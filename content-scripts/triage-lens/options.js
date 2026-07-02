@@ -539,6 +539,19 @@
   const ALLOWED_BUMPS = ['', 'risk', 'monitoring', 'meds', 'openLoops', 'carePlan', 'safeguarding'];
   const ALLOWED_ACTION_TYPES = ['link', 'snippet', 'note'];
 
+  // isSafeActionUrl(url) → boolean
+  // Mirrors content.js's executeAction scheme check: only absolute http(s) URLs
+  // are allowed for link actions, so an imported/edited config can't smuggle in
+  // a javascript:/data: URL that would execute on click.
+  const isSafeActionUrl = (url) => {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch (e) {
+      return false;
+    }
+  };
+
   // validateTriageRule(rule) → string[]
   // Returns an array of error strings (empty = valid).
   // Used by both saveCurrentRule and the LLM importer.
@@ -607,6 +620,8 @@
       }
       if (a.type === 'link' && (!a.url || typeof a.url !== 'string')) {
         errs.push('actions[' + i + ']: url is required for link actions.');
+      } else if (a.type === 'link' && !isSafeActionUrl(a.url)) {
+        errs.push('actions[' + i + ']: url must be an absolute http:// or https:// URL.');
       }
       if ((a.type === 'snippet' || a.type === 'note') && (a.text == null || typeof a.text !== 'string')) {
         errs.push('actions[' + i + ']: text is required for ' + a.type + ' actions.');
@@ -614,6 +629,93 @@
     });
 
     return errs;
+  };
+
+  // ============================================================
+  // FULL-CONFIG IMPORT VALIDATION (backup file + pasted JSON)
+  // ============================================================
+  // validateImportedConfig(parsed, currentConfig) → { errors: string[], normalized?: object }
+  // Shared by the file-import handler and the "Save pasted JSON" handler so a
+  // crafted or corrupt backup is rejected wholesale rather than partially
+  // persisted. Runs the SAME per-rule validators the manual editor uses
+  // (validateTriageRule / SentinelResultRules.validateResultRule) over every
+  // entry, sanity-checks the shape of the other top-level keys, and
+  // normalises `version` to a number.
+  const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+
+  const validateImportedConfig = (parsed, currentConfig) => {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { errors: ['Not a valid Triage Lens config: expected a JSON object.'] };
+    }
+
+    const errors = [];
+
+    if (!Array.isArray(parsed.rules)) {
+      errors.push('rules must be an array.');
+    } else {
+      for (let i = 0; i < parsed.rules.length && errors.length === 0; i++) {
+        const errs = validateTriageRule(parsed.rules[i]);
+        if (errs.length > 0) {
+          const name = (parsed.rules[i] && (parsed.rules[i].label || parsed.rules[i].id)) || 'untitled';
+          errors.push('rules[' + i + '] (' + name + '): ' + errs[0]);
+        }
+      }
+    }
+
+    if (errors.length === 0 && parsed.resultRules !== undefined) {
+      if (!Array.isArray(parsed.resultRules)) {
+        errors.push('resultRules must be an array.');
+      } else {
+        const VALIDATE = window.SentinelResultRules && window.SentinelResultRules.validateResultRule;
+        if (VALIDATE) {
+          for (let i = 0; i < parsed.resultRules.length && errors.length === 0; i++) {
+            const errs = VALIDATE(parsed.resultRules[i]);
+            if (errs.length > 0) {
+              const name = (parsed.resultRules[i] && parsed.resultRules[i].label) || 'untitled';
+              errors.push('resultRules[' + i + '] (' + name + '): ' + errs[0]);
+            }
+          }
+        }
+      }
+    }
+
+    if (errors.length === 0 && parsed.thresholds !== undefined) {
+      if (!isPlainObject(parsed.thresholds)) {
+        errors.push('thresholds must be an object.');
+      } else {
+        for (const key of Object.keys(parsed.thresholds)) {
+          if (!Number.isFinite(parsed.thresholds[key])) {
+            errors.push('thresholds.' + key + ' must be a finite number.');
+            break;
+          }
+        }
+      }
+    }
+
+    if (errors.length === 0 && parsed.prefs !== undefined && !isPlainObject(parsed.prefs)) {
+      errors.push('prefs must be an object.');
+    }
+
+    if (errors.length === 0 && parsed.systemChips !== undefined && !isPlainObject(parsed.systemChips)) {
+      errors.push('systemChips must be an object.');
+    }
+
+    if (errors.length > 0) return { errors };
+
+    // Normalise version to a number. mergeShippedDefaults treats a falsy/NaN
+    // version as 0 ("older than anything shipped") and silently merges shipped
+    // builtins in on the next options load — so a missing/invalid imported
+    // version must NOT be allowed to trigger that; fall back to the
+    // pre-import CONFIG.version instead. A genuinely-numeric (even low)
+    // imported version is left as-is — that's the existing, intended
+    // "import an older backup, then it catches up on next load" behaviour.
+    const normalized = { ...parsed };
+    const importedVersion = Number(parsed.version);
+    normalized.version = Number.isFinite(importedVersion)
+      ? importedVersion
+      : (currentConfig && currentConfig.version) || 0;
+
+    return { errors: [], normalized };
   };
 
   // ============================================================
@@ -1001,15 +1103,17 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       const text = await f.text();
       try {
         const parsed = JSON.parse(text);
-        if (!parsed || !Array.isArray(parsed.rules)) throw new Error('Not a valid Triage Lens config');
-        if (!confirm(`Import config with ${parsed.rules.length} rules? Your current rules will be replaced.`)) return;
-        await saveConfig(parsed);
+        const { errors, normalized } = validateImportedConfig(parsed, CONFIG);
+        if (errors.length > 0) throw new Error(errors[0]);
+        if (!confirm(`Import config with ${normalized.rules.length} rules? Your current rules will be replaced.`))
+          return;
+        await saveConfig(normalized);
         flash('Imported');
         renderRules();
         populateThresholds();
         populatePrefs();
         populateOir();
-        $('#rawJson').value = JSON.stringify(parsed, null, 2);
+        $('#rawJson').value = JSON.stringify(normalized, null, 2);
       } catch (e) {
         flash('Import failed: ' + e.message, 'err');
       }
@@ -1044,8 +1148,9 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#btnSaveJson').addEventListener('click', async () => {
       try {
         const parsed = JSON.parse($('#rawJson').value);
-        if (!parsed || !Array.isArray(parsed.rules)) throw new Error('Missing rules array');
-        await saveConfig(parsed);
+        const { errors, normalized } = validateImportedConfig(parsed, CONFIG);
+        if (errors.length > 0) throw new Error(errors[0]);
+        await saveConfig(normalized);
         renderRules();
         populateThresholds();
         populatePrefs();

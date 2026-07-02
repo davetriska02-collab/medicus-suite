@@ -1930,9 +1930,23 @@
     setTimeout(() => document.addEventListener('click', onDocClickForMenu, true), 0);
   };
 
+  const isSafeActionUrl = (url) => {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch (e) {
+      return false;
+    }
+  };
+
   const executeAction = (action, anchorEl, menuEl) => {
     if (!action) return;
     if (action.type === 'link' && action.url) {
+      if (!isSafeActionUrl(action.url)) {
+        log('executeAction: blocked unsafe action.url', action.url);
+        closeActionMenu();
+        return;
+      }
       try { window.open(action.url, '_blank', 'noopener'); } catch (e) {}
       closeActionMenu();
       return;
