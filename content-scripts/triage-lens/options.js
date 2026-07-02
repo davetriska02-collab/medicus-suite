@@ -171,14 +171,6 @@
     // amber:48 (label text is unchanged — "HbA1c ≥48" reads correctly at either severity, so
     // it is not part of this un-stick).
     'base-hba1c-diabetes': { red: [48], amber: [undefined] },
-    // v22 raised base-fib4-elevated's red cutoff 2.67→3.25 (see the new companion
-    // base-fib4-elevated-under65 context rule, which keeps 2.67 for age <65) to stop
-    // over-calling elderly patients, whose FIB-4 score is inflated by age sitting in the
-    // numerator. A held rule still at the old red:2.67 label/value is brought up to date.
-    'base-fib4-elevated': {
-      label: ['FIB-4 elevated — fibrosis risk (red ≥2.67, amber ≥1.3)'],
-      red: [2.67],
-    },
     // v21 tightened the bare "gram positive"/"gram negative"/"candida" substrings (they
     // matched NEGATIVE phrasing like "No gram negative organisms isolated" and tripped a
     // false-amber review) to morphology-qualified gram-stain terms and named candida

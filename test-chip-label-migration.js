@@ -416,50 +416,15 @@ if (contentRR && optionsRR) {
       'revert: a practice-customised HbA1c red threshold is left untouched (atomic)'
     );
   }
-  // ── v22 calibration pass (item 3.3): FIB-4 age-recalibration ─────────────────
-  // A held builtin still at the OLD label+red (2.67) is brought up to the new
-  // label+red (3.25) — the age<65 cutoff moves to the new companion context rule
-  // (base-fib4-elevated-under65), which is a brand-new id and needs no un-stick.
-  {
-    const held = [
-      {
-        id: 'base-fib4-elevated',
-        builtin: true,
-        kind: 'threshold',
-        comparator: 'above',
-        label: 'FIB-4 elevated — fibrosis risk (red ≥2.67, amber ≥1.3)',
-        amber: 1.3,
-        red: 2.67,
-        unit: null,
-      },
-    ];
-    contentRR.revert(held, shippedRR2);
-    const shippedFib4 = shippedRR2.find((r) => r.id === 'base-fib4-elevated');
-    check(
-      held[0].label === shippedFib4.label && held[0].red === 3.25,
-      'revert: held old FIB-4 rule gets the new label AND red 3.25'
-    );
-  }
-  // A practice that renamed the FIB-4 label keeps its rename (atomic — no desync).
-  {
-    const held = [
-      {
-        id: 'base-fib4-elevated',
-        builtin: true,
-        kind: 'threshold',
-        comparator: 'above',
-        label: 'My own FIB-4 label',
-        amber: 1.3,
-        red: 2.67,
-        unit: null,
-      },
-    ];
-    contentRR.revert(held, shippedRR2);
-    check(
-      held[0].label === 'My own FIB-4 label' && held[0].red === 2.67,
-      'revert: a customised FIB-4 label leaves the whole rule untouched (atomic)'
-    );
-  }
+  // NOTE (item 3.3 correction): the FIB-4 recalibration was REVERTED after independent
+  // verification (red 3.25 is the hepatitis-C cutoff, wrong for NAFLD/MASLD; and the real
+  // age-adjustment raises the rule-OUT cutoff, a suppression this escalate-only engine
+  // cannot implement). base-fib4-elevated is back at its status-quo red 2.67 unchanged, so
+  // it carries NO RETIRED_RESULTRULE_FIELDS un-stick entry — asserted here in both files.
+  check(
+    !contentRR.table['base-fib4-elevated'] && !optionsRR.table['base-fib4-elevated'],
+    'no FIB-4 un-stick entry in either file (the 3.3 recalibration was reverted)'
+  );
 
   // EDITABLE-FLAGS CONTRACT (Nick's request): a clinician who renames a built-in chip
   // label — e.g. strips a redundant "high" — must keep that rename across suite updates.

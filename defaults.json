@@ -4770,28 +4770,10 @@
       "enabled": true,
       "id": "base-fib4-elevated",
       "kind": "threshold",
-      "label": "FIB-4 elevated — fibrosis risk (red ≥3.25, amber ≥1.3)",
+      "label": "FIB-4 elevated — fibrosis risk (red ≥2.67, amber ≥1.3)",
       "amber": 1.3,
-      "red": 3.25,
-      "unit": null
-    },
-    {
-      "analyte": {
-        "match": [
-          "Fibrosis-4 score"
-        ]
-      },
-      "builtin": true,
-      "comparator": "above",
-      "enabled": true,
-      "id": "base-fib4-elevated-under65",
-      "kind": "threshold",
-      "label": "FIB-4 elevated — fibrosis risk, age <65 (red ≥2.67)",
       "red": 2.67,
-      "unit": null,
-      "context": {
-        "maxAge": 64
-      }
+      "unit": null
     },
     {
       "analyte": {
@@ -4830,7 +4812,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "High sodium — hypernatraemia (red ≥155 mmol/L, amber ≥150)",
+      "label": "High sodium — hypernatraemia (red ≥160 mmol/L, amber ≥150)",
       "analyte": {
         "match": [
           "sodium"
@@ -4843,7 +4825,7 @@
       },
       "comparator": "above",
       "amber": 150,
-      "red": 155,
+      "red": 160,
       "unit": "mmol/L"
     },
     {

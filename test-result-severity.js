@@ -3213,11 +3213,15 @@ console.log('\n--- item 3.3: base-high-sodium (hypernatraemia, NEW) ---');
   const amber = evaluateReportSeverity(makeReport([mkResult('Sodium', 152, { unit: 'mmol/L' })]), {
     resultRules: rules,
   });
-  assert(amber.level === 'amber', 'sodium 152 (>= amber 150, < red 155) → amber');
-  const red = evaluateReportSeverity(makeReport([mkResult('Sodium', 156, { unit: 'mmol/L' })]), {
+  assert(amber.level === 'amber', 'sodium 152 (>= amber 150, < red 160) → amber');
+  const stillAmber = evaluateReportSeverity(makeReport([mkResult('Sodium', 156, { unit: 'mmol/L' })]), {
     resultRules: rules,
   });
-  assert(red.level === 'red', 'sodium 156 (>= red 155) → red');
+  assert(stillAmber.level === 'amber', 'sodium 156 (>= amber 150, still < red 160) → amber');
+  const red = evaluateReportSeverity(makeReport([mkResult('Sodium', 162, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(red.level === 'red', 'sodium 162 (>= red 160, better-sourced "severe" cutoff) → red');
 }
 
 console.log('\n--- item 3.3: base-high-creatinine-aki (NEW) ---');
@@ -3380,44 +3384,36 @@ console.log('\n--- item 3.3: base-hba1c-diabetes recalibration (CHANGED — red 
   assert(out.urgentCount === 0, 'HbA1c 52 → urgentCount 0 (never escalates to red any more)');
 }
 
-console.log('\n--- item 3.3: base-fib4-elevated recalibration + base-fib4-elevated-under65 (NEW context rule) ---');
+console.log('\n--- item 3.3 (REVERTED): base-fib4-elevated status quo (red ≥2.67 all ages) ---');
 {
+  // The 3.3 FIB-4 recalibration (red→3.25 + a context:{maxAge:64} companion rule) was
+  // REVERTED after independent verification: red 3.25 is the hepatitis-C FIB-4 cutoff,
+  // wrong for NAFLD/MASLD; and the real age-adjustment raises the rule-OUT (low-risk)
+  // cutoff for ≥65 — a SUPPRESSION this escalate-only engine cannot express. So the rule
+  // is back at its original red 2.67 for all ages, and the under-65 companion rule is gone.
   const baseRule = shippedRule('base-fib4-elevated');
-  const under65Rule = shippedRule('base-fib4-elevated-under65');
-  assert(baseRule.red === 3.25, 'sanity: base-fib4-elevated red is now 3.25');
+  assert(baseRule.red === 2.67, 'sanity: base-fib4-elevated red is back at the status-quo 2.67');
+  assert(baseRule.amber === 1.3, 'sanity: base-fib4-elevated amber unchanged at 1.3');
   assert(
-    under65Rule.context && under65Rule.context.maxAge === 64,
-    'sanity: base-fib4-elevated-under65 carries context.maxAge 64'
+    !SHIPPED_RESULT_RULES.some((r) => r && r.id === 'base-fib4-elevated-under65'),
+    'the base-fib4-elevated-under65 companion rule was deleted (no longer shipped)'
   );
-  const rules = [baseRule, under65Rule];
+  const rules = [baseRule];
 
-  const highEveryone = evaluateReportSeverity(makeReport([mkResult('Fibrosis-4 score', 3.4)]), {
+  const highEveryone = evaluateReportSeverity(makeReport([mkResult('Fibrosis-4 score', 2.9)]), {
     resultRules: rules,
   });
-  assert(highEveryone.level === 'red', 'FIB-4 3.4 fires red for everyone (base rule, no patientContext needed)');
+  assert(highEveryone.level === 'red', 'FIB-4 2.9 (>= red 2.67) fires red for everyone, no patientContext needed');
 
-  const youngAt267 = evaluateReportSeverity(makeReport([mkResult('Fibrosis-4 score', 2.9)]), {
-    resultRules: rules,
-    patientContext: { ageYears: 40 },
-  });
-  assert(youngAt267.level === 'red', 'FIB-4 2.9 in a patient aged 40 (<65) fires red via the under-65 2.67 cutoff');
-
-  const elderlyAt29 = evaluateReportSeverity(makeReport([mkResult('Fibrosis-4 score', 2.9)]), {
-    resultRules: rules,
-    patientContext: { ageYears: 70 },
-  });
-  assert(
-    elderlyAt29.level === 'amber',
-    'FIB-4 2.9 in a patient aged 70 (>=65) does NOT fire red (under-65 rule gated out; base amber 1.3 still applies)'
-  );
-
-  const noContextAt29 = evaluateReportSeverity(makeReport([mkResult('Fibrosis-4 score', 2.9)]), {
+  const amberBand = evaluateReportSeverity(makeReport([mkResult('Fibrosis-4 score', 2.0)]), {
     resultRules: rules,
   });
-  assert(
-    noContextAt29.level === 'amber',
-    'FIB-4 2.9 with no patientContext at all: under-65 rule fails closed, only base amber applies'
-  );
+  assert(amberBand.level === 'amber', 'FIB-4 2.0 (>= amber 1.3, < red 2.67) → amber');
+
+  const quiet = evaluateReportSeverity(makeReport([mkResult('Fibrosis-4 score', 1.1)]), {
+    resultRules: rules,
+  });
+  assert(quiet.level === 'none', 'FIB-4 1.1 (below amber 1.3) → quiet');
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────
