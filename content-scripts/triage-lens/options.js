@@ -141,7 +141,15 @@
   // content.js; bump defaults.json "version" when you add an entry here.
   const RETIRED_RESULTRULE_FIELDS = {
     'base-low-haemoglobin': { label: ['Critical low haemoglobin'], red: [100] },
-    'base-high-potassium': { label: ['Critical high potassium'] },
+    // v22 added an amber band (6.0–6.4 mmol/L, UKKA Oct 2023 "moderate" hyperkalaemia
+    // band) below the pre-existing red ≥6.5 — a NEW field on a held builtin, which the
+    // append-by-id merge never delivers on its own. Both the ancient (pre-v17) and the
+    // v17 numbered label are listed as retired candidates so either vintage of held rule
+    // (which never carried an amber field) is brought up to the new label + amber value.
+    'base-high-potassium': {
+      label: ['Critical high potassium', 'Critical high potassium (red ≥6.5 mmol/L)'],
+      amber: [undefined],
+    },
     'base-low-sodium': { label: ['Critical low sodium'] },
     'base-low-egfr': { label: ['Critical low eGFR'] },
     'base-low-platelets': { label: ['Critical low platelets'] },
@@ -156,6 +164,21 @@
     'base-low-magnesium': { label: ['Low magnesium — hypomagnesaemia'] },
     'base-high-tsh': { label: ['High TSH — possible hypothyroidism'] },
     'base-low-tsh': { label: ['Suppressed TSH — possible thyrotoxicosis'] },
+    // v22 (CSO calibration pass, TRIAGE-LENS-2026-07-02.md item 3.3) demoted HbA1c ≥48 from
+    // red to amber — 48 mmol/mol is the WHO/NICE NG28 DIAGNOSTIC threshold, not itself a
+    // marker of clinical urgency, and firing red on every newly-diagnostic HbA1c was alert
+    // fatigue. A held rule still at the old red:48/no-amber shape is moved to red:null,
+    // amber:48 (label text is unchanged — "HbA1c ≥48" reads correctly at either severity, so
+    // it is not part of this un-stick).
+    'base-hba1c-diabetes': { red: [48], amber: [undefined] },
+    // v22 raised base-fib4-elevated's red cutoff 2.67→3.25 (see the new companion
+    // base-fib4-elevated-under65 context rule, which keeps 2.67 for age <65) to stop
+    // over-calling elderly patients, whose FIB-4 score is inflated by age sitting in the
+    // numerator. A held rule still at the old red:2.67 label/value is brought up to date.
+    'base-fib4-elevated': {
+      label: ['FIB-4 elevated — fibrosis risk (red ≥2.67, amber ≥1.3)'],
+      red: [2.67],
+    },
     // v21 tightened the bare "gram positive"/"gram negative"/"candida" substrings (they
     // matched NEGATIVE phrasing like "No gram negative organisms isolated" and tripped a
     // false-amber review) to morphology-qualified gram-stain terms and named candida

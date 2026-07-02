@@ -375,6 +375,92 @@ if (contentRR && optionsRR) {
     contentRR.revert(held, shippedRR2);
     check(held[0].label === 'High INR', 'revert: a non-builtin sharing the id is not touched');
   }
+  // ── v22 calibration pass (item 3.3): HbA1c red→amber demotion ────────────────
+  // A held builtin still at the OLD red:48/no-amber shape is moved to the new
+  // red:null/amber:48 shape (fires amber instead of red at the same 48 mmol/mol).
+  {
+    const held = [
+      {
+        id: 'base-hba1c-diabetes',
+        builtin: true,
+        kind: 'threshold',
+        comparator: 'above',
+        label: 'Possible diabetes — not on register (HbA1c ≥48)',
+        red: 48,
+        unit: 'mmol/mol',
+      },
+    ];
+    contentRR.revert(held, shippedRR2);
+    check(
+      held[0].red === null && held[0].amber === 48,
+      'revert: held old HbA1c rule (red:48) moves to red:null, amber:48'
+    );
+  }
+  // A practice that customised the HbA1c red threshold (e.g. raised it) is left alone —
+  // atomic per-id check, same as every other retired-fields entry.
+  {
+    const held = [
+      {
+        id: 'base-hba1c-diabetes',
+        builtin: true,
+        kind: 'threshold',
+        comparator: 'above',
+        label: 'Possible diabetes — not on register (HbA1c ≥48)',
+        red: 53,
+        unit: 'mmol/mol',
+      },
+    ];
+    contentRR.revert(held, shippedRR2);
+    check(
+      held[0].red === 53 && held[0].amber === undefined,
+      'revert: a practice-customised HbA1c red threshold is left untouched (atomic)'
+    );
+  }
+  // ── v22 calibration pass (item 3.3): FIB-4 age-recalibration ─────────────────
+  // A held builtin still at the OLD label+red (2.67) is brought up to the new
+  // label+red (3.25) — the age<65 cutoff moves to the new companion context rule
+  // (base-fib4-elevated-under65), which is a brand-new id and needs no un-stick.
+  {
+    const held = [
+      {
+        id: 'base-fib4-elevated',
+        builtin: true,
+        kind: 'threshold',
+        comparator: 'above',
+        label: 'FIB-4 elevated — fibrosis risk (red ≥2.67, amber ≥1.3)',
+        amber: 1.3,
+        red: 2.67,
+        unit: null,
+      },
+    ];
+    contentRR.revert(held, shippedRR2);
+    const shippedFib4 = shippedRR2.find((r) => r.id === 'base-fib4-elevated');
+    check(
+      held[0].label === shippedFib4.label && held[0].red === 3.25,
+      'revert: held old FIB-4 rule gets the new label AND red 3.25'
+    );
+  }
+  // A practice that renamed the FIB-4 label keeps its rename (atomic — no desync).
+  {
+    const held = [
+      {
+        id: 'base-fib4-elevated',
+        builtin: true,
+        kind: 'threshold',
+        comparator: 'above',
+        label: 'My own FIB-4 label',
+        amber: 1.3,
+        red: 2.67,
+        unit: null,
+      },
+    ];
+    contentRR.revert(held, shippedRR2);
+    check(
+      held[0].label === 'My own FIB-4 label' && held[0].red === 2.67,
+      'revert: a customised FIB-4 label leaves the whole rule untouched (atomic)'
+    );
+  }
+
   // EDITABLE-FLAGS CONTRACT (Nick's request): a clinician who renames a built-in chip
   // label — e.g. strips a redundant "high" — must keep that rename across suite updates.
   // The label they typed is NOT a retired default, so revert leaves the whole rule alone

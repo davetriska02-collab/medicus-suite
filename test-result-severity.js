@@ -11,6 +11,16 @@ const {
   contextAllows,
 } = require('./engine/result-severity.js');
 
+// The REAL shipped result rules (root defaults.json is the source of truth) — used by
+// the item 3.3 (calibration pass) section below to test the actual calibrated content,
+// not a hand-rolled stand-in, mirroring test-chip-label-migration.js's own pattern.
+const SHIPPED_RESULT_RULES = require('./defaults.json').resultRules || [];
+function shippedRule(id) {
+  const r = SHIPPED_RESULT_RULES.find((x) => x && x.id === id);
+  if (!r) throw new Error(`shippedRule: no shipped resultRule with id "${id}"`);
+  return r;
+}
+
 let passed = 0;
 let failed = 0;
 
@@ -1097,7 +1107,8 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
       assert(validateResultRule(r).length === 0, `${id}: validates clean`);
     }
   }
-  // Fire the full shipped base set against representative results (now RED-ONLY).
+  // Fire the full shipped base set against representative results (mostly RED-ONLY;
+  // potassium gained an amber band in item 3.3 — see below).
   const baseSet = rules.filter((r) => baseIds.includes(r.id));
   const fire = (name, value, problems) =>
     evaluateReportSeverity(makeReport([mkResult(name, value)]), { resultRules: baseSet, problems }).level;
@@ -1107,7 +1118,9 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
   assert(fire('Haemoglobin', 95) === 'none', 'base: Haemoglobin 95 → none (red-only, >80, CSO-lowered from 100)');
   assert(fire('Haemoglobin', 130) === 'none', 'base: Haemoglobin 130 → none');
   assert(fire('Potassium', 6.6) === 'red', 'base: Potassium 6.6 → red');
-  assert(fire('Potassium', 6.2) === 'none', 'base: Potassium 6.2 → none (red-only, <6.5)');
+  // item 3.3 added an amber band (UKKA "moderate" 6.0–6.4) below the pre-existing red 6.5.
+  assert(fire('Potassium', 6.2) === 'amber', 'base: Potassium 6.2 → amber (item 3.3 amber band, was none)');
+  assert(fire('Potassium', 5.8) === 'none', 'base: Potassium 5.8 → none (below the new amber 6.0)');
   assert(fire('Urine potassium', 60) === 'none', 'base: Urine potassium 60 → none (excluded)');
   assert(fire('Sodium', 118) === 'red', 'base: Sodium 118 → red');
   assert(fire('Sodium', 125) === 'none', 'base: Sodium 125 → none (red-only, >120)');
@@ -1119,8 +1132,10 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
   assert(fire('INR', 8.5) === 'red', 'base: INR 8.5 → red');
   assert(fire('INR', 5.5) === 'none', 'base: INR 5.5 → none (red-only, <8)');
 
-  // HbA1c conditional flags
-  assert(fire('HbA1c', 50) === 'red', 'base: HbA1c 50, no record → red (possible diabetes)');
+  // HbA1c conditional flags. item 3.3 demoted the ≥48 "possible diabetes" outcome from
+  // red to amber (48 is the WHO/NICE NG28 DIAGNOSTIC threshold, not itself urgent —
+  // alert-fatigue fix); every case below that used to assert 'red' now asserts 'amber'.
+  assert(fire('HbA1c', 50) === 'amber', 'base: HbA1c 50, no record → amber (possible diabetes, item 3.3 demotion)');
   assert(fire('HbA1c', 44) === 'amber', 'base: HbA1c 44, no record → amber (prediabetes)');
   assert(fire('HbA1c', 38) === 'none', 'base: HbA1c 38 → none');
   // Known diabetic → diabetes flag suppressed (and prediabetes too)
@@ -1130,13 +1145,13 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
   );
   // Known prediabetic with a NEW diabetic-range HbA1c → diabetes flag still fires (progression)
   assert(
-    fire('HbA1c', 50, [{ label: 'Pre-diabetes' }]) === 'red',
-    'base: HbA1c 50 with prediabetes on record → red (progression to diabetes still flagged)'
+    fire('HbA1c', 50, [{ label: 'Pre-diabetes' }]) === 'amber',
+    'base: HbA1c 50 with prediabetes on record → amber (progression to diabetes still flagged)'
   );
   // "non-diabetic hyperglycaemia" must NOT suppress the diabetes flag (footgun guard)
   assert(
-    fire('HbA1c', 50, [{ label: 'Non-diabetic hyperglycaemia' }]) === 'red',
-    'base: HbA1c 50 with non-diabetic hyperglycaemia → red (not a diabetes diagnosis)'
+    fire('HbA1c', 50, [{ label: 'Non-diabetic hyperglycaemia' }]) === 'amber',
+    'base: HbA1c 50 with non-diabetic hyperglycaemia → amber (not a diabetes diagnosis)'
   );
   // Prediabetes flag suppressed once prediabetes is on record
   assert(
@@ -1145,8 +1160,8 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
   );
   // H1 (patient-safety): a FAMILY HISTORY code must NOT suppress the new-diabetes flag
   assert(
-    fire('HbA1c', 52, [{ label: 'Family history of diabetes mellitus' }]) === 'red',
-    'H1: HbA1c 52 with "Family history of diabetes mellitus" → red (NOT suppressed)'
+    fire('HbA1c', 52, [{ label: 'Family history of diabetes mellitus' }]) === 'amber',
+    'H1: HbA1c 52 with "Family history of diabetes mellitus" → amber (NOT suppressed)'
   );
   // M1 (alert fatigue): known diabetics coded without "mellitus"/"type N" still suppress
   assert(
@@ -1158,10 +1173,13 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
   assert(fire('HbA1c', 60, [{ label: 'T2DM' }]) === 'none', 'M1: "T2DM" abbreviation → suppressed');
   // Broadened match must NOT over-suppress the footgun look-alikes
   assert(
-    fire('HbA1c', 52, [{ label: 'Pre-diabetic retinopathy' }]) === 'red',
-    'pre-diabetic retinopathy → red (not suppressed)'
+    fire('HbA1c', 52, [{ label: 'Pre-diabetic retinopathy' }]) === 'amber',
+    'pre-diabetic retinopathy → amber (not suppressed)'
   );
-  assert(fire('HbA1c', 52, [{ label: 'Diabetes insipidus' }]) === 'red', 'diabetes insipidus → red (not suppressed)');
+  assert(
+    fire('HbA1c', 52, [{ label: 'Diabetes insipidus' }]) === 'amber',
+    'diabetes insipidus → amber (not suppressed)'
+  );
 
   // Attributable rule label flows onto top for rule-driven escalations
   const ruleDrivenRed = evaluateReportSeverity(makeReport([mkResult('Potassium', 6.7)]), { resultRules: baseSet });
@@ -3177,6 +3195,229 @@ console.log('\n--- item 3.5: byte-identical when no rule carries a context claus
     'output is byte-identical with/without patientContext when no rule carries a context clause'
   );
   assert(withoutPatientContext.level === 'red', 'sanity: the plain rules still fire as expected (level red)');
+}
+
+// ── item 3.3: calibration pass — new/changed shipped result rules ─────────────
+// Tests the REAL shipped defaults.json rules (SHIPPED_RESULT_RULES/shippedRule above),
+// not stand-ins — pins the calibrated thresholds themselves, so a future accidental
+// edit to defaults.json fails here, not just in production.
+
+console.log('\n--- item 3.3: base-high-sodium (hypernatraemia, NEW) ---');
+{
+  const rule = shippedRule('base-high-sodium');
+  const rules = [rule];
+  const below = evaluateReportSeverity(makeReport([mkResult('Sodium', 149, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(below.level === 'none', 'sodium 149 (below amber 150) → quiet');
+  const amber = evaluateReportSeverity(makeReport([mkResult('Sodium', 152, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(amber.level === 'amber', 'sodium 152 (>= amber 150, < red 155) → amber');
+  const red = evaluateReportSeverity(makeReport([mkResult('Sodium', 156, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(red.level === 'red', 'sodium 156 (>= red 155) → red');
+}
+
+console.log('\n--- item 3.3: base-high-creatinine-aki (NEW) ---');
+{
+  const rule = shippedRule('base-high-creatinine-aki');
+  const rules = [rule];
+  const below = evaluateReportSeverity(makeReport([mkResult('Creatinine', 200, { unit: 'µmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(below.level === 'none', 'creatinine 200 (below red 354, no amber configured) → quiet');
+  const red = evaluateReportSeverity(makeReport([mkResult('Creatinine', 400, { unit: 'µmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(red.level === 'red', 'creatinine 400 (>= red 354) → red (KDIGO stage 3)');
+}
+
+console.log('\n--- item 3.3: base-creatinine-delta-aki (NEW, kind:delta) ---');
+{
+  const rule = shippedRule('base-creatinine-delta-aki');
+  assert(rule.kind === 'delta', 'sanity: base-creatinine-delta-aki is kind:delta');
+  const rules = [rule];
+  const risingWithinWindow = mkResult('Creatinine', 176, {
+    unit: 'µmol/L',
+    date: '2026-06-13',
+    history: [{ value: 148, date: '2026-06-11', unit: 'µmol/L' }],
+  });
+  const fires = evaluateReportSeverity(makeReport([risingWithinWindow]), { resultRules: rules });
+  assert(fires.level === 'amber', 'creatinine +28 µmol/L over 2 days (KDIGO stage 1 absolute rise) → amber');
+
+  const smallRise = mkResult('Creatinine', 160, {
+    unit: 'µmol/L',
+    date: '2026-06-13',
+    history: [{ value: 148, date: '2026-06-11', unit: 'µmol/L' }],
+  });
+  const quiet = evaluateReportSeverity(makeReport([smallRise]), { resultRules: rules });
+  assert(quiet.level === 'none', 'creatinine +12 µmol/L (below the 26.5 delta) → quiet');
+
+  const risingOutsideWindow = mkResult('Creatinine', 176, {
+    unit: 'µmol/L',
+    date: '2026-06-13',
+    history: [{ value: 148, date: '2026-06-01', unit: 'µmol/L' }], // 12 days prior
+  });
+  const outsideWindow = evaluateReportSeverity(makeReport([risingOutsideWindow]), { resultRules: rules });
+  assert(outsideWindow.level === 'none', 'same +28 rise but prior is outside the 48h maxDays window → quiet');
+}
+
+console.log('\n--- item 3.3: base-high-glucose (hyperglycaemia, NEW) ---');
+{
+  const rule = shippedRule('base-high-glucose');
+  const rules = [rule];
+  const below = evaluateReportSeverity(makeReport([mkResult('Glucose', 9, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(below.level === 'none', 'glucose 9 (below amber 11.1) → quiet');
+  const amber = evaluateReportSeverity(makeReport([mkResult('Glucose', 15, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(amber.level === 'amber', 'glucose 15 (>= amber 11.1, < red 30) → amber');
+  const red = evaluateReportSeverity(makeReport([mkResult('Glucose', 32, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(red.level === 'red', 'glucose 32 (>= red 30, HHS range) → red');
+}
+
+console.log('\n--- item 3.3: base-low-glucose (hypoglycaemia, NEW) ---');
+{
+  const rule = shippedRule('base-low-glucose');
+  const rules = [rule];
+  const above = evaluateReportSeverity(makeReport([mkResult('Glucose', 4.5, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(above.level === 'none', 'glucose 4.5 (above amber 4.0) → quiet');
+  const amber = evaluateReportSeverity(makeReport([mkResult('Glucose', 3.5, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(amber.level === 'amber', 'glucose 3.5 (<= amber 4.0, > red 3.0) → amber ("4 is the floor")');
+  const red = evaluateReportSeverity(makeReport([mkResult('Glucose', 2.6, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(red.level === 'red', 'glucose 2.6 (<= red 3.0, JBDS level 2) → red');
+}
+
+console.log('\n--- item 3.3: base-high-alt / base-high-ast (transaminitis, NEW) ---');
+{
+  for (const id of ['base-high-alt', 'base-high-ast']) {
+    const rule = shippedRule(id);
+    const name = id === 'base-high-alt' ? 'ALT' : 'AST';
+    const rules = [rule];
+    const below = evaluateReportSeverity(makeReport([mkResult(name, 80, { unit: 'U/L' })]), { resultRules: rules });
+    assert(below.level === 'none', `${id}: ${name} 80 (below amber 120, ~2x ULN) → quiet`);
+    const amber = evaluateReportSeverity(makeReport([mkResult(name, 150, { unit: 'U/L' })]), { resultRules: rules });
+    assert(amber.level === 'amber', `${id}: ${name} 150 (>= amber 120, 3x ULN) → amber`);
+    const red = evaluateReportSeverity(makeReport([mkResult(name, 350, { unit: 'U/L' })]), { resultRules: rules });
+    assert(red.level === 'red', `${id}: ${name} 350 (>= red 320, 8x ULN) → red`);
+  }
+}
+
+console.log('\n--- item 3.3: base-high-crp (NEW) ---');
+{
+  const rule = shippedRule('base-high-crp');
+  const rules = [rule];
+  const below = evaluateReportSeverity(makeReport([mkResult('CRP', 10, { unit: 'mg/L' })]), { resultRules: rules });
+  assert(below.level === 'none', 'CRP 10 (below amber 20, NICE CG191 no-antibiotic band) → quiet');
+  const amber = evaluateReportSeverity(makeReport([mkResult('CRP', 50, { unit: 'mg/L' })]), { resultRules: rules });
+  assert(amber.level === 'amber', 'CRP 50 (>= amber 20, delayed-antibiotic band) → amber');
+  const red = evaluateReportSeverity(makeReport([mkResult('CRP', 120, { unit: 'mg/L' })]), { resultRules: rules });
+  assert(red.level === 'red', 'CRP 120 (>= red 100, immediate-antibiotic band) → red');
+}
+
+console.log('\n--- item 3.3: base-high-wcc / base-high-neutrophils (sepsis signal, NEW) ---');
+{
+  const wccRule = shippedRule('base-high-wcc');
+  const below = evaluateReportSeverity(makeReport([mkResult('White cell count', 8, { unit: '×10⁹/L' })]), {
+    resultRules: [wccRule],
+  });
+  assert(below.level === 'none', 'WCC 8 (below amber 12) → quiet');
+  const amber = evaluateReportSeverity(makeReport([mkResult('White cell count', 14, { unit: '×10⁹/L' })]), {
+    resultRules: [wccRule],
+  });
+  assert(amber.level === 'amber', 'WCC 14 (>= amber 12, SIRS/sepsis-screen criterion) → amber');
+
+  const neutRule = shippedRule('base-high-neutrophils');
+  const neutBelow = evaluateReportSeverity(makeReport([mkResult('Neutrophils', 6, { unit: '×10⁹/L' })]), {
+    resultRules: [neutRule],
+  });
+  assert(neutBelow.level === 'none', 'neutrophils 6 (below amber 7.5) → quiet');
+  const neutAmber = evaluateReportSeverity(makeReport([mkResult('Neutrophils', 9, { unit: '×10⁹/L' })]), {
+    resultRules: [neutRule],
+  });
+  assert(neutAmber.level === 'amber', 'neutrophils 9 (>= amber 7.5) → amber (neutrophilia)');
+}
+
+console.log('\n--- item 3.3: base-high-potassium amber band (CHANGED — added amber) ---');
+{
+  const rule = shippedRule('base-high-potassium');
+  const rules = [rule];
+  const below = evaluateReportSeverity(makeReport([mkResult('Potassium', 5.8, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(below.level === 'none', 'potassium 5.8 (below amber 6.0) → quiet');
+  const amber = evaluateReportSeverity(makeReport([mkResult('Potassium', 6.2, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(amber.level === 'amber', 'potassium 6.2 (UKKA "moderate" 6.0–6.4) → amber, NOT red');
+  const red = evaluateReportSeverity(makeReport([mkResult('Potassium', 6.6, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(red.level === 'red', 'potassium 6.6 (still >= red 6.5, unchanged) → red');
+}
+
+console.log('\n--- item 3.3: base-hba1c-diabetes recalibration (CHANGED — red → amber) ---');
+{
+  const rule = shippedRule('base-hba1c-diabetes');
+  assert(rule.red === null || rule.red === undefined, 'sanity: base-hba1c-diabetes no longer carries a red threshold');
+  assert(rule.amber === 48, 'sanity: base-hba1c-diabetes amber is 48');
+  const out = evaluateReportSeverity(makeReport([mkResult('HbA1c', 52, { unit: 'mmol/mol' })]), {
+    resultRules: [rule],
+  });
+  assert(out.level === 'amber', 'HbA1c 52 (>= 48) → amber, not red (alert-fatigue demotion)');
+  assert(out.urgentCount === 0, 'HbA1c 52 → urgentCount 0 (never escalates to red any more)');
+}
+
+console.log('\n--- item 3.3: base-fib4-elevated recalibration + base-fib4-elevated-under65 (NEW context rule) ---');
+{
+  const baseRule = shippedRule('base-fib4-elevated');
+  const under65Rule = shippedRule('base-fib4-elevated-under65');
+  assert(baseRule.red === 3.25, 'sanity: base-fib4-elevated red is now 3.25');
+  assert(
+    under65Rule.context && under65Rule.context.maxAge === 64,
+    'sanity: base-fib4-elevated-under65 carries context.maxAge 64'
+  );
+  const rules = [baseRule, under65Rule];
+
+  const highEveryone = evaluateReportSeverity(makeReport([mkResult('Fibrosis-4 score', 3.4)]), {
+    resultRules: rules,
+  });
+  assert(highEveryone.level === 'red', 'FIB-4 3.4 fires red for everyone (base rule, no patientContext needed)');
+
+  const youngAt267 = evaluateReportSeverity(makeReport([mkResult('Fibrosis-4 score', 2.9)]), {
+    resultRules: rules,
+    patientContext: { ageYears: 40 },
+  });
+  assert(youngAt267.level === 'red', 'FIB-4 2.9 in a patient aged 40 (<65) fires red via the under-65 2.67 cutoff');
+
+  const elderlyAt29 = evaluateReportSeverity(makeReport([mkResult('Fibrosis-4 score', 2.9)]), {
+    resultRules: rules,
+    patientContext: { ageYears: 70 },
+  });
+  assert(
+    elderlyAt29.level === 'amber',
+    'FIB-4 2.9 in a patient aged 70 (>=65) does NOT fire red (under-65 rule gated out; base amber 1.3 still applies)'
+  );
+
+  const noContextAt29 = evaluateReportSeverity(makeReport([mkResult('Fibrosis-4 score', 2.9)]), {
+    resultRules: rules,
+  });
+  assert(
+    noContextAt29.level === 'amber',
+    'FIB-4 2.9 with no patientContext at all: under-65 rule fails closed, only base amber applies'
+  );
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────
