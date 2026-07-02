@@ -80,10 +80,16 @@ had been ranked *above* info.)
 **Your review:** are these two rules safe to ship as green, and is the phrasing
 tight enough? Prune/amend freely.
 
-## 4.8 Photo-missing prompt
+## 4.8 Photo-missing prompt — NOT FEASIBLE from current data (defer)
 
-*Feasibility check pending — depends on whether attachment presence is visible in
-the task data.*
+**Finding:** there is **no attachment / photo / image field** anywhere the
+extension currently reads — not in `page-world.js`'s bridge, `api-client.js`,
+`data-fetcher.js`, the extractors, or any recorded fixture. So "no image
+attached?" on a rash/lump request can't be computed — we can't tell whether a
+request has a photo. Building it would need **live-Medicus discovery** to find an
+attachment indicator in the request DOM/payload (same gate as the plan's other
+deferred "needs live-Medicus DOM discovery" items — bulk lab filing, requester
+capture). Deferred until that discovery can be done on a real Medicus instance.
 
 ## Phase 3 follow-ups (from the Phase 3 sign-off)
 
