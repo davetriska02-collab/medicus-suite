@@ -658,6 +658,17 @@
   letter-spacing: 0.04em;
 }
 
+/* Plain-English headline sentence (GP panel feedback): the action-needed fact
+   stated as a sentence, not a stat, so it carries its own weight rather than
+   reading as a number to skim past. Sits above the compact count line, same
+   tone convention (amber = action needed, green = genuinely clear). */
+.today-sweep-headline {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 /* Single provenance line: how many checked, how many alerts. Tone-coded so
    "all clear" reads green and "action needed" reads amber — but the words
    carry the meaning, never hue alone. */

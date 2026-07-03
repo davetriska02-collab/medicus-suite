@@ -608,10 +608,17 @@ function renderSafetyNet() {
         r.severity === 'overdue' ? 'ref-sn-overdue' : r.severity === 'watch' ? 'ref-sn-watch' : 'ref-sn-open';
       const svc = r.referralService ? `<span class="ref-sn-svc">${escHtml(r.referralService)}</span>` : '';
       const clin = r.referringClinician ? `<span class="ref-sn-clin">${escHtml(r.referringClinician)}</span>` : '';
+      // Name goes on its own line and is allowed to wrap in full — a secretary
+      // must be able to read the whole name to act on it. Service/clinician
+      // are secondary context, so they move to a sub-line rather than compete
+      // with the name for width.
+      const sub = svc || clin ? `<div class="ref-sn-sub">${svc}${clin}</div>` : '';
       return `<div class="ref-sn-row ${sevClass}">
-        <span class="ref-sn-age" title="calendar days since referral">${escHtml(age)}</span>
-        <span class="ref-sn-name">${escHtml(name)}</span>
-        ${svc}${clin}
+        <div class="ref-sn-row-main">
+          <span class="ref-sn-age" title="calendar days since referral">${escHtml(age)}</span>
+          <span class="ref-sn-name">${escHtml(name)}</span>
+        </div>
+        ${sub}
       </div>`;
     })
     .join('');
@@ -623,6 +630,8 @@ function renderSafetyNet() {
     ? `<span class="ref-sn-badge ref-sn-badge-watch">${sn.counts.watch} &ge; ${sn.watchDays}d</span>`
     : '';
 
+  const legend = `<p class="ref-sn-legend">Watch &ge; ${sn.watchDays}d &middot; Overdue &ge; ${sn.overdueDays}d — days since referral</p>`;
+
   return `
     <div class="ref-sn-card">
       <div class="ref-sn-head">
@@ -630,6 +639,7 @@ function renderSafetyNet() {
         ${overdueBadge}${watchBadge}
       </div>
       <p class="ref-sn-note">Suspected-cancer (2WW) referrals still showing <strong>Incomplete</strong> — no confirmed outcome yet. Check each has been received and an appointment booked; absent safety-netting/follow-up is the top root cause of cancer-delay claims. Ages are calendar days since referral; thresholds are a guide, not a clinical standard.</p>
+      ${legend}
       <div class="ref-sn-rows">${rowsHtml}</div>
     </div>`;
 }

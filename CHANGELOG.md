@@ -2,6 +2,56 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.152.0] — 2026-07-03
+
+### Practice-panel wishlist wave 1 (quick wins + half-day items)
+
+First build wave from the whole-suite feature-wishlist appraisal
+(`docs/appraisal/PRACTICE-wishlist-whole-suite-2026-07-03.md`).
+
+**Sweep / Today**
+- QOF points-at-risk patient rows now show each indicator's name next to its
+  code ("DM037 — …"), not bare codes.
+- Skipped appointment entries (no patient UUID) are now *named*: a collapsible
+  amber list shows time · clinician · raw name for every entry the sweep could
+  not check, with an explicit "never checked, not an all-clear" caveat. New
+  `sweep.lastRun.skippedEntries` field (PHI-bearing, same 2h TTL, never backed
+  up); `missingUuidCount` kept for back-compat.
+- Today's Morning Sweep card adds a plain-English line: "N of M booked
+  patients have checks due — open the sweep for names" (neutral zero state;
+  not-run state untouched — never implies all-clear).
+
+**Monitoring visibility from any tab**
+- The open patient's red/amber monitoring count now shows on the header strip's
+  "Monitoring →" button (amber, red if any red chip), falling back to a badge
+  on the Monitoring nav tab when the waiting-room strip is hidden. Panel-only;
+  reuses the content script's already-computed chips via `getSentinelSnapshot`
+  (no rules-engine run in the panel). Unavailable snapshot renders as no badge,
+  never as 0 or an implied all-clear.
+
+**Referrals**
+- 2WW safety-net rows no longer truncate patient names (name wraps on its own
+  line; service/clinician move to a sub-line) and the card carries a threshold
+  legend ("watch ≥ 14d · overdue ≥ 21d", values from the API, not hardcoded).
+
+**Reception → Leaflets**
+- Each pathway tile gains a "Leaflet →" link that jumps to the Leaflets tab
+  with the matching NHS A–Z search pre-run (one-shot `leaflets.pendingQuery`
+  handoff key; transient, never exported).
+
+**Knowledge**
+- Reserved "Locum brief" pinned category: sorts first after "All", styled
+  distinctly, with an empty-state hint and a suggested option in the Add form
+  — the locum's day-one who's-who/escalation card, practice-authored.
+
+**Setup / help**
+- Triage-monitor setup step now uses the canonical "Team / assignee UUID"
+  wording and explains where to find it in plain English.
+- Tab help + tour now surface four features users kept asking for because they
+  couldn't find them: Sentinel auto-follow, the clickable "N unmatched" audit
+  count, and the Practice Pressure cog (weightings/thresholds). TOUR_VERSION
+  8 → 9 so returning users get the "What's new" pass.
+
 ## [v3.151.0] — 2026-07-02
 
 ### Triage Lens — Workload off the GP (Phase 4)

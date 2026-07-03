@@ -614,9 +614,20 @@ function buildSweepBody() {
   // Single clear provenance line: when, how many checked, how many alerts.
   const tone = actionNeeded > 0 ? 'today-sweep-result--action' : 'today-sweep-result--clear';
 
+  // Plain-English headline (GP panel feedback): a bare "N alerts" count reads
+  // as a stat to skim past, not a thing to act on. Say it as a sentence so the
+  // action-needed fact carries its own weight. The 0 case stays neutral — it
+  // must never imply "all clear" beyond what was actually checked.
+  const actionVerb = actionNeeded === 1 ? 'has' : 'have';
+  const headlineText =
+    actionNeeded > 0
+      ? `${actionNeeded} of ${checked} booked ${plural} ${actionVerb} checks due — open the sweep for names`
+      : `No action-needed alerts among ${checked} checked`;
+
   return `
     <div class="today-sweep-summary">
       <span class="today-sweep-time">Last sweep ${esc(timeStr)}</span>
+      <span class="today-sweep-headline ${tone}">${esc(headlineText)}</span>
       <span class="today-sweep-result ${tone}">${checked} ${plural} checked · ${actionNeeded} ${alertWord}</span>
     </div>
     <div class="today-sweep-actions">

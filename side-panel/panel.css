@@ -1025,6 +1025,16 @@ body {
   line-height: 1.4;
 }
 
+/* Monitoring action-count severity, layered on the neutral .nav-badge above —
+   used only when the WR strip is hidden (no waiting patients) so the Sentinel
+   badge falls back to the nav tab. See panel.js applySentinelBadgeToDom. */
+.nav-badge-amber {
+  background: var(--amber);
+}
+.nav-badge-red {
+  background: var(--red);
+}
+
 /* ── Waiting Room global strip ───────────────────────────────────────────────
    Sits between the nav bar and the module content. Visible on every tab.   */
 
@@ -1336,6 +1346,20 @@ body {
 .wr-strip-goto:active {
   color: var(--text-1);
   background: var(--bg-hover);
+}
+
+/* Monitoring action-count chip on the "Monitoring →" button — the open-patient
+   red/amber Sentinel count, visible from any tab without switching to
+   Monitoring. Amber/red only; never shown for an unavailable snapshot. */
+.wr-strip-goto-count {
+  margin-left: 4px;
+  font-weight: 700;
+}
+.wr-strip-goto-count-amber {
+  color: var(--amber);
+}
+.wr-strip-goto-count-red {
+  color: var(--red);
 }
 
 /* ── Request Monitor strip (v1.3) ────────────────────────────────────────────

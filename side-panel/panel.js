@@ -9,6 +9,7 @@ import { initPalette } from './palette/palette.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
 import { initSetup } from './setup/setup.js';
 import { TAB_HELP } from '../shared/tab-help.js';
+import { STATUS_RANK } from './modules/sentinel/sentinel-core.js';
 
 const content = document.getElementById('suiteContent');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -999,6 +1000,9 @@ function renderStrip(patients) {
     wrStripEl.className = 'wr-strip wr-strip-hidden';
     wrStripEl.innerHTML = '';
     reportAlert('waiting', null);
+    // Strip just lost its "Monitoring →" button — the badge falls back to the
+    // nav tab (see applySentinelBadgeToDom).
+    applySentinelBadgeToDom(_sentBadgeActionCount, _sentBadgeHasRed);
     return;
   }
 
@@ -1036,6 +1040,8 @@ function renderStrip(patients) {
     switchModule('sentinel');
     document.querySelector('[data-module="sentinel"]')?.scrollIntoView({ behavior: 'smooth', inline: 'nearest' });
   });
+  // Rebuilt the button above — reapply the last-known Monitoring badge state.
+  applySentinelBadgeToDom(_sentBadgeActionCount, _sentBadgeHasRed);
 
   reportAlert('waiting', {
     level: urgency,
@@ -1219,6 +1225,104 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
 // Boot the strip — initial fetch + self-scheduling poll with failure backoff
 wrPoller = makePoller(fetchAndRenderStrip, WR_POLL_MS, 'wr-strip').start();
+
+// ── Monitoring (Sentinel) action-count badge — visible from any tab ───────────
+// Panel finding: the GP wants to know whether the patient open in Medicus has
+// red/amber monitoring chips without switching to the Monitoring tab. The rules
+// engine runs ONLY in the content script (content-scripts/sentinel.js); this
+// reads its already-published snapshot via getSentinelSnapshot — it never runs
+// the rules engine itself. Refreshed on chrome.tabs.onActivated and on the
+// content script's bare 'sentinel:snapshot-updated' ping (debounced — the ping
+// can fire repeatedly on SPA churn).
+//
+// CLINICAL SAFETY: an unavailable snapshot, chips: null, or no active Medicus
+// tab must render as NO badge — never "0" and never an implied all-clear. The
+// badge only ever signals "action-needed chips are present"; absence of the
+// badge means "unknown", not "clear".
+let _sentBadgeTimer = null;
+
+function scheduleSentinelBadgeUpdate() {
+  if (_sentBadgeTimer) return;
+  _sentBadgeTimer = setTimeout(() => {
+    _sentBadgeTimer = null;
+    updateSentinelBadge();
+  }, 400);
+}
+
+async function updateSentinelBadge() {
+  let chips = null; // stays null (= unavailable) unless a real snapshot with chips comes back
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (tab?.id && tab?.url && /medicus\.health/.test(tab.url)) {
+      const snapshot = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
+      if (snapshot && !snapshot.unavailable && Array.isArray(snapshot.chips)) {
+        chips = snapshot.chips;
+      }
+    }
+  } catch (_) {
+    // No Medicus tab, no content script mounted, or the message failed — chips
+    // stays null, which renders as no badge (see CLINICAL SAFETY note above).
+  }
+  const actionCount = chips ? chips.filter((c) => STATUS_RANK[c.status] <= 2).length : null;
+  const hasRed = chips ? chips.some((c) => STATUS_RANK[c.status] === 0) : false;
+  applySentinelBadgeToDom(actionCount, hasRed);
+}
+
+// Last-known state, reapplied whenever the WR strip re-renders (it owns the
+// "Monitoring →" button this badge decorates) so the two stay in sync without
+// a second round-trip to the content script.
+let _sentBadgeActionCount = null;
+let _sentBadgeHasRed = false;
+
+function applySentinelBadgeToDom(actionCount, hasRed) {
+  _sentBadgeActionCount = actionCount;
+  _sentBadgeHasRed = hasRed;
+
+  const gotoBtn = wrStripEl?.querySelector('.wr-strip-goto');
+  // Prefer the strip chip when the WR strip is actually showing a "Monitoring →"
+  // button; fall back to the nav-tab badge when the strip is hidden (no
+  // waiting patients) — same fallback pattern as the Slots nav badge above.
+  if (gotoBtn) {
+    let chip = gotoBtn.querySelector('.wr-strip-goto-count');
+    if (actionCount) {
+      if (!chip) {
+        chip = document.createElement('span');
+        chip.className = 'wr-strip-goto-count';
+        gotoBtn.appendChild(chip);
+      }
+      chip.textContent = `· ${actionCount}`;
+      chip.classList.toggle('wr-strip-goto-count-red', hasRed);
+      chip.classList.toggle('wr-strip-goto-count-amber', !hasRed);
+    } else if (chip) {
+      chip.remove();
+    }
+  }
+
+  const navTab = document.querySelector('[data-module="sentinel"]');
+  if (!navTab) return;
+  let badge = navTab.querySelector('.nav-badge');
+  if (actionCount && !gotoBtn) {
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'nav-badge';
+      navTab.appendChild(badge);
+    }
+    badge.textContent = String(actionCount);
+    badge.classList.toggle('nav-badge-red', hasRed);
+    badge.classList.toggle('nav-badge-amber', !hasRed);
+    badge.style.display = '';
+  } else if (badge) {
+    badge.style.display = 'none';
+  }
+}
+
+chrome.tabs.onActivated.addListener(() => scheduleSentinelBadgeUpdate());
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!sender || sender.id !== chrome.runtime.id) return;
+  if (msg?.type === 'sentinel:snapshot-updated') scheduleSentinelBadgeUpdate();
+});
+updateSentinelBadge();
 
 // ── Request Monitor strip (v1.3) ─────────────────────────────────────────────
 // Sits below the waiting room strip. Hidden entirely unless toggled on in
@@ -1562,9 +1666,7 @@ async function fetchAndRenderHealthStrip() {
     // Several contracts can share one owning feature (e.g. the three queue-chip
     // contracts) — de-dupe so the strip reads "Queue chips degraded", not
     // "Queue chips, Queue chips, Queue chips degraded".
-    const features = degradedIds
-      .map((id) => DC.get(id)?.feature || id)
-      .filter((f, i, arr) => arr.indexOf(f) === i);
+    const features = degradedIds.map((id) => DC.get(id)?.feature || id).filter((f, i, arr) => arr.indexOf(f) === i);
     healthStripEl.className = 'health-strip health-strip-amber';
     healthStripEl.innerHTML = `
       <span class="health-strip-icon">⚠</span>
