@@ -184,6 +184,42 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+// ── Leaflet suggestion handoff ────────────────────────────────────────────────
+// Each pathway tile carries a small secondary "Leaflet" link — pure signposting
+// to the NHS A-Z leaflet index (Leaflets tab), no clinical claim, and it never
+// touches the tile's own capture-launch click.
+//
+// There is no exported switchModule, so the jump is done the same way as the
+// other cross-tab links in this file (see rcpGotoSentinel below) and in
+// today.js:64 — click the nav-tab button. The search query itself travels via
+// a one-shot storage key (leaflets.pendingQuery): leaflets.js's init() reads
+// it as the initial query and removes it immediately. Machine-local and
+// transient — deliberately NOT added to shared/io/leaflets-io.js.
+
+// Turn a pathway title into a plausible NHS leaflet search term. Deliberately
+// simple — searchIndex() is a forgiving fuzzy match with its own "no bundled
+// match" fallback (search nhs.uk directly), so this only needs to strip the
+// obvious non-condition noise, not guarantee a hit.
+function deriveLeafletQuery(title) {
+  let q = String(title || '').trim();
+  // Trailing age/context qualifier, e.g. "Headache (adult)" -> "Headache"
+  q = q.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  // Titles offering alternates via "/" — the first term is the more specific one
+  if (q.includes('/')) q = q.split('/')[0].trim();
+  // A couple of generic trailing words that don't help a leaflet search
+  q = q.replace(/\s+(symptoms|problems?)$/i, '').trim();
+  return q;
+}
+
+async function goToLeaflet(query) {
+  try {
+    await chrome.storage.local.set({ 'leaflets.pendingQuery': query });
+  } catch (_) {
+    // best-effort — worst case the Leaflets tab just opens with a blank search
+  }
+  document.querySelector('.nav-tab[data-module="leaflets"]')?.click();
+}
+
 // ── Init / cleanup ────────────────────────────────────────────────────────────
 
 export async function init(el) {
@@ -472,6 +508,11 @@ function renderPathwayPicker(_activeDraft) {
       // in the same corner instead). A dot reads as a personal tag, not a
       // clinical-severity edge-bar.
       const tag = !_organising && colour !== 'default' ? `<span class="rcp-tile-tag" aria-hidden="true"></span>` : '';
+      // Secondary, non-competing suggestion — hidden in organise mode, same as
+      // the draft pill and colour tag above.
+      const leafletLink = !_organising
+        ? `<a href="#" class="rcp-tile-leaflet" data-leaflet-query="${esc(deriveLeafletQuery(p.title))}" title="Find the NHS patient leaflet for this">Leaflet <span aria-hidden="true">&rarr;</span></a>`
+        : '';
       return `<div class="rcp-pathway-tile rcp-tile-c-${esc(colour)}${_organising ? ' rcp-tile-organising' : ''}" data-pathway="${esc(p.id)}"${draggable ? ' draggable="true"' : ''}>
       ${handle}
       <button class="rcp-pathway-btn" data-pathway-go="${esc(p.id)}" type="button"${_organising ? ' tabindex="-1"' : ''}>
@@ -479,7 +520,7 @@ function renderPathwayPicker(_activeDraft) {
         <span class="rcp-pathway-applies">${esc(p.appliesTo || '')}</span>
         ${draftPill}
       </button>
-      ${tag}${swatch}${palette}
+      ${tag}${swatch}${palette}${leafletLink}
     </div>`;
     })
     .join('');
@@ -504,6 +545,13 @@ function renderPathwayPicker(_activeDraft) {
       if (_organising) return; // organise mode: launching a capture is disabled
       const p = enabled.find((x) => x.id === btn.dataset.pathwayGo);
       if (p) renderCaptureForm(p);
+    });
+  });
+  body.querySelectorAll('.rcp-tile-leaflet').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation(); // do not also trigger the tile's capture launch
+      goToLeaflet(a.dataset.leafletQuery);
     });
   });
 

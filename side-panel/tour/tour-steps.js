@@ -34,10 +34,15 @@
 //       'display' and 'popout' were consolidated into one 'header-controls'
 //       step (same content, one fewer step) — no user-visible step was
 //       dropped.
+//   9 — 'monitoring-intro' body extended to mention panel auto-follow and the
+//       clickable "N unmatched" audit count (help-text pass — both were
+//       already shipped, just hard to find). No step added or removed (still
+//       20 steps); the existing step's addedIn was retagged 2 → 9 so the
+//       reworked copy reaches returning users via the "What's new" pass.
 
 'use strict';
 
-export const TOUR_VERSION = 8;
+export const TOUR_VERSION = 9;
 
 export const TOUR_STEPS = [
   {
@@ -88,11 +93,15 @@ export const TOUR_STEPS = [
   },
   {
     id: 'monitoring-intro',
-    addedIn: 2,
+    // Body materially reworked in v9 (auto-follow + clickable unmatched count),
+    // so retagged to 9 rather than left at its original 2 — returning users get
+    // this step in their "What's new" pass instead of it silently changing
+    // under them. See TOUR_VERSION history above.
+    addedIn: 9,
     module: 'sentinel',
     target: ['.sent-header'],
     title: 'Monitoring — the clinical core',
-    body: 'Sentinel reads the open patient record and shows drug-monitoring, QOF and vaccine status as colour-ranked chips. Red needs action; click any chip for its evidence.',
+    body: 'Sentinel auto-follows the patient open in Medicus, showing drug-monitoring, QOF and vaccine status as colour-ranked chips — red needs action, click any chip for its evidence. The "N unmatched" audit count is clickable to name the medicines.',
   },
   {
     id: 'rule-coverage',

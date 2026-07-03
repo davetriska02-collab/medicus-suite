@@ -358,6 +358,31 @@
   padding-right: 22px;
 }
 
+/* Secondary "Leaflet" suggestion (bottom-right of the tile) — pure signposting
+   to the NHS A-Z leaflet index. Deliberately small/muted so it never competes
+   with the tile's primary capture-launch click; hidden in organise mode along
+   with the draft pill and colour tag. */
+.rcp-tile-leaflet {
+  position: absolute;
+  right: 6px;
+  bottom: 5px;
+  font-size: 10px;
+  color: var(--text-4);
+  text-decoration: none;
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  transition:
+    color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+.rcp-tile-leaflet:hover {
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+.rcp-pathway-tile:not(.rcp-tile-organising) > .rcp-pathway-btn {
+  padding-bottom: 18px;
+}
+
 /* Organise toolbar */
 .rcp-tile-toolbar {
   display: flex;

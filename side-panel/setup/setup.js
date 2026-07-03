@@ -243,7 +243,7 @@ function renderTriageStep() {
       ${stepIcon(done)}
       <div class="setup-step-body">
         <span class="setup-step-label">Triage monitor <span class="setup-optional-badge">optional</span></span>
-        <span class="setup-step-detail">Watching a triage inbox needs a team ID.</span>
+        <span class="setup-step-detail">Watching a triage inbox needs the practice's Team / assignee UUID. In Medicus, open the task list with your team filter applied and paste the whole URL into settings &mdash; or ask your practice manager.</span>
         <div class="setup-step-actions">
           <a class="setup-link" href="#" data-open-options="sect-suite">Configure in settings</a>
         </div>

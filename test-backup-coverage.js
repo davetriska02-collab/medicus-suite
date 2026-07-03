@@ -161,6 +161,11 @@ const ALLOWLIST = new Set([
   // OS window handle — session-transient (documented in shared/io/popout-io.js):
   'popout.windowId',
 
+  // Transient cross-module handoff — written by the Reception pathway tiles'
+  // "Leaflet" link, read once and removed by leaflets.js init. Not user config
+  // (see side-panel/modules/reception/reception.js goToLeaflet):
+  'leaflets.pendingQuery',
+
   // Transient print payload — written on "Print reception handout", read by
   // handout.html, overwritten on every print. Not user config (documented in
   // side-panel/modules/sweep/sweep.js):

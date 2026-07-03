@@ -35,8 +35,9 @@ export const TAB_HELP = {
   },
   sentinel: {
     title: 'Monitoring',
-    what: 'Shows drug-monitoring and QOF (Quality and Outcomes Framework) reminders for the patient record you have open in Medicus.',
-    firstStep: 'Open a patient in Medicus, then check the reminders here against the record.',
+    what: 'Shows drug-monitoring and QOF (Quality and Outcomes Framework) reminders for the patient record you have open in Medicus. The panel auto-follows whichever patient is open — no need to search or refresh.',
+    firstStep:
+      'Open a patient in Medicus, then check the reminders here against the record. If the audit line shows "N unmatched", click it to name the medicines that didn’t match a monitoring rule.',
   },
   record: {
     title: 'Record',
@@ -57,7 +58,8 @@ export const TAB_HELP = {
   condor: {
     title: 'Condor',
     what: 'A live dashboard of practice pressure, pulling several demand signals together.',
-    firstStep: 'Glance at the headline level to gauge how busy the practice is right now.',
+    firstStep:
+      'Glance at the headline level to gauge how busy the practice is right now. The cog on the Practice Pressure card lets you tune the index weightings and band thresholds to match how your practice runs.',
   },
   trends: {
     title: 'Trends',

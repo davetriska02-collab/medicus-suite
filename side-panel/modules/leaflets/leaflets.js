@@ -60,6 +60,22 @@ export async function init(el) {
   _query = '';
   _openKey = null;
 
+  // One-shot handoff from another tab (e.g. Reception's "Leaflet" suggestion on
+  // a pathway tile — see reception.js deriveLeafletQuery/goToLeaflet): a
+  // pre-filled initial query, consumed immediately so reopening this tab later
+  // starts blank again. Machine-local and transient — deliberately NOT part of
+  // shared/io/leaflets-io.js's backup surface.
+  try {
+    const handoff = await chrome.storage.local.get('leaflets.pendingQuery');
+    const pending = handoff['leaflets.pendingQuery'];
+    if (typeof pending === 'string' && pending.trim()) {
+      _query = pending;
+      await chrome.storage.local.remove('leaflets.pendingQuery');
+    }
+  } catch (_) {
+    // best-effort — worst case the tab opens with a blank search box
+  }
+
   container.innerHTML = `
     <div class="lf-module">
       <div class="lf-head">

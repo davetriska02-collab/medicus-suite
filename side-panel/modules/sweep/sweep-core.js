@@ -79,6 +79,10 @@ export function isActionNeeded(status) {
 //     clinicians: string[],            // staff with >=1 appointment entry (unfiltered)
 //     appointmentCount: number,        // appointment entries seen (after clinician filter)
 //     missingUuidCount: number,        // entries where no UUID was found
+//     skippedEntries: Array<{ time, clinician, rawName }>, // the missingUuidCount entries
+//                                      //   themselves — named, not just counted, so a
+//                                      //   nurse/pharmacist can see exactly who was NOT
+//                                      //   checked rather than trusting a bare number.
 //     cappedAt: number | null,         // total before limit (only set when limit applied)
 //     diagnosticMessage: string | null // non-null when the feed is unusable —
 //                                      //   unrecognised shape, no appointments
@@ -110,6 +114,7 @@ export function extractBookedPatients(raw, opts) {
       clinicians: [],
       appointmentCount: 0,
       missingUuidCount: 0,
+      skippedEntries: [],
       cappedAt: null,
       diagnosticMessage: 'Could not read the appointment book — sweep unavailable; field layout may have changed',
     };
@@ -167,12 +172,22 @@ export function extractBookedPatients(raw, opts) {
   }
 
   let missingUuidCount = 0;
+  // The entries themselves, named — a nurse/pharmacist reviewing the sweep must be
+  // able to see WHO was skipped, not just trust a count (synthetic-panel feedback:
+  // "name every skipped patient, never just a count"). Time is derived the same
+  // way as kept patients' `time` below, so the two lists read consistently.
+  const skippedEntries = [];
   const seen = new Map(); // uuid → patient object (deduplicate)
 
   for (const { entry, clinician } of allEntries) {
     const uuid = extractUuid(entry);
     if (!uuid) {
       missingUuidCount++;
+      skippedEntries.push({
+        time: entry.startDateTime ?? entry.start ?? entry.startTime ?? null,
+        clinician,
+        rawName: entry.patient?.name ?? entry.patient?.displayName ?? 'Unknown name',
+      });
       continue;
     }
     if (seen.has(uuid)) continue; // same patient booked twice
@@ -206,7 +221,15 @@ export function extractBookedPatients(raw, opts) {
   const cappedAt = limit !== null && sorted.length > limit ? sorted.length : null;
   const patients = limit !== null ? sorted.slice(0, limit) : sorted;
 
-  return { patients, clinicians, appointmentCount: allEntries.length, missingUuidCount, cappedAt, diagnosticMessage };
+  return {
+    patients,
+    clinicians,
+    appointmentCount: allEntries.length,
+    missingUuidCount,
+    skippedEntries,
+    cappedAt,
+    diagnosticMessage,
+  };
 }
 
 // ---------------------------------------------------------------------------
