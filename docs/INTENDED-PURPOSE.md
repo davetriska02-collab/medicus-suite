@@ -1,7 +1,7 @@
 # Medicus Suite — Intended Purpose Statement
 
-**Version:** 3.16.0  
-**Date:** May 2026  
+**Version:** 3.17.0  
+**Date:** 2026-07  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Status:** Limited distribution — named clinical users only
 
@@ -10,6 +10,8 @@
 ## Software description
 
 Medicus Suite is a browser extension for Google Chrome that runs alongside the Medicus electronic patient record system (Medicus Health Ltd / Doctolib). It adds a side panel and optional display overlays to the Medicus web interface. It does not install any software on clinical systems, does not write to any patient record, and does not transmit patient data outside the user's browser. The suite also provides an in-app feedback channel that composes an ordinary email via the user's own mail client; it transmits no patient data and auto-attaches only the suite version, browser, and timestamp.
+
+**Bounded write exceptions (as of v3.152.0).** The general description above, and the frozen statement below, describe the software's default, read-only architecture, which remains true of every module not named here. Four specific, confirm-gated capabilities are the exceptions — no full-auto write path exists anywhere in the code for any of them: the routine-prescriptions "send to routine list" button and the OIR auto-tick audit/confirm flow (both pre-existing); Sweep's per-row "Create recall task" button and the Slots appointment-booking flow, each a single explicit confirm click writing a task or booking into Medicus's own system; and, from v3.143.0, **Lab Results Auto-Filing** — an admin-configured, opt-in, fail-closed "File all normal" button that files an investigation result via Medicus's own filing controls. This is the suite's first feature that files a result into the record, and it is recorded as **pending Clinical Safety Officer review** in `docs/HAZARD-LOG.md` (H-038). Full detail and controls for all four are in the hazard log (H-035, H-036, H-038, H-042) and the Clinical Safety Notice (limitations 39 and 41).
 
 The extension comprises the following functional modules:
 
@@ -25,6 +27,11 @@ The extension comprises the following functional modules:
 | **Referrals Tracker** | Displays referral audit data drawn from Medicus, including specialty, priority, status, and clinician breakdowns. |
 | **Waiting Room / Request Monitor** | Displays live waiting-room patient counts and new-request demand counts with configurable amber/red thresholds. |
 | **Patient Record Visualiser** | Analyses a Medicus EPR export PDF locally in the browser to produce a multi-tab clinical dashboard. Outputs include: continuity-of-care indices, investigation trends with clinical zone bands, medication monitoring compliance against NICE/BNF intervals, electronic frailty index (eFI), PINCER-style prescribing safety flags, QOF register review status, and a D3 swim-lane event timeline. No patient data leaves the browser at any stage. |
+| **Lab Results Auto-Filing** (v3.143.0) | An admin-configured, opt-in, confirm-gated "File all normal" button that files an all-normal investigation result via Medicus's own filing controls. **The suite's first record-writing capability** — fail-closed on anything it cannot judge, kill-switched, audited. Pending Clinical Safety Officer review (H-038). |
+| **NHS Patient Leaflets** (v3.147.0) | Bundled offline A-Z search of NHS condition/medicine leaflets with open-in-tab/copy-link actions; with a practice-supplied API key, optionally renders leaflet text in-panel via the NHS Website Content API. Passive reference material; the only new outbound host since the original GitHub/Medicus allowlist (H-039). |
+| **Prescribing Pre-flight** (v3.145.0, Record tab) | Read-only what-if preview: re-runs the existing ACB/STOPP-START/interaction/monitoring engines over "current medications + one proposed drug" and reports the delta, before the drug exists in the record. Decision aid, not advice (H-041). |
+
+*The above module table has not been kept in step with every module shipped since v3.16.0 (e.g. Sweep, Record, Condor, CQC Inspection Readiness, Reception, Knowledge, Today are documented in `docs/HAZARD-LOG.md` §2 and `docs/CLINICAL-SAFETY-NOTICE.md` §2 but not reflected here); this incremental sync adds only this week's new capabilities rather than backfilling the full gap, which is flagged for a future full re-baseline.*
 
 ---
 

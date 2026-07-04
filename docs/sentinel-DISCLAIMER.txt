@@ -8,9 +8,9 @@ person who installs, uses, configures, modifies or distributes the software.
 Installation or use of Sentinel constitutes acknowledgement that the user has
 read this disclaimer and accepts its terms in full.
 
-Version:  0.3.1
+Version:  0.4.0
 Status:   Limited distribution — named GP users only; not certified; see INTENDED-PURPOSE.md and HAZARD-LOG.md.
-Date:     2026-05
+Date:     2026-07 (see v3.152.0 addendum at end of document for the current state)
 
 
 --------------------------------------------------------------------------------
@@ -442,3 +442,48 @@ recipient address is configurable so a practice may direct feedback to an
 internal, information-governance-approved mailbox. This addendum does not alter
 the nature of the software, its intended purpose, or any data-handling
 characteristic described above; it is a clarification only.
+
+
+--- v3.152.0 addendum ---
+
+This addendum records new capabilities shipped between v3.116.0 and v3.152.0.
+Each remains within the intended purpose at section 3, and each is a narrow,
+disclosed, confirm-gated exception to the general architecture described
+above — none is presented as a departure from that architecture; all are
+recorded in full in docs/HAZARD-LOG.md.
+
+Lab Results Auto-Filing (v3.143.0) is the suite's first feature that writes
+to the Medicus record. An admin-configured, opt-in filing profile judges an
+investigation result all-normal by numeric range only; a clinician must still
+click an explicit confirm dialog that enumerates the values relied upon
+before anything is filed. There is no full-auto commit mode. The gate fails
+closed (blocks the offer) on any free-text, culture, unmatched-patient, or
+otherwise unjudgeable report. A practice-wide kill switch and a per-patient
+"never auto-file" list are both available. This capability is recorded as
+pending Clinical Safety Officer review (docs/HAZARD-LOG.md H-038); a practice
+must not enable a filing profile until its own rules owner and CSO have
+reviewed it. New user obligation: a practice enabling this feature must
+nominate a rules owner to configure and periodically review filing profiles,
+in addition to the existing rules-owner obligation for Monitoring rules.
+
+NHS Patient Leaflets (v3.147.0) adds one new, optional external network
+endpoint, api.nhs.uk, contacted only if a practice configures an API key.
+The request contains the user-selected condition or medicine search term
+only — never a patient name, NHS number, or any other patient-identifiable
+data. Without a key, no new endpoint is contacted. This is the first outbound
+host added since the original GitHub-update-check/Medicus allowlist.
+
+Reception request-queue decision support (v3.151.0) — Pharmacy First divert
+and ask-back chips, and two conservative green routine-request
+classifications — offers information and prepare-only drafts to reception
+and clinical staff; it never auto-diverts, auto-triages, or auto-sends
+anything. Separately, Sweep's "Create recall task" button and the Slots
+booking flow each write a task or booking directly into Medicus via one
+explicit, confirm-gated click per patient.
+
+Prescribing Pre-flight (v3.145.0) is a read-only what-if preview on the
+Record tab; it never writes a prescription, order, or record entry.
+
+This addendum does not weaken, narrow, or remove any statement made in the
+sections above or in any earlier addendum; it discloses additional scope
+only.
