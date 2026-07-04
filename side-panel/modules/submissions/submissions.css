@@ -132,6 +132,26 @@
   gap: 4px;
 }
 
+/* FEATURE 1a: read-only span display for the Compare tab's month-to-date sub-mode
+   (replaces the editable date pickers, which don't apply to a computed calendar span). */
+.dp-readonly {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-2);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 3px 6px;
+}
+
+.mode-note {
+  flex-basis: 100%;
+  font-family: var(--sans);
+  font-size: 10px;
+  color: var(--text-4);
+  margin-top: 2px;
+}
+
 .sub-metrics {
   display: grid;
   grid-template-columns: repeat(5, 1fr);

@@ -2,6 +2,63 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.153.0] — 2026-07-04
+
+### Practice-panel wishlist wave 2 (the 1–2-day roadmap items)
+
+Second build wave from `docs/appraisal/PRACTICE-wishlist-whole-suite-2026-07-03.md`.
+
+**Sweep — nurse clinic-prep worklist + QOF £**
+- New collapsible prep view grouping the day's action-needed findings by what
+  the nurse physically preps: bloods to draw, non-blood checks (BP/weight/ECG),
+  vaccines to fetch, reviews to book — a drug needing both bloods and a check
+  appears in both buckets. Printable prep list follows the handout pattern
+  (transient `sweep.worklist`, consume-on-read, never backed up). Absence never
+  reads as all-clear.
+- QOF points-at-risk can now show pounds: enter your practice's own £/point
+  figure once (inline cog, `sweep.qofConfig`, no shipped default — the tool
+  asserts no national price); total and CVD subtotal render in £ alongside
+  points. Non-clinical arithmetic only.
+
+**Manager pack — months and sessions**
+- Submissions: This month / Last month range presets, and a Compare sub-mode
+  "This month vs last month" — always month-to-date vs same-day-of-prior-month,
+  never a partial month against a full one, with the spans shown on-screen.
+- Activity: "Compare vs previous period" toggle (same same-span convention)
+  with per-clinician deltas in the list and CSV; "Per session" toggle divides
+  each clinician's totals by their non-cancelled session count (from the
+  scheduling overview, ≤31-day ranges via the capacity module's fan-out
+  pattern) — session count always shown next to the derived figure; "0
+  sessions — check rota" instead of Infinity; no session data = raw + marker.
+- Condor Pulse: calendar "Month view" line (PPI + demand, month-to-date vs
+  same span last month) over the existing snapshot store, with the honest
+  "N of M possible snapshots" coverage disclosure — gaps are never
+  interpolated.
+- `aggregateSlots` now reports per-clinician non-cancelled `sessions`
+  (additive).
+
+**Referrals — 2WW chase-letter draft**
+- Each safety-net row gains a "Chase draft" button: a prepared, letterheaded
+  chase letter (patient, referral date, days outstanding, specialty/hospital,
+  referral ID) in a readonly textarea with copy-to-clipboard. Prepared draft
+  only — review and edit before sending; never auto-sent; right-patient
+  fineprint included.
+
+**Record — SMR prep pack**
+- "SMR prep pack" button prints a clinician-facing sheet composing problems,
+  dosed medications with overdue/review flags, per-rule monitoring status, ACB
+  and STOPP/START prompts, QOF gaps and latest observations — with the
+  mandatory allergies/immunisations/history gap block and verify-before-
+  prescribing framing top and bottom. Forked from the passport print pattern
+  (transient `record.smrPack`, consume-on-read, never backed up). Empty
+  sections say "none recorded in live view", never implying reviewed-and-clear.
+
+**Panel — keyboard-first navigation**
+- 1–9 jumps to the Nth visible tab; `g` + letter chords (g t today, g m
+  monitoring, …); `/` focuses the active module's search; `?` opens the help
+  popover with a new shortcuts cheat-sheet. Single shared typing guard with
+  the existing Ctrl/Cmd+Alt+←/→ cycler; palette/tour/popovers always win.
+
 ## [v3.152.0] — 2026-07-03
 
 ### Practice-panel wishlist wave 1 (quick wins + half-day items)

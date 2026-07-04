@@ -29,7 +29,7 @@ const path = require('path');
   }
 
   const base = `file://${path.resolve(__dirname)}/`;
-  const { buildPulseRows, coverageSummary, PULSE_METRICS } = await import(
+  const { buildPulseRows, buildMonthlyPulseRows, coverageSummary, PULSE_METRICS } = await import(
     new URL('side-panel/modules/condor/pulse-core.js', base).href
   );
   const reportData = await import(new URL('side-panel/modules/condor/report/report-data.js', base).href);
@@ -249,6 +249,102 @@ const path = require('path');
     check(
       typeof reportData.buildReport === 'function' && reportData.buildReport.length <= 1,
       'buildReport reads slots.hiddenTypes once and threads it into both current and prior fetchCapacityRange calls (see report-data.js buildReport)'
+    );
+  }
+
+  // ── buildMonthlyPulseRows (manager-pack FEATURE 1c) ─────────────────────────
+  console.log('\n--- buildMonthlyPulseRows: windows ---');
+  {
+    // 2026-07-04: this-month-to-date is 2026-07-01..07-04 (4 days); previous span is the
+    // SAME day-of-month clamp in June: 2026-06-01..06-04 (partial-month convention).
+    const built = buildMonthlyPulseRows([], new Date('2026-07-04T12:00:00'));
+    check(
+      built.current.start === '2026-07-01' && built.current.end === '2026-07-04',
+      'current window is month-to-date'
+    );
+    check(
+      built.previous.start === '2026-06-01' && built.previous.end === '2026-06-04',
+      `previous window is the same day-of-month span last month (got ${built.previous.start}..${built.previous.end})`
+    );
+    check(built.current.days === 4 && built.previous.days === 4, 'both windows report equal day counts (4)');
+    check(Array.isArray(built.metrics) && built.metrics.length === 0, 'no snapshots at all → no metrics surfaced');
+  }
+
+  console.log('\n--- buildMonthlyPulseRows: end-of-month clamp (31 Jan → Feb) ---');
+  {
+    // asOf = last day of a 31-day month; previous month (Feb, non-leap) only has 28 days —
+    // the previous span must clamp to Feb's actual last day, not roll into March.
+    const built = buildMonthlyPulseRows([], new Date('2027-01-31T12:00:00'));
+    check(
+      built.current.start === '2027-01-01' && built.current.end === '2027-01-31',
+      'current window is the full month (Jan is complete)'
+    );
+    check(
+      built.previous.start === '2026-12-01' && built.previous.end === '2026-12-31',
+      `full current month compares against the full previous month, not a clamp (got ${built.previous.start}..${built.previous.end})`
+    );
+  }
+
+  console.log('\n--- buildMonthlyPulseRows: January rolls back into prior December ---');
+  {
+    const built = buildMonthlyPulseRows([], new Date('2026-01-15T12:00:00'));
+    check(built.current.start === '2026-01-01' && built.current.end === '2026-01-15', 'current window is Jan 1-15');
+    check(
+      built.previous.start === '2025-12-01' && built.previous.end === '2025-12-15',
+      `previous window rolls back into prior December (got ${built.previous.start}..${built.previous.end})`
+    );
+  }
+
+  console.log('\n--- buildMonthlyPulseRows: deltas ---');
+  {
+    // Current month (1-4 Jul) averages ppi=50; previous month same span (1-4 Jun) averages 30.
+    const snaps = [
+      row('2026-06-01', { ppi: 30 }),
+      row('2026-06-02', { ppi: 30 }),
+      row('2026-06-03', { ppi: 30 }),
+      row('2026-06-04', { ppi: 30 }),
+      row('2026-07-01', { ppi: 50 }),
+      row('2026-07-02', { ppi: 50 }),
+      row('2026-07-03', { ppi: 50 }),
+      row('2026-07-04', { ppi: 50 }),
+    ];
+    const built = buildMonthlyPulseRows(snaps, new Date('2026-07-04T12:00:00'));
+    const ppi = built.metrics.find((m) => m.key === 'ppi');
+    check(!!ppi, 'ppi metric present (recorded in both windows)');
+    check(ppi.current === 50, 'current month mean computed correctly');
+    check(ppi.previous === 30, 'previous month mean computed correctly');
+    check(ppi.delta === 20, 'delta = current - previous');
+    check(ppi.deltaPct === Math.round((20 / 30) * 100), 'deltaPct matches comparePct-style rounding');
+    check(ppi.direction === 'up' && ppi.sense === 'worsening', 'rising pressure index reads as worsening');
+    check(
+      ppi.coverage.current.have === 4 && ppi.coverage.current.possible === 4,
+      'current-window coverage is 4 of 4 possible'
+    );
+    check(
+      ppi.coverage.previous.have === 4 && ppi.coverage.previous.possible === 4,
+      'previous-window coverage is 4 of 4 possible'
+    );
+  }
+
+  console.log('\n--- buildMonthlyPulseRows: coverage — sparse and zero ---');
+  {
+    // Only 1 of 4 days recorded this month; previous month fully absent.
+    const snaps = [row('2026-07-03', { ppi: 40 })];
+    const built = buildMonthlyPulseRows(snaps, new Date('2026-07-04T12:00:00'));
+    const ppi = built.metrics.find((m) => m.key === 'ppi');
+    check(ppi.coverage.current.have === 1 && ppi.coverage.current.possible === 4, 'sparse current coverage: 1 of 4');
+    check(ppi.coverage.previous.have === 0 && ppi.coverage.previous.possible === 4, 'zero previous coverage: 0 of 4');
+    check(ppi.previous === null, 'no previous-window snapshots → previous mean is null, not 0');
+    check(ppi.delta === null && ppi.deltaPct === null, 'no delta computed when either window is uncovered');
+  }
+
+  console.log('\n--- buildMonthlyPulseRows: never-recorded metric is omitted, not empty ---');
+  {
+    const snaps = [row('2026-07-01', { ppi: 10 })];
+    const built = buildMonthlyPulseRows(snaps, new Date('2026-07-04T12:00:00'));
+    check(
+      !built.metrics.some((m) => m.key === 'demand'),
+      'demand never recorded in the series → omitted entirely, not shown as an empty row'
     );
   }
 

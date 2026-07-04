@@ -40,7 +40,9 @@ const path = require('path');
     ACTION_COLOURS,
     chipInstruction,
     buildHandout,
-    buildRecallDescription;
+    buildRecallDescription,
+    summariseWorklistByAction,
+    buildWorklist;
   try {
     const mod = await import(sweepCorePath);
     extractBookedPatients = mod.extractBookedPatients;
@@ -51,6 +53,8 @@ const path = require('path');
     chipInstruction = mod.chipInstruction;
     buildHandout = mod.buildHandout;
     buildRecallDescription = mod.buildRecallDescription;
+    summariseWorklistByAction = mod.summariseWorklistByAction;
+    buildWorklist = mod.buildWorklist;
   } catch (e) {
     console.error('FATAL: could not import sweep-core.js:', e.message);
     process.exit(1);
@@ -885,6 +889,142 @@ const path = require('path');
     check(buildRecallDescription([]) === '', 'empty chips → empty description');
     check(buildRecallDescription(null) === '', 'null chips → empty description');
   }
+
+  // ── summariseWorklistByAction ─────────────────────────────────────────────────
+  console.log('\n--- summariseWorklistByAction ---');
+
+  // Both-bucket drug: methotrexate contributes FBC (blood) AND weight (check)
+  // for the SAME patient — must appear in both buckets, per CLAUDE.md.
+  const bothBucketDrugChip = {
+    type: 'drug-monitoring',
+    status: 'overdue',
+    drugName: 'Methotrexate',
+    tests: [
+      { name: 'FBC', status: 'overdue' },
+      { name: 'LFT', status: 'due_soon' },
+      { name: 'Weight', status: 'stale' },
+      { name: 'U&E', status: 'in_date' }, // not action-needed → excluded
+    ],
+  };
+  const vaccineDueChip = { type: 'vaccine', status: 'vax_due', displayName: 'Flu vaccine' };
+  const vaccineGivenChip = { type: 'vaccine', status: 'vax_given', displayName: 'Shingles vaccine' }; // excluded
+  const reviewChip = { type: 'qof-indicator', status: 'not_met', indicatorCode: 'HYP010', indicatorName: 'BP control' };
+  const clearQofChip = { type: 'qof-indicator', status: 'achieved', indicatorCode: 'DM020' }; // excluded
+
+  const worklistInput = [
+    {
+      uuid: 'w-1',
+      name: 'Alice Prep',
+      time: '2026-07-04T09:00:00',
+      clinician: 'Nurse A',
+      chips: [bothBucketDrugChip, vaccineDueChip],
+      error: null,
+    },
+    {
+      uuid: 'w-2',
+      name: 'Bob Review',
+      time: '2026-07-04T08:30:00',
+      clinician: 'Dr B',
+      chips: [reviewChip, clearQofChip, vaccineGivenChip],
+      error: null,
+    },
+    {
+      uuid: 'w-3',
+      name: 'Errored Patient',
+      time: '2026-07-04T08:00:00',
+      chips: null,
+      error: 'HTTP 500', // must be skipped entirely
+    },
+  ];
+
+  const worklist = summariseWorklistByAction(worklistInput);
+
+  check(worklist.bloods.length === 1, 'bloods bucket has 1 patient');
+  check(worklist.bloods[0].uuid === 'w-1', 'bloods bucket patient is Alice');
+  check(
+    worklist.bloods[0].items.length === 2 &&
+      worklist.bloods[0].items.includes('FBC — Methotrexate') &&
+      worklist.bloods[0].items.includes('LFT — Methotrexate'),
+    `bloods items correct (overdue + due_soon both included), got ${JSON.stringify(worklist.bloods[0].items)}`
+  );
+  check(
+    !worklist.bloods[0].items.some((i) => i.includes('U&E')),
+    'in_date test excluded from bloods (not action-needed)'
+  );
+
+  check(worklist.checks.length === 1, 'checks bucket has 1 patient');
+  check(worklist.checks[0].uuid === 'w-1', 'checks bucket patient is Alice');
+  check(
+    worklist.checks[0].items.length === 1 && worklist.checks[0].items[0] === 'Weight — Methotrexate',
+    `checks items correct (the non-blood test only), got ${JSON.stringify(worklist.checks[0].items)}`
+  );
+
+  check(worklist.vaccines.length === 1, 'vaccines bucket has 1 patient');
+  check(worklist.vaccines[0].uuid === 'w-1', 'vaccines bucket patient is Alice');
+  check(worklist.vaccines[0].items[0] === 'Flu vaccine', 'vaccine item is the displayName');
+  check(!worklist.vaccines.some((p) => p.uuid === 'w-2'), 'vax_given excluded from vaccines bucket');
+
+  check(worklist.reviews.length === 1, 'reviews bucket has 1 patient');
+  check(worklist.reviews[0].uuid === 'w-2', 'reviews bucket patient is Bob');
+  check(/Book a blood pressure check/.test(worklist.reviews[0].items[0]), 'review item carries the booking verb');
+  check(/HYP010/.test(worklist.reviews[0].items[0]), 'review item carries the indicator code');
+  check(!worklist.reviews.some((p) => p.items.some((i) => /DM020/.test(i))), 'achieved QOF chip excluded from reviews');
+
+  check(!worklist.bloods.some((p) => p.uuid === 'w-3'), 'errored patient excluded from every bucket (bloods)');
+  check(!worklist.reviews.some((p) => p.uuid === 'w-3'), 'errored patient excluded from every bucket (reviews)');
+
+  // Time ordering within a bucket (Bob 08:30 before hypothetical later entries).
+  const orderInput = [
+    { uuid: 'o-1', name: 'Later', time: '2026-07-04T11:00:00', chips: [vaccineDueChip], error: null },
+    { uuid: 'o-2', name: 'Earlier', time: '2026-07-04T08:15:00', chips: [vaccineDueChip], error: null },
+  ];
+  const orderResult = summariseWorklistByAction(orderInput);
+  check(
+    orderResult.vaccines[0].name === 'Earlier' && orderResult.vaccines[1].name === 'Later',
+    'worklist buckets are time-ordered'
+  );
+
+  // Empty / null input.
+  const emptyWorklist = summariseWorklistByAction([]);
+  check(
+    emptyWorklist.bloods.length === 0 &&
+      emptyWorklist.checks.length === 0 &&
+      emptyWorklist.vaccines.length === 0 &&
+      emptyWorklist.reviews.length === 0,
+    'empty input → all buckets empty'
+  );
+  const nullWorklist = summariseWorklistByAction(null);
+  check(nullWorklist.bloods.length === 0, 'null input → no crash, empty buckets');
+
+  // ── buildWorklist ─────────────────────────────────────────────────────────────
+  console.log('\n--- buildWorklist ---');
+  const builtWorklist = buildWorklist(worklistInput, {
+    runAt: '2026-07-04T07:00:00Z',
+    clinicDate: '2026-07-04',
+    clinicians: ['Nurse A', 'Dr B'],
+    suiteVersion: '9.9.9',
+  });
+  check(builtWorklist.generatedAt === '2026-07-04T07:00:00Z', 'buildWorklist carries runAt through');
+  check(builtWorklist.clinicDate === '2026-07-04', 'buildWorklist carries clinicDate through');
+  check(builtWorklist.clinicians.join(',') === 'Nurse A,Dr B', 'buildWorklist carries clinicians array through');
+  check(builtWorklist.clinician === null, 'buildWorklist clinician back-compat null when ≥2 selected');
+  check(builtWorklist.suiteVersion === '9.9.9', 'buildWorklist carries suiteVersion through');
+  check(
+    builtWorklist.bloods.length === 1 && builtWorklist.reviews.length === 1,
+    'buildWorklist model wraps the buckets'
+  );
+
+  const oneClinWorklist = buildWorklist(worklistInput, { clinicians: ['Nurse A'] });
+  check(oneClinWorklist.clinician === 'Nurse A', 'buildWorklist clinician set when exactly one selected');
+
+  const emptyBuiltWorklist = buildWorklist([], {});
+  check(
+    emptyBuiltWorklist.bloods.length === 0 &&
+      emptyBuiltWorklist.checks.length === 0 &&
+      emptyBuiltWorklist.vaccines.length === 0 &&
+      emptyBuiltWorklist.reviews.length === 0,
+    'empty perPatientResults → empty worklist model'
+  );
 
   // ── Final results ─────────────────────────────────────────────────────────────
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
