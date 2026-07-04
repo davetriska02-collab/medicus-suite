@@ -44,7 +44,8 @@
         "shared/extraction-health.js",
         "shared/chip-renderer.js",
         "content-scripts/sentinel.js",
-        "content-scripts/referrals-discovery.js"
+        "content-scripts/referrals-discovery.js",
+        "content-scripts/api-discovery.js"
       ],
       "run_at": "document_idle"
     },

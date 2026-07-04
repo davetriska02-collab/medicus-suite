@@ -216,6 +216,31 @@ const ALLOWLIST = new Set([
   // referrals.config IS covered via referrals-io.
   'referrals.discovery',
 
+  // Locally-discovered patient-listing/journal API endpoint URLs (and their
+  // UUID-templated forms) captured by content-scripts/api-discovery.js —
+  // endpoint shapes only, no PHI. Rediscovered on visiting the relevant
+  // Medicus page; feeds duplicate-checker.js's practice-wide GP2GP-duplicate
+  // scan and per-patient click-through. Never exported to backup:
+  'suite.discoveredPatientListUrl',
+  'suite.discoveredAllPatientUrls',
+  'suite.discoveredJournalUrl',
+  'suite.discoveredAllJournalUrls',
+  'suite.discoveredJournalUrlTemplate',
+  'suite.discoveredAllJournalUrlTemplates',
+
+  // Practice-wide flagged-patient scan results from duplicate-checker.js —
+  // NAMES, NHS NUMBERS AND DATES OF BIRTH for every patient the GP2GP
+  // duplicate scan flags, persisted so re-scans can skip already-checked
+  // patients. This is the largest identifiable-PHI surface in the suite
+  // (practice-wide, not per-patient) and is DELIBERATELY excluded from suite
+  // backups — a portable JSON export must never carry a practice-wide PHI
+  // list. If you're tempted to wire this into an io file per the usual
+  // convention, don't — that would ship real patient data in every backup
+  // file. (duplicate-checker.js lives at the repo root, outside the APP_DIRS
+  // this audit scans, so this entry is defence-in-depth documentation, not
+  // something the scanner currently detects on its own.)
+  'suite.dupChecker.state',
+
   // Per-machine view state — not user config, not PHI, deliberately excluded from
   // backups so a restore onto a new machine starts fresh (see shared/modules/shared/ui-state.js):
   'suite.uiState',

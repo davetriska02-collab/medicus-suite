@@ -458,6 +458,10 @@ document.querySelectorAll('.nav-tab').forEach((tab) => {
       chrome.tabs.create({ url: chrome.runtime.getURL('visualiser-core.html') });
       return;
     }
+    if (mod === 'duplicate-checker') {
+      chrome.tabs.create({ url: chrome.runtime.getURL('duplicate-checker.html') });
+      return;
+    }
     if (mod === activeModule) return;
     switchModule(mod);
   });
