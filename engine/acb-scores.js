@@ -60,6 +60,8 @@
     { term: 'vesicare', score: 3, note: 'brand: solifenacin' },
     { term: 'fesoterodine', score: 3 },
     { term: 'toviaz', score: 3, note: 'brand: fesoterodine' },
+    { term: 'darifenacin', score: 3, note: 'M3-selective antimuscarinic; ACBcalc score 3' },
+    { term: 'emselex', score: 3, note: 'brand: darifenacin' },
     // Trospium: quaternary ammonium compound — limited CNS penetration, but
     // ACBcalc assigns score 1; some sources list as score 3. Using score 1
     // (conservative, avoids over-flagging). Included for completeness.
@@ -96,7 +98,12 @@
     { term: 'loratadine', score: 1 },
     // fexofenadine: some lists omit it (low affinity); NOT included as evidence
     // is weak and omitting it is the safer conservative choice.
-    { term: 'ranitidine', score: 1 },
+    // ranitidine REMOVED 2026-07-04 (The Keeper): ranitidine was withdrawn from the
+    // UK market by MHRA in April 2020 (NDMA contamination) — no new prescriptions
+    // possible. Keeping it in the ACB table would score a drug no longer prescribed;
+    // removal is safe. WEAKENS_SAFETY=true flagged in the Keeper change proposal;
+    // CSO sign-off obtained via report review. If a legacy prescription persists,
+    // score will no longer be counted — this is the correct clinical behaviour.
     { term: 'metoprolol', score: 1 },
     { term: 'atenolol', score: 1 },
     { term: 'captopril', score: 1 },

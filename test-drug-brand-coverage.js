@@ -114,7 +114,30 @@ const EXPECTED = {
     'Chlorpromazine 25mg', 'Largactil 25mg', 'Amisulpride 200mg', 'Solian 200mg',
     'Paliperidone 6mg', 'Invega 6mg', 'Xeplion 75mg', 'Trevicta 175mg', 'Byannli 700mg',
     'Lurasidone 37mg', 'Latuda 37mg', 'Asenapine 10mg', 'Sycrest 10mg',
-    'Cariprazine 3mg', 'Reagila 3mg'
+    'Cariprazine 3mg', 'Reagila 3mg',
+    // FGAs added 2026-07-04 (The Keeper)
+    'Zuclopenthixol 25mg tablets', 'Clopixol 25mg tablets', 'Clopixol Acuphase 50mg/ml injection',
+    'Flupentixol 3mg tablets', 'Depixol 20mg/ml injection', 'Depixol Low Volume 100mg/ml injection',
+    'Sulpiride 200mg tablets', 'Dolmatil 200mg tablets', 'Sulpor 200mg/5ml oral solution', 'Sulpitil 200mg tablets',
+    'Trifluoperazine 1mg tablets', 'Stelazine 1mg spansule',
+    'Promazine 25mg tablets', 'Promazine 50mg/5ml oral solution',
+    'Pericyazine 2.5mg tablets', 'Neulactil 2.5mg tablets',
+    'Levomepromazine 25mg tablets', 'Nozinan 25mg tablets'
+  ],
+  'valproate-maintenance': [
+    'Sodium valproate 200mg tablets', 'Epilim 200mg crushable tablets',
+    'Epilim Chrono 300mg tablets', 'Epilim Chronosphere 250mg granules',
+    'Episenta 150mg prolonged-release capsules', 'Convulex 150mg gastro-resistant capsules',
+    'Depakote 250mg gastro-resistant tablets', 'Orlept 200mg/5ml oral solution',
+    'Valproic acid 150mg capsules', 'Belvo 50mg/ml oral solution'
+  ],
+  'finerenone-maintenance': [
+    'Finerenone 10mg tablets', 'Kerendia 10mg tablets', 'Finerenone 20mg tablets', 'Kerendia 20mg tablets'
+  ],
+  'digoxin-maintenance': [
+    'Digoxin 62.5 microgram tablets', 'Digoxin 125 microgram tablets',
+    'Digoxin 250 microgram tablets', 'Lanoxin 62.5mcg tablets', 'Lanoxin 125mcg tablets',
+    'Lanoxin-PG 62.5mcg tablets', 'Digoxin 50mcg/ml oral solution'
   ],
   'mirabegron': ['Mirabegron 50mg', 'Betmiga 50mg'],
   'levothyroxine': [
@@ -167,6 +190,11 @@ const MUST_NOT = [
   // clozapine is deliberately excluded — monitored under the national CPMS protocol
   ['antipsychotic', 'Clozapine 100mg tablets'],
   ['antipsychotic', 'Clozaril 100mg tablets'],
+  // fluanxol (flupentixol 1mg — antidepressant dose) is EXCLUDED — false-positive
+  // risk for depression patients; CSO sign-off pending. Depixol (antipsychotic depot)
+  // is in the match list via 'flupentixol' and 'depixol' — this must NOT match fluanxol.
+  ['antipsychotic', 'Fluanxol 500mcg tablets'],
+  ['antipsychotic', 'Fluanxol 1mg tablets'],
   // local vaginal oestrogens are excluded (no systemic effect)
   ['hrt-systemic', 'Vagifem 10mcg vaginal tablets'],
   ['hrt-systemic', 'Ovestin 0.1% vaginal cream'],

@@ -380,7 +380,7 @@ const HIGH_RISK_DRUGS = [
       'liver function',
       'lft',
     ],
-    interval: 91,
+    interval: 84, // 12 weeks (BSR 2025); was 91 (13 weeks — incorrect), fixed 2026-07-04
   },
   {
     id: 'azathioprine',
@@ -505,7 +505,7 @@ const HIGH_RISK_DRUGS = [
   {
     id: 'statin',
     label: 'Statin',
-    terms: ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'fluvastatin', 'pitavastatin'],
+    terms: ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'fluvastatin', 'pitavastatin', 'livazo'],
     requires: ['lft', 'liver function', 'cholesterol'],
     interval: 365,
   },
@@ -558,11 +558,12 @@ const HIGH_RISK_DRUGS = [
     requires: [],
     interval: 0,
   },
-  // H2-blockers: extend gastroprotection detection (famotidine, cimetidine, nizatidine, ranitidine)
+  // H2-blockers: extend gastroprotection detection (famotidine, cimetidine only — ranitidine and
+  // nizatidine withdrawn from UK market by MHRA 2020 due to NDMA contamination; removed 2026-07-04)
   {
     id: 'h2blocker',
     label: 'H2-blocker',
-    terms: ['famotidine', 'cimetidine', 'nizatidine', 'ranitidine'],
+    terms: ['famotidine', 'cimetidine'],
     requires: [],
     interval: 0,
   },

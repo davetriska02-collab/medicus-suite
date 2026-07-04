@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-06-21",
+  "lastUpdated": "2026-07-04",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes.",
   "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported).",
@@ -851,7 +851,15 @@
           "irbesartan",
           "telmisartan",
           "olmesartan",
-          "azilsartan"
+          "azilsartan",
+          "quinapril",
+          "accupro",
+          "cilazapril",
+          "vascace",
+          "imidapril",
+          "tanatril",
+          "eprosartan",
+          "teveten"
         ]
       },
       "thresholds": {
@@ -1259,7 +1267,15 @@
               "olmesartan",
               "azilsartan",
               "sacubitril",
-              "entresto"
+              "entresto",
+              "quinapril",
+              "accupro",
+              "cilazapril",
+              "vascace",
+              "imidapril",
+              "tanatril",
+              "eprosartan",
+              "teveten"
             ]
           },
           {

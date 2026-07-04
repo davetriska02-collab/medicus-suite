@@ -291,6 +291,28 @@ console.log('\n--- START 11: IHD + no statin ---');
   assert(!find(flags, 'start_statin_ihd'), 'START 11 does NOT fire: no IHD problem');
 }
 
+// ── START 11 extension: pitavastatin / livazo recognised as statin ─────────
+// (2026-07-04 Keeper: pitavastatin and livazo added to STATIN_TERMS)
+console.log('\n--- START 11 extension: pitavastatin/livazo recognised ---');
+{
+  const flags = computeStoppStart({
+    drugs: ['pitavastatin 2mg tablets'],
+    problems: [{ name: 'ischaemic heart disease' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_statin_ihd'), 'pitavastatin recognised as statin (START 11 suppressed)');
+}
+{
+  const flags = computeStoppStart({
+    drugs: ['Livazo 2mg tablets'],
+    problems: [{ name: 'ischaemic heart disease' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_statin_ihd'), 'Livazo (pitavastatin brand) recognised as statin (START 11 suppressed)');
+}
+
 // ── START 12: Diabetes + CKD + no ACEi/ARB ───────────────────────────────
 console.log('\n--- START 12: Diabetes + CKD + no ACEi/ARB ---');
 {
@@ -447,6 +469,64 @@ console.log('\n--- START 13: MI + no beta-blocker ---');
     egfr: null,
   });
   assert(!find(flags, 'start_bb_post_mi'), 'START 13 does NOT fire: no MI problem');
+}
+
+// ── START 13 extension: new beta-blockers recognised ─────────────────────
+// (2026-07-04 Keeper: acebutolol/sectral/celiprolol/celectol/nadolol/pindolol/visken added)
+console.log('\n--- START 13 extension: acebutolol/celiprolol/nadolol/pindolol recognised ---');
+{
+  const flags = computeStoppStart({
+    drugs: ['acebutolol 200mg capsules'],
+    problems: [{ name: 'myocardial infarction' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bb_post_mi'), 'acebutolol recognised as beta-blocker (START 13 suppressed)');
+}
+{
+  const flags = computeStoppStart({
+    drugs: ['Sectral 200mg capsules'],
+    problems: [{ name: 'myocardial infarction' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bb_post_mi'), 'Sectral (acebutolol brand) recognised as beta-blocker');
+}
+{
+  const flags = computeStoppStart({
+    drugs: ['celiprolol 200mg tablets'],
+    problems: [{ name: 'myocardial infarction' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bb_post_mi'), 'celiprolol recognised as beta-blocker (START 13 suppressed)');
+}
+{
+  const flags = computeStoppStart({
+    drugs: ['nadolol 40mg tablets'],
+    problems: [{ name: 'myocardial infarction' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bb_post_mi'), 'nadolol recognised as beta-blocker (START 13 suppressed)');
+}
+{
+  const flags = computeStoppStart({
+    drugs: ['pindolol 5mg tablets'],
+    problems: [{ name: 'myocardial infarction' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bb_post_mi'), 'pindolol recognised as beta-blocker (START 13 suppressed)');
+}
+{
+  const flags = computeStoppStart({
+    drugs: ['Visken 5mg tablets'],
+    problems: [{ name: 'myocardial infarction' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bb_post_mi'), 'Visken (pindolol brand) recognised as beta-blocker');
 }
 
 // ── Negative control: clean drug list → no flags ──────────────────────────

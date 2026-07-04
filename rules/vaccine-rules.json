@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-17",
+  "lastUpdated": "2026-07-04",
   "specVersion": "JCVI/UKHSA 2026/27 season (2026-06-17 CSO-approved: RSV 75+/care-home expansion, flu homelessness cohort, pneumococcal PCV20 relabel — verify against source letters; applied this run without page-verification due to WebFetch 403)",
   "notes": "Seasonal rules (flu, COVID) use schedule+season for campaign-window suppression. One-off lifetime rules (pneumococcal, shingles, RSV) use schedule:once. INTENTIONAL OMISSIONS: pertussis-in-pregnancy and RSV-in-pregnancy are not encoded — the engine has no per-pregnancy episode gate or gestational-age gate; a lifetime lookback cannot distinguish doses given in prior pregnancies.",
   "rules": [
@@ -18,7 +18,7 @@
           { "kind": "age", "ageMin": 2, "ageMax": 17, "label": "Child (2–17 years)" },
           { "kind": "problem", "match": ["pregnan"], "sex": "F", "label": "Pregnancy" },
           { "kind": "problem", "match": ["homeless","rough sleeper","no fixed abode","night shelter resident","hostel resident"], "label": "Experiencing homelessness" },
-          { "kind": "register", "registers": ["DM","CKD","COPD","CHD","HF","STIA","AF","PAD"], "label": "Clinical risk group (QOF register)" },
+          { "kind": "register", "registers": ["DM","CKD","COPD","CHD","HF","STIA","AF","PAD","SMI"], "label": "Clinical risk group (QOF register)" },
           { "kind": "problem", "match": ["cirrhosis","chronic hepatitis b","chronic hepatitis c","chronic liver disease","primary biliary","primary sclerosing cholangitis","biliary atresia","epilepsy","multiple sclerosis","parkinson","cerebral palsy","motor neurone","huntington","splenectomy","asplenia","hyposplenism","sickle cell","thalassaemia major","hereditary spherocytosis","hiv","aids","transplant","leukaemia","lymphoma","myeloma","bronchiectasis","cystic fibrosis","pulmonary fibrosis","interstitial lung","learning disabilit","downs syndrome","down syndrome"], "label": "Clinical risk group (problem)" },
           { "kind": "medication", "match": ["rituximab","adalimumab","infliximab","etanercept","abatacept","tocilizumab","secukinumab","ustekinumab","baricitinib","tofacitinib","azathioprine","ciclosporin","mycophenolate","tacrolimus","sirolimus","methotrexate","cyclophosphamide","chlorambucil","prednisolone","dexamethasone","chemotherapy"], "label": "Immunosuppressive medication" },
           { "kind": "observation-threshold", "observation": ["bmi","body mass index"], "operator": ">=", "value": 40, "label": "BMI ≥40 kg/m²" },
@@ -44,7 +44,7 @@
           { "kind": "age", "ageMin": 75, "label": "Age 75+" },
           { "kind": "problem", "match": ["care home resident","nursing home resident","residential care"], "label": "Care home resident" },
           { "kind": "problem", "match": ["transplant","stem cell","bone marrow","leukaemia","lymphoma","myeloma","hiv","aids","primary immunodeficiency","severe combined immunodeficiency","scid","chronic leukaemia","hodgkin"], "label": "Immunosuppressed (problem)" },
-          { "kind": "medication", "match": ["rituximab","ciclosporin","mycophenolate","tacrolimus","azathioprine","methotrexate","cyclophosphamide","chemotherapy","alemtuzumab","ofatumumab","ibrutinib","venetoclax"], "label": "Immunosuppressed (medication)" }
+          { "kind": "medication", "match": ["rituximab","ciclosporin","mycophenolate","tacrolimus","azathioprine","methotrexate","cyclophosphamide","chemotherapy","alemtuzumab","ofatumumab","ibrutinib","venetoclax","baricitinib","tofacitinib"], "label": "Immunosuppressed (medication)" }
         ]
       },
       "statusTerms": {

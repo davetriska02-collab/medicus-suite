@@ -2,6 +2,108 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.153.0] — 2026-07-04
+
+### The Keeper — clinical rules currency update (2026-07-04)
+
+Periodic horizon scan of all rule files. 18 changes applied across 8 rule files + 3 JS data tables.
+All external source URLs returned HTTP 403 this run (proxy policy); changes verified via training
+knowledge and intra-repo cross-references. Source citations in each rule. **CSO review required
+before merge** (see ranitidine ACB removal note below).
+
+#### New drug-monitoring rules (`rules/drug-rules.json`)
+- **Valproate monitoring** (`valproate-maintenance`): annual LFT, FBC, weight. Brands: sodium
+  valproate, epilim (incl. Chrono/Chronosphere), episenta, convulex, depakote, orlept, belvo,
+  valproic acid. Source: BNF / NICE CG137 / MHRA DSU (valproate 2018–2024).
+- **Finerenone monitoring** (`finerenone-maintenance`): K+ and eGFR/U&E every 90 days. Brands:
+  finerenone, kerendia. Source: NICE TA894 (March 2024) / BNF / Kerendia SmPC.
+- **Digoxin monitoring** (`digoxin-maintenance`): digoxin level and U&E annually. Brands: digoxin,
+  lanoxin. Source: BNF / NICE CG108.
+
+#### Antipsychotic rule expanded (`rules/drug-rules.json`)
+- **FGAs added** to antipsychotic match list: zuclopenthixol/clopixol, flupentixol/depixol,
+  sulpiride/dolmatil/sulpor/sulpitil, trifluoperazine/stelazine, promazine, pericyazine/neulactil,
+  levomepromazine/nozinan. Source: NICE CG178 / Maudsley Prescribing Guidelines 14th ed.
+- **Fluanxol excluded** (new `drug.exclude` entry): fluanxol is the antidepressant-dose brand of
+  flupentixol; false-positive risk for depression patients. CSO to decide whether to include;
+  excluded pending sign-off.
+
+#### QOF rules (`rules/qof-rules.json`)
+- **DM006 + HF009 RAAS drug list**: added quinapril/accupro, cilazapril/vascace, imidapril/tanatril,
+  eprosartan/teveten to both indicators — these agents were absent, causing false 'not met' QOF
+  chips for patients on these ACE inhibitors/ARBs. Brought into parity with alert-library.json
+  pincer-4 (updated 2026-06-11). Source: QOF 2026/27 / BNF.
+
+#### Vaccine rules (`rules/vaccine-rules.json`)
+- **Flu vaccine — SMI register added**: `"SMI"` added to vax-flu eligibility registers. Patients on
+  the SMI QOF register were silently missing the flu chip. Source: JCVI Green Book Chapter 19.
+- **COVID vaccine — JAK inhibitors added**: baricitinib and tofacitinib added to vax-covid
+  immunosuppressed medication match. Source: JCVI COVID autumn 2026/27 eligibility (medium
+  confidence — primary URL not verified this run).
+
+#### New alert-library entries (`rules/alert-library.json`)
+- **Topiramate PPP alert** (`mhra-topiramate-ppg`, Red): topiramate in female aged 12–55 — MHRA
+  Pregnancy Prevention Programme mandatory from January 2024 (DSU Vol 17 Issue 7). Topiramate is
+  teratogenic (cleft palate/lip, low birth weight, neurodevelopmental effects in exposed children).
+  No alert previously existed (valproate PPP existed; topiramate equivalent was absent).
+- **Lithium + thiazide toxicity** (`alert-lithium-thiazide-toxicity`, Red): concurrent lithium and
+  thiazide/thiazide-related diuretic — thiazides cause lithium retention and toxicity risk. Drug set
+  B: bendroflumethiazide, hydrochlorothiazide, indapamide, chlortalidone, metolazone, xipamide,
+  cyclopenthiazide, co-amilozide, co-triamterzide. Loop diuretics NOT included (different mechanism;
+  routinely co-prescribed with lithium in HF). Source: BNF / NICE CG185.
+- **PINCER #3 cimetidine fix**: cimetidine added to PINCER #3 mustNotBePresent gastroprotection
+  list (was in PINCER #1 but not #3 — consistency fix; cimetidine is a licensed H2-blocker).
+
+#### ACB scores (`engine/acb-scores.js`)
+- **Darifenacin/Emselex added** at score 3 (M3-selective bladder antimuscarinic; ACBcalc score 3).
+  All other bladder antimuscarinics were already present. Source: Boustani/ACBcalc.
+- **⚠ Ranitidine removed** (MHRA withdrawal April 2020 — NDMA contamination; `weakens_safety=true`).
+  No new prescriptions possible. Legacy ACB score 1 entry removed. **CSO sign-off required**: if
+  any patient still has ranitidine on their active medication list, it will no longer score to ACB.
+  Clinical impact: negligible (score 1 drug; unavailable). Source: MHRA April 2020.
+
+#### STOPP/START engine (`engine/stopp-start.js`)
+- **Pitavastatin + Livazo** added to `STATIN_TERMS`. Absent entries caused false START 'no statin'
+  flags for patients on pitavastatin. (Pitavastatin already in visualiser-core.js and drug-rules.json
+  — this is a parity fix.) Source: BNF / STOPP/START v3.
+- **Beta-blocker terms expanded**: acebutolol/sectral, celiprolol/celectol, nadolol, pindolol/visken
+  added to `BETA_BLOCKER_TERMS`. These are active UK generics/brands absent from the list, causing
+  false START 'no beta-blocker post-MI' flags. Source: BNF / STOPP/START v3.
+
+#### Visualiser (`visualiser-core.js`)
+- **H2-blocker terms**: ranitidine and nizatidine removed from h2blocker HIGH_RISK_DRUGS terms
+  (both MHRA-withdrawn 2020 — NDMA). Their presence suppressed PINCER alerts for aspirin/NSAID
+  patients who appeared (incorrectly) gastroprotected. Famotidine and cimetidine remain.
+- **Methotrexate interval corrected**: 91 days → 84 days (12 weeks). drug-rules.json already
+  encoded 84 days (BSR 2025); visualiser-core.js had 91 (13 weeks — incorrect). Now consistent.
+  Fix causes the PINCER overdue alert to fire ~1 week sooner (safety-improving).
+- **Livazo added** to statin terms (brand completeness parity with stopp-start.js).
+
+#### Reception pathways (`rules/reception-pathways.json`)
+- **Feverish child — two new red flags**:
+  - `rf-bulge`: bulging fontanelle → 999 (NICE NG143 high-risk feature)
+  - `rf-temp39-3to6m`: age 3–6 months + ≥39°C → duty (NICE NG143 intermediate-risk)
+- **Rash — two new red flags**:
+  - `rf-emrash`: expanding ring/bull's-eye rash (erythema migrans — possible Lyme) → duty
+    (NICE CKS Lyme disease)
+  - `rf-vzvimmunosuppress`: chickenpox/blistering rash in immunosuppressed patient → duty
+    (NICE CKS Chickenpox — immunosuppressed patients need urgent same-day assessment)
+
+#### Test coverage
+All new/changed rules have regression locks added to:
+`test-drug-brand-coverage.js`, `test-acb-scores.js`, `test-stopp-start.js`,
+`test-qof-indicator-filters.js`, `test-visualiser-pincer.js`. Full test suite: 0 failures.
+
+#### Source gap notice
+All external UK source URLs (BNF, gov.uk, NICE, MHRA, ACBcalc, emc) returned HTTP 403 this run.
+Changes verified via training knowledge and intra-repo cross-references. Primary-source confirmation
+pending. Every change carries its source citation in the rule file for independent verification.
+
+#### Held for future CSO decision
+- vacc-F02: care-home workers/residents to vax-flu — awaiting CSO confirmation against flu letter
+- vacc-C01: full JAK inhibitor scope for COVID vax — medium confidence pending page verification
+- antipsychotic: fluanxol inclusion — false-positive risk for antidepressant-dose patients
+
 ## [v3.152.0] — 2026-07-03
 
 ### Practice-panel wishlist wave 1 (quick wins + half-day items)

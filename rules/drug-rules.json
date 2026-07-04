@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-29",
+  "lastUpdated": "2026-07-04",
   "schemaVersion": 2,
   "specVersion": "Sentinel drug rules - June 2026 review",
   "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-14 CSO-approved Keeper addition: added brand 'jayempi' to azathioprine-maintenance (licensed UK azathioprine 10mg/ml oral suspension, Nova Laboratories, MA PLGB 13581/0005, available Feb 2024) — WebSearch-corroborated (emc SmPC / NHSBSA Drug Tariff), CSO-signed-off. 2026-06-20 (The Keeper, CSO proposal): corrected the DOAC rule notes to specify CrCl (Cockcroft-Gault), NOT eGFR, for renal-banded monitoring frequency (eGFR overestimates clearance and raises bleeding risk; MHRA/SPS/EHRA) — no interval change. Added a DMPA injectable-contraception monitoring rule (dmpa-injectable, enabled, 2-yearly BP+weight, FSRH). Added a combined-hormonal-contraception rule (chc-combined-hormonal) SHIPPED DISABLED pending engine disambiguation: the hrt-systemic rule matches bare 'estradiol', a substring of 'ethinylestradiol', so an enabled CHC rule would double-fire the HRT rule for oestrogen-ingredient/natural-oestrogen records. SOURCE GAP: FSRH/BNF primary PDFs 403 — corroborated via NHS formulary/NICE CKS reproductions; pending primary-source confirmation. 2026-06-21 (The Keeper, Sentinel currency review): additive safety/source refresh only — added the MHRA DSU 29 Jan 2026 strengthened GLP-1/GIP pancreatitis warning (glp1-receptor-agonist), refreshed the csDMARD source citation to the 2025 BSR guideline (Rheumatology, Nov 2025) across methotrexate/leflunomide/azathioprine/sulfasalazine/hydroxychloroquine with NO interval change, and noted the MHRA tirzepatide-to-oral-contraceptive interaction on chc-combined-hormonal. All corroborated across multiple secondary summaries; primary gov.uk/journal PDFs were 403 this run, pending primary-source confirmation. NOT changed: QOF DM036 age band (file uses <=70; one secondary source says <=79) — held for primary confirmation to avoid a silent chip change. 2026-06-29 (additive safety enhancement, PENDING CSO REVIEW): added a post-initiation U&E test to the ace-arb (RAAS blocker) rule enforcing NICE NG136's requirement for a U&E within ~1-2 weeks of STARTING an ACE-I/ARB (previously only described in notes, not enforced). Implemented via a new engine `postInitiationDays`/`postInitiationDueSoonDays` test mechanism that fires only when the drug's start date is known AND no U&E has been recorded since starting — so it cannot raise a false alert on an established patient whose start date is not visible. No change to the existing annual U&E/BP intervals or to any other rule.",
@@ -1023,10 +1023,26 @@
           "asenapine",
           "sycrest",
           "cariprazine",
-          "reagila"
+          "reagila",
+          "zuclopenthixol",
+          "clopixol",
+          "flupentixol",
+          "depixol",
+          "sulpiride",
+          "dolmatil",
+          "sulpor",
+          "sulpitil",
+          "trifluoperazine",
+          "stelazine",
+          "promazine",
+          "pericyazine",
+          "neulactil",
+          "levomepromazine",
+          "nozinan"
         ],
         "exclude": [
-          "clozapine"
+          "clozapine",
+          "fluanxol"
         ]
       },
       "phase": "maintenance",
@@ -1092,7 +1108,7 @@
         }
       ],
       "source": "NICE CG178 / Maudsley Prescribing Guidelines 14th ed / QOF MH002-MH012",
-      "notes": "Metabolic syndrome screening. ECG recommended at baseline and annually if cardiovascular risk factors or QTc-prolonging concomitant drugs. Clozapine EXCLUDED here — monitored under separate national protocol (CPMS/ZTAS) with weekly FBC for 18 weeks, then 2-weekly to 1 year, then 4-weekly indefinitely; mandatorily clozapine-clinic led, not amenable to primary-care rule firing.",
+      "notes": "Metabolic syndrome screening. ECG recommended at baseline and annually if cardiovascular risk factors or QTc-prolonging concomitant drugs. Clozapine EXCLUDED here — monitored under separate national protocol (CPMS/ZTAS) with weekly FBC for 18 weeks, then 2-weekly to 1 year, then 4-weekly indefinitely; mandatorily clozapine-clinic led, not amenable to primary-care rule firing. FGAs added 2026-07-04 (The Keeper): zuclopenthixol/clopixol, flupentixol/depixol, sulpiride/dolmatil/sulpor/sulpitil, trifluoperazine/stelazine, promazine, pericyazine/neulactil, levomepromazine/nozinan — all have NICE/Maudsley metabolic monitoring expectation. FLUANXOL (flupentixol 1mg — antidepressant dose) EXCLUDED: substring 'fluanxol' matches only the low-dose antidepressant brand, not the higher-dose antipsychotic form (depixol). False-positive risk for depression patients. CSO to decide if fluanxol should be included; currently excluded pending sign-off.",
       "sharedCare": true
     },
     {
@@ -1845,6 +1861,149 @@
       ],
       "source": "FSRH Guideline: Combined Hormonal Contraception (Jan 2019, amended Oct 2023); NICE CKS Contraception",
       "notes": "FSRH/NICE mandate BP+BMI at initiation, a 3-month review, then at least annually — this rule enforces the annual recurring BP+BMI check. CHC = combined pills + Evra patch + NuvaRing/SyreniRing. Contraindicated in uncontrolled hypertension (UKMEC 4 ≥160/100; UKMEC 3 ≥140/90 or BMI ≥35); reassess VTE/CVD risk at each review. DISAMBIGUATION (enabled 2026-06-20): the hrt-systemic rule matches the bare term 'estradiol', which is a SUBSTRING of the contraceptive oestrogen 'ethinylestradiol' and of the natural-oestrogen pills' 'estradiol valerate' (Qlaira) / 'estradiol hemihydrate' (Zoely). To stop CHC patients double-firing the HRT review, hrt-systemic now EXCLUDES 'ethinylestradiol'/'ethinyloestradiol'/'qlaira'/'zoely' (none of which are HRT). CHC matches by brand plus the contraceptive-only oestrogen 'ethinylestradiol'/'ethinyloestradiol' (so generic ethinylestradiol+progestogen combos fire here, never as HRT). POPs (Cerazette/Cerelle/Zelleta/Lovima/Hana/Nacrez — desogestrel) are excluded. SOURCE: FSRH Combined Hormonal Contraception (2019, amended 2023); corroborated via NHS formulary/NICE CKS. MHRA: co-prescribed tirzepatide (Mounjaro) may reduce absorption of oral contraceptives, especially in overweight/obese patients — advise an additional barrier method or a non-oral method for 4 weeks after starting tirzepatide and after each dose increase (corroborated 2026-06-21; primary MHRA wording pending confirmation).",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "valproate-maintenance",
+      "drugClass": "Valproate",
+      "drug": {
+        "match": [
+          "sodium valproate",
+          "valproic acid",
+          "valproate",
+          "epilim",
+          "episenta",
+          "convulex",
+          "depakote",
+          "orlept",
+          "belvo"
+        ],
+        "exclude": []
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "LFTs",
+          "match": [
+            "liver function",
+            "lft",
+            "alt",
+            "alanine aminotransferase",
+            "hepatic function"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "FBC",
+          "match": [
+            "full blood count",
+            "fbc",
+            "blood count"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "Weight",
+          "match": [
+            "weight",
+            "body weight"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "BNF / NICE CG137 (Epilepsy) / MHRA Drug Safety Update (valproate, 2018–2024)",
+      "notes": "Annual LFT, FBC, and weight monitoring per BNF/NICE guidance. Valproate causes hepatotoxicity (most risk first 6 months) and bone marrow suppression. MHRA Pregnancy Prevention Programme (PPP) — see alert-library.json mhra-valproate-ppg for the separate sex/age PPP alert for women aged 12–55. Epilim Chrono and Epilim Chronosphere are matched by the 'epilim' substring. Added 2026-07-04 (The Keeper).",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "finerenone-maintenance",
+      "drugClass": "Non-steroidal MRA",
+      "drug": {
+        "match": [
+          "finerenone",
+          "kerendia"
+        ],
+        "exclude": []
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "Potassium",
+          "match": [
+            "potassium",
+            "serum potassium",
+            "u&e",
+            "urea and electrolytes",
+            "renal profile"
+          ],
+          "intervalDays": 90,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "eGFR / U&E",
+          "match": [
+            "egfr",
+            "estimated glomerular",
+            "u&e",
+            "urea and electrolytes",
+            "renal profile",
+            "creatinine"
+          ],
+          "intervalDays": 90,
+          "dueSoonDays": 14
+        }
+      ],
+      "source": "NICE TA894 (Finerenone, March 2024) / Kerendia SmPC (Bayer) / BNF",
+      "notes": "Finerenone (Kerendia) approved by NICE TA894 March 2024 for CKD with type 2 diabetes. BNF/SmPC mandates K+ and eGFR/U&E monitoring before initiation, at 4 weeks, and every 3 months thereafter (high hyperkalaemia risk, especially with eGFR <60 or baseline K+ >4.8 mmol/L). Do not start if K+ >5.0 mmol/L. This rule enforces the 3-monthly maintenance interval. Added 2026-07-04 (The Keeper).",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "digoxin-maintenance",
+      "drugClass": "Cardiac glycoside",
+      "drug": {
+        "match": [
+          "digoxin",
+          "lanoxin"
+        ],
+        "exclude": []
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "Digoxin level",
+          "match": [
+            "digoxin level",
+            "serum digoxin",
+            "digoxin concentration"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "U&E",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile",
+            "electrolytes",
+            "potassium",
+            "creatinine"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "BNF (Digoxin monitoring) / NICE CG108 (Chronic heart failure)",
+      "notes": "Digoxin has a narrow therapeutic index. Annual monitoring of digoxin level and renal function (U&E) is recommended — more frequently if dose changed, renal function changes, interacting drug added, or symptoms of toxicity (bradycardia, nausea, visual disturbance, confusion). Target level 0.5–1.0 nmol/L (or 0.6–1.2 ng/mL) for AF/HF; level should be taken at least 6 hours post-dose. Hypokalaemia, hypomagnesaemia, and hypercalcaemia potentiate digoxin toxicity — check electrolytes. Lanoxin is the main UK brand; the generic 'digoxin' covers most prescriptions. Added 2026-07-04 (The Keeper).",
       "sharedCare": false
     }
   ]

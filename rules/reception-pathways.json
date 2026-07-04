@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-06-14",
+  "lastUpdated": "2026-07-04",
   "specVersion": "Reception capture pathways v1.3 — CSO-signed-off 2026-06-14 (escalation re-tiering 2026-06-10; CSO 999-promotion pass 2026-06-14)",
   "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes), the NICE NG143 feverish-child traffic-light features, the NHS Pharmacy First clinical pathways, and NICE NG253/NG254/NG255 (suspected sepsis, replacing NG51) for urosepsis / sepsis escalation, re-phrased in lay language for telephone use by non-clinical staff. 2026-06-10: escalation re-tiering pass — several time-critical presentations (urosepsis, cauda equina, PE, large haemoptysis, sepsis, self-harm with means) promoted to 999 level. 2026-06-14: CSO signed off the reception tiers and red-flag escalation levels for live use (DRAFT blocker lifted), and promoted five red flags from urgent-duty to 999 on clinical review — suspected SJS/TEN (rash), sepsis with rigors (UTI), possible cauda equina / bilateral leg weakness or numbness (back pain), mastoiditis (earache), and red painful eye with halos / suspected acute angle-closure glaucoma (headache). This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files.",
   "escalations": {
@@ -174,7 +174,9 @@
         { "id": "rf-colour", "ask": "Blue, grey, mottled, or very pale skin or lips?", "escalate": "999" },
         { "id": "rf-fluids", "ask": "No wet nappy (or not passing urine) for 12 hours, or sunken eyes?", "escalate": "duty" },
         { "id": "rf-seizure", "ask": "Any fit or seizure?", "escalate": "999" },
-        { "id": "rf-neck", "ask": "Stiff neck or bothered by bright light?", "escalate": "999" }
+        { "id": "rf-neck", "ask": "Stiff neck or bothered by bright light?", "escalate": "999" },
+        { "id": "rf-bulge", "ask": "A bulging or tense soft spot on top of the head (fontanelle)?", "escalate": "999" },
+        { "id": "rf-temp39-3to6m", "ask": "Is the baby 3–6 months old with a temperature of 39°C or above?", "escalate": "duty" }
       ],
       "questions": [
         { "id": "age", "ask": "How old is the child?", "type": "text", "label": "Age" },
@@ -199,7 +201,9 @@
         { "id": "rf-spreading", "ask": "An area of skin that is red, hot, very painful and spreading FAST, AND they feel very unwell, have a fever, or look or sound seriously ill? (Possible necrotising fasciitis — emergency)", "escalate": "999" },
         { "id": "rf-blistering", "ask": "Widespread blistering, skin peeling, or rawness or blistering also affecting the mouth, eyes, or genitals, with feeling unwell? (Possible SJS/TEN)", "escalate": "999" },
         { "id": "rf-meningism", "ask": "Rash with severe headache, stiff neck, or dislike of bright light?", "escalate": "999" },
-        { "id": "rf-newdrug", "ask": "Started a new medicine recently, now a widespread rash and feeling unwell?", "escalate": "duty" }
+        { "id": "rf-newdrug", "ask": "Started a new medicine recently, now a widespread rash and feeling unwell?", "escalate": "duty" },
+        { "id": "rf-emrash", "ask": "An expanding red circular rash (like a bull's-eye or growing red ring), especially after being outdoors or in long grass?", "escalate": "duty" },
+        { "id": "rf-vzvimmunosuppress", "ask": "Chickenpox-type spots or a painful blistering rash in a patient on chemotherapy, immunosuppressants, steroids, or with a condition that affects the immune system?", "escalate": "duty" }
       ],
       "questions": [
         { "id": "where", "ask": "Where on the body is it?", "type": "text", "label": "Location" },

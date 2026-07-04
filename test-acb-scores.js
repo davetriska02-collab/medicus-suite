@@ -157,6 +157,33 @@ console.log('\n--- Levomepromazine (ACB score 3) ---');
   assert(r.perDrug[0] && r.perDrug[0].score === 3, 'methotrimeprazine scores 3');
 }
 
+// ── Darifenacin / Emselex (2026-07-04 Keeper addition) ───────────────────
+console.log('\n--- Darifenacin / Emselex (ACB score 3) ---');
+{
+  const r = computeACB(['darifenacin 7.5mg tablets']);
+  assert(r.perDrug.length === 1, 'darifenacin yields one entry');
+  assert(r.perDrug[0].score === 3, 'darifenacin scores 3');
+}
+{
+  const r = computeACB(['Emselex 7.5mg tablets']);
+  assert(r.perDrug.length === 1, 'Emselex yields one entry');
+  assert(r.perDrug[0].score === 3, 'Emselex (darifenacin brand) scores 3');
+}
+
+// ── Ranitidine removed from ACB table (2026-07-04 Keeper) ────────────────
+// Ranitidine was withdrawn from UK market by MHRA April 2020 (NDMA contamination).
+// It must no longer contribute to ACB score.
+console.log('\n--- Ranitidine no longer in ACB table ---');
+{
+  const r = computeACB(['ranitidine 150mg tablets']);
+  assert(r.perDrug.length === 0, 'ranitidine no longer in ACB table (withdrawn UK 2020)');
+  assert(r.total === 0, 'ranitidine total = 0 (withdrawn)');
+}
+{
+  const r = computeACB(['Zantac 150mg tablets']);
+  assert(r.perDrug.length === 0, 'Zantac (ranitidine brand) no longer in ACB table');
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

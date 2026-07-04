@@ -560,6 +560,43 @@ console.log('\n── Drug-table completeness locks ──');
   }
 }
 
+// ── H2-blocker term-list: ranitidine/nizatidine removed (2026-07-04 Keeper) ─
+// Ranitidine and nizatidine were withdrawn from UK market by MHRA in 2020
+// (NDMA contamination). They must no longer count as gastroprotection.
+console.log('\n--- h2blocker terms: ranitidine/nizatidine removed ---');
+{
+  const h2Entry = HIGH_RISK_DRUGS.find((d) => d.id === 'h2blocker');
+  assert(!!h2Entry, 'h2blocker entry exists in HIGH_RISK_DRUGS');
+  assert(!(h2Entry?.terms || []).includes('ranitidine'), 'ranitidine NOT in h2blocker terms (MHRA withdrawal 2020)');
+  assert(!(h2Entry?.terms || []).includes('nizatidine'), 'nizatidine NOT in h2blocker terms (MHRA withdrawal 2020)');
+  assert((h2Entry?.terms || []).includes('famotidine'), 'famotidine still in h2blocker terms');
+  assert((h2Entry?.terms || []).includes('cimetidine'), 'cimetidine still in h2blocker terms');
+}
+{
+  // A patient on ranitidine + NSAID should NOT be considered gastroprotected.
+  // Use makeDetectedDrug for nsaid, and manually construct a ranitidine-labelled h2blocker.
+  // Since ranitidine is removed from h2blocker.terms, it won't match the h2blocker detector
+  // → no gastroprotection → P-C (NSAID + age ≥65) MUST fire.
+  const nsaid = makeDetectedDrug('nsaid_long');
+  // Build a mock h2blocker with terms only including famotidine (mimic current state):
+  // Actually: computePINCER checks HIGH_RISK_DRUGS.h2blocker terms — ranitidine is absent,
+  // so a patient whose only "gastroprotection" is ranitidine has no detected h2blocker drug.
+  // We can verify this via the terms check above (ranitidine absent from h2blocker.terms).
+  const h2Terms = (HIGH_RISK_DRUGS.find((d) => d.id === 'h2blocker')?.terms || []);
+  const ranitidineWouldMatch = h2Terms.some((t) => 'ranitidine 150mg'.includes(t));
+  assert(!ranitidineWouldMatch, 'ranitidine 150mg would NOT match any h2blocker term');
+  const nizatidineWouldMatch = h2Terms.some((t) => 'nizatidine 300mg'.includes(t));
+  assert(!nizatidineWouldMatch, 'nizatidine 300mg would NOT match any h2blocker term');
+}
+
+// ── Statin brand lock: livazo added to visualiser-core.js statin terms ─────
+// (2026-07-04 Keeper: livazo added for brand completeness alongside pitavastatin)
+console.log('\n--- statin terms: livazo added ---');
+{
+  const statins = (HIGH_RISK_DRUGS.find((d) => d.id === 'statin')?.terms || []).map((t) => t.toLowerCase());
+  assert(statins.includes('livazo'), 'livazo (pitavastatin brand) in statin terms');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

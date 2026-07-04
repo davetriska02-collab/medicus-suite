@@ -354,5 +354,29 @@ safetyRuleIds.forEach((id) => {
   check(r && r.category === 'safety-monitoring', `${id} is tagged category: safety-monitoring`);
 });
 
+// ── DM006 + HF009 RAAS drug-list completeness (2026-07-04 Keeper) ────────────
+// Quinapril, cilazapril, imidapril, eprosartan were missing from both DM006 and
+// HF009 medicationMatch lists; added 2026-07-04. Regression-lock them here.
+console.log('\n--- DM006 / HF009: added RAAS agents (Keeper 2026-07-04) ---');
+const dm006 = qof.rules.find((r) => r.indicatorCode === 'DM006' && r.type === 'qof-indicator');
+const hf009 = qof.rules.find((r) => r.indicatorCode === 'HF009' && r.type === 'qof-indicator');
+check(!!dm006, 'DM006 rule exists');
+check(!!hf009, 'HF009 rule exists');
+if (dm006 && dm006.check && dm006.check.medicationMatch) {
+  const dm006meds = dm006.check.medicationMatch;
+  for (const term of ['quinapril', 'accupro', 'cilazapril', 'vascace', 'imidapril', 'tanatril', 'eprosartan', 'teveten']) {
+    check(dm006meds.includes(term), `DM006 medicationMatch includes "${term}"`);
+  }
+}
+if (hf009 && hf009.check && hf009.check.groups) {
+  const raasGroup = hf009.check.groups.find((g) => g.name === 'RAAS');
+  check(!!raasGroup, 'HF009 has RAAS group');
+  if (raasGroup) {
+    for (const term of ['quinapril', 'accupro', 'cilazapril', 'vascace', 'imidapril', 'tanatril', 'eprosartan', 'teveten']) {
+      check(raasGroup.match.includes(term), `HF009 RAAS group includes "${term}"`);
+    }
+  }
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

@@ -125,7 +125,7 @@
   const LONG_SU_TERMS = ['glibenclamide', 'glimepiride'];
 
   // Statins — from HIGH_RISK_DRUGS id:'statin'
-  const STATIN_TERMS = ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'fluvastatin'];
+  const STATIN_TERMS = ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'fluvastatin', 'pitavastatin', 'livazo'];
 
   // ACE inhibitors — from HIGH_RISK_DRUGS id:'acei' (first entries are ACEi).
   // Kept at parity with visualiser-core.js's ACEi list (medrev-001).
@@ -165,6 +165,13 @@
     'sotalol',
     'nebivolol',
     'labetalol',
+    'acebutolol',
+    'sectral',
+    'celiprolol',
+    'celectol',
+    'nadolol',
+    'pindolol',
+    'visken',
   ];
 
   // Anticholinergic drugs with a meaningful burden — REUSED from the shared
