@@ -100,6 +100,7 @@ const VALID_SCOPES = [
   'knowledge',
   'labfiling',
   'notifications',
+  'leaflets',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -337,6 +338,15 @@ function previewEnvelope(envelope) {
     if (m) lines.push(m);
   }
 
+  if (mods.condor) {
+    const dayScoreCount = (mods.condor.dayScores || []).length;
+    const snapshotCount = (mods.condor.reportSnapshots || []).length;
+    lines.push(`Condor: ${dayScoreCount} day score(s), ${snapshotCount} report snapshot(s)`);
+  } else {
+    const m = missing('Condor');
+    if (m) lines.push(m);
+  }
+
   if (mods.reception) {
     const customCount = (mods.reception.customPathways || []).length;
     const editCount = Object.keys(mods.reception.pathwayOverrides || {}).length;
@@ -397,6 +407,17 @@ function previewEnvelope(envelope) {
     lines.push(`Notifications: badge ${badgeEnabled === false ? 'disabled' : 'enabled'}`);
   } else {
     const m = missing('Notifications');
+    if (m) lines.push(m);
+  }
+
+  if (mods.leaflets) {
+    const recentCount = (mods.leaflets.recent || []).length;
+    const apiEnabled = mods.leaflets.config?.enabled === true;
+    lines.push(
+      `Leaflets: ${recentCount} recent, in-panel API rendering ${apiEnabled ? 'enabled (key stays machine-local — not in this backup)' : 'off'}`
+    );
+  } else {
+    const m = missing('Leaflets');
     if (m) lines.push(m);
   }
 

@@ -81,7 +81,7 @@ let _cumulativeResults = []; // per-patient results accumulated across batches
 let _sweepRules = null; // rules loaded at sweep start (cached for continue)
 let _sweepHiddenRules = {}; // hidden rules snapshot for current sweep session
 let _sweepApiBase = ''; // API base URL for current sweep session
-let _sweepMeta = null; // { missingUuidCount, runAt }
+let _sweepMeta = null; // { missingUuidCount, skippedEntries, runAt }
 let _lastActionRows = []; // action rows from the last render — source for the printable handout
 
 // Batch selection state — ephemeral, lives in module memory only.
@@ -207,6 +207,7 @@ async function persistLastRun() {
         clinician: _selectedClinicians.length === 1 ? _selectedClinicians[0] : null,
         results: serialiseResults(_cumulativeResults),
         missingUuidCount: _sweepMeta?.missingUuidCount ?? 0,
+        skippedEntries: _sweepMeta?.skippedEntries ?? [],
         totalCount: _allPatients.length,
         processedCount: _sweepOffset,
         selectedUuids,
@@ -416,7 +417,7 @@ async function runSweep(apiBase, hiddenRules) {
 
   // limit: null — fetch the full list; sweep.js handles batching.
   // Empty _selectedClinicians → all clinicians (per the core normalisation).
-  const { patients, clinicians, missingUuidCount, diagnosticMessage } = extractBookedPatients(raw, {
+  const { patients, clinicians, missingUuidCount, skippedEntries, diagnosticMessage } = extractBookedPatients(raw, {
     clinicians: _selectedClinicians,
     limit: null,
   });
@@ -451,7 +452,7 @@ async function runSweep(apiBase, hiddenRules) {
   _sweepApiBase = apiBase;
   // ISO string, not a Date: chrome.storage.local serialises Date objects to {},
   // which would break the printable handout (it reads runAt back from storage).
-  _sweepMeta = { missingUuidCount, runAt: new Date().toISOString(), clinicDate: _selectedDate };
+  _sweepMeta = { missingUuidCount, skippedEntries, runAt: new Date().toISOString(), clinicDate: _selectedDate };
 
   await runNextBatch();
 }
@@ -509,6 +510,13 @@ async function runNextBatch() {
 
   const aborted = _abortFlag;
   _abortFlag = false;
+
+  // If the module was torn down mid-batch (cleanup() sets _abortFlag and wipes
+  // _cumulativeResults/container), do not persist or render — that would
+  // overwrite the last-known-good sweep.lastRun with emptied/invalidated state
+  // while still recording the pre-abort processedCount/totalCount.
+  if (aborted && !container) return;
+
   _sweepOffset = batchStart + processedThisBatch;
 
   // Persist the run before rendering so the resume card is available after a
@@ -523,10 +531,29 @@ async function runNextBatch() {
     processedCount: _sweepOffset,
     totalCount: total,
     missingUuidCount: _sweepMeta.missingUuidCount,
+    skippedEntries: _sweepMeta.skippedEntries,
     runAt: _sweepMeta.runAt,
     aborted,
     isResume: false,
   });
+
+  // F2 Clinical Event Ledger — one summary event per completed (or cancelled)
+  // sweep run: counts + clinician scope ONLY, never per-patient rows (a patient
+  // is only ledgered individually when a recall task is actually created).
+  // Fire-and-forget: the ledger swallows its own failures.
+  if ((aborted || _sweepOffset >= total) && window.EventLedger) {
+    window.EventLedger.record({
+      source: 'sweep',
+      patientRef: null,
+      severity: null,
+      ruleId: null,
+      label:
+        `${actionRows.length} of ${_sweepOffset} checked need action` +
+        ` · clinicians: ${_selectedClinicians.length ? _selectedClinicians.join('; ') : 'all'}` +
+        (aborted ? ' · cancelled early' : ''),
+      action: 'sweep-run',
+    });
+  }
 }
 
 // ── Render helpers ────────────────────────────────────────────────────────────
@@ -645,8 +672,25 @@ function renderQofPointsPanel(summary, siteId) {
     .map((p) => {
       const timeStr = p.time ? `<span class="sweep-row-time">${formatTime(p.time)}</span>` : '';
       const recUrl = `https://england.medicus.health/${esc(siteId)}/patient/${esc(p.uuid)}/`;
-      const cvd = p.cvdPoints > 0 ? `<span class="sweep-qof-cvd-dot" title="${p.cvdPoints} CVD-prevention points">CVD ${p.cvdPoints}</span>` : '';
-      const codes = esc(p.indicators.map((i) => i.code).join(', '));
+      const cvd =
+        p.cvdPoints > 0
+          ? `<span class="sweep-qof-cvd-dot" title="${p.cvdPoints} CVD-prevention points">CVD ${p.cvdPoints}</span>`
+          : '';
+      // Bare codes ("DM037, HYP010…") are unreadable to a clinician without the
+      // rulebook to hand (synthetic-panel feedback) — pair each code with its
+      // indicator description, mirroring the by-indicator column's own
+      // code/name classes. `title` carries the full pairing too, but never as
+      // the ONLY place it appears — the name is always in the visible text.
+      const codes = p.indicators
+        .map((i) => {
+          const code = esc(i.code);
+          const name = esc(i.name || '');
+          const full = name ? `${code} — ${name}` : code;
+          return `<span class="sweep-qof-pind" title="${full}"><span class="sweep-qof-picode">${code}</span>${
+            name ? `<span class="sweep-qof-piname">${name}</span>` : ''
+          }</span>`;
+        })
+        .join('');
       return `<li class="sweep-qof-prow">
         <span class="sweep-qof-pts">${p.points}</span>
         <span class="sweep-qof-pname">${timeStr}${esc(p.name)}</span>
@@ -691,6 +735,31 @@ function renderQofPointsPanel(summary, siteId) {
     </details>`;
 }
 
+// Collapsible, amber-toned notice naming every skipped appointment entry (no
+// patient UUID found → NEVER evaluated against the Sentinel rules). A bare
+// count invites "probably fine" thinking (nurse/pharmacist panel feedback:
+// "name every skipped patient, never just a count") — and the clinical-safety
+// stance is the opposite: an entry that was never checked must never read as
+// clear just because it doesn't appear as a red/amber row above.
+function skippedEntriesHtml(missingUuidCount, skippedEntries) {
+  const rows = Array.isArray(skippedEntries) ? skippedEntries : [];
+  const rowsHtml = rows
+    .map((s) => {
+      const timeStr = s.time ? formatTime(s.time) : '—';
+      const clinician = esc(s.clinician || 'Unknown clinician');
+      const rawName = esc(s.rawName || 'Unknown name');
+      return `<li class="sweep-skipped-row">${timeStr} &middot; ${clinician} &middot; ${rawName}</li>`;
+    })
+    .join('');
+  return `<details class="sweep-skipped-section">
+    <summary class="sweep-skipped-summary">${missingUuidCount} appointment entr${missingUuidCount === 1 ? 'y' : 'ies'} could not be identified (no patient UUID found) and were NOT checked</summary>
+    <div class="sweep-skipped-body">
+      <p class="sweep-skipped-caveat">These entries were never evaluated against the Sentinel rules — their absence from the results above is not an all-clear.</p>
+      <ul class="sweep-skipped-list">${rowsHtml}</ul>
+    </div>
+  </details>`;
+}
+
 function renderResults({
   actionRows,
   clearRows,
@@ -698,6 +767,7 @@ function renderResults({
   processedCount,
   totalCount,
   missingUuidCount,
+  skippedEntries,
   runAt,
   aborted,
   isResume,
@@ -719,10 +789,7 @@ function renderResults({
   const clearCount = clearRows.length;
   const errorCount = errorRows.length;
 
-  const missingNote =
-    missingUuidCount > 0
-      ? `<div class="sweep-notice sweep-notice-warn">${missingUuidCount} appointment entr${missingUuidCount === 1 ? 'y' : 'ies'} could not be identified (no patient UUID found) and were skipped.</div>`
-      : '';
+  const missingNote = missingUuidCount > 0 ? skippedEntriesHtml(missingUuidCount, skippedEntries) : '';
 
   // Progress across batches
   const remaining = totalCount - processedCount;
@@ -1023,12 +1090,25 @@ async function submitRecall(slot) {
   if (statusEl) statusEl.textContent = '';
   try {
     await createGeneralTask(_recallApiBase, { patientId, assignee, description, priority });
+    // F2 Clinical Event Ledger — a recall task was actually created for this
+    // patient (fire-and-forget; can never break the recall flow).
+    if (window.EventLedger) {
+      window.EventLedger.record({
+        source: 'sweep',
+        patientRef: patientId,
+        severity: null,
+        ruleId: null,
+        label: 'recall task created' + (assigneeLabel ? ` — ${assigneeLabel}` : ''),
+        action: 'recall-created',
+      });
+    }
     slot.innerHTML = `<div class="sweep-recall-done">&#10003; Recall task created${
       assigneeLabel ? ` — assigned to ${esc(assigneeLabel)}` : ''
     }.</div>`;
     slot.dataset.open = 'done';
   } catch (e) {
-    if (statusEl) statusEl.innerHTML = `<span class="sweep-recall-error">${esc(e.message || 'Failed to create the task.')}</span>`;
+    if (statusEl)
+      statusEl.innerHTML = `<span class="sweep-recall-error">${esc(e.message || 'Failed to create the task.')}</span>`;
     createBtn.disabled = false;
     createBtn.textContent = 'Create task';
   }
@@ -1232,6 +1312,7 @@ function onResumeClick(stored) {
     runAt: stored.runAt,
     clinicDate: stored.clinicDate || null,
     missingUuidCount: stored.missingUuidCount ?? 0,
+    skippedEntries: Array.isArray(stored.skippedEntries) ? stored.skippedEntries : [],
   };
   // Restore the clinician selection (accept the new array form or an old
   // single-string `clinician`) and re-tick the picker checkboxes.
@@ -1258,6 +1339,7 @@ function onResumeClick(stored) {
     processedCount: _sweepOffset,
     totalCount: stored.totalCount ?? _sweepOffset,
     missingUuidCount: _sweepMeta.missingUuidCount,
+    skippedEntries: _sweepMeta.skippedEntries,
     runAt: _sweepMeta.runAt,
     aborted: false,
     isResume: true,

@@ -194,6 +194,56 @@ function exportCsv() {
   downloadCsv(filename, ['Date', `${metric.label} (${unit})`], rows);
 }
 
+// ── Resting state (no patient open yet) ─────────────────────────────────────────
+// "Black box" was the whole-suite appraisal's word for the old bare empty
+// state (a single line of prose, no worked example). This replaces it with a
+// self-describing rest: what Trends is, a worked example (a small annotated
+// sparkline built from static sample numbers — no live data, no new library),
+// and the first concrete step. Deliberately calm: no amber/red — this is a
+// resting state, not an alert, so it borrows only neutral/accent ink.
+const RESTING_SAMPLE_POINTS = [148, 152, 145, 139, 142, 136];
+
+function restingSparklineSvg() {
+  const w = 160;
+  const h = 40;
+  const pad = 4;
+  const vals = RESTING_SAMPLE_POINTS;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const range = max - min || 1;
+  const stepX = (w - pad * 2) / (vals.length - 1);
+  const coords = vals.map((v, i) => {
+    const x = pad + i * stepX;
+    const y = pad + (1 - (v - min) / range) * (h - pad * 2);
+    return [x, y];
+  });
+  const path = coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const [lastX, lastY] = coords[coords.length - 1];
+  return `
+    <svg class="trends-rest-spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Example trend line: a measurement gently falling over six readings">
+      <path class="trends-rest-spark-line" d="${path}" fill="none" />
+      <circle class="trends-rest-spark-dot" cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="2.5" />
+    </svg>`;
+}
+
+function buildRestingState() {
+  return `
+    <div class="trends-rest">
+      <div class="trends-rest-example">
+        ${restingSparklineSvg()}
+        <span class="trends-rest-example-lbl">Example: systolic BP over six readings</span>
+      </div>
+      <p class="trends-rest-purpose">
+        Trends draws a line chart of one patient's results over time — blood pressure, renal
+        function (ACR/eGFR), HbA1c, cholesterol or weight — so a slow drift is easy to see, not
+        just the latest number.
+      </p>
+      <p class="trends-rest-step">
+        <strong>First step:</strong> open a patient in Medicus, then pick a metric.
+      </p>
+    </div>`;
+}
+
 // ── Main render dispatcher ─────────────────────────────────────────────────────
 function render(m) {
   if (!container) return;
@@ -202,7 +252,7 @@ function render(m) {
     return;
   }
   if (m.state === 'no-medicus') {
-    container.innerHTML = `<div class="trends-msg">Trends mirror the patient open in Medicus — open a record to see their results over time.</div>`;
+    container.innerHTML = buildRestingState();
     return;
   }
 

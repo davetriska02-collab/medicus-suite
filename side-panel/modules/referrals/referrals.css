@@ -840,6 +840,56 @@
   color: var(--text-2);
 }
 
+/* ── Patient-name search + clinician filter (item 5) ─────────────────────── */
+
+.ref-pc-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ref-pc-search-wrap {
+  position: relative;
+  flex: 1 1 160px;
+  min-width: 140px;
+}
+.ref-pc-search-wrap .ref-search-input {
+  width: 100%;
+}
+
+.ref-clinician-select {
+  flex: 1 1 140px;
+  min-width: 120px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  padding: 5px 8px;
+  font-family: var(--sans);
+  font-size: 11px;
+  border-radius: var(--r-md);
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+.ref-clinician-select:focus {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+
+.ref-pc-filter-active {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
 /* ── Show all toggle ──────────────────────────────────────────────────────── */
 
 .ref-show-all {
@@ -995,24 +1045,36 @@
   border: 1px solid var(--amber-line);
 }
 .ref-sn-note {
-  margin: 0 0 8px;
+  margin: 0 0 4px;
   font-size: 11px;
   color: var(--text-3);
   line-height: 1.5;
 }
+.ref-sn-legend {
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--text-4);
+}
 .ref-sn-rows {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 .ref-sn-row {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
   padding: 3px 6px;
   font-size: 12px;
   border-radius: var(--r-sm);
   background: var(--bg-elev);
+}
+.ref-sn-row-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 .ref-sn-age {
   font-family: var(--mono);
@@ -1030,16 +1092,22 @@
 .ref-sn-name {
   flex: 1;
   color: var(--text-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+.ref-sn-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  /* indent under the name, past the age column (min-width 34px + 8px gap) */
+  padding-left: 42px;
 }
 .ref-sn-svc {
   color: var(--text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 40%;
+  max-width: 60%;
 }
 .ref-sn-clin {
   color: var(--text-4);

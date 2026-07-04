@@ -22,10 +22,27 @@
 //       relocated under the pre-consultation brief (v3.58.0)
 //   3 — Command palette (Ctrl+K) step (v3.59.0)
 //   4 — Today tab — morning command centre (v3.60.0)
+//   5 — Record tab — live-first patient record
+//   6 — Today "what needs you now" headline; Sentinel rule-coverage
+//       drill-down (v3.144.0)
+//   7 — Record Pre-flight (what-if safety preview) (v3.145.0). Condor Pulse
+//       and Options → Event Ledger deliberately not taught: the 20-step cap
+//       was reached, Condor stays overview-only (nav-tabs step) as before,
+//       and the tour only covers the side panel, not the Options page.
+//   8 — Leaflets tab — NHS patient information search (bundled A-Z + optional
+//       in-panel API rendering) (v3.147.0). To stay within the 20-step cap,
+//       'display' and 'popout' were consolidated into one 'header-controls'
+//       step (same content, one fewer step) — no user-visible step was
+//       dropped.
+//   9 — 'monitoring-intro' body extended to mention panel auto-follow and the
+//       clickable "N unmatched" audit count (help-text pass — both were
+//       already shipped, just hard to find). No step added or removed (still
+//       20 steps); the existing step's addedIn was retagged 2 → 9 so the
+//       reworked copy reaches returning users via the "What's new" pass.
 
 'use strict';
 
-export const TOUR_VERSION = 5;
+export const TOUR_VERSION = 9;
 
 export const TOUR_STEPS = [
   {
@@ -59,6 +76,14 @@ export const TOUR_STEPS = [
     body: 'One screen shows waiting patients, triage load, demand counts, available slots and the pre-clinic sweep result so you can start clinic fully briefed.',
   },
   {
+    id: 'today-headline',
+    addedIn: 6,
+    module: 'today',
+    target: ['.today-headline'],
+    title: 'One line: what needs you now',
+    body: 'A plain-English summary of the cards below — worst thing first, quiet when nothing is outstanding — always stamped with when it was last checked.',
+  },
+  {
     id: 'slots',
     addedIn: 2,
     module: 'slots',
@@ -68,11 +93,24 @@ export const TOUR_STEPS = [
   },
   {
     id: 'monitoring-intro',
-    addedIn: 2,
+    // Body materially reworked in v9 (auto-follow + clickable unmatched count),
+    // so retagged to 9 rather than left at its original 2 — returning users get
+    // this step in their "What's new" pass instead of it silently changing
+    // under them. See TOUR_VERSION history above.
+    addedIn: 9,
     module: 'sentinel',
     target: ['.sent-header'],
     title: 'Monitoring — the clinical core',
-    body: 'Sentinel reads the open patient record and shows drug-monitoring, QOF and vaccine status as colour-ranked chips. Red needs action; click any chip for its evidence.',
+    body: 'Sentinel auto-follows the patient open in Medicus, showing drug-monitoring, QOF and vaccine status as colour-ranked chips — red needs action, click any chip for its evidence. The "N unmatched" audit count is clickable to name the medicines.',
+  },
+  {
+    id: 'rule-coverage',
+    addedIn: 6,
+    module: 'sentinel',
+    target: ['#sentRulesToggle'],
+    centerFallback: true,
+    title: 'What the monitoring rules actually cover',
+    body: 'Click the rule-currency line to expand every drug and QOF rule with the terms it matches — so you can check a specific drug is covered, not just that rules exist.',
   },
   {
     id: 'waiting-room',
@@ -126,18 +164,11 @@ export const TOUR_STEPS = [
     body: 'Press Ctrl+K (or click here) for the command palette: jump to any tab, change theme or text size, open the right settings section, or replay this tour.',
   },
   {
-    id: 'display',
+    id: 'header-controls',
     addedIn: 2,
-    target: ['#displayBtn'],
-    title: 'Make it yours',
-    body: 'Light or dark theme, three text sizes, and a colour-blind-safe palette.',
-  },
-  {
-    id: 'popout',
-    addedIn: 2,
-    target: ['#popoutBtn'],
-    title: 'Pop out the panel',
-    body: 'Open the suite in a floating window you can park on a second screen while Medicus fills this one.',
+    target: ['#displayBtn', '#popoutBtn'],
+    title: 'Make it yours, or pop it out',
+    body: 'Light or dark theme, three text sizes, and a colour-blind-safe palette — or open the suite in a floating window you can park on a second screen while Medicus fills this one.',
   },
   {
     id: 'settings',
@@ -153,6 +184,24 @@ export const TOUR_STEPS = [
     target: ['.rec-root'],
     title: 'Record — the open patient, live',
     body: 'A live snapshot of the patient open in Medicus — problems, medicines, results and safety prompts, no PDF needed. Incomplete by design (no allergies); read the gap-markers and verify the record. The full visualiser opens from the footer.',
+  },
+  {
+    id: 'preflight',
+    addedIn: 7,
+    module: 'record',
+    target: ['#recPreflight'],
+    centerFallback: true,
+    title: 'Pre-flight — check before you prescribe',
+    body: 'Type a drug you’re considering to see how it would change ACB and STOPP/START, any new interactions with current meds, and what monitoring it would need — before it exists in the record. A decision aid, not advice.',
+  },
+  {
+    id: 'leaflets',
+    addedIn: 8,
+    module: 'leaflets',
+    target: ['.lf-module'],
+    centerFallback: true,
+    title: 'Leaflets — NHS patient information, fast',
+    body: 'Search a condition or medicine to open or copy a link to its nhs.uk page — always works, no setup. Add an API key in Options → Leaflets to render the leaflet text right here.',
   },
   {
     id: 'finish',

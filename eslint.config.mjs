@@ -24,13 +24,13 @@ export default [
       // Tuned so EXISTING code passes (repo style: `catch (_) {}` everywhere)
       'no-empty': ['error', { allowEmptyCatch: true }],
       // Rules disabled after survey — see comments for triggering files:
-      'no-unused-vars': 'off',         // widespread across existing codebase (31 instances); rename-to-_foo deferred
-      'no-useless-escape': 'off',      // content-scripts/triage-lens/content.js, engine/extractors/*, visualiser-core.js, sentinel-options/options.js
-      'no-regex-spaces': 'off',        // test-extraction-health.js, test-monitoring-chip.js, test-prescribing-flags.js (vm-extraction regexes — must not be autofixed)
-      'no-func-assign': 'off',         // sentinel-options/options.js:1261
-      'no-redeclare': 'off',           // engine/rules-engine.js, shared/ dual-context guards
-      'no-undef': 'off',               // visualiser-core.js (pdfjsLib, document, chrome globals called before chrome-api override)
-      'no-prototype-builtins': 'off',  // shared/io/*.js, engine/*.js
+      'no-unused-vars': 'off', // widespread across existing codebase (31 instances); rename-to-_foo deferred
+      'no-useless-escape': 'off', // content-scripts/triage-lens/content.js, engine/extractors/*, visualiser-core.js, sentinel-options/options.js
+      'no-regex-spaces': 'off', // test-extraction-health.js, test-monitoring-chip.js, test-prescribing-flags.js (vm-extraction regexes — must not be autofixed)
+      'no-func-assign': 'off', // sentinel-options/options.js:1261
+      'no-redeclare': 'off', // engine/rules-engine.js, shared/ dual-context guards
+      'no-undef': 'off', // visualiser-core.js (pdfjsLib, document, chrome globals called before chrome-api override)
+      'no-prototype-builtins': 'off', // shared/io/*.js, engine/*.js
     },
   },
   {
@@ -39,9 +39,10 @@ export default [
     languageOptions: { sourceType: 'module' },
   },
   {
-    // shared/medicus-api.js and shared/task-api.js are ES modules (export keyword),
-    // imported by side-panel modules rather than loaded as classic scripts.
-    files: ['shared/medicus-api.js', 'shared/task-api.js'],
+    // shared/medicus-api.js, shared/task-api.js and shared/tab-help.js are ES
+    // modules (export keyword), imported by side-panel modules / panel.js /
+    // pop-out.js rather than loaded as classic scripts.
+    files: ['shared/medicus-api.js', 'shared/task-api.js', 'shared/tab-help.js'],
     languageOptions: { sourceType: 'module' },
   },
   {

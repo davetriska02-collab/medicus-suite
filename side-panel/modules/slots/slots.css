@@ -934,6 +934,123 @@ html[data-theme='dark'] .staff-split .split-pm {
   outline-offset: 2px;
 }
 
+/* ── Alert threshold editor (item 9) ─────────────────────────────────────────
+   Cog button in the date-presets row + the minimal in-module editor panel it
+   toggles. .has-alert-rules gives the cog a quiet accent tint so a practice
+   with rules configured can tell at a glance without opening the panel. */
+#slotsAlertToggle.has-alert-rules {
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+#slotsAlertToggle.active {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--text-2);
+}
+
+.slots-alert-editor {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.slots-alert-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.slots-alert-editor-title {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-1);
+}
+
+.slots-alert-editor-close {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.slots-alert-editor-note {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
+.slots-alert-editor-empty {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  padding: 8px 0;
+}
+
+.slots-alert-rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.slots-alert-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.slots-alert-rule-row .sar-type {
+  flex: 1 1 140px;
+  min-width: 120px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  padding: 4px 6px;
+  font-family: var(--sans);
+  font-size: 11px;
+  border-radius: var(--r-sm);
+}
+.slots-alert-rule-row .sar-type:focus {
+  border-color: var(--accent);
+  background: var(--bg-deep);
+}
+
+.slots-alert-rule-row .sar-lte,
+.slots-alert-rule-row .sar-unit {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+
+.slots-alert-rule-row .sar-threshold {
+  width: 56px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  padding: 4px 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  border-radius: var(--r-sm);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.slots-alert-rule-row .sar-threshold:focus {
+  border-color: var(--accent);
+  background: var(--bg-deep);
+}
+
+.slots-alert-rule-row .sar-delete {
+  padding: 2px 8px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
 /* ── Booking section ─────────────────────────────────────────────────────────
    Collapsible panel at the bottom of the Slots tab.
    bk-toggle-row acts as both the section-label and the open/close trigger. */

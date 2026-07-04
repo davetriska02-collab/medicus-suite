@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Duplicate Problem Checker — Medicus Suite</title>
+    <style>
+      :root {
+        --bg: #0f1117;
+        --bg-mid: #1a1d27;
+        --bg-card: #1e2130;
+        --border: #2e3347;
+        --text: #e2e8f0;
+        --text-2: #94a3b8;
+        --blue: #3b82f6;
+        --green: #4ade80;
+        --amber: #f59e0b;
+        --red: #ef4444;
+        --r: 6px;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+        padding: 24px;
+      }
+      h1 {
+        font-size: 18px;
+        margin-bottom: 4px;
+      }
+      .subtitle {
+        color: var(--text-2);
+        font-size: 13px;
+        margin-bottom: 24px;
+      }
+      .card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--r);
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        color: var(--text-2);
+        margin-bottom: 4px;
+      }
+      input {
+        width: 100%;
+        background: var(--bg-mid);
+        border: 1px solid var(--border);
+        border-radius: var(--r);
+        color: var(--text);
+        padding: 7px 10px;
+        font-size: 13px;
+      }
+      input:focus {
+        outline: none;
+        border-color: var(--blue);
+      }
+      button {
+        padding: 8px 18px;
+        border-radius: var(--r);
+        border: none;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      #runBtn {
+        background: var(--blue);
+        color: #fff;
+      }
+      #runBtn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      #csvBtn {
+        background: var(--bg-mid);
+        color: var(--text);
+        border: 1px solid var(--border);
+        display: none;
+        margin-left: 8px;
+      }
+      .progress-wrap {
+        display: none;
+        margin-top: 12px;
+      }
+      .progress-bar-bg {
+        background: var(--bg-mid);
+        border-radius: 99px;
+        height: 8px;
+        overflow: hidden;
+      }
+      .progress-bar {
+        background: var(--blue);
+        height: 8px;
+        width: 0;
+        transition: width 0.2s;
+        border-radius: 99px;
+      }
+      .progress-label {
+        font-size: 12px;
+        color: var(--text-2);
+        margin-top: 6px;
+      }
+      #status {
+        font-size: 13px;
+        margin-top: 10px;
+        color: var(--text-2);
+        min-height: 20px;
+      }
+      #results {
+        display: none;
+        margin-top: 8px;
+      }
+      .summary {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
+      .stat {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--r);
+        padding: 12px 18px;
+        text-align: center;
+      }
+      .stat-num {
+        font-size: 28px;
+        font-weight: 700;
+      }
+      .stat-lbl {
+        font-size: 11px;
+        color: var(--text-2);
+        margin-top: 2px;
+      }
+      .stat-num.amber {
+        color: var(--amber);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th {
+        text-align: left;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-2);
+        font-weight: 500;
+        font-size: 12px;
+        cursor: pointer;
+        user-select: none;
+      }
+      th:hover {
+        color: var(--text);
+      }
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      tr:hover td {
+        background: var(--bg-mid);
+      }
+      .pill {
+        display: inline-block;
+        background: rgba(239, 68, 68, 0.15);
+        color: var(--red);
+        border-radius: 99px;
+        padding: 1px 8px;
+        font-size: 11px;
+      }
+      .dup-list {
+        font-size: 11px;
+        color: var(--text-2);
+        margin-top: 4px;
+      }
+      .err {
+        color: var(--red);
+        font-size: 13px;
+        margin-top: 8px;
+      }
+      .info {
+        color: var(--amber);
+        font-size: 12px;
+        padding: 8px 10px;
+        background: rgba(245, 158, 11, 0.1);
+        border-radius: var(--r);
+        border: 1px solid rgba(245, 158, 11, 0.2);
+      }
+      .trigger-badge {
+        display: inline-block;
+        font-size: 11px;
+        padding: 1px 7px;
+        border-radius: 99px;
+        background: rgba(59, 130, 246, 0.15);
+        color: #93c5fd;
+        border: 1px solid rgba(59, 130, 246, 0.25);
+        white-space: nowrap;
+        margin: 1px 2px 1px 0;
+      }
+      #savedStateBanner {
+        display: none;
+        background: rgba(245, 158, 11, 0.08);
+        border: 1px solid rgba(245, 158, 11, 0.25);
+        border-radius: var(--r);
+        padding: 10px 14px;
+        margin-bottom: 14px;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      #savedStateBanner button {
+        padding: 5px 12px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Duplicate Problem Checker</h1>
+    <p class="subtitle">
+      Scans active problem lists practice-wide and flags patients with any duplicated problem code.
+    </p>
+
+    <div id="savedStateBanner">
+      <span style="color: var(--amber); font-size: 13px" id="savedStateInfo"></span>
+      <button id="restoreBtn" style="background: var(--blue); color: #fff; border: none">Restore results</button>
+      <button id="incrBtn" style="background: var(--bg-mid); color: var(--text); border: 1px solid var(--border)">
+        Check new patients only
+      </button>
+      <button id="clearStateBtn" style="background: none; color: var(--text-2); border: 1px solid var(--border)">
+        Clear
+      </button>
+    </div>
+
+    <div class="card">
+      <label>Practice code (auto-detected from open Medicus tab)</label>
+      <input id="codeInput" placeholder="e.g. e38a9f" spellcheck="false" />
+      <div id="endpointWrap" style="margin-top: 10px; display: none">
+        <div style="font-size: 11px; color: var(--text-2); margin-bottom: 3px">Discovered patient listing endpoint</div>
+        <div style="display: flex; align-items: center; gap: 8px">
+          <code
+            id="endpointDisplay"
+            style="font-size: 11px; color: var(--text-2); word-break: break-all; flex: 1"
+          ></code>
+          <button
+            id="rediscoverBtn"
+            style="
+              background: none;
+              border: 1px solid var(--border);
+              color: var(--text-2);
+              font-size: 11px;
+              padding: 3px 8px;
+              white-space: nowrap;
+            "
+          >
+            Re-discover
+          </button>
+        </div>
+      </div>
+      <div style="margin-top: 12px">
+        <button id="runBtn">Run scan</button>
+        <button
+          id="fullScanBtn"
+          style="
+            background: none;
+            color: var(--text-2);
+            border: 1px solid var(--border);
+            display: none;
+            margin-left: 6px;
+            font-size: 12px;
+          "
+        >
+          Full scan
+        </button>
+        <button
+          id="secondPassBtn"
+          style="
+            background: var(--bg-mid);
+            color: var(--text);
+            border: 1px solid var(--border);
+            display: none;
+            margin-left: 8px;
+          "
+        >
+          Run second pass
+        </button>
+        <button id="csvBtn">Download CSV</button>
+        <button
+          id="debugBtn"
+          style="
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text-2);
+            font-size: 11px;
+            padding: 4px 10px;
+            margin-left: 8px;
+          "
+        >
+          Show patient fields
+        </button>
+      </div>
+      <pre
+        id="debugPanel"
+        style="
+          display: none;
+          margin-top: 10px;
+          font-size: 11px;
+          color: var(--text-2);
+          background: var(--bg-mid);
+          border: 1px solid var(--border);
+          border-radius: var(--r);
+          padding: 10px;
+          overflow: auto;
+          max-height: 200px;
+          white-space: pre-wrap;
+        "
+      ></pre>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar-bg"><div class="progress-bar" id="progressBar"></div></div>
+        <div class="progress-label" id="progressLabel"></div>
+      </div>
+      <div id="status"></div>
+      <div id="errMsg" class="err"></div>
+    </div>
+
+    <div id="results">
+      <div class="summary" id="summary"></div>
+      <div class="card" style="padding: 0; overflow: hidden">
+        <table id="resultTable">
+          <thead>
+            <tr>
+              <th data-col="name">
+                Patient
+                <span style="font-weight: 400; opacity: 0.5; font-size: 10px">(click row to inspect raw fields)</span>
+              </th>
+              <th data-col="nhs">NHS number</th>
+              <th data-col="dob">DOB</th>
+              <th data-col="count" style="text-align: center">Dupl. codes</th>
+              <th data-col="problems">Duplicated problems</th>
+              <th data-col="triggers">Triggered by</th>
+              <th id="dateMatchTh" data-col="dateMatchPairs" style="text-align: center; display: none">Date match</th>
+            </tr>
+          </thead>
+          <tbody id="resultBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <script src="engine/record-duplicate-parser.js"></script>
+    <script src="duplicate-checker.js"></script>
+  </body>
+</html>

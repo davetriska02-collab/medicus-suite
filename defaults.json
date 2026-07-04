@@ -1,5 +1,5 @@
 {
-  "version": 20,
+  "version": 24,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3588,6 +3588,84 @@
           "url": "https://cks.nice.org.uk/topics/dementia/"
         }
       ]
+    },
+    {
+      "id": "practice-admin-details",
+      "enabled": true,
+      "label": "Practice admin (non-clinical)",
+      "kind": "green",
+      "patterns": [
+        "proof of address",
+        "registration query",
+        "regist\\w* (with|at) (the |this )?practice",
+        "new patient registration",
+        "change of address",
+        "chang\\w* (my |our |the )?address",
+        "updat\\w* (my |our |the )?address",
+        "change of (phone|telephone|mobile) number",
+        "chang\\w* (my |our |the )?(phone|telephone|mobile) number",
+        "updat\\w* (my |our |the )?(phone|telephone|mobile) number",
+        "change (my |our |the )?(contact )?details",
+        "updat\\w* (my |our |the )?(contact )?details",
+        "change of name",
+        "deregist\\w*",
+        "leav\\w* the practice",
+        "transfer\\w* (my )?(medical )?records to (a|another)"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "Reception admin — no clinical action needed",
+          "text": "Routine administrative request (address / phone / registration / name / leaving the practice) — confidently non-clinical. No GP review required.\n\n• Verify patient identity before amending personal details (data-protection / anti-impersonation check)\n• Registration/catchment queries: confirm catchment area before accepting\n• Deregistration/leaving: follow the practice's standard leaver process (records transfer request)\n• If this request ALSO raises a clinical concern elsewhere in the same message, that concern fires its own (higher-ranked) rule chip independently — this note only covers the administrative part"
+        }
+      ]
+    },
+    {
+      "id": "pharmacy-process-query",
+      "enabled": true,
+      "label": "Pharmacy/prescription admin",
+      "kind": "green",
+      "patterns": [
+        "pharmacy quer\\w*",
+        "chemist quer\\w*",
+        "prescription not ready",
+        "prescription (hasn.?t|has not) (arrived|come through|been sent|turned up)",
+        "pharmacy (hasn.?t|has not) receiv\\w*",
+        "wrong pharmacy",
+        "chang\\w* (my |the )?(nominated )?pharmacy",
+        "nominated pharmacy",
+        "prescription (sent|gone) to (the )?wrong pharmacy",
+        "collect (my |the )?prescription",
+        "prescription ready for collection",
+        "when (can|will) i collect my prescription"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "Reception admin — no clinical action needed",
+          "text": "Routine pharmacy/prescription-PROCESS query (dispensing, collection, nominated pharmacy) — confidently non-clinical, distinct from a NEW repeat-prescription request (see the separate 'Repeat meds' rule). No GP review required.\n\n• Direct to reception/dispensary to chase the pharmacy or amend the nominated pharmacy on the EPS system\n• If the patient ALSO reports a new symptom or a medication concern (e.g. ran out and now unwell), that fires its own (higher-ranked) rule chip independently — this note only covers the dispensing-process part"
+        }
+      ]
     }
   ],
   "thresholds": {
@@ -4064,7 +4142,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical high potassium (red ≥6.5 mmol/L)",
+      "label": "Critical high potassium (red ≥6.5 mmol/L, amber ≥6.0)",
       "analyte": {
         "match": [
           "potassium"
@@ -4075,6 +4153,7 @@
         ]
       },
       "comparator": "above",
+      "amber": 6.0,
       "red": 6.5,
       "unit": "mmol/L"
     },
@@ -4227,7 +4306,8 @@
         ]
       },
       "comparator": "above",
-      "red": 48,
+      "red": null,
+      "amber": 48,
       "unit": "mmol/mol",
       "suppressIfProblem": {
         "match": [
@@ -4384,10 +4464,14 @@
         "grown in aerobic bottle",
         "grown in anaerobic bottle",
         "positive blood culture",
-        "gram positive",
-        "gram negative",
-        "gram-positive",
-        "gram-negative",
+        "gram positive cocci",
+        "gram-positive cocci",
+        "gram positive bacilli",
+        "gram-positive bacilli",
+        "gram negative bacilli",
+        "gram-negative bacilli",
+        "gram negative cocci",
+        "gram-negative cocci",
         "bacteraemia",
         "bacteremia",
         "fungaemia",
@@ -4404,7 +4488,12 @@
         "neisseria",
         "listeria",
         "salmonella",
-        "candida",
+        "candidaemia",
+        "candida albicans",
+        "candida glabrata",
+        "candida parapsilosis",
+        "candida tropicalis",
+        "candida auris",
         "acinetobacter",
         "serratia",
         "enterobacter",
@@ -4795,6 +4884,195 @@
       "amber": 180,
       "red": 110,
       "unit": "ng/L"
+    },
+    {
+      "id": "base-high-sodium",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High sodium — hypernatraemia (red ≥160 mmol/L, amber ≥150)",
+      "analyte": {
+        "match": [
+          "sodium"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "valproate"
+        ]
+      },
+      "comparator": "above",
+      "amber": 150,
+      "red": 160,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-high-creatinine-aki",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Critical high creatinine — AKI stage 3 (red ≥354 µmol/L)",
+      "analyte": {
+        "match": [
+          "creatinine"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "clearance",
+          "ratio"
+        ]
+      },
+      "comparator": "above",
+      "red": 354,
+      "unit": "µmol/L"
+    },
+    {
+      "id": "base-creatinine-delta-aki",
+      "kind": "delta",
+      "enabled": true,
+      "builtin": true,
+      "label": "Rising creatinine — possible AKI (amber ≥+26.5 µmol/L)",
+      "analyte": {
+        "match": [
+          "creatinine"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "clearance",
+          "ratio"
+        ]
+      },
+      "direction": "rise",
+      "by": true,
+      "amber": 26.5,
+      "maxDays": 2,
+      "unit": "µmol/L"
+    },
+    {
+      "id": "base-high-glucose",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High glucose — hyperglycaemia (red ≥30 mmol/L, amber ≥11.1)",
+      "analyte": {
+        "match": [
+          "glucose"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "csf"
+        ]
+      },
+      "comparator": "above",
+      "amber": 11.1,
+      "red": 30,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-low-glucose",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Low glucose — hypoglycaemia (red ≤3.0 mmol/L, amber ≤4.0)",
+      "analyte": {
+        "match": [
+          "glucose"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "csf"
+        ]
+      },
+      "comparator": "below",
+      "amber": 4.0,
+      "red": 3.0,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-high-alt",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High ALT — transaminitis (red ≥320 U/L, amber ≥120)",
+      "analyte": {
+        "match": [
+          "alt",
+          "alanine aminotransferase",
+          "alanine transaminase"
+        ]
+      },
+      "comparator": "above",
+      "amber": 120,
+      "red": 320,
+      "unit": "U/L"
+    },
+    {
+      "id": "base-high-ast",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High AST — transaminitis (red ≥320 U/L, amber ≥120)",
+      "analyte": {
+        "match": [
+          "ast",
+          "aspartate aminotransferase",
+          "aspartate transaminase"
+        ],
+        "exclude": [
+          "fasting"
+        ]
+      },
+      "comparator": "above",
+      "amber": 120,
+      "red": 320,
+      "unit": "U/L"
+    },
+    {
+      "id": "base-high-crp",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High CRP — possible severe infection (red ≥100, amber ≥20)",
+      "analyte": {
+        "match": [
+          "crp",
+          "c-reactive protein",
+          "c reactive protein"
+        ]
+      },
+      "comparator": "above",
+      "amber": 20,
+      "red": 100,
+      "unit": "mg/L"
+    },
+    {
+      "id": "base-high-wcc",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High white cell count (amber ≥12 ×10⁹/L)",
+      "analyte": {
+        "match": [
+          "white cell count",
+          "white blood cell count",
+          "wbc",
+          "leucocyte count",
+          "leukocyte count"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "csf",
+          "pus"
+        ]
+      },
+      "comparator": "above",
+      "amber": 12,
+      "unit": "×10⁹/L"
     }
   ]
 }

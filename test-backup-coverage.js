@@ -98,6 +98,9 @@ const KEY_PREFIXES = [
   'knowledge',
   'sweep',
   'reception',
+  'ledger',
+  'health',
+  'leaflets',
 ];
 
 function hasKeyPrefix(k) {
@@ -157,6 +160,11 @@ const ALLOWLIST = new Set([
 
   // OS window handle — session-transient (documented in shared/io/popout-io.js):
   'popout.windowId',
+
+  // Transient cross-module handoff — written by the Reception pathway tiles'
+  // "Leaflet" link, read once and removed by leaflets.js init. Not user config
+  // (see side-panel/modules/reception/reception.js goToLeaflet):
+  'leaflets.pendingQuery',
 
   // Transient print payload — written on "Print reception handout", read by
   // handout.html, overwritten on every print. Not user config (documented in
@@ -283,6 +291,38 @@ const ALLOWLIST = new Set([
   // Mirrors the suite.alertLog rationale. The OIR *config* (oirTests + oir prefs)
   // IS backed up — it rides triagelens.config via triage-io:
   'triagelens.oir.auditLog',
+
+  // Routine-prescription button audit trail (Phase 1.4, H-035 gap fix) —
+  // machine-local ring buffer (cap 200) of what the "send to routine
+  // prescriptions" macro did on THIS device: task URL/UUID, team, commit
+  // mode, timestamp, outcome (committed/highlighted/aborted+reason). Same
+  // doctrine as labfiling.auditLog / triagelens.oir.auditLog: it is a
+  // per-device governance record, not user config, and restoring it onto
+  // another machine would fabricate a misleading "what this macro did here"
+  // trail. The routine-rx *config* (teams/lastTeam/commitMode) IS backed up —
+  // it rides triagelens.routineRx via triage-io; only the audit log is
+  // excluded:
+  'triagelens.routinerx.auditLog',
+
+  // F2 Clinical Event Ledger — machine-local ring buffer (cap 5000 events /
+  // 90 days) of what the suite displayed or did on THIS machine
+  // (shared/event-ledger.js; read/export/clear UI in the Options "Event
+  // ledger" card). Deliberately EXCLUDED from suite backup — same doctrine as
+  // labfiling.auditLog and triagelens.oir.auditLog: it contains patient UUIDs,
+  // and restoring an event ledger onto another machine would fabricate a
+  // misleading "what was shown here" record. The exclusion is stated in the
+  // user-facing disclosure block in options.html:
+  'ledger.events',
+
+  // Horizon-1 H2 — DOM-contract runtime canary state (shared/contract-canary.js):
+  // per-contract { lastProbe, status, sinceTs, probeCount, failStreak, lastFailTs }
+  // written by the content-script probe injected into the live Medicus page.
+  // Machine-local diagnostic telemetry — same doctrine as
+  // sentinel.extractionBaseline/ledger.events: restoring it onto another
+  // machine would import a stale/foreign "is Medicus broken here" verdict
+  // that has nothing to do with that machine's actual, current DOM. Surfaced
+  // read-only in Options → Suite health (options.html #sect-health):
+  'health.contracts',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

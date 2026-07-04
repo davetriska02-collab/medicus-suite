@@ -379,6 +379,16 @@ main {
   font-size: 11px;
   overflow-wrap: anywhere;
 }
+/* Item 3.4 (TRIAGE-LENS-2026-07-02.md) — Live preview qualifier suffix,
+   "(negated?)"/"(past?)", mirrors the queue chip's own demotion label.
+   Muted/italic, not a severity colour — the kind badge already carries
+   severity; this only flags "this hit may be demoted". */
+.tl-rule-qualifier {
+  font-size: 11px;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--text-3);
+}
 .tl-rule-row > .tl-rule-actions {
   display: flex;
   gap: 4px;
@@ -488,6 +498,20 @@ fieldset.tl-field legend {
   padding: 2px 0;
   font-size: 12px;
   cursor: pointer;
+}
+
+/* Item 3.5 (TRIAGE-LENS-2026-07-02.md) — patient-context / require field groups
+   (request-rule "Require patient context" and result-rule "Patient context"
+   fieldsets). Deliberately a SEPARATE class from .tl-checks: its children are
+   full .tl-field labels (span + input, column layout), not checkbox rows, so it
+   must not inherit .tl-checks label's row-flex override. */
+.tl-req-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+.tl-req-fields .tl-field {
+  grid-column: span 1;
 }
 
 .tl-edit-footer {
@@ -737,7 +761,8 @@ details summary {
 
 /* Rule-kind field groups — toggled show/hide by rrApplyKindVisibility() */
 .rr-fields-threshold,
-.rr-fields-text {
+.rr-fields-text,
+.rr-fields-delta {
   margin-top: 0;
 }
 

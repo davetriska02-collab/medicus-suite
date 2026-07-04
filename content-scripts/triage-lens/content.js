@@ -59,25 +59,50 @@
   font-style: normal;
 }
 
-/* ---- Queue result legend ---- */
-/* Injected once at the top of the Investigation Results queue. Deliberately     */
-/* quiet — informs without competing with the red/amber clinical chips.          */
-.ch-q-legend {
-  display: block;
+/* ---- Queue triage status bar (item 1.2, TRIAGE-LENS-2026-07-02.md) ---- */
+/* Replaces the old passive legend. This copy is effectively inert (the PiP    */
+/* window only ever renders the HUD panel, never the queue grid), kept only    */
+/* for parity with hud.css so nothing here ever renders as unstyled text if    */
+/* that ever changes. */
+.ch-q-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   background: #f1f5f9;
   color: #475569;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
-  padding: 4px 8px;
+  padding: 4px 6px 4px 8px;
   font-size: 11px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   line-height: 1.3;
-  max-width: 360px;
+  max-width: 420px;
   position: fixed;
   top: 56px;
   right: 16px;
   z-index: 99990;
-  pointer-events: none;
+}
+.ch-q-status-btn {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.09);
+  border: 1px solid rgba(37, 99, 235, 0.3);
+}
+.ch-q-status-flash {
+  animation: ch-q-status-flash-pulse 1.3s ease-in-out 2;
+}
+@keyframes ch-q-status-flash-pulse {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3); }
+}
+.ch-q-focus-alerts .ag-row:not(.ch-row-sev-red):not(.ch-row-sev-amber) {
+  opacity: 0.35;
 }
 
 /* ---- Queue row chips ---- */
@@ -323,7 +348,7 @@
   // on init and re-loaded when chrome.storage.onChanged fires. In demo mode
   // (no chrome.storage), falls back to EMBEDDED_DEFAULTS substituted at build.
 
-  const EMBEDDED_DEFAULTS = `{"version":20,"rules":[{"id":"mh-crisis","enabled":true,"label":"MH crisis","kind":"red","patterns":["suicid\\\\w*","self.?harm\\\\w*","kill myself","kill him\\\\w*self","kill her\\\\w*self","end my life","end it all","want to die","wanting to die","don.?t want to be here","don.?t want to live","no longer want to live","not want to live","harm myself","hurt myself","hurting myself","take my (own )?life","taking my (own )?life","overdos\\\\w*","took too many (pills|tablets|medication)","taken too many (pills|tablets|medication)","swallowed too many","cutting myself","hang\\\\w* myself","jump\\\\w* off","throw myself (off|under|in front)","feel like (i want to )?die","feeling suicid\\\\w*","active suicid\\\\w*","passive suicid\\\\w*","life not worth","not worth living","can.?t go on","cannot go on","crisis (team|line|referral)","mental health crisis","psychiatric emergency","(postpartum|puerperal) psychosis","thoughts of (harming|hurting) (my |the )?baby","thoughts of (harming|hurting) (my |the )?(children|kids)","want to (hurt|harm) (my |the )?baby"],"regex":true,"fields":["request","banner"],"pages":["queue","detail","record"],"bumpsTile":"safeguarding","builtin":true,"actions":[{"type":"link","label":"Samaritans","url":"https://www.samaritans.org/"},{"type":"link","label":"NHS 111 mental health","url":"https://111.nhs.uk/"},{"type":"snippet","label":"Risk assessment","text":"MH risk assessment:\\n- Current intent / plan / means:\\n- Recent triggers:\\n- Protective factors:\\n- Past attempts / hospital admissions:\\n- Substance use:\\n- MH services involvement:\\n- Capacity:\\n\\nAction:\\n- Same-day F2F vs phone vs crisis team\\n- Safety plan documented\\n- Safeguarding referral if children in household\\n- Follow-up timeframe agreed"},{"type":"note","label":"Safeguarding check","text":"Always consider:\\n\\u2022 Children / dependents in household \\u2192 safeguarding referral threshold\\n\\u2022 Mental Capacity Assessment\\n\\u2022 Document risk assessment in full\\n\\u2022 Crisis team contact readily available\\n\\u2022 Clear follow-up plan with named clinician"}]},{"id":"safeguarding","enabled":true,"label":"Safeguarding","kind":"red","patterns":["safeguarding","abuse","abused","abusing","neglect","neglected","domestic violence","domestic abuse","coercive control","coercive behaviour","controlling partner","controlling relationship","controlling behaviour","hit me","hits me","hitting me","punch","kicked me","kicks me","slap","strangl","afraid at home","scared at home","scared of my partner","scared of my husband","scared of my wife","scared of my boyfriend","scared of my girlfriend","frightened at home","frightened of my partner","fear at home","unsafe at home","not safe at home","partner hurts me","partner hits me","husband hits me","husband hurts me","my partner beats me","being beaten","physical abuse","emotional abuse","psychological abuse","sexual abuse","sexual assault","assaulted","rape","financial abuse","forced marriage","female genital mutilation","fgm","child abuse","child neglect","child at risk","at risk child","exploitation","traffick","modern slavery","honour","forced into","threatened me","threatening me","threats at home","violence at home","hurt at home"],"regex":false,"fields":["request","banner","problems"],"pages":["queue","detail","record"],"bumpsTile":"safeguarding","builtin":true,"actions":[{"type":"link","label":"Local safeguarding (replace URL)","url":"https://www.gov.uk/government/publications/safeguarding-adults"},{"type":"note","label":"Documentation","text":"Safeguarding considerations:\\n\\u2022 Notify practice safeguarding lead\\n\\u2022 MARAC / DASH risk assessment if DV suspected\\n\\u2022 Code in record (Safeguarding adult / child concern)\\n\\u2022 Document concerns verbatim\\n\\u2022 Information sharing per local policy\\n\\u2022 Children in household \\u2014 separate referral if at risk"}]},{"id":"chest-pain","enabled":true,"label":"Chest pain","kind":"red","patterns":["chest pain","chest tightness","tight chest","tightness in my chest","tightness in chest","crushing","central chest","pain in my chest","pain in the chest","chest pressure","pressure on my chest","pressure in my chest","pressure in chest","heaviness in my chest","heavy chest","chest heaviness","chest discomfort","discomfort in my chest","chest ache","aching chest","ache in my chest","chest squeezing","squeezing chest","squeezing in my chest","heart pain","pain in my heart","angina","heart attack","cardiac","chest burning","burning in my chest","burning chest","chest tightening","tightening in my chest","substernal","retrosternal","radiation to my arm","radiating to my arm","pain down my arm","pain in my left arm","jaw pain with chest","pain in my jaw and chest","chest and arm pain","chest and jaw pain","myocardial","nstemi","stemi","jaw pain and arm","jaw pain with arm","jaw pain and shoulder","jaw pain with shoulder","neck pain and arm","neck pain with arm","neck pain and shoulder","neck pain with shoulder","pain in my left arm and sweat","pain in my left arm with sweat","pain in my left arm and nausea","pain in my left arm with nausea","pain in my right arm and sweat","pain in my right arm with sweat","pain in my left shoulder and sweat","pain in my left shoulder with sweat","indigestion and arm pain","indigestion with arm pain","heartburn and arm pain","heartburn with arm pain","indigestion and jaw pain","indigestion with jaw pain","heartburn and jaw pain","heartburn with jaw pain","indigestion and sweating","indigestion with sweating","heartburn and sweating","heartburn with sweating"],"regex":false,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Acute pathway","text":"If acute / ongoing pain \\u2192 999.\\n\\nIf resolved:\\n\\u2022 Onset, duration, character, radiation, exertion-related?\\n\\u2022 Cardiac risk factors: age, smoker, FH, DM, lipids, BP, prior CVD\\n\\u2022 Associated: SOB, sweating, N&V, syncope\\n\\u2022 Differential: ACS, PE, dissection, pericarditis, GORD, MSK, anxiety\\n\\nThresholds:\\n\\u2022 HEART score for risk stratification\\n\\u2022 Same-day clinical assessment if any concerning features"},{"type":"snippet","label":"HEART score template","text":"HEART score:\\n- History (suspicious 0/1/2):\\n- ECG (normal / non-spec / abnormal 0/1/2):\\n- Age (<45 / 45-64 / >65 = 0/1/2):\\n- Risk factors (count: 0 / 1-2 / 3+ or known CVD = 0/1/2):\\n- Troponin (norm / 1-3x / >3x ULN = 0/1/2):\\n\\nTotal: __\\n0-3 = low risk \\u00b7 4-6 = moderate \\u00b7 7-10 = high"}]},{"id":"cauda-equina","enabled":true,"label":"Cauda equina","kind":"red","patterns":["saddle.?(numb\\\\w*|anaesthe\\\\w*|anesthe\\\\w*|paresthe\\\\w*|parasthe\\\\w*|sensation)","bladder retention","urinary retention","bowel incontinence","perineal numb\\\\w*","perineal anaesthe\\\\w*","perineal anesthe\\\\w*","perineal paresthe\\\\w*","can.?t feel (when I |to |myself )?(wee|urinate|pee|pass urine|empty my bladder)","can.?t empty my bladder","unable to empty (my )?bladder","loss of bladder control","lost bladder control","can.?t feel (my )?(bottom|bum|groin|genitals|between my legs|down below|perineum)","numb (bum|bottom|groin|genitals|perineum|between my legs|between the legs|down below|in my groin|around my back passage|around my anus|around my back\\\\w*)","numbness (in my )?(bum|bottom|groin|genitals|perineum|between (my |the )?legs|down below|around my back passage|saddle area)","tingling (in my )?(bum|bottom|groin|genitals|perineum|between (my |the )?legs|saddle area)","loss of sensation (in my )?(bum|bottom|groin|genitals|perineum|between (my |the )?legs|saddle area|down below)","reduced sensation (in my )?(bum|bottom|groin|genitals|perineum|between (my |the )?legs|saddle area)","no sensation (in my )?(bum|bottom|groin|genitals|perineum|between (my |the )?legs|saddle area)","back passage numb\\\\w*","anal numb\\\\w*","perianal numb\\\\w*","cauda equina","bowel and bladder","bladder and bowel","can.?t pass urine","unable to urinate","unable to pass urine","not passed urine (for|in)","haven.?t (been able to )?wee\\\\w* (for|in)","can.?t wee","retention of urine","faecal incontinence","fecal incontinence","losing control of (my )?bowels","lost control of (my )?bowels","loss of bowel control","leaking (from|stool|bowel)","back pain with (bladder|bowel|numb\\\\w*|incontinence|retention)","leg weakness with (bladder|bowel|numb\\\\w*|incontinence|retention)","sciatica (and|with) (bladder|bowel|incontinence|numb\\\\w*|retention)","lost all (feeling|sensation) down (there|below)","can.?t feel (myself |when I )?(pee|wee|go to the toilet)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Emergency MRI","text":"Suspected cauda equina = same-day emergency MRI.\\n\\nRed flags (any):\\n\\u2022 Bilateral sciatica\\n\\u2022 Saddle anaesthesia / paraesthesia\\n\\u2022 Bladder dysfunction (retention / overflow)\\n\\u2022 Bowel incontinence / loss of anal tone\\n\\u2022 Sexual dysfunction\\n\\nAction:\\n\\u2022 Discuss with on-call neurosurgery / spinal team\\n\\u2022 Direct ED referral if no urgent MRI access\\n\\u2022 Document neuro exam including PR if appropriate"}]},{"id":"thunderclap","enabled":true,"label":"Thunderclap headache","kind":"red","patterns":["worst headache","worst head pain","started instantly","thunderclap","sudden severe headache","sudden onset headache","worst headache of my life","worst headache i have ever","worst headache ever","never had a headache like","headache like a thunderclap","headache came on suddenly","headache came on instantly","headache came on out of nowhere","headache hit me suddenly","headache out of nowhere","headache hit like","headache started suddenly","sudden headache","instantaneous headache","explosive headache","headache like an explosion","bang in my head","worst pain of my life in my head","head pain worst ever","severe sudden head","head felt like it exploded","head like it was going to explode","subarachnoid","brain haemorrhage","brain hemorrhage","bleed in the brain","bleed on the brain","worst pain ever in my head","10 out of 10 headache","10/10 headache","headache ten out of ten","sudden headache and stiff neck","sudden headache with stiff neck","sudden severe headache and stiff neck","sudden severe headache with stiff neck","sudden headache and sore neck","sudden headache with sore neck","sudden headache and painful neck","sudden headache with painful neck","worst headache and neck pain","worst headache with neck pain"],"regex":false,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"SAH pathway","text":"Thunderclap headache \\u2192 consider SAH.\\n\\n\\u2022 Maximum intensity within seconds-minutes\\n\\u2022 Same-day CT head (CT >95% sensitive within 6h)\\n\\u2022 If CT negative & onset <6h, may exclude\\n\\u2022 If onset >6h or symptoms ongoing, LP at 12h\\n\\nOther differentials: cervical artery dissection, RCVS, pituitary apoplexy, venous sinus thrombosis.\\n\\nAction: same-day ED referral."}]},{"id":"gi-bleed","enabled":true,"label":"GI bleed","kind":"red","patterns":["melaena\\\\w*","melena\\\\w*","malaena\\\\w*","haematemesis\\\\w*","hematemesis\\\\w*","vomiting blood","vomited blood","vomit\\\\w* blood","threw up blood","throwing up blood","coffee.?ground\\\\w*","fresh blood per rectum","haematochezia\\\\w*","hematochezia\\\\w*","blood in (my )?(stool|stools|poo|poop|faeces|feces|bowel movement|motion|toilet)","blood (from|in|out of) (my )?(back passage|bottom|anus|rectum|bum)","passing blood (from|per|in|out of|rectum|back passage|bottom|anus|bum|stool|poo|bowel)","rectal bleeding","rectal bleed\\\\w*","bleeding (from|per) rectum","bleeding from (my )?(back passage|bottom|anus|bum)","bright red blood (from|in|per|out of)","dark (red )?blood (in|from|per|out of) (my )?(stool|poo|back passage|bottom|bowel)","black (tarry |and tarry )?(stool|stools|poo|poop|faeces|feces|bowel|motion)","black and tarry","tarry (stool|stools|poo|poop|faeces|feces|bowel|motion)","tar.?like (stool|stools|poo|poop|faeces|feces)","dark stool\\\\w*","dark poo\\\\w*","very dark poo","blood when I wipe","blood on toilet paper","blood in (the )?toilet (bowl|pan|water)?","blood (after|when) (going to the )?toilet","pr bleed\\\\w*","upper gi bleed\\\\w*","lower gi bleed\\\\w*","gastrointestinal bleed\\\\w*","gi bleed\\\\w*","haemorrhage\\\\w* (from|in|into) (bowel|gut|stomach|oesophagus|esophagus|intestine)","hemorrhage\\\\w* (from|in|into) (bowel|gut|stomach|esophagus|intestine)","blood (in|from) (my )?vomit","bloody vomit","bloody stool\\\\w*","bloody diarrhoea","bloody diarrhea"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Acute pathway","text":"Suspected upper / lower GI bleed.\\n\\n\\u2022 Haemodynamics: HR, BP, lying/standing\\n\\u2022 Anticoagulants / antiplatelets / NSAIDs\\n\\u2022 Liver disease / known varices\\n\\u2022 Glasgow-Blatchford for upper GI bleed\\n\\nAction:\\n\\u2022 Acute / unstable \\u2192 999\\n\\u2022 Stable + suspicious \\u2192 same-day medical admission\\n\\u2022 Painless rectal bleeding > 50y \\u2192 2WW colorectal"},{"type":"snippet","label":"Glasgow-Blatchford template","text":"Glasgow-Blatchford:\\n- Urea (mmol/L):\\n- Hb (g/L):\\n- Systolic BP:\\n- Pulse \\u2265100:\\n- Melaena:\\n- Syncope:\\n- Hepatic disease:\\n- Cardiac failure:\\n\\nScore: __\\n0 = consider outpatient \\u00b7 \\u22651 = admit"}]},{"id":"methotrexate","enabled":true,"label":"Methotrexate","kind":"amber","patterns":["methotrexate\\\\w*","methtrexate\\\\w*","methotrexat\\\\b","Maxtrex\\\\w*","Metoject\\\\w*","Nordimet\\\\w*","Jylamvo\\\\w*","\\\\bMTX\\\\b"],"regex":true,"fields":["meds","request","problems"],"pages":["detail","record"],"bumpsTile":"meds","builtin":true,"actions":[{"type":"note","label":"DMARD monitoring","text":"Methotrexate monitoring (NICE / BSR):\\n\\n\\u2022 FBC + U&E + LFT every 12 weeks (or 4-weekly if dose change / new abnormalities)\\n\\u2022 Annual chest X-ray if respiratory symptoms\\n\\u2022 Pneumococcal + annual flu vaccine\\n\\u2022 Folic acid 5mg weekly (\\u226524h after MTX)\\n\\nWarnings:\\n\\u2022 Teratogenic \\u2014 6mo washout F, 3mo M before conception\\n\\u2022 Hepatotoxic \\u2014 alcohol limits\\n\\u2022 Pulmonary toxicity \\u2014 investigate any new SOB / dry cough\\n\\u2022 Drug interactions \\u2014 esp. trimethoprim, NSAIDs (caution)"},{"type":"snippet","label":"Bloods reminder","text":"Methotrexate monitoring bloods:\\n- FBC + film:\\n- U&E:\\n- LFTs:\\n- Date of last MTX dose:\\n- Current dose:\\n- Folic acid:\\n- Symptoms? (SOB, mouth ulcers, infection):\\n\\nNext review due:"}]},{"id":"lithium","enabled":true,"label":"Lithium","kind":"amber","patterns":["lithium\\\\w*","Priadel\\\\w*","Camcolit\\\\w*","Liskonum\\\\w*","Li-Liquid\\\\w*","Li Liquid\\\\w*"],"regex":true,"fields":["meds","request","problems"],"pages":["detail","record"],"bumpsTile":"meds","builtin":true,"actions":[{"type":"note","label":"Lithium monitoring","text":"Lithium monitoring (NICE):\\n\\n\\u2022 Level 12h post-dose, 3-monthly (more often if dose change, illness, drug interaction)\\n\\u2022 U&E + TFT + Ca every 6 months\\n\\u2022 Target range typically 0.6-0.8 mmol/L (0.4-1.0 acceptable)\\n\\u2022 Toxicity above 1.5 mmol/L\\n\\nCommon traps:\\n\\u2022 Dehydration / D&V \\u2192 toxicity\\n\\u2022 NSAIDs, ACEi, thiazides \\u2191 levels\\n\\u2022 Pregnancy considerations \\u2014 specialist advice\\n\\u2022 Hypothyroidism long-term"}]},{"id":"anticoag","enabled":true,"label":"Anticoagulant","kind":"amber","patterns":["warfarin\\\\w*","apixaban\\\\w*","rivaroxaban\\\\w*","edoxaban\\\\w*","dabigatran\\\\w*","acenocoumarol\\\\w*","phenindione\\\\w*","Eliquis\\\\w*","Xarelto\\\\w*","Lixiana\\\\w*","Pradaxa\\\\w*","Coumadin\\\\w*","Marevan\\\\w*","Sinthrome\\\\w*","\\\\bDOAC\\\\b","\\\\bNOAC\\\\b","blood thinners?\\\\b","blood[- ]?thinning tablets?\\\\b","anticoagulant\\\\w*"],"regex":true,"fields":["meds"],"pages":["detail","record"],"bumpsTile":"meds","builtin":true,"actions":[{"type":"note","label":"Anticoag review","text":"Annual anticoagulant review:\\n\\n\\u2022 Indication still valid?\\n\\u2022 Renal function \\u2014 dose adjustment for DOACs\\n\\u2022 Bleeding risk reassessment (HAS-BLED, ORBIT)\\n\\u2022 CHA\\u2082DS\\u2082-VASc for AF (consider stopping if low risk)\\n\\u2022 Patient knows what to do if a dose is missed\\n\\u2022 Has Yellow Book / DOAC alert card\\n\\u2022 Interacting meds review (esp. NSAIDs, antibiotics, antifungals)\\n\\u2022 Bleeding episodes \\u2014 frequency, severity, source\\n\\u2022 Falls risk if elderly"}]},{"id":"uti","enabled":true,"label":"UTI","kind":"amber","patterns":["\\\\bUTI\\\\b","urinary tract inf\\\\w*","burning (when |while )?(passing (water|urine)|pe?e?ing|i (pe?e?|wee)|to (pee|wee))\\\\w*","stinging (when |while )?(passing (water|urine)|pe?e?ing|i (pe?e?|wee)|to (pee|wee))\\\\w*","dysuria\\\\w*","cystitis\\\\w*","water inf\\\\w*","bladder inf\\\\w*","need to (wee|pee|urinate) (all the time|constantly|frequently|a lot)\\\\w*","cloudy (urine|wee|pee)\\\\w*","smelly (urine|wee|pee)\\\\w*","pain (passing|when passing) (water|urine)\\\\w*","frequent urination\\\\w*","urine inf\\\\w*","can.?t (pee|pass water)","unable to (wee|pee|pass water)","nothing comes? out (when I try to )?(wee|pee)","struggling to pass (urine|water)"],"regex":true,"fields":["request","problems"],"pages":["queue","detail","record"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NICE CKS UTI (women)","url":"https://cks.nice.org.uk/topics/urinary-tract-infection-lower-women/"},{"type":"link","label":"NICE CKS UTI (men)","url":"https://cks.nice.org.uk/topics/urinary-tract-infection-lower-men/"},{"type":"snippet","label":"UTI history & exam","text":"UTI history:\\n- Dysuria / frequency / urgency:\\n- Suprapubic pain / loin pain:\\n- Duration of symptoms:\\n- Fever / rigors / vomiting:\\n- Vaginal discharge:\\n- Sexually active / new partner:\\n- Pregnancy possible:\\n- Catheter / structural abnormality:\\n- Recent abx / hospitalisation:\\n- Recurrence (\\u22653 in 12mo or \\u22652 in 6mo):\\n- Diabetes / immunosuppression:\\n\\nO/E:\\n- Vitals (sepsis screen):\\n- Abdominal exam:\\n- Loin tenderness:\\n- (Dipstick: not for \\u226565y or catheterised):\\n\\nPlan:\\n- 1st line: nitrofurantoin or trimethoprim per local sensitivity\\n- 2nd line: pivmecillinam / fosfomycin\\n- Pyelonephritis features \\u2192 admit / IV abx"},{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"snippet","label":"Pharmacy First referral (UTI)","text":"Consider Pharmacy First \\u2014 uncomplicated lower UTI, women aged 16\\u201364, not pregnant. If eligible, signpost to community pharmacy.\\n\\nNot suitable / safety-net: pregnant, male, <16 or >64, recurrent UTI, catheter, immunosuppressed, suspected pyelonephritis (fever, loin/back pain, rigors, vomiting), visible haematuria, or not improving in 48h."}]},{"id":"epiglottitis","enabled":true,"label":"Epiglottitis","kind":"red","patterns":["epiglottit\\\\w*","(drooling|can.?t swallow (my )?(own )?(saliva|spit))","(muffled|hot.?potato) voice"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Airway emergency","text":"Suspected adult epiglottitis / supraglottitis \\u2192 999 / same-day ED.\\n\\nRed flags (any): drooling or unable to swallow saliva, muffled \\u201chot potato\\u201d voice, stridor, sitting forward to breathe, severe sore throat with a normal-looking oropharynx, rapid deterioration.\\n\\nAction:\\n\\u2022 Do NOT attempt to examine the throat or use a tongue depressor \\u2014 risk of precipitating airway obstruction\\n\\u2022 Keep the patient sitting upright; do not lie flat\\n\\u2022 999 transfer / immediate ENT-anaesthetics involvement\\n\\u2022 Differential: quinsy, deep neck-space infection, anaphylaxis"}]},{"id":"sore-throat","enabled":true,"label":"Sore throat","kind":"amber","patterns":["sore throat\\\\w*","tonsillitis\\\\w*","throat pain\\\\w*","pharyngitis\\\\w*","painful throat\\\\w*","throat is sore\\\\w*","hurts to swallow\\\\w*","strep throat\\\\w*","quinsy\\\\w*","peritonsillar\\\\w*","tonsils (are |is )?(sore|swollen|infected|inflamed|painful)\\\\w*","swollen tonsils?\\\\w*","throat infection\\\\w*"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NICE CKS sore throat","url":"https://cks.nice.org.uk/topics/sore-throat-acute/"},{"type":"snippet","label":"FeverPAIN scoring","text":"FeverPAIN score (1 point each):\\n- Fever in last 24h:\\n- Purulence (tonsils):\\n- Attended within 3 days of onset:\\n- Inflamed tonsils (severe):\\n- No cough or coryza:\\n\\nTotal: __\\n0-1: 13-18% strep \\u2014 no abx, self-care\\n2-3: 34-40% strep \\u2014 delayed abx (3d) or no abx\\n4-5: 62-65% strep \\u2014 immediate abx\\n\\nAbx of choice: phenoxymethylpenicillin 500mg QDS 5-10d (clarithromycin if pen-allergic)"},{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"snippet","label":"Pharmacy First referral (sore throat)","text":"Consider Pharmacy First \\u2014 acute sore throat, age 5+. Pharmacist applies FeverPAIN.\\n\\nSafety-net / urgent: difficulty breathing, difficulty swallowing saliva, drooling, muffled \\u201chot potato\\u201d voice, stridor, neck stiffness, systemically very unwell, or immunosuppressed \\u2192 same-day assessment (?quinsy / epiglottitis)."}]},{"id":"otitis","enabled":true,"label":"Otitis media","kind":"amber","patterns":["otitis\\\\w*","earache\\\\w*","ear[- ]?ache\\\\w*","ear inf\\\\w*","ear pain\\\\w*","ear (is |are )?(really |very |so |getting |bit |a bit )?(hurting|sore|painful|infected|aching)\\\\w*","my ear (is |are )?(really |very |so |getting |bit |a bit )?(sore|hurting|painful|aching)\\\\w*","sore ear\\\\w*","painful ear\\\\w*","pain in (my |the |her |his )?ear\\\\w*","\\\\bAOM\\\\b","\\\\bOME\\\\b","glue ear\\\\w*","ear discharge\\\\w*","discharge from (the |my |her |his )?ear\\\\w*","blocked ear\\\\w*","muffled hearing (in|from) (the |my )?(ear|right ear|left ear)\\\\w*"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NICE CKS OM","url":"https://cks.nice.org.uk/topics/otitis-media-acute/"},{"type":"snippet","label":"OM history & exam","text":"Otitis media history:\\n- Onset / duration:\\n- Fever / unwell:\\n- Otalgia laterality:\\n- Discharge / hearing loss:\\n- Recent URTI:\\n- Recurrent OM (\\u22653 in 6mo or \\u22654/yr):\\n- Eardrum perforation history:\\n- Grommets:\\n\\nO/E:\\n- TM appearance: bulging / erythematous / dull / perforated / effusion\\n- Mastoid tenderness:\\n- General \\u2014 temp, fluid intake:\\n\\nPlan:\\n- Most resolve in 3 days, paracetamol / ibuprofen\\n- Abx if: <2y bilateral, perforation + discharge, systemically unwell, deteriorating\\n- Amoxicillin 5-7d (clarithromycin if pen-allergic)\\n- Safety net: persistent fever 3-4d, mastoid swelling, hearing loss >2-4w"},{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"snippet","label":"Pharmacy First referral (otitis media)","text":"Consider Pharmacy First \\u2014 acute otitis media, age 1\\u201317. If eligible, signpost to community pharmacy.\\n\\nNot suitable / safety-net: <1y or >17y, systemically very unwell, immunosuppressed, suspected mastoiditis (swelling/redness behind the ear), or symptoms not improving after 3 days."}]},{"id":"sinusitis","enabled":true,"label":"Sinusitis","kind":"amber","patterns":["sinusit\\\\w*","sinus infection","sinus pain","sinus pressure","blocked sinus\\\\w*","facial pain","facial pressure","pressure (in|around|behind) (my )?(face|cheek|cheeks|eyes)","pain (over|around) (my )?(cheek|cheeks|sinuses)","post.?nasal drip"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"snippet","label":"Pharmacy First referral (sinusitis)","text":"Consider Pharmacy First \\u2014 acute sinusitis, age 12+. If eligible, signpost to community pharmacy.\\n\\nSafety-net / urgent: symptoms >10 days, swelling or redness around the eye, double vision, severe frontal headache, photophobia, neck stiffness, or systemically very unwell."}]},{"id":"insect-bite","enabled":true,"label":"Insect bite","kind":"amber","patterns":["insect bite\\\\w*","insect sting\\\\w*","bug bite\\\\w*","spider bite\\\\w*","mosquito bite\\\\w*","infected bite\\\\w*","infected sting\\\\w*","bite (that('?s| is| has)? )?(gone )?(red|infected|swollen|hot|spreading)","sting (that('?s| is| has)? )?(gone )?(red|infected|swollen|hot|spreading)","bitten by (an? )?(insect|mosquito|spider|midge|wasp|bee)\\\\w*","tick bite\\\\w*","bitten by a tick","(bull.?s.?eye|circular|ring.?shaped) rash","lyme disease"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"snippet","label":"Pharmacy First referral (infected insect bite)","text":"Consider Pharmacy First \\u2014 infected insect bite, age 1+. If eligible, signpost to community pharmacy.\\n\\nSafety-net / urgent: rapidly spreading redness, fever or systemic illness, suspected cellulitis, bite near the eye, or breathing difficulty / facial swelling suggesting anaphylaxis \\u2192 emergency."}]},{"id":"impetigo","enabled":true,"label":"Impetigo","kind":"amber","patterns":["impetigo\\\\w*","school sores?","golden crust\\\\w*","honey.?colou?red crust\\\\w*","weeping sore\\\\w*","crusty (sore|sores|rash|spot|spots) (on|around) (the |my )?(face|nose|mouth|chin|lip|lips)","infected (sore|sores) (on|around) (my |the )?(face|nose|mouth)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"snippet","label":"Pharmacy First referral (impetigo)","text":"Consider Pharmacy First \\u2014 impetigo, age 1+ (non-bullous, localised). If eligible, signpost to community pharmacy.\\n\\nNot suitable / refer: bullous impetigo, widespread or recurrent, systemically unwell, immunosuppressed, or not improving with treatment."}]},{"id":"shingles","enabled":true,"label":"Shingles","kind":"amber","patterns":["shingles","herpes zoster","\\\\bzoster\\\\b","shingle rash","blistering rash","band of blister\\\\w*","painful rash (on )?one side","rash (on )?one side of (my )?(face|body|chest|back|torso)","burning pain (on |down )?(one side|the left|the right)( of my (chest|back|body|face))?"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"snippet","label":"Pharmacy First referral (shingles)","text":"Consider Pharmacy First \\u2014 shingles, age 18+. Antiviral most effective within 72h of rash onset.\\n\\nUrgent / not suitable for PF: eye involvement or rash on the tip of the nose (Hutchinson\\u2019s sign \\u2014 ?ophthalmic zoster), immunocompromised, pregnant, severe / widespread / disseminated rash, or signs of complications."}]},{"id":"back-pain","enabled":true,"label":"Back pain","kind":"amber","patterns":["back pain","lower back","lumbar pain","sciatica","backache","bad back","sore back","back hurt","pain in my back","aching back","back ache","slipped disc","trapped nerve","lumbago","sciatic","pain down my leg","leg pain from my back","back spasm","spine pain","spinal pain","lumbar","coccyx","sacral pain","sacroiliac","degenerative disc","herniated disc","prolapsed disc","disc bulge","facet joint"],"regex":false,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NICE LBP & sciatica","url":"https://www.nice.org.uk/guidance/ng59"},{"type":"snippet","label":"Back pain assessment","text":"Back pain \\u2014 red flags (refer urgently):\\n- Cauda equina (saddle anaesthesia, bladder/bowel)\\n- Significant trauma\\n- Age <20 or >55 new onset\\n- Progressive neurological deficit\\n- Fever / weight loss / night pain (cancer/infection)\\n- IVDU / immunosuppression\\n- History of malignancy\\n- Severe progressive limb weakness\\n\\nYellow flags (psychosocial):\\n- Belief pain is harmful\\n- Avoidance behaviour\\n- Low mood / withdrawal\\n- Job dissatisfaction\\n- Compensation/legal issues\\n\\nManagement (no red flags):\\n- Stay active, return to normal activities\\n- Analgesia: NSAIDs first-line (with PPI cover if indicated)\\n- Avoid opioids and gabapentinoids for non-specific LBP\\n- Refer to physio / MSK if not improving in 4-6 weeks"}]},{"id":"cough-resp","enabled":true,"label":"Cough/SOB","kind":"amber","patterns":["cough\\\\w*","shortness of breath","short of breath","breathless\\\\w*","wheez\\\\w*","chest infection\\\\w*","phlegm","\\\\bSOB\\\\b","\\\\bCOPD\\\\b","can't catch my breath","cannot catch my breath","cant catch my breath","struggling to breath\\\\w*","difficulty breath\\\\w*","hard to breath\\\\w*","chesty cough\\\\w*","mucus","sputum","tight chest","chest tightness from breath\\\\w*","bronchit\\\\w*","COPD flare\\\\w*","asthma attack\\\\w*","asthma flare\\\\w*","asthma\\\\b","haemoptysis","hemoptysis","coughing up blood","bringing up phlegm","bringing up mucus","winded","out of breath","puffed out","puffed\\\\b","respiratory infection","chest congestion","congested chest","rattly chest","productive cough\\\\w*","dry cough\\\\w*","persistent cough\\\\w*","tickly cough\\\\w*","night cough\\\\w*","asthma (getting|got|much) worse","asthma (not controlled|playing up)","(using|needing) (my )?(blue inhaler|reliever|salbutamol|ventolin) (more|more often|all the time|every (few )?hours)","(blue inhaler|reliever|inhaler) (not lasting|not working|not helping|isn.?t helping)","(waking|woken) (at|in the) night (with )?(wheez\\\\w*|cough\\\\w*|breathless\\\\w*|tight chest)","peak flow (dropping|down|low|worse)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Resp red flags","text":"Cough / breathlessness \\u2014 concerning features:\\n\\u2022 Haemoptysis\\n\\u2022 Weight loss / night sweats\\n\\u2022 Smoker / ex-smoker, esp. age >40\\n\\u2022 Persistent cough >3 weeks\\n\\u2022 Hoarseness >3 weeks\\n\\u2022 Acute onset breathlessness (PE / pneumothorax)\\n\\u2022 Tachypnoea, hypoxia, accessory muscle use\\n\\u2022 Single-lobe / focal signs\\n\\u2022 Failure to respond to abx\\n\\nThresholds:\\n\\u2022 Same-day F2F if any red flag, hypoxia, or systemic unwellness\\n\\u2022 2WW chest if haemoptysis + age >40, or persistent cough + smoker"},{"type":"snippet","label":"Resp assessment","text":"Respiratory presentation:\\n- Onset / duration:\\n- Cough: dry / productive (colour, consistency):\\n- Haemoptysis:\\n- Breathlessness \\u2014 exertional / rest, MRC grade:\\n- Wheeze:\\n- Fever, night sweats, weight loss:\\n- Chest pain \\u2014 pleuritic / cardiac:\\n- PE risk: travel, immobility, surgery, OCP, malignancy, leg swelling:\\n- Smoking pack-years:\\n- Asthma / COPD:\\n\\nO/E:\\n- Vitals: HR, BP, RR, sats, temp:\\n- WOB / accessory muscles:\\n- Chest exam:\\n- PEFR (if asthma):\\n\\nPlan:"},{"type":"note","label":"Asthma control (RCP3Q)","text":"RCP 3 Questions (any \\u201cyes\\u201d = poor control \\u2192 review):\\n1. Recent sleep disturbance from asthma?\\n2. Usual daytime symptoms (cough/wheeze/tight chest)?\\n3. Interference with usual activity?\\n\\nReliever use \\u22653\\u00d7/week or any night waking = uncontrolled \\u2192 inhaler technique + adherence + step-up review.\\n\\nACUTE SEVERE (same-day): PEF 33\\u201350% best, can\\u2019t complete sentences, RR \\u226525, HR \\u2265110.\\nLIFE-THREATENING (999): PEF <33%, silent chest, cyanosis, exhaustion, SpO\\u2082 <92%.\\nAfter any attack: steroid course completed? Follow-up within 48h."}]},{"id":"skin-2ww","enabled":true,"label":"Skin lesion","kind":"amber","patterns":["mole\\\\w*","skin lesion\\\\w*","skin change\\\\w*","changing mole\\\\w*","dark spot\\\\w*","growing lesion\\\\w*","non.?healing","ulcerat\\\\w*","new mole\\\\w*","mole has changed","mole that has changed","irregular mole\\\\w*","bleeding mole\\\\w*","itchy mole\\\\w*","spot that won.?t heal","sore that won.?t heal","wound that won.?t heal","won.?t heal","wont heal","not healing","hasn.?t healed","isn.?t healing","lump on \\\\w*(skin|back|arm|leg|face|neck|scalp|chest|shoulder)","skin growth\\\\w*","pigmented lesion\\\\w*","pigmented spot\\\\w*","melanoma\\\\w*","changing freckle\\\\w*","freckle that has changed","scab that won.?t heal","crusty lesion\\\\w*","crusty spot\\\\w*","suspicious mole\\\\w*","abnormal mole\\\\w*","pearly lump\\\\w*","basal cell\\\\w*","squamous cell\\\\w*","actinic keratosis","solar keratosis","rodent ulcer\\\\w*","lump on skin","skin lump\\\\w*","new lesion\\\\w*","spreading lesion\\\\w*","oozing lesion\\\\w*","bleeding lesion\\\\w*","lesion that bleeds","lesion that ooze\\\\w*"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NICE 2WW skin","url":"https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#skin-cancers"},{"type":"snippet","label":"7-point checklist","text":"Weighted 7-point checklist for pigmented lesion (refer 2WW if score \\u22653 OR any major):\\n\\nMajor (2 points each):\\n- Change in size:\\n- Irregular shape:\\n- Irregular colour:\\n\\nMinor (1 point each):\\n- Largest diameter \\u22657mm:\\n- Inflammation:\\n- Oozing / bleeding:\\n- Change in sensation (itch):\\n\\nTotal: __\\n\\nLesion description:\\n- Site:\\n- Diameter:\\n- Colour:\\n- Border:\\n- Evolution (timeline):\\n- Symptoms:\\n- ABCDE: Asymmetry / Border / Colour / Diameter / Evolving:\\n\\nPhoto on record? Y/N"}]},{"id":"mh-general","enabled":true,"label":"Mental health","kind":"amber","patterns":["anxi\\\\w*","depress\\\\w*","low mood","panic attack\\\\w*","stress\\\\w*","insomnia","mental health","mental wellbeing","therapy","counselling","counseling","feeling down","feel\\\\w* low","feel\\\\w* depressed","feel\\\\w* anxious","feeling hopeless","feeling worthless","feeling overwhelm\\\\w*","overwhelm\\\\w*","tearful","crying all the time","can't sleep","cannot sleep","cant sleep","not sleeping","struggling to sleep","sleep problem\\\\w*","sleep difficult\\\\w*","no motivation","lack of motivation","lost interest","no interest in","can't cope","cannot cope","cant cope","struggling mentally","struggling emotionally","worried all the time","nervous all the time","nervous wreck","constant worry\\\\w*","low self[- ]?esteem","\\\\bCBT\\\\b","talking therapy","talking therapies","\\\\bIAPT\\\\b","NHS talking therapies","mood problem\\\\w*","mood issue\\\\w*","burnt out","burnout","burn out","emotionally exhausted","mental breakdown","nervous breakdown","phobia\\\\w*","OCD\\\\b","PTSD\\\\b","post.?traumatic","intrusive thought\\\\w*","low energy","no energy","mood swings","anger problem\\\\w*"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"PHQ-9","url":"https://patient.info/doctor/patient-health-questionnaire-phq-9"},{"type":"link","label":"GAD-7","url":"https://patient.info/doctor/generalised-anxiety-disorder-assessment-gad-7"},{"type":"link","label":"Local IAPT / Talking Therapies (replace)","url":"https://www.nhs.uk/mental-health/talking-therapies-medicine-treatments/talking-therapies-and-counselling/nhs-talking-therapies/"},{"type":"snippet","label":"MH consultation","text":"MH presentation:\\n- Onset / duration / triggers:\\n- Symptoms (mood, anhedonia, sleep, appetite, energy, concentration):\\n- Anxiety symptoms / panic:\\n- Functional impact (work, relationships, self-care):\\n- Risk: thoughts of self-harm / suicide / harm to others:\\n- Substance use:\\n- Past MH history / family history:\\n- Social context: housing, finances, support network:\\n- Recent losses / life events:\\n- PHQ-9: __ / GAD-7: __\\n\\nPlan:\\n- Self-help / IAPT / counselling\\n- SSRI if moderate-severe (caution under 25 \\u2014 review 2 weekly):\\n- Safety net + follow-up:"}]},{"id":"post-discharge","enabled":true,"label":"Post-discharge","kind":"amber","patterns":["discharged","just home from hospital","out of hospital","recently in hospital","discharge summary","came out of hospital","got home from hospital","back from hospital","left hospital","after my hospital stay","following my admission","post-op","after my operation","after my surgery","discharged from ward","TTO","TTA"],"regex":false,"fields":["request","docs"],"pages":["queue","detail","record"],"bumpsTile":"openLoops","builtin":true,"actions":[{"type":"note","label":"Post-discharge checklist","text":"After hospital discharge \\u2014 review:\\n\\n\\u2022 Medication reconciliation (new / changed / stopped)\\n\\u2022 Follow-up appointments booked?\\n\\u2022 Outstanding investigations / results pending?\\n\\u2022 Self-monitoring / safety-net advice given?\\n\\u2022 District nurse / community support arranged?\\n\\u2022 Social: home situation, carer, equipment\\n\\u2022 Code recent admission in record\\n\\u2022 Update problem list and registers (e.g. HF, COPD, AF post-MI)\\n\\u2022 Consider proactive care plan if frail / multimorbid"},{"type":"snippet","label":"Post-discharge review","text":"Post-discharge review:\\n\\nAdmission:\\n- Dates:\\n- Diagnoses:\\n- Procedures:\\n- Discharge medications (new/changed):\\n- Follow-up planned:\\n\\nReview today:\\n- Recovery progress:\\n- Symptoms \\u2014 concerning / improving:\\n- Pain control:\\n- Mobility / ADLs:\\n- Med compliance / side effects:\\n- Outstanding actions chased:\\n- Safety net advice:"}]},{"id":"repeat-meds","enabled":true,"label":"Repeat meds","kind":"info","patterns":["repeat prescription","repeat medication","repeat script","repeat meds","ran out","run out of","running out","out of my (?!mind|depth|comfort|control|league|way|system|element|own|head|life|hands|hair|sight|reach|price|budget)\\\\w+","reorder","re-order","refill","top.?up","more of my","need more of my","need my tablets","need my inhaler","need my medication","need a prescription","need my prescription","prescription request","order my medication","order my meds","medication review"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"snippet","label":"SMR template","text":"Structured Medication Review (SMR):\\n\\nPatient understanding:\\n- Knows why each med is prescribed:\\n- Adherence / compliance:\\n- Side effects experienced:\\n- Self-monitoring (BP, BG, peak flow):\\n\\nFor each medication:\\n- Indication still valid?\\n- Dose appropriate (renal/hepatic adjustment)?\\n- Duplications / interactions / cascades?\\n- Anticholinergic burden / falls risk?\\n- Recent monitoring done?\\n\\nDeprescribe candidates:\\n- PPI > 8 weeks without indication\\n- Long-term benzo / Z-drug\\n- Statin in extreme frailty / limited life expectancy\\n- Anti-hypertensives if postural hypotension\\n- Aspirin without clear secondary prevention indication\\n\\nAgreed plan:"}]},{"id":"fit-note","enabled":true,"label":"Fit note","kind":"info","patterns":["fit note","fitnote","sick note","sicknote","med[- ]?3","fitness for work","off work","note for work","doctors note","doctor's note","statement of fitness","unfit for work","time off work","signed off","sign me off","sick certificate"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"GOV.UK Med3 guidance","url":"https://www.gov.uk/government/publications/fit-note-guidance-for-healthcare-professionals"},{"type":"snippet","label":"Fit note template","text":"Med3 considerations:\\n\\n- Diagnosis (the condition affecting work):\\n- Functional limitations (what can / can't do):\\n- Duration: <3mo (any duration) / >3mo (max 3mo):\\n- 'Not fit' or 'May be fit' (consider phased return / amended duties / altered hours / workplace adaptations):\\n- Assessment date and end date:\\n- Comments / advice to employer:\\n\\nFor mental health:\\n- Avoid jargon \\u2014 concrete functional language\\n- Consider OH referral / IAPT signposting\\n\\nFor MSK:\\n- Active management plan\\n- Avoid bed rest > 1-2 days"}]},{"id":"menopause","enabled":true,"label":"Menopause/HRT","kind":"info","patterns":["menopaus","menopausal","perimenopaus","peri-menopausal","hot flush","hot flushes","hot flash","hot flashes","night sweat","HRT","hormone replacement","hormone replacement therapy","HRT patch","oestrogen","estrogen","oestrogen gel","vaginal dryness","Evorel","Oestrogel","Sandrena","Utrogestan","Elleste","Femoston","Tibolone","patches for menopause"],"regex":false,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NICE menopause (NG23)","url":"https://www.nice.org.uk/guidance/ng23"},{"type":"link","label":"British Menopause Society","url":"https://thebms.org.uk/"},{"type":"snippet","label":"HRT consultation","text":"Menopause / HRT consultation:\\n\\nSymptoms:\\n- Vasomotor (flushes, sweats, night sweats):\\n- Mood, sleep, cognition:\\n- GU: vaginal dryness, dyspareunia, urinary:\\n- Joint / muscle pain:\\n- Libido:\\n- Functional impact:\\n\\nHistory:\\n- LMP / cycle changes:\\n- Contraception still needed?\\n- Migraine with aura?\\n- VTE / clotting history (personal / family):\\n- Breast / endometrial / ovarian cancer history:\\n- BMI / smoking / alcohol:\\n- Cardiovascular risk:\\n- Liver disease:\\n- Current meds:\\n\\nDiscussion:\\n- Risk / benefit balance\\n- Options: sequential vs continuous combined; oestrogen-only if hysterectomy; transdermal preferred if VTE / migraine / hepatic / >60\\n- Vaginal oestrogen for GU symptoms (no extra systemic risk)\\n- Testosterone for low libido (off-label)\\n- Lifestyle, CBT for vasomotor\\n\\nPlan / review timeframe:"}]},{"id":"stroke-tia","enabled":true,"label":"Stroke/TIA","kind":"red","patterns":["face (is |was |has been |keeps )?droop\\\\w*","facial droop\\\\w*","drooping face","one side of (my )?face (is )?(numb|droop\\\\w*|drop\\\\w*|sag\\\\w*|weak)","mouth (is )?droop\\\\w*","smile (is|has gone) (lopsided|uneven|crooked)","can.?t smile","arm (drift|has gone (numb|weak|dead))","one arm (numb\\\\w*|weak\\\\w*|won.?t move|gone)","can.?t (lift|feel|move) (my )?arm","sudden (arm|leg|face) (weakness|numbness)","slurr\\\\w* (speech|words)","speech (is )?(slurred|unclear|jumbled|muddled)","can.?t (speak|get my words out)","sudden\\\\w* difficulty (speaking|talking)","stroke","TIA","transient ischaemic attack","mini.?stroke","funny turn (down|on) one side","went (numb|weak) down one side","sudden (loss of )?vision in one eye","can.?t (get (my )?words out|speak properly)","(lost|losing) (the ability|my ability) to (speak|talk)","both (my )?arms? (have )?(suddenly )?(gone )?(weak|numb|heavy)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"FAST pathway","text":"Suspected stroke (FAST: Face droop / Arm weakness / Speech / Time) with symptoms NOW or within hours \\u2192 999. Thrombolysis & thrombectomy are time-critical.\\n\\nResolved deficit (?TIA): high early stroke risk \\u2014 aspirin 300mg (unless contraindicated) + specialist TIA-clinic assessment within 24h (NICE NG128). Do NOT \\u201cwait and see\\u201d.\\n\\nMimics (hypo, migraine aura, Bell\\u2019s palsy) \\u2014 treat as stroke until assessed."},{"type":"link","label":"NICE NG128 (stroke & TIA)","url":"https://www.nice.org.uk/guidance/ng128"}]},{"id":"sepsis","enabled":true,"label":"Sepsis?","kind":"red","patterns":["sepsis","septic\\\\w*","(septicaemi|septicemi)\\\\w*","fever (and|with) (confus\\\\w*|drowsy|drowsiness|delirious|hard to wake|can.?t stay awake|unresponsive)","fever (and|with) (mottled|blotchy|grey|pale) skin","mottled skin","high (fever|temperature) (and|with) (rigors|violent shaking|uncontrollable shaking)","shaking (uncontrollably|violently) with (a )?(fever|temperature)","rigors","fever (and|with) (very fast|racing|pounding) (heart|pulse)","fever (and|with) (fast|rapid) breathing","fever (and|with) (not passing|no) urine","flu.?like (and|with) (collaps\\\\w*|can.?t get up|can.?t stand)","felt (the )?worst (i.?ve|i have) ever (felt|been) (and|with) (fever|temperature)","non.?blanching rash","(fever|temperature|burning up) (and|with) feel\\\\w* (absolutely )?(terrible|dreadful|awful)","(hot and cold|cold and hot) (sweats|shivers|all over)","(shaking|shivering) uncontrollably"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Sepsis screen","text":"Could this be sepsis? (NICE NG51 risk stratification.)\\n\\nHigh-risk features \\u2192 999 / immediate F2F:\\n\\u2022 New altered mental state / hard to rouse\\n\\u2022 Mottled, ashen or cyanosed skin; non-blanching rash\\n\\u2022 RR \\u226525, new O\\u2082 requirement\\n\\u2022 HR \\u2265130, SBP \\u226490\\n\\u2022 Not passed urine in 18h\\n\\u2022 Rigors / uncontrollable shaking with fever\\n\\nRemember NEUTROPENIC sepsis: chemotherapy in last 6 weeks + fever = emergency admission, no delays."},{"type":"link","label":"NICE NG51 (sepsis)","url":"https://www.nice.org.uk/guidance/ng51"}]},{"id":"anaphylaxis","enabled":true,"label":"Anaphylaxis?","kind":"red","patterns":["anaphyla\\\\w*","severe allergic reaction","allergic (reaction )?(getting|got) (worse|much worse) (quickly|fast)","(swelling|swollen) (of (my )?)?(throat|tongue|lips|mouth|face)","throat (is )?(closing|tight\\\\w*|swelling)","(can.?t|hard to|struggling to) (breathe|swallow) (after|since) (eating|the sting|the injection|antibiotic\\\\w*|penicillin)","stridor","wheez\\\\w* (after eating|after the sting|with swelling)","hives (and|with) (swelling|breathing|face|throat)","widespread (hives|urticaria|welts) (and|with) (swelling|breathing|face)","lips (have )?(swollen|swelled) up","face (has )?(swollen|puffed) up (suddenly|fast|quickly)","went (pale|clammy|floppy) after (eating|the sting|injection)","reaction (after|to) (a |the )?(bee|wasp) sting","reaction (after|to) (eating )?(nuts|peanut\\\\w*|shellfish)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Anaphylaxis pathway","text":"Airway/breathing/circulation involvement with an allergic trigger = anaphylaxis.\\n\\n\\u2022 999 immediately\\n\\u2022 IM adrenaline 1:1000, 500 micrograms (adult) anterolateral thigh; repeat after 5 min if no improvement\\n\\u2022 Lie flat, raise legs (sit up only if breathing difficulty); do NOT stand the patient up\\n\\u2022 After emergency treatment: ensure 2 adrenaline auto-injectors carried + specialist allergy-clinic referral\\n\\nRash/itch alone without airway, breathing or circulation features is not anaphylaxis \\u2014 antihistamine + safety-net."},{"type":"link","label":"Resus Council UK anaphylaxis","url":"https://www.resus.org.uk/library/additional-guidance/guidance-anaphylaxis"}]},{"id":"meningitis","enabled":true,"label":"Meningitis?","kind":"red","patterns":["meningitis","meningococ\\\\w*","non.?blanch\\\\w* rash","rash (that )?(doesn.?t|does not|won.?t|will not) (fade|blanch|go) (when |if )?(pressed|i press|under (a |the )?glass)","glass test","tumbler test","petechia\\\\w*","petechial rash","purple (spots|rash|blotches)","spots that (don.?t|won.?t) fade","fever (and|with) (neck stiffness|stiff neck)","(stiff neck|neck stiffness) (and|with) (fever|rash|headache|light)","can.?t (bend|move) (my )?neck forward","fever (and|with) (photophobia|light hurt\\\\w*|bright light)","light (hurts|is hurting) (my )?eyes","severe headache (and|with) (fever|neck stiffness|rash|vomiting)","fever (and|with) (rash|confus\\\\w*|drowsy|very sleepy)","bruis\\\\w*.?like rash (with|and) fever","(fever|temperature) (and|with) (a )?(purple|non.?blanching|blotchy) (rash|spots)","(rash|spots) (that )?(doesn.?t|don.?t|won.?t) (fade|go away|disappear) (under|with) (a )?glass"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Meningitis / meningococcal","text":"Fever + any of: non-blanching/petechial rash, neck stiffness, photophobia, new confusion or drowsiness \\u2192 999 (NICE NG240, 2024).\\n\\n\\u2022 Non-blanching rash + fever = meningococcal sepsis until proven otherwise (may occur WITHOUT meningitis)\\n\\u2022 Give IM/IV benzylpenicillin (or ceftriaxone) pre-hospital ONLY if transfer will be delayed \\u2014 never delay transfer to give it\\n\\u2022 Glass/tumbler test is the patient-facing check for blanching"},{"type":"link","label":"NICE NG240 (meningitis & meningococcal)","url":"https://www.nice.org.uk/guidance/ng240"}]},{"id":"aaa","enabled":true,"label":"AAA/dissection?","kind":"red","patterns":["aortic aneurysm","AAA","aortic dissection","sudden (severe )?tearing (pain )?(in (my )?)?(back|tummy|abdomen|chest)","tearing (sensation|pain) (in (my )?)?(back|abdomen|chest)","(ripping|tearing|splitting) pain (in (my )?)?(back|abdomen|chest)","felt (something|a) (tear|rip) (inside|in my (back|tummy|chest))","sudden severe (back|abdominal|tummy) pain (and|with) (faint\\\\w*|collaps\\\\w*|pale|sweat\\\\w*|clammy|dizzy)","(back|abdominal) pain (radiating|going|spreading) (down|into) (both )?(legs|groin)","pulsating (lump|mass) in (my )?(tummy|abdomen|belly)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Vascular emergency","text":"Sudden tearing/ripping back, abdominal or chest pain \\u00b1 collapse, pallor, sweating, or a pulsatile abdominal mass = ruptured AAA / aortic dissection until proven otherwise.\\n\\n\\u2022 999 \\u2014 do not bring to surgery for assessment\\n\\u2022 Highest suspicion: older men, smokers, hypertension, known aneurysm/FH\\n\\u2022 Mimics renal colic in the elderly \\u2014 first presentation of \\u201crenal colic\\u201d over 60 should raise AAA"}]},{"id":"testicular-torsion","enabled":true,"label":"Testicular torsion?","kind":"red","patterns":["testicular torsion","torsion of (the )?(testicle|testis)","sudden (severe )?pain in (my )?(testicle|testis|ball|balls|scrotum)","(testicle|testis|ball|scrotum) (pain|swelling) (came on )?(suddenly|out of nowhere)","(severe|sudden|acute|unbearable) (testicular|scrotal) pain","woke up with (testicular|scrotal|groin) pain","(testicle|testis) (is )?(swollen|riding high|hard|tender) (and |with )?(pain|painful|vomiting|sick)","sudden severe groin pain (and|with) (swelling|vomiting|nausea)","boy (with|has) (testicular|scrotal|groin) pain"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Surgical emergency","text":"Sudden severe unilateral testicular pain \\u00b1 nausea/vomiting = torsion until proven otherwise \\u2014 the salvage window is ~6 hours.\\n\\n\\u2022 Same-day urology / ED NOW \\u2014 do not arrange routine review or wait for swelling to settle\\n\\u2022 Most common 12\\u201325y but any age\\n\\u2022 Do not rely on ultrasound availability to decide \\u2014 clinical suspicion is enough for referral"},{"type":"link","label":"NICE CKS scrotal pain & swelling","url":"https://cks.nice.org.uk/topics/scrotal-pain-swelling/"}]},{"id":"pe-dvt","enabled":true,"label":"PE/DVT?","kind":"red","patterns":["pulmonary embolism","PE","DVT","deep vein thrombosis","blood clot in (my )?(leg|lung\\\\w*|calf)","one (leg|calf) (swollen|bigger|hot|red|hard)","(calf|leg) (swelling|swollen) (and|with) (pain|hot|red|warm|hard|tender)","(calf|leg) (pain|tender\\\\w*) (and|with) (swelling|swollen|hot|red|warm)","sudden(ly)? (short of breath|breathless\\\\w*|out of breath)","pleuritic chest pain","chest pain (when|worse) (i )?breath\\\\w* in","pain (when|on) breathing in (and|with) (breathless\\\\w*|leg)","breathless\\\\w* (and|with) (leg (swelling|pain)|chest pain)","(recent|after) (surgery|operation|long flight|long.?haul) (and|with) (leg (swelling|pain)|breathless\\\\w*)","(leg|foot|arm|hand) (gone|turned|is) (cold|white|pale|mottled|blue) (and |with )?(numb|painful|can.?t move)","no pulse in (my )?(leg|foot|arm)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"VTE / limb-ischaemia pathway","text":"Suspected PE: acute breathlessness \\u00b1 pleuritic pain \\u00b1 haemoptysis. Haemodynamic compromise or hypoxia \\u2192 999; otherwise same-day assessment (Wells \\u2192 D-dimer / CTPA) per NICE NG158.\\n\\nSuspected DVT: unilateral leg swelling/heat/tenderness \\u2192 same-day Wells scoring + proximal leg ultrasound pathway. Do not massage the leg.\\n\\nCOLD, PALE, PULSELESS limb (6 P\\u2019s) = acute limb ischaemia \\u2192 999 / vascular surgery \\u2014 hours matter."},{"type":"snippet","label":"Wells score (DVT)","text":"Wells DVT (1 point each unless stated):\\n- Active cancer:\\n- Paralysis / recent plaster immobilisation:\\n- Bed >3d or major surgery <12wk:\\n- Tenderness along deep venous system:\\n- Entire leg swollen:\\n- Calf >3cm larger than other side:\\n- Pitting oedema (symptomatic leg):\\n- Collateral superficial veins:\\n- Previous DVT:\\n- Alternative diagnosis at least as likely: -2\\n\\n\\u22652 DVT likely \\u2192 USS within 4h (or anticoagulate + USS within 24h)\\n\\u22641 DVT unlikely \\u2192 D-dimer"},{"type":"link","label":"NICE NG158 (VTE diagnosis)","url":"https://www.nice.org.uk/guidance/ng158"}]},{"id":"acute-severe-abdomen","enabled":true,"label":"Acute abdomen?","kind":"red","patterns":["rigid (abdomen|tummy|belly)","board.?like (abdomen|tummy|belly)","(abdomen|tummy|belly) (is )?(rigid|hard as a board)","worst (ever|of my life) (stomach|tummy|belly|abdominal) pain","excruciating (abdominal|tummy|belly|stomach) pain","(can.?t|won.?t) (move|straighten up) (because of|with) (the )?(tummy|stomach|abdominal) pain","peritonitis","perforat\\\\w* (bowel|ulcer|appendix|stomach)","(acute )?pancreatitis","severe (epigastric|upper (tummy|abdominal)) pain (radiating|going) (through|to) (my )?back","appendicitis","sudden severe (tummy|abdominal|belly) pain (and|with) (vomiting|fever|can.?t move)","guarding (and|with) rebound"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Surgical abdomen","text":"Peritonitic features (rigid/board-like abdomen, rebound, guarding, pain on movement/coughing, lying still) \\u2192 same-day surgical assessment / 999 if shocked.\\n\\nConsider: perforation, pancreatitis, ischaemic bowel (pain out of proportion), appendicitis, ruptured ectopic.\\n\\nWomen of reproductive age with acute lower abdominal pain: ALWAYS pregnancy test (?ectopic)."}]},{"id":"fever-infant","enabled":true,"label":"Fever <3m","kind":"red","patterns":["(baby|newborn|infant) (has|with|has got|running) (a |high )?(fever|temperature)","(baby|newborn|infant) (is )?(burning up|really hot|very hot|boiling)","(baby|newborn)(.?s)? temperature (of |is )?(3[8-9]|4\\\\d|over 38)","temperature (won.?t|will not) come down","under (3|three) months (old )?(and|with) (a )?(fever|temperature|hot)","\\\\d+ (week|month) old (with|and|has) (a )?(fever|temperature)","newborn (is |feels )?(hot|feverish)","(baby|infant) (fever|temperature) (and|with) (not feeding|poor feeding|floppy|drowsy|lethargic)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"NICE traffic light","text":"Temperature \\u226538\\u00b0C in an infant UNDER 3 MONTHS is a RED traffic-light feature (NICE NG143) \\u2192 same-day paediatric assessment (usually ED), regardless of how well the baby looks.\\n\\n3\\u20136 months \\u226539\\u00b0C = amber minimum.\\n\\nAny age + fever with: drowsy/floppy, poor feeding, non-blanching rash, grunting/recession, reduced wet nappies \\u2192 escalate same-day."},{"type":"link","label":"NICE NG143 (fever under 5s)","url":"https://www.nice.org.uk/guidance/ng143"}]},{"id":"resp-distress-child","enabled":true,"label":"Child breathing difficulty","kind":"red","patterns":["(drawing|sucking) (breath )?in (funny|hard)","(ribs|tummy|chest) (are |is |keep |keeps )?(going|sucking|pulling) in (when|as|with) (he |she |they |baby |every )?breath\\\\w*","recession (when|while) breathing","retractions","(nostrils|nose) flaring","grunting (when |while )?breath\\\\w*","baby (is )?grunting","stridor\\\\w*","(barky|barking|seal.?like) cough","croup","bronchiolitis","(blue|grey|dusky) (lips|face|tongue|around (the |his |her )?mouth)","cyanos\\\\w*","breathing (really|very) (fast|hard|quickly)","(can.?t|struggling to) (catch (his|her|their) breath|breathe at all|breathe properly)","working (really )?hard to breathe"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Paediatric respiratory distress","text":"Signs of increased work of breathing in a child \\u2014 recession (ribs/tummy sucking in), grunting, nasal flaring, stridor at rest, cyanosis/blue lips, too breathless to feed or talk \\u2192 same-day assessment; 999 if stridor at rest, cyanosis, exhaustion or drowsiness.\\n\\nCroup: barky cough + stridor \\u2014 oral dexamethasone if more than mild.\\nBronchiolitis (<2y): escalate if feeding <50% of normal, apnoeas, marked recession, sats concern."},{"type":"link","label":"NICE NG143 (fever under 5s)","url":"https://www.nice.org.uk/guidance/ng143"}]},{"id":"seizure","enabled":true,"label":"Seizure","kind":"red","patterns":["febrile (convulsion|seizure)\\\\w*","(had|having) a (fit|seizure|convulsion)","(fit|seizure|convulsion) (with|during|from) (a )?(fever|temperature)","first (ever )?(fit|seizure|convulsion)","(shaking|jerking) (uncontrollably|all over) (with|and) (fever|temperature|eyes rolled)","eyes (rolled|rolling) back (and|with) (shaking|jerking|stiff)","(fitting|seizing|convulsing) (now|for|lasting) (\\\\d+ )?(minutes|seconds)","tonic.?clonic","limbs (jerking|stiffened|went stiff)","won.?t (come round|wake up) after (a |the )?(fit|seizure)","seizure","convulsion\\\\w*"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Seizure pathway","text":"\\u2022 Seizure ongoing >5 min, repeated seizures, or not recovering consciousness \\u2192 999 (status epilepticus)\\n\\u2022 FIRST-ever seizure (any age) \\u2192 same-day assessment + urgent first-fit clinic referral; advise not to drive (DVLA)\\n\\u2022 Febrile convulsion (6m\\u20135y): usually benign if simple (<15 min, generalised, full recovery) but first episode warrants same-day review and exclusion of meningitis/serious infection\\n\\u2022 Known epilepsy with typical self-terminated seizure \\u2192 prompt review, check triggers/adherence"},{"type":"link","label":"NICE CKS febrile seizure","url":"https://cks.nice.org.uk/topics/febrile-seizure/"}]},{"id":"ectopic-miscarriage","enabled":true,"label":"Pregnancy bleeding/pain","kind":"red","patterns":["ectopic( pregnancy)?","miscarr\\\\w*","(pregnan\\\\w*|expecting) (and|with) (bleed\\\\w*|spotting|blood|cramp\\\\w*|pain)","bleed\\\\w* (and|while|when) (pregnan\\\\w*|expecting)","(spotting|bleeding|blood) in (early )?pregnancy","(pregnan\\\\w*|expecting) (and|with) (one.?sided|shoulder.?tip|shoulder) pain","(severe|bad) (cramp\\\\w*|period.?like pain|tummy pain) (and|while) pregnan\\\\w*","losing (the |my )?(baby|pregnancy)","positive (pregnancy )?test (and|with) (bleed\\\\w*|pain|cramp\\\\w*)","collaps\\\\w* (and|while|when) pregnan\\\\w*"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Early pregnancy pathway","text":"Pain and/or bleeding in (possible) pregnancy \\u2192 same-day Early Pregnancy Unit assessment.\\n\\n\\u2022 Ectopic can present with PAIN BEFORE any bleeding \\u2014 one-sided pain, shoulder-tip pain, dizziness/collapse in early pregnancy = ruptured ectopic until proven otherwise \\u2192 999\\n\\u2022 Always pregnancy-test women of reproductive age with abdominal pain\\n\\u2022 Anti-D consideration for surgical management of miscarriage"},{"type":"link","label":"NICE NG126 (ectopic & miscarriage)","url":"https://www.nice.org.uk/guidance/ng126"}]},{"id":"reduced-fetal-movements","enabled":true,"label":"Reduced fetal movements","kind":"red","patterns":["baby (not|isn.?t|stopped) (moving|kicking)( as much| much| at all)?","baby (is )?(quieter|less active|still|not as active)( than usual)?","(fewer|less|reduced|decreased) (baby |fetal |foetal )?(movements|kicks)","(no|hardly any|barely any) (kicks|movements)","(haven.?t|not) felt (the )?baby (move|kick)","movements (have )?(slowed (down|right down)|reduced|dropped off|stopped)","(worried|concerned) (baby|movements) (not moving|reduced|quiet)","not as much movement"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"RFM pathway (RCOG GTG57)","text":"Any maternal perception of reduced fetal movements (after ~24 weeks) \\u2192 signpost DIRECTLY to maternity triage / day assessment unit NOW for CTG \\u00b1 ultrasound.\\n\\n\\u2022 Do NOT book a GP appointment or advise \\u201cwait and count kicks\\u201d\\n\\u2022 Never reassure by phone without fetal assessment\\n\\u2022 Repeat episodes still warrant assessment every time"},{"type":"link","label":"RCOG GTG57 (reduced fetal movements)","url":"https://www.rcog.org.uk/guidance/browse-all-guidance/green-top-guidelines/reduced-fetal-movements-green-top-guideline-no-57/"}]},{"id":"pre-eclampsia","enabled":true,"label":"Pre-eclampsia?","kind":"red","patterns":["pre.?eclampsia","(pregnan\\\\w*|expecting) (and|with) (a |really |very )?(severe|bad|terrible|awful|pounding) headache","(severe|bad) headache (and|while|when) pregnan\\\\w*","(blurred|blurry) vision (and|while|when) pregnan\\\\w*","(seeing )?(flashing lights|spots|stars) (and|while|when) pregnan\\\\w*","(pregnan\\\\w*|expecting) (and|with) (visual|vision) (changes|disturbance)","(pain|hurting) (under|below) (my )?ribs (and|while|when) pregnan\\\\w*","(upper (tummy|abdominal)|epigastric) pain (and|while|when) pregnan\\\\w*","(sudden|severe) swelling (of (my )?)?(face|hands) (and|while|when) pregnan\\\\w*","(pregnan\\\\w*|expecting) (and|with) (headache (and|with) (vision|swelling)|swelling (and|with) headache)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Pre-eclampsia pathway","text":"Pregnancy (especially >20 weeks) + severe/persistent headache, visual disturbance, epigastric/RUQ pain, or sudden swelling of face/hands \\u2192 same-day maternity assessment for BP + urine protein.\\n\\n\\u2022 Can progress rapidly to eclampsia/HELLP\\n\\u2022 Seizure, severe hypertension or reduced consciousness \\u2192 999\\n\\u2022 Direct to maternity triage, not a routine GP slot"},{"type":"link","label":"NICE NG133 (hypertension in pregnancy)","url":"https://www.nice.org.uk/guidance/ng133"}]},{"id":"sudden-vision-loss","enabled":true,"label":"Sudden visual loss","kind":"red","patterns":["sudden (loss of )?(vision|sight)","(lost|losing) (my )?(vision|sight) (suddenly|in one eye|in my (left|right) eye)","curtain (coming|coming down|over) (my |one )?(eye|vision)","(shadow|curtain) (across|over) (my )?vision","new floaters","(shower of|sudden|lots of new) (floaters|flashes|flashing lights)","(flashes|flashing lights) (and|with) (new )?floaters","cobwebs (in|across) (my )?vision","sudden (blurred|blurry) vision in one eye","(giant cell arteritis|GCA)","(temporal|scalp) (pain|tenderness) (and|with) (jaw|vision|headache)","jaw (pain|ache\\\\w*|claudication) (when|while|on) (chewing|eating)","amaurosis","retinal detach\\\\w*","black (spot|patch) (in|across) (my )?vision"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Sight-threatening pathway","text":"\\u2022 Sudden painless loss of vision in one eye \\u2192 same-day emergency ophthalmology (?CRAO/CRVO/retinal detachment/vitreous haemorrhage)\\n\\u2022 Curtain/shadow over vision, or flashes + NEW floaters \\u2192 same-day (?retinal detachment/tear)\\n\\u2022 GCA: age >50 + new headache, scalp tenderness, jaw claudication \\u00b1 visual symptoms \\u2192 SAME-DAY high-dose steroid + urgent ophthalmology/rheumatology + ESR/CRP \\u2014 the second eye is at risk\\n\\u2022 Painful red eye + visual loss \\u2192 ?acute angle-closure \\u2192 emergency"},{"type":"link","label":"NICE CKS giant cell arteritis","url":"https://cks.nice.org.uk/topics/giant-cell-arteritis/"}]},{"id":"septic-arthritis","enabled":true,"label":"Hot swollen joint","kind":"red","patterns":["(hot|red.?hot) (and )?swollen joint","(swollen|huge) (and |very )?(hot|red) (knee|hip|shoulder|elbow|wrist|ankle|joint)","(knee|hip|shoulder|ankle|wrist|elbow|joint) (is )?(red.?hot|red and (hot|swollen)|hot and swollen)","joint (swelled|swelled up|swollen) (overnight|suddenly|very quickly)","(can.?t|unable to) (move|bend|weight bear on) (my )?(knee|hip|shoulder|joint) (and|with) (hot|swollen|red|fever)","acutely (swollen|hot|painful) joint","(hot|swollen) joint (and|with) (fever|feeling unwell|temperature)","septic arthritis"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Septic arthritis pathway","text":"An acutely hot, swollen, very painful joint (especially single joint \\u00b1 fever) = septic arthritis until proven otherwise.\\n\\n\\u2022 Same-day orthopaedics / ED for joint aspiration BEFORE antibiotics\\n\\u2022 An untreated septic joint is destroyed within days\\n\\u2022 Prosthetic joint, immunosuppression, recent injection = even lower threshold\\n\\u2022 Do not assume gout if febrile or systemically unwell"}]},{"id":"psychosis","enabled":true,"label":"Psychosis?","kind":"red","patterns":["hearing voices","voices (in my head|telling me|commenting)","(seeing|hearing) (things|stuff) (that aren.?t|not) (there|real)","hallucinat\\\\w*","visual hallucination\\\\w*","delusion\\\\w*","(psychosis|psychotic)","first episode psychosis","(people|they|the government|neighbours) (are )?(out to get|spying on|poisoning|watching) me","thoughts (being )?(put|inserted) (in|into) my (head|mind)","my (mind|thoughts) (are )?being controlled","paranoid (and|with) (voices|hallucinat\\\\w*|not safe|they.?re after me)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":"safeguarding","builtin":true,"actions":[{"type":"note","label":"First-episode psychosis","text":"Hallucinations, delusions, thought disorder or marked paranoia \\u2192 urgent referral to Early Intervention in Psychosis (EIP) \\u2014 NICE: assessment started within 2 weeks; same-day crisis-team input if risk.\\n\\n\\u2022 Command hallucinations / risk to self or others \\u2192 crisis pathway now\\n\\u2022 Exclude organic causes (delirium, substances) \\u2014 acute confusion in the elderly is delirium, not psychosis\\n\\u2022 POSTPARTUM PSYCHOSIS = psychiatric emergency \\u2192 same-day perinatal MH / crisis team"},{"type":"link","label":"NICE CKS psychosis","url":"https://cks.nice.org.uk/topics/psychosis-schizophrenia/"}]},{"id":"haematuria-2ww","enabled":true,"label":"Blood in urine","kind":"amber","patterns":["blood in (my )?(urine|wee|pee)","blood when (i )?(wee|pee|pass (water|urine))","ha?ematuria\\\\w*","(red|pink|cola.?colou?red|rusty) (urine|wee|pee)","(urine|wee|pee) (is|looks|has gone) (red|pink|bloody|like blood)","passing (blood|red water|bloody (water|urine))","visible blood (in|when passing) (urine|wee|pee)","bleeding when (i )?(wee|pee|urinat\\\\w*)","blood clots in (my )?(urine|wee)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"2WW pathway","text":"NICE NG12: visible haematuria aged \\u226545 (unexplained, or persisting/recurring after UTI treatment) \\u2192 2WW urology. Aged \\u226560 with unexplained non-visible haematuria + dysuria or raised WCC \\u2192 2WW.\\n\\nUnder the age cutoffs: still assess (UTI, stones, anticoagulants) and safety-net \\u2014 haematuria is never normal.\\n\\nExclude/treat UTI but do not let an infection label close the loop without confirming resolution."},{"type":"link","label":"NICE NG12 urological cancers","url":"https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#urological-cancers"}]},{"id":"postmenopausal-bleeding","enabled":true,"label":"Post-menopausal bleeding","kind":"amber","patterns":["post.?menopausal bleed\\\\w*","bleeding (after|since) (the |my )?menopause","(vaginal )?bleed\\\\w* (after|since) (my )?periods (stopped|ended|finished)","spotting (after|since) (the )?menopause","(haven.?t|not) had a period (for|in) (\\\\w+ )?(years|months) (and|but) (now )?(i.?m |i am )?(bleed\\\\w*|spotting|blood)","brown discharge (after|since) menopause","bleeding (and|but) (i.?m|i am) post.?menopausal"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"2WW pathway","text":"NICE NG12: post-menopausal bleeding (\\u226512 months after last period) in women \\u226555 \\u2192 2WW gynaecology (transvaginal USS endometrial assessment); strongly consider for younger post-menopausal women too.\\n\\n\\u2022 Includes spotting, staining and blood-streaked discharge\\n\\u2022 HRT breakthrough bleeding still needs assessment if unscheduled/persistent"},{"type":"link","label":"NICE NG12 gynaecological cancers","url":"https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#gynaecological-cancers"}]},{"id":"breast-changes-2ww","enabled":true,"label":"Breast lump/change","kind":"amber","patterns":["(lump|hard lump|thickening) (in|on) (my )?(breast|boob|boobs)","breast lump\\\\w*","boob lump\\\\w*","one breast (bigger|larger|different|changed)","breast (has |is )?(changed|dimpl\\\\w*|pucker\\\\w*)","(skin )?(dimpl\\\\w*|pucker\\\\w*|orange.?peel) (on|in) (my )?(breast|boob)","nipple (discharge|bleed\\\\w*|inver\\\\w*|retract\\\\w*|pulled in)","(scaly|crusty|eczema|rash) (on )?(my )?(nipple|areola)","inverted nipple"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"2WW pathway","text":"NICE NG12 breast referral:\\n\\u2022 Aged \\u226530 with an unexplained breast lump \\u2192 2WW\\n\\u2022 Aged \\u226550 with nipple discharge, retraction or other concerning unilateral nipple change \\u2192 2WW\\n\\u2022 Skin changes suggestive of cancer (dimpling, peau d\\u2019orange, nipple eczema) or axillary lump \\u2192 refer\\n\\u2022 Under 30 with a lump: non-urgent referral/assessment, lower threshold if FH\\n\\nIf the story is feeding-related (mastitis), treat \\u2014 but a lump persisting after mastitis resolves needs 2WW."},{"type":"link","label":"NICE NG12 breast cancer","url":"https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#breast-cancer"}]},{"id":"dysphagia-2ww","enabled":true,"label":"Swallowing difficulty","kind":"amber","patterns":["food (gets |is |keeps |keeps getting |getting )?(sticking|stuck) (in (my )?)?(throat|chest|food pipe|gullet|oesophagus)","something stuck (in my throat|when i swallow)","difficulty swallowing (food|solids|getting worse|for weeks)","swallowing (is )?(getting (worse|harder)|harder)","can.?t swallow (food|solids|properly)","food (won.?t |doesn.?t )?go down","odynophagia","dysphagia\\\\w*","hoarse\\\\w* (for|lasting|more than) (\\\\d+ )?(week|month)\\\\w*","(persistent|chronic) hoarse\\\\w*","voice (has been )?(hoarse|rough|gone) for (weeks|ages|a month)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"2WW pathway","text":"NICE NG12:\\n\\u2022 Dysphagia (food sticking, progressive difficulty swallowing) at ANY age \\u2192 2WW upper-GI endoscopy\\n\\u2022 Persistent hoarseness >3 weeks (especially >45y or smoker) \\u2192 2WW ENT + consider CXR\\n\\nAcute painful swallow with sore throat/tonsillitis is different \\u2014 see sore-throat rule. Difficulty swallowing SALIVA / drooling \\u2192 same-day (?epiglottitis/quinsy)."},{"type":"link","label":"NICE NG12 upper GI cancers","url":"https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#upper-gastrointestinal-tract-cancers"}]},{"id":"dka-hhs","enabled":true,"label":"DKA / HHS","kind":"red","patterns":["diabetic ketoacidosis","DKA","HHS","hyperosmolar","ketones (high|raised|in my (blood|urine|wee))","fruity (smelling )?breath","acetone breath","diabetes (and|with) (vomiting|can.?t keep (fluids|anything) down|confus\\\\w*)","(high|raised) ketones (and|with) (vomiting|unwell|drowsy|breathless)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Diabetic emergency","text":"Suspected DKA or HHS \\u2192 same-day / 999.\\n\\n\\u2022 DKA (type 1): vomiting, abdominal pain, raised ketones, deep/fast (Kussmaul) breathing, fruity breath, drowsiness\\n\\u2022 HHS (elderly type 2): very high glucose + marked dehydration + confusion, usually without significant ketones\\n\\nAction:\\n\\u2022 Check capillary glucose AND ketones now if able\\n\\u2022 Capillary ketones \\u22653.0 mmol/L (or urine ketones ++), or vomiting and unable to keep fluids down \\u2192 emergency admission\\n\\u2022 NEVER omit insulin - arrange immediate transfer"}]},{"id":"diabetes","enabled":true,"label":"Diabetes problem","kind":"amber","patterns":["(hyperglycaemi|hyperglycemi)\\\\w*","(hypoglycaemi|hypoglycemi)\\\\w*","hypo","blood sugars? (too high|very high|sky high|dangerously high|too low|very low|in the \\\\d+s)","blood sugars? (won.?t come down|keep dropping|all over the place)","(keep having|frequent|lots of) hypos","sick day rules","insulin (not working|isn.?t working|won.?t bring (it|sugars) down)","diabetes (out of control|not controlled|poorly controlled)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Escalation thresholds","text":"RED FLAGS \\u2192 same-day / 999:\\n\\u2022 ?DKA (esp. type 1): vomiting, abdominal pain, ketones, deep/fast breathing, fruity breath, drowsiness\\n\\u2022 ?HHS (esp. elderly type 2): very high glucose + dehydration + confusion\\n\\u2022 Severe hypo (needed help / unconscious / seizure) \\u2192 999; IM glucagon if available\\n\\u2022 Vomiting and cannot keep fluids down \\u2192 same-day\\n\\nSick-day rules: NEVER stop insulin; check glucose & ketones 2\\u20134-hourly; keep drinking; ketones rising or persistent vomiting \\u2192 urgent review.\\n\\nRoutine \\u201csugars running high\\u201d without red flags \\u2192 prompt clinical review/titration, not emergency."},{"type":"link","label":"NICE CKS diabetes","url":"https://cks.nice.org.uk/topics/diabetes-type-2/"}]},{"id":"dehydration-child","enabled":true,"label":"Child dehydration?","kind":"amber","patterns":["(no|hasn.?t had a|dry) (wet )?nappy (for|in) (\\\\d+ )?(hours|day)","hasn.?t (wee.?d|passed urine) (for|in) (\\\\d+ )?(hours|day)","(baby|she|he) (won.?t|not) (drink|feed|take (a |the )?(bottle|breast|milk|feed))","not feeding (and|with) (lethargic|drowsy|floppy|sunken)","dry (mouth|lips|tongue) (and|with) (not (drinking|feeding)|lethargic|drowsy)","sunken (eyes|fontanelle|soft spot)","fontanelle (sunken|bulging)","no (wet )?nappies","not (making|producing) tears","floppy (and|with) (not (drinking|feeding)|lethargic)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Dehydration assessment","text":"Concerning: \\u226550% fewer wet nappies, no tears, dry mouth, sunken eyes/fontanelle, lethargy, not tolerating fluids \\u2192 same-day assessment.\\n\\nRED (\\u2192 999/ED): mottled, cold extremities, cap refill >2s, very drowsy/floppy, no urine >12\\u201324h, persistent bilious vomiting.\\n\\nMild D&V tolerating ORS \\u2192 small frequent fluids + strict safety-net. Bulging fontanelle = different emergency (?meningitis)."}]},{"id":"vomiting-baby","enabled":true,"label":"Infant vomiting","kind":"amber","patterns":["projectile vomit\\\\w*","bringing (everything|every feed) (back )?up","vomiting (every|after every) feed","won.?t keep (a |any )?(feed|milk|bottle) down","(green|bilious|bile.?stained) vomit\\\\w*","vomiting (green|bile)","keeps being sick (and|with) (not feeding|lethargic|drowsy)","can.?t keep (anything|fluids|milk) down","baby (sick|vomiting) (and|with) (lethargic|floppy|drowsy|swollen tummy)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Infant vomiting red flags","text":"\\u2022 GREEN/BILIOUS vomiting in an infant = intestinal obstruction (?malrotation/volvulus) until proven otherwise \\u2192 SAME-DAY surgical/ED \\u2014 this is an emergency\\n\\u2022 Projectile vomiting in a 2\\u20138-week-old, hungry after, weight faltering \\u2192 ?pyloric stenosis \\u2192 same-day referral\\n\\u2022 Vomiting + drowsy/floppy/bulging fontanelle \\u2192 ?meningitis/raised ICP \\u2192 emergency\\n\\u2022 Effortless small possets in a well, gaining baby = reflux \\u2014 reassure + safety-net"}]},{"id":"head-injury","enabled":true,"label":"Head injury","kind":"amber","patterns":["(hit|bumped|banged|knocked|whacked) (my |his |her |their |the )?head","head (injury|trauma)","fell (and|then) (hit|banged|knocked) (my|his|her|their|the) head","(bang|blow|knock) (on|to) the head","concuss\\\\w*","(lost consciousness|knocked out|passed out|blacked out) (after|when|from) (the |a )?(fall|hit|blow)","knocked (out|unconscious)","(vomit\\\\w*|drowsy|confus\\\\w*|sleepy|not right) (after|since) (hitting|banging) (my |his |her )?head","clear fluid (from|leaking from) (my |his |her )?(ear|nose)","won.?t (wake up|stay awake) after (hitting|banging|the bang on) (his |her |their )?head","on (blood thinners|warfarin|apixaban|rivaroxaban|edoxaban|dabigatran|anticoagulant\\\\w*) (and|after) (hit\\\\w*|bang\\\\w*|fell)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"NG232 CT criteria","text":"CT head WITHIN 1 HOUR (\\u2192 ED now) if any: GCS <13 initially or <15 at 2h; suspected open/depressed or basal skull fracture (CSF leak, panda eyes, Battle\\u2019s sign); post-traumatic seizure; focal neurology; >1 episode of vomiting.\\n\\nON ANTICOAGULANT (warfarin/DOAC) or with bleeding disorder: CT within 8h after ANY head injury, even if entirely well \\u2014 send to ED.\\n\\nLOC or amnesia + (age \\u226565 / dangerous mechanism / clotting issue) \\u2192 CT within 8h.\\n\\nChildren: lower threshold; <1y with any bruise/swelling on head \\u2192 assess; consider NAI if mechanism inconsistent."},{"type":"link","label":"NICE NG232 (head injury)","url":"https://www.nice.org.uk/guidance/ng232"}]},{"id":"acute-limp-child","enabled":true,"label":"Limping child","kind":"amber","patterns":["(child|toddler|boy|girl|son|daughter|he|she) (is )?limping","limping (and|with) (fever|temperature|hot|swollen|won.?t walk)","won.?t (put weight on|walk on|stand on) (his|her|their|the) (leg|foot|knee|hip)","refusing to (walk|weight bear|stand)","not (weight.?bearing|bearing weight)","woke up limping","(hot|swollen|red) (knee|hip|ankle|leg) (and|with) (limp\\\\w*|fever|won.?t walk)","sudden (onset )?limp"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Limping child pathway","text":"Limp + fever or systemically unwell = septic arthritis/osteomyelitis until proven otherwise \\u2192 same-day paediatric/ortho assessment (bloods + imaging).\\n\\n\\u2022 Non-weight-bearing at any age \\u2192 same-day (fracture, septic hip)\\n\\u2022 Child <3y with a limp \\u2192 same-day assessment (and consider NAI)\\n\\u2022 Adolescent with hip/knee pain + limp \\u2192 ?SUFE \\u2192 urgent\\n\\u2022 Transient synovitis is a diagnosis of exclusion"},{"type":"link","label":"NICE CKS acute childhood limp","url":"https://cks.nice.org.uk/topics/acute-childhood-limp/"}]},{"id":"neonatal-jaundice","enabled":true,"label":"Newborn jaundice","kind":"amber","patterns":["(baby|newborn) (is|looks|has gone|going) (very |really )?yellow","jaundice\\\\w* (in (my |the )?)?(baby|newborn)","(baby|newborn).?s? (skin|eyes|sclera) (are |is |look\\\\w* )?yellow","bilirubin","jaundice (within|in the first) (24 hours|first day|day one)","(yellow|jaundice\\\\w*) (and|with) (poor feeding|not feeding|drowsy|lethargic|sleepy)","still (yellow|jaundiced) at (2|3|two|three) weeks"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Neonatal jaundice (NG98)","text":"\\u2022 Jaundice in the FIRST 24 HOURS of life = always pathological \\u2192 same-day urgent serum bilirubin + paediatric assessment\\n\\u2022 Visible jaundice any time in first 2 weeks \\u2192 measure bilirubin (transcutaneous/serum) and plot on treatment-threshold chart \\u2014 do not estimate by eye\\n\\u2022 Jaundice + poor feeding/drowsy \\u2192 urgent same-day\\n\\u2022 Prolonged jaundice (>14 days term, >21 days preterm) \\u2192 prolonged-jaundice screen incl. CONJUGATED bilirubin (?biliary atresia \\u2014 pale stools/dark urine)"},{"type":"link","label":"NICE NG98 (neonatal jaundice)","url":"https://www.nice.org.uk/guidance/ng98"}]},{"id":"adult-jaundice","enabled":true,"label":"Jaundice (adult)","kind":"amber","patterns":["(skin|eyes) (have |has |are |is )?(gone|turned|turning|going) yellow","yellow (skin|eyes|tinge)","whites of (my |the )?eyes (are |look )?yellow","jaundice\\\\w*","(i|he|she) (look|am|is|seem)\\\\w* yellow","(dark urine|pale stools?) (and|with) (yellow|itch\\\\w*|jaundice)","itch\\\\w* (all over )?(and|with) (yellow|dark urine|pale stools?)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Adult jaundice pathway","text":"New jaundice in an adult \\u2192 same-day bloods (LFTs, FBC, U&E, INR) and urgent assessment.\\n\\n\\u2022 PAINLESS jaundice (esp. >40y, weight loss, dark urine/pale stools) is a pancreatic-cancer red flag \\u2192 NICE NG12 urgent CT/2WW pathway\\n\\u2022 Jaundice + fever/RUQ pain \\u2192 ?cholangitis \\u2192 same-day admission\\n\\u2022 Jaundice + confusion/bruising \\u2192 ?acute liver failure \\u2192 emergency\\n\\u2022 Check paracetamol overdose, alcohol, new drugs (incl. herbal)"},{"type":"link","label":"NICE NG12 pancreatic cancer","url":"https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#pancreatic-cancer"}]},{"id":"testicular-lump","enabled":true,"label":"Testicular lump","kind":"amber","patterns":["(lump|swelling|mass) (in|on) (my )?(testicle|testis|ball|balls|scrotum)","testicular lump","(testicle|testis|ball) (feels|is) (hard|bigger|enlarged|different|heavy)","(found|felt|noticed) a lump (in|on) (my )?(testicle|testis|ball|scrotum)","swollen (testicle|testis)","(heaviness|dragging) (in (my )?)?(scrotum|testicle|balls)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"2WW pathway","text":"NICE NG12: non-painful enlargement or change in shape/texture of the testis \\u2192 2WW urology (any age \\u2014 peak 15\\u201340y). Consider direct-access ultrasound if unsure whether mass is testicular.\\n\\nSUDDEN SEVERE testicular PAIN = torsion \\u2192 emergency (separate red rule).\\nYoung men under-present \\u2014 take written mentions seriously."},{"type":"link","label":"NICE NG12 testicular cancer","url":"https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#urological-cancers"}]},{"id":"vzv-pregnancy","enabled":true,"label":"Chickenpox/shingles in pregnancy","kind":"amber","patterns":["pregnan\\\\w*.{0,50}(chickenpox|chicken pox|varicella|shingles)","(chickenpox|chicken pox|varicella|shingles).{0,50}pregnan\\\\w*","expecting.{0,40}(chickenpox|chicken pox|varicella|shingles)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"VZV in pregnancy","text":"Chickenpox CONTACT in pregnancy: same-day advice \\u2014 check varicella history/immunity (IgG if uncertain); if non-immune and significant contact, post-exposure prophylaxis (antivirals/VZIG per current UKHSA guidance) is TIME-CRITICAL \\u2192 discuss with obstetrics/virology today.\\n\\nChickenpox RASH in pregnancy: same-day clinical discussion \\u2014 oral aciclovir if \\u226520 weeks and within 24h of rash; severe disease/respiratory symptoms \\u2192 admission. Risks: fetal varicella syndrome (<28wk), neonatal varicella (around delivery), maternal pneumonitis."},{"type":"link","label":"RCOG chickenpox in pregnancy (GTG13)","url":"https://www.rcog.org.uk/guidance/browse-all-guidance/green-top-guidelines/chickenpox-in-pregnancy-green-top-guideline-no-13/"}]},{"id":"emergency-contraception","enabled":true,"label":"Emergency contraception","kind":"amber","patterns":["morning after pill","emergency contracept\\\\w*","emergency (pill|coil|contraceptive)","need contraception (quickly|urgently|today|asap)","unprotected sex","condom (broke|split|came off|failed)","missed (my |a |several )?(contraceptive )?pills?","forgot (to take )?(my )?pill","(took|taken) (my )?pill (late|too late)","(levonorgestrel|ulipristal|ellaone)","plan b","copper coil (for|as) emergency"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"EC time windows","text":"Time-critical \\u2014 deal with today:\\n\\u2022 Copper IUD: most effective, up to 5 days (120h) after UPSI (or up to 5 days after earliest ovulation) \\u2014 also ongoing contraception\\n\\u2022 Ulipristal (ellaOne): up to 120h\\n\\u2022 Levonorgestrel: up to 72h (less effective later; double dose if BMI/weight criteria per FSRH)\\n\\nCommunity pharmacy can supply oral EC free via Pharmacy First. Safeguard: under-16s (Fraser), coercion/assault \\u2192 follow safeguarding pathway. Offer STI screen + ongoing contraception; pregnancy test if next period late."},{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"link","label":"NICE CKS emergency contraception","url":"https://cks.nice.org.uk/topics/contraception-emergency/"}]},{"id":"mastitis","enabled":true,"label":"Mastitis/breastfeeding","kind":"amber","patterns":["mastitis","breast (infection|abscess)","infected breast","breastfeed\\\\w*.{0,40}(pain\\\\w*|sore|red|hot|fever\\\\w*|lump\\\\w*|flu.?like|burning)","(painful|sore|red|hot|hard|engorged) breast (while|when|and) (feeding|breastfeeding|nursing)","(breast engorgement|engorged breasts?)","(blocked|plugged|clogged) (milk )?duct","cracked nipple (and|with) (pain|red|fever)","(red|hot|hard) (patch|area|wedge|lump) (on|in) (my )?breast (and|with) (fever|feeding|flu)","flu.?like (and|with) (breast|breastfeeding)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Mastitis pathway","text":"Lactational mastitis: continue feeding/expressing (milk drainage is the treatment), analgesia (paracetamol/ibuprofen safe), warm compress before feeds.\\n\\nAntibiotics (flucloxacillin 10\\u201314d; erythromycin if pen-allergic) if: systemically unwell, nipple fissure infection, or not improving after 12\\u201324h of effective milk removal.\\n\\n\\u2022 Fluctuant mass \\u2192 ?abscess \\u2192 same-day referral for USS \\u00b1 drainage\\n\\u2022 A discrete lump or skin change persisting AFTER mastitis resolves \\u2192 breast 2WW (inflammatory cancer mimics mastitis)\\n\\u2022 Sepsis features \\u2192 admit"},{"type":"link","label":"NICE CKS mastitis","url":"https://cks.nice.org.uk/topics/mastitis-breast-abscess/"}]},{"id":"heavy-period","enabled":true,"label":"Heavy menstrual bleeding","kind":"amber","patterns":["heavy periods?","(very|really|extremely) heavy (menstrual )?bleed\\\\w*","soaking through (pads|tampons|sanitary)","changing (my )?(pad|tampon) every (hour|half hour|30 min\\\\w*)","flooding (through|at night|during my period)","period (flooding|won.?t stop)","(large|big) (blood )?clots (in|during|with) (my )?(period|bleed\\\\w*)","bleeding (for|going on) (more than|over) (a week|7 days|two weeks)","menorrhagia","heavy menstrual bleeding","bleeding through (my )?clothes","period (is )?(much |a lot )?heavier than usual"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"HMB pathway (NG88)","text":"\\u2022 Check FBC (\\u00b1 ferritin) \\u2014 anaemia is common\\n\\u2022 First-line: LNG-IUS; or tranexamic acid \\u00b1 NSAID, or hormonal options\\n\\u2022 Red flags out: intermenstrual/postcoital bleeding, post-menopausal bleeding (\\u2192 2WW), pressure symptoms/mass (?fibroids \\u2192 USS)\\n\\u2022 Acute flooding + dizziness/syncope or Hb concern \\u2192 same-day review\\n\\u2022 Persistent IMB or treatment failure \\u2192 gynae referral"},{"type":"link","label":"NICE NG88 (heavy menstrual bleeding)","url":"https://www.nice.org.uk/guidance/ng88"}]},{"id":"postpartum-complications","enabled":true,"label":"Postpartum bleeding/infection","kind":"amber","patterns":["(heavy |postpartum |postnatal )?bleeding (after|since) (giving birth|the birth|delivery|having (my )?baby)","postpartum (bleed\\\\w*|haemorrhage|hemorrhage)","lochia (heavy|heavier|smelly|foul|increasing)","(fever|temperature|unwell|shivery) (after|since) (giving birth|the birth|delivery)","(c.?section|caesarean|cesarean) (wound|scar) (infect\\\\w*|red|oozing|opening|leaking)","stitches (infected|opened|smelly|oozing)","(foul|smelly|offensive) (smelling )?discharge (after|since) (giving birth|the birth|birth|delivery|having (my )?baby)","retained placenta","endometritis","unwell (a )?(few days|week|fortnight) after (giving birth|having (my )?baby)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Postpartum red flags","text":"Postpartum women deteriorate FAST \\u2014 low threshold for same-day review/admission.\\n\\n\\u2022 Secondary PPH (heavy/increasing bleeding >24h\\u201312wk post-delivery) \\u2192 same-day; clots/offensive lochia \\u2192 ?retained products/endometritis\\n\\u2022 Fever + foul lochia + uterine tenderness = endometritis \\u2192 same-day, often admission for IV antibiotics\\n\\u2022 Wound infection: spreading erythema/systemic features \\u2192 same-day\\n\\u2022 Always consider sepsis (MBRRACE: genital-tract sepsis remains a leading cause of maternal death)"}]},{"id":"acute-red-eye","enabled":true,"label":"Painful red eye","kind":"amber","patterns":["(painful|sore) red eye","red (and )?(painful|sore) eye","red eye (and|with) (pain|blurred vision|vision (loss|change)|light hurt\\\\w*|photophobia|haz\\\\w*|halo\\\\w*)","eye (is )?red (and|with) (painful|losing vision|can.?t see|light sensitive)","(photophobia|light hurt\\\\w*|can.?t tolerate light) (and|with) (red|painful) eye","contact lens\\\\w* (and|with) (red|painful|sore) eye","keratitis","(uveitis|iritis)","corneal (pain|ulcer|abrasion)","eye pain (and|with) (vision (loss|change|blur\\\\w*)|halo\\\\w*|redness)","(something|chemical|bleach) (splashed|went) in (my )?eye"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Red eye red flags","text":"Same-day ophthalmology if red eye PLUS any: pain (not just gritty), photophobia, reduced vision, haloes (?acute angle-closure), fixed/irregular pupil, CONTACT-LENS wearer (?microbial keratitis \\u2014 lens out, same-day), herpetic vesicles, hypopyon, trauma.\\n\\nChemical injury: irrigate copiously NOW, then emergency referral.\\n\\nBland red eye, no pain/vision change = likely conjunctivitis \\u2192 self-care/pharmacy + safety-net."},{"type":"link","label":"NICE CKS red eye","url":"https://cks.nice.org.uk/topics/red-eye/"}]},{"id":"sudden-hearing-loss","enabled":true,"label":"Sudden hearing loss","kind":"amber","patterns":["sudden (hearing loss|loss of hearing|deaf\\\\w*)","(lost|losing) (my )?hearing (in (my |the )?one ear|in my (left|right) ear|overnight|suddenly)","woke up (deaf|and (can.?t|couldn.?t) hear)","gone deaf in one ear","ear (went|has gone) dead","(can.?t hear|hearing.?s gone) (in one ear|suddenly|overnight)","sensorineural","hearing (disappeared|vanished) (overnight|suddenly)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"SSNHL \\u2014 urgent","text":"Sudden (\\u226472h) unexplained hearing loss in one or both ears, not explained by wax/effusion on otoscopy, = sudden sensorineural hearing loss \\u2192 URGENT same-day/24h ENT referral for audiometry + oral steroids \\u2014 the treatment window is days, outcomes worsen with delay.\\n\\nDo NOT routine-refer. Tuning fork (Weber lateralises AWAY from affected ear in SNHL) helps distinguish from conductive causes.\\n\\nWith vertigo/neurology \\u2192 consider stroke pathway."}]},{"id":"epistaxis","enabled":true,"label":"Nosebleed (significant)","kind":"amber","patterns":["nose ?bleed\\\\w* (that )?(won.?t|will not) stop","(can.?t|unable to) stop (my |the )?nose ?bleed\\\\w*","(heavy|prolonged|continuous|torrential) nose ?bleed\\\\w*","nose ?bleed\\\\w* (for|lasting|going on) (\\\\d+ )?(hour|hours|30 min\\\\w*)","nose (won.?t|will not) stop bleeding","epistaxis","bleeding (heavily )?from (my )?nose (and|that) won.?t stop","nose ?bleed\\\\w* (and|on) (blood thinners|warfarin|apixaban|rivaroxaban|anticoagulant\\\\w*)","(keep getting|recurrent|repeated) nose ?bleed\\\\w*"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Epistaxis pathway","text":"First aid: sit forward, pinch the SOFT part of the nose firmly 10\\u201315 min continuously, ice to bridge, spit don\\u2019t swallow.\\n\\n\\u2022 Not controlled after 2 \\u00d7 15 min pressure \\u2192 ED (cautery/packing)\\n\\u2022 On anticoagulant/antiplatelet + heavy or recurrent bleeding \\u2192 same-day review (check INR if warfarin) \\u2014 low threshold for ED\\n\\u2022 Posterior bleed (blood down throat both sides), haemodynamic symptoms \\u2192 999/ED\\n\\u2022 Recurrent unilateral epistaxis + blocked nose in an adult \\u2192 consider ENT referral (rare: tumour)"}]},{"id":"gout","enabled":true,"label":"Gout flare?","kind":"amber","patterns":["gout( flare| attack)?","big toe (joint )?(pain|swollen|swelling|red.?hot|agony|on fire)","(red|hot|swollen) big toe","toe (is )?(red and swollen|hot and swollen)","acute (toe|midfoot|ankle) (pain|swelling) (came on )?(overnight|suddenly)","toph(us|i)","gouty"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Gout (NG219)","text":"Acute flare: NSAID (with PPI) OR colchicine 500mcg bd\\u2013qds (cap dose; caution renal impairment/statins) OR short oral prednisolone \\u2014 treat fast, any of the three.\\n\\n\\u2022 Do NOT stop allopurinol/febuxostat during a flare\\n\\u2022 After the flare settles: offer urate-lowering therapy (treat-to-target serum urate <360 micromol/L; <300 if tophi/recurrent), start low + flare prophylaxis cover\\n\\u2022 Hot swollen joint + fever/unwell \\u2192 treat as SEPTIC arthritis, not gout\\n\\u2022 Check U&E, consider CV risk/diuretic review"},{"type":"link","label":"NICE NG219 (gout)","url":"https://www.nice.org.uk/guidance/ng219"}]},{"id":"cellulitis","enabled":true,"label":"Cellulitis?","kind":"amber","patterns":["cellulitis","spreading (redness|red area|infection)","(redness|red area|red patch).{0,30}(spreading|getting bigger|getting worse|tracking)","red streak\\\\w*","lymphangitis","(leg|arm|skin|wound|foot|hand) infection (and|with) (red|hot|swollen|spreading|fever)","infected wound (and|with) (spreading|red|hot|fever)","(hot|warm) (red|swollen) (and )?spreading","(leg|arm) (is )?(red, hot and swollen|hot, red and swollen)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Cellulitis pathway","text":"Mark the border and date it. Uncomplicated: oral flucloxacillin (clarithromycin/doxycycline if pen-allergic), elevate, review 48h.\\n\\nAdmit / same-day ED if: systemic sepsis features, rapidly spreading, facial/periorbital (?orbital cellulitis \\u2014 emergency), severe pain out of proportion (?necrotising \\u2014 999), immunosuppressed, failed orals.\\n\\nUnilateral red swollen leg: consider DVT (often confused) and chronic venous eczema (usually bilateral, itchy, not febrile \\u2014 doesn\\u2019t need antibiotics)."},{"type":"link","label":"NICE CKS cellulitis","url":"https://cks.nice.org.uk/topics/cellulitis-acute/"}]},{"id":"medication-side-effect","enabled":true,"label":"Medication side effect","kind":"amber","patterns":["side.?effects?","adverse (reaction|effect)","reaction to (my )?(medication|tablets|pills|new (tablet|medication|med))","(medication|tablets?|pills?) (is |are )?(making me|giving me) (unwell|sick|dizzy|a rash|nausea|itchy)","(rash|nausea|dizziness|diarrhoea|swelling) (from|since starting) (my )?(medication|tablets|new (tablet|medication|med))","can.?t tolerate (my )?(medication|tablets|new (tablet|medication|med))","since starting (the|my|this) new (tablet\\\\w*|medication|med\\\\w*|inhaler)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"ADR triage","text":"Prescriber review needed \\u2014 check timing vs drug start, dose, interactions (BNF).\\n\\nSERIOUS \\u2014 same-day/emergency:\\n\\u2022 ACEi angioedema (lip/tongue swelling) \\u2192 emergency\\n\\u2022 New rash on allopurinol / lamotrigine / carbamazepine / penicillins \\u2192 ?SJS/DRESS \\u2192 stop + urgent review (mucosal involvement/blistering = emergency)\\n\\u2022 Muscle pain + dark urine on statin \\u2192 ?rhabdo \\u2192 same-day CK\\n\\u2022 Bleeding on anticoagulant \\u2192 same-day\\n\\nReport serious/unexpected reactions via MHRA Yellow Card."},{"type":"link","label":"MHRA Yellow Card","url":"https://yellowcard.mhra.gov.uk/"}]},{"id":"delirium","enabled":true,"label":"Acute confusion","kind":"amber","patterns":["(suddenly|acutely|overnight|out of the blue) confused","acute confusion","confus\\\\w* (and|with) (fever|not (himself|herself|themselves)|drowsy|hallucinating)","confused since (yesterday|this morning|last night)","(mum|dad|nan|gran|grandad|mother|father|husband|wife) (is|has been|has got|seems) (suddenly |very |really )?(confused|muddled|not making sense)","not (himself|herself|themselves) (and|with) confus\\\\w*","(rambling|incoherent|talking nonsense|not making sense) (suddenly|since|today|overnight)","doesn.?t know (what day|where (he|she|they) (is|are)|who (i am|people are))","(delirium|delirious)","woke up confused","hallucinating (and|with) (confused|fever|unwell)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Delirium screen","text":"ACUTE change in cognition/attention = delirium until proven otherwise \\u2014 in an older person this is a same-day assessment (4AT screen).\\n\\nHunt the cause: infection (UTI/chest), urinary retention, constipation, dehydration, hypoxia, drugs (opioids, anticholinergics, benzos \\u2014 recent changes), alcohol withdrawal, electrolytes/glucose, pain, stroke.\\n\\nFluctuating course + inattention distinguishes from dementia (chronic \\u2192 memory-loss rule). Both can coexist \\u2014 acute-on-chronic change still needs same-day review."},{"type":"link","label":"NICE CKS delirium","url":"https://cks.nice.org.uk/topics/delirium/"}]},{"id":"alcohol-misuse","enabled":true,"label":"Alcohol concern","kind":"amber","patterns":["drinking too much","(drink|drinking|alcohol) problem\\\\w*","alcoholi(c|sm)","(worried|concerned) about (my |his |her )?drinking","help (to |with )?(stop|stopping|cut down|cutting down|control\\\\w*) (my )?drinking","can.?t (stop|control) (my )?drinking","alcohol (dependence|dependent|withdrawal|detox)","shakes (when|from|if) (i )?(stop|don.?t|haven.?t) (been )?drink\\\\w*","(detox|withdraw\\\\w*) (from|off) alcohol","drinking (every day|every morning|in the morning|first thing)","relapsed? (on |with )?(drinking|alcohol)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Alcohol pathway","text":"\\u2022 Screen with AUDIT-C / full AUDIT\\n\\u2022 DEPENDENT drinkers must NOT stop abruptly \\u2014 withdrawal seizures and delirium tremens can kill; arrange planned/supported detox\\n\\u2022 Already withdrawing (tremor, sweating, agitation, hallucinations, seizure) \\u2192 same-day; severe \\u2192 admission\\n\\u2022 Oral thiamine (Wernicke prophylaxis); refer local community alcohol service\\n\\u2022 Safeguarding: children/dependants at home; DVLA if relevant"},{"type":"link","label":"NICE CKS alcohol problem drinking","url":"https://cks.nice.org.uk/topics/alcohol-problem-drinking/"}]},{"id":"eating-disorder","enabled":true,"label":"Eating disorder?","kind":"amber","patterns":["(anorexi|bulimi)\\\\w*","eating disorder\\\\w*","(making|make) myself (sick|throw up|vomit)","purg\\\\w* (after eating|food|meals)","vomiting (after|straight after) (every )?(meal\\\\w*|eating)","laxative\\\\w* (abuse|misuse|to lose weight)","restrict\\\\w* (my )?(food|eating|calories)","afraid (of food|to eat|of (gaining|putting on) weight)","(losing|lost) weight (very |really )?(fast|quickly|rapidly)","binge\\\\w* (and|then) (purg\\\\w*|vomit\\\\w*|making myself sick)","(ARFID|binge eating disorder)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"MEED risk assessment","text":"Eating disorders kill \\u2014 assess medical risk (RCPsych MEED), do not rely on appearance or BMI alone (bulimia/ARFID often normal weight).\\n\\nCheck: rate of weight loss, BMI/%mBMI, HR (bradycardia <50), postural BP drop, core temp, SUSS test (sit-up/squat-stand), ECG (QTc), U&E (K+!), phosphate, glucose.\\n\\n\\u2022 Physiological compromise \\u2192 same-day medical admission (refeeding risk \\u2014 admit, don\\u2019t \\u201cfeed up at home\\u201d)\\n\\u2022 Under-18 \\u2192 urgent referral to community eating-disorder service/CAMHS-ED (NICE NG69: do not delay for weight thresholds)"},{"type":"link","label":"NICE NG69 (eating disorders)","url":"https://www.nice.org.uk/guidance/ng69"},{"type":"link","label":"BEAT (support)","url":"https://www.beateatingdisorders.org.uk/"}]},{"id":"postnatal-mh","enabled":true,"label":"Perinatal mental health","kind":"amber","patterns":["(postnatal|post.?partum) depression","PND","(struggling|not coping|can.?t cope) (after|since) (having )?(the |my )?baby","(struggling|low|depressed|anxious|tearful) since (giving birth|the baby|baby was born)","bonding (problem\\\\w*|difficult\\\\w*|issues) (with )?(the |my )?baby","not bonding with (the |my )?baby","intrusive thoughts (about|of) (the |my )?baby","baby blues","perinatal (mental health|anxiety|depression)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":"safeguarding","builtin":true,"actions":[{"type":"note","label":"Perinatal MH pathway","text":"\\u2022 Ask directly about thoughts of self-harm and of harming the baby; intrusive \\u201cwhat if\\u201d thoughts WITH distress and no intent are common in perinatal OCD \\u2014 distinguish from psychotic ideation\\n\\u2022 Postpartum PSYCHOSIS (rapid onset days\\u2013weeks post-birth: confusion, mania, delusions about the baby) = psychiatric emergency \\u2192 same-day perinatal/crisis team\\n\\u2022 Refer perinatal mental-health team (priority access); EPDS/PHQ-9 useful\\n\\u2022 Baby blues (day 3\\u201310, mild, self-limiting) \\u2014 safety-net; persistent >2wk = treat as PND\\n\\u2022 Safeguarding: consider infant + other children"},{"type":"link","label":"NICE CKS postnatal depression","url":"https://cks.nice.org.uk/topics/depression-antenatal-postnatal/"}]},{"id":"dental","enabled":true,"label":"Dental","kind":"info","patterns":["(toothache|tooth ache\\\\w*)","dental (pain|abscess)","pain in (my )?(tooth|teeth)","(broken|chipped|cracked) tooth","abscess (on|in) (my )?(tooth|gum)","infected tooth","(swollen|painful|bleeding) gums?","wisdom tooth","(filling|crown|cap) (came out|fell out)","lost a (filling|crown)","need (a |an emergency )?dentist"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Dental signposting","text":"GPs cannot provide NHS dental treatment and should not routinely prescribe for dental infection \\u2014 the treatment is dental (drainage/extraction).\\n\\nSignpost: own dentist (urgent slot) or NHS 111 for urgent dental access if no dentist.\\n\\nESCALATE (\\u2192 ED): facial swelling spreading to eye or neck, trismus, difficulty swallowing/breathing, systemically unwell (?Ludwig\\u2019s angina / spreading odontogenic infection)."},{"type":"link","label":"NHS find a dentist","url":"https://www.nhs.uk/service-search/find-a-dentist"}]},{"id":"blood-test-result","enabled":true,"label":"Results query","kind":"info","patterns":["(blood|test) results?","bloods? (back|results)","(have|got|chasing|waiting for|when will i get|any news on|where are) (my )?(blood |test )?results","results (back|come back|came back)","what (do|does) my (results|bloods) (say|show|mean)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Admin routing","text":"Results-status query \\u2014 admin/clerical, not a clinical queue item.\\n\\n1. Check if result is filed \\u2192 if normal & actioned, reception/portal can relay\\n2. If abnormal/unactioned \\u2192 route to the requesting clinician\\n3. If pending \\u2192 give expected turnaround\\n4. Signpost NHS App / online record for future self-serve"}]},{"id":"referral-chase","enabled":true,"label":"Referral chase","kind":"info","patterns":["chas(e|ing) (my |up )?(referral|appointment)","(where.?s|where is|any news on|status of|update on) (my )?referral","(haven.?t|not) heard (anything )?(about|from|back from) (the |my )?(hospital|consultant|clinic|specialist|referral)","(still )?waiting (for|on|to hear about) (my |a |the )?(hospital|specialist|consultant|clinic) (appointment|letter|call|date)","referral (status|gone through|been sent|been done)","has my referral (gone|been sent)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Admin routing","text":"Referral-status query \\u2014 route to admin team, not the clinical queue.\\n\\n1. Check referral was sent + e-RS status\\n2. If 2WW referral and no appointment within expected window \\u2192 escalate to secretary/2WW chase actively (this one IS time-critical)\\n3. Routine: signpost NHS App appointment tracking / hospital booking line\\n4. New symptoms or deterioration while waiting \\u2192 clinical review, consider expediting letter"}]},{"id":"medical-report-letter","enabled":true,"label":"Letter/report request","kind":"info","patterns":["(need|requesting|request|asking for|can i (have|get)) (a )?(letter|medical letter|gp letter|doctor.?s letter|support\\\\w* letter|evidence letter)","letter (for|to) (my )?(insurance|employer|work|mortgage|landlord|housing|solicitor|court|university|college|school|airline|visa|travel|DWP|PIP)","medical report","fitness to (fly|travel) (letter|certificate)","to whom it may concern","(insurance|solicitor.?s?|capability) report"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Admin routing","text":"Letter/report request \\u2014 admin workflow, not the clinical queue (fit notes have their own rule).\\n\\n\\u2022 Non-NHS work: practice may charge (per BMA guidance) \\u2014 admin to advise fee + timescale before clinician writes\\n\\u2022 Factual extracts can often be handled via SAR/online record instead of a bespoke letter\\n\\u2022 Route to designated letters clinician/secretary with clear purpose stated"}]},{"id":"travel-vaccination","enabled":true,"label":"Travel health","kind":"info","patterns":["travel (vaccin\\\\w*|jabs?|injections?)","travel (clinic|health|advice)","(going|travelling|traveling|flying) abroad","(yellow fever|typhoid|rabies|hepatitis a|hepatitis b|cholera|japanese encephalitis) (vaccin\\\\w*|jab)","malaria (tablets?|prophylaxis|prevention|pills)","fit (to|for) (fly|travel)","(vaccin\\\\w*|jabs?) (for|before) (my )?(holiday|trip|travels)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Travel health routing","text":"Planned preventive care \\u2192 practice nurse travel clinic or private travel clinic, ideally 6\\u20138 weeks before departure (some courses need time; late presentation still worth assessing).\\n\\n\\u2022 Risk-assess via fitfortravel/NaTHNaC by destination\\n\\u2022 Only some vaccines are NHS-funded (typhoid, hep A, cholera, polio-containing booster); yellow fever/rabies/JE = private/registered centre\\n\\u2022 Malaria prophylaxis: private prescription\\n\\u2022 Returning traveller with FEVER = clinical, not admin (?malaria \\u2014 same-day)"},{"type":"link","label":"Fit for Travel (NHS)","url":"https://www.fitfortravel.nhs.uk/"}]},{"id":"weight-loss-injection","enabled":true,"label":"Weight-loss medication request","kind":"info","patterns":["(wegovy|mounjaro|saxenda|ozempic|rybelsus)","(semaglutide|tirzepatide|liraglutide)","weight.?loss (injection\\\\w*|jabs?|pen|medication|drug)","GLP.?1","(skinny|fat|weight.?loss) (jab|pen)","injections? (for|to) (lose|losing) weight"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"GLP-1 weight-management requests","text":"Rapidly growing request type \\u2014 route to a planned appointment, not urgent queue.\\n\\n\\u2022 NICE: semaglutide (Wegovy, TA875) via specialist weight management; tirzepatide (Mounjaro, TA1026) with phased primary-care rollout from 2025 under strict eligibility (BMI + comorbidity tiers) \\u2014 CHECK CURRENT LOCAL COMMISSIONING before promising anything\\n\\u2022 Ozempic is licensed for T2DM, not weight loss \\u2014 do not prescribe off-label for weight\\n\\u2022 Many patients buy privately online: ask, document, counsel (side effects, gallstones, pancreatitis, pregnancy avoidance)\\n\\u2022 Screen for eating disorder before supporting weight-loss medication"}]},{"id":"end-of-life-admin","enabled":true,"label":"ACP/DNACPR admin","kind":"info","patterns":["(DNACPR|DNAR|DNR)","do not (attempt )?resuscitat\\\\w*","respect form","advance (directive|decision|statement|care plan)","(lasting )?power of attorney","LPA","living will","organ donation","treatment escalation plan","TEP"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"ACP routing","text":"Advance-care-planning / DNACPR / LPA request \\u2014 sensitive but planned work: book with the patient\\u2019s usual GP (or palliative lead), allow a double slot; not for the urgent queue.\\n\\n\\u2022 DNACPR/ReSPECT: clinical decision made WITH patient/family \\u2014 document and share (incl. out-of-hours/ambulance visibility)\\n\\u2022 LPA forms are completed via OPG \\u2014 GP only needed if asked to act as certificate provider (may carry a fee)\\n\\u2022 If the text suggests the patient is actively dying or in symptom crisis \\u2192 that is urgent clinical work, not admin"},{"type":"link","label":"Resus Council ReSPECT","url":"https://www.resus.org.uk/respect"}]},{"id":"memory-loss","enabled":true,"label":"Memory concern","kind":"info","patterns":["memory (loss|problems?|concerns?)","(losing|lost) (my|his|her) memory","forget\\\\w* (things|names|words|appointments|conversations)","(dementia|alzheimer\\\\w*)","cognitive decline","memory (getting worse|going|deteriorat\\\\w*)","worried about (my |his |her |mum.?s |dad.?s )?memory","memory (clinic|assessment|test)","(mum|dad|nan|gran|grandad).?s? memory (is )?(getting worse|going|terrible|bad)","keeps (getting lost|forgetting|repeating)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Memory pathway","text":"Gradual memory decline \\u2192 routine (not urgent) workup: collateral history, cognitive test (GPCOG/6-CIT), dementia bloods (FBC, U&E, LFT, TFT, B12/folate, calcium, glucose \\u00b1 HbA1c), depression screen, medication review (anticholinergic burden) \\u2192 memory clinic referral.\\n\\n\\u2022 ACUTE/fluctuating confusion = delirium \\u2192 same-day (separate rule)\\n\\u2022 Rapid progression over weeks, young onset, neurology \\u2192 urgent referral\\n\\u2022 Driving: advise DVLA notification where diagnosis made"},{"type":"link","label":"NICE CKS dementia","url":"https://cks.nice.org.uk/topics/dementia/"}]}],"thresholds":{"polypharmacyRed":15,"polypharmacyAmber":10,"bpAgeMonthsLtc":9,"bpAgeMonthsNoLtc":24,"weightAgeMonths":24,"frailtyHitsRed":3,"frailtyHitsAmber":1,"lastContactMonths":12,"recentDischargeRed":14,"recentDischargeAmber":90,"anticholinergicAmber":3,"qofOverdueRed":2,"recentReferralDays":60,"taskAgeAmber":3,"taskAgeRed":7,"elderAge":80,"childAge":16},"prefs":{"showAgeChip":true,"showFootStats":true,"showRequestSnippet":true,"snippetMaxChars":240,"showBuiltInTiles":true,"oirEnabled":true,"oirBulkTickOff":true,"oirConfidenceFloor":"default","oirLookbackMonths":0,"oirShowValueOnBadge":false,"oirDateFormat":"absolute","oirAuditLog":true},"oirTests":[],"systemChips":{"queue.child":{"enabled":true,"label":"Child ({age})","kind":"amber","actions":[]},"queue.elder":{"enabled":true,"label":"Elder ({age})","kind":"amber","actions":[]},"queue.taskAgeAmber":{"enabled":true,"label":"{days}d","kind":"amber","actions":[]},"queue.taskAgeRed":{"enabled":true,"label":"{days}d","kind":"red","actions":[]},"queue.priority":{"enabled":true,"label":"{priority}","kind":"red","actions":[]},"detail.statusAwaiting":{"enabled":true,"label":"{status}","kind":"amber","actions":[]},"detail.statusReplyReceived":{"enabled":true,"label":"{status}","kind":"red","actions":[]},"detail.statusClosed":{"enabled":true,"label":"{status}","kind":"green","actions":[]},"detail.statusOther":{"enabled":true,"label":"{status}","kind":"info","actions":[]},"detail.priority":{"enabled":true,"label":"{priority}","kind":"red","actions":[]},"detail.daysOpenInfo":{"enabled":true,"label":"{days}d open","kind":"info","actions":[]},"detail.daysOpenAmber":{"enabled":true,"label":"{days}d open","kind":"amber","actions":[]},"detail.daysOpenRed":{"enabled":true,"label":"{days}d open","kind":"red","actions":[]},"detail.today":{"enabled":true,"label":"today","kind":"info","actions":[]},"detail.proxy":{"enabled":true,"label":"via {relationship}","kind":"info","actions":[]},"detail.attachments":{"enabled":true,"label":"{count} attach","kind":"info","actions":[]},"record.age":{"enabled":true,"label":"{age}y","kind":"info","actions":[]},"record.palliative":{"enabled":true,"label":"Palliative","kind":"red","actions":[]},"record.riskToSelf":{"enabled":true,"label":"Risk to self","kind":"red","actions":[]},"record.frailtyRed":{"enabled":true,"label":"Frailty x{count}","kind":"red","actions":[]},"record.frailtyAmber":{"enabled":true,"label":"Frailty x{count}","kind":"amber","actions":[]},"record.recentAdmissionRed":{"enabled":true,"label":"Admit {days}d","kind":"red","actions":[]},"record.recentAdmissionAmber":{"enabled":true,"label":"Admit {days}d","kind":"amber","actions":[]},"record.polypharmacyRed":{"enabled":true,"label":"Meds x{count}","kind":"red","actions":[]},"record.polypharmacyAmber":{"enabled":true,"label":"Meds x{count}","kind":"amber","actions":[]},"record.monitoringDueRed":{"enabled":true,"label":"Monitoring due x{count}","kind":"red","actions":[]},"record.monitoringDueAmber":{"enabled":true,"label":"Monitoring x{count}","kind":"amber","actions":[]},"detail.monitoringDueRed":{"enabled":true,"label":"Monitoring due x{count}","kind":"red","actions":[]},"detail.monitoringDueAmber":{"enabled":true,"label":"Monitoring x{count}","kind":"amber","actions":[]},"detail.docType":{"enabled":true,"label":"{docType}","kind":"info","actions":[]},"detail.docSpecialty":{"enabled":true,"label":"{specialty}","kind":"info","actions":[]},"queue.monitoringDueRed":{"enabled":false,"label":"Monitoring \\u00d7{count}","kind":"red","actions":[]},"queue.monitoringDueAmber":{"enabled":false,"label":"Monitoring {count}","kind":"amber","actions":[]},"queue.resultUrgent":{"enabled":true,"label":"{name}","kind":"red","actions":[]},"queue.resultAbnormal":{"enabled":true,"label":"{count} abnormal","kind":"amber","actions":[]},"queue.resultRuleUrgent":{"enabled":true,"label":"{label}","kind":"red","actions":[]},"queue.resultRuleAbnormal":{"enabled":true,"label":"{label}","kind":"amber","actions":[]},"queue.resultMisprioritised":{"enabled":true,"label":"Under-prioritised","kind":"red","actions":[]},"queue.resultUnmatched":{"enabled":true,"label":"Unmatched patient","kind":"amber","actions":[]},"queue.resultReview":{"enabled":true,"label":"Needs review","kind":"amber","actions":[]},"queue.resultReviewRule":{"enabled":true,"label":"{rule}","kind":"amber","actions":[]},"queue.resultNoGrowth":{"enabled":true,"label":"No growth","kind":"info","actions":[]},"queue.resultNoGrowthRule":{"enabled":true,"label":"{label}","kind":"info","actions":[]},"queue.resultCombo":{"enabled":true,"label":"{rule}","kind":"amber","actions":[]},"record.stoppStart":{"enabled":true,"label":"Rx review \\u00d7{count}","kind":"amber","actions":[]},"record.riskScores":{"enabled":true,"label":"Risk tools","kind":"info","actions":[{"type":"link","label":"QRISK3 (CVD 10-yr)","url":"https://qrisk.org/"},{"type":"link","label":"QCancer","url":"https://qcancer.org/"},{"type":"link","label":"eFI \\u2014 electronic frailty index (NHSE)","url":"https://www.england.nhs.uk/ourwork/clinical-policy/older-people/frailty/efi/"},{"type":"note","label":"How to use","text":"Signpost only \\u2014 Medicus does not compute these scores.\\n\\nOpen the calculator and enter the inputs from the record:\\n\\u2022 QRISK3: age, sex, ethnicity, smoking, systolic BP, total cholesterol:HDL ratio, BMI, comorbidities\\n\\u2022 QCancer: age, sex, symptoms, comorbidities\\n\\u2022 eFI: coded frailty deficits\\n\\nAlways verify against the patient record."}]}},"resultRules":[{"id":"msu-culture","kind":"text","enabled":true,"builtin":true,"label":"Needs review","normalLabel":"No growth","analyte":{"match":["msu","urine culture","mid-stream urine","mid stream urine","m,c&s","mc&s","culture & sensitivity","culture and sensitivity"]},"normalText":["no growth","no bacterial growth","no significant growth","no organisms isolated","no organism isolated","no growth after"],"abnormalText":["pure growth of","predominant growth of","heavy growth of","sensitive to","resistant to","sensitivities shown","antimicrobial sensitivity"]},{"id":"base-urine-sterile-pyuria","kind":"combo","enabled":true,"builtin":true,"label":"Sterile pyuria \\u2014 pus cells raised, culture negative","level":"amber","conditions":[{"analyte":{"match":["pus cell","white cell","white blood cell","wbc","leucocyte","leukocyte"],"specimen":["urine","msu","mid-stream","mid stream","csu"]},"comparator":"above","value":40},{"analyte":{"match":["culture"],"specimen":["urine","msu","mid-stream","mid stream","csu"]},"contains":["no growth","no significant growth","no bacterial growth","no organisms isolated","no organism isolated","sterile"]}]},{"id":"base-bowel-screening-nonresponder","kind":"text","enabled":true,"builtin":true,"label":"Bowel screening: no response","analyte":{"match":["bcs:fob","bcs fob","bowel cancer screening","faecal occult blood"]},"abnormalText":["no response to bowel cancer screening","no response to bowel screening","non-response to bowel cancer screening","bowel cancer screening programme non-responder","bowel cancer screening non-responder","non-responder","non responder"]},{"id":"base-low-haemoglobin","kind":"threshold","enabled":true,"builtin":true,"label":"Critical low haemoglobin (red \\u226480 g/L)","analyte":{"match":["haemoglobin","hemoglobin"],"exclude":["a1c","glycated","glycosylated"]},"comparator":"below","red":80,"unit":"g/L"},{"id":"base-high-potassium","kind":"threshold","enabled":true,"builtin":true,"label":"Critical high potassium (red \\u22656.5 mmol/L)","analyte":{"match":["potassium"],"exclude":["urine","urinary"]},"comparator":"above","red":6.5,"unit":"mmol/L"},{"id":"base-low-sodium","kind":"threshold","enabled":true,"builtin":true,"label":"Critical low sodium (red \\u2264120 mmol/L)","analyte":{"match":["sodium"],"exclude":["urine","urinary","valproate"]},"comparator":"below","red":120,"unit":"mmol/L"},{"id":"base-low-egfr","kind":"threshold","enabled":true,"builtin":true,"label":"Critical low eGFR (red \\u226415 mL/min/1.73m\\u00b2)","analyte":{"match":["gfr"]},"comparator":"below","red":15,"unit":"mL/min/1.73m\\u00b2"},{"id":"base-low-platelets","kind":"threshold","enabled":true,"builtin":true,"label":"Critical low platelets (red \\u226430 \\u00d710\\u2079/L)","analyte":{"match":["platelet"],"exclude":["mean platelet","volume","ratio","large"]},"comparator":"below","red":30,"unit":"\\u00d710\\u2079/L"},{"id":"base-low-neutrophils","kind":"threshold","enabled":true,"builtin":true,"label":"Critical low neutrophils (red \\u22640.5 \\u00d710\\u2079/L)","analyte":{"match":["neutrophil"],"exclude":["%","percent","ratio"]},"comparator":"below","red":0.5,"unit":"\\u00d710\\u2079/L"},{"id":"base-high-inr","kind":"threshold","enabled":true,"builtin":true,"label":"High INR (red \\u22658)","analyte":{"match":["inr","international normalised ratio","international normalized ratio"]},"comparator":"above","red":8,"unit":"ratio"},{"id":"base-hba1c-prediabetes","kind":"threshold","enabled":true,"builtin":true,"label":"Prediabetes range \\u2014 not on record (HbA1c 42\\u201347)","analyte":{"match":["hba1c","haemoglobin a1c","glycated haemoglobin","glycosylated haemoglobin"]},"comparator":"above","amber":42,"unit":"mmol/mol","suppressIfProblem":{"match":["prediabetes","pre-diabetes","pre-diabetic","impaired glucose","impaired fasting","non-diabetic hyperglycaemia","non-diabetic hyperglycemia","diabetes","diabetic","t1dm","t2dm","diabetes mellitus","type 1 diabetes","type 2 diabetes"],"exclude":["family history","diabetes insipidus","gestational"]}},{"id":"base-hba1c-diabetes","kind":"threshold","enabled":true,"builtin":true,"label":"Possible diabetes \\u2014 not on register (HbA1c \\u226548)","analyte":{"match":["hba1c","haemoglobin a1c","glycated haemoglobin","glycosylated haemoglobin"]},"comparator":"above","red":48,"unit":"mmol/mol","suppressIfProblem":{"match":["diabetes","diabetic","t1dm","t2dm","diabetes mellitus","type 1 diabetes","type 2 diabetes","type i diabetes","type ii diabetes","insulin dependent diabetes","non insulin dependent diabetes"],"exclude":["family history","non-diabetic","pre-diabetic","prediabetes","pre-diabetes","impaired glucose","impaired fasting","diabetes insipidus","gestational"]}},{"id":"base-lithium-toxicity","kind":"threshold","enabled":true,"builtin":true,"label":"High lithium level \\u2014 toxicity risk (red \\u22651.5 mmol/L)","analyte":{"match":["lithium"]},"comparator":"above","amber":1,"red":1.5,"unit":"mmol/L"},{"id":"base-digoxin-toxicity","kind":"threshold","enabled":true,"builtin":true,"label":"High digoxin level \\u2014 toxicity risk (red \\u22652.0 micrograms/L)","analyte":{"match":["digoxin"]},"comparator":"above","amber":1.5,"red":2,"unit":"micrograms/L"},{"id":"base-low-potassium","kind":"threshold","enabled":true,"builtin":true,"label":"Critical low potassium (red \\u22642.5 mmol/L)","analyte":{"match":["potassium"],"exclude":["urine","urinary"]},"comparator":"below","amber":3,"red":2.5,"unit":"mmol/L"},{"id":"base-high-calcium","kind":"threshold","enabled":true,"builtin":true,"label":"High calcium \\u2014 hypercalcaemia (red \\u22653.0 mmol/L)","analyte":{"match":["calcium"],"exclude":["urine","urinary","24 hour","24-hour","/creat","ionised","ionized"]},"comparator":"above","amber":2.6,"red":3,"unit":"mmol/L"},{"id":"base-egfr-amber","kind":"threshold","enabled":true,"builtin":true,"label":"Low eGFR \\u2014 significant CKD (amber \\u226430 mL/min/1.73m\\u00b2)","analyte":{"match":["gfr"]},"comparator":"below","amber":30,"unit":"mL/min/1.73m\\u00b2"},{"id":"base-blood-culture","kind":"text","enabled":true,"builtin":true,"label":"Blood culture \\u2014 needs review","normalLabel":"No growth","analyte":{"match":["blood culture","blood cx","blood c&s"],"exclude":["urine","wound","sputum","csf","swab","stool","faeces","faecal"]},"normalText":["no growth","no bacterial growth","no significant growth","no organisms isolated","no organism isolated","no growth after"],"abnormalText":["grown in aerobic bottle","grown in anaerobic bottle","positive blood culture","gram positive","gram negative","gram-positive","gram-negative","bacteraemia","bacteremia","fungaemia","sensitive to","resistant to","sensitivities shown","staphylococcus","streptococcus","escherichia","klebsiella","enterococcus","pseudomonas","haemophilus","neisseria","listeria","salmonella","candida","acinetobacter","serratia","enterobacter","proteus","citrobacter","stenotrophomonas"]},{"id":"base-low-calcium","kind":"threshold","enabled":true,"builtin":true,"label":"Low adjusted calcium \\u2014 hypocalcaemia (red \\u22641.9 mmol/L)","analyte":{"match":["adjusted calcium","corrected calcium","albumin-adjusted calcium","albumin adjusted calcium"],"exclude":["urine","urinary","24 hour","24-hour","/creat","ionised","ionized"]},"comparator":"below","amber":2.1,"red":1.9,"unit":"mmol/L"},{"id":"base-low-magnesium","kind":"threshold","enabled":true,"builtin":true,"label":"Low magnesium \\u2014 hypomagnesaemia (red \\u22640.5 mmol/L)","analyte":{"match":["magnesium"],"exclude":["urine","urinary","24 hour","24-hour"]},"comparator":"below","amber":0.6,"red":0.5,"unit":"mmol/L"},{"id":"base-high-tsh","kind":"threshold","enabled":true,"builtin":true,"label":"High TSH \\u2014 possible hypothyroidism (red \\u226520 mU/L)","analyte":{"match":["tsh","thyroid stimulating hormone","thyroid-stimulating hormone"],"exclude":["receptor","antibody","antibodies"]},"comparator":"above","amber":10,"red":20,"unit":"mU/L","suppressIfProblem":{"match":["hypothyroidism","hypothyroid","levothyroxine","thyroxine","myxoedema","myxedema"],"exclude":["family history"]}},{"id":"base-low-tsh","kind":"threshold","enabled":true,"builtin":true,"label":"Suppressed TSH \\u2014 possible thyrotoxicosis (red \\u22640.01 mU/L)","analyte":{"match":["tsh","thyroid stimulating hormone","thyroid-stimulating hormone"],"exclude":["receptor","antibody","antibodies"]},"comparator":"below","amber":0.1,"red":0.01,"unit":"mU/L","suppressIfProblem":{"match":["thyrotoxicosis","hyperthyroidism","hyperthyroid","graves","carbimazole","propylthiouracil","thyroid cancer","levothyroxine","thyroxine"],"exclude":["family history"]}},{"id":"base-throat-swab","kind":"text","enabled":true,"builtin":true,"label":"Throat swab \\u2014 needs review","normalLabel":"Negative","analyte":{"match":["throat swab","throat culture","culture"],"specimen":["throat swab","throat"]},"normalText":["beta haemolytic streptococcus not isolated","beta-haemolytic streptococcus not isolated","no beta haemolytic streptococci","anaerobes not isolated","no anaerobes isolated"],"abnormalText":["beta haemolytic streptococcus isolated","group a streptococcus isolated"]},{"analyte":{"match":["Echography","Ultrasound","Ultrasonography","USS"]},"builtin":true,"enabled":true,"id":"base-uss-abnormal","kind":"text","label":"Ultrasound \\u2014 review","normalLabel":"Normal US","normalText":["No focal soft tissue abnormality","Lipoma","Unremarkable pelvic study","No sonographic abnormality identified"]},{"analyte":{"match":["Histology"]},"builtin":true,"enabled":true,"id":"base-histology-abnormal","kind":"text","label":"Histology \\u2014 review","normalLabel":"Histology normal","normalText":["benign intradermal melanocytic naevus","no evidence of atypia or malignancy","no evidence of dysplasia or malignancy","no dysplasia or malignancy","no atypia or malignancy"]},{"analyte":{"match":["HELICOBACTER PYLORI STOOL ANTIGEN","helicobacter pylori","H pylori antigen"]},"builtin":true,"enabled":true,"id":"base-h-pylori","kind":"text","label":"H. pylori positive","normalLabel":"H pylori normal","normalText":["NOT detected"]},{"analyte":{"match":["CHLAMYDIA AND GONORRHOEA NAAT","chlamydia trachomatis","neisseria gonorrhoea"]},"builtin":true,"enabled":true,"id":"base-sti-naat","kind":"text","label":"STI screen positive","normalLabel":"STI screen NAD","normalText":["NOT detected"]},{"analyte":{"match":["Enteric pathogen DNA","FAECES - MOLECULAR SCREENING","Faeces MC&S"]},"builtin":true,"enabled":true,"id":"base-stool-mcs","kind":"text","label":"Stool MC&S \\u2014 review","normalLabel":"MC&S NAD","normalText":["not detected"]},{"analyte":{"match":["Candida Culture"],"specimen":["GENITAL SWAB CULTURE"]},"builtin":true,"enabled":true,"id":"base-genital-candida","kind":"text","label":"Vaginal thrush","normalLabel":"No vag. thrush","normalText":["Candida species not isolated"]},{"analyte":{"match":["Culture","Anaerobic culture"],"specimen":["WOUND SWAB"]},"builtin":true,"enabled":true,"id":"base-wound-swab-growth","kind":"text","label":"Wound swab positive","normalLabel":"Wound swab no growth","normalText":["no growth","no significant growth","anaerobes not isolated"]},{"analyte":{"match":["Culture for fungi","Anaerobic culture"],"specimen":["EAR SWAB"]},"builtin":true,"enabled":true,"id":"base-ear-swab-growth","kind":"text","label":"Ear swab positive","normalLabel":"No growth","normalText":["no growth","no significant growth","no organisms isolated"]},{"analyte":{"match":["EBV - VCA IgM level","EBV capsid IgG level","EBV nuclear IgG level"],"specimen":["Epstein-Barr virus serology"]},"builtin":true,"enabled":true,"id":"base-ebv-serology","kind":"text","label":"EBV positive","normalLabel":"No growth","normalText":["NOT detected"]},{"analyte":{"match":["Fibrosis-4 score"]},"builtin":true,"comparator":"above","enabled":true,"id":"base-fib4-elevated","kind":"threshold","label":"FIB-4 elevated \\u2014 fibrosis risk (red \\u22652.67, amber \\u22651.3)","amber":1.3,"red":2.67,"unit":null},{"analyte":{"match":["ferritin"]},"builtin":true,"comparator":"below","enabled":true,"id":"base-low-ferritin","kind":"threshold","label":"Low ferritin (red <15, amber <60 \\u00b5g/L)","amber":60,"red":15,"unit":"\\u00b5g/L"},{"analyte":{"match":["B12"]},"builtin":true,"comparator":"below","enabled":true,"id":"base-low-b12","kind":"threshold","label":"Low B12 (red <110, amber <180 ng/L)","amber":180,"red":110,"unit":"ng/L"}]}`;
+  const EMBEDDED_DEFAULTS = `{"version":24,"rules":[{"id":"mh-crisis","enabled":true,"label":"MH crisis","kind":"red","patterns":["suicid\\\\w*","self.?harm\\\\w*","kill myself","kill him\\\\w*self","kill her\\\\w*self","end my life","end it all","want to die","wanting to die","don.?t want to be here","don.?t want to live","no longer want to live","not want to live","harm myself","hurt myself","hurting myself","take my (own )?life","taking my (own )?life","overdos\\\\w*","took too many (pills|tablets|medication)","taken too many (pills|tablets|medication)","swallowed too many","cutting myself","hang\\\\w* myself","jump\\\\w* off","throw myself (off|under|in front)","feel like (i want to )?die","feeling suicid\\\\w*","active suicid\\\\w*","passive suicid\\\\w*","life not worth","not worth living","can.?t go on","cannot go on","crisis (team|line|referral)","mental health crisis","psychiatric emergency","(postpartum|puerperal) psychosis","thoughts of (harming|hurting) (my |the )?baby","thoughts of (harming|hurting) (my |the )?(children|kids)","want to (hurt|harm) (my |the )?baby"],"regex":true,"fields":["request","banner"],"pages":["queue","detail","record"],"bumpsTile":"safeguarding","builtin":true,"actions":[{"type":"link","label":"Samaritans","url":"https://www.samaritans.org/"},{"type":"link","label":"NHS 111 mental health","url":"https://111.nhs.uk/"},{"type":"snippet","label":"Risk assessment","text":"MH risk assessment:\\n- Current intent / plan / means:\\n- Recent triggers:\\n- Protective factors:\\n- Past attempts / hospital admissions:\\n- Substance use:\\n- MH services involvement:\\n- Capacity:\\n\\nAction:\\n- Same-day F2F vs phone vs crisis team\\n- Safety plan documented\\n- Safeguarding referral if children in household\\n- Follow-up timeframe agreed"},{"type":"note","label":"Safeguarding check","text":"Always consider:\\n\\u2022 Children / dependents in household \\u2192 safeguarding referral threshold\\n\\u2022 Mental Capacity Assessment\\n\\u2022 Document risk assessment in full\\n\\u2022 Crisis team contact readily available\\n\\u2022 Clear follow-up plan with named clinician"}]},{"id":"safeguarding","enabled":true,"label":"Safeguarding","kind":"red","patterns":["safeguarding","abuse","abused","abusing","neglect","neglected","domestic violence","domestic abuse","coercive control","coercive behaviour","controlling partner","controlling relationship","controlling behaviour","hit me","hits me","hitting me","punch","kicked me","kicks me","slap","strangl","afraid at home","scared at home","scared of my partner","scared of my husband","scared of my wife","scared of my boyfriend","scared of my girlfriend","frightened at home","frightened of my partner","fear at home","unsafe at home","not safe at home","partner hurts me","partner hits me","husband hits me","husband hurts me","my partner beats me","being beaten","physical abuse","emotional abuse","psychological abuse","sexual abuse","sexual assault","assaulted","rape","financial abuse","forced marriage","female genital mutilation","fgm","child abuse","child neglect","child at risk","at risk child","exploitation","traffick","modern slavery","honour","forced into","threatened me","threatening me","threats at home","violence at home","hurt at home"],"regex":false,"fields":["request","banner","problems"],"pages":["queue","detail","record"],"bumpsTile":"safeguarding","builtin":true,"actions":[{"type":"link","label":"Local safeguarding (replace URL)","url":"https://www.gov.uk/government/publications/safeguarding-adults"},{"type":"note","label":"Documentation","text":"Safeguarding considerations:\\n\\u2022 Notify practice safeguarding lead\\n\\u2022 MARAC / DASH risk assessment if DV suspected\\n\\u2022 Code in record (Safeguarding adult / child concern)\\n\\u2022 Document concerns verbatim\\n\\u2022 Information sharing per local policy\\n\\u2022 Children in household \\u2014 separate referral if at risk"}]},{"id":"chest-pain","enabled":true,"label":"Chest pain","kind":"red","patterns":["chest pain","chest tightness","tight chest","tightness in my chest","tightness in chest","crushing","central chest","pain in my chest","pain in the chest","chest pressure","pressure on my chest","pressure in my chest","pressure in chest","heaviness in my chest","heavy chest","chest heaviness","chest discomfort","discomfort in my chest","chest ache","aching chest","ache in my chest","chest squeezing","squeezing chest","squeezing in my chest","heart pain","pain in my heart","angina","heart attack","cardiac","chest burning","burning in my chest","burning chest","chest tightening","tightening in my chest","substernal","retrosternal","radiation to my arm","radiating to my arm","pain down my arm","pain in my left arm","jaw pain with chest","pain in my jaw and chest","chest and arm pain","chest and jaw pain","myocardial","nstemi","stemi","jaw pain and arm","jaw pain with arm","jaw pain and shoulder","jaw pain with shoulder","neck pain and arm","neck pain with arm","neck pain and shoulder","neck pain with shoulder","pain in my left arm and sweat","pain in my left arm with sweat","pain in my left arm and nausea","pain in my left arm with nausea","pain in my right arm and sweat","pain in my right arm with sweat","pain in my left shoulder and sweat","pain in my left shoulder with sweat","indigestion and arm pain","indigestion with arm pain","heartburn and arm pain","heartburn with arm pain","indigestion and jaw pain","indigestion with jaw pain","heartburn and jaw pain","heartburn with jaw pain","indigestion and sweating","indigestion with sweating","heartburn and sweating","heartburn with sweating"],"regex":false,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Acute pathway","text":"If acute / ongoing pain \\u2192 999.\\n\\nIf resolved:\\n\\u2022 Onset, duration, character, radiation, exertion-related?\\n\\u2022 Cardiac risk factors: age, smoker, FH, DM, lipids, BP, prior CVD\\n\\u2022 Associated: SOB, sweating, N&V, syncope\\n\\u2022 Differential: ACS, PE, dissection, pericarditis, GORD, MSK, anxiety\\n\\nThresholds:\\n\\u2022 HEART score for risk stratification\\n\\u2022 Same-day clinical assessment if any concerning features"},{"type":"snippet","label":"HEART score template","text":"HEART score:\\n- History (suspicious 0/1/2):\\n- ECG (normal / non-spec / abnormal 0/1/2):\\n- Age (<45 / 45-64 / >65 = 0/1/2):\\n- Risk factors (count: 0 / 1-2 / 3+ or known CVD = 0/1/2):\\n- Troponin (norm / 1-3x / >3x ULN = 0/1/2):\\n\\nTotal: __\\n0-3 = low risk \\u00b7 4-6 = moderate \\u00b7 7-10 = high"}]},{"id":"cauda-equina","enabled":true,"label":"Cauda equina","kind":"red","patterns":["saddle.?(numb\\\\w*|anaesthe\\\\w*|anesthe\\\\w*|paresthe\\\\w*|parasthe\\\\w*|sensation)","bladder retention","urinary retention","bowel incontinence","perineal numb\\\\w*","perineal anaesthe\\\\w*","perineal anesthe\\\\w*","perineal paresthe\\\\w*","can.?t feel (when I |to |myself )?(wee|urinate|pee|pass urine|empty my bladder)","can.?t empty my bladder","unable to empty (my )?bladder","loss of bladder control","lost bladder control","can.?t feel (my )?(bottom|bum|groin|genitals|between my legs|down below|perineum)","numb (bum|bottom|groin|genitals|perineum|between my legs|between the legs|down below|in my groin|around my back passage|around my anus|around my back\\\\w*)","numbness (in my )?(bum|bottom|groin|genitals|perineum|between (my |the )?legs|down below|around my back passage|saddle area)","tingling (in my )?(bum|bottom|groin|genitals|perineum|between (my |the )?legs|saddle area)","loss of sensation (in my )?(bum|bottom|groin|genitals|perineum|between (my |the )?legs|saddle area|down below)","reduced sensation (in my )?(bum|bottom|groin|genitals|perineum|between (my |the )?legs|saddle area)","no sensation (in my )?(bum|bottom|groin|genitals|perineum|between (my |the )?legs|saddle area)","back passage numb\\\\w*","anal numb\\\\w*","perianal numb\\\\w*","cauda equina","bowel and bladder","bladder and bowel","can.?t pass urine","unable to urinate","unable to pass urine","not passed urine (for|in)","haven.?t (been able to )?wee\\\\w* (for|in)","can.?t wee","retention of urine","faecal incontinence","fecal incontinence","losing control of (my )?bowels","lost control of (my )?bowels","loss of bowel control","leaking (from|stool|bowel)","back pain with (bladder|bowel|numb\\\\w*|incontinence|retention)","leg weakness with (bladder|bowel|numb\\\\w*|incontinence|retention)","sciatica (and|with) (bladder|bowel|incontinence|numb\\\\w*|retention)","lost all (feeling|sensation) down (there|below)","can.?t feel (myself |when I )?(pee|wee|go to the toilet)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Emergency MRI","text":"Suspected cauda equina = same-day emergency MRI.\\n\\nRed flags (any):\\n\\u2022 Bilateral sciatica\\n\\u2022 Saddle anaesthesia / paraesthesia\\n\\u2022 Bladder dysfunction (retention / overflow)\\n\\u2022 Bowel incontinence / loss of anal tone\\n\\u2022 Sexual dysfunction\\n\\nAction:\\n\\u2022 Discuss with on-call neurosurgery / spinal team\\n\\u2022 Direct ED referral if no urgent MRI access\\n\\u2022 Document neuro exam including PR if appropriate"}]},{"id":"thunderclap","enabled":true,"label":"Thunderclap headache","kind":"red","patterns":["worst headache","worst head pain","started instantly","thunderclap","sudden severe headache","sudden onset headache","worst headache of my life","worst headache i have ever","worst headache ever","never had a headache like","headache like a thunderclap","headache came on suddenly","headache came on instantly","headache came on out of nowhere","headache hit me suddenly","headache out of nowhere","headache hit like","headache started suddenly","sudden headache","instantaneous headache","explosive headache","headache like an explosion","bang in my head","worst pain of my life in my head","head pain worst ever","severe sudden head","head felt like it exploded","head like it was going to explode","subarachnoid","brain haemorrhage","brain hemorrhage","bleed in the brain","bleed on the brain","worst pain ever in my head","10 out of 10 headache","10/10 headache","headache ten out of ten","sudden headache and stiff neck","sudden headache with stiff neck","sudden severe headache and stiff neck","sudden severe headache with stiff neck","sudden headache and sore neck","sudden headache with sore neck","sudden headache and painful neck","sudden headache with painful neck","worst headache and neck pain","worst headache with neck pain"],"regex":false,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"SAH pathway","text":"Thunderclap headache \\u2192 consider SAH.\\n\\n\\u2022 Maximum intensity within seconds-minutes\\n\\u2022 Same-day CT head (CT >95% sensitive within 6h)\\n\\u2022 If CT negative & onset <6h, may exclude\\n\\u2022 If onset >6h or symptoms ongoing, LP at 12h\\n\\nOther differentials: cervical artery dissection, RCVS, pituitary apoplexy, venous sinus thrombosis.\\n\\nAction: same-day ED referral."}]},{"id":"gi-bleed","enabled":true,"label":"GI bleed","kind":"red","patterns":["melaena\\\\w*","melena\\\\w*","malaena\\\\w*","haematemesis\\\\w*","hematemesis\\\\w*","vomiting blood","vomited blood","vomit\\\\w* blood","threw up blood","throwing up blood","coffee.?ground\\\\w*","fresh blood per rectum","haematochezia\\\\w*","hematochezia\\\\w*","blood in (my )?(stool|stools|poo|poop|faeces|feces|bowel movement|motion|toilet)","blood (from|in|out of) (my )?(back passage|bottom|anus|rectum|bum)","passing blood (from|per|in|out of|rectum|back passage|bottom|anus|bum|stool|poo|bowel)","rectal bleeding","rectal bleed\\\\w*","bleeding (from|per) rectum","bleeding from (my )?(back passage|bottom|anus|bum)","bright red blood (from|in|per|out of)","dark (red )?blood (in|from|per|out of) (my )?(stool|poo|back passage|bottom|bowel)","black (tarry |and tarry )?(stool|stools|poo|poop|faeces|feces|bowel|motion)","black and tarry","tarry (stool|stools|poo|poop|faeces|feces|bowel|motion)","tar.?like (stool|stools|poo|poop|faeces|feces)","dark stool\\\\w*","dark poo\\\\w*","very dark poo","blood when I wipe","blood on toilet paper","blood in (the )?toilet (bowl|pan|water)?","blood (after|when) (going to the )?toilet","pr bleed\\\\w*","upper gi bleed\\\\w*","lower gi bleed\\\\w*","gastrointestinal bleed\\\\w*","gi bleed\\\\w*","haemorrhage\\\\w* (from|in|into) (bowel|gut|stomach|oesophagus|esophagus|intestine)","hemorrhage\\\\w* (from|in|into) (bowel|gut|stomach|esophagus|intestine)","blood (in|from) (my )?vomit","bloody vomit","bloody stool\\\\w*","bloody diarrhoea","bloody diarrhea"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Acute pathway","text":"Suspected upper / lower GI bleed.\\n\\n\\u2022 Haemodynamics: HR, BP, lying/standing\\n\\u2022 Anticoagulants / antiplatelets / NSAIDs\\n\\u2022 Liver disease / known varices\\n\\u2022 Glasgow-Blatchford for upper GI bleed\\n\\nAction:\\n\\u2022 Acute / unstable \\u2192 999\\n\\u2022 Stable + suspicious \\u2192 same-day medical admission\\n\\u2022 Painless rectal bleeding > 50y \\u2192 2WW colorectal"},{"type":"snippet","label":"Glasgow-Blatchford template","text":"Glasgow-Blatchford:\\n- Urea (mmol/L):\\n- Hb (g/L):\\n- Systolic BP:\\n- Pulse \\u2265100:\\n- Melaena:\\n- Syncope:\\n- Hepatic disease:\\n- Cardiac failure:\\n\\nScore: __\\n0 = consider outpatient \\u00b7 \\u22651 = admit"}]},{"id":"methotrexate","enabled":true,"label":"Methotrexate","kind":"amber","patterns":["methotrexate\\\\w*","methtrexate\\\\w*","methotrexat\\\\b","Maxtrex\\\\w*","Metoject\\\\w*","Nordimet\\\\w*","Jylamvo\\\\w*","\\\\bMTX\\\\b"],"regex":true,"fields":["meds","request","problems"],"pages":["detail","record"],"bumpsTile":"meds","builtin":true,"actions":[{"type":"note","label":"DMARD monitoring","text":"Methotrexate monitoring (NICE / BSR):\\n\\n\\u2022 FBC + U&E + LFT every 12 weeks (or 4-weekly if dose change / new abnormalities)\\n\\u2022 Annual chest X-ray if respiratory symptoms\\n\\u2022 Pneumococcal + annual flu vaccine\\n\\u2022 Folic acid 5mg weekly (\\u226524h after MTX)\\n\\nWarnings:\\n\\u2022 Teratogenic \\u2014 6mo washout F, 3mo M before conception\\n\\u2022 Hepatotoxic \\u2014 alcohol limits\\n\\u2022 Pulmonary toxicity \\u2014 investigate any new SOB / dry cough\\n\\u2022 Drug interactions \\u2014 esp. trimethoprim, NSAIDs (caution)"},{"type":"snippet","label":"Bloods reminder","text":"Methotrexate monitoring bloods:\\n- FBC + film:\\n- U&E:\\n- LFTs:\\n- Date of last MTX dose:\\n- Current dose:\\n- Folic acid:\\n- Symptoms? (SOB, mouth ulcers, infection):\\n\\nNext review due:"}]},{"id":"lithium","enabled":true,"label":"Lithium","kind":"amber","patterns":["lithium\\\\w*","Priadel\\\\w*","Camcolit\\\\w*","Liskonum\\\\w*","Li-Liquid\\\\w*","Li Liquid\\\\w*"],"regex":true,"fields":["meds","request","problems"],"pages":["detail","record"],"bumpsTile":"meds","builtin":true,"actions":[{"type":"note","label":"Lithium monitoring","text":"Lithium monitoring (NICE):\\n\\n\\u2022 Level 12h post-dose, 3-monthly (more often if dose change, illness, drug interaction)\\n\\u2022 U&E + TFT + Ca every 6 months\\n\\u2022 Target range typically 0.6-0.8 mmol/L (0.4-1.0 acceptable)\\n\\u2022 Toxicity above 1.5 mmol/L\\n\\nCommon traps:\\n\\u2022 Dehydration / D&V \\u2192 toxicity\\n\\u2022 NSAIDs, ACEi, thiazides \\u2191 levels\\n\\u2022 Pregnancy considerations \\u2014 specialist advice\\n\\u2022 Hypothyroidism long-term"}]},{"id":"anticoag","enabled":true,"label":"Anticoagulant","kind":"amber","patterns":["warfarin\\\\w*","apixaban\\\\w*","rivaroxaban\\\\w*","edoxaban\\\\w*","dabigatran\\\\w*","acenocoumarol\\\\w*","phenindione\\\\w*","Eliquis\\\\w*","Xarelto\\\\w*","Lixiana\\\\w*","Pradaxa\\\\w*","Coumadin\\\\w*","Marevan\\\\w*","Sinthrome\\\\w*","\\\\bDOAC\\\\b","\\\\bNOAC\\\\b","blood thinners?\\\\b","blood[- ]?thinning tablets?\\\\b","anticoagulant\\\\w*"],"regex":true,"fields":["meds"],"pages":["detail","record"],"bumpsTile":"meds","builtin":true,"actions":[{"type":"note","label":"Anticoag review","text":"Annual anticoagulant review:\\n\\n\\u2022 Indication still valid?\\n\\u2022 Renal function \\u2014 dose adjustment for DOACs\\n\\u2022 Bleeding risk reassessment (HAS-BLED, ORBIT)\\n\\u2022 CHA\\u2082DS\\u2082-VASc for AF (consider stopping if low risk)\\n\\u2022 Patient knows what to do if a dose is missed\\n\\u2022 Has Yellow Book / DOAC alert card\\n\\u2022 Interacting meds review (esp. NSAIDs, antibiotics, antifungals)\\n\\u2022 Bleeding episodes \\u2014 frequency, severity, source\\n\\u2022 Falls risk if elderly"}]},{"id":"uti","enabled":true,"label":"UTI","kind":"amber","patterns":["\\\\bUTI\\\\b","urinary tract inf\\\\w*","burning (when |while )?(passing (water|urine)|pe?e?ing|i (pe?e?|wee)|to (pee|wee))\\\\w*","stinging (when |while )?(passing (water|urine)|pe?e?ing|i (pe?e?|wee)|to (pee|wee))\\\\w*","dysuria\\\\w*","cystitis\\\\w*","water inf\\\\w*","bladder inf\\\\w*","need to (wee|pee|urinate) (all the time|constantly|frequently|a lot)\\\\w*","cloudy (urine|wee|pee)\\\\w*","smelly (urine|wee|pee)\\\\w*","pain (passing|when passing) (water|urine)\\\\w*","frequent urination\\\\w*","urine inf\\\\w*","can.?t (pee|pass water)","unable to (wee|pee|pass water)","nothing comes? out (when I try to )?(wee|pee)","struggling to pass (urine|water)"],"regex":true,"fields":["request","problems"],"pages":["queue","detail","record"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NICE CKS UTI (women)","url":"https://cks.nice.org.uk/topics/urinary-tract-infection-lower-women/"},{"type":"link","label":"NICE CKS UTI (men)","url":"https://cks.nice.org.uk/topics/urinary-tract-infection-lower-men/"},{"type":"snippet","label":"UTI history & exam","text":"UTI history:\\n- Dysuria / frequency / urgency:\\n- Suprapubic pain / loin pain:\\n- Duration of symptoms:\\n- Fever / rigors / vomiting:\\n- Vaginal discharge:\\n- Sexually active / new partner:\\n- Pregnancy possible:\\n- Catheter / structural abnormality:\\n- Recent abx / hospitalisation:\\n- Recurrence (\\u22653 in 12mo or \\u22652 in 6mo):\\n- Diabetes / immunosuppression:\\n\\nO/E:\\n- Vitals (sepsis screen):\\n- Abdominal exam:\\n- Loin tenderness:\\n- (Dipstick: not for \\u226565y or catheterised):\\n\\nPlan:\\n- 1st line: nitrofurantoin or trimethoprim per local sensitivity\\n- 2nd line: pivmecillinam / fosfomycin\\n- Pyelonephritis features \\u2192 admit / IV abx"},{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"snippet","label":"Pharmacy First referral (UTI)","text":"Consider Pharmacy First \\u2014 uncomplicated lower UTI, women aged 16\\u201364, not pregnant. If eligible, signpost to community pharmacy.\\n\\nNot suitable / safety-net: pregnant, male, <16 or >64, recurrent UTI, catheter, immunosuppressed, suspected pyelonephritis (fever, loin/back pain, rigors, vomiting), visible haematuria, or not improving in 48h."}]},{"id":"epiglottitis","enabled":true,"label":"Epiglottitis","kind":"red","patterns":["epiglottit\\\\w*","(drooling|can.?t swallow (my )?(own )?(saliva|spit))","(muffled|hot.?potato) voice"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Airway emergency","text":"Suspected adult epiglottitis / supraglottitis \\u2192 999 / same-day ED.\\n\\nRed flags (any): drooling or unable to swallow saliva, muffled \\u201chot potato\\u201d voice, stridor, sitting forward to breathe, severe sore throat with a normal-looking oropharynx, rapid deterioration.\\n\\nAction:\\n\\u2022 Do NOT attempt to examine the throat or use a tongue depressor \\u2014 risk of precipitating airway obstruction\\n\\u2022 Keep the patient sitting upright; do not lie flat\\n\\u2022 999 transfer / immediate ENT-anaesthetics involvement\\n\\u2022 Differential: quinsy, deep neck-space infection, anaphylaxis"}]},{"id":"sore-throat","enabled":true,"label":"Sore throat","kind":"amber","patterns":["sore throat\\\\w*","tonsillitis\\\\w*","throat pain\\\\w*","pharyngitis\\\\w*","painful throat\\\\w*","throat is sore\\\\w*","hurts to swallow\\\\w*","strep throat\\\\w*","quinsy\\\\w*","peritonsillar\\\\w*","tonsils (are |is )?(sore|swollen|infected|inflamed|painful)\\\\w*","swollen tonsils?\\\\w*","throat infection\\\\w*"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NICE CKS sore throat","url":"https://cks.nice.org.uk/topics/sore-throat-acute/"},{"type":"snippet","label":"FeverPAIN scoring","text":"FeverPAIN score (1 point each):\\n- Fever in last 24h:\\n- Purulence (tonsils):\\n- Attended within 3 days of onset:\\n- Inflamed tonsils (severe):\\n- No cough or coryza:\\n\\nTotal: __\\n0-1: 13-18% strep \\u2014 no abx, self-care\\n2-3: 34-40% strep \\u2014 delayed abx (3d) or no abx\\n4-5: 62-65% strep \\u2014 immediate abx\\n\\nAbx of choice: phenoxymethylpenicillin 500mg QDS 5-10d (clarithromycin if pen-allergic)"},{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"snippet","label":"Pharmacy First referral (sore throat)","text":"Consider Pharmacy First \\u2014 acute sore throat, age 5+. Pharmacist applies FeverPAIN.\\n\\nSafety-net / urgent: difficulty breathing, difficulty swallowing saliva, drooling, muffled \\u201chot potato\\u201d voice, stridor, neck stiffness, systemically very unwell, or immunosuppressed \\u2192 same-day assessment (?quinsy / epiglottitis)."}]},{"id":"otitis","enabled":true,"label":"Otitis media","kind":"amber","patterns":["otitis\\\\w*","earache\\\\w*","ear[- ]?ache\\\\w*","ear inf\\\\w*","ear pain\\\\w*","ear (is |are )?(really |very |so |getting |bit |a bit )?(hurting|sore|painful|infected|aching)\\\\w*","my ear (is |are )?(really |very |so |getting |bit |a bit )?(sore|hurting|painful|aching)\\\\w*","sore ear\\\\w*","painful ear\\\\w*","pain in (my |the |her |his )?ear\\\\w*","\\\\bAOM\\\\b","\\\\bOME\\\\b","glue ear\\\\w*","ear discharge\\\\w*","discharge from (the |my |her |his )?ear\\\\w*","blocked ear\\\\w*","muffled hearing (in|from) (the |my )?(ear|right ear|left ear)\\\\w*"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NICE CKS OM","url":"https://cks.nice.org.uk/topics/otitis-media-acute/"},{"type":"snippet","label":"OM history & exam","text":"Otitis media history:\\n- Onset / duration:\\n- Fever / unwell:\\n- Otalgia laterality:\\n- Discharge / hearing loss:\\n- Recent URTI:\\n- Recurrent OM (\\u22653 in 6mo or \\u22654/yr):\\n- Eardrum perforation history:\\n- Grommets:\\n\\nO/E:\\n- TM appearance: bulging / erythematous / dull / perforated / effusion\\n- Mastoid tenderness:\\n- General \\u2014 temp, fluid intake:\\n\\nPlan:\\n- Most resolve in 3 days, paracetamol / ibuprofen\\n- Abx if: <2y bilateral, perforation + discharge, systemically unwell, deteriorating\\n- Amoxicillin 5-7d (clarithromycin if pen-allergic)\\n- Safety net: persistent fever 3-4d, mastoid swelling, hearing loss >2-4w"},{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"snippet","label":"Pharmacy First referral (otitis media)","text":"Consider Pharmacy First \\u2014 acute otitis media, age 1\\u201317. If eligible, signpost to community pharmacy.\\n\\nNot suitable / safety-net: <1y or >17y, systemically very unwell, immunosuppressed, suspected mastoiditis (swelling/redness behind the ear), or symptoms not improving after 3 days."}]},{"id":"sinusitis","enabled":true,"label":"Sinusitis","kind":"amber","patterns":["sinusit\\\\w*","sinus infection","sinus pain","sinus pressure","blocked sinus\\\\w*","facial pain","facial pressure","pressure (in|around|behind) (my )?(face|cheek|cheeks|eyes)","pain (over|around) (my )?(cheek|cheeks|sinuses)","post.?nasal drip"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"snippet","label":"Pharmacy First referral (sinusitis)","text":"Consider Pharmacy First \\u2014 acute sinusitis, age 12+. If eligible, signpost to community pharmacy.\\n\\nSafety-net / urgent: symptoms >10 days, swelling or redness around the eye, double vision, severe frontal headache, photophobia, neck stiffness, or systemically very unwell."}]},{"id":"insect-bite","enabled":true,"label":"Insect bite","kind":"amber","patterns":["insect bite\\\\w*","insect sting\\\\w*","bug bite\\\\w*","spider bite\\\\w*","mosquito bite\\\\w*","infected bite\\\\w*","infected sting\\\\w*","bite (that('?s| is| has)? )?(gone )?(red|infected|swollen|hot|spreading)","sting (that('?s| is| has)? )?(gone )?(red|infected|swollen|hot|spreading)","bitten by (an? )?(insect|mosquito|spider|midge|wasp|bee)\\\\w*","tick bite\\\\w*","bitten by a tick","(bull.?s.?eye|circular|ring.?shaped) rash","lyme disease"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"snippet","label":"Pharmacy First referral (infected insect bite)","text":"Consider Pharmacy First \\u2014 infected insect bite, age 1+. If eligible, signpost to community pharmacy.\\n\\nSafety-net / urgent: rapidly spreading redness, fever or systemic illness, suspected cellulitis, bite near the eye, or breathing difficulty / facial swelling suggesting anaphylaxis \\u2192 emergency."}]},{"id":"impetigo","enabled":true,"label":"Impetigo","kind":"amber","patterns":["impetigo\\\\w*","school sores?","golden crust\\\\w*","honey.?colou?red crust\\\\w*","weeping sore\\\\w*","crusty (sore|sores|rash|spot|spots) (on|around) (the |my )?(face|nose|mouth|chin|lip|lips)","infected (sore|sores) (on|around) (my |the )?(face|nose|mouth)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"snippet","label":"Pharmacy First referral (impetigo)","text":"Consider Pharmacy First \\u2014 impetigo, age 1+ (non-bullous, localised). If eligible, signpost to community pharmacy.\\n\\nNot suitable / refer: bullous impetigo, widespread or recurrent, systemically unwell, immunosuppressed, or not improving with treatment."}]},{"id":"shingles","enabled":true,"label":"Shingles","kind":"amber","patterns":["shingles","herpes zoster","\\\\bzoster\\\\b","shingle rash","blistering rash","band of blister\\\\w*","painful rash (on )?one side","rash (on )?one side of (my )?(face|body|chest|back|torso)","burning pain (on |down )?(one side|the left|the right)( of my (chest|back|body|face))?"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"snippet","label":"Pharmacy First referral (shingles)","text":"Consider Pharmacy First \\u2014 shingles, age 18+. Antiviral most effective within 72h of rash onset.\\n\\nUrgent / not suitable for PF: eye involvement or rash on the tip of the nose (Hutchinson\\u2019s sign \\u2014 ?ophthalmic zoster), immunocompromised, pregnant, severe / widespread / disseminated rash, or signs of complications."}]},{"id":"back-pain","enabled":true,"label":"Back pain","kind":"amber","patterns":["back pain","lower back","lumbar pain","sciatica","backache","bad back","sore back","back hurt","pain in my back","aching back","back ache","slipped disc","trapped nerve","lumbago","sciatic","pain down my leg","leg pain from my back","back spasm","spine pain","spinal pain","lumbar","coccyx","sacral pain","sacroiliac","degenerative disc","herniated disc","prolapsed disc","disc bulge","facet joint"],"regex":false,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NICE LBP & sciatica","url":"https://www.nice.org.uk/guidance/ng59"},{"type":"snippet","label":"Back pain assessment","text":"Back pain \\u2014 red flags (refer urgently):\\n- Cauda equina (saddle anaesthesia, bladder/bowel)\\n- Significant trauma\\n- Age <20 or >55 new onset\\n- Progressive neurological deficit\\n- Fever / weight loss / night pain (cancer/infection)\\n- IVDU / immunosuppression\\n- History of malignancy\\n- Severe progressive limb weakness\\n\\nYellow flags (psychosocial):\\n- Belief pain is harmful\\n- Avoidance behaviour\\n- Low mood / withdrawal\\n- Job dissatisfaction\\n- Compensation/legal issues\\n\\nManagement (no red flags):\\n- Stay active, return to normal activities\\n- Analgesia: NSAIDs first-line (with PPI cover if indicated)\\n- Avoid opioids and gabapentinoids for non-specific LBP\\n- Refer to physio / MSK if not improving in 4-6 weeks"}]},{"id":"cough-resp","enabled":true,"label":"Cough/SOB","kind":"amber","patterns":["cough\\\\w*","shortness of breath","short of breath","breathless\\\\w*","wheez\\\\w*","chest infection\\\\w*","phlegm","\\\\bSOB\\\\b","\\\\bCOPD\\\\b","can't catch my breath","cannot catch my breath","cant catch my breath","struggling to breath\\\\w*","difficulty breath\\\\w*","hard to breath\\\\w*","chesty cough\\\\w*","mucus","sputum","tight chest","chest tightness from breath\\\\w*","bronchit\\\\w*","COPD flare\\\\w*","asthma attack\\\\w*","asthma flare\\\\w*","asthma\\\\b","haemoptysis","hemoptysis","coughing up blood","bringing up phlegm","bringing up mucus","winded","out of breath","puffed out","puffed\\\\b","respiratory infection","chest congestion","congested chest","rattly chest","productive cough\\\\w*","dry cough\\\\w*","persistent cough\\\\w*","tickly cough\\\\w*","night cough\\\\w*","asthma (getting|got|much) worse","asthma (not controlled|playing up)","(using|needing) (my )?(blue inhaler|reliever|salbutamol|ventolin) (more|more often|all the time|every (few )?hours)","(blue inhaler|reliever|inhaler) (not lasting|not working|not helping|isn.?t helping)","(waking|woken) (at|in the) night (with )?(wheez\\\\w*|cough\\\\w*|breathless\\\\w*|tight chest)","peak flow (dropping|down|low|worse)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Resp red flags","text":"Cough / breathlessness \\u2014 concerning features:\\n\\u2022 Haemoptysis\\n\\u2022 Weight loss / night sweats\\n\\u2022 Smoker / ex-smoker, esp. age >40\\n\\u2022 Persistent cough >3 weeks\\n\\u2022 Hoarseness >3 weeks\\n\\u2022 Acute onset breathlessness (PE / pneumothorax)\\n\\u2022 Tachypnoea, hypoxia, accessory muscle use\\n\\u2022 Single-lobe / focal signs\\n\\u2022 Failure to respond to abx\\n\\nThresholds:\\n\\u2022 Same-day F2F if any red flag, hypoxia, or systemic unwellness\\n\\u2022 2WW chest if haemoptysis + age >40, or persistent cough + smoker"},{"type":"snippet","label":"Resp assessment","text":"Respiratory presentation:\\n- Onset / duration:\\n- Cough: dry / productive (colour, consistency):\\n- Haemoptysis:\\n- Breathlessness \\u2014 exertional / rest, MRC grade:\\n- Wheeze:\\n- Fever, night sweats, weight loss:\\n- Chest pain \\u2014 pleuritic / cardiac:\\n- PE risk: travel, immobility, surgery, OCP, malignancy, leg swelling:\\n- Smoking pack-years:\\n- Asthma / COPD:\\n\\nO/E:\\n- Vitals: HR, BP, RR, sats, temp:\\n- WOB / accessory muscles:\\n- Chest exam:\\n- PEFR (if asthma):\\n\\nPlan:"},{"type":"note","label":"Asthma control (RCP3Q)","text":"RCP 3 Questions (any \\u201cyes\\u201d = poor control \\u2192 review):\\n1. Recent sleep disturbance from asthma?\\n2. Usual daytime symptoms (cough/wheeze/tight chest)?\\n3. Interference with usual activity?\\n\\nReliever use \\u22653\\u00d7/week or any night waking = uncontrolled \\u2192 inhaler technique + adherence + step-up review.\\n\\nACUTE SEVERE (same-day): PEF 33\\u201350% best, can\\u2019t complete sentences, RR \\u226525, HR \\u2265110.\\nLIFE-THREATENING (999): PEF <33%, silent chest, cyanosis, exhaustion, SpO\\u2082 <92%.\\nAfter any attack: steroid course completed? Follow-up within 48h."}]},{"id":"skin-2ww","enabled":true,"label":"Skin lesion","kind":"amber","patterns":["mole\\\\w*","skin lesion\\\\w*","skin change\\\\w*","changing mole\\\\w*","dark spot\\\\w*","growing lesion\\\\w*","non.?healing","ulcerat\\\\w*","new mole\\\\w*","mole has changed","mole that has changed","irregular mole\\\\w*","bleeding mole\\\\w*","itchy mole\\\\w*","spot that won.?t heal","sore that won.?t heal","wound that won.?t heal","won.?t heal","wont heal","not healing","hasn.?t healed","isn.?t healing","lump on \\\\w*(skin|back|arm|leg|face|neck|scalp|chest|shoulder)","skin growth\\\\w*","pigmented lesion\\\\w*","pigmented spot\\\\w*","melanoma\\\\w*","changing freckle\\\\w*","freckle that has changed","scab that won.?t heal","crusty lesion\\\\w*","crusty spot\\\\w*","suspicious mole\\\\w*","abnormal mole\\\\w*","pearly lump\\\\w*","basal cell\\\\w*","squamous cell\\\\w*","actinic keratosis","solar keratosis","rodent ulcer\\\\w*","lump on skin","skin lump\\\\w*","new lesion\\\\w*","spreading lesion\\\\w*","oozing lesion\\\\w*","bleeding lesion\\\\w*","lesion that bleeds","lesion that ooze\\\\w*"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NICE 2WW skin","url":"https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#skin-cancers"},{"type":"snippet","label":"7-point checklist","text":"Weighted 7-point checklist for pigmented lesion (refer 2WW if score \\u22653 OR any major):\\n\\nMajor (2 points each):\\n- Change in size:\\n- Irregular shape:\\n- Irregular colour:\\n\\nMinor (1 point each):\\n- Largest diameter \\u22657mm:\\n- Inflammation:\\n- Oozing / bleeding:\\n- Change in sensation (itch):\\n\\nTotal: __\\n\\nLesion description:\\n- Site:\\n- Diameter:\\n- Colour:\\n- Border:\\n- Evolution (timeline):\\n- Symptoms:\\n- ABCDE: Asymmetry / Border / Colour / Diameter / Evolving:\\n\\nPhoto on record? Y/N"}]},{"id":"mh-general","enabled":true,"label":"Mental health","kind":"amber","patterns":["anxi\\\\w*","depress\\\\w*","low mood","panic attack\\\\w*","stress\\\\w*","insomnia","mental health","mental wellbeing","therapy","counselling","counseling","feeling down","feel\\\\w* low","feel\\\\w* depressed","feel\\\\w* anxious","feeling hopeless","feeling worthless","feeling overwhelm\\\\w*","overwhelm\\\\w*","tearful","crying all the time","can't sleep","cannot sleep","cant sleep","not sleeping","struggling to sleep","sleep problem\\\\w*","sleep difficult\\\\w*","no motivation","lack of motivation","lost interest","no interest in","can't cope","cannot cope","cant cope","struggling mentally","struggling emotionally","worried all the time","nervous all the time","nervous wreck","constant worry\\\\w*","low self[- ]?esteem","\\\\bCBT\\\\b","talking therapy","talking therapies","\\\\bIAPT\\\\b","NHS talking therapies","mood problem\\\\w*","mood issue\\\\w*","burnt out","burnout","burn out","emotionally exhausted","mental breakdown","nervous breakdown","phobia\\\\w*","OCD\\\\b","PTSD\\\\b","post.?traumatic","intrusive thought\\\\w*","low energy","no energy","mood swings","anger problem\\\\w*"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"PHQ-9","url":"https://patient.info/doctor/patient-health-questionnaire-phq-9"},{"type":"link","label":"GAD-7","url":"https://patient.info/doctor/generalised-anxiety-disorder-assessment-gad-7"},{"type":"link","label":"Local IAPT / Talking Therapies (replace)","url":"https://www.nhs.uk/mental-health/talking-therapies-medicine-treatments/talking-therapies-and-counselling/nhs-talking-therapies/"},{"type":"snippet","label":"MH consultation","text":"MH presentation:\\n- Onset / duration / triggers:\\n- Symptoms (mood, anhedonia, sleep, appetite, energy, concentration):\\n- Anxiety symptoms / panic:\\n- Functional impact (work, relationships, self-care):\\n- Risk: thoughts of self-harm / suicide / harm to others:\\n- Substance use:\\n- Past MH history / family history:\\n- Social context: housing, finances, support network:\\n- Recent losses / life events:\\n- PHQ-9: __ / GAD-7: __\\n\\nPlan:\\n- Self-help / IAPT / counselling\\n- SSRI if moderate-severe (caution under 25 \\u2014 review 2 weekly):\\n- Safety net + follow-up:"}]},{"id":"post-discharge","enabled":true,"label":"Post-discharge","kind":"amber","patterns":["discharged","just home from hospital","out of hospital","recently in hospital","discharge summary","came out of hospital","got home from hospital","back from hospital","left hospital","after my hospital stay","following my admission","post-op","after my operation","after my surgery","discharged from ward","TTO","TTA"],"regex":false,"fields":["request","docs"],"pages":["queue","detail","record"],"bumpsTile":"openLoops","builtin":true,"actions":[{"type":"note","label":"Post-discharge checklist","text":"After hospital discharge \\u2014 review:\\n\\n\\u2022 Medication reconciliation (new / changed / stopped)\\n\\u2022 Follow-up appointments booked?\\n\\u2022 Outstanding investigations / results pending?\\n\\u2022 Self-monitoring / safety-net advice given?\\n\\u2022 District nurse / community support arranged?\\n\\u2022 Social: home situation, carer, equipment\\n\\u2022 Code recent admission in record\\n\\u2022 Update problem list and registers (e.g. HF, COPD, AF post-MI)\\n\\u2022 Consider proactive care plan if frail / multimorbid"},{"type":"snippet","label":"Post-discharge review","text":"Post-discharge review:\\n\\nAdmission:\\n- Dates:\\n- Diagnoses:\\n- Procedures:\\n- Discharge medications (new/changed):\\n- Follow-up planned:\\n\\nReview today:\\n- Recovery progress:\\n- Symptoms \\u2014 concerning / improving:\\n- Pain control:\\n- Mobility / ADLs:\\n- Med compliance / side effects:\\n- Outstanding actions chased:\\n- Safety net advice:"}]},{"id":"repeat-meds","enabled":true,"label":"Repeat meds","kind":"info","patterns":["repeat prescription","repeat medication","repeat script","repeat meds","ran out","run out of","running out","out of my (?!mind|depth|comfort|control|league|way|system|element|own|head|life|hands|hair|sight|reach|price|budget)\\\\w+","reorder","re-order","refill","top.?up","more of my","need more of my","need my tablets","need my inhaler","need my medication","need a prescription","need my prescription","prescription request","order my medication","order my meds","medication review"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"snippet","label":"SMR template","text":"Structured Medication Review (SMR):\\n\\nPatient understanding:\\n- Knows why each med is prescribed:\\n- Adherence / compliance:\\n- Side effects experienced:\\n- Self-monitoring (BP, BG, peak flow):\\n\\nFor each medication:\\n- Indication still valid?\\n- Dose appropriate (renal/hepatic adjustment)?\\n- Duplications / interactions / cascades?\\n- Anticholinergic burden / falls risk?\\n- Recent monitoring done?\\n\\nDeprescribe candidates:\\n- PPI > 8 weeks without indication\\n- Long-term benzo / Z-drug\\n- Statin in extreme frailty / limited life expectancy\\n- Anti-hypertensives if postural hypotension\\n- Aspirin without clear secondary prevention indication\\n\\nAgreed plan:"}]},{"id":"fit-note","enabled":true,"label":"Fit note","kind":"info","patterns":["fit note","fitnote","sick note","sicknote","med[- ]?3","fitness for work","off work","note for work","doctors note","doctor's note","statement of fitness","unfit for work","time off work","signed off","sign me off","sick certificate"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"GOV.UK Med3 guidance","url":"https://www.gov.uk/government/publications/fit-note-guidance-for-healthcare-professionals"},{"type":"snippet","label":"Fit note template","text":"Med3 considerations:\\n\\n- Diagnosis (the condition affecting work):\\n- Functional limitations (what can / can't do):\\n- Duration: <3mo (any duration) / >3mo (max 3mo):\\n- 'Not fit' or 'May be fit' (consider phased return / amended duties / altered hours / workplace adaptations):\\n- Assessment date and end date:\\n- Comments / advice to employer:\\n\\nFor mental health:\\n- Avoid jargon \\u2014 concrete functional language\\n- Consider OH referral / IAPT signposting\\n\\nFor MSK:\\n- Active management plan\\n- Avoid bed rest > 1-2 days"}]},{"id":"menopause","enabled":true,"label":"Menopause/HRT","kind":"info","patterns":["menopaus","menopausal","perimenopaus","peri-menopausal","hot flush","hot flushes","hot flash","hot flashes","night sweat","HRT","hormone replacement","hormone replacement therapy","HRT patch","oestrogen","estrogen","oestrogen gel","vaginal dryness","Evorel","Oestrogel","Sandrena","Utrogestan","Elleste","Femoston","Tibolone","patches for menopause"],"regex":false,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"link","label":"NICE menopause (NG23)","url":"https://www.nice.org.uk/guidance/ng23"},{"type":"link","label":"British Menopause Society","url":"https://thebms.org.uk/"},{"type":"snippet","label":"HRT consultation","text":"Menopause / HRT consultation:\\n\\nSymptoms:\\n- Vasomotor (flushes, sweats, night sweats):\\n- Mood, sleep, cognition:\\n- GU: vaginal dryness, dyspareunia, urinary:\\n- Joint / muscle pain:\\n- Libido:\\n- Functional impact:\\n\\nHistory:\\n- LMP / cycle changes:\\n- Contraception still needed?\\n- Migraine with aura?\\n- VTE / clotting history (personal / family):\\n- Breast / endometrial / ovarian cancer history:\\n- BMI / smoking / alcohol:\\n- Cardiovascular risk:\\n- Liver disease:\\n- Current meds:\\n\\nDiscussion:\\n- Risk / benefit balance\\n- Options: sequential vs continuous combined; oestrogen-only if hysterectomy; transdermal preferred if VTE / migraine / hepatic / >60\\n- Vaginal oestrogen for GU symptoms (no extra systemic risk)\\n- Testosterone for low libido (off-label)\\n- Lifestyle, CBT for vasomotor\\n\\nPlan / review timeframe:"}]},{"id":"stroke-tia","enabled":true,"label":"Stroke/TIA","kind":"red","patterns":["face (is |was |has been |keeps )?droop\\\\w*","facial droop\\\\w*","drooping face","one side of (my )?face (is )?(numb|droop\\\\w*|drop\\\\w*|sag\\\\w*|weak)","mouth (is )?droop\\\\w*","smile (is|has gone) (lopsided|uneven|crooked)","can.?t smile","arm (drift|has gone (numb|weak|dead))","one arm (numb\\\\w*|weak\\\\w*|won.?t move|gone)","can.?t (lift|feel|move) (my )?arm","sudden (arm|leg|face) (weakness|numbness)","slurr\\\\w* (speech|words)","speech (is )?(slurred|unclear|jumbled|muddled)","can.?t (speak|get my words out)","sudden\\\\w* difficulty (speaking|talking)","stroke","TIA","transient ischaemic attack","mini.?stroke","funny turn (down|on) one side","went (numb|weak) down one side","sudden (loss of )?vision in one eye","can.?t (get (my )?words out|speak properly)","(lost|losing) (the ability|my ability) to (speak|talk)","both (my )?arms? (have )?(suddenly )?(gone )?(weak|numb|heavy)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"FAST pathway","text":"Suspected stroke (FAST: Face droop / Arm weakness / Speech / Time) with symptoms NOW or within hours \\u2192 999. Thrombolysis & thrombectomy are time-critical.\\n\\nResolved deficit (?TIA): high early stroke risk \\u2014 aspirin 300mg (unless contraindicated) + specialist TIA-clinic assessment within 24h (NICE NG128). Do NOT \\u201cwait and see\\u201d.\\n\\nMimics (hypo, migraine aura, Bell\\u2019s palsy) \\u2014 treat as stroke until assessed."},{"type":"link","label":"NICE NG128 (stroke & TIA)","url":"https://www.nice.org.uk/guidance/ng128"}]},{"id":"sepsis","enabled":true,"label":"Sepsis?","kind":"red","patterns":["sepsis","septic\\\\w*","(septicaemi|septicemi)\\\\w*","fever (and|with) (confus\\\\w*|drowsy|drowsiness|delirious|hard to wake|can.?t stay awake|unresponsive)","fever (and|with) (mottled|blotchy|grey|pale) skin","mottled skin","high (fever|temperature) (and|with) (rigors|violent shaking|uncontrollable shaking)","shaking (uncontrollably|violently) with (a )?(fever|temperature)","rigors","fever (and|with) (very fast|racing|pounding) (heart|pulse)","fever (and|with) (fast|rapid) breathing","fever (and|with) (not passing|no) urine","flu.?like (and|with) (collaps\\\\w*|can.?t get up|can.?t stand)","felt (the )?worst (i.?ve|i have) ever (felt|been) (and|with) (fever|temperature)","non.?blanching rash","(fever|temperature|burning up) (and|with) feel\\\\w* (absolutely )?(terrible|dreadful|awful)","(hot and cold|cold and hot) (sweats|shivers|all over)","(shaking|shivering) uncontrollably"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Sepsis screen","text":"Could this be sepsis? (NICE NG51 risk stratification.)\\n\\nHigh-risk features \\u2192 999 / immediate F2F:\\n\\u2022 New altered mental state / hard to rouse\\n\\u2022 Mottled, ashen or cyanosed skin; non-blanching rash\\n\\u2022 RR \\u226525, new O\\u2082 requirement\\n\\u2022 HR \\u2265130, SBP \\u226490\\n\\u2022 Not passed urine in 18h\\n\\u2022 Rigors / uncontrollable shaking with fever\\n\\nRemember NEUTROPENIC sepsis: chemotherapy in last 6 weeks + fever = emergency admission, no delays."},{"type":"link","label":"NICE NG51 (sepsis)","url":"https://www.nice.org.uk/guidance/ng51"}]},{"id":"anaphylaxis","enabled":true,"label":"Anaphylaxis?","kind":"red","patterns":["anaphyla\\\\w*","severe allergic reaction","allergic (reaction )?(getting|got) (worse|much worse) (quickly|fast)","(swelling|swollen) (of (my )?)?(throat|tongue|lips|mouth|face)","throat (is )?(closing|tight\\\\w*|swelling)","(can.?t|hard to|struggling to) (breathe|swallow) (after|since) (eating|the sting|the injection|antibiotic\\\\w*|penicillin)","stridor","wheez\\\\w* (after eating|after the sting|with swelling)","hives (and|with) (swelling|breathing|face|throat)","widespread (hives|urticaria|welts) (and|with) (swelling|breathing|face)","lips (have )?(swollen|swelled) up","face (has )?(swollen|puffed) up (suddenly|fast|quickly)","went (pale|clammy|floppy) after (eating|the sting|injection)","reaction (after|to) (a |the )?(bee|wasp) sting","reaction (after|to) (eating )?(nuts|peanut\\\\w*|shellfish)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Anaphylaxis pathway","text":"Airway/breathing/circulation involvement with an allergic trigger = anaphylaxis.\\n\\n\\u2022 999 immediately\\n\\u2022 IM adrenaline 1:1000, 500 micrograms (adult) anterolateral thigh; repeat after 5 min if no improvement\\n\\u2022 Lie flat, raise legs (sit up only if breathing difficulty); do NOT stand the patient up\\n\\u2022 After emergency treatment: ensure 2 adrenaline auto-injectors carried + specialist allergy-clinic referral\\n\\nRash/itch alone without airway, breathing or circulation features is not anaphylaxis \\u2014 antihistamine + safety-net."},{"type":"link","label":"Resus Council UK anaphylaxis","url":"https://www.resus.org.uk/library/additional-guidance/guidance-anaphylaxis"}]},{"id":"meningitis","enabled":true,"label":"Meningitis?","kind":"red","patterns":["meningitis","meningococ\\\\w*","non.?blanch\\\\w* rash","rash (that )?(doesn.?t|does not|won.?t|will not) (fade|blanch|go) (when |if )?(pressed|i press|under (a |the )?glass)","glass test","tumbler test","petechia\\\\w*","petechial rash","purple (spots|rash|blotches)","spots that (don.?t|won.?t) fade","fever (and|with) (neck stiffness|stiff neck)","(stiff neck|neck stiffness) (and|with) (fever|rash|headache|light)","can.?t (bend|move) (my )?neck forward","fever (and|with) (photophobia|light hurt\\\\w*|bright light)","light (hurts|is hurting) (my )?eyes","severe headache (and|with) (fever|neck stiffness|rash|vomiting)","fever (and|with) (rash|confus\\\\w*|drowsy|very sleepy)","bruis\\\\w*.?like rash (with|and) fever","(fever|temperature) (and|with) (a )?(purple|non.?blanching|blotchy) (rash|spots)","(rash|spots) (that )?(doesn.?t|don.?t|won.?t) (fade|go away|disappear) (under|with) (a )?glass"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Meningitis / meningococcal","text":"Fever + any of: non-blanching/petechial rash, neck stiffness, photophobia, new confusion or drowsiness \\u2192 999 (NICE NG240, 2024).\\n\\n\\u2022 Non-blanching rash + fever = meningococcal sepsis until proven otherwise (may occur WITHOUT meningitis)\\n\\u2022 Give IM/IV benzylpenicillin (or ceftriaxone) pre-hospital ONLY if transfer will be delayed \\u2014 never delay transfer to give it\\n\\u2022 Glass/tumbler test is the patient-facing check for blanching"},{"type":"link","label":"NICE NG240 (meningitis & meningococcal)","url":"https://www.nice.org.uk/guidance/ng240"}]},{"id":"aaa","enabled":true,"label":"AAA/dissection?","kind":"red","patterns":["aortic aneurysm","AAA","aortic dissection","sudden (severe )?tearing (pain )?(in (my )?)?(back|tummy|abdomen|chest)","tearing (sensation|pain) (in (my )?)?(back|abdomen|chest)","(ripping|tearing|splitting) pain (in (my )?)?(back|abdomen|chest)","felt (something|a) (tear|rip) (inside|in my (back|tummy|chest))","sudden severe (back|abdominal|tummy) pain (and|with) (faint\\\\w*|collaps\\\\w*|pale|sweat\\\\w*|clammy|dizzy)","(back|abdominal) pain (radiating|going|spreading) (down|into) (both )?(legs|groin)","pulsating (lump|mass) in (my )?(tummy|abdomen|belly)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Vascular emergency","text":"Sudden tearing/ripping back, abdominal or chest pain \\u00b1 collapse, pallor, sweating, or a pulsatile abdominal mass = ruptured AAA / aortic dissection until proven otherwise.\\n\\n\\u2022 999 \\u2014 do not bring to surgery for assessment\\n\\u2022 Highest suspicion: older men, smokers, hypertension, known aneurysm/FH\\n\\u2022 Mimics renal colic in the elderly \\u2014 first presentation of \\u201crenal colic\\u201d over 60 should raise AAA"}]},{"id":"testicular-torsion","enabled":true,"label":"Testicular torsion?","kind":"red","patterns":["testicular torsion","torsion of (the )?(testicle|testis)","sudden (severe )?pain in (my )?(testicle|testis|ball|balls|scrotum)","(testicle|testis|ball|scrotum) (pain|swelling) (came on )?(suddenly|out of nowhere)","(severe|sudden|acute|unbearable) (testicular|scrotal) pain","woke up with (testicular|scrotal|groin) pain","(testicle|testis) (is )?(swollen|riding high|hard|tender) (and |with )?(pain|painful|vomiting|sick)","sudden severe groin pain (and|with) (swelling|vomiting|nausea)","boy (with|has) (testicular|scrotal|groin) pain"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Surgical emergency","text":"Sudden severe unilateral testicular pain \\u00b1 nausea/vomiting = torsion until proven otherwise \\u2014 the salvage window is ~6 hours.\\n\\n\\u2022 Same-day urology / ED NOW \\u2014 do not arrange routine review or wait for swelling to settle\\n\\u2022 Most common 12\\u201325y but any age\\n\\u2022 Do not rely on ultrasound availability to decide \\u2014 clinical suspicion is enough for referral"},{"type":"link","label":"NICE CKS scrotal pain & swelling","url":"https://cks.nice.org.uk/topics/scrotal-pain-swelling/"}]},{"id":"pe-dvt","enabled":true,"label":"PE/DVT?","kind":"red","patterns":["pulmonary embolism","PE","DVT","deep vein thrombosis","blood clot in (my )?(leg|lung\\\\w*|calf)","one (leg|calf) (swollen|bigger|hot|red|hard)","(calf|leg) (swelling|swollen) (and|with) (pain|hot|red|warm|hard|tender)","(calf|leg) (pain|tender\\\\w*) (and|with) (swelling|swollen|hot|red|warm)","sudden(ly)? (short of breath|breathless\\\\w*|out of breath)","pleuritic chest pain","chest pain (when|worse) (i )?breath\\\\w* in","pain (when|on) breathing in (and|with) (breathless\\\\w*|leg)","breathless\\\\w* (and|with) (leg (swelling|pain)|chest pain)","(recent|after) (surgery|operation|long flight|long.?haul) (and|with) (leg (swelling|pain)|breathless\\\\w*)","(leg|foot|arm|hand) (gone|turned|is) (cold|white|pale|mottled|blue) (and |with )?(numb|painful|can.?t move)","no pulse in (my )?(leg|foot|arm)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"VTE / limb-ischaemia pathway","text":"Suspected PE: acute breathlessness \\u00b1 pleuritic pain \\u00b1 haemoptysis. Haemodynamic compromise or hypoxia \\u2192 999; otherwise same-day assessment (Wells \\u2192 D-dimer / CTPA) per NICE NG158.\\n\\nSuspected DVT: unilateral leg swelling/heat/tenderness \\u2192 same-day Wells scoring + proximal leg ultrasound pathway. Do not massage the leg.\\n\\nCOLD, PALE, PULSELESS limb (6 P\\u2019s) = acute limb ischaemia \\u2192 999 / vascular surgery \\u2014 hours matter."},{"type":"snippet","label":"Wells score (DVT)","text":"Wells DVT (1 point each unless stated):\\n- Active cancer:\\n- Paralysis / recent plaster immobilisation:\\n- Bed >3d or major surgery <12wk:\\n- Tenderness along deep venous system:\\n- Entire leg swollen:\\n- Calf >3cm larger than other side:\\n- Pitting oedema (symptomatic leg):\\n- Collateral superficial veins:\\n- Previous DVT:\\n- Alternative diagnosis at least as likely: -2\\n\\n\\u22652 DVT likely \\u2192 USS within 4h (or anticoagulate + USS within 24h)\\n\\u22641 DVT unlikely \\u2192 D-dimer"},{"type":"link","label":"NICE NG158 (VTE diagnosis)","url":"https://www.nice.org.uk/guidance/ng158"}]},{"id":"acute-severe-abdomen","enabled":true,"label":"Acute abdomen?","kind":"red","patterns":["rigid (abdomen|tummy|belly)","board.?like (abdomen|tummy|belly)","(abdomen|tummy|belly) (is )?(rigid|hard as a board)","worst (ever|of my life) (stomach|tummy|belly|abdominal) pain","excruciating (abdominal|tummy|belly|stomach) pain","(can.?t|won.?t) (move|straighten up) (because of|with) (the )?(tummy|stomach|abdominal) pain","peritonitis","perforat\\\\w* (bowel|ulcer|appendix|stomach)","(acute )?pancreatitis","severe (epigastric|upper (tummy|abdominal)) pain (radiating|going) (through|to) (my )?back","appendicitis","sudden severe (tummy|abdominal|belly) pain (and|with) (vomiting|fever|can.?t move)","guarding (and|with) rebound"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Surgical abdomen","text":"Peritonitic features (rigid/board-like abdomen, rebound, guarding, pain on movement/coughing, lying still) \\u2192 same-day surgical assessment / 999 if shocked.\\n\\nConsider: perforation, pancreatitis, ischaemic bowel (pain out of proportion), appendicitis, ruptured ectopic.\\n\\nWomen of reproductive age with acute lower abdominal pain: ALWAYS pregnancy test (?ectopic)."}]},{"id":"fever-infant","enabled":true,"label":"Fever <3m","kind":"red","patterns":["(baby|newborn|infant) (has|with|has got|running) (a |high )?(fever|temperature)","(baby|newborn|infant) (is )?(burning up|really hot|very hot|boiling)","(baby|newborn)(.?s)? temperature (of |is )?(3[8-9]|4\\\\d|over 38)","temperature (won.?t|will not) come down","under (3|three) months (old )?(and|with) (a )?(fever|temperature|hot)","\\\\d+ (week|month) old (with|and|has) (a )?(fever|temperature)","newborn (is |feels )?(hot|feverish)","(baby|infant) (fever|temperature) (and|with) (not feeding|poor feeding|floppy|drowsy|lethargic)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"NICE traffic light","text":"Temperature \\u226538\\u00b0C in an infant UNDER 3 MONTHS is a RED traffic-light feature (NICE NG143) \\u2192 same-day paediatric assessment (usually ED), regardless of how well the baby looks.\\n\\n3\\u20136 months \\u226539\\u00b0C = amber minimum.\\n\\nAny age + fever with: drowsy/floppy, poor feeding, non-blanching rash, grunting/recession, reduced wet nappies \\u2192 escalate same-day."},{"type":"link","label":"NICE NG143 (fever under 5s)","url":"https://www.nice.org.uk/guidance/ng143"}]},{"id":"resp-distress-child","enabled":true,"label":"Child breathing difficulty","kind":"red","patterns":["(drawing|sucking) (breath )?in (funny|hard)","(ribs|tummy|chest) (are |is |keep |keeps )?(going|sucking|pulling) in (when|as|with) (he |she |they |baby |every )?breath\\\\w*","recession (when|while) breathing","retractions","(nostrils|nose) flaring","grunting (when |while )?breath\\\\w*","baby (is )?grunting","stridor\\\\w*","(barky|barking|seal.?like) cough","croup","bronchiolitis","(blue|grey|dusky) (lips|face|tongue|around (the |his |her )?mouth)","cyanos\\\\w*","breathing (really|very) (fast|hard|quickly)","(can.?t|struggling to) (catch (his|her|their) breath|breathe at all|breathe properly)","working (really )?hard to breathe"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Paediatric respiratory distress","text":"Signs of increased work of breathing in a child \\u2014 recession (ribs/tummy sucking in), grunting, nasal flaring, stridor at rest, cyanosis/blue lips, too breathless to feed or talk \\u2192 same-day assessment; 999 if stridor at rest, cyanosis, exhaustion or drowsiness.\\n\\nCroup: barky cough + stridor \\u2014 oral dexamethasone if more than mild.\\nBronchiolitis (<2y): escalate if feeding <50% of normal, apnoeas, marked recession, sats concern."},{"type":"link","label":"NICE NG143 (fever under 5s)","url":"https://www.nice.org.uk/guidance/ng143"}]},{"id":"seizure","enabled":true,"label":"Seizure","kind":"red","patterns":["febrile (convulsion|seizure)\\\\w*","(had|having) a (fit|seizure|convulsion)","(fit|seizure|convulsion) (with|during|from) (a )?(fever|temperature)","first (ever )?(fit|seizure|convulsion)","(shaking|jerking) (uncontrollably|all over) (with|and) (fever|temperature|eyes rolled)","eyes (rolled|rolling) back (and|with) (shaking|jerking|stiff)","(fitting|seizing|convulsing) (now|for|lasting) (\\\\d+ )?(minutes|seconds)","tonic.?clonic","limbs (jerking|stiffened|went stiff)","won.?t (come round|wake up) after (a |the )?(fit|seizure)","seizure","convulsion\\\\w*"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Seizure pathway","text":"\\u2022 Seizure ongoing >5 min, repeated seizures, or not recovering consciousness \\u2192 999 (status epilepticus)\\n\\u2022 FIRST-ever seizure (any age) \\u2192 same-day assessment + urgent first-fit clinic referral; advise not to drive (DVLA)\\n\\u2022 Febrile convulsion (6m\\u20135y): usually benign if simple (<15 min, generalised, full recovery) but first episode warrants same-day review and exclusion of meningitis/serious infection\\n\\u2022 Known epilepsy with typical self-terminated seizure \\u2192 prompt review, check triggers/adherence"},{"type":"link","label":"NICE CKS febrile seizure","url":"https://cks.nice.org.uk/topics/febrile-seizure/"}]},{"id":"ectopic-miscarriage","enabled":true,"label":"Pregnancy bleeding/pain","kind":"red","patterns":["ectopic( pregnancy)?","miscarr\\\\w*","(pregnan\\\\w*|expecting) (and|with) (bleed\\\\w*|spotting|blood|cramp\\\\w*|pain)","bleed\\\\w* (and|while|when) (pregnan\\\\w*|expecting)","(spotting|bleeding|blood) in (early )?pregnancy","(pregnan\\\\w*|expecting) (and|with) (one.?sided|shoulder.?tip|shoulder) pain","(severe|bad) (cramp\\\\w*|period.?like pain|tummy pain) (and|while) pregnan\\\\w*","losing (the |my )?(baby|pregnancy)","positive (pregnancy )?test (and|with) (bleed\\\\w*|pain|cramp\\\\w*)","collaps\\\\w* (and|while|when) pregnan\\\\w*"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Early pregnancy pathway","text":"Pain and/or bleeding in (possible) pregnancy \\u2192 same-day Early Pregnancy Unit assessment.\\n\\n\\u2022 Ectopic can present with PAIN BEFORE any bleeding \\u2014 one-sided pain, shoulder-tip pain, dizziness/collapse in early pregnancy = ruptured ectopic until proven otherwise \\u2192 999\\n\\u2022 Always pregnancy-test women of reproductive age with abdominal pain\\n\\u2022 Anti-D consideration for surgical management of miscarriage"},{"type":"link","label":"NICE NG126 (ectopic & miscarriage)","url":"https://www.nice.org.uk/guidance/ng126"}]},{"id":"reduced-fetal-movements","enabled":true,"label":"Reduced fetal movements","kind":"red","patterns":["baby (not|isn.?t|stopped) (moving|kicking)( as much| much| at all)?","baby (is )?(quieter|less active|still|not as active)( than usual)?","(fewer|less|reduced|decreased) (baby |fetal |foetal )?(movements|kicks)","(no|hardly any|barely any) (kicks|movements)","(haven.?t|not) felt (the )?baby (move|kick)","movements (have )?(slowed (down|right down)|reduced|dropped off|stopped)","(worried|concerned) (baby|movements) (not moving|reduced|quiet)","not as much movement"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"RFM pathway (RCOG GTG57)","text":"Any maternal perception of reduced fetal movements (after ~24 weeks) \\u2192 signpost DIRECTLY to maternity triage / day assessment unit NOW for CTG \\u00b1 ultrasound.\\n\\n\\u2022 Do NOT book a GP appointment or advise \\u201cwait and count kicks\\u201d\\n\\u2022 Never reassure by phone without fetal assessment\\n\\u2022 Repeat episodes still warrant assessment every time"},{"type":"link","label":"RCOG GTG57 (reduced fetal movements)","url":"https://www.rcog.org.uk/guidance/browse-all-guidance/green-top-guidelines/reduced-fetal-movements-green-top-guideline-no-57/"}]},{"id":"pre-eclampsia","enabled":true,"label":"Pre-eclampsia?","kind":"red","patterns":["pre.?eclampsia","(pregnan\\\\w*|expecting) (and|with) (a |really |very )?(severe|bad|terrible|awful|pounding) headache","(severe|bad) headache (and|while|when) pregnan\\\\w*","(blurred|blurry) vision (and|while|when) pregnan\\\\w*","(seeing )?(flashing lights|spots|stars) (and|while|when) pregnan\\\\w*","(pregnan\\\\w*|expecting) (and|with) (visual|vision) (changes|disturbance)","(pain|hurting) (under|below) (my )?ribs (and|while|when) pregnan\\\\w*","(upper (tummy|abdominal)|epigastric) pain (and|while|when) pregnan\\\\w*","(sudden|severe) swelling (of (my )?)?(face|hands) (and|while|when) pregnan\\\\w*","(pregnan\\\\w*|expecting) (and|with) (headache (and|with) (vision|swelling)|swelling (and|with) headache)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Pre-eclampsia pathway","text":"Pregnancy (especially >20 weeks) + severe/persistent headache, visual disturbance, epigastric/RUQ pain, or sudden swelling of face/hands \\u2192 same-day maternity assessment for BP + urine protein.\\n\\n\\u2022 Can progress rapidly to eclampsia/HELLP\\n\\u2022 Seizure, severe hypertension or reduced consciousness \\u2192 999\\n\\u2022 Direct to maternity triage, not a routine GP slot"},{"type":"link","label":"NICE NG133 (hypertension in pregnancy)","url":"https://www.nice.org.uk/guidance/ng133"}]},{"id":"sudden-vision-loss","enabled":true,"label":"Sudden visual loss","kind":"red","patterns":["sudden (loss of )?(vision|sight)","(lost|losing) (my )?(vision|sight) (suddenly|in one eye|in my (left|right) eye)","curtain (coming|coming down|over) (my |one )?(eye|vision)","(shadow|curtain) (across|over) (my )?vision","new floaters","(shower of|sudden|lots of new) (floaters|flashes|flashing lights)","(flashes|flashing lights) (and|with) (new )?floaters","cobwebs (in|across) (my )?vision","sudden (blurred|blurry) vision in one eye","(giant cell arteritis|GCA)","(temporal|scalp) (pain|tenderness) (and|with) (jaw|vision|headache)","jaw (pain|ache\\\\w*|claudication) (when|while|on) (chewing|eating)","amaurosis","retinal detach\\\\w*","black (spot|patch) (in|across) (my )?vision"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Sight-threatening pathway","text":"\\u2022 Sudden painless loss of vision in one eye \\u2192 same-day emergency ophthalmology (?CRAO/CRVO/retinal detachment/vitreous haemorrhage)\\n\\u2022 Curtain/shadow over vision, or flashes + NEW floaters \\u2192 same-day (?retinal detachment/tear)\\n\\u2022 GCA: age >50 + new headache, scalp tenderness, jaw claudication \\u00b1 visual symptoms \\u2192 SAME-DAY high-dose steroid + urgent ophthalmology/rheumatology + ESR/CRP \\u2014 the second eye is at risk\\n\\u2022 Painful red eye + visual loss \\u2192 ?acute angle-closure \\u2192 emergency"},{"type":"link","label":"NICE CKS giant cell arteritis","url":"https://cks.nice.org.uk/topics/giant-cell-arteritis/"}]},{"id":"septic-arthritis","enabled":true,"label":"Hot swollen joint","kind":"red","patterns":["(hot|red.?hot) (and )?swollen joint","(swollen|huge) (and |very )?(hot|red) (knee|hip|shoulder|elbow|wrist|ankle|joint)","(knee|hip|shoulder|ankle|wrist|elbow|joint) (is )?(red.?hot|red and (hot|swollen)|hot and swollen)","joint (swelled|swelled up|swollen) (overnight|suddenly|very quickly)","(can.?t|unable to) (move|bend|weight bear on) (my )?(knee|hip|shoulder|joint) (and|with) (hot|swollen|red|fever)","acutely (swollen|hot|painful) joint","(hot|swollen) joint (and|with) (fever|feeling unwell|temperature)","septic arthritis"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Septic arthritis pathway","text":"An acutely hot, swollen, very painful joint (especially single joint \\u00b1 fever) = septic arthritis until proven otherwise.\\n\\n\\u2022 Same-day orthopaedics / ED for joint aspiration BEFORE antibiotics\\n\\u2022 An untreated septic joint is destroyed within days\\n\\u2022 Prosthetic joint, immunosuppression, recent injection = even lower threshold\\n\\u2022 Do not assume gout if febrile or systemically unwell"}]},{"id":"psychosis","enabled":true,"label":"Psychosis?","kind":"red","patterns":["hearing voices","voices (in my head|telling me|commenting)","(seeing|hearing) (things|stuff) (that aren.?t|not) (there|real)","hallucinat\\\\w*","visual hallucination\\\\w*","delusion\\\\w*","(psychosis|psychotic)","first episode psychosis","(people|they|the government|neighbours) (are )?(out to get|spying on|poisoning|watching) me","thoughts (being )?(put|inserted) (in|into) my (head|mind)","my (mind|thoughts) (are )?being controlled","paranoid (and|with) (voices|hallucinat\\\\w*|not safe|they.?re after me)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":"safeguarding","builtin":true,"actions":[{"type":"note","label":"First-episode psychosis","text":"Hallucinations, delusions, thought disorder or marked paranoia \\u2192 urgent referral to Early Intervention in Psychosis (EIP) \\u2014 NICE: assessment started within 2 weeks; same-day crisis-team input if risk.\\n\\n\\u2022 Command hallucinations / risk to self or others \\u2192 crisis pathway now\\n\\u2022 Exclude organic causes (delirium, substances) \\u2014 acute confusion in the elderly is delirium, not psychosis\\n\\u2022 POSTPARTUM PSYCHOSIS = psychiatric emergency \\u2192 same-day perinatal MH / crisis team"},{"type":"link","label":"NICE CKS psychosis","url":"https://cks.nice.org.uk/topics/psychosis-schizophrenia/"}]},{"id":"haematuria-2ww","enabled":true,"label":"Blood in urine","kind":"amber","patterns":["blood in (my )?(urine|wee|pee)","blood when (i )?(wee|pee|pass (water|urine))","ha?ematuria\\\\w*","(red|pink|cola.?colou?red|rusty) (urine|wee|pee)","(urine|wee|pee) (is|looks|has gone) (red|pink|bloody|like blood)","passing (blood|red water|bloody (water|urine))","visible blood (in|when passing) (urine|wee|pee)","bleeding when (i )?(wee|pee|urinat\\\\w*)","blood clots in (my )?(urine|wee)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"2WW pathway","text":"NICE NG12: visible haematuria aged \\u226545 (unexplained, or persisting/recurring after UTI treatment) \\u2192 2WW urology. Aged \\u226560 with unexplained non-visible haematuria + dysuria or raised WCC \\u2192 2WW.\\n\\nUnder the age cutoffs: still assess (UTI, stones, anticoagulants) and safety-net \\u2014 haematuria is never normal.\\n\\nExclude/treat UTI but do not let an infection label close the loop without confirming resolution."},{"type":"link","label":"NICE NG12 urological cancers","url":"https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#urological-cancers"}]},{"id":"postmenopausal-bleeding","enabled":true,"label":"Post-menopausal bleeding","kind":"amber","patterns":["post.?menopausal bleed\\\\w*","bleeding (after|since) (the |my )?menopause","(vaginal )?bleed\\\\w* (after|since) (my )?periods (stopped|ended|finished)","spotting (after|since) (the )?menopause","(haven.?t|not) had a period (for|in) (\\\\w+ )?(years|months) (and|but) (now )?(i.?m |i am )?(bleed\\\\w*|spotting|blood)","brown discharge (after|since) menopause","bleeding (and|but) (i.?m|i am) post.?menopausal"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"2WW pathway","text":"NICE NG12: post-menopausal bleeding (\\u226512 months after last period) in women \\u226555 \\u2192 2WW gynaecology (transvaginal USS endometrial assessment); strongly consider for younger post-menopausal women too.\\n\\n\\u2022 Includes spotting, staining and blood-streaked discharge\\n\\u2022 HRT breakthrough bleeding still needs assessment if unscheduled/persistent"},{"type":"link","label":"NICE NG12 gynaecological cancers","url":"https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#gynaecological-cancers"}]},{"id":"breast-changes-2ww","enabled":true,"label":"Breast lump/change","kind":"amber","patterns":["(lump|hard lump|thickening) (in|on) (my )?(breast|boob|boobs)","breast lump\\\\w*","boob lump\\\\w*","one breast (bigger|larger|different|changed)","breast (has |is )?(changed|dimpl\\\\w*|pucker\\\\w*)","(skin )?(dimpl\\\\w*|pucker\\\\w*|orange.?peel) (on|in) (my )?(breast|boob)","nipple (discharge|bleed\\\\w*|inver\\\\w*|retract\\\\w*|pulled in)","(scaly|crusty|eczema|rash) (on )?(my )?(nipple|areola)","inverted nipple"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"2WW pathway","text":"NICE NG12 breast referral:\\n\\u2022 Aged \\u226530 with an unexplained breast lump \\u2192 2WW\\n\\u2022 Aged \\u226550 with nipple discharge, retraction or other concerning unilateral nipple change \\u2192 2WW\\n\\u2022 Skin changes suggestive of cancer (dimpling, peau d\\u2019orange, nipple eczema) or axillary lump \\u2192 refer\\n\\u2022 Under 30 with a lump: non-urgent referral/assessment, lower threshold if FH\\n\\nIf the story is feeding-related (mastitis), treat \\u2014 but a lump persisting after mastitis resolves needs 2WW."},{"type":"link","label":"NICE NG12 breast cancer","url":"https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#breast-cancer"}]},{"id":"dysphagia-2ww","enabled":true,"label":"Swallowing difficulty","kind":"amber","patterns":["food (gets |is |keeps |keeps getting |getting )?(sticking|stuck) (in (my )?)?(throat|chest|food pipe|gullet|oesophagus)","something stuck (in my throat|when i swallow)","difficulty swallowing (food|solids|getting worse|for weeks)","swallowing (is )?(getting (worse|harder)|harder)","can.?t swallow (food|solids|properly)","food (won.?t |doesn.?t )?go down","odynophagia","dysphagia\\\\w*","hoarse\\\\w* (for|lasting|more than) (\\\\d+ )?(week|month)\\\\w*","(persistent|chronic) hoarse\\\\w*","voice (has been )?(hoarse|rough|gone) for (weeks|ages|a month)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"2WW pathway","text":"NICE NG12:\\n\\u2022 Dysphagia (food sticking, progressive difficulty swallowing) at ANY age \\u2192 2WW upper-GI endoscopy\\n\\u2022 Persistent hoarseness >3 weeks (especially >45y or smoker) \\u2192 2WW ENT + consider CXR\\n\\nAcute painful swallow with sore throat/tonsillitis is different \\u2014 see sore-throat rule. Difficulty swallowing SALIVA / drooling \\u2192 same-day (?epiglottitis/quinsy)."},{"type":"link","label":"NICE NG12 upper GI cancers","url":"https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#upper-gastrointestinal-tract-cancers"}]},{"id":"dka-hhs","enabled":true,"label":"DKA / HHS","kind":"red","patterns":["diabetic ketoacidosis","DKA","HHS","hyperosmolar","ketones (high|raised|in my (blood|urine|wee))","fruity (smelling )?breath","acetone breath","diabetes (and|with) (vomiting|can.?t keep (fluids|anything) down|confus\\\\w*)","(high|raised) ketones (and|with) (vomiting|unwell|drowsy|breathless)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Diabetic emergency","text":"Suspected DKA or HHS \\u2192 same-day / 999.\\n\\n\\u2022 DKA (type 1): vomiting, abdominal pain, raised ketones, deep/fast (Kussmaul) breathing, fruity breath, drowsiness\\n\\u2022 HHS (elderly type 2): very high glucose + marked dehydration + confusion, usually without significant ketones\\n\\nAction:\\n\\u2022 Check capillary glucose AND ketones now if able\\n\\u2022 Capillary ketones \\u22653.0 mmol/L (or urine ketones ++), or vomiting and unable to keep fluids down \\u2192 emergency admission\\n\\u2022 NEVER omit insulin - arrange immediate transfer"}]},{"id":"diabetes","enabled":true,"label":"Diabetes problem","kind":"amber","patterns":["(hyperglycaemi|hyperglycemi)\\\\w*","(hypoglycaemi|hypoglycemi)\\\\w*","hypo","blood sugars? (too high|very high|sky high|dangerously high|too low|very low|in the \\\\d+s)","blood sugars? (won.?t come down|keep dropping|all over the place)","(keep having|frequent|lots of) hypos","sick day rules","insulin (not working|isn.?t working|won.?t bring (it|sugars) down)","diabetes (out of control|not controlled|poorly controlled)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Escalation thresholds","text":"RED FLAGS \\u2192 same-day / 999:\\n\\u2022 ?DKA (esp. type 1): vomiting, abdominal pain, ketones, deep/fast breathing, fruity breath, drowsiness\\n\\u2022 ?HHS (esp. elderly type 2): very high glucose + dehydration + confusion\\n\\u2022 Severe hypo (needed help / unconscious / seizure) \\u2192 999; IM glucagon if available\\n\\u2022 Vomiting and cannot keep fluids down \\u2192 same-day\\n\\nSick-day rules: NEVER stop insulin; check glucose & ketones 2\\u20134-hourly; keep drinking; ketones rising or persistent vomiting \\u2192 urgent review.\\n\\nRoutine \\u201csugars running high\\u201d without red flags \\u2192 prompt clinical review/titration, not emergency."},{"type":"link","label":"NICE CKS diabetes","url":"https://cks.nice.org.uk/topics/diabetes-type-2/"}]},{"id":"dehydration-child","enabled":true,"label":"Child dehydration?","kind":"amber","patterns":["(no|hasn.?t had a|dry) (wet )?nappy (for|in) (\\\\d+ )?(hours|day)","hasn.?t (wee.?d|passed urine) (for|in) (\\\\d+ )?(hours|day)","(baby|she|he) (won.?t|not) (drink|feed|take (a |the )?(bottle|breast|milk|feed))","not feeding (and|with) (lethargic|drowsy|floppy|sunken)","dry (mouth|lips|tongue) (and|with) (not (drinking|feeding)|lethargic|drowsy)","sunken (eyes|fontanelle|soft spot)","fontanelle (sunken|bulging)","no (wet )?nappies","not (making|producing) tears","floppy (and|with) (not (drinking|feeding)|lethargic)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Dehydration assessment","text":"Concerning: \\u226550% fewer wet nappies, no tears, dry mouth, sunken eyes/fontanelle, lethargy, not tolerating fluids \\u2192 same-day assessment.\\n\\nRED (\\u2192 999/ED): mottled, cold extremities, cap refill >2s, very drowsy/floppy, no urine >12\\u201324h, persistent bilious vomiting.\\n\\nMild D&V tolerating ORS \\u2192 small frequent fluids + strict safety-net. Bulging fontanelle = different emergency (?meningitis)."}]},{"id":"vomiting-baby","enabled":true,"label":"Infant vomiting","kind":"amber","patterns":["projectile vomit\\\\w*","bringing (everything|every feed) (back )?up","vomiting (every|after every) feed","won.?t keep (a |any )?(feed|milk|bottle) down","(green|bilious|bile.?stained) vomit\\\\w*","vomiting (green|bile)","keeps being sick (and|with) (not feeding|lethargic|drowsy)","can.?t keep (anything|fluids|milk) down","baby (sick|vomiting) (and|with) (lethargic|floppy|drowsy|swollen tummy)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Infant vomiting red flags","text":"\\u2022 GREEN/BILIOUS vomiting in an infant = intestinal obstruction (?malrotation/volvulus) until proven otherwise \\u2192 SAME-DAY surgical/ED \\u2014 this is an emergency\\n\\u2022 Projectile vomiting in a 2\\u20138-week-old, hungry after, weight faltering \\u2192 ?pyloric stenosis \\u2192 same-day referral\\n\\u2022 Vomiting + drowsy/floppy/bulging fontanelle \\u2192 ?meningitis/raised ICP \\u2192 emergency\\n\\u2022 Effortless small possets in a well, gaining baby = reflux \\u2014 reassure + safety-net"}]},{"id":"head-injury","enabled":true,"label":"Head injury","kind":"amber","patterns":["(hit|bumped|banged|knocked|whacked) (my |his |her |their |the )?head","head (injury|trauma)","fell (and|then) (hit|banged|knocked) (my|his|her|their|the) head","(bang|blow|knock) (on|to) the head","concuss\\\\w*","(lost consciousness|knocked out|passed out|blacked out) (after|when|from) (the |a )?(fall|hit|blow)","knocked (out|unconscious)","(vomit\\\\w*|drowsy|confus\\\\w*|sleepy|not right) (after|since) (hitting|banging) (my |his |her )?head","clear fluid (from|leaking from) (my |his |her )?(ear|nose)","won.?t (wake up|stay awake) after (hitting|banging|the bang on) (his |her |their )?head","on (blood thinners|warfarin|apixaban|rivaroxaban|edoxaban|dabigatran|anticoagulant\\\\w*) (and|after) (hit\\\\w*|bang\\\\w*|fell)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"NG232 CT criteria","text":"CT head WITHIN 1 HOUR (\\u2192 ED now) if any: GCS <13 initially or <15 at 2h; suspected open/depressed or basal skull fracture (CSF leak, panda eyes, Battle\\u2019s sign); post-traumatic seizure; focal neurology; >1 episode of vomiting.\\n\\nON ANTICOAGULANT (warfarin/DOAC) or with bleeding disorder: CT within 8h after ANY head injury, even if entirely well \\u2014 send to ED.\\n\\nLOC or amnesia + (age \\u226565 / dangerous mechanism / clotting issue) \\u2192 CT within 8h.\\n\\nChildren: lower threshold; <1y with any bruise/swelling on head \\u2192 assess; consider NAI if mechanism inconsistent."},{"type":"link","label":"NICE NG232 (head injury)","url":"https://www.nice.org.uk/guidance/ng232"}]},{"id":"acute-limp-child","enabled":true,"label":"Limping child","kind":"amber","patterns":["(child|toddler|boy|girl|son|daughter|he|she) (is )?limping","limping (and|with) (fever|temperature|hot|swollen|won.?t walk)","won.?t (put weight on|walk on|stand on) (his|her|their|the) (leg|foot|knee|hip)","refusing to (walk|weight bear|stand)","not (weight.?bearing|bearing weight)","woke up limping","(hot|swollen|red) (knee|hip|ankle|leg) (and|with) (limp\\\\w*|fever|won.?t walk)","sudden (onset )?limp"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Limping child pathway","text":"Limp + fever or systemically unwell = septic arthritis/osteomyelitis until proven otherwise \\u2192 same-day paediatric/ortho assessment (bloods + imaging).\\n\\n\\u2022 Non-weight-bearing at any age \\u2192 same-day (fracture, septic hip)\\n\\u2022 Child <3y with a limp \\u2192 same-day assessment (and consider NAI)\\n\\u2022 Adolescent with hip/knee pain + limp \\u2192 ?SUFE \\u2192 urgent\\n\\u2022 Transient synovitis is a diagnosis of exclusion"},{"type":"link","label":"NICE CKS acute childhood limp","url":"https://cks.nice.org.uk/topics/acute-childhood-limp/"}]},{"id":"neonatal-jaundice","enabled":true,"label":"Newborn jaundice","kind":"amber","patterns":["(baby|newborn) (is|looks|has gone|going) (very |really )?yellow","jaundice\\\\w* (in (my |the )?)?(baby|newborn)","(baby|newborn).?s? (skin|eyes|sclera) (are |is |look\\\\w* )?yellow","bilirubin","jaundice (within|in the first) (24 hours|first day|day one)","(yellow|jaundice\\\\w*) (and|with) (poor feeding|not feeding|drowsy|lethargic|sleepy)","still (yellow|jaundiced) at (2|3|two|three) weeks"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Neonatal jaundice (NG98)","text":"\\u2022 Jaundice in the FIRST 24 HOURS of life = always pathological \\u2192 same-day urgent serum bilirubin + paediatric assessment\\n\\u2022 Visible jaundice any time in first 2 weeks \\u2192 measure bilirubin (transcutaneous/serum) and plot on treatment-threshold chart \\u2014 do not estimate by eye\\n\\u2022 Jaundice + poor feeding/drowsy \\u2192 urgent same-day\\n\\u2022 Prolonged jaundice (>14 days term, >21 days preterm) \\u2192 prolonged-jaundice screen incl. CONJUGATED bilirubin (?biliary atresia \\u2014 pale stools/dark urine)"},{"type":"link","label":"NICE NG98 (neonatal jaundice)","url":"https://www.nice.org.uk/guidance/ng98"}]},{"id":"adult-jaundice","enabled":true,"label":"Jaundice (adult)","kind":"amber","patterns":["(skin|eyes) (have |has |are |is )?(gone|turned|turning|going) yellow","yellow (skin|eyes|tinge)","whites of (my |the )?eyes (are |look )?yellow","jaundice\\\\w*","(i|he|she) (look|am|is|seem)\\\\w* yellow","(dark urine|pale stools?) (and|with) (yellow|itch\\\\w*|jaundice)","itch\\\\w* (all over )?(and|with) (yellow|dark urine|pale stools?)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Adult jaundice pathway","text":"New jaundice in an adult \\u2192 same-day bloods (LFTs, FBC, U&E, INR) and urgent assessment.\\n\\n\\u2022 PAINLESS jaundice (esp. >40y, weight loss, dark urine/pale stools) is a pancreatic-cancer red flag \\u2192 NICE NG12 urgent CT/2WW pathway\\n\\u2022 Jaundice + fever/RUQ pain \\u2192 ?cholangitis \\u2192 same-day admission\\n\\u2022 Jaundice + confusion/bruising \\u2192 ?acute liver failure \\u2192 emergency\\n\\u2022 Check paracetamol overdose, alcohol, new drugs (incl. herbal)"},{"type":"link","label":"NICE NG12 pancreatic cancer","url":"https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#pancreatic-cancer"}]},{"id":"testicular-lump","enabled":true,"label":"Testicular lump","kind":"amber","patterns":["(lump|swelling|mass) (in|on) (my )?(testicle|testis|ball|balls|scrotum)","testicular lump","(testicle|testis|ball) (feels|is) (hard|bigger|enlarged|different|heavy)","(found|felt|noticed) a lump (in|on) (my )?(testicle|testis|ball|scrotum)","swollen (testicle|testis)","(heaviness|dragging) (in (my )?)?(scrotum|testicle|balls)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"2WW pathway","text":"NICE NG12: non-painful enlargement or change in shape/texture of the testis \\u2192 2WW urology (any age \\u2014 peak 15\\u201340y). Consider direct-access ultrasound if unsure whether mass is testicular.\\n\\nSUDDEN SEVERE testicular PAIN = torsion \\u2192 emergency (separate red rule).\\nYoung men under-present \\u2014 take written mentions seriously."},{"type":"link","label":"NICE NG12 testicular cancer","url":"https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#urological-cancers"}]},{"id":"vzv-pregnancy","enabled":true,"label":"Chickenpox/shingles in pregnancy","kind":"amber","patterns":["pregnan\\\\w*.{0,50}(chickenpox|chicken pox|varicella|shingles)","(chickenpox|chicken pox|varicella|shingles).{0,50}pregnan\\\\w*","expecting.{0,40}(chickenpox|chicken pox|varicella|shingles)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"VZV in pregnancy","text":"Chickenpox CONTACT in pregnancy: same-day advice \\u2014 check varicella history/immunity (IgG if uncertain); if non-immune and significant contact, post-exposure prophylaxis (antivirals/VZIG per current UKHSA guidance) is TIME-CRITICAL \\u2192 discuss with obstetrics/virology today.\\n\\nChickenpox RASH in pregnancy: same-day clinical discussion \\u2014 oral aciclovir if \\u226520 weeks and within 24h of rash; severe disease/respiratory symptoms \\u2192 admission. Risks: fetal varicella syndrome (<28wk), neonatal varicella (around delivery), maternal pneumonitis."},{"type":"link","label":"RCOG chickenpox in pregnancy (GTG13)","url":"https://www.rcog.org.uk/guidance/browse-all-guidance/green-top-guidelines/chickenpox-in-pregnancy-green-top-guideline-no-13/"}]},{"id":"emergency-contraception","enabled":true,"label":"Emergency contraception","kind":"amber","patterns":["morning after pill","emergency contracept\\\\w*","emergency (pill|coil|contraceptive)","need contraception (quickly|urgently|today|asap)","unprotected sex","condom (broke|split|came off|failed)","missed (my |a |several )?(contraceptive )?pills?","forgot (to take )?(my )?pill","(took|taken) (my )?pill (late|too late)","(levonorgestrel|ulipristal|ellaone)","plan b","copper coil (for|as) emergency"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"EC time windows","text":"Time-critical \\u2014 deal with today:\\n\\u2022 Copper IUD: most effective, up to 5 days (120h) after UPSI (or up to 5 days after earliest ovulation) \\u2014 also ongoing contraception\\n\\u2022 Ulipristal (ellaOne): up to 120h\\n\\u2022 Levonorgestrel: up to 72h (less effective later; double dose if BMI/weight criteria per FSRH)\\n\\nCommunity pharmacy can supply oral EC free via Pharmacy First. Safeguard: under-16s (Fraser), coercion/assault \\u2192 follow safeguarding pathway. Offer STI screen + ongoing contraception; pregnancy test if next period late."},{"type":"link","label":"NHS Pharmacy First","url":"https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"},{"type":"link","label":"NICE CKS emergency contraception","url":"https://cks.nice.org.uk/topics/contraception-emergency/"}]},{"id":"mastitis","enabled":true,"label":"Mastitis/breastfeeding","kind":"amber","patterns":["mastitis","breast (infection|abscess)","infected breast","breastfeed\\\\w*.{0,40}(pain\\\\w*|sore|red|hot|fever\\\\w*|lump\\\\w*|flu.?like|burning)","(painful|sore|red|hot|hard|engorged) breast (while|when|and) (feeding|breastfeeding|nursing)","(breast engorgement|engorged breasts?)","(blocked|plugged|clogged) (milk )?duct","cracked nipple (and|with) (pain|red|fever)","(red|hot|hard) (patch|area|wedge|lump) (on|in) (my )?breast (and|with) (fever|feeding|flu)","flu.?like (and|with) (breast|breastfeeding)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Mastitis pathway","text":"Lactational mastitis: continue feeding/expressing (milk drainage is the treatment), analgesia (paracetamol/ibuprofen safe), warm compress before feeds.\\n\\nAntibiotics (flucloxacillin 10\\u201314d; erythromycin if pen-allergic) if: systemically unwell, nipple fissure infection, or not improving after 12\\u201324h of effective milk removal.\\n\\n\\u2022 Fluctuant mass \\u2192 ?abscess \\u2192 same-day referral for USS \\u00b1 drainage\\n\\u2022 A discrete lump or skin change persisting AFTER mastitis resolves \\u2192 breast 2WW (inflammatory cancer mimics mastitis)\\n\\u2022 Sepsis features \\u2192 admit"},{"type":"link","label":"NICE CKS mastitis","url":"https://cks.nice.org.uk/topics/mastitis-breast-abscess/"}]},{"id":"heavy-period","enabled":true,"label":"Heavy menstrual bleeding","kind":"amber","patterns":["heavy periods?","(very|really|extremely) heavy (menstrual )?bleed\\\\w*","soaking through (pads|tampons|sanitary)","changing (my )?(pad|tampon) every (hour|half hour|30 min\\\\w*)","flooding (through|at night|during my period)","period (flooding|won.?t stop)","(large|big) (blood )?clots (in|during|with) (my )?(period|bleed\\\\w*)","bleeding (for|going on) (more than|over) (a week|7 days|two weeks)","menorrhagia","heavy menstrual bleeding","bleeding through (my )?clothes","period (is )?(much |a lot )?heavier than usual"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"HMB pathway (NG88)","text":"\\u2022 Check FBC (\\u00b1 ferritin) \\u2014 anaemia is common\\n\\u2022 First-line: LNG-IUS; or tranexamic acid \\u00b1 NSAID, or hormonal options\\n\\u2022 Red flags out: intermenstrual/postcoital bleeding, post-menopausal bleeding (\\u2192 2WW), pressure symptoms/mass (?fibroids \\u2192 USS)\\n\\u2022 Acute flooding + dizziness/syncope or Hb concern \\u2192 same-day review\\n\\u2022 Persistent IMB or treatment failure \\u2192 gynae referral"},{"type":"link","label":"NICE NG88 (heavy menstrual bleeding)","url":"https://www.nice.org.uk/guidance/ng88"}]},{"id":"postpartum-complications","enabled":true,"label":"Postpartum bleeding/infection","kind":"amber","patterns":["(heavy |postpartum |postnatal )?bleeding (after|since) (giving birth|the birth|delivery|having (my )?baby)","postpartum (bleed\\\\w*|haemorrhage|hemorrhage)","lochia (heavy|heavier|smelly|foul|increasing)","(fever|temperature|unwell|shivery) (after|since) (giving birth|the birth|delivery)","(c.?section|caesarean|cesarean) (wound|scar) (infect\\\\w*|red|oozing|opening|leaking)","stitches (infected|opened|smelly|oozing)","(foul|smelly|offensive) (smelling )?discharge (after|since) (giving birth|the birth|birth|delivery|having (my )?baby)","retained placenta","endometritis","unwell (a )?(few days|week|fortnight) after (giving birth|having (my )?baby)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Postpartum red flags","text":"Postpartum women deteriorate FAST \\u2014 low threshold for same-day review/admission.\\n\\n\\u2022 Secondary PPH (heavy/increasing bleeding >24h\\u201312wk post-delivery) \\u2192 same-day; clots/offensive lochia \\u2192 ?retained products/endometritis\\n\\u2022 Fever + foul lochia + uterine tenderness = endometritis \\u2192 same-day, often admission for IV antibiotics\\n\\u2022 Wound infection: spreading erythema/systemic features \\u2192 same-day\\n\\u2022 Always consider sepsis (MBRRACE: genital-tract sepsis remains a leading cause of maternal death)"}]},{"id":"acute-red-eye","enabled":true,"label":"Painful red eye","kind":"amber","patterns":["(painful|sore) red eye","red (and )?(painful|sore) eye","red eye (and|with) (pain|blurred vision|vision (loss|change)|light hurt\\\\w*|photophobia|haz\\\\w*|halo\\\\w*)","eye (is )?red (and|with) (painful|losing vision|can.?t see|light sensitive)","(photophobia|light hurt\\\\w*|can.?t tolerate light) (and|with) (red|painful) eye","contact lens\\\\w* (and|with) (red|painful|sore) eye","keratitis","(uveitis|iritis)","corneal (pain|ulcer|abrasion)","eye pain (and|with) (vision (loss|change|blur\\\\w*)|halo\\\\w*|redness)","(something|chemical|bleach) (splashed|went) in (my )?eye"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Red eye red flags","text":"Same-day ophthalmology if red eye PLUS any: pain (not just gritty), photophobia, reduced vision, haloes (?acute angle-closure), fixed/irregular pupil, CONTACT-LENS wearer (?microbial keratitis \\u2014 lens out, same-day), herpetic vesicles, hypopyon, trauma.\\n\\nChemical injury: irrigate copiously NOW, then emergency referral.\\n\\nBland red eye, no pain/vision change = likely conjunctivitis \\u2192 self-care/pharmacy + safety-net."},{"type":"link","label":"NICE CKS red eye","url":"https://cks.nice.org.uk/topics/red-eye/"}]},{"id":"sudden-hearing-loss","enabled":true,"label":"Sudden hearing loss","kind":"amber","patterns":["sudden (hearing loss|loss of hearing|deaf\\\\w*)","(lost|losing) (my )?hearing (in (my |the )?one ear|in my (left|right) ear|overnight|suddenly)","woke up (deaf|and (can.?t|couldn.?t) hear)","gone deaf in one ear","ear (went|has gone) dead","(can.?t hear|hearing.?s gone) (in one ear|suddenly|overnight)","sensorineural","hearing (disappeared|vanished) (overnight|suddenly)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"SSNHL \\u2014 urgent","text":"Sudden (\\u226472h) unexplained hearing loss in one or both ears, not explained by wax/effusion on otoscopy, = sudden sensorineural hearing loss \\u2192 URGENT same-day/24h ENT referral for audiometry + oral steroids \\u2014 the treatment window is days, outcomes worsen with delay.\\n\\nDo NOT routine-refer. Tuning fork (Weber lateralises AWAY from affected ear in SNHL) helps distinguish from conductive causes.\\n\\nWith vertigo/neurology \\u2192 consider stroke pathway."}]},{"id":"epistaxis","enabled":true,"label":"Nosebleed (significant)","kind":"amber","patterns":["nose ?bleed\\\\w* (that )?(won.?t|will not) stop","(can.?t|unable to) stop (my |the )?nose ?bleed\\\\w*","(heavy|prolonged|continuous|torrential) nose ?bleed\\\\w*","nose ?bleed\\\\w* (for|lasting|going on) (\\\\d+ )?(hour|hours|30 min\\\\w*)","nose (won.?t|will not) stop bleeding","epistaxis","bleeding (heavily )?from (my )?nose (and|that) won.?t stop","nose ?bleed\\\\w* (and|on) (blood thinners|warfarin|apixaban|rivaroxaban|anticoagulant\\\\w*)","(keep getting|recurrent|repeated) nose ?bleed\\\\w*"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Epistaxis pathway","text":"First aid: sit forward, pinch the SOFT part of the nose firmly 10\\u201315 min continuously, ice to bridge, spit don\\u2019t swallow.\\n\\n\\u2022 Not controlled after 2 \\u00d7 15 min pressure \\u2192 ED (cautery/packing)\\n\\u2022 On anticoagulant/antiplatelet + heavy or recurrent bleeding \\u2192 same-day review (check INR if warfarin) \\u2014 low threshold for ED\\n\\u2022 Posterior bleed (blood down throat both sides), haemodynamic symptoms \\u2192 999/ED\\n\\u2022 Recurrent unilateral epistaxis + blocked nose in an adult \\u2192 consider ENT referral (rare: tumour)"}]},{"id":"gout","enabled":true,"label":"Gout flare?","kind":"amber","patterns":["gout( flare| attack)?","big toe (joint )?(pain|swollen|swelling|red.?hot|agony|on fire)","(red|hot|swollen) big toe","toe (is )?(red and swollen|hot and swollen)","acute (toe|midfoot|ankle) (pain|swelling) (came on )?(overnight|suddenly)","toph(us|i)","gouty"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Gout (NG219)","text":"Acute flare: NSAID (with PPI) OR colchicine 500mcg bd\\u2013qds (cap dose; caution renal impairment/statins) OR short oral prednisolone \\u2014 treat fast, any of the three.\\n\\n\\u2022 Do NOT stop allopurinol/febuxostat during a flare\\n\\u2022 After the flare settles: offer urate-lowering therapy (treat-to-target serum urate <360 micromol/L; <300 if tophi/recurrent), start low + flare prophylaxis cover\\n\\u2022 Hot swollen joint + fever/unwell \\u2192 treat as SEPTIC arthritis, not gout\\n\\u2022 Check U&E, consider CV risk/diuretic review"},{"type":"link","label":"NICE NG219 (gout)","url":"https://www.nice.org.uk/guidance/ng219"}]},{"id":"cellulitis","enabled":true,"label":"Cellulitis?","kind":"amber","patterns":["cellulitis","spreading (redness|red area|infection)","(redness|red area|red patch).{0,30}(spreading|getting bigger|getting worse|tracking)","red streak\\\\w*","lymphangitis","(leg|arm|skin|wound|foot|hand) infection (and|with) (red|hot|swollen|spreading|fever)","infected wound (and|with) (spreading|red|hot|fever)","(hot|warm) (red|swollen) (and )?spreading","(leg|arm) (is )?(red, hot and swollen|hot, red and swollen)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Cellulitis pathway","text":"Mark the border and date it. Uncomplicated: oral flucloxacillin (clarithromycin/doxycycline if pen-allergic), elevate, review 48h.\\n\\nAdmit / same-day ED if: systemic sepsis features, rapidly spreading, facial/periorbital (?orbital cellulitis \\u2014 emergency), severe pain out of proportion (?necrotising \\u2014 999), immunosuppressed, failed orals.\\n\\nUnilateral red swollen leg: consider DVT (often confused) and chronic venous eczema (usually bilateral, itchy, not febrile \\u2014 doesn\\u2019t need antibiotics)."},{"type":"link","label":"NICE CKS cellulitis","url":"https://cks.nice.org.uk/topics/cellulitis-acute/"}]},{"id":"medication-side-effect","enabled":true,"label":"Medication side effect","kind":"amber","patterns":["side.?effects?","adverse (reaction|effect)","reaction to (my )?(medication|tablets|pills|new (tablet|medication|med))","(medication|tablets?|pills?) (is |are )?(making me|giving me) (unwell|sick|dizzy|a rash|nausea|itchy)","(rash|nausea|dizziness|diarrhoea|swelling) (from|since starting) (my )?(medication|tablets|new (tablet|medication|med))","can.?t tolerate (my )?(medication|tablets|new (tablet|medication|med))","since starting (the|my|this) new (tablet\\\\w*|medication|med\\\\w*|inhaler)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"ADR triage","text":"Prescriber review needed \\u2014 check timing vs drug start, dose, interactions (BNF).\\n\\nSERIOUS \\u2014 same-day/emergency:\\n\\u2022 ACEi angioedema (lip/tongue swelling) \\u2192 emergency\\n\\u2022 New rash on allopurinol / lamotrigine / carbamazepine / penicillins \\u2192 ?SJS/DRESS \\u2192 stop + urgent review (mucosal involvement/blistering = emergency)\\n\\u2022 Muscle pain + dark urine on statin \\u2192 ?rhabdo \\u2192 same-day CK\\n\\u2022 Bleeding on anticoagulant \\u2192 same-day\\n\\nReport serious/unexpected reactions via MHRA Yellow Card."},{"type":"link","label":"MHRA Yellow Card","url":"https://yellowcard.mhra.gov.uk/"}]},{"id":"delirium","enabled":true,"label":"Acute confusion","kind":"amber","patterns":["(suddenly|acutely|overnight|out of the blue) confused","acute confusion","confus\\\\w* (and|with) (fever|not (himself|herself|themselves)|drowsy|hallucinating)","confused since (yesterday|this morning|last night)","(mum|dad|nan|gran|grandad|mother|father|husband|wife) (is|has been|has got|seems) (suddenly |very |really )?(confused|muddled|not making sense)","not (himself|herself|themselves) (and|with) confus\\\\w*","(rambling|incoherent|talking nonsense|not making sense) (suddenly|since|today|overnight)","doesn.?t know (what day|where (he|she|they) (is|are)|who (i am|people are))","(delirium|delirious)","woke up confused","hallucinating (and|with) (confused|fever|unwell)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Delirium screen","text":"ACUTE change in cognition/attention = delirium until proven otherwise \\u2014 in an older person this is a same-day assessment (4AT screen).\\n\\nHunt the cause: infection (UTI/chest), urinary retention, constipation, dehydration, hypoxia, drugs (opioids, anticholinergics, benzos \\u2014 recent changes), alcohol withdrawal, electrolytes/glucose, pain, stroke.\\n\\nFluctuating course + inattention distinguishes from dementia (chronic \\u2192 memory-loss rule). Both can coexist \\u2014 acute-on-chronic change still needs same-day review."},{"type":"link","label":"NICE CKS delirium","url":"https://cks.nice.org.uk/topics/delirium/"}]},{"id":"alcohol-misuse","enabled":true,"label":"Alcohol concern","kind":"amber","patterns":["drinking too much","(drink|drinking|alcohol) problem\\\\w*","alcoholi(c|sm)","(worried|concerned) about (my |his |her )?drinking","help (to |with )?(stop|stopping|cut down|cutting down|control\\\\w*) (my )?drinking","can.?t (stop|control) (my )?drinking","alcohol (dependence|dependent|withdrawal|detox)","shakes (when|from|if) (i )?(stop|don.?t|haven.?t) (been )?drink\\\\w*","(detox|withdraw\\\\w*) (from|off) alcohol","drinking (every day|every morning|in the morning|first thing)","relapsed? (on |with )?(drinking|alcohol)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Alcohol pathway","text":"\\u2022 Screen with AUDIT-C / full AUDIT\\n\\u2022 DEPENDENT drinkers must NOT stop abruptly \\u2014 withdrawal seizures and delirium tremens can kill; arrange planned/supported detox\\n\\u2022 Already withdrawing (tremor, sweating, agitation, hallucinations, seizure) \\u2192 same-day; severe \\u2192 admission\\n\\u2022 Oral thiamine (Wernicke prophylaxis); refer local community alcohol service\\n\\u2022 Safeguarding: children/dependants at home; DVLA if relevant"},{"type":"link","label":"NICE CKS alcohol problem drinking","url":"https://cks.nice.org.uk/topics/alcohol-problem-drinking/"}]},{"id":"eating-disorder","enabled":true,"label":"Eating disorder?","kind":"amber","patterns":["(anorexi|bulimi)\\\\w*","eating disorder\\\\w*","(making|make) myself (sick|throw up|vomit)","purg\\\\w* (after eating|food|meals)","vomiting (after|straight after) (every )?(meal\\\\w*|eating)","laxative\\\\w* (abuse|misuse|to lose weight)","restrict\\\\w* (my )?(food|eating|calories)","afraid (of food|to eat|of (gaining|putting on) weight)","(losing|lost) weight (very |really )?(fast|quickly|rapidly)","binge\\\\w* (and|then) (purg\\\\w*|vomit\\\\w*|making myself sick)","(ARFID|binge eating disorder)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"MEED risk assessment","text":"Eating disorders kill \\u2014 assess medical risk (RCPsych MEED), do not rely on appearance or BMI alone (bulimia/ARFID often normal weight).\\n\\nCheck: rate of weight loss, BMI/%mBMI, HR (bradycardia <50), postural BP drop, core temp, SUSS test (sit-up/squat-stand), ECG (QTc), U&E (K+!), phosphate, glucose.\\n\\n\\u2022 Physiological compromise \\u2192 same-day medical admission (refeeding risk \\u2014 admit, don\\u2019t \\u201cfeed up at home\\u201d)\\n\\u2022 Under-18 \\u2192 urgent referral to community eating-disorder service/CAMHS-ED (NICE NG69: do not delay for weight thresholds)"},{"type":"link","label":"NICE NG69 (eating disorders)","url":"https://www.nice.org.uk/guidance/ng69"},{"type":"link","label":"BEAT (support)","url":"https://www.beateatingdisorders.org.uk/"}]},{"id":"postnatal-mh","enabled":true,"label":"Perinatal mental health","kind":"amber","patterns":["(postnatal|post.?partum) depression","PND","(struggling|not coping|can.?t cope) (after|since) (having )?(the |my )?baby","(struggling|low|depressed|anxious|tearful) since (giving birth|the baby|baby was born)","bonding (problem\\\\w*|difficult\\\\w*|issues) (with )?(the |my )?baby","not bonding with (the |my )?baby","intrusive thoughts (about|of) (the |my )?baby","baby blues","perinatal (mental health|anxiety|depression)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":"safeguarding","builtin":true,"actions":[{"type":"note","label":"Perinatal MH pathway","text":"\\u2022 Ask directly about thoughts of self-harm and of harming the baby; intrusive \\u201cwhat if\\u201d thoughts WITH distress and no intent are common in perinatal OCD \\u2014 distinguish from psychotic ideation\\n\\u2022 Postpartum PSYCHOSIS (rapid onset days\\u2013weeks post-birth: confusion, mania, delusions about the baby) = psychiatric emergency \\u2192 same-day perinatal/crisis team\\n\\u2022 Refer perinatal mental-health team (priority access); EPDS/PHQ-9 useful\\n\\u2022 Baby blues (day 3\\u201310, mild, self-limiting) \\u2014 safety-net; persistent >2wk = treat as PND\\n\\u2022 Safeguarding: consider infant + other children"},{"type":"link","label":"NICE CKS postnatal depression","url":"https://cks.nice.org.uk/topics/depression-antenatal-postnatal/"}]},{"id":"dental","enabled":true,"label":"Dental","kind":"info","patterns":["(toothache|tooth ache\\\\w*)","dental (pain|abscess)","pain in (my )?(tooth|teeth)","(broken|chipped|cracked) tooth","abscess (on|in) (my )?(tooth|gum)","infected tooth","(swollen|painful|bleeding) gums?","wisdom tooth","(filling|crown|cap) (came out|fell out)","lost a (filling|crown)","need (a |an emergency )?dentist"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Dental signposting","text":"GPs cannot provide NHS dental treatment and should not routinely prescribe for dental infection \\u2014 the treatment is dental (drainage/extraction).\\n\\nSignpost: own dentist (urgent slot) or NHS 111 for urgent dental access if no dentist.\\n\\nESCALATE (\\u2192 ED): facial swelling spreading to eye or neck, trismus, difficulty swallowing/breathing, systemically unwell (?Ludwig\\u2019s angina / spreading odontogenic infection)."},{"type":"link","label":"NHS find a dentist","url":"https://www.nhs.uk/service-search/find-a-dentist"}]},{"id":"blood-test-result","enabled":true,"label":"Results query","kind":"info","patterns":["(blood|test) results?","bloods? (back|results)","(have|got|chasing|waiting for|when will i get|any news on|where are) (my )?(blood |test )?results","results (back|come back|came back)","what (do|does) my (results|bloods) (say|show|mean)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Admin routing","text":"Results-status query \\u2014 admin/clerical, not a clinical queue item.\\n\\n1. Check if result is filed \\u2192 if normal & actioned, reception/portal can relay\\n2. If abnormal/unactioned \\u2192 route to the requesting clinician\\n3. If pending \\u2192 give expected turnaround\\n4. Signpost NHS App / online record for future self-serve"}]},{"id":"referral-chase","enabled":true,"label":"Referral chase","kind":"info","patterns":["chas(e|ing) (my |up )?(referral|appointment)","(where.?s|where is|any news on|status of|update on) (my )?referral","(haven.?t|not) heard (anything )?(about|from|back from) (the |my )?(hospital|consultant|clinic|specialist|referral)","(still )?waiting (for|on|to hear about) (my |a |the )?(hospital|specialist|consultant|clinic) (appointment|letter|call|date)","referral (status|gone through|been sent|been done)","has my referral (gone|been sent)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Admin routing","text":"Referral-status query \\u2014 route to admin team, not the clinical queue.\\n\\n1. Check referral was sent + e-RS status\\n2. If 2WW referral and no appointment within expected window \\u2192 escalate to secretary/2WW chase actively (this one IS time-critical)\\n3. Routine: signpost NHS App appointment tracking / hospital booking line\\n4. New symptoms or deterioration while waiting \\u2192 clinical review, consider expediting letter"}]},{"id":"medical-report-letter","enabled":true,"label":"Letter/report request","kind":"info","patterns":["(need|requesting|request|asking for|can i (have|get)) (a )?(letter|medical letter|gp letter|doctor.?s letter|support\\\\w* letter|evidence letter)","letter (for|to) (my )?(insurance|employer|work|mortgage|landlord|housing|solicitor|court|university|college|school|airline|visa|travel|DWP|PIP)","medical report","fitness to (fly|travel) (letter|certificate)","to whom it may concern","(insurance|solicitor.?s?|capability) report"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Admin routing","text":"Letter/report request \\u2014 admin workflow, not the clinical queue (fit notes have their own rule).\\n\\n\\u2022 Non-NHS work: practice may charge (per BMA guidance) \\u2014 admin to advise fee + timescale before clinician writes\\n\\u2022 Factual extracts can often be handled via SAR/online record instead of a bespoke letter\\n\\u2022 Route to designated letters clinician/secretary with clear purpose stated"}]},{"id":"travel-vaccination","enabled":true,"label":"Travel health","kind":"info","patterns":["travel (vaccin\\\\w*|jabs?|injections?)","travel (clinic|health|advice)","(going|travelling|traveling|flying) abroad","(yellow fever|typhoid|rabies|hepatitis a|hepatitis b|cholera|japanese encephalitis) (vaccin\\\\w*|jab)","malaria (tablets?|prophylaxis|prevention|pills)","fit (to|for) (fly|travel)","(vaccin\\\\w*|jabs?) (for|before) (my )?(holiday|trip|travels)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Travel health routing","text":"Planned preventive care \\u2192 practice nurse travel clinic or private travel clinic, ideally 6\\u20138 weeks before departure (some courses need time; late presentation still worth assessing).\\n\\n\\u2022 Risk-assess via fitfortravel/NaTHNaC by destination\\n\\u2022 Only some vaccines are NHS-funded (typhoid, hep A, cholera, polio-containing booster); yellow fever/rabies/JE = private/registered centre\\n\\u2022 Malaria prophylaxis: private prescription\\n\\u2022 Returning traveller with FEVER = clinical, not admin (?malaria \\u2014 same-day)"},{"type":"link","label":"Fit for Travel (NHS)","url":"https://www.fitfortravel.nhs.uk/"}]},{"id":"weight-loss-injection","enabled":true,"label":"Weight-loss medication request","kind":"info","patterns":["(wegovy|mounjaro|saxenda|ozempic|rybelsus)","(semaglutide|tirzepatide|liraglutide)","weight.?loss (injection\\\\w*|jabs?|pen|medication|drug)","GLP.?1","(skinny|fat|weight.?loss) (jab|pen)","injections? (for|to) (lose|losing) weight"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"GLP-1 weight-management requests","text":"Rapidly growing request type \\u2014 route to a planned appointment, not urgent queue.\\n\\n\\u2022 NICE: semaglutide (Wegovy, TA875) via specialist weight management; tirzepatide (Mounjaro, TA1026) with phased primary-care rollout from 2025 under strict eligibility (BMI + comorbidity tiers) \\u2014 CHECK CURRENT LOCAL COMMISSIONING before promising anything\\n\\u2022 Ozempic is licensed for T2DM, not weight loss \\u2014 do not prescribe off-label for weight\\n\\u2022 Many patients buy privately online: ask, document, counsel (side effects, gallstones, pancreatitis, pregnancy avoidance)\\n\\u2022 Screen for eating disorder before supporting weight-loss medication"}]},{"id":"end-of-life-admin","enabled":true,"label":"ACP/DNACPR admin","kind":"info","patterns":["(DNACPR|DNAR|DNR)","do not (attempt )?resuscitat\\\\w*","respect form","advance (directive|decision|statement|care plan)","(lasting )?power of attorney","LPA","living will","organ donation","treatment escalation plan","TEP"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"ACP routing","text":"Advance-care-planning / DNACPR / LPA request \\u2014 sensitive but planned work: book with the patient\\u2019s usual GP (or palliative lead), allow a double slot; not for the urgent queue.\\n\\n\\u2022 DNACPR/ReSPECT: clinical decision made WITH patient/family \\u2014 document and share (incl. out-of-hours/ambulance visibility)\\n\\u2022 LPA forms are completed via OPG \\u2014 GP only needed if asked to act as certificate provider (may carry a fee)\\n\\u2022 If the text suggests the patient is actively dying or in symptom crisis \\u2192 that is urgent clinical work, not admin"},{"type":"link","label":"Resus Council ReSPECT","url":"https://www.resus.org.uk/respect"}]},{"id":"memory-loss","enabled":true,"label":"Memory concern","kind":"info","patterns":["memory (loss|problems?|concerns?)","(losing|lost) (my|his|her) memory","forget\\\\w* (things|names|words|appointments|conversations)","(dementia|alzheimer\\\\w*)","cognitive decline","memory (getting worse|going|deteriorat\\\\w*)","worried about (my |his |her |mum.?s |dad.?s )?memory","memory (clinic|assessment|test)","(mum|dad|nan|gran|grandad).?s? memory (is )?(getting worse|going|terrible|bad)","keeps (getting lost|forgetting|repeating)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Memory pathway","text":"Gradual memory decline \\u2192 routine (not urgent) workup: collateral history, cognitive test (GPCOG/6-CIT), dementia bloods (FBC, U&E, LFT, TFT, B12/folate, calcium, glucose \\u00b1 HbA1c), depression screen, medication review (anticholinergic burden) \\u2192 memory clinic referral.\\n\\n\\u2022 ACUTE/fluctuating confusion = delirium \\u2192 same-day (separate rule)\\n\\u2022 Rapid progression over weeks, young onset, neurology \\u2192 urgent referral\\n\\u2022 Driving: advise DVLA notification where diagnosis made"},{"type":"link","label":"NICE CKS dementia","url":"https://cks.nice.org.uk/topics/dementia/"}]},{"id":"practice-admin-details","enabled":true,"label":"Practice admin (non-clinical)","kind":"green","patterns":["proof of address","registration query","regist\\\\w* (with|at) (the |this )?practice","new patient registration","change of address","chang\\\\w* (my |our |the )?address","updat\\\\w* (my |our |the )?address","change of (phone|telephone|mobile) number","chang\\\\w* (my |our |the )?(phone|telephone|mobile) number","updat\\\\w* (my |our |the )?(phone|telephone|mobile) number","change (my |our |the )?(contact )?details","updat\\\\w* (my |our |the )?(contact )?details","change of name","deregist\\\\w*","leav\\\\w* the practice","transfer\\\\w* (my )?(medical )?records to (a|another)"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Reception admin \\u2014 no clinical action needed","text":"Routine administrative request (address / phone / registration / name / leaving the practice) \\u2014 confidently non-clinical. No GP review required.\\n\\n\\u2022 Verify patient identity before amending personal details (data-protection / anti-impersonation check)\\n\\u2022 Registration/catchment queries: confirm catchment area before accepting\\n\\u2022 Deregistration/leaving: follow the practice's standard leaver process (records transfer request)\\n\\u2022 If this request ALSO raises a clinical concern elsewhere in the same message, that concern fires its own (higher-ranked) rule chip independently \\u2014 this note only covers the administrative part"}]},{"id":"pharmacy-process-query","enabled":true,"label":"Pharmacy/prescription admin","kind":"green","patterns":["pharmacy quer\\\\w*","chemist quer\\\\w*","prescription not ready","prescription (hasn.?t|has not) (arrived|come through|been sent|turned up)","pharmacy (hasn.?t|has not) receiv\\\\w*","wrong pharmacy","chang\\\\w* (my |the )?(nominated )?pharmacy","nominated pharmacy","prescription (sent|gone) to (the )?wrong pharmacy","collect (my |the )?prescription","prescription ready for collection","when (can|will) i collect my prescription"],"regex":true,"fields":["request"],"pages":["queue","detail"],"bumpsTile":null,"builtin":true,"actions":[{"type":"note","label":"Reception admin \\u2014 no clinical action needed","text":"Routine pharmacy/prescription-PROCESS query (dispensing, collection, nominated pharmacy) \\u2014 confidently non-clinical, distinct from a NEW repeat-prescription request (see the separate 'Repeat meds' rule). No GP review required.\\n\\n\\u2022 Direct to reception/dispensary to chase the pharmacy or amend the nominated pharmacy on the EPS system\\n\\u2022 If the patient ALSO reports a new symptom or a medication concern (e.g. ran out and now unwell), that fires its own (higher-ranked) rule chip independently \\u2014 this note only covers the dispensing-process part"}]}],"thresholds":{"polypharmacyRed":15,"polypharmacyAmber":10,"bpAgeMonthsLtc":9,"bpAgeMonthsNoLtc":24,"weightAgeMonths":24,"frailtyHitsRed":3,"frailtyHitsAmber":1,"lastContactMonths":12,"recentDischargeRed":14,"recentDischargeAmber":90,"anticholinergicAmber":3,"qofOverdueRed":2,"recentReferralDays":60,"taskAgeAmber":3,"taskAgeRed":7,"elderAge":80,"childAge":16},"prefs":{"showAgeChip":true,"showFootStats":true,"showRequestSnippet":true,"snippetMaxChars":240,"showBuiltInTiles":true,"oirEnabled":true,"oirBulkTickOff":true,"oirConfidenceFloor":"default","oirLookbackMonths":0,"oirShowValueOnBadge":false,"oirDateFormat":"absolute","oirAuditLog":true},"oirTests":[],"systemChips":{"queue.child":{"enabled":true,"label":"Child ({age})","kind":"amber","actions":[]},"queue.elder":{"enabled":true,"label":"Elder ({age})","kind":"amber","actions":[]},"queue.taskAgeAmber":{"enabled":true,"label":"{days}d","kind":"amber","actions":[]},"queue.taskAgeRed":{"enabled":true,"label":"{days}d","kind":"red","actions":[]},"queue.priority":{"enabled":true,"label":"{priority}","kind":"red","actions":[]},"detail.statusAwaiting":{"enabled":true,"label":"{status}","kind":"amber","actions":[]},"detail.statusReplyReceived":{"enabled":true,"label":"{status}","kind":"red","actions":[]},"detail.statusClosed":{"enabled":true,"label":"{status}","kind":"green","actions":[]},"detail.statusOther":{"enabled":true,"label":"{status}","kind":"info","actions":[]},"detail.priority":{"enabled":true,"label":"{priority}","kind":"red","actions":[]},"detail.daysOpenInfo":{"enabled":true,"label":"{days}d open","kind":"info","actions":[]},"detail.daysOpenAmber":{"enabled":true,"label":"{days}d open","kind":"amber","actions":[]},"detail.daysOpenRed":{"enabled":true,"label":"{days}d open","kind":"red","actions":[]},"detail.today":{"enabled":true,"label":"today","kind":"info","actions":[]},"detail.proxy":{"enabled":true,"label":"via {relationship}","kind":"info","actions":[]},"detail.attachments":{"enabled":true,"label":"{count} attach","kind":"info","actions":[]},"record.age":{"enabled":true,"label":"{age}y","kind":"info","actions":[]},"record.palliative":{"enabled":true,"label":"Palliative","kind":"red","actions":[]},"record.riskToSelf":{"enabled":true,"label":"Risk to self","kind":"red","actions":[]},"record.frailtyRed":{"enabled":true,"label":"Frailty x{count}","kind":"red","actions":[]},"record.frailtyAmber":{"enabled":true,"label":"Frailty x{count}","kind":"amber","actions":[]},"record.recentAdmissionRed":{"enabled":true,"label":"Admit {days}d","kind":"red","actions":[]},"record.recentAdmissionAmber":{"enabled":true,"label":"Admit {days}d","kind":"amber","actions":[]},"record.polypharmacyRed":{"enabled":true,"label":"Meds x{count}","kind":"red","actions":[]},"record.polypharmacyAmber":{"enabled":true,"label":"Meds x{count}","kind":"amber","actions":[]},"record.monitoringDueRed":{"enabled":true,"label":"Monitoring due x{count}","kind":"red","actions":[]},"record.monitoringDueAmber":{"enabled":true,"label":"Monitoring x{count}","kind":"amber","actions":[]},"detail.monitoringDueRed":{"enabled":true,"label":"Monitoring due x{count}","kind":"red","actions":[]},"detail.monitoringDueAmber":{"enabled":true,"label":"Monitoring x{count}","kind":"amber","actions":[]},"detail.docType":{"enabled":true,"label":"{docType}","kind":"info","actions":[]},"detail.docSpecialty":{"enabled":true,"label":"{specialty}","kind":"info","actions":[]},"queue.monitoringDueRed":{"enabled":false,"label":"Monitoring \\u00d7{count}","kind":"red","actions":[]},"queue.monitoringDueAmber":{"enabled":false,"label":"Monitoring {count}","kind":"amber","actions":[]},"queue.resultUrgent":{"enabled":true,"label":"{name}","kind":"red","actions":[]},"queue.resultAbnormal":{"enabled":true,"label":"{count} abnormal","kind":"amber","actions":[]},"queue.resultRuleUrgent":{"enabled":true,"label":"{label}","kind":"red","actions":[]},"queue.resultRuleAbnormal":{"enabled":true,"label":"{label}","kind":"amber","actions":[]},"queue.resultMisprioritised":{"enabled":true,"label":"Under-prioritised","kind":"red","actions":[]},"queue.resultUnmatched":{"enabled":true,"label":"Unmatched patient","kind":"amber","actions":[]},"queue.resultReview":{"enabled":true,"label":"Needs review","kind":"amber","actions":[]},"queue.resultReviewRule":{"enabled":true,"label":"{rule}","kind":"amber","actions":[]},"queue.resultNoGrowth":{"enabled":true,"label":"No growth","kind":"info","actions":[]},"queue.resultNoGrowthRule":{"enabled":true,"label":"{label}","kind":"info","actions":[]},"queue.resultCombo":{"enabled":true,"label":"{rule}","kind":"amber","actions":[]},"record.stoppStart":{"enabled":true,"label":"Rx review \\u00d7{count}","kind":"amber","actions":[]},"record.riskScores":{"enabled":true,"label":"Risk tools","kind":"info","actions":[{"type":"link","label":"QRISK3 (CVD 10-yr)","url":"https://qrisk.org/"},{"type":"link","label":"QCancer","url":"https://qcancer.org/"},{"type":"link","label":"eFI \\u2014 electronic frailty index (NHSE)","url":"https://www.england.nhs.uk/ourwork/clinical-policy/older-people/frailty/efi/"},{"type":"note","label":"How to use","text":"Signpost only \\u2014 Medicus does not compute these scores.\\n\\nOpen the calculator and enter the inputs from the record:\\n\\u2022 QRISK3: age, sex, ethnicity, smoking, systolic BP, total cholesterol:HDL ratio, BMI, comorbidities\\n\\u2022 QCancer: age, sex, symptoms, comorbidities\\n\\u2022 eFI: coded frailty deficits\\n\\nAlways verify against the patient record."}]}},"resultRules":[{"id":"msu-culture","kind":"text","enabled":true,"builtin":true,"label":"Needs review","normalLabel":"No growth","analyte":{"match":["msu","urine culture","mid-stream urine","mid stream urine","m,c&s","mc&s","culture & sensitivity","culture and sensitivity"]},"normalText":["no growth","no bacterial growth","no significant growth","no organisms isolated","no organism isolated","no growth after"],"abnormalText":["pure growth of","predominant growth of","heavy growth of","sensitive to","resistant to","sensitivities shown","antimicrobial sensitivity"]},{"id":"base-urine-sterile-pyuria","kind":"combo","enabled":true,"builtin":true,"label":"Sterile pyuria \\u2014 pus cells raised, culture negative","level":"amber","conditions":[{"analyte":{"match":["pus cell","white cell","white blood cell","wbc","leucocyte","leukocyte"],"specimen":["urine","msu","mid-stream","mid stream","csu"]},"comparator":"above","value":40},{"analyte":{"match":["culture"],"specimen":["urine","msu","mid-stream","mid stream","csu"]},"contains":["no growth","no significant growth","no bacterial growth","no organisms isolated","no organism isolated","sterile"]}]},{"id":"base-bowel-screening-nonresponder","kind":"text","enabled":true,"builtin":true,"label":"Bowel screening: no response","analyte":{"match":["bcs:fob","bcs fob","bowel cancer screening","faecal occult blood"]},"abnormalText":["no response to bowel cancer screening","no response to bowel screening","non-response to bowel cancer screening","bowel cancer screening programme non-responder","bowel cancer screening non-responder","non-responder","non responder"]},{"id":"base-low-haemoglobin","kind":"threshold","enabled":true,"builtin":true,"label":"Critical low haemoglobin (red \\u226480 g/L)","analyte":{"match":["haemoglobin","hemoglobin"],"exclude":["a1c","glycated","glycosylated"]},"comparator":"below","red":80,"unit":"g/L"},{"id":"base-high-potassium","kind":"threshold","enabled":true,"builtin":true,"label":"Critical high potassium (red \\u22656.5 mmol/L, amber \\u22656.0)","analyte":{"match":["potassium"],"exclude":["urine","urinary"]},"comparator":"above","amber":6,"red":6.5,"unit":"mmol/L"},{"id":"base-low-sodium","kind":"threshold","enabled":true,"builtin":true,"label":"Critical low sodium (red \\u2264120 mmol/L)","analyte":{"match":["sodium"],"exclude":["urine","urinary","valproate"]},"comparator":"below","red":120,"unit":"mmol/L"},{"id":"base-low-egfr","kind":"threshold","enabled":true,"builtin":true,"label":"Critical low eGFR (red \\u226415 mL/min/1.73m\\u00b2)","analyte":{"match":["gfr"]},"comparator":"below","red":15,"unit":"mL/min/1.73m\\u00b2"},{"id":"base-low-platelets","kind":"threshold","enabled":true,"builtin":true,"label":"Critical low platelets (red \\u226430 \\u00d710\\u2079/L)","analyte":{"match":["platelet"],"exclude":["mean platelet","volume","ratio","large"]},"comparator":"below","red":30,"unit":"\\u00d710\\u2079/L"},{"id":"base-low-neutrophils","kind":"threshold","enabled":true,"builtin":true,"label":"Critical low neutrophils (red \\u22640.5 \\u00d710\\u2079/L)","analyte":{"match":["neutrophil"],"exclude":["%","percent","ratio"]},"comparator":"below","red":0.5,"unit":"\\u00d710\\u2079/L"},{"id":"base-high-inr","kind":"threshold","enabled":true,"builtin":true,"label":"High INR (red \\u22658)","analyte":{"match":["inr","international normalised ratio","international normalized ratio"]},"comparator":"above","red":8,"unit":"ratio"},{"id":"base-hba1c-prediabetes","kind":"threshold","enabled":true,"builtin":true,"label":"Prediabetes range \\u2014 not on record (HbA1c 42\\u201347)","analyte":{"match":["hba1c","haemoglobin a1c","glycated haemoglobin","glycosylated haemoglobin"]},"comparator":"above","amber":42,"unit":"mmol/mol","suppressIfProblem":{"match":["prediabetes","pre-diabetes","pre-diabetic","impaired glucose","impaired fasting","non-diabetic hyperglycaemia","non-diabetic hyperglycemia","diabetes","diabetic","t1dm","t2dm","diabetes mellitus","type 1 diabetes","type 2 diabetes"],"exclude":["family history","diabetes insipidus","gestational"]}},{"id":"base-hba1c-diabetes","kind":"threshold","enabled":true,"builtin":true,"label":"Possible diabetes \\u2014 not on register (HbA1c \\u226548)","analyte":{"match":["hba1c","haemoglobin a1c","glycated haemoglobin","glycosylated haemoglobin"]},"comparator":"above","red":null,"amber":48,"unit":"mmol/mol","suppressIfProblem":{"match":["diabetes","diabetic","t1dm","t2dm","diabetes mellitus","type 1 diabetes","type 2 diabetes","type i diabetes","type ii diabetes","insulin dependent diabetes","non insulin dependent diabetes"],"exclude":["family history","non-diabetic","pre-diabetic","prediabetes","pre-diabetes","impaired glucose","impaired fasting","diabetes insipidus","gestational"]}},{"id":"base-lithium-toxicity","kind":"threshold","enabled":true,"builtin":true,"label":"High lithium level \\u2014 toxicity risk (red \\u22651.5 mmol/L)","analyte":{"match":["lithium"]},"comparator":"above","amber":1,"red":1.5,"unit":"mmol/L"},{"id":"base-digoxin-toxicity","kind":"threshold","enabled":true,"builtin":true,"label":"High digoxin level \\u2014 toxicity risk (red \\u22652.0 micrograms/L)","analyte":{"match":["digoxin"]},"comparator":"above","amber":1.5,"red":2,"unit":"micrograms/L"},{"id":"base-low-potassium","kind":"threshold","enabled":true,"builtin":true,"label":"Critical low potassium (red \\u22642.5 mmol/L)","analyte":{"match":["potassium"],"exclude":["urine","urinary"]},"comparator":"below","amber":3,"red":2.5,"unit":"mmol/L"},{"id":"base-high-calcium","kind":"threshold","enabled":true,"builtin":true,"label":"High calcium \\u2014 hypercalcaemia (red \\u22653.0 mmol/L)","analyte":{"match":["calcium"],"exclude":["urine","urinary","24 hour","24-hour","/creat","ionised","ionized"]},"comparator":"above","amber":2.6,"red":3,"unit":"mmol/L"},{"id":"base-egfr-amber","kind":"threshold","enabled":true,"builtin":true,"label":"Low eGFR \\u2014 significant CKD (amber \\u226430 mL/min/1.73m\\u00b2)","analyte":{"match":["gfr"]},"comparator":"below","amber":30,"unit":"mL/min/1.73m\\u00b2"},{"id":"base-blood-culture","kind":"text","enabled":true,"builtin":true,"label":"Blood culture \\u2014 needs review","normalLabel":"No growth","analyte":{"match":["blood culture","blood cx","blood c&s"],"exclude":["urine","wound","sputum","csf","swab","stool","faeces","faecal"]},"normalText":["no growth","no bacterial growth","no significant growth","no organisms isolated","no organism isolated","no growth after"],"abnormalText":["grown in aerobic bottle","grown in anaerobic bottle","positive blood culture","gram positive cocci","gram-positive cocci","gram positive bacilli","gram-positive bacilli","gram negative bacilli","gram-negative bacilli","gram negative cocci","gram-negative cocci","bacteraemia","bacteremia","fungaemia","sensitive to","resistant to","sensitivities shown","staphylococcus","streptococcus","escherichia","klebsiella","enterococcus","pseudomonas","haemophilus","neisseria","listeria","salmonella","candidaemia","candida albicans","candida glabrata","candida parapsilosis","candida tropicalis","candida auris","acinetobacter","serratia","enterobacter","proteus","citrobacter","stenotrophomonas"]},{"id":"base-low-calcium","kind":"threshold","enabled":true,"builtin":true,"label":"Low adjusted calcium \\u2014 hypocalcaemia (red \\u22641.9 mmol/L)","analyte":{"match":["adjusted calcium","corrected calcium","albumin-adjusted calcium","albumin adjusted calcium"],"exclude":["urine","urinary","24 hour","24-hour","/creat","ionised","ionized"]},"comparator":"below","amber":2.1,"red":1.9,"unit":"mmol/L"},{"id":"base-low-magnesium","kind":"threshold","enabled":true,"builtin":true,"label":"Low magnesium \\u2014 hypomagnesaemia (red \\u22640.5 mmol/L)","analyte":{"match":["magnesium"],"exclude":["urine","urinary","24 hour","24-hour"]},"comparator":"below","amber":0.6,"red":0.5,"unit":"mmol/L"},{"id":"base-high-tsh","kind":"threshold","enabled":true,"builtin":true,"label":"High TSH \\u2014 possible hypothyroidism (red \\u226520 mU/L)","analyte":{"match":["tsh","thyroid stimulating hormone","thyroid-stimulating hormone"],"exclude":["receptor","antibody","antibodies"]},"comparator":"above","amber":10,"red":20,"unit":"mU/L","suppressIfProblem":{"match":["hypothyroidism","hypothyroid","levothyroxine","thyroxine","myxoedema","myxedema"],"exclude":["family history"]}},{"id":"base-low-tsh","kind":"threshold","enabled":true,"builtin":true,"label":"Suppressed TSH \\u2014 possible thyrotoxicosis (red \\u22640.01 mU/L)","analyte":{"match":["tsh","thyroid stimulating hormone","thyroid-stimulating hormone"],"exclude":["receptor","antibody","antibodies"]},"comparator":"below","amber":0.1,"red":0.01,"unit":"mU/L","suppressIfProblem":{"match":["thyrotoxicosis","hyperthyroidism","hyperthyroid","graves","carbimazole","propylthiouracil","thyroid cancer","levothyroxine","thyroxine"],"exclude":["family history"]}},{"id":"base-throat-swab","kind":"text","enabled":true,"builtin":true,"label":"Throat swab \\u2014 needs review","normalLabel":"Negative","analyte":{"match":["throat swab","throat culture","culture"],"specimen":["throat swab","throat"]},"normalText":["beta haemolytic streptococcus not isolated","beta-haemolytic streptococcus not isolated","no beta haemolytic streptococci","anaerobes not isolated","no anaerobes isolated"],"abnormalText":["beta haemolytic streptococcus isolated","group a streptococcus isolated"]},{"analyte":{"match":["Echography","Ultrasound","Ultrasonography","USS"]},"builtin":true,"enabled":true,"id":"base-uss-abnormal","kind":"text","label":"Ultrasound \\u2014 review","normalLabel":"Normal US","normalText":["No focal soft tissue abnormality","Lipoma","Unremarkable pelvic study","No sonographic abnormality identified"]},{"analyte":{"match":["Histology"]},"builtin":true,"enabled":true,"id":"base-histology-abnormal","kind":"text","label":"Histology \\u2014 review","normalLabel":"Histology normal","normalText":["benign intradermal melanocytic naevus","no evidence of atypia or malignancy","no evidence of dysplasia or malignancy","no dysplasia or malignancy","no atypia or malignancy"]},{"analyte":{"match":["HELICOBACTER PYLORI STOOL ANTIGEN","helicobacter pylori","H pylori antigen"]},"builtin":true,"enabled":true,"id":"base-h-pylori","kind":"text","label":"H. pylori positive","normalLabel":"H pylori normal","normalText":["NOT detected"]},{"analyte":{"match":["CHLAMYDIA AND GONORRHOEA NAAT","chlamydia trachomatis","neisseria gonorrhoea"]},"builtin":true,"enabled":true,"id":"base-sti-naat","kind":"text","label":"STI screen positive","normalLabel":"STI screen NAD","normalText":["NOT detected"]},{"analyte":{"match":["Enteric pathogen DNA","FAECES - MOLECULAR SCREENING","Faeces MC&S"]},"builtin":true,"enabled":true,"id":"base-stool-mcs","kind":"text","label":"Stool MC&S \\u2014 review","normalLabel":"MC&S NAD","normalText":["not detected"]},{"analyte":{"match":["Candida Culture"],"specimen":["GENITAL SWAB CULTURE"]},"builtin":true,"enabled":true,"id":"base-genital-candida","kind":"text","label":"Vaginal thrush","normalLabel":"No vag. thrush","normalText":["Candida species not isolated"]},{"analyte":{"match":["Culture","Anaerobic culture"],"specimen":["WOUND SWAB"]},"builtin":true,"enabled":true,"id":"base-wound-swab-growth","kind":"text","label":"Wound swab positive","normalLabel":"Wound swab no growth","normalText":["no growth","no significant growth","anaerobes not isolated"]},{"analyte":{"match":["Culture for fungi","Anaerobic culture"],"specimen":["EAR SWAB"]},"builtin":true,"enabled":true,"id":"base-ear-swab-growth","kind":"text","label":"Ear swab positive","normalLabel":"No growth","normalText":["no growth","no significant growth","no organisms isolated"]},{"analyte":{"match":["EBV - VCA IgM level","EBV capsid IgG level","EBV nuclear IgG level"],"specimen":["Epstein-Barr virus serology"]},"builtin":true,"enabled":true,"id":"base-ebv-serology","kind":"text","label":"EBV positive","normalLabel":"No growth","normalText":["NOT detected"]},{"analyte":{"match":["Fibrosis-4 score"]},"builtin":true,"comparator":"above","enabled":true,"id":"base-fib4-elevated","kind":"threshold","label":"FIB-4 elevated \\u2014 fibrosis risk (red \\u22652.67, amber \\u22651.3)","amber":1.3,"red":2.67,"unit":null},{"analyte":{"match":["ferritin"]},"builtin":true,"comparator":"below","enabled":true,"id":"base-low-ferritin","kind":"threshold","label":"Low ferritin (red <15, amber <60 \\u00b5g/L)","amber":60,"red":15,"unit":"\\u00b5g/L"},{"analyte":{"match":["B12"]},"builtin":true,"comparator":"below","enabled":true,"id":"base-low-b12","kind":"threshold","label":"Low B12 (red <110, amber <180 ng/L)","amber":180,"red":110,"unit":"ng/L"},{"id":"base-high-sodium","kind":"threshold","enabled":true,"builtin":true,"label":"High sodium \\u2014 hypernatraemia (red \\u2265160 mmol/L, amber \\u2265150)","analyte":{"match":["sodium"],"exclude":["urine","urinary","valproate"]},"comparator":"above","amber":150,"red":160,"unit":"mmol/L"},{"id":"base-high-creatinine-aki","kind":"threshold","enabled":true,"builtin":true,"label":"Critical high creatinine \\u2014 AKI stage 3 (red \\u2265354 \\u00b5mol/L)","analyte":{"match":["creatinine"],"exclude":["urine","urinary","clearance","ratio"]},"comparator":"above","red":354,"unit":"\\u00b5mol/L"},{"id":"base-creatinine-delta-aki","kind":"delta","enabled":true,"builtin":true,"label":"Rising creatinine \\u2014 possible AKI (amber \\u2265+26.5 \\u00b5mol/L)","analyte":{"match":["creatinine"],"exclude":["urine","urinary","clearance","ratio"]},"direction":"rise","by":true,"amber":26.5,"maxDays":2,"unit":"\\u00b5mol/L"},{"id":"base-high-glucose","kind":"threshold","enabled":true,"builtin":true,"label":"High glucose \\u2014 hyperglycaemia (red \\u226530 mmol/L, amber \\u226511.1)","analyte":{"match":["glucose"],"exclude":["urine","urinary","csf"]},"comparator":"above","amber":11.1,"red":30,"unit":"mmol/L"},{"id":"base-low-glucose","kind":"threshold","enabled":true,"builtin":true,"label":"Low glucose \\u2014 hypoglycaemia (red \\u22643.0 mmol/L, amber \\u22644.0)","analyte":{"match":["glucose"],"exclude":["urine","urinary","csf"]},"comparator":"below","amber":4,"red":3,"unit":"mmol/L"},{"id":"base-high-alt","kind":"threshold","enabled":true,"builtin":true,"label":"High ALT \\u2014 transaminitis (red \\u2265320 U/L, amber \\u2265120)","analyte":{"match":["alt","alanine aminotransferase","alanine transaminase"]},"comparator":"above","amber":120,"red":320,"unit":"U/L"},{"id":"base-high-ast","kind":"threshold","enabled":true,"builtin":true,"label":"High AST \\u2014 transaminitis (red \\u2265320 U/L, amber \\u2265120)","analyte":{"match":["ast","aspartate aminotransferase","aspartate transaminase"],"exclude":["fasting"]},"comparator":"above","amber":120,"red":320,"unit":"U/L"},{"id":"base-high-crp","kind":"threshold","enabled":true,"builtin":true,"label":"High CRP \\u2014 possible severe infection (red \\u2265100, amber \\u226520)","analyte":{"match":["crp","c-reactive protein","c reactive protein"]},"comparator":"above","amber":20,"red":100,"unit":"mg/L"},{"id":"base-high-wcc","kind":"threshold","enabled":true,"builtin":true,"label":"High white cell count (amber \\u226512 \\u00d710\\u2079/L)","analyte":{"match":["white cell count","white blood cell count","wbc","leucocyte count","leukocyte count"],"exclude":["urine","urinary","csf","pus"]},"comparator":"above","amber":12,"unit":"\\u00d710\\u2079/L"}]}`;
 
   let CONFIG = null;
   let COMPILED_RULES = [];
@@ -415,7 +440,15 @@
   // options.js; bump defaults.json "version" when you add an entry here.
   const RETIRED_RESULTRULE_FIELDS = {
     'base-low-haemoglobin': { label: ['Critical low haemoglobin'], red: [100] },
-    'base-high-potassium': { label: ['Critical high potassium'] },
+    // v22 added an amber band (6.0–6.4 mmol/L, UKKA Oct 2023 "moderate" hyperkalaemia
+    // band) below the pre-existing red ≥6.5 — a NEW field on a held builtin, which the
+    // append-by-id merge never delivers on its own. Both the ancient (pre-v17) and the
+    // v17 numbered label are listed as retired candidates so either vintage of held rule
+    // (which never carried an amber field) is brought up to the new label + amber value.
+    'base-high-potassium': {
+      label: ['Critical high potassium', 'Critical high potassium (red ≥6.5 mmol/L)'],
+      amber: [undefined]
+    },
     'base-low-sodium': { label: ['Critical low sodium'] },
     'base-low-egfr': { label: ['Critical low eGFR'] },
     'base-low-platelets': { label: ['Critical low platelets'] },
@@ -429,7 +462,65 @@
     'base-low-calcium': { label: ['Low adjusted calcium — hypocalcaemia'] },
     'base-low-magnesium': { label: ['Low magnesium — hypomagnesaemia'] },
     'base-high-tsh': { label: ['High TSH — possible hypothyroidism'] },
-    'base-low-tsh': { label: ['Suppressed TSH — possible thyrotoxicosis'] }
+    'base-low-tsh': { label: ['Suppressed TSH — possible thyrotoxicosis'] },
+    // v22 (CSO calibration pass, TRIAGE-LENS-2026-07-02.md item 3.3) demoted HbA1c ≥48 from
+    // red to amber — 48 mmol/mol is the WHO/NICE NG28 DIAGNOSTIC threshold, not itself a
+    // marker of clinical urgency, and firing red on every newly-diagnostic HbA1c was alert
+    // fatigue. A held rule still at the old red:48/no-amber shape is moved to red:null,
+    // amber:48 (label text is unchanged — "HbA1c ≥48" reads correctly at either severity, so
+    // it is not part of this un-stick).
+    'base-hba1c-diabetes': { red: [48], amber: [undefined] },
+    // v21 tightened the bare "gram positive"/"gram negative"/"candida" substrings (they
+    // matched NEGATIVE phrasing like "No gram negative organisms isolated" and tripped a
+    // false-amber review) to morphology-qualified gram-stain terms and named candida
+    // species. A held rule whose abnormalText still deep-equals this OLD 30-element
+    // shipped array is un-stuck to the new shipped array; a customised array is left alone.
+    'base-blood-culture': {
+      abnormalText: [
+        [
+          'grown in aerobic bottle',
+          'grown in anaerobic bottle',
+          'positive blood culture',
+          'gram positive',
+          'gram negative',
+          'gram-positive',
+          'gram-negative',
+          'bacteraemia',
+          'bacteremia',
+          'fungaemia',
+          'sensitive to',
+          'resistant to',
+          'sensitivities shown',
+          'staphylococcus',
+          'streptococcus',
+          'escherichia',
+          'klebsiella',
+          'enterococcus',
+          'pseudomonas',
+          'haemophilus',
+          'neisseria',
+          'listeria',
+          'salmonella',
+          'candida',
+          'acinetobacter',
+          'serratia',
+          'enterobacter',
+          'proteus',
+          'citrobacter',
+          'stenotrophomonas'
+        ]
+      ]
+    }
+  };
+  // A retired field's candidate value may be a scalar (indexOf works) or, for
+  // abnormalText, an array of candidate arrays — reference-compare via indexOf never
+  // matches two distinct array instances, so deep-compare element-wise when the held
+  // value is itself an array.
+  const arraysShallowEqual = (a, b) =>
+    Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => v === b[i]);
+  const fieldStillDefault = (candidates, heldValue) => {
+    if (Array.isArray(heldValue)) return candidates.some(c => arraysShallowEqual(c, heldValue));
+    return candidates.indexOf(heldValue) !== -1;
   };
   const revertRetiredResultRuleFields = (resultRules, shippedResultRules) => {
     if (!Array.isArray(resultRules) || !Array.isArray(shippedResultRules)) return;
@@ -438,10 +529,11 @@
       const shippedRule = shippedResultRules.find(r => r && r.id === id);
       if (!held || !shippedRule) continue;
       const fields = RETIRED_RESULTRULE_FIELDS[id];
-      const stillDefault = Object.keys(fields).every(f => fields[f].indexOf(held[f]) !== -1);
+      const stillDefault = Object.keys(fields).every(f => fieldStillDefault(fields[f], held[f]));
       if (!stillDefault) continue;
       for (const f of Object.keys(fields)) {
-        if (shippedRule[f] !== undefined) held[f] = shippedRule[f];
+        if (shippedRule[f] === undefined) continue;
+        held[f] = Array.isArray(shippedRule[f]) ? [...shippedRule[f]] : shippedRule[f];
       }
     }
   };
@@ -652,9 +744,49 @@
   // ============================================================
   // 2. DOM EXTRACTION
   // ============================================================
+  // One-time-per-title console.warn guard (item 1.1, TRIAGE-LENS-2026-07-02.md).
+  // findCardByTitle is called on every run() pass (SPA re-renders fire constantly),
+  // so warning on every miss would spam the console; a Set persists for the
+  // current page load and is cleared by onRoute() on SPA navigation so a genuinely
+  // new page gets its own warning if the card is still missing there.
+  const _cardMissWarned = new Set();
+
+  // Find a Medicus card by its header text. A plain exact match silently drops
+  // the WHOLE card (and everything computed from it) the moment Medicus tweaks a
+  // label or appends a live count ("Active Problems (5)") — a patient-safety
+  // risk, not a cosmetic one, so this is deliberately tiered rather than a single
+  // strict `===`:
+  //   1. exact match after normalising (trim/collapse-whitespace/case-insensitive)
+  //   2. same, with a trailing " (N)" count suffix stripped off the header first
+  //   3. startsWith(title) — but ONLY when exactly one header qualifies; an
+  //      ambiguous prefix (e.g. "Tasks" matching both "Tasks" and "Tasks &
+  //      Actions") must resolve to no match, never to the wrong card.
+  // A still-unresolved title is logged once per page load (see _cardMissWarned)
+  // so a real drift is visible without being silent.
   const findCardByTitle = (title) => {
-    const h2 = [...document.querySelectorAll('h2, h3, h4')].find(h => h.textContent.trim() === title);
-    return h2 ? (h2.closest('.m-card-v2') || h2.closest('[class*="m-card"]') || h2.parentElement?.parentElement) : null;
+    const headers = [...document.querySelectorAll('h2, h3, h4')];
+    const norm = (s) => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    const wantNorm = norm(title);
+
+    let h2 = headers.find(h => norm(h.textContent) === wantNorm);
+
+    if (!h2) {
+      h2 = headers.find(h => norm(h.textContent).replace(/\s*\(\d+\)$/, '') === wantNorm);
+    }
+
+    if (!h2) {
+      const candidates = headers.filter(h => norm(h.textContent).startsWith(wantNorm));
+      if (candidates.length === 1) h2 = candidates[0];
+    }
+
+    if (!h2) {
+      if (!_cardMissWarned.has(title)) {
+        _cardMissWarned.add(title);
+        console.warn('[TriageLens] card not found: "' + title + '" — extraction for this section will be empty this page load');
+      }
+      return null;
+    }
+    return h2.closest('.m-card-v2') || h2.closest('[class*="m-card"]') || h2.parentElement?.parentElement;
   };
 
   const cardContent = (card) => {
@@ -1138,7 +1270,45 @@
     };
   };
 
-  const extractAll = () => {
+  // ---- Extraction-health (item 1.1 leg B, TRIAGE-LENS-2026-07-02.md) ----
+  // Static map of the card titles each page type's extraction genuinely queries
+  // via findCardByTitle. Keep this truthful to the extractors above — if a new
+  // findCardByTitle('...') call is added to record/detail extraction, add its
+  // title here too, or a real drop will go undetected by _missingCards.
+  //   record  — the five cards extractAll() itself reads (extractRegisters,
+  //             extractActiveProblems, extractMedications, extractTasks,
+  //             extractObservations).
+  //   detail  — extractTaskDetails / extractRequester / extractInitialRequest
+  //             (the non-document-task detail extraction in runDetail).
+  //   detail-document — extractDocumentTaskInfo's cards (the isDocumentTask()
+  //             branch of runDetail). NOT the same set as plain "detail":
+  //             a document-task page genuinely has no Task Details/Requester
+  //             Details/Initial Request cards, so treating those as "expected"
+  //             there would flag every document task as unreadable.
+  // Deliberately does NOT include Registers/Active Problems/etc for 'detail' —
+  // those record-summary cards are optional context on a detail page (a
+  // document/communication-thread page may never render them at all), so their
+  // absence there is normal, not a silent failure. See pageReady()'s own
+  // detail-readiness check, which likewise never requires them.
+  const EXPECTED_CARDS_BY_PAGE = {
+    record: ['Registers', 'Active Problems', 'Current Medication', 'Tasks & Actions', 'Observations & Results'],
+    detail: ['Task Details', 'Requester Details', 'Initial Request'],
+    'detail-document': ['Task Overview', 'Document Details', 'Internal Comments', 'Codes & Actions']
+  };
+
+  // Pure (given the current DOM): which of the titles expected for this page are
+  // genuinely ABSENT (findCardByTitle returned null) — never cards that are
+  // present but empty ("None."). A present-but-empty card is a real "nothing to
+  // flag"; a missing card node is "could not read", and the two must never look
+  // the same to a GP scanning the HUD.
+  const computeMissingCards = (pageTypeVal, isDocTask) => {
+    const key = pageTypeVal === 'detail' && isDocTask ? 'detail-document' : pageTypeVal;
+    const expected = EXPECTED_CARDS_BY_PAGE[key] || [];
+    return expected.filter(title => !findCardByTitle(title));
+  };
+
+  const extractAll = (pageTypeVal, isDocTask) => {
+    const pt = pageTypeVal || pageType();
     return {
       banner: extractBanner(),
       registers: extractRegisters(),
@@ -1147,7 +1317,8 @@
       tasks: extractTasks(),
       obs: extractObservations(),
       docs: extractDocuments(),
-      cons: extractConsultations()
+      cons: extractConsultations(),
+      _missingCards: computeMissingCards(pt, isDocTask)
     };
   };
 
@@ -1441,9 +1612,21 @@
   // Apply user rules: merge matching rules into header chips & bump tiles.
   // Also returns the matched rules separately so the renderer can attach
   // action-menu handlers to their chips.
-  const RULE_CHIP_SEVERITY = { red: 0, amber: 1, green: 2, info: 3 };
-  const applyRules = (sig, page, fieldsData) => {
-    const matched = matchRules(page, fieldsData);
+  // requireCtx (item 3.5, optional) — { ageYears?, sex?, medsText?, problemsText? }.
+  // A rule with a `require` clause this ctx cannot confirm is EXCLUDED from `matched`
+  // (fails closed) — the SAME gate the queue applies in decorateOneRow, applied here
+  // for the detail/record HUD rule chips. Never suppresses another, un-gated rule.
+  // Item 4.3 (TRIAGE-LENS-2026-07-02.md) — green sorts LAST (after info): green is
+  // the "confidently routine, nothing to check" signal, so it must never visually
+  // outrank even an informational chip. Mirrors RULE_KIND_RANK below (queue path) —
+  // keep both in lock-step if this ordering ever changes.
+  const RULE_CHIP_SEVERITY = { red: 0, amber: 1, info: 2, green: 3 };
+  const applyRules = (sig, page, fieldsData, requireCtx) => {
+    const rawMatched = matchRules(page, fieldsData);
+    const matcherReq = typeof window !== 'undefined' && window.TriageLensMatch && window.TriageLensMatch.ruleRequireMet;
+    const matched = matcherReq
+      ? rawMatched.filter((r) => matcherReq(r, requireCtx || {}))
+      : rawMatched;
     // Red chips must never trail amber/info ones: order by severity (stable
     // sort preserves config order within the same severity).
     matched.sort((a, b) =>
@@ -1620,6 +1803,35 @@
     }
   };
 
+  // Items 4.1/4.2 (TRIAGE-LENS-2026-07-02.md) — the CSO-signed reception pathway
+  // set (rules/reception-pathways.json), fetched ONCE per session for the
+  // reception-match engine (window.SentinelReceptionMatch, engine/reception-match.js).
+  // Unlike loadMonitoringRules above this is read by decorateOneRow's SYNCHRONOUS,
+  // DOM-driven chip pass (CLAUDE.md's "age/decoration" durability rule) rather than
+  // by an async-fetch chip family — so this cache is a plain module `let`, kicked
+  // off ONCE at module init (see loadConfig().then(...) below) and read as-is
+  // (possibly still null) on every decorateOneRow call. That's safe: the live
+  // queue's MutationObserver churns constantly and refreshQueueChips wipes + fully
+  // rebuilds every row's chips on every cycle, so the very next churn after the
+  // fetch resolves picks the pathway chip up — exactly like CONFIG itself before
+  // its first chrome.storage.local.get resolves.
+  let _receptionPathwaysData = null; // { pathways, closingQuestions, … } | null
+  let _receptionPathwaysFetchStarted = false;
+  const ensureReceptionPathwaysLoaded = () => {
+    if (_receptionPathwaysData || _receptionPathwaysFetchStarted) return;
+    _receptionPathwaysFetchStarted = true;
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.getURL) return;
+    const url = chrome.runtime.getURL('rules/reception-pathways.json');
+    fetch(url)
+      .then((r) => r.json())
+      .then((doc) => {
+        _receptionPathwaysData = doc && Array.isArray(doc.pathways) ? doc : null;
+      })
+      .catch((e) => {
+        log('reception pathways load failed', e);
+      });
+  };
+
   // Async: fetch patient data via Sentinel, evaluate, and return the
   // selectMonitoringDue() result (or null). Guards every global access.
   const computeMonitoringChip = async () => {
@@ -1636,17 +1848,37 @@
     const engine = window.SentinelRules;
     if (!fetcher || typeof fetcher.fetchPatientData !== 'function') return null;
     if (!engine || typeof engine.evaluatePatient !== 'function') return null;
+    // Item 1.1 leg C (TRIAGE-LENS-2026-07-02.md): from here on, EVERY
+    // could-not-evaluate path THROWS rather than returning null. Contract:
+    // null now means ONLY "successfully evaluated, nothing due" (a definitive
+    // clear) — never "we don't know". runMonitoringChip's .catch() on this
+    // promise (below) preserves whatever chip is already on screen instead of
+    // clearing it, exactly like the pre-existing medications-fetch-failure
+    // throw a few lines down. Previously only that one branch threw; every
+    // other failure here quietly cleared a real due-monitoring chip.
     const rules = await loadMonitoringRules();
-    if (!rules || rules.length === 0) return null;
+    if (!rules || rules.length === 0) throw new Error('monitoring chip: rules failed to load');
     let data;
     try {
       data = await fetcher.fetchPatientData('live');
     } catch (e) {
       log('monitoring fetchPatientData failed', e);
-      return null;
+      throw e;
     }
-    if (!data || data.error) return null;
-    // No usable data → no chip (never a false all-clear).
+    if (!data || data.error) throw new Error('monitoring chip: fetchPatientData returned no usable data');
+    // A real per-field fetch failure (banner OK, but medications/problems/
+    // observations individually errored and DOM fallback also came up empty —
+    // see engine/data-fetcher.js debug.dataFetchFailed) is NOT the same as a
+    // confirmed "patient has no medications". Treating it as all-clear would
+    // silently drop a genuine due-monitoring chip the moment the API blips.
+    // Surface it as a distinguishable failure so the caller can leave any
+    // already-rendered chip in place instead of clearing it.
+    if (data.debug && data.debug.dataFetchFailed && data.debug.dataFetchFailed.medications) {
+      throw new Error('monitoring chip: medications fetch failed, DOM fallback empty');
+    }
+    // Confirmed (not a fetch failure, see the dataFetchFailed check just above)
+    // — this patient genuinely has no medications on record. A definitive
+    // clear: nothing to monitor, so null (not a throw) is correct here.
     if (!Array.isArray(data.medications) || data.medications.length === 0) return null;
     const now = new Date().toISOString();
     const evalOpts = {
@@ -1672,7 +1904,7 @@
       chips = engine.evaluatePatient(data.medications || [], data.observations || [], rules, evalOpts);
     } catch (e) {
       log('monitoring evaluatePatient failed', e);
-      return null;
+      throw e;
     }
     if (cache && inputHash != null) _monEvalCache.set(monitoringToken(), inputHash, chips);
     return selectMonitoringDue(chips);
@@ -1743,9 +1975,11 @@
     // Dedupe: remove any previously injected monitoring chip (either severity)
     // before adding the current one.
     row.querySelectorAll('.ch-monitoring-chip').forEach(el => el.remove());
-    // If the "No flags" placeholder is the only thing present, clear it.
-    const placeholder = row.querySelector('.ch-chip-info');
-    if (placeholder && row.children.length === 1 && /No flags/i.test(placeholder.textContent)) {
+    // If the "No flags" / "Not fully assessed" placeholder is the only thing
+    // present, clear it — a real chip firing means there IS something to show,
+    // whichever placeholder headlineNoFlagsChipHtml() picked.
+    const placeholder = row.querySelector('.ch-chip-info, .ch-chip-not-assessed');
+    if (placeholder && row.children.length === 1 && /No flags|Not fully assessed/i.test(placeholder.textContent)) {
       placeholder.remove();
     }
     const tmp = document.createElement('div');
@@ -1799,12 +2033,71 @@
     return name || lastPatientName;
   };
 
-  const tile = (key, label, signal) => `
+  // ---- Extraction-health (item 1.1 leg B) — pure helpers, unit-testable
+  // without a DOM or a full renderHUD() call. ----
+
+  // Which cards each HUD tile's signal is computed from (see computeSignals).
+  // Conservative & manual — kept next to the tile map itself, not derived, so a
+  // reviewer can see at a glance whether a new signal source needs adding here.
+  // Non-card sources (banner warnings, the docs/consultations free-text search)
+  // are deliberately excluded: they're never gated by findCardByTitle, so their
+  // absence is not an extraction failure this mechanism can detect.
+  const TILE_CARD_SOURCES = {
+    risk: ['Active Problems', 'Registers'],
+    monitoring: ['Tasks & Actions', 'Observations & Results'],
+    meds: ['Current Medication'],
+    openLoops: ['Tasks & Actions'],
+    carePlan: ['Registers', 'Active Problems'],
+    safeguarding: ['Registers']
+  };
+
+  // Pure: is this tile's CURRENT clear/zero state actually "we never read the
+  // data" rather than "we read it and it's genuinely clear"? Only fires when
+  // EVERY card this tile draws from is missing AND the tile found nothing —
+  // a tile that already has a real finding (e.g. risk's docs-derived recent-
+  // discharge check, which isn't card-gated) keeps showing that finding rather
+  // than being masked by an unrelated missing card.
+  const tileNotAssessed = (key, signal, missingCards) => {
+    const sources = TILE_CARD_SOURCES[key];
+    if (!sources || !sources.length || !signal) return false;
+    if (signal.items && signal.items.length > 0) return false;
+    const missing = missingCards || [];
+    return sources.every(title => missing.includes(title));
+  };
+
+  // Pure: the header-chips-row placeholder when no chip fired. A missing card
+  // must never render identically to a genuine "No flags" — that's the whole
+  // point of item 1.1 (H-005: "not assessed" must never look like "normal").
+  const headlineNoFlagsChipHtml = (missingCards) => {
+    if (missingCards && missingCards.length) {
+      return '<span class="ch-chip ch-chip-not-assessed" title="Could not read: ' +
+        escapeHtml(missingCards.join(', ')) + '">Not fully assessed</span>';
+    }
+    return '<span class="ch-chip ch-chip-info">No flags</span>';
+  };
+
+  // Pure: the grey footer line naming which cards could not be read this pass.
+  const missingCardsFooterHtml = (missingCards) => {
+    if (!missingCards || !missingCards.length) return '';
+    return `<div class="ch-missing-footer">Could not read: ${escapeHtml(missingCards.join(', '))}</div>`;
+  };
+
+  const tile = (key, label, signal, missingCards) => {
+    if (tileNotAssessed(key, signal, missingCards)) {
+      return `
+    <div class="ch-tile ch-not-assessed" data-tile="${key}" title="Could not read the card(s) this tile needs">
+      <div class="ch-tile-label">${label}</div>
+      <div class="ch-tile-status">—</div>
+      <div class="ch-tile-count">Not assessed</div>
+    </div>`;
+    }
+    return `
     <div class="ch-tile ch-${signal.level}" data-tile="${key}">
       <div class="ch-tile-label">${label}</div>
       <div class="ch-tile-status">${signal.level === 'green' && signal.items.length === 0 ? '—' : signal.level.toUpperCase()}</div>
       <div class="ch-tile-count">${signal.items.length ? signal.items.length + ' signal' + (signal.items.length > 1 ? 's' : '') : ''}</div>
     </div>`;
+  };
 
   const detailList = (items) => {
     if (!items.length) return '<div class="ch-detail-empty">No flags</div>';
@@ -1844,19 +2137,42 @@
 
   // ---- Action menu popover ----
   // Anchored to document.body so it works in HUD, queue rows, and the request
-  // panel. One menu open at a time. Click outside to dismiss.
+  // panel. One menu open at a time (shared singleton — the rule-match menu
+  // below, item 2.1/2.3/2.5 of TRIAGE-LENS-2026-07-02.md, reuses this SAME
+  // activeActionMenu/closeActionMenu pair rather than a second one, so that
+  // (a) only one popover is ever open across the whole extension and (b) its
+  // "note" action back-button — wired to closeActionMenu() inside
+  // executeAction below — closes the right menu regardless of which caller
+  // opened it). Dismiss on outside click, Esc, or scroll (item 2.5's "menu
+  // element" requirement); activeAnchorEl lets refreshQueueChips notice when
+  // a still-open menu's anchor chip has been wiped out from under it by the
+  // next churn cycle (CLAUDE.md rule #3) and close rather than float over a
+  // dead reference.
   let activeActionMenu = null;
+  let activeAnchorEl = null;
   const closeActionMenu = () => {
     if (activeActionMenu) {
       activeActionMenu.remove();
       activeActionMenu = null;
     }
+    activeAnchorEl = null;
     document.removeEventListener('click', onDocClickForMenu, true);
+    document.removeEventListener('keydown', onKeydownForMenu, true);
+    window.removeEventListener('scroll', onScrollForMenu, true);
   };
   const onDocClickForMenu = (e) => {
     if (!activeActionMenu) return;
     if (activeActionMenu.contains(e.target)) return;
     closeActionMenu();
+  };
+  const onKeydownForMenu = (e) => {
+    if (e.key === 'Escape') closeActionMenu();
+  };
+  const onScrollForMenu = () => closeActionMenu();
+  const armActionMenuDismissal = () => {
+    setTimeout(() => document.addEventListener('click', onDocClickForMenu, true), 0);
+    document.addEventListener('keydown', onKeydownForMenu, true);
+    window.addEventListener('scroll', onScrollForMenu, true);
   };
 
   const findRuleById = (id) => {
@@ -1917,12 +2233,27 @@
 
     document.body.appendChild(menu);
     activeActionMenu = menu;
-    setTimeout(() => document.addEventListener('click', onDocClickForMenu, true), 0);
+    activeAnchorEl = anchor;
+    armActionMenuDismissal();
+  };
+
+  const isSafeActionUrl = (url) => {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch (e) {
+      return false;
+    }
   };
 
   const executeAction = (action, anchorEl, menuEl) => {
     if (!action) return;
     if (action.type === 'link' && action.url) {
+      if (!isSafeActionUrl(action.url)) {
+        log('executeAction: blocked unsafe action.url', action.url);
+        closeActionMenu();
+        return;
+      }
       try { window.open(action.url, '_blank', 'noopener'); } catch (e) {}
       closeActionMenu();
       return;
@@ -1972,6 +2303,381 @@
     }
   };
 
+  // ---- Rule-match menu (queue rule chips — items 2.1/2.3/2.5,
+  // TRIAGE-LENS-2026-07-02.md) ----
+  // Reuses the SAME activeActionMenu/closeActionMenu singleton as
+  // showActionMenu/executeAction above — only one popover open at a time —
+  // so link/snippet/note actions clicked from here run through the existing,
+  // already-hardened executeAction unchanged (scheme-checked links, clipboard
+  // snippets, note view). This block only builds what goes INSIDE the popover
+  // for a queue row's matched rules: an evidence line ahead of the actions,
+  // and — when more than one rule matched — a list view to drill through
+  // them. `rules` is the row's RANKED matched (compiled) rule array and
+  // `previewText` the row's request text, both closure-captured by
+  // decorateOneRow at decoration time. buildEvidenceEl below recomputes full
+  // evidence (term/context/qualifier) lazily, on menu open — decorateOneRow's
+  // own rankRuleMatches call (item 3.4) only computes the qualifier up front,
+  // to rank/label chips; it never builds the full evidence text.
+  const buildEvidenceEl = (rule, previewText) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'ch-rule-menu-evidence';
+    const ev = window.TriageLensMatch.ruleMatchEvidence(rule, previewText || '');
+    if (!ev) {
+      wrap.classList.add('ch-rule-menu-evidence-empty');
+      wrap.textContent = 'No matching text found in the current request.';
+      return wrap;
+    }
+    const label = document.createElement('div');
+    label.className = 'ch-rule-menu-evidence-label';
+    label.textContent = 'Matched text';
+    wrap.appendChild(label);
+    const p = document.createElement('p');
+    p.className = 'ch-rule-menu-evidence-text';
+    // The request text is UNTRUSTED (patient/reception-typed) — built with
+    // createElement/textContent only, NEVER innerHTML of it (a prior
+    // attribute-injection XSS was fixed in this area; CLAUDE.md pins that
+    // discipline for this surface). ev.term is a verbatim substring of
+    // ev.context (both derived from the same source string), so a plain
+    // indexOf finds it; if the term happens to recur earlier in the same
+    // sentence the FIRST occurrence is highlighted — a cosmetic edge case,
+    // not a correctness/safety one.
+    const idx = ev.context.indexOf(ev.term);
+    if (idx === -1) {
+      p.appendChild(document.createTextNode(ev.context));
+    } else {
+      p.appendChild(document.createTextNode(ev.context.slice(0, idx)));
+      const strong = document.createElement('strong');
+      strong.appendChild(document.createTextNode(ev.context.slice(idx, idx + ev.term.length)));
+      p.appendChild(strong);
+      p.appendChild(document.createTextNode(ev.context.slice(idx + ev.term.length)));
+    }
+    wrap.appendChild(p);
+    // Item 3.4 — surface WHY a match was demoted (never why it was hidden —
+    // it never is). ev.qualifierTerm is our own compiled negator/past-phrase
+    // list, not request text, so a plain textContent template literal is fine.
+    if (ev.qualifier) {
+      const q = document.createElement('p');
+      q.className = 'ch-rule-menu-evidence-qualifier ch-rule-menu-evidence-qualifier-' + ev.qualifier;
+      const qLabel = ev.qualifier === 'negated' ? 'negation detected' : 'past-reference detected';
+      q.textContent = `${qLabel}: "${ev.qualifierTerm}"`;
+      wrap.appendChild(q);
+    }
+    return wrap;
+  };
+
+  const RULE_MENU_ACTION_ICONS = { link: '🔗', snippet: '📋', note: '📌' };
+
+  const renderRuleMenuActionItems = (rule) => {
+    const box = document.createDocumentFragment();
+    const actions = rule.actions || [];
+    if (!actions.length) {
+      const empty = document.createElement('div');
+      empty.className = 'ch-action-menu-empty';
+      empty.textContent = 'No actions configured for this rule.';
+      box.appendChild(empty);
+      return box;
+    }
+    actions.forEach((a) => {
+      const item = document.createElement('div');
+      item.className = 'ch-action-menu-item ch-action-menu-item-' + (a.type || 'note');
+      item.setAttribute('role', 'menuitem');
+      item.setAttribute('tabindex', '0');
+      const icon = document.createElement('span');
+      icon.className = 'ch-action-icon';
+      icon.textContent = RULE_MENU_ACTION_ICONS[a.type] || '•';
+      const label = document.createElement('span');
+      label.className = 'ch-action-label';
+      label.textContent = a.label || '(unlabelled)';
+      item.appendChild(icon);
+      item.appendChild(label);
+      const activate = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        executeAction(a, item, activeActionMenu);
+      };
+      item.addEventListener('click', activate);
+      item.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') activate(e);
+      });
+      box.appendChild(item);
+    });
+    return box;
+  };
+
+  // Detail view: one rule's evidence + actions. `showBack` is true only when
+  // reached by drilling into the "+N" list view, so the top chip's own
+  // (single-rule) detail view has no back target.
+  const renderRuleMenuDetail = (rule, previewText, rules, showBack) => {
+    if (!activeActionMenu) return;
+    activeActionMenu.innerHTML = '';
+    activeActionMenu.setAttribute(
+      'aria-label',
+      `${rule.label} — ${rule.kind} alert` +
+        (rule._qualifier ? `, ${RULE_QUALIFIER_ARIA[rule._qualifier]}` : '')
+    );
+    const head = document.createElement('div');
+    head.className = 'ch-action-menu-head';
+    if (showBack) {
+      const back = document.createElement('button');
+      back.className = 'ch-action-back';
+      back.type = 'button';
+      back.textContent = '← Back';
+      back.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        renderRuleMenuList(rules, previewText);
+      });
+      head.appendChild(back);
+    }
+    const badge = document.createElement('span');
+    badge.className = 'ch-chip ch-chip-' + rule.kind;
+    badge.textContent = rule.label;
+    head.appendChild(badge);
+    activeActionMenu.appendChild(head);
+    activeActionMenu.appendChild(buildEvidenceEl(rule, previewText));
+    activeActionMenu.appendChild(renderRuleMenuActionItems(rule));
+  };
+
+  // List view: every matched rule on this row (item 2.5's "+N" overflow),
+  // each row drilling into its own detail view via renderRuleMenuDetail.
+  const renderRuleMenuList = (rules, previewText) => {
+    if (!activeActionMenu) return;
+    activeActionMenu.innerHTML = '';
+    activeActionMenu.setAttribute('aria-label', `Matched rules, ${rules.length} total`);
+    const head = document.createElement('div');
+    head.className = 'ch-action-menu-head';
+    head.textContent = `Matched rules (${rules.length})`;
+    activeActionMenu.appendChild(head);
+    const list = document.createElement('div');
+    list.className = 'ch-rule-menu-list';
+    rules.forEach((r) => {
+      const item = document.createElement('div');
+      item.className = 'ch-rule-menu-list-item';
+      item.setAttribute('role', 'menuitem');
+      item.setAttribute('tabindex', '0');
+      const badge = document.createElement('span');
+      badge.className = 'ch-chip ch-chip-' + r.kind;
+      badge.textContent = r.kind;
+      const label = document.createElement('span');
+      label.className = 'ch-rule-menu-list-label';
+      label.textContent = r.label;
+      item.appendChild(badge);
+      // Item 3.4 — the qualifier badge is metadata computed by rankRuleMatches
+      // (r._qualifier); a rule reached via the top-chip/direct showRuleMatchMenu
+      // path (no rankRuleMatches pass) simply has no badge here — still fully
+      // shown, never suppressed.
+      if (r._qualifier) {
+        const qBadge = document.createElement('span');
+        qBadge.className = 'ch-rule-menu-list-qualifier ch-rule-menu-list-qualifier-' + r._qualifier;
+        qBadge.textContent = RULE_QUALIFIER_LABEL[r._qualifier];
+        item.appendChild(qBadge);
+      }
+      item.appendChild(label);
+      const activate = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        renderRuleMenuDetail(r, previewText, rules, true);
+      };
+      item.addEventListener('click', activate);
+      item.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') activate(e);
+      });
+      list.appendChild(item);
+    });
+    activeActionMenu.appendChild(list);
+  };
+
+  // Entry point wired to the queue rule-match chips (decorateOneRow below).
+  // `openList` is true for the "+N" overflow chip (straight to the full
+  // list), false for the top chip (straight to its own detail — matches the
+  // pre-2.5 single-chip behaviour when there's only one matched rule).
+  const showRuleMatchMenu = (anchor, rules, previewText, openList) => {
+    closeActionMenu();
+    if (!rules || !rules.length) return;
+    const r = anchor.getBoundingClientRect();
+    const menu = document.createElement('div');
+    menu.className = 'ch-action-menu ch-rule-menu';
+    menu.setAttribute('role', 'menu');
+    menu.style.position = 'fixed';
+    menu.style.top = (r.bottom + 4) + 'px';
+    menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 340)) + 'px';
+    menu.style.zIndex = '2147483647';
+    document.body.appendChild(menu);
+    activeActionMenu = menu;
+    activeAnchorEl = anchor;
+    if (openList && rules.length > 1) {
+      renderRuleMenuList(rules, previewText);
+    } else {
+      renderRuleMenuDetail(rules[0], previewText, rules, false);
+    }
+    armActionMenuDismissal();
+  };
+
+  // ---- Pathway menu — Pharmacy First divert + missing-info ask-back (items
+  // 4.1/4.2, TRIAGE-LENS-2026-07-02.md) ----
+  // Reuses the SAME activeActionMenu/closeActionMenu singleton as
+  // showActionMenu/showRuleMatchMenu above (only one popover open at a time),
+  // and reuses renderRuleMenuActionItems/executeAction verbatim for every
+  // "copy" button so the clipboard-write + "Copied" confirmation + safe
+  // execCommand fallback is EXACTLY the same code path already hardened for
+  // the rule-chip snippet actions and lab-file-button.js's fileAndMessage
+  // handoff — no new clipboard code.
+  //
+  // DECISION-SUPPORT SURFACING ONLY: rules/reception-pathways.json's own
+  // header states this "captures a structured history only — does not
+  // triage, diagnose, or advise beyond red-flag escalation." Every action
+  // offered here is either read-only information or a PREPARE-ONLY draft —
+  // nothing is ever sent, filed, or auto-advised. `pathway`/red-flag `ask`/
+  // `escalate` text is CSO-signed config content (trusted), but this menu
+  // still builds everything via createElement/textContent, never innerHTML —
+  // the same discipline buildEvidenceEl applies to genuinely untrusted
+  // request text, kept here for consistency and because buildAskBackText's
+  // output is partly templated around that same request-derived match state.
+
+  // A single-item "actions list" wrapping one prepare-only copy draft, reusing
+  // renderRuleMenuActionItems's existing snippet-action rendering + click
+  // wiring (which calls the real, already-hardened executeAction).
+  const buildCopySnippetActionsEl = (text, label) =>
+    renderRuleMenuActionItems({ actions: [{ type: 'snippet', label, text }] });
+
+  // Plain-text, prepare-only Pharmacy First redirect draft ("this looks
+  // suitable for Pharmacy First: …"). Built HERE, not in
+  // engine/reception-match.js (matching-only, out of scope to edit) — this is
+  // pure UI-layer templating around the pathway's own CSO-signed
+  // pharmacyFirst.note, with no independent clinical content of its own.
+  const buildPharmacyFirstRedirectText = (pathway, pfElig) => {
+    const title = (pathway && pathway.title) || 'this presentation';
+    const lines = [];
+    lines.push(`This looks suitable for Pharmacy First (${title}).`);
+    if (pfElig && pfElig.ageNote) lines.push(pfElig.ageNote);
+    lines.push(
+      'Prepared draft only — please review before use. A clinician or care navigator still confirms suitability; this is not a referral and not a clinical decision.'
+    );
+    return lines.join('\n') + '\n';
+  };
+
+  // The PROMINENT "patient may have already mentioned a red flag" banner
+  // (item 4.2's escalation-note requirement) — a safety signal the keyword
+  // rule chips might miss, so it renders FIRST in the menu, ahead of both the
+  // Pharmacy First and ask-back sections. `flaggedInText` entries are
+  // { id, ask, escalate } from redFlagGaps (CSO-signed content).
+  const buildPathwayEscalationEl = (flaggedInText) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'ch-pathway-escalation';
+    const head = document.createElement('div');
+    head.className = 'ch-pathway-escalation-head';
+    head.textContent = '⚠ Patient may have already mentioned:';
+    wrap.appendChild(head);
+    flaggedInText.forEach((rf) => {
+      const line = document.createElement('div');
+      line.className = 'ch-pathway-escalation-line';
+      line.textContent = (rf && rf.ask ? rf.ask : rf && rf.id) + ' — escalate ' + ((rf && rf.escalate) || '?') + ' if confirmed';
+      wrap.appendChild(line);
+    });
+    return wrap;
+  };
+
+  const buildPathwaySectionHead = (label) => {
+    const head = document.createElement('div');
+    head.className = 'ch-pathway-section-head';
+    head.textContent = label;
+    return head;
+  };
+
+  // Pharmacy First section — the pathway's own note, then the prepare-only
+  // redirect draft (shown inline AND offered as a one-click copy).
+  const buildPharmacyFirstSectionEl = (pathway, pfElig) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'ch-pathway-section';
+    wrap.appendChild(buildPathwaySectionHead('Pharmacy First'));
+    const note = document.createElement('p');
+    note.className = 'ch-pathway-note';
+    note.textContent =
+      (pfElig && pfElig.ageNote) ||
+      'Age criteria met for Pharmacy First — a clinician or care navigator still confirms suitability.';
+    wrap.appendChild(note);
+    const redirectText = buildPharmacyFirstRedirectText(pathway, pfElig);
+    const draft = document.createElement('p');
+    draft.className = 'ch-pathway-draft';
+    draft.textContent = redirectText;
+    wrap.appendChild(draft);
+    wrap.appendChild(buildCopySnippetActionsEl(redirectText, 'Copy Pharmacy First message'));
+    return wrap;
+  };
+
+  // Ask-back section — the gap questions (what the request text does NOT yet
+  // cover) plus a one-click copy of the full buildAskBackText() draft. Shown
+  // even when there are zero gaps (buildAskBackText's own "no outstanding
+  // questions" line) so the section is never silently missing.
+  const buildAskBackSectionEl = (pathway, gapsData, closingQuestions) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'ch-pathway-section';
+    wrap.appendChild(buildPathwaySectionHead('Ask-back — not yet mentioned'));
+    const gaps = (gapsData && gapsData.gaps) || [];
+    if (gaps.length) {
+      const list = document.createElement('ul');
+      list.className = 'ch-pathway-gap-list';
+      gaps.forEach((g) => {
+        const li = document.createElement('li');
+        li.textContent = (g && g.ask) || (g && g.id) || '';
+        list.appendChild(li);
+      });
+      wrap.appendChild(list);
+    } else {
+      const none = document.createElement('p');
+      none.className = 'ch-pathway-note';
+      none.textContent = 'No outstanding red-flag questions identified from the request text.';
+      wrap.appendChild(none);
+    }
+    const askBackText = window.SentinelReceptionMatch.buildAskBackText(pathway, gaps, closingQuestions);
+    wrap.appendChild(buildCopySnippetActionsEl(askBackText, 'Copy ask-back draft'));
+    return wrap;
+  };
+
+  // Entry point wired to the queue's Pharmacy First / Ask-back chips
+  // (decorateOneRow below). `pfElig`/`gapsData`/`closingQuestions` are
+  // ALREADY COMPUTED by decorateOneRow (closure-captured, same convention as
+  // showRuleMatchMenu's rankedRules/previewText) — never recomputed here, so
+  // the menu always reflects exactly what the chip itself was rendered from.
+  const showPathwayMenu = (anchor, pathway, previewText, pfElig, gapsData, closingQuestions) => {
+    closeActionMenu();
+    if (!pathway) return;
+    const r = anchor.getBoundingClientRect();
+    const menu = document.createElement('div');
+    menu.className = 'ch-action-menu ch-pathway-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', `${pathway.title || 'Reception pathway'} — Pharmacy First / ask-back`);
+    menu.style.position = 'fixed';
+    menu.style.top = (r.bottom + 4) + 'px';
+    menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 340)) + 'px';
+    menu.style.zIndex = '2147483647';
+    document.body.appendChild(menu);
+    activeActionMenu = menu;
+    activeAnchorEl = anchor;
+
+    const head = document.createElement('div');
+    head.className = 'ch-action-menu-head';
+    const badge = document.createElement('span');
+    badge.className = 'ch-chip ch-chip-info';
+    badge.textContent = pathway.title || 'Reception pathway';
+    head.appendChild(badge);
+    menu.appendChild(head);
+
+    const disclaimer = document.createElement('div');
+    disclaimer.className = 'ch-pathway-disclaimer';
+    disclaimer.textContent =
+      'Decision support only — offers information and prepares drafts. It never diagnoses, advises beyond red-flag escalation, or sends anything.';
+    menu.appendChild(disclaimer);
+
+    const flaggedInText = (gapsData && gapsData.flaggedInText) || [];
+    if (flaggedInText.length) {
+      menu.appendChild(buildPathwayEscalationEl(flaggedInText));
+    }
+    if (pfElig && pfElig.eligible === true) {
+      menu.appendChild(buildPharmacyFirstSectionEl(pathway, pfElig));
+    }
+    menu.appendChild(buildAskBackSectionEl(pathway, gapsData, closingQuestions));
+
+    armActionMenuDismissal();
+  };
+
   const renderHUD = (data, signals, requestSignals) => {
     lastSignals = signals;
     const hud = ensureHudEl();
@@ -1998,6 +2704,11 @@
 
     const showTiles = PREF('showBuiltInTiles', true);
     const showFoot = PREF('showFootStats', true);
+    // Item 1.1 leg B — cards findCardByTitle genuinely could not find this pass.
+    // Drives: the headline chip chooser (never a green/info "No flags" when we
+    // know something wasn't read), the grey footer line, and each tile's
+    // "not assessed" fallback below.
+    const missingCards = data._missingCards || [];
 
     hud.innerHTML = `
       <header class="ch-head">
@@ -2013,15 +2724,16 @@
         ${patient ? `<button class="ch-patient" data-act="focus-tab" title="Bring source tab to front">${escapeHtml(patient)} →</button>` : ''}
         ${requestPanel(requestSignals)}
         <div class="ch-chips">
-          ${allHeaderChips.length ? allHeaderChips.map(c => renderChipHtml(c)).join('') : '<span class="ch-chip ch-chip-info">No flags</span>'}
+          ${allHeaderChips.length ? allHeaderChips.map(c => renderChipHtml(c)).join('') : headlineNoFlagsChipHtml(missingCards)}
         </div>
+        ${missingCardsFooterHtml(missingCards)}
         ${showTiles ? `<div class="ch-grid">
-          ${tile('risk', 'Risk', signals.risk)}
-          ${tile('monitoring', 'Monitoring', signals.monitoring)}
-          ${tile('meds', 'Meds', signals.meds)}
-          ${tile('openLoops', 'Open loops', signals.openLoops)}
-          ${tile('carePlan', 'Care plan', signals.carePlan)}
-          ${tile('safeguarding', 'Safeguarding', signals.safeguarding)}
+          ${tile('risk', 'Risk', signals.risk, missingCards)}
+          ${tile('monitoring', 'Monitoring', signals.monitoring, missingCards)}
+          ${tile('meds', 'Meds', signals.meds, missingCards)}
+          ${tile('openLoops', 'Open loops', signals.openLoops, missingCards)}
+          ${tile('carePlan', 'Care plan', signals.carePlan, missingCards)}
+          ${tile('safeguarding', 'Safeguarding', signals.safeguarding, missingCards)}
         </div>
         <div class="ch-detail" id="ch-detail">
           <div class="ch-detail-head">Click a tile for detail</div>
@@ -2165,11 +2877,31 @@
     };
   };
 
+  // Item 3.5 — build the require-gate ctx { ageYears?, sex?, medsText?, problemsText? }
+  // for the detail/record HUD from the SAME extracted data buildFieldsData already
+  // reshaped (meds/problems are already flat string arrays there — no re-extraction).
+  //   ageYears — extractBanner() (DOM scan of the patient banner) parses an age from
+  //              an "(NNy" token or a DOB string. Same source the record/detail HUD
+  //              already displays.
+  //   sex      — NOT currently extracted anywhere on this page (extractBanner only
+  //              returns { warnings, age }) — always undefined here, so a
+  //              require:{sex} clause fails closed on every surface today.
+  //   medsText/problemsText — joined from fieldsData.meds / fieldsData.problems
+  //              (extractMedications / extractActiveProblems), the same "Current
+  //              Medication" / "Active Problems" cards the HUD renders.
+  const buildRequireCtx = (data, fieldsData) => ({
+    ageYears: Number.isFinite(data?.banner?.age) ? data.banner.age : undefined,
+    sex: undefined,
+    medsText: Array.isArray(fieldsData?.meds) ? fieldsData.meds.join(' ') : '',
+    problemsText: Array.isArray(fieldsData?.problems) ? fieldsData.problems.join(' ') : '',
+  });
+
   // ---- Per-page handlers ----
   const runRecord = () => {
-    const data = extractAll();
+    const data = extractAll('record', false);
     const signals = computeSignals(data);
-    applyRules(signals, 'record', buildFieldsData(data, ''));
+    const fieldsData = buildFieldsData(data, '');
+    applyRules(signals, 'record', fieldsData, buildRequireCtx(data, fieldsData));
     renderHUD(data, signals, null);
     restorePosition(hudEl);
     enableDrag(hudEl);
@@ -2178,10 +2910,14 @@
   };
 
   const runDetail = () => {
-    const data = extractAll();
+    // Resolved up front (URL-only check) so extractAll() knows which detail
+    // expected-card set applies (item 1.1 leg B — a document task and a
+    // request/communication task expect different cards).
+    const docTask = isDocumentTask();
+    const data = extractAll('detail', docTask);
     const signals = computeSignals(data);
 
-    const docInfo = isDocumentTask() ? extractDocumentTaskInfo() : null;
+    const docInfo = docTask ? extractDocumentTaskInfo() : null;
 
     let taskDetails, requester, initialReq;
     if (docInfo) {
@@ -2196,7 +2932,8 @@
       initialReq = extractInitialRequest();
     }
 
-    applyRules(signals, 'detail', buildFieldsData(data, initialReq.text || ''));
+    const detailFieldsData = buildFieldsData(data, initialReq.text || '');
+    applyRules(signals, 'detail', detailFieldsData, buildRequireCtx(data, detailFieldsData));
     const requestSignals = computeRequestSignals(taskDetails, requester, initialReq);
 
     if (docInfo) {
@@ -2217,6 +2954,7 @@
     enableDrag(hudEl);
     runMonitoringChip();
     runOutstandingMatch();
+    runDetailVerdict();
     log('detail rendered', { data, signals, taskDetails, initialReq, docInfo });
   };
 
@@ -2301,14 +3039,27 @@
     const ab = v.matchedAbnormal ? ` ${v.matchedAbnormal.toUpperCase()}` : '';
     return ` · ${v.matchedValue}${unit}${ab}`;
   };
-  // Append a bulk tick-off to the local OIR audit log (ring buffer, last 200).
+  // Append a tick-off to the local OIR audit log (ring buffer, last 200).
   // Machine-local governance record; never auto-restored (see backup allowlist).
-  const recordOirAudit = (verdicts, taskUuid) => {
+  // `kind` distinguishes WHO/WHAT initiated the write, all going through this
+  // one path/storage key/cap so the options audit viewer (renderOirAudit)
+  // picks every kind up automatically:
+  //   'bulk'       — clinician-confirmed bulk tick-off (confirmBulkTickOff)
+  //   'auto'       — machine auto-tick of confident, report-covered rows
+  //                  (performOirAutoTick) — see H-036 in docs/HAZARD-LOG.md
+  //   'auto-review'  — the auto-tick toast's Review action (performOirAutoReview).
+  //                  NOTE: this does NOT mean the tick was reversed — ticking
+  //                  writes to Medicus immediately and can't be undone from
+  //                  here (see confirmBulkTickOff's own dialog text) — it
+  //                  records that the clinician asked to review what was
+  //                  auto-ticked.
+  const recordOirAudit = (verdicts, taskUuid, kind) => {
     try {
       if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
       const patientUuid = taskUuid ? _oirPatientCache.get(taskUuid) : undefined;
       const entry = {
         ts: new Date().toISOString(),
+        kind: kind || 'bulk',
         taskUuid: taskUuid || null,
         patientUuid: patientUuid || null,
         count: verdicts.length,
@@ -2329,6 +3080,110 @@
     } catch (e) {
       log('OIR audit write failed', e.message);
     }
+  };
+
+  // ---- Auto-tick toast (undo/review affordance) --------------------------
+  // Non-blocking, informational toast shown after a machine auto-tick fires.
+  // IMPORTANT — this is NOT a true undo: ticking an OIR checkbox writes to
+  // Medicus server-side immediately (see confirmBulkTickOff's own confirm
+  // text: "This cannot be undone from here"), so re-clicking the checkbox
+  // would either do nothing or falsely reassure the clinician the request is
+  // back on the outstanding list. Per the "never fake an undo" rule, the
+  // toast's action instead SCROLLS TO + FLASHES the ticked row(s) so the
+  // clinician can review them and, if genuinely needed, re-request via
+  // Medicus directly — and says so in its own copy.
+  const OIR_TOAST_MS = 15000;
+  let _oirToastEl = null;
+  let _oirToastTimer = null;
+
+  const removeOirToast = () => {
+    if (_oirToastTimer) {
+      clearTimeout(_oirToastTimer);
+      _oirToastTimer = null;
+    }
+    if (_oirToastEl && _oirToastEl.parentElement) _oirToastEl.remove();
+    _oirToastEl = null;
+  };
+
+  // Scrolls to + flashes the auto-ticked row(s) and records the review as an
+  // audit entry (kind: 'auto-review'). Standalone/testable — see
+  // recordOirAudit's kind doc for why this does not claim a reversal.
+  const performOirAutoReview = (verdicts, boxes, taskUuid) => {
+    const first = (boxes || []).find(Boolean);
+    if (first && typeof first.scrollIntoView === 'function') {
+      try {
+        first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    (boxes || []).forEach((b) => {
+      if (!b) return;
+      const row = (typeof b.closest === 'function' && b.closest('label.m-checkbox, .q-checkbox')) || b;
+      if (row && row.classList) {
+        row.classList.add('ch-oir-flash');
+        setTimeout(() => row.classList.remove('ch-oir-flash'), 2600);
+      }
+    });
+    log('OIR auto-tick review', { count: (boxes || []).length });
+    if (PREF('oirAuditLog', true)) recordOirAudit(verdicts, taskUuid, 'auto-review');
+  };
+
+  const showOirAutoTickToast = (verdicts, taskUuid, boxes) => {
+    if (typeof document === 'undefined') return;
+    removeOirToast();
+    const el = document.createElement('div');
+    el.className = 'ch-oir-toast';
+    const msg = document.createElement('div');
+    msg.className = 'ch-oir-toast-msg';
+    const names = verdicts
+      .map((v) => v.name)
+      .filter(Boolean)
+      .join(', ');
+    msg.textContent = `Auto-ticked: ${names} — resulted in this report`;
+    el.appendChild(msg);
+    const note = document.createElement('div');
+    note.className = 'ch-oir-toast-note';
+    note.textContent = 'This writes to Medicus immediately and can’t be undone from here.';
+    el.appendChild(note);
+    const actions = document.createElement('div');
+    actions.className = 'ch-oir-toast-actions';
+    const reviewBtn = document.createElement('button');
+    reviewBtn.type = 'button';
+    reviewBtn.className = 'ch-oir-toast-btn';
+    reviewBtn.textContent = 'Review';
+    reviewBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      performOirAutoReview(verdicts, boxes, taskUuid);
+      removeOirToast();
+    };
+    actions.appendChild(reviewBtn);
+    el.appendChild(actions);
+    document.body.appendChild(el);
+    _oirToastEl = el;
+    requestAnimationFrame(() => el.classList.add('ch-oir-toast-show'));
+    _oirToastTimer = setTimeout(() => {
+      if (_oirToastEl) _oirToastEl.classList.remove('ch-oir-toast-show');
+      setTimeout(removeOirToast, 300);
+    }, OIR_TOAST_MS);
+  };
+
+  // Filters confident, report-covered verdicts, ticks their checkboxes,
+  // audits (kind: 'auto') and surfaces the review toast above. Gated by the
+  // oirAutoTick pref (default ON — preserves the pre-existing behaviour);
+  // turning it off leaves the inline flags but never writes a tick.
+  // Standalone/testable — kept out of applyOutstandingMatch's body so it can
+  // be extracted and unit-tested without the rest of the match pipeline.
+  const performOirAutoTick = (verdicts, rows, taskUuid) => {
+    if (!PREF('oirAutoTick', true)) return;
+    const toTickVerdicts = verdicts.filter((v) => v.autoTick && rows[v.id]);
+    if (!toTickVerdicts.length) return;
+    const toTick = toTickVerdicts.map((v) => rows[v.id].box);
+    log('OIR auto-tick', { count: toTick.length });
+    tickRows(toTick);
+    if (PREF('oirAuditLog', true)) recordOirAudit(toTickVerdicts, taskUuid, 'auto');
+    showOirAutoTickToast(toTickVerdicts, taskUuid, toTick);
   };
 
   // Read the outstanding-request rows from the card.
@@ -2525,7 +3380,7 @@
       e.stopPropagation();
       if (confirmBulkTickOff(pending)) {
         log('OIR bulk tick-off', { count: pending.length });
-        if (PREF('oirAuditLog', true)) recordOirAudit(pending, taskUuid);
+        if (PREF('oirAuditLog', true)) recordOirAudit(pending, taskUuid, 'bulk');
         tickRows(pending.map((v) => rows[v.id].box));
         bar.remove();
       }
@@ -2570,13 +3425,11 @@
 
     // Auto-tick once per task — confident + predating, report-covered rows only.
     // Resulted-elsewhere rows are NEVER auto-ticked (autoTick === false).
+    // performOirAutoTick handles the oirAutoTick pref gate, the tick itself,
+    // the audit entry (kind: 'auto') and the undoable review toast.
     if (taskUuid && !_oirAutoTicked.has(taskUuid)) {
       _oirAutoTicked.add(taskUuid);
-      const toTick = verdicts.filter((v) => v.autoTick && rows[v.id]).map((v) => rows[v.id].box);
-      if (toTick.length) {
-        log('OIR auto-tick', { count: toTick.length });
-        tickRows(toTick);
-      }
+      performOirAutoTick(verdicts, rows, taskUuid);
     }
 
     // Bulk bar: only CONFIDENT results found elsewhere are eligible for one-click
@@ -2707,25 +3560,13 @@
     _oirRaf = false;
   };
 
-  // ---- Queue "absence is not a verdict" legend ----
-  // Injected once when on the Investigation Results queue; removed on navigation
-  // away.  Guard ID prevents duplicate insertion across SPA re-renders.
-  const _QUEUE_LEGEND_ID = 'ch-q-legend-note';
-
-  const injectQueueLegend = () => {
-    if (document.getElementById(_QUEUE_LEGEND_ID)) return;
-    const el = document.createElement('div');
-    el.id = _QUEUE_LEGEND_ID;
-    el.className = 'ch-q-legend';
-    el.textContent =
-      'Triage Lens flags urgent / abnormal results. A row with no flag has not been assessed as normal — open and review every result.';
-    document.body.appendChild(el);
-  };
-
-  const removeQueueLegend = () => {
-    const el = document.getElementById(_QUEUE_LEGEND_ID);
-    if (el) el.remove();
-  };
+  // ---- Queue triage status bar (item 1.2, TRIAGE-LENS-2026-07-02.md) ----
+  // Replaces the old passive "absence is not a verdict" legend with a live,
+  // interactive strip: recomputed counts, jump-to-next-alert, and a focus
+  // toggle. Implementation (computeQueueTriageCounts / nextAlertRowIndex /
+  // updateQueueStatusBar / applyQueueFocusClass) lives further down, grouped
+  // with the severity row tint code (item 1.3) it reads from — see
+  // "Queue triage status bar" below.
 
   const runQueue = () => {
     teardownQueueObserver();
@@ -2745,7 +3586,15 @@
     for (const [uuid, entry] of _queueResultCache) {
       if (entry.ts && entry.ts < resultPruneTs) _queueResultCache.delete(uuid);
     }
-    injectQueueLegend();
+    // Queue re-entry resets the jump cycle (item 1.2) — a "last jumped-to row"
+    // from a previous queue visit has no meaning against a fresh row set.
+    _queueStatusJumpPos = null;
+    _queueStatusLastRed = 0;
+    _queueStatusLastAmber = 0;
+    // Re-assert the session-local focus-alerts toggle (module state, survives
+    // navigation) onto this fresh queue visit.
+    applyQueueFocusClass();
+    updateQueueStatusBar();
     decorateQueueRows();
     setupQueueObserver();
     scheduleQueueMonitoring();
@@ -2761,8 +3610,14 @@
       // If we've navigated away from the queue, release the observer so the
       // next queue visit always rebuilds it against a fresh container.
       if (type !== 'queue') teardownQueueObserver();
-      // The outstanding-match observer is detail-page-only; release it elsewhere.
-      if (type !== 'detail') teardownOutstandingObserver();
+      // The outstanding-match observer AND the verdict banner (item 2.4) are
+      // detail-page-only; release/clear both elsewhere so neither can linger
+      // into a differently-typed page (e.g. back to the queue).
+      if (type !== 'detail') {
+        teardownOutstandingObserver();
+        removeDetailVerdictBanner();
+        _detailVerdictTaskUuid = null;
+      }
       if (type === 'record') runRecord();
       else if (type === 'detail') runDetail();
       else if (type === 'queue') runQueue();
@@ -2802,9 +3657,17 @@
   let _queueMonRunning = false;
   let _queueMonGeneration = 0; // incremented on each new data arrival
 
-  // taskUuid → { overviewURL, priorityDisplay, unmatched, sev, ts } — result-triage cache
+  // taskUuid → { overviewURL, priorityDisplay, unmatched, sev, error, ts } —
+  // result-triage cache. `error: true` (item 1.1 leg D) marks a row whose fetch
+  // or evaluation genuinely failed (sev stays null either way — a definitive
+  // "nothing due" clear and a failed check both leave sev null; `error`
+  // distinguishes them for rendering + retry cadence).
   const _queueResultCache = new Map();
   const _RESULT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  // Error entries get a much shorter TTL than a real result so a transient
+  // fetch/eval failure retries soon instead of showing "couldn't check" for
+  // the full 5 minutes.
+  const _RESULT_ERROR_TTL = 60 * 1000; // 60 seconds
   let _queueResultRunning = false;
   let _queueResultGeneration = 0;
 
@@ -3116,6 +3979,33 @@
     if (_queueMonGeneration !== gen) scheduleQueueMonitoring();
   };
 
+  // Durable re-injection of already-cached monitoring chips, mirroring
+  // reinjectCachedResultChips below for result-triage chips (see CLAUDE.md
+  // chip-injection rule #4). runQueue clears _queueRowUuids on every re-entry while
+  // still on the queue page, so gating re-injection on it loses chips whose severity
+  // is still valid in _queueMonCache. This walks the durable rowIndex->taskUuid map
+  // for the rows currently ON SCREEN (AG-Grid virtualises the rest), looks up the
+  // cached result keyed by taskUuid, and re-injects via the row-index path
+  // unconditionally on every refresh. injectQueueMonitoringChip de-dupes via
+  // queueChipHost's marker check, so this is safe to call every time.
+  const reinjectCachedMonitoringChips = () => {
+    let n = 0;
+    const scope = queueScope();
+    scope.querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)').forEach((row) => {
+      const ri = row.getAttribute('row-index');
+      if (ri == null) return;
+      const rowIndex = Number(ri);
+      const taskUuid = _durableRowMap.get(rowIndex);
+      if (!taskUuid) return;
+      const entry = _queueMonCache.get(taskUuid);
+      if (!entry || entry.result === undefined || entry.result === null) return;
+      if (!entry.ts || (Date.now() - entry.ts) > _MON_CACHE_TTL) return;
+      injectQueueMonitoringChip(rowIndex, entry.result);
+      n++;
+    });
+    if (n) log('queue-mon: re-injected ' + n + ' cached chip(s) from durable map (visible rows)');
+  };
+
   // ---- Queue result-triage chips ----
   // Mirror of the monitoring pipeline but for Investigation Results tasks.
   // Uses the engine globals: SentinelApiClient, SentinelNormalisers, SentinelResultSeverity.
@@ -3196,35 +4086,81 @@
     // the lab flag) — lets us show an attributable chip instead of a generic one.
     const ruleLabel = sev.top && sev.top.ruleLabel ? sev.top.ruleLabel : null;
     const topName = sev.top ? sev.top.name : '';
-    // Clinical severity chips (urgent/abnormal) — highest priority, shown first
-    if (sev.level === 'red' && sev.urgentCount > 0) {
+    // Item 2.6 (TRIAGE-LENS-2026-07-02.md trend arrows) — a bare arrow glyph appended
+    // to the SALIENT chip's own label when sev.top carries a usable prior (up/down
+    // only; 'same' gets no glyph — nothing to draw attention to). sev.top.prior is
+    // computed by evaluateReportSeverity (engine/result-severity.js, additive field);
+    // this is purely a display append, one character, and never changes which chip id
+    // renders. Only the chips below that actually show the analyte name/label have
+    // anywhere to put it — the plain "{count} abnormal" chip (no rule, no name in its
+    // shipped template) has no slot for it and is deliberately left unchanged.
+    const priorDir = sev.top && sev.top.prior && (sev.top.prior.dir === 'up' || sev.top.prior.dir === 'down')
+      ? sev.top.prior.dir
+      : null;
+    const trendArrow = priorDir === 'up' ? ' ↑' : priorDir === 'down' ? ' ↓' : '';
+    // Clinical severity chips (urgent/abnormal) — highest priority, shown first.
+    // Keyed on urgentCount / abnormalCount (a genuine numeric/lab-flagged RESULT), NOT on
+    // the aggregate `level`: item 3.2 lets a red TEXT review or a red COMBO push `level` to
+    // red while urgentCount stays 0, and the old `level === 'amber'` guard on the abnormal
+    // branch would then suppress a real numeric-abnormal chip. Counting the results directly
+    // keeps the numeric chip visible alongside the red text/combo chip. (When abnormalCount
+    // is 0 no abnormal chip renders anyway, so a review-only amber report is unchanged.)
+    if (sev.urgentCount > 0) {
       if (ruleLabel) {
         chips.push({
           id: 'queue.resultRuleUrgent',
-          vars: { name: topName, rule: ruleLabel, label: composeResultRuleLabel(topName, ruleLabel) }
+          vars: { name: topName, rule: ruleLabel, label: composeResultRuleLabel(topName, ruleLabel) + trendArrow }
         });
       } else {
-        chips.push({ id: 'queue.resultUrgent', vars: { name: topName, count: sev.urgentCount } });
+        chips.push({ id: 'queue.resultUrgent', vars: { name: topName + trendArrow, count: sev.urgentCount } });
       }
-    } else if (sev.level === 'amber' && sev.abnormalCount > 0) {
-      // Guard on abnormalCount > 0: `level` is ALSO raised to amber by a text-rule
-      // review (reviewCount > 0) that found no numeric abnormal. In that case the
-      // review chip below carries the signal and this clinical abnormal chip must NOT
-      // render — otherwise it shows a meaningless "0 abnormal" next to the review chip.
+    } else if (sev.abnormalCount > 0) {
       if (ruleLabel) {
         chips.push({
           id: 'queue.resultRuleAbnormal',
-          vars: { name: topName, rule: ruleLabel, label: composeResultRuleLabel(topName, ruleLabel) }
+          vars: { name: topName, rule: ruleLabel, label: composeResultRuleLabel(topName, ruleLabel) + trendArrow }
         });
       } else {
         chips.push({ id: 'queue.resultAbnormal', vars: { count: sev.abnormalCount } });
       }
     }
-    // Text-rule review chips — after clinical severity, before meta process chips.
-    // A specifically-labelled text rule (e.g. bowel screening non-responder) shows its own
-    // label via the attributable chip; the generic "Needs review" covers cultures (whose
-    // rule label is itself "Needs review").
-    if (sev.reviewCount > 0) {
+    // Part A (item 3.2, TRIAGE-LENS-2026-07-02.md) — a red-level text review
+    // (reviewTop.level === 'red', e.g. a positive blood culture rule authored with
+    // abnormalLevel:'red') reuses the SAME urgent/rule-urgent chip templates as a
+    // genuine numeric urgent result — there is no separate "review, but red" system
+    // chip in defaults.json, and there must not be a new one added here (this rule set
+    // is calibrated by a CSO review, not this mechanism change) — reusing the existing
+    // red family is the deliberate choice. Renders alongside the numeric urgent/abnormal
+    // chip above when both fire (they already co-render today — see the
+    // "urgent numeric + review" case in test-result-severity.js — this is not a new
+    // interaction, just a new colour for the review side of it).
+    const isRedReview = !!(sev.reviewTop && sev.reviewTop.level === 'red');
+    if (isRedReview) {
+      const redName = sev.reviewTop.name || '';
+      const redLabel = sev.reviewTop.label || '';
+      // Same "is this a real custom label, or just the generic default" distinction as
+      // every other attributable chip here (numeric urgent/abnormal, amber review): a
+      // text rule authored WITHOUT its own `label` falls back to the literal string
+      // "Needs review" (see computeTextOutcome) — that is not a name worth naming in
+      // the chip, so it renders via the generic red id instead of the rule-attributed one.
+      if (redLabel && redLabel !== 'Needs review') {
+        chips.push({
+          id: 'queue.resultRuleUrgent',
+          vars: { name: redName, rule: redLabel, label: composeResultRuleLabel(redName, redLabel) }
+        });
+      } else {
+        chips.push({ id: 'queue.resultUrgent', vars: { name: redName, count: 1 } });
+      }
+    }
+    // Text-rule review chips (amber) — after clinical severity, before meta process
+    // chips. A specifically-labelled text rule (e.g. bowel screening non-responder)
+    // shows its own label via the attributable chip; the generic "Needs review" covers
+    // cultures (whose rule label is itself "Needs review"). Suppressed when the review
+    // chip above ALREADY carried this exact finding red (reviewCount === 1 and it was
+    // the red one) — never double-show the identical result as both a red and an amber
+    // chip. A report with additional amber-level reviews alongside the red one still
+    // shows this generic amber chip (reviewCount counts every review, red or amber).
+    if (sev.reviewCount > 0 && !(isRedReview && sev.reviewCount === 1)) {
       const reviewLabel = sev.reviewTop && sev.reviewTop.label ? String(sev.reviewTop.label) : '';
       if (reviewLabel && reviewLabel !== 'Needs review') {
         chips.push({ id: 'queue.resultReviewRule', vars: { rule: reviewLabel } });
@@ -3252,6 +4188,10 @@
     // Meta/process chips (outline, not filled) — last
     if (sev.misprioritised) chips.push({ id: 'queue.resultMisprioritised', vars: {}, meta: true });
     if (sev.unmatched) chips.push({ id: 'queue.resultUnmatched', vars: {}, meta: true });
+    // NOTE: sev.unclassified (Part B, item 3.2) is NOT rendered here — there is no
+    // defaults.json systemChips slot for it (this mechanism change deliberately ships
+    // no new shipped chip config) — see buildUnclassifiedChipHtml/injectResultChip,
+    // which appends it as FIXED markup, the same pattern as the "unit?" meta chip.
     // When a more informative severity chip is already present, suppress bare-flag review
     // chips (e.g. a custom rule matching Medicus's internal "High" flag result). A review
     // chip labelled just "High" / "Low" / "H" adds no signal when the severity chip already
@@ -3265,6 +4205,247 @@
     }
     return chips;
   }
+
+  // Pure helper (item 2.2, TRIAGE-LENS-2026-07-02.md) — build the compact per-result
+  // detail array for the queue result-chip popover. Takes the normalised investigation
+  // report (engine/normalisers.js normaliseInvestigationReport) and the sev object
+  // returned by evaluateReportSeverity (engine/result-severity.js), including its
+  // ADDITIVE `flagged`/`reviewTop`/`noGrowthTop`/`comboTop`/`unclassified` fields —
+  // never recomputes grading itself, just reshapes what's already been decided. Capped
+  // at 10 entries, filled in priority order: numeric urgent-flagged results, then
+  // numeric abnormal-flagged results, then the rule-fired (text-rule) review result,
+  // then every unclassified-positive result (item 3.2 Part B), then the fired combo +
+  // calm noGrowth informational lines. Exported for unit testing via regex extraction —
+  // self-contained (nests its own small helpers), same pattern as selectResultChips'
+  // composeResultRuleLabel above.
+  function buildResultDetail(report, sevResult) {
+    const DETAIL_CAP = 10;
+    if (!sevResult || typeof sevResult !== 'object') return [];
+    const results = report && Array.isArray(report.results) ? report.results : [];
+    const out = [];
+    const pushCap = (entry) => {
+      if (entry && out.length < DETAIL_CAP) out.push(entry);
+    };
+
+    // Compose a rule's label with its threshold summary, e.g.
+    // "Critical high potassium (red ≥6.5)". comparator/threshold are the ADDITIVE
+    // fields computeRuleSev now carries (result-severity.js) — display-only.
+    // ADDITIVE (item 3.6) — a delta rule reuses this SAME slot with comparator
+    // 'rise'/'fall' (never 'above'/'below'); rendered with a "≥+" magnitude symbol
+    // instead of "≥"/"≤" so "(red ≥+26)" reads as a CHANGE, not an absolute value
+    // crossing — showing "(red ≥26)" on a creatinine delta rule would be actively
+    // misleading (a creatinine of 26 is nonsensical; a RISE of 26 is the AKI signal).
+    const composeRuleThresholdLabel = (label, comparator, threshold, effSev) => {
+      if (!label) return null;
+      const isDelta = comparator === 'rise' || comparator === 'fall';
+      if ((comparator !== 'above' && comparator !== 'below' && !isDelta) || !Number.isFinite(threshold)) return label;
+      const band = effSev === 'urgent' ? 'red' : 'amber';
+      const symbol = isDelta ? '≥+' : comparator === 'above' ? '≥' : '≤';
+      return label + ' (' + band + ' ' + symbol + threshold + ')';
+    };
+
+    // Direction for a numeric flagged entry: prefer the lab's own above/below range
+    // flags, then a rule's comparator (a rule can escalate a value the lab itself
+    // never flagged above/below), and only fall back to the bare 'urgent' lab flag
+    // (result.urgent — a distinct API field independent of range) when no direction
+    // is known at all. ADDITIVE (item 3.6) — a delta rule's comparator is
+    // 'rise'/'fall' (the OBSERVED direction of change); treated the same as
+    // 'above'/'below' for the arrow glyph (↑ for a rise, ↓ for a fall).
+    const flagFor = (f) => {
+      if (f.isAbove) return 'above';
+      if (f.isBelow) return 'below';
+      if (f.ruleComparator === 'above' || f.ruleComparator === 'rise') return 'above';
+      if (f.ruleComparator === 'below' || f.ruleComparator === 'fall') return 'below';
+      if (f.urgent || f.effSev === 'urgent') return 'urgent';
+      return null;
+    };
+
+    const toEntry = (f) => ({
+      name: f.name || '',
+      value: f.value === undefined ? null : f.value,
+      unit: f.unit || null,
+      low: f.low === undefined ? null : f.low,
+      high: f.high === undefined ? null : f.high,
+      flag: flagFor(f),
+      date: f.date || null,
+      ruleLabel: composeRuleThresholdLabel(f.ruleLabel, f.ruleComparator, f.ruleThreshold, f.effSev),
+      // ADDITIVE (item 2.7, TRIAGE-LENS-2026-07-02.md) — the fired rule's id (only set
+      // when a rule, not the lab flag, drove this result's severity — same gate as
+      // ruleLabel, see result-severity.js's ruleDriven). Looked up against
+      // CONFIG.resultRules at POPOVER-RENDER time (buildResultDetailPopoverEl), not
+      // cached here, so an edited rule's actions apply immediately with no cache
+      // invalidation — see findResultRuleActionsById below.
+      ruleId: f.ruleId || null,
+      // ADDITIVE (item 3.6) — ready-to-render change summary e.g. '+38 in 5 days',
+      // set only when a delta rule drove this result's severity (result-severity.js
+      // evaluateReportSeverity). null on every non-delta-driven entry.
+      deltaSummary: f.deltaSummary || null,
+      prior: f.prior || null,
+    });
+
+    const flagged = Array.isArray(sevResult.flagged) ? sevResult.flagged : [];
+    // Tier 1 — urgent-flagged numeric results
+    flagged.filter((f) => f && f.effSev === 'urgent').forEach((f) => pushCap(toEntry(f)));
+    // Tier 2 — abnormal-flagged numeric results
+    flagged.filter((f) => f && f.effSev === 'abnormal').forEach((f) => pushCap(toEntry(f)));
+
+    // Tier 3 — rule-fired (text-rule) review result. evaluateReportSeverity only
+    // tracks the FIRST review outcome (reviewTop); look up the matching normalised
+    // result (by name) for a value/date to show, when still available.
+    if (sevResult.reviewTop && sevResult.reviewTop.name) {
+      const match = results.find((r) => r && r.name === sevResult.reviewTop.name);
+      pushCap({
+        name: sevResult.reviewTop.name,
+        value: match && match.rawValue ? match.rawValue : null,
+        unit: null,
+        low: null,
+        high: null,
+        // Part A (item 3.2) — a red-level text review shows the urgent glyph (mirrors the
+        // comboTop tier below), so the popover line reads as red, not a plain review.
+        flag: sevResult.reviewTop.level === 'red' ? 'urgent' : null,
+        date: (match && match.date) || null,
+        ruleLabel: sevResult.reviewTop.label || null,
+        prior: null,
+      });
+    }
+
+    // Tier 3b — unclassified qualitative positives (Part B, item 3.2). Results no rule
+    // classified but whose text looks positive; surfaced so the popover/banner explain
+    // the amber chip rather than showing nothing. ONE LINE PER ENTRY in
+    // sevResult.unclassified (not just the first — capped like every other tier by
+    // pushCap/DETAIL_CAP). Value shows the raw result string when available.
+    const unclassifiedList = Array.isArray(sevResult.unclassified) ? sevResult.unclassified : [];
+    unclassifiedList.forEach((u) => {
+      if (!u || !u.name) return;
+      const match = results.find((r) => r && r.name === u.name);
+      pushCap({
+        name: u.name,
+        value: match && match.rawValue ? match.rawValue : null,
+        unit: null,
+        low: null,
+        high: null,
+        flag: null,
+        date: (match && match.date) || null,
+        ruleLabel: "'" + String(u.token || '') + "' — not matched by a rule, surfaced for review",
+        prior: null,
+      });
+    });
+
+    // Tier 4 — informational lines: the fired combo (report-level, not tied to a
+    // single result row), then the calm noGrowth text-rule outcome.
+    if (sevResult.comboTop && sevResult.comboTop.label) {
+      pushCap({
+        name: sevResult.comboTop.label,
+        value: null,
+        unit: null,
+        low: null,
+        high: null,
+        flag: sevResult.comboTop.level === 'red' ? 'urgent' : null,
+        date: null,
+        ruleLabel: null,
+        prior: null,
+      });
+    }
+    if (sevResult.noGrowthTop && sevResult.noGrowthTop.name) {
+      const match = results.find((r) => r && r.name === sevResult.noGrowthTop.name);
+      pushCap({
+        name: sevResult.noGrowthTop.name,
+        value: match && match.rawValue ? match.rawValue : null,
+        unit: null,
+        low: null,
+        high: null,
+        flag: null,
+        date: (match && match.date) || null,
+        ruleLabel: sevResult.noGrowthTop.label || null,
+        prior: null,
+      });
+    }
+
+    return out;
+  }
+
+  // Pure helper (item 2.2) — render one buildResultDetail() entry as a single display
+  // line, e.g. "K+ 6.2 mmol/L ↑ (3.5–5.3) · 12 Jun · rule: Critical high potassium
+  // (red ≥6.5) · was 4.1, 03 May". Exported for unit testing via regex extraction —
+  // self-contained (nests its own date formatter). The RESULT of this function must
+  // only ever be assigned via textContent, never innerHTML — the pieces it joins
+  // (analyte name, value, unit, rule label) are untrusted lab-report/config-derived
+  // strings (CLAUDE.md / TRIAGE-LENS-2026-07-02.md item 2.2 hard rule).
+  function formatDetailLine(entry) {
+    if (!entry || typeof entry !== 'object') return '';
+    const shortDate = (iso) => {
+      if (typeof iso !== 'string') return '';
+      const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!m) return '';
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const mon = months[Number(m[2]) - 1];
+      return mon ? m[3] + ' ' + mon : '';
+    };
+    const GLYPH = { urgent: '❗', above: '↑', below: '↓' };
+
+    let head = String(entry.name || '').trim();
+    const hasValue = entry.value !== null && entry.value !== undefined && entry.value !== '';
+    if (hasValue) {
+      head += (head ? ' ' : '') + String(entry.value);
+      if (entry.unit) head += ' ' + entry.unit;
+    }
+    if (entry.flag && GLYPH[entry.flag]) head += ' ' + GLYPH[entry.flag];
+    // ADDITIVE (item 3.6) — a delta-fired entry's change summary e.g. '+38 in 5
+    // days', appended right after the arrow so the head reads as one clause:
+    // "Creatinine 148 ↑ +38 in 5 days". Suppresses the trailing "was X, date"
+    // segment below (same underlying prior value — showing both is redundant).
+    if (entry.deltaSummary) head += ' ' + entry.deltaSummary;
+    const hasLow = entry.low !== null && entry.low !== undefined;
+    const hasHigh = entry.high !== null && entry.high !== undefined;
+    if (hasLow || hasHigh) {
+      head += ' (' + (hasLow ? entry.low : '?') + '–' + (hasHigh ? entry.high : '?') + ')';
+    }
+
+    const segs = [];
+    const headTrimmed = head.trim();
+    if (headTrimmed) segs.push(headTrimmed);
+    const d = shortDate(entry.date);
+    if (d) segs.push(d);
+    if (entry.ruleLabel) segs.push('rule: ' + entry.ruleLabel);
+    if (
+      !entry.deltaSummary &&
+      entry.prior &&
+      (entry.prior.dir === 'up' || entry.prior.dir === 'down' || entry.prior.dir === 'same') &&
+      entry.prior.value !== null &&
+      entry.prior.value !== undefined
+    ) {
+      const pd = shortDate(entry.prior.date);
+      segs.push('was ' + entry.prior.value + (pd ? ', ' + pd : ''));
+    }
+    return segs.join(' · ');
+  }
+
+  // Pure helper (item 3.1, TRIAGE-LENS-2026-07-02.md) — render one entry from
+  // sev.unitMismatches as a single explanatory popover line, e.g. "Potassium: rule
+  // 'Critical high potassium' expects mmol/L, result reported in mg/dL — rule not
+  // applied". Exported for unit testing via regex extraction, same pattern as
+  // formatDetailLine above. The RESULT of this function must only ever be assigned
+  // via textContent, never innerHTML — the pieces it joins (analyte name, rule
+  // label, unit strings) are untrusted lab-report/config-derived strings.
+  function formatUnitMismatchLine(m) {
+    if (!m || typeof m !== 'object') return '';
+    const name = String(m.name || '').trim() || 'Result';
+    const ruleLabel = String(m.ruleLabel || '').trim();
+    const ruleUnit = String(m.ruleUnit || '').trim();
+    const resultUnit = String(m.resultUnit || '').trim();
+    const rulePart = ruleLabel ? "rule '" + ruleLabel + "'" : 'a rule';
+    const expects = ruleUnit ? ' expects ' + ruleUnit + ',' : '';
+    const reported = resultUnit ? ' result reported in ' + resultUnit : ' result reported in an unrecognised unit';
+    return name + ': ' + rulePart + expects + reported + ' — rule not applied';
+  }
+
+  // Sentinel returned by computeQueueRowResult (item 1.1 leg D) to distinguish
+  // "attempted this row's fetch/eval and it genuinely failed" from a plain
+  // `null`, which stays reserved for "nothing to check" (feature disabled,
+  // this task has no matching investigation report) or "checked, nothing due".
+  // A distinct object identity — never a string/bool — so it can't collide
+  // with a real evaluateReportSeverity() result or a plain null.
+  const QUEUE_RESULT_FETCH_ERROR = Object.freeze({ __chQueueResultError: true });
 
   const computeQueueRowResult = async (taskUuid) => {
     const urgentCfg  = findSystemChip('queue.resultUrgent');
@@ -3290,14 +4471,20 @@
     const API  = window.SentinelApiClient;
     const NORM = window.SentinelNormalisers;
     const SEV  = window.SentinelResultSeverity;
+    // Globals absent / no API context: the whole feature can't run in this
+    // world — same "nothing to check" bucket as anyEnabled/overviewURL below,
+    // not a per-row failure, so plain null (no error chip, no aggressive retry).
     if (!API || !NORM || !SEV) { log('queue-result: globals not loaded', taskUuid); return null; }
     const ctx = API.detectMedicusContext(location.href);
     if (!ctx) { log('queue-result: no medicus context'); return null; }
     const entry = _queueResultCache.get(taskUuid);
+    // No overviewURL: this task has no matching investigation report to fetch
+    // (e.g. a non-lab task type in the same queue) — a structural "nothing to
+    // check" for this row, not a failed check, so plain null.
     if (!entry || !entry.overviewURL) { log('queue-result: no overviewURL', taskUuid); return null; }
     let raw;
     try { raw = await API.fetchInvestigationReport(ctx.apiBase, entry.overviewURL); }
-    catch (e) { log('queue-result: fetchInvestigationReport threw', e.message); return null; }
+    catch (e) { log('queue-result: fetchInvestigationReport threw', e.message); return QUEUE_RESULT_FETCH_ERROR; }
     const report = NORM.normaliseInvestigationReport(raw);
     // Retain the just-parsed result lines in memory so the options-page result-rule
     // inspector can offer "Load a recent result" instead of demanding a raw paste.
@@ -3315,65 +4502,485 @@
       ? CONFIG.resultRules.filter(r => r && r.enabled !== false)
       : [];
 
-    // Patient-record suppression (e.g. "possible new diabetes" rules): fetch the
-    // problem list ONLY when a suppressIfProblem rule's analyte is actually present
-    // in this report — most reports (FBC, U&E) never trigger this extra fetch.
+    // Patient-record suppression (e.g. "possible new diabetes" rules) AND patient-
+    // context result rules (item 3.5 — age/sex-gated escalations, e.g. an
+    // over-65-only FIB-4 threshold): both need a full patient fetch beyond the
+    // investigation report itself, so share ONE opportunistic fetchAll, triggered
+    // ONLY when a relevant rule is actually configured AND its analyte is present in
+    // THIS report — most reports (FBC, U&E) never trigger it. Since zero shipped
+    // result rules carry suppressIfProblem-needing-fetch analytes outside their own
+    // report or a context clause today, `contextRules` is always empty and this
+    // extra fetch fires no more often than it did before item 3.5 — patientContext
+    // stays undefined (fail closed for every context-gated rule) until a clinician
+    // actually authors one.
     let problems = [];
+    let patientContext; // fail closed by default — undefined unless a real banner was fetched
     try {
       const suppressRules = resultRules.filter(
         r => r && r.suppressIfProblem && r.analyte && Array.isArray(r.analyte.match)
       );
-      if (suppressRules.length && report.patientUuid && Array.isArray(report.results)) {
+      const contextRules = resultRules.filter(r => r && r.context && typeof r.context === 'object');
+      const analyteTermsFor = (r) => {
+        if ((r.kind || 'threshold') === 'combo' && Array.isArray(r.conditions)) {
+          return r.conditions.reduce((acc, c) => {
+            if (c && c.analyte && Array.isArray(c.analyte.match)) acc.push(...c.analyte.match);
+            return acc;
+          }, []);
+        }
+        return (r.analyte && Array.isArray(r.analyte.match)) ? r.analyte.match : [];
+      };
+      if ((suppressRules.length || contextRules.length) && report.patientUuid && Array.isArray(report.results)) {
         const names = report.results.map(r => String((r && r.name) || '').toLowerCase());
-        const relevant = suppressRules.some(r =>
+        const relevantSuppress = suppressRules.some(r =>
           r.analyte.match.some(
             m => typeof m === 'string' && m && names.some(n => n.includes(m.toLowerCase()))
           )
         );
-        if (relevant) {
+        const relevantContext = contextRules.some(r =>
+          analyteTermsFor(r).some(
+            m => typeof m === 'string' && m && names.some(n => n.includes(m.toLowerCase()))
+          )
+        );
+        if (relevantSuppress || relevantContext) {
           const apiResults = await API.fetchAll(ctx.apiBase, report.patientUuid);
           const normalised = NORM.normaliseAll(apiResults, {
             url: location.href, title: '', view: null,
             patientUuid: report.patientUuid, resolutionSource: 'queue-result-suppress'
           });
           problems = Array.isArray(normalised.problems) ? normalised.problems : [];
+          // Item 3.5 — normaliseBanner (engine/normalisers.js) supplies ageYears/sex
+          // from the patient banner. Only carried through when at least one is a
+          // genuinely usable value — never a fabricated/guessed field.
+          const pc = normalised.patientContext;
+          if (pc && typeof pc === 'object' && (Number.isFinite(pc.ageYears) || typeof pc.sex === 'string')) {
+            patientContext = {
+              ageYears: Number.isFinite(pc.ageYears) ? pc.ageYears : undefined,
+              sex: typeof pc.sex === 'string' ? pc.sex : undefined,
+            };
+          }
         }
       }
     } catch (e) { log('queue-result: problem fetch failed', e.message); }
 
-    const sev = SEV.evaluateReportSeverity(report, {
-      priorityDisplay: entry.priorityDisplay,
-      resultRules,
-      problems
-    });
+    let sev;
+    try {
+      sev = SEV.evaluateReportSeverity(report, {
+        priorityDisplay: entry.priorityDisplay,
+        resultRules,
+        problems,
+        patientContext
+      });
+    } catch (e) {
+      log('queue-result: evaluateReportSeverity threw', e.message);
+      return QUEUE_RESULT_FETCH_ERROR;
+    }
+    // Item 2.2 — build the compact per-result detail array for the queue chip popover
+    // from the SAME already-fetched/normalised report + already-computed sev (no extra
+    // fetch, no re-evaluation). Attached directly onto the returned sev object so it
+    // rides along wherever `sev` is cached/returned (see the scheduler below, which
+    // additionally mirrors it onto the cache entry as `.detail`) without changing this
+    // function's return contract (still `sev`, null, or the error sentinel — the
+    // sentinel paths above all return before this point, so an error row can never
+    // carry a numeric detail array; its popover is the fixed explanation text).
+    try {
+      if (sev && typeof sev === 'object') sev.detail = buildResultDetail(report, sev);
+    } catch (e) { log('queue-result: buildResultDetail failed', e.message); }
+    // Item 4.4 (TRIAGE-LENS-2026-07-02.md) — "all-normal, fileable" queue marker.
+    // Reuses shared/lab-filing-utils.js's fileabilityBlockers(report, severity,
+    // resultRules) — the EXACT profile-independent gate lab-file-button.js's own
+    // loadReportSeverity() already runs on the filing screen (severity.level ===
+    // 'none' AND no free-text/culture/unmatched/missing-result-rules blocker).
+    // Deliberately NOT lab-file-button.js's computeProfileBlockers — those need a
+    // MATCHED FILING PROFILE (per-profile parameter overrides, trend guard, the
+    // per-patient suppress list, text-suppress phrases, med exclusion), which the
+    // queue has no concept of; fileabilityBlockers is the profile-independent half
+    // of the gate and is exactly "all-normal, nothing that blocks auto-filing".
+    // shared/lab-filing-utils.js loads in the SAME manifest content-script block as
+    // this file (after content.js, before lab-file-button.js) and runs
+    // synchronously at document_idle, well before any fetch-driven call into this
+    // function — so window.LabFilingUtils is always populated by the time this
+    // executes. READ-ONLY: this NEVER files anything — filing stays the explicit
+    // lab-file-button.js action on the filing screen. Fails CLOSED: if the util
+    // isn't loaded, or blockers can't be computed, `fileable` stays undefined/false
+    // — absence of the tick is never a claim, only its presence is.
+    try {
+      if (sev && typeof sev === 'object' && sev.level === 'none') {
+        const LF = window.LabFilingUtils;
+        if (LF && typeof LF.fileabilityBlockers === 'function') {
+          const fileBlockers = LF.fileabilityBlockers(report, sev, resultRules);
+          sev.fileable = Array.isArray(fileBlockers) && fileBlockers.length === 0;
+        }
+      }
+    } catch (e) { log('queue-result: fileability check failed', e.message); }
+    // Item 3.1 — log each individual unit-mismatch skip (not just the count) at the
+    // point sev is computed, once per fetch — the most useful place to see WHICH
+    // analyte/rule/unit-pair was skipped when diagnosing a "why didn't this rule
+    // fire" report.
+    if (sev && Array.isArray(sev.unitMismatches) && sev.unitMismatches.length) {
+      sev.unitMismatches.forEach((m) => {
+        log('queue-result: unit-mismatch skip', taskUuid, m.name, 'rule=' + m.ruleLabel, 'ruleUnit=' + m.ruleUnit, 'resultUnit=' + m.resultUnit);
+      });
+    }
     log('queue-result: sev for', taskUuid, '=', sev && sev.level, '(rules=' + resultRules.length + ')');
     return sev;
   };
 
-  const injectResultChip = (rowIndex, sev) => {
-    if (!sev) return;
+  // The "couldn't check" chip (item 1.1 leg D) — fixed markup, NOT routed
+  // through getSystemChip/renderSystemChipHtmlMemo (those are user-configurable
+  // chip CONTENT; this is a system-level failure indicator and must not be
+  // relabelled/disabled by a rule config). Grey outline (.ch-chip-meta family +
+  // its own .ch-chip-error modifier — see hud.css) so it's visually distinct
+  // from both a filled clinical chip and the plain meta/outline chips.
+  const RESULT_ERROR_CHIP_HTML =
+    '<span class="ch-chip ch-chip-meta ch-chip-error" role="note" ' +
+    'title="Medicus Suite couldn’t check this result — will retry">?</span>';
+
+  // "Unit mismatch" chip (item 3.1, TRIAGE-LENS-2026-07-02.md) — fixed markup, NOT
+  // routed through getSystemChip/renderSystemChipHtmlMemo, same reasoning as
+  // RESULT_ERROR_CHIP_HTML above: this is a SYSTEM-level indicator (one or more
+  // result rules were skipped because the reported unit conflicts with the rule's
+  // expected unit — see engine/result-severity.js unitsCompatible), not
+  // user-configurable chip content, and there is no defaults.json systemChips slot
+  // to author a label for it. Same ch-chip-meta family as the other meta chips
+  // (misprioritised/unmatched) — outline, never a clinical fill, since this never
+  // changes severity, only which rules were consulted.
+  const UNIT_MISMATCH_CHIP_HTML =
+    '<span class="ch-chip ch-chip-meta ch-chip-unit-mismatch" role="note" ' +
+    'title="One or more rules were skipped: reported unit does not match the rule’s expected unit — see detail">unit?</span>';
+
+  // "Unclassified qualitative positive" chip (Part B, item 3.2, TRIAGE-LENS-2026-07-02.md)
+  // — a non-numeric result (e.g. "Positive", "Detected") that no lab flag and no text
+  // rule caught, surfaced so it can never be silently invisible (see
+  // engine/result-severity.js matchUnclassifiedPositive). Fixed markup, NOT routed
+  // through findSystemChip/renderSystemChipHtmlMemo — same reasoning as
+  // RESULT_ERROR_CHIP_HTML/UNIT_MISMATCH_CHIP_HTML above: this mechanism change ships
+  // no new defaults.json systemChips slot (that is the calibration pass's call). AMBER
+  // but deliberately NOT the filled .ch-chip-amber a lab-confirmed abnormal/review chip
+  // uses — dashed outline (.ch-chip-unclassified, hud.css) with a "?" hint prefix, so a
+  // GP never mistakes an unreviewed free-text hit for a graded clinical finding.
+  // `name`/`token` are lab-report-derived and untrusted — escapeHtml()'d, this file's
+  // innerHTML discipline. Shows only the FIRST unclassified entry by name (mirrors the
+  // review/noGrowth/combo "top" chip convention); a count suffix covers the rest.
+  const buildUnclassifiedChipHtml = (list) => {
+    if (!Array.isArray(list) || !list.length) return null;
+    const first = list[0] && typeof list[0] === 'object' ? list[0] : {};
+    const name = escapeHtml(String(first.name || 'Result').trim());
+    const extra = list.length > 1 ? ' +' + (list.length - 1) : '';
+    const title = 'Not matched by a rule — surfaced for review (unclassified positive result' +
+      (list.length > 1 ? 's' : '') + ')';
+    return '<span class="ch-chip ch-chip-unclassified" role="note" title="' + escapeHtml(title) + '">? ' +
+      name + extra + '</span>';
+  };
+
+  // "All-normal, fileable" marker (item 4.4, TRIAGE-LENS-2026-07-02.md) — a small
+  // green tick shown ONLY when computeQueueRowResult's fileability check found the
+  // report level:'none' AND cleared shared/lab-filing-utils.js's fileabilityBlockers
+  // (free-text/culture/unmatched/missing-rules) — the same profile-independent gate
+  // lab-file-button.js runs on the filing screen. READ-ONLY: it never files anything
+  // — filing stays the explicit lab-file-button.js action on the task's filing
+  // screen; this is purely "work the reds first, batch the ticks later". Fixed
+  // markup, NOT routed through findSystemChip/renderSystemChipHtmlMemo — same
+  // reasoning as RESULT_ERROR_CHIP_HTML/UNIT_MISMATCH_CHIP_HTML above: a system-level
+  // indicator with no defaults.json systemChips slot to author a label for. Classed
+  // `ch-chip-fileable` (colour) + `ch-q-fileable` (a stable hook independent of the
+  // colour class). Rendered INSIDE the existing .ch-q-result host span (see
+  // injectResultChip below), so it inherits that host's hud.css token-block scope
+  // (CLAUDE.md rule 5) via CSS inheritance without needing its own top-level entry
+  // in the selector list.
+  const FILEABLE_CHIP_HTML =
+    '<span class="ch-chip ch-chip-fileable ch-q-fileable" role="note" ' +
+    'title="Every result is within normal limits and nothing was found that blocks auto-filing. ' +
+    'This is a marker only, nothing is filed automatically — file from the task’s lab-filing action.">✓</span>';
+
+  // taskUuid (item 2.2) is threaded through by every call site (initial post-fetch
+  // inject, the scheduler's fresh-cache-hit path, and reinjectCachedResultChips) so
+  // the popover click handler can read this row's cached detail at click time.
+  const injectResultChip = (rowIndex, sev, taskUuid, isError) => {
+    if (!sev && !isError) return;
     const row = document.querySelector(`.ag-row[row-index="${rowIndex}"]:not(.ag-full-width-row)`);
     if (!row) return;
-    const chipDefs = selectResultChips(sev);
-    if (!chipDefs.length) return;
-    const built = chipDefs
-      .map((d) => ({ html: renderSystemChipHtmlMemo(d.id, d.vars), meta: !!d.meta }))
-      .filter((b) => b.html);
-    if (!built.length) return;
+    // `built` stays undefined on the error path — the error markup already
+    // carries its ch-chip-meta/ch-chip-error classes inline, so there's no
+    // post-hoc meta marking to do for it.
+    let builtHtml, built;
+    if (isError) {
+      builtHtml = [RESULT_ERROR_CHIP_HTML];
+    } else {
+      const chipDefs = selectResultChips(sev);
+      built = chipDefs
+        .map((d) => ({ html: renderSystemChipHtmlMemo(d.id, d.vars), meta: !!d.meta }))
+        .filter((b) => b.html);
+      builtHtml = built.map((b) => b.html);
+      // Item 3.1 — append the fixed "unit?" meta chip when this report had one or
+      // more rules skipped on a unit mismatch. Appended (not gated on chipDefs
+      // being non-empty) so a report with NO severity/review/combo chip at all —
+      // e.g. every applicable rule was skipped on unit mismatch and nothing else
+      // fired — still shows the "unit?" chip rather than nothing.
+      const hasUnitMismatch = !!(sev && Array.isArray(sev.unitMismatches) && sev.unitMismatches.length);
+      if (hasUnitMismatch) {
+        builtHtml = builtHtml.concat([UNIT_MISMATCH_CHIP_HTML]);
+        log('queue-result: unit-mismatch chip', rowIndex, 'count=' + sev.unitMismatches.length);
+      }
+      // Part B (item 3.2) — same "append even when nothing else fired" reasoning as the
+      // unit-mismatch chip above: a report whose ONLY signal is an unclassified positive
+      // (nothing else matched/flagged it) must still show something, not silence.
+      const unclassifiedList = sev && Array.isArray(sev.unclassified) ? sev.unclassified : [];
+      if (unclassifiedList.length) {
+        const chipHtml = buildUnclassifiedChipHtml(unclassifiedList);
+        if (chipHtml) {
+          builtHtml = builtHtml.concat([chipHtml]);
+          log('queue-result: unclassified chip', rowIndex, 'count=' + unclassifiedList.length);
+        }
+      }
+      // Item 4.4 — "all-normal, fileable" marker. Appended (not gated on builtHtml
+      // being non-empty, same convention as the two blocks above) because a
+      // genuinely all-normal report shows NO clinical/meta chip at all today — the
+      // tick is that row's only signal, so without this an all-normal-and-fileable
+      // row would render nothing. Only ever true when computeQueueRowResult found
+      // sev.level==='none' AND the LabFilingUtils gate cleared it (see FILEABLE_
+      // CHIP_HTML above) — a row the gate can't judge, or any red/amber/error row,
+      // never sets sev.fileable, so this never fires for them. Pref-gated (default
+      // true, PREF('queueFileableMarker', true)) and re-checked on every render, so
+      // turning the pref off in Settings clears the tick on the next refresh — same
+      // convention as queueRowTint.
+      if (sev && sev.fileable === true && PREF('queueFileableMarker', true)) {
+        builtHtml = builtHtml.concat([FILEABLE_CHIP_HTML]);
+        log('queue-result: fileable marker', rowIndex);
+      }
+      if (!builtHtml.length) return;
+    }
     const host = queueChipHost(row, '.ch-q-result');
     if (!host) return;
     const span = document.createElement('span');
     span.className = host.inPreview ? 'ch-q-result' : 'ch-q-result ch-q-result-inline';
     span.setAttribute('role', 'note');
-    span.innerHTML = built.map((b) => b.html).join('');
+    if (taskUuid) span.dataset.chTaskUuid = taskUuid;
+    span.innerHTML = builtHtml.join('');
     // Always PREPEND. Appending to the end of the (Vue-managed) patient-name cell
     // gets reconciled away by Medicus's renderer on its next re-render; prepending
     // before the cell's own content survives. The name stays visible via the CSS
     // width-cap on .ch-q-result-inline, not by position.
     host.target.insertBefore(span, host.target.firstChild);
-    log('queue-result: chip injected', rowIndex, 'inPreview=' + host.inPreview);
+    log('queue-result: chip injected', rowIndex, 'inPreview=' + host.inPreview, isError ? '(error)' : '');
     const rendered = span.querySelectorAll('.ch-chip');
-    built.forEach((b, i) => { if (b.meta && rendered[i]) rendered[i].classList.add('ch-chip-meta'); });
+    if (built) {
+      built.forEach((b, i) => { if (b.meta && rendered[i]) rendered[i].classList.add('ch-chip-meta'); });
+    }
+    // Item 2.2 — make each rendered chip clickable: opens a singleton popover showing
+    // this row's cached detail lines. All chips in this host share the SAME popover
+    // content (the row's whole detail set, not per-chip filtering) — simpler and still
+    // correct, since a row typically shows 1-2 chips drawn from the same report. The
+    // grey "?" error chip gets the SAME wiring: its popover renders the fixed
+    // explanation text instead of detail lines (isError is threaded through so the
+    // toggle never shows a numeric detail array for a failed check — there isn't one
+    // cached for error entries anyway).
+    // Wired here (not via delegation) so both injection paths — the initial
+    // fetch-then-inject call below and reinjectCachedResultChips' durable re-inject —
+    // go through this SAME function and always get a live listener on the fresh node
+    // Vue's re-render just replaced (delegated listeners on a still-live ancestor would
+    // also work, but per-node keeps this identical to the existing action-menu pattern).
+    if (taskUuid) {
+      rendered.forEach((chipEl) => {
+        chipEl.classList.add('ch-chip-actionable');
+        chipEl.setAttribute('role', 'button');
+        chipEl.setAttribute('tabindex', '0');
+        chipEl.addEventListener('click', (e) => {
+          e.preventDefault(); e.stopPropagation();
+          toggleResultDetailPopover(chipEl, taskUuid, !!isError);
+        });
+        chipEl.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+            e.preventDefault(); e.stopPropagation();
+            toggleResultDetailPopover(chipEl, taskUuid, !!isError);
+          }
+        });
+      });
+    }
+  };
+
+  // ---- Result-chip detail popover (item 2.2, TRIAGE-LENS-2026-07-02.md) ----
+  // Singleton, document.body-hosted (same convention as the action menu above). Built
+  // with createElement/textContent ONLY — the lines are derived from lab-report data
+  // (untrusted), so no innerHTML anywhere on this path (CLAUDE.md / plan hard rule).
+  let _resultDetailPopoverEl = null;
+  let _resultDetailPopoverAnchor = null;
+
+  const closeResultDetailPopover = () => {
+    if (_resultDetailPopoverEl) {
+      _resultDetailPopoverEl.remove();
+      _resultDetailPopoverEl = null;
+    }
+    _resultDetailPopoverAnchor = null;
+    document.removeEventListener('click', onDocClickForResultPopover, true);
+    document.removeEventListener('keydown', onKeydownForResultPopover, true);
+    window.removeEventListener('scroll', closeResultDetailPopover, true);
+  };
+  const onDocClickForResultPopover = (e) => {
+    if (!_resultDetailPopoverEl) return;
+    if (_resultDetailPopoverEl.contains(e.target)) return;
+    if (_resultDetailPopoverAnchor && _resultDetailPopoverAnchor.contains(e.target)) return;
+    closeResultDetailPopover();
+  };
+  const onKeydownForResultPopover = (e) => {
+    if (e.key === 'Escape' || e.key === 'Esc') closeResultDetailPopover();
+  };
+
+  // Fixed explanation shown when the grey "?" error chip is clicked (item 2.2 —
+  // the error chip gets a popover too). Plain, non-alarming, and honest about the
+  // retry behaviour: the scheduler re-attempts an error entry after the short
+  // _RESULT_ERROR_TTL, with no user action needed.
+  const RESULT_ERROR_POPOVER_TEXT =
+    'Medicus Suite couldn’t check this result — the fetch or evaluation failed. ' +
+    'This is usually transient (network hiccup, Medicus API blip). ' +
+    'It retries automatically; the chip updates when a retry succeeds.';
+
+  // findResultRuleActionsById(ruleId) → action[] | null (item 2.7, TRIAGE-LENS-2026-07-02.md)
+  // Looks up a result rule's `actions` array by id straight from the LIVE CONFIG at
+  // POPOVER-RENDER time (not cached alongside the detail entry, which only carries the
+  // small ruleId string) — so editing a rule's actions in Settings applies to the next
+  // popover open with no cache invalidation needed. Returns null (never []) when the
+  // rule is missing, disabled-out-of-config, or carries no actions, so callers can use
+  // a simple truthiness check.
+  const findResultRuleActionsById = (ruleId) => {
+    if (!ruleId || !CONFIG || !Array.isArray(CONFIG.resultRules)) return null;
+    const rule = CONFIG.resultRules.find((r) => r && r.id === ruleId);
+    if (!rule || !Array.isArray(rule.actions) || !rule.actions.length) return null;
+    return rule.actions;
+  };
+
+  // buildResultRuleActionsRow(actions) — item 2.7. One button per guidance action,
+  // built with createElement/textContent only (no innerHTML — action label/text are
+  // clinician-authored config, but this popover's hard rule per item 2.2 is
+  // createElement/textContent throughout, so this stays consistent rather than
+  // carving out an exception). Reuses executeAction for link/snippet — the SAME
+  // scheme-guarded (isSafeActionUrl) function the alert-rule action menu uses, so a
+  // javascript:/data: link action is blocked here exactly as it is there. `note`
+  // actions are handled locally (a toggled inline text block) rather than via
+  // executeAction's note branch, which rewrites a whole ch-action-menu singleton — a
+  // different popover/lifecycle to this one; toggling in place keeps the rest of this
+  // popover's detail lines visible instead of replacing them.
+  const buildResultRuleActionsRow = (actions) => {
+    const row = document.createElement('div');
+    row.className = 'ch-result-popover-actions';
+    actions.forEach((a) => {
+      if (!a || typeof a !== 'object') return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ch-result-popover-action ch-result-popover-action-' + (a.type || 'note');
+      btn.textContent = a.label || '(unlabelled)';
+      if (a.type === 'note' && a.text) {
+        const note = document.createElement('div');
+        // Deliberately NOT "ch-result-popover-action-note" — the button itself already
+        // carries that exact class as its type modifier (ch-result-popover-action-<type>),
+        // so reusing it here would make the two indistinguishable by selector.
+        note.className = 'ch-result-popover-action-notebody';
+        note.textContent = a.text;
+        note.style.display = 'none';
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          note.style.display = note.style.display === 'none' ? 'block' : 'none';
+        });
+        row.appendChild(btn);
+        row.appendChild(note);
+      } else {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          executeAction(a, btn, null);
+        });
+        row.appendChild(btn);
+      }
+    });
+    return row;
+  };
+
+  // Build the popover body with createElement/textContent only — no innerHTML of any
+  // lab-derived string. `detail` is the array built by buildResultDetail; each line's
+  // TEXT comes from formatDetailLine, assigned via textContent only. isError builds
+  // the fixed error explanation instead (never a numeric detail array — error cache
+  // entries don't carry one). `unitMismatches` (item 3.1, ADDITIVE) is
+  // sev.unitMismatches, mirrored onto the cache entry alongside `detail` — one
+  // explanatory line per skipped rule, appended AFTER the normal detail lines.
+  // Rendered regardless of whether `detail` itself is empty, so a report whose
+  // ONLY signal is a unit-mismatch skip still shows something rather than "No
+  // detail available."
+  const buildResultDetailPopoverEl = (detail, isError, unitMismatches) => {
+    const el = document.createElement('div');
+    el.className = 'ch-result-popover';
+    el.setAttribute('role', 'dialog');
+    if (isError) {
+      const line = document.createElement('div');
+      line.className = 'ch-result-popover-line ch-result-popover-error';
+      line.textContent = RESULT_ERROR_POPOVER_TEXT;
+      el.appendChild(line);
+      return el;
+    }
+    const hasDetail = Array.isArray(detail) && detail.length > 0;
+    const mismatches = Array.isArray(unitMismatches) ? unitMismatches : [];
+    if (!hasDetail && !mismatches.length) {
+      const empty = document.createElement('div');
+      empty.className = 'ch-result-popover-empty';
+      empty.textContent = 'No detail available.';
+      el.appendChild(empty);
+      return el;
+    }
+    if (hasDetail) {
+      detail.forEach((entry) => {
+        const line = document.createElement('div');
+        line.className = 'ch-result-popover-line' + (entry.flag ? ' ch-result-popover-line-' + entry.flag : '');
+        line.textContent = formatDetailLine(entry);
+        el.appendChild(line);
+        // Item 2.7 — guidance actions carried by the fired result rule, resolved by
+        // ruleId against the live CONFIG (see findResultRuleActionsById above). No
+        // ruleId, or a rule with no actions configured, renders nothing extra.
+        const actions = findResultRuleActionsById(entry.ruleId);
+        if (actions) el.appendChild(buildResultRuleActionsRow(actions));
+      });
+    }
+    // Item 3.1 — one explanatory line per (result, rule) unit-mismatch skip.
+    mismatches.forEach((m) => {
+      const line = document.createElement('div');
+      line.className = 'ch-result-popover-line ch-result-popover-line-unit-mismatch';
+      line.textContent = formatUnitMismatchLine(m);
+      el.appendChild(line);
+    });
+    return el;
+  };
+
+  // Toggle: clicking the SAME open anchor again closes it; clicking any other chip (or
+  // a fresh open) closes whatever was open and opens the new one. `taskUuid` is read
+  // fresh from _queueResultCache at click time (not a stale closure), so a detail
+  // array that changed since inject (config/cache invalidation) is never shown stale.
+  // The error state is ALSO re-read from the live cache entry (OR'd with the inject-time
+  // flag): if the entry has flipped to error since inject, never show a stale detail
+  // array for a row whose current state is "couldn't check".
+  const toggleResultDetailPopover = (anchorEl, taskUuid, isError) => {
+    if (_resultDetailPopoverEl && _resultDetailPopoverAnchor === anchorEl) {
+      closeResultDetailPopover();
+      return;
+    }
+    closeResultDetailPopover();
+    const entry = _queueResultCache.get(taskUuid);
+    const showError = !!isError || !!(entry && entry.error);
+    const detail = !showError && entry && Array.isArray(entry.detail) ? entry.detail : [];
+    const unitMismatches = !showError && entry && Array.isArray(entry.unitMismatches) ? entry.unitMismatches : [];
+    const popover = buildResultDetailPopoverEl(detail, showError, unitMismatches);
+    const r = anchorEl.getBoundingClientRect();
+    popover.style.position = 'fixed';
+    popover.style.top = (r.bottom + 4) + 'px';
+    popover.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 340)) + 'px';
+    popover.style.zIndex = '2147483647';
+    document.body.appendChild(popover);
+    _resultDetailPopoverEl = popover;
+    _resultDetailPopoverAnchor = anchorEl;
+    // Dismiss on outside click, Esc, or scroll (matches the action-menu's deferred
+    // listener-attach so the click that OPENED the popover doesn't also close it).
+    setTimeout(() => {
+      document.addEventListener('click', onDocClickForResultPopover, true);
+      document.addEventListener('keydown', onKeydownForResultPopover, true);
+      window.addEventListener('scroll', closeResultDetailPopover, true);
+    }, 0);
   };
 
   // Re-inject result chips straight from the per-task cache, keyed by each row's own
@@ -3399,12 +5006,840 @@
       const taskUuid = _durableRowMap.get(rowIndex);
       if (!taskUuid) return;
       const entry = _queueResultCache.get(taskUuid);
-      if (!entry || entry.sev === undefined || entry.sev === null) return;
-      if (!entry.ts || (Date.now() - entry.ts) > _RESULT_CACHE_TTL) return;
-      injectResultChip(rowIndex, entry.sev);
+      if (!entry || entry.sev === undefined) return; // never evaluated -> nothing (still pending)
+      // A definitive clear/disabled/unmatched row (sev===null, not an error) has
+      // nothing to show — but an ERROR entry also has sev===null, and DOES have
+      // something to show (the grey "?" chip) as long as it's still live. Item
+      // 1.1 leg D: an expired error entry is treated as NOT cached (renders
+      // nothing here — the scheduler's own freshness check picks it up for retry).
+      if (entry.sev === null && !entry.error) return;
+      const ttl = entry.error ? _RESULT_ERROR_TTL : _RESULT_CACHE_TTL;
+      if (!entry.ts || (Date.now() - entry.ts) > ttl) return;
+      injectResultChip(rowIndex, entry.sev, taskUuid, !!entry.error);
       n++;
     });
     if (n) log('queue-result: re-injected ' + n + ' cached chip(s) from durable map (visible rows)');
+  };
+
+  // ---- Severity row tint (item 1.3, TRIAGE-LENS-2026-07-02.md) ----
+  // Pre-attentive 2-3px left-edge tint on rows with a KNOWN cached severity — red for
+  // red/urgent, amber for amber. A marker CLASS added to the host `.ag-row` (and its
+  // preview/detail row when one exists), same "class on the host element" pattern as
+  // QUEUE_DECORATED_KEY — NOT an injected node. Rows with no cached severity get
+  // neither class: this must never imply "assessed" (that's item 1.1's territory).
+  const ROW_TINT_RED = 'ch-row-sev-red';
+  const ROW_TINT_AMBER = 'ch-row-sev-amber';
+
+  // Strip stale tint classes from every row currently carrying one, scoped to the live
+  // grid container. Must run in the SAME wipe cycle as the chip-node wipe
+  // (refreshQueueChips) so a recycled row-index never keeps a previous patient's
+  // tint colour — the tint analogue of the v3.69 wrong-row chip bug (CLAUDE.md rule #4).
+  const clearQueueRowTint = () => {
+    queueScope()
+      .querySelectorAll('.' + ROW_TINT_RED + ', .' + ROW_TINT_AMBER)
+      .forEach((el) => el.classList.remove(ROW_TINT_RED, ROW_TINT_AMBER));
+  };
+
+  // Re-apply tint straight from the per-task cache, using the EXACT SAME durable
+  // rowIndex->taskUuid->severity lookup as reinjectCachedResultChips above (survives
+  // the runQueue churn that empties _queueRowUuids). Tints both the master row and its
+  // preview/detail row (queueChipHost's host resolution shows a GP may be scanning
+  // either). Gated on prefs.queueRowTint (default true) via the existing PREF()
+  // mechanism. Idempotent: always paired with clearQueueRowTint() in the same cycle,
+  // so calling it repeatedly never accumulates stale classes.
+  const reapplyQueueRowTint = () => {
+    if (!PREF('queueRowTint', true)) return;
+    let n = 0;
+    const scope = queueScope();
+    scope.querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)').forEach((row) => {
+      const ri = row.getAttribute('row-index');
+      if (ri == null) return;
+      const rowIndex = Number(ri);
+      const taskUuid = _durableRowMap.get(rowIndex);
+      if (!taskUuid) return;
+      const entry = _queueResultCache.get(taskUuid);
+      if (!entry || entry.sev === undefined || entry.sev === null) return;
+      if (!entry.ts || (Date.now() - entry.ts) > _RESULT_CACHE_TTL) return;
+      const level = entry.sev.level;
+      if (level !== 'red' && level !== 'amber') return; // unknown/none -> no tint, ever
+      const cls = level === 'red' ? ROW_TINT_RED : ROW_TINT_AMBER;
+      row.classList.add(cls);
+      const previewRow = findQueuePreviewRow(row);
+      if (previewRow) previewRow.classList.add(cls);
+      n++;
+    });
+    if (n) log('queue-result: tinted ' + n + ' row(s) from durable map (visible rows)');
+  };
+
+  // ---- Seen-session row dimming (item 4.7, TRIAGE-LENS-2026-07-02.md) ----
+  // SAFETY-SENSITIVE — read docs/HAZARD-LOG.md before touching this section.
+  // Dims rows for tasks the GP has already OPENED this session, so unworked
+  // rows stand out. Visual only, session-local: `_seenTasks` is a plain Set
+  // of taskUuids, never persisted (no chrome.storage write), never cleared
+  // (lives for the page/tab session — a fresh page load starts empty). A
+  // taskUuid is added the moment runDetailVerdict() resolves it (below), the
+  // same "GP is now looking at this task" signal the detail-verdict banner
+  // itself keys off.
+  //
+  // HARD SAFETY GATE: a row is ONLY eligible to dim when it is NOT currently
+  // carrying ROW_TINT_RED or ROW_TINT_AMBER — i.e. its live severity is
+  // clear/none or unassessed. This is checked against the row's CURRENT tint
+  // class at apply time, every refreshQueueChips cycle (never a one-off
+  // snapshot taken when the task was opened), which is what gives the
+  // auto-undim behaviour for free: reapplyQueueRowTint (above) runs earlier
+  // in the SAME refreshQueueChips pass and derives the tint fresh from
+  // _queueResultCache every time, so a row that has since re-graded red/amber
+  // (a new result landed) has already LOST its tint class by the time this
+  // function reads it, fails the gate below, and is never dimmed — there is
+  // no separate "undo the dim" code path to get wrong. This suppresses
+  // NOTHING from the engine: chip content, tint colour and the status-bar
+  // counts are all completely unaffected by whether a row is dimmed.
+  //
+  // Pref-gated OFF by default (PREF('queueSeenDimming', false)) — the most
+  // snooze-adjacent feature in the plan, so opt-in is the conservative
+  // default.
+  const ROW_SEEN_CLASS = 'ch-row-seen';
+  const _seenTasks = new Set();
+
+  const clearQueueSeenDim = () => {
+    queueScope()
+      .querySelectorAll('.' + ROW_SEEN_CLASS)
+      .forEach((el) => el.classList.remove(ROW_SEEN_CLASS));
+  };
+
+  // Re-apply from _seenTasks + the durable rowIndex->taskUuid map. Exported
+  // for tests. MUST run after reapplyQueueRowTint in the same refresh cycle
+  // (refreshQueueChips wires this) so the tint-class gate below reflects this
+  // cycle's freshly-computed severity, not a stale one.
+  const reapplyQueueSeenDim = () => {
+    if (!PREF('queueSeenDimming', false)) return;
+    queueScope()
+      .querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)')
+      .forEach((row) => {
+        const ri = row.getAttribute('row-index');
+        if (ri == null) return;
+        const rowIndex = Number(ri);
+        const taskUuid = _durableRowMap.get(rowIndex);
+        if (!taskUuid || !_seenTasks.has(taskUuid)) return;
+        // NEVER dim a row with a red/amber result — the escalation gate. Read the
+        // severity straight from the result cache (the source of truth), NOT from
+        // the tint CSS class: the tint is only rendered when prefs.queueRowTint is
+        // on, so a class check would wrongly dim a seen ALERT row for a user who
+        // has row-tint OFF but seen-dimming ON. A fresh red/amber cache entry
+        // blocks the dim regardless of any cosmetic pref; a later re-grade to
+        // red/amber removes the dim on the next refresh (auto-undim) for free.
+        const sevEntry = _queueResultCache.get(taskUuid);
+        if (
+          sevEntry &&
+          sevEntry.sev &&
+          sevEntry.ts &&
+          Date.now() - sevEntry.ts <= _RESULT_CACHE_TTL &&
+          (sevEntry.sev.level === 'red' || sevEntry.sev.level === 'amber')
+        ) {
+          return;
+        }
+        row.classList.add(ROW_SEEN_CLASS);
+        const previewRow = findQueuePreviewRow(row);
+        if (previewRow) previewRow.classList.add(ROW_SEEN_CLASS);
+      });
+  };
+
+  // ---- Detail-page verdict banner (item 2.4, TRIAGE-LENS-2026-07-02.md) ----
+  // Opening a task and staring at a raw report to re-derive what the queue chip
+  // already knew is the exact "the screen never lies" gap this closes: echo the
+  // SAME cached severity onto the task detail page, reusing the queue's own
+  // cache/compute path (_queueResultCache / computeQueueRowResult) so a task
+  // seen in the queue this session renders with ZERO extra fetches, and a task
+  // opened directly (no queue visit) computes ONCE per taskUuid per page-visit.
+  const DETAIL_VERDICT_CLASS = 'ch-detail-verdict';
+
+  // Which taskUuid the banner currently reflects (module state — survives
+  // runDetail's repeated calls across SPA route/DOM churn) and which taskUuids
+  // have already had a compute-on-miss attempted THIS PAGE-VISIT, so a genuine
+  // cache miss fetches exactly once (the caches above make a repeat visit to
+  // the same task cheap; this guard is what makes a repeat runDetail() pass on
+  // the SAME task, before that fetch resolves, a no-op rather than a re-fetch).
+  let _detailVerdictTaskUuid = null;
+  const _detailVerdictAttempted = new Set();
+
+  // Pure — decides what the banner should show for a given _queueResultCache
+  // entry (or undefined/missing) at time `now`. This is the single seam that
+  // carries all the TTL/error/null-sev logic; the wiring below just acts on the
+  // result. Exported for unit testing via regex extraction (same pattern as
+  // the other pure helpers in this file).
+  //   'render'  — a fresh, graded severity is cached: draw the banner from it.
+  //   'error'   — a fresh (within _RESULT_ERROR_TTL) error entry: draw the grey
+  //               "couldn't check" variant.
+  //   'nothing' — a fresh, definitive null (nothing gradeable — e.g. an admin/
+  //               med task, or disabled result chips): draw NOTHING, ever — a
+  //               verdict banner on a non-result task is noise, not signal.
+  //   'compute' — no entry, the entry has aged past its own TTL (result or
+  //               error), or the row has literally never been evaluated
+  //               (entry.sev === undefined): the caller must compute once.
+  function detailVerdictState(entry, now) {
+    const nowTs = typeof now === 'number' ? now : Date.now();
+    if (!entry) return 'compute';
+    if (entry.error) {
+      return entry.ts && nowTs - entry.ts <= _RESULT_ERROR_TTL ? 'error' : 'compute';
+    }
+    if (entry.sev === undefined) return 'compute';
+    if (!entry.ts || nowTs - entry.ts > _RESULT_CACHE_TTL) return 'compute';
+    return entry.sev === null ? 'nothing' : 'render';
+  }
+
+  // Compose the chip-equivalent headline, reusing selectResultChips' OWN
+  // priority order and sev fields — never re-deriving severity. Mirrors the
+  // top of selectResultChips (clinical severity first, then review/combo/
+  // noGrowth) but returns plain text for the banner rather than a chip def.
+  function buildDetailVerdictHeadline(sev) {
+    if (!sev || typeof sev !== 'object') return '';
+    // Keyed on urgentCount/abnormalCount directly (not gated on `level`) — item 3.2
+    // lets a red text review push `level` to red while urgentCount stays 0, and a
+    // `level === 'amber'` guard would then hide a genuine numeric abnormal headline.
+    // Same reasoning as selectResultChips' numeric branch above.
+    if (sev.urgentCount > 0) {
+      return sev.urgentCount === 1 ? '1 urgent' : sev.urgentCount + ' urgent';
+    }
+    if (sev.abnormalCount > 0) {
+      return sev.abnormalCount === 1 ? '1 abnormal' : sev.abnormalCount + ' abnormal';
+    }
+    if (sev.reviewCount > 0) {
+      const label = sev.reviewTop && sev.reviewTop.label ? String(sev.reviewTop.label) : '';
+      return label && label !== 'Needs review' ? label : 'Needs review';
+    }
+    if (sev.comboCount > 0 && sev.comboTop && sev.comboTop.label) return String(sev.comboTop.label);
+    // Part B (item 3.2) — an unclassified qualitative positive (amber), when nothing
+    // more severe carried the headline. Names the analyte + matched token, e.g.
+    // "Hepatitis B surface antigen: 'Positive'".
+    if (Array.isArray(sev.unclassified) && sev.unclassified.length > 0) {
+      const first = sev.unclassified[0] || {};
+      const n = first.name ? String(first.name) : '';
+      const t = first.token ? String(first.token) : '';
+      const suffix = sev.unclassified.length > 1 ? ' (+' + (sev.unclassified.length - 1) + ')' : '';
+      return (n ? n + ': ' : '') + (t ? "'" + t + "'" : 'unclassified') + suffix;
+    }
+    if (sev.noGrowthCount > 0) {
+      const label = sev.noGrowthTop && sev.noGrowthTop.label ? String(sev.noGrowthTop.label) : '';
+      return label && label !== 'No growth' ? label : 'No growth';
+    }
+    return '';
+  }
+
+  // Least-fragile stable host: the "Task Details" card every non-document
+  // detail task is expected to carry (EXPECTED_CARDS_BY_PAGE['detail'] — the
+  // same anchor extractTaskDetails()/pageReady() already rely on for this
+  // exact page type, so it is present whenever runDetail's own extraction is).
+  const detailVerdictHost = () => findCardByTitle('Task Details');
+
+  // Remove any existing banner node (idempotent — safe to call unconditionally).
+  const removeDetailVerdictBanner = () => {
+    document.querySelectorAll('.' + DETAIL_VERDICT_CLASS).forEach((el) => el.remove());
+  };
+
+  // Build the banner element with createElement/textContent ONLY — the pieces
+  // (analyte names/values, rule labels) are lab-report/config-derived and
+  // untrusted, same discipline as buildResultDetailPopoverEl (CLAUDE.md).
+  const buildDetailVerdictEl = (taskUuid, sev, isError) => {
+    const el = document.createElement('div');
+    el.className = DETAIL_VERDICT_CLASS;
+    el.dataset.chTaskUuid = taskUuid;
+    el.setAttribute('role', 'note');
+    if (isError) {
+      el.classList.add(DETAIL_VERDICT_CLASS + '-error');
+      const line = document.createElement('div');
+      line.className = DETAIL_VERDICT_CLASS + '-line';
+      line.textContent = RESULT_ERROR_POPOVER_TEXT;
+      el.appendChild(line);
+      return el;
+    }
+    const level = sev && sev.level === 'red' ? 'red' : 'amber';
+    el.classList.add(DETAIL_VERDICT_CLASS + '-' + level);
+    const headline = buildDetailVerdictHeadline(sev);
+    if (headline) {
+      const h = document.createElement('div');
+      h.className = DETAIL_VERDICT_CLASS + '-headline';
+      h.textContent = headline;
+      el.appendChild(h);
+    }
+    const DETAIL_LINE_CAP = 3;
+    const detail = sev && Array.isArray(sev.detail) ? sev.detail : [];
+    detail.slice(0, DETAIL_LINE_CAP).forEach((entry) => {
+      const line = document.createElement('div');
+      line.className = DETAIL_VERDICT_CLASS + '-line';
+      line.textContent = formatDetailLine(entry);
+      el.appendChild(line);
+    });
+    if (detail.length > DETAIL_LINE_CAP) {
+      const more = document.createElement('div');
+      more.className = DETAIL_VERDICT_CLASS + '-more';
+      more.textContent = '+' + (detail.length - DETAIL_LINE_CAP) + ' more';
+      el.appendChild(more);
+    }
+    // Item 3.1 — one-line note when one or more rules were skipped on a unit
+    // mismatch. NO severity change: this is an informational note, not a headline,
+    // and never affects `level`/the banner's red/amber colour above. Full detail
+    // (which analyte, which rule, which units) lives in the chip's own popover —
+    // this note just tells the GP to go look.
+    const unitMismatches = sev && Array.isArray(sev.unitMismatches) ? sev.unitMismatches : [];
+    if (unitMismatches.length) {
+      const note = document.createElement('div');
+      note.className = DETAIL_VERDICT_CLASS + '-unit-note';
+      const n = unitMismatches.length;
+      note.textContent = (n === 1 ? '1 rule skipped' : n + ' rules skipped') + ': unit mismatch — see chip';
+      el.appendChild(note);
+    }
+    return el;
+  };
+
+  // PREPEND into the host card, de-duped + kept fresh by taskUuid (never mere
+  // presence — CLAUDE.md rule 4/5: a stale banner on the wrong patient is the
+  // failure mode that matters). A banner already correct for this taskUuid is
+  // left alone (idempotent across runDetail's repeated calls on SPA churn).
+  const renderDetailVerdictBanner = (taskUuid, sev, isError) => {
+    const host = detailVerdictHost();
+    if (!host) return;
+    const existing = host.querySelector('.' + DETAIL_VERDICT_CLASS);
+    if (existing) {
+      if (existing.dataset.chTaskUuid === taskUuid) return;
+      existing.remove();
+    }
+    const el = buildDetailVerdictEl(taskUuid, sev, isError);
+    host.insertBefore(el, host.firstChild);
+  };
+
+  // Entry point — called from runDetail() on every pass. A cache HIT (this
+  // task was seen in the queue, or a previous visit already computed it)
+  // renders immediately with zero extra fetches. A cache MISS computes once
+  // via the SAME path the queue uses (computeQueueRowResult), seeding a
+  // _queueResultCache entry with the derived overviewURL first — exactly the
+  // shape the queue bridge itself writes — so computeQueueRowResult's existing
+  // cache-read is unchanged. No spinner/placeholder while that fetch is in
+  // flight (plan item 2): nothing renders until there is a real verdict.
+  const runDetailVerdict = () => {
+    const API = window.SentinelApiClient;
+    if (!API) { removeDetailVerdictBanner(); return; }
+    const ctx = API.detectMedicusContext(location.href);
+    const taskUuid = ctx && ctx.taskUuid;
+    // Item 4.7 — mark this task "seen" as soon as its taskUuid resolves, on
+    // EVERY runDetailVerdict pass (idempotent — Set.add of an existing member
+    // is a no-op), regardless of the detailVerdictBanner pref below: seen-
+    // dimming is a separately-gated pref (queueSeenDimming) and must not be
+    // coupled to whether the banner itself renders.
+    if (taskUuid) _seenTasks.add(taskUuid);
+    if (!taskUuid || !PREF('detailVerdictBanner', true)) {
+      removeDetailVerdictBanner();
+      _detailVerdictTaskUuid = taskUuid || null;
+      return;
+    }
+    if (taskUuid !== _detailVerdictTaskUuid) {
+      // Task changed since the last render (including "none yet") — drop any
+      // stale banner from the previous task before deciding this one's state,
+      // so there is never a frame showing the wrong patient's verdict.
+      removeDetailVerdictBanner();
+      _detailVerdictTaskUuid = taskUuid;
+    }
+    const entry = _queueResultCache.get(taskUuid);
+    const state = detailVerdictState(entry, Date.now());
+    if (state === 'render') { renderDetailVerdictBanner(taskUuid, entry.sev, false); return; }
+    if (state === 'error') { renderDetailVerdictBanner(taskUuid, null, true); return; }
+    if (state === 'nothing') { removeDetailVerdictBanner(); return; }
+    // state === 'compute'
+    if (_detailVerdictAttempted.has(taskUuid)) return;
+    _detailVerdictAttempted.add(taskUuid);
+    if (!ctx.taskTypeSlug) return; // no overview URL derivable — nothing to compute
+    if (!_queueResultCache.has(taskUuid)) {
+      _queueResultCache.set(taskUuid, {
+        overviewURL: `/tasks/data/${ctx.taskTypeSlug}/overview/${taskUuid}`,
+        priorityDisplay: '',
+        unmatched: false,
+      });
+    }
+    computeQueueRowResult(taskUuid)
+      .then((sev) => {
+        const isError = sev === QUEUE_RESULT_FETCH_ERROR;
+        const e2 = _queueResultCache.get(taskUuid);
+        if (e2) {
+          e2.sev = isError ? null : sev;
+          e2.error = isError;
+          e2.detail = !isError && sev && sev.detail ? sev.detail : undefined;
+          // Item 3.1 — mirror unitMismatches onto the cache entry alongside .detail,
+          // same reasoning as the .detail mirror above: the popover click handler
+          // reads it straight off the cache, never through .sev.
+          e2.unitMismatches = !isError && sev && Array.isArray(sev.unitMismatches) ? sev.unitMismatches : undefined;
+          // Item 4.4 — same mirror as the queue scheduler worker above.
+          e2.fileable = !isError && !!(sev && sev.fileable === true);
+          e2.ts = Date.now();
+        }
+        // Only paint if the GP is still on THIS task's detail page — a slow
+        // fetch must never land a verdict banner after navigating away (or
+        // onto a different patient's task in the meantime).
+        const liveCtx = API.detectMedicusContext(location.href);
+        if (pageType() !== 'detail' || !liveCtx || liveCtx.taskUuid !== taskUuid) return;
+        if (isError) { renderDetailVerdictBanner(taskUuid, null, true); return; }
+        if (sev === null) { removeDetailVerdictBanner(); return; }
+        renderDetailVerdictBanner(taskUuid, sev, false);
+      })
+      .catch((e) => log('detail-verdict: compute threw', e.message));
+  };
+
+  // ---- Queue triage status bar (item 1.2, TRIAGE-LENS-2026-07-02.md) ----
+  // Replaces the old passive "absence is not a verdict" legend with a live,
+  // recomputed status strip: "N red · N amber · N clear · N ? · checking N…",
+  // a jump-to-next-alert button, and a focus toggle that dims non-alert rows.
+  // Counting reuses the exact same durable-map/cache lookup as the tint code
+  // above, so the bar and the row colours can never disagree.
+
+  // Pure — counts the rows the lens knows about (union of the durable
+  // rowIndex->taskUuid map and whatever rows are currently visible in the
+  // virtualised grid, deduped by taskUuid where one is known) into five
+  // triage buckets. Exported for tests.
+  //   - red / amber: a fresh (within _RESULT_CACHE_TTL) cached result at that level.
+  //   - clear: a fresh cached level:'none' result — an actual report was
+  //     assessed and nothing flagged. ONLY that.
+  //   - noResult: a fresh definitive sev===null non-error entry (a task with
+  //     nothing to check — no matching investigation report, e.g. admin/med
+  //     request rows). Checked-but-not-gradeable is neither clear nor
+  //     checking, so it gets its own bucket and is NOT rendered as a bar
+  //     segment (item 1.1's honesty rule: never imply "assessed normal").
+  //   - couldn't check: a fresh (within _RESULT_ERROR_TTL) error entry.
+  //   - checking: a row we know about but have no LIVE cache entry for —
+  //     never fetched yet, mid-fetch, or the entry (result or error) has aged
+  //     past its own TTL. A visible row with no durable-map entry at all
+  //     (bridge hasn't resolved its taskUuid yet) also counts here — there is
+  //     no taskUuid to look up a cache entry by, so "still checking" is the
+  //     only honest bucket for it.
+  const computeQueueTriageCounts = (durableMap, cache, visibleRowIndexes, now) => {
+    const counts = { red: 0, amber: 0, clear: 0, error: 0, checking: 0, noResult: 0, total: 0 };
+    const visible = visibleRowIndexes instanceof Set ? visibleRowIndexes : new Set(visibleRowIndexes || []);
+    const rowIndexes = new Set(visible);
+    if (durableMap && typeof durableMap.keys === 'function') {
+      for (const ri of durableMap.keys()) rowIndexes.add(ri);
+    }
+    const seenUuids = new Set();
+    for (const rowIndex of rowIndexes) {
+      const taskUuid = durableMap && typeof durableMap.get === 'function' ? durableMap.get(rowIndex) : undefined;
+      if (!taskUuid) {
+        // Visible but not yet mapped to a taskUuid — nothing to look up, still checking.
+        counts.total++;
+        counts.checking++;
+        continue;
+      }
+      if (seenUuids.has(taskUuid)) continue; // dedupe by taskUuid where known
+      seenUuids.add(taskUuid);
+      counts.total++;
+      const entry = cache && typeof cache.get === 'function' ? cache.get(taskUuid) : undefined;
+      if (!entry || entry.sev === undefined) {
+        counts.checking++;
+        continue;
+      }
+      const ttl = entry.error ? _RESULT_ERROR_TTL : _RESULT_CACHE_TTL;
+      const fresh = !!entry.ts && now - entry.ts <= ttl;
+      if (!fresh) {
+        counts.checking++;
+        continue;
+      }
+      if (entry.error) {
+        counts.error++;
+      } else if (entry.sev === null) {
+        // Checked, but there was no gradeable investigation report on this task
+        // (admin/med-request rows, no matching report). NOT 'clear' — 'clear'
+        // must mean assessed-normal and nothing else (Phase 1 honesty rule).
+        // Counted separately and not rendered as a bar segment.
+        counts.noResult++;
+      } else if (entry.sev.level === 'red') {
+        counts.red++;
+      } else if (entry.sev.level === 'amber') {
+        counts.amber++;
+      } else {
+        counts.clear++; // assessed: level 'none'
+      }
+    }
+    return counts;
+  };
+
+  // Pure — where the "jump to next alert" button goes next. Reds take priority;
+  // falls back to ambers only when there are zero reds (never mixes the two
+  // lists — a GP cycling through reds should never land on an amber
+  // mid-sequence). currentPos is the last row-index jumped to (or null/absent
+  // from the list); wraps back to the start after the last one. Returns null
+  // when both lists are empty (caller disables the button in that case).
+  // Exported for tests.
+  const nextAlertRowIndex = (currentPos, redIndexes, amberIndexes) => {
+    const list = (redIndexes && redIndexes.length ? redIndexes : amberIndexes) || [];
+    if (!list.length) return null;
+    if (currentPos == null) return list[0];
+    const next = list.find((idx) => idx > currentPos);
+    return next !== undefined ? next : list[0]; // wrap around
+  };
+
+  // Impure — live-query which currently-rendered rows carry each tint class.
+  // AG-Grid virtualises, so this (deliberately, like every other queue-chip
+  // helper in this file) only ever sees on-screen rows; sorted ascending so
+  // nextAlertRowIndex's row-index-order cycling is well-defined.
+  const getQueueTintedRowIndexes = () => {
+    const red = [];
+    const amber = [];
+    queueScope()
+      .querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)')
+      .forEach((row) => {
+        const ri = row.getAttribute('row-index');
+        if (ri == null) return;
+        const n = Number(ri);
+        if (row.classList.contains(ROW_TINT_RED)) red.push(n);
+        else if (row.classList.contains(ROW_TINT_AMBER)) amber.push(n);
+      });
+    red.sort((a, b) => a - b);
+    amber.sort((a, b) => a - b);
+    return { red, amber };
+  };
+
+  const QUEUE_STATUS_BAR_ID = 'ch-q-status-bar';
+  const QUEUE_STATUS_FLASH_CLASS = 'ch-q-status-flash';
+  const QUEUE_FOCUS_CLASS = 'ch-q-focus-alerts';
+  const QUEUE_STATUS_TOOLTIP =
+    'Triage Lens flags urgent / abnormal results. A row with no flag has not been assessed as normal — open and review every result.';
+
+  // Module state — session-local, deliberately NOT reset by refreshQueueChips
+  // (only by runQueue on a genuine queue re-entry, or the focus toggle itself).
+  let _queueStatusJumpPos = null; // last row-index jumped to, for the cycling order
+  let _queueStatusLastRed = 0; // last-rendered red/amber totals, to detect a
+  let _queueStatusLastAmber = 0; // "material" severity change that should reset the cycle
+  let _queueFocusAlertsOn = false; // OFF by default (plan item 1.2)
+  let _queueStatusBarRafPending = false;
+
+  // Shared jump-to-alert mechanics (item 1.2's button AND item 4.6's 'n' key
+  // both call this — factored out so there is exactly one implementation of
+  // "find the next red/amber row, scroll to it, flash it"). Pure-ish: reads
+  // the live DOM to find/scroll/flash the target row, but does NOT mutate
+  // _queueStatusJumpPos itself — both callers own that assignment so each can
+  // decide what else to do with the landed-on row-index (the keyboard
+  // handler additionally parks the kbd cursor there). Returns the row-index
+  // jumped to, or null if there was nothing to jump to. Exported for tests.
+  const jumpToAlertRow = (fromIndex) => {
+    const { red, amber } = getQueueTintedRowIndexes();
+    const target = nextAlertRowIndex(fromIndex, red, amber);
+    if (target == null) return null;
+    const row = queueScope().querySelector('.ag-row[row-index="' + target + '"]:not(.ag-full-width-row)');
+    if (!row) return null;
+    if (typeof row.scrollIntoView === 'function') {
+      try {
+        row.scrollIntoView({ block: 'center' });
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    const flashTargets = [row];
+    const previewRow = findQueuePreviewRow(row);
+    if (previewRow) flashTargets.push(previewRow);
+    flashTargets.forEach((r) => {
+      if (!r || !r.classList) return;
+      r.classList.add(QUEUE_STATUS_FLASH_CLASS);
+      setTimeout(() => r.classList.remove(QUEUE_STATUS_FLASH_CLASS), 2600);
+    });
+    return target;
+  };
+
+  const onQueueStatusJumpClick = () => {
+    const target = jumpToAlertRow(_queueStatusJumpPos);
+    if (target == null) return;
+    _queueStatusJumpPos = target;
+  };
+
+  const onQueueStatusFocusClick = (e) => {
+    _queueFocusAlertsOn = !_queueFocusAlertsOn;
+    applyQueueFocusClass();
+    const btn = e && e.currentTarget;
+    if (btn) {
+      btn.setAttribute('aria-pressed', String(_queueFocusAlertsOn));
+      if (btn.classList) btn.classList.toggle('ch-q-status-btn-active', _queueFocusAlertsOn);
+    }
+  };
+
+  // ---- Keyboard triage (item 4.6, TRIAGE-LENS-2026-07-02.md) ----
+  // A single keydown handler, attached ONCE on document at module init
+  // (below), active only when pageType() is the queue AND focus is not in an
+  // input/textarea/select/contenteditable — never hijacks ordinary typing.
+  //   j / ArrowDown — move the cursor to the next visible row (row-index
+  //     order); k / ArrowUp — previous. Clamps at both ends (does not wrap:
+  //     this is a linear scan, unlike 'n's cycling jump).
+  //   Enter — activate the cursor row: click its open-link (the same target
+  //     the GP would click to open the task).
+  //   n — jump to the next red (amber-fallback) row, reusing jumpToAlertRow
+  //     above, and park the keyboard cursor there too.
+  //   ? — tiny help hint (console log only; deliberately minimal).
+  // Cursor state (_kbdCursorRowIndex) is session-local and reset on queue
+  // (re)entry/navigation by teardownQueueObserver (called at the start of
+  // every runQueue AND whenever the page navigates off the queue). The
+  // ch-kbd-cursor CLASS itself is cleared+reapplied every refreshQueueChips
+  // cycle (CLAUDE.md rule 4) so a recycled row-index never keeps a stale
+  // cursor from a previous patient.
+  const KBD_CURSOR_CLASS = 'ch-kbd-cursor';
+  let _kbdCursorRowIndex = null;
+
+  // Pure — sorted ascending row-index list of every row currently rendered in
+  // the (virtualised) grid. Exported for tests.
+  const visibleQueueRowIndexes = () => {
+    const out = [];
+    queueScope()
+      .querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)')
+      .forEach((row) => {
+        const ri = row.getAttribute('row-index');
+        if (ri != null) out.push(Number(ri));
+      });
+    out.sort((a, b) => a - b);
+    return out;
+  };
+
+  // Pure — where the cursor moves to for one j/k press, given the current
+  // cursor position (row-index or null) and the currently visible row-index
+  // list. direction is +1 (j/ArrowDown) or -1 (k/ArrowUp). Clamps at both
+  // ends rather than wrapping. A currentIndex no longer present in the list
+  // (its row scrolled out of the virtualised viewport, or was recycled onto
+  // a different task) re-anchors to the nearest end rather than doing
+  // nothing. Returns null only when the list itself is empty. Exported for
+  // tests.
+  const moveKbdCursor = (currentIndex, rowIndexes, direction) => {
+    if (!rowIndexes || !rowIndexes.length) return null;
+    if (currentIndex == null) return direction > 0 ? rowIndexes[0] : rowIndexes[rowIndexes.length - 1];
+    const pos = rowIndexes.indexOf(currentIndex);
+    if (pos === -1) return direction > 0 ? rowIndexes[0] : rowIndexes[rowIndexes.length - 1];
+    const next = pos + direction;
+    if (next < 0) return rowIndexes[0];
+    if (next >= rowIndexes.length) return rowIndexes[rowIndexes.length - 1];
+    return rowIndexes[next];
+  };
+
+  const clearQueueKbdCursor = () => {
+    queueScope()
+      .querySelectorAll('.' + KBD_CURSOR_CLASS)
+      .forEach((el) => el.classList.remove(KBD_CURSOR_CLASS));
+  };
+
+  // Re-apply the cursor class from _kbdCursorRowIndex — called both by the
+  // keyboard handler (after moving) and by refreshQueueChips (to restore the
+  // cursor visually across SPA churn, same pattern as reapplyQueueRowTint).
+  // No-op if the cursor row isn't currently rendered (virtualised out of
+  // view) — it is NOT re-anchored here; only an explicit j/k/n press moves
+  // it. Exported for tests.
+  const applyQueueKbdCursor = () => {
+    if (_kbdCursorRowIndex == null) return;
+    const row = queueScope().querySelector('.ag-row[row-index="' + _kbdCursorRowIndex + '"]:not(.ag-full-width-row)');
+    if (!row) return;
+    row.classList.add(KBD_CURSOR_CLASS);
+    const previewRow = findQueuePreviewRow(row);
+    if (previewRow) previewRow.classList.add(KBD_CURSOR_CLASS);
+  };
+
+  const scrollKbdCursorIntoView = () => {
+    if (_kbdCursorRowIndex == null) return;
+    const row = queueScope().querySelector('.ag-row[row-index="' + _kbdCursorRowIndex + '"]:not(.ag-full-width-row)');
+    if (row && typeof row.scrollIntoView === 'function') {
+      try {
+        row.scrollIntoView({ block: 'nearest' });
+      } catch (e) {
+        /* ignore */
+      }
+    }
+  };
+
+  // Resolve the element to click to open a queue row's task — the same
+  // target a GP would click. Prefers a real link/link-role element inside
+  // the patientName cell (real Medicus may render the cell content as an
+  // anchor); falls back to the cell itself, which is the documented fallback
+  // chip host elsewhere in this file (queueChipHost) and is exactly what a
+  // GP visually clicks on regardless of what markup is under it. Returns
+  // null if the row has no patientName cell at all (header/pinned/malformed
+  // row). Exported for tests.
+  const findQueueRowOpenTarget = (row) => {
+    const nameCell = row.querySelector('[col-id="patientName"]');
+    if (!nameCell) return null;
+    const link = nameCell.querySelector('a, [role="link"]');
+    return link || nameCell;
+  };
+
+  // True when `el` is a live text-entry surface — the keyboard handler must
+  // never hijack typing into it. Exported for tests.
+  const isQueueKeydownTypingTarget = (el) => {
+    if (!el) return false;
+    const tag = el.tagName ? String(el.tagName).toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+    if (el.isContentEditable) return true;
+    return false;
+  };
+
+  const onQueueKeydown = (e) => {
+    if (!PREF('queueKeyboardNav', true)) return;
+    if (pageType() !== 'queue') return;
+    if (isQueueKeydownTypingTarget(e && e.target)) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const key = e.key;
+    if (key === 'j' || key === 'ArrowDown') {
+      if (e.preventDefault) e.preventDefault();
+      _kbdCursorRowIndex = moveKbdCursor(_kbdCursorRowIndex, visibleQueueRowIndexes(), 1);
+      clearQueueKbdCursor();
+      applyQueueKbdCursor();
+      scrollKbdCursorIntoView();
+    } else if (key === 'k' || key === 'ArrowUp') {
+      if (e.preventDefault) e.preventDefault();
+      _kbdCursorRowIndex = moveKbdCursor(_kbdCursorRowIndex, visibleQueueRowIndexes(), -1);
+      clearQueueKbdCursor();
+      applyQueueKbdCursor();
+      scrollKbdCursorIntoView();
+    } else if (key === 'Enter') {
+      if (_kbdCursorRowIndex == null) return;
+      const row = queueScope().querySelector('.ag-row[row-index="' + _kbdCursorRowIndex + '"]:not(.ag-full-width-row)');
+      if (!row) return;
+      const target = findQueueRowOpenTarget(row);
+      if (target && typeof target.click === 'function') {
+        if (e.preventDefault) e.preventDefault();
+        target.click();
+      }
+    } else if (key === 'n' || key === 'N') {
+      if (e.preventDefault) e.preventDefault();
+      const target = jumpToAlertRow(_queueStatusJumpPos);
+      if (target != null) {
+        _queueStatusJumpPos = target;
+        _kbdCursorRowIndex = target;
+        clearQueueKbdCursor();
+        applyQueueKbdCursor();
+      }
+    } else if (key === '?') {
+      log('queue keyboard shortcuts: j/k (or arrows) move, Enter opens, n jumps to next red/amber');
+    }
+  };
+
+  // Create-once, mutate-in-place (no flicker, no duplicate insertion across
+  // SPA re-renders) — same pattern the old legend used, extended with the
+  // interactive controls. Appended to document.body (not the AG-Grid
+  // container), so it never triggers the queue MutationObserver itself.
+  const ensureQueueStatusBarEl = () => {
+    let el = document.getElementById(QUEUE_STATUS_BAR_ID);
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = QUEUE_STATUS_BAR_ID;
+    el.className = 'ch-q-status';
+    el.setAttribute('role', 'status');
+    // aria-live deliberately 'off', not 'polite': counts can change multiple
+    // times a second while the fetch pass runs — a polite live region would
+    // spam a screen reader far faster than the numbers are meaningful.
+    el.setAttribute('aria-live', 'off');
+    el.setAttribute('aria-label', 'Triage Lens queue triage status');
+    el.title = QUEUE_STATUS_TOOLTIP;
+
+    const counts = document.createElement('span');
+    counts.className = 'ch-q-status-counts';
+    el.appendChild(counts);
+
+    const spinner = document.createElement('span');
+    spinner.className = 'ch-q-status-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    el.appendChild(spinner);
+
+    const jumpBtn = document.createElement('button');
+    jumpBtn.type = 'button';
+    jumpBtn.className = 'ch-q-status-btn ch-q-status-jump';
+    jumpBtn.addEventListener('click', onQueueStatusJumpClick);
+    el.appendChild(jumpBtn);
+
+    const focusBtn = document.createElement('button');
+    focusBtn.type = 'button';
+    focusBtn.className = 'ch-q-status-btn ch-q-status-focus';
+    focusBtn.setAttribute('aria-pressed', 'false');
+    focusBtn.textContent = 'Focus alerts';
+    focusBtn.addEventListener('click', onQueueStatusFocusClick);
+    el.appendChild(focusBtn);
+
+    document.body.appendChild(el);
+    return el;
+  };
+
+  const removeQueueStatusBar = () => {
+    const el = document.getElementById(QUEUE_STATUS_BAR_ID);
+    if (el) el.remove();
+  };
+
+  // The nearest STABLE ancestor for the focus-dim class: queueObservedContainer
+  // is rebuilt whenever the SPA tears down and re-creates AG-Grid (setupQueueObserver),
+  // so a class placed there would silently vanish on that swap. document.body
+  // persists across every re-render, and the dim rule is scoped by the
+  // descendant selector (.ch-q-focus-alerts .ag-row:...) so putting the class on
+  // body is exactly as targeted as putting it on the grid container itself —
+  // it only ever affects `.ag-row` elements. teardownQueueObserver removes it
+  // when leaving the queue page so it can't bleed onto unrelated Medicus pages.
+  const applyQueueFocusClass = () => {
+    if (typeof document === 'undefined' || !document.body) return;
+    document.body.classList.toggle(QUEUE_FOCUS_CLASS, _queueFocusAlertsOn);
+  };
+
+  const renderQueueStatusBar = () => {
+    if (!PREF('queueStatusBar', true)) {
+      removeQueueStatusBar();
+      return;
+    }
+    const el = ensureQueueStatusBarEl();
+    const now = Date.now();
+    const visible = new Set();
+    queueScope()
+      .querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)')
+      .forEach((row) => {
+        const ri = row.getAttribute('row-index');
+        if (ri != null) visible.add(Number(ri));
+      });
+    const counts = computeQueueTriageCounts(_durableRowMap, _queueResultCache, visible, now);
+
+    const parts = [counts.red + ' red', counts.amber + ' amber'];
+    if (counts.clear > 0) parts.push(counts.clear + ' clear');
+    if (counts.error > 0) parts.push(counts.error + ' ?');
+    let text = parts.join(' · ');
+    if (counts.checking > 0) text += (text ? ' · ' : '') + 'checking ' + counts.checking + '…';
+
+    const countsEl = el.querySelector('.ch-q-status-counts');
+    if (countsEl) countsEl.textContent = text;
+    el.classList.toggle('ch-q-status--checking', counts.checking > 0);
+
+    // "Material" change = the aggregate red/amber picture actually moved (a new
+    // alert appeared/resolved) — NOT virtualisation-driven scroll churn, which
+    // constantly changes which row-indexes are on-screen without changing what's
+    // wrong with the queue. Only the former should discard the jump cycle.
+    if (counts.red !== _queueStatusLastRed || counts.amber !== _queueStatusLastAmber) {
+      _queueStatusJumpPos = null;
+      _queueStatusLastRed = counts.red;
+      _queueStatusLastAmber = counts.amber;
+    }
+
+    const { red: redIdx, amber: amberIdx } = getQueueTintedRowIndexes();
+    const jumpBtn = el.querySelector('.ch-q-status-jump');
+    if (jumpBtn) {
+      const hasRed = redIdx.length > 0;
+      const hasAmber = amberIdx.length > 0;
+      jumpBtn.disabled = !hasRed && !hasAmber;
+      jumpBtn.textContent = hasRed ? '▶ red' : hasAmber ? '▶ amber' : '▶ red';
+    }
+
+    // Sync the focus button's visual/ARIA state from the session-local toggle on
+    // every render — covers the bar being torn down and recreated (leave/re-enter
+    // the queue) while `_queueFocusAlertsOn` stayed true, which the click handler
+    // alone would never re-apply to a brand-new button element.
+    const focusBtn = el.querySelector('.ch-q-status-focus');
+    if (focusBtn) {
+      focusBtn.setAttribute('aria-pressed', String(_queueFocusAlertsOn));
+      if (focusBtn.classList) focusBtn.classList.toggle('ch-q-status-btn-active', _queueFocusAlertsOn);
+    }
+  };
+
+  // rAF-coalesced wrapper: refreshQueueChips fires on every grid mutation and the
+  // result-triage worker calls this once per row it finishes fetching, so a queue
+  // with 40 rows tagging in a burst would otherwise trigger 40 full DOM updates a
+  // frame apart. Collapses any number of calls within one frame into a single
+  // render — CLAUDE.md-style "no flicker, cheap to call from a loop".
+  const updateQueueStatusBar = () => {
+    if (_queueStatusBarRafPending) return;
+    _queueStatusBarRafPending = true;
+    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (fn) => setTimeout(fn, 0);
+    raf(() => {
+      _queueStatusBarRafPending = false;
+      renderQueueStatusBar();
+    });
   };
 
   // Rolling rate-limit for result fetches: max 90 fetches per 60s window.
@@ -3464,22 +5899,54 @@
           }, _RESULT_FETCH_WINDOW_MS);
         }
         const entry = _queueResultCache.get(taskUuid);
-        const fresh = entry && entry.sev !== undefined && entry.ts && (Date.now() - entry.ts) <= _RESULT_CACHE_TTL;
+        // Item 1.1 leg D: an error entry is "fresh" only within the SHORT
+        // _RESULT_ERROR_TTL (60s), not the normal 5-minute TTL — an expired
+        // error entry must be treated as not-cached so it's retried below.
+        const entryTtl = entry && entry.error ? _RESULT_ERROR_TTL : _RESULT_CACHE_TTL;
+        const fresh = entry && entry.sev !== undefined && entry.ts && (Date.now() - entry.ts) <= entryTtl;
         if (fresh) {
-          injectResultChip(rowIndex, entry.sev);
+          injectResultChip(rowIndex, entry.sev, taskUuid, !!entry.error);
         } else {
           if (_resultFetchCount >= _RESULT_FETCH_MAX) continue; // skip, don't throw
           _resultFetchCount++;
           const sev = await computeQueueRowResult(taskUuid);
+          const isError = sev === QUEUE_RESULT_FETCH_ERROR;
           if (_queueResultCache.has(taskUuid)) {
             const e2 = _queueResultCache.get(taskUuid);
-            e2.sev = sev;
-            // A failed fetch (null — transient error / flaky HIGH result) gets only a
-            // SHORT retry window so it re-surfaces on a later pass; a real result keeps
-            // the full TTL. Without this a one-off error blanked the row for 5 minutes.
-            e2.ts = sev === null ? Date.now() - _RESULT_CACHE_TTL + _RESULT_RETRY_MS : Date.now();
+            e2.sev = isError ? null : sev;
+            e2.error = isError;
+            // Item 2.2 — mirror the detail array (built inside computeQueueRowResult,
+            // attached to sev.detail) onto the cache entry itself, alongside .sev, so
+            // the popover click handler can read it straight off the cache without
+            // reaching through .sev (and so it stays in lockstep with whatever .sev
+            // this pass just wrote — see toggleResultDetailPopover above). An ERROR
+            // result never carries one (the sentinel returns before the detail attach
+            // in computeQueueRowResult), so an error entry's detail is always cleared
+            // here — its popover is the fixed explanation text, never stale numbers.
+            e2.detail = !isError && sev && sev.detail ? sev.detail : undefined;
+            // Item 3.1 — mirror unitMismatches onto the cache entry alongside
+            // .detail (same lockstep reasoning as the comment above).
+            e2.unitMismatches = !isError && sev && Array.isArray(sev.unitMismatches) ? sev.unitMismatches : undefined;
+            // Item 4.4 — mirror the fileable flag alongside .detail/.unitMismatches
+            // (same lockstep reasoning): survives the durable-map re-inject path with
+            // no extra fetch, and is re-derived from THIS pass's sev every time, never
+            // defaulted true.
+            e2.fileable = !isError && !!(sev && sev.fileable === true);
+            // An error entry always gets the short _RESULT_ERROR_TTL retry
+            // window (via a fresh ts — the fresh-check above applies
+            // _RESULT_ERROR_TTL to it). A definitive-null (disabled/unmatched)
+            // fetch gets only a SHORT retry window too, so it re-surfaces on a
+            // later pass; a real result keeps the full TTL. Without this a
+            // one-off null blanked the row for 5 minutes.
+            e2.ts = (!isError && sev === null) ? Date.now() - _RESULT_CACHE_TTL + _RESULT_RETRY_MS : Date.now();
           }
-          injectResultChip(rowIndex, sev);
+          injectResultChip(rowIndex, isError ? null : sev, taskUuid, isError);
+          // Item 1.2: a row just moved out of "checking" (cache entry written
+          // above) — refresh the status bar so the "checking N…" count steps
+          // down live as the fetch pass progresses, not only once per grid
+          // mutation. rAF-coalesced internally, so calling it once per row in
+          // this loop is cheap (one paint per frame, not one per row).
+          updateQueueStatusBar();
           // Budget-aware inter-fetch delay (only on actual fetches, not cache hits):
           // ON-SCREEN rows get ZERO delay — the ~12 visible rows are well under the
           // 90/60s budget and the browser's ~6-connection-per-host ceiling, so firing
@@ -3548,6 +6015,98 @@
     return { target, inPreview: !!previewRow };
   };
 
+  // ---- Rank & collapse multi-fire request-rule chips (item 2.5), extended
+  // with display-only negation/past-tense demotion (item 3.4,
+  // TRIAGE-LENS-2026-07-02.md) and the green routine tier (item 4.3,
+  // TRIAGE-LENS-2026-07-02.md) ----
+  // Sort matched rules red < amber < info < green (unknown/other kinds sort
+  // last, defensively, rather than throwing); WITHIN a kind, an unqualified
+  // (live) match now ranks above a negated/past-tense one — "no chest pain"
+  // must never outrank a live "chest pain" of the same severity. Ties keep
+  // their original matchRules order (stable — explicit index tiebreak). This
+  // never hides a match: escalate-only — a demoted rule still renders (top
+  // chip or "+N" overflow), just ranked lower and shown distinctly.
+  //
+  // green ranks LAST, below info: green is the "nothing urgent here — safe to
+  // sweep" signal, so a green chip is only ever the TOP chip when NO red/
+  // amber/info rule ALSO matched the same request text. This is the whole
+  // safety argument for item 4.3's shipped green rules — a green rule's
+  // patterns are deliberately administrative/non-clinical, but even if a
+  // patient's free text happens to co-mention a genuine symptom that a red/
+  // amber/info rule also catches ("...also my chest hurts"), THAT rule wins
+  // the top-chip slot by kind alone, unconditionally. The green rule is never
+  // suppressed (it still renders in the "+N" overflow), just never allowed to
+  // be the headline when something more urgent also fired.
+  //
+  // Evidence (and therefore the qualifier) is computed HERE, at decoration
+  // time, which runs on every queue refresh — so it stays cheap. A row
+  // typically matches 0-2 rules; on the rare row matching MORE than
+  // RULE_QUALIFIER_EVIDENCE_CAP, only the top rules BY KIND get evidence
+  // computed — the remainder are treated as unqualified for ranking purposes
+  // only (they still render fully in the "+N" overflow list, just without a
+  // negation/past badge).
+  const RULE_KIND_RANK = { red: 0, amber: 1, info: 2, green: 3 };
+  const RULE_QUALIFIER_EVIDENCE_CAP = 4;
+  const RULE_QUALIFIER_LABEL = { negated: 'negated?', past: 'past?' };
+  const RULE_QUALIFIER_ARIA = { negated: 'possible negation', past: 'possible past reference' };
+  const rankRuleMatches = (rules, previewText) => {
+    const withIndex = rules.map((r, i) => ({ r, i, qualifier: null, qualifierTerm: null }));
+    const kindOrder = (r) => RULE_KIND_RANK[r.kind] ?? 4;
+    const byKind = withIndex
+      .slice()
+      .sort((a, b) => (kindOrder(a.r) !== kindOrder(b.r) ? kindOrder(a.r) - kindOrder(b.r) : a.i - b.i));
+    const evidenceEligible = new Set(byKind.slice(0, RULE_QUALIFIER_EVIDENCE_CAP).map((x) => x.i));
+    const matcher = typeof window !== 'undefined' && window.TriageLensMatch;
+    if (matcher) {
+      withIndex.forEach((x) => {
+        if (!evidenceEligible.has(x.i)) return;
+        const ev = matcher.ruleMatchEvidence(x.r, previewText || '');
+        x.qualifier = ev ? ev.qualifier : null;
+        x.qualifierTerm = ev ? ev.qualifierTerm : null;
+      });
+    }
+    return withIndex
+      .sort((a, b) => {
+        if (kindOrder(a.r) !== kindOrder(b.r)) return kindOrder(a.r) - kindOrder(b.r);
+        const qa = a.qualifier ? 1 : 0;
+        const qb = b.qualifier ? 1 : 0;
+        if (qa !== qb) return qa - qb; // unqualified before qualified, same kind
+        return a.i - b.i;
+      })
+      .map((x) => ({ ...x.r, _qualifier: x.qualifier, _qualifierTerm: x.qualifierTerm }));
+  };
+
+  // Deliberately separate from renderChipHtml above (system chips — child/
+  // elder/priority/task-age — are UNCHANGED by item 2.5) so only the
+  // ranked/collapsed rule-match chips get role="button"/tabindex/aria-label
+  // and the click-to-evidence wiring. Built as a real element via
+  // createElement/textContent/setAttribute (not an HTML string) — chip.text/
+  // chip.ariaLabel are OUR OWN generated strings (rule label + kind, never
+  // raw request text), but building them this way needs no escaping at all
+  // and lets this chip be appended onto the strip AFTER the system chips'
+  // combined innerHTML without a re-parse. `chip.rqIdx` indexes into
+  // decorateOneRow's per-row ruleMatchActivators array (wired up after the
+  // element lands in the DOM) rather than encoding the handler in the markup.
+  // `chip.qualifier` (item 3.4) — when set, adds the outline/dimmed
+  // ".ch-chip-demoted" variant; the chip is otherwise built identically and
+  // is NEVER omitted for being qualified (display-only, escalate-only).
+  const buildRuleMatchChipEl = (chip) => {
+    const el = document.createElement('span');
+    const demotedClass = chip.qualifier ? ' ch-chip-demoted' : '';
+    el.className = `ch-chip ch-chip-${chip.kind} ch-chip-actionable ch-q-rule-chip${demotedClass}`;
+    el.setAttribute('data-rq-idx', String(chip.rqIdx));
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-label', chip.ariaLabel);
+    el.setAttribute('title', chip.text);
+    el.appendChild(document.createTextNode(chip.text));
+    const chev = document.createElement('span');
+    chev.className = 'ch-chev';
+    chev.textContent = ' ▾';
+    el.appendChild(chev);
+    return el;
+  };
+
   const decorateOneRow = (row) => {
     if (!row || !row.classList || !row.classList.contains('ag-row')) return;
     // Only decorate master rows. Skip detail/preview rows (they have no cells).
@@ -3586,8 +6145,14 @@
 
     // Age extremes
     const ageMatch = dob.match(/\((\d+)\s*y/i);
+    // Item 3.5 (TRIAGE-LENS-2026-07-02.md) — captured OUTSIDE the if-block so the
+    // require gate below can reuse the SAME age already parsed from this row's own
+    // DOB cell (the queue surface has no sex/meds/problems data — see the require
+    // gate comment further down).
+    let rowAgeYears;
     if (ageMatch) {
       const age = +ageMatch[1];
+      rowAgeYears = age;
       if (age < TH('childAge')) pushSysChip('queue.child', { age });
       else if (age >= TH('elderAge')) pushSysChip('queue.elder', { age });
     }
@@ -3608,15 +6173,123 @@
       }
     }
 
-    // User rules — match against the request preview text
-    const ruleMatches = matchRules('queue', { request: previewText });
-    for (const rule of ruleMatches) {
+    // User rules — match against the request preview text. Rank matches by
+    // severity (then, item 3.4, live-before-negated/past within a severity)
+    // and collapse to a top chip + "+N" overflow chip (item 2.5) rather than
+    // one chip per matched rule. Both are clickable (item 2.3): the top chip
+    // opens straight to ITS rule's evidence+actions; "+N" opens the full
+    // ranked list, each entry drilling into its own evidence+actions the same
+    // way. ruleMatchActivators holds the per-chip click callbacks — populated
+    // here (closure-capturing rankedRules/previewText, already in hand) and
+    // consumed by the wiring pass below, by index (data-rq-idx), once the
+    // chip HTML has actually landed in the DOM.
+    // Item 3.5 — require gate applied AFTER text matching, exactly like the engine's
+    // result-rule contextAllows gate: a rule with a `require` clause the current
+    // surface's data cannot confirm is EXCLUDED from ruleMatches (fails closed) —
+    // never suppresses any OTHER, un-gated rule that also matched the same text.
+    // The queue surface only has age (parsed from this row's own DOB cell, above);
+    // sex/meds/problems are NOT available here, so any require:{sex|medsAny|
+    // problemsAny} clause always fails closed on the queue (see content.js's Part 2
+    // report — meds/problems only reach content.js on the detail/record HUD path,
+    // via extractMedications/extractActiveProblems).
+    const rawRuleMatches = matchRules('queue', { request: previewText });
+    const matcherReq = typeof window !== 'undefined' && window.TriageLensMatch && window.TriageLensMatch.ruleRequireMet;
+    const ruleMatches = matcherReq
+      ? rawRuleMatches.filter((r) => matcherReq(r, { ageYears: rowAgeYears }))
+      : rawRuleMatches;
+    const ruleMatchActivators = [];
+    if (ruleMatches.length) {
+      const rankedRules = rankRuleMatches(ruleMatches, previewText);
+      const topRule = rankedRules[0];
+      const overflow = rankedRules.length - 1;
+      const topQualifier = topRule._qualifier || null;
+      // Item 3.4: a qualified top match is NEVER suppressed — it still
+      // renders as the top chip, just visually demoted (outline variant,
+      // buildRuleMatchChipEl) and suffixed so a GP can tell at a glance.
+      const topLabel = topQualifier
+        ? `${topRule.label} (${RULE_QUALIFIER_LABEL[topQualifier]})`
+        : topRule.label;
+      const topIdx = ruleMatchActivators.push(
+        (el) => showRuleMatchMenu(el, rankedRules, previewText, false)
+      ) - 1;
       chips.push({
-        kind: rule.kind,
-        text: rule.label,
-        ruleId: rule.id,
-        hasActions: (rule.actions || []).length > 0
+        kind: topRule.kind,
+        text: topLabel,
+        isRuleMatch: true,
+        qualifier: topQualifier,
+        rqIdx: topIdx,
+        ariaLabel: `${topRule.label} — ${topRule.kind} alert` +
+          (topQualifier ? `, ${RULE_QUALIFIER_ARIA[topQualifier]}` : '') +
+          (overflow > 0 ? `, ${overflow} more rule${overflow === 1 ? '' : 's'} matched` : '')
       });
+      if (overflow > 0) {
+        const moreIdx = ruleMatchActivators.push(
+          (el) => showRuleMatchMenu(el, rankedRules, previewText, true)
+        ) - 1;
+        chips.push({
+          kind: 'meta',
+          text: '+' + overflow,
+          isRuleMatch: true,
+          rqIdx: moreIdx,
+          ariaLabel: `${overflow} more matched rule${overflow === 1 ? '' : 's'} — show all`
+        });
+      }
+    }
+
+    // Items 4.1/4.2 (TRIAGE-LENS-2026-07-02.md) — Pharmacy First divert chip +
+    // missing-info ask-back, wired to the ALREADY-BUILT reception-match engine
+    // (engine/reception-match.js, window.SentinelReceptionMatch). ADDITIVE only —
+    // never affects the red/amber/info rule chips above. Pref-gated (default true)
+    // so a practice can turn this whole surface off. `_receptionPathwaysData` may
+    // still be null on an early render (see ensureReceptionPathwaysLoaded's own
+    // comment) — that's a "not yet loaded" no-op here, not a failure.
+    //
+    // One pathway chip per row (the FIRST matched pathway — mirrors the existing
+    // "top match" convention, e.g. buildUnclassifiedChipHtml), not one per matched
+    // pathway, so the strip never gets crowded. pharmacyFirstEligibility FAILS
+    // CLOSED on unknown age (rowAgeYears, parsed above from this row's OWN DOB
+    // cell — same parse the child/elder system chips already use) — an
+    // age-unknown row therefore never renders the green Pharmacy First chip. The
+    // ask-back chip is independent of PF eligibility: it renders whenever the
+    // matched pathway has outstanding gap questions OR a red flag the patient
+    // already volunteered (flaggedInText) — a safety signal that must surface
+    // even when Pharmacy First itself can't be confirmed.
+    const RM = typeof window !== 'undefined' && window.SentinelReceptionMatch;
+    if (RM && PREF('requestPathwayChips', true) && previewText && _receptionPathwaysData) {
+      const matchedPathways = RM.matchPathways(previewText, _receptionPathwaysData.pathways);
+      const topPathway = matchedPathways[0];
+      if (topPathway) {
+        const pfElig = RM.pharmacyFirstEligibility(topPathway, rowAgeYears);
+        const gapsData = RM.redFlagGaps(topPathway, previewText);
+        const closingQuestions = _receptionPathwaysData.closingQuestions;
+        const hasEscalation = gapsData.flaggedInText.length > 0;
+        const hasAskBack = gapsData.gaps.length > 0 || hasEscalation;
+        if (pfElig.eligible === true) {
+          const pfIdx = ruleMatchActivators.push(
+            (el) => showPathwayMenu(el, topPathway, previewText, pfElig, gapsData, closingQuestions)
+          ) - 1;
+          chips.push({
+            kind: 'green',
+            text: 'Pharmacy First',
+            isRuleMatch: true,
+            rqIdx: pfIdx,
+            ariaLabel: `Pharmacy First eligible — ${topPathway.title}` +
+              (hasEscalation ? ', patient may have already mentioned a red flag — review before diverting' : '')
+          });
+        } else if (hasAskBack) {
+          const abIdx = ruleMatchActivators.push(
+            (el) => showPathwayMenu(el, topPathway, previewText, pfElig, gapsData, closingQuestions)
+          ) - 1;
+          chips.push({
+            kind: 'info',
+            text: 'Ask-back',
+            isRuleMatch: true,
+            rqIdx: abIdx,
+            ariaLabel: `Reception ask-back available — ${topPathway.title}` +
+              (hasEscalation ? ', patient may have already mentioned a red flag — review before proceeding' : '')
+          });
+        }
+      }
     }
 
     if (!chips.length) {
@@ -3641,13 +6314,36 @@
     if (target && !target.querySelector('.ch-queue-chips')) {
       const strip = document.createElement('span');
       strip.className = 'ch-queue-chips';
-      strip.innerHTML = chips.map(c => renderChipHtml(c)).join('');
+      // System chips (child/elder/priority/task-age — UNCHANGED by item 2.5)
+      // render via the existing combined-HTML-string path; the ranked
+      // rule-match chips (top + "+N") are appended afterwards as real
+      // elements (buildRuleMatchChipEl above) — mixing innerHTML then
+      // appendChild on the same node is standard DOM (Medicus's own page
+      // does this constantly) and keeps the rule-match chips last, matching
+      // their position in `chips` (system chips are always pushed first).
+      const systemChips = chips.filter(c => !c.isRuleMatch);
+      const ruleMatchChips = chips.filter(c => c.isRuleMatch);
+      strip.innerHTML = systemChips.map(c => renderChipHtml(c)).join('');
+      ruleMatchChips.forEach(c => strip.appendChild(buildRuleMatchChipEl(c)));
       target.insertBefore(strip, target.firstChild);
-      // Wire action menu handlers onto chips that have actions
+      // Wire action menu handlers onto system chips that have actions
+      // (child/elder/priority/task-age + any other plain ruleId chip) —
+      // UNCHANGED from before item 2.5.
       strip.querySelectorAll('[data-rule-id]').forEach(el => {
         el.addEventListener('click', (e) => {
           e.preventDefault(); e.stopPropagation();
           showActionMenu(el, el.dataset.ruleId);
+        });
+      });
+      // Wire the ranked rule-match chips (top + "+N") — item 2.3/2.5. Enter/
+      // Space activate too (role="button" chips, per plan a11y requirement).
+      strip.querySelectorAll('[data-rq-idx]').forEach(el => {
+        const activator = ruleMatchActivators[Number(el.dataset.rqIdx)];
+        if (!activator) return;
+        const activate = (e) => { e.preventDefault(); e.stopPropagation(); activator(el); };
+        el.addEventListener('click', activate);
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') activate(e);
         });
       });
     }
@@ -3682,19 +6378,81 @@
     if (queueObserver) { queueObserver.disconnect(); queueObserver = null; }
     queueObservedContainer = null;
     queueRafScheduled = false;
-    removeQueueLegend();
+    removeQueueStatusBar();
+    // Leaving the queue page: drop the focus-dim class so it never bleeds onto
+    // unrelated Medicus pages that also happen to render `.ag-row` elements.
+    // `_queueFocusAlertsOn` itself is untouched — session-local state — so the
+    // toggle is restored on the next queue visit via runQueue's
+    // applyQueueFocusClass() call.
+    if (typeof document !== 'undefined' && document.body) document.body.classList.remove(QUEUE_FOCUS_CLASS);
+    // Item 4.6 — called both when leaving the queue AND at the start of every
+    // runQueue (fresh queue re-entry), so this one line covers "cursor resets
+    // on queue (re)entry / navigation" for both directions. The ch-kbd-cursor
+    // CLASS itself needs no explicit removal here — the DOM it was on is
+    // either gone (navigated away) or about to be fully re-decorated
+    // (runQueue -> decorateQueueRows), and refreshQueueChips's own
+    // clear/reapply cycle governs the class from then on.
+    _kbdCursorRowIndex = null;
   };
 
   const refreshQueueChips = () => {
     log('queue: refreshQueueChips, rows=' + _queueRowUuids.size);
+    // Item 2.5 (TRIAGE-LENS-2026-07-02.md): every churn cycle wipes and
+    // rebuilds ALL chip nodes (CLAUDE.md rule #3), so a chip-anchored popover
+    // (the rule-match menu, or the older per-chip action menu) left open
+    // across a churn can end up pointing at a dead anchor. Close it rather
+    // than leave it floating over nothing — cheap, and applies to either
+    // menu since both share the activeActionMenu/activeAnchorEl singleton.
+    if (activeActionMenu && activeAnchorEl && !activeAnchorEl.isConnected) {
+      closeActionMenu();
+    }
     if (queueObserver) queueObserver.disconnect();
     queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result').forEach(s => s.remove());
+    // Wipe stale severity tint in the SAME cycle as the chip-node wipe (item 1.3) —
+    // a recycled row-index must never keep a previous patient's tint colour.
+    clearQueueRowTint();
+    // Item 4.7 — same reasoning as the tint wipe above: a recycled row-index
+    // must never keep a previous patient's seen-dim.
+    clearQueueSeenDim();
+    // Item 4.6 — same reasoning: a recycled row-index must never keep a
+    // previous patient's keyboard cursor highlight.
+    clearQueueKbdCursor();
+    // Item 2.2 — the wipe above just removed every .ch-q-result chip, including any
+    // node the detail popover is anchored to. A popover whose anchor no longer exists
+    // must close rather than linger detached/mis-positioned; reinjectCachedResultChips
+    // below will supply a fresh anchor if the GP reopens it.
+    if (_resultDetailPopoverAnchor && !document.contains(_resultDetailPopoverAnchor)) {
+      closeResultDetailPopover();
+    }
     queueScope().querySelectorAll('.ag-row').forEach(r => { delete r.dataset[QUEUE_DECORATED_KEY]; });
     decorateQueueRows();
     // Restore result chips synchronously from the per-task cache via each row's row-id.
     // DOM-driven (like the age chips) so they survive re-renders even when the
     // bridge-provided row->task map is transiently empty (the SPA keeps clearing it).
     reinjectCachedResultChips();
+    // Re-tint from the same cache the chips above just used — piggybacks this cycle so
+    // a config-driven cache invalidation (entry.sev cleared, watchConfig handler below)
+    // also clears/re-derives the tint for free (item 1.3, CLAUDE.md rule #4).
+    reapplyQueueRowTint();
+    // Item 4.7 — MUST run after reapplyQueueRowTint (immediately above): the
+    // never-dim-an-alert-row gate reads the tint classes reapplyQueueRowTint
+    // just set for THIS cycle, which is what gives the auto-undim behaviour.
+    reapplyQueueSeenDim();
+    // Item 4.6 — restore the keyboard cursor highlight across this cycle's
+    // churn, same pattern as the tint/seen-dim reapply above.
+    applyQueueKbdCursor();
+    // Restore monitoring chips synchronously from the per-task cache via the durable
+    // rowIndex->taskUuid map (see reinjectCachedMonitoringChips above) — unconditional,
+    // unlike the scheduleQueueMonitoring() fetch-scheduling call below, so cached chips
+    // survive the runQueue churn that empties _queueRowUuids (CLAUDE.md rule #4).
+    reinjectCachedMonitoringChips();
+    // Re-render the status bar AFTER the tint pass above so its jump-target query
+    // (tinted .ag-row elements) sees this cycle's freshly-applied classes, not the
+    // previous cycle's. Also re-assert the focus-dim class every cycle — cheap and
+    // idempotent (classList.add/remove no-op when already correct) — belt-and-braces
+    // in case anything upstream ever clears it.
+    updateQueueStatusBar();
+    applyQueueFocusClass();
     // Re-arm the SAME observer (cheap) after the self-write disconnect above, so we
     // don't leave it disconnected — only rebuild from scratch if the container is
     // actually gone (SPA tore down AG-Grid). Do NOT null out queueObservedContainer
@@ -3840,6 +6598,9 @@
       // per change, each triggering a full 4-endpoint fetch cascade.
       clearTimeout(pending);
       clearTimeout(pendingSlow);
+      // New page load (SPA navigation) — let findCardByTitle warn again if the
+      // same title is still missing on THIS page (item 1.1).
+      _cardMissWarned.clear();
       pending = setTimeout(() => run(true), 250);
       pendingSlow = setTimeout(() => run(true), 1200);
     };
@@ -3921,6 +6682,10 @@
 
   // Load config first, then start. Config drives rule matching.
   loadConfig().then(() => {
+    // Items 4.1/4.2 — kick off the (session-once) reception-pathways fetch
+    // alongside the rest of bootstrap; see ensureReceptionPathwaysLoaded's own
+    // comment for why decorateOneRow itself never awaits this.
+    ensureReceptionPathwaysLoaded();
     waitFor(pageReady, () => {
       run(true);
       setupRouteWatcher();
@@ -3928,8 +6693,17 @@
     watchConfig(() => {
       // Config changed — invalidate cached result severities so edited/enabled
       // result rules are recomputed on the next pass (not re-injected stale),
-      // then wipe + redo queue chips and re-render the HUD.
-      for (const entry of _queueResultCache.values()) { entry.sev = undefined; entry.ts = 0; }
+      // then wipe + redo queue chips and re-render the HUD. .detail/.unitMismatches/
+      // .fileable ride on the same cache entry as .sev (items 2.2/3.1/4.4) — clear
+      // all of them too so a stale popover or fileable tick built under the old
+      // config can't linger once .sev is recomputed.
+      for (const entry of _queueResultCache.values()) {
+        entry.sev = undefined;
+        entry.ts = 0;
+        entry.detail = undefined;
+        entry.unitMismatches = undefined;
+        entry.fileable = undefined;
+      }
       // The memoised chip HTML is config-derived too — drop it so edited labels/
       // kinds re-render rather than serving the stale cached string.
       _chipHtmlMemo.clear();
@@ -3937,6 +6711,13 @@
       run(true);
     });
   }).catch(e => console.error('[TriageLens] init failed', e));
+
+  // Item 4.6 — attached ONCE at module init (not per-queue-visit — the handler
+  // itself gates on pageType()==='queue' on every keypress, so there's nothing
+  // to attach/detach on navigation). Capture-phase like the other document-
+  // level keydown listeners in this file (onKeydownForMenu/onKeydownForResultPopover)
+  // so it sees the key before any Medicus-page handler could stop propagation.
+  document.addEventListener('keydown', onQueueKeydown, true);
 
   // Expose for manual re-trigger (demo / testing / SPA edge cases)
   window.__clinHudRun = () => run(true);

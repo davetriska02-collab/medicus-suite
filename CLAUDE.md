@@ -22,7 +22,7 @@
 4. Add `<name>: { js: () => import('./modules/<name>/<name>.js'), css: '...' }` to `MODULES` in `side-panel/panel.js` AND `pop-out/pop-out.js`
 5. Follow the backup convention below
 
-> **Panel-only tabs (intentional exceptions):** `visualiser` and `about` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. `visualiser` is special-cased in `panel.js` (opens a full browser tab, not a module) and `about` renders inline static text — neither makes sense in the floating pop-out, so they are deliberately omitted there. All *real* modules must still appear in both.
+> **Panel-only tabs (intentional exceptions):** `visualiser`, `about`, and `duplicate-checker` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. `visualiser` and `duplicate-checker` are both special-cased in `panel.js` (each opens a full browser tab via `chrome.tabs.create`, not a module) and `about` renders inline static text — none of these make sense in the floating pop-out, so they are deliberately omitted there. All *real* modules must still appear in both.
 
 ## chrome.storage.local keys — backup convention
 
@@ -42,12 +42,13 @@
 
 ## Global demand / alert strips
 
-Three permanent strips live in `side-panel/panel.html` outside `<main>`, polled independently by `panel.js`:
+Four permanent strips live in `side-panel/panel.html` outside `<main>`, polled independently by `panel.js`:
 - `#wrStrip` — waiting room patients (`wr-strip-*` CSS)
 - `#rmStrip` — new medical/admin requests (`rm-strip-*` CSS)
 - `#subRagStrip` — submissions RAG threshold alerts (`sub-rag-strip-*` CSS)
+- `#healthStrip` — suite self-diagnosis: >= 1 DOM contract (`shared/dom-contracts.js`) probed `degraded` by the runtime canary (`shared/contract-canary.js`, injected into the live Medicus page) — amber-only, never red (`health-strip-*` CSS)
 
-Pattern: each strip has a hidden class, polls on load + interval, shows amber/red state when threshold crossed. If you add another global alert, follow this same pattern.
+Pattern: each strip has a hidden class, polls on load + interval, shows amber/red state when threshold crossed. If you add another global alert, follow this same pattern. All four are panel-only by convention — `pop-out/pop-out.js`'s `MODULES` comment records this deliberately ("no WR/RM strips — they stay in the docked panel"); a new strip should match unless there's a specific reason to break the pattern.
 
 ## Injecting chips into the live Medicus queue (mechanics — copy the pattern, don't rediscover)
 

@@ -8,6 +8,8 @@ import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
 import { initSetup } from './setup/setup.js';
+import { TAB_HELP } from '../shared/tab-help.js';
+import { STATUS_RANK } from './modules/sentinel/sentinel-core.js';
 
 const content = document.getElementById('suiteContent');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -118,80 +120,15 @@ const MODULES = {
   reception: { js: () => import('./modules/reception/reception.js'), css: './modules/reception/reception.css' },
   sweep: { js: () => import('./modules/sweep/sweep.js'), css: './modules/sweep/sweep.css' },
   knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
+  leaflets: { js: () => import('./modules/leaflets/leaflets.js'), css: './modules/leaflets/leaflets.css' },
   record: { js: () => import('./modules/record/record.js'), css: './modules/record/record.css' },
   about: null,
 };
 
-// ── Per-tab help registry ──────────────────────────────────────────────────────
-// Plain-English, UK English, two-line summary per module: what the tab is, and
-// what to do first. Keyed by MODULES key. Reference aid only — these descriptions
-// are orientation help, NOT clinical decision support. Keep copy concise and
-// clinically careful. Mirrored in pop-out.js (keep in sync).
-const TAB_HELP = {
-  today: {
-    title: 'Today',
-    what: 'A morning overview of the practice: waiting room, triage load, demand and free slots, all on one screen.',
-    firstStep: 'Read it top to bottom before clinic to see what the day looks like.',
-  },
-  slots: {
-    title: 'Slots',
-    what: 'Counts of free appointment slots by type for any chosen date.',
-    firstStep: 'Pick a date to see how many slots of each type are still free.',
-  },
-  capacity: {
-    title: 'Forecast',
-    what: 'A short-term projection of appointment capacity against expected demand.',
-    firstStep: 'Check the coming days for any shortfall between slots and demand.',
-  },
-  sentinel: {
-    title: 'Monitoring',
-    what: 'Shows drug-monitoring and QOF (Quality and Outcomes Framework) reminders for the patient record you have open in Medicus.',
-    firstStep: 'Open a patient in Medicus, then check the reminders here against the record.',
-  },
-  record: {
-    title: 'Record',
-    what: 'A live snapshot of the patient open in Medicus: problems, current medicines, recent results and prescribing-safety prompts — no PDF needed. It is incomplete by design (no allergies or immunisations, limited history) and never replaces reading the record.',
-    firstStep:
-      'Open a patient in Medicus, then read the summary here. For the multi-year timeline and continuity, open the full visualiser from the footer.',
-  },
-  activity: {
-    title: 'Activity',
-    what: 'Workload per staff member over a date range, broken down by task type.',
-    firstStep: 'Choose a date range to see each person’s totals.',
-  },
-  referrals: {
-    title: 'Referrals',
-    what: 'A summary of referrals over a date range by priority, status, clinician and specialty.',
-    firstStep: 'Set a date range to see referral counts and breakdowns.',
-  },
-  condor: {
-    title: 'Condor',
-    what: 'A live dashboard of practice pressure, pulling several demand signals together.',
-    firstStep: 'Glance at the headline level to gauge how busy the practice is right now.',
-  },
-  trends: {
-    title: 'Trends',
-    what: 'How key practice figures have moved over time, shown as charts.',
-    firstStep: 'Pick a measure and time window to see the trend line.',
-  },
-  reception: {
-    title: 'Reception',
-    what: 'Quick-reference pathways to help reception direct patient requests to the right place.',
-    firstStep: 'Search or browse for the request type to see the suggested pathway.',
-  },
-  sweep: {
-    title: 'Sweep',
-    what: 'A pre-clinic scan of your upcoming patients that flags points worth a look beforehand.',
-    firstStep: 'Run the sweep before clinic, then review each flagged patient in Medicus.',
-  },
-  knowledge: {
-    title: 'Knowledge',
-    what: 'A searchable store of the practice’s own notes, contacts and how-to information.',
-    firstStep: 'Type a keyword to find the relevant practice note.',
-  },
-};
-
 // ── Help popover (per-tab "what is this?" affordance) ──────────────────────────
+// TAB_HELP content lives in shared/tab-help.js — ONE source consumed by both
+// this file and pop-out.js (see CLAUDE.md backup-convention-adjacent rule:
+// shared content lives in one place, not duplicated per shell).
 let helpOpen = false;
 let _helpCloseHandler = null;
 
@@ -1067,6 +1004,9 @@ function renderStrip(patients) {
     wrStripEl.className = 'wr-strip wr-strip-hidden';
     wrStripEl.innerHTML = '';
     reportAlert('waiting', null);
+    // Strip just lost its "Monitoring →" button — the badge falls back to the
+    // nav tab (see applySentinelBadgeToDom).
+    applySentinelBadgeToDom(_sentBadgeActionCount, _sentBadgeHasRed);
     return;
   }
 
@@ -1104,6 +1044,8 @@ function renderStrip(patients) {
     switchModule('sentinel');
     document.querySelector('[data-module="sentinel"]')?.scrollIntoView({ behavior: 'smooth', inline: 'nearest' });
   });
+  // Rebuilt the button above — reapply the last-known Monitoring badge state.
+  applySentinelBadgeToDom(_sentBadgeActionCount, _sentBadgeHasRed);
 
   reportAlert('waiting', {
     level: urgency,
@@ -1276,8 +1218,9 @@ function makePoller(fn, baseMs, label) {
 // Listen for Pusher-triggered refresh from service worker
 // F5: Sender guard — only accept messages from intra-extension contexts.
 // Light coalescing: fetchAndRenderStrip / fetchAndRenderRmStrip are already
-// guarded by document.visibilityState and their own fetch-in-flight logic,
-// so duplicate refreshes within the same tick are absorbed naturally.
+// guarded by document.visibilityState and their own fetch-in-flight guard
+// (_rmFetchInFlight for the RM strip), so duplicate refreshes within the same
+// tick are absorbed naturally by awaiting the existing in-flight call.
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!sender || sender.id !== chrome.runtime.id) return;
   if (msg?.type === 'waiting:refresh') fetchAndRenderStrip(true);
@@ -1286,6 +1229,104 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
 // Boot the strip — initial fetch + self-scheduling poll with failure backoff
 wrPoller = makePoller(fetchAndRenderStrip, WR_POLL_MS, 'wr-strip').start();
+
+// ── Monitoring (Sentinel) action-count badge — visible from any tab ───────────
+// Panel finding: the GP wants to know whether the patient open in Medicus has
+// red/amber monitoring chips without switching to the Monitoring tab. The rules
+// engine runs ONLY in the content script (content-scripts/sentinel.js); this
+// reads its already-published snapshot via getSentinelSnapshot — it never runs
+// the rules engine itself. Refreshed on chrome.tabs.onActivated and on the
+// content script's bare 'sentinel:snapshot-updated' ping (debounced — the ping
+// can fire repeatedly on SPA churn).
+//
+// CLINICAL SAFETY: an unavailable snapshot, chips: null, or no active Medicus
+// tab must render as NO badge — never "0" and never an implied all-clear. The
+// badge only ever signals "action-needed chips are present"; absence of the
+// badge means "unknown", not "clear".
+let _sentBadgeTimer = null;
+
+function scheduleSentinelBadgeUpdate() {
+  if (_sentBadgeTimer) return;
+  _sentBadgeTimer = setTimeout(() => {
+    _sentBadgeTimer = null;
+    updateSentinelBadge();
+  }, 400);
+}
+
+async function updateSentinelBadge() {
+  let chips = null; // stays null (= unavailable) unless a real snapshot with chips comes back
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (tab?.id && tab?.url && /medicus\.health/.test(tab.url)) {
+      const snapshot = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
+      if (snapshot && !snapshot.unavailable && Array.isArray(snapshot.chips)) {
+        chips = snapshot.chips;
+      }
+    }
+  } catch (_) {
+    // No Medicus tab, no content script mounted, or the message failed — chips
+    // stays null, which renders as no badge (see CLINICAL SAFETY note above).
+  }
+  const actionCount = chips ? chips.filter((c) => STATUS_RANK[c.status] <= 2).length : null;
+  const hasRed = chips ? chips.some((c) => STATUS_RANK[c.status] === 0) : false;
+  applySentinelBadgeToDom(actionCount, hasRed);
+}
+
+// Last-known state, reapplied whenever the WR strip re-renders (it owns the
+// "Monitoring →" button this badge decorates) so the two stay in sync without
+// a second round-trip to the content script.
+let _sentBadgeActionCount = null;
+let _sentBadgeHasRed = false;
+
+function applySentinelBadgeToDom(actionCount, hasRed) {
+  _sentBadgeActionCount = actionCount;
+  _sentBadgeHasRed = hasRed;
+
+  const gotoBtn = wrStripEl?.querySelector('.wr-strip-goto');
+  // Prefer the strip chip when the WR strip is actually showing a "Monitoring →"
+  // button; fall back to the nav-tab badge when the strip is hidden (no
+  // waiting patients) — same fallback pattern as the Slots nav badge above.
+  if (gotoBtn) {
+    let chip = gotoBtn.querySelector('.wr-strip-goto-count');
+    if (actionCount) {
+      if (!chip) {
+        chip = document.createElement('span');
+        chip.className = 'wr-strip-goto-count';
+        gotoBtn.appendChild(chip);
+      }
+      chip.textContent = `· ${actionCount}`;
+      chip.classList.toggle('wr-strip-goto-count-red', hasRed);
+      chip.classList.toggle('wr-strip-goto-count-amber', !hasRed);
+    } else if (chip) {
+      chip.remove();
+    }
+  }
+
+  const navTab = document.querySelector('[data-module="sentinel"]');
+  if (!navTab) return;
+  let badge = navTab.querySelector('.nav-badge');
+  if (actionCount && !gotoBtn) {
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'nav-badge';
+      navTab.appendChild(badge);
+    }
+    badge.textContent = String(actionCount);
+    badge.classList.toggle('nav-badge-red', hasRed);
+    badge.classList.toggle('nav-badge-amber', !hasRed);
+    badge.style.display = '';
+  } else if (badge) {
+    badge.style.display = 'none';
+  }
+}
+
+chrome.tabs.onActivated.addListener(() => scheduleSentinelBadgeUpdate());
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!sender || sender.id !== chrome.runtime.id) return;
+  if (msg?.type === 'sentinel:snapshot-updated') scheduleSentinelBadgeUpdate();
+});
+updateSentinelBadge();
 
 // ── Request Monitor strip (v1.3) ─────────────────────────────────────────────
 // Sits below the waiting room strip. Hidden entirely unless toggled on in
@@ -1296,7 +1337,17 @@ const rmStripEl = document.getElementById('rmStrip');
 let rmPoller = null;
 let rmPollSeconds = 60;
 
+let _rmFetchInFlight = null;
+
 async function fetchAndRenderRmStrip() {
+  if (_rmFetchInFlight) return _rmFetchInFlight;
+  _rmFetchInFlight = _doFetchAndRenderRmStrip().finally(() => {
+    _rmFetchInFlight = null;
+  });
+  return _rmFetchInFlight;
+}
+
+async function _doFetchAndRenderRmStrip() {
   if (document.visibilityState !== 'visible') return true;
   if (!rmStripEl || !window.RequestMonitor) return true;
 
@@ -1589,12 +1640,66 @@ async function fetchAndRenderSubRagStrip() {
 
 let subRagPoller = makePoller(fetchAndRenderSubRagStrip, SUB_RAG_POLL_MS, 'sub-rag-strip').start();
 
-// Refresh all three strips immediately when the panel becomes visible again
+// ── Suite health strip (global — visible on every module) ─────────────────────
+// Self-diagnosis, not a clinical alert: shown ONLY when >= 1 DOM contract this
+// suite depends on (shared/dom-contracts.js) has been probed 'degraded' by the
+// runtime canary (shared/contract-canary.js, injected into the live Medicus
+// page — see manifest.json's content-script list). The canary does all the
+// probing and hysteresis; this strip only reads its result out of
+// chrome.storage.local — no API calls, no polling backoff needed. Calm and
+// amber-only by design (never red — Medicus changing its own UI is expected,
+// not a clinical emergency). Same strip family as #wrStrip/#rmStrip/
+// #subRagStrip (CLAUDE.md "Global demand / alert strips"); panel-only by the
+// same convention those three already use (no WR/RM/SubRag strips in the
+// pop-out either — see pop-out/pop-out.js's MODULES comment).
+const healthStripEl = document.getElementById('healthStrip');
+const HEALTH_POLL_MS = 30 * 1000;
+
+async function fetchAndRenderHealthStrip() {
+  if (!healthStripEl) return true;
+  try {
+    const r = await chrome.storage.local.get('health.contracts');
+    const health = r['health.contracts'] || {};
+    const DC = window.DomContracts;
+    const degradedIds = Object.keys(health).filter((id) => health[id]?.status === 'degraded');
+    if (degradedIds.length === 0 || !DC) {
+      healthStripEl.className = 'health-strip health-strip-hidden';
+      healthStripEl.innerHTML = '';
+      return true;
+    }
+    // Several contracts can share one owning feature (e.g. the three queue-chip
+    // contracts) — de-dupe so the strip reads "Queue chips degraded", not
+    // "Queue chips, Queue chips, Queue chips degraded".
+    const features = degradedIds.map((id) => DC.get(id)?.feature || id).filter((f, i, arr) => arr.indexOf(f) === i);
+    healthStripEl.className = 'health-strip health-strip-amber';
+    healthStripEl.innerHTML = `
+      <span class="health-strip-icon">⚠</span>
+      <span class="health-strip-text">Medicus may have changed — ${escStrip(features.join(', '))} degraded. Details in Options → Suite health.</span>
+      <button class="health-strip-goto">Details →</button>
+    `;
+    healthStripEl.querySelector('.health-strip-goto')?.addEventListener('click', () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-health') });
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+let healthPoller = makePoller(fetchAndRenderHealthStrip, HEALTH_POLL_MS, 'health-strip').start();
+// Snappier than the 30s poll: the canary writes this key directly, so react
+// to it immediately when the panel is open and watching.
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes['health.contracts']) fetchAndRenderHealthStrip();
+});
+
+// Refresh all four strips immediately when the panel becomes visible again
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     fetchAndRenderStrip();
     fetchAndRenderRmStrip();
     fetchAndRenderSubRagStrip();
+    fetchAndRenderHealthStrip();
   }
 });
 
@@ -1619,6 +1724,7 @@ window.addEventListener('pagehide', () => {
   if (wrPoller) wrPoller.stop();
   if (rmPoller) rmPoller.stop();
   if (subRagPoller) subRagPoller.stop();
+  if (healthPoller) healthPoller.stop();
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

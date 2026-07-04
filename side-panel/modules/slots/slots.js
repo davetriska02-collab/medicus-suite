@@ -20,6 +20,11 @@ import {
   createAppointment,
   releaseReservation,
 } from './booking-api.js';
+import {
+  typeAlertLevel as coreTypeAlertLevel,
+  overallAlertLevel as coreOverallAlertLevel,
+  validateAlertRule,
+} from './slots-alert-core.js';
 
 // Practice code resolved from chrome.storage.local['suite.practiceCode'].
 // No hardcoded default — null means the user has not configured a code yet.
@@ -38,6 +43,7 @@ let state = {
   showExcluded: false,
   lastFetched: null,
   alertRules: [],
+  alertEditorOpen: false, // item 9 — minimal in-module rule editor, toggled from the ribbon/hero
   // Pill preferences — USER CONFIG (order + colour per type), persisted to
   // 'slots.pillPrefs' and included in suite backups via slot-counter-io.js.
   pillPrefs: { order: [], colours: {} },
@@ -80,6 +86,52 @@ function savePillPrefs() {
   chrome.storage.local.set({ 'slots.pillPrefs': { order: state.pillPrefs.order, colours: state.pillPrefs.colours } });
 }
 
+// Item 9 — alert threshold editor persistence. Writes the full array every
+// time (small, always <20 rows in practice) rather than diffing — mirrors
+// the options.html#sect-slots editor's own save() so both surfaces behave
+// identically and can never drift into a different persistence shape.
+function saveAlertRules() {
+  chrome.storage.local.set({ 'slots.alertRules': state.alertRules }).catch((e) => {
+    // A silent failure here (quota / context invalidated) would otherwise
+    // leave the UI showing an edit that was never actually persisted.
+    console.warn('[Slots] Failed to save alert rules', e);
+  });
+}
+
+// Defensive: back-fill an id on any rule loaded without one (e.g. a
+// hand-edited backup, or data written before ids existed) — the in-module
+// editor keys rows by rule.id (never array index, see updateAlertRule), so
+// every rule must have one before it can be edited/deleted safely.
+function withRuleIds(rules) {
+  return (Array.isArray(rules) ? rules : []).map((r) =>
+    r && r.id ? r : { ...r, id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` }
+  );
+}
+
+// Apply a partial patch to one rule, found by STABLE id (never array index —
+// an index-based lookup would silently retarget a different rule if a second
+// edit/delete lands between a mutation and its re-render/rebind), validating/
+// clamping via the shared core (validateAlertRule) before persisting — so a
+// fat-fingered threshold or an in-progress "no type picked yet" row can never
+// corrupt the stored rule shape that typeAlertLevel()/overallAlertLevel()
+// depend on.
+function updateAlertRule(id, patch) {
+  const idx = state.alertRules.findIndex((r) => r.id === id);
+  if (idx === -1) return;
+  const current = state.alertRules[idx];
+  const merged = { ...current, ...patch };
+  // Allow an in-progress row with no type picked yet to exist in the UI
+  // without being force-validated away — only persist once it has a type.
+  if (!merged.typeName) {
+    state.alertRules[idx] = merged;
+    saveAlertRules();
+    return;
+  }
+  const { rule } = validateAlertRule(merged);
+  state.alertRules[idx] = rule;
+  saveAlertRules();
+}
+
 let container = null;
 let _inFlight = false;
 
@@ -96,7 +148,7 @@ export async function init(el) {
     'suite.practiceCode',
   ]);
   if (stored['slots.hiddenTypes']) state.hiddenTypes = new Set(stored['slots.hiddenTypes']);
-  if (stored['slots.alertRules']) state.alertRules = stored['slots.alertRules'];
+  if (stored['slots.alertRules']) state.alertRules = withRuleIds(stored['slots.alertRules']);
   state.pillPrefs = sanitisePillPrefs(stored['slots.pillPrefs']);
   if (stored['suite.practiceCode']) {
     SITE_ID = stored['suite.practiceCode'];
@@ -149,7 +201,7 @@ function onStorageChange(changes) {
     render();
   }
   if (changes['slots.alertRules']) {
-    state.alertRules = changes['slots.alertRules'].newValue || [];
+    state.alertRules = withRuleIds(changes['slots.alertRules'].newValue || []);
     render();
   }
   if (changes['slots.pillPrefs']) {
@@ -321,26 +373,18 @@ function visibleTotal(byType, hiddenTypes) {
 // ── Alert levels ──────────────────────────────────────────────────────────────
 // One source of truth for "is this type running dry?" — consumed by the alert
 // ribbon, the hero label, and the type pills, so they can never disagree.
+// The evaluation itself lives in the pure, Node-testable slots-alert-core.js
+// (item 9 — shared with the Today "Slots Today" card so both surfaces read
+// the exact same threshold logic); these are thin wrappers over module state.
 
 // 'red' (zero left), 'amber' (at/below threshold), or null for a single type.
 function typeAlertLevel(typeName, count) {
-  for (const rule of state.alertRules || []) {
-    if (!rule.enabled || rule.typeName !== typeName) continue;
-    if (count <= rule.threshold) return count === 0 ? 'red' : 'amber';
-  }
-  return null;
+  return coreTypeAlertLevel(state.alertRules, typeName, count);
 }
 
 // Highest triggered level across all enabled rules, or null when all calm.
 function overallAlertLevel(byType) {
-  let level = null;
-  for (const rule of state.alertRules || []) {
-    if (!rule.enabled) continue;
-    const l = typeAlertLevel(rule.typeName, sumAmPm(byType[rule.typeName]));
-    if (l === 'red') return 'red';
-    if (l === 'amber') level = 'amber';
-  }
-  return level;
+  return coreOverallAlertLevel(state.alertRules, byType);
 }
 
 // ── SVG helpers ───────────────────────────────────────────────────────────────
@@ -380,6 +424,7 @@ function render() {
         ${state.error && state.error.startsWith('No practice code') ? ' <button class="ghost-btn setup-now-btn">Set up now</button>' : ''}
       </div>
       ${!state.loading && d ? renderAlertRibbon(d.byType) : ''}
+      ${state.alertEditorOpen ? renderAlertEditor(d) : ''}
       ${!state.loading && d ? renderHeroCard(visible, visibleSum) : ''}
       ${state.loading ? renderSkeleton() : d ? renderData(d, visible, visibleSum) : ''}
       ${renderBookingSection()}
@@ -404,6 +449,9 @@ function renderHeader() {
       <input type="date" id="slotsDate" value="${state.date}" max="2099-12-31" class="date-input" />
       <button class="ghost-btn date-refresh-btn" id="refreshSlots" title="Refresh">${SVG_REFRESH}</button>
       ${state.data && Object.keys(state.data.byType).length > 0 ? `<button class="ghost-btn" id="slotsCsvBtn">&#x2193; CSV</button>` : ''}
+      <button class="ghost-btn date-refresh-btn${state.alertEditorOpen ? ' active' : ''}${(state.alertRules || []).some((r) => r.enabled) ? ' has-alert-rules' : ''}"
+        id="slotsAlertToggle" aria-expanded="${state.alertEditorOpen}"
+        title="Alert thresholds — get warned when a slot type is running low">${SVG_SLIDERS}</button>
     </div>
   `;
 }
@@ -532,6 +580,59 @@ function renderAlertRibbon(byType) {
       <span class="slots-alert-icon">${iconSvg}</span>
       <div class="slots-alert-items">${items}</div>
       ${editBtn}
+    </div>
+  `;
+}
+
+// ── Alert threshold editor (item 9 — minimal, in-module) ─────────────────────
+// Per-appointment-type "alert if fewer than N remaining" rules. Rows list the
+// day's known appointment types (from state.data.byType, falling back to any
+// rule referencing a type not seen today so an existing rule is never hidden
+// just because the type has no sessions on the currently-viewed date). The
+// same options.html#sect-slots editor still works — both write the same
+// 'slots.alertRules' key — this is the calm, no-navigation-away alternative.
+function renderAlertEditor(d) {
+  const knownTypes = d ? Object.keys(d.byType || {}) : [];
+  const ruleTypes = (state.alertRules || []).map((r) => r.typeName).filter(Boolean);
+  const typeOptions = [...new Set([...knownTypes, ...ruleTypes])].sort((a, b) => a.localeCompare(b));
+
+  // Keyed by rule.id (stable across renders), NOT array index — an index
+  // would silently retarget a different rule if two edits land between a
+  // mutation and its re-render/rebind (see slots-alert-core.js's id
+  // generation; options.html#sect-slots's editor already keys this way too).
+  const rows = (state.alertRules || [])
+    .map((rule) => {
+      const optionsHtml = typeOptions
+        .map((t) => `<option value="${escHtml(t)}"${rule.typeName === t ? ' selected' : ''}>${escHtml(t)}</option>`)
+        .join('');
+      return `
+      <div class="slots-alert-rule-row" data-rule-id="${escHtml(rule.id)}">
+        <input type="checkbox" class="sar-enabled" ${rule.enabled ? 'checked' : ''} title="Enable this rule" />
+        <select class="sar-type" title="Appointment type">
+          <option value="">— pick type —</option>
+          ${optionsHtml}
+        </select>
+        <span class="sar-lte">&le;</span>
+        <input type="number" class="sar-threshold" value="${rule.threshold}" min="0" max="999" title="Alert when at or below this many slots remain" />
+        <span class="sar-unit">left</span>
+        <button class="sar-delete ghost-btn" title="Remove rule" aria-label="Remove rule for ${escHtml(rule.typeName || 'this type')}">✕</button>
+      </div>`;
+    })
+    .join('');
+
+  return `
+    <div class="slots-alert-editor" id="slotsAlertEditor">
+      <div class="slots-alert-editor-head">
+        <span class="slots-alert-editor-title">Alert thresholds</span>
+        <button class="ghost-btn slots-alert-editor-close" id="slotsAlertEditorClose" aria-label="Close">✕</button>
+      </div>
+      <p class="slots-alert-editor-note">
+        Get an amber/red warning here — and on Today's Slots card — when an appointment type drops
+        to or below a threshold. Set threshold to 0 to alert only when a type is completely gone.
+      </p>
+      <div class="slots-alert-rule-list">${rows}</div>
+      ${rows ? '' : '<div class="slots-alert-editor-empty">No alert rules yet.</div>'}
+      <button class="ghost-btn" id="slotsAlertAddRule">+ Add rule</button>
     </div>
   `;
 }
@@ -1013,9 +1114,50 @@ function bindEvents() {
     });
   });
 
-  // Edit thresholds deep-link button in alert ribbon
+  // "Edit thresholds" in the alert ribbon and the header cog both open the
+  // same minimal in-module editor (item 9) — no navigation away from Slots.
   container.querySelector('#slotsRibbonEdit')?.addEventListener('click', () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-slots') });
+    state.alertEditorOpen = true;
+    render();
+  });
+  container.querySelector('#slotsAlertToggle')?.addEventListener('click', () => {
+    state.alertEditorOpen = !state.alertEditorOpen;
+    render();
+  });
+  container.querySelector('#slotsAlertEditorClose')?.addEventListener('click', () => {
+    state.alertEditorOpen = false;
+    render();
+  });
+
+  container.querySelector('#slotsAlertAddRule')?.addEventListener('click', () => {
+    // Same id shape as validateAlertRule()'s auto-generated id (timestamp +
+    // random suffix) — a bare timestamp could collide if "+ Add rule" were
+    // ever triggered twice within the same millisecond.
+    const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    state.alertRules = [...state.alertRules, { id, typeName: '', threshold: 0, enabled: true }];
+    saveAlertRules();
+    render();
+  });
+
+  container.querySelectorAll('.slots-alert-rule-row').forEach((row) => {
+    const ruleId = row.dataset.ruleId;
+    row.querySelector('.sar-enabled')?.addEventListener('change', (e) => {
+      updateAlertRule(ruleId, { enabled: e.target.checked });
+      render();
+    });
+    row.querySelector('.sar-type')?.addEventListener('change', (e) => {
+      updateAlertRule(ruleId, { typeName: e.target.value });
+      render();
+    });
+    row.querySelector('.sar-threshold')?.addEventListener('change', (e) => {
+      updateAlertRule(ruleId, { threshold: e.target.value });
+      render();
+    });
+    row.querySelector('.sar-delete')?.addEventListener('click', () => {
+      state.alertRules = state.alertRules.filter((r) => r.id !== ruleId);
+      saveAlertRules();
+      render();
+    });
   });
 
   container.querySelector('#excludedToggle')?.addEventListener('click', () => {

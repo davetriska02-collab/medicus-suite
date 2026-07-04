@@ -2,6 +2,641 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.152.0] — 2026-07-03
+
+### Practice-panel wishlist wave 1 (quick wins + half-day items)
+
+First build wave from the whole-suite feature-wishlist appraisal
+(`docs/appraisal/PRACTICE-wishlist-whole-suite-2026-07-03.md`).
+
+**Sweep / Today**
+- QOF points-at-risk patient rows now show each indicator's name next to its
+  code ("DM037 — …"), not bare codes.
+- Skipped appointment entries (no patient UUID) are now *named*: a collapsible
+  amber list shows time · clinician · raw name for every entry the sweep could
+  not check, with an explicit "never checked, not an all-clear" caveat. New
+  `sweep.lastRun.skippedEntries` field (PHI-bearing, same 2h TTL, never backed
+  up); `missingUuidCount` kept for back-compat.
+- Today's Morning Sweep card adds a plain-English line: "N of M booked
+  patients have checks due — open the sweep for names" (neutral zero state;
+  not-run state untouched — never implies all-clear).
+
+**Monitoring visibility from any tab**
+- The open patient's red/amber monitoring count now shows on the header strip's
+  "Monitoring →" button (amber, red if any red chip), falling back to a badge
+  on the Monitoring nav tab when the waiting-room strip is hidden. Panel-only;
+  reuses the content script's already-computed chips via `getSentinelSnapshot`
+  (no rules-engine run in the panel). Unavailable snapshot renders as no badge,
+  never as 0 or an implied all-clear.
+
+**Referrals**
+- 2WW safety-net rows no longer truncate patient names (name wraps on its own
+  line; service/clinician move to a sub-line) and the card carries a threshold
+  legend ("watch ≥ 14d · overdue ≥ 21d", values from the API, not hardcoded).
+
+**Reception → Leaflets**
+- Each pathway tile gains a "Leaflet →" link that jumps to the Leaflets tab
+  with the matching NHS A–Z search pre-run (one-shot `leaflets.pendingQuery`
+  handoff key; transient, never exported).
+
+**Knowledge**
+- Reserved "Locum brief" pinned category: sorts first after "All", styled
+  distinctly, with an empty-state hint and a suggested option in the Add form
+  — the locum's day-one who's-who/escalation card, practice-authored.
+
+**Setup / help**
+- Triage-monitor setup step now uses the canonical "Team / assignee UUID"
+  wording and explains where to find it in plain English.
+- Tab help + tour now surface four features users kept asking for because they
+  couldn't find them: Sentinel auto-follow, the clickable "N unmatched" audit
+  count, and the Practice Pressure cog (weightings/thresholds). TOUR_VERSION
+  8 → 9 so returning users get the "What's new" pass.
+
+## [v3.151.0] — 2026-07-02
+
+### Triage Lens — Workload off the GP (Phase 4)
+
+Phase 4 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: turning the evidence and
+honesty of the earlier phases into consultations that never reach the GP. The
+clinical items (pathway matching, green routine rules) were CSO-reviewed —
+`docs/plans/TRIAGE-LENS-PHASE4-REVIEW.md`.
+
+**Queue workflow (client-side):**
+- **Keyboard triage** — j/k (or arrows) move a cursor through the results
+  queue, Enter opens the cursor row, n jumps to the next red/amber. Ignores
+  keys while typing. Pref `queueKeyboardNav` (default on).
+- **Seen-dimming** (opt-in, default off) — rows whose task was opened this
+  session dim so unworked rows stand out. Visual-only, session-local,
+  suppresses nothing: it **never dims a red/amber row** (gate reads the result
+  cache, so it holds even with row-tint off) and auto-undims the moment a row
+  re-grades to an alert. Hazard log H-037.
+- **"All-normal, fileable" marker** — a green ✓ on rows whose report is
+  confidently all-normal with no filing blockers, so the GP works reds first
+  and batches the easy filings. Reuses the lab-file gate; fail-closed; marks
+  nothing it can't confirm, and files nothing itself.
+
+**Request-queue decision support (CSO-reviewed):**
+- **Pharmacy First divert chip** — a request matching a Pharmacy First pathway
+  (from the CSO-signed `reception-pathways.json`) shows a green chip when the
+  patient is age-eligible (fails closed on unknown age). Clicking offers a
+  prepare-only redirect draft — copy-to-clipboard, never auto-sent.
+- **Missing-info ask-back** — for a matched pathway, the chip menu lists the
+  red-flag questions the request hasn't answered and a prepare-only ask-back
+  draft; a red flag the patient *volunteered* (999/duty) surfaces as a
+  prominent escalation note. Decision support only — offers info and drafts,
+  never triages or auto-advises.
+- **Green routine rules** — requests that are confidently non-clinical
+  (practice-admin details, pharmacy/prescription process queries) now show a
+  green chip so the safe tail can be swept in one pass. Green ranks *below*
+  red/amber/info, so a symptom co-occurring with an admin phrase always keeps
+  its clinical chip on top — green can never mask a signal. defaults config
+  23→24.
+- **`engine/reception-match.js`** — new pure matching engine (Pharmacy First
+  eligibility, red-flag gap detection) over the pathways file, fail-closed on
+  unknown age, conservative gap detection (over-asks rather than assumes).
+
+**Deferred** (in the review doc): repeat-contact (the queue payload carries no
+patient identifier — awaiting a decision on the name+DOB fallback); the
+photo-missing prompt (no attachment field is visible in the data the extension
+reads — needs live-Medicus discovery); and the Phase 3 FIB-4 age-split /
+Hb-K⁺ delta follow-ups.
+
+## [v3.150.0] — 2026-07-02
+
+### Triage Lens — Smarter grading (Phase 3)
+
+Phase 3 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: the first phase to change
+what fires red and amber. Every new/changed shipped threshold was independently
+verified against a named UK source and **CSO-signed-off** before release — see
+`docs/plans/TRIAGE-LENS-PHASE3-REVIEW.md`.
+
+**Engine capabilities** (grading was byte-identical until this release shipped
+content that uses them):
+
+- **Unit-mismatch guard** — a result rule no longer grades a value reported in a
+  unit incompatible with the rule's own (`unitsCompatible()` normalises µ/u,
+  superscript and cell-count notations, `micrograms/L`↔`µg/L`). On a genuine
+  mismatch the rule is skipped and surfaced as a grey "unit?" chip with a
+  plain-language popover line; absent units stay fail-open (Medicus often omits
+  them). IU vs U kept distinct.
+- **Text rules can reach red** — optional `abnormalLevel:'red'` lets a designated
+  positive text finding escalate past the historic amber cap (escalate-only).
+- **Unclassified-positive safety net** — an unmatched non-numeric positive result
+  ("Positive"/"Detected"/…) no longer scores nothing; it surfaces an amber "?"
+  chip. Heavily negation-guarded (incl. a `non-reactive` glued-prefix guard),
+  amber-max, and only when no rule already classified the result.
+- **Negation / past-reference demotion** — request-queue chips visually demote
+  (never suppress) when the trigger phrase is negated ("no chest pain") or
+  historic ("UTI last year"): outline style, "(negated?)"/"(past?)" suffix,
+  ranked below undemoted matches.
+- **Patient-context gates** — result rules accept `context:{minAge,maxAge,sex}`;
+  request rules accept `require:{ageMin,ageMax,sex,medsAny,problemsAny}`. Both
+  AND-gate and **fail closed** — a gate whose data isn't available on the current
+  surface simply doesn't fire, never suppressing a base match.
+- **Delta / trend rule kind** — `kind:'delta'` grades on change over time
+  (direction, absolute or percent, unit-guarded, optional `maxDays`), rendered
+  with the change summary in the chip popover.
+
+**New shipped result-rule coverage** (config version 21→23; each cited to a UK
+source, thresholds in the review doc):
+
+- Hypernatraemia (Na high, amber ≥150 / red ≥160), absolute creatinine/AKI
+  (red ≥354 µmol/L, KDIGO stage 3) plus a creatinine-rise delta (≥26.5 µmol/L in
+  48h, KDIGO stage 1), glucose (high ≥11.1 / ≥30; low ≤4.0 / ≤3.0), ALT & AST
+  transaminitis (≥120 / ≥320 U/L), CRP (≥20 / ≥100, NICE CG191), WCC high (≥12),
+  and a **potassium 6.0–6.4 amber band** below the existing red ≥6.5 (UK Kidney
+  Association).
+- **HbA1c ≥48 demoted red → amber** — 48 is the diagnostic threshold, not an
+  acute-danger value; demotion cuts red alert-fatigue (with a `RETIRED_*`
+  un-stick so it reaches existing installs). New diabetes still flags, at amber.
+
+**Held back after clinical review** (in the review doc, pursued as follow-up):
+the FIB-4 age-adjustment was reverted to status quo (the drafted ≥65 cutoff used
+a hepatitis-C value and the correct age-adjustment needs an engine change the
+escalate-only model can't do yet); the neutrophil-high rule was dropped (a
+lab-range boundary, not a validated action threshold); and Hb-fall / K⁺-rise
+delta rules await a defensible sourced magnitude.
+
+## [v3.149.0] — 2026-07-02
+
+### Triage Lens — Evidence at the chip (Phase 2)
+
+Phase 2 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: every chip can now explain
+itself and carry its next step — all client-side, on data already fetched, with
+no change to clinical grading.
+
+- **Request chips show their evidence.** Clicking a queue rule chip opens a
+  menu showing the exact sentence from the patient's request that triggered
+  the rule (matched term highlighted) plus the rule's attached actions —
+  guidance links, copy-ready snippets, notes — via the scheme-guarded action
+  executor. When several rules match one request, chips rank red < amber <
+  info and collapse to the top chip + "+N" (the overflow menu lists all
+  matched rules, each with its own evidence and actions). Evidence is built
+  with `textContent` only — request text is never rendered as HTML, and
+  Medicus's own DOM is never mutated for highlighting. New matcher API
+  `ruleMatchEvidence()` is built on the same compiled patterns as the boolean
+  matcher and parity-swept across the full 78-rule corpus.
+- **Result chips answer "how bad?" in place.** Red/amber chips gain a trend
+  arrow (↑/↓) when a prior value exists in the report's own history —
+  suppressed on any unit mismatch, never a cross-unit comparison. Clicking a
+  chip opens a detail popover: value, unit, reference range, lab flag, sample
+  date, which rule fired (with its threshold, e.g. "red ≥6.5"), and the prior
+  value with date. The grey "couldn't check" chip explains itself and notes
+  the automatic retry. Engine change is purely additive attribution
+  (`flagged`, `ruleId`, `extractPrior`) — grading behaviour byte-identical,
+  all pre-existing severity tests unchanged.
+- **The verdict follows you into the task.** Opening a task from the queue
+  shows a slim severity-edged banner echoing the evaluation ("2 abnormal:
+  K⁺ 6.2 ↑ · eGFR 38 ↓ — rule: …") from cache with zero extra fetches;
+  directly-opened tasks compute once via the queue's own path. The banner is
+  keyed to the task ID (a slow fetch can never paint the wrong patient's
+  verdict), shows an honest grey variant when the check failed, and stays
+  silent on non-result tasks. Pref `detailVerdictBanner` (default on).
+- **Result rules can carry guidance actions.** The same link/snippet/note
+  actions request rules have — validated (http/https only), editable in the
+  result-rule editor (shared action-editor component), documented in the LLM
+  authoring prompt, and rendered in the chip popover for the rule that fired.
+  Actions resolve from live config at render time, so edits apply instantly.
+  No shipped rule gains actions in this release (user-authored only).
+
+## [v3.148.0] — 2026-07-02
+
+### Triage Lens — Trust: the screen never lies (Phase 1)
+
+Phase 1 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: the queue and HUD now
+distinguish "assessed and clear" from "not assessed" everywhere, alert rows are
+visible at a glance, and every machine-initiated write leaves an audit trail.
+
+- **"Not assessed" never looks like "normal".** The HUD headline says **"Not
+  fully assessed"** (never "No flags") when a clinical card could not be read,
+  with a grey footer naming the missing cards, and a tile whose entire source
+  is unreadable renders a grey not-assessed state instead of implying clear.
+  Card lookup itself is hardened (count-suffix and whitespace/case tolerant,
+  ambiguity-safe) and warns once per page load when an expected card is
+  missing. On the results queue, a row whose check **failed** now shows a grey
+  outline "?" chip and is retried within a minute — previously indistinguishable
+  from an unassessed or normal row. The monitoring-due chip is now conservative:
+  a transient fetch/evaluation failure preserves the last known chip instead of
+  clearing it (only a successful evaluation can clear), while patient/page
+  changes still reset it so a chip can never leak across patients.
+- **Live triage status bar** replaces the passive queue legend: live counts
+  ("3 red · 7 amber · 22 clear · 2 ? · checking 8…"), a **jump-to-next-red**
+  button (amber fallback) that scrolls and flashes the row, and a
+  **Focus alerts** toggle that dims non-alert rows (never hides them). "Clear"
+  counts only results that were actually assessed; tasks with no gradeable
+  report are not claimed as clear. Pref-gated (`queueStatusBar`, default on).
+- **Severity row tint**: alert rows carry a 2–3px red/amber left-edge tint
+  (master and preview rows), wiped and re-derived in the same cycle as the
+  chips so a recycled grid row can never wear a previous patient's colour.
+  Pref-gated (`queueRowTint`, default on).
+- **Machine writes are audited and surfaced.** OIR auto-ticks now write
+  `kind:'auto'` entries to the existing audit log and show a toast listing
+  exactly what was ticked, with a **Review** action (scroll + flash — labelled
+  honestly: ticking writes to Medicus immediately and cannot be reversed from
+  the toast) recorded as `kind:'auto-review'`; a new `oirAutoTick` pref
+  (default on) can disable auto-ticking entirely. The routine-prescriptions
+  button now records every outcome (committed / highlighted / aborted,
+  including the previously-untracked `auto` mode) in a machine-local ring
+  buffer mirrored to the Clinical Event Ledger. Audit logs stay machine-local
+  by design (excluded from backups, matching the lab-filing precedent). Hazard
+  log: new **H-036** (auto-tick wrong-match hazard), H-035 updated.
+- **Fixed in passing:** meta chips (`Under-prioritised`, `Unmatched patient`)
+  rendered filled instead of outline on the live page — the `.ch-chip-meta`
+  rule existed only in the stale PiP CSS copy, now restored to `hud.css`.
+
+## [v3.147.1] — 2026-07-02
+
+### Triage Lens — Phase 0 hardening (guardrails before the improvement plan)
+
+Groundwork from `docs/plans/TRIAGE-LENS-2026-07-02.md` (Phase 0): the tests and
+one-line safety fixes that protect every later phase. No user-visible feature
+change beyond one false-alert fix; the value is regression insurance on the
+suite's most-regressed surface.
+
+- **Blood-culture chip no longer false-ambers negative reports.** Bare
+  substrings `gram positive` / `gram negative` / `candida` in the
+  `base-blood-culture` result rule tripped a "needs review" amber on explicitly
+  *negative* reports ("No gram negative organisms isolated", "Candida species
+  not isolated"). Replaced with morphology-qualified gram-stain terms
+  (`gram negative bacilli`, `gram-positive cocci`, …) and named candida species
+  + `candidaemia`, which keep detecting genuine positives — including interim
+  gram-film-only reports — without colliding with negation phrasing.
+  `defaults.json` config version 20 → 21. The migration un-stick
+  (`revertRetiredResultRuleFields`) was extended to deep-compare **array**
+  fields (it previously handled only scalar labels/thresholds), so existing
+  installs whose stored rule still matches the old shipped array pick up the fix
+  while practice-customised rules are left untouched — mirrored in
+  `content.js` + `options.js` per the lock-step convention. Phrasing set flagged
+  for Keeper source-review in the Phase 3 calibration pass.
+- **Action URLs are scheme-checked.** `executeAction` in
+  `content-scripts/triage-lens/content.js` now permits only `http:` / `https:`
+  before `window.open`; a `javascript:` / `data:` URL from an imported or edited
+  config is rejected and logged, not executed. The same allowlist is enforced in
+  `options.js` at rule-edit / LLM-import time (defence in depth).
+- **Backup imports are validated before they persist.** The file-import and
+  raw-JSON save paths in `options.js` previously accepted anything with a
+  `rules` array. They now run every rule through `validateTriageRule` /
+  `validateResultRule`, shape-check `thresholds` / `prefs` / `systemChips`, and
+  normalise `version` — rejecting the whole import (naming the first offender)
+  rather than half-persisting a malformed or hostile config.
+- **New regression tests.** A live-grid injection smoke harness
+  (`test-queue-injection-smoke.js`, 57 checks) drives the real chip injectors
+  through prepend / de-dupe / SPA-churn-survival / durable-map keying — closing
+  the "needs a live-grid smoke test" gap the changelog has flagged repeatedly.
+  `test-triage-alert-engine.js` (45 checks) covers the previously untested
+  `triage-alert-engine.evaluate()`; `test-routine-rx-macro.js` (49 checks) gives
+  the routine-Rx macro the behavioural coverage lab-file already had;
+  `test-triage-import-validation.js` (68 checks) guards the new import/URL
+  validation. `test-triage-rule-patterns.js` now imports the real
+  `rule-match.js` instead of a re-implementation (no drift was found).
+- **Internal:** the analyte match/exclude/specimen matcher, previously copied
+  three times inside `engine/result-severity.js`, is now one shared
+  `analyteMatches` helper with direct unit tests (`test-analyte-match.js`) —
+  behaviour verified identical before unifying.
+## [v3.147.1] — 2026-07-02
+
+### Suite health — fix two false "degraded" alarms on the health strip
+
+The `#healthStrip` amber banner could read "Queue chips — master/detail row
+linkage (findQueuePreviewRow) degraded" and "Patient UUID resolution … DOM
+fallback degraded" while the queue chips were visibly rendering fine — a
+DOM-contract canary false alarm, not a real break.
+
+- **`queue.preview-row-link`**: the canary tested only whether AG-Grid's
+  master/detail preview row was present, not whether chips actually landed.
+  `queueChipHost()`'s own further fallback (the `patientName` cell) is
+  covered by the separate `queue.chip-host` contract — when that contract
+  reads OK, the narrower preview-row contract is now treated as OK too
+  (`dom-contracts.js`'s new `suppressedByOk` field, applied in
+  `contract-canary.js`'s `runProbeRound`), instead of alarming on a
+  transient/legitimately-absent preview row that a working fallback already
+  covers.
+- **`api-client.patient-uuid-dom-fallback`**: probed on every page
+  (`pageMatch: null`) even though the DOM fallback it backs is only ever
+  consulted when URL-based patient/encounter/task-id resolution
+  (`detectMedicusContext`) fails — on a queue/task-list page (a genuinely
+  multi-patient screen) it FAILed constantly for a fallback that was never
+  going to run. `runProbeRound` now skips this contract for any round where
+  the URL already resolved an id.
+- Both fixes are hysteresis-neutral: an already-degraded contract now
+  auto-recovers the moment its covering signal reads OK, same as any other
+  recovery.
+
+## [v3.147.0] — 2026-07-02
+
+### NHS Patient Leaflets — a new tab, not a Google search
+
+Dave: "I end up sticking it in Google — NHS wart — and it feels disjointed."
+A new side-panel tab puts the right NHS patient leaflet one search away,
+without ever sending patient data anywhere. Plan:
+`docs/plans/NHS-LEAFLETS-2026-07-02.md`.
+
+- **Tier 1 — bundled A-Z, works with zero configuration.** A curated index
+  of 221 entries (166 conditions + 55 medicines) ships in
+  `rules/nhs-az-index.json`, matched by fuzzy search with alias and
+  typo-tolerant prefix matching. Every search also offers a guaranteed
+  "Search nhs.uk for '\<term\>'" fallback row, so the tab never dead-ends on
+  an index miss. Results **open in a new tab** (a normal user-initiated
+  navigation, not an extension fetch) or **copy a link** for the
+  patient-SMS workflow; a Recent list keeps the last 10 for quick reuse.
+  This tier contacts no new endpoint at all.
+- **Tier 2 — optional in-panel rendering via the NHS Website Content API.**
+  Options-gated: a subscription key, entered in Options → Leaflets, lets a
+  search result render the leaflet text right in the panel — headings and
+  paragraphs built from text nodes only (no `innerHTML` of remote content),
+  with a visible "From the NHS website" attribution link back to the
+  source page. Responses are cached for 24h to respect syndication
+  freshness terms and avoid re-fetching on every click. Any fetch failure
+  (401/403/429/network/unexpected shape) fails calmly back to tier-1
+  open-in-tab behaviour with a one-line notice — the module is
+  indistinguishable from tier-1-only when no key is set. The API key is
+  deliberately excluded from suite backups (secrets stay machine-local);
+  everything else (recent list, enabled flag) travels normally.
+- **`scripts/verify-nhs-index.js`** HEAD-checks every bundled slug against
+  the live site from a machine with normal egress (this sandbox couldn't
+  reach nhs.uk to verify the seed index directly) and reports failures —
+  documented in `rules/`.
+- **Honest disclosure.** README and `docs/DPIA.md` now say plainly that
+  `api.github.com` is no longer the *only* external endpoint the extension
+  can contact: with a key configured, selecting a search result sends
+  `api.nhs.uk` the condition or medicine term the user selected — never
+  patient data. Without a key, nothing changes.
+- **Event Ledger.** Every leaflet open is recorded (source `leaflets`,
+  action `opened`, label = slug, `patientRef` always null) — evidence of
+  what was opened, never who for.
+- New module: `side-panel/modules/leaflets/`; backup wiring
+  (`shared/io/leaflets-io.js`, `VALID_SCOPES`, `doFullExport`/
+  `applyEnvelope`/`previewEnvelope`, Options export card); tab help in
+  `shared/tab-help.js`; tour step (`TOUR_VERSION` 7 → 8).
+
+## [v3.146.0] — 2026-07-02
+
+### Unbreakable — the suite knows when Medicus changes
+
+Three of the last six mainline fixes (v3.143.1 OIR checkboxes, v3.143.2
+assignee picker) were regressions caused by Medicus silently changing
+frontend components, discovered by a clinician in clinic — for a safety
+tool that means periods where features silently didn't fire and nobody
+knew. This release makes the next one self-announcing. Landed as two
+batches (`8a5a06f`, `230fc1d`); plan: `docs/plans/HORIZON1-UNBREAKABLE-2026-07-02.md`.
+
+- **DOM-contract registry (`shared/dom-contracts.js`).** All 14 Medicus
+  selector contracts the suite depends on, declared once with
+  anchor/target/legacy-fallback semantics. Consumers outside content.js
+  (routine-rx button, lab-file button, booking/task inline widgets,
+  api-client's UUID fallback) now read their selectors FROM the registry
+  instead of hard-coding them. `content-scripts/triage-lens/content.js`
+  is untouched (tests pin its exact content) — its own contracts (OIR
+  checkboxes, queue-chip hosts) are mirrored in the registry, and a
+  grep-based sync test fails CI if a future content.js selector change
+  drifts from the mirror.
+- **Recorded-fixture tests.** 21 sanitised fixtures covering current
+  `m-*` and legacy `q-*` Medicus markup variants, synthesised from the
+  selector expectations the code demonstrably handles today (fixtures
+  carry provenance headers saying so, not real patient DOM). A 310-check
+  contract test verifies every contract against its fixtures (anchor
+  match, target match, legacy fallback, and FAIL/NOT_APPLICABLE probe
+  semantics never false-alarming), plus a 31-check sync test for the
+  content.js mirror. `scripts/capture-fixture.js` is a paste-into-the-
+  Medicus-console helper that captures and PHI-sanitises real DOM
+  subtrees, to replace synthesised fixtures with real ones over time.
+- **Runtime canaries (`shared/contract-canary.js`).** Probes the 7 of 14
+  contracts that are safe to check at runtime (the rest are fixture-only,
+  with documented reasons) via the existing DOM-observer hub — no new
+  MutationObservers — debounced ≥5s, counts/booleans only, never text
+  content. Two-strike hysteresis (≥2 FAILs at least 30s apart) so SPA
+  churn can't false-alarm; a single OK recovers the contract.
+- **Suite health surfaces.** An amber `#healthStrip` in the side panel
+  (panel-only, following the existing wr/rm/subRag strip convention)
+  appears only when a contract is degraded, pointing to Options. Options
+  gains a "Suite health" table of all 14 contracts — status, plain-English
+  "what degrades", and why fixture-only contracts aren't probed live.
+  ok↔degraded transitions are logged to the Clinical Event Ledger (source
+  `health`, deduped per contract per day). `health.contracts` is
+  machine-local and excluded from suite backups.
+
+No new tour steps — the health strip is exceptional-state UI (only visible
+when something is degraded) and the Suite-health card lives in Options,
+out of tour scope. `TOUR_VERSION` stays at 7.
+
+## [v3.145.0] — 2026-07-01
+
+### Class-leader features — Prescribing Pre-flight, Clinical Event Ledger, Practice Pulse
+
+Three features chosen for best-of-type differentiation
+(`docs/plans/CLASS-LEADERS-2026-07-01.md`), landed as three batches (`fab7081`,
+`158e30a`, `3395739`). Read-only against the clinical record throughout — no new
+record writes.
+
+- **Prescribing Pre-flight (Record tab).** A collapsible "Pre-flight" section lets you
+  type a drug you're considering and see, before it exists in the record: the ACB
+  delta and any band change, STOPP/START prompts newly triggered by the addition (not
+  ones already true of the current regimen), interactions against current meds, and
+  required monitoring — distinguishing a baseline already satisfied by a recent result
+  from one that's missing. The full alert library (interaction/awareness rules,
+  PINCER combos, etc.) is treated as always-on background knowledge for this what-if
+  check, not just the rules a clinician has opted into live — a deliberate design
+  decision, documented in `engine/preflight.js`. An unknown drug is reported as
+  unknown, never implied safe. Every result carries the caveat "Decision aid, not
+  advice — confirm against the BNF and the full record." New pure module
+  `engine/preflight.js` composes the existing ACB, STOPP/START and drug-monitoring/
+  combo engines — no new drug term lists or interaction pairs were added. Also fixes a
+  real latent bug: `alert-library.json`'s library rules carried no `id` of their own,
+  so de-duplication (used to tell "already firing on current meds" apart from "newly
+  introduced by the proposed drug") collided on `ruleId undefined` and silently
+  dropped interaction alerts; rules are now stamped with their library `libId` as
+  `id`. Tests: `test-preflight.js`.
+- **Clinical Event Ledger.** A machine-local, capped record (5000 events, 90-day
+  retention, pruned on every append) of what the suite displayed or did — answering
+  "did the tool flag this?" with evidence instead of a shrug. Instruments: Sentinel
+  red/amber chips shown (deduped per patient+rule+day so it's evidence, not noise) and
+  dismissals; Sweep run summaries and each "Create recall task"; Record "Copy patient
+  summary" and Pre-flight runs; Lab Filing filings mirrored alongside the existing
+  audit log (mirror, not migrate — the lab-filing log itself is untouched). Writes are
+  fire-and-forget and never break the calling surface on a throwing storage layer.
+  Patient references are the Medicus UUID only — never a name — and shape-validated at
+  write time (`sanitisePatientRef`), rejecting anything that doesn't look like a
+  UUID/hex identifier. Options → Event Ledger adds a card with patient-UUID and
+  date-range filters, CSV export (RFC-4180 quoting plus a spreadsheet
+  formula-injection guard), a typed-CLEAR confirmation to wipe the ledger, and a
+  plain-English disclosure of what it is and isn't (not a clinical record; absence of
+  an event is not evidence nothing was shown). Deliberately **excluded from suite
+  backup**, same doctrine as the lab-filing audit log — restoring an event ledger onto
+  another machine would fabricate a misleading "what was shown here" record. New
+  `shared/event-ledger.js`. Tests: `test-event-ledger.js`.
+- **Practice Pulse (Condor).** Condor's daily snapshots become week-on-week
+  operational intelligence. A new Pulse card shows trend rows — pressure index,
+  demand, slots free, waiting room, urgent tasks, task age — over 7d/30d with inline
+  sparklines and a "based on N of 30 possible snapshots" coverage line; gaps (days the
+  extension wasn't open) are disclosed, never interpolated. Historical pressure-index
+  values are shown exactly as recorded on the day, not recomputed under today's custom
+  weightings — restating history under current settings could silently disagree with
+  what a partner actually saw at the time. The Practice Report's Trends section is
+  rebuilt on the same pure core (`pulse-core.js`) with a prior-period comparison per
+  audience profile, so the panel and the printed report can never quietly diverge.
+  Verified-already-fixed rather than newly fixed: live Condor's capacity figures
+  already honoured the `slots.hiddenTypes` filter, and the Practice Report already
+  used the same filter — both now covered by a regression test
+  (`test-pulse-core.js`) rather than left to silently drift back apart. The snapshot
+  store (`practice.reportSnapshots`) was already capped at 90 days
+  (`pruneSnapshots`/`SNAPSHOT_KEEP_DAYS`) — verified, not newly capped — and is now
+  regression-tested too. Tests: `test-pulse-core.js`.
+- Reference: `docs/plans/CLASS-LEADERS-2026-07-01.md`.
+
+Tour: one new step — Record Pre-flight (`#recPreflight`), `TOUR_VERSION` bumped 6 → 7.
+Condor Pulse and Options → Event Ledger were deliberately not added as dedicated
+steps: the tour's 20-step sanity cap was reached, Condor stays taught by the existing
+nav-tabs overview step (as before), and the guided tour only covers the side panel,
+not the Options page. All existing anchor selectors re-verified against current
+markup (`test-tour-steps.js`). `defaults.json` (both copies) intentionally
+untouched — no migration-propagated content changed this release.
+
+## [v3.144.0] — 2026-07-01
+
+### Top-10 user-value set — answer-first Today, discoverability, coverage transparency, filters and tunables
+
+Ten improvements drawn from the practice-panel appraisals and the Dave-council roadmap
+(`docs/plans/TOP10-USER-VALUE-2026-07-01.md`), landed as three batches
+(`b2d9c81`, `d05ec6a`, `c75b304`). Read-only throughout — no new clinical-record writes.
+
+- **Today: "what needs you now" headline.** A plain-English sentence at the top of
+  Today, rolled up from data the module already polls — red states lead, amber next,
+  and a quiet "nothing needs you right now" state carries a "last checked HH:MM"
+  provenance line when all clear. Pure builder (`today-headline.js`) with a 55-case
+  test. Also fixed a bug in `triageClause` where it read wall-clock `Date.now()`
+  instead of the threaded `now` parameter, which could misjudge triage age against
+  the caller's reference time.
+- **Per-tab "?" help.** The two copies of `TAB_HELP` that had drifted apart between
+  `panel.js` and `pop-out.js` are now one shared source, `shared/tab-help.js`; missing
+  entries for Submissions, Visualiser and About were added. A coverage test fails CI
+  if a new tab ships without help copy.
+- **Trends: self-describing resting state.** The empty/no-patient state now explains
+  its own purpose, shows an inline SVG worked example, and states the first step
+  ("open a patient in Medicus, then pick a metric") instead of showing a blank chart.
+- **Sentinel: rule-coverage drill-down.** The rule-currency footer line is now a
+  toggle that expands into every drug-monitoring rule (with its matched terms) and
+  every QOF indicator covered — read-only, renders without a patient loaded so it can
+  be checked ahead of a clinic. Rule/indicator counts are test-locked against
+  `rules/drug-rules.json` and `rules/qof-rules.json`. (The "N meds checked · M matched
+  · K overdue · P unmatched" audit headline was already shipped in the v3.138.0-era
+  work — verified present, not rebuilt.)
+- **Record: "Copy patient summary".** Verified pre-existing with its own tests
+  (`test-record-summary.js`); not rebuilt.
+- **Command palette: patient-scoped actions.** A new "Patient" command group — copy
+  patient summary (via the Record tab's single formatter path), open visualiser, jump
+  to Record/Trends/Sentinel — appears only when patient context exists, hidden
+  otherwise.
+- **Referrals: search and clinician filter.** Patient-name search plus a clinician
+  dropdown, AND-combined with the existing priority/status chips, filtering the list,
+  chart and the 2WW safety-net worklist together. CSV export respects the active
+  filters and discloses them; CSV-injection hardened so CR/LF characters typed into
+  the search box can no longer forge extra rows in the export.
+- **Condor: tunable pressure-index weightings and thresholds.** Practice Pressure
+  Index maths extracted into one shared pure core (`condor-index-core.js`) used by
+  `condor.js`, `ppi.js` and `practice-report.js`. A new cog editor lets a power user
+  adjust component weightings and the AMBER/RED band thresholds, with visible
+  defaults and one-click reset (`condor.indexConfig`, included in the Condor backup
+  scope). The capacity safety floor is applied unconditionally *after* any custom
+  config — proven by an adversarial fuzz test that no combination of weightings can
+  produce a GREEN result while capacity is over limit. "Custom weightings" is
+  disclosed in Copy Figures, CSV export, the headline and the Practice Report.
+- **Slots: proactive alert thresholds.** Alert-rule evaluation extracted into a pure
+  core (`slots-alert-core.js`); a new in-module cog editor replaces the Options-only
+  configuration; breaches now surface on Today's Slots card and in the Today headline.
+  (Evaluation and storage already existed; this delivers the in-module editor, the
+  pure core, and the Today integration.)
+- Reference: `docs/plans/TOP10-USER-VALUE-2026-07-01.md` is the source plan for all ten
+  items, including what was deliberately excluded from this set.
+
+Tour: two new steps (Today headline, Sentinel rule-coverage drill-down),
+`TOUR_VERSION` bumped 5 → 6 so returning users see a short "what's new" pass. All
+other tour anchors re-verified against the current markup (`test-tour-steps.js`).
+## [v3.143.3] — 2026-07-02
+
+### Bug bash — 22 fixes across data-fetch, queue chips, drug rules, backup and modules
+
+A full-repo bug bash surfaced 22 verified defects, ranging from a silent drug-monitoring
+gap to several async races and backup/restore coverage gaps. All 22 are fixed in this
+release.
+
+- **`engine/data-fetcher.js`** — `fetchLive()` now falls back to DOM extraction per
+  data type (medications/problems/observations individually), not only when the
+  patient-banner endpoint fails, and surfaces a `debug.dataFetchFailed` flag when a
+  field's API call and its DOM fallback both come up empty
+- **`content-scripts/triage-lens/content.js`** — `computeMonitoringChip` now treats a
+  `dataFetchFailed` medications signal as a genuine failure (leaves any existing chip
+  in place) instead of silently rendering an all-clear; queue monitoring chips
+  (`.ch-q-mon`) gained a durable `_durableRowMap`-driven re-injector matching the
+  result-chip pattern, so they no longer flash-and-vanish on SPA churn
+- **`content-scripts/triage-lens/hud.css`** — added the missing `.ch-q-legend` rule
+  (and token-block scope entry) so the queue safety-disclaimer banner is actually
+  styled on the live page, not just in the PiP window
+- **`rules/alert-library.json`** — PINCER aspirin combo alerts (pincer-3/8/13) now
+  match real UK aspirin brand names (Nu-Seals, Caprin, Micropirin) and dm+d wording,
+  at parity with `engine/stopp-start.js`'s `ASPIRIN_TERMS`; aligned
+  `mhra-isotretinoin-ppg` severity to red to match the comparable valproate PPP alert
+- **`visualiser-core.js`** — fixed the aspirin-antiplatelet detector regex so it
+  matches real "NNmg" dose labels (was silently never matching); `computeEFI`'s
+  polypharmacy deficit now counts only active drugs, not historic/stopped ones
+- **`engine/stopp-start.js`** — a problem coded literally as bare "MI" now matches
+  the post-MI beta-blocker START check and the aspirin primary-prevention CV check,
+  via a narrowly-scoped exact-match helper (not a change to the generic `hasProblem`
+  matcher, which is shared with unrelated term lists)
+- **`scripts/regen-defaults.js`** — `buildEmbeddedLiteral()` now escapes backticks
+  and template-literal interpolation starts, so a stray backtick in `defaults.json`
+  can no longer corrupt the generated `content.js` into a syntax error
+- **`side-panel/panel.js`** — Request Monitor strip fetch now guarded against
+  concurrent invocation, closing a race that could double-fire desktop triage
+  notifications and duplicate alert-log entries
+- **`pop-out/pop-out.html`** — loads `shared/request-monitor.js` (dropped in v3.21.3
+  before the Today tab existed), fixing the pop-out's Triage Load card
+- **`side-panel/modules/reception/reception.js`** — `refreshPatientCard` now guards
+  against out-of-order async responses with a generation counter, so rapid tab
+  switching can no longer show the wrong patient's status
+- **`side-panel/modules/record/record.js`** — "needing attention" chip count now
+  checks `chip.status` via the canonical helper instead of regex-matching the whole
+  chip object's text (was miscounting achieved indicators whose label contained
+  "due")
+- **`side-panel/modules/sweep/sweep.js`** — switching tabs mid-run no longer
+  persists an emptied result set over `sweep.lastRun`
+- **`side-panel/modules/today/today.js`** — Morning Sweep "all clear" check now
+  includes amber action-needed statuses, matching the real Sweep tab
+- **`side-panel/modules/capacity/capacity.js`** — appointment-type cache now
+  invalidates when the practice code changes
+- **`shared/io/condor-io.js`** — `dayScores` now defaults to (and is validated as)
+  an array, not an object, fixing a backup/restore path that could silently break
+  day-score persistence
+- **`shared/io/suite-envelope.js`** — `previewEnvelope()` now summarises Condor
+  content, closing the one module scope that showed no preview before a restore
+- **`shared/io/suite-io.js`** — `suite.practiceProfile.attestations` now round-trips
+  through suite-wide backup/restore
+- **`side-panel/modules/condor/report/report-data.js`** — `saveSnapshot()` now
+  upserts by date, making concurrent panel+pop-out writes safe
+- **`engine/eval-cache.js`** — `rulesSignature()` now hashes each rule's full
+  content, not just id/enabled, so an in-place rule edit correctly busts the cache
+
+## [v3.143.2] — 2026-07-01
+
+### Fix: "Send to Prescribing" team picker restored after Medicus dropdown component change
+
+Medicus replaced their Quasar `q-select` team/assignee picker with a native
+`m-simple-select` component whose option list is a debounced, server-driven search —
+it only narrows down as you type real keystrokes. The routine-prescription re-assign
+macro (`routine-rx-button.js`) was setting the whole team name in one shot and firing a
+single synthetic keydown, which never triggered that search: the full unfiltered
+Teams/Staff list stayed on screen, the configured team never appeared in it, and the
+button failed with "isn't in the assignee list" even though the team exists.
+
+- `runMacro` now simulates real character-by-character typing (`typeText`) into the
+  "Assign to" field — a `keydown`/native-value-set/`keyup` cycle per character with a
+  short pause between keystrokes — so the live search fires the same way it does for a
+  human typing.
+- The subsequent option-match wait was extended from 4s to 6s to give the debounce +
+  server round trip room, now that it's a live search rather than a local list filter.
+- The `[id^="select-item-"]` / `[role="option"]` selectors themselves were unaffected —
+  Medicus's new component still uses that markup, so no selector fallback was needed
+  here (unlike the OIR checkbox fix in v3.143.1).
+
 ## [v3.143.1] — 2026-06-30
 
 ### Fix: OIR matching restored after Medicus checkbox component change

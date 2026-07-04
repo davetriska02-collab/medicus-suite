@@ -35,9 +35,22 @@
   if (window.__chRoutineRx) return;
   window.__chRoutineRx = true;
 
+  // DOM-contract registry (Horizon-1) — loaded earlier in the manifest's
+  // content-script list. Selectors below are read FROM shared/dom-contracts.js
+  // rather than duplicated here, so the registry and this file cannot drift
+  // apart. See routine-rx.routing-control / routine-rx.assignee-option /
+  // routine-rx.action-anchor in that registry.
+  var DC = window.DomContracts;
+
   // ---- config / storage --------------------------------------------------
 
   var STORE_KEY = 'triagelens.routineRx';
+  // Machine-local audit ring buffer for this macro's writes (H-035 gap fix —
+  // see recordAudit below). Same shape/cap convention as labfiling.auditLog /
+  // triagelens.oir.auditLog: full detail here, a schema-compliant subset
+  // mirrored into the shared Event Ledger. Deliberately machine-local — see
+  // shared/io/triage-io.js for the backup-convention decision.
+  var AUDIT_KEY = 'triagelens.routinerx.auditLog';
   var DEFAULTS = {
     teams: ['Prescribing / Meds Management'],
     lastTeam: 'Prescribing / Meds Management',
@@ -67,6 +80,81 @@
     var out = {};
     out[STORE_KEY] = { teams: cfg.teams, lastTeam: cfg.lastTeam, commitMode: cfg.commitMode };
     chrome.storage.local.set(out);
+  }
+
+  // Write one audit entry for a macro run's outcome. Mirrors lab-file-button.js's
+  // recordAudit split exactly: the FULL detail (task URL/UUID, team, commit
+  // mode, reason) goes only into the machine-local ring buffer (AUDIT_KEY,
+  // capped at 200, newest-first); the shared Event Ledger mirror carries only
+  // the schema-compliant subset (source/patientRef/severity/ruleId/label/
+  // action) — no patient identity is available here (this file makes no
+  // network calls, see file header), so patientRef/severity/ruleId stay null
+  // and `label` carries the team name instead.
+  //
+  // outcome: 'committed' (the macro clicked "Send to routine list") |
+  //          'highlighted' (manual mode — pre-filled, user must click) |
+  //          'aborted' (couldn't complete — includes the clinician declining
+  //          the confirm-mode dialog; `reason` explains why).
+  function recordAudit(team, mode, outcome, reason) {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
+      var taskUuid = null;
+      try {
+        var m = /\/tasks\/data\/[^/]+\/overview\/([^/?#]+)/.exec(
+          (typeof location !== 'undefined' && location.pathname) || ''
+        );
+        taskUuid = m ? m[1] : null;
+      } catch (e) {
+        /* ignore */
+      }
+      var entry = {
+        ts: new Date().toISOString(),
+        taskUrl: (typeof location !== 'undefined' && location.href) || null,
+        taskUuid: taskUuid,
+        team: team || null,
+        commitMode: mode || null,
+        outcome: outcome,
+        reason: reason || null,
+      };
+      chrome.storage.local.get(AUDIT_KEY, function (r) {
+        var arr = Array.isArray(r[AUDIT_KEY]) ? r[AUDIT_KEY] : [];
+        arr.unshift(entry);
+        var out = {};
+        out[AUDIT_KEY] = arr.slice(0, 200);
+        chrome.storage.local.set(out);
+      });
+      // F2 Clinical Event Ledger mirror — fire-and-forget, never breaks the
+      // macro (see event-ledger.js record()'s own try/catch).
+      if (typeof window !== 'undefined' && window.EventLedger) {
+        window.EventLedger.record({
+          source: 'routinerx',
+          patientRef: null,
+          severity: null,
+          ruleId: null,
+          label: team || null,
+          action: outcome,
+        });
+      }
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  // Final-step helpers — small and side-effect-isolated on purpose so the
+  // audited outcome is exercised the same way whichever path reaches it
+  // ('auto' mode and an accepted 'confirm' dialog both call commitAndAudit;
+  // 'manual' mode calls highlightAndAudit). Kept standalone (not inlined in
+  // runMacro) so they can be extracted and unit-tested without driving the
+  // full async find/type/wait pipeline — see test-routine-rx-macro.js.
+  function commitAndAudit(commitEl, team, mode) {
+    realClick(commitEl);
+    toast('Sent to “' + team + '”.', 'ok');
+    recordAudit(team, mode, 'committed', null);
+  }
+  function highlightAndAudit(commitEl, team, mode) {
+    highlight(commitEl);
+    toast('Ready — review and click “Send to routine list”.', 'ok');
+    recordAudit(team, mode, 'highlighted', null);
   }
 
   // ---- DOM helpers -------------------------------------------------------
@@ -199,6 +287,30 @@
     }
   }
 
+  // The "Assign to" picker (Medicus's m-simple-select, replacing the old Quasar
+  // q-select) runs a debounced/live server search keyed off real per-keystroke
+  // typing — setting the full value in one shot and firing a single keydown for
+  // the last character (the old approach) never triggers that search, so the
+  // option never renders and the macro times out even though the team exists.
+  // Simulate an actual keystroke-by-keystroke type with a small pause between
+  // characters so the debounce fires the same way it does for a human typing.
+  function typeText(el, text, delay) {
+    delay = delay || 45;
+    return new Promise(function (resolve) {
+      var i = 0;
+      var built = '';
+      (function step() {
+        if (i >= text.length) return resolve();
+        var ch = text[i++];
+        built += ch;
+        el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: ch }));
+        setNativeValue(el, built);
+        el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: ch }));
+        setTimeout(step, delay);
+      })();
+    });
+  }
+
   // The "Assign to" control: an input reachable after the re-assign radio is on.
   function findAssignInput() {
     var inputs = document.querySelectorAll('input');
@@ -224,8 +336,11 @@
 
   var running = false;
 
-  function abort(msg) {
+  // team/mode default to null so an abort BEFORE runMacro's parameters are
+  // known (there is none today, but keeps the signature safe) never throws.
+  function abort(msg, team, mode) {
     toast(msg, 'err');
+    recordAudit(team || null, mode || null, 'aborted', msg);
   }
 
   async function runMacro(team, mode) {
@@ -238,25 +353,33 @@
         ['label', '[role="radio"]', '.radio', 'div', 'span'],
         'Save & send to routine requests task list'
       );
-      if (!radio) return abort('Couldn’t find the “Save & send to routine requests task list” option on this screen.');
+      if (!radio)
+        return abort(
+          'Couldn’t find the “Save & send to routine requests task list” option on this screen.',
+          team,
+          mode
+        );
       realClick(radio);
 
       // 2. Assign-to picker
       var assign = await waitFor(findAssignInput, 4000);
-      if (!assign) return abort('Couldn’t find the “Assign to” picker. Is this a prescription task?');
+      if (!assign) return abort('Couldn’t find the “Assign to” picker. Is this a prescription task?', team, mode);
       assign.focus();
       realClick(assign);
-      // Filter the list by typing the team name — confirmed to narrow the list
-      // (e.g. "pres" → "Prescribing / Meds Management"). Fire keyboard events too
-      // for comboboxes that only open/filter on keydown.
-      setNativeValue(assign, team);
-      var lastCh = team.slice(-1);
-      assign.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: lastCh }));
-      assign.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: lastCh }));
+      // Filter the list by typing the team name character-by-character — the
+      // picker's search is debounced/server-driven and only fires off real
+      // per-keystroke input (see typeText).
+      setNativeValue(assign, '');
+      await typeText(assign, team);
 
-      // 3. the team option
+      // 3. the team option — extra margin over the old 4s since this now waits
+      // on a real debounce + server round trip, not a local list filter.
+      var optionSel =
+        DC && DC.get('routine-rx.assignee-option')
+          ? DC.get('routine-rx.assignee-option').target.join(', ')
+          : '[id^="select-item-"], [role="option"], li[role="option"]';
       var option = await waitFor(function () {
-        var opts = document.querySelectorAll('[id^="select-item-"], [role="option"], li[role="option"]');
+        var opts = document.querySelectorAll(optionSel);
         var exact = null,
           partial = null;
         for (var i = 0; i < opts.length; i++) {
@@ -269,12 +392,14 @@
           if (!partial && t.indexOf(norm(team)) >= 0) partial = opts[i];
         }
         return exact || partial;
-      }, 4000);
+      }, 6000);
       if (!option)
         return abort(
           'Team “' +
             team +
-            '” isn’t in the assignee list. Open the picker to check the exact name, or add it via the ▾ menu.'
+            '” isn’t in the assignee list. Open the picker to check the exact name, or add it via the ▾ menu.',
+          team,
+          mode
         );
       realClick(option);
 
@@ -289,10 +414,12 @@
           return abort(
             'Selected “' +
               team +
-              '”, but “Send to routine list” stayed disabled — the assignee may not have registered. Check the picker.'
+              '”, but “Send to routine list” stayed disabled — the assignee may not have registered. Check the picker.',
+            team,
+            mode
           );
         }
-        return abort('Selected “' + team + '”, but couldn’t find the “Send to routine list” button.');
+        return abort('Selected “' + team + '”, but couldn’t find the “Send to routine list” button.', team, mode);
       }
 
       cfg.lastTeam = team;
@@ -300,19 +427,18 @@
       renderButton();
 
       if (mode === 'manual') {
-        highlight(commit);
-        toast('Ready — review and click “Send to routine list”.', 'ok');
+        highlightAndAudit(commit, team, mode);
         return;
       }
       if (mode === 'confirm') {
         var ok = window.confirm('Send this prescription to routine requests for “' + team + '”?');
         if (!ok) {
           toast('Cancelled — nothing was sent. Selection is pre-filled.', 'warn');
+          recordAudit(team, mode, 'aborted', 'clinician declined the confirm-mode dialog');
           return;
         }
       }
-      realClick(commit);
-      toast('Sent to “' + team + '”.', 'ok');
+      commitAndAudit(commit, team, mode);
     } finally {
       running = false;
       setBusy(false);
@@ -503,9 +629,12 @@
   // only widen to the costly div/span sweep if the narrow set yields nothing. The
   // narrow set covers the live app; the wide set is a defensive fallback.
   function findRoutingControl() {
+    var C = DC && DC.get('routine-rx.routing-control');
+    var narrow = C ? C.target : ['label', '[role="radio"]', '.radio'];
+    var wide = C && C.legacy[0] ? C.legacy[0] : ['div', 'span'];
     return (
-      findByText(['label', '[role="radio"]', '.radio'], 'Save & send to routine requests task list') ||
-      findByText(['div', 'span'], 'Save & send to routine requests task list')
+      findByText(narrow, 'Save & send to routine requests task list') ||
+      findByText(wide, 'Save & send to routine requests task list')
     );
   }
 
@@ -515,7 +644,11 @@
     var routine = findRoutingControl();
     if (!routine) return null;
 
-    var candidates = collectByText(['button', '[role="button"]'], 'More actions');
+    var actionSel =
+      DC && DC.get('routine-rx.action-anchor')
+        ? DC.get('routine-rx.action-anchor').target
+        : ['button', '[role="button"]'];
+    var candidates = collectByText(actionSel, 'More actions');
     for (var i = 0; i < candidates.length; i++) {
       var more = candidates[i];
       if (more.closest('[role="dialog"], [aria-modal="true"]')) continue;
@@ -635,6 +768,18 @@
     '.chrx-toast.chrx-show{opacity:1;transform:none}',
     '.chrx-toast.chrx-ok{background:#0d6e5e}.chrx-toast.chrx-warn{background:#b45309}.chrx-toast.chrx-err{background:#b42318}',
   ].join('');
+
+  // ── Node test hook ────────────────────────────────────────────────────
+  // Exposes the already-isolated audit helpers (see their comments above) so
+  // test-routine-rx-macro.js can exercise the AUDITED outcomes directly,
+  // without driving the full async find/type/wait DOM pipeline. Same pattern
+  // as lab-file-button.js's own Node hook: returns BEFORE the chrome-storage
+  // config load + UI/observer boot that follows, which needs a live
+  // extension context.
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { recordAudit, abort, commitAndAudit, highlightAndAudit, AUDIT_KEY: AUDIT_KEY };
+    return;
+  }
 
   // ---- boot --------------------------------------------------------------
 

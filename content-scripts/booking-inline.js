@@ -11,6 +11,13 @@
   if (window.__msBkInline) return;
   window.__msBkInline = true;
 
+  // DOM-contract registry (Horizon-1) — loaded earlier in the manifest's
+  // content-script list. findHeading/findCard below read their selectors FROM
+  // shared/dom-contracts.js (task-widget.codes-actions-heading /
+  // task-widget.card-submit-button — shared with task-inline.js, which has the
+  // byte-identical implementation) rather than duplicating them here.
+  var DC = window.DomContracts;
+
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
   function pad(n) {
@@ -223,13 +230,22 @@
     return HEADING_RE.test(el.textContent.trim());
   }
 
+  var HEADING_CONTRACT = DC && DC.get('task-widget.codes-actions-heading');
+  var HEADING_NARROW_SEL = HEADING_CONTRACT ? HEADING_CONTRACT.target.join(',') : 'h1,h2,h3,h4,h5,h6,strong,b,legend';
+  var HEADING_WIDE_SEL =
+    HEADING_CONTRACT && HEADING_CONTRACT.legacy[0] ? HEADING_CONTRACT.legacy[0].join(',') : 'div,span,p';
+  var SUBMIT_BTN_CONTRACT = DC && DC.get('task-widget.card-submit-button');
+  var SUBMIT_BTN_SEL = SUBMIT_BTN_CONTRACT
+    ? SUBMIT_BTN_CONTRACT.target.join(', ')
+    : 'button, [role="button"], input[type="submit"]';
+
   function findHeading() {
     // Narrow pass: real heading elements only — a tiny node set.
-    for (const el of document.querySelectorAll('h1,h2,h3,h4,h5,h6,strong,b,legend')) {
+    for (const el of document.querySelectorAll(HEADING_NARROW_SEL)) {
       if (matchHeading(el)) return el;
     }
     // Fallback pass: Medicus sometimes renders the label in a plain div/span/p.
-    for (const el of document.querySelectorAll('div,span,p')) {
+    for (const el of document.querySelectorAll(HEADING_WIDE_SEL)) {
       if (matchHeading(el)) return el;
     }
     return null;
@@ -241,7 +257,7 @@
     let node = heading.parentElement;
     let fallback = node;
     while (node && node !== document.body) {
-      const btns = node.querySelectorAll('button, [role="button"], input[type="submit"]');
+      const btns = node.querySelectorAll(SUBMIT_BTN_SEL);
       for (const b of btns) {
         if (/^submit$/i.test((b.value || b.textContent || '').trim())) return node;
       }

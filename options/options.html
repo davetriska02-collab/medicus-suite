@@ -800,6 +800,190 @@
         background: var(--bg-mid) !important;
         color: var(--text-2) !important;
       }
+
+      /* ── Event Ledger section (F2) ─────────────────────────────────────── */
+      .ledger-disclosure {
+        border: 1px solid var(--border-hi);
+        border-radius: var(--r-md);
+        background: var(--bg-mid);
+        padding: 14px 16px;
+        font-size: 12px;
+        color: var(--text-3);
+        line-height: 1.55;
+        margin-bottom: 22px;
+      }
+      .ledger-disclosure strong {
+        color: var(--text-2);
+      }
+      .ledger-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+      .ledger-controls input[type='text'] {
+        width: 300px;
+      }
+      .ledger-controls input[type='date'] {
+        background: var(--bg-mid);
+        border: 1px solid var(--border-hi);
+        border-radius: var(--r-md);
+        color: var(--text-2);
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 8px 10px;
+      }
+      .ledger-summary {
+        font-size: 11px;
+        color: var(--text-4);
+        margin-bottom: 10px;
+        font-family: var(--mono);
+      }
+      .ledger-table-wrap {
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        overflow-x: auto;
+        margin-bottom: 22px;
+      }
+      .ledger-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+        font-family: var(--mono);
+      }
+      .ledger-table th {
+        text-align: left;
+        padding: 8px 10px;
+        background: var(--bg-mid);
+        color: var(--text-3);
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        font-size: 10px;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+      }
+      .ledger-table td {
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-2);
+        vertical-align: top;
+        white-space: nowrap;
+      }
+      .ledger-table td.ledger-td-label {
+        white-space: normal;
+        max-width: 340px;
+      }
+      .ledger-sev-red {
+        color: var(--red, #e5484d);
+        font-weight: 600;
+      }
+      .ledger-sev-amber {
+        color: var(--amber, #f5a524);
+        font-weight: 600;
+      }
+      .ledger-empty {
+        padding: 18px;
+        font-size: 12px;
+        color: var(--text-4);
+        text-align: center;
+      }
+      .ledger-clear-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-top: 6px;
+      }
+      .ledger-clear-row input[type='text'] {
+        width: 180px;
+      }
+
+      /* ── Suite Health section (Horizon-1 H2) ─────────────────────────────── */
+      .health-summary {
+        font-size: 11px;
+        color: var(--text-4);
+        margin-bottom: 10px;
+        font-family: var(--mono);
+      }
+      .health-table-wrap {
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        overflow-x: auto;
+        margin-bottom: 22px;
+      }
+      .health-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+      }
+      .health-table th {
+        text-align: left;
+        padding: 8px 10px;
+        background: var(--bg-mid);
+        color: var(--text-3);
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        font-size: 10px;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+      }
+      .health-table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-2);
+        vertical-align: top;
+      }
+      .health-table td.health-td-feature {
+        white-space: nowrap;
+        font-weight: 600;
+        color: var(--text-1);
+      }
+      .health-table td.health-td-degrades,
+      .health-table td.health-td-explain {
+        max-width: 320px;
+      }
+      .health-table td.health-td-checked {
+        white-space: nowrap;
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text-3);
+      }
+      .health-status {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: var(--r-pill);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        white-space: nowrap;
+      }
+      .health-status--ok {
+        background: var(--green-dim);
+        color: var(--green);
+        border: 1px solid var(--green-line);
+      }
+      .health-status--degraded {
+        background: var(--amber-dim);
+        color: var(--amber);
+        border: 1px solid var(--amber-line);
+      }
+      .health-status--na {
+        background: var(--bg-mid);
+        color: var(--text-4);
+        border: 1px solid var(--border-hi);
+      }
+      .health-status--unchecked {
+        background: var(--bg-mid);
+        color: var(--text-4);
+        border: 1px solid var(--border-hi);
+      }
+      .health-status--fixture {
+        background: var(--bg-mid);
+        color: var(--text-3);
+        border: 1px solid var(--border-hi);
+      }
     </style>
   </head>
   <body>
@@ -822,8 +1006,11 @@
         <button class="nav-item" data-section="oir">Outstanding Requests</button>
         <button class="nav-item" data-section="reception">Reception</button>
         <button class="nav-item" data-section="knowledge">Knowledge</button>
+        <button class="nav-item" data-section="leaflets">Leaflets</button>
         <button class="nav-item" data-section="safety">Clinical Safety</button>
         <button class="nav-item" data-section="cqc">CQC Readiness</button>
+        <button class="nav-item" data-section="ledger">Event Ledger</button>
+        <button class="nav-item" data-section="health">Suite Health</button>
         <button class="nav-item" data-section="backup">Backup &amp; Restore</button>
         <button class="nav-item" data-section="debug">Debug</button>
       </nav>
@@ -1706,6 +1893,55 @@
           </details>
         </section>
 
+        <!-- Leaflets section -->
+        <section class="opt-section" id="sect-leaflets">
+          <h1>Leaflets <span class="module-badge">NHS patient information</span></h1>
+          <p class="section-desc">
+            The <strong>Leaflets</strong> tab searches a bundled index of common conditions and medicines and lets you
+            open or copy a link to the matching page on nhs.uk &mdash; this works with no setup and contacts nothing but
+            your browser's own navigation. The optional API key below additionally renders the leaflet text
+            <strong>in the side panel</strong>, using the NHS Website Content API.
+          </p>
+
+          <div class="field">
+            <label class="checkbox-row" style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+              <input type="checkbox" id="lfEnabled" />
+              <span class="field-label" style="margin: 0">Enable in-panel rendering (NHS Website Content API)</span>
+            </label>
+            <span class="field-help" style="margin-top: 4px; display: block">
+              Optional. With this off (or no key set below), the Leaflets tab still works fully &mdash; results just
+              open nhs.uk in a new browser tab instead of rendering here.
+            </span>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="lfApiKey">API subscription key</label>
+            <input type="password" id="lfApiKey" placeholder="Paste your subscription key" autocomplete="off" />
+            <span class="field-help">
+              Free to register via the
+              <a
+                href="https://digital.nhs.uk/developer/api-catalogue/nhs-website-content"
+                target="_blank"
+                rel="noopener noreferrer"
+                >NHS England API catalogue</a
+              >. <strong>Stored only on this device</strong> &mdash; the key is deliberately excluded from suite backups
+              (see the Leaflets card under Backup &amp; Restore), so restoring a backup on another machine never carries
+              it across.
+            </span>
+          </div>
+
+          <p class="field-help" style="margin: 4px 0 0">
+            Privacy: with a key configured and enabled, selecting a search result sends only the condition or medicine
+            name to <code style="color: var(--text-3)">api.nhs.uk</code> &mdash; never patient data. Without a key, no
+            new external endpoint is contacted at all; "Open" just navigates your browser to nhs.uk.
+          </p>
+
+          <div class="actions">
+            <button class="primary" id="saveLeaflets">Save</button>
+            <span class="saved" id="leafletsSaved">Saved ✓</span>
+          </div>
+        </section>
+
         <!-- Clinical Safety section -->
         <section class="opt-section" id="sect-safety">
           <h1>Clinical Safety</h1>
@@ -1862,6 +2098,93 @@
             command palette &mdash; press <strong>Ctrl+K</strong> and type &ldquo;CQC&rdquo;.)
           </p>
           <button class="primary" id="cqcOpenBtn" type="button">Open CQC Inspection Readiness</button>
+        </section>
+
+        <!-- Event Ledger section (F2) — machine-local record of what the suite flagged -->
+        <section class="opt-section" id="sect-ledger">
+          <h1>Event ledger <span class="module-badge">machine-local</span></h1>
+          <p class="section-desc">
+            A record of what this extension <strong>displayed or did on this computer</strong> — alerts shown,
+            dismissals, recall tasks created, patient summaries copied, pre-flight checks run, and results filed via
+            Lab Filing. It exists to answer &ldquo;did the tool flag this?&rdquo; with evidence.
+          </p>
+
+          <div class="ledger-disclosure">
+            <strong>What this is:</strong> a machine-local log of what this extension showed and did while it was open
+            on <strong>this machine only</strong>. Patients appear as their Medicus UUID — never by name.
+            <br /><br />
+            <strong>What it is not:</strong> it is <strong>not part of the clinical record</strong> and is no
+            substitute for Medicus&rsquo;s own audit trail. <strong>Absence of an event is not evidence that nothing
+            was shown</strong> — the extension only logs while it is open and running on this machine.
+            <br /><br />
+            <strong>Retention:</strong> capped at 5,000 events and 90 days — older events are pruned automatically. It
+            never leaves this machine and is <strong>deliberately excluded from suite backups</strong> (the same rule
+            as the Lab Filing audit log): restoring it onto another machine would fabricate a misleading record of
+            what was shown there.
+          </div>
+
+          <div class="ledger-controls">
+            <input
+              type="text"
+              id="ledgerFilterPatient"
+              placeholder="Patient UUID (exact or prefix)"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <input type="date" id="ledgerFilterFrom" title="From date (inclusive)" />
+            <input type="date" id="ledgerFilterTo" title="To date (inclusive)" />
+            <button class="ghost" id="ledgerResetFilter" type="button">Reset filters</button>
+            <button class="ghost" id="ledgerExportCsv" type="button" title="Download the filtered events as CSV.">
+              Export CSV
+            </button>
+          </div>
+
+          <div class="ledger-summary" id="ledgerSummary"></div>
+          <div class="ledger-table-wrap" id="ledgerTableWrap"></div>
+
+          <div class="ledger-clear-row">
+            <input
+              type="text"
+              id="ledgerClearConfirm"
+              placeholder="Type CLEAR to enable"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button class="ghost" id="ledgerClearBtn" type="button" disabled>Clear ledger</button>
+            <span class="field-help" style="margin: 0">Deletes every event on this machine. Cannot be undone.</span>
+          </div>
+        </section>
+
+        <!-- Suite Health section (Horizon-1 H2) — self-diagnosis of the extension's own
+             DOM-contract integration points, not a Medicus fault report -->
+        <section class="opt-section" id="sect-health">
+          <h1>Suite health <span class="module-badge">self-diagnosis</span></h1>
+          <p class="section-desc">
+            The suite depends on specific pieces of Medicus's own page structure to work &mdash; a checkbox, a
+            button, a row of results. This section is the extension quietly checking that those pieces are still
+            where it expects, using a small background probe that runs on the live Medicus page. That probe counts
+            elements only &mdash; it never reads patient data or page text. A <strong>degraded</strong> row means
+            Medicus's interface may have changed since the extension was built, and that one feature may be silently
+            limited until the extension is updated to match.
+            <strong>It is not a fault report about Medicus</strong> &mdash; Medicus changing its own UI is normal and
+            expected; this is the suite catching up with it, automatically, before a clinician has to notice the
+            hard way.
+          </p>
+          <p class="section-desc">
+            <strong>What to do about a degraded row:</strong> first check you're on the latest version of the
+            extension (see the version badge above, or the update checker) &mdash; most fixes for this ship as a
+            routine update. If it's still degraded after updating, tell Dave (the extension's maintainer) which
+            feature it is so the underlying selector can be fixed.
+          </p>
+          <p class="section-desc">
+            Some contracts below are marked <strong>fixture-tested only</strong> rather than live-checked &mdash;
+            their own selectors are too generic, or too transient (existing only for a few seconds mid-interaction),
+            to probe live without false alarms. Those are still regression-tested against recorded Medicus DOM
+            snapshots on every code change; they are just not re-checked against the live page every session. The
+            explanation column says why, contract by contract.
+          </p>
+          <div class="health-summary" id="healthSummary"></div>
+          <div class="health-table-wrap" id="healthTableWrap"></div>
         </section>
 
         <!-- Backup & Restore section -->
@@ -2377,6 +2700,14 @@
                   />
                 </div>
               </div>
+              <div class="module-export-card">
+                <div class="mec-name">Leaflets</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="leaflets">Export</button>
+                  <button class="ghost" data-mod-import="leaflets">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="leaflets" accept=".json" style="display: none" />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2464,6 +2795,8 @@
     <script src="../shared/lab-filing-utils.js"></script>
     <script src="../shared/io/labfiling-io.js"></script>
     <script src="../shared/io/notifications-io.js"></script>
+    <script src="../shared/leaflets-utils.js"></script>
+    <script src="../shared/io/leaflets-io.js"></script>
     <script src="../shared/quiet-mode.js"></script>
     <script src="../shared/practice-code.js"></script>
     <script src="../shared/api-diag.js"></script>
@@ -2472,6 +2805,8 @@
     <script src="../shared/update-checker.js"></script>
     <script src="../shared/rule-currency.js"></script>
     <script src="../shared/display-prefs.js"></script>
+    <script src="../shared/dom-contracts.js"></script>
+    <script src="../shared/event-ledger.js"></script>
     <script src="options.js"></script>
     <script type="module" src="tabs-section.js"></script>
     <script type="module" src="labfiling-section.js"></script>

@@ -1,0 +1,241 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Leaflets module */
+
+.lf-module {
+  padding: 14px 14px 24px;
+}
+
+.lf-head {
+  margin-bottom: 12px;
+}
+.lf-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.lf-subtitle {
+  display: block;
+  font-size: 11px;
+  color: var(--text-4);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+/* ── Toolbar / search ── */
+.lf-toolbar {
+  margin-bottom: 10px;
+}
+.lf-search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  border-radius: var(--r-md);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-family: var(--sans);
+  transition: border-color var(--fast) var(--ease);
+}
+.lf-search:focus {
+  border-color: var(--accent);
+}
+
+.lf-notice {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  color: var(--text-2);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+/* ── Section header (Recent) ── */
+.lf-section-header {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin: 4px 0 6px;
+}
+
+/* ── Empty / resting state ── */
+.lf-empty {
+  text-align: center;
+  padding: 28px 12px;
+  color: var(--text-4);
+}
+.lf-empty-line {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.6;
+}
+.lf-empty-example {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-5);
+  margin-top: 6px;
+}
+.lf-empty-noresults {
+  padding: 12px 4px;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* ── Result rows ── */
+.lf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lf-row {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
+  padding: 8px 10px;
+  transition:
+    border-color var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
+}
+.lf-row-selectable {
+  cursor: pointer;
+}
+.lf-row-selectable:hover {
+  border-color: var(--border-hi);
+  box-shadow: var(--shadow-2);
+}
+.lf-row-open {
+  border-color: var(--accent);
+}
+.lf-row-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.lf-row-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.lf-row-kind {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+.lf-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.lf-row-hint {
+  font-size: 10px;
+  color: var(--text-5);
+  margin-right: auto;
+}
+
+.lf-row-fallback {
+  cursor: pointer;
+  border-style: dashed;
+}
+.lf-row-fallback:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
+}
+.lf-row-fallback .lf-row-name {
+  color: var(--text-2);
+  font-weight: 500;
+}
+.lf-row-fallback-hint {
+  font-size: 10px;
+  color: var(--text-5);
+}
+
+/* ── Buttons ── */
+.lf-btn {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  border-radius: var(--r-md);
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: var(--sans);
+  white-space: nowrap;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.lf-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hi);
+}
+.lf-btn-sm {
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
+/* ── Tier-2 in-panel detail ── */
+.lf-detail {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  cursor: default;
+}
+.lf-detail-loading {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+}
+.lf-detail-error {
+  font-size: 12px;
+  color: var(--amber);
+  line-height: 1.5;
+}
+.lf-detail-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin: 0 0 2px;
+}
+.lf-detail-reviewed {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-5);
+  margin-bottom: 8px;
+}
+.lf-detail-heading {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin: 10px 0 4px;
+}
+.lf-detail-para {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.6;
+  margin: 0 0 8px;
+}
+.lf-attribution {
+  font-size: 10px;
+  color: var(--text-4);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.lf-attribution a {
+  color: var(--accent);
+}

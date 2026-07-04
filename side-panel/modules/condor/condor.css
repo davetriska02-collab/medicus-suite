@@ -83,6 +83,147 @@
 .condor-hero {
   width: 100%;
   padding: 12px 12px 0;
+  position: relative;
+}
+
+/* ── Tunable pressure-index cog + editor (item 8) ─────────────────────────── */
+
+.condor-index-cog {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-4);
+  cursor: pointer;
+  transition:
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+.condor-index-cog:hover {
+  color: var(--text-2);
+  border-color: var(--border-hi);
+  background: var(--bg-hover);
+}
+.condor-index-cog--custom {
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+.condor-index-cog-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.condor-idx-editor {
+  margin-top: 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  padding: 12px 14px;
+}
+
+.condor-idx-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.condor-idx-editor-title {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-1);
+}
+
+.condor-idx-editor-title--sub {
+  margin-top: 12px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.condor-idx-close {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.condor-idx-editor-note {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
+.condor-idx-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.condor-idx-row {
+  display: grid;
+  grid-template-columns: 1fr 64px auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.condor-idx-label {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.condor-idx-input {
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  padding: 4px 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  border-radius: var(--r-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.condor-idx-input:focus {
+  border-color: var(--accent);
+  background: var(--bg-deep);
+}
+
+.condor-idx-default {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+
+.condor-idx-editor-safety {
+  font-size: 10px;
+  color: var(--text-4);
+  line-height: 1.5;
+  margin: 12px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+.condor-idx-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .condor-ts {

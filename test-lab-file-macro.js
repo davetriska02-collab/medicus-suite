@@ -308,6 +308,70 @@ function normalScreen() {
     'aborts message action when no message step configured'
   );
 
+  // 11. Queue "all-normal, fileable" marker gate (item 4.4, TRIAGE-LENS-2026-07-02.md)
+  // — content.js's computeQueueRowResult reuses this EXACT profile-independent
+  // composition (no filing profile involved, unlike fileAllNormal's GATE 1/1b
+  // above): sev.level === 'none' AND LF.fileabilityBlockers(report, sev,
+  // resultRules) is empty. Pinned here so a change to fileabilityBlockers'
+  // contract is caught alongside the macro's own gate tests, not just in
+  // test-lab-filing-utils.js's lower-level unit tests.
+  console.log(
+    "\n--- queue fileable-marker gate (item 4.4): sev.level==='none' && fileabilityBlockers().length===0 ---"
+  );
+  const isFileableNormal = (report, sev, resultRules) =>
+    !!(sev && sev.level === 'none' && LF.fileabilityBlockers(report, sev, resultRules).length === 0);
+
+  const qRules = [{ id: 'r', enabled: true }];
+  const qAllNormalReport = {
+    unmatched: false,
+    results: [
+      { name: 'Haemoglobin', value: 145, text: 'Haemoglobin 145' },
+      { name: 'Sodium', value: 138, text: 'Sodium 138' },
+    ],
+  };
+  check(
+    isFileableNormal(qAllNormalReport, { level: 'none' }, qRules) === true,
+    'all-normal numeric report, level:none, rules loaded -> fileable'
+  );
+
+  const qAbnormalReport = {
+    unmatched: false,
+    results: [{ name: 'Potassium', value: 6.8, text: 'Potassium 6.8', isAbove: true }],
+  };
+  check(
+    isFileableNormal(qAbnormalReport, { level: 'amber' }, qRules) === false,
+    'abnormal (level:amber) report -> NOT fileable'
+  );
+  check(
+    isFileableNormal(qAbnormalReport, { level: 'red' }, qRules) === false,
+    'urgent (level:red) report -> NOT fileable'
+  );
+
+  const qCultureReport = {
+    unmatched: false,
+    results: [{ name: 'Urine culture', value: NaN, text: 'Mixed growth, contaminated specimen suspected' }],
+  };
+  check(
+    isFileableNormal(qCultureReport, { level: 'none' }, qRules) === false,
+    'a culture / free-text (non-numeric with text) result -> NOT fileable, even at level:none'
+  );
+
+  const qUnmatchedReport = { unmatched: true, results: qAllNormalReport.results };
+  check(
+    isFileableNormal(qUnmatchedReport, { level: 'none' }, qRules) === false,
+    'a report not matched to a patient -> NOT fileable'
+  );
+
+  check(
+    isFileableNormal(qAllNormalReport, { level: 'none' }, []) === false,
+    'no result rules loaded (cultures/thresholds uncheckable) -> NOT fileable, fails closed'
+  );
+
+  check(
+    isFileableNormal(qAllNormalReport, null, qRules) === false,
+    'no severity computed at all -> NOT fileable, fails closed'
+  );
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
 })();

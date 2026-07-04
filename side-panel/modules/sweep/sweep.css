@@ -395,6 +395,61 @@
   color: var(--green);
 }
 
+/* Skipped appointment entries — no patient UUID found, so NEVER evaluated
+   against the Sentinel rules. Named, not just counted (nurse/pharmacist panel
+   feedback: a bare count invites "probably fine" thinking). Collapsible so the
+   list doesn't dominate the panel when it's long, but the amber tone and
+   caveat copy inside keep the clinical-safety stance visible either way. */
+.sweep-skipped-section {
+  margin-bottom: 6px;
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--amber-dim);
+}
+.sweep-skipped-summary {
+  cursor: pointer;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--amber);
+  user-select: none;
+  list-style: none;
+}
+.sweep-skipped-summary::-webkit-details-marker {
+  display: none;
+}
+.sweep-skipped-summary::before {
+  content: '\25B6\0020';
+  font-size: 9px;
+  vertical-align: middle;
+  margin-right: 3px;
+}
+.sweep-skipped-section[open] .sweep-skipped-summary::before {
+  content: '\25BC\0020';
+}
+.sweep-skipped-body {
+  padding: 6px 8px 8px;
+  border-top: 1px solid var(--amber-line);
+  background: var(--bg-elev);
+}
+.sweep-skipped-caveat {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+.sweep-skipped-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sweep-skipped-row {
+  padding: 2px 0;
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text-2);
+}
+
 /* Controls: run button + day on one row, clinician picker below (v3.84.0) */
 .sweep-controls-row {
   display: flex;
@@ -796,10 +851,38 @@
 }
 .sweep-qof-pcodes {
   flex-basis: 100%;
+  padding-left: 28px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+}
+
+/* One indicator badge (code + description) inside a patient row — mirrors the
+   by-indicator column's own code/name split (sweep-qof-icode/sweep-qof-iname)
+   so the same code always reads with the same visual weight everywhere it
+   appears in this panel. Wraps rather than truncating: the description is
+   load-bearing text, not decoration, so it must never be clipped away. */
+.sweep-qof-pind {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  max-width: 100%;
+}
+.sweep-qof-picode {
   font-family: var(--mono);
   font-size: 10px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.sweep-qof-piname {
+  font-family: var(--sans);
+  font-size: 10px;
   color: var(--text-4);
-  padding-left: 28px;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+.sweep-qof-piname::before {
+  content: '\2014\0020'; /* em dash + space, matches the "DM037 — <name>" convention */
 }
 .sweep-qof-cvd-dot {
   font-family: var(--mono);

@@ -20,6 +20,14 @@
   if (window.__msTkInline) return;
   window.__msTkInline = true;
 
+  // DOM-contract registry (Horizon-1) — loaded earlier in the manifest's
+  // content-script list. findHeading/findCard/findActionRow below read their
+  // selectors FROM shared/dom-contracts.js (task-widget.codes-actions-heading /
+  // task-widget.card-submit-button — shared with booking-inline.js, which has
+  // the byte-identical findHeading/findCard implementation — and
+  // task-inline.action-row) rather than duplicating them here.
+  var DC = window.DomContracts;
+
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
   function esc(s) {
@@ -134,11 +142,22 @@
     return HEADING_RE.test(el.textContent.trim());
   }
 
+  var HEADING_CONTRACT = DC && DC.get('task-widget.codes-actions-heading');
+  var HEADING_NARROW_SEL = HEADING_CONTRACT ? HEADING_CONTRACT.target.join(',') : 'h1,h2,h3,h4,h5,h6,strong,b,legend';
+  var HEADING_WIDE_SEL =
+    HEADING_CONTRACT && HEADING_CONTRACT.legacy[0] ? HEADING_CONTRACT.legacy[0].join(',') : 'div,span,p';
+  var SUBMIT_BTN_CONTRACT = DC && DC.get('task-widget.card-submit-button');
+  var SUBMIT_BTN_SEL = SUBMIT_BTN_CONTRACT
+    ? SUBMIT_BTN_CONTRACT.target.join(', ')
+    : 'button, [role="button"], input[type="submit"]';
+  var ACTION_ROW_CONTRACT = DC && DC.get('task-inline.action-row');
+  var ACTION_ROW_SEL = ACTION_ROW_CONTRACT ? ACTION_ROW_CONTRACT.target.join(', ') : 'button, [role="button"]';
+
   function findHeading() {
-    for (const el of document.querySelectorAll('h1,h2,h3,h4,h5,h6,strong,b,legend')) {
+    for (const el of document.querySelectorAll(HEADING_NARROW_SEL)) {
       if (matchHeading(el)) return el;
     }
-    for (const el of document.querySelectorAll('div,span,p')) {
+    for (const el of document.querySelectorAll(HEADING_WIDE_SEL)) {
       if (matchHeading(el)) return el;
     }
     return null;
@@ -150,7 +169,7 @@
     let node = heading.parentElement;
     let fallback = node;
     while (node && node !== document.body) {
-      const btns = node.querySelectorAll('button, [role="button"], input[type="submit"]');
+      const btns = node.querySelectorAll(SUBMIT_BTN_SEL);
       for (const b of btns) {
         if (/^submit$/i.test((b.value || b.textContent || '').trim())) return node;
       }
@@ -163,7 +182,7 @@
   // The bottom-most visible "More actions" button's row, excluding any inside a
   // dialog/drawer. Returns the row element so we can insert the panel above it.
   function findActionRow() {
-    const btns = document.querySelectorAll('button, [role="button"]');
+    const btns = document.querySelectorAll(ACTION_ROW_SEL);
     for (let i = btns.length - 1; i >= 0; i--) {
       const b = btns[i];
       if (!/more actions/i.test((b.textContent || '').trim())) continue;

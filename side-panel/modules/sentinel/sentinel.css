@@ -1475,6 +1475,131 @@
   margin-right: 4px;
 }
 
+/* The rule-currency line doubles as the coverage drill-down toggle when rule
+   data has loaded (loadRuleCurrencyFooter / wireCoverageToggle). Reset button
+   chrome so it reads exactly like the plain-text line it replaces. */
+.sent-rules-footer-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+}
+.sent-rules-footer-btn:hover {
+  text-decoration: underline;
+}
+.sent-rules-footer-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* ── Rule-coverage drill-down ─────────────────────────────────────────────── */
+/* Read-only listing of every drug-monitoring rule and QOF register/indicator,
+   built from coverage-core.js. Collapsed by default; toggled from the rule
+   currency line above. Renders without a patient loaded (source is the rule
+   files, not a patient snapshot). Calm, low-chroma — this is reference
+   material, not an alert. */
+.sent-cov-drilldown {
+  margin-top: 8px;
+  padding: 10px 10px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-mid);
+}
+.sent-cov-note {
+  margin: 0 0 10px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.sent-cov-section {
+  margin-bottom: 12px;
+}
+.sent-cov-section:last-child {
+  margin-bottom: 6px;
+}
+.sent-cov-h {
+  margin: 0 0 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  font-weight: 600;
+}
+.sent-cov-count {
+  font-weight: 400;
+  color: var(--text-5);
+}
+.sent-cov-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.sent-cov-rule {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+.sent-cov-rule:last-child {
+  border-bottom: none;
+}
+.sent-cov-rule-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.sent-cov-rule-class {
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--text-5);
+}
+.sent-cov-rule-off {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-5);
+}
+.sent-cov-rule-disabled .sent-cov-rule-name {
+  color: var(--text-5);
+}
+.sent-cov-rule-terms {
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.sent-cov-list-compact .sent-cov-item {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 3px 0;
+  font-size: 11px;
+}
+.sent-cov-item-code {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  min-width: 52px;
+}
+.sent-cov-item-name {
+  color: var(--text-2);
+}
+.sent-cov-item-disabled .sent-cov-item-code,
+.sent-cov-item-disabled .sent-cov-item-name {
+  color: var(--text-5);
+}
+.sent-cov-empty {
+  font-size: 11px;
+  color: var(--text-5);
+  padding: 3px 0;
+}
+
 /* ── Appointments summary modal ─────────────────────────────────────────────── */
 .sent-appt-modal {
   /* Fixed to the viewport (not the module) so it is always fully visible

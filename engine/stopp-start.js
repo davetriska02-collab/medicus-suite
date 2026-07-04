@@ -224,6 +224,13 @@
     });
   }
 
+  // True if any problem is exactly the bare token (trimmed), for abbreviations too short
+  // to safely substring-match (e.g. "MI" alone, which would false-positive against
+  // unrelated term lists like DIABETES_TERMS/CKD_TERMS if added to hasProblem generally)
+  function hasBareProblemToken(problems, token) {
+    return problems.some((p) => problemName(p).trim() === token);
+  }
+
   // ── Problem term lists ─────────────────────────────────────────────────────
 
   // Cardiovascular/cerebrovascular disease (for aspirin primary-prevention check)
@@ -232,7 +239,7 @@
     'ischaemic heart',
     'ischemic heart',
     'myocardial infarction',
-    ' mi ',
+    'mi ',
     'angina',
     'heart failure',
     'atrial fibrillation',
@@ -291,7 +298,7 @@
   ];
 
   // Myocardial infarction (for beta-blocker START)
-  const MI_TERMS = ['myocardial infarction', 'mi ', ' mi\b', 'stemi', 'nstemi', 'heart attack'];
+  const MI_TERMS = ['myocardial infarction', 'mi ', 'stemi', 'nstemi', 'heart attack'];
 
   // Digoxin
   const DIGOXIN_TERMS = ['digoxin'];
@@ -459,7 +466,11 @@
     // in the problem list, flag as possible primary prevention.
     // Conservative: the terms list for CV disease is broad to minimise
     // false positives. If the problem list contains any CV term, no flag.
-    if (hasDrug(drugs, ASPIRIN_TERMS) && !hasProblem(problems, CV_DISEASE_TERMS)) {
+    if (
+      hasDrug(drugs, ASPIRIN_TERMS) &&
+      !hasProblem(problems, CV_DISEASE_TERMS) &&
+      !hasBareProblemToken(problems, 'mi')
+    ) {
       flags.push({
         id: 'stopp_aspirin_primary_prev',
         kind: 'stopp',
@@ -558,7 +569,10 @@
     }
 
     // START 13: Myocardial infarction AND no beta-blocker (amber)
-    if (hasProblem(problems, MI_TERMS) && !hasDrug(drugs, BETA_BLOCKER_TERMS)) {
+    if (
+      (hasProblem(problems, MI_TERMS) || hasBareProblemToken(problems, 'mi')) &&
+      !hasDrug(drugs, BETA_BLOCKER_TERMS)
+    ) {
       flags.push({
         id: 'start_bb_post_mi',
         kind: 'start',
