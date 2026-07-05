@@ -532,15 +532,18 @@ const TIER_ACTION = {
 };
 
 function renderJournalAnalysisHtml(analysis) {
-  const { groups, transferEncounters, summary } = analysis;
-  if (!groups.length && !transferEncounters.length) {
+  const { groups, transferEncounters, summary, gp2gpWrapperCoverage } = analysis;
+  const nearMisses = (gp2gpWrapperCoverage && gp2gpWrapperCoverage.nearMisses) || [];
+  if (!groups.length && !transferEncounters.length && !nearMisses.length) {
     return '<div style="color:var(--text-2);font-size:12px">No candidate duplicate entries found in this patient\'s journal.</div>';
   }
 
   const summaryLine = `<div style="font-size:12px;color:var(--text-2);margin-bottom:10px">
+    ${summary.totalEntries} comparable entr${summary.totalEntries !== 1 ? 'ies' : 'y'} read from this journal ·
     ${summary.totalCandidateGroups} candidate duplicate group${summary.totalCandidateGroups !== 1 ? 's' : ''}
     (${summary.byTier.exact} exact, ${summary.byTier.high} high, ${summary.byTier.review} review)
     ${summary.transferEncountersTotal ? ` · ${summary.transferEncountersConfirmed}/${summary.transferEncountersTotal} GP2GP transfer encounter(s) content-confirmed` : ''}
+    ${summary.suppressedSameConsultationTotal ? ` · <span style="color:var(--amber)">${summary.suppressedSameConsultationTotal} group(s) suppressed as same-consultation (${summary.suppressedSameConsultationFromTransfer} from transfer encounters)</span>` : ''}
   </div>`;
 
   const groupsHtml = groups
@@ -577,7 +580,35 @@ function renderJournalAnalysisHtml(analysis) {
       </div>`
     : '';
 
-  return summaryLine + groupsHtml + transferHtml;
+  // Diagnostic-only: how often the GP2GP-wrapper regex (built from a single
+  // 2026-07-01 sample) actually fires on this patient's real data, plus any
+  // near-miss text that looks wrapper-like but wasn't stripped — evidence
+  // for whether the pattern needs broadening. Capped at 5 samples so a
+  // heavily-transferred patient doesn't dump an unreadable wall of text.
+  const wrapperHtml =
+    summary.gp2gpWrapperStrictMatches || nearMisses.length
+      ? `<div style="margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:var(--r);font-size:11px;color:var(--text-2)">
+          <strong style="color:var(--text)">GP2GP-wrapper text coverage (diagnostic)</strong>
+          <div style="margin-top:4px">${summary.gp2gpWrapperStrictMatches} entr${summary.gp2gpWrapperStrictMatches !== 1 ? 'ies' : 'y'} matched the known wrapper pattern.</div>
+          ${
+            nearMisses.length
+              ? `<div style="margin-top:6px;color:var(--amber)">${nearMisses.length} near-miss(es) — wrapper-like text NOT stripped by the current pattern:</div>` +
+                nearMisses
+                  .slice(0, 5)
+                  .map(
+                    (nm) => `<div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border)">
+                ${esc(nm.kind)} · ${esc(nm.date || 'unknown date')}${nm.fromTransferEncounter ? ' · <span style="color:var(--amber)">transfer encounter</span>' : ''}
+                <div style="margin-top:2px">${esc(nm.sample)}${nm.sample.length >= 160 ? '…' : ''}</div>
+              </div>`
+                  )
+                  .join('') +
+                (nearMisses.length > 5 ? `<div style="margin-top:4px">…and ${nearMisses.length - 5} more.</div>` : '')
+              : ''
+          }
+        </div>`
+      : '';
+
+  return summaryLine + groupsHtml + transferHtml + wrapperHtml;
 }
 
 function esc(s) {
@@ -939,9 +970,14 @@ document.getElementById('debugBtn').addEventListener('click', () => {
       'suite.discoveredJournalUrl',
       'suite.discoveredJournalUrlTemplate',
       'suite.discoveredAllJournalUrlTemplates',
+      'suite.apiDiscoveryLastRun',
     ],
     (r) => {
       const shape = r['suite.patientFieldDebug'];
+      const lastRun = r['suite.apiDiscoveryLastRun'];
+      const lastRunLine = lastRun
+        ? `api-discovery.js content script last ran: ${new Date(lastRun).toLocaleString()}\n\n`
+        : 'api-discovery.js content script last ran: (never — no capture has happened on this install yet)\n\n';
       const allUrls = r['suite.discoveredAllPatientUrls'] || [];
       const allJournalUrls = r['suite.discoveredAllJournalUrls'] || [];
       const journalUrl = r['suite.discoveredJournalUrl'];
@@ -994,6 +1030,7 @@ document.getElementById('debugBtn').addEventListener('click', () => {
             : '\n\n(No best-guess template yet — none of the captured URLs had "journal" in the path. Pick the right one manually if needed.)')
         : '';
       panel.textContent =
+        lastRunLine +
         statusList +
         urlList +
         journalList +

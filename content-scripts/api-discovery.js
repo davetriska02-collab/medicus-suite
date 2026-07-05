@@ -20,8 +20,33 @@ const JOURNAL_KEY = 'suite.discoveredJournalUrl';
 const ALL_JOURNAL_URLS_KEY = 'suite.discoveredAllJournalUrls';
 const JOURNAL_TEMPLATE_KEY = 'suite.discoveredJournalUrlTemplate';
 const ALL_JOURNAL_TEMPLATES_KEY = 'suite.discoveredAllJournalUrlTemplates';
+const LAST_RUN_KEY = 'suite.apiDiscoveryLastRun';
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 const PATIENT_UUID_PLACEHOLDER = '__PATIENT_UUID__';
+
+// The real data endpoint, confirmed live 2026-07-02 (see
+// docs/learnings-patient-journal-api.md) — prefer this over the loose
+// "journal" substring match below, which also matches UI/component asset
+// URLs (e.g. `clinical/ui/patient-journal/filters-category.vue`) that aren't
+// the data call at all.
+const CONFIRMED_JOURNAL_ENDPOINT_RE = /\/clinical\/data\/patient-journal\/overview\//i;
+const STATIC_ASSET_RE = /\.(vue|jsx?|tsx?|css|png|jpe?g|gif|svg|woff2?|ico|map)(\?|$)/i;
+
+// Decides whether `candidatePathname` should replace whatever is currently
+// stored as the best-guess journal endpoint. A confirmed-shape match always
+// wins; a static asset never wins; otherwise fall back to the original loose
+// heuristic, but never let it downgrade an already-confirmed guess.
+function isBetterJournalGuess(candidatePathname, currentUrl) {
+  if (CONFIRMED_JOURNAL_ENDPOINT_RE.test(candidatePathname)) return true;
+  if (STATIC_ASSET_RE.test(candidatePathname)) return false;
+  if (!/journal/i.test(candidatePathname)) return false;
+  if (!currentUrl) return true;
+  try {
+    return !CONFIRMED_JOURNAL_ENDPOINT_RE.test(new URL(currentUrl).pathname);
+  } catch (e) {
+    return true;
+  }
+}
 
 function isOnJournalPage() {
   return /\/care-record\//i.test(location.pathname) && /careRecordTab=journal/i.test(location.search);
@@ -59,6 +84,8 @@ function storeJournalUrl(url) {
       }
     });
 
+    const pathname = new URL(url).pathname;
+
     const template = templateUrl(clean);
     if (template) {
       chrome.storage.local.get(ALL_JOURNAL_TEMPLATES_KEY, (r) => {
@@ -67,17 +94,18 @@ function storeJournalUrl(url) {
           chrome.storage.local.set({ [ALL_JOURNAL_TEMPLATES_KEY]: [...existing, template] });
         }
       });
-      // Best-guess primary: a UUID-bearing URL whose path also mentions
-      // "journal" (or, failing that, the endpoint returning the largest
-      // response is left to manual pick via the debug panel).
-      if (/journal/i.test(new URL(url).pathname)) {
-        chrome.storage.local.set({ [JOURNAL_TEMPLATE_KEY]: template });
-      }
+      chrome.storage.local.get(JOURNAL_TEMPLATE_KEY, (r) => {
+        if (isBetterJournalGuess(pathname, r[JOURNAL_TEMPLATE_KEY])) {
+          chrome.storage.local.set({ [JOURNAL_TEMPLATE_KEY]: template });
+        }
+      });
     }
 
-    if (/journal/i.test(new URL(url).pathname)) {
-      chrome.storage.local.set({ [JOURNAL_KEY]: clean });
-    }
+    chrome.storage.local.get(JOURNAL_KEY, (r) => {
+      if (isBetterJournalGuess(pathname, r[JOURNAL_KEY])) {
+        chrome.storage.local.set({ [JOURNAL_KEY]: clean });
+      }
+    });
   } catch (e) {
     /* ignore */
   }
@@ -119,6 +147,12 @@ function storeUrl(url) {
   }
 }
 
+// Recorded once per (re)injection — lets the debug panel show when this
+// content script last actually ran, so a stale-script suspicion during live
+// troubleshooting (e.g. "did my reload really pick up the code change?") can
+// be checked directly instead of guessed at.
+chrome.storage.local.set({ [LAST_RUN_KEY]: Date.now() });
+
 // Capture resources already loaded before this script ran
 performance.getEntriesByType('resource').forEach((e) => storeUrl(e.name));
 
@@ -127,3 +161,19 @@ const observer = new PerformanceObserver((list) => {
   list.getEntries().forEach((e) => storeUrl(e.name));
 });
 observer.observe({ entryTypes: ['resource'] });
+
+// The Resource Timing buffer defaults to 250 entries; once full, Chrome
+// silently DROPS new entries (they never reach the observer above either) —
+// this is the browser's own documented gotcha, not specific to this script.
+// The queue is "a Vue + AG-Grid SPA that re-renders constantly" (see
+// CLAUDE.md), almost certainly generating 250+ resource entries during
+// ordinary navigation before a user ever reaches a patient's Journal tab —
+// plausibly why journal-URL auto-capture never fired in live testing despite
+// the page route matching `isOnJournalPage()`. Enlarge the buffer up front,
+// and clear it (never lose future entries) if it still fills.
+if (typeof performance.setResourceTimingBufferSize === 'function') {
+  performance.setResourceTimingBufferSize(2000);
+}
+if ('onresourcetimingbufferfull' in performance) {
+  performance.onresourcetimingbufferfull = () => performance.clearResourceTimings();
+}

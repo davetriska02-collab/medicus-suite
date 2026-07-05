@@ -235,6 +235,7 @@ const ALLOWLIST = new Set([
   'suite.discoveredAllJournalUrls',
   'suite.discoveredJournalUrlTemplate',
   'suite.discoveredAllJournalUrlTemplates',
+  'suite.apiDiscoveryLastRun',
 
   // Practice-wide flagged-patient scan results from duplicate-checker.js —
   // NAMES, NHS NUMBERS AND DATES OF BIRTH for every patient the GP2GP

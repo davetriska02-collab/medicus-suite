@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.152.1] — 2026-07-05
+
+### Duplicate-checker: journal-capture reliability + diagnostics (internal tool)
+
+Continuing the per-patient record-cleansing project (`docs/learnings-patient-journal-api.md`).
+
+- `content-scripts/api-discovery.js`: fixed the journal-URL auto-capture never
+  firing live — the browser's Resource Timing buffer (default 250 entries)
+  was silently dropping new entries before a patient's Journal tab was ever
+  reached. Now sizes the buffer up front and clears it on
+  `resourcetimingbufferfull`. Also fixed a second bug where a later-fetched
+  UI asset containing "journal" in its path could clobber an already-good
+  endpoint guess — a confirmed endpoint pattern now always wins over a loose
+  substring match, and static assets are excluded from candidacy entirely.
+  Writes `suite.apiDiscoveryLastRun` on every injection so the debug panel
+  can show whether a reload actually picked up a content-script change.
+- `engine/record-duplicate-parser.js`: `groupAndTier`/`analyzeJournal` now
+  also report `suppressedSameConsultation` (groups dropped by the
+  same-consultation `encounterId` exclusion) and
+  `analyzeGp2gpWrapperCoverage` (how often the known GP2GP-wrapper text
+  pattern actually matched vs. near-miss text that looked wrapper-like but
+  wasn't stripped) — diagnostics only, not used by grouping/tiering itself.
+- `duplicate-checker.js`: surfaces both diagnostics in the per-patient
+  journal-analysis panel; fixed a `describeShape()` bug that silently
+  stringified arrays-of-objects to `"[object Object]"`.
+- `test-record-duplicate-parser.js`: 44/44 passing (4 new tests for the
+  GP2GP-wrapper coverage diagnostic). `test-backup-coverage.js`: added
+  `suite.apiDiscoveryLastRun` to the ephemeral-diagnostic allowlist.
+
 ## [v3.152.0] — 2026-07-03
 
 ### Practice-panel wishlist wave 1 (quick wins + half-day items)

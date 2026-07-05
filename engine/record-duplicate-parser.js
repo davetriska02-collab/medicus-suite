@@ -148,6 +148,43 @@
     return { text: s.trim().replace(/\s+/g, ' ').toLowerCase(), wrapped };
   }
 
+  // Loose signal that a text looks like it MIGHT be a GP2GP wrapper —
+  // deliberately unanchored and whitespace-tolerant, unlike the strict
+  // GP2GP_WRAPPER_RE/EPISODICITY_SUFFIX_RE above, which were built from a
+  // single 2026-07-01 sample and never cross-checked live. Used only to spot
+  // near-misses (see analyzeGp2gpWrapperCoverage) — text the strict regexes
+  // SHOULD probably have stripped but didn't, e.g. because the wrapper
+  // wasn't right at the start/end of the string, or used slightly different
+  // spacing/casing than the one sample it was built from.
+  const GP2GP_WRAPPER_CANDIDATE_RE = /problem\s*info\s*:|problem\s*notes\s*:|episodicity\s*:/i;
+
+  // Diagnostic (2026-07-04): reports how often the strict wrapper regex
+  // actually fires across a real patient's entries, plus any near-miss text
+  // that looks wrapper-like but wasn't stripped — evidence for whether the
+  // n=2-sample regex generalises or needs broadening. Not used by
+  // grouping/tiering itself.
+  function analyzeGp2gpWrapperCoverage(entries) {
+    let strictMatches = 0;
+    const nearMisses = [];
+    for (const e of entries) {
+      if (!e.rawText) continue;
+      const { wrapped } = normText(e.rawText);
+      if (wrapped) {
+        strictMatches++;
+        continue;
+      }
+      if (GP2GP_WRAPPER_CANDIDATE_RE.test(e.rawText)) {
+        nearMisses.push({
+          kind: e.kind,
+          date: e.date,
+          fromTransferEncounter: e.fromTransferEncounter,
+          sample: e.rawText.slice(0, 160),
+        });
+      }
+    }
+    return { strictMatches, nearMisses };
+  }
+
   function isTransferEncounter(encounterData) {
     return (encounterData.consultationTopics || []).some((ct) => ct.title === 'Data Transferred from other system');
   }
@@ -359,7 +396,7 @@
   // ── Group + tier ──────────────────────────────────────────────────────────
   // Groups flattened entries by (kind, date, normalised code) and assigns a
   // confidence tier per candidate group.
-  function groupAndTier(entries) {
+  function groupAndTier(entries, suppressed) {
     const groups = new Map();
     for (const e of entries) {
       const key = `${e.kind}|${e.date}|${normCode(e.code)}`;
@@ -380,7 +417,26 @@
       // case — that's the flat/nested dual-render pattern this parser is
       // built to catch (see file header) — so a shared null doesn't count.
       const encounterIds = new Set(members.map((m) => m.encounterId));
-      if (encounterIds.size === 1 && members[0].encounterId) continue;
+      if (encounterIds.size === 1 && members[0].encounterId) {
+        // Diagnostic only (2026-07-04, investigating a live report of a
+        // transfer-heavy patient's group count collapsing to zero): record
+        // what this exclusion just suppressed so the UI/tests can tell
+        // whether it's firing on genuine single-consultation repeats or on
+        // transfer-encounter entries where a shared encounterId may not
+        // reliably mean "one real consultation".
+        if (suppressed) {
+          const [kind, date] = key.split('|');
+          suppressed.push({
+            kind,
+            date,
+            code: members[0].code,
+            count: members.length,
+            encounterId: members[0].encounterId,
+            allFromTransferEncounter: members.every((m) => m.fromTransferEncounter),
+          });
+        }
+        continue;
+      }
 
       const [kind, date] = key.split('|');
       const normed = members.map((m) => ({ m, ...normText(m.rawText) }));
@@ -470,8 +526,10 @@
   function analyzeJournal(payload) {
     const dayGroups = extractDayGroups(payload);
     const { entries, transferEncounters } = flattenJournal(dayGroups);
-    const groups = groupAndTier(entries);
+    const suppressedSameConsultation = [];
+    const groups = groupAndTier(entries, suppressedSameConsultation);
     const confirmedTransfers = markTransferConfirmation(transferEncounters, groups);
+    const gp2gpWrapperCoverage = analyzeGp2gpWrapperCoverage(entries);
 
     const byTier = { exact: 0, high: 0, review: 0 };
     for (const g of groups) byTier[g.tier]++;
@@ -479,11 +537,19 @@
     return {
       groups,
       transferEncounters: confirmedTransfers,
+      suppressedSameConsultation,
+      gp2gpWrapperCoverage,
       summary: {
+        totalEntries: entries.length,
         totalCandidateGroups: groups.length,
         byTier,
         transferEncountersTotal: confirmedTransfers.length,
         transferEncountersConfirmed: confirmedTransfers.filter((t) => t.contentConfirmed).length,
+        suppressedSameConsultationTotal: suppressedSameConsultation.length,
+        suppressedSameConsultationFromTransfer: suppressedSameConsultation.filter((s) => s.allFromTransferEncounter)
+          .length,
+        gp2gpWrapperStrictMatches: gp2gpWrapperCoverage.strictMatches,
+        gp2gpWrapperNearMisses: gp2gpWrapperCoverage.nearMisses.length,
       },
     };
   }
@@ -498,6 +564,7 @@
     decodeIdTimestamp,
     parseGenericDocumentTitle,
     resolveDocumentTypeLabel,
+    analyzeGp2gpWrapperCoverage,
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

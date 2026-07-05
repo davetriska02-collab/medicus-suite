@@ -498,5 +498,49 @@ assert(
   'The same code/text/author across TWO SEPARATE consultations still forms an EXACT duplicate group'
 );
 
+console.log('\n--- GP2GP-wrapper coverage diagnostic ---');
+const wrapperCoverageDayGroups = [
+  {
+    title: 'Mon 01 Jan 2024',
+    items: [
+      flatNoteItem(
+        'wrap-strict',
+        'Pigmented naevus',
+        'Problem Info: Problem Notes: Mole on back {Episodicity : code=1, displayName=First}',
+        'Dr Test',
+        'Test Surgery'
+      ),
+      flatNoteItem(
+        'wrap-nearmiss',
+        'Skin tag',
+        'A note mentioning Problem Info: partway through, not at the very start.',
+        'Dr Test',
+        'Test Surgery'
+      ),
+      flatNoteItem('wrap-clean', 'Sore throat', 'Nothing wrapper-like here at all.', 'Dr Test', 'Test Surgery'),
+    ],
+  },
+];
+const wrapperCoverageResult = analyzeJournal(wrapperCoverageDayGroups);
+assert(
+  wrapperCoverageResult.summary.gp2gpWrapperStrictMatches === 1,
+  'One entry with the exact known wrapper shape counts as a strict match'
+);
+assert(
+  wrapperCoverageResult.summary.gp2gpWrapperNearMisses === 1,
+  'One entry with wrapper-like text not at the start counts as a near-miss, not a strict match'
+);
+assert(
+  wrapperCoverageResult.gp2gpWrapperCoverage.nearMisses[0].kind === 'note' &&
+    wrapperCoverageResult.gp2gpWrapperCoverage.nearMisses[0].sample.includes('Problem Info:'),
+  'Near-miss entries carry enough detail (kind + text sample) to inspect manually'
+);
+assert(
+  !wrapperCoverageResult.gp2gpWrapperCoverage.nearMisses.some(
+    (nm) => nm.kind === 'note' && nm.sample.includes('Sore throat')
+  ),
+  'An entry with no wrapper-like text at all is neither a strict match nor a near-miss'
+);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
