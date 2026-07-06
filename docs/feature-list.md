@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.152.0
-**Generated:** 2026-07-05 (automated)
+**Version:** v3.153.0
+**Generated:** 2026-07-06 (automated)
 
 ## What it is
 
@@ -29,7 +29,7 @@ Live appointment-slot counts by type for any date, pulled from the scheduling AP
 A calendar view of upcoming appointment capacity against a practice-set minimum, with separate targets per weekday. Week/month views are colour-coded Sufficient/Tight/Low/Critical, and multiple named presets let different services or teams be checked side by side.
 
 ### Submissions Tracker
-Daily inbound task counts — medical, admin, investigations, prescriptions — with a today view, a custom date range, and day-vs-day comparison. Amber/red thresholds flag unusual volume before it becomes a backlog.
+Daily inbound task counts — medical, admin, investigations, prescriptions — with a today view, a custom date range, and day-vs-day comparison. Amber/red thresholds flag unusual volume before it becomes a backlog. Because Medicus only reports still-open tasks, the suite keeps its own day ledger of every request it has seen, so counts reflect true received volume and no longer fall as the team completes work; days the suite wasn't watching are flagged as undercounts rather than shown as history.
 
 ### Activity Report
 Shows how much work each staff member has processed over a chosen date range — consultations, prescriptions, reviews, documents, results — as period totals and a per-person stacked bar chart, useful for workload reviews and rota planning.
@@ -96,6 +96,7 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 
 ## Recent additions (last 4 weeks)
 
+- **v3.153.0 (2026-07-06)** — Demand counts fixed to reflect true received volume: a new day ledger remembers requests after the team completes them (Medicus itself only reports still-open tasks), correcting a systematic undercount across Submissions, Today, the demand strip and Condor.
 - **v3.152.0 (2026-07-03)** — Sweep and Today gained plain-English "checks due" summaries and named skipped appointments; the open patient's monitoring status now shows from any tab; Reception pathways link straight to matching NHS leaflets.
 - **v3.151.0 (2026-07-02)** — Triage Lens queue reworked to keep more routine requests off the GP's desk: keyboard-driven triage, prepared Pharmacy First replies, and safer grading of borderline results.
 - **v3.147.0 (2026-07-02)** — New Leaflets tab: find and share the right NHS patient information from inside the panel instead of a web search.
