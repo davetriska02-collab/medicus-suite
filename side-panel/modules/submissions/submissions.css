@@ -386,3 +386,28 @@
   border: 1px solid var(--red-line);
   color: var(--red);
 }
+
+/* ── Data-health notice ──────────────────────────────── */
+/* API returned suspect data (date filter ignored / truncated page).
+   Amber: suite self-diagnosis, never a clinical alert. */
+
+.sub-data-health {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  border-radius: var(--r-md);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+}
+.sub-data-health.hidden {
+  display: none;
+}
+.sub-data-health .sub-alert-ico {
+  margin-top: 1px;
+}

@@ -3,7 +3,13 @@
 'use strict';
 
 import { createModuleLoader } from './module-loader.js';
-import { DEFAULT_SUB_THRESHOLDS, ragLevel } from './modules/submissions/submissions-core.js';
+import {
+  DEFAULT_SUB_THRESHOLDS,
+  ragLevel,
+  windowTaskList,
+  ledgerSeriesForDay,
+} from './modules/submissions/submissions-core.js';
+import { recordTaskLists } from './modules/submissions/submissions-ledger.js';
 import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
@@ -1554,7 +1560,10 @@ async function fetchAndRenderSubRagStrip() {
     return true;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // LOCAL calendar date, not toISOString() — UTC would query yesterday during
+  // the first BST hour of the day (same fix as condor's todayISO, v3.35.2).
+  const _now = new Date();
+  const today = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
   const results = await Promise.allSettled(
     SUB_RAG_TYPES.map(async (tt) => {
       const url = `https://${code}.api.england.medicus.health/tasks/data/${tt.apiType}/task-list?createdAt_startDate=${today}&createdAt_endDate=${today}`;
@@ -1563,9 +1572,37 @@ async function fetchAndRenderSubRagStrip() {
       const r = await window.ApiDiag.fetch({ module: 'panel-sub-rag-strip', url, code, codeSource: source });
       if (!r.ok) throw new Error(`${tt.label} HTTP ${r.status}`);
       const d = await r.json();
-      return { key: tt.key, label: tt.label, count: (d.tasks || []).length };
+      // windowTaskList: thresholds must fire on tasks CREATED today, even if
+      // the server-side createdAt filter is ever renamed/ignored upstream.
+      return { key: tt.key, label: tt.label, tasks: windowTaskList(d, today, today).tasks };
     })
   );
+
+  // Thresholds fire on the DAY-LEDGER count (tasks seen today, including ones
+  // the team has since completed) — the task-list API only contains open
+  // tasks, so a raw count would sag as work is cleared and could un-trip an
+  // alert mid-morning while true demand keeps climbing (v3.153.0).
+  let ledger = null;
+  try {
+    const byKey = {};
+    for (const res of results) {
+      if (res.status === 'fulfilled') byKey[res.value.key] = res.value.tasks;
+    }
+    ledger = await recordTaskLists(byKey);
+  } catch (_) {
+    // Storage failure — fall back to live (open-only) counts below.
+  }
+  const ledgerSeries = ledger
+    ? ledgerSeriesForDay(
+        ledger,
+        today,
+        SUB_RAG_TYPES.map((t) => t.key)
+      )
+    : null;
+  for (const res of results) {
+    if (res.status !== 'fulfilled') continue;
+    res.value.count = ledgerSeries ? ledgerSeries[res.value.key].total : res.value.tasks.length;
+  }
 
   // A failure in any sub-request counts as a polling failure for backoff purposes
   const anyFailed = results.some((r) => r.status === 'rejected');

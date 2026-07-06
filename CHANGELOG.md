@@ -2,6 +2,102 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.153.0] — 2026-07-06
+
+### Fixed: Submissions "work received" counts no longer erode as the team completes work (day ledger)
+
+Root cause of the v3.152.1 report, confirmed by live-API probe (2026-07-06):
+the `/tasks/data/{type}/task-list` endpoint **only ever contains open tasks**.
+Its status filter offers `New / Awaiting recipient response / Reply received /
+Snoozed` — there is **no completed state**; completed requests leave the table
+entirely (a probe of the previous Monday returned 2 residual tasks). So a
+`createdAt`-filtered count is "received AND still open", and the number falls
+as the team clears work. The Submissions Tracker, Today demand card, panel
+demand strip and Condor demand/velocity/PPI have therefore all systematically
+**undercounted received work since inception** — worst on busy mornings, when
+27 could show against a true intake 3–4× higher. A demand undercount reads as
+"quiet day" and misinforms capacity decisions.
+
+The API cannot return completed tasks, so the suite now **remembers** them:
+
+- **New received-work day ledger** (`submissions.ledger`,
+  `side-panel/modules/submissions/submissions-ledger.js`, pure logic in
+  `submissions-core.js`). Every poller that already hits the endpoint
+  (Submissions module, Today demand card, panel `#subRagStrip`, Condor — each
+  every 60s while visible) merges the task IDs it sees into per-day, per-
+  category entries. Once seen, a task stays counted after completion.
+- **PHI/data-minimisation**: the ledger stores task UUIDs + creation hour for
+  the current day only; past days are compacted to bare counts + a 24-bucket
+  hourly histogram at the first poll of the next day. No patient identifiers,
+  92-day retention. Backed up via `shared/io/submissions-io.js` (with
+  structural sanitisation on import) so demand history survives reinstalls.
+- **All four consumers now count from the ledger** (falling back to the live
+  open-only count if storage fails): Submissions tiles/charts in all three
+  modes, Today demand card, demand-strip RAG thresholds, Condor
+  demand/velocity/PPI. RAG thresholds in particular no longer un-trip
+  mid-morning because the team is clearing the queue while intake keeps
+  climbing.
+- **Honest history**: days the suite wasn't live-watching can only show
+  residual open tasks. The Submissions module now flags such days in the
+  amber data-health notice instead of presenting undercounts as history —
+  received counts build up from the day the suite starts watching.
+- Known limitation (documented, unfixable client-side): work received and
+  completed while the panel was closed (e.g. before first open of the day) is
+  invisible to the ledger and still undercounts that window.
+
+## [v3.152.1] — 2026-07-06
+
+### Fixed/hardened: Submissions & Today demand counts against silent task-list API changes
+
+Reported: Submissions Tracker (and the Today demand card, which shares the
+endpoint) showing implausibly low "work received" counts on a Monday morning,
+with the same numbers regardless of date — alongside a health-strip warning
+that Medicus may have changed.
+
+The `/tasks/data/{type}/task-list` endpoint **silently ignores query params it
+doesn't recognise** (the v3.35.2 postmortem: `startDate` vs
+`createdAt_startDate` returned the whole backlog). If Medicus renames the
+`createdAt_*` filters, the failure inverts and every consumer quietly counts
+the *default open-task view* — the outstanding queue, not work received.
+Completed work vanishes from the count, every date shows the same numbers, and
+nothing errors. Previously that showed as confidently wrong tiles; a demand
+undercount reads as "quiet Monday" and misinforms capacity decisions.
+
+New `windowTaskList` / `extractTaskArray` / `taskDateISO` in
+`submissions-core.js` (pure, tested), now used by **all four same-day
+consumers** — Submissions module, Today demand card, panel `#subRagStrip`,
+Condor demand/velocity/PPI:
+
+- **Detects an ignored date filter**: tasks created clearly outside the
+  requested window (±1-day tolerance absorbs UTC/BST boundary skew — no false
+  alarms on midnight tasks) trip a `filterIgnored` flag; counts are then
+  re-windowed client-side to the requested dates so they stay honest.
+- **Surfaces it, never hides it**: the Submissions module shows an amber
+  data-health notice ("Counts unreliable — Medicus ignored the date filter…
+  likely an undercount, completed items may be missing"); the Today demand
+  card shows an inline warning. Healthy responses pass through untouched.
+- **Detects truncation**: a body carrying `totalCount`/`total`/`meta.total`
+  larger than the returned array (pagination introduced upstream) flags
+  "partial page — counts may be low".
+- **Tolerates envelope renames**: task arrays are now extracted from
+  `tasks | data | results | rows | bare array` (same shape list page-world.js
+  already tolerates) instead of only `d.tasks` — a renamed envelope becomes a
+  flagged count, not a silent zero.
+- Panel `#subRagStrip` also now uses the **local** calendar date instead of
+  `toISOString()` (which queried yesterday during the first BST hour — same
+  fix condor got in v3.35.2).
+- The Condor report's ranged demand fetch already windows client-side via
+  `bucketDemandByDay` and needed no change.
+
+Note: when the filter is being ignored upstream, client-side windowing cannot
+recover work the API no longer returns (completed tasks). The warning is the
+point — the follow-up fix needs the new filter param names captured from a live
+Medicus page (Debug → API diagnostics, or a page-console capture).
+
+Tests: `test-submissions-core.js` extended to cover envelope tolerance, date
+parsing, boundary tolerance, ignored-filter re-windowing and truncation
+detection.
+
 ## [v3.152.0] — 2026-07-03
 
 ### Practice-panel wishlist wave 1 (quick wins + half-day items)
