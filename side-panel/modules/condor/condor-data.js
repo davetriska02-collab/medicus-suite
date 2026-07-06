@@ -1,7 +1,8 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 'use strict';
 
-import { windowTaskList } from '../submissions/submissions-core.js';
+import { windowTaskList, ledgerSeriesForDay } from '../submissions/submissions-core.js';
+import { recordTaskLists } from '../submissions/submissions-ledger.js';
 
 function todayISO() {
   // Local calendar date (NOT UTC) — toISOString() would roll to the next/previous
@@ -108,6 +109,7 @@ async function fetchSubmissions(base) {
     })
   );
 
+  const keys = TASK_TYPES.map((tt) => tt.key);
   const byHour = Array.from({ length: 24 }, (_, i) => ({
     hour: i,
     medical: 0,
@@ -127,11 +129,38 @@ async function fetchSubmissions(base) {
     ts.forEach((t) => {
       const hourOfDay = new Date(t.createdAt).getHours();
       tasks.push({ id: t.id, type: key, createdAt: t.createdAt, hourOfDay });
-      if (byHour[hourOfDay]) byHour[hourOfDay][key] = (byHour[hourOfDay][key] || 0) + 1;
-      totals[key] = (totals[key] || 0) + 1;
-      totals.all++;
     });
   });
+
+  // Demand/velocity/PPI count from the day ledger (tasks seen today, kept
+  // after completion), not the raw response: the task-list API only contains
+  // OPEN tasks, so raw totals sag as the team clears work and understate true
+  // demand (v3.153.0).
+  let ledgerSeries = null;
+  try {
+    const byKey = {};
+    for (const res of results) {
+      if (res.status === 'fulfilled') byKey[res.value.key] = res.value.tasks;
+    }
+    const ledger = await recordTaskLists(byKey);
+    ledgerSeries = ledgerSeriesForDay(ledger, today, keys);
+  } catch (_) {
+    // Storage failure — fall back to live (open-only) counts.
+  }
+
+  for (const key of keys) {
+    if (ledgerSeries) {
+      totals[key] = ledgerSeries[key].total;
+      for (let h = 0; h < 24; h++) byHour[h][key] = ledgerSeries[key].hourly[h];
+    } else {
+      for (const t of tasks) {
+        if (t.type !== key) continue;
+        if (byHour[t.hourOfDay]) byHour[t.hourOfDay][key]++;
+        totals[key]++;
+      }
+    }
+    totals.all += totals[key];
+  }
 
   return { tasks, totals, byHour, filterIgnored };
 }

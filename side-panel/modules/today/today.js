@@ -19,7 +19,8 @@
 import { buildHeadline } from './today-headline.js';
 import { hasEnabledRules, buildBreaches } from '../slots/slots-alert-core.js';
 import { isActionNeeded } from '../sweep/sweep-core.js';
-import { windowTaskList } from '../submissions/submissions-core.js';
+import { windowTaskList, ledgerSeriesForDay } from '../submissions/submissions-core.js';
+import { recordTaskLists } from '../submissions/submissions-ledger.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -213,8 +214,23 @@ async function fetchDemand() {
     // degrades to an honest count + visible warning, not a quietly wrong number.
     const medW = medRes.status === 'fulfilled' ? windowTaskList(medRes.value, today, today) : null;
     const admW = admRes.status === 'fulfilled' ? windowTaskList(admRes.value, today, today) : null;
-    const medical = medW ? medW.tasks.length : null;
-    const admin = admW ? admW.tasks.length : null;
+    let medical = medW ? medW.tasks.length : null;
+    let admin = admW ? admW.tasks.length : null;
+    // Count from the day ledger, not the raw response: the task-list only
+    // contains OPEN tasks (completed requests leave the table — v3.153.0), so
+    // the raw count erodes as the team works. The ledger remembers every task
+    // seen today, so "received today" survives completion.
+    try {
+      const byKey = {};
+      if (medW) byKey.medical = medW.tasks;
+      if (admW) byKey.admin = admW.tasks;
+      const ledger = await recordTaskLists(byKey);
+      const s = ledgerSeriesForDay(ledger, today, ['medical', 'admin']);
+      if (medW) medical = s.medical.total;
+      if (admW) admin = s.admin.total;
+    } catch (_) {
+      // Storage failure — fall back to the live (open-only) counts above.
+    }
     const dataWarn =
       medW?.filterIgnored || admW?.filterIgnored
         ? 'Medicus ignored the date filter — counts may miss completed work'

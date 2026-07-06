@@ -3,7 +3,13 @@
 'use strict';
 
 import { createModuleLoader } from './module-loader.js';
-import { DEFAULT_SUB_THRESHOLDS, ragLevel, windowTaskList } from './modules/submissions/submissions-core.js';
+import {
+  DEFAULT_SUB_THRESHOLDS,
+  ragLevel,
+  windowTaskList,
+  ledgerSeriesForDay,
+} from './modules/submissions/submissions-core.js';
+import { recordTaskLists } from './modules/submissions/submissions-ledger.js';
 import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
@@ -1568,9 +1574,35 @@ async function fetchAndRenderSubRagStrip() {
       const d = await r.json();
       // windowTaskList: thresholds must fire on tasks CREATED today, even if
       // the server-side createdAt filter is ever renamed/ignored upstream.
-      return { key: tt.key, label: tt.label, count: windowTaskList(d, today, today).tasks.length };
+      return { key: tt.key, label: tt.label, tasks: windowTaskList(d, today, today).tasks };
     })
   );
+
+  // Thresholds fire on the DAY-LEDGER count (tasks seen today, including ones
+  // the team has since completed) — the task-list API only contains open
+  // tasks, so a raw count would sag as work is cleared and could un-trip an
+  // alert mid-morning while true demand keeps climbing (v3.153.0).
+  let ledger = null;
+  try {
+    const byKey = {};
+    for (const res of results) {
+      if (res.status === 'fulfilled') byKey[res.value.key] = res.value.tasks;
+    }
+    ledger = await recordTaskLists(byKey);
+  } catch (_) {
+    // Storage failure — fall back to live (open-only) counts below.
+  }
+  const ledgerSeries = ledger
+    ? ledgerSeriesForDay(
+        ledger,
+        today,
+        SUB_RAG_TYPES.map((t) => t.key)
+      )
+    : null;
+  for (const res of results) {
+    if (res.status !== 'fulfilled') continue;
+    res.value.count = ledgerSeries ? ledgerSeries[res.value.key].total : res.value.tasks.length;
+  }
 
   // A failure in any sub-request counts as a polling failure for backoff purposes
   const anyFailed = results.some((r) => r.status === 'rejected');

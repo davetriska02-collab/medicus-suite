@@ -23,9 +23,23 @@ const path = require('path');
   const corePath = new URL('side-panel/modules/submissions/submissions-core.js', `file://${path.resolve(__dirname)}/`)
     .href;
 
-  const { DEFAULT_SUB_THRESHOLDS, ragLevel, getRagLevel, extractTaskArray, taskDateISO, windowTaskList } = await import(
-    corePath
-  );
+  const {
+    DEFAULT_SUB_THRESHOLDS,
+    ragLevel,
+    getRagLevel,
+    extractTaskArray,
+    taskDateISO,
+    windowTaskList,
+    taskHour,
+    emptyLedger,
+    normaliseLedger,
+    touchLedgerDay,
+    mergeTasksIntoLedger,
+    compactLedger,
+    ledgerSeriesForDay,
+    ledgerCountsForDays,
+    ledgerDayWatched,
+  } = await import(corePath);
 
   // ── defaults ─────────────────────────────────────────────────────────────────
   console.log('--- DEFAULT_SUB_THRESHOLDS ---');
@@ -123,6 +137,79 @@ const path = require('path');
   // Envelope rename tolerated end-to-end
   w = windowTaskList({ data: [{ createdAt: '2026-07-06T08:00:00Z' }] }, D, D);
   check(w.tasks.length === 1, 'data-envelope response still counted');
+
+  // ── day ledger ───────────────────────────────────────────────────────────────
+  console.log('\n--- day ledger ---');
+  const TODAY = '2026-07-06';
+  const task = (id, iso) => ({ id, createdAt: iso });
+
+  check(taskHour('2026-07-06T09:30:00Z') === 9, 'taskHour ISO');
+  check(taskHour('06 Jul 2026 14:05') === 14, 'taskHour legacy');
+  check(taskHour('garbage') === null, 'taskHour garbage → null');
+
+  // Merge is idempotent per ID and survives task disappearance (completion)
+  let led = emptyLedger();
+  touchLedgerDay(led, TODAY);
+  mergeTasksIntoLedger(led, 'medical', [task('a', '2026-07-06T08:10:00Z'), task('b', '2026-07-06T09:00:00Z')], TODAY);
+  mergeTasksIntoLedger(led, 'medical', [task('b', '2026-07-06T09:00:00Z'), task('c', '2026-07-06T10:00:00Z')], TODAY);
+  let s = ledgerSeriesForDay(led, TODAY, ['medical']);
+  check(s.medical.total === 3, 'ledger remembers completed task a → count 3, not 2');
+  check(s.medical.hourly[8] === 1 && s.medical.hourly[9] === 1 && s.medical.hourly[10] === 1, 'hourly buckets');
+  check(s.medical.cumulative[23] === 3, 'cumulative reaches total');
+  check(ledgerDayWatched(led, TODAY) === true, 'touched day is watched');
+  check(ledgerDayWatched(led, '2026-07-05') === false, 'untouched day is not watched');
+
+  // Duplicate merge does not double-count
+  mergeTasksIntoLedger(led, 'medical', [task('a', '2026-07-06T08:10:00Z')], TODAY);
+  check(ledgerSeriesForDay(led, TODAY, ['medical']).medical.total === 3, 'idempotent per task ID');
+
+  // Tasks without id/date are skipped
+  mergeTasksIntoLedger(led, 'medical', [{ createdAt: '2026-07-06T08:00:00Z' }, task('d', null)], TODAY);
+  check(ledgerSeriesForDay(led, TODAY, ['medical']).medical.total === 3, 'no-id / no-date tasks skipped');
+
+  // Compaction: past days become {n, hourly} with IDs discarded
+  mergeTasksIntoLedger(led, 'admin', [task('x', '2026-07-05T11:00:00Z')], TODAY);
+  compactLedger(led, TODAY);
+  check(led.days['2026-07-05'].admin.n === 1 && !led.days['2026-07-05'].admin.ids, 'past day compacted, IDs gone');
+  check(led.days[TODAY].medical.ids, 'today stays in ids-form');
+  s = ledgerSeriesForDay(led, '2026-07-05', ['admin']);
+  check(s.admin.total === 1 && s.admin.hourly[11] === 1, 'compacted day still renders counts + hourly');
+
+  // Merging into a compacted day can only correct upward
+  mergeTasksIntoLedger(led, 'admin', [task('x', '2026-07-05T11:00:00Z')], TODAY);
+  check(led.days['2026-07-05'].admin.n === 1, 'compacted merge with fewer/equal rows is a no-op');
+  mergeTasksIntoLedger(led, 'admin', [task('x', '2026-07-05T11:00:00Z'), task('y', '2026-07-05T12:00:00Z')], TODAY);
+  check(led.days['2026-07-05'].admin.n === 2, 'compacted merge corrects upward when live view shows more');
+
+  // Retention: days beyond SUB_LEDGER_RETAIN_DAYS are dropped
+  led.days['2020-01-01'] = { medical: { n: 5, hourly: new Array(24).fill(0) } };
+  compactLedger(led, TODAY);
+  check(!led.days['2020-01-01'], 'ancient day dropped by retention');
+
+  // ledgerCountsForDays zero-fills missing days/categories
+  const counts = ledgerCountsForDays(led, ['2026-07-05', '2026-07-04'], ['admin', 'medical']);
+  check(counts['2026-07-05'].admin === 2 && counts['2026-07-05'].medical === 0, 'counts for known day');
+  check(counts['2026-07-04'].admin === 0, 'unknown day zero-filled');
+
+  // normaliseLedger drops garbage, keeps valid structure
+  const dirty = {
+    days: {
+      '2026-07-06': { watched: true, medical: { ids: { u1: 8, u2: 99 } }, junk: 'nope' },
+      'not-a-date': { medical: { ids: {} } },
+      '2026-07-05': { admin: { n: 3.7, hourly: ['x', 2] } },
+    },
+  };
+  const clean = normaliseLedger(dirty);
+  check(clean.days['2026-07-06'].medical.ids.u1 === 8, 'valid id/hour kept');
+  check(clean.days['2026-07-06'].medical.ids.u2 === 0, 'out-of-range hour clamped to 0');
+  check(!clean.days['not-a-date'], 'bad date key dropped');
+  check(clean.days['2026-07-05'].admin.n === 3, 'fractional n floored');
+  check(
+    clean.days['2026-07-05'].admin.hourly[0] === 0 && clean.days['2026-07-05'].admin.hourly[1] === 2,
+    'bad hourly cell zeroed, good kept'
+  );
+  check(normaliseLedger(null).days && Object.keys(normaliseLedger(null).days).length === 0, 'null → empty ledger');
+  check(normaliseLedger('junk').v === 1, 'non-object → empty ledger');
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);

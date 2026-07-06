@@ -148,3 +148,193 @@ export function windowTaskList(body, startISO, endISO) {
     truncated,
   };
 }
+
+// ── Received-work day ledger ──────────────────────────────────────────────────
+//
+// CONFIRMED against the live API (2026-07-06 probe, see CHANGELOG v3.153.0):
+// the /tasks/data/{type}/task-list endpoint only ever contains OPEN tasks —
+// its status filter has no "completed" option; completed requests leave the
+// table entirely (a full Monday's intake showed 2 residual tasks a week
+// later). So a date-filtered count is "received AND still open", and the
+// number erodes as the team works: the tracker systematically undercounted
+// "work received", worst on busy mornings.
+//
+// The API cannot return completed tasks, so the suite REMEMBERS them instead:
+// every poller that hits the endpoint (Submissions module, Today demand card,
+// panel #subRagStrip, Condor — all every 60s while visible) merges the task
+// IDs it sees into a persistent per-day ledger. Once seen, a task stays
+// counted after completion. Days the suite watched live are accurate; days it
+// didn't are flagged as undercounts by the callers.
+//
+// Ledger shape (storage key 'submissions.ledger', wrapped by
+// submissions-ledger.js):
+//   { v: 1, days: { 'YYYY-MM-DD': {
+//       watched?: true,                      // suite polled during that day
+//       [category]: { ids: { uuid: hour } }  // live form (today)
+//                  | { n: 12, hourly: [24] } // compacted form (past days)
+//   } } }
+//
+// PHI: task UUIDs + creation hour only — no patient identifiers — and the
+// UUIDs are compacted away to bare counts at the first poll of the next day.
+
+export const SUB_LEDGER_RETAIN_DAYS = 92;
+
+// Local calendar date (NOT toISOString(), which rolls the day over in UTC).
+export function localDateISO(d = new Date()) {
+  const p = (x) => String(x).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// Hour-of-day from an ISO 8601 or legacy "DD Mon YYYY HH:MM" createdAt, else null.
+export function taskHour(str) {
+  if (!str || typeof str !== 'string') return null;
+  const iso = str.match(/T(\d{2}):\d{2}/);
+  if (iso) return parseInt(iso[1], 10);
+  const m = str.match(/(\d{2}):(\d{2})(?!.*\d)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+export function emptyLedger() {
+  return { v: 1, days: {} };
+}
+
+// Structural guard for ledgers read from storage or a backup: returns a valid
+// ledger, dropping anything malformed (never throws).
+export function normaliseLedger(raw) {
+  const out = emptyLedger();
+  if (!raw || typeof raw !== 'object' || !raw.days || typeof raw.days !== 'object') return out;
+  for (const [date, day] of Object.entries(raw.days)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !day || typeof day !== 'object') continue;
+    const cleanDay = {};
+    if (day.watched === true) cleanDay.watched = true;
+    for (const [key, entry] of Object.entries(day)) {
+      if (key === 'watched' || !entry || typeof entry !== 'object') continue;
+      if (entry.ids && typeof entry.ids === 'object' && !Array.isArray(entry.ids)) {
+        const ids = {};
+        for (const [id, h] of Object.entries(entry.ids)) {
+          if (typeof id === 'string' && id) ids[id] = typeof h === 'number' && h >= 0 && h <= 23 ? h : 0;
+        }
+        cleanDay[key] = { ids };
+      } else if (typeof entry.n === 'number' && Number.isFinite(entry.n) && entry.n >= 0) {
+        const hourly = new Array(24).fill(0);
+        if (Array.isArray(entry.hourly)) {
+          for (let i = 0; i < 24; i++) {
+            const v = entry.hourly[i];
+            if (typeof v === 'number' && Number.isFinite(v) && v >= 0) hourly[i] = v;
+          }
+        }
+        cleanDay[key] = { n: Math.floor(entry.n), hourly };
+      }
+    }
+    out.days[date] = cleanDay;
+  }
+  return out;
+}
+
+// Mark today as live-watched (the suite was polling during this calendar day),
+// even if the poll returned zero tasks.
+export function touchLedgerDay(ledger, dateISO) {
+  const day = (ledger.days[dateISO] = ledger.days[dateISO] || {});
+  day.watched = true;
+  return ledger;
+}
+
+function _hourlyFromRows(rows) {
+  const hourly = new Array(24).fill(0);
+  for (const r of rows) hourly[r.hour]++;
+  return hourly;
+}
+
+// Merge one category's fetched tasks into the ledger (mutates + returns it).
+// Idempotent per task ID. Past-day tasks (from a range fetch or the residual
+// open tasks of an old day) merge into that day's entry — they can only ever
+// ADD to what is remembered, never remove.
+export function mergeTasksIntoLedger(ledger, key, tasks, todayISO) {
+  const cutoff = _isoAddDays(todayISO, -SUB_LEDGER_RETAIN_DAYS);
+  const byDate = new Map();
+  for (const t of tasks || []) {
+    const id = t && t.id != null ? String(t.id) : '';
+    const date = taskDateISO(t && t.createdAt);
+    if (!id || !date || date < cutoff) continue;
+    if (!byDate.has(date)) byDate.set(date, []);
+    const h = taskHour(t.createdAt);
+    byDate.get(date).push({ id, hour: h != null && h >= 0 && h <= 23 ? h : 0 });
+  }
+  for (const [date, rows] of byDate) {
+    const day = (ledger.days[date] = ledger.days[date] || {});
+    const cur = day[key];
+    if (cur && typeof cur.n === 'number') {
+      // Already compacted (IDs discarded) — can only correct upward if the live
+      // view somehow shows more than was remembered.
+      if (rows.length > cur.n) {
+        cur.n = rows.length;
+        cur.hourly = _hourlyFromRows(rows);
+      }
+    } else {
+      const entry = cur && cur.ids ? cur : (day[key] = { ids: {} });
+      for (const r of rows) {
+        if (!(r.id in entry.ids)) entry.ids[r.id] = r.hour;
+      }
+    }
+  }
+  return ledger;
+}
+
+// Compact past days (IDs → counts, discarding the UUIDs) and drop days beyond
+// retention. Mutates + returns the ledger. Call on every write.
+export function compactLedger(ledger, todayISO) {
+  const cutoff = _isoAddDays(todayISO, -SUB_LEDGER_RETAIN_DAYS);
+  for (const [date, day] of Object.entries(ledger.days)) {
+    if (date < cutoff) {
+      delete ledger.days[date];
+      continue;
+    }
+    if (date >= todayISO) continue;
+    for (const [key, entry] of Object.entries(day)) {
+      if (key === 'watched' || !entry || !entry.ids) continue;
+      const rows = Object.entries(entry.ids).map(([id, hour]) => ({ id, hour }));
+      day[key] = { n: rows.length, hourly: _hourlyFromRows(rows) };
+    }
+  }
+  return ledger;
+}
+
+// Chart-ready series for one day: { [key]: { total, hourly[24], cumulative[24] } }.
+// Missing categories/days come back zero-filled.
+export function ledgerSeriesForDay(ledger, dateISO, keys) {
+  const day = (ledger && ledger.days && ledger.days[dateISO]) || {};
+  const out = {};
+  for (const key of keys) {
+    const entry = day[key];
+    let hourly = new Array(24).fill(0);
+    let total = 0;
+    if (entry && entry.ids) {
+      for (const h of Object.values(entry.ids)) hourly[h >= 0 && h <= 23 ? h : 0]++;
+      total = Object.keys(entry.ids).length;
+    } else if (entry && typeof entry.n === 'number') {
+      hourly = entry.hourly && entry.hourly.length === 24 ? entry.hourly.slice() : hourly;
+      total = entry.n;
+    }
+    let acc = 0;
+    const cumulative = hourly.map((v) => (acc += v));
+    out[key] = { total, hourly, cumulative };
+  }
+  return out;
+}
+
+// Per-day totals for a list of days: { [dateISO]: { [key]: n } }.
+export function ledgerCountsForDays(ledger, days, keys) {
+  const out = {};
+  for (const date of days) {
+    const series = ledgerSeriesForDay(ledger, date, keys);
+    out[date] = {};
+    for (const key of keys) out[date][key] = series[key].total;
+  }
+  return out;
+}
+
+// True when the suite was live-polling during that calendar day — counts for
+// unwatched days are the residual open tasks only (an undercount).
+export function ledgerDayWatched(ledger, dateISO) {
+  return !!(ledger && ledger.days && ledger.days[dateISO] && ledger.days[dateISO].watched);
+}
