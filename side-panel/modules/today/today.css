@@ -594,6 +594,16 @@
   border: 1px solid var(--red-line);
 }
 
+/* Data-health warning — the API returned suspect data (filter ignored /
+   truncated page); suite self-diagnosis, not a clinical alert. */
+.today-demand-datawarn {
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--amber);
+}
+
 /* Headroom meter — count's position against the amber/red thresholds.
    The tick marks the amber threshold; the fill colour is the current level. */
 .today-demand-meter {

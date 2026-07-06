@@ -7,7 +7,7 @@
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
 import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
 import { downloadCsv } from '../shared/export-util.js';
-import { DEFAULT_SUB_THRESHOLDS, getRagLevel } from './submissions-core.js';
+import { DEFAULT_SUB_THRESHOLDS, getRagLevel, windowTaskList } from './submissions-core.js';
 
 // ── Task types ────────────────────────────────────────────────────────────────
 
@@ -171,6 +171,7 @@ function renderShell() {
 
       <div id="modeControls" class="mode-controls-row"></div>
       <div id="subBanner" class="banner hidden"></div>
+      <div id="subDataHealth" class="sub-data-health hidden" role="status" aria-live="polite"></div>
       <div id="subAlertStrip" class="sub-alert-strip hidden" role="status" aria-live="assertive" aria-atomic="true"></div>
 
       <div id="subMetrics" class="sub-metrics"></div>
@@ -337,38 +338,41 @@ async function fetchAndRender(force = false) {
 }
 
 async function fetchDay(dateISO) {
-  // F8: Validate practice code before interpolating into the fetch URL.
-  if (!_isValidPracticeCode(state.config.practiceCode)) {
-    throw new Error('Invalid practice code format — cannot fetch');
-  }
-  const result = {};
-  await Promise.all(
-    TASK_TYPES.map(async (tt) => {
-      const url = `https://${state.config.practiceCode}.api.england.medicus.health/tasks/data/${tt.type}/task-list?createdAt_startDate=${dateISO}&createdAt_endDate=${dateISO}`;
-      const r = await fetch(url, { credentials: 'include' });
-      if (!r.ok) throw new Error(`${tt.label} HTTP ${r.status}`);
-      const d = await r.json();
-      result[tt.key] = d.tasks || [];
-    })
-  );
-  return result;
+  return fetchWindow(dateISO, dateISO);
 }
 
 async function fetchRange(startISO, endISO) {
+  return fetchWindow(startISO, endISO);
+}
+
+// Shared fetch for both day and range modes. Responses go through
+// windowTaskList (submissions-core.js) so a server-side change to the
+// createdAt_* filter or the response envelope shows up as a visible data-health
+// warning (`result._diag`, rendered by renderDataHealth) instead of silently
+// wrong counts — see the v3.35.2 postmortem in CHANGELOG.
+async function fetchWindow(startISO, endISO) {
   // F8: Validate practice code before interpolating into the fetch URL.
   if (!_isValidPracticeCode(state.config.practiceCode)) {
     throw new Error('Invalid practice code format — cannot fetch');
   }
   const result = {};
+  const diag = { filterIgnored: false, dropped: 0, truncated: false };
   await Promise.all(
     TASK_TYPES.map(async (tt) => {
       const url = `https://${state.config.practiceCode}.api.england.medicus.health/tasks/data/${tt.type}/task-list?createdAt_startDate=${startISO}&createdAt_endDate=${endISO}`;
       const r = await fetch(url, { credentials: 'include' });
       if (!r.ok) throw new Error(`${tt.label} HTTP ${r.status}`);
       const d = await r.json();
-      result[tt.key] = d.tasks || [];
+      const w = windowTaskList(d, startISO, endISO);
+      result[tt.key] = w.tasks;
+      if (w.filterIgnored) {
+        diag.filterIgnored = true;
+        diag.dropped += w.dropped;
+      }
+      if (w.truncated) diag.truncated = true;
     })
   );
+  result._diag = diag;
   return result;
 }
 
@@ -430,6 +434,7 @@ function downloadSubCsv() {
 function renderAll() {
   if (!container) return;
   updateTitles();
+  renderDataHealth();
   if (state.mode === 'today') renderToday();
   else if (state.mode === 'compare') renderCompare();
   else renderRange();
@@ -604,6 +609,40 @@ function renderMetrics(items) {
     </div>`;
     })
     .join('');
+}
+
+// Data-health notice — shown when windowTaskList detected the Medicus API
+// misbehaving (date filter ignored, or a truncated/paginated response). Wrong
+// numbers presented confidently are worse than no numbers: this tells the user
+// the counts are suspect and why, instead of letting a demand undercount pass
+// as a quiet Monday.
+function renderDataHealth() {
+  const el = container?.querySelector('#subDataHealth');
+  if (!el) return;
+  const diags = [state.data.primary?._diag, state.data.compare?._diag].filter(Boolean);
+  const filterIgnored = diags.some((d) => d.filterIgnored);
+  const truncated = diags.some((d) => d.truncated);
+  if (!filterIgnored && !truncated) {
+    el.className = 'sub-data-health hidden';
+    el.textContent = '';
+    return;
+  }
+  const dropped = diags.reduce((a, d) => a + (d.dropped || 0), 0);
+  const parts = [];
+  if (filterIgnored) {
+    parts.push(
+      `Medicus ignored the date filter on this request (${dropped} task${dropped === 1 ? '' : 's'} from other days excluded). ` +
+        `Counts show only tasks the API still returns for the selected period and are likely an UNDERCOUNT of work received — ` +
+        `completed items may be missing. The Medicus task-list API may have changed.`
+    );
+  }
+  if (truncated) {
+    parts.push('Medicus sent a partial page of tasks (server reports more than it returned) — counts may be low.');
+  }
+  el.className = 'sub-data-health';
+  el.innerHTML =
+    `<svg class="sub-alert-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>` +
+    `<span>Counts unreliable — ${parts.join(' ')}</span>`;
 }
 
 function renderAlertStrip() {

@@ -19,6 +19,7 @@
 import { buildHeadline } from './today-headline.js';
 import { hasEnabledRules, buildBreaches } from '../slots/slots-alert-core.js';
 import { isActionNeeded } from '../sweep/sweep-core.js';
+import { windowTaskList } from '../submissions/submissions-core.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -207,13 +208,24 @@ async function fetchDemand() {
         codeSource: source,
       }).then((r) => r.json()),
     ]);
-    const medical = medRes.status === 'fulfilled' ? (medRes.value.tasks || []).length : null;
-    const admin = admRes.status === 'fulfilled' ? (admRes.value.tasks || []).length : null;
+    // Route both responses through windowTaskList so a server-side change to
+    // the createdAt_* filter (silently ignored params → default open-task view)
+    // degrades to an honest count + visible warning, not a quietly wrong number.
+    const medW = medRes.status === 'fulfilled' ? windowTaskList(medRes.value, today, today) : null;
+    const admW = admRes.status === 'fulfilled' ? windowTaskList(admRes.value, today, today) : null;
+    const medical = medW ? medW.tasks.length : null;
+    const admin = admW ? admW.tasks.length : null;
+    const dataWarn =
+      medW?.filterIgnored || admW?.filterIgnored
+        ? 'Medicus ignored the date filter — counts may miss completed work'
+        : medW?.truncated || admW?.truncated
+          ? 'Medicus sent a partial task page — counts may be low'
+          : null;
     const error =
       medRes.status === 'rejected' || admRes.status === 'rejected'
         ? medRes.reason?.message || admRes.reason?.message || 'Fetch failed'
         : null;
-    _demandData = { medical, admin, thresholds, error };
+    _demandData = { medical, admin, thresholds, error, dataWarn };
   } catch (e) {
     _demandData = {
       medical: null,
@@ -463,7 +475,7 @@ function buildDemandBody() {
   if (!_demandData) return '<span class="today-loading">Loading…</span>';
   if (_demandData.noCode) return buildNoCodeMsg();
 
-  const { medical, admin, thresholds, error } = _demandData;
+  const { medical, admin, thresholds, error, dataWarn } = _demandData;
 
   if (error && medical == null && admin == null) {
     return errMsg(error);
@@ -496,6 +508,7 @@ function buildDemandBody() {
     : '';
 
   const errLine = error ? errMsgInline(error) : '';
+  const warnLine = dataWarn ? `<div class="today-demand-datawarn">⚠ ${dataWarn}</div>` : '';
 
   // Headroom meter — the card's altitude over the strip: the strip shows the
   // raw count, the meter shows where it sits against the amber/red thresholds.
@@ -530,6 +543,7 @@ function buildDemandBody() {
       ${admFlag}
     </div>
     ${meter('admin', admin)}
+    ${warnLine}
     ${errLine}
   `;
 }

@@ -3,7 +3,7 @@
 'use strict';
 
 import { createModuleLoader } from './module-loader.js';
-import { DEFAULT_SUB_THRESHOLDS, ragLevel } from './modules/submissions/submissions-core.js';
+import { DEFAULT_SUB_THRESHOLDS, ragLevel, windowTaskList } from './modules/submissions/submissions-core.js';
 import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
@@ -1554,7 +1554,10 @@ async function fetchAndRenderSubRagStrip() {
     return true;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // LOCAL calendar date, not toISOString() — UTC would query yesterday during
+  // the first BST hour of the day (same fix as condor's todayISO, v3.35.2).
+  const _now = new Date();
+  const today = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
   const results = await Promise.allSettled(
     SUB_RAG_TYPES.map(async (tt) => {
       const url = `https://${code}.api.england.medicus.health/tasks/data/${tt.apiType}/task-list?createdAt_startDate=${today}&createdAt_endDate=${today}`;
@@ -1563,7 +1566,9 @@ async function fetchAndRenderSubRagStrip() {
       const r = await window.ApiDiag.fetch({ module: 'panel-sub-rag-strip', url, code, codeSource: source });
       if (!r.ok) throw new Error(`${tt.label} HTTP ${r.status}`);
       const d = await r.json();
-      return { key: tt.key, label: tt.label, count: (d.tasks || []).length };
+      // windowTaskList: thresholds must fire on tasks CREATED today, even if
+      // the server-side createdAt filter is ever renamed/ignored upstream.
+      return { key: tt.key, label: tt.label, count: windowTaskList(d, today, today).tasks.length };
     })
   );
 

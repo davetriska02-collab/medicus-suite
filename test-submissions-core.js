@@ -23,7 +23,9 @@ const path = require('path');
   const corePath = new URL('side-panel/modules/submissions/submissions-core.js', `file://${path.resolve(__dirname)}/`)
     .href;
 
-  const { DEFAULT_SUB_THRESHOLDS, ragLevel, getRagLevel } = await import(corePath);
+  const { DEFAULT_SUB_THRESHOLDS, ragLevel, getRagLevel, extractTaskArray, taskDateISO, windowTaskList } = await import(
+    corePath
+  );
 
   // ── defaults ─────────────────────────────────────────────────────────────────
   console.log('--- DEFAULT_SUB_THRESHOLDS ---');
@@ -60,6 +62,67 @@ const path = require('path');
   check(getRagLevel('admin', 65, thresholds) === null, 'admin disabled → null regardless of count');
   check(getRagLevel('investigation', 999, thresholds) === null, 'unknown key → null (no threshold)');
   check(getRagLevel('medical', 10, null) === null, 'null thresholds map → null');
+
+  // ── extractTaskArray (envelope tolerance) ────────────────────────────────────
+  console.log('\n--- extractTaskArray ---');
+  const t1 = [{ id: 1 }];
+  check(extractTaskArray({ tasks: t1 }).length === 1, 'tasks key');
+  check(extractTaskArray({ data: t1 }).length === 1, 'data key');
+  check(extractTaskArray({ results: t1 }).length === 1, 'results key');
+  check(extractTaskArray({ rows: t1 }).length === 1, 'rows key');
+  check(extractTaskArray(t1).length === 1, 'bare array body');
+  check(extractTaskArray({ tasks: 'nope' }).length === 0, 'non-array tasks → []');
+  check(extractTaskArray(null).length === 0, 'null body → []');
+  check(extractTaskArray({}).length === 0, 'empty object → []');
+
+  // ── taskDateISO ──────────────────────────────────────────────────────────────
+  console.log('\n--- taskDateISO ---');
+  check(taskDateISO('2026-07-06T08:30:00Z') === '2026-07-06', 'ISO datetime → date');
+  check(taskDateISO('2026-07-06') === '2026-07-06', 'bare ISO date');
+  check(taskDateISO('06 Jul 2026 08:30') === '2026-07-06', 'legacy DD Mon YYYY');
+  check(taskDateISO('garbage') === null, 'garbage → null');
+  check(taskDateISO(null) === null, 'null → null');
+  check(taskDateISO(42) === null, 'non-string → null');
+
+  // ── windowTaskList ───────────────────────────────────────────────────────────
+  console.log('\n--- windowTaskList ---');
+  const D = '2026-07-06';
+  const mk = (dates) => ({ tasks: dates.map((d, i) => ({ id: i, createdAt: d })) });
+
+  // Healthy response: everything in-window → passthrough, no flags
+  let w = windowTaskList(mk(['2026-07-06T08:00:00Z', '2026-07-06T09:00:00Z']), D, D);
+  check(w.tasks.length === 2 && !w.filterIgnored && w.dropped === 0, 'in-window response passes through');
+
+  // Boundary tolerance: a ±1-day task (timezone skew) must NOT trip the alarm
+  w = windowTaskList(mk(['2026-07-05T23:30:00Z', '2026-07-06T08:00:00Z']), D, D);
+  check(!w.filterIgnored, 'previous-day boundary task (UTC skew) does not trip filterIgnored');
+  check(w.tasks.length === 2, 'boundary-tolerant response is not re-windowed');
+
+  // Filter ignored: clearly-out-of-window tasks trip the alarm AND get windowed out
+  w = windowTaskList(mk(['2026-06-01T10:00:00Z', '2026-07-06T08:00:00Z', '2026-07-04T10:00:00Z']), D, D);
+  check(w.filterIgnored === true, 'far-outside task trips filterIgnored');
+  check(w.tasks.length === 1 && w.tasks[0].createdAt.startsWith('2026-07-06'), 'ignored filter → strict re-window');
+  check(w.dropped === 2, 'dropped counts the excluded tasks');
+
+  // When re-windowing, unparseable dates are dropped (invisible to charts anyway)
+  w = windowTaskList(mk(['2026-06-01T10:00:00Z', 'garbage', '2026-07-06T08:00:00Z']), D, D);
+  check(w.tasks.length === 1, 'unparseable createdAt dropped when filter ignored');
+
+  // Range mode windows to [start, end]
+  w = windowTaskList(mk(['2026-06-01T10:00:00Z', '2026-07-02T10:00:00Z', '2026-07-04T10:00:00Z']), '2026-07-01', D);
+  check(w.filterIgnored && w.tasks.length === 2, 'range window keeps in-range, drops far-outside');
+
+  // Truncation detection via server-side totals
+  w = windowTaskList({ tasks: [{ id: 1, createdAt: '2026-07-06T08:00:00Z' }], totalCount: 40 }, D, D);
+  check(w.truncated === true && w.serverTotal === 40, 'totalCount > returned rows → truncated');
+  w = windowTaskList({ tasks: t1.map(() => ({ createdAt: '2026-07-06T08:00:00Z' })), totalCount: 1 }, D, D);
+  check(w.truncated === false, 'totalCount == returned rows → not truncated');
+  w = windowTaskList({ tasks: [], meta: { total: 12 } }, D, D);
+  check(w.truncated === true && w.serverTotal === 12, 'meta.total honoured');
+
+  // Envelope rename tolerated end-to-end
+  w = windowTaskList({ data: [{ createdAt: '2026-07-06T08:00:00Z' }] }, D, D);
+  check(w.tasks.length === 1, 'data-envelope response still counted');
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);

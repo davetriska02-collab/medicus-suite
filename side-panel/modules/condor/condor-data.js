@@ -1,11 +1,13 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 'use strict';
 
+import { windowTaskList } from '../submissions/submissions-core.js';
+
 function todayISO() {
   // Local calendar date (NOT UTC) — toISOString() would roll to the next/previous
   // day in the early/late hours and query the wrong day's tasks.
   const d = new Date();
-  const pad = n => String(n).padStart(2, '0');
+  const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
@@ -28,10 +30,10 @@ async function fetchSlotsAndWaitingRoom(base, hiddenTypes = new Set()) {
   // ── Waiting room (practice-wide) ───────────────────────────────────────────
   const wrAppointments = [];
 
-  (raw.staffSchedules || []).forEach(staff => {
+  (raw.staffSchedules || []).forEach((staff) => {
     const staffName = staff.name || 'Unknown';
-    (staff.schedule || []).forEach(session => {
-      (session.entries || []).forEach(entry => {
+    (staff.schedule || []).forEach((session) => {
+      (session.entries || []).forEach((entry) => {
         const entryType = entry.diaryEntryType?.value;
 
         if (entryType === 'slot') {
@@ -45,8 +47,13 @@ async function fetchSlotsAndWaitingRoom(base, hiddenTypes = new Set()) {
           const isAm = hour < 12;
           entries.push({ staff: staffName, type, startDateTime: entry.startDateTime || '' });
           if (!byStaff[staffName]) byStaff[staffName] = { amRemaining: 0, pmRemaining: 0 };
-          if (isAm) { byStaff[staffName].amRemaining++; amRemaining++; }
-          else      { byStaff[staffName].pmRemaining++; pmRemaining++; }
+          if (isAm) {
+            byStaff[staffName].amRemaining++;
+            amRemaining++;
+          } else {
+            byStaff[staffName].pmRemaining++;
+            pmRemaining++;
+          }
           return;
         }
 
@@ -55,22 +62,22 @@ async function fetchSlotsAndWaitingRoom(base, hiddenTypes = new Set()) {
           // Include arrived (in waiting room) and booked (upcoming) only.
           if (status !== 'arrived' && status !== 'booked') return;
           wrAppointments.push({
-            patientName:  entry.patient?.name || 'Unknown',
+            patientName: entry.patient?.name || 'Unknown',
             staffName,
-            start:        entry.startDateTime || '',
-            reason:       entry.compiledReasonForAppointment || '',
+            start: entry.startDateTime || '',
+            reason: entry.compiledReasonForAppointment || '',
             deliveryMode: entry.deliveryMode?.value || '',
-            isArrived:    status === 'arrived',
+            isArrived: status === 'arrived',
           });
         }
       });
     });
   });
 
-  const arrivedCount = wrAppointments.filter(a => a.isArrived).length;
+  const arrivedCount = wrAppointments.filter((a) => a.isArrived).length;
 
   return {
-    slots:       { entries, amRemaining, pmRemaining, totalRemaining: amRemaining + pmRemaining, byStaff },
+    slots: { entries, amRemaining, pmRemaining, totalRemaining: amRemaining + pmRemaining, byStaff },
     waitingRoom: { appointments: wrAppointments, arrivedCount },
   };
 }
@@ -78,34 +85,46 @@ async function fetchSlotsAndWaitingRoom(base, hiddenTypes = new Set()) {
 async function fetchSubmissions(base) {
   const today = todayISO();
   const TASK_TYPES = [
-    { key: 'medical',       apiType: 'medical_patient_request_task' },
-    { key: 'admin',         apiType: 'admin_patient_request_task' },
+    { key: 'medical', apiType: 'medical_patient_request_task' },
+    { key: 'admin', apiType: 'admin_patient_request_task' },
     { key: 'investigation', apiType: 'review_investigation_results_task' },
-    { key: 'rxRoutine',     apiType: 'prescription_request_task_routine' },
-    { key: 'rxNonRoutine',  apiType: 'prescription_request_task_non_routine' },
+    { key: 'rxRoutine', apiType: 'prescription_request_task_routine' },
+    { key: 'rxNonRoutine', apiType: 'prescription_request_task_non_routine' },
   ];
 
-  const results = await Promise.allSettled(TASK_TYPES.map(async tt => {
-    // The task-list endpoint filters by `createdAt_startDate` / `createdAt_endDate`.
-    // Using plain `startDate` / `endDate` is silently ignored and returns the entire
-    // open-task backlog — which is what inflated demand/velocity/PPI to tens of thousands.
-    const url = `${base}/tasks/data/${tt.apiType}/task-list?createdAt_startDate=${today}&createdAt_endDate=${today}`;
-    const r = await fetch(url, { credentials: 'include' });
-    if (!r.ok) throw new Error(`${tt.key} HTTP ${r.status}`);
-    const d = await r.json();
-    return { key: tt.key, tasks: d.tasks || [] };
-  }));
+  const results = await Promise.allSettled(
+    TASK_TYPES.map(async (tt) => {
+      // The task-list endpoint filters by `createdAt_startDate` / `createdAt_endDate`.
+      // Using plain `startDate` / `endDate` is silently ignored and returns the entire
+      // open-task backlog — which is what inflated demand/velocity/PPI to tens of thousands.
+      const url = `${base}/tasks/data/${tt.apiType}/task-list?createdAt_startDate=${today}&createdAt_endDate=${today}`;
+      const r = await fetch(url, { credentials: 'include' });
+      if (!r.ok) throw new Error(`${tt.key} HTTP ${r.status}`);
+      const d = await r.json();
+      // windowTaskList guards demand/velocity/PPI against the server ignoring the
+      // createdAt_* filter (the v3.35.2 failure class, in either direction).
+      const w = windowTaskList(d, today, today);
+      return { key: tt.key, tasks: w.tasks, filterIgnored: w.filterIgnored };
+    })
+  );
 
   const byHour = Array.from({ length: 24 }, (_, i) => ({
-    hour: i, medical: 0, admin: 0, rxRoutine: 0, rxNonRoutine: 0, investigation: 0,
+    hour: i,
+    medical: 0,
+    admin: 0,
+    rxRoutine: 0,
+    rxNonRoutine: 0,
+    investigation: 0,
   }));
   const totals = { medical: 0, admin: 0, rxRoutine: 0, rxNonRoutine: 0, investigation: 0, all: 0 };
   const tasks = [];
+  let filterIgnored = false;
 
-  results.forEach(res => {
+  results.forEach((res) => {
     if (res.status !== 'fulfilled') return;
     const { key, tasks: ts } = res.value;
-    ts.forEach(t => {
+    if (res.value.filterIgnored) filterIgnored = true;
+    ts.forEach((t) => {
       const hourOfDay = new Date(t.createdAt).getHours();
       tasks.push({ id: t.id, type: key, createdAt: t.createdAt, hourOfDay });
       if (byHour[hourOfDay]) byHour[hourOfDay][key] = (byHour[hourOfDay][key] || 0) + 1;
@@ -114,7 +133,7 @@ async function fetchSubmissions(base) {
     });
   });
 
-  return { tasks, totals, byHour };
+  return { tasks, totals, byHour, filterIgnored };
 }
 
 // Build the request-monitor stream from the cached poll state written by the
@@ -139,25 +158,25 @@ export function buildRequestMonitorFromState(state) {
   const now = Date.now();
   const items = [];
   for (const bucket of Object.values(state.buckets || {})) {
-    for (const t of (bucket?.items || [])) {
+    for (const t of bucket?.items || []) {
       items.push({
-        id:        t.id,
-        patient:   t.patient || '',
-        summary:   t.summary || '',
-        priority:  t.priority || '',
+        id: t.id,
+        patient: t.patient || '',
+        summary: t.summary || '',
+        priority: t.priority || '',
         createdAt: t.createdAt,
-        ageMs:     now - new Date(t.createdAt).getTime(),
+        ageMs: now - new Date(t.createdAt).getTime(),
       });
     }
   }
 
-  const urgentCount = items.filter(i => /urgent/i.test(i.priority)).length;
+  const urgentCount = items.filter((i) => /urgent/i.test(i.priority)).length;
   const byAgeBucket = { lt1h: 0, h1to4: 0, h4to8: 0, gt8h: 0 };
-  items.forEach(i => {
-    if      (i.ageMs < 3600000)   byAgeBucket.lt1h++;
-    else if (i.ageMs < 14400000)  byAgeBucket.h1to4++;
-    else if (i.ageMs < 28800000)  byAgeBucket.h4to8++;
-    else                          byAgeBucket.gt8h++;
+  items.forEach((i) => {
+    if (i.ageMs < 3600000) byAgeBucket.lt1h++;
+    else if (i.ageMs < 14400000) byAgeBucket.h1to4++;
+    else if (i.ageMs < 28800000) byAgeBucket.h4to8++;
+    else byAgeBucket.gt8h++;
   });
 
   return { items, urgentCount, totalCount: items.length, byAgeBucket, lastPoll: state.lastPoll };
@@ -171,21 +190,21 @@ async function fetchActivity(base) {
   const d = await r.json();
 
   const totals = { consultations: 0, routineRx: 0, nonRoutineRx: 0, reviews: 0, documents: 0, results: 0, all: 0 };
-  const rows = (d.rowData || []).map(row => {
+  const rows = (d.rowData || []).map((row) => {
     const consultations = row.consultations || 0;
-    const routineRx     = row.routinePrescriptionRequestTasks || 0;
-    const nonRoutineRx  = row.nonRoutinePrescriptionRequestTasks || 0;
-    const reviews       = row.medicationReviews || 0;
-    const documents     = row.documentTasks || 0;
-    const results       = row.investigationReportTasks || 0;
-    const total         = consultations + routineRx + nonRoutineRx + reviews + documents + results;
+    const routineRx = row.routinePrescriptionRequestTasks || 0;
+    const nonRoutineRx = row.nonRoutinePrescriptionRequestTasks || 0;
+    const reviews = row.medicationReviews || 0;
+    const documents = row.documentTasks || 0;
+    const results = row.investigationReportTasks || 0;
+    const total = consultations + routineRx + nonRoutineRx + reviews + documents + results;
     totals.consultations += consultations;
-    totals.routineRx     += routineRx;
-    totals.nonRoutineRx  += nonRoutineRx;
-    totals.reviews       += reviews;
-    totals.documents     += documents;
-    totals.results       += results;
-    totals.all           += total;
+    totals.routineRx += routineRx;
+    totals.nonRoutineRx += nonRoutineRx;
+    totals.reviews += reviews;
+    totals.documents += documents;
+    totals.results += results;
+    totals.all += total;
     return { name: row.name || 'Unknown', consultations, routineRx, nonRoutineRx, reviews, documents, results, total };
   });
 
@@ -193,23 +212,23 @@ async function fetchActivity(base) {
 }
 
 function computeCapacityPreset(storage, slotsData) {
-  const presets  = storage['capacity.presets'];
+  const presets = storage['capacity.presets'];
   const activeId = storage['capacity.activePresetId'];
   if (!presets || !activeId) return null;
 
-  const preset = (Array.isArray(presets) ? presets : Object.values(presets)).find(p => p.id === activeId);
+  const preset = (Array.isArray(presets) ? presets : Object.values(presets)).find((p) => p.id === activeId);
   if (!preset?.minimumByDay) return null;
 
-  const dayKey    = ['sun','mon','tue','wed','thu','fri','sat'][new Date().getDay()];
-  const minimum   = preset.minimumByDay[dayKey] ?? 0;
+  const dayKey = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date().getDay()];
+  const minimum = preset.minimumByDay[dayKey] ?? 0;
   const remaining = slotsData?.totalRemaining ?? 0;
 
   let status;
-  if (remaining === 0)                  status = 'closed';
-  else if (minimum === 0)               status = 'sufficient';
-  else if (remaining / minimum < 0.5)  status = 'low';
+  if (remaining === 0) status = 'closed';
+  else if (minimum === 0) status = 'sufficient';
+  else if (remaining / minimum < 0.5) status = 'low';
   else if (remaining / minimum < 0.75) status = 'tight';
-  else                                  status = 'sufficient';
+  else status = 'sufficient';
 
   return { minimum, status };
 }
@@ -226,7 +245,7 @@ export async function fetchAllStreams() {
   ];
 
   const storage = await chrome.storage.local.get(storageKeys);
-  const siteId  = storage['suite.practiceCode'] || null;
+  const siteId = storage['suite.practiceCode'] || null;
   const hiddenTypes = new Set(storage['slots.hiddenTypes'] || []);
   const fetchErrors = [];
 
@@ -244,8 +263,8 @@ export async function fetchAllStreams() {
   }
 
   const base = `https://${siteId}.api.england.medicus.health`;
-  const rmConfig  = {
-    enabled:    storage['suite.requestMonitor.enabled'],
+  const rmConfig = {
+    enabled: storage['suite.requestMonitor.enabled'],
     assigneeId: storage['suite.requestMonitor.assigneeId'],
   };
   const rmEnabled = rmConfig.enabled && rmConfig.assigneeId;
@@ -256,9 +275,10 @@ export async function fetchAllStreams() {
     fetchActivity(base),
   ]);
 
-  const slots       = slotsAndWrRes.status === 'fulfilled' ? slotsAndWrRes.value.slots       : null;
-  const waitingRoom = slotsAndWrRes.status === 'fulfilled' ? slotsAndWrRes.value.waitingRoom  : null;
-  if (slotsAndWrRes.status === 'rejected') fetchErrors.push(`slots: ${slotsAndWrRes.reason?.message || slotsAndWrRes.reason}`);
+  const slots = slotsAndWrRes.status === 'fulfilled' ? slotsAndWrRes.value.slots : null;
+  const waitingRoom = slotsAndWrRes.status === 'fulfilled' ? slotsAndWrRes.value.waitingRoom : null;
+  if (slotsAndWrRes.status === 'rejected')
+    fetchErrors.push(`slots: ${slotsAndWrRes.reason?.message || slotsAndWrRes.reason}`);
 
   const submissions = subRes.status === 'fulfilled' ? subRes.value : null;
   if (subRes.status === 'rejected') fetchErrors.push(`submissions: ${subRes.reason?.message || subRes.reason}`);
