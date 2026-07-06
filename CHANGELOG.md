@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.153.1] — 2026-07-06
+
+### Fix: "Publish to shared folder" failing with "leafletsExport is not defined"
+
+`shared/leaflets-utils.js` and `shared/io/leaflets-io.js` are both loaded as
+classic `<script>` tags on the options page and so share one global scope.
+Both declared top-level `const SLUG_RE` and `const RECENT_MAX` — the second
+declaration threw `SyntaxError: Identifier 'SLUG_RE' has already been
+declared`, which silently aborted all of `leaflets-io.js`. That left
+`leafletsExport`/`leafletsImport` undefined, so any full-suite export
+(including Backup & Restore → Publish to shared folder) failed. `require()`
+in `test-leaflets-io.js` never caught it, since CommonJS gives each file its
+own module scope.
+
+- Renamed `leaflets-io.js`'s internal constants to `LEAFLETS_IO_SLUG_RE` /
+  `LEAFLETS_IO_RECENT_MAX` so they can't collide with `leaflets-utils.js` (or
+  anything else) loaded on the same page
+- No behaviour change to the export/import contract; `test-leaflets-io.js`
+  unaffected
+
 ## [v3.153.0] — 2026-07-06
 
 ### Fixed: Submissions "work received" counts no longer erode as the team completes work (day ledger)
