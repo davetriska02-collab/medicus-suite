@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.154.3] — 2026-07-07
+
+### Fixed: record sections empty on slow loads ("card not found: Observations & Results")
+
+Reported via console warning on a live care-record page where the card list
+showed 'Observations & Results' clearly present. Root cause is a one-shot
+extraction race, not a Medicus rename: pageReady() passes as soon as the
+patient banner or FIRST record card renders, extractAll() runs once, and
+Medicus lazy-renders the lower cards afterwards — the route watcher's
+250ms/1200ms reruns can both land too early on a slow load, leaving those
+sections empty for the whole page visit.
+
+New late-card settle-watch in `content-scripts/triage-lens/content.js`: when
+an extraction pass reports expected-but-absent cards (`_missingCards`), the
+lens polls cheaply (500ms) for up to 12s and re-extracts as soon as any of
+them appears. Applies to record AND detail pages; self-terminates on deadline
+or completion; disarmed on SPA route change. The once-per-load
+"card not found" warning still fires if a card genuinely never renders.
+
 ## [v3.154.2] — 2026-07-07
 
 ### Fixed: health-strip false positive — patient-UUID fallback probe fired on patient-less pages
