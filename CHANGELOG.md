@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.154.2] — 2026-07-07
+
+### Fixed: health-strip false positive — patient-UUID fallback probe fired on patient-less pages
+
+Root cause of the "Medicus may have changed — Patient UUID resolution" strip
+found via live-DOM capture: the contract is only probed on pages whose URL
+resolves no id, which includes patient-LESS screens like the appointment book
+and dashboards. A diary grid has no patient links, so the probe FAILed there
+and two spaced visits promoted to a 'degraded' banner while nothing was
+broken. (The capture also confirmed the data-attribute strategy matches
+nothing on current Medicus — the link strategies `/care-record/{uuid}` /
+`/patient/{uuid}` still work and carry the feature.)
+
+- **Applicability gate** (`anchorHrefRe` on the contract, honoured by
+  `DomContracts.probeContract`): if no anchor href on the page carries a bare
+  UUID, there is no patient-resolution evidence to test — the round reads
+  `not_applicable`, never FAIL. UUID-bearing links that match neither shape
+  still FAIL (genuine URL-shape drift stays detectable).
+- **State epochs** (`stateEpoch` on the contract; `applyStateEpochs` /
+  `stampStateEpochs` in contract-canary.js): stored verdicts issued under the
+  old probe semantics are discarded on the next probe round, so the existing
+  false-positive 'degraded' clears itself on the next Medicus visit — no
+  manual dismiss needed.
+- Tour: 'header-controls' step extended to lead with the v3.154.0
+  quick-leaflet button and retagged (TOUR_VERSION 9 → 10) so returning users
+  get a "What's new" pass showing where it lives — shipped and immediately
+  missed by its own requester, so it earns the spotlight.
+
+Tests: probe-gate semantics (patient-less page → not_applicable; UUID links +
+selector miss → FAIL) and epoch discard/stamp covered in
+test-dom-contracts.js / test-contract-canary.js.
+
 ## [v3.154.1] — 2026-07-07
 
 ### Suite-health strip: acknowledge/dismiss (7-day snooze per degradation set)
