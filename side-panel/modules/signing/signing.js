@@ -40,6 +40,7 @@ import {
   rowMatchesLocationFilter,
   filterHiddenSummary,
   isDispensaryLocation,
+  emptyStateKind,
   RENAL_STALE_DAYS,
   ROW_STATE,
   CHIP_STATUS_TEXT,
@@ -481,7 +482,16 @@ function renderList() {
     return;
   }
   if (state.rows.length === 0) {
-    list.innerHTML = '<div class="sg-empty">No open repeat requests for the selected types.</div>';
+    // Practice-panel "clear state" ruling (2026-07-07): one fixed line of warm,
+    // static text — but ONLY when the pile is genuinely finished (every task
+    // type selected, no filter). A narrowed view keeps the neutral wording:
+    // warmth on a false all-clear is worse than no warmth at all.
+    const allTypes = TASK_TYPES.every((tt) => state.types[tt.key]);
+    const kind = emptyStateKind(0, allTypes, state.locationFilter.size > 0);
+    list.innerHTML =
+      kind === 'done'
+        ? '<div class="sg-empty sg-empty--done"><span class="sg-empty-tick" aria-hidden="true">&#10003;</span> Pile&rsquo;s clear &mdash; nothing waiting on you.</div>'
+        : '<div class="sg-empty">No open repeat requests for the selected types.</div>';
     renderMore(0);
     return;
   }

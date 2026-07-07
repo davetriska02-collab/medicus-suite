@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.158.0
+**Version:** v3.159.0
 **Generated:** 2026-07-06 (automated)
 
 ## What it is
@@ -113,6 +113,8 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.159.0 (2026-07-07)** — One warm line on the genuinely finished signing pile (“✓ Pile’s clear — nothing waiting on you.”) — panel-vetted: static text, no emoji, no animation, and never shown when filters merely hide requests.
 
 - **v3.158.0 (2026-07-07)** — Signing gains location filter pills with counts (“Dispensary 6 · No location 3”, hidden red flags always called out) and glanceable collection glyphs after the name; Monitoring gains Sweep’s “Create task” button for the open patient — one explicit confirm, Medicus’s own task workflow.
 

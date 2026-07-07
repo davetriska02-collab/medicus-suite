@@ -292,3 +292,22 @@
   padding: 0 2px;
   text-decoration: underline;
 }
+
+/* Genuinely-finished pile — the panel's one warm line. Static text, sentence
+   case, muted green tick reusing the suite's existing ✓ language. Deliberately
+   NO animation, NO emoji, NO rotation (Practice-panel ruling 2026-07-07 — the
+   restraint is the point; if you are tempted to animate this, reread the
+   appraisal doc first). Only rendered by emptyStateKind === 'done'. */
+.sg-empty--done {
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text-2);
+}
+
+.sg-empty-tick {
+  color: var(--green);
+  font-weight: 700;
+  margin-right: 4px;
+}

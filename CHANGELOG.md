@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.159.0] — 2026-07-07
+
+### Signing Queue: one warm line on the genuinely finished pile
+
+The maintainer asked for "a smiley face or something" on clear states; a
+scoped Practice-panel run (docs/appraisal/PRACTICE-clear-state-2026-07-07.md)
+unanimously rejected the smiley — including the consumer-savvy persona — and
+converged on one fixed line of warm, static text instead. Shipped as ruled:
+
+- Signing Queue's empty state now reads **"✓ Pile's clear — nothing waiting
+  on you."** (muted-green tick, sentence case) — acknowledgement and
+  permission to stop, not celebration. No emoji, no animation, no rotating
+  copy, no sound; identical every day so it fades into competence.
+- **Only when genuinely finished** (`emptyStateKind` in signing-core.js,
+  tested): every task type ticked and no location filter active. A narrowed
+  view keeps the neutral "No open repeat requests for the selected types." —
+  warmth on a false all-clear is worse than no warmth at all.
+- Doctrine recorded in the appraisal doc: delight attaches to finished WORK,
+  never to absence of clinical alerts, and never near a caveat.
+
 ## [v3.158.0] — 2026-07-07
 
 ### Signing Queue: location filter pills + glance glyphs (panel-appraised, user-placed)
