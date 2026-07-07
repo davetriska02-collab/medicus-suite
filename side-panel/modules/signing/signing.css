@@ -1,0 +1,174 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Signing Queue module */
+
+/* Honest-state line — fixed, not dismissable; part of the surface's contract. */
+.sg-honest {
+  margin: 4px 0 10px;
+  padding: 7px 10px;
+  border-radius: var(--r-md);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+}
+
+.sg-controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.sg-type-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.sg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sg-empty {
+  padding: 24px 0;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
+.sg-row {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+}
+
+.sg-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.sg-patient {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.sg-dob {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-4);
+}
+
+.sg-summary {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.sg-verdicts {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.sg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.sg-chip--red {
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+  color: var(--red);
+}
+
+.sg-chip--amber {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+}
+
+/* The loudest signal: the flagged drug appears in the request itself. */
+.sg-chip--requested {
+  outline: 2px solid var(--red-line);
+  outline-offset: 1px;
+}
+
+.sg-chip-req {
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 4px;
+  border-radius: var(--r-sm);
+  background: var(--red);
+  color: var(--bg-elev);
+}
+
+.sg-status {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.sg-status--pending {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-4);
+}
+
+.sg-status--error {
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.sg-status--clear {
+  color: var(--text-3);
+}
+
+.sg-clear-caveat {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  margin-left: 4px;
+}
+
+.sg-meta {
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-4);
+}
+
+.sg-meta-high {
+  color: var(--red);
+  font-weight: 700;
+}
+
+.sg-more-btn {
+  margin-top: 10px;
+  width: 100%;
+}

@@ -125,6 +125,7 @@ const MODULES = {
   condor: { js: () => import('./modules/condor/condor.js'), css: './modules/condor/condor.css' },
   trends: { js: () => import('./modules/trends/trends.js'), css: './modules/trends/trends.css' },
   reception: { js: () => import('./modules/reception/reception.js'), css: './modules/reception/reception.css' },
+  signing: { js: () => import('./modules/signing/signing.js'), css: './modules/signing/signing.css' },
   sweep: { js: () => import('./modules/sweep/sweep.js'), css: './modules/sweep/sweep.css' },
   knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
   leaflets: { js: () => import('./modules/leaflets/leaflets.js'), css: './modules/leaflets/leaflets.css' },
