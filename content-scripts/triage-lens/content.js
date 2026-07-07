@@ -2906,6 +2906,7 @@
     restorePosition(hudEl);
     enableDrag(hudEl);
     runMonitoringChip();
+    armLateCardWatch('record', false, data._missingCards);
     log('record rendered', { data, signals });
   };
 
@@ -2915,6 +2916,7 @@
     // request/communication task expect different cards).
     const docTask = isDocumentTask();
     const data = extractAll('detail', docTask);
+    armLateCardWatch('detail', docTask, data._missingCards);
     const signals = computeSignals(data);
 
     const docInfo = docTask ? extractDocumentTaskInfo() : null;
@@ -3599,6 +3601,53 @@
     setupQueueObserver();
     scheduleQueueMonitoring();
     scheduleQueueResultTriage();
+  };
+
+  // ---- Late-card settle-watch (record/detail extraction race) ----
+  // Medicus lazy-renders the lower record cards ('Observations & Results',
+  // 'Documents & Consultations') AFTER pageReady()'s first-card/banner signal,
+  // and the route watcher's 250ms/1200ms reruns can both land too early on a
+  // slow load — leaving those sections empty for the whole page visit (the
+  // findCardByTitle once-per-load warning is this race being reported). When an
+  // extraction pass reports expected-but-absent cards (_missingCards), poll
+  // cheaply for up to 12s and re-extract as soon as any of them appears. The
+  // watch self-terminates (deadline, or nothing missing) and is disarmed on
+  // route change.
+  let _lateCardTimer = null;
+  let _lateCardKey = '';
+  let _lateCardDeadline = 0;
+  const LATE_CARD_POLL_MS = 500;
+  const LATE_CARD_WINDOW_MS = 12000;
+
+  const disarmLateCardWatch = () => {
+    if (_lateCardTimer) clearTimeout(_lateCardTimer);
+    _lateCardTimer = null;
+    _lateCardKey = '';
+  };
+
+  const armLateCardWatch = (pageTypeVal, isDocTask, missing) => {
+    if (!missing || missing.length === 0) {
+      disarmLateCardWatch();
+      return;
+    }
+    const key = location.href + '|' + missing.join(',');
+    if (_lateCardTimer && key === _lateCardKey) return; // already watching this exact state
+    disarmLateCardWatch();
+    _lateCardKey = key;
+    _lateCardDeadline = Date.now() + LATE_CARD_WINDOW_MS;
+    const tick = () => {
+      _lateCardTimer = null;
+      if (Date.now() > _lateCardDeadline) return; // give up — matches old behaviour
+      const nowMissing = computeMissingCards(pageTypeVal, isDocTask);
+      if (nowMissing.length < missing.length) {
+        // A late card landed — re-extract. The rerun re-arms with the smaller
+        // set if anything is still missing (new key, so the guard above passes).
+        run(true);
+        return;
+      }
+      _lateCardTimer = setTimeout(tick, LATE_CARD_POLL_MS);
+    };
+    _lateCardTimer = setTimeout(tick, LATE_CARD_POLL_MS);
   };
 
   const run = (force = false) => {
@@ -6599,8 +6648,10 @@
       clearTimeout(pending);
       clearTimeout(pendingSlow);
       // New page load (SPA navigation) — let findCardByTitle warn again if the
-      // same title is still missing on THIS page (item 1.1).
+      // same title is still missing on THIS page (item 1.1), and drop any
+      // settle-watch armed for the page we just left.
       _cardMissWarned.clear();
+      disarmLateCardWatch();
       pending = setTimeout(() => run(true), 250);
       pendingSlow = setTimeout(() => run(true), 1200);
     };
