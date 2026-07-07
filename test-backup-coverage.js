@@ -304,6 +304,13 @@ const ALLOWLIST = new Set([
   // machine (or a fresh install) must NOT silently suppress that machine's
   // own health warning, so it is never backed up:
   'health.stripSnooze',
+
+  // Follow-ups ledger (v3.160.0): personal safety-net reminders carrying
+  // patient-identifiable free text + patient UUIDs. Machine-local BY DESIGN
+  // (same doctrine as ledger.events): backups are configuration only, never
+  // patient-identifiable data, and restoring stale patient reminders onto
+  // another machine would surface them out of context. Never backed up:
+  'followups.entries',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

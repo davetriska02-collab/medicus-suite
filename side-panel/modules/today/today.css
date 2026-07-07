@@ -50,6 +50,41 @@
   font-weight: 500;
 }
 
+/* ── Follow-ups line ─────────────────────────────────────────────────────────── */
+/* One compact click-through line for the personal safety-net ledger; hidden
+   entirely when the ledger has no open entries (no noise for non-users). */
+
+.today-followups {
+  display: block;
+  width: calc(100% - 20px);
+  text-align: left;
+  margin: 6px 10px 0;
+  padding: 6px 10px;
+  border-radius: var(--r-md);
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--bg-elev);
+  border: 1px dashed var(--border-hi);
+  cursor: pointer;
+}
+.today-followups:hover {
+  border-color: var(--accent-line);
+}
+.today-followups.hidden {
+  display: none;
+}
+.today-followups--red {
+  color: var(--red);
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+}
+.today-followups--amber {
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+}
+
 /* ── Card ────────────────────────────────────────────────────────────────────── */
 
 .today-card {

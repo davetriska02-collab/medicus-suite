@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.159.0
-**Generated:** 2026-07-06 (automated)
+**Version:** v3.160.0
+**Generated:** 2026-07-07 (automated)
 
 ## What it is
 
@@ -9,7 +9,7 @@ Medicus Suite is a Chrome browser extension for UK GP practices that runs alongs
 
 ## At a glance
 
-- 15 side-panel modules covering monitoring, demand, capacity, workflow, knowledge and the live patient record
+- 16 side-panel modules covering monitoring, demand, capacity, workflow, knowledge and the live patient record
 - 8 in-page content-script features (queue overlays, workflow buttons and relays) plus 2 full-tab generated reports
 - 7 rule types in the alert engine
 - 27 drug-monitoring rules, 65 QOF register/indicator rules, 5 vaccine rules, 44 investigation-result rules, and 26 starter alerts in the prescribing-safety library
@@ -39,6 +39,10 @@ Daily inbound task counts — medical, admin, investigations, prescriptions — 
 ### Signing Queue
 
 Every open repeat-prescription request shown with the requesting patient's recorded drug-monitoring currency alongside — the same engine checks as Monitoring and Sweep — sorted riskiest first, with the loudest flag when the requested drug is itself the one overdue, the latest recorded eGFR (with its age) on every checked row, and each request's collection route at a glance (house glyph = practice dispensary, Rx glyph = community pharmacy) with location filter pills and counts — hidden red flags always called out. Display only: "no flag" is explicitly not an all-clear, records that could not be read sort above quiet rows, and authorisation happens only in Medicus.
+
+### Follow-ups
+
+A personal safety-net ledger: the things a clinician is waiting on — a pending result, a call-back — logged with a due date and resurfaced when the date passes, on the tab and as a line on Today. Reminders can be linked to the open patient from the Monitoring tab (with the same wrong-patient guards as task creation) or added as unlinked notes. Stored on this machine only, excluded from backups, never written to the record, and never acts by itself — it does not replace safety-netting documented in Medicus.
 
 ### Activity Report
 
@@ -113,6 +117,8 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.160.0 (2026-07-07)** — New Follow-ups tab: a personal safety-net ledger ("MSU pending — chase Friday") resurfaced when due, with patient-linked capture from Monitoring and an overdue line on Today. Machine-local, excluded from backups, never acts by itself.
 
 - **v3.159.0 (2026-07-07)** — One warm line on the genuinely finished signing pile (“✓ Pile’s clear — nothing waiting on you.”) — panel-vetted: static text, no emoji, no animation, and never shown when filters merely hide requests.
 

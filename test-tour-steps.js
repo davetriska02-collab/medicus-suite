@@ -39,6 +39,10 @@ const NAV_COVERED_BY_OVERVIEW = new Set([
   // header is self-explanatory and tab-help carries the first-step guidance.
   // Revisit for a dedicated step when the cap is next re-balanced.
   'signing',
+  // followups (v3.160.0): same 20-step-cap decision as signing — the tab is
+  // a single add-form + list with a fixed honest-state header, and tab-help
+  // carries the first-step guidance. Revisit with the next cap re-balance.
+  'followups',
   'trends',
   'capacity',
   'submissions',

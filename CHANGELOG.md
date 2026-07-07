@@ -2,6 +2,37 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.160.0] — 2026-07-07
+
+### New Follow-ups tab: the personal safety-net ledger
+
+The strongest convergence of the 2026-07-07 Practice dream-feature panel
+(docs/appraisal/PRACTICE-dream-features-2026-07-07.md, item D1 — 7 of 10
+personas independently asked for loop-closure memory): the things a clinician
+is waiting on — "MSU pending, chase Friday" — held locally and resurfaced when
+the due date passes, instead of living in their head all week.
+
+- **Follow-ups tab** (`side-panel/modules/followups/`): add what you're
+  waiting for with a due date; entries band as waiting → due soon → due today
+  → **overdue** (lapsed is the loudest state — the broken chain IS the
+  product), sorted most-lapsed first. Done entries keep a struck-through
+  30-day trail, then auto-prune.
+- **Add from Monitoring**: an "Add follow-up reminder" action on the open
+  patient (overflow menu) creates a patient-linked entry — UUID captured from
+  the record context with the same open/submit wrong-patient re-check as the
+  create-task form. Entries added on the tab itself are explicitly labelled
+  "unlinked note"; a typed name is never treated as identity.
+- **Today line**: "Follow-ups: 2 overdue · 1 due today" under the headline —
+  red when anything has lapsed, hidden entirely when the ledger is empty.
+- **Honest state, fixed**: the ledger is a personal reminder list on this
+  machine only — not the clinical record, never a safety-netting system of
+  record, and nothing in it acts by itself. Stated permanently on the tab and
+  at the point of capture. Patient-identifiable by nature, so the store is
+  **excluded from suite backups** (machine-local by design, enforced by the
+  backup-coverage test) and open entries are **never silently pruned**
+  (regression-tested). Ledger writes are audited to the event ledger by
+  patient UUID. Hazard log: **H-039**.
+
 ## [v3.159.0] — 2026-07-07
 
 ### Signing Queue: one warm line on the genuinely finished pile
