@@ -2,6 +2,47 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.155.0] — 2026-07-07
+
+### New: Signing Queue — the repeat-prescription pile with monitoring context
+
+The wishlist's top remaining GP minutes-saver (Tom's "safe to sign", 2026-07-03
+appraisal §3b), built to fit the frozen intended-purpose statement: the module
+DISPLAYS recorded monitoring next to each open request and deliberately never
+renders a verdict — no "safe", no ticks, no green. Hazard log: **H-038**.
+
+**What it does.** New Signing tab (panel + pop-out; in the GP role preset)
+lists every open prescription-request task (routine by default; non-routine
+toggleable — the endpoint's open-task view is exactly the outstanding pile),
+resolves each to its patient via the task-overview endpoint
+(`SentinelApiClient.resolveTaskToPatient` — the same panel-proven path
+booking-api uses), runs the patient through the identical monitoring pipeline
+Sweep uses (`fetchAll → normaliseAll → evaluatePatient`, drug rules +
+practice org/custom overlays, sequential with 250ms pacing, 30-patient
+batches with "Check next"), and shows the verdict chips on each request:
+
+- **red** — any monitored drug overdue / stale / no data;
+- **amber** — due soon;
+- **"requested" tag** — the loudest signal: the flagged drug appears in the
+  request text itself (a lithium request while the lithium level is overdue);
+- rows sort riskiest-first, with **unknown above quiet**: a record that could
+  not be read is an amber "check manually" row ranked above "no monitoring
+  flags recorded" — an incomplete read can never masquerade as an all-clear;
+- "no monitoring flags recorded" carries a permanent "≠ all clear" caveat and
+  the header's fixed honest-state line; multiple requests from one patient
+  share a single record fetch.
+
+**Safety framing.** Read-only (no write path exists in the module);
+authorisation happens only in Medicus. Nothing persisted — verdicts are
+in-memory; the only storage is the type-toggle UI pref via shared ui-state.
+New hazard H-038 (automation bias on this surface) with controls documented.
+
+Files: `side-panel/modules/signing/{signing.js,signing-core.js,signing.css}`
+(new), nav/registry entries in `panel.html`, `pop-out/pop-out.html`,
+`panel.js`, `pop-out.js`, `tab-catalog.js` (+ GP preset), tab-help entry.
+Tests: `test-signing-core.js` (30 checks: verdict reduction, requested-drug
+matching, risk-band sorting, patient grouping, request age).
+
 ## [v3.154.3] — 2026-07-07
 
 ### Fixed: record sections empty on slow loads ("card not found: Observations & Results")
