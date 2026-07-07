@@ -155,6 +155,19 @@ function buildCommands(hasPatient) {
     });
   }
 
+  // Quick leaflet search — panel only (the button/host don't exist in the
+  // pop-out window, which reaches the full Leaflets tab from its own nav).
+  if (document.getElementById('quickLeafletBtn')) {
+    cmds.push({
+      id: 'open:quick-leaflet',
+      label: 'NHS leaflet quick search\u2026',
+      group: 'Open',
+      keywords: 'leaflet patient information nhs handout condition medicine share triage',
+      icon: GENERIC_ICONS.doc,
+      run: () => import('../quick-leaflet/quick-leaflet.js').then((m) => m.openQuickLeaflet()),
+    });
+  }
+
   // Practice Report — opens the full report page (a browser tab, like the visualiser).
   cmds.push({
     id: 'open:practice-report',

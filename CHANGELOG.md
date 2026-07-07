@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.154.0] — 2026-07-06
+
+### New: Quick Leaflet popover — NHS leaflet search from any tab
+
+Requested for mid-triage use: leaflets were needed while working the Slots
+screen (and the queue, and Sentinel), and switching to the Leaflets tab loses
+the module you're in. Rather than embed leaflets into Slots specifically, the
+panel header gains a leaflet button (open-book icon, next to the command
+palette) that opens a compact popover on top of whatever tab is active:
+
+- Fuzzy search over the bundled NHS A–Z index (same tier-1 engine as the
+  Leaflets tab, via `shared/leaflets-utils.js`) with keyboard-first flow —
+  type, ↑/↓, Enter opens the leaflet on nhs.uk in a new tab; per-row
+  copy-link; a guaranteed "Search nhs.uk for …" fallback row covers index
+  misses; recents shown when the query is empty.
+- Shares the Leaflets tab's `leaflets.recent` list (both surfaces stay in
+  sync) and hands the current query into the full tab via the existing
+  `leaflets.pendingQuery` mechanism ("Open Leaflets tab →" in the footer).
+  Tier-1 only — no API key use, no in-panel rendering, no new storage keys.
+- Also reachable from the command palette ("NHS leaflet quick search…").
+- Panel-only by the same convention as the global strips; the pop-out window
+  reaches the full Leaflets tab from its own nav.
+
+Files: `side-panel/quick-leaflet/quick-leaflet.js` (new), `panel.html`
+(header button + host), `panel.css` (`.ql-*` styles), `panel.js` (init),
+`palette/palette.js` (command).
+
 ## [v3.153.0] — 2026-07-06
 
 ### Fixed: Submissions "work received" counts no longer erode as the team completes work (day ledger)

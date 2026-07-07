@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.153.0
+**Version:** v3.154.0
 **Generated:** 2026-07-06 (automated)
 
 ## What it is
@@ -96,6 +96,7 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 
 ## Recent additions (last 4 weeks)
 
+- **v3.154.0 (2026-07-06)** — Quick-leaflet button in the panel header: search NHS patient leaflets from any tab (built for mid-triage use), with open/copy-link and a hand-off into the full Leaflets tab.
 - **v3.153.0 (2026-07-06)** — Demand counts fixed to reflect true received volume: a new day ledger remembers requests after the team completes them (Medicus itself only reports still-open tasks), correcting a systematic undercount across Submissions, Today, the demand strip and Condor.
 - **v3.152.0 (2026-07-03)** — Sweep and Today gained plain-English "checks due" summaries and named skipped appointments; the open patient's monitoring status now shows from any tab; Reception pathways link straight to matching NHS leaflets.
 - **v3.151.0 (2026-07-02)** — Triage Lens queue reworked to keep more routine requests off the GP's desk: keyboard-driven triage, prepared Pharmacy First replies, and safer grading of borderline results.

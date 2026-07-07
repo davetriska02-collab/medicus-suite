@@ -351,7 +351,36 @@
             </button>
             <div id="helpPopoverHost"></div>
           </div>
-          <button id="paletteBtn" class="icon-btn" title="Command palette (Ctrl+K)" aria-label="Command palette — jump to any tab (Ctrl+K)">
+          <div class="nav-disp-wrap">
+            <button
+              id="quickLeafletBtn"
+              class="icon-btn"
+              title="Quick leaflet search — NHS patient info from any tab"
+              aria-label="Quick leaflet search"
+              aria-haspopup="dialog"
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+              </svg>
+            </button>
+            <div id="quickLeafletHost"></div>
+          </div>
+          <button
+            id="paletteBtn"
+            class="icon-btn"
+            title="Command palette (Ctrl+K)"
+            aria-label="Command palette — jump to any tab (Ctrl+K)"
+          >
             <svg
               width="13"
               height="13"
@@ -414,7 +443,12 @@
             </button>
             <div id="displayPopoverHost"></div>
           </div>
-          <button id="popoutBtn" class="icon-btn" title="Pop out to floating window" aria-label="Pop out to floating window">
+          <button
+            id="popoutBtn"
+            class="icon-btn"
+            title="Pop out to floating window"
+            aria-label="Pop out to floating window"
+          >
             <svg
               width="13"
               height="13"

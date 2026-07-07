@@ -12,6 +12,7 @@ import {
 import { recordTaskLists } from './modules/submissions/submissions-ledger.js';
 import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
+import { initQuickLeaflet } from './quick-leaflet/quick-leaflet.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
 import { initSetup } from './setup/setup.js';
 import { TAB_HELP } from '../shared/tab-help.js';
@@ -1783,6 +1784,9 @@ document.getElementById('displayBtn')?.addEventListener('click', (e) => {
   displayOpen = !displayOpen;
   renderDisplayPopover();
 });
+
+// Wire quick-leaflet popover (leaflet search from any tab — panel only)
+initQuickLeaflet({ switchModule });
 
 // Wire per-tab help button
 wireHelpButton();
