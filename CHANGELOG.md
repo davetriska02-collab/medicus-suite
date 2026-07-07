@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.161.0] — 2026-07-07
+
+### Signing Queue: prescribing-safety combinations at the decision moment
+
+Gauntlet exceed-plan item B1, slice 1 (docs/benchmark/GAUNTLET-2026-07-07.md):
+the engine already evaluates the practice's drug-combination rules (the
+CSO-reviewed alert library + practice-authored combos) on every signing
+check — their chips were simply filtered out. They now render on the row:
+
+- **Combination chips** (dashed border, red/amber tiers) alongside the
+  monitoring chips — e.g. "ACEi/ARB + NSAID concurrent" — with the matched
+  drugs verbatim in the tooltip. No new clinical rule content: this
+  re-displays an already-evaluated fact at the point of authorisation.
+- **"In request" flag** when a drug in the request itself is one leg of a
+  flagged combination — the acute-NSAID-completes-the-AKI-cluster case —
+  additive salience only, same doctrine as the requested-drug tag.
+- Red combinations join the riskiest-first sort banding and the hidden-red
+  filter note; the no-eGFR call-out now also fires on combination-flagged
+  rows. The 'noted' awareness tier deliberately stays in Monitoring so
+  signing-time salience is reserved for act-on-it-now combinations.
+- Hazard log: **H-038 controls (j)–(l)** recorded (re-display-only scope,
+  additive salience, awareness-tier exclusion).
+
 ## [v3.160.0] — 2026-07-07
 
 ### New Follow-ups tab: the personal safety-net ledger

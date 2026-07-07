@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.160.0
+**Version:** v3.161.0
 **Generated:** 2026-07-07 (automated)
 
 ## What it is
@@ -38,7 +38,7 @@ Daily inbound task counts — medical, admin, investigations, prescriptions — 
 
 ### Signing Queue
 
-Every open repeat-prescription request shown with the requesting patient's recorded drug-monitoring currency alongside — the same engine checks as Monitoring and Sweep — sorted riskiest first, with the loudest flag when the requested drug is itself the one overdue, the latest recorded eGFR (with its age) on every checked row, and each request's collection route at a glance (house glyph = practice dispensary, Rx glyph = community pharmacy) with location filter pills and counts — hidden red flags always called out. Display only: "no flag" is explicitly not an all-clear, records that could not be read sort above quiet rows, and authorisation happens only in Medicus.
+Every open repeat-prescription request shown with the requesting patient's recorded drug-monitoring currency alongside — the same engine checks as Monitoring and Sweep — sorted riskiest first, with the loudest flag when the requested drug is itself the one overdue, the latest recorded eGFR (with its age) on every checked row, and each request's collection route at a glance (house glyph = practice dispensary, Rx glyph = community pharmacy) with location filter pills and counts — hidden red flags always called out. The practice's configured prescribing-safety combination alerts (drug–drug interactions, PINCER-style clusters) are re-shown on the row too, with an "in request" flag when the requested drug is itself one leg of the combination — e.g. an acute NSAID request landing on top of an ACE inhibitor and diuretic. Display only: "no flag" is explicitly not an all-clear, records that could not be read sort above quiet rows, and authorisation happens only in Medicus.
 
 ### Follow-ups
 
@@ -117,6 +117,8 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.161.0 (2026-07-07)** — Signing rows now also show the practice's configured prescribing-safety combination alerts (re-displayed from the same engine pass, no new rule content), loudest when the requested drug completes the combination — e.g. an acute NSAID on top of ACEi + diuretic.
 
 - **v3.160.0 (2026-07-07)** — New Follow-ups tab: a personal safety-net ledger ("MSU pending — chase Friday") resurfaced when due, with patient-linked capture from Monitoring and an overdue line on Today. Machine-local, excluded from backups, never acts by itself.
 
