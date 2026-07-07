@@ -522,6 +522,41 @@ function fakeDomContracts(status) {
     'without an ApiClient dep at all, the UUID DOM-fallback contract is probed as before (guard is opt-in)'
   );
 
+  // ── State epochs (stale-verdict discard on probe-semantics change) ────────
+  console.log('\n--- applyStateEpochs / stampStateEpochs ---');
+  {
+    const contracts = [
+      { id: 'a', stateEpoch: 2 },
+      { id: 'b' }, // no epoch — never pruned
+    ];
+    // stale epoch (absent) on an epoch-bearing contract -> entry discarded
+    let prev = { a: { status: 'degraded', failStreak: 2 }, b: { status: 'degraded' } };
+    let out = CC.applyStateEpochs(prev, contracts);
+    check(!out.a, 'stale-epoch state (no epoch field) is discarded for epoch-bearing contract');
+    check(!!out.b, 'contracts without stateEpoch keep their stored state');
+    check(!!prev.a, 'applyStateEpochs is pure — input untouched');
+
+    // matching epoch survives
+    prev = { a: { status: 'degraded', epoch: 2 } };
+    out = CC.applyStateEpochs(prev, contracts);
+    check(!!out.a && out.a.status === 'degraded', 'matching-epoch state survives the discard');
+
+    // older epoch number is discarded too
+    prev = { a: { status: 'degraded', epoch: 1 } };
+    out = CC.applyStateEpochs(prev, contracts);
+    check(!out.a, 'older-epoch state is discarded');
+
+    // stamping writes the current epoch onto fresh state
+    const health = { a: { status: 'ok' }, b: { status: 'ok' } };
+    CC.stampStateEpochs(health, contracts);
+    check(health.a.epoch === 2, 'stampStateEpochs stamps the declared epoch');
+    check(!('epoch' in health.b), 'no epoch stamped on contracts without stateEpoch');
+
+    // garbage tolerated
+    check(Object.keys(CC.applyStateEpochs(null, contracts)).length === 0, 'null prevHealth -> empty, no throw');
+    check(!!CC.applyStateEpochs({ a: { epoch: 2 } }, null).a, 'null contracts -> passthrough, no throw');
+  }
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
 })();

@@ -1689,14 +1689,32 @@ let subRagPoller = makePoller(fetchAndRenderSubRagStrip, SUB_RAG_POLL_MS, 'sub-r
 const healthStripEl = document.getElementById('healthStrip');
 const HEALTH_POLL_MS = 30 * 1000;
 
+// Acknowledge/snooze: an amber self-diagnosis the user has SEEN shouldn't nag
+// every day while the degradation is unchanged. Dismiss hides the strip for
+// this exact degraded-contract set for 7 days; if the set CHANGES (a new
+// contract degrades, or one recovers and a different one breaks) the strip
+// reappears immediately — new problems always surface. Options → Suite health
+// keeps the full detail regardless of the snooze.
+const HEALTH_SNOOZE_KEY = 'health.stripSnooze';
+const HEALTH_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+
 async function fetchAndRenderHealthStrip() {
   if (!healthStripEl) return true;
   try {
-    const r = await chrome.storage.local.get('health.contracts');
+    const r = await chrome.storage.local.get(['health.contracts', HEALTH_SNOOZE_KEY]);
     const health = r['health.contracts'] || {};
     const DC = window.DomContracts;
-    const degradedIds = Object.keys(health).filter((id) => health[id]?.status === 'degraded');
+    const degradedIds = Object.keys(health)
+      .filter((id) => health[id]?.status === 'degraded')
+      .sort();
     if (degradedIds.length === 0 || !DC) {
+      healthStripEl.className = 'health-strip health-strip-hidden';
+      healthStripEl.innerHTML = '';
+      return true;
+    }
+    const sig = degradedIds.join('|');
+    const snooze = r[HEALTH_SNOOZE_KEY];
+    if (snooze && snooze.sig === sig && typeof snooze.until === 'number' && Date.now() < snooze.until) {
       healthStripEl.className = 'health-strip health-strip-hidden';
       healthStripEl.innerHTML = '';
       return true;
@@ -1710,9 +1728,14 @@ async function fetchAndRenderHealthStrip() {
       <span class="health-strip-icon">⚠</span>
       <span class="health-strip-text">Medicus may have changed — ${escStrip(features.join(', '))} degraded. Details in Options → Suite health.</span>
       <button class="health-strip-goto">Details →</button>
+      <button class="health-strip-dismiss" title="Dismiss for 7 days (reappears if anything new degrades)" aria-label="Dismiss health warning for 7 days">✕</button>
     `;
     healthStripEl.querySelector('.health-strip-goto')?.addEventListener('click', () => {
       chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-health') });
+    });
+    healthStripEl.querySelector('.health-strip-dismiss')?.addEventListener('click', async () => {
+      await chrome.storage.local.set({ [HEALTH_SNOOZE_KEY]: { sig, until: Date.now() + HEALTH_SNOOZE_MS } });
+      fetchAndRenderHealthStrip();
     });
     return true;
   } catch (_) {

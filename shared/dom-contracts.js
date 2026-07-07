@@ -349,6 +349,28 @@
       anchor: 'a[href]',
       target: ['[data-patient-id]', '[data-patientid]', '[data-patient]', '[data-pid]'],
       legacy: [['a[href*="/care-record/"]', 'a[href*="/patient/"]']],
+      // Applicability gate (2026-07-07 false-positive fix): this contract is
+      // only probed on pages whose URL resolved no id — which includes
+      // patient-LESS screens (appointment book, dashboards, reports). A diary
+      // grid has no patient links, so a plain probe FAILs there and two
+      // spaced visits promote to a 'degraded' banner while nothing is broken.
+      // (Live-DOM capture confirmed the link strategies still work on real
+      // care-record pages; the data-attribute strategy currently matches
+      // nothing on live Medicus, so the legacy link selectors carry the
+      // probe.) Gate: if NO anchor href on the page carries a bare UUID at
+      // all, there is no patient-resolution evidence to test — the round
+      // reads not_applicable, never FAIL. If uuid-bearing links exist but
+      // none match the care-record/patient shapes, that IS a genuine FAIL
+      // (Medicus changed its URL shapes). Known blind spot, accepted: a
+      // Medicus that stops putting UUIDs in hrefs entirely would read
+      // not_applicable rather than degraded — but the fallback would be
+      // unfixable by selector relocation at that point anyway.
+      anchorHrefRe: '[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}',
+      // State epoch: bump to make the canary discard stored verdicts issued
+      // under older probe semantics — without this, pre-gate false positives
+      // stay 'degraded' forever, because not_applicable rounds never touch an
+      // established status. Epoch 2 = the anchorHrefRe gate above.
+      stateEpoch: 2,
       runtime: true,
       mirrorOf: null,
     },
@@ -401,6 +423,30 @@
     const anchorCount = countMatches(root, contract.anchor);
     if (anchorCount === 0) {
       return { id: contract.id, status: STATUS.NOT_APPLICABLE, anchorCount: 0, targetCount: 0, legacyCounts: [] };
+    }
+    // Optional applicability gate: when `anchorHrefRe` is set, the probe only
+    // has meaning if at least one anchor's href matches it (e.g. carries a
+    // UUID) — a page with none has no evidence to test, so the round reads
+    // not_applicable rather than FAIL. Never throws: a bad regex or href-less
+    // anchors simply don't gate.
+    if (contract.anchorHrefRe) {
+      let anyHrefMatch = false;
+      try {
+        const re = new RegExp(contract.anchorHrefRe, 'i');
+        const anchors = root.querySelectorAll(contract.anchor);
+        for (const a of anchors) {
+          const href = typeof a.getAttribute === 'function' ? a.getAttribute('href') : null;
+          if (href && re.test(href)) {
+            anyHrefMatch = true;
+            break;
+          }
+        }
+      } catch (_) {
+        anyHrefMatch = true; // fail open — a broken gate must not mask real probes
+      }
+      if (!anyHrefMatch) {
+        return { id: contract.id, status: STATUS.NOT_APPLICABLE, anchorCount, targetCount: 0, legacyCounts: [] };
+      }
     }
     const targetCount = (contract.target || []).reduce((sum, sel) => sum + countMatches(root, sel), 0);
     const legacyCounts = (contract.legacy || []).map((tier) =>

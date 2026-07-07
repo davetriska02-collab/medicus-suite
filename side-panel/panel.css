@@ -1673,6 +1673,22 @@ html[data-zen='1'] #rmStrip:not(.rm-strip-alerted-amber):not(.rm-strip-alerted-r
     border-color var(--fast) var(--ease);
   white-space: nowrap;
 }
+.health-strip-dismiss {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-4);
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 3px 5px;
+  cursor: pointer;
+}
+.health-strip-dismiss:hover {
+  color: var(--text-1);
+  background: var(--amber-dim);
+}
+
 .health-strip-goto:hover {
   color: var(--text-2);
   border-color: var(--accent);

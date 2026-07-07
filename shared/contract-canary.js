@@ -258,6 +258,33 @@
     );
   }
 
+  // ── State epochs ──────────────────────────────────────────────────────────
+  // A contract whose PROBE SEMANTICS change (e.g. the anchorHrefRe
+  // applicability gate added to the UUID DOM-fallback) declares a bumped
+  // `stateEpoch` in dom-contracts.js. Stored verdicts issued under an older
+  // epoch are discarded before the round applies — without this, a
+  // false-positive 'degraded' issued by the OLD semantics could stand forever,
+  // because not_applicable rounds never touch an established status.
+
+  // PURE: returns a copy of prevHealth with stale-epoch entries removed.
+  function applyStateEpochs(prevHealth, contracts) {
+    const out = Object.assign({}, prevHealth && typeof prevHealth === 'object' ? prevHealth : {});
+    for (const c of contracts || []) {
+      if (!c || !c.stateEpoch || !out[c.id]) continue;
+      if (out[c.id].epoch !== c.stateEpoch) delete out[c.id];
+    }
+    return out;
+  }
+
+  // Mutates: stamps each epoch-bearing contract's current epoch onto its
+  // (fresh or carried-over) state so the discard above is one-shot.
+  function stampStateEpochs(health, contracts) {
+    for (const c of contracts || []) {
+      if (c && c.stateEpoch && health[c.id]) health[c.id].epoch = c.stateEpoch;
+    }
+    return health;
+  }
+
   /**
    * Run one probe round against a real (or fake) DOM and persist the result.
    * Exposed (not just internal) so tests can drive it end-to-end with fake
@@ -318,8 +345,9 @@
       });
 
       const stored = await chrome.storage.local.get(STORAGE_KEY);
-      const prevHealth = (stored && stored[STORAGE_KEY]) || {};
+      const prevHealth = applyStateEpochs((stored && stored[STORAGE_KEY]) || {}, contracts);
       const { health, transitions } = applyProbeRound(prevHealth, results, nowIso);
+      stampStateEpochs(health, contracts);
       await chrome.storage.local.set({ [STORAGE_KEY]: health });
 
       const EL = d.EventLedger;
@@ -412,6 +440,8 @@
     shouldProbeNow,
     nextContractState,
     applyProbeRound,
+    applyStateEpochs,
+    stampStateEpochs,
     runProbeRound,
   };
 

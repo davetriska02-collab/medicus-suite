@@ -2,6 +2,77 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.154.3] — 2026-07-07
+
+### Fixed: record sections empty on slow loads ("card not found: Observations & Results")
+
+Reported via console warning on a live care-record page where the card list
+showed 'Observations & Results' clearly present. Root cause is a one-shot
+extraction race, not a Medicus rename: pageReady() passes as soon as the
+patient banner or FIRST record card renders, extractAll() runs once, and
+Medicus lazy-renders the lower cards afterwards — the route watcher's
+250ms/1200ms reruns can both land too early on a slow load, leaving those
+sections empty for the whole page visit.
+
+New late-card settle-watch in `content-scripts/triage-lens/content.js`: when
+an extraction pass reports expected-but-absent cards (`_missingCards`), the
+lens polls cheaply (500ms) for up to 12s and re-extracts as soon as any of
+them appears. Applies to record AND detail pages; self-terminates on deadline
+or completion; disarmed on SPA route change. The once-per-load
+"card not found" warning still fires if a card genuinely never renders.
+
+## [v3.154.2] — 2026-07-07
+
+### Fixed: health-strip false positive — patient-UUID fallback probe fired on patient-less pages
+
+Root cause of the "Medicus may have changed — Patient UUID resolution" strip
+found via live-DOM capture: the contract is only probed on pages whose URL
+resolves no id, which includes patient-LESS screens like the appointment book
+and dashboards. A diary grid has no patient links, so the probe FAILed there
+and two spaced visits promoted to a 'degraded' banner while nothing was
+broken. (The capture also confirmed the data-attribute strategy matches
+nothing on current Medicus — the link strategies `/care-record/{uuid}` /
+`/patient/{uuid}` still work and carry the feature.)
+
+- **Applicability gate** (`anchorHrefRe` on the contract, honoured by
+  `DomContracts.probeContract`): if no anchor href on the page carries a bare
+  UUID, there is no patient-resolution evidence to test — the round reads
+  `not_applicable`, never FAIL. UUID-bearing links that match neither shape
+  still FAIL (genuine URL-shape drift stays detectable).
+- **State epochs** (`stateEpoch` on the contract; `applyStateEpochs` /
+  `stampStateEpochs` in contract-canary.js): stored verdicts issued under the
+  old probe semantics are discarded on the next probe round, so the existing
+  false-positive 'degraded' clears itself on the next Medicus visit — no
+  manual dismiss needed.
+- Tour: 'header-controls' step extended to lead with the v3.154.0
+  quick-leaflet button and retagged (TOUR_VERSION 9 → 10) so returning users
+  get a "What's new" pass showing where it lives — shipped and immediately
+  missed by its own requester, so it earns the spotlight.
+
+Tests: probe-gate semantics (patient-less page → not_applicable; UUID links +
+selector miss → FAIL) and epoch discard/stamp covered in
+test-dom-contracts.js / test-contract-canary.js.
+
+## [v3.154.1] — 2026-07-07
+
+### Suite-health strip: acknowledge/dismiss (7-day snooze per degradation set)
+
+The amber "Medicus may have changed — … degraded" strip had no acknowledge
+action, so a known, unchanged degradation nagged on every panel open. The
+strip now carries a ✕ dismiss: hides that EXACT set of degraded contracts for
+7 days, and reappears immediately if the degraded set changes (anything new
+breaks, or a different contract degrades) — new problems always surface.
+Options → Suite health keeps full detail regardless of the snooze. New
+machine-local key `health.stripSnooze` (transient acknowledgement, not backed
+up — a restored backup should re-surface the warning).
+
+Context: the strip was correctly reporting a real Medicus change (the
+patient-UUID DOM fallback probe degraded — the same change that takes out the
+cross-tab monitoring badge on pages where URL detection can't resolve the
+patient). The fix for the underlying selector drift needs a live-DOM capture
+and ships separately; this release just makes the warning politely
+acknowledgeable while it's known-about.
+
 ## [v3.154.0] — 2026-07-06
 
 ### New: Quick Leaflet popover — NHS leaflet search from any tab
