@@ -35,6 +35,10 @@ const ROOT = __dirname;
 // dedicated walkthrough step). Move one out of this list and give it a step
 // when it gains a flagship feature worth 15 seconds of a new user's time.
 const NAV_COVERED_BY_OVERVIEW = new Set([
+  // signing (v3.155.0): 20-step cap reached; the tab's fixed honest-state
+  // header is self-explanatory and tab-help carries the first-step guidance.
+  // Revisit for a dedicated step when the cap is next re-balanced.
+  'signing',
   'trends',
   'capacity',
   'submissions',

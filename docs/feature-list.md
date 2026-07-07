@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.153.0
+**Version:** v3.156.0
 **Generated:** 2026-07-06 (automated)
 
 ## What it is
@@ -9,7 +9,7 @@ Medicus Suite is a Chrome browser extension for UK GP practices that runs alongs
 
 ## At a glance
 
-- 14 side-panel modules covering monitoring, demand, capacity, workflow, knowledge and the live patient record
+- 15 side-panel modules covering monitoring, demand, capacity, workflow, knowledge and the live patient record
 - 8 in-page content-script features (queue overlays, workflow buttons and relays) plus 2 full-tab generated reports
 - 7 rule types in the alert engine
 - 27 drug-monitoring rules, 65 QOF register/indicator rules, 5 vaccine rules, 44 investigation-result rules, and 26 starter alerts in the prescribing-safety library
@@ -17,45 +17,63 @@ Medicus Suite is a Chrome browser extension for UK GP practices that runs alongs
 ## Side-panel modules
 
 ### Today
+
 The default tab — a morning command centre. A one-line "what needs you now" summary sits above cards for waiting-room load, triage volume, today's medical/admin demand, remaining slots and the pre-clinic sweep, so nothing needs checking screen by screen before clinic starts.
 
 ### Sentinel (Monitoring)
+
 The core per-patient alerting module. With a record open, Sentinel checks the patient's medications, problems and results against drug-monitoring guidance and QOF indicators and shows colour-coded chips for anything overdue, due, or not achieved. A "Brief" gives a 30-second worst-first summary; a "Patient Passport" turns it into a plain-English handout; "Action Packs" attach copy-ready recall/booking text to each chip. Passive display only — no advice, no record writes; every value must be checked against the source.
 
 ### Slot Counter
+
 Live appointment-slot counts by type for any date, pulled from the scheduling API rather than requiring the scheduling page to be open. Configurable colour thresholds, CSV export, and an embedded mini-booking flow that reserves and confirms a slot without leaving the panel.
 
 ### Capacity Forecast
+
 A calendar view of upcoming appointment capacity against a practice-set minimum, with separate targets per weekday. Week/month views are colour-coded Sufficient/Tight/Low/Critical, and multiple named presets let different services or teams be checked side by side.
 
 ### Submissions Tracker
+
 Daily inbound task counts — medical, admin, investigations, prescriptions — with a today view, a custom date range, and day-vs-day comparison. Amber/red thresholds flag unusual volume before it becomes a backlog. Because Medicus only reports still-open tasks, the suite keeps its own day ledger of every request it has seen, so counts reflect true received volume and no longer fall as the team completes work; days the suite wasn't watching are flagged as undercounts rather than shown as history.
 
+### Signing Queue
+
+Every open repeat-prescription request shown with the requesting patient's recorded drug-monitoring currency alongside — the same engine checks as Monitoring and Sweep — sorted riskiest first, with the loudest flag when the requested drug is itself the one overdue, and the latest recorded eGFR (with its age) on every checked row. Display only: "no flag" is explicitly not an all-clear, records that could not be read sort above quiet rows, and authorisation happens only in Medicus.
+
 ### Activity Report
+
 Shows how much work each staff member has processed over a chosen date range — consultations, prescriptions, reviews, documents, results — as period totals and a per-person stacked bar chart, useful for workload reviews and rota planning.
 
 ### Referrals Tracker
+
 Audits referrals sent over a date range by priority and status, with charts by clinician, specialty and hospital. A standing safety-net worklist surfaces open Two-Week-Wait suspected-cancer referrals that haven't yet reached a confirmed outcome.
 
 ### Condor (Practice Pressure)
+
 A live whole-practice dashboard distilling waiting-room load, task queue, urgent workload and capacity into one Green/Amber/Red Practice Pressure Index — with a built-in safety floor that will never show "all clear" while demand has outstripped capacity. Supporting cards cover workload balance, task-backlog age, demand velocity and a day-on-day trend view (Pulse). Generates a one-click Practice Report for management, staff or ICB audiences (the staff version stays whole-practice, never per-clinician).
 
 ### Trends
+
 Line-chart history of a patient's key readings — blood pressure, kidney function, HbA1c, cholesterol, weight — for quick context alongside the record, with blood pressure shown against target and kidney readings mapped to standard staging. Read-only; adds no commentary.
 
 ### Reception
+
 A front-desk companion: a single red/amber/green status for the open patient (expandable to what's overdue), plus guided call-handling question sets for common presenting problems with immediate escalation on any red-flag answer. Produces a copy-ready note for the record — it never triages. Pathways are practice-editable and need explicit manager sign-off before use.
 
 ### Pre-clinic Sweep
+
 Checks a day's booked list (one clinician or the whole practice) against the monitoring rules before clinic starts, so gaps can be arranged in advance rather than found mid-consultation. Ranks QOF points at risk, works through large lists in batches, and can raise a recall task or print a reception handout directly from the results. Results are a temporary snapshot, cleared after a couple of hours.
 
 ### Knowledge
+
 A practice-owned reference library — referral criteria, contacts, local pathways, templates — searchable and editable directly from the tab, with near-duplicate detection and a bulk starter-pack import handled in Settings.
 
 ### Leaflets (NHS Patient Leaflets)
+
 Finds and shares official NHS patient information without leaving the panel. Tier 1 is always-on: instant local search over a curated NHS index with a guaranteed "search nhs.uk" fallback. Tier 2 is optional: with a configured key, selected leaflets render in-panel with NHS attribution, falling back cleanly to open-in-tab if the live lookup fails.
 
 ### Patient Record (live)
+
 A live, on-screen snapshot of the patient open in Medicus — problems, medications, recent results and standard prescribing-safety scores — sourced from the same data Medicus already shows, not from an export. Display-copy only: it transcribes what's on screen with a provenance note baked into any copy, and marks gaps (allergies, immunisations, full history) explicitly rather than hiding them.
 
 ## In-page features (content scripts)
@@ -96,6 +114,10 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 
 ## Recent additions (last 4 weeks)
 
+- **v3.156.0 (2026-07-07)** — Signing rows now carry the patient’s latest recorded eGFR with its age; stale or absent renal data gets amber salience on flagged rows. Verbatim recorded fact only — no bands, no dose logic.
+
+- **v3.155.0 (2026-07-07)** — New Signing tab: the repeat-prescription pile with each patient’s recorded monitoring alongside, riskiest first — built for the 6pm signing session. Display only; never says "safe".
+- **v3.154.0 (2026-07-06)** — Quick-leaflet button in the panel header: search NHS patient leaflets from any tab (built for mid-triage use), with open/copy-link and a hand-off into the full Leaflets tab.
 - **v3.153.0 (2026-07-06)** — Demand counts fixed to reflect true received volume: a new day ledger remembers requests after the team completes them (Medicus itself only reports still-open tasks), correcting a systematic undercount across Submissions, Today, the demand strip and Condor.
 - **v3.152.0 (2026-07-03)** — Sweep and Today gained plain-English "checks due" summaries and named skipped appointments; the open patient's monitoring status now shows from any tab; Reception pathways link straight to matching NHS leaflets.
 - **v3.151.0 (2026-07-02)** — Triage Lens queue reworked to keep more routine requests off the GP's desk: keyboard-driven triage, prepared Pharmacy First replies, and safer grading of borderline results.

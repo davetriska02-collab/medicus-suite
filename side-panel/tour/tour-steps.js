@@ -39,10 +39,15 @@
 //       already shipped, just hard to find). No step added or removed (still
 //       20 steps); the existing step's addedIn was retagged 2 → 9 so the
 //       reworked copy reaches returning users via the "What's new" pass.
+//  10 — 'header-controls' extended to lead with the new quick-leaflet header
+//       button (v3.154.0 — shipped for mid-triage use and immediately missed
+//       by its own requester, so it earns the what's-new spotlight). Same
+//       consolidation pattern as 9: no step added or removed (still 20
+//       steps); addedIn retagged 2 → 10 so returning users get shown.
 
 'use strict';
 
-export const TOUR_VERSION = 9;
+export const TOUR_VERSION = 10;
 
 export const TOUR_STEPS = [
   {
@@ -165,10 +170,10 @@ export const TOUR_STEPS = [
   },
   {
     id: 'header-controls',
-    addedIn: 2,
-    target: ['#displayBtn', '#popoutBtn'],
-    title: 'Make it yours, or pop it out',
-    body: 'Light or dark theme, three text sizes, and a colour-blind-safe palette — or open the suite in a floating window you can park on a second screen while Medicus fills this one.',
+    addedIn: 10,
+    target: ['#quickLeafletBtn', '#displayBtn', '#popoutBtn'],
+    title: 'Quick leaflets, themes, pop-out',
+    body: 'The open-book button finds an NHS patient leaflet from any tab — type, Enter, done (built for mid-triage). Next to it: light/dark theme, text sizes, and a floating pop-out window for a second screen.',
   },
   {
     id: 'settings',
