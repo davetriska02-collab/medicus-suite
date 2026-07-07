@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.153.1] — 2026-07-06
+## [v3.156.2] — 2026-07-07
 
 ### Fix: Backup & Restore — "Export entire suite", "Import from file", and "Publish to shared folder" all failing
 
@@ -35,6 +35,184 @@ go through the whole-suite export/import path rather than a single module:
   anything else) loaded on the same page
 - No behaviour change to the export/import contract; `test-leaflets-io.js`
   unaffected
+
+## [v3.156.1] — 2026-07-07
+
+### Fixed: Signing Queue "patient not resolvable" on every live task
+
+First live run showed every row erroring at patient resolution: the module
+constructed the overview path from the TASK-LIST slug
+(`/tasks/data/prescription_request_task_routine/overview/{id}`), but live
+Medicus serves the overview under a different slug than the list. Fix: the
+task row's own `overviewURL` (validated with the same `_OVERVIEW_URL_RE` the
+queue bridge uses — it is the pointer Medicus itself links and the queue
+chips already fetch) is now the authoritative resolution path, with the
+constructed path kept only as a fallback. Verified on a live-mimic fixture
+where the constructed path fails and only the row's overviewURL succeeds.
+
+## [v3.156.0] — 2026-07-07
+
+### Signing Queue: renal context on every checked row (display-only)
+
+The wishlist's "highest patient-safety value" renal join, delivered in the
+conservative display-only slice that fits the intended-purpose statement:
+before signing a renally-cleared repeat (DOAC, metformin, lithium…) the eye
+asks "what's the kidney function, and how old is that number?" — the record
+fetch already returns it, so every checked signing row now shows the
+patient's **latest recorded eGFR verbatim with its age permanently attached**
+("eGFR 38 mL/min/1.73m2 · 11mo ago").
+
+- Value is NEVER rendered without its date/age (out-of-context guard, H-010);
+  unparseable dates fall back to showing the raw recorded date.
+- **Stale (> 12 months) or unparseable-age renal data gets amber salience**;
+  "no eGFR on record" is remarked ONLY on rows already carrying a monitoring
+  flag — a quiet row's missing eGFR would be noise on young healthy patients.
+- No threshold, band, or dose logic is computed — verbatim recorded fact
+  adjacency only. H-038 gains control (i) documenting this.
+- Zero extra network cost: the eGFR comes from the investigation dashboard
+  the monitoring pass already fetches per patient.
+
+Pure logic (`renalContext`, `formatObsAge`) in signing-core.js with tests
+(39 checks total in test-signing-core.js).
+
+## [v3.155.0] — 2026-07-07
+
+### New: Signing Queue — the repeat-prescription pile with monitoring context
+
+The wishlist's top remaining GP minutes-saver (Tom's "safe to sign", 2026-07-03
+appraisal §3b), built to fit the frozen intended-purpose statement: the module
+DISPLAYS recorded monitoring next to each open request and deliberately never
+renders a verdict — no "safe", no ticks, no green. Hazard log: **H-038**.
+
+**What it does.** New Signing tab (panel + pop-out; in the GP role preset)
+lists every open prescription-request task (routine by default; non-routine
+toggleable — the endpoint's open-task view is exactly the outstanding pile),
+resolves each to its patient via the task-overview endpoint
+(`SentinelApiClient.resolveTaskToPatient` — the same panel-proven path
+booking-api uses), runs the patient through the identical monitoring pipeline
+Sweep uses (`fetchAll → normaliseAll → evaluatePatient`, drug rules +
+practice org/custom overlays, sequential with 250ms pacing, 30-patient
+batches with "Check next"), and shows the verdict chips on each request:
+
+- **red** — any monitored drug overdue / stale / no data;
+- **amber** — due soon;
+- **"requested" tag** — the loudest signal: the flagged drug appears in the
+  request text itself (a lithium request while the lithium level is overdue);
+- rows sort riskiest-first, with **unknown above quiet**: a record that could
+  not be read is an amber "check manually" row ranked above "no monitoring
+  flags recorded" — an incomplete read can never masquerade as an all-clear;
+- "no monitoring flags recorded" carries a permanent "≠ all clear" caveat and
+  the header's fixed honest-state line; multiple requests from one patient
+  share a single record fetch.
+
+**Safety framing.** Read-only (no write path exists in the module);
+authorisation happens only in Medicus. Nothing persisted — verdicts are
+in-memory; the only storage is the type-toggle UI pref via shared ui-state.
+New hazard H-038 (automation bias on this surface) with controls documented.
+
+Files: `side-panel/modules/signing/{signing.js,signing-core.js,signing.css}`
+(new), nav/registry entries in `panel.html`, `pop-out/pop-out.html`,
+`panel.js`, `pop-out.js`, `tab-catalog.js` (+ GP preset), tab-help entry.
+Tests: `test-signing-core.js` (30 checks: verdict reduction, requested-drug
+matching, risk-band sorting, patient grouping, request age).
+
+## [v3.154.3] — 2026-07-07
+
+### Fixed: record sections empty on slow loads ("card not found: Observations & Results")
+
+Reported via console warning on a live care-record page where the card list
+showed 'Observations & Results' clearly present. Root cause is a one-shot
+extraction race, not a Medicus rename: pageReady() passes as soon as the
+patient banner or FIRST record card renders, extractAll() runs once, and
+Medicus lazy-renders the lower cards afterwards — the route watcher's
+250ms/1200ms reruns can both land too early on a slow load, leaving those
+sections empty for the whole page visit.
+
+New late-card settle-watch in `content-scripts/triage-lens/content.js`: when
+an extraction pass reports expected-but-absent cards (`_missingCards`), the
+lens polls cheaply (500ms) for up to 12s and re-extracts as soon as any of
+them appears. Applies to record AND detail pages; self-terminates on deadline
+or completion; disarmed on SPA route change. The once-per-load
+"card not found" warning still fires if a card genuinely never renders.
+
+## [v3.154.2] — 2026-07-07
+
+### Fixed: health-strip false positive — patient-UUID fallback probe fired on patient-less pages
+
+Root cause of the "Medicus may have changed — Patient UUID resolution" strip
+found via live-DOM capture: the contract is only probed on pages whose URL
+resolves no id, which includes patient-LESS screens like the appointment book
+and dashboards. A diary grid has no patient links, so the probe FAILed there
+and two spaced visits promoted to a 'degraded' banner while nothing was
+broken. (The capture also confirmed the data-attribute strategy matches
+nothing on current Medicus — the link strategies `/care-record/{uuid}` /
+`/patient/{uuid}` still work and carry the feature.)
+
+- **Applicability gate** (`anchorHrefRe` on the contract, honoured by
+  `DomContracts.probeContract`): if no anchor href on the page carries a bare
+  UUID, there is no patient-resolution evidence to test — the round reads
+  `not_applicable`, never FAIL. UUID-bearing links that match neither shape
+  still FAIL (genuine URL-shape drift stays detectable).
+- **State epochs** (`stateEpoch` on the contract; `applyStateEpochs` /
+  `stampStateEpochs` in contract-canary.js): stored verdicts issued under the
+  old probe semantics are discarded on the next probe round, so the existing
+  false-positive 'degraded' clears itself on the next Medicus visit — no
+  manual dismiss needed.
+- Tour: 'header-controls' step extended to lead with the v3.154.0
+  quick-leaflet button and retagged (TOUR_VERSION 9 → 10) so returning users
+  get a "What's new" pass showing where it lives — shipped and immediately
+  missed by its own requester, so it earns the spotlight.
+
+Tests: probe-gate semantics (patient-less page → not_applicable; UUID links +
+selector miss → FAIL) and epoch discard/stamp covered in
+test-dom-contracts.js / test-contract-canary.js.
+
+## [v3.154.1] — 2026-07-07
+
+### Suite-health strip: acknowledge/dismiss (7-day snooze per degradation set)
+
+The amber "Medicus may have changed — … degraded" strip had no acknowledge
+action, so a known, unchanged degradation nagged on every panel open. The
+strip now carries a ✕ dismiss: hides that EXACT set of degraded contracts for
+7 days, and reappears immediately if the degraded set changes (anything new
+breaks, or a different contract degrades) — new problems always surface.
+Options → Suite health keeps full detail regardless of the snooze. New
+machine-local key `health.stripSnooze` (transient acknowledgement, not backed
+up — a restored backup should re-surface the warning).
+
+Context: the strip was correctly reporting a real Medicus change (the
+patient-UUID DOM fallback probe degraded — the same change that takes out the
+cross-tab monitoring badge on pages where URL detection can't resolve the
+patient). The fix for the underlying selector drift needs a live-DOM capture
+and ships separately; this release just makes the warning politely
+acknowledgeable while it's known-about.
+
+## [v3.154.0] — 2026-07-06
+
+### New: Quick Leaflet popover — NHS leaflet search from any tab
+
+Requested for mid-triage use: leaflets were needed while working the Slots
+screen (and the queue, and Sentinel), and switching to the Leaflets tab loses
+the module you're in. Rather than embed leaflets into Slots specifically, the
+panel header gains a leaflet button (open-book icon, next to the command
+palette) that opens a compact popover on top of whatever tab is active:
+
+- Fuzzy search over the bundled NHS A–Z index (same tier-1 engine as the
+  Leaflets tab, via `shared/leaflets-utils.js`) with keyboard-first flow —
+  type, ↑/↓, Enter opens the leaflet on nhs.uk in a new tab; per-row
+  copy-link; a guaranteed "Search nhs.uk for …" fallback row covers index
+  misses; recents shown when the query is empty.
+- Shares the Leaflets tab's `leaflets.recent` list (both surfaces stay in
+  sync) and hands the current query into the full tab via the existing
+  `leaflets.pendingQuery` mechanism ("Open Leaflets tab →" in the footer).
+  Tier-1 only — no API key use, no in-panel rendering, no new storage keys.
+- Also reachable from the command palette ("NHS leaflet quick search…").
+- Panel-only by the same convention as the global strips; the pop-out window
+  reaches the full Leaflets tab from its own nav.
+
+Files: `side-panel/quick-leaflet/quick-leaflet.js` (new), `panel.html`
+(header button + host), `panel.css` (`.ql-*` styles), `panel.js` (init),
+`palette/palette.js` (command).
 
 ## [v3.153.0] — 2026-07-06
 

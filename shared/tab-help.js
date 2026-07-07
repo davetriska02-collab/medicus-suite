@@ -71,6 +71,12 @@ export const TAB_HELP = {
     what: 'Quick-reference pathways to help reception direct patient requests to the right place.',
     firstStep: 'Search or browse for the request type to see the suggested pathway.',
   },
+  signing: {
+    title: 'Signing',
+    what: 'Your open repeat-prescription requests, each shown with the monitoring already recorded for that patient — riskiest first.',
+    firstStep:
+      'Work the pile top-down; anything flagged red deserves the record open before you sign. No flag is not an all-clear.',
+  },
   sweep: {
     title: 'Sweep',
     what: 'A pre-clinic scan of your upcoming patients that flags points worth a look beforehand.',
