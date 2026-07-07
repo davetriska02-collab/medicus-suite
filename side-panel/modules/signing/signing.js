@@ -34,12 +34,19 @@ import {
   requestedDrugFlags,
   sortSigningRows,
   requestAgeDays,
+  renalContext,
+  formatObsAge,
+  RENAL_STALE_DAYS,
   ROW_STATE,
   CHIP_STATUS_TEXT,
 } from './signing-core.js';
 
 // F8: same practice-code guard as every other fetching module.
 const _SITE_CODE_RE = /^[a-f0-9]{4,8}$/i;
+
+// Relative task-overview path validation — identical to the queue bridge's
+// _OVERVIEW_URL_RE in content-scripts/triage-lens/content.js.
+const _OVERVIEW_URL_RE = /^\/tasks\/data\/[A-Za-z0-9_-]+\/overview\/[0-9a-f-]+$/;
 
 const TASK_TYPES = [
   { key: 'routine', slug: 'prescription_request_task_routine', label: 'Routine' },
@@ -141,6 +148,13 @@ async function fetchAndRun() {
           priorityDisplay: t.priorityDisplay || '',
           createdAt: t.createdAt || '',
           assignedTo: t.assignedTo || '',
+          // The row's own overview pointer — the PROVEN live path to the
+          // patient (the queue bridge fetches exactly this field). Preferred
+          // over constructing /tasks/data/{list-slug}/overview/{id}: on live
+          // Medicus the overview endpoint's slug can differ from the
+          // task-list slug (v3.156.1 field fix — every prescription task was
+          // coming back "patient not resolvable" via the constructed path).
+          overviewURL: typeof t.overviewURL === 'string' && _OVERVIEW_URL_RE.test(t.overviewURL) ? t.overviewURL : '',
           state: ROW_STATE.PENDING,
           verdict: null,
           requestedHits: [],
@@ -194,32 +208,59 @@ async function runMonitoringPass(apiBase) {
     renderList();
 
     try {
-      const patientUuid = await api.resolveTaskToPatient(apiBase, row.slug, row.taskId);
+      const patientUuid = await resolvePatientForRow(api, apiBase, row);
       if (!patientUuid) throw new Error('patient not resolvable from this task');
 
-      let verdict = _verdictByUuid.get(patientUuid);
-      if (!verdict) {
+      let entry = _verdictByUuid.get(patientUuid);
+      if (!entry) {
         if (evaluations >= BATCH_SIZE) {
           // Batch budget spent — leave for "Check next".
           row.state = ROW_STATE.PENDING;
           renderList();
           return;
         }
-        const chips = await evaluatePatient(apiBase, patientUuid, rules);
-        verdict = monitoringVerdict(chips);
-        _verdictByUuid.set(patientUuid, verdict);
+        const { chips, renal } = await evaluatePatient(apiBase, patientUuid, rules);
+        entry = { verdict: monitoringVerdict(chips), renal };
+        _verdictByUuid.set(patientUuid, entry);
         evaluations++;
         await new Promise((r) => setTimeout(r, PER_PATIENT_DELAY_MS));
       }
       row.state = ROW_STATE.DONE;
-      row.verdict = verdict;
-      row.requestedHits = requestedDrugFlags(row.summary, verdict.items);
+      row.verdict = entry.verdict;
+      row.renal = entry.renal;
+      row.requestedHits = requestedDrugFlags(row.summary, entry.verdict.items);
     } catch (e) {
       row.state = ROW_STATE.ERROR;
       row.error = e.message || 'record not read';
     }
     renderList();
   }
+}
+
+// Resolve a task row to its patient UUID. The row's own validated
+// overviewURL is authoritative (it is what live Medicus itself links, and the
+// queue bridge fetches it directly); the constructed
+// /tasks/data/{list-slug}/overview/{id} path is only a fallback because the
+// overview slug is not guaranteed to equal the task-list slug.
+const _overviewPatientCache = new Map(); // overviewURL -> patientUuid (session)
+async function resolvePatientForRow(api, apiBase, row) {
+  if (row.overviewURL) {
+    if (_overviewPatientCache.has(row.overviewURL)) return _overviewPatientCache.get(row.overviewURL);
+    try {
+      const r = await fetch(`${apiBase}${row.overviewURL}`, { credentials: 'include' });
+      if (r.ok) {
+        const data = await r.json();
+        const uuid = data?.data?.patient?.id || data?.data?.patientId || data?.patient?.id || data?.patientId || null;
+        if (uuid) {
+          _overviewPatientCache.set(row.overviewURL, uuid);
+          return uuid;
+        }
+      }
+    } catch (_) {
+      // fall through to the constructed-path fallback
+    }
+  }
+  return api.resolveTaskToPatient(apiBase, row.slug, row.taskId);
 }
 
 // Same pipeline (and the same fail-closed contract) as Sweep's evaluatePatient:
@@ -247,12 +288,14 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
     patientUuid,
   });
 
-  return engine.evaluatePatient(data.medications || [], data.observations || [], rules, {
+  const chips = engine.evaluatePatient(data.medications || [], data.observations || [], rules, {
     now: new Date().toISOString(),
     problems: data.problems || [],
     patientContext: data.patientContext,
     observationHistory: data.observationHistory || [],
   });
+  // Renal context rides along with the verdict — same fetch, zero extra cost.
+  return { chips, renal: renalContext(data.observations || [], Date.now()) };
 }
 
 // Drug rules + practice/org/custom overlays — the same merge order Sweep uses,
@@ -375,19 +418,40 @@ function verdictHtml(row) {
   }
   const v = row.verdict;
   if (!v || v.level === null) {
-    return '<span class="sg-status sg-status--clear">no monitoring flags recorded <span class="sg-clear-caveat">&ne; all clear</span></span>';
+    return (
+      '<span class="sg-status sg-status--clear">no monitoring flags recorded <span class="sg-clear-caveat">&ne; all clear</span></span>' +
+      renalHtml(row)
+    );
   }
   const hitNames = new Set(row.requestedHits.map((h) => h.name));
-  return v.items
-    .map((it) => {
-      const band = ['overdue', 'stale', 'no_data'].includes(it.status) ? 'red' : 'amber';
-      const isRequested = hitNames.has(it.name);
-      return `<span class="sg-chip sg-chip--${band}${isRequested ? ' sg-chip--requested' : ''}">
+  return (
+    v.items
+      .map((it) => {
+        const band = ['overdue', 'stale', 'no_data'].includes(it.status) ? 'red' : 'amber';
+        const isRequested = hitNames.has(it.name);
+        return `<span class="sg-chip sg-chip--${band}${isRequested ? ' sg-chip--requested' : ''}">
         ${isRequested ? '<span class="sg-chip-req" title="This flagged drug appears in the request itself">requested</span>' : ''}
         ${esc(it.name)} — ${esc(CHIP_STATUS_TEXT[it.status] || it.status)}${it.detail ? `: ${esc(it.detail)}` : ''}
       </span>`;
-    })
-    .join('');
+      })
+      .join('') + renalHtml(row)
+  );
+}
+
+// Renal fact — verbatim latest recorded eGFR, value NEVER shown without its
+// age (out-of-context guard). Absence is only called out on rows that already
+// carry a monitoring flag (that's where renal function is decision-adjacent);
+// a quiet row's missing eGFR would be noise on every young healthy patient.
+function renalHtml(row) {
+  const r = row.renal;
+  const flagged = !!(row.verdict && row.verdict.level);
+  if (!r) {
+    return flagged ? '<span class="sg-renal sg-renal--stale">no eGFR on record</span>' : '';
+  }
+  const age = formatObsAge(r.ageDays);
+  const when = age || `recorded ${esc(String(r.date).slice(0, 10))}`;
+  const stale = r.ageDays == null || r.ageDays > RENAL_STALE_DAYS;
+  return `<span class="sg-renal${stale ? ' sg-renal--stale' : ''}" title="Latest recorded eGFR — display of the recorded value only; verify in the record">eGFR ${esc(r.value)} · ${when}</span>`;
 }
 
 function renderList() {

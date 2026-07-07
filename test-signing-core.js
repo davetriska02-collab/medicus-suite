@@ -26,6 +26,8 @@ const path = require('path');
     requestedDrugFlags,
     sortSigningRows,
     requestAgeDays,
+    renalContext,
+    formatObsAge,
     ROW_STATE,
     RED_CHIP_STATUSES,
     AMBER_CHIP_STATUSES,
@@ -124,6 +126,33 @@ const path = require('path');
   check(requestAgeDays('garbage', now) === null, 'garbage → null');
   check(requestAgeDays('', now) === null, 'empty → null');
   check(requestAgeDays('2026-07-09T09:00:00Z', now) === null, 'future createdAt → null, never negative');
+
+  // ── renalContext / formatObsAge ──────────────────────────────────────────────
+  console.log('\n--- renal context ---');
+  const NOW = new Date('2026-07-07T12:00:00Z').getTime();
+  const obs = (name, date, value) => ({ name, date, value });
+  let rc = renalContext(
+    [
+      obs('eGFR', '2025-08-01', '38 mL/min/1.73m2'),
+      obs('eGFR', '2024-01-01', '52 mL/min/1.73m2'),
+      obs('HbA1c', '2026-06-01', '48'),
+    ],
+    NOW
+  );
+  check(rc.value.startsWith('38'), 'latest eGFR wins, HbA1c ignored');
+  check(rc.ageDays > 300 && rc.ageDays < 400, 'ageDays computed from latest date');
+  rc = renalContext([obs('Glomerular filtration rate', '2026-06-30', '61')], NOW);
+  check(rc && rc.value === '61', 'glomerular filtration name variant matches');
+  check(renalContext([obs('HbA1c', '2026-06-01', '48')], NOW) === null, 'no renal obs → null');
+  check(renalContext(null, NOW) === null, 'null observations → null');
+  rc = renalContext([obs('eGFR', 'garbage-date', '40')], NOW);
+  check(rc && rc.ageDays === null, 'unparseable date → ageDays null (renderer shows raw date)');
+
+  check(formatObsAge(0) === 'today', 'formatObsAge today');
+  check(formatObsAge(12) === '12d ago', 'formatObsAge days');
+  check(formatObsAge(200) === '7mo ago', 'formatObsAge months');
+  check(formatObsAge(900) === '2y ago', 'formatObsAge years');
+  check(formatObsAge(null) === '', 'formatObsAge null → empty (renderer must fall back to raw date)');
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);

@@ -137,6 +137,46 @@ export function sortSigningRows(rows) {
 // the overview resolution and the record fetch, so this costs one extra
 // lightweight overview call per task, not one record fetch per task).
 
+// ── Renal context (display-only recorded fact) ────────────────────────────────
+// Before signing a renally-cleared repeat the eye asks "what's the kidney
+// function, and how old is that number?" The record fetch already returns the
+// investigation dashboard; this surfaces the LATEST recorded eGFR verbatim,
+// with its age always attached — the age IS the honest state. No threshold,
+// band, or dose logic is ever computed here (intended-purpose: display only;
+// out-of-context display risk is mitigated by never separating value from
+// date — see H-038 control (i)).
+
+const RENAL_MATCH = ['egfr', 'glomerular filtration'];
+export const RENAL_STALE_DAYS = 365;
+
+// Latest recorded eGFR from normalised observations ({name, date, value}).
+// Returns { value, date, ageDays } or null when none recorded. Same substring
+// match philosophy as the rules engine's findLatestObservation.
+export function renalContext(observations, nowMs) {
+  let best = null;
+  for (const obs of Array.isArray(observations) ? observations : []) {
+    if (!obs || !obs.name || !obs.date) continue;
+    const n = String(obs.name).toLowerCase();
+    if (!RENAL_MATCH.some((m) => n.includes(m))) continue;
+    if (!best || String(obs.date) > String(best.date)) best = obs;
+  }
+  if (!best) return null;
+  const t = new Date(best.date).getTime();
+  const ageDays = Number.isFinite(t) && nowMs >= t ? Math.floor((nowMs - t) / 86400000) : null;
+  return { value: best.value != null ? String(best.value) : '', date: best.date, ageDays };
+}
+
+// Compact age text for a recorded fact: "today", "Nd", "Nmo", "Ny". Empty
+// string when unknown — the renderer must then show the raw date instead,
+// never an ageless number.
+export function formatObsAge(ageDays) {
+  if (ageDays == null || !Number.isFinite(ageDays) || ageDays < 0) return '';
+  if (ageDays === 0) return 'today';
+  if (ageDays < 60) return `${ageDays}d ago`;
+  if (ageDays < 365 * 2) return `${Math.round(ageDays / 30.44)}mo ago`;
+  return `${Math.floor(ageDays / 365.25)}y ago`;
+}
+
 // Age of a request in whole days from its createdAt to `now` (ms). null when
 // unparseable — the renderer shows nothing rather than "0d".
 export function requestAgeDays(createdAt, nowMs) {
