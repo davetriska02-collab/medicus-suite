@@ -3,9 +3,16 @@
 'use strict';
 
 import { createModuleLoader } from './module-loader.js';
-import { DEFAULT_SUB_THRESHOLDS, ragLevel } from './modules/submissions/submissions-core.js';
+import {
+  DEFAULT_SUB_THRESHOLDS,
+  ragLevel,
+  windowTaskList,
+  ledgerSeriesForDay,
+} from './modules/submissions/submissions-core.js';
+import { recordTaskLists } from './modules/submissions/submissions-ledger.js';
 import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
+import { initQuickLeaflet } from './quick-leaflet/quick-leaflet.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
 import { initSetup } from './setup/setup.js';
 import { TAB_HELP } from '../shared/tab-help.js';
@@ -118,6 +125,7 @@ const MODULES = {
   condor: { js: () => import('./modules/condor/condor.js'), css: './modules/condor/condor.css' },
   trends: { js: () => import('./modules/trends/trends.js'), css: './modules/trends/trends.css' },
   reception: { js: () => import('./modules/reception/reception.js'), css: './modules/reception/reception.css' },
+  signing: { js: () => import('./modules/signing/signing.js'), css: './modules/signing/signing.css' },
   sweep: { js: () => import('./modules/sweep/sweep.js'), css: './modules/sweep/sweep.css' },
   knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
   leaflets: { js: () => import('./modules/leaflets/leaflets.js'), css: './modules/leaflets/leaflets.css' },
@@ -1558,7 +1566,10 @@ async function fetchAndRenderSubRagStrip() {
     return true;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // LOCAL calendar date, not toISOString() — UTC would query yesterday during
+  // the first BST hour of the day (same fix as condor's todayISO, v3.35.2).
+  const _now = new Date();
+  const today = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
   const results = await Promise.allSettled(
     SUB_RAG_TYPES.map(async (tt) => {
       const url = `https://${code}.api.england.medicus.health/tasks/data/${tt.apiType}/task-list?createdAt_startDate=${today}&createdAt_endDate=${today}`;
@@ -1567,9 +1578,37 @@ async function fetchAndRenderSubRagStrip() {
       const r = await window.ApiDiag.fetch({ module: 'panel-sub-rag-strip', url, code, codeSource: source });
       if (!r.ok) throw new Error(`${tt.label} HTTP ${r.status}`);
       const d = await r.json();
-      return { key: tt.key, label: tt.label, count: (d.tasks || []).length };
+      // windowTaskList: thresholds must fire on tasks CREATED today, even if
+      // the server-side createdAt filter is ever renamed/ignored upstream.
+      return { key: tt.key, label: tt.label, tasks: windowTaskList(d, today, today).tasks };
     })
   );
+
+  // Thresholds fire on the DAY-LEDGER count (tasks seen today, including ones
+  // the team has since completed) — the task-list API only contains open
+  // tasks, so a raw count would sag as work is cleared and could un-trip an
+  // alert mid-morning while true demand keeps climbing (v3.153.0).
+  let ledger = null;
+  try {
+    const byKey = {};
+    for (const res of results) {
+      if (res.status === 'fulfilled') byKey[res.value.key] = res.value.tasks;
+    }
+    ledger = await recordTaskLists(byKey);
+  } catch (_) {
+    // Storage failure — fall back to live (open-only) counts below.
+  }
+  const ledgerSeries = ledger
+    ? ledgerSeriesForDay(
+        ledger,
+        today,
+        SUB_RAG_TYPES.map((t) => t.key)
+      )
+    : null;
+  for (const res of results) {
+    if (res.status !== 'fulfilled') continue;
+    res.value.count = ledgerSeries ? ledgerSeries[res.value.key].total : res.value.tasks.length;
+  }
 
   // A failure in any sub-request counts as a polling failure for backoff purposes
   const anyFailed = results.some((r) => r.status === 'rejected');
@@ -1655,14 +1694,32 @@ let subRagPoller = makePoller(fetchAndRenderSubRagStrip, SUB_RAG_POLL_MS, 'sub-r
 const healthStripEl = document.getElementById('healthStrip');
 const HEALTH_POLL_MS = 30 * 1000;
 
+// Acknowledge/snooze: an amber self-diagnosis the user has SEEN shouldn't nag
+// every day while the degradation is unchanged. Dismiss hides the strip for
+// this exact degraded-contract set for 7 days; if the set CHANGES (a new
+// contract degrades, or one recovers and a different one breaks) the strip
+// reappears immediately — new problems always surface. Options → Suite health
+// keeps the full detail regardless of the snooze.
+const HEALTH_SNOOZE_KEY = 'health.stripSnooze';
+const HEALTH_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+
 async function fetchAndRenderHealthStrip() {
   if (!healthStripEl) return true;
   try {
-    const r = await chrome.storage.local.get('health.contracts');
+    const r = await chrome.storage.local.get(['health.contracts', HEALTH_SNOOZE_KEY]);
     const health = r['health.contracts'] || {};
     const DC = window.DomContracts;
-    const degradedIds = Object.keys(health).filter((id) => health[id]?.status === 'degraded');
+    const degradedIds = Object.keys(health)
+      .filter((id) => health[id]?.status === 'degraded')
+      .sort();
     if (degradedIds.length === 0 || !DC) {
+      healthStripEl.className = 'health-strip health-strip-hidden';
+      healthStripEl.innerHTML = '';
+      return true;
+    }
+    const sig = degradedIds.join('|');
+    const snooze = r[HEALTH_SNOOZE_KEY];
+    if (snooze && snooze.sig === sig && typeof snooze.until === 'number' && Date.now() < snooze.until) {
       healthStripEl.className = 'health-strip health-strip-hidden';
       healthStripEl.innerHTML = '';
       return true;
@@ -1676,9 +1733,14 @@ async function fetchAndRenderHealthStrip() {
       <span class="health-strip-icon">⚠</span>
       <span class="health-strip-text">Medicus may have changed — ${escStrip(features.join(', '))} degraded. Details in Options → Suite health.</span>
       <button class="health-strip-goto">Details →</button>
+      <button class="health-strip-dismiss" title="Dismiss for 7 days (reappears if anything new degrades)" aria-label="Dismiss health warning for 7 days">✕</button>
     `;
     healthStripEl.querySelector('.health-strip-goto')?.addEventListener('click', () => {
       chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-health') });
+    });
+    healthStripEl.querySelector('.health-strip-dismiss')?.addEventListener('click', async () => {
+      await chrome.storage.local.set({ [HEALTH_SNOOZE_KEY]: { sig, until: Date.now() + HEALTH_SNOOZE_MS } });
+      fetchAndRenderHealthStrip();
     });
     return true;
   } catch (_) {
@@ -1750,6 +1812,9 @@ document.getElementById('displayBtn')?.addEventListener('click', (e) => {
   displayOpen = !displayOpen;
   renderDisplayPopover();
 });
+
+// Wire quick-leaflet popover (leaflet search from any tab — panel only)
+initQuickLeaflet({ switchModule });
 
 // Wire per-tab help button
 wireHelpButton();

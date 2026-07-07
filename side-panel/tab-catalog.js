@@ -26,6 +26,11 @@ export const TAB_CATALOG = [
   { id: 'condor', name: 'Condor', blurb: 'Live operations dashboard — pressure, demand gap, task age.' },
   { id: 'reception', name: 'Reception', blurb: 'Front-desk tools: guided call capture and patient status.' },
   { id: 'sweep', name: 'Sweep', blurb: 'Pre-clinic check of today’s booked patients for overdue monitoring.' },
+  {
+    id: 'signing',
+    name: 'Signing',
+    blurb: 'Open repeat requests with each patient’s recorded monitoring alongside — riskiest first.',
+  },
   { id: 'knowledge', name: 'Knowledge', blurb: 'Your practice’s reference base — criteria, contacts, pathways.' },
   { id: 'leaflets', name: 'Leaflets', blurb: 'Find and share the right NHS patient information leaflet, fast.' },
   {
@@ -48,7 +53,19 @@ export const ROLE_PRESETS = [
   {
     id: 'gp',
     label: 'GP / clinician',
-    show: ['today', 'sentinel', 'record', 'trends', 'sweep', 'slots', 'knowledge', 'leaflets', 'visualiser', 'about'],
+    show: [
+      'today',
+      'sentinel',
+      'record',
+      'trends',
+      'sweep',
+      'signing',
+      'slots',
+      'knowledge',
+      'leaflets',
+      'visualiser',
+      'about',
+    ],
   },
   {
     id: 'reception',

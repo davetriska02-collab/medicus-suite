@@ -533,14 +533,14 @@ export function summariseQofPointsAtRisk(perPatientResults, pointsByCode) {
 // several gaps that resolve to one booking reads as one line, not three). Used
 // to prefill the "Create recall task" form so the loop from detection → a real
 // Medicus task is one click + a confirm. Pure: no DOM, no fetch.
-export function buildRecallDescription(chips) {
+export function buildRecallDescription(chips, source = 'Sweep') {
   const groups = groupInstructionsByAction(chips || [], chipInstruction);
   if (!groups.length) return '';
   const lines = groups.map(({ action, details }) => {
     const d = (details || []).filter(Boolean).join('; ');
     return d ? `${action}: ${d}` : action;
   });
-  return `Recall (from Sweep): ${lines.join(' | ')}`;
+  return `Recall (from ${source}): ${lines.join(' | ')}`;
 }
 
 export function summariseSweep(perPatientResults) {

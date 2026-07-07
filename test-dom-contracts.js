@@ -66,7 +66,11 @@ const VOID_TAGS = new Set([
 ]);
 
 function makeNode(tag) {
-  return { tag: tag.toLowerCase(), attrs: {}, children: [] };
+  const node = { tag: tag.toLowerCase(), attrs: {}, children: [] };
+  // Faithful to the real DOM: absent attribute -> null (probeContract's
+  // anchorHrefRe gate reads anchors via getAttribute('href')).
+  node.getAttribute = (name) => (name in node.attrs ? node.attrs[name] : null);
+  return node;
 }
 
 function parseHTML(html) {
@@ -385,6 +389,46 @@ const semanticsContract = {
   const root = asProbeRoot(parseHTML('<div class="probe-anchor"><span class="probe-target">present</span></div>'));
   const result = DomContracts.probeContract(semanticsContract, root);
   check(result.status === DomContracts.STATUS.OK, 'anchor present + target present -> OK');
+}
+
+// anchorHrefRe applicability gate (uuid DOM-fallback false-positive fix):
+// pages whose anchors carry no matching href give NOT_APPLICABLE, never FAIL.
+{
+  const gated = {
+    id: 'probe.semantics.gated',
+    anchor: 'a',
+    target: ['.probe-target'],
+    legacy: [['a[href*="/care-record/"]']],
+    anchorHrefRe: '[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}',
+  };
+  // anchors present but none carries a UUID (patient-less page, e.g. the
+  // appointment book) -> NOT_APPLICABLE
+  let root = asProbeRoot(parseHTML('<div><a href="/560b6c/scheduling/appointment-book">Diary</a></div>'));
+  let result = DomContracts.probeContract(gated, root);
+  check(
+    result.status === DomContracts.STATUS.NOT_APPLICABLE,
+    'anchorHrefRe gate: anchors without a UUID href -> NOT_APPLICABLE (patient-less page is not a failure)'
+  );
+
+  // a UUID-bearing anchor exists and matches the legacy selector -> OK
+  root = asProbeRoot(
+    parseHTML('<div><a href="/560b6c/patient/patient/care-record/deadbeef-dead-4eef-8eef-deadbeefdead">P</a></div>')
+  );
+  result = DomContracts.probeContract(gated, root);
+  check(result.status === DomContracts.STATUS.OK, 'anchorHrefRe gate: UUID href present + legacy hit -> OK');
+
+  // UUID-bearing anchors exist but match neither target nor legacy -> genuine FAIL
+  root = asProbeRoot(parseHTML('<div><a href="/560b6c/new-shape/deadbeef-dead-4eef-8eef-deadbeefdead">P</a></div>'));
+  result = DomContracts.probeContract(gated, root);
+  check(
+    result.status === DomContracts.STATUS.FAIL,
+    'anchorHrefRe gate: UUID hrefs present but no target/legacy match -> FAIL (real URL-shape drift)'
+  );
+
+  // the shipped uuid contract declares the gate + a state epoch
+  const shipped = DomContracts.get('api-client.patient-uuid-dom-fallback');
+  check(!!shipped.anchorHrefRe, 'shipped uuid contract declares anchorHrefRe gate');
+  check(shipped.stateEpoch === 2, 'shipped uuid contract declares stateEpoch 2');
 }
 
 // probeContract never throws on a garbage contract/root

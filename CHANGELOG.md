@@ -2,6 +2,387 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.159.0] — 2026-07-07
+
+### Signing Queue: one warm line on the genuinely finished pile
+
+The maintainer asked for "a smiley face or something" on clear states; a
+scoped Practice-panel run (docs/appraisal/PRACTICE-clear-state-2026-07-07.md)
+unanimously rejected the smiley — including the consumer-savvy persona — and
+converged on one fixed line of warm, static text instead. Shipped as ruled:
+
+- Signing Queue's empty state now reads **"✓ Pile's clear — nothing waiting
+  on you."** (muted-green tick, sentence case) — acknowledgement and
+  permission to stop, not celebration. No emoji, no animation, no rotating
+  copy, no sound; identical every day so it fades into competence.
+- **Only when genuinely finished** (`emptyStateKind` in signing-core.js,
+  tested): every task type ticked and no location filter active. A narrowed
+  view keeps the neutral "No open repeat requests for the selected types." —
+  warmth on a false all-clear is worse than no warmth at all.
+- Doctrine recorded in the appraisal doc: delight attaches to finished WORK,
+  never to absence of clinical alerts, and never near a caveat.
+
+## [v3.158.0] — 2026-07-07
+
+### Signing Queue: location filter pills + glance glyphs (panel-appraised, user-placed)
+
+The v3.157.0 collection chip, matured through a scoped Practice-panel run
+(docs/appraisal/PRACTICE-signing-chip-2026-07-07.md) and then real-user
+feedback from the practice's own dispensary side:
+
+- **Location filter pills with counts** above the pile ("Dispensary 6 ·
+  Boots Pharmacy, Godalming 1 · No location 3") — derived from the values
+  present, clickable to filter, invisible at practices that never record
+  locations. "No location" is an explicit, countable bucket: a blank can no
+  longer silently read as "not ours" (the panel's sharpest finding).
+- **A narrowed view is never silent**: an active filter shows "N requests
+  hidden by the location filter", and any hidden RED-flagged rows are called
+  out by count in red (H-038 control (j)). The monitoring pass always checks
+  every row regardless of the filter. Filter is session-only, never
+  persisted — a remembered filter could hide rows from a user who forgot it.
+- **Chip placement settled by the real user**, overriding the synthetic
+  panel's meta-line ruling: it stays in the row head after the name, and the
+  SYMBOL now carries the glance category — house glyph (tinted) = practice
+  dispensary, Rx glyph (outline) = community pharmacy — answering the
+  phone-call question ("with our dispenser or your usual chemist?") without
+  reading. Category is a /dispens/i heuristic on the recorded name; the
+  verbatim text always rides alongside so a mis-coded location stays visible.
+
+### Monitoring: "Create task" for the open patient (Sweep's close-the-loop)
+
+Sweep's per-patient "Create recall task" — requested for the Monitoring tab —
+added to the Sentinel action bar. Same machinery (`shared/task-api.js`
+driving Medicus's OWN general-task endpoints; Medicus's validation, access
+control and audit fire as normal), description prefilled from the patient's
+action-needed chips via the shared instruction grouping ("Recall (from
+Monitoring): …"), assignee/priority from the live Medicus form, one explicit
+confirm, EventLedger record on success. **Wrong-patient guards (H-023
+extended):** the form permanently names the patient it was opened for, and
+submit re-checks the currently-followed patient UUID against the one captured
+at form-open — auto-follow moving on mid-form invalidates the submit instead
+of creating a task against the wrong record.
+
+## [v3.157.0] — 2026-07-07
+
+### Signing Queue: collection-location flag (dispensing patients)
+
+Each signing row now carries the request's recorded **collection location**
+verbatim from the task row (`collectionLocationName` — zero extra fetches),
+rendered as a neutral chip beside the patient name. For a dispensing
+practice this is the dispensing-patient flag at signing time: it says where
+the script goes after signing ("Dispensary"), so the dispensing pile is
+scannable at a glance. Routing information, not clinical risk — styled in
+the accent tokens, never red/amber, and absent when Medicus records no
+location. No new storage, no sort changes.
+
+## [v3.156.2] — 2026-07-07
+
+### Fix: Backup & Restore — "Export entire suite", "Import from file", and "Publish to shared folder" all failing
+
+`shared/leaflets-utils.js` and `shared/io/leaflets-io.js` are both loaded as
+classic `<script>` tags on the options page and so share one global scope.
+Both declared top-level `const SLUG_RE` and `const RECENT_MAX` — the second
+declaration threw `SyntaxError: Identifier 'SLUG_RE' has already been
+declared`, which silently aborted all of `leaflets-io.js`. That left
+`leafletsExport`/`leafletsImport` undefined. `require()` in
+`test-leaflets-io.js` never caught it, since CommonJS gives each file its own
+module scope.
+
+This one root cause broke three separate-looking symptoms, because all three
+go through the whole-suite export/import path rather than a single module:
+
+- **"Publish to shared folder"** and **"Export entire suite"** — both call
+  `doFullExport()`, which unconditionally includes `leafletsExport()` while
+  building its `Promise.all` array. Referencing the undefined function threw
+  immediately, aborting the whole export before any file was produced.
+- **"Import from file"** (and "paste JSON") — both call `applyEnvelope()`,
+  which includes a `leafletsImport` task whenever the backup has a `leaflets`
+  section (true for any full-suite backup). `applyWithRollback` rolls back
+  every task if any one throws, so the undefined function aborted and
+  rolled back the entire import, not just the leaflets portion.
+- Per-module (single-scope) export/import was unaffected, since those only
+  call the one requested module's function.
+
+- Renamed `leaflets-io.js`'s internal constants to `LEAFLETS_IO_SLUG_RE` /
+  `LEAFLETS_IO_RECENT_MAX` so they can't collide with `leaflets-utils.js` (or
+  anything else) loaded on the same page
+- No behaviour change to the export/import contract; `test-leaflets-io.js`
+  unaffected
+
+## [v3.156.1] — 2026-07-07
+
+### Fixed: Signing Queue "patient not resolvable" on every live task
+
+First live run showed every row erroring at patient resolution: the module
+constructed the overview path from the TASK-LIST slug
+(`/tasks/data/prescription_request_task_routine/overview/{id}`), but live
+Medicus serves the overview under a different slug than the list. Fix: the
+task row's own `overviewURL` (validated with the same `_OVERVIEW_URL_RE` the
+queue bridge uses — it is the pointer Medicus itself links and the queue
+chips already fetch) is now the authoritative resolution path, with the
+constructed path kept only as a fallback. Verified on a live-mimic fixture
+where the constructed path fails and only the row's overviewURL succeeds.
+
+## [v3.156.0] — 2026-07-07
+
+### Signing Queue: renal context on every checked row (display-only)
+
+The wishlist's "highest patient-safety value" renal join, delivered in the
+conservative display-only slice that fits the intended-purpose statement:
+before signing a renally-cleared repeat (DOAC, metformin, lithium…) the eye
+asks "what's the kidney function, and how old is that number?" — the record
+fetch already returns it, so every checked signing row now shows the
+patient's **latest recorded eGFR verbatim with its age permanently attached**
+("eGFR 38 mL/min/1.73m2 · 11mo ago").
+
+- Value is NEVER rendered without its date/age (out-of-context guard, H-010);
+  unparseable dates fall back to showing the raw recorded date.
+- **Stale (> 12 months) or unparseable-age renal data gets amber salience**;
+  "no eGFR on record" is remarked ONLY on rows already carrying a monitoring
+  flag — a quiet row's missing eGFR would be noise on young healthy patients.
+- No threshold, band, or dose logic is computed — verbatim recorded fact
+  adjacency only. H-038 gains control (i) documenting this.
+- Zero extra network cost: the eGFR comes from the investigation dashboard
+  the monitoring pass already fetches per patient.
+
+Pure logic (`renalContext`, `formatObsAge`) in signing-core.js with tests
+(39 checks total in test-signing-core.js).
+
+## [v3.155.0] — 2026-07-07
+
+### New: Signing Queue — the repeat-prescription pile with monitoring context
+
+The wishlist's top remaining GP minutes-saver (Tom's "safe to sign", 2026-07-03
+appraisal §3b), built to fit the frozen intended-purpose statement: the module
+DISPLAYS recorded monitoring next to each open request and deliberately never
+renders a verdict — no "safe", no ticks, no green. Hazard log: **H-038**.
+
+**What it does.** New Signing tab (panel + pop-out; in the GP role preset)
+lists every open prescription-request task (routine by default; non-routine
+toggleable — the endpoint's open-task view is exactly the outstanding pile),
+resolves each to its patient via the task-overview endpoint
+(`SentinelApiClient.resolveTaskToPatient` — the same panel-proven path
+booking-api uses), runs the patient through the identical monitoring pipeline
+Sweep uses (`fetchAll → normaliseAll → evaluatePatient`, drug rules +
+practice org/custom overlays, sequential with 250ms pacing, 30-patient
+batches with "Check next"), and shows the verdict chips on each request:
+
+- **red** — any monitored drug overdue / stale / no data;
+- **amber** — due soon;
+- **"requested" tag** — the loudest signal: the flagged drug appears in the
+  request text itself (a lithium request while the lithium level is overdue);
+- rows sort riskiest-first, with **unknown above quiet**: a record that could
+  not be read is an amber "check manually" row ranked above "no monitoring
+  flags recorded" — an incomplete read can never masquerade as an all-clear;
+- "no monitoring flags recorded" carries a permanent "≠ all clear" caveat and
+  the header's fixed honest-state line; multiple requests from one patient
+  share a single record fetch.
+
+**Safety framing.** Read-only (no write path exists in the module);
+authorisation happens only in Medicus. Nothing persisted — verdicts are
+in-memory; the only storage is the type-toggle UI pref via shared ui-state.
+New hazard H-038 (automation bias on this surface) with controls documented.
+
+Files: `side-panel/modules/signing/{signing.js,signing-core.js,signing.css}`
+(new), nav/registry entries in `panel.html`, `pop-out/pop-out.html`,
+`panel.js`, `pop-out.js`, `tab-catalog.js` (+ GP preset), tab-help entry.
+Tests: `test-signing-core.js` (30 checks: verdict reduction, requested-drug
+matching, risk-band sorting, patient grouping, request age).
+
+## [v3.154.3] — 2026-07-07
+
+### Fixed: record sections empty on slow loads ("card not found: Observations & Results")
+
+Reported via console warning on a live care-record page where the card list
+showed 'Observations & Results' clearly present. Root cause is a one-shot
+extraction race, not a Medicus rename: pageReady() passes as soon as the
+patient banner or FIRST record card renders, extractAll() runs once, and
+Medicus lazy-renders the lower cards afterwards — the route watcher's
+250ms/1200ms reruns can both land too early on a slow load, leaving those
+sections empty for the whole page visit.
+
+New late-card settle-watch in `content-scripts/triage-lens/content.js`: when
+an extraction pass reports expected-but-absent cards (`_missingCards`), the
+lens polls cheaply (500ms) for up to 12s and re-extracts as soon as any of
+them appears. Applies to record AND detail pages; self-terminates on deadline
+or completion; disarmed on SPA route change. The once-per-load
+"card not found" warning still fires if a card genuinely never renders.
+
+## [v3.154.2] — 2026-07-07
+
+### Fixed: health-strip false positive — patient-UUID fallback probe fired on patient-less pages
+
+Root cause of the "Medicus may have changed — Patient UUID resolution" strip
+found via live-DOM capture: the contract is only probed on pages whose URL
+resolves no id, which includes patient-LESS screens like the appointment book
+and dashboards. A diary grid has no patient links, so the probe FAILed there
+and two spaced visits promoted to a 'degraded' banner while nothing was
+broken. (The capture also confirmed the data-attribute strategy matches
+nothing on current Medicus — the link strategies `/care-record/{uuid}` /
+`/patient/{uuid}` still work and carry the feature.)
+
+- **Applicability gate** (`anchorHrefRe` on the contract, honoured by
+  `DomContracts.probeContract`): if no anchor href on the page carries a bare
+  UUID, there is no patient-resolution evidence to test — the round reads
+  `not_applicable`, never FAIL. UUID-bearing links that match neither shape
+  still FAIL (genuine URL-shape drift stays detectable).
+- **State epochs** (`stateEpoch` on the contract; `applyStateEpochs` /
+  `stampStateEpochs` in contract-canary.js): stored verdicts issued under the
+  old probe semantics are discarded on the next probe round, so the existing
+  false-positive 'degraded' clears itself on the next Medicus visit — no
+  manual dismiss needed.
+- Tour: 'header-controls' step extended to lead with the v3.154.0
+  quick-leaflet button and retagged (TOUR_VERSION 9 → 10) so returning users
+  get a "What's new" pass showing where it lives — shipped and immediately
+  missed by its own requester, so it earns the spotlight.
+
+Tests: probe-gate semantics (patient-less page → not_applicable; UUID links +
+selector miss → FAIL) and epoch discard/stamp covered in
+test-dom-contracts.js / test-contract-canary.js.
+
+## [v3.154.1] — 2026-07-07
+
+### Suite-health strip: acknowledge/dismiss (7-day snooze per degradation set)
+
+The amber "Medicus may have changed — … degraded" strip had no acknowledge
+action, so a known, unchanged degradation nagged on every panel open. The
+strip now carries a ✕ dismiss: hides that EXACT set of degraded contracts for
+7 days, and reappears immediately if the degraded set changes (anything new
+breaks, or a different contract degrades) — new problems always surface.
+Options → Suite health keeps full detail regardless of the snooze. New
+machine-local key `health.stripSnooze` (transient acknowledgement, not backed
+up — a restored backup should re-surface the warning).
+
+Context: the strip was correctly reporting a real Medicus change (the
+patient-UUID DOM fallback probe degraded — the same change that takes out the
+cross-tab monitoring badge on pages where URL detection can't resolve the
+patient). The fix for the underlying selector drift needs a live-DOM capture
+and ships separately; this release just makes the warning politely
+acknowledgeable while it's known-about.
+
+## [v3.154.0] — 2026-07-06
+
+### New: Quick Leaflet popover — NHS leaflet search from any tab
+
+Requested for mid-triage use: leaflets were needed while working the Slots
+screen (and the queue, and Sentinel), and switching to the Leaflets tab loses
+the module you're in. Rather than embed leaflets into Slots specifically, the
+panel header gains a leaflet button (open-book icon, next to the command
+palette) that opens a compact popover on top of whatever tab is active:
+
+- Fuzzy search over the bundled NHS A–Z index (same tier-1 engine as the
+  Leaflets tab, via `shared/leaflets-utils.js`) with keyboard-first flow —
+  type, ↑/↓, Enter opens the leaflet on nhs.uk in a new tab; per-row
+  copy-link; a guaranteed "Search nhs.uk for …" fallback row covers index
+  misses; recents shown when the query is empty.
+- Shares the Leaflets tab's `leaflets.recent` list (both surfaces stay in
+  sync) and hands the current query into the full tab via the existing
+  `leaflets.pendingQuery` mechanism ("Open Leaflets tab →" in the footer).
+  Tier-1 only — no API key use, no in-panel rendering, no new storage keys.
+- Also reachable from the command palette ("NHS leaflet quick search…").
+- Panel-only by the same convention as the global strips; the pop-out window
+  reaches the full Leaflets tab from its own nav.
+
+Files: `side-panel/quick-leaflet/quick-leaflet.js` (new), `panel.html`
+(header button + host), `panel.css` (`.ql-*` styles), `panel.js` (init),
+`palette/palette.js` (command).
+
+## [v3.153.0] — 2026-07-06
+
+### Fixed: Submissions "work received" counts no longer erode as the team completes work (day ledger)
+
+Root cause of the v3.152.1 report, confirmed by live-API probe (2026-07-06):
+the `/tasks/data/{type}/task-list` endpoint **only ever contains open tasks**.
+Its status filter offers `New / Awaiting recipient response / Reply received /
+Snoozed` — there is **no completed state**; completed requests leave the table
+entirely (a probe of the previous Monday returned 2 residual tasks). So a
+`createdAt`-filtered count is "received AND still open", and the number falls
+as the team clears work. The Submissions Tracker, Today demand card, panel
+demand strip and Condor demand/velocity/PPI have therefore all systematically
+**undercounted received work since inception** — worst on busy mornings, when
+27 could show against a true intake 3–4× higher. A demand undercount reads as
+"quiet day" and misinforms capacity decisions.
+
+The API cannot return completed tasks, so the suite now **remembers** them:
+
+- **New received-work day ledger** (`submissions.ledger`,
+  `side-panel/modules/submissions/submissions-ledger.js`, pure logic in
+  `submissions-core.js`). Every poller that already hits the endpoint
+  (Submissions module, Today demand card, panel `#subRagStrip`, Condor — each
+  every 60s while visible) merges the task IDs it sees into per-day, per-
+  category entries. Once seen, a task stays counted after completion.
+- **PHI/data-minimisation**: the ledger stores task UUIDs + creation hour for
+  the current day only; past days are compacted to bare counts + a 24-bucket
+  hourly histogram at the first poll of the next day. No patient identifiers,
+  92-day retention. Backed up via `shared/io/submissions-io.js` (with
+  structural sanitisation on import) so demand history survives reinstalls.
+- **All four consumers now count from the ledger** (falling back to the live
+  open-only count if storage fails): Submissions tiles/charts in all three
+  modes, Today demand card, demand-strip RAG thresholds, Condor
+  demand/velocity/PPI. RAG thresholds in particular no longer un-trip
+  mid-morning because the team is clearing the queue while intake keeps
+  climbing.
+- **Honest history**: days the suite wasn't live-watching can only show
+  residual open tasks. The Submissions module now flags such days in the
+  amber data-health notice instead of presenting undercounts as history —
+  received counts build up from the day the suite starts watching.
+- Known limitation (documented, unfixable client-side): work received and
+  completed while the panel was closed (e.g. before first open of the day) is
+  invisible to the ledger and still undercounts that window.
+
+## [v3.152.1] — 2026-07-06
+
+### Fixed/hardened: Submissions & Today demand counts against silent task-list API changes
+
+Reported: Submissions Tracker (and the Today demand card, which shares the
+endpoint) showing implausibly low "work received" counts on a Monday morning,
+with the same numbers regardless of date — alongside a health-strip warning
+that Medicus may have changed.
+
+The `/tasks/data/{type}/task-list` endpoint **silently ignores query params it
+doesn't recognise** (the v3.35.2 postmortem: `startDate` vs
+`createdAt_startDate` returned the whole backlog). If Medicus renames the
+`createdAt_*` filters, the failure inverts and every consumer quietly counts
+the *default open-task view* — the outstanding queue, not work received.
+Completed work vanishes from the count, every date shows the same numbers, and
+nothing errors. Previously that showed as confidently wrong tiles; a demand
+undercount reads as "quiet Monday" and misinforms capacity decisions.
+
+New `windowTaskList` / `extractTaskArray` / `taskDateISO` in
+`submissions-core.js` (pure, tested), now used by **all four same-day
+consumers** — Submissions module, Today demand card, panel `#subRagStrip`,
+Condor demand/velocity/PPI:
+
+- **Detects an ignored date filter**: tasks created clearly outside the
+  requested window (±1-day tolerance absorbs UTC/BST boundary skew — no false
+  alarms on midnight tasks) trip a `filterIgnored` flag; counts are then
+  re-windowed client-side to the requested dates so they stay honest.
+- **Surfaces it, never hides it**: the Submissions module shows an amber
+  data-health notice ("Counts unreliable — Medicus ignored the date filter…
+  likely an undercount, completed items may be missing"); the Today demand
+  card shows an inline warning. Healthy responses pass through untouched.
+- **Detects truncation**: a body carrying `totalCount`/`total`/`meta.total`
+  larger than the returned array (pagination introduced upstream) flags
+  "partial page — counts may be low".
+- **Tolerates envelope renames**: task arrays are now extracted from
+  `tasks | data | results | rows | bare array` (same shape list page-world.js
+  already tolerates) instead of only `d.tasks` — a renamed envelope becomes a
+  flagged count, not a silent zero.
+- Panel `#subRagStrip` also now uses the **local** calendar date instead of
+  `toISOString()` (which queried yesterday during the first BST hour — same
+  fix condor got in v3.35.2).
+- The Condor report's ranged demand fetch already windows client-side via
+  `bucketDemandByDay` and needed no change.
+
+Note: when the filter is being ignored upstream, client-side windowing cannot
+recover work the API no longer returns (completed tasks). The warning is the
+point — the follow-up fix needs the new filter param names captured from a live
+Medicus page (Debug → API diagnostics, or a page-console capture).
+
+Tests: `test-submissions-core.js` extended to cover envelope tolerance, date
+parsing, boundary tolerance, ignored-filter re-windowing and truncation
+detection.
+
 ## [v3.152.1] — 2026-07-05
 
 ### Duplicate-checker: journal-capture reliability + diagnostics (internal tool)

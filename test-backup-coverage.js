@@ -324,6 +324,12 @@ const ALLOWLIST = new Set([
   // that has nothing to do with that machine's actual, current DOM. Surfaced
   // read-only in Options → Suite health (options.html #sect-health):
   'health.contracts',
+
+  // Health-strip acknowledgement (v3.154.1): 7-day snooze of the CURRENT
+  // degraded-contract set. Transient by design — restoring it onto another
+  // machine (or a fresh install) must NOT silently suppress that machine's
+  // own health warning, so it is never backed up:
+  'health.stripSnooze',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
