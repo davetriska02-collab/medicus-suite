@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.156.2] — 2026-07-07
+
+### Fix: Backup & Restore — "Export entire suite", "Import from file", and "Publish to shared folder" all failing
+
+`shared/leaflets-utils.js` and `shared/io/leaflets-io.js` are both loaded as
+classic `<script>` tags on the options page and so share one global scope.
+Both declared top-level `const SLUG_RE` and `const RECENT_MAX` — the second
+declaration threw `SyntaxError: Identifier 'SLUG_RE' has already been
+declared`, which silently aborted all of `leaflets-io.js`. That left
+`leafletsExport`/`leafletsImport` undefined. `require()` in
+`test-leaflets-io.js` never caught it, since CommonJS gives each file its own
+module scope.
+
+This one root cause broke three separate-looking symptoms, because all three
+go through the whole-suite export/import path rather than a single module:
+
+- **"Publish to shared folder"** and **"Export entire suite"** — both call
+  `doFullExport()`, which unconditionally includes `leafletsExport()` while
+  building its `Promise.all` array. Referencing the undefined function threw
+  immediately, aborting the whole export before any file was produced.
+- **"Import from file"** (and "paste JSON") — both call `applyEnvelope()`,
+  which includes a `leafletsImport` task whenever the backup has a `leaflets`
+  section (true for any full-suite backup). `applyWithRollback` rolls back
+  every task if any one throws, so the undefined function aborted and
+  rolled back the entire import, not just the leaflets portion.
+- Per-module (single-scope) export/import was unaffected, since those only
+  call the one requested module's function.
+
+- Renamed `leaflets-io.js`'s internal constants to `LEAFLETS_IO_SLUG_RE` /
+  `LEAFLETS_IO_RECENT_MAX` so they can't collide with `leaflets-utils.js` (or
+  anything else) loaded on the same page
+- No behaviour change to the export/import contract; `test-leaflets-io.js`
+  unaffected
+
 ## [v3.156.1] — 2026-07-07
 
 ### Fixed: Signing Queue "patient not resolvable" on every live task

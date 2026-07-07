@@ -20,8 +20,16 @@
 
 const LEAFLETS_KEYS = ['leaflets.recent', 'leaflets.config'];
 
-const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const RECENT_MAX = 10;
+// Named distinctly from shared/leaflets-utils.js's own SLUG_RE/RECENT_MAX:
+// both files are loaded as classic (non-module) <script> tags on the same
+// options page, so identically-named top-level `const`s collide and throw
+// "Identifier has already been declared" — which silently aborts whichever
+// script loads second. That's what broke "Publish to shared folder": it
+// aborted this file, so leafletsExport/leafletsImport were never defined.
+// require()-based tests never caught it because CommonJS gives each file
+// its own scope. Keep these names unique rather than reusing the utils file's.
+const LEAFLETS_IO_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const LEAFLETS_IO_RECENT_MAX = 10;
 const RECENT_NAME_MAX = 120;
 
 async function leafletsExport() {
@@ -45,7 +53,7 @@ async function leafletsImport(data) {
       if (!item || typeof item !== 'object' || Array.isArray(item)) {
         throw new Error('leaflets.recent entries must be objects.');
       }
-      if (typeof item.slug !== 'string' || !SLUG_RE.test(item.slug)) {
+      if (typeof item.slug !== 'string' || !LEAFLETS_IO_SLUG_RE.test(item.slug)) {
         throw new Error(`leaflets.recent: invalid slug "${item.slug}".`);
       }
       if (typeof item.name !== 'string' || !item.name.trim()) {
@@ -58,7 +66,7 @@ async function leafletsImport(data) {
         openedAt: typeof item.openedAt === 'string' && item.openedAt ? item.openedAt : new Date().toISOString(),
       });
     }
-    toSet['leaflets.recent'] = cleaned.slice(0, RECENT_MAX);
+    toSet['leaflets.recent'] = cleaned.slice(0, LEAFLETS_IO_RECENT_MAX);
   }
 
   if (data.config !== undefined) {
