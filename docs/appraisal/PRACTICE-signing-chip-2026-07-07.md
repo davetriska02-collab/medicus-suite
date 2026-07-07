@@ -19,12 +19,12 @@ which two personas independently rated a trust/safety gap.
 
 ## Panel
 
-| Persona (synthetic) | Role / band | Score /10 |
-|---|---|---|
-| Dr Tom Hollis | GP signer, pragmatist | 7 |
-| Raj Patel | Clinical pharmacist + dispenser lens, savvy/domain | 6 (4 for a dispensary tech) |
-| Janet Briggs | Practice manager, reluctant-but-capable | 6 |
-| Dr Margaret Aldous | Senior partner, technophobe | 6 |
+| Persona (synthetic) | Role / band                                        | Score /10                   |
+| ------------------- | -------------------------------------------------- | --------------------------- |
+| Dr Tom Hollis       | GP signer, pragmatist                              | 7                           |
+| Raj Patel           | Clinical pharmacist + dispenser lens, savvy/domain | 6 (4 for a dispensary tech) |
+| Janet Briggs        | Practice manager, reluctant-but-capable            | 6                           |
+| Dr Margaret Aldous  | Senior partner, technophobe                        | 6                           |
 
 ## Findings and rulings
 
@@ -58,8 +58,8 @@ which two personas independently rated a trust/safety gap.
    self-explaining, no glyph decoding; drop or keep ⌂ as decoration.
 5. **[OVERRULE · reason recorded] Normalised "DISPENSING" badge.** Raj argued
    verbatim text is clinically safer (exposes stale pharmacy nominations) and
-   nobody dissented. The verbatim reading stays. *(Reverse with: replace chip
-   text with a practice-configured location→badge map — not recommended.)*
+   nobody dissented. The verbatim reading stays. _(Reverse with: replace chip
+   text with a practice-configured location→badge map — not recommended.)_
 6. **[NOTE · minor] Items vs patients.** Janet: 6 requests = 5 patients (Moss
    ×2). Consider "10 open repeat requests · 8 patients" in the title.
 7. **[STRENGTHS to protect]** Verbatim location text (Raj); calm accent colour
@@ -85,3 +85,15 @@ pile-colourblind; 10-row fixture (5 Dispensary, 2 community pharmacy, 3 none;
 verdict spread incl. requested-red, stale eGFR, error row) via
 `.claude/skills/design-crit/harness.mjs`. Cast: personas 5, 9, 8, 1; Margaret
 on haiku, rest sonnet; screenshots-only, no source access, no cross-talk.
+
+## Addendum (same day) — real user outranks the panel
+
+After this run, real feedback from the practice's dispensary side (Chris M.,
+via the maintainer) asked for the flag **after the patient's name** with a
+**glanceable symbol** ("so I can say your prescription will be with — our
+dispenser or your usual chemist"). Real-user evidence outranks the synthetic
+panel by this skill's own doctrine: finding 3 (meta-line demotion) is
+REVERSED — the chip stays in the row head with glyph-borne category (house =
+dispensary, Rx = community pharmacy). Findings 1, 2 and the hidden-red filter
+note shipped as adopted (v3.158.0). Finding 4's plain-language ask is served
+by the glyph + tooltip rather than the "collect:" prefix.
