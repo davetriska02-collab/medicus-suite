@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.156.1] — 2026-07-07
+
+### Fixed: Signing Queue "patient not resolvable" on every live task
+
+First live run showed every row erroring at patient resolution: the module
+constructed the overview path from the TASK-LIST slug
+(`/tasks/data/prescription_request_task_routine/overview/{id}`), but live
+Medicus serves the overview under a different slug than the list. Fix: the
+task row's own `overviewURL` (validated with the same `_OVERVIEW_URL_RE` the
+queue bridge uses — it is the pointer Medicus itself links and the queue
+chips already fetch) is now the authoritative resolution path, with the
+constructed path kept only as a fallback. Verified on a live-mimic fixture
+where the constructed path fails and only the row's overviewURL succeeds.
+
 ## [v3.156.0] — 2026-07-07
 
 ### Signing Queue: renal context on every checked row (display-only)
