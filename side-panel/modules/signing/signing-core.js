@@ -238,6 +238,22 @@ export function filterHiddenSummary(rows, filterKeys) {
   return { hidden, hiddenRed };
 }
 
+// ── Empty-state kind (Practice-panel "clear state" ruling, 2026-07-07) ───────
+// One fixed line of warm, static text on the GENUINELY finished pile —
+// acknowledgement, not celebration; no emoji, no animation, no rotation (the
+// panel was unanimous, including the personas who like fun). Tom's guard is
+// load-bearing: warmth must never appear when the emptiness is an artefact of
+// narrowed view state (a type unticked, a location filter active) — warmth on
+// a false all-clear is worse than no warmth at all.
+//   'done'     — zero rows with every task type selected and no filter: the
+//                pile is truly finished.
+//   'narrowed' — zero rows but the view is narrowed: neutral wording only.
+//   null       — rows exist; no empty state.
+export function emptyStateKind(rowCount, allTypesSelected, filterActive) {
+  if (rowCount > 0) return null;
+  return allTypesSelected && !filterActive ? 'done' : 'narrowed';
+}
+
 // Age of a request in whole days from its createdAt to `now` (ms). null when
 // unparseable — the renderer shows nothing rather than "0d".
 export function requestAgeDays(createdAt, nowMs) {

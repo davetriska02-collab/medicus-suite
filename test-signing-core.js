@@ -33,6 +33,7 @@ const path = require('path');
     filterHiddenSummary,
     NO_LOCATION_KEY,
     isDispensaryLocation,
+    emptyStateKind,
     ROW_STATE,
     RED_CHIP_STATUSES,
     AMBER_CHIP_STATUSES,
@@ -204,6 +205,13 @@ const path = require('path');
   check(isDispensaryLocation('Witley Dispensing Hub') === true, 'dispens* variants → in-house');
   check(isDispensaryLocation('Boots Pharmacy, Godalming') === false, 'community pharmacy → chemist');
   check(isDispensaryLocation('') === false, 'blank → not in-house');
+
+  // ── emptyStateKind (warm line only on a genuinely finished pile) ─────────────
+  console.log('\n--- empty state kind ---');
+  check(emptyStateKind(0, true, false) === 'done', 'zero rows, all types, no filter → done (warm line)');
+  check(emptyStateKind(0, false, false) === 'narrowed', 'a task type unticked → narrowed (neutral wording)');
+  check(emptyStateKind(0, true, true) === 'narrowed', 'location filter active → narrowed');
+  check(emptyStateKind(5, true, false) === null, 'rows present → no empty state');
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
