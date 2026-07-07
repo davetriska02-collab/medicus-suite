@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.162.0] — 2026-07-07
+
+### Baselines: "is today busy, or does it just feel busy?"
+
+Gauntlet exceed-plan item B3 / dream-panel D3 (third consecutive panel run
+asking for history): today's demand now reads against the same weekday's own
+ledger history, in plain English.
+
+- **Today demand card + Submissions today view** carry a baseline line —
+  "Busier than usual for a Tuesday — ahead of 7 of the last 9 by this time"
+  (amber ink only when genuinely ahead of most of its history; quieter and
+  typical days stay muted).
+- **Compared honestly**: cumulative to the same hour of day (a half-day is
+  never compared against past full days); a viewed past day compares as a
+  complete day. Counts, not percentiles — checkable by hand from the
+  compare view.
+- **Watched days only, minimum 4 samples**: unwatched ledger days are known
+  undercounts and are excluded (they would bias every ordinary day toward
+  "busier than usual"); until four watched same-weekdays exist, the line
+  simply doesn't render — no baseline invented from two points.
+- Pure logic in `submissions-core.js` (`demandBaseline`, regression-tested:
+  weekday isolation, watched-only sampling, half-day honesty, band edges,
+  minimum-history gate).
+
 ## [v3.161.0] — 2026-07-07
 
 ### Signing Queue: prescribing-safety combinations at the decision moment

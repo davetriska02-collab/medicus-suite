@@ -14,6 +14,8 @@ import {
   ledgerSeriesForDay,
   ledgerCountsForDays,
   ledgerDayWatched,
+  demandBaseline,
+  baselineLine,
 } from './submissions-core.js';
 import { recordTaskLists } from './submissions-ledger.js';
 
@@ -184,6 +186,7 @@ function renderShell() {
       <div id="subAlertStrip" class="sub-alert-strip hidden" role="status" aria-live="assertive" aria-atomic="true"></div>
 
       <div id="subMetrics" class="sub-metrics"></div>
+      <div id="subBaseline" class="sub-baseline hidden"></div>
 
       <div class="chart-card">
         <div class="chart-hdr"><span id="chart1Title">Cumulative through the day</span></div>
@@ -505,6 +508,7 @@ function renderToday() {
   renderMetrics(
     TASK_TYPES.map((tt) => ({ key: tt.key, label: tt.shortLabel, value: series[tt.key].total, color: tt.color }))
   );
+  renderBaselineLine();
   const t = container.querySelector('#chart1Title');
   if (t) t.textContent = 'Cumulative through the day';
   MWChart.line({
@@ -529,6 +533,31 @@ function renderToday() {
     bars: TASK_TYPES.map((tt) => ({ key: tt.key, label: tt.shortLabel, value: series[tt.key].total, color: tt.color })),
   });
   renderAlertStrip();
+}
+
+// Same-weekday baseline line under the metrics (Gauntlet B3 / D3): today is
+// compared cumulative-to-the-current-hour; a viewed PAST day is compared as a
+// complete day (hour 23). Hidden entirely until the ledger holds enough
+// watched same-weekday history — no comparison invented from two points.
+function renderBaselineLine() {
+  const el = container.querySelector('#subBaseline');
+  if (!el) return;
+  const isToday = state.primaryDate === todayISO();
+  const hour = isToday ? new Date().getHours() : 23;
+  const b = demandBaseline(
+    state.ledger,
+    state.primaryDate,
+    hour,
+    TASK_TYPES.map((tt) => tt.key)
+  );
+  if (!b) {
+    el.classList.add('hidden');
+    return;
+  }
+  el.classList.remove('hidden');
+  el.className = `sub-baseline sub-baseline--${b.band}`;
+  el.title = 'All categories combined vs this weekday’s ledger history (watched days only, same hour of day)';
+  el.textContent = baselineLine(b, isToday);
 }
 
 function renderCompare() {

@@ -19,7 +19,7 @@
 import { buildHeadline } from './today-headline.js';
 import { hasEnabledRules, buildBreaches } from '../slots/slots-alert-core.js';
 import { isActionNeeded } from '../sweep/sweep-core.js';
-import { windowTaskList, ledgerSeriesForDay } from '../submissions/submissions-core.js';
+import { windowTaskList, ledgerSeriesForDay, demandBaseline, baselineLine } from '../submissions/submissions-core.js';
 import { recordTaskLists } from '../submissions/submissions-ledger.js';
 import { followupCounts } from '../followups/followups-core.js';
 
@@ -196,6 +196,7 @@ async function fetchDemand() {
       return;
     }
     const today = todayISO();
+    let baseline = null;
     const [medRes, admRes] = await Promise.allSettled([
       window.ApiDiag.fetch({
         module: 'today-demand',
@@ -229,6 +230,9 @@ async function fetchDemand() {
       const s = ledgerSeriesForDay(ledger, today, ['medical', 'admin']);
       if (medW) medical = s.medical.total;
       if (admW) admin = s.admin.total;
+      // Same-weekday baseline read (null until enough watched history) —
+      // cumulative to the CURRENT hour, so a half-day is compared honestly.
+      baseline = demandBaseline(ledger, today, new Date().getHours(), ['medical', 'admin']);
     } catch (_) {
       // Storage failure — fall back to the live (open-only) counts above.
     }
@@ -242,7 +246,7 @@ async function fetchDemand() {
       medRes.status === 'rejected' || admRes.status === 'rejected'
         ? medRes.reason?.message || admRes.reason?.message || 'Fetch failed'
         : null;
-    _demandData = { medical, admin, thresholds, error, dataWarn };
+    _demandData = { medical, admin, thresholds, error, dataWarn, baseline };
   } catch (e) {
     _demandData = {
       medical: null,
@@ -492,7 +496,7 @@ function buildDemandBody() {
   if (!_demandData) return '<span class="today-loading">Loading…</span>';
   if (_demandData.noCode) return buildNoCodeMsg();
 
-  const { medical, admin, thresholds, error, dataWarn } = _demandData;
+  const { medical, admin, thresholds, error, dataWarn, baseline } = _demandData;
 
   if (error && medical == null && admin == null) {
     return errMsg(error);
@@ -560,6 +564,11 @@ function buildDemandBody() {
       ${admFlag}
     </div>
     ${meter('admin', admin)}
+    ${
+      baseline
+        ? `<div class="today-baseline today-baseline--${baseline.band}" title="Combined medical + admin received today vs the same weekday's history (watched days only, compared to the same hour)">${esc(baselineLine(baseline))}</div>`
+        : ''
+    }
     ${warnLine}
     ${errLine}
   `;

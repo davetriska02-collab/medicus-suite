@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.161.0
+**Version:** v3.162.0
 **Generated:** 2026-07-07 (automated)
 
 ## What it is
@@ -34,7 +34,7 @@ A calendar view of upcoming appointment capacity against a practice-set minimum,
 
 ### Submissions Tracker
 
-Daily inbound task counts — medical, admin, investigations, prescriptions — with a today view, a custom date range, and day-vs-day comparison. Amber/red thresholds flag unusual volume before it becomes a backlog. Because Medicus only reports still-open tasks, the suite keeps its own day ledger of every request it has seen, so counts reflect true received volume and no longer fall as the team completes work; days the suite wasn't watching are flagged as undercounts rather than shown as history.
+Daily inbound task counts — medical, admin, investigations, prescriptions — with a today view, a custom date range, and day-vs-day comparison. Amber/red thresholds flag unusual volume before it becomes a backlog. Because Medicus only reports still-open tasks, the suite keeps its own day ledger of every request it has seen, so counts reflect true received volume and no longer fall as the team completes work; days the suite wasn't watching are flagged as undercounts rather than shown as history. Once enough history accrues, today reads against its own weekday's baseline in plain English — "busier than usual for a Tuesday, ahead of 7 of the last 9 by this time" (also shown on the Today demand card) — compared to the same hour of day, watched days only, and never claimed from thin history.
 
 ### Signing Queue
 
@@ -117,6 +117,8 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.162.0 (2026-07-07)** — Demand grows a memory: Today and Submissions now say whether today is genuinely busy for its weekday ("ahead of 7 of the last 9 Tuesdays by this time"), from the suite's own day ledger — same-hour comparison, watched days only, silent until 4 weeks of history exist.
 
 - **v3.161.0 (2026-07-07)** — Signing rows now also show the practice's configured prescribing-safety combination alerts (re-displayed from the same engine pass, no new rule content), loudest when the requested drug completes the combination — e.g. an acute NSAID on top of ACEi + diuretic.
 

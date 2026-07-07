@@ -85,6 +85,17 @@
   border: 1px solid var(--amber-line);
 }
 
+/* Same-weekday demand baseline on the Demand card — muted context line,
+   amber ink only when today is genuinely ahead of most of its history. */
+.today-baseline {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-4);
+}
+.today-baseline--high {
+  color: var(--amber);
+}
+
 /* ── Card ────────────────────────────────────────────────────────────────────── */
 
 .today-card {
