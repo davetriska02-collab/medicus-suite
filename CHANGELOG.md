@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.157.0] — 2026-07-07
+
+### Signing Queue: collection-location flag (dispensing patients)
+
+Each signing row now carries the request's recorded **collection location**
+verbatim from the task row (`collectionLocationName` — zero extra fetches),
+rendered as a neutral chip beside the patient name. For a dispensing
+practice this is the dispensing-patient flag at signing time: it says where
+the script goes after signing ("Dispensary"), so the dispensing pile is
+scannable at a glance. Routing information, not clinical risk — styled in
+the accent tokens, never red/amber, and absent when Medicus records no
+location. No new storage, no sort changes.
+
 ## [v3.156.2] — 2026-07-07
 
 ### Fix: Backup & Restore — "Export entire suite", "Import from file", and "Publish to shared folder" all failing

@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.156.0
+**Version:** v3.157.0
 **Generated:** 2026-07-06 (automated)
 
 ## What it is
@@ -38,7 +38,7 @@ Daily inbound task counts — medical, admin, investigations, prescriptions — 
 
 ### Signing Queue
 
-Every open repeat-prescription request shown with the requesting patient's recorded drug-monitoring currency alongside — the same engine checks as Monitoring and Sweep — sorted riskiest first, with the loudest flag when the requested drug is itself the one overdue, and the latest recorded eGFR (with its age) on every checked row. Display only: "no flag" is explicitly not an all-clear, records that could not be read sort above quiet rows, and authorisation happens only in Medicus.
+Every open repeat-prescription request shown with the requesting patient's recorded drug-monitoring currency alongside — the same engine checks as Monitoring and Sweep — sorted riskiest first, with the loudest flag when the requested drug is itself the one overdue, the latest recorded eGFR (with its age) on every checked row, and each request's recorded collection location — the dispensing-patient flag at signing time. Display only: "no flag" is explicitly not an all-clear, records that could not be read sort above quiet rows, and authorisation happens only in Medicus.
 
 ### Activity Report
 
@@ -113,6 +113,8 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.157.0 (2026-07-07)** — Signing rows show each request’s recorded collection location (e.g. “Dispensary”) — the dispensing-patient flag for dispensing practices. Verbatim from the task row, zero extra fetches.
 
 - **v3.156.0 (2026-07-07)** — Signing rows now carry the patient’s latest recorded eGFR with its age; stale or absent renal data gets amber salience on flagged rows. Verbatim recorded fact only — no bands, no dose logic.
 
