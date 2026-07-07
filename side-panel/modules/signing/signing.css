@@ -190,3 +190,22 @@
   border-color: var(--amber-line);
   background: var(--amber-dim);
 }
+
+/* Collection-location flag — verbatim from the task row. For a dispensing
+   practice this is the dispensing-patient marker at signing time. Routing
+   info, not clinical risk: never red/amber. */
+.sg-collect {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+}

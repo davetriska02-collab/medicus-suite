@@ -155,6 +155,12 @@ async function fetchAndRun() {
           // task-list slug (v3.156.1 field fix — every prescription task was
           // coming back "patient not resolvable" via the constructed path).
           overviewURL: typeof t.overviewURL === 'string' && _OVERVIEW_URL_RE.test(t.overviewURL) ? t.overviewURL : '',
+          // Collection location straight off the task row (verbatim recorded
+          // fact, zero extra fetches) — for a dispensing practice this is the
+          // dispensing-patient flag at signing time: it says where the script
+          // goes after signing (e.g. "Dispensary").
+          collectionLocation:
+            typeof t.collectionLocationName === 'string' ? t.collectionLocationName.trim().slice(0, 40) : '',
           state: ROW_STATE.PENDING,
           verdict: null,
           requestedHits: [],
@@ -489,6 +495,7 @@ function renderList() {
         <div class="sg-row-head">
           <span class="sg-patient">${esc(row.patientName)}</span>
           <span class="sg-dob">${esc(row.dateOfBirth)}</span>
+          ${row.collectionLocation ? `<span class="sg-collect" title="Collection location recorded on this request">&#8962; ${esc(row.collectionLocation)}</span>` : ''}
         </div>
         ${row.summary ? `<div class="sg-summary">${esc(row.summary)}</div>` : ''}
         <div class="sg-verdicts">${verdictHtml(row)}</div>
