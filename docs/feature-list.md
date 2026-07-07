@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.155.0
+**Version:** v3.156.0
 **Generated:** 2026-07-06 (automated)
 
 ## What it is
@@ -38,7 +38,7 @@ Daily inbound task counts — medical, admin, investigations, prescriptions — 
 
 ### Signing Queue
 
-Every open repeat-prescription request shown with the requesting patient's recorded drug-monitoring currency alongside — the same engine checks as Monitoring and Sweep — sorted riskiest first, with the loudest flag when the requested drug is itself the one overdue. Display only: "no flag" is explicitly not an all-clear, records that could not be read sort above quiet rows, and authorisation happens only in Medicus.
+Every open repeat-prescription request shown with the requesting patient's recorded drug-monitoring currency alongside — the same engine checks as Monitoring and Sweep — sorted riskiest first, with the loudest flag when the requested drug is itself the one overdue, and the latest recorded eGFR (with its age) on every checked row. Display only: "no flag" is explicitly not an all-clear, records that could not be read sort above quiet rows, and authorisation happens only in Medicus.
 
 ### Activity Report
 
@@ -113,6 +113,8 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.156.0 (2026-07-07)** — Signing rows now carry the patient’s latest recorded eGFR with its age; stale or absent renal data gets amber salience on flagged rows. Verbatim recorded fact only — no bands, no dose logic.
 
 - **v3.155.0 (2026-07-07)** — New Signing tab: the repeat-prescription pile with each patient’s recorded monitoring alongside, riskiest first — built for the 6pm signing session. Display only; never says "safe".
 - **v3.154.0 (2026-07-06)** — Quick-leaflet button in the panel header: search NHS patient leaflets from any tab (built for mid-triage use), with open/copy-link and a hand-off into the full Leaflets tab.

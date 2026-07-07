@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.156.0] — 2026-07-07
+
+### Signing Queue: renal context on every checked row (display-only)
+
+The wishlist's "highest patient-safety value" renal join, delivered in the
+conservative display-only slice that fits the intended-purpose statement:
+before signing a renally-cleared repeat (DOAC, metformin, lithium…) the eye
+asks "what's the kidney function, and how old is that number?" — the record
+fetch already returns it, so every checked signing row now shows the
+patient's **latest recorded eGFR verbatim with its age permanently attached**
+("eGFR 38 mL/min/1.73m2 · 11mo ago").
+
+- Value is NEVER rendered without its date/age (out-of-context guard, H-010);
+  unparseable dates fall back to showing the raw recorded date.
+- **Stale (> 12 months) or unparseable-age renal data gets amber salience**;
+  "no eGFR on record" is remarked ONLY on rows already carrying a monitoring
+  flag — a quiet row's missing eGFR would be noise on young healthy patients.
+- No threshold, band, or dose logic is computed — verbatim recorded fact
+  adjacency only. H-038 gains control (i) documenting this.
+- Zero extra network cost: the eGFR comes from the investigation dashboard
+  the monitoring pass already fetches per patient.
+
+Pure logic (`renalContext`, `formatObsAge`) in signing-core.js with tests
+(39 checks total in test-signing-core.js).
+
 ## [v3.155.0] — 2026-07-07
 
 ### New: Signing Queue — the repeat-prescription pile with monitoring context

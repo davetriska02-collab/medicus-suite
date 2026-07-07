@@ -172,3 +172,21 @@
   margin-top: 10px;
   width: 100%;
 }
+
+/* Renal fact — verbatim recorded eGFR + age; stale/absent gets amber salience. */
+.sg-renal {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-3);
+  border: 1px dashed var(--border-hi);
+}
+
+.sg-renal--stale {
+  color: var(--amber);
+  border-color: var(--amber-line);
+  background: var(--amber-dim);
+}
