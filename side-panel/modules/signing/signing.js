@@ -33,7 +33,6 @@ import {
   monitoringVerdict,
   requestedDrugFlags,
   sortSigningRows,
-  groupTasksByPatient,
   requestAgeDays,
   ROW_STATE,
   CHIP_STATUS_TEXT,
@@ -47,19 +46,23 @@ const TASK_TYPES = [
   { key: 'nonRoutine', slug: 'prescription_request_task_non_routine', label: 'Non-routine' },
 ];
 
-const BATCH_SIZE = 30; // patient-groups checked per pass; "Check next" continues
+const BATCH_SIZE = 30; // unique-patient record evaluations per pass; "Check next" continues
 const PER_PATIENT_DELAY_MS = 250; // same pacing as Sweep
 
 let container = null;
 let _abort = false;
 let _running = false;
+let _currentRun = null; // in-flight pass promise — refresh awaits it (never silently no-ops)
 let _stopFresh = null;
+
+// Verdicts already computed this session, keyed by PATIENT UUID — the only
+// identity ever trusted for sharing a verdict between rows (wrong-patient
+// guard: see signing-core.js note). Cleared on every fresh fetch.
+let _verdictByUuid = new Map();
 
 let state = {
   types: { routine: true, nonRoutine: false },
   rows: [], // [{ taskId, slug, patientName, dateOfBirth, summary, priorityDisplay, createdAt, assignedTo, state, verdict, requestedHits, error }]
-  groups: [], // patient groups of task rows (see signing-core.groupTasksByPatient)
-  groupOffset: 0, // how many groups have been checked
   lastFetched: null,
   error: null,
   noCode: false,
@@ -90,7 +93,18 @@ export async function init(el) {
 // ── Fetch + monitoring pass ───────────────────────────────────────────────────
 
 async function fetchAndRun() {
-  if (!container || _running) return;
+  if (!container) return;
+  // A pass may be mid-flight (refresh/toggle sets _abort then calls us):
+  // await its wind-down instead of silently no-oping and leaving a stale pile.
+  if (_running) {
+    _abort = true;
+    try {
+      await _currentRun;
+    } catch (_) {
+      /* the old pass's failure is not this run's problem */
+    }
+    if (!container) return;
+  }
   _running = true;
   _abort = false;
   try {
@@ -135,12 +149,12 @@ async function fetchAndRun() {
       }
     }
     state.rows = rows;
-    state.groups = groupTasksByPatient(rows);
-    state.groupOffset = 0;
+    _verdictByUuid = new Map();
     state.lastFetched = new Date();
     renderAll();
 
-    await runMonitoringPass(apiBase);
+    _currentRun = runMonitoringPass(apiBase);
+    await _currentRun;
   } catch (err) {
     state.error = err.message || 'Failed to load';
     renderAll();
@@ -150,6 +164,13 @@ async function fetchAndRun() {
   }
 }
 
+// One pass over the still-pending rows. WRONG-PATIENT GUARD: every task is
+// resolved to its own patient UUID via the task-overview endpoint — no
+// name/DOB shortcut exists anywhere in this module. Record evaluations are
+// deduped strictly on the resolved UUID (api-client additionally caches the
+// overview resolution per task), and the pass stops after BATCH_SIZE unique
+// record evaluations; rows whose patient was already evaluated this pass
+// complete for free.
 async function runMonitoringPass(apiBase) {
   const api = window.SentinelApiClient;
   const norm = window.SentinelNormalisers;
@@ -163,34 +184,41 @@ async function runMonitoringPass(apiBase) {
   }
 
   const rules = await loadRules();
-  const batch = state.groups.slice(state.groupOffset, state.groupOffset + BATCH_SIZE);
+  let evaluations = 0;
 
-  for (const group of batch) {
+  for (const row of state.rows) {
     if (_abort || !container) return;
-    for (const row of group) row.state = ROW_STATE.CHECKING;
+    if (row.state !== ROW_STATE.PENDING) continue;
+
+    row.state = ROW_STATE.CHECKING;
     renderList();
 
     try {
-      const first = group[0];
-      const patientUuid = await api.resolveTaskToPatient(apiBase, first.slug, first.taskId);
+      const patientUuid = await api.resolveTaskToPatient(apiBase, row.slug, row.taskId);
       if (!patientUuid) throw new Error('patient not resolvable from this task');
 
-      const chips = await evaluatePatient(apiBase, patientUuid, rules);
-      const verdict = monitoringVerdict(chips);
-      for (const row of group) {
-        row.state = ROW_STATE.DONE;
-        row.verdict = verdict;
-        row.requestedHits = requestedDrugFlags(row.summary, verdict.items);
+      let verdict = _verdictByUuid.get(patientUuid);
+      if (!verdict) {
+        if (evaluations >= BATCH_SIZE) {
+          // Batch budget spent — leave for "Check next".
+          row.state = ROW_STATE.PENDING;
+          renderList();
+          return;
+        }
+        const chips = await evaluatePatient(apiBase, patientUuid, rules);
+        verdict = monitoringVerdict(chips);
+        _verdictByUuid.set(patientUuid, verdict);
+        evaluations++;
+        await new Promise((r) => setTimeout(r, PER_PATIENT_DELAY_MS));
       }
+      row.state = ROW_STATE.DONE;
+      row.verdict = verdict;
+      row.requestedHits = requestedDrugFlags(row.summary, verdict.items);
     } catch (e) {
-      for (const row of group) {
-        row.state = ROW_STATE.ERROR;
-        row.error = e.message || 'record not read';
-      }
+      row.state = ROW_STATE.ERROR;
+      row.error = e.message || 'record not read';
     }
-    state.groupOffset++;
     renderList();
-    await new Promise((r) => setTimeout(r, PER_PATIENT_DELAY_MS));
   }
 }
 
@@ -405,17 +433,17 @@ function renderList() {
     })
     .join('');
 
-  renderMore(state.groups.length - state.groupOffset);
+  renderMore(state.rows.filter((r) => r.state === ROW_STATE.PENDING).length);
 }
 
-function renderMore(remainingGroups) {
+function renderMore(remainingRows) {
   const more = container?.querySelector('#sgMore');
   if (!more) return;
-  if (_running || remainingGroups <= 0) {
+  if (_running || remainingRows <= 0) {
     more.innerHTML = '';
     return;
   }
-  more.innerHTML = `<button class="ghost-btn sg-more-btn">Check next ${Math.min(remainingGroups, BATCH_SIZE)} patients (${remainingGroups} unchecked)</button>`;
+  more.innerHTML = `<button class="ghost-btn sg-more-btn">Check next batch (${remainingRows} request${remainingRows === 1 ? '' : 's'} unchecked)</button>`;
   more.querySelector('.sg-more-btn')?.addEventListener('click', async () => {
     if (_running) return;
     _running = true;
@@ -423,7 +451,8 @@ function renderMore(remainingGroups) {
     try {
       const { code } = await window.PracticeCode.resolve();
       if (code && _SITE_CODE_RE.test(code)) {
-        await runMonitoringPass(`https://${code}.api.england.medicus.health`);
+        _currentRun = runMonitoringPass(`https://${code}.api.england.medicus.health`);
+        await _currentRun;
       }
     } finally {
       _running = false;

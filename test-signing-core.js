@@ -25,7 +25,6 @@ const path = require('path');
     monitoringVerdict,
     requestedDrugFlags,
     sortSigningRows,
-    groupTasksByPatient,
     requestAgeDays,
     ROW_STATE,
     RED_CHIP_STATUSES,
@@ -116,18 +115,6 @@ const path = require('path');
   const b = row({ taskId: 'b', verdict: { level: 'red', items: [{}] }, createdAt: '2026-06-28T08:00:00Z' });
   check(sortSigningRows([a, b])[0].taskId === 'b', 'same band → oldest request first');
   check(Array.isArray(sortSigningRows(null)), 'null input tolerated');
-
-  // ── groupTasksByPatient ──────────────────────────────────────────────────────
-  console.log('\n--- groupTasksByPatient ---');
-  const t = (id, name, dob) => ({ id, patientName: name, dateOfBirth: dob });
-  const groups = groupTasksByPatient([
-    t('1', 'Ann Smith', '01/01/1950'),
-    t('2', 'ANN SMITH', '01/01/1950'), // same patient, case differs
-    t('3', 'Ann Smith', '02/02/1960'), // same name, different DOB → different patient
-    { patientName: 'No Id', dateOfBirth: 'x' }, // no task id → dropped
-  ]);
-  check(groups.length === 2, 'grouped by name+DOB (case-insensitive), id-less dropped');
-  check(groups[0].length === 2, 'two requests for the same patient share one group');
 
   // ── requestAgeDays ───────────────────────────────────────────────────────────
   console.log('\n--- requestAgeDays ---');

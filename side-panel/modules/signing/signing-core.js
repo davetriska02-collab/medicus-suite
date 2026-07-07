@@ -78,6 +78,12 @@ const _norm = (s) =>
 // task's request summary text against each verdict item's drug name and
 // matched term, case-insensitive substring — same matching philosophy as
 // drugMatchesRule in the rules engine.
+//
+// BEST-EFFORT SALIENCE ONLY — do not harden this into anything load-bearing.
+// The tag can only ADD attention to an already-flagged red/amber item; a
+// missed or spurious match never hides, suppresses or downranks a chip
+// (H-038 control (f)). Substring matching against free request text is the
+// right cost/benefit for that job and no more.
 export function requestedDrugFlags(summary, verdictItems) {
   const text = _norm(summary);
   if (!text) return [];
@@ -122,23 +128,14 @@ export function sortSigningRows(rows) {
   });
 }
 
-// Group open tasks by patient so one slow record fetch serves every request
-// from that patient. Tasks without a task id are dropped (nothing to key on).
-// Returns [{ key, tasks }] — key is the task id of the FIRST task for the
-// patient until a patient UUID is resolved (the module rekeys after
-// resolution); grouping input is (patientName + dateOfBirth) because the
-// task-list row carries no patient UUID.
-export function groupTasksByPatient(tasks) {
-  const groups = new Map();
-  for (const t of Array.isArray(tasks) ? tasks : []) {
-    const id = t && (t.taskId ?? t.id);
-    if (id == null) continue;
-    const key = `${_norm(t.patientName)}|${_norm(t.dateOfBirth)}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(t);
-  }
-  return [...groups.values()];
-}
+// NOTE (wrong-patient guard, review 2026-07-07): there is deliberately NO
+// name/DOB-based patient grouping here. Task rows carry no patient UUID, and
+// demographic strings are not identity — two patients can share name+DOB, and
+// rows with unreadable names must never collapse into one bucket. The module
+// resolves EVERY task to its patient UUID via the task-overview endpoint and
+// dedupes record fetches on the UUID alone (engine/api-client.js caches both
+// the overview resolution and the record fetch, so this costs one extra
+// lightweight overview call per task, not one record fetch per task).
 
 // Age of a request in whole days from its createdAt to `now` (ms). null when
 // unparseable — the renderer shows nothing rather than "0d".
