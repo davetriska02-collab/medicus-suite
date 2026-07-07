@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.154.1] — 2026-07-07
+
+### Suite-health strip: acknowledge/dismiss (7-day snooze per degradation set)
+
+The amber "Medicus may have changed — … degraded" strip had no acknowledge
+action, so a known, unchanged degradation nagged on every panel open. The
+strip now carries a ✕ dismiss: hides that EXACT set of degraded contracts for
+7 days, and reappears immediately if the degraded set changes (anything new
+breaks, or a different contract degrades) — new problems always surface.
+Options → Suite health keeps full detail regardless of the snooze. New
+machine-local key `health.stripSnooze` (transient acknowledgement, not backed
+up — a restored backup should re-surface the warning).
+
+Context: the strip was correctly reporting a real Medicus change (the
+patient-UUID DOM fallback probe degraded — the same change that takes out the
+cross-tab monitoring badge on pages where URL detection can't resolve the
+patient). The fix for the underlying selector drift needs a live-DOM capture
+and ships separately; this release just makes the warning politely
+acknowledgeable while it's known-about.
+
 ## [v3.154.0] — 2026-07-06
 
 ### New: Quick Leaflet popover — NHS leaflet search from any tab
