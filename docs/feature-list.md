@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.157.0
+**Version:** v3.158.0
 **Generated:** 2026-07-06 (automated)
 
 ## What it is
@@ -38,7 +38,7 @@ Daily inbound task counts — medical, admin, investigations, prescriptions — 
 
 ### Signing Queue
 
-Every open repeat-prescription request shown with the requesting patient's recorded drug-monitoring currency alongside — the same engine checks as Monitoring and Sweep — sorted riskiest first, with the loudest flag when the requested drug is itself the one overdue, the latest recorded eGFR (with its age) on every checked row, and each request's recorded collection location — the dispensing-patient flag at signing time. Display only: "no flag" is explicitly not an all-clear, records that could not be read sort above quiet rows, and authorisation happens only in Medicus.
+Every open repeat-prescription request shown with the requesting patient's recorded drug-monitoring currency alongside — the same engine checks as Monitoring and Sweep — sorted riskiest first, with the loudest flag when the requested drug is itself the one overdue, the latest recorded eGFR (with its age) on every checked row, and each request's collection route at a glance (house glyph = practice dispensary, Rx glyph = community pharmacy) with location filter pills and counts — hidden red flags always called out. Display only: "no flag" is explicitly not an all-clear, records that could not be read sort above quiet rows, and authorisation happens only in Medicus.
 
 ### Activity Report
 
@@ -113,6 +113,8 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.158.0 (2026-07-07)** — Signing gains location filter pills with counts (“Dispensary 6 · No location 3”, hidden red flags always called out) and glanceable collection glyphs after the name; Monitoring gains Sweep’s “Create task” button for the open patient — one explicit confirm, Medicus’s own task workflow.
 
 - **v3.157.0 (2026-07-07)** — Signing rows show each request’s recorded collection location (e.g. “Dispensary”) — the dispensing-patient flag for dispensing practices. Verbatim from the task row, zero extra fetches.
 

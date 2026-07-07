@@ -28,6 +28,11 @@ const path = require('path');
     requestAgeDays,
     renalContext,
     formatObsAge,
+    locationBuckets,
+    rowMatchesLocationFilter,
+    filterHiddenSummary,
+    NO_LOCATION_KEY,
+    isDispensaryLocation,
     ROW_STATE,
     RED_CHIP_STATUSES,
     AMBER_CHIP_STATUSES,
@@ -153,6 +158,52 @@ const path = require('path');
   check(formatObsAge(200) === '7mo ago', 'formatObsAge months');
   check(formatObsAge(900) === '2y ago', 'formatObsAge years');
   check(formatObsAge(null) === '', 'formatObsAge null → empty (renderer must fall back to raw date)');
+
+  // ── location buckets / filter (Practice-panel ruling) ───────────────────────
+  console.log('\n--- location buckets ---');
+  const lrow = (loc, level) => ({
+    collectionLocation: loc,
+    verdict: level ? { level, items: [{}] } : { level: null, items: [] },
+  });
+  const pile = [
+    lrow('Dispensary', 'red'),
+    lrow('Dispensary', null),
+    lrow('Dispensary', null),
+    lrow('Boots Pharmacy, Godalming', 'red'),
+    lrow('', 'amber'),
+    lrow('', null),
+  ];
+  let buckets = locationBuckets(pile);
+  check(buckets.length === 3, 'three buckets: two named + No location');
+  check(buckets[0].label === 'Dispensary' && buckets[0].count === 3, 'highest count first');
+  check(
+    buckets[2].key === NO_LOCATION_KEY && buckets[2].label === 'No location' && buckets[2].count === 2,
+    'No location is an explicit, countable bucket (blank never silently means not-ours)'
+  );
+  check(
+    locationBuckets([lrow('', null), lrow('', 'red')]).length === 0,
+    'practice that never records locations → no pills at all (feature invisible)'
+  );
+  check(locationBuckets(null).length === 0, 'null rows tolerated');
+
+  // filter matching
+  const dispOnly = new Set(['Dispensary']);
+  check(rowMatchesLocationFilter(pile[0], dispOnly) === true, 'Dispensary row passes Dispensary filter');
+  check(rowMatchesLocationFilter(pile[3], dispOnly) === false, 'pharmacy row excluded by Dispensary filter');
+  check(rowMatchesLocationFilter(pile[4], new Set([NO_LOCATION_KEY])) === true, 'blank row passes No-location filter');
+  check(rowMatchesLocationFilter(pile[3], new Set()) === true, 'empty filter shows everything');
+
+  // hidden summary — the safety note: hidden reds are always counted
+  let hs = filterHiddenSummary(pile, dispOnly);
+  check(hs.hidden === 3, 'filter hides the 3 non-Dispensary rows');
+  check(hs.hiddenRed === 1, 'hidden RED rows counted (Boots red must never vanish silently)');
+  check(filterHiddenSummary(pile, new Set()) === null, 'no active filter → no note');
+
+  // in-house vs chemist glance category (heuristic; verbatim text always shown)
+  check(isDispensaryLocation('Dispensary') === true, 'Dispensary → in-house');
+  check(isDispensaryLocation('Witley Dispensing Hub') === true, 'dispens* variants → in-house');
+  check(isDispensaryLocation('Boots Pharmacy, Godalming') === false, 'community pharmacy → chemist');
+  check(isDispensaryLocation('') === false, 'blank → not in-house');
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);

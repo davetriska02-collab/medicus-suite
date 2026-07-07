@@ -177,6 +177,67 @@ export function formatObsAge(ageDays) {
   return `${Math.floor(ageDays / 365.25)}y ago`;
 }
 
+// ── Collection-location buckets (Practice-panel ruling, 2026-07-07) ──────────
+// Filter pills with counts, derived from the location values present in the
+// CURRENT pile — no hardcoded "dispensing" semantics, so this stays portable
+// to any practice. "No location" is an explicit, countable bucket (a blank
+// must never silently read as "not ours" — the panel's sharpest finding).
+// When NO row carries a location the practice doesn't use the field: return
+// [] and the whole pill row stays invisible.
+export const NO_LOCATION_KEY = '\u0000none';
+
+export function locationBuckets(rows) {
+  const counts = new Map();
+  let withLocation = 0;
+  let without = 0;
+  for (const r of Array.isArray(rows) ? rows : []) {
+    const loc = r && typeof r.collectionLocation === 'string' ? r.collectionLocation : '';
+    if (loc) {
+      withLocation++;
+      counts.set(loc, (counts.get(loc) || 0) + 1);
+    } else {
+      without++;
+    }
+  }
+  if (withLocation === 0) return [];
+  const out = [...counts.entries()]
+    .map(([label, count]) => ({ key: label, label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  if (without > 0) out.push({ key: NO_LOCATION_KEY, label: 'No location', count: without });
+  return out;
+}
+
+// In-house vs community glance category (real-user ask, Chris M. 2026-07-07:
+// "so I can say your prescription will be with a quick glance — our dispenser
+// or your usual chemist"). Heuristic on the recorded name only — the verbatim
+// text is always shown alongside, so a mis-categorised name is visible, and
+// the category changes ONLY the glyph/tint, never the data.
+export function isDispensaryLocation(loc) {
+  return /dispens/i.test(String(loc || ''));
+}
+
+// Apply an active location filter (Set of bucket keys; empty set = show all).
+export function rowMatchesLocationFilter(row, filterKeys) {
+  if (!filterKeys || filterKeys.size === 0) return true;
+  const loc = row && typeof row.collectionLocation === 'string' ? row.collectionLocation : '';
+  return filterKeys.has(loc || NO_LOCATION_KEY);
+}
+
+// Safety note for an active filter: how many rows are hidden, and — the part
+// that must never be silent — how many of those carry a RED verdict. A filter
+// may narrow the view, but a hidden red flag is always called out by count.
+export function filterHiddenSummary(rows, filterKeys) {
+  if (!filterKeys || filterKeys.size === 0) return null;
+  let hidden = 0;
+  let hiddenRed = 0;
+  for (const r of Array.isArray(rows) ? rows : []) {
+    if (rowMatchesLocationFilter(r, filterKeys)) continue;
+    hidden++;
+    if (r.verdict && r.verdict.level === 'red') hiddenRed++;
+  }
+  return { hidden, hiddenRed };
+}
+
 // Age of a request in whole days from its createdAt to `now` (ms). null when
 // unparseable — the renderer shows nothing rather than "0d".
 export function requestAgeDays(createdAt, nowMs) {

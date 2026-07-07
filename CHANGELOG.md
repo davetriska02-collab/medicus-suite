@@ -2,6 +2,46 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.158.0] — 2026-07-07
+
+### Signing Queue: location filter pills + glance glyphs (panel-appraised, user-placed)
+
+The v3.157.0 collection chip, matured through a scoped Practice-panel run
+(docs/appraisal/PRACTICE-signing-chip-2026-07-07.md) and then real-user
+feedback from the practice's own dispensary side:
+
+- **Location filter pills with counts** above the pile ("Dispensary 6 ·
+  Boots Pharmacy, Godalming 1 · No location 3") — derived from the values
+  present, clickable to filter, invisible at practices that never record
+  locations. "No location" is an explicit, countable bucket: a blank can no
+  longer silently read as "not ours" (the panel's sharpest finding).
+- **A narrowed view is never silent**: an active filter shows "N requests
+  hidden by the location filter", and any hidden RED-flagged rows are called
+  out by count in red (H-038 control (j)). The monitoring pass always checks
+  every row regardless of the filter. Filter is session-only, never
+  persisted — a remembered filter could hide rows from a user who forgot it.
+- **Chip placement settled by the real user**, overriding the synthetic
+  panel's meta-line ruling: it stays in the row head after the name, and the
+  SYMBOL now carries the glance category — house glyph (tinted) = practice
+  dispensary, Rx glyph (outline) = community pharmacy — answering the
+  phone-call question ("with our dispenser or your usual chemist?") without
+  reading. Category is a /dispens/i heuristic on the recorded name; the
+  verbatim text always rides alongside so a mis-coded location stays visible.
+
+### Monitoring: "Create task" for the open patient (Sweep's close-the-loop)
+
+Sweep's per-patient "Create recall task" — requested for the Monitoring tab —
+added to the Sentinel action bar. Same machinery (`shared/task-api.js`
+driving Medicus's OWN general-task endpoints; Medicus's validation, access
+control and audit fire as normal), description prefilled from the patient's
+action-needed chips via the shared instruction grouping ("Recall (from
+Monitoring): …"), assignee/priority from the live Medicus form, one explicit
+confirm, EventLedger record on success. **Wrong-patient guards (H-023
+extended):** the form permanently names the patient it was opened for, and
+submit re-checks the currently-followed patient UUID against the one captured
+at form-open — auto-follow moving on mid-form invalidates the submit instead
+of creating a task against the wrong record.
+
 ## [v3.157.0] — 2026-07-07
 
 ### Signing Queue: collection-location flag (dispensing patients)

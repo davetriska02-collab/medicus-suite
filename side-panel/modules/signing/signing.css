@@ -191,9 +191,10 @@
   background: var(--amber-dim);
 }
 
-/* Collection-location flag — verbatim from the task row. For a dispensing
-   practice this is the dispensing-patient marker at signing time. Routing
-   info, not clinical risk: never red/amber. */
+/* Collection chip — row head after the name (real-user placement, Chris M.
+   2026-07-07, overriding the synthetic panel's meta-line ruling). The glyph
+   carries the glance category: house = practice dispensary (tinted),
+   Rx = community pharmacy (outline). Routing info, never red/amber. */
 .sg-collect {
   margin-left: auto;
   flex-shrink: 0;
@@ -205,7 +206,89 @@
   font-family: var(--mono);
   font-size: 9px;
   letter-spacing: 0.04em;
+}
+.sg-collect--home {
   color: var(--accent);
   background: var(--accent-dim);
   border: 1px solid var(--accent-line);
+  font-weight: 600;
+}
+.sg-collect--chemist {
+  color: var(--text-3);
+  background: none;
+  border: 1px solid var(--border-hi);
+}
+
+/* Location filter pills — counts derived from the current pile; invisible at
+   practices that don't record collection locations. */
+.sg-loc-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.sg-loc-pills:empty {
+  display: none;
+}
+
+.sg-loc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--r-lg);
+  font-size: 10.5px;
+  color: var(--text-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  cursor: pointer;
+}
+.sg-loc-pill:hover {
+  border-color: var(--accent-line);
+}
+.sg-loc-pill--active {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  font-weight: 600;
+}
+
+.sg-loc-count {
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 0 5px;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+}
+
+/* Active-filter note — a narrowed view is never silent; hidden red flags are
+   called out by count (H-038 control (j)). */
+.sg-filter-note {
+  margin-bottom: 8px;
+  padding: 5px 9px;
+  border-radius: var(--r-md);
+  font-size: 10.5px;
+  color: var(--text-3);
+  background: var(--bg-elev);
+  border: 1px dashed var(--border-hi);
+}
+.sg-filter-note--red {
+  color: var(--red);
+  border-color: var(--red-line);
+  background: var(--red-dim);
+}
+.sg-filter-note.hidden {
+  display: none;
+}
+
+.sg-filter-clear {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 10.5px;
+  cursor: pointer;
+  padding: 0 2px;
+  text-decoration: underline;
 }

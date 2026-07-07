@@ -36,6 +36,10 @@ import {
   requestAgeDays,
   renalContext,
   formatObsAge,
+  locationBuckets,
+  rowMatchesLocationFilter,
+  filterHiddenSummary,
+  isDispensaryLocation,
   RENAL_STALE_DAYS,
   ROW_STATE,
   CHIP_STATUS_TEXT,
@@ -70,6 +74,10 @@ let _verdictByUuid = new Map();
 let state = {
   types: { routine: true, nonRoutine: false },
   rows: [], // [{ taskId, slug, patientName, dateOfBirth, summary, priorityDisplay, createdAt, assignedTo, state, verdict, requestedHits, error }]
+  // Location filter: Set of bucket keys (empty = show all). SESSION-ONLY and
+  // deliberately never persisted — a filter remembered across days could
+  // silently hide rows from a user who forgot they set it.
+  locationFilter: new Set(),
   lastFetched: null,
   error: null,
   noCode: false,
@@ -369,7 +377,9 @@ function renderShell() {
         ).join('')}
       </div>
 
+      <div id="sgLocPills" class="sg-loc-pills"></div>
       <div id="sgBanner" class="banner hidden"></div>
+      <div id="sgFilterNote" class="sg-filter-note hidden" role="status"></div>
       <div id="sgList" class="sg-list"></div>
       <div id="sgMore"></div>
       <div class="foot" id="sgFoot"></div>
@@ -411,6 +421,7 @@ function renderAll() {
     title.textContent =
       state.noCode || state.error ? 'Repeat requests' : `${n} open repeat request${n === 1 ? '' : 's'}`;
   }
+  renderLocPills();
   renderList();
   const foot = container.querySelector('#sgFoot');
   if (foot) foot.innerHTML = state.lastFetched ? freshnessHtml(state.lastFetched) : '';
@@ -476,7 +487,9 @@ function renderList() {
   }
 
   const now = Date.now();
-  const sorted = sortSigningRows(state.rows);
+  const visible = state.rows.filter((r) => rowMatchesLocationFilter(r, state.locationFilter));
+  renderFilterNote();
+  const sorted = sortSigningRows(visible);
   list.innerHTML = sorted
     .map((row) => {
       const age = requestAgeDays(row.createdAt, now);
@@ -495,7 +508,7 @@ function renderList() {
         <div class="sg-row-head">
           <span class="sg-patient">${esc(row.patientName)}</span>
           <span class="sg-dob">${esc(row.dateOfBirth)}</span>
-          ${row.collectionLocation ? `<span class="sg-collect" title="Collection location recorded on this request">&#8962; ${esc(row.collectionLocation)}</span>` : ''}
+          ${collectChip(row)}
         </div>
         ${row.summary ? `<div class="sg-summary">${esc(row.summary)}</div>` : ''}
         <div class="sg-verdicts">${verdictHtml(row)}</div>
@@ -505,6 +518,80 @@ function renderList() {
     .join('');
 
   renderMore(state.rows.filter((r) => r.state === ROW_STATE.PENDING).length);
+}
+
+// Collection chip — row head, after the name (real-user placement, Chris M.):
+// the SYMBOL answers the phone-call question at a glance (house = our
+// dispensary, Rx = the patient's usual chemist); the verbatim recorded name
+// rides alongside so a stale or mis-coded location stays visible.
+// Informational only — nothing to action; never red/amber.
+function collectChip(row) {
+  if (!row.collectionLocation) return '';
+  const home = isDispensaryLocation(row.collectionLocation);
+  const glyph = home ? '&#8962;' : '&#8478;'; // ⌂ dispensary | ℞ community pharmacy
+  const kind = home ? 'home' : 'chemist';
+  const what = home ? 'collected from the practice dispensary' : "collected from the patient's community pharmacy";
+  return `<span class="sg-collect sg-collect--${kind}" title="Where this prescription is ${what} — recorded on the request; informational only, nothing to action here">${glyph} ${esc(row.collectionLocation)}</span>`;
+}
+
+// Location filter pills (Practice-panel ruling, 2026-07-07): counts derived
+// from the values present in the current pile; "No location" is an explicit
+// bucket; the whole row is invisible at practices that don't use the field.
+// Display-only — the monitoring pass always checks EVERY row regardless of
+// the active filter, so verdicts are complete even while the view is narrowed.
+function renderLocPills() {
+  const host = container?.querySelector('#sgLocPills');
+  if (!host) return;
+  const buckets = locationBuckets(state.rows);
+  if (buckets.length === 0) {
+    host.innerHTML = '';
+    state.locationFilter.clear();
+    return;
+  }
+  // Drop filter keys that no longer exist in the pile (e.g. after a refresh).
+  const validKeys = new Set(buckets.map((b) => b.key));
+  for (const k of [...state.locationFilter]) if (!validKeys.has(k)) state.locationFilter.delete(k);
+
+  host.innerHTML = buckets
+    .map(
+      (b) => `
+      <button class="sg-loc-pill${state.locationFilter.has(b.key) ? ' sg-loc-pill--active' : ''}"
+              data-key="${esc(b.key)}" role="switch" aria-checked="${state.locationFilter.has(b.key)}"
+              aria-label="Filter to ${esc(b.label)} (${b.count} request${b.count === 1 ? '' : 's'})">
+        ${esc(b.label)} <span class="sg-loc-count">${b.count}</span>
+      </button>`
+    )
+    .join('');
+  host.querySelectorAll('.sg-loc-pill').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      if (state.locationFilter.has(key)) state.locationFilter.delete(key);
+      else state.locationFilter.add(key);
+      renderLocPills();
+      renderList();
+    });
+  });
+}
+
+// Active-filter note — narrowing the view must never be silent, and a hidden
+// RED row is always called out by count (H-038 control (j)).
+function renderFilterNote() {
+  const note = container?.querySelector('#sgFilterNote');
+  if (!note) return;
+  const summary = filterHiddenSummary(state.rows, state.locationFilter);
+  if (!summary || summary.hidden === 0) {
+    note.className = 'sg-filter-note hidden';
+    note.innerHTML = '';
+    return;
+  }
+  const redBit = summary.hiddenRed > 0 ? ` — <strong>including ${summary.hiddenRed} red-flagged</strong>` : '';
+  note.className = `sg-filter-note${summary.hiddenRed > 0 ? ' sg-filter-note--red' : ''}`;
+  note.innerHTML = `${summary.hidden} request${summary.hidden === 1 ? '' : 's'} hidden by the location filter${redBit}. <button class="sg-filter-clear">Show all</button>`;
+  note.querySelector('.sg-filter-clear')?.addEventListener('click', () => {
+    state.locationFilter.clear();
+    renderLocPills();
+    renderList();
+  });
 }
 
 function renderMore(remainingRows) {
