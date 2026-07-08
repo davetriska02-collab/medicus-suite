@@ -2,6 +2,39 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.171.0] — 2026-07-08
+
+### Added: links out to Medicus for direct comparison (duplicate-checker)
+
+Two navigation links, both confirmed live via DevTools capture:
+
+- **"Open this patient's record in Medicus ↗"** at the top of every
+  patient's analysis, opening the confirmed care-record journal page in a
+  new tab. Its URL only differs from the API host by moving the site code
+  from subdomain to the first path segment
+  (`https://e38a9f.api.england.medicus.health` →
+  `https://england.medicus.health/e38a9f/patient/patient/care-record/{id}?careRecordTab=journal`)
+  — `buildCareRecordJournalUrl` refuses (returns null, no link rendered)
+  rather than guessing if `apiBase` doesn't match the exact confirmed
+  shape.
+- **"Download original ↗"** on each copy's column header in the document
+  Compare-fields table, via the confirmed
+  `GET clinical/document/download-file/{fileId}?convertToPDF=0` endpoint —
+  the same original bytes this tool's fileType/fileSize matching already
+  compares, not a converted copy. Takes the document's own `fileId`
+  (confirmed distinct from `documentId` in the real capture), read from
+  the preview already fetched for the comparison table — no new fetch.
+  `convertToPDF=1` (PDF export) is a plausible but unconfirmed inference
+  from the parameter name and is deliberately not wired without its own
+  capture.
+- Investigation-only: clicking a document in Medicus's own UI opens an
+  in-page modal (every related call sits under `.../modals/...` and
+  returns JSON) — there is no document-specific browser URL to link to,
+  which is why these two links are the practical ceiling for "click to
+  compare" rather than a direct jump into the document viewer.
+
+8 new parser tests (261/261 passing).
+
 ## [v3.170.0] — 2026-07-08
 
 ### Duplicate-checker: GP2GP wrapper shown as a guide; single keep cue

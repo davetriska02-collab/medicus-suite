@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.170.0
+**Version:** v3.171.0
 **Generated:** 2026-07-08 (manual refresh — duplicate-checker branch)
 
 ## What it is
@@ -113,6 +113,8 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.171.0 (2026-07-08)** — Record duplicate cleanup tool (internal): a direct link to open the patient's own record in Medicus, and a "Download original" link on each copy in the document comparison view, so a user can pull up two flagged copies side by side to confirm a match.
 
 - **v3.170.0 (2026-07-08)** — Record duplicate cleanup tool (internal): GP2GP import-wrapper text is now shown highlighted (a visual guide to which copy is the reimport artifact) rather than silently stripped; and the keep/discard indication in the removal step was simplified to a single green highlight on the copy being kept.
 

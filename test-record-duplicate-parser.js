@@ -34,6 +34,8 @@ const {
   buildDocumentEditOverrides,
   buildDocumentEditRequest,
   splitDocumentGroupsByFileType,
+  buildCareRecordJournalUrl,
+  buildDocumentDownloadUrl,
   flattenDocumentEntries,
   findDocumentLinkedDuplicates,
   sortGroupsByJournalOrder,
@@ -2246,6 +2248,40 @@ console.log('\n--- sortGroupsByJournalOrder (documentLinked groups adjacent to t
     missingRow.values[1].value === null,
     'an entry with no fetched preview at all shows a blank value for that column, never guessed'
   );
+}
+
+console.log('\n--- External links (buildCareRecordJournalUrl / buildDocumentDownloadUrl) ---');
+{
+  const apiBase = 'https://e38a9f.api.england.medicus.health';
+  assert(
+    buildCareRecordJournalUrl(apiBase, '01923611-438d-709c-b6f5-ba80da283466') ===
+      'https://england.medicus.health/e38a9f/patient/patient/care-record/01923611-438d-709c-b6f5-ba80da283466?careRecordTab=journal',
+    'buildCareRecordJournalUrl matches the confirmed real capture exactly: site code moves from subdomain to first path segment'
+  );
+  assert(
+    buildCareRecordJournalUrl(null, 'patient-1') === null,
+    'buildCareRecordJournalUrl refuses a missing apiBase'
+  );
+  assert(
+    buildCareRecordJournalUrl(apiBase, null) === null,
+    'buildCareRecordJournalUrl refuses a missing patientId'
+  );
+  assert(
+    buildCareRecordJournalUrl('https://not-the-expected-shape.example.com', 'patient-1') === null,
+    'buildCareRecordJournalUrl refuses rather than guesses when apiBase does not match the confirmed {code}.api.england.medicus.health shape'
+  );
+  assert(
+    buildCareRecordJournalUrl('https://e38a9f.api.OTHER.domain.com', 'patient-1') === null,
+    'buildCareRecordJournalUrl refuses a non-england.medicus.health domain rather than guessing the transform still applies'
+  );
+
+  assert(
+    buildDocumentDownloadUrl(apiBase, '019c5688-49cf-71e5-bb2a-b6927a3fc63a') ===
+      'https://e38a9f.api.england.medicus.health/clinical/document/download-file/019c5688-49cf-71e5-bb2a-b6927a3fc63a?convertToPDF=0',
+    'buildDocumentDownloadUrl matches the confirmed real capture exactly — on the API host, not the UI host'
+  );
+  assert(buildDocumentDownloadUrl(null, 'file-1') === null, 'buildDocumentDownloadUrl refuses a missing apiBase');
+  assert(buildDocumentDownloadUrl(apiBase, null) === null, 'buildDocumentDownloadUrl refuses a missing fileId');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

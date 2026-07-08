@@ -671,7 +671,7 @@ async function runJournalAnalysis(idx, r) {
     out.__analysis = analysis;
     out.__patient = r;
     out.__idx = idx;
-    out.innerHTML = renderJournalAnalysisHtml(analysis);
+    out.innerHTML = renderJournalAnalysisHtml(analysis, _apiBase, r.uuid);
     wireRemovalDelegation(out);
   } catch (e) {
     if (myGeneration !== _activeGeneration) return;
@@ -890,11 +890,24 @@ function standardEntryLinesHtml(g) {
     .join('');
 }
 
-function renderJournalAnalysisHtml(analysis) {
+// Link to the patient's own care-record journal in Medicus, opened in a new
+// tab (2026-07-08, confirmed live — see buildCareRecordJournalUrl's own
+// header comment: there is no document-specific deep link, Medicus's
+// document viewer is an in-page modal, not a route — so this is the
+// closest "click to compare" gets: land the user on the right patient's
+// journal and let them navigate from there).
+function patientJournalLinkHtml(apiBase, patientUuid) {
+  const url = window.RecordDuplicateParser.buildCareRecordJournalUrl(apiBase, patientUuid);
+  if (!url) return '';
+  return `<div style="margin-bottom:8px"><a href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--accent)">Open this patient's record in Medicus ↗</a></div>`;
+}
+
+function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
   const { groups, transferEncounters, summary, gp2gpWrapperCoverage } = analysis;
   const nearMisses = (gp2gpWrapperCoverage && gp2gpWrapperCoverage.nearMisses) || [];
+  const patientLinkHtml = patientJournalLinkHtml(apiBase, patientUuid);
   if (!groups.length && !transferEncounters.length && !nearMisses.length) {
-    return '<div class="empty-state">No candidate duplicate entries found in this patient\'s journal.</div>';
+    return `${patientLinkHtml}<div class="empty-state">No candidate duplicate entries found in this patient's journal.</div>`;
   }
 
   const summaryLine = `<div style="font-size:12px;color:var(--text-3);margin-bottom:10px">
@@ -976,7 +989,7 @@ function renderJournalAnalysisHtml(analysis) {
         </div>`
       : '';
 
-  return summaryLine + groupsHtml + transferHtml + wrapperHtml;
+  return patientLinkHtml + summaryLine + groupsHtml + transferHtml + wrapperHtml;
 }
 
 // ── Removal action (EXACT-tier, confirmed-write kinds only) ─────────────────
@@ -1435,17 +1448,25 @@ function reviewActionsHtml(g, gIdx) {
 // independently, since the "better" copy often differs per field (e.g. the
 // duplicate's Record date is usually the reimport-collapsed one, but its
 // Document date and Author may still be fine).
-function renderDocumentFieldComparisonHtml(g, gIdx, comparison) {
+function renderDocumentFieldComparisonHtml(g, gIdx, comparison, previewByEntryId) {
   const entryIds = g.entries.map((e) => e.id);
   // Each copy gets TWO physical columns — a fixed narrow radio column and a
   // left-aligned value column — so the radios line up vertically and the
   // values line up vertically (live feedback 2026-07-08: radio + value
   // sharing one auto-width cell rendered misaligned and cramped).
+  // A download link per copy (2026-07-08, confirmed live — see
+  // buildDocumentDownloadUrl's own header comment) is the closest this tool
+  // gets to "click to compare": the ORIGINAL file, same bytes the
+  // fileType/fileSize check already compares, not a converted copy.
   const colHeaders = g.entries
-    .map(
-      (e) =>
-        `<th colspan="2" style="text-align:left;padding:4px 8px;font-size:11px;color:var(--text-2)">${e.id === g.keeperEntryId ? 'Kept copy' : 'Other copy'}</th>`
-    )
+    .map((e) => {
+      const preview = previewByEntryId && previewByEntryId[e.id];
+      const downloadUrl = preview && window.RecordDuplicateParser.buildDocumentDownloadUrl(_apiBase, preview.fileId);
+      const downloadLink = downloadUrl
+        ? ` · <a href="${esc(downloadUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-weight:normal">Download original ↗</a>`
+        : '';
+      return `<th colspan="2" style="text-align:left;padding:4px 8px;font-size:11px;color:var(--text-2)">${e.id === g.keeperEntryId ? 'Kept copy' : 'Other copy'}${downloadLink}</th>`;
+    })
     .join('');
 
   const rowsHtml = comparison.rows
@@ -2039,7 +2060,7 @@ function wireRemovalDelegation(out) {
         g,
         analysis.documentPreviewsByEntryId || {}
       );
-      slot.innerHTML = renderDocumentFieldComparisonHtml(g, gIdx, comparison);
+      slot.innerHTML = renderDocumentFieldComparisonHtml(g, gIdx, comparison, analysis.documentPreviewsByEntryId || {});
       return;
     }
     const copyFieldSummaryBtn = ev.target.closest('.copy-field-summary-btn');

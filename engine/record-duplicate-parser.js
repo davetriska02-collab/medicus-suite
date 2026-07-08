@@ -1528,6 +1528,45 @@
     };
   }
 
+  // ── External links (2026-07-08) ────────────────────────────────────────────
+  // Confirmed live via DevTools capture: clicking a document in Medicus's own
+  // UI opens an in-page MODAL, not a navigable page — every call in that
+  // sequence sits under `.../modals/...` and returns JSON. There is no
+  // document-specific browser URL. Two links ARE confirmed real, navigable
+  // targets:
+
+  // The care-record journal page is a genuine UI route, distinct from the
+  // `.../data/...` API family every other function in this file targets.
+  // Its hostname differs from the API hostname only by moving the site code
+  // from subdomain to the first path segment — e.g.
+  // https://e38a9f.api.england.medicus.health -> https://england.medicus.health/e38a9f/...
+  // Every apiBase in duplicate-checker.js is constructed as the fixed
+  // `https://{code}.api.england.medicus.health` shape, so this regex matches
+  // exactly that and REFUSES (null) rather than guessing if apiBase doesn't
+  // match — same discipline as every write contract above.
+  const API_BASE_RE = /^https:\/\/([a-z0-9]+)\.api\.(england\.medicus\.health)$/i;
+
+  function buildCareRecordJournalUrl(apiBase, patientId) {
+    const m = typeof apiBase === 'string' ? apiBase.match(API_BASE_RE) : null;
+    if (!m || !patientId) return null;
+    const [, code, domain] = m;
+    return `https://${domain}/${code}/patient/patient/care-record/${patientId}?careRecordTab=journal`;
+  }
+
+  // Confirmed live 2026-07-08: GET clinical/document/download-file/{fileId}
+  // ?convertToPDF=0 downloads the document's ORIGINAL file, unconverted —
+  // the same bytes this tool's fileType/fileSize matching already compares.
+  // Takes `fileId` (the document preview's own top-level `fileId` field —
+  // see DOCUMENT_COMPARISON_FIELDS above), deliberately NOT documentId,
+  // confirmed as a distinct id in the real capture. `convertToPDF=1` for a
+  // PDF conversion is a highly plausible but UNCONFIRMED inference from the
+  // parameter name and Medicus's own "Export as PDF" menu option — not
+  // offered here without a direct capture of that variant.
+  function buildDocumentDownloadUrl(apiBase, fileId) {
+    if (!apiBase || !fileId) return null;
+    return `${apiBase}/clinical/document/download-file/${fileId}?convertToPDF=0`;
+  }
+
   // ── Public entry point ────────────────────────────────────────────────────
   // Accepts either the raw array of day-groups, or a payload object with the
   // array under a common wrapper key. `patientJournalRecords` is the real,
@@ -1618,6 +1657,8 @@
     buildDocumentEditOverrides,
     buildDocumentEditRequest,
     splitDocumentGroupsByFileType,
+    buildCareRecordJournalUrl,
+    buildDocumentDownloadUrl,
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
