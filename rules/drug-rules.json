@@ -2,7 +2,7 @@
   "lastUpdated": "2026-06-29",
   "schemaVersion": 2,
   "specVersion": "Sentinel drug rules - June 2026 review",
-  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-14 CSO-approved Keeper addition: added brand 'jayempi' to azathioprine-maintenance (licensed UK azathioprine 10mg/ml oral suspension, Nova Laboratories, MA PLGB 13581/0005, available Feb 2024) — WebSearch-corroborated (emc SmPC / NHSBSA Drug Tariff), CSO-signed-off. 2026-06-20 (The Keeper, CSO proposal): corrected the DOAC rule notes to specify CrCl (Cockcroft-Gault), NOT eGFR, for renal-banded monitoring frequency (eGFR overestimates clearance and raises bleeding risk; MHRA/SPS/EHRA) — no interval change. Added a DMPA injectable-contraception monitoring rule (dmpa-injectable, enabled, 2-yearly BP+weight, FSRH). Added a combined-hormonal-contraception rule (chc-combined-hormonal) SHIPPED DISABLED pending engine disambiguation: the hrt-systemic rule matches bare 'estradiol', a substring of 'ethinylestradiol', so an enabled CHC rule would double-fire the HRT rule for oestrogen-ingredient/natural-oestrogen records. SOURCE GAP: FSRH/BNF primary PDFs 403 — corroborated via NHS formulary/NICE CKS reproductions; pending primary-source confirmation. 2026-06-21 (The Keeper, Sentinel currency review): additive safety/source refresh only — added the MHRA DSU 29 Jan 2026 strengthened GLP-1/GIP pancreatitis warning (glp1-receptor-agonist), refreshed the csDMARD source citation to the 2025 BSR guideline (Rheumatology, Nov 2025) across methotrexate/leflunomide/azathioprine/sulfasalazine/hydroxychloroquine with NO interval change, and noted the MHRA tirzepatide-to-oral-contraceptive interaction on chc-combined-hormonal. All corroborated across multiple secondary summaries; primary gov.uk/journal PDFs were 403 this run, pending primary-source confirmation. NOT changed: QOF DM036 age band (file uses <=70; one secondary source says <=79) — held for primary confirmation to avoid a silent chip change. 2026-06-29 (additive safety enhancement, PENDING CSO REVIEW): added a post-initiation U&E test to the ace-arb (RAAS blocker) rule enforcing NICE NG136's requirement for a U&E within ~1-2 weeks of STARTING an ACE-I/ARB (previously only described in notes, not enforced). Implemented via a new engine `postInitiationDays`/`postInitiationDueSoonDays` test mechanism that fires only when the drug's start date is known AND no U&E has been recorded since starting — so it cannot raise a false alert on an established patient whose start date is not visible. No change to the existing annual U&E/BP intervals or to any other rule.",
+  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-14 CSO-approved Keeper addition: added brand 'jayempi' to azathioprine-maintenance (licensed UK azathioprine 10mg/ml oral suspension, Nova Laboratories, MA PLGB 13581/0005, available Feb 2024) — WebSearch-corroborated (emc SmPC / NHSBSA Drug Tariff), CSO-signed-off. 2026-06-20 (The Keeper, CSO proposal): corrected the DOAC rule notes to specify CrCl (Cockcroft-Gault), NOT eGFR, for renal-banded monitoring frequency (eGFR overestimates clearance and raises bleeding risk; MHRA/SPS/EHRA) — no interval change. Added a DMPA injectable-contraception monitoring rule (dmpa-injectable, enabled, 2-yearly BP+weight, FSRH). Added a combined-hormonal-contraception rule (chc-combined-hormonal) SHIPPED DISABLED pending engine disambiguation: the hrt-systemic rule matches bare 'estradiol', a substring of 'ethinylestradiol', so an enabled CHC rule would double-fire the HRT rule for oestrogen-ingredient/natural-oestrogen records. SOURCE GAP: FSRH/BNF primary PDFs 403 — corroborated via NHS formulary/NICE CKS reproductions; pending primary-source confirmation. 2026-06-21 (The Keeper, Sentinel currency review): additive safety/source refresh only — added the MHRA DSU 29 Jan 2026 strengthened GLP-1/GIP pancreatitis warning (glp1-receptor-agonist), refreshed the csDMARD source citation to the 2025 BSR guideline (Rheumatology, Nov 2025) across methotrexate/leflunomide/azathioprine/sulfasalazine/hydroxychloroquine with NO interval change, and noted the MHRA tirzepatide-to-oral-contraceptive interaction on chc-combined-hormonal. All corroborated across multiple secondary summaries; primary gov.uk/journal PDFs were 403 this run, pending primary-source confirmation. NOT changed: QOF DM036 age band (file uses <=70; one secondary source says <=79) — held for primary confirmation to avoid a silent chip change. 2026-06-29 (additive safety enhancement, PENDING CSO REVIEW): added a post-initiation U&E test to the ace-arb (RAAS blocker) rule enforcing NICE NG136's requirement for a U&E within ~1-2 weeks of STARTING an ACE-I/ARB (previously only described in notes, not enforced). Implemented via a new engine `postInitiationDays`/`postInitiationDueSoonDays` test mechanism that fires only when the drug's start date is known AND no U&E has been recorded since starting — so it cannot raise a false alert on an established patient whose start date is not visible. No change to the existing annual U&E/BP intervals or to any other rule. 2026-07-08 (Transactional-API enablement): added the drug-allergy rule type and three starter cross-check rules (penicillin, NSAID hypersensitivity, sulfonamide) that fire only when a documented ACTIVE allergy co-occurs with a contraindicated drug. These read the allergies bundle, available ONLY from the Transactional (GP Connect Structured) feed; on the legacy session/DOM feed there are no allergies so they FAIL CLOSED and never fire. SHIPPED ENABLED because fail-closed makes them zero-risk today; marked PENDING CSO REVIEW for the term lists and cross-sensitivity scope. Sources: BNF interactions/allergy guidance, MHRA, NICE CKS drug-allergy; primary PDFs to be confirmed at CSO review.",
   "rules": [
     {
       "type": "drug-monitoring",
@@ -1846,6 +1846,160 @@
       "source": "FSRH Guideline: Combined Hormonal Contraception (Jan 2019, amended Oct 2023); NICE CKS Contraception",
       "notes": "FSRH/NICE mandate BP+BMI at initiation, a 3-month review, then at least annually — this rule enforces the annual recurring BP+BMI check. CHC = combined pills + Evra patch + NuvaRing/SyreniRing. Contraindicated in uncontrolled hypertension (UKMEC 4 ≥160/100; UKMEC 3 ≥140/90 or BMI ≥35); reassess VTE/CVD risk at each review. DISAMBIGUATION (enabled 2026-06-20): the hrt-systemic rule matches the bare term 'estradiol', which is a SUBSTRING of the contraceptive oestrogen 'ethinylestradiol' and of the natural-oestrogen pills' 'estradiol valerate' (Qlaira) / 'estradiol hemihydrate' (Zoely). To stop CHC patients double-firing the HRT review, hrt-systemic now EXCLUDES 'ethinylestradiol'/'ethinyloestradiol'/'qlaira'/'zoely' (none of which are HRT). CHC matches by brand plus the contraceptive-only oestrogen 'ethinylestradiol'/'ethinyloestradiol' (so generic ethinylestradiol+progestogen combos fire here, never as HRT). POPs (Cerazette/Cerelle/Zelleta/Lovima/Hana/Nacrez — desogestrel) are excluded. SOURCE: FSRH Combined Hormonal Contraception (2019, amended 2023); corroborated via NHS formulary/NICE CKS. MHRA: co-prescribed tirzepatide (Mounjaro) may reduce absorption of oral contraceptives, especially in overweight/obese patients — advise an additional barrier method or a non-oral method for 4 weeks after starting tirzepatide and after each dose increase (corroborated 2026-06-21; primary MHRA wording pending confirmation).",
       "sharedCare": false
+    },
+    {
+      "id": "allergy-penicillin",
+      "type": "drug-allergy",
+      "enabled": true,
+      "label": "Penicillin allergy + penicillin/beta-lactam",
+      "severity": "red",
+      "allergyTerms": [
+        "penicillin",
+        "amoxicillin allerg",
+        "flucloxacillin allerg",
+        "co-amoxiclav allerg",
+        "beta-lactam allerg",
+        "betalactam allerg",
+        "phenoxymethylpenicillin allerg",
+        "benzylpenicillin allerg"
+      ],
+      "drugSets": [
+        {
+          "name": "Penicillins",
+          "match": [
+            "penicillin",
+            "amoxicillin",
+            "ampicillin",
+            "flucloxacillin",
+            "co-amoxiclav",
+            "co amoxiclav",
+            "phenoxymethylpenicillin",
+            "benzylpenicillin",
+            "pivmecillinam",
+            "piperacillin",
+            "temocillin"
+          ],
+          "exclude": []
+        }
+      ],
+      "source": "BNF/NICE CKS drug allergy; MHRA. PENDING CSO REVIEW.",
+      "notes": "Fires when an active penicillin/beta-lactam allergy co-occurs with a penicillin-class drug. Cross-reactivity with cephalosporins/carbapenems is handled by the separate cross-sensitivity rule."
+    },
+    {
+      "id": "allergy-penicillin-cephalosporin-xs",
+      "type": "drug-allergy",
+      "enabled": true,
+      "label": "Penicillin allergy + cephalosporin (cross-sensitivity)",
+      "severity": "amber",
+      "crossSensitivity": true,
+      "allergyTerms": [
+        "penicillin",
+        "beta-lactam allerg",
+        "betalactam allerg"
+      ],
+      "drugSets": [
+        {
+          "name": "Cephalosporins/carbapenems",
+          "match": [
+            "cefalexin",
+            "cephalexin",
+            "cefaclor",
+            "cefadroxil",
+            "cefuroxime",
+            "cefixime",
+            "cefotaxime",
+            "ceftriaxone",
+            "ceftazidime",
+            "cefepime",
+            "meropenem",
+            "imipenem",
+            "ertapenem",
+            "aztreonam"
+          ],
+          "exclude": []
+        }
+      ],
+      "source": "BNF/NICE CKS: ~1-3% cephalosporin cross-reactivity in penicillin allergy; lower with 3rd-gen. PENDING CSO REVIEW.",
+      "notes": "Cross-sensitivity CAUTION (amber), not an absolute contraindication — review documented reaction severity."
+    },
+    {
+      "id": "allergy-nsaid",
+      "type": "drug-allergy",
+      "enabled": true,
+      "label": "NSAID/aspirin hypersensitivity + NSAID",
+      "severity": "red",
+      "allergyTerms": [
+        "nsaid",
+        "non-steroidal anti-inflammatory",
+        "aspirin allerg",
+        "ibuprofen allerg",
+        "naproxen allerg",
+        "diclofenac allerg",
+        "salicylate allerg"
+      ],
+      "drugSets": [
+        {
+          "name": "NSAIDs",
+          "match": [
+            "ibuprofen",
+            "naproxen",
+            "diclofenac",
+            "aceclofenac",
+            "celecoxib",
+            "etoricoxib",
+            "meloxicam",
+            "piroxicam",
+            "indometacin",
+            "indomethacin",
+            "ketoprofen",
+            "mefenamic acid",
+            "nabumetone",
+            "etodolac",
+            "aspirin",
+            "acetylsalicylic"
+          ],
+          "exclude": [
+            "topical",
+            "gel",
+            "cream",
+            "patch",
+            "spray",
+            "eye drop"
+          ]
+        }
+      ],
+      "source": "BNF/NICE CKS NSAID hypersensitivity; cross-reactivity across NSAID class. PENDING CSO REVIEW.",
+      "notes": "Fires when active NSAID/aspirin/salicylate hypersensitivity co-occurs with a systemic NSAID. Topical formulations excluded. Aspirin-exacerbated respiratory disease is a class effect."
+    },
+    {
+      "id": "allergy-sulfonamide",
+      "type": "drug-allergy",
+      "enabled": true,
+      "label": "Sulfonamide allergy + sulfonamide antibiotic",
+      "severity": "red",
+      "allergyTerms": [
+        "sulfonamide",
+        "sulphonamide",
+        "sulfa allerg",
+        "co-trimoxazole allerg",
+        "trimethoprim-sulfamethoxazole allerg",
+        "sulfamethoxazole allerg"
+      ],
+      "drugSets": [
+        {
+          "name": "Sulfonamide antibiotics",
+          "match": [
+            "co-trimoxazole",
+            "co trimoxazole",
+            "sulfamethoxazole",
+            "sulfadiazine",
+            "sulfasalazine"
+          ],
+          "exclude": []
+        }
+      ],
+      "source": "BNF/NICE CKS sulfonamide allergy. PENDING CSO REVIEW.",
+      "notes": "Fires when an active sulfonamide-antibiotic allergy co-occurs with a sulfonamide antibiotic. Non-antibiotic sulfonamide cross-reactivity (e.g. thiazides, sulfonylureas) is contested and NOT encoded."
     }
   ]
 }

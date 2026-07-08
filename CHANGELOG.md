@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.161.0] — 2026-07-08
+
+### Drug-allergy safety rules (enabled by the Transactional care record)
+
+A new `drug-allergy` rule type fires when a documented **active** allergy
+co-occurs with a contraindicated drug — the first rule to read the allergies
+bundle, which only the Transactional (GP Connect Structured) feed provides.
+
+- **Fail-closed by design:** with no allergy data the rule never fires and never
+  asserts "no allergy", so it is dormant and zero-risk on the legacy session/DOM
+  feed (which has no allergies) and lights up only when a real allergy record is
+  present. Shipped enabled for that reason; term lists marked PENDING CSO REVIEW.
+- **Starter pack (4 rules)** in `rules/drug-rules.json`: penicillin/beta-lactam
+  (red), penicillin→cephalosporin cross-sensitivity (amber caution, not absolute),
+  NSAID/aspirin hypersensitivity (red, topical excluded), sulfonamide-antibiotic
+  (red). Only ACTIVE allergies count; resolved/inactive/refuted are ignored.
+- Engine reads `data.allergies` (threaded through `evaluatePatient` options and
+  both Sentinel call sites). `test-drug-allergy.js` (5 tests): fires, fails
+  closed, drug-absent, status-filtering, and the real pack on representative data.
+
 ## [v3.160.0] — 2026-07-08
 
 ### Transactional API integration (dormant by default) + feed-swap safety gate

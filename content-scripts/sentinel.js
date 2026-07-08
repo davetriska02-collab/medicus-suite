@@ -278,6 +278,7 @@
         problems: data.problems || [],
         patientContext: data.patientContext,
         observationHistory: data.observationHistory || [],
+        allergies: data.allergies || [],
       });
 
       renderPatientBanner(data, allChips);
@@ -1197,6 +1198,7 @@
               problems: data.problems || [],
               patientContext: data.patientContext,
               observationHistory: data.observationHistory || [],
+              allergies: data.allergies || [],
               trace: true,
             }
           );
