@@ -310,11 +310,50 @@
     }
   }
 
+  // === TRANSACTIONAL (official Medicus API via our backend proxy) ===
+  // Dormant unless txn.integrationMode is 'hybrid'/'transactional' (default
+  // 'session'). The service worker owns the proxy credential and returns a
+  // fully normalised engine bundle (see service-worker.js txnFetchPatientBundle).
+  // READS ONLY, and any failure falls straight back to fetchLive() — the
+  // transactional feed may never make the extension show LESS than today.
+  async function fetchTransactionalOrLive() {
+    try {
+      // Node tests / non-extension contexts: no chrome APIs -> session path.
+      if (typeof chrome === 'undefined' || !chrome.storage?.local || !chrome.runtime?.sendMessage) {
+        return fetchLive();
+      }
+      const stored = await chrome.storage.local.get('txn.integrationMode');
+      const txnMode = stored['txn.integrationMode'] || 'session';
+      if (txnMode !== 'hybrid' && txnMode !== 'transactional') return fetchLive();
+
+      // v1 scope: only URL-resolved patient UUIDs use the transactional feed;
+      // encounter/task views keep the session resolvers inside fetchLive().
+      const API = global.SentinelApiClient;
+      const ctx = API && API.detectMedicusContext ? API.detectMedicusContext(location.href) : null;
+      const patientUuid = ctx && ctx.patientUuid;
+      if (!patientUuid) return fetchLive();
+
+      const resp = await chrome.runtime.sendMessage({ action: 'txn:fetchPatientBundle', patientUuid });
+      if (resp && resp.ok && resp.bundle && resp.bundle.patientContext) {
+        return resp.bundle;
+      }
+      const live = await fetchLive();
+      live.debug = live.debug || {};
+      live.debug.txnFallback = (resp && resp.error) || 'no bundle';
+      return live;
+    } catch (e) {
+      const live = await fetchLive();
+      live.debug = live.debug || {};
+      live.debug.txnFallback = String((e && e.message) || e);
+      return live;
+    }
+  }
+
   function fetchPatientData(mode) {
     try {
       if (mode === 'mock') return Promise.resolve(fetchMock());
       if (mode === 'discovery') return Promise.resolve(runDiscovery());
-      return fetchLive();
+      return fetchTransactionalOrLive();
     } catch (e) {
       return Promise.resolve({
         mode,
@@ -329,7 +368,7 @@
     }
   }
 
-  const api = { fetchPatientData, fetchMock, runDiscovery, fetchLive, fetchFromDom };
+  const api = { fetchPatientData, fetchMock, runDiscovery, fetchLive, fetchFromDom, fetchTransactionalOrLive };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {

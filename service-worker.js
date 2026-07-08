@@ -101,6 +101,61 @@ try {
   console.warn('[Suite] importScripts shared/quiet-mode.js failed:', e && e.message);
 }
 
+// Transactional API integration (official Medicus API via our backend proxy).
+// The proxy caller credential (txn.callerKey) is only ever read HERE, in the
+// service worker — content scripts request patient bundles by message and
+// never see the credential. See docs/TRANSACTIONAL-API-INTEGRATION.md.
+try {
+  importScripts(
+    'shared/txn-config.js',
+    'shared/txn-transport.js',
+    'shared/txn-api.js',
+    'shared/fhir-normaliser.js',
+    'shared/immunisation-bridge.js',
+    'shared/data-source-transactional.js'
+  );
+} catch (e) {
+  console.warn('[Suite] importScripts txn modules failed:', e && e.message);
+}
+
+// ── Transactional feed: patient-bundle fetcher (SW-side; owns the credential) ─
+
+async function txnFetchPatientBundle(patientUuid) {
+  const settings = await TxnConfig.readSettings();
+  if (!TxnConfig.isTransactionalEnabled(settings.integrationMode)) {
+    return { ok: false, error: 'txn integration not enabled' };
+  }
+  const stored = await chrome.storage.local.get('suite.practiceCode');
+  const tenant = stored['suite.practiceCode'] || null;
+  if (!tenant) return { ok: false, error: 'practice code not set' };
+
+  const txnApi = TxnApi.createTxnApi({
+    baseUrl: 'https://proxy.invalid', // unused: the proxy transport forwards {method, path} only
+    fetchFn: TxnTransport.createProxyTransport({
+      proxyUrl: settings.proxyUrl,
+      getCallerCredential: async () => settings.callerKey || null,
+      getTenant: async () => tenant,
+      getEnvironment: async () => settings.environment,
+      getUserEmail: async () => settings.userEmail || null,
+    }),
+  });
+  const fetchFromTransactional = SentinelTransactionalSource.createTransactionalSource({
+    txnApi,
+    normaliseCareRecord: SentinelFhirNormaliser.normaliseCareRecord,
+  });
+  const bundle = await fetchFromTransactional({ patientUuid });
+  return { ok: true, bundle: SentinelImmunisationBridge.bridgeImmunisations(bundle) };
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return; // F5: intra-extension only
+  if (!msg || msg.action !== 'txn:fetchPatientBundle') return;
+  txnFetchPatientBundle(msg.patientUuid)
+    .then(sendResponse)
+    .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+  return true; // async sendResponse
+});
+
 // ── Message router ────────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.159.0
-**Generated:** 2026-07-06 (automated)
+**Version:** v3.160.0
+**Generated:** 2026-07-08 (automated)
 
 ## What it is
 
@@ -113,6 +113,8 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.160.0 (2026-07-08)** — Transactional API integration (dormant by default): the official Medicus API (JWT/JWKS, via our backend proxy — the extension never holds the signing key) can source the patient bundle, with automatic fallback to the session feed on any failure. Adds live allergies + immunisations to the bundle, structured-Immunization vaccine status, and a CI shadow-proof gate that runs the real engines on the FHIR feed. Reads only; no behaviour change until a practice opts in.
 
 - **v3.159.0 (2026-07-07)** — One warm line on the genuinely finished signing pile (“✓ Pile’s clear — nothing waiting on you.”) — panel-vetted: static text, no emoji, no animation, and never shown when filters merely hide requests.
 

@@ -2,6 +2,37 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.160.0] — 2026-07-08
+
+### Transactional API integration (dormant by default) + feed-swap safety gate
+
+The official Medicus Transactional API (JWT/JWKS, server-to-server) can now
+source the patient bundle, behind `txn.integrationMode` — default `'session'`,
+so nothing changes until a practice opts in. See
+docs/TRANSACTIONAL-API-INTEGRATION.md for the architecture and settings.
+
+- **New shared modules:** `txn-config` / `txn-transport` / `txn-api` (proxy
+  client — the extension never holds the signing key; our backend signs a ≤60s
+  JWT and forwards), `fhir-normaliser` (GP Connect Structured → the exact
+  engine bundle, now including **allergies and immunisations**, which the
+  session feed cannot provide), `fhir-results-adapter`, `fhir-triage-fields`,
+  `immunisation-bridge`, `record-provider`, `shadow-compare`.
+- **Service worker** owns the proxy credential (`txn.callerKey`, read nowhere
+  else, excluded from backups) and serves `txn:fetchPatientBundle` messages;
+  `engine/data-fetcher.js` tries the transactional feed first when enabled and
+  falls back to `fetchLive()` on ANY failure — the new feed can never make the
+  extension show less than today. Reads only; no write endpoint is wired.
+- **Vaccine status upgrade:** structured `Immunization` resources drive
+  given/declined via `immunisation-bridge` (a false "flu due" resolves to
+  "given") — previously inferred from coded text only.
+- **Safety gate in CI:** `test-txn-shadow.js` runs the REAL rules engine,
+  result-severity and triage matcher on the FHIR feed — parity must hold, and
+  a narrower API record (GP Connect exclusion rules) must be FLAGGED as a
+  regression, never silent. 38 new tests across `test-txn-*.js`.
+- `host_permissions` gains the backend-proxy origin (`https://*.supabase.co/*`).
+- Scheduling/capacity/task/reporting modules are untouched: the Transactional
+  API has no equivalent endpoints, so they stay on the session feed.
+
 ## [v3.159.0] — 2026-07-07
 
 ### Signing Queue: one warm line on the genuinely finished pile
