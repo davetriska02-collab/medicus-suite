@@ -250,6 +250,14 @@ const ALLOWLIST = new Set([
   // something the scanner currently detects on its own.)
   'suite.dupChecker.state',
 
+  // Local audit trail of every EXACT-tier duplicate entry duplicate-checker.js
+  // has removed from a patient's record (patient uuid/name, entry kind/id,
+  // reason, timestamp) — the only record of these writes, since there is no
+  // confirmed "undo" endpoint yet. Same PHI reasoning as suite.dupChecker.state
+  // directly above: deliberately excluded from suite backups, never wire this
+  // into an io file.
+  'suite.dupChecker.removalLog',
+
   // Per-machine view state — not user config, not PHI, deliberately excluded from
   // backups so a restore onto a new machine starts fresh (see shared/modules/shared/ui-state.js):
   'suite.uiState',

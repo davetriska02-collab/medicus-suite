@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.159.0
-**Generated:** 2026-07-06 (automated)
+**Version:** v3.170.0
+**Generated:** 2026-07-08 (manual refresh — duplicate-checker branch)
 
 ## What it is
 
@@ -113,6 +113,28 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.170.0 (2026-07-08)** — Record duplicate cleanup tool (internal): GP2GP import-wrapper text is now shown highlighted (a visual guide to which copy is the reimport artifact) rather than silently stripped; and the keep/discard indication in the removal step was simplified to a single green highlight on the copy being kept.
+
+- **v3.169.0 (2026-07-08)** — Record duplicate cleanup tool (internal): duplicate documents can now be removed directly (via Medicus's confirmed "remove from record" action) — both standalone and after applying corrected field values to the kept copy; completes the document apply-then-remove workflow.
+
+- **v3.168.0 (2026-07-08)** — Record duplicate cleanup tool (internal): notes recorded at a previous practice can now be auto-merged (round-trip confirmed against a real captured save); where the imported note has no organisation recorded — a state Medicus itself refuses to save — the tool prompts for one ("Previous GP" by default) instead of dead-ending, and merge failures now explain exactly which field blocked them.
+
+- **v3.167.0 (2026-07-08)** — Record duplicate cleanup tool (internal): one consistent compare-and-merge view for note duplicates (full-record field table plus merge editor, kept copy headed "✓ KEEP", click a card to switch keeper); every copy card now shows its creation timestamp recovered from the record id, so "identical" duplicates created years apart are visibly different; keep/remove confirmation panels now sit side by side.
+
+- **v3.166.0 (2026-07-08)** — Record duplicate cleanup tool (internal): unmistakable KEEP/DISCARD labels on every copy during removal (click a copy to keep it instead); a read-only "Compare details" view for note pairs showing linked problems and created timestamps, with a warning when the copy being removed holds problem links the kept copy lacks; and GP2GP junk-only note pairs (e.g. a bare Episodicity block vs an empty note) now correctly recognised as exact duplicates.
+
+- **v3.165.0 (2026-07-08)** — Record duplicate cleanup tool (internal): HIGH-tier note and problem duplicate pairs (identical text, different author/organisation — the classic GP2GP reimport signature) now show side-by-side comparison cards with remove and merge actions, matching the workflow already available for REVIEW-tier groups.
+
+- **v3.164.0 (2026-07-08)** — Record duplicate cleanup tool (internal): chosen field values on a duplicated document (title, type, dates, author) can now be applied to the kept copy via Medicus's own confirmed edit contract, with an explicit old → new confirmation — and a refusal (falling back to manual guidance) whenever the document carries anything never live-tested.
+
+- **v3.163.0 (2026-07-08)** — Record duplicate cleanup tool (internal): duplicated documents gained a field-by-field comparison table (title, type, dates, author, file details) in place of the free-text diff, with a copyable "chosen record" summary for manual correction.
+
+- **v3.162.0 (2026-07-07)** — Record duplicate cleanup tool (internal): now spots a subtler GP2GP artefact — a document's own linked entries re-imported as separate freestanding notes. The original linked entry is always protected; only the stray freestanding copy is ever offered for removal. (Corrected against real payloads in v3.162.2.)
+
+- **v3.161.0 (2026-07-06)** — Record duplicate cleanup tool (internal): REVIEW-tier duplicate groups gained a full-text word-diff comparison view, a human-judged override into the existing removal flow, and a suggested-merge workflow — automated for notes via Medicus's own edit endpoint, copy-paste guidance for everything else.
+
+- **v3.160.0 (2026-07-05)** — The duplicate checker was renamed "Record duplicate cleanup tool" and redesigned: master-detail layout (one patient's analysis at a time), suite design tokens in light and dark, and an expanded plain-English explanation of the matching logic and the GP2GP background.
 
 - **v3.159.0 (2026-07-07)** — One warm line on the genuinely finished signing pile (“✓ Pile’s clear — nothing waiting on you.”) — panel-vetted: static text, no emoji, no animation, and never shown when filters merely hide requests.
 

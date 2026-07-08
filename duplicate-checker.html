@@ -2,219 +2,356 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Duplicate Problem Checker — Medicus Suite</title>
+    <title>Record duplicate cleanup tool — Medicus Suite</title>
     <style>
-      :root {
-        --bg: #0f1117;
-        --bg-mid: #1a1d27;
-        --bg-card: #1e2130;
-        --border: #2e3347;
-        --text: #e2e8f0;
-        --text-2: #94a3b8;
-        --blue: #3b82f6;
-        --green: #4ade80;
-        --amber: #f59e0b;
-        --red: #ef4444;
-        --r: 6px;
-      }
-      * {
+      @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+      *,
+      *::before,
+      *::after {
         box-sizing: border-box;
         margin: 0;
         padding: 0;
       }
-      body {
-        background: var(--bg);
-        color: var(--text);
-        font:
-          14px/1.5 system-ui,
-          sans-serif;
-        padding: 24px;
+
+      /* ── Token canon (mirrors side-panel/panel.css :root — see
+         .claude/skills/ui-design/TOKENS.md. This is a standalone extension
+         page, same pattern as options.html: no panel.css to link, so the
+         canon is duplicated here verbatim. Keep in lock-step. ── */
+      :root {
+        --bg-deep: #f8fafc;
+        --bg-mid: #f1f5f9;
+        --bg-elev: #ffffff;
+        --bg-hover: #e2eaf5;
+        --border: #cbd5e1;
+        --border-hi: #94a3b8;
+        --accent: #2563eb;
+        --accent-hover: #1d4ed8;
+        --accent-dim: rgba(37, 99, 235, 0.09);
+        --accent-line: rgba(37, 99, 235, 0.3);
+        --text-1: #0f172a;
+        --text-2: #1e3a5f;
+        --text-3: #475569;
+        --text-4: #556377;
+        --text-5: #5f6f85;
+        --green: #16a34a;
+        --green-dim: rgba(22, 163, 74, 0.09);
+        --green-line: rgba(22, 163, 74, 0.3);
+        --amber: #b45309;
+        --amber-dim: rgba(180, 83, 9, 0.09);
+        --amber-line: rgba(180, 83, 9, 0.32);
+        --red: #dc2626;
+        --red-dim: rgba(220, 38, 38, 0.08);
+        --red-line: rgba(220, 38, 38, 0.3);
+        --r-sm: 4px;
+        --r-md: 6px;
+        --r-lg: 8px;
+        --r-pill: 999px;
+        --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05);
+        --shadow-2: 0 2px 8px rgba(15, 23, 42, 0.08);
+        --shadow-3: 0 8px 28px rgba(15, 23, 42, 0.14);
+        --ease: cubic-bezier(0.2, 0, 0, 1);
+        --fast: 120ms;
+        --med: 200ms;
+        --mono: 'JetBrains Mono', 'Courier New', monospace;
+        --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
+
+      html[data-theme='dark'] {
+        --bg-deep: #050a14;
+        --bg-mid: #0b1424;
+        --bg-elev: #131e34;
+        --bg-hover: #1a2a44;
+        --border: #1c2e4e;
+        --border-hi: #2a4060;
+        --accent: #5b8fc7;
+        --accent-hover: #7eaad6;
+        --accent-dim: rgba(91, 143, 199, 0.14);
+        --accent-line: rgba(91, 143, 199, 0.35);
+        --text-1: #f1f5f9;
+        --text-2: #cfe1ff;
+        --text-3: #93a8c5;
+        --text-4: #7d97b5;
+        --text-5: #6c89ac;
+        --green: #4ade80;
+        --green-dim: rgba(74, 222, 128, 0.12);
+        --green-line: rgba(74, 222, 128, 0.32);
+        --amber: #fbbf24;
+        --amber-dim: rgba(251, 191, 36, 0.16);
+        --amber-line: rgba(251, 191, 36, 0.32);
+        --red: #f87171;
+        --red-dim: rgba(248, 113, 113, 0.17);
+        --red-line: rgba(248, 113, 113, 0.34);
+        --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.45);
+        --shadow-3: 0 10px 32px rgba(0, 0, 0, 0.55);
+      }
+
+      html[data-size='small'] {
+        zoom: 0.85;
+      }
+      html[data-size='large'] {
+        zoom: 1.25;
+      }
+
+      html[data-colorblind='true'] {
+        --red: #ea580c;
+        --green: #2563eb;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+
+      html,
+      body {
+        height: 100%;
+        background: var(--bg-deep);
+        color: var(--text-1);
+        font: 13px/1.5 var(--sans);
+      }
+
+      /* ── Shell: main content + right-hand rail ── */
+      .app-shell {
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+      }
+      .main {
+        flex: 1;
+        min-width: 0;
+        overflow-y: auto;
+        padding: 24px 28px;
+      }
+      .rail {
+        width: 320px;
+        flex-shrink: 0;
+        border-left: 1px solid var(--border);
+        background: var(--bg-mid);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      @media (max-width: 900px) {
+        .app-shell {
+          flex-direction: column;
+          height: auto;
+          overflow: visible;
+        }
+        .rail {
+          width: 100%;
+          border-left: none;
+          border-top: 1px solid var(--border);
+        }
+      }
+
       h1 {
         font-size: 18px;
-        margin-bottom: 4px;
+        font-weight: 700;
+        margin-bottom: 2px;
       }
-      .subtitle {
-        color: var(--text-2);
+      h2 {
         font-size: 13px;
-        margin-bottom: 24px;
+        font-weight: 600;
+        color: var(--text-2);
       }
+      .page-header {
+        margin-bottom: 16px;
+      }
+      .section-header {
+        font: 600 11px/1.3 var(--sans);
+        color: var(--text-2);
+        text-transform: none;
+      }
+
+      /* ── Card ── */
       .card {
-        background: var(--bg-card);
+        background: var(--bg-elev);
         border: 1px solid var(--border);
-        border-radius: var(--r);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-1);
         padding: 16px;
         margin-bottom: 16px;
       }
+
       label {
         display: block;
-        font-size: 12px;
-        color: var(--text-2);
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-3);
         margin-bottom: 4px;
       }
       input {
         width: 100%;
         background: var(--bg-mid);
         border: 1px solid var(--border);
-        border-radius: var(--r);
-        color: var(--text);
+        border-radius: var(--r-md);
+        color: var(--text-2);
         padding: 7px 10px;
         font-size: 13px;
       }
       input:focus {
         outline: none;
-        border-color: var(--blue);
+        border-color: var(--accent);
+        background: var(--bg-elev);
       }
+
       button {
-        padding: 8px 18px;
-        border-radius: var(--r);
+        padding: 7px 16px;
+        border-radius: var(--r-md);
         border: none;
-        font-size: 13px;
+        font-size: 12px;
+        font-weight: 600;
         cursor: pointer;
+        transition:
+          background var(--fast) var(--ease),
+          border-color var(--fast) var(--ease),
+          color var(--fast) var(--ease);
       }
-      #runBtn {
-        background: var(--blue);
-        color: #fff;
-      }
-      #runBtn:disabled {
-        opacity: 0.4;
+      button:disabled {
+        opacity: 0.45;
         cursor: not-allowed;
       }
-      #csvBtn {
-        background: var(--bg-mid);
-        color: var(--text);
-        border: 1px solid var(--border);
-        display: none;
-        margin-left: 8px;
+      .btn-primary {
+        background: var(--accent);
+        color: var(--bg-deep);
       }
+      .btn-primary:hover:not(:disabled) {
+        background: var(--accent-hover);
+      }
+      .btn-ghost {
+        background: transparent;
+        color: var(--text-3);
+        border: 1px solid var(--border-hi);
+      }
+      .btn-ghost:hover:not(:disabled) {
+        border-color: var(--accent);
+        color: var(--text-2);
+        background: var(--accent-dim);
+      }
+      .btn-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .field-row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
       .progress-wrap {
         display: none;
         margin-top: 12px;
       }
       .progress-bar-bg {
-        background: var(--bg-mid);
-        border-radius: 99px;
+        background: var(--bg-deep);
+        border-radius: var(--r-pill);
         height: 8px;
         overflow: hidden;
       }
       .progress-bar {
-        background: var(--blue);
+        background: var(--accent);
         height: 8px;
         width: 0;
-        transition: width 0.2s;
-        border-radius: 99px;
+        transition: width var(--med) var(--ease);
+        border-radius: var(--r-pill);
       }
       .progress-label {
-        font-size: 12px;
-        color: var(--text-2);
+        font: 500 11px var(--mono);
+        color: var(--text-3);
         margin-top: 6px;
       }
       #status {
-        font-size: 13px;
+        font-size: 12px;
         margin-top: 10px;
-        color: var(--text-2);
-        min-height: 20px;
+        color: var(--text-3);
+        min-height: 18px;
       }
-      #results {
-        display: none;
-        margin-top: 8px;
-      }
+
+      /* ── Stat tiles ── */
       .summary {
         display: flex;
-        gap: 16px;
-        margin-bottom: 16px;
-        flex-wrap: wrap;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
       }
       .stat {
-        background: var(--bg-card);
+        background: var(--bg-elev);
         border: 1px solid var(--border);
-        border-radius: var(--r);
-        padding: 12px 18px;
-        text-align: center;
+        border-radius: var(--r-md);
+        padding: 8px 12px;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
       }
       .stat-num {
-        font-size: 28px;
-        font-weight: 700;
+        font: 700 18px/1 var(--mono);
+        font-variant-numeric: tabular-nums;
       }
       .stat-lbl {
-        font-size: 11px;
-        color: var(--text-2);
-        margin-top: 2px;
+        font-size: 10px;
+        color: var(--text-3);
+        text-align: right;
       }
       .stat-num.amber {
         color: var(--amber);
       }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-      }
-      th {
-        text-align: left;
-        padding: 8px 10px;
-        border-bottom: 1px solid var(--border);
-        color: var(--text-2);
-        font-weight: 500;
-        font-size: 12px;
-        cursor: pointer;
-        user-select: none;
-      }
-      th:hover {
-        color: var(--text);
-      }
-      td {
-        padding: 8px 10px;
-        border-bottom: 1px solid var(--border);
-        vertical-align: top;
-      }
-      tr:last-child td {
-        border-bottom: none;
-      }
-      tr:hover td {
-        background: var(--bg-mid);
-      }
+
       .pill {
         display: inline-block;
-        background: rgba(239, 68, 68, 0.15);
+        background: var(--red-dim);
         color: var(--red);
-        border-radius: 99px;
+        border: 1px solid var(--red-line);
+        border-radius: var(--r-pill);
         padding: 1px 8px;
-        font-size: 11px;
+        font: 600 11px var(--mono);
       }
       .dup-list {
         font-size: 11px;
-        color: var(--text-2);
+        color: var(--text-3);
         margin-top: 4px;
       }
       .err {
         color: var(--red);
-        font-size: 13px;
+        font-size: 12px;
         margin-top: 8px;
       }
       .info {
         color: var(--amber);
         font-size: 12px;
         padding: 8px 10px;
-        background: rgba(245, 158, 11, 0.1);
-        border-radius: var(--r);
-        border: 1px solid rgba(245, 158, 11, 0.2);
+        background: var(--amber-dim);
+        border-radius: var(--r-md);
+        border: 1px solid var(--amber-line);
       }
       .trigger-badge {
         display: inline-block;
-        font-size: 11px;
+        font: 600 10px var(--mono);
         padding: 1px 7px;
-        border-radius: 99px;
-        background: rgba(59, 130, 246, 0.15);
-        color: #93c5fd;
-        border: 1px solid rgba(59, 130, 246, 0.25);
+        border-radius: var(--r-pill);
+        background: var(--accent-dim);
+        color: var(--accent);
+        border: 1px solid var(--accent-line);
         white-space: nowrap;
         margin: 1px 2px 1px 0;
       }
+      code {
+        font-family: var(--mono);
+      }
+      .mono {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+      }
+
       #savedStateBanner {
         display: none;
-        background: rgba(245, 158, 11, 0.08);
-        border: 1px solid rgba(245, 158, 11, 0.25);
-        border-radius: var(--r);
+        background: var(--amber-dim);
+        border: 1px solid var(--amber-line);
+        border-radius: var(--r-md);
         padding: 10px 14px;
         margin-bottom: 14px;
         align-items: center;
@@ -223,141 +360,533 @@
       }
       #savedStateBanner button {
         padding: 5px 12px;
+        font-size: 11px;
+      }
+
+      /* ── Intro / learn-more ── */
+      .intro-copy {
         font-size: 12px;
+        color: var(--text-3);
+        max-width: 68ch;
+        margin: 10px 0 4px;
+      }
+      .intro-copy p {
+        margin-bottom: 10px;
+      }
+      .intro-copy h3 {
+        font: 600 11px var(--sans);
+        color: var(--text-2);
+        margin: 14px 0 6px;
+      }
+      .intro-copy ol,
+      .intro-copy ul {
+        margin: 0 0 10px 18px;
+      }
+      .intro-copy li {
+        margin-bottom: 4px;
+      }
+      .learn-more-toggle {
+        background: none;
+        border: none;
+        color: var(--accent);
+        font: 600 11px var(--sans);
+        padding: 0;
+        cursor: pointer;
+        margin-bottom: 8px;
+      }
+      .learn-more-toggle:hover {
+        color: var(--accent-hover);
+      }
+      .warning-line {
+        font-size: 12px;
+        color: var(--amber);
+        background: var(--amber-dim);
+        border: 1px solid var(--amber-line);
+        border-radius: var(--r-md);
+        padding: 8px 10px;
+        max-width: 68ch;
+        margin-top: 8px;
+      }
+
+      /* ── Right rail: collapsible scan drawer + patient list ── */
+      .rail-drawer {
+        border-bottom: 1px solid var(--border);
+      }
+      .drawer-toggle {
+        width: 100%;
+        text-align: left;
+        background: none;
+        border: none;
+        border-radius: 0;
+        color: var(--text-2);
+        font: 600 12px var(--sans);
+        padding: 12px 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .drawer-toggle:hover {
+        background: var(--bg-hover);
+      }
+      .drawer-chevron {
+        transition: transform var(--fast) var(--ease);
+        color: var(--text-4);
+      }
+      .rail-drawer.collapsed .drawer-chevron {
+        transform: rotate(-90deg);
+      }
+      .drawer-body {
+        padding: 0 14px 14px;
+      }
+      .rail-drawer.collapsed .drawer-body {
+        display: none;
+      }
+      .rail-drawer .card {
+        box-shadow: none;
+        border: none;
+        background: transparent;
+        padding: 0;
+        margin: 0;
+      }
+
+      .rail-list-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 14px 6px;
+        font: 600 11px var(--sans);
+        color: var(--text-3);
+      }
+      .rail-sort-row {
+        display: flex;
+        gap: 6px;
+        padding: 0 14px 8px;
+      }
+      .sort-btn {
+        background: transparent;
+        border: 1px solid transparent;
+        color: var(--text-4);
+        font: 500 10px var(--mono);
+        padding: 3px 8px;
+        border-radius: var(--r-sm);
+      }
+      .sort-btn.active {
+        border-color: var(--border-hi);
+        color: var(--text-2);
+        background: var(--bg-elev);
+      }
+
+      #results {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+      }
+      .rail-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0 8px 12px;
+        min-height: 0;
+      }
+      .rail-item {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 9px 10px;
+        border-radius: var(--r-md);
+        border: 1px solid transparent;
+        cursor: pointer;
+        margin-bottom: 3px;
+      }
+      .rail-item:hover {
+        background: var(--bg-hover);
+      }
+      .rail-item.active {
+        background: var(--accent-dim);
+        border-color: var(--accent-line);
+      }
+      .rail-item-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+      }
+      .rail-item-name {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-1);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .rail-item-meta {
+        font-size: 10px;
+        color: var(--text-4);
+      }
+      .rail-item-triggers {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px;
+      }
+      .rail-empty {
+        text-align: center;
+        color: var(--text-4);
+        font: 500 10px var(--mono);
+        padding: 32px 16px;
+      }
+
+      /* ── Patient detail (main area) ── */
+      .detail-pre {
+        margin: 0;
+        padding: 12px 14px;
+        font: 11px/1.5 var(--mono);
+        color: var(--text-3);
+        background: var(--bg-mid);
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        white-space: pre-wrap;
+        overflow: auto;
+        max-height: 400px;
+      }
+      .journal-analysis-wrap {
+        padding: 14px 0 0;
+      }
+
+      /* ── Tier chips (status-chip recipe, TOKENS.md) ── */
+      .tier-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font: 600 10px var(--mono);
+        letter-spacing: 0.03em;
+        padding: 2px 8px;
+        border-radius: var(--r-sm);
+        white-space: nowrap;
+      }
+      .tier-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        display: inline-block;
+      }
+      .tier-chip.tier-exact {
+        background: var(--red-dim);
+        color: var(--red);
+        border: 1px solid var(--red-line);
+      }
+      .tier-chip.tier-exact .tier-dot {
+        background: var(--red);
+      }
+      .tier-chip.tier-high {
+        background: var(--amber-dim);
+        color: var(--amber);
+        border: 1px solid var(--amber-line);
+      }
+      .tier-chip.tier-high .tier-dot {
+        background: transparent;
+        border: 1.5px solid var(--amber);
+      }
+      .tier-chip.tier-review {
+        background: var(--bg-mid);
+        color: var(--text-3);
+        border: 1px solid var(--border);
+      }
+      .tier-chip.tier-review .tier-dot {
+        background: transparent;
+        border: 1.5px dashed var(--text-4);
+      }
+
+      /* REVIEW-tier comparison view word-diff highlighting */
+      .diff-insert {
+        background: var(--amber-dim);
+        color: var(--amber);
+        border-radius: 3px;
+        padding: 0 2px;
+      }
+      .diff-delete {
+        color: var(--text-4);
+        text-decoration: line-through;
+      }
+
+      .rec-line {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--text-3);
+        margin-top: 6px;
+      }
+      .rec-line svg {
+        flex-shrink: 0;
+        margin-top: 1px;
+        stroke: var(--text-4);
+      }
+
+      .dup-group {
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-1);
+        background: var(--bg-elev);
+        padding: 12px;
+        margin-bottom: 8px;
+      }
+      .dup-group-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .dup-group-key {
+        font-size: 12px;
+      }
+      .dup-group-key .code {
+        color: var(--text-2);
+      }
+      .entry-line {
+        padding: 5px 0;
+        border-top: 1px solid var(--border);
+        font-size: 11px;
+        color: var(--text-3);
+      }
+      .entry-line .entry-date {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ── Empty state ── */
+      .empty-state {
+        text-align: center;
+        color: var(--text-4);
+        font: 500 11px var(--sans);
+        padding: 40px 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      .empty-state svg {
+        stroke: var(--text-5);
       }
     </style>
   </head>
   <body>
-    <h1>Duplicate Problem Checker</h1>
-    <p class="subtitle">
-      Scans active problem lists practice-wide and flags patients with any duplicated problem code.
-    </p>
-
-    <div id="savedStateBanner">
-      <span style="color: var(--amber); font-size: 13px" id="savedStateInfo"></span>
-      <button id="restoreBtn" style="background: var(--blue); color: #fff; border: none">Restore results</button>
-      <button id="incrBtn" style="background: var(--bg-mid); color: var(--text); border: 1px solid var(--border)">
-        Check new patients only
-      </button>
-      <button id="clearStateBtn" style="background: none; color: var(--text-2); border: 1px solid var(--border)">
-        Clear
-      </button>
-    </div>
-
-    <div class="card">
-      <label>Practice code (auto-detected from open Medicus tab)</label>
-      <input id="codeInput" placeholder="e.g. e38a9f" spellcheck="false" />
-      <div id="endpointWrap" style="margin-top: 10px; display: none">
-        <div style="font-size: 11px; color: var(--text-2); margin-bottom: 3px">Discovered patient listing endpoint</div>
-        <div style="display: flex; align-items: center; gap: 8px">
-          <code
-            id="endpointDisplay"
-            style="font-size: 11px; color: var(--text-2); word-break: break-all; flex: 1"
-          ></code>
-          <button
-            id="rediscoverBtn"
-            style="
-              background: none;
-              border: 1px solid var(--border);
-              color: var(--text-2);
-              font-size: 11px;
-              padding: 3px 8px;
-              white-space: nowrap;
-            "
-          >
-            Re-discover
+    <div class="app-shell">
+      <main class="main">
+        <div class="page-header">
+          <h1>Record duplicate cleanup tool</h1>
+          <button class="learn-more-toggle" id="learnMoreToggle" aria-expanded="false">
+            What does this do, and why? ▾
           </button>
+          <div class="intro-copy" id="introCopy" hidden>
+            <p>
+              This tool looks for patterns — either in an individual patient record, or in your overall patient list —
+              suggesting duplication of data. Usually, this occurs in record transfers via the GP2GP process, and can in
+              some cases result in the whole record being duplicated. This tool flags likely candidates in your
+              registered list, and/or allows you to search for and clean up duplicates within an individual patient
+              record.
+            </p>
+            <p>
+              The list search works by looking ONLY at problem codes, and identifying where these appear duplicated.
+              Patients are then flagged for a full record search, which you can do per-patient. Within a patient record,
+              the rules are more complex, but aim to flag likely duplicates and make cleaning them up easier.
+            </p>
+
+            <h3>How duplicates are identified</h3>
+            <p>
+              Within a patient's full record, the tool groups entries that share the same clinical code, the same date,
+              and the same type (problem, note, prescription, etc.), then checks how confident it can be that they're
+              really the same thing recorded twice:
+            </p>
+            <ul>
+              <li><strong>EXACT match</strong> — identical wording and the same author. Safe to bulk-remove.</li>
+              <li>
+                <strong>HIGH match</strong> — identical wording, but recorded by a different clinician/organisation (a
+                common sign of a GP2GP re-import). Also offered for bulk removal.
+              </li>
+              <li>
+                <strong>REVIEW</strong> — same code, but the wording genuinely differs (e.g. one copy has extra clinical
+                detail the other doesn't). Never offered for automatic removal — flagged for you to look at and merge by
+                hand if needed.
+              </li>
+            </ul>
+            <p>A few safety checks run automatically before anything is even offered for removal:</p>
+            <ul>
+              <li>
+                Two mentions of the same code within <strong>one single consultation</strong> are not treated as
+                duplicates — that's normal clinical recording, not an import artefact.
+              </li>
+              <li>
+                Prescriptions issued on the same day but for a <strong>different quantity</strong>, or a real minute or
+                more apart, are treated as separate genuine issues, not duplicates.
+              </li>
+              <li>
+                <strong>Documents</strong> are never bulk-removable through this tool — only ever flagged for manual
+                review, since two documents can share identical-looking metadata while being completely different
+                records.
+              </li>
+              <li>
+                If it's genuinely unclear which copy is the original, you're asked to choose before any removal is
+                offered — it never guesses.
+              </li>
+            </ul>
+
+            <h3>Background: how a record moves through GP2GP</h3>
+            <p>
+              A single patient's record can pass through this cycle more than once in their lifetime — each time they
+              move practice, it repeats:
+            </p>
+            <ol>
+              <li><strong>GP EPR 1</strong> prepares and sends the de-registering patient's data.</li>
+              <li>The <strong>GP2GP process</strong> sends that data on to the new practice's system, GP EPR 2.</li>
+              <li><strong>GP EPR 2</strong> receives and processes that data as a new patient.</li>
+              <li>
+                Later, when the patient moves again, <strong>GP EPR 2</strong> prepares and sends the (now
+                de-registering) patient's data onward.
+              </li>
+              <li>The <strong>GP2GP process</strong> sends that data on to the next practice's system, GP EPR 3.</li>
+              <li><strong>GP EPR 3</strong> receives and processes that data as a new patient.</li>
+            </ol>
+            <p>
+              Errors and corruption can be introduced at <strong>any</strong> of these six steps — and this tool
+              deliberately does not try to identify where or why for any given patient. It only detects that duplication
+              has happened, not which stage of the chain is responsible.
+            </p>
+          </div>
+          <p class="warning-line">
+            Removing data in this way is not easily reversible in Medicus (it requires manual work by the backend team)
+            — so please make sure you are confident that any data you remove is genuinely a duplicate before proceeding.
+          </p>
         </div>
-      </div>
-      <div style="margin-top: 12px">
-        <button id="runBtn">Run scan</button>
-        <button
-          id="fullScanBtn"
-          style="
-            background: none;
-            color: var(--text-2);
-            border: 1px solid var(--border);
-            display: none;
-            margin-left: 6px;
-            font-size: 12px;
-          "
-        >
-          Full scan
-        </button>
-        <button
-          id="secondPassBtn"
-          style="
-            background: var(--bg-mid);
-            color: var(--text);
-            border: 1px solid var(--border);
-            display: none;
-            margin-left: 8px;
-          "
-        >
-          Run second pass
-        </button>
-        <button id="csvBtn">Download CSV</button>
-        <button
-          id="debugBtn"
-          style="
-            background: none;
-            border: 1px solid var(--border);
-            color: var(--text-2);
-            font-size: 11px;
-            padding: 4px 10px;
-            margin-left: 8px;
-          "
-        >
-          Show patient fields
-        </button>
-      </div>
-      <pre
-        id="debugPanel"
-        style="
-          display: none;
-          margin-top: 10px;
-          font-size: 11px;
-          color: var(--text-2);
-          background: var(--bg-mid);
-          border: 1px solid var(--border);
-          border-radius: var(--r);
-          padding: 10px;
-          overflow: auto;
-          max-height: 200px;
-          white-space: pre-wrap;
-        "
-      ></pre>
-      <div class="progress-wrap" id="progressWrap">
-        <div class="progress-bar-bg"><div class="progress-bar" id="progressBar"></div></div>
-        <div class="progress-label" id="progressLabel"></div>
-      </div>
-      <div id="status"></div>
-      <div id="errMsg" class="err"></div>
+
+        <div id="savedStateBanner">
+          <span style="color: var(--amber); font-size: 13px" id="savedStateInfo"></span>
+          <button id="restoreBtn" class="btn-primary">Restore results</button>
+          <button id="incrBtn" class="btn-ghost">Check new patients only</button>
+          <button id="clearStateBtn" class="btn-ghost">Clear</button>
+        </div>
+
+        <div class="card" id="analyzeCurrentCard">
+          <h2 style="margin-bottom: 4px">Analyse current patient</h2>
+          <p style="color: var(--text-3); font-size: 12px; margin-bottom: 12px">
+            Skip the practice-wide scan — analyse whichever patient record is currently open in Medicus.
+          </p>
+          <div class="field-row">
+            <div style="flex: 0 0 130px">
+              <label>Practice code</label>
+              <input id="currentPatientCode" placeholder="e.g. e38a9f" spellcheck="false" />
+            </div>
+            <div style="flex: 1 1 320px">
+              <label>Patient UUID</label>
+              <input id="currentPatientUuid" placeholder="auto-filled from the open Medicus tab" spellcheck="false" />
+            </div>
+          </div>
+          <div class="btn-row" style="margin-top: 12px">
+            <button id="detectCurrentPatientBtn" class="btn-ghost">Detect from open tab</button>
+            <button id="analyzeCurrentPatientBtn" class="btn-primary analyze-journal-btn" data-idx="current">
+              Analyse full record for duplicates
+            </button>
+          </div>
+          <div id="currentPatientErr" class="err" style="display: none"></div>
+        </div>
+
+        <section id="patientDetailMain"></section>
+      </main>
+
+      <aside class="rail">
+        <div class="rail-drawer" id="scanDrawer">
+          <button class="drawer-toggle" id="scanDrawerToggle" aria-expanded="true">
+            <span>Scan practice list</span>
+            <svg
+              class="drawer-chevron"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          <div class="drawer-body" id="scanDrawerBody">
+            <label>Practice code (auto-detected from open Medicus tab)</label>
+            <input id="codeInput" placeholder="e.g. e38a9f" spellcheck="false" />
+            <div id="endpointWrap" style="margin-top: 10px; display: none">
+              <div style="font-size: 10px; color: var(--text-4); margin-bottom: 3px">
+                Discovered patient listing endpoint
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <code
+                  id="endpointDisplay"
+                  style="font-size: 10px; color: var(--text-4); word-break: break-all; flex: 1"
+                ></code>
+                <button
+                  id="rediscoverBtn"
+                  class="btn-ghost"
+                  style="font-size: 10px; padding: 3px 8px; white-space: nowrap"
+                >
+                  Re-discover
+                </button>
+              </div>
+            </div>
+            <div class="btn-row" style="margin-top: 12px">
+              <button id="runBtn" class="btn-primary">Run scan</button>
+              <button id="fullScanBtn" class="btn-ghost" style="display: none; font-size: 11px">Full scan</button>
+              <button id="secondPassBtn" style="display: none">Run second pass</button>
+            </div>
+            <div class="btn-row" style="margin-top: 8px">
+              <button id="csvBtn" class="btn-ghost" style="display: none">Download CSV</button>
+              <button id="debugBtn" class="btn-ghost" style="font-size: 10px; padding: 4px 10px">
+                Show patient fields
+              </button>
+            </div>
+            <pre
+              id="debugPanel"
+              style="
+                display: none;
+                margin-top: 10px;
+                font-size: 10px;
+                color: var(--text-3);
+                background: var(--bg-deep);
+                border: 1px solid var(--border);
+                border-radius: var(--r-md);
+                padding: 10px;
+                overflow: auto;
+                max-height: 200px;
+                white-space: pre-wrap;
+              "
+            ></pre>
+            <div class="progress-wrap" id="progressWrap">
+              <div class="progress-bar-bg"><div class="progress-bar" id="progressBar"></div></div>
+              <div class="progress-label" id="progressLabel"></div>
+            </div>
+            <div id="status"></div>
+            <div id="errMsg" class="err"></div>
+          </div>
+        </div>
+
+        <div id="results" style="display: none">
+          <div class="summary" id="summary"></div>
+          <div class="rail-list-header">
+            <span>Flagged patients</span>
+            <span id="dateMatchTh" style="display: none; font: 500 10px var(--mono)">date-match</span>
+          </div>
+          <div class="rail-sort-row" id="railSortRow">
+            <button class="sort-btn active" data-sort="count">Dup. count</button>
+            <button class="sort-btn" data-sort="name">Name</button>
+          </div>
+          <div class="rail-list">
+            <div id="resultBody"></div>
+          </div>
+        </div>
+      </aside>
     </div>
 
-    <div id="results">
-      <div class="summary" id="summary"></div>
-      <div class="card" style="padding: 0; overflow: hidden">
-        <table id="resultTable">
-          <thead>
-            <tr>
-              <th data-col="name">
-                Patient
-                <span style="font-weight: 400; opacity: 0.5; font-size: 10px">(click row to inspect raw fields)</span>
-              </th>
-              <th data-col="nhs">NHS number</th>
-              <th data-col="dob">DOB</th>
-              <th data-col="count" style="text-align: center">Dupl. codes</th>
-              <th data-col="problems">Duplicated problems</th>
-              <th data-col="triggers">Triggered by</th>
-              <th id="dateMatchTh" data-col="dateMatchPairs" style="text-align: center; display: none">Date match</th>
-            </tr>
-          </thead>
-          <tbody id="resultBody"></tbody>
-        </table>
-      </div>
-    </div>
-
+    <script src="shared/display-prefs.js"></script>
     <script src="engine/record-duplicate-parser.js"></script>
     <script src="duplicate-checker.js"></script>
   </body>
