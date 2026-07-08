@@ -311,3 +311,109 @@
   font-weight: 700;
   margin-right: 4px;
 }
+
+/* ── Create task (close-the-loop, mirrors Sweep's recall form) ──────────────── */
+.sg-task {
+  margin-top: 6px;
+}
+.sg-task-btn {
+  font-size: 11px;
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm);
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease);
+}
+.sg-task-btn:hover {
+  background: var(--accent-dim);
+}
+.sg-task-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.sg-task-slot {
+  margin-top: 6px;
+}
+.sg-task-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.sg-task-for {
+  font-size: 11px;
+  color: var(--text-2);
+}
+.sg-task-lbl {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.sg-task-assignee,
+.sg-task-priority,
+.sg-task-desc {
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-1);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 6px;
+}
+.sg-task-desc {
+  resize: vertical;
+  line-height: 1.4;
+}
+.sg-task-actions {
+  display: flex;
+  gap: 6px;
+}
+.sg-task-create {
+  font-size: 12px;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.sg-task-create:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.sg-task-cancel {
+  font-size: 12px;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.sg-task-loading {
+  font-size: 11px;
+  color: var(--text-4);
+  padding: 4px 0;
+}
+.sg-task-status {
+  min-height: 0;
+}
+.sg-task-error {
+  font-size: 11px;
+  color: var(--red);
+}
+.sg-task-done {
+  font-size: 12px;
+  color: var(--green);
+  padding: 4px 0;
+  margin-top: 4px;
+}

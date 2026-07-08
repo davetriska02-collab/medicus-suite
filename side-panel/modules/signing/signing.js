@@ -8,9 +8,12 @@
 //
 // INTENDED-PURPOSE FRAMING (docs/INTENDED-PURPOSE.md — read before editing
 // copy): this surface DISPLAYS recorded monitoring next to each request. It
-// never says "safe", never authorises, never writes. The honest-state line
-// ("No flag ≠ safe to sign…") is a fixed part of the header, not a dismissable
-// notice. Hazard log: H-038.
+// never says "safe" and never authorises. Its ONLY write is the per-row
+// "Create task" control — Medicus's own general-task endpoint behind an
+// explicit confirm (shared/task-api.js, the identical proven path as
+// Sweep/Monitoring); it never touches the prescription itself. The
+// honest-state line ("No flag ≠ safe to sign…") is a fixed part of the
+// header, not a dismissable notice. Hazard log: H-038.
 //
 // Data path (all proven elsewhere in the suite):
 //   task-list (open pile, no date filter — completed requests leave the
@@ -29,8 +32,10 @@
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
 import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
 import { extractTaskArray } from '../submissions/submissions-core.js';
+import { fetchTaskCreateForm, createGeneralTask } from '../../../shared/task-api.js';
 import {
   monitoringVerdict,
+  buildSigningTaskDescription,
   requestedDrugFlags,
   sortSigningRows,
   requestAgeDays,
@@ -71,6 +76,17 @@ let _stopFresh = null;
 // identity ever trusted for sharing a verdict between rows (wrong-patient
 // guard: see signing-core.js note). Cleared on every fresh fetch.
 let _verdictByUuid = new Map();
+
+// Create-task state (the Sweep/Monitoring close-the-loop, inline on the pile).
+// Assignee/priority options are practice-wide, so the form is fetched once per
+// apiBase and reused across rows.
+let _taskApiBase = '';
+let _taskFormCache = null;
+// taskId of the row whose inline create-task form is open. While set,
+// renderList() is PAUSED — the monitoring pass re-renders after every row and
+// would otherwise wipe the clinician's half-typed form. Closing the form
+// (cancel / create / toggle / fresh fetch) re-renders and catches up.
+let _taskFormOpenId = null;
 
 let state = {
   types: { routine: true, nonRoutine: false },
@@ -135,6 +151,9 @@ async function fetchAndRun() {
       return;
     }
     const apiBase = `https://${code}.api.england.medicus.health`;
+    if (_taskApiBase !== apiBase) _taskFormCache = null;
+    _taskApiBase = apiBase;
+    _taskFormOpenId = null; // fresh pile — any open form's row is about to be replaced
 
     // 1. The pile: open prescription-request tasks. Deliberately NO createdAt
     // filter — the endpoint's default view is exactly the outstanding tasks,
@@ -174,6 +193,8 @@ async function fetchAndRun() {
           verdict: null,
           requestedHits: [],
           error: null,
+          patientUuid: null, // set once resolved — gates the Create-task control
+          taskCreated: null, // { assigneeLabel } after a task was created for this row
         });
       }
     }
@@ -225,6 +246,10 @@ async function runMonitoringPass(apiBase) {
     try {
       const patientUuid = await resolvePatientForRow(api, apiBase, row);
       if (!patientUuid) throw new Error('patient not resolvable from this task');
+      // Enables the per-row Create-task control — kept even if the record read
+      // below fails (a task like "record unreadable — review before issuing"
+      // is exactly what an error row needs).
+      row.patientUuid = patientUuid;
 
       let entry = _verdictByUuid.get(patientUuid);
       if (!entry) {
@@ -368,7 +393,8 @@ function renderShell() {
 
       <div class="sg-honest" role="note">
         Monitoring shown is what is <strong>recorded</strong>, not what is true. No flag &ne; safe to sign —
-        verify in the record before authorising. This panel never writes to Medicus.
+        verify in the record before authorising. This panel never authorises or alters a prescription —
+        its only write is a task you explicitly confirm, via Medicus&rsquo;s own task workflow.
       </div>
 
       <div class="sg-controls">
@@ -476,6 +502,11 @@ function renderList() {
   const list = container?.querySelector('#sgList');
   if (!list) return;
 
+  // An open create-task form must never be wiped mid-typing: the monitoring
+  // pass calls renderList() after every row, so list re-renders are paused
+  // while a form is open. Every close path clears the flag and re-renders.
+  if (_taskFormOpenId !== null) return;
+
   if (state.noCode || state.error) {
     list.innerHTML = '';
     renderMore(0);
@@ -523,11 +554,159 @@ function renderList() {
         ${row.summary ? `<div class="sg-summary">${esc(row.summary)}</div>` : ''}
         <div class="sg-verdicts">${verdictHtml(row)}</div>
         ${meta ? `<div class="sg-meta">${meta}</div>` : ''}
+        ${taskAreaHtml(row)}
       </div>`;
     })
     .join('');
 
+  list.querySelectorAll('.sg-task-btn').forEach((btn) => {
+    btn.addEventListener('click', () => openTaskForm(btn));
+  });
+
   renderMore(state.rows.filter((r) => r.state === ROW_STATE.PENDING).length);
+}
+
+// ── Create task (the Sweep/Monitoring close-the-loop, inline on the pile) ─────
+//
+// One careful, explicit task per click — deliberately NO bulk "create all".
+// The button opens an inline confirm form (assignee + an editable description
+// prefilled from that row's monitoring flags); only the Create button writes,
+// via Medicus's own general-task endpoint (shared/task-api.js), so Medicus's
+// validation, access control and audit fire as normal. WRONG-PATIENT GUARD:
+// the control only appears once the row's patient UUID has been RESOLVED via
+// the task-overview endpoint, the form names the patient (+DOB), and the task
+// is created against that resolved UUID — never a name/DOB lookup.
+
+function taskAreaHtml(row) {
+  if (!_taskApiBase || !row.patientUuid) return '';
+  if (row.taskCreated) {
+    return `<div class="sg-task-done">&#10003; Task created${
+      row.taskCreated.assigneeLabel ? ` — assigned to ${esc(row.taskCreated.assigneeLabel)}` : ''
+    }.</div>`;
+  }
+  return `<div class="sg-task">
+    <button class="sg-task-btn" type="button" data-task="${esc(row.taskId)}" title="Create a task for this patient in Medicus — Medicus's own task workflow, one explicit confirm">+ Create task</button>
+    <div class="sg-task-slot"></div>
+  </div>`;
+}
+
+async function openTaskForm(btn) {
+  const row = state.rows.find((r) => r.taskId === btn.dataset.task);
+  const slot = btn.parentElement?.querySelector('.sg-task-slot');
+  if (!row || !slot || !row.patientUuid) return;
+
+  // Toggle closed if already open.
+  if (slot.dataset.open === '1') {
+    slot.innerHTML = '';
+    slot.dataset.open = '';
+    _taskFormOpenId = null;
+    renderList(); // catch up on renders skipped while the form was open
+    return;
+  }
+  _taskFormOpenId = row.taskId;
+  slot.dataset.open = '1';
+  slot.innerHTML = `<div class="sg-task-loading">Loading task form…</div>`;
+
+  let form;
+  try {
+    if (!_taskFormCache) _taskFormCache = await fetchTaskCreateForm(_taskApiBase, row.patientUuid);
+    form = _taskFormCache;
+  } catch (e) {
+    slot.innerHTML = `<div class="sg-task-error">${esc(e.message || 'Could not load the task form.')}</div>`;
+    slot.dataset.open = '';
+    _taskFormOpenId = null;
+    return;
+  }
+
+  const desc = buildSigningTaskDescription(row);
+  const opt = (o) => `<option value="${esc(`${o.type}|${o.value}`)}">${esc(o.label)}</option>`;
+  let assigneeHtml = '<option value="">— select —</option>';
+  if (form.teams && form.teams.length)
+    assigneeHtml += `<optgroup label="Teams">${form.teams.map(opt).join('')}</optgroup>`;
+  if (form.staff && form.staff.length)
+    assigneeHtml += `<optgroup label="Staff">${form.staff.map(opt).join('')}</optgroup>`;
+  const priorityHtml =
+    form.priorities && form.priorities.length > 1
+      ? `<label class="sg-task-lbl">Priority
+           <select class="sg-task-priority">${form.priorities
+             .map((p) => `<option value="${esc(p.value)}">${esc(p.label)}</option>`)
+             .join('')}</select>
+         </label>`
+      : '';
+
+  slot.innerHTML = `
+    <div class="sg-task-form">
+      <div class="sg-task-for">Task for <strong>${esc(row.patientName)}</strong>${
+        row.dateOfBirth ? ` (${esc(row.dateOfBirth)})` : ''
+      } — check this is who you mean before creating.</div>
+      <label class="sg-task-lbl">Assign to
+        <select class="sg-task-assignee">${assigneeHtml}</select>
+      </label>
+      <label class="sg-task-lbl">Details
+        <textarea class="sg-task-desc" rows="3" maxlength="2000">${esc(desc)}</textarea>
+      </label>
+      ${priorityHtml}
+      <div class="sg-task-actions">
+        <button class="sg-task-create" type="button" disabled>Create task</button>
+        <button class="sg-task-cancel" type="button">Cancel</button>
+      </div>
+      <div class="sg-task-status" role="status"></div>
+    </div>`;
+
+  const assigneeSel = slot.querySelector('.sg-task-assignee');
+  const descEl = slot.querySelector('.sg-task-desc');
+  const createBtn = slot.querySelector('.sg-task-create');
+  const updateEnabled = () => {
+    createBtn.disabled = !(assigneeSel.value && descEl.value.trim());
+  };
+  assigneeSel.addEventListener('change', updateEnabled);
+  descEl.addEventListener('input', updateEnabled);
+  slot.querySelector('.sg-task-cancel').addEventListener('click', () => {
+    slot.innerHTML = '';
+    slot.dataset.open = '';
+    _taskFormOpenId = null;
+    renderList();
+  });
+  createBtn.addEventListener('click', () => submitSigningTask(slot, row));
+}
+
+async function submitSigningTask(slot, row) {
+  const assigneeSel = slot.querySelector('.sg-task-assignee');
+  const assignee = assigneeSel?.value || '';
+  const description = slot.querySelector('.sg-task-desc')?.value || '';
+  const priority = slot.querySelector('.sg-task-priority')?.value ?? 0;
+  const createBtn = slot.querySelector('.sg-task-create');
+  const statusEl = slot.querySelector('.sg-task-status');
+  if (!row.patientUuid || !assignee || !description.trim()) return;
+
+  const assigneeLabel = assigneeSel.selectedOptions?.[0]?.textContent?.trim() || '';
+  createBtn.disabled = true;
+  createBtn.textContent = 'Creating…';
+  if (statusEl) statusEl.textContent = '';
+  try {
+    await createGeneralTask(_taskApiBase, { patientId: row.patientUuid, assignee, description, priority });
+    // F2 Clinical Event Ledger — fire-and-forget; can never break the flow.
+    if (window.EventLedger) {
+      window.EventLedger.record({
+        source: 'signing',
+        patientRef: row.patientUuid,
+        severity: null,
+        ruleId: null,
+        label: 'task created from signing pile' + (assigneeLabel ? ` — ${assigneeLabel}` : ''),
+        action: 'recall-created',
+      });
+    }
+    // Persist the outcome on the row — renderList() redraws the whole list,
+    // so the confirmation must live in state, not just this slot's DOM.
+    row.taskCreated = { assigneeLabel };
+    _taskFormOpenId = null;
+    renderList();
+  } catch (e) {
+    if (statusEl)
+      statusEl.innerHTML = `<span class="sg-task-error">${esc(e.message || 'Failed to create the task.')}</span>`;
+    createBtn.disabled = false;
+    createBtn.textContent = 'Create task';
+  }
 }
 
 // Collection chip — row head, after the name (real-user placement, Chris M.):

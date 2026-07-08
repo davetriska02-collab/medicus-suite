@@ -2,6 +2,39 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.160.0] — 2026-07-08
+
+### Signing Queue: inline "Create task" on every row (the Sweep close-the-loop)
+
+The signing pile now closes its own loop: when a request needs bloods chased
+or a query raised, the task is created without leaving the row — the same
+one-explicit-confirm control Sweep and Monitoring already ship, driving
+Medicus's own general-task endpoint (`shared/task-api.js`) so Medicus's
+validation, access control and audit fire as normal.
+
+- **Per-row "+ Create task"** opens an inline form (assignee, editable
+  details, priority) — one careful task per click, deliberately no bulk
+  create. The confirmation ("✓ Task created — assigned to …") persists on the
+  row for the rest of the session.
+- **Prefilled from the row's own flags** (`buildSigningTaskDescription`,
+  signing-core.js, tested): flagged rows get the Sweep-style recall body with
+  the requested-drug hit sorted first and marked ("Lithium — overdue: Lithium
+  level (requested drug)"); quiet or record-not-read rows get a stub naming
+  the request — an unreadable record is exactly when "review before issuing"
+  needs a task.
+- **Wrong-patient guard**: the control only appears once the row's patient
+  UUID has been resolved via the task-overview endpoint; the form names the
+  patient and DOB; the task is created against that resolved UUID, never a
+  name/DOB lookup. Ledgered as `signing / recall-created` (Event Ledger gains
+  the `signing` source).
+- The honest-state header now says precisely what the panel can and cannot
+  do: it never authorises or alters a prescription — its only write is a task
+  you explicitly confirm. H-038 control (d) updated to match ("No prescribing
+  write path").
+- List re-renders pause while a form is open, so the monitoring pass can't
+  wipe a half-typed task; every close path (cancel, create, toggle, refresh)
+  catches the view back up.
+
 ## [v3.159.0] — 2026-07-07
 
 ### Signing Queue: one warm line on the genuinely finished pile

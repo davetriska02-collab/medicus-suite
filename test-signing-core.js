@@ -34,6 +34,7 @@ const path = require('path');
     NO_LOCATION_KEY,
     isDispensaryLocation,
     emptyStateKind,
+    buildSigningTaskDescription,
     ROW_STATE,
     RED_CHIP_STATUSES,
     AMBER_CHIP_STATUSES,
@@ -205,6 +206,43 @@ const path = require('path');
   check(isDispensaryLocation('Witley Dispensing Hub') === true, 'dispens* variants → in-house');
   check(isDispensaryLocation('Boots Pharmacy, Godalming') === false, 'community pharmacy → chemist');
   check(isDispensaryLocation('') === false, 'blank → not in-house');
+
+  // ── buildSigningTaskDescription (Create-task prefill) ───────────────────────
+  console.log('\n--- buildSigningTaskDescription ---');
+  const flaggedRow = {
+    summary: 'Lithium carbonate 400mg MR tablets',
+    verdict: {
+      level: 'red',
+      items: [
+        { name: 'Ramipril', status: 'due_soon', matchedTerm: 'ramipril', detail: 'U&E' },
+        { name: 'Lithium', status: 'overdue', matchedTerm: 'lithium', detail: 'Lithium level' },
+      ],
+    },
+    requestedHits: [{ name: 'Lithium' }],
+  };
+  let d = buildSigningTaskDescription(flaggedRow);
+  check(d.startsWith('Recall (from Signing Queue): '), 'flagged row → recall-shaped prefill');
+  check(
+    d.includes('Lithium — overdue: Lithium level (requested drug)'),
+    'flagged item carries status, detail and requested-drug mark'
+  );
+  check(d.indexOf('Lithium') < d.indexOf('Ramipril'), 'requested-drug hit sorted first');
+  check(d.includes('Ramipril — due soon: U&E'), 'non-requested item kept, human status text');
+
+  d = buildSigningTaskDescription({
+    summary: 'Atorvastatin 20mg',
+    verdict: { level: null, items: [] },
+    requestedHits: [],
+  });
+  check(d === 'Re repeat request (from Signing Queue): Atorvastatin 20mg', 'quiet row → request stub with summary');
+  d = buildSigningTaskDescription({ summary: '', verdict: null, requestedHits: [] });
+  check(
+    d === 'Re repeat request (from Signing Queue)',
+    'no summary, no verdict → still a non-empty stub (error rows keep the control)'
+  );
+  check(buildSigningTaskDescription(null).length > 0, 'null row tolerated, never empty');
+  d = buildSigningTaskDescription({ summary: 'x'.repeat(300), verdict: null, requestedHits: [] });
+  check(d.length <= 'Re repeat request (from Signing Queue): '.length + 140, 'summary clipped to 140 chars');
 
   // ── emptyStateKind (warm line only on a genuinely finished pile) ─────────────
   console.log('\n--- empty state kind ---');

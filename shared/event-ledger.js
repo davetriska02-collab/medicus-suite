@@ -69,7 +69,20 @@
   // including the clinician declining the confirm dialog — the FULL reason
   // string lives only in the module's own machine-local ring buffer,
   // triagelens.routinerx.auditLog, not in this ledger's fixed shape).
-  const SOURCES = ['sentinel', 'sweep', 'labfiling', 'record', 'preflight', 'health', 'leaflets', 'routinerx'];
+  // 'signing' — side-panel/modules/signing/signing.js records a task created
+  // from the signing pile via its per-row "Create task" control ('recall-created';
+  // patientRef is the resolved patient UUID).
+  const SOURCES = [
+    'sentinel',
+    'sweep',
+    'labfiling',
+    'record',
+    'preflight',
+    'health',
+    'leaflets',
+    'routinerx',
+    'signing',
+  ];
   const ACTIONS = [
     'shown',
     'dismissed',

@@ -124,6 +124,10 @@ async function runTests() {
   );
   check(e.label === 'eczema', 'leaflets label (slug) preserved');
 
+  // ── signing source — signing.js's per-row "Create task" control ──
+  e = Ledger.makeEvent(baseEvent({ source: 'signing', action: 'recall-created', label: 'task created' }), now);
+  check(e && e.source === 'signing' && e.action === 'recall-created', 'signing/recall-created accepted');
+
   // ── sanitisePatientRef — the PHI backstop ─────────────────────────────────
   console.log('\n--- sanitisePatientRef (UUID only, never a name) ---');
   check(Ledger.sanitisePatientRef(UUID) === UUID, 'lowercase UUID passes');

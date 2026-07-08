@@ -38,7 +38,7 @@ Daily inbound task counts — medical, admin, investigations, prescriptions — 
 
 ### Signing Queue
 
-Every open repeat-prescription request shown with the requesting patient's recorded drug-monitoring currency alongside — the same engine checks as Monitoring and Sweep — sorted riskiest first, with the loudest flag when the requested drug is itself the one overdue, the latest recorded eGFR (with its age) on every checked row, and each request's collection route at a glance (house glyph = practice dispensary, Rx glyph = community pharmacy) with location filter pills and counts — hidden red flags always called out. Display only: "no flag" is explicitly not an all-clear, records that could not be read sort above quiet rows, and authorisation happens only in Medicus.
+Every open repeat-prescription request shown with the requesting patient's recorded drug-monitoring currency alongside — the same engine checks as Monitoring and Sweep — sorted riskiest first, with the loudest flag when the requested drug is itself the one overdue, the latest recorded eGFR (with its age) on every checked row, and each request's collection route at a glance (house glyph = practice dispensary, Rx glyph = community pharmacy) with location filter pills and counts — hidden red flags always called out. Each row carries an inline "Create task" (the same one-explicit-confirm control as Sweep and Monitoring, prefilled from the row's monitoring flags) so a request that needs bloods chased becomes a real Medicus task without leaving the pile. "No flag" is explicitly not an all-clear, records that could not be read sort above quiet rows, and the panel can never authorise or alter a prescription — that happens only in Medicus.
 
 ### Activity Report
 
@@ -113,6 +113,8 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.160.0 (2026-07-08)** — Signing rows gain Sweep’s inline “Create task” — prefilled from the row’s monitoring flags (requested drug marked first), created against the resolved patient UUID via Medicus’s own task workflow, one explicit confirm per row, offered even on record-not-read rows.
 
 - **v3.159.0 (2026-07-07)** — One warm line on the genuinely finished signing pile (“✓ Pile’s clear — nothing waiting on you.”) — panel-vetted: static text, no emoji, no animation, and never shown when filters merely hide requests.
 

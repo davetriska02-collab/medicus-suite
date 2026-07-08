@@ -94,6 +94,32 @@ export function requestedDrugFlags(summary, verdictItems) {
   });
 }
 
+// buildSigningTaskDescription(row)
+// Prefill body for the per-row "Create task" form ({ verdict, requestedHits,
+// summary } is all it reads). Flagged rows get the same recall shape as
+// Sweep/Monitoring — one segment per flagged drug, requested-drug hits first
+// and marked — so the loop from "lithium level overdue on a lithium request"
+// to a real Medicus task is one click + a confirm. A quiet or unreadable row
+// still gets a stub naming the request, because the task may be
+// administrative ("contact patient re quantity"), not a recall. Pure: no DOM,
+// no fetch. Never returns an empty string.
+export function buildSigningTaskDescription(row) {
+  const items = (row && row.verdict && Array.isArray(row.verdict.items) && row.verdict.items) || [];
+  const hitNames = new Set((Array.isArray(row && row.requestedHits) ? row.requestedHits : []).map((h) => h && h.name));
+  if (items.length > 0) {
+    const sorted = [...items].sort((a, b) => (hitNames.has(b.name) ? 1 : 0) - (hitNames.has(a.name) ? 1 : 0));
+    const lines = sorted.map((it) => {
+      const status = CHIP_STATUS_TEXT[it.status] || it.status || '';
+      const detail = it.detail ? `: ${it.detail}` : '';
+      const req = hitNames.has(it.name) ? ' (requested drug)' : '';
+      return `${it.name} — ${status}${detail}${req}`;
+    });
+    return `Recall (from Signing Queue): ${lines.join(' | ')}`;
+  }
+  const summary = row && row.summary ? String(row.summary).replace(/\s+/g, ' ').trim().slice(0, 140) : '';
+  return `Re repeat request (from Signing Queue)${summary ? `: ${summary}` : ''}`;
+}
+
 // Row states a task can be in while the pass runs.
 export const ROW_STATE = {
   PENDING: 'pending', // not yet checked this pass
