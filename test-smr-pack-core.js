@@ -74,7 +74,9 @@ async function runTests() {
       ageYears: 78,
       sex: 'Female',
       dob: '1948-03-12',
-      nhsNumber: '9000000009',
+      // Deliberately fails NHS Modulus-11 (the valid check digit here is 9) so
+      // the patient-data CI guard can prove this fixture is synthetic:
+      nhsNumber: '9000000001',
       namedGP: 'Dr A. Patel',
       isDeceased: false,
       testPatient: false,

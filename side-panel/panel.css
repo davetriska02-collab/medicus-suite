@@ -3147,6 +3147,8 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   padding: 1px 5px;
+}
+
 /* ── Quick Leaflet popover (panel shell — see quick-leaflet/quick-leaflet.js) ─ */
 
 .ql-popover {
