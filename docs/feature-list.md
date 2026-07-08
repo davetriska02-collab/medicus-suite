@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.172.0
+**Version:** v3.173.0
 **Generated:** 2026-07-08 (manual refresh — duplicate-checker branch)
 
 ## What it is
@@ -113,6 +113,8 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.173.0 (2026-07-08)** — Record duplicate cleanup tool (internal): the cross-record file-match check (v3.172.0) is now an opt-in "Run full cross-document check" button rather than running automatically, after live timing showed it slowed the main analysis by ~46% on a document-heavy record; a free check still flags when it's worth running.
 
 - **v3.172.0 (2026-07-08)** — Record duplicate cleanup tool (internal): documents duplicated across different dates — which the normal matching can't catch — are now also detected by comparing file size and type across the whole record, flagged for manual review with a clear warning that it's a different kind of match.
 

@@ -851,33 +851,6 @@ async function applyOnDemandCrossChecks(analysis, apiBase, isStillActive) {
   const documentLinkedDataByDocumentId = {};
   for (const e of allDocumentEntries) {
     if (isStillActive && !isStillActive()) return;
-    // Cross-record file-match detection (2026-07-08, built into the first
-    // pass — see findFileMatchedDuplicates' own header comment): reuses this
-    // SAME per-document loop rather than a second pass over every document,
-    // and skips entries whose preview the primary grouped-document loop
-    // above already fetched — so the added cost is exactly one preview
-    // fetch per document that never formed a candidate group under
-    // (kind, date, code), not one per document in the record.
-    if (!allDocumentPreviewsByEntryId[e.id]) {
-      try {
-        const preview = await apiFetch(`${apiBase}/clinical/data/document/modals/preview/${e.id}`);
-        allDocumentPreviewsByEntryId[e.id] = preview;
-        if (
-          recordDocumentPreviewFields(
-            e.id,
-            preview,
-            fileTypeByEntryId,
-            fileSizeByEntryId,
-            createdDateByEntryId,
-            filedDateTimeByEntryId
-          )
-        ) {
-          documentPreviewsChecked++;
-        }
-      } catch (err) {
-        /* leave this document's preview/file fields unknown */
-      }
-    }
     try {
       const res = await apiFetch(`${apiBase}/clinical/document/entries/${e.id}`);
       if (res && Array.isArray(res.entries) && res.entries.length) {
@@ -892,21 +865,16 @@ async function applyOnDemandCrossChecks(analysis, apiBase, isStillActive) {
     documentLinkedDataByDocumentId
   );
 
-  const { groups: fileMatchedGroups, clustersChecked: fileMatchClustersChecked } =
-    window.RecordDuplicateParser.findFileMatchedDuplicates(
-      allDocumentEntries,
-      splitGroups,
-      fileTypeByEntryId,
-      fileSizeByEntryId,
-      createdDateByEntryId,
-      filedDateTimeByEntryId
-    );
-
-  // Journal-order sort so documentLinked/fileMatched groups land adjacent to
-  // the document tasks they relate to, not appended at the bottom
-  // (2026-07-08).
+  // Journal-order sort so documentLinked groups land adjacent to the
+  // document tasks they relate to, not appended at the bottom (2026-07-08).
+  // The cross-record file-match check (fileType/fileSize across the whole
+  // document pool) is NOT run here — live timing on a 63-document record
+  // showed it added ~25s to this pass (54.5s -> 79.3s), so it moved to an
+  // opt-in second pass (runFileMatchSecondPass, below) triggered by a
+  // banner when findSuspiciousDocuments (zero-fetch, computed in
+  // analyzeJournal) flags anything.
   const allGroups = window.RecordDuplicateParser.sortGroupsByJournalOrder(
-    splitGroups.concat(linkedGroups).concat(fileMatchedGroups),
+    splitGroups.concat(linkedGroups),
     analysis.entries
   );
   analysis.groups = allGroups;
@@ -917,8 +885,6 @@ async function applyOnDemandCrossChecks(analysis, apiBase, isStillActive) {
   analysis.summary.byTier = byTier;
   analysis.summary.documentLinkedEntriesGenerated = linkedEntriesGenerated;
   analysis.summary.documentLinkedGroupsFound = linkedGroups.length;
-  analysis.summary.fileMatchClustersChecked = fileMatchClustersChecked;
-  analysis.summary.fileMatchedGroupsFound = fileMatchedGroups.length;
   analysis.summary.totalCandidateGroups = allGroups.length;
   analysis.summary.excludedPrescriptionTimingTotal = excludedPrescriptionTiming.length;
   analysis.summary.excludedQuestionnaireMismatchTotal = excludedQuestionnaireMismatch.length;
@@ -926,6 +892,66 @@ async function applyOnDemandCrossChecks(analysis, apiBase, isStillActive) {
   analysis.summary.documentPreviewsChecked = documentPreviewsChecked;
   analysis.summary.documentPreviewsWithFileSize = Object.keys(fileSizeByEntryId).length;
   analysis.documentPreviewsByEntryId = allDocumentPreviewsByEntryId;
+}
+
+// ── Cross-record file-match second pass (opt-in, 2026-07-08) ────────────────
+// The expensive half of cross-record file-match detection: fetches
+// clinical/data/document/modals/preview/{id} for every document-kind entry
+// NOT already covered by the primary pass above (reusing
+// analysis.documentPreviewsByEntryId — no re-fetch for documents already
+// known), then matches by (fileType, fileSize) across the WHOLE record.
+// User-triggered only (see fileMatchSecondPassBannerHtml) — live timing
+// showed running this unconditionally added ~25s to a 63-document record's
+// analysis. `analysis.__fileMatchChecked` marks it done so the banner
+// doesn't reappear on a later render of the same analysis object.
+async function runFileMatchSecondPass(out) {
+  const analysis = out.__analysis;
+  if (!analysis || analysis.__fileMatchChecked) return;
+  const P = window.RecordDuplicateParser;
+  const bannerEl = out.querySelector('.file-match-second-pass');
+  if (bannerEl) {
+    bannerEl.innerHTML = '<div style="font-size:11px;color:var(--text-3)">Checking file size/type across every document in the record…</div>';
+  }
+
+  const allDocumentEntries = (analysis.entries || []).filter((e) => e.kind === 'document');
+  const fileTypeByEntryId = {};
+  const fileSizeByEntryId = {};
+  const createdDateByEntryId = {};
+  const filedDateTimeByEntryId = {};
+  for (const [id, preview] of Object.entries(analysis.documentPreviewsByEntryId || {})) {
+    recordDocumentPreviewFields(id, preview, fileTypeByEntryId, fileSizeByEntryId, createdDateByEntryId, filedDateTimeByEntryId);
+  }
+  for (const e of allDocumentEntries) {
+    if (analysis.documentPreviewsByEntryId[e.id] !== undefined) continue;
+    try {
+      const preview = await apiFetch(`${_apiBase}/clinical/data/document/modals/preview/${e.id}`);
+      analysis.documentPreviewsByEntryId[e.id] = preview;
+      recordDocumentPreviewFields(e.id, preview, fileTypeByEntryId, fileSizeByEntryId, createdDateByEntryId, filedDateTimeByEntryId);
+    } catch (err) {
+      analysis.documentPreviewsByEntryId[e.id] = null;
+    }
+  }
+
+  const { groups: fileMatchedGroups, clustersChecked } = P.findFileMatchedDuplicates(
+    allDocumentEntries,
+    analysis.groups,
+    fileTypeByEntryId,
+    fileSizeByEntryId,
+    createdDateByEntryId,
+    filedDateTimeByEntryId
+  );
+
+  analysis.groups = P.sortGroupsByJournalOrder(analysis.groups.concat(fileMatchedGroups), analysis.entries);
+  analysis.__fileMatchChecked = true;
+  analysis.summary.fileMatchClustersChecked = clustersChecked;
+  analysis.summary.fileMatchedGroupsFound = fileMatchedGroups.length;
+  const byTier = { exact: 0, high: 0, review: 0 };
+  for (const g of analysis.groups) byTier[g.tier]++;
+  analysis.summary.byTier = byTier;
+  analysis.summary.totalCandidateGroups = analysis.groups.length;
+
+  out.innerHTML = renderJournalAnalysisHtml(analysis, _apiBase, out.__patient.uuid);
+  wireRemovalDelegation(out);
 }
 
 const TIER_LABEL = {
@@ -977,12 +1003,31 @@ function patientJournalLinkHtml(apiBase, patientUuid) {
   return `<div style="margin-bottom:8px"><a href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--accent)">Open this patient's record in Medicus ↗</a></div>`;
 }
 
+// Opt-in banner for the cross-record file-match second pass (2026-07-08 —
+// see runFileMatchSecondPass's own header comment for why this is opt-in,
+// not automatic). Shown whenever findSuspiciousDocuments flagged anything
+// (computed free, in analyzeJournal, regardless of whether the primary
+// pass found any groups at all) and the second pass hasn't already run for
+// this analysis — this is exactly the scenario that motivated the whole
+// feature: a patient flagged as suspicious with no hits in the normal
+// search.
+function fileMatchSecondPassBannerHtml(analysis) {
+  if (analysis.__fileMatchChecked) return '';
+  const n = (analysis.suspiciousDocuments || []).length;
+  if (!n) return '';
+  return `<div class="file-match-second-pass" style="margin-bottom:10px;padding:8px;border:1px solid var(--amber);border-radius:var(--r-md);font-size:11px">
+    <div style="color:var(--text-1)">${n} document${n !== 1 ? 's' : ''} show signs of reimport corruption (a raw filename/GUID left in the title, or a creation time shared with another document) but didn't match anything in the analysis above. A slower, whole-record check by file size and type may find duplicates the normal matching structurally can't see (e.g. copies filed on different dates).</div>
+    <button class="run-file-match-btn btn-ghost" style="margin-top:6px">Run full cross-document file-match check…</button>
+  </div>`;
+}
+
 function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
   const { groups, transferEncounters, summary, gp2gpWrapperCoverage } = analysis;
   const nearMisses = (gp2gpWrapperCoverage && gp2gpWrapperCoverage.nearMisses) || [];
   const patientLinkHtml = patientJournalLinkHtml(apiBase, patientUuid);
+  const fileMatchBannerHtml = fileMatchSecondPassBannerHtml(analysis);
   if (!groups.length && !transferEncounters.length && !nearMisses.length) {
-    return `${patientLinkHtml}<div class="empty-state">No candidate duplicate entries found in this patient's journal.</div>`;
+    return `${patientLinkHtml}${fileMatchBannerHtml}<div class="empty-state">No candidate duplicate entries found in this patient's journal.</div>`;
   }
 
   const summaryLine = `<div style="font-size:12px;color:var(--text-3);margin-bottom:10px">
@@ -1070,7 +1115,7 @@ function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
         </div>`
       : '';
 
-  return patientLinkHtml + summaryLine + groupsHtml + transferHtml + wrapperHtml;
+  return patientLinkHtml + summaryLine + fileMatchBannerHtml + groupsHtml + transferHtml + wrapperHtml;
 }
 
 // ── Removal action (EXACT-tier, confirmed-write kinds only) ─────────────────
@@ -2207,6 +2252,13 @@ function wireRemovalDelegation(out) {
     const noteCompareMergeBtn = ev.target.closest('.note-compare-merge-btn');
     if (noteCompareMergeBtn) {
       showNoteCompareMerge(out, parseInt(noteCompareMergeBtn.dataset.groupIdx, 10));
+      return;
+    }
+    const runFileMatchBtn = ev.target.closest('.run-file-match-btn');
+    if (runFileMatchBtn && !runFileMatchBtn.disabled) {
+      runFileMatchBtn.disabled = true;
+      runFileMatchBtn.textContent = 'Checking…';
+      runFileMatchSecondPass(out);
       return;
     }
     const applyDocFieldsBtn = ev.target.closest('.apply-doc-fields-btn');

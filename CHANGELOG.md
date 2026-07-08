@@ -2,6 +2,43 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.173.0] — 2026-07-08
+
+### Cross-record file-match detection moved to an opt-in second pass
+
+Live timing from the user, always-on v3.172.0 vs the pre-feature baseline
+on the same 63-document test-patient record: **54.5s → 79.3s** — a ~25s
+(~46%) slowdown, confirmed too slow to run unconditionally. The matching
+itself was confirmed accurate (correctly found real duplicates filed years
+apart), so the fix is gating, not the algorithm.
+
+- New `findSuspiciousDocuments(documentEntries)` — the free half of the
+  design: flags a document if its title carries a raw filename/GUID prefix
+  (`hasJunkTitlePrefix`, unchanged from v3.172.0) OR its id-timestamp falls
+  in the same MINUTE as another document's (new — buckets by
+  `Math.floor(idTime / 60000)`, reusing the id-timestamp every entry
+  already carries, the same signal the keeper tie-breaker uses). Wired
+  into `analyzeJournal` itself so it's computed on every analysis at zero
+  cost — `analysis.suspiciousDocuments` / `summary.suspiciousDocumentsTotal`
+  are always populated, whether or not the primary pass found anything.
+- `applyOnDemandCrossChecks` no longer fetches previews for un-grouped
+  documents or calls `findFileMatchedDuplicates` — that expensive half
+  moved to a new, user-triggered `runFileMatchSecondPass(out)`.
+- New opt-in banner, shown whenever `findSuspiciousDocuments` flagged
+  anything and the second pass hasn't run yet — including in the
+  **empty-state** case (zero groups found by the normal pass): "N
+  document(s) show signs of reimport corruption … Run full cross-document
+  file-match check…". This is exactly the scenario that motivated the
+  whole feature — a patient flagged as suspicious with no hits in the
+  normal search.
+- `document` entries now carry their own raw `title` field (added in
+  v3.172.0, unchanged) — still needed for the junk-prefix check regardless
+  of pass timing.
+- No change to `findFileMatchedDuplicates`, `hasJunkTitlePrefix`, or
+  `hasCreatedAfterFiled` themselves — only when they run.
+
+11 new parser tests (301/301 passing).
+
 ## [v3.172.0] — 2026-07-08
 
 ### Added: cross-record file-match duplicate detection for documents, built into the first pass

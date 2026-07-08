@@ -894,6 +894,45 @@
     return created > filed;
   }
 
+  // Free, zero-fetch trigger for the opt-in cross-record file-match check
+  // below (2026-07-08): live timing on a 63-document record showed the
+  // ALWAYS-ON version added ~25s (54.5s -> 79.3s) to "Analyse current
+  // patient" — user decision, confirmed the matching itself is accurate
+  // (correctly found real duplicates years apart) but too slow to run
+  // unconditionally, so it becomes an opt-in second pass instead, gated on
+  // these two zero-cost signals: hasJunkTitlePrefix (title shape, already
+  // in memory) and a creation timestamp shared with >=1 other document
+  // within the same MINUTE (via the id-timestamp every entry already
+  // carries — decodeIdTimestamp, the same signal the keeper tie-breaker
+  // uses — so this needs no new data, only grouping what's already there).
+  // Scoped to kind==='document' only; the caller decides what to do with a
+  // non-empty result (show an opt-in banner), never runs the expensive
+  // match itself.
+  function findSuspiciousDocuments(documentEntries) {
+    const entries = (documentEntries || []).filter((e) => e && e.idTime != null);
+    const minuteBuckets = new Map();
+    for (const e of entries) {
+      const minute = Math.floor(e.idTime / 60000);
+      if (!minuteBuckets.has(minute)) minuteBuckets.set(minute, []);
+      minuteBuckets.get(minute).push(e);
+    }
+    const sharedMinuteIds = new Set();
+    for (const bucket of minuteBuckets.values()) {
+      if (bucket.length < 2) continue;
+      for (const e of bucket) sharedMinuteIds.add(e.id);
+    }
+
+    const flagged = [];
+    for (const e of documentEntries || []) {
+      const titleJunkPrefix = hasJunkTitlePrefix(e.title);
+      const sharedCreationMinute = sharedMinuteIds.has(e.id);
+      if (titleJunkPrefix || sharedCreationMinute) {
+        flagged.push({ id: e.id, titleJunkPrefix, sharedCreationMinute });
+      }
+    }
+    return flagged;
+  }
+
   // Matches document-kind entries ACROSS THE WHOLE RECORD by (fileType,
   // fileSize) — deliberately not scoped to any date window or existing
   // group, per explicit product decision (2026-07-08): the duplicate of a
@@ -1718,6 +1757,10 @@
     const groups = groupAndTier(entries, suppressedSameConsultation, suppressedQuantityMismatch);
     const confirmedTransfers = markTransferConfirmation(transferEncounters, groups);
     const gp2gpWrapperCoverage = analyzeGp2gpWrapperCoverage(entries);
+    // Zero-fetch trigger for the opt-in cross-record file-match second pass
+    // (see findSuspiciousDocuments' own header comment) — computed here,
+    // always, since it costs nothing; the expensive match itself is opt-in.
+    const suspiciousDocuments = findSuspiciousDocuments(entries.filter((e) => e.kind === 'document'));
 
     const byTier = { exact: 0, high: 0, review: 0 };
     for (const g of groups) byTier[g.tier]++;
@@ -1729,6 +1772,7 @@
       suppressedSameConsultation,
       suppressedQuantityMismatch,
       gp2gpWrapperCoverage,
+      suspiciousDocuments,
       summary: {
         totalEntries: entries.length,
         totalCandidateGroups: groups.length,
@@ -1741,6 +1785,7 @@
         suppressedQuantityMismatchTotal: suppressedQuantityMismatch.length,
         gp2gpWrapperStrictMatches: gp2gpWrapperCoverage.strictMatches,
         gp2gpWrapperNearMisses: gp2gpWrapperCoverage.nearMisses.length,
+        suspiciousDocumentsTotal: suspiciousDocuments.length,
       },
     };
   }
@@ -1781,6 +1826,7 @@
     splitDocumentGroupsByFileType,
     hasJunkTitlePrefix,
     hasCreatedAfterFiled,
+    findSuspiciousDocuments,
     findFileMatchedDuplicates,
     buildCareRecordJournalUrl,
     buildDocumentDownloadUrl,

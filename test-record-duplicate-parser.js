@@ -36,6 +36,7 @@ const {
   splitDocumentGroupsByFileType,
   hasJunkTitlePrefix,
   hasCreatedAfterFiled,
+  findSuspiciousDocuments,
   findFileMatchedDuplicates,
   buildCareRecordJournalUrl,
   buildDocumentDownloadUrl,
@@ -2159,6 +2160,70 @@ console.log('\n--- hasJunkTitlePrefix / hasCreatedAfterFiled (cross-record file-
   assert(
     hasCreatedAfterFiled('not a date', '2026-02-23 15:11:10') === false,
     'an unparseable date never guesses — not flagged'
+  );
+}
+
+console.log('\n--- findSuspiciousDocuments (zero-fetch trigger for the opt-in second pass, 2026-07-08) ---');
+{
+  // Two documents created within the same minute (id-timestamp), a third
+  // created minutes later — the shared-minute pair should flag, the lone
+  // one should not (from timestamp alone).
+  const t0 = Date.parse('2026-02-23T06:05:00Z');
+  const near = { id: 'near-1', kind: 'document', idTime: t0, title: null };
+  const nearToo = { id: 'near-2', kind: 'document', idTime: t0 + 30000, title: null }; // same minute
+  const farAway = { id: 'far-1', kind: 'document', idTime: t0 + 10 * 60000, title: null }; // 10 min later
+  const junkTitled = {
+    id: 'junk-1',
+    kind: 'document',
+    idTime: t0 + 20 * 60000,
+    title: 'tiff: GUID.tiff - Type: Admin Letter Author Org: Y',
+  };
+  const clean = { id: 'clean-1', kind: 'document', idTime: t0 + 30 * 60000, title: 'Type: Referral letter' };
+
+  const flagged = findSuspiciousDocuments([near, nearToo, farAway, junkTitled, clean]);
+  const byId = Object.fromEntries(flagged.map((f) => [f.id, f]));
+  assert(byId['near-1'] && byId['near-1'].sharedCreationMinute === true, 'near-1 flagged: shares its creation minute with near-2');
+  assert(byId['near-2'] && byId['near-2'].sharedCreationMinute === true, 'near-2 flagged: shares its creation minute with near-1');
+  assert(!byId['far-1'], 'far-1 is NOT flagged — its creation minute is unique and its title is clean');
+  assert(byId['junk-1'] && byId['junk-1'].titleJunkPrefix === true, 'junk-1 flagged: junk title prefix, even with a unique creation minute');
+  assert(!byId['clean-1'], 'clean-1 is NOT flagged — clean title, unique creation minute');
+  assert(
+    byId['near-1'].titleJunkPrefix === false && byId['junk-1'].sharedCreationMinute === false,
+    'each flagged entry reports which specific marker(s) fired, not just a bare true'
+  );
+
+  assert(findSuspiciousDocuments([]).length === 0, 'no documents produces no flags');
+  assert(findSuspiciousDocuments(null).length === 0, 'null input degrades to no flags, never throws');
+  assert(
+    findSuspiciousDocuments([{ id: 'no-time', kind: 'document', idTime: null, title: null }]).length === 0,
+    'an entry with no decodable id-timestamp and a clean title is never flagged'
+  );
+
+  // End-to-end: analyzeJournal wires findSuspiciousDocuments in for free,
+  // and a document's raw `title` (not just the concatenated rawText blob)
+  // is retained on the flattened entry — needed for the junk-prefix check.
+  const dayGroups = [
+    {
+      title: 'Mon 1 Jan 2024',
+      items: [
+        flatDocumentItem(
+          'junk-doc',
+          'Other digital signal',
+          'tiff: GUID.tiff - Type: Admin Letter Author Org: Y',
+          {}
+        ),
+      ],
+    },
+  ];
+  const analysis = analyzeJournal(dayGroups);
+  assert(
+    analysis.summary.suspiciousDocumentsTotal === 1 && analysis.suspiciousDocuments[0].id === 'junk-doc',
+    'analyzeJournal surfaces suspiciousDocuments/summary.suspiciousDocumentsTotal for free, with no candidate group required'
+  );
+  const docEntry = analysis.entries.find((e) => e.id === 'junk-doc');
+  assert(
+    docEntry.title === 'tiff: GUID.tiff - Type: Admin Letter Author Org: Y',
+    "a document entry retains its own raw title field (not just the concatenated rawText blob)"
   );
 }
 
