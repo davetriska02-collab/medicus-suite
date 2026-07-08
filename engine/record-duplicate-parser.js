@@ -564,7 +564,8 @@
                     entry.organisationName,
                     date,
                     item.id,
-                    transfer
+                    transfer,
+                    { title: entry.title || null }
                   );
                 }
               }
@@ -621,7 +622,8 @@
             d.organisationName,
             date,
             null,
-            false
+            false,
+            { title: d.title || null }
           );
           for (const p of d.linkedProblems || []) pushProblem(p, date, null, null, false);
         }
@@ -846,6 +848,126 @@
       }
     }
     return { groups: result, documentGroupsSplit };
+  }
+
+  // ── Cross-record file-match duplicate detection (2026-07-08) ───────────────
+  // Real motivating case (test patient 5, live): documents duplicated across
+  // DIFFERENT journal dates — the primary (kind, date, code) key can never
+  // catch these, no matter how the code/date resolve, because the two
+  // "copies" genuinely disagree on date. Two independent, zero-fetch signals
+  // (title shape, id-timestamp) flag which documents are WORTH suspecting;
+  // the actual match is confirmed by file size + type, the one thing that
+  // can't be corrupted by a reimport relabelling pass — same composite key
+  // splitDocumentGroupsByFileType already uses, applied the opposite way
+  // (forming new groups across the whole document pool instead of splitting
+  // one over-merged group apart).
+
+  // A document whose real title has been genericised carries its actual
+  // metadata as `Type:`/`Author Org:`/`Custodian Org:` segments (see
+  // parseGenericDocumentTitle above) — but on some reimports the title also
+  // carries a raw filename/GUID fragment BEFORE those segments, e.g.
+  // "tiff: 1C60D211-3115-4EAE-B2C3-86C905926DCB.tiff - Type: Admin Letter
+  // Author Org: …" (live example, 2026-07-08). That leading fragment is
+  // itself evidence of a degraded import — a normal title has nothing
+  // before its first recognised label. Reuses parseGenericDocumentTitle's
+  // own TITLE_LABEL_RE so the two stay in lock-step by construction.
+  function hasJunkTitlePrefix(title) {
+    if (typeof title !== 'string') return false;
+    const matches = [...title.matchAll(TITLE_LABEL_RE)];
+    if (!matches.length) return false;
+    return title.slice(0, matches[0].index).trim().length > 0;
+  }
+
+  // A document whose recorded creation time postdates its own filing time is
+  // logically backwards — evidence a later reimport pass rewrote one
+  // timestamp but not the other. Both fields are the "YYYY-MM-DD HH:MM:SS"
+  // shape already confirmed on `clinical/data/document/modals/preview/{id}`
+  // (`document.createdDate` / `document.filedDateTime`). No threshold: this
+  // is a logical-ordering check, not a timing-proximity heuristic like
+  // hasPrescriptionTimingMismatch, so any postdating counts. Returns false
+  // (never guesses) unless BOTH values are present and parseable.
+  function hasCreatedAfterFiled(createdDate, filedDateTime) {
+    if (typeof createdDate !== 'string' || typeof filedDateTime !== 'string') return false;
+    const created = Date.parse(createdDate.trim().replace(' ', 'T'));
+    const filed = Date.parse(filedDateTime.trim().replace(' ', 'T'));
+    if (!Number.isFinite(created) || !Number.isFinite(filed)) return false;
+    return created > filed;
+  }
+
+  // Matches document-kind entries ACROSS THE WHOLE RECORD by (fileType,
+  // fileSize) — deliberately not scoped to any date window or existing
+  // group, per explicit product decision (2026-07-08): the duplicate of a
+  // suspicious-looking document can just as easily be a completely
+  // unremarkable-looking copy elsewhere in the record, so the search has to
+  // cover every document, not just a cluster. Entries with an unknown
+  // fileType or fileSize are excluded from matching entirely — never guess
+  // a match off incomplete data, same principle as every cross-check above.
+  //
+  // `existingGroups` lets a cluster that's ALREADY exactly one existing
+  // group (same member-id-set) skip re-reporting; a cluster that's only
+  // partially covered, or spans documents that landed in different existing
+  // groups (or none), IS still reported — that's the whole value of this
+  // pass, surfacing a cross-date link the primary pass structurally cannot
+  // see. Tier is always REVIEW: same-size-same-type is strong evidence, not
+  // proof of identical content, so it's never auto-removable-by-default —
+  // same discipline as documentLinked groups.
+  function findFileMatchedDuplicates(documentEntries, existingGroups, fileTypeByEntryId, fileSizeByEntryId, createdDateByEntryId, filedDateTimeByEntryId) {
+    const buckets = new Map();
+    for (const e of documentEntries || []) {
+      const ft = fileTypeByEntryId ? fileTypeByEntryId[e.id] : null;
+      const fs = fileSizeByEntryId ? fileSizeByEntryId[e.id] : null;
+      if (!ft || !fs) continue;
+      const key = `${ft}::${fs}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(e);
+    }
+
+    const existingIdSets = (existingGroups || []).map((g) => new Set((g.entries || []).map((e) => e.id)));
+    const isAlreadyOneExistingGroup = (ids) =>
+      existingIdSets.some((set) => ids.length === set.size && ids.every((id) => set.has(id)));
+
+    const groups = [];
+    let clustersChecked = 0;
+    for (const [key, members] of buckets) {
+      if (members.length < 2) continue;
+      clustersChecked++;
+      const ids = members.map((m) => m.id);
+      if (isAlreadyOneExistingGroup(ids)) continue;
+
+      const [fileType, fileSize] = key.split('::');
+      const dates = new Set(members.map((m) => m.date || ''));
+      const date = dates.size === 1 ? members[0].date : `${dates.size} dates`;
+      const recordedBySet = new Set(members.map((m) => m.recordedBy || ''));
+      const orgSet = new Set(members.map((m) => m.recordedByOrganisation || ''));
+
+      const withTime = members.filter((m) => m.idTime != null);
+      let keeperEntryId = null;
+      if (withTime.length >= 2) {
+        keeperEntryId = withTime.reduce((a, b) => (a.idTime <= b.idTime ? a : b)).id;
+      }
+
+      groups.push({
+        kind: 'document',
+        date,
+        code: `${fileType} · ${fileSize}`,
+        tier: TIER.REVIEW,
+        gp2gpWrapper: false,
+        recordedByVaries: recordedBySet.size > 1,
+        recordedByOrganisationVaries: orgSet.size > 1,
+        keeperEntryId,
+        fileMatched: true,
+        entries: members.map((m) => ({
+          ...m,
+          isKeeper: keeperEntryId != null && m.id === keeperEntryId,
+          titleJunkPrefix: hasJunkTitlePrefix(m.title),
+          createdAfterFiled: hasCreatedAfterFiled(
+            createdDateByEntryId ? createdDateByEntryId[m.id] : null,
+            filedDateTimeByEntryId ? filedDateTimeByEntryId[m.id] : null
+          ),
+        })),
+      });
+    }
+    return { groups, clustersChecked };
   }
 
   // ── Document-linked-entry matching (2026-07-07, corrected 2026-07-08) ─────
@@ -1657,6 +1779,9 @@
     buildDocumentEditOverrides,
     buildDocumentEditRequest,
     splitDocumentGroupsByFileType,
+    hasJunkTitlePrefix,
+    hasCreatedAfterFiled,
+    findFileMatchedDuplicates,
     buildCareRecordJournalUrl,
     buildDocumentDownloadUrl,
   };

@@ -2,6 +2,55 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.172.0] — 2026-07-08
+
+### Added: cross-record file-match duplicate detection for documents, built into the first pass
+
+Real motivating case (test patient 5, live): documents duplicated across
+DIFFERENT journal dates, which the primary `(kind, date, code)` key can
+never catch no matter how the code/date resolve, because the two copies
+genuinely disagree on date. Built at the user's explicit request as an
+**always-on** part of "Analyse current patient" (not opt-in) for a first,
+honest timing test on a document-heavy record (63 documents) — the user's
+plan is to break it out into an opt-in second pass only if it measurably
+slows the analysis down.
+
+- `engine/record-duplicate-parser.js`: `findFileMatchedDuplicates(documentEntries,
+  existingGroups, fileTypeByEntryId, fileSizeByEntryId, createdDateByEntryId,
+  filedDateTimeByEntryId)` — matches document-kind entries ACROSS THE WHOLE
+  RECORD by `(fileType, fileSize)` (the one signal a reimport relabelling
+  pass can't corrupt), the same composite key `splitDocumentGroupsByFileType`
+  already uses, applied the opposite way (forms new groups instead of
+  splitting one apart). Entries with unknown fileType/fileSize are excluded
+  from matching entirely — never guessed. A cluster whose member set is
+  already exactly one existing group is skipped (no duplicate reporting);
+  a cluster only partially covered by existing grouping IS still surfaced
+  — that's the whole point, catching links the primary pass structurally
+  cannot see. Tier is always REVIEW (strong evidence, not proof), tagged
+  `fileMatched: true`.
+- Two zero-fetch diagnostic markers carried per matched entry: `hasJunkTitlePrefix`
+  (a raw filename/GUID fragment before a genericised title's `Type:`/
+  `Author Org:` segments — live example: `"tiff: 1C60D211-...tiff - Type:
+  Admin Letter Author Org: …"` — reuses `parseGenericDocumentTitle`'s own
+  label regex) and `hasCreatedAfterFiled` (a document's creation time
+  postdating its own filing time — a logical-ordering anomaly, not a
+  timing-proximity heuristic).
+- `duplicate-checker.js`: `applyOnDemandCrossChecks` now fetches
+  `clinical/data/document/modals/preview/{id}` for every document-kind
+  entry that never formed a candidate group under the primary pass (reusing
+  previews already fetched for grouped documents — piggybacked on the
+  existing per-document `document/entries` loop, so no extra pass over the
+  document list). Cost is proportional to how many documents the journal
+  grouping missed, not the whole document population twice over. New
+  summary line: "N/M cross-record file-size/type cluster(s) surfaced as new
+  group(s)". Matched groups get an explicit warning banner and per-card
+  badges (own date, junk-title-prefix, created-after-filed) since a
+  file-matched group can span different journal dates and codes.
+- Document entries now retain their own `title` field (previously only the
+  concatenated `rawText` blob was kept) — needed for the junk-prefix check.
+
+29 new parser tests (290/290 passing).
+
 ## [v3.171.0] — 2026-07-08
 
 ### Added: links out to Medicus for direct comparison (duplicate-checker)

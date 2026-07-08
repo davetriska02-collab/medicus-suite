@@ -749,6 +749,35 @@ async function crossCheckQuestionnaireTemplate(apiBase, group, previewByEntryId)
 // actually still shown. isStillActive (optional) is polled between groups so
 // a user-initiated patient switch can abandon the remaining per-group
 // fetches early rather than working through all of them pointlessly.
+// Extracted so both the primary (grouped-document) fetch loop and the
+// whole-record file-match pass below feed the exact same maps — one
+// counter, one set of fields, regardless of which loop reached a given
+// document first.
+function recordDocumentPreviewFields(
+  entryId,
+  preview,
+  fileTypeByEntryId,
+  fileSizeByEntryId,
+  createdDateByEntryId,
+  filedDateTimeByEntryId
+) {
+  if (!preview) return false;
+  if (typeof preview.fileType === 'string' && preview.fileType.trim()) {
+    fileTypeByEntryId[entryId] = preview.fileType.trim().toLowerCase();
+  }
+  if (preview.fileSize !== undefined && preview.fileSize !== null && String(preview.fileSize).trim()) {
+    fileSizeByEntryId[entryId] = String(preview.fileSize).trim();
+  }
+  const doc = preview.document;
+  if (doc && typeof doc.createdDate === 'string' && doc.createdDate.trim()) {
+    createdDateByEntryId[entryId] = doc.createdDate.trim();
+  }
+  if (doc && typeof doc.filedDateTime === 'string' && doc.filedDateTime.trim()) {
+    filedDateTimeByEntryId[entryId] = doc.filedDateTime.trim();
+  }
+  return true;
+}
+
 async function applyOnDemandCrossChecks(analysis, apiBase, isStillActive) {
   if (!apiBase) return;
   const kept = [];
@@ -760,6 +789,8 @@ async function applyOnDemandCrossChecks(analysis, apiBase, isStillActive) {
   // present on every document type; the tracked count below surfaces
   // coverage in the summary line rather than leaving a gap silent.
   const fileSizeByEntryId = {};
+  const createdDateByEntryId = {};
+  const filedDateTimeByEntryId = {};
   let documentPreviewsChecked = 0;
   // Retained (not just extracted-then-discarded) so the field-by-field
   // comparison UI can read the full preview object later, on demand, when
@@ -777,13 +808,17 @@ async function applyOnDemandCrossChecks(analysis, apiBase, isStillActive) {
       const previewByEntryId = await fetchDocumentPreviews(apiBase, g);
       Object.assign(allDocumentPreviewsByEntryId, previewByEntryId);
       for (const [entryId, preview] of Object.entries(previewByEntryId)) {
-        if (!preview) continue;
-        documentPreviewsChecked++;
-        if (typeof preview.fileType === 'string' && preview.fileType.trim()) {
-          fileTypeByEntryId[entryId] = preview.fileType.trim().toLowerCase();
-        }
-        if (preview.fileSize !== undefined && preview.fileSize !== null && String(preview.fileSize).trim()) {
-          fileSizeByEntryId[entryId] = String(preview.fileSize).trim();
+        if (
+          recordDocumentPreviewFields(
+            entryId,
+            preview,
+            fileTypeByEntryId,
+            fileSizeByEntryId,
+            createdDateByEntryId,
+            filedDateTimeByEntryId
+          )
+        ) {
+          documentPreviewsChecked++;
         }
       }
       if (await crossCheckQuestionnaireTemplate(apiBase, g, previewByEntryId)) {
@@ -816,6 +851,33 @@ async function applyOnDemandCrossChecks(analysis, apiBase, isStillActive) {
   const documentLinkedDataByDocumentId = {};
   for (const e of allDocumentEntries) {
     if (isStillActive && !isStillActive()) return;
+    // Cross-record file-match detection (2026-07-08, built into the first
+    // pass — see findFileMatchedDuplicates' own header comment): reuses this
+    // SAME per-document loop rather than a second pass over every document,
+    // and skips entries whose preview the primary grouped-document loop
+    // above already fetched — so the added cost is exactly one preview
+    // fetch per document that never formed a candidate group under
+    // (kind, date, code), not one per document in the record.
+    if (!allDocumentPreviewsByEntryId[e.id]) {
+      try {
+        const preview = await apiFetch(`${apiBase}/clinical/data/document/modals/preview/${e.id}`);
+        allDocumentPreviewsByEntryId[e.id] = preview;
+        if (
+          recordDocumentPreviewFields(
+            e.id,
+            preview,
+            fileTypeByEntryId,
+            fileSizeByEntryId,
+            createdDateByEntryId,
+            filedDateTimeByEntryId
+          )
+        ) {
+          documentPreviewsChecked++;
+        }
+      } catch (err) {
+        /* leave this document's preview/file fields unknown */
+      }
+    }
     try {
       const res = await apiFetch(`${apiBase}/clinical/document/entries/${e.id}`);
       if (res && Array.isArray(res.entries) && res.entries.length) {
@@ -830,10 +892,21 @@ async function applyOnDemandCrossChecks(analysis, apiBase, isStillActive) {
     documentLinkedDataByDocumentId
   );
 
-  // Journal-order sort so documentLinked groups land adjacent to the
-  // document tasks they relate to, not appended at the bottom (2026-07-08).
+  const { groups: fileMatchedGroups, clustersChecked: fileMatchClustersChecked } =
+    window.RecordDuplicateParser.findFileMatchedDuplicates(
+      allDocumentEntries,
+      splitGroups,
+      fileTypeByEntryId,
+      fileSizeByEntryId,
+      createdDateByEntryId,
+      filedDateTimeByEntryId
+    );
+
+  // Journal-order sort so documentLinked/fileMatched groups land adjacent to
+  // the document tasks they relate to, not appended at the bottom
+  // (2026-07-08).
   const allGroups = window.RecordDuplicateParser.sortGroupsByJournalOrder(
-    splitGroups.concat(linkedGroups),
+    splitGroups.concat(linkedGroups).concat(fileMatchedGroups),
     analysis.entries
   );
   analysis.groups = allGroups;
@@ -844,6 +917,8 @@ async function applyOnDemandCrossChecks(analysis, apiBase, isStillActive) {
   analysis.summary.byTier = byTier;
   analysis.summary.documentLinkedEntriesGenerated = linkedEntriesGenerated;
   analysis.summary.documentLinkedGroupsFound = linkedGroups.length;
+  analysis.summary.fileMatchClustersChecked = fileMatchClustersChecked;
+  analysis.summary.fileMatchedGroupsFound = fileMatchedGroups.length;
   analysis.summary.totalCandidateGroups = allGroups.length;
   analysis.summary.excludedPrescriptionTimingTotal = excludedPrescriptionTiming.length;
   analysis.summary.excludedQuestionnaireMismatchTotal = excludedQuestionnaireMismatch.length;
@@ -922,6 +997,7 @@ function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
     ${summary.documentGroupsSplitByFileType ? ` · <span style="color:var(--amber)">${summary.documentGroupsSplitByFileType} document group(s) split by file type/size (were wrongly merged — different documents sharing a date)</span>` : ''}
     ${summary.documentPreviewsChecked ? ` · <span class="mono">${summary.documentPreviewsWithFileSize}/${summary.documentPreviewsChecked}</span> document preview(s) had a usable file-size field` : ''}
     ${summary.documentLinkedGroupsFound ? ` · <span style="color:var(--amber)">${summary.documentLinkedGroupsFound} document-linked duplicate group(s) found (experimental — see warning on each)</span>` : ''}
+    ${summary.fileMatchClustersChecked ? ` · <span class="mono">${summary.fileMatchedGroupsFound}/${summary.fileMatchClustersChecked}</span> cross-record file-size/type cluster(s) surfaced as new group(s)` : ''}
   </div>`;
 
   const groupsHtml = groups
@@ -943,6 +1019,11 @@ function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
       ${
         g.documentLinked
           ? `<div style="font-size:11px;color:var(--amber);margin-top:2px;font-weight:600">⚠ One copy of this pair is still linked to its source document and is kept automatically — only the freestanding duplicate is ever offered for removal. The matched text is derived from the document's linked-entry data; double-check it against the source document before removing.</div>`
+          : ''
+      }
+      ${
+        g.fileMatched
+          ? `<div style="font-size:11px;color:var(--amber);margin-top:2px;font-weight:600">⚠ Matched by file size and type across different dates, not by the journal's own type/date fields — the journal grouping missed this pair entirely. Same size and type is strong evidence but not proof of identical content; check the "Download original" links in Compare fields before removing.</div>`
           : ''
       }
       <div class="rec-line">${INFO_ICON}<span>${TIER_ACTION[g.tier]}</span></div>
@@ -1390,6 +1471,9 @@ function reviewEntriesHtml(g) {
           ${g.documentLinked && !e.fromDocumentLinkedElement ? ' · <span style="color:var(--amber)">freestanding copy</span>' : ''}
           ${e.isKeeper ? ' · <span style="color:var(--green)">kept (earliest copy)</span>' : ''}
           ${i === refIdx ? ' · reference copy' : ''}
+          ${g.fileMatched ? ` · <span style="color:var(--text-2)">${esc(e.date || 'unknown date')}</span>` : ''}
+          ${e.titleJunkPrefix ? ' · <span style="color:var(--amber)">title has raw filename/GUID prefix</span>' : ''}
+          ${e.createdAfterFiled ? ' · <span style="color:var(--amber)">created after filed (reimport anomaly)</span>' : ''}
         </div>
         <div style="margin-top:6px">${bodyHtml}</div>
         ${createdLine}

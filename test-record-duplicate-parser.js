@@ -34,6 +34,9 @@ const {
   buildDocumentEditOverrides,
   buildDocumentEditRequest,
   splitDocumentGroupsByFileType,
+  hasJunkTitlePrefix,
+  hasCreatedAfterFiled,
+  findFileMatchedDuplicates,
   buildCareRecordJournalUrl,
   buildDocumentDownloadUrl,
   flattenDocumentEntries,
@@ -2119,6 +2122,161 @@ console.log('\n--- normText null/junk-only parity + note field comparison (2026-
   assert(
     noComparison.rows.every((r) => r.values.every((v) => v.value === null)),
     'a missing overview shows blank values for that copy, never guessed'
+  );
+}
+
+console.log('\n--- hasJunkTitlePrefix / hasCreatedAfterFiled (cross-record file-match markers) ---');
+{
+  assert(
+    hasJunkTitlePrefix(
+      'tiff: 1C60D211-3115-4EAE-B2C3-86C905926DCB.tiff - Type: Admin Letter Author Org: Adur Health Partnership Custodian Org: Park Road Surgery'
+    ) === true,
+    'a raw filename/GUID fragment before the first recognised label is flagged as a junk prefix (real live example)'
+  );
+  assert(
+    hasJunkTitlePrefix('Type: Referral letter Author Org: Kingston Hospital') === false,
+    'a title with no content before its first recognised label is not flagged'
+  );
+  assert(
+    hasJunkTitlePrefix('An ordinary, non-generic document title') === false,
+    'a title with no recognised labels at all is not flagged (a normal, non-generic document)'
+  );
+  assert(hasJunkTitlePrefix(null) === false, 'a null title is not flagged, never throws');
+  assert(hasJunkTitlePrefix(42) === false, 'a non-string title is not flagged, never throws');
+
+  assert(
+    hasCreatedAfterFiled('2026-02-23 15:11:10', '2026-02-23 06:05:21') === true,
+    'a creation time after the filing time is flagged as a reimport anomaly'
+  );
+  assert(
+    hasCreatedAfterFiled('2026-02-23 06:05:21', '2026-02-23 15:11:10') === false,
+    'a normal created-before-filed ordering is not flagged'
+  );
+  assert(
+    hasCreatedAfterFiled(null, '2026-02-23 15:11:10') === false,
+    'a missing createdDate never guesses — not flagged'
+  );
+  assert(
+    hasCreatedAfterFiled('not a date', '2026-02-23 15:11:10') === false,
+    'an unparseable date never guesses — not flagged'
+  );
+}
+
+console.log('\n--- findFileMatchedDuplicates (cross-record file-size/type duplicate detection, 2026-07-08) ---');
+{
+  // Real motivating case (test patient 5): documents duplicated across
+  // DIFFERENT journal dates — the primary (kind, date, code) key can never
+  // catch these. Two documents, different dates, different codes, but the
+  // SAME (fileType, fileSize) — the one signal that can't be corrupted by a
+  // reimport relabelling pass.
+  const docA = { id: 'doc-a', kind: 'document', date: 'Mon 1 Jan 2024', code: 'Admin Letter', recordedBy: 'X', recordedByOrganisation: null, idTime: 100, title: 'tiff: GUID.tiff - Type: Admin Letter Author Org: Y' };
+  const docB = { id: 'doc-b', kind: 'document', date: 'Fri 15 Mar 2024', code: 'Clinical letter', recordedBy: 'X', recordedByOrganisation: null, idTime: 200, title: 'Type: Clinical letter Author Org: Y' };
+  const docC = { id: 'doc-c', kind: 'document', date: 'Mon 1 Jan 2024', code: 'Admin Letter', recordedBy: 'X', recordedByOrganisation: null, idTime: 50, title: null };
+  const fileType = { 'doc-a': 'tiff', 'doc-b': 'tiff', 'doc-c': 'pdf' };
+  const fileSize = { 'doc-a': '245.11 KB', 'doc-b': '245.11 KB', 'doc-c': '10 KB' };
+  const created = { 'doc-a': '2026-02-23 15:11:10' };
+  const filed = { 'doc-a': '2026-02-23 06:05:21' };
+
+  const { groups, clustersChecked } = findFileMatchedDuplicates([docA, docB, docC], [], fileType, fileSize, created, filed);
+  assert(
+    clustersChecked === 1,
+    'only the tiff/245.11KB bucket has 2+ members and counts as a checked cluster — the lone pdf/10KB document never reaches that stage'
+  );
+  assert(groups.length === 1, 'only the cluster with 2+ members forms a group — a lone document never groups');
+  const g = groups[0];
+  assert(g.kind === 'document' && g.tier === TIER.REVIEW && g.fileMatched === true, 'the group is document-kind, tier REVIEW, tagged fileMatched');
+  assert(g.gp2gpWrapper === false, 'gp2gpWrapper is always false for a file-matched group (not a text-wrapper concept)');
+  assert(g.entries.map((e) => e.id).sort().join(',') === 'doc-a,doc-b', 'the matched cluster contains exactly the two same-fileType/fileSize documents');
+  assert(g.date === '2 dates', 'a cluster spanning different journal dates reports a date COUNT, never a guessed single date');
+  assert(g.code === 'tiff · 245.11 KB', 'code displays the matching evidence itself (fileType · fileSize), since there is no shared textual code');
+  assert(g.keeperEntryId === 'doc-a', 'keeper is the earliest-idTime member of the MATCHED pair (doc-a=100 < doc-b=200), independent of doc-c');
+  const entryA = g.entries.find((e) => e.id === 'doc-a');
+  const entryB = g.entries.find((e) => e.id === 'doc-b');
+  assert(entryA.isKeeper === true && entryB.isKeeper === false, 'isKeeper flags match the computed keeper');
+  assert(entryA.titleJunkPrefix === true, "doc-a's junk-prefixed title is flagged on its entry");
+  assert(entryB.titleJunkPrefix === false, "doc-b's clean title is not flagged");
+  assert(entryA.createdAfterFiled === true, 'doc-a\'s created-after-filed anomaly is flagged from the caller-supplied maps');
+  assert(entryB.createdAfterFiled === false, 'doc-b has no known created/filed data, so no anomaly is guessed');
+
+  const sameDate = findFileMatchedDuplicates(
+    [
+      { id: 'x', kind: 'document', date: 'Mon 1 Jan', recordedBy: 'A', recordedByOrganisation: 'Org1', idTime: 1, title: null },
+      { id: 'y', kind: 'document', date: 'Mon 1 Jan', recordedBy: 'B', recordedByOrganisation: 'Org2', idTime: 2, title: null },
+    ],
+    [],
+    { x: 'pdf', y: 'pdf' },
+    { x: '1KB', y: '1KB' },
+    {},
+    {}
+  );
+  assert(sameDate.groups[0].date === 'Mon 1 Jan', 'a cluster where every member shares one date reports that single date, not a count');
+  assert(
+    sameDate.groups[0].recordedByVaries === true && sameDate.groups[0].recordedByOrganisationVaries === true,
+    'recordedBy/recordedByOrganisation variance is computed the same way buildGroupRecord does'
+  );
+
+  const missingFields = findFileMatchedDuplicates(
+    [
+      { id: 'p', kind: 'document', date: 'd', idTime: 1 },
+      { id: 'q', kind: 'document', date: 'd', idTime: 2 },
+    ],
+    [],
+    { p: 'pdf' }, // q has no known fileType
+    { p: '1KB', q: '1KB' },
+    {},
+    {}
+  );
+  assert(
+    missingFields.groups.length === 0 && missingFields.clustersChecked === 0,
+    'entries with an unknown fileType or fileSize are excluded from matching entirely — never guessed into a cluster'
+  );
+
+  // Dedup: a cluster that's already EXACTLY one existing group is not
+  // re-reported as a new group.
+  const alreadyGrouped = [{ kind: 'document', entries: [{ id: 'm' }, { id: 'n' }] }];
+  const dedup = findFileMatchedDuplicates(
+    [
+      { id: 'm', kind: 'document', date: 'd', idTime: 1 },
+      { id: 'n', kind: 'document', date: 'd', idTime: 2 },
+    ],
+    alreadyGrouped,
+    { m: 'pdf', n: 'pdf' },
+    { m: '1KB', n: '1KB' },
+    {},
+    {}
+  );
+  assert(
+    dedup.groups.length === 0 && dedup.clustersChecked === 1,
+    'a cluster whose member set already equals one existing group is skipped — checked, but not re-reported'
+  );
+
+  // Partial coverage: a cluster spanning documents that landed in DIFFERENT
+  // existing groups (or none) IS still reported — the whole point of this
+  // pass is surfacing what the primary grouping structurally could not see.
+  const partiallyGrouped = [{ kind: 'document', entries: [{ id: 'm' }, { id: 'other' }] }];
+  const partial = findFileMatchedDuplicates(
+    [
+      { id: 'm', kind: 'document', date: 'd1', idTime: 1 },
+      { id: 'n', kind: 'document', date: 'd2', idTime: 2 },
+    ],
+    partiallyGrouped,
+    { m: 'pdf', n: 'pdf' },
+    { m: '1KB', n: '1KB' },
+    {},
+    {}
+  );
+  assert(
+    partial.groups.length === 1 && partial.groups[0].entries.map((e) => e.id).sort().join(',') === 'm,n',
+    'a cluster only partially covered by an existing (different-membership) group is still surfaced as new'
+  );
+
+  assert(
+    findFileMatchedDuplicates([], [], {}, {}, {}, {}).groups.length === 0,
+    'no document entries at all produces no groups, never throws'
+  );
+  assert(
+    findFileMatchedDuplicates(null, null, {}, {}, {}, {}).groups.length === 0,
+    'null document entries degrades to no groups, never throws'
   );
 }
 
