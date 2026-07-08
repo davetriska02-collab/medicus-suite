@@ -2125,3 +2125,102 @@
   font-size: 9px;
   color: var(--text-4);
 }
+
+/* ── Create recall task (from the action bar — Sweep's close-the-loop, for the
+   open patient). Mirrors sweep.css's recall-form styling. ─────────────────── */
+
+.sent-task-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 10px;
+  padding: 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+/* Wrong-patient guard: the form always names who it is for. */
+.sent-task-for {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-2);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sent-task-lbl {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.sent-task-assignee,
+.sent-task-priority,
+.sent-task-desc {
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-1);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 6px;
+}
+
+.sent-task-desc {
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.sent-task-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.sent-task-create {
+  font-size: 12px;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.sent-task-create:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sent-task-cancel {
+  font-size: 12px;
+  color: var(--text-3);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.sent-task-loading {
+  margin: 6px 0 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+}
+
+.sent-task-error {
+  font-size: 11px;
+  color: var(--red);
+}
+
+.sent-task-done {
+  margin: 6px 0 10px;
+  padding: 6px 9px;
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}

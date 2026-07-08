@@ -8,6 +8,8 @@ import { STATUS_RANK, buildAdminSummaryText, isChipActionNeeded } from './sentin
 import { buildChipActions, buildPatientActions } from '../shared/action-packs.js';
 import { buildBrief } from './brief-core.js';
 import { buildPassport } from './passport-core.js';
+import { fetchTaskCreateForm, createGeneralTask } from '../../../shared/task-api.js';
+import { buildRecallDescription, isActionNeeded } from '../sweep/sweep-core.js';
 import { buildCoverageView } from './coverage-core.js';
 import { startTour } from '../../tour/tour.js';
 
@@ -1961,6 +1963,7 @@ const TOOL_ICONS = {
   printer:
     '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
   more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  plus: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
 };
 
 function scaffoldHtml() {
@@ -1985,6 +1988,7 @@ function scaffoldHtml() {
       <button class="sent-action-btn" id="sentApptSummaryBtn" disabled title="Copyable list of the appointments this patient is due, for admin to book">${toolIcon(TOOL_ICONS.calendar)}<span>Appointments</span></button>
       <button class="sent-action-btn" id="sentCopyAllActionsBtn" disabled title="Copy-ready blood forms, recall SMS and tasks for every alert needing action">${toolIcon(TOOL_ICONS.clipboard)}<span>Copy actions</span></button>
       <button class="sent-action-btn" id="sentPrintPassportBtn" disabled title="Print a plain-English health summary to hand to the patient">${toolIcon(TOOL_ICONS.printer)}<span>Print summary</span></button>
+      <button class="sent-action-btn" id="sentCreateTaskBtn" disabled title="Create a recall task in Medicus for this patient's overdue monitoring — Medicus's own task workflow, one explicit confirm">${toolIcon(TOOL_ICONS.plus)}<span>Create task</span></button>
       <div class="sent-overflow-wrap">
         <button class="sent-action-btn" id="sentOverflowBtn" title="More tools" aria-haspopup="menu" aria-expanded="false">${toolIcon(TOOL_ICONS.more)}<span>More</span></button>
         <div class="sent-overflow-menu" id="sentOverflowMenu" hidden role="menu" aria-label="More tools">
@@ -1995,6 +1999,7 @@ function scaffoldHtml() {
         </div>
       </div>
     </div>
+    <div id="sentTaskSlot"></div>
     <div id="sentWrSlot">${renderWaitingRoomBlock()}</div>
     <div id="sentDynamic" aria-live="polite"></div>
     <div class="sent-footer">
@@ -2003,6 +2008,156 @@ function scaffoldHtml() {
     </div>
     <div id="sentModalHost"></div>
   </div>`;
+}
+
+// ── Create recall task (lifted from Sweep — the same one-click-plus-confirm
+// close-the-loop, for the patient open in Monitoring) ─────────────────────────
+// Drives Medicus's OWN general-task endpoints via shared/task-api.js: Medicus
+// stays the system of record; its validation, access control and audit fire as
+// normal. One patient, one explicit confirm — no bulk create.
+//
+// WRONG-PATIENT GUARDS (H-023 extension): the form names the patient it was
+// opened for, and the submit handler re-checks that the currently-followed
+// patient UUID still matches the one the form was opened for — auto-follow
+// switching patients mid-form invalidates the submit instead of creating a
+// task against the wrong record.
+
+let _sentTaskFormCache = null; // assignee/priority options are practice-wide
+
+async function toggleCreateTaskForm() {
+  const slot = container?.querySelector('#sentTaskSlot');
+  if (!slot) return;
+  if (slot.dataset.open === '1') {
+    slot.innerHTML = '';
+    slot.dataset.open = '';
+    return;
+  }
+  const patient = _renderCtx?.patient;
+  const patientId = patient && (patient.patientUuid || patient.uuid);
+  if (!patientId) return;
+  const patientName = patient.patientName || patient.displayName || 'this patient';
+
+  slot.dataset.open = '1';
+  slot.innerHTML = `<div class="sent-task-loading">Loading task form…</div>`;
+
+  let code = null;
+  try {
+    const r = await window.PracticeCode.resolve();
+    code = r && r.code;
+  } catch (_) {
+    /* handled below */
+  }
+  if (!code || !/^[a-f0-9]{4,8}$/i.test(code)) {
+    slot.innerHTML = `<div class="sent-task-error">No practice code — open a Medicus tab or set it in Options.</div>`;
+    slot.dataset.open = '';
+    return;
+  }
+  const apiBase = `https://${code}.api.england.medicus.health`;
+
+  let form;
+  try {
+    if (!_sentTaskFormCache) _sentTaskFormCache = await fetchTaskCreateForm(apiBase, patientId);
+    form = _sentTaskFormCache;
+  } catch (e) {
+    slot.innerHTML = `<div class="sent-task-error">${escHtml(e.message || 'Could not load the task form.')}</div>`;
+    slot.dataset.open = '';
+    return;
+  }
+
+  const actionChips = (_renderCtx?.chips || []).filter((c) => c && isActionNeeded(c.status));
+  const desc = buildRecallDescription(actionChips, 'Monitoring');
+  const opt = (o) => `<option value="${escAttr(`${o.type}|${o.value}`)}">${escHtml(o.label)}</option>`;
+  let assigneeHtml = '<option value="">— select —</option>';
+  if (form.teams && form.teams.length)
+    assigneeHtml += `<optgroup label="Teams">${form.teams.map(opt).join('')}</optgroup>`;
+  if (form.staff && form.staff.length)
+    assigneeHtml += `<optgroup label="Staff">${form.staff.map(opt).join('')}</optgroup>`;
+  const priorityHtml =
+    form.priorities && form.priorities.length > 1
+      ? `<label class="sent-task-lbl">Priority
+           <select class="sent-task-priority">${form.priorities
+             .map((p) => `<option value="${escAttr(p.value)}">${escHtml(p.label)}</option>`)
+             .join('')}</select>
+         </label>`
+      : '';
+
+  slot.innerHTML = `
+    <div class="sent-task-form">
+      <div class="sent-task-for">Task for <strong>${escHtml(patientName)}</strong> — check this is who you mean before creating.</div>
+      <label class="sent-task-lbl">Assign to
+        <select class="sent-task-assignee">${assigneeHtml}</select>
+      </label>
+      <label class="sent-task-lbl">Details
+        <textarea class="sent-task-desc" rows="3" maxlength="2000">${escHtml(desc)}</textarea>
+      </label>
+      ${priorityHtml}
+      <div class="sent-task-actions">
+        <button class="sent-task-create" type="button" disabled>Create task</button>
+        <button class="sent-task-cancel" type="button">Cancel</button>
+      </div>
+      <div class="sent-task-status" role="status"></div>
+    </div>`;
+
+  const assigneeSel = slot.querySelector('.sent-task-assignee');
+  const descEl = slot.querySelector('.sent-task-desc');
+  const createBtn = slot.querySelector('.sent-task-create');
+  const updateEnabled = () => {
+    createBtn.disabled = !(assigneeSel.value && descEl.value.trim());
+  };
+  assigneeSel.addEventListener('change', updateEnabled);
+  descEl.addEventListener('input', updateEnabled);
+  slot.querySelector('.sent-task-cancel').addEventListener('click', () => {
+    slot.innerHTML = '';
+    slot.dataset.open = '';
+  });
+  createBtn.addEventListener('click', () => submitSentinelTask(slot, apiBase, patientId, patientName));
+}
+
+async function submitSentinelTask(slot, apiBase, patientId, patientName) {
+  const assigneeSel = slot.querySelector('.sent-task-assignee');
+  const assignee = assigneeSel?.value || '';
+  const description = slot.querySelector('.sent-task-desc')?.value || '';
+  const priority = slot.querySelector('.sent-task-priority')?.value ?? 0;
+  const createBtn = slot.querySelector('.sent-task-create');
+  const statusEl = slot.querySelector('.sent-task-status');
+  if (!assignee || !description.trim()) return;
+
+  // Wrong-patient guard: auto-follow may have moved on while the form was open.
+  const nowPatient = _renderCtx?.patient;
+  const nowId = nowPatient && (nowPatient.patientUuid || nowPatient.uuid);
+  if (nowId && nowId !== patientId) {
+    if (statusEl)
+      statusEl.innerHTML = `<span class="sent-task-error">The open patient has changed since this form was opened — cancelled. Reopen the form for the current patient.</span>`;
+    if (createBtn) createBtn.disabled = true;
+    return;
+  }
+
+  const assigneeLabel = assigneeSel.selectedOptions?.[0]?.textContent?.trim() || '';
+  createBtn.disabled = true;
+  createBtn.textContent = 'Creating…';
+  if (statusEl) statusEl.textContent = '';
+  try {
+    await createGeneralTask(apiBase, { patientId, assignee, description, priority });
+    if (window.EventLedger) {
+      window.EventLedger.record({
+        source: 'sentinel',
+        patientRef: patientId,
+        severity: null,
+        ruleId: null,
+        label: 'recall task created' + (assigneeLabel ? ` — ${assigneeLabel}` : ''),
+        action: 'recall-created',
+      });
+    }
+    slot.innerHTML = `<div class="sent-task-done">&#10003; Task created for ${escHtml(patientName)}${
+      assigneeLabel ? ` — assigned to ${escHtml(assigneeLabel)}` : ''
+    }.</div>`;
+    slot.dataset.open = 'done';
+  } catch (e) {
+    if (statusEl)
+      statusEl.innerHTML = `<span class="sent-task-error">${escHtml(e.message || 'Failed to create the task.')}</span>`;
+    createBtn.disabled = false;
+    createBtn.textContent = 'Create task';
+  }
 }
 
 // Wire the toolbar exactly once per module life (scaffold is never re-rendered).
@@ -2021,6 +2176,9 @@ function wireToolbar() {
   });
   $('sentPrintPassportBtn')?.addEventListener('click', () => {
     if (_currentSnapshot) onPrintPassport(_currentSnapshot);
+  });
+  $('sentCreateTaskBtn')?.addEventListener('click', () => {
+    toggleCreateTaskForm();
   });
   $('sentSettingsBtn')?.addEventListener('click', () => {
     closeOverflowMenu();
@@ -2081,6 +2239,7 @@ function updateToolbarState() {
   set('sentApptSummaryBtn', !!ctx);
   set('sentCopyAllActionsBtn', !!ctx && ctx.actionCount > 0);
   set('sentPrintPassportBtn', !!ctx && !!ctx.patient);
+  set('sentCreateTaskBtn', !!ctx && !!(ctx.patient && (ctx.patient.patientUuid || ctx.patient.uuid)));
   set('sentExportLogBtn', !!ctx && !!ctx.trace);
 
   // Hide the whole action bar when there is nothing to act on (no data context).

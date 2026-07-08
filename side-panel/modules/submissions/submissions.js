@@ -7,7 +7,15 @@
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
 import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
 import { downloadCsv } from '../shared/export-util.js';
-import { DEFAULT_SUB_THRESHOLDS, getRagLevel } from './submissions-core.js';
+import {
+  DEFAULT_SUB_THRESHOLDS,
+  getRagLevel,
+  windowTaskList,
+  ledgerSeriesForDay,
+  ledgerCountsForDays,
+  ledgerDayWatched,
+} from './submissions-core.js';
+import { recordTaskLists } from './submissions-ledger.js';
 
 // ── Task types ────────────────────────────────────────────────────────────────
 
@@ -88,6 +96,7 @@ let state = {
   compareMode: 'day',
   monthCompare: null, // { startA, endA, startB, endB } — set when compareMode==='month'
   data: { primary: null, compare: null },
+  ledger: null,
   loading: false,
   config: { ...DEFAULTS },
   hiddenSeries: new Set(),
@@ -176,6 +185,7 @@ function renderShell() {
 
       <div id="modeControls" class="mode-controls-row"></div>
       <div id="subBanner" class="banner hidden"></div>
+      <div id="subDataHealth" class="sub-data-health hidden" role="status" aria-live="polite"></div>
       <div id="subAlertStrip" class="sub-alert-strip hidden" role="status" aria-live="assertive" aria-atomic="true"></div>
 
       <div id="subMetrics" class="sub-metrics"></div>
@@ -385,38 +395,54 @@ async function fetchAndRender(force = false) {
 }
 
 async function fetchDay(dateISO) {
-  // F8: Validate practice code before interpolating into the fetch URL.
-  if (!_isValidPracticeCode(state.config.practiceCode)) {
-    throw new Error('Invalid practice code format — cannot fetch');
-  }
-  const result = {};
-  await Promise.all(
-    TASK_TYPES.map(async (tt) => {
-      const url = `https://${state.config.practiceCode}.api.england.medicus.health/tasks/data/${tt.type}/task-list?createdAt_startDate=${dateISO}&createdAt_endDate=${dateISO}`;
-      const r = await fetch(url, { credentials: 'include' });
-      if (!r.ok) throw new Error(`${tt.label} HTTP ${r.status}`);
-      const d = await r.json();
-      result[tt.key] = d.tasks || [];
-    })
-  );
-  return result;
+  return fetchWindow(dateISO, dateISO);
 }
 
 async function fetchRange(startISO, endISO) {
+  return fetchWindow(startISO, endISO);
+}
+
+// Shared fetch for both day and range modes. Responses go through
+// windowTaskList (submissions-core.js) so a server-side change to the
+// createdAt_* filter or the response envelope shows up as a visible data-health
+// warning (`result._diag`, rendered by renderDataHealth) instead of silently
+// wrong counts — see the v3.35.2 postmortem in CHANGELOG.
+//
+// The fetched lists are then merged into the persistent day ledger
+// (submissions-ledger.js) and the module RENDERS FROM THE LEDGER, not the raw
+// response: the task-list API only ever contains open tasks (completed
+// requests leave the table — confirmed by live probe, v3.153.0), so the raw
+// response undercounts "work received" as the team completes work. The ledger
+// keeps a task counted once it has been seen.
+async function fetchWindow(startISO, endISO) {
   // F8: Validate practice code before interpolating into the fetch URL.
   if (!_isValidPracticeCode(state.config.practiceCode)) {
     throw new Error('Invalid practice code format — cannot fetch');
   }
   const result = {};
+  const diag = { filterIgnored: false, dropped: 0, truncated: false };
   await Promise.all(
     TASK_TYPES.map(async (tt) => {
       const url = `https://${state.config.practiceCode}.api.england.medicus.health/tasks/data/${tt.type}/task-list?createdAt_startDate=${startISO}&createdAt_endDate=${endISO}`;
       const r = await fetch(url, { credentials: 'include' });
       if (!r.ok) throw new Error(`${tt.label} HTTP ${r.status}`);
       const d = await r.json();
-      result[tt.key] = d.tasks || [];
+      const w = windowTaskList(d, startISO, endISO);
+      result[tt.key] = w.tasks;
+      if (w.filterIgnored) {
+        diag.filterIgnored = true;
+        diag.dropped += w.dropped;
+      }
+      if (w.truncated) diag.truncated = true;
     })
   );
+  try {
+    state.ledger = await recordTaskLists(result);
+  } catch (_) {
+    // Storage failure — render falls back to the live (open-tasks-only) view.
+    state.ledger = null;
+  }
+  result._diag = diag;
   return result;
 }
 
@@ -480,6 +506,7 @@ function downloadSubCsv() {
 function renderAll() {
   if (!container) return;
   updateTitles();
+  renderDataHealth();
   if (state.mode === 'today') renderToday();
   else if (state.mode === 'compare') renderCompare();
   else renderRange();
@@ -515,10 +542,22 @@ function updateTitles() {
   }
 }
 
+// Chart series for one day: from the ledger (remembers completed tasks) when
+// available, else derived from the live open-tasks-only fetch.
+function daySeries(dateISO, liveDayData) {
+  if (state.ledger)
+    return ledgerSeriesForDay(
+      state.ledger,
+      dateISO,
+      TASK_TYPES.map((tt) => tt.key)
+    );
+  return buildHourlyCumulative(liveDayData || {});
+}
+
 function renderToday() {
   const day = state.data.primary;
   if (!day) return;
-  const series = buildHourlyCumulative(day);
+  const series = daySeries(state.primaryDate, day);
   renderMetrics(
     TASK_TYPES.map((tt) => ({ key: tt.key, label: tt.shortLabel, value: series[tt.key].total, color: tt.color }))
   );
@@ -556,8 +595,8 @@ function renderCompare() {
   const dayA = state.data.primary;
   const dayB = state.data.compare;
   if (!dayA || !dayB) return;
-  const sA = buildHourlyCumulative(dayA);
-  const sB = buildHourlyCumulative(dayB);
+  const sA = daySeries(state.primaryDate, dayA);
+  const sB = daySeries(state.compareDate, dayB);
   renderMetrics(
     TASK_TYPES.map((tt) => ({
       key: tt.key,
@@ -660,7 +699,14 @@ function renderCompareMonth() {
 function renderRange() {
   const data = state.data.primary;
   if (!data) return;
-  const { days, byDay } = buildDailyTotals(data, state.rangeStart, state.rangeEnd);
+  const { days, byDay: liveByDay } = buildDailyTotals(data, state.rangeStart, state.rangeEnd);
+  const byDay = state.ledger
+    ? ledgerCountsForDays(
+        state.ledger,
+        days,
+        TASK_TYPES.map((tt) => tt.key)
+      )
+    : liveByDay;
   const totals = {};
   for (const tt of TASK_TYPES) totals[tt.key] = days.reduce((a, d) => a + (byDay[d][tt.key] || 0), 0);
   renderMetrics(
@@ -714,6 +760,67 @@ function renderMetrics(items) {
     </div>`;
     })
     .join('');
+}
+
+// Data-health notice — shown when windowTaskList detected the Medicus API
+// misbehaving (date filter ignored, or a truncated/paginated response). Wrong
+// numbers presented confidently are worse than no numbers: this tells the user
+// the counts are suspect and why, instead of letting a demand undercount pass
+// as a quiet Monday.
+// Dates the current view displays — used for the ledger-coverage warning.
+function viewDates() {
+  if (state.mode === 'compare') return [state.primaryDate, state.compareDate];
+  if (state.mode === 'range') {
+    const days = [];
+    let cur = state.rangeStart;
+    while (cur <= state.rangeEnd) {
+      days.push(cur);
+      cur = addDays(cur, 1);
+    }
+    return days;
+  }
+  return [state.primaryDate];
+}
+
+function renderDataHealth() {
+  const el = container?.querySelector('#subDataHealth');
+  if (!el) return;
+  const diags = [state.data.primary?._diag, state.data.compare?._diag].filter(Boolean);
+  const filterIgnored = diags.some((d) => d.filterIgnored);
+  const truncated = diags.some((d) => d.truncated);
+  // Ledger coverage: Medicus only reports STILL-OPEN tasks for any date, so a
+  // day the suite didn't watch live shows residual open tasks, not what was
+  // received. Say so rather than present an undercount as history.
+  const unwatched = state.ledger ? viewDates().filter((d) => !ledgerDayWatched(state.ledger, d)) : [];
+  if (!filterIgnored && !truncated && unwatched.length === 0) {
+    el.className = 'sub-data-health hidden';
+    el.textContent = '';
+    return;
+  }
+  const dropped = diags.reduce((a, d) => a + (d.dropped || 0), 0);
+  const parts = [];
+  if (filterIgnored) {
+    parts.push(
+      `Medicus ignored the date filter on this request (${dropped} task${dropped === 1 ? '' : 's'} from other days excluded). ` +
+        `Counts show only tasks the API still returns for the selected period and are likely an UNDERCOUNT of work received — ` +
+        `completed items may be missing. The Medicus task-list API may have changed.`
+    );
+  }
+  if (truncated) {
+    parts.push('Medicus sent a partial page of tasks (server reports more than it returned) — counts may be low.');
+  }
+  if (unwatched.length > 0) {
+    const n = unwatched.length;
+    parts.push(
+      `${n} day${n === 1 ? '' : 's'} in this view ${n === 1 ? 'was' : 'were'} not watched live by the suite — ` +
+        `Medicus only reports still-open tasks for past dates, so ${n === 1 ? 'it shows' : 'they show'} what remains open, ` +
+        `not true received volume. Received counts build up from the day the suite starts watching.`
+    );
+  }
+  el.className = 'sub-data-health';
+  el.innerHTML =
+    `<svg class="sub-alert-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>` +
+    `<span>${filterIgnored || truncated ? 'Counts unreliable — ' : ''}${parts.join(' ')}</span>`;
 }
 
 function renderAlertStrip() {

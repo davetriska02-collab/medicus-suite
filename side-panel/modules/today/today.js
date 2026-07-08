@@ -19,6 +19,8 @@
 import { buildHeadline } from './today-headline.js';
 import { hasEnabledRules, buildBreaches } from '../slots/slots-alert-core.js';
 import { isActionNeeded } from '../sweep/sweep-core.js';
+import { windowTaskList, ledgerSeriesForDay } from '../submissions/submissions-core.js';
+import { recordTaskLists } from '../submissions/submissions-ledger.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -207,13 +209,39 @@ async function fetchDemand() {
         codeSource: source,
       }).then((r) => r.json()),
     ]);
-    const medical = medRes.status === 'fulfilled' ? (medRes.value.tasks || []).length : null;
-    const admin = admRes.status === 'fulfilled' ? (admRes.value.tasks || []).length : null;
+    // Route both responses through windowTaskList so a server-side change to
+    // the createdAt_* filter (silently ignored params → default open-task view)
+    // degrades to an honest count + visible warning, not a quietly wrong number.
+    const medW = medRes.status === 'fulfilled' ? windowTaskList(medRes.value, today, today) : null;
+    const admW = admRes.status === 'fulfilled' ? windowTaskList(admRes.value, today, today) : null;
+    let medical = medW ? medW.tasks.length : null;
+    let admin = admW ? admW.tasks.length : null;
+    // Count from the day ledger, not the raw response: the task-list only
+    // contains OPEN tasks (completed requests leave the table — v3.153.0), so
+    // the raw count erodes as the team works. The ledger remembers every task
+    // seen today, so "received today" survives completion.
+    try {
+      const byKey = {};
+      if (medW) byKey.medical = medW.tasks;
+      if (admW) byKey.admin = admW.tasks;
+      const ledger = await recordTaskLists(byKey);
+      const s = ledgerSeriesForDay(ledger, today, ['medical', 'admin']);
+      if (medW) medical = s.medical.total;
+      if (admW) admin = s.admin.total;
+    } catch (_) {
+      // Storage failure — fall back to the live (open-only) counts above.
+    }
+    const dataWarn =
+      medW?.filterIgnored || admW?.filterIgnored
+        ? 'Medicus ignored the date filter — counts may miss completed work'
+        : medW?.truncated || admW?.truncated
+          ? 'Medicus sent a partial task page — counts may be low'
+          : null;
     const error =
       medRes.status === 'rejected' || admRes.status === 'rejected'
         ? medRes.reason?.message || admRes.reason?.message || 'Fetch failed'
         : null;
-    _demandData = { medical, admin, thresholds, error };
+    _demandData = { medical, admin, thresholds, error, dataWarn };
   } catch (e) {
     _demandData = {
       medical: null,
@@ -463,7 +491,7 @@ function buildDemandBody() {
   if (!_demandData) return '<span class="today-loading">Loading…</span>';
   if (_demandData.noCode) return buildNoCodeMsg();
 
-  const { medical, admin, thresholds, error } = _demandData;
+  const { medical, admin, thresholds, error, dataWarn } = _demandData;
 
   if (error && medical == null && admin == null) {
     return errMsg(error);
@@ -496,6 +524,7 @@ function buildDemandBody() {
     : '';
 
   const errLine = error ? errMsgInline(error) : '';
+  const warnLine = dataWarn ? `<div class="today-demand-datawarn">⚠ ${dataWarn}</div>` : '';
 
   // Headroom meter — the card's altitude over the strip: the strip shows the
   // raw count, the meter shows where it sits against the amber/red thresholds.
@@ -530,6 +559,7 @@ function buildDemandBody() {
       ${admFlag}
     </div>
     ${meter('admin', admin)}
+    ${warnLine}
     ${errLine}
   `;
 }

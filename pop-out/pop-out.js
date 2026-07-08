@@ -51,6 +51,10 @@ const MODULES = {
     js: () => import('../side-panel/modules/reception/reception.js'),
     css: '../side-panel/modules/reception/reception.css',
   },
+  signing: {
+    js: () => import('../side-panel/modules/signing/signing.js'),
+    css: '../side-panel/modules/signing/signing.css',
+  },
   sweep: { js: () => import('../side-panel/modules/sweep/sweep.js'), css: '../side-panel/modules/sweep/sweep.css' },
   knowledge: {
     js: () => import('../side-panel/modules/knowledge/knowledge.js'),
