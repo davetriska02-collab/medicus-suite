@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.161.0
+**Version:** v3.161.1
 **Generated:** 2026-07-08 (automated)
 
 ## What it is
@@ -113,6 +113,8 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.161.1 (2026-07-08)** — Fix: drug-allergy alert chips fired correctly but were never shown to the clinician (no case in the chip renderer, and no section in the default grouped view). Now rendered with its own "Drug Allergy" section, shown first for top visual priority as a red safety alert. Rendering-only fix; no rule or engine changes.
 
 - **v3.161.0 (2026-07-08)** — New drug-allergy safety rules: flag a prescribed drug that clashes with a documented active allergy (penicillin/beta-lactam, cephalosporin cross-sensitivity, NSAID/aspirin, sulfonamide). Fail-closed — only active when the Transactional care-record feed supplies allergies; dormant otherwise.
 

@@ -399,6 +399,46 @@
       </div>`;
   }
 
+  // Render a drug-allergy chip (documented allergy co-occurring with a
+  // contraindicated prescribed drug — evaluateDrugAllergyRule in rules-engine.js).
+  // Distinct from drug-combo: chip.matchSummary here is a plain STRING
+  // ("Penicillin allergy + Amoxicillin"), not an array of {setName, drugs[]}
+  // sets, so renderDrugComboChip's setsText.map() would throw on it — a
+  // dedicated renderer avoids that shape mismatch.
+  function renderDrugAllergyChip(chip) {
+    const col = STATUS_COLOUR[chip.status] || 'neutral';
+    const lbl = STATUS_LABEL[chip.status] || String(chip.status || '').toUpperCase();
+    const tooltipBits = [];
+    if (chip.notes) tooltipBits.push(chip.notes);
+    if (chip.source) tooltipBits.push('Source: ' + chip.source);
+    const titleAttr = tooltipBits.length ? ` title="${escAttr(tooltipBits.join(' — '))}"` : '';
+    const evAttrs = chip.evidence
+      ? ` data-rule-id="${escAttr(chip.ruleId || '')}" data-evidence-key="${escAttr(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
+      : '';
+    // F: Chevron at end of chip-head instead of ⓘ next to name
+    const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
+    // Surface the evidence facts (Allergy / matched drug set / cross-sensitivity
+    // note) inline, in addition to the click-to-expand evidence panel, so the
+    // key safety detail is visible without an extra click.
+    const factsHtml = (chip.evidence?.facts || [])
+      .map(
+        (f) =>
+          `<div class="sent-chip-fact"><span class="sent-chip-fact-label">${escHtml(f.label)}:</span> ${escHtml(f.value)}</div>`
+      )
+      .join('');
+    return `
+      <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
+        <div class="sent-chip-head">
+          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}</span>
+          <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
+          ${evChevron}
+        </div>
+        ${chip.matchSummary ? `<div class="sent-chip-obs">${escHtml(chip.matchSummary)}</div>` : ''}
+        ${factsHtml ? `<div class="sent-chip-facts">${factsHtml}</div>` : ''}
+        <div class="sent-chip-cat"><span class="sent-custom-tag">Allergy</span></div>
+      </div>`;
+  }
+
   // Render an event-count chip (recurrent events: ≥N matches in window).
   function renderEventCountChip(chip) {
     const col = STATUS_COLOUR[chip.status] || 'neutral';
@@ -695,6 +735,12 @@
       return `Vaccine (${entry.label || entry.ruleId}): ${entry.eligibilityReason || 'eligible'} — ${seasonPart}. ${evtPart} Status: ${statusPhrase}.`;
     }
 
+    // Drug-allergy type (entry.matchSummary is a plain string here, unlike
+    // drug-combo's array of {setName, drugs[]} sets).
+    if (entry.ruleType === 'drug-allergy') {
+      return `Drug-allergy alert '${entry.label || entry.ruleId}' detected${entry.matchSummary ? ': ' + entry.matchSummary : ''}. Status: ${statusPhrase}.`;
+    }
+
     // Drug-combo type
     if (entry.ruleType === 'drug-combo') {
       const summary = entry.matchSummary
@@ -738,6 +784,7 @@
     renderQofIndicatorChip,
     buildQofPreviewChip,
     renderDrugComboChip,
+    renderDrugAllergyChip,
     renderEventCountChip,
     renderCompositeChip,
     renderVaccineChip,

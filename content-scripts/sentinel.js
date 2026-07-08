@@ -48,6 +48,7 @@
   let collapsedSections = new Set();
 
   const SECTION_LABELS = {
+    'drug-allergy': 'Drug Allergy',
     'drug-monitoring': 'Drug Monitoring',
     'qof-register': 'QOF Registers',
     'qof-indicator': 'QOF Indicators',
@@ -539,7 +540,7 @@
     // 'status' is the default order already produced by the engine
 
     // Group by type (default) or flat list
-    const groups = { 'drug-monitoring': [], 'qof-indicator': [], 'qof-register': [] };
+    const groups = { 'drug-allergy': [], 'drug-monitoring': [], 'qof-indicator': [], 'qof-register': [] };
     chips.forEach((c) => {
       const t = c.type || 'drug-monitoring';
       if (!groups[t]) groups[t] = [];
@@ -590,8 +591,10 @@
         wireChipEvents(el, chip, allChips, data);
       });
     } else {
-      // Grouped sections (default)
-      ['drug-monitoring', 'qof-indicator'].forEach((type) => {
+      // Grouped sections (default). drug-allergy is listed first: it is a red
+      // patient-safety contraindication alert and must have top visual priority,
+      // ahead of routine drug-monitoring / QOF housekeeping sections.
+      ['drug-allergy', 'drug-monitoring', 'qof-indicator'].forEach((type) => {
         const groupChips = groups[type] || [];
         if (groupChips.length === 0) return;
         const sectionEl = document.createElement('section');
@@ -779,6 +782,7 @@
     // v3 custom-alert chip types delegate to the shared renderer.
     const CR = typeof window !== 'undefined' ? window.ChipRenderer : null;
     if (CR) {
+      if (chip.type === 'drug-allergy') return CR.renderDrugAllergyChip(chip);
       if (chip.type === 'drug-combo') return CR.renderDrugComboChip(chip);
       if (chip.type === 'event-count') return CR.renderEventCountChip(chip);
       if (chip.type === 'composite') return CR.renderCompositeChip(chip);
@@ -1180,8 +1184,11 @@
               // may show no_data when they should not, which is a silent clinical gap.
               // No patient data in the error message — only the error type/message.
               _journalAugmentFailed = true;
-              _journalAugmentError = (journalErr && journalErr.message) ? String(journalErr.message) : 'unknown error';
-              console.warn('[Sentinel] Journal augmentation failed — QOF journal-coded indicators may show no_data:', _journalAugmentError);
+              _journalAugmentError = journalErr && journalErr.message ? String(journalErr.message) : 'unknown error';
+              console.warn(
+                '[Sentinel] Journal augmentation failed — QOF journal-coded indicators may show no_data:',
+                _journalAugmentError
+              );
             }
           }
           // Evaluate with the FULL merged drug+QOF ruleset, capture the chips, and
@@ -1231,7 +1238,19 @@
           // Assess extraction drift (best-effort — never blocks chip publication).
           const drift = await recordAndAssessDrift(data);
           if (gen !== _evalGen) return; // navigation superseded us during drift assess
-          publishSnapshot(chips, data.patientContext, health, data, unmatchedMeds, unmatchedMedsDetailed, trace, drift, _journalAugmentFailed, _journalAugmentError, unmatchedHighRisk);
+          publishSnapshot(
+            chips,
+            data.patientContext,
+            health,
+            data,
+            unmatchedMeds,
+            unmatchedMedsDetailed,
+            trace,
+            drift,
+            _journalAugmentFailed,
+            _journalAugmentError,
+            unmatchedHighRisk
+          );
         })
         .catch(() => {
           if (gen === _evalGen) invalidateSnapshot();
@@ -1358,7 +1377,19 @@
   // with the triage-lens HUD (content.js:1448, 2092), which evaluates a
   // drug-rules-only set and would otherwise clobber the QOF chips on every
   // record/route tick (e.g. when searching the journal).
-  function publishSnapshot(chips, pc, health, rawData, unmatchedMeds, unmatchedMedsDetailed, trace, drift, journalAugmentFailed, journalAugmentError, unmatchedHighRisk) {
+  function publishSnapshot(
+    chips,
+    pc,
+    health,
+    rawData,
+    unmatchedMeds,
+    unmatchedMedsDetailed,
+    trace,
+    drift,
+    journalAugmentFailed,
+    journalAugmentError,
+    unmatchedHighRisk
+  ) {
     // Remember the patient we just evaluated so the nav watcher can recognise
     // same-patient sub-navigation and avoid blanking these chips.
     if (pc && pc.patientUuid) _lastPatientUuid = pc.patientUuid;
@@ -1382,7 +1413,7 @@
       // QOF chips that rely on journal codes may show no_data incorrectly.
       // In-memory only — no patient data stored, only the error message string.
       journalAugmentFailed: journalAugmentFailed === true,
-      journalAugmentError: journalAugmentFailed ? (journalAugmentError || 'unknown error') : null,
+      journalAugmentError: journalAugmentFailed ? journalAugmentError || 'unknown error' : null,
     };
     // Cache the raw observation + problem data for the BP/ACR trend tabs.
     // Written in lockstep with _lastSnapshot and cleared in invalidateSnapshot,

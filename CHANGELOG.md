@@ -2,6 +2,43 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.161.1] — 2026-07-08
+
+### Fix: drug-allergy chips fired but were never shown to the clinician
+
+The new `drug-allergy` rule type (v3.161.0) evaluated correctly and produced a
+`{ type: 'drug-allergy', ... }` chip (see `test-drug-allergy.js`), but the
+rendering side of the pipeline had no idea the type existed:
+
+- `content-scripts/sentinel.js`'s `chipHtml()` dispatch had no case for
+  `drug-allergy`, so it fell through to the generic `<div>Unknown chip
+  type</div>` fallback.
+- The default grouped view (`chipGrouping: 'by-type'`, `renderGroupedChips()`)
+  only ever built sections for `drug-monitoring` and `qof-indicator` — a fired
+  drug-allergy chip was grouped into `groups['drug-allergy']` but that group
+  was never drawn, so the chip stayed invisible even in the flat view fallback.
+
+A patient could have a live drug-allergy contraindication and the panel would
+show nothing.
+
+- Added `ChipRenderer.renderDrugAllergyChip()` (`shared/chip-renderer.js`) —
+  distinct from `renderDrugComboChip` because `chip.matchSummary` is a plain
+  string here (`"Penicillin allergy + Amoxicillin"`), not an array of
+  `{setName, drugs[]}` sets, so reusing the combo renderer would throw.
+  Surfaces the label, match summary, status badge, source/notes tooltip, and
+  the evidence facts (allergy + matched drug set + cross-sensitivity note)
+  inline, plus the click-to-expand evidence panel affordance shared with the
+  other alert-style chips.
+- Wired `chip.type === 'drug-allergy'` into `chipHtml()`.
+- Added a `drug-allergy` section (label "Drug Allergy") to the default grouped
+  view, listed **first** — ahead of Drug Monitoring and QOF Indicators — since
+  it is a red patient-safety contraindication alert and needs top visual
+  priority.
+- No engine or rule changes — rendering only. `test-drug-allergy-render.js`
+  (6 tests) drives the real `evaluateDrugAllergyRule` → `evaluatePatient`
+  output through the real renderer and pins that it no longer returns
+  "Unknown chip type".
+
 ## [v3.161.0] — 2026-07-08
 
 ### Drug-allergy safety rules (enabled by the Transactional care record)
