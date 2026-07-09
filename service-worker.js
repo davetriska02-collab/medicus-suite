@@ -113,7 +113,8 @@ try {
     'shared/fhir-normaliser.js',
     'shared/immunisation-bridge.js',
     'shared/data-source-transactional.js',
-    'shared/txn-bundle-cache.js'
+    'shared/txn-bundle-cache.js',
+    'shared/txn-request-gate.js'
   );
 } catch (e) {
   console.warn('[Suite] importScripts txn modules failed:', e && e.message);
@@ -125,6 +126,14 @@ try {
 // shadow/hybrid comparison path benefits equally from not re-fetching on every
 // render. Cleared below whenever txn config changes (see chrome.storage.onChanged).
 const txnBundleCache = TxnBundleCache.createBundleCache({});
+
+// Protects the proxy / Medicus staging from multi-context stampedes — Sweep
+// tab batches, the Record tab, the sentinel content script, and shadow-mode
+// comparisons can all message this service worker at once. Every txn network
+// call (bundle fetch, connection test) runs through this shared gate; cache
+// hits in txnFetchPatientBundle are checked BEFORE the gate so they never
+// queue behind in-flight network calls.
+const txnGate = TxnRequestGate.createRequestGate({});
 
 // ── Transactional feed: patient-bundle fetcher (SW-side; owns the credential) ─
 
@@ -158,7 +167,9 @@ async function txnFetchPatientBundle(patientUuid) {
     txnApi,
     normaliseCareRecord: SentinelFhirNormaliser.normaliseCareRecord,
   });
-  const bundle = await fetchFromTransactional({ patientUuid });
+  // Cache check above stays outside the gate — only the actual network call
+  // is gated, so a cache hit never waits behind other in-flight requests.
+  const bundle = await txnGate.run(() => fetchFromTransactional({ patientUuid }));
   const bridged = SentinelImmunisationBridge.bridgeImmunisations(bundle);
   txnBundleCache.set(cacheKey, bridged); // only successful results are cached — never errors
   return { ok: true, bundle: bridged };
@@ -219,7 +230,7 @@ async function txnTestConnection() {
 
   const startedAt = Date.now();
   try {
-    await txnApi.ping();
+    await txnGate.run(() => txnApi.ping());
     return { ok: true, latencyMs: Date.now() - startedAt };
   } catch (e) {
     const status = e && e.status;

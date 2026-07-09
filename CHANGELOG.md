@@ -2,6 +2,39 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.165.0] — 2026-07-09
+
+### The API feed becomes the richer source + production guardrails
+
+**FHIR normaliser enrichment.** The transactional bundle previously carried
+LESS than the session feed in places — no medication dosage, no
+abnormal-result flags, no problem significance — which is why v3.164.0's
+Record tab deliberately kept those sections session-fed. The normaliser now
+extracts what GP Connect was carrying all along: `dosage` (from
+dosageInstruction/patientInstruction), `isAbove`/`isBelow` (computed from
+referenceRange, including per-component handling for BP-style observations —
+any component breaching its own range flags the observation), the same flags
+through `observationHistory`, and problem `significance` (major/minor from
+the ProblemSignificance extension). All additive; field names verified
+against the session normaliser and Record-tab reads so consumers adopt them
+without translation; every extraction fails soft per-item. This unlocks
+flipping Record sections and the Trends tab to the API feed in a later
+release.
+
+**Production interlock.** Saving API settings with environment `prod` and a
+non-Session mode now requires a deliberate second Save within 10 seconds,
+behind an explicit live-patient-data warning. Every other combination saves
+exactly as before.
+
+**Service-worker request gate.** All transactional network calls (bundle
+fetches, connection tests) now pass through a shared FIFO concurrency gate
+(max 3 in flight) — Sweep batches, the Record tab, sentinel and shadow
+comparisons across multiple tabs can no longer stampede the proxy or
+Medicus's staging environment. Cache hits bypass the gate entirely.
+
+Tests: 277 passing (was 250) — new `test-fhir-enrichment.js` (20) and
+`test-txn-request-gate.js` (7).
+
 ## [v3.164.0] — 2026-07-09
 
 ### The API feed reaches the panel: Sweep worklist + pre-consultation brief

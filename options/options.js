@@ -256,6 +256,30 @@ const saveTxnBtn = document.getElementById('saveTxnBtn');
 const txnSaved = document.getElementById('txnSaved');
 const txnTestConnectionBtn = document.getElementById('txnTestConnectionBtn');
 const txnTestConnectionResult = document.getElementById('txnTestConnectionResult');
+const txnProdConfirmWarning = document.getElementById('txnProdConfirmWarning');
+
+// Production interlock: saving with environment 'prod' and a non-session
+// integration mode points Suite's live patient-record reads at the real
+// Medicus API, so it gets a deliberate double-click confirmation rather than
+// saving on the first click like every other change. Armed by the first
+// Save click below; a second Save click while armed performs the save; the
+// arm expires silently after 10s (TXN_PROD_CONFIRM_WINDOW_MS) if not
+// confirmed.
+const TXN_PROD_CONFIRM_WINDOW_MS = 10000;
+let txnProdConfirmArmed = false;
+let txnProdConfirmTimer = null;
+
+function txnClearProdConfirm() {
+  txnProdConfirmArmed = false;
+  if (txnProdConfirmTimer) {
+    clearTimeout(txnProdConfirmTimer);
+    txnProdConfirmTimer = null;
+  }
+  if (txnProdConfirmWarning) {
+    txnProdConfirmWarning.style.display = 'none';
+    txnProdConfirmWarning.textContent = '';
+  }
+}
 
 function txnUpdateModeWarning() {
   if (!txnModeWarning) return;
@@ -297,6 +321,26 @@ saveTxnBtn?.addEventListener('click', async () => {
   const checkedMode = document.querySelector('input[name="txnMode"]:checked');
   const mode = checkedMode ? checkedMode.value : TXN_DEFAULT_MODE;
   const environment = txnEnvironmentSelect ? txnEnvironmentSelect.value : TXN_DEFAULT_ENVIRONMENT;
+
+  // Deliberate-confirmation interlock: pointing Suite at PRODUCTION while an
+  // integration mode other than 'session' is selected means live reads will
+  // actually hit real patient data, so the first click only arms a warning —
+  // it does not save. A second click within the window confirms and saves.
+  const needsProdConfirm = environment === 'prod' && mode !== 'session';
+  if (needsProdConfirm && !txnProdConfirmArmed) {
+    txnProdConfirmArmed = true;
+    if (txnProdConfirmTimer) clearTimeout(txnProdConfirmTimer);
+    txnProdConfirmTimer = setTimeout(txnClearProdConfirm, TXN_PROD_CONFIRM_WINDOW_MS);
+    if (txnProdConfirmWarning) {
+      txnProdConfirmWarning.textContent =
+        'You are pointing Suite at the PRODUCTION Medicus API for live patient data. Click Save again within 10 seconds to confirm.';
+      txnProdConfirmWarning.style.display = 'block';
+    }
+    return;
+  }
+  // Either this isn't a prod+non-session save (saves as today), or it's a
+  // confirming second click — either way, clear any armed state.
+  txnClearProdConfirm();
 
   await chrome.storage.local.set({
     'txn.integrationMode': mode,
