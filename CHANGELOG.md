@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.163.0] — 2026-07-09
+
+### Staging-friendly caching + dormant check-in prompt builder
+
+**Patient-bundle cache (service worker).** Transactional bundles are now
+cached for 60s per `tenant|environment|patientUuid` (`shared/
+txn-bundle-cache.js`, max 50 entries, oldest evicted). The cache is checked
+only after the integration-enabled/config guards, only successful bundles are
+stored, and ANY change to `txn.*` settings or `suite.practiceCode` flushes it.
+Repeat views within a minute stop re-fetching through the proxy — kinder to
+Medicus's staging environment during live testing, and faster for the
+clinician. Cached responses are marked `cached: true`.
+
+**"While you're here" prompt builder (dormant).** `shared/checkin-prompts.js`
+is the pure core of composite feature B (opportunistic case-finding at
+check-in): it turns engine chips into a short, prioritised, reception-safe
+prompt list. Safety prompts (drug-allergy / drug-combo alerts, prefixed
+"URGENT:") always survive the display cap; monitoring (`overdue`/`stale`),
+vaccines due and unmet QOF indicators follow in clinical-priority order.
+Labels are built only from fields already on the chip — nothing invents
+clinical text. NOTHING calls it yet: it ships dormant, ready to wire the
+moment the Medicus appointments spec lands.
+
+Tests: 241 passing (was 216) — new `test-txn-bundle-cache.js` (6) and
+`test-checkin-prompts.js` (19).
+
 ## [v3.162.0] — 2026-07-09
 
 ### Live-testing readiness: settings UI, true hybrid shadow mode, failure visibility

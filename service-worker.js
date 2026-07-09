@@ -112,11 +112,19 @@ try {
     'shared/txn-api.js',
     'shared/fhir-normaliser.js',
     'shared/immunisation-bridge.js',
-    'shared/data-source-transactional.js'
+    'shared/data-source-transactional.js',
+    'shared/txn-bundle-cache.js'
   );
 } catch (e) {
   console.warn('[Suite] importScripts txn modules failed:', e && e.message);
 }
+
+// Short-TTL cache for patient bundles (see shared/txn-bundle-cache.js). Clinical
+// trade-off: 60s of possible staleness is acceptable for a chip/summary read —
+// nothing in this integration writes back through the cache, and the
+// shadow/hybrid comparison path benefits equally from not re-fetching on every
+// render. Cleared below whenever txn config changes (see chrome.storage.onChanged).
+const txnBundleCache = TxnBundleCache.createBundleCache({});
 
 // ── Transactional feed: patient-bundle fetcher (SW-side; owns the credential) ─
 
@@ -128,6 +136,13 @@ async function txnFetchPatientBundle(patientUuid) {
   const stored = await chrome.storage.local.get('suite.practiceCode');
   const tenant = stored['suite.practiceCode'] || null;
   if (!tenant) return { ok: false, error: 'practice code not set' };
+
+  // Cache key includes everything that changes the result: a bundle fetched
+  // for one tenant/environment must never be served for another, and a config
+  // change (e.g. flipping staging <-> prod) must not serve a stale bundle.
+  const cacheKey = `${tenant}|${settings.environment}|${patientUuid}`;
+  const cached = txnBundleCache.get(cacheKey);
+  if (cached) return { ok: true, bundle: cached, cached: true };
 
   const txnApi = TxnApi.createTxnApi({
     baseUrl: 'https://proxy.invalid', // unused: the proxy transport forwards {method, path} only
@@ -144,7 +159,9 @@ async function txnFetchPatientBundle(patientUuid) {
     normaliseCareRecord: SentinelFhirNormaliser.normaliseCareRecord,
   });
   const bundle = await fetchFromTransactional({ patientUuid });
-  return { ok: true, bundle: SentinelImmunisationBridge.bridgeImmunisations(bundle) };
+  const bridged = SentinelImmunisationBridge.bridgeImmunisations(bundle);
+  txnBundleCache.set(cacheKey, bridged); // only successful results are cached — never errors
+  return { ok: true, bundle: bridged };
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -154,6 +171,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     .then(sendResponse)
     .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
   return true; // async sendResponse
+});
+
+// Any change to txn.* settings (proxy URL, environment, integration mode,
+// caller key, ...) or suite.practiceCode (tenant) can change what a cached
+// bundle should contain — e.g. flipping environment or re-pointing the proxy
+// must not keep serving a bundle fetched under the old config. Clear the
+// whole cache rather than trying to reason about which entries are affected.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  const changedKeys = Object.keys(changes);
+  if (changedKeys.some((k) => k.startsWith('txn.') || k === 'suite.practiceCode')) {
+    txnBundleCache.clear();
+  }
 });
 
 // ── Transactional feed: connectivity test (SW-side; owns the credential) ────
