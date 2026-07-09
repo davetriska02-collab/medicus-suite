@@ -238,6 +238,106 @@ testConnectionBtn?.addEventListener('click', async () => {
   }
 });
 
+// ── API Integration (Transactional API) settings ──────────────────────────────
+// shared/txn-config.js (TxnConfig) is service-worker only — not loaded on this
+// page — so the two literal defaults below are mirrored from its DEFAULTS and
+// must be kept in sync if that module's defaults ever change.
+const TXN_DEFAULT_MODE = 'session';
+const TXN_DEFAULT_ENVIRONMENT = 'staging';
+
+const txnModeRadios = document.querySelectorAll('input[name="txnMode"]');
+const txnModeWarning = document.getElementById('txnModeWarning');
+const txnEnvironmentSelect = document.getElementById('txnEnvironment');
+const txnProxyUrlInput = document.getElementById('txnProxyUrl');
+const txnCallerKeyInput = document.getElementById('txnCallerKey');
+const txnUserEmailInput = document.getElementById('txnUserEmail');
+const txnTenantValue = document.getElementById('txnTenantValue');
+const saveTxnBtn = document.getElementById('saveTxnBtn');
+const txnSaved = document.getElementById('txnSaved');
+const txnTestConnectionBtn = document.getElementById('txnTestConnectionBtn');
+const txnTestConnectionResult = document.getElementById('txnTestConnectionResult');
+
+function txnUpdateModeWarning() {
+  if (!txnModeWarning) return;
+  const checked = document.querySelector('input[name="txnMode"]:checked');
+  txnModeWarning.style.display = checked && checked.value === 'transactional' ? 'block' : 'none';
+}
+txnModeRadios.forEach((r) => r.addEventListener('change', txnUpdateModeWarning));
+
+(async function initTxnSection() {
+  try {
+    const res = await chrome.storage.local.get([
+      'txn.integrationMode',
+      'txn.environment',
+      'txn.proxyUrl',
+      'txn.callerKey',
+      'txn.userEmail',
+      'suite.practiceCode',
+    ]);
+
+    const mode = res['txn.integrationMode'] || TXN_DEFAULT_MODE;
+    const modeRadio =
+      document.querySelector(`input[name="txnMode"][value="${escAttr(mode)}"]`) ||
+      document.getElementById('txnModeSession');
+    if (modeRadio) modeRadio.checked = true;
+
+    if (txnEnvironmentSelect) txnEnvironmentSelect.value = res['txn.environment'] || TXN_DEFAULT_ENVIRONMENT;
+    if (txnProxyUrlInput) txnProxyUrlInput.value = res['txn.proxyUrl'] || '';
+    if (txnCallerKeyInput) txnCallerKeyInput.value = res['txn.callerKey'] || '';
+    if (txnUserEmailInput) txnUserEmailInput.value = res['txn.userEmail'] || '';
+    if (txnTenantValue) txnTenantValue.textContent = res['suite.practiceCode'] || '(not set — see Suite section)';
+
+    txnUpdateModeWarning();
+  } catch (e) {
+    console.warn('[Txn section init]', e.message);
+  }
+})();
+
+saveTxnBtn?.addEventListener('click', async () => {
+  const checkedMode = document.querySelector('input[name="txnMode"]:checked');
+  const mode = checkedMode ? checkedMode.value : TXN_DEFAULT_MODE;
+  const environment = txnEnvironmentSelect ? txnEnvironmentSelect.value : TXN_DEFAULT_ENVIRONMENT;
+
+  await chrome.storage.local.set({
+    'txn.integrationMode': mode,
+    'txn.environment': environment,
+    // Trimmed; an empty string is a deliberate clear of a previously-saved value.
+    'txn.proxyUrl': (txnProxyUrlInput?.value || '').trim(),
+    'txn.callerKey': (txnCallerKeyInput?.value || '').trim(),
+    'txn.userEmail': (txnUserEmailInput?.value || '').trim(),
+  });
+
+  txnUpdateModeWarning();
+
+  if (txnSaved) {
+    txnSaved.classList.add('show');
+    setTimeout(() => txnSaved.classList.remove('show'), 2000);
+  }
+});
+
+txnTestConnectionBtn?.addEventListener('click', async () => {
+  if (txnTestConnectionResult) {
+    txnTestConnectionResult.textContent = 'Testing…';
+    txnTestConnectionResult.style.color = 'var(--text-3)';
+  }
+  try {
+    const r = await chrome.runtime.sendMessage({ action: 'txn:testConnection' });
+    if (!txnTestConnectionResult) return;
+    if (r && r.ok) {
+      txnTestConnectionResult.textContent = `Connected — proxy and Medicus API reachable (${r.latencyMs} ms)`;
+      txnTestConnectionResult.style.color = 'var(--green)';
+    } else {
+      txnTestConnectionResult.textContent = (r && r.error) || 'Test failed — no response from the service worker.';
+      txnTestConnectionResult.style.color = 'var(--red)';
+    }
+  } catch (e) {
+    if (txnTestConnectionResult) {
+      txnTestConnectionResult.textContent = `Error: ${e.message}`;
+      txnTestConnectionResult.style.color = 'var(--red)';
+    }
+  }
+});
+
 // ── Capacity Forecast preset editor ──────────────────────────────────────────
 
 const presetEditor = document.getElementById('capPresetEditor');

@@ -156,6 +156,83 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true; // async sendResponse
 });
 
+// ── Transactional feed: connectivity test (SW-side; owns the credential) ────
+// Used by the options page "Test connection" button in the API Integration
+// section. Unlike txnFetchPatientBundle this runs even when integrationMode is
+// 'session' — the whole point is to let a practice validate proxy/caller-key
+// config *before* switching into Hybrid or Transactional.
+//
+// Response shape: { ok: true, latencyMs } | { ok: false, stage, error }
+//   stage: 'config' — proxy URL / caller key / practice code missing
+//          'proxy'  — proxy unreachable, or rejected the caller key (401/403)
+//          'medicus' — proxy reached Medicus but got an upstream error back
+// `error` is always a short, plain-English, caller-key-free string.
+async function txnTestConnection() {
+  const settings = await TxnConfig.readSettings();
+  if (!settings.proxyUrl) return { ok: false, stage: 'config', error: 'Proxy URL not set' };
+  if (!settings.callerKey) return { ok: false, stage: 'config', error: 'Caller key not set' };
+
+  const stored = await chrome.storage.local.get('suite.practiceCode');
+  const tenant = stored['suite.practiceCode'] || null;
+  if (!tenant) return { ok: false, stage: 'config', error: 'Practice code not set (Suite section)' };
+
+  const txnApi = TxnApi.createTxnApi({
+    baseUrl: 'https://proxy.invalid', // unused: the proxy transport forwards {method, path} only
+    fetchFn: TxnTransport.createProxyTransport({
+      proxyUrl: settings.proxyUrl,
+      getCallerCredential: async () => settings.callerKey || null,
+      getTenant: async () => tenant,
+      getEnvironment: async () => settings.environment,
+      getUserEmail: async () => settings.userEmail || null,
+    }),
+  });
+
+  const startedAt = Date.now();
+  try {
+    await txnApi.ping();
+    return { ok: true, latencyMs: Date.now() - startedAt };
+  } catch (e) {
+    const status = e && e.status;
+    if (e && e.isTimeout) {
+      // shared/txn-transport.js aborted the call (default 10s) — the proxy is
+      // resolvable but not answering, which is different from a wrong URL.
+      return { ok: false, stage: 'proxy', error: 'Proxy timed out (no response within 10s)' };
+    }
+    if (status === 401 || status === 403) {
+      return { ok: false, stage: 'proxy', error: 'Proxy rejected the caller key' };
+    }
+    if (!status) {
+      // No HTTP status means we never got a response from the proxy at all
+      // (DNS/connection failure, wrong URL, CORS, etc.) — see the plain
+      // `throw new Error(...)` cases in shared/txn-transport.js.
+      return { ok: false, stage: 'proxy', error: 'Could not reach the proxy (check the URL)' };
+    }
+    // Proxy responded with some other status — it forwarded an upstream
+    // (Medicus) error. Pass through a short, safe message (never the caller key).
+    const message = String((e && e.message) || 'Unknown error')
+      .trim()
+      .slice(0, 200);
+    return { ok: false, stage: 'medicus', error: message };
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return; // F5: intra-extension only
+  if (!msg || msg.action !== 'txn:testConnection') return;
+  txnTestConnection()
+    .then(sendResponse)
+    .catch((e) =>
+      sendResponse({
+        ok: false,
+        stage: 'proxy',
+        error: String((e && e.message) || e)
+          .trim()
+          .slice(0, 200),
+      })
+    );
+  return true; // async sendResponse
+});
+
 // ── Message router ────────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

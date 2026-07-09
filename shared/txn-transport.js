@@ -20,10 +20,12 @@
   //   getEnvironment,       // async () => 'staging' | 'prod'
   //   getUserEmail,         // async () => clinician email | null (user-restricted attribution)
   //   fetchFn,              // injectable for tests; defaults to global fetch
+  //   timeoutMs,            // abort the proxy call after this long; default 10000
   // })
   function createProxyTransport(cfg) {
     const c = cfg || {};
     const doFetch = c.fetchFn || (typeof fetch !== 'undefined' ? fetch : null);
+    const timeoutMs = c.timeoutMs || 10000;
 
     return async function transport({ method, path, body, isWrite }) {
       if (!c.proxyUrl) throw new Error('txn proxy URL not configured');
@@ -41,11 +43,31 @@
       const email = c.getUserEmail ? await c.getUserEmail() : null;
       if (email) payload.userEmail = email;
 
-      const resp = await doFetch(`${String(c.proxyUrl).replace(/\/+$/, '')}/proxy`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${cred}` },
-        body: JSON.stringify(payload),
-      });
+      // Old environments (and some test stubs) may not have AbortController — in
+      // that case we skip the timeout entirely and behave exactly as before.
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      let timer = null;
+      let resp;
+      try {
+        if (controller) timer = setTimeout(() => controller.abort(), timeoutMs);
+        resp = await doFetch(`${String(c.proxyUrl).replace(/\/+$/, '')}/proxy`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${cred}` },
+          body: JSON.stringify(payload),
+          ...(controller ? { signal: controller.signal } : {}),
+        });
+      } catch (e) {
+        if (controller && controller.signal.aborted) {
+          const err = new Error(`txn proxy timeout after ${timeoutMs}ms`);
+          err.isTimeout = true;
+          err.isWrite = !!isWrite; // writes must NEVER be silently retried or fallen back
+          throw err;
+        }
+        e.isWrite = !!isWrite; // writes must NEVER be silently retried or fallen back
+        throw e;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
       const text = await resp.text();
       let data;
       try {

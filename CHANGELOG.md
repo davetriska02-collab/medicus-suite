@@ -2,6 +2,52 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.162.0] — 2026-07-09
+
+### Live-testing readiness: settings UI, true hybrid shadow mode, failure visibility
+
+Everything a practice needs to trial the Transactional API feed safely,
+without touching devtools — and everything the crossover period needs to
+prove parity between the session feed and the API feed.
+
+**API Integration settings (options page).** New "API Integration" section:
+mode (Session / Hybrid / Transactional, with plain-English explanations and a
+soft warning when selecting Transactional), environment (staging/prod), proxy
+URL, caller key (password field; stored locally, read only by the service
+worker, never included in Suite backups), optional clinician email for
+user-restricted attribution, and a read-only view of the tenant
+(`suite.practiceCode`). A **Test connection** button runs a ping through the
+proxy and reports stage-aware, plain-English results — config missing vs
+"Proxy rejected the caller key" vs "Could not reach the proxy" vs "Proxy timed
+out" vs an upstream Medicus error (new `txn:testConnection` SW message; runs
+even in Session mode so config can be validated before switching).
+
+**True hybrid (shadow) mode.** `hybrid` previously behaved identically to
+`transactional`. Now it is a genuine shadow: the session bundle is ALWAYS what
+renders (identical clinical behaviour to Session mode); the API bundle is
+fetched concurrently, the same rules are evaluated against it, and
+`shared/txn-shadow-summary.js` + `shared/shadow-compare.js` diff the two chip
+sets. The status line shows ` · API shadow: parity` or
+` · API shadow: N difference(s)`, and divergences are recorded in the Event
+Ledger (`txn-shadow-divergence`, with severity regression/escalation-only) —
+the ledger's CSV export is the parity evidence pack for assurance. A hard
+shadow budget (6s) guarantees a slow/hung proxy can never delay the
+clinician's render; budget breaches are recorded as `txn-shadow-unavailable`.
+
+**Failure visibility.** In Transactional mode, falling back to session data is
+now visible (` · API feed unavailable — using session data` + `txn-fallback`
+ledger event) instead of silent. All shadow/status logic is wrapped so a
+telemetry bug can never break clinical rendering.
+
+**Proxy transport timeout.** `shared/txn-transport.js` now aborts proxy calls
+after 10s (configurable `timeoutMs`) with `err.isTimeout`; writes keep their
+never-silently-retried semantics. Previously a hung proxy call could stall a
+fetch for the browser default (30s+).
+
+Tests: 216 passing (was 194) — new `test-txn-transport-timeout.js`,
+`test-txn-hybrid-fetch.js` (incl. shadow-budget render-delay proof),
+`test-txn-shadow-status.js`.
+
 ## [v3.161.1] — 2026-07-08
 
 ### Fix: drug-allergy chips fired but were never shown to the clinician
