@@ -122,6 +122,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Feed-provenance rollup appended to the summary line — only rendered when
+   at least one patient was sourced from the Transactional API feed, so a
+   session-only practice sees no change here. */
+.sweep-feed-summary {
+  font-weight: 400;
+  color: var(--text-4);
+  font-size: 11px;
+  margin-left: 4px;
+}
+
 .sweep-timestamp {
   font-family: var(--mono);
   font-size: 10px;
@@ -244,6 +254,27 @@
   background: var(--red-dim);
   color: var(--red);
   border: 1px solid var(--red-line);
+}
+
+/* Per-row data-source provenance ('API' feed vs 'session' fetch) — subtle,
+   sits in the meta line alongside the clinician name, not the red/amber
+   alert badges above. */
+.sweep-badge-source {
+  font-weight: 600;
+  padding: 0 4px;
+  margin-right: 4px;
+}
+
+.sweep-badge-source-api {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+}
+
+.sweep-badge-source-session {
+  background: var(--bg-mid);
+  color: var(--text-4);
+  border: 1px solid var(--border);
 }
 
 /* Chip summary */

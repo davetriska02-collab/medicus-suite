@@ -2,6 +2,41 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.164.0] — 2026-07-09
+
+### The API feed reaches the panel: Sweep worklist + pre-consultation brief
+
+**Shared feed selector.** `shared/panel-txn-feed.js`: panel modules source the
+same normalised engine bundle from the Transactional API feed when — and only
+when — the practice has switched to `transactional` mode (via the service
+worker + its 60s cache). Session and hybrid modes return null so the panel is
+byte-for-byte unchanged; every failure falls back to the session path.
+
+**Sweep tab.** Each booked patient's bundle can now come from the API feed,
+per-patient fallback to session, with a subtle `API`/`session` provenance
+badge on every row and a run summary ("via API feed: N · via session: M",
+shown only when the feed served anyone). Persisted/resumed runs keep their
+provenance. Also fixes a pre-existing gap: Sweep now threads `allergies` into
+the rules engine (mirroring sentinel.js), so drug-allergy alerts can fire in
+the pre-clinic sweep — previously they never could.
+
+**Record tab → pre-consultation brief.** New "Since last visit" section at the
+top: on each view the record is fingerprinted (hashed keys only — no clinical
+text is ever stored; `brief.fp.*`, pruned beyond 200 patients) and diffed
+against the previous view — "+ allergy: penicillin", "+ medication: apixaban",
+"N item(s) no longer present — review", or "No changes since DATE".
+Medication identity is dose-insensitive (a dose change is not a stop+start).
+Ported from the population-sweep delta engine (`shared/record-delta.js`), with
+a browser-safe hash substitution documented in the file. The tab can also
+draw on the API feed: per-field audit keeps richer session fields
+(dosage/flags/raw values/significance) session-fed so no section ever renders
+worse; `allergies`/`immunisations` — which the session path never had — come
+from the feed. One provenance line ("Data: API feed"/"Data: session").
+A delta failure can never break the tab (section simply omitted).
+
+Tests: 250 passing (was 241) — new `test-panel-txn-feed.js` (3) and ported
+`test-record-delta.js` (6).
+
 ## [v3.163.0] — 2026-07-09
 
 ### Staging-friendly caching + dormant check-in prompt builder

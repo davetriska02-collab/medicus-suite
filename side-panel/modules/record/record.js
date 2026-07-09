@@ -40,9 +40,33 @@
 //   → SentinelApiClient.fetchAll → SentinelNormalisers.normaliseAll
 //   → ACBScores.computeACB / StoppStart.computeStoppStart
 //   live monitoring/QOF chips → getSentinelSnapshot.chips
+//
+// Transactional feed (shared/panel-txn-feed.js): offered ALONGSIDE the session
+// fetch above, not instead of it — see buildRecordModel() below. A practice
+// stays on the session path unless integrationMode is explicitly
+// 'transactional' (getTxnBundleIfEnabled() returns null in every other case,
+// never throws). When it IS offered, several sections here need per-item
+// fields the txn bundle's slimmer FHIR shape doesn't carry (medication dose/
+// overdue flags, observation rawValue/range flags, problem significance,
+// deceased/test-patient demographics) so those fields keep preferring the
+// session result — the bundle is used outright only for allergies/
+// immunisations (the session feed has never had either) and as a fallback if
+// the session fetch itself failed. A one-line "Data: API feed"/"Data:
+// session" provenance note (feedSourceLabel()) reflects which bundle was
+// primary. See CAUTION comments at buildRecordModel().
+//
+// "Since last visit" (shared/record-delta.js, global SentinelRecordDelta,
+// lazy-loaded — see loadRecordDelta()): a per-patient fingerprint of
+// allergies/problems/medications/immunisations is diffed against the last
+// time this patient's snapshot was rendered (chrome.storage.local key
+// `brief.fp.<uuid>`) and surfaced as a short "what's new" section at the top
+// of the tab. Works against either feed above, since both produce the same
+// normalised bundle shape. Wrapped end-to-end in try/catch: a delta failure
+// only ever omits the section, never the rest of the tab.
 
 import { copyText } from '../shared/export-util.js';
 import { isChipActionNeeded } from '../sentinel/sentinel-core.js';
+import { getTxnBundleIfEnabled, feedSourceLabel } from '../../../shared/panel-txn-feed.js';
 
 let container = null;
 let _runToken = 0; // cancels stale async renders on rapid patient/tab change
@@ -282,48 +306,121 @@ async function load(force) {
   setSource('Loading live data from Medicus…', 'rec-source-loading');
   setBody(skeleton());
 
-  let raw;
+  // Try the transactional feed first (best-effort; never throws — see header
+  // DATA PATH note). Still followed by the ordinary session fetch below: for
+  // this tab the session result remains the preferred source for most fields
+  // (see buildRecordModel), so both are gathered here rather than short-
+  // circuiting on a bundle alone.
+  let feedBundle = null;
   try {
-    raw = await apiClient.fetchAll(ctx.apiBase, uuid, { useCache: !force });
+    feedBundle = await getTxnBundleIfEnabled(uuid);
+  } catch (_) {
+    feedBundle = null;
+  }
+  if (token !== _runToken) return;
+
+  let sessionData = null;
+  try {
+    const raw = await apiClient.fetchAll(ctx.apiBase, uuid, { useCache: !force });
+    sessionData = normalisers.normaliseAll(raw, ctx);
   } catch (e) {
-    if (token !== _runToken) return;
+    sessionData = null; // fall through — the txn bundle (if any) may still carry this render
+  }
+  if (token !== _runToken) return;
+
+  if (!sessionData && !feedBundle) {
     setSource('Couldn’t reach Medicus', 'rec-source-err');
     setBody(
       stateCard('Couldn’t load the record', 'Medicus did not respond. Check you are signed in, then retry.', true)
     );
     return;
   }
-  if (token !== _runToken) return;
 
-  const data = normalisers.normaliseAll(raw, ctx);
-  const errs = data.apiErrors || {};
+  const errs = (sessionData && sessionData.apiErrors) || {};
   const authFail = Object.values(errs).some((e) => /401|403|sign|auth/i.test(String(e)));
-  if (authFail && !data.patientContext) {
+  if (sessionData && authFail && !sessionData.patientContext && !feedBundle) {
     setSource('Not signed in', 'rec-source-err');
     setBody(stateCard('Sign in to Medicus', 'Your Medicus session looks signed out. Sign in, then retry.', true));
     return;
   }
 
+  const data = buildRecordModel(sessionData, feedBundle);
+
   const chips = await liveChips(tab.id);
   if (token !== _runToken) return;
 
   _lastUuid = uuid;
-  render(data, chips, errs);
+  await render(data, chips, errs, { feedBundle, token, uuid });
+}
+
+// Combine the session-normalised model with the (optional) transactional
+// bundle into the single shape render() consumes.
+//
+// CAUTION (see header DATA PATH note): the txn bundle's FHIR-derived shape is
+// thinner than the session shape for several fields this tab renders —
+// medications have no dosage/isOverDue/isReviewOverDue, observations have no
+// rawValue/isAbove/isBelow (resultsCard's own filter requires rawValue, so a
+// bundle-sourced observations array would silently render as "no results"),
+// problems have no `significance` (loses the "major problem" highlight), and
+// patientContext has no isDeceased/testPatient/namedGP (the deceased badge is
+// a load-bearing safety control per this module's header). None of that is a
+// safe trade to make silently, so those fields keep preferring the session
+// result and only fall back to the bundle if the session fetch failed
+// outright (a thinner record beats an error card). allergies/immunisations
+// have no session equivalent at all — they always come from the bundle when
+// one is offered, and are what feeds the "Since last visit" section below.
+function buildRecordModel(sessionData, feedBundle) {
+  const s = sessionData || {};
+  const b = feedBundle || {};
+  return {
+    patientContext: s.patientContext || b.patientContext || null,
+    medications: s.medications || b.medications || [],
+    observations: s.observations || b.observations || [],
+    observationHistory: s.observationHistory || b.observationHistory || [],
+    problems: s.problems || b.problems || [],
+    pastProblems: s.pastProblems || b.pastProblems || [],
+    allergies: b.allergies || [],
+    immunisations: b.immunisations || [],
+  };
 }
 
 // ── render (loaded state) ────────────────────────────────────────────────────
 
-function render(data, chips, errs) {
+async function render(data, chips, errs, opts) {
+  const { feedBundle, token, uuid } = opts || {};
+
+  // "Since last visit" — computed (and its own storage read/write performed)
+  // BEFORE anything is painted, so a stale/superseded render never writes a
+  // fingerprint for the wrong patient. Failures here only ever omit the
+  // section (see renderSinceLastVisitSection); they must never surface as a
+  // broken Record tab.
+  let deltaSectionHtml = '';
+  try {
+    deltaSectionHtml = await renderSinceLastVisitSection(data, uuid);
+  } catch (_) {
+    deltaSectionHtml = '';
+  }
+  if (token !== undefined && token !== _runToken) return; // a newer load() has already superseded this one
+
   const pc = data.patientContext || {};
   const meds = data.medications || [];
   const problems = data.problems || [];
   const past = data.pastProblems || [];
   const obs = data.observations || [];
 
-  // Source line: live + freshness
+  // Source line: live + freshness + feed provenance. "API feed" only when the
+  // transactional feed actually supplied the primary bundle for this render
+  // (shared/panel-txn-feed.js feedSourceLabel) — otherwise "session", exactly
+  // as before this feature existed.
   const stamp = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  let feedLabel = 'session';
+  try {
+    feedLabel = feedSourceLabel(feedBundle) === 'API' ? 'API feed' : 'session';
+  } catch (_) {
+    feedLabel = 'session';
+  }
   setSource(
-    `<span class="rec-live-dot" aria-hidden="true"></span>LIVE from Medicus · ${esc(stamp)} · <span class="rec-snapshot-word">snapshot, not the full record</span>`,
+    `<span class="rec-live-dot" aria-hidden="true"></span>LIVE from Medicus · ${esc(stamp)} · <span class="rec-snapshot-word">snapshot, not the full record</span> · <span class="rec-feed-label">Data: ${esc(feedLabel)}</span>`,
     'rec-source-live'
   );
 
@@ -338,13 +435,15 @@ function render(data, chips, errs) {
     ? `<div class="rec-partial">⚠ Some sections didn’t load (${esc(Object.keys(errs).join(', '))}). Showing what was returned.</div>`
     : '';
 
-  // Order follows how a clinician orients: identity → what's missing (safety
-  // gaps) → what's wrong (problems) → what they're on (meds) → safety scores
-  // that interrogate those → results. Scores sit AFTER problems/meds because
-  // the panel critique found clinicians read the clinical picture first and
-  // use the scores to confirm or challenge it.
+  // Order follows how a clinician orients: what changed since last time →
+  // identity → what's missing (safety gaps) → what's wrong (problems) →
+  // what they're on (meds) → safety scores that interrogate those → results.
+  // Scores sit AFTER problems/meds because the panel critique found
+  // clinicians read the clinical picture first and use the scores to confirm
+  // or challenge it.
   setBody(
-    `${demographicsCard(pc)}
+    `${deltaSectionHtml}
+     ${demographicsCard(pc)}
      ${safetyBanner()}
      ${partial}
      ${gapMarkers()}
@@ -355,6 +454,130 @@ function render(data, chips, errs) {
      ${resultsCard(obs)}`
   );
   wirePreflightControls();
+}
+
+// ── "Since last visit" (shared/record-delta.js) ─────────────────────────────
+//
+// A per-patient fingerprint (hashed identity keys only — see shared/
+// record-delta.js header) is stored per patient and diffed on every render
+// against the CURRENT bundle to produce a short, human "what changed" list.
+// Works identically against either feed (session or transactional) — both
+// produce the same normalised bundle shape this module already renders from.
+//
+// STORAGE DISCIPLINE: chrome.storage.local key `brief.fp.<patientUuid>` holds
+// ONLY { keys: [...hashed fingerprint keys], at: <ISO timestamp> } — exactly
+// what shared/record-delta.js's fingerprintKeys() produces, plus the
+// timestamp this section needs to say "since DATE". The hashed keys carry no
+// PHI (see that module's header); the human-readable added-item LABELS shown
+// below are read fresh off the CURRENT bundle at render time and are never
+// written to storage.
+const BRIEF_FP_PREFIX = 'brief.fp.';
+const BRIEF_FP_MAX_PATIENTS = 200; // simple count-based cap, checked on every write
+
+// shared/record-delta.js is a classic global-style script (window.
+// SentinelRecordDelta), like the other engine globals this module already
+// reads (window.ACBScores, window.StoppStart, ...) — but unlike those, it is
+// not preloaded by a <script> tag, so it is lazy-loaded here via a dynamic
+// import of its own URL purely for the side effect of setting that global
+// (the file has no ES export statements; the import's returned namespace is
+// unused). Cached after the first successful load.
+let _recordDeltaPromise = null;
+function loadRecordDelta() {
+  if (typeof window !== 'undefined' && window.SentinelRecordDelta) {
+    return Promise.resolve(window.SentinelRecordDelta);
+  }
+  if (typeof chrome === 'undefined' || !chrome.runtime?.getURL) return Promise.resolve(null);
+  if (!_recordDeltaPromise) {
+    _recordDeltaPromise = import(chrome.runtime.getURL('shared/record-delta.js'))
+      .then(() => (typeof window !== 'undefined' && window.SentinelRecordDelta) || null)
+      .catch(() => null);
+  }
+  return _recordDeltaPromise;
+}
+
+// renderSinceLastVisitSection(data, patientUuid) -> HTML string (possibly '')
+//
+// Never throws (every failure path resolves to ''); render() additionally
+// wraps the call in try/catch as a second layer of defence — a delta failure
+// must never break the rest of the tab.
+async function renderSinceLastVisitSection(data, patientUuid) {
+  if (!patientUuid) return '';
+  const RecordDelta = await loadRecordDelta();
+  if (!RecordDelta) return '';
+
+  const key = BRIEF_FP_PREFIX + patientUuid;
+  let prevRec = null;
+  try {
+    const stored = await chrome.storage.local.get(key);
+    prevRec = (stored && stored[key]) || null;
+  } catch (_) {
+    prevRec = null;
+  }
+
+  const isFirstView = !prevRec || !Array.isArray(prevRec.keys);
+  let delta;
+  try {
+    delta = RecordDelta.recordDelta(isFirstView ? [] : prevRec.keys, data);
+  } catch (_) {
+    return '';
+  }
+
+  // Fire-and-forget: persist the fingerprint for the NEXT visit. Never
+  // awaited — a storage write failure must not hold up (or break) this
+  // render; saveFingerprint swallows its own errors.
+  saveFingerprint(patientUuid, delta.nextKeys);
+
+  return sinceLastVisitCard(delta, isFirstView, prevRec && prevRec.at);
+}
+
+async function saveFingerprint(patientUuid, nextKeys) {
+  try {
+    const key = BRIEF_FP_PREFIX + patientUuid;
+    await chrome.storage.local.set({ [key]: { keys: nextKeys, at: new Date().toISOString() } });
+    await pruneFingerprintStore();
+  } catch (_) {
+    /* best-effort only — never break the tab over a storage write failure */
+  }
+}
+
+// Simple count-based cap: if more than BRIEF_FP_MAX_PATIENTS fingerprints are
+// stored, drop the oldest (by their `at` timestamp) until back at the cap.
+async function pruneFingerprintStore() {
+  try {
+    const all = await chrome.storage.local.get(null);
+    const entries = Object.keys(all)
+      .filter((k) => k.startsWith(BRIEF_FP_PREFIX))
+      .map((k) => ({ key: k, at: (all[k] && all[k].at) || '' }));
+    if (entries.length <= BRIEF_FP_MAX_PATIENTS) return;
+    entries.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0)); // oldest (smallest ISO) first
+    const toRemove = entries.slice(0, entries.length - BRIEF_FP_MAX_PATIENTS).map((e) => e.key);
+    if (toRemove.length) await chrome.storage.local.remove(toRemove);
+  } catch (_) {
+    /* best-effort prune only */
+  }
+}
+
+function sinceLastVisitCard(delta, isFirstView, prevAtIso) {
+  let body;
+  if (isFirstView) {
+    body = `<div class="rec-delta-baseline">Baseline stored — changes will show from your next visit.</div>`;
+  } else if (delta.added.length === 0 && delta.removedCount === 0) {
+    const dateStr = prevAtIso ? fmtDate(prevAtIso) : 'last visit';
+    body = `<div class="rec-delta-none">No changes since ${esc(dateStr)}.</div>`;
+  } else {
+    const items = delta.added
+      .map((a) => `<li class="rec-delta-item rec-delta-${esc(a.kind)}">+ ${esc(a.kind)}: ${esc(a.label)}</li>`)
+      .join('');
+    const removedNote = delta.removedCount
+      ? `<li class="rec-delta-item rec-delta-removed">${delta.removedCount} item${delta.removedCount === 1 ? '' : 's'} no longer present — review</li>`
+      : '';
+    body = `<ul class="rec-delta-list">${items}${removedNote}</ul>`;
+  }
+  return `
+    <section class="rec-card rec-delta-card">
+      <h3 class="rec-card-h">Since last visit</h3>
+      ${body}
+    </section>`;
 }
 
 // ── Copy summary — plain-text builder ────────────────────────────────────────

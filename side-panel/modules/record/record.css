@@ -114,6 +114,50 @@
   display: inline-block;
   flex: none;
 }
+/* feed provenance ("Data: API feed" / "Data: session") — subtle, not a badge */
+.rec-feed-label {
+  color: var(--text-4);
+  font-weight: 400;
+}
+
+/* "Since last visit" — the brief's headline, rendered first ------------------ */
+.rec-delta-card {
+  border-left: 4px solid var(--accent);
+}
+.rec-delta-baseline,
+.rec-delta-none {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.rec-delta-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rec-delta-item {
+  font-size: 12.5px;
+  color: var(--text-1);
+  line-height: 1.4;
+}
+.rec-delta-allergy {
+  color: var(--red);
+  font-weight: 700;
+}
+.rec-delta-problem {
+  color: var(--amber);
+  font-weight: 600;
+}
+.rec-delta-medication,
+.rec-delta-immunisation {
+  color: var(--text-1);
+}
+.rec-delta-removed {
+  color: var(--text-3);
+  font-style: italic;
+}
 
 /* demographics -------------------------------------------------------------- */
 .rec-demo {
