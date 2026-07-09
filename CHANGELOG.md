@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.166.0] — 2026-07-09
+
+### Assurance pack, Record-tab allergy alerts, read-retry, Trends on the API feed
+
+**API parity report (options page).** One click turns the hybrid-mode shadow
+ledger into a Markdown evidence pack: divergence counts and timeline, feed
+failure reasons, honestly worded (parity views record nothing, so a quiet
+report over a long period is the strong signal). Downloads like the ledger's
+CSV export; contains no patient identifiers (asserted by test); clock-free
+and byte-deterministic (`shared/txn-parity-report.js`).
+
+**Record tab: drug-allergy safety prompts.** When the API feed supplies
+allergies, the Prescribing-safety card now evaluates the drug-allergy rule
+pack (same engine, same rules as sentinel/sweep — no re-implemented matching)
+and lists conflicts first. Session-only renders are pixel-identical to
+before; every layer fails soft. Per-section merge re-audited against the
+v3.165.0 enrichment: `problems` now feed-first (all rendered fields covered,
+including significance); medications/observations stay session-fed with the
+exact missing fields documented in-code (bundle `observations` still strip
+`rawValue` — noted for a future normaliser pass).
+
+**Transport read-retry.** One backed-off retry (capped, jittered) for
+transient READ failures only (timeout, network, 502/503/504/429). Writes are
+never retried — asserted by test (exactly one fetch, ever). 500/501 and other
+4xx are deliberately non-retryable. First-try successes are unchanged.
+
+**Trends tab on the API feed.** In transactional mode the BP/renal/HbA1c/
+cholesterol/weight charts can source from the enriched feed — guarded by a
+runtime per-patient coverage check: the feed only takes over if it yields a
+non-empty series for every metric the session feed found, otherwise the whole
+tab stays on session ("never render worse", enforced live). Subtle
+provenance line matches the Record tab.
+
+Tests: 317 passing (was 277) — new `test-txn-parity-report.js` (18),
+`test-record-allergy-prompts.js` (12), `test-txn-transport-retry.js` (10).
+
 ## [v3.165.0] — 2026-07-09
 
 ### The API feed becomes the richer source + production guardrails

@@ -257,6 +257,7 @@ const txnSaved = document.getElementById('txnSaved');
 const txnTestConnectionBtn = document.getElementById('txnTestConnectionBtn');
 const txnTestConnectionResult = document.getElementById('txnTestConnectionResult');
 const txnProdConfirmWarning = document.getElementById('txnProdConfirmWarning');
+const txnParityReportBtn = document.getElementById('txnParityReportBtn');
 
 // Production interlock: saving with environment 'prod' and a non-session
 // integration mode points Suite's live patient-record reads at the real
@@ -379,6 +380,37 @@ txnTestConnectionBtn?.addEventListener('click', async () => {
       txnTestConnectionResult.textContent = `Error: ${e.message}`;
       txnTestConnectionResult.style.color = 'var(--red)';
     }
+  }
+});
+
+// Generate parity report — one-click assurance evidence pack: reads the
+// Clinical Event Ledger (shared/event-ledger.js, window.EventLedger, loaded
+// before this script), summarises the crossover-related events with
+// shared/txn-parity-report.js (window.TxnParityReport), and downloads a
+// Markdown document. Same client-side Blob + temporary <a download> pattern
+// as the Event Ledger section's own "Export CSV" (see initLedgerSection
+// below) — no server round-trip, nothing leaves this machine.
+txnParityReportBtn?.addEventListener('click', async () => {
+  const EL = typeof window !== 'undefined' ? window.EventLedger : null;
+  const TPR = typeof window !== 'undefined' ? window.TxnParityReport : null;
+  if (!EL || !TPR) return;
+  try {
+    const events = await EL.getEvents();
+    const report = TPR.buildParityReport(events, { nowIso: new Date().toISOString() });
+    const checkedMode = document.querySelector('input[name="txnMode"]:checked');
+    const mode = checkedMode ? checkedMode.value : TXN_DEFAULT_MODE;
+    const tenantText = txnTenantValue ? txnTenantValue.textContent : '';
+    const practiceLabel = tenantText && !tenantText.startsWith('(') && tenantText !== '—' ? tenantText : '';
+    const md = TPR.renderParityReportMarkdown(report, { practiceLabel, modeNote: `Integration mode: ${mode}` });
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'medicus-suite-api-parity-report.md';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.warn('[Txn parity report]', e.message);
   }
 });
 
