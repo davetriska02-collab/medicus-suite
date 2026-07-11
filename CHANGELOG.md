@@ -2,6 +2,58 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.160.0] — 2026-07-11
+
+### The Keeper: clinical rule currency update (2026-07-11)
+
+Automated horizon-scan of all Sentinel rule files against authoritative UK sources.
+All changes are additive or corrective; no monitoring intervals lengthened, no alerts
+removed. Full test suite passes (0 failures). CSO review required before merge.
+
+**Medicines monitoring (`rules/drug-rules.json`)**
+- `ace-arb`: added cilazapril (Vascace), imidapril (Tanatril) — both UK-licensed ACEi brands absent from match list (silent miss; BNF July 2026)
+- `antipsychotic`: added sulpiride (Dolmatil/Sulpitil/Sulpor), zuclopenthixol (Clopixol), flupentixol (Depixol/Fluanxol), fluphenazine (Modecate) — UK-licensed FGA antipsychotics with distinct brands absent from match list
+- `chc-combined-hormonal`: added Logynon, Synphase to match; added Slinda to exclude (POP, false-positive risk)
+- `sodium-valproate`: new monitoring rule (annual FBC/LFT/U&E); match includes "valproic acid" as explicit term (does not substring-match "valproate"); MHRA PPP obligation noted in alert text
+- `finerenone`: new monitoring rule (Kerendia; 4-monthly U&E/K+/eGFR; licensed for CKD+T2DM)
+
+**QOF indicators (`rules/qof-rules.json`)**
+- Added LD register (QOF 2025/26 LD001 reintroduced)
+- Added DEM004 (dementia carer review)
+- Added CKD002 (urine ACR testing) and CKD003 (BP <130/80 in CKD with proteinuria)
+- CHOL003 and CHOL004 cloned to multi-register populations (PAD, STIA; CHOL003 also CKD; CHOL004 excludes CKD per QOF spec)
+
+**Vaccine eligibility (`rules/vaccine-rules.json`)**
+- Flu homelessness cohort: ageMin 16 added
+- Shingles notes: corrected immunosuppressed pathway to 18+
+
+**Alert library (`rules/alert-library.json`)**
+- `pincer-7`: INR interval corrected 90d → 84d (= 12 exact weeks, NPSA/NICE NG196)
+- `prescribing-qtc-combination`: pimozide regression-locked in test
+- `alert-001`: new — NSAID without PPI in GI-risk patient (PINCER 2024; 22 NSAID terms)
+- `alert-002`: new — dual beta-blocker (PINCER 2024; 15 beta-blocker terms)
+- `alert-004`: new — acitretin/alitretinoin PPP in women 12–55 (MHRA)
+- `alert-005`: new — 5-alpha-reductase inhibitor teratogenicity flag (MHRA 2023)
+- `alert-008`: new — dual antiplatelet review (aspirin_ap 8 terms + P2Y12; PINCER 2024)
+- `alert-009`: new — NSAID + anticoagulant (PINCER 2024; 22 NSAID terms)
+
+**Medication review instruments (`engine/acb-scores.js`, `engine/stopp-start.js`, `visualiser-core.js`)**
+- ACB: added trimipramine (Surmontil, score 3), darifenacin (Emselex, score 3), trifluoperazine (score 3)
+- STOPP: added loprazolam, lormetazepam to BENZO_TERMS (criterion 4); alimemazine/trimeprazine to FIRSTGEN_AH_TERMS (criterion 3)
+- START: added pitavastatin to STATIN_TERMS; acebutolol/celiprolol/nadolol/oxprenolol to BETA_BLOCKER_TERMS
+- visualiser-core: aspirin_ap expanded (8 terms); antipsych adds amisulpride/paliperidone; benzo_z adds loprazolam/lormetazepam
+
+**Reception pathways (`rules/reception-pathways.json`)**
+- `backpain` rf-bladder: added "difficulty starting to pass urine" (NICE CKS cauda equina signs)
+- `feverish-child`: added rf-fontanelle (bulging fontanelle → 999; NICE NG143 immediate emergency)
+- `cough`: promoted unexplained weight loss from history question to red flag (duty; NICE NG12)
+- `headache`: split GCA flag into rf-new50-visual (visual symptoms → 999, sight-threatening) and rf-new50 (no visual → duty; NICE CKS GCA / BSR guidelines)
+- `sinusitis`: new pathway, Pharmacy First eligible age 12+, 6 red flags, 6 history questions
+
+**Tests extended:** test-drug-brand-coverage.js, test-qof-indicator-filters.js, test-acb-scores.js, test-stopp-start.js, test-visualiser-pincer.js, test-reception-pathways.js, test-alert-library-coverage.js
+
+**Sources:** BNF (July 2026, corroborated — primary PDFs returned 403); NHS England QOF 2025/26 (PRN02356); NHSE Annual flu letter 2025/26; PHE Green Book ch.19/28a; MHRA DSUs (valproate PPP, pimozide QTc, acitretin/alitretinoin PPP, finasteride/dutasteride); PINCER v2024; NPSA/NICE NG196; STOPP/START v3 (O'Mahony 2023); Boustani ACB/ACBcalc; NICE CKS (backpain, GCA, sinusitis, cough); NICE NG12, NG143; NHSE Pharmacy First spec 2024.
+
 ## [v3.159.0] — 2026-07-07
 
 ### Signing Queue: one warm line on the genuinely finished pile

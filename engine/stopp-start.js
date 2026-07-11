@@ -85,6 +85,8 @@
     'clonazepam',
     'alprazolam',
     'oxazepam',
+    'loprazolam', // 2026-07-11 Keeper: BNF-listed UK benzo, missing from original list
+    'lormetazepam', // 2026-07-11 Keeper: BNF-listed UK benzo, missing from original list
   ];
 
   // Z-drugs (non-benzodiazepine hypnotics)
@@ -98,7 +100,15 @@
   ];
 
   // First-generation (sedating) antihistamines
-  const FIRSTGEN_AH_TERMS = ['chlorphenamine', 'promethazine', 'hydroxyzine', 'diphenhydramine', 'cyclizine'];
+  const FIRSTGEN_AH_TERMS = [
+    'chlorphenamine',
+    'promethazine',
+    'hydroxyzine',
+    'diphenhydramine',
+    'cyclizine',
+    'alimemazine', // 2026-07-11 Keeper: UK sedating AH (= trimeprazine), BNF 3.4.1
+    'trimeprazine', // 2026-07-11 Keeper: older name for alimemazine (not substring of it)
+  ];
 
   // PPIs — from HIGH_RISK_DRUGS id:'ppi'
   const PPI_TERMS = ['omeprazole', 'lansoprazole', 'pantoprazole', 'esomeprazole', 'rabeprazole'];
@@ -125,7 +135,14 @@
   const LONG_SU_TERMS = ['glibenclamide', 'glimepiride'];
 
   // Statins — from HIGH_RISK_DRUGS id:'statin'
-  const STATIN_TERMS = ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'fluvastatin'];
+  const STATIN_TERMS = [
+    'atorvastatin',
+    'simvastatin',
+    'rosuvastatin',
+    'pravastatin',
+    'fluvastatin',
+    'pitavastatin', // 2026-07-11 Keeper: licensed in UK (Livazo); BNF 2.12
+  ];
 
   // ACE inhibitors — from HIGH_RISK_DRUGS id:'acei' (first entries are ACEi).
   // Kept at parity with visualiser-core.js's ACEi list (medrev-001).
@@ -165,6 +182,10 @@
     'sotalol',
     'nebivolol',
     'labetalol',
+    'acebutolol', // 2026-07-11 Keeper: BNF-listed UK beta-blocker, missing from original list
+    'celiprolol', // 2026-07-11 Keeper: BNF-listed UK beta-blocker, missing from original list
+    'nadolol', // 2026-07-11 Keeper: BNF-listed UK beta-blocker, missing from original list
+    'oxprenolol', // 2026-07-11 Keeper: BNF-listed UK beta-blocker, missing from original list
   ];
 
   // Anticholinergic drugs with a meaningful burden — REUSED from the shared
