@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
 **Version:** v3.159.0
-**Generated:** 2026-07-06 (automated)
+**Generated:** 2026-07-12 (automated)
 
 ## What it is
 
@@ -134,8 +134,6 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **v3.143.0 (2026-06-30)** — New "File all normal" button auto-files confirmed-clear lab results — the suite's first feature that can act on the patient record, with strict safety checks and full audit.
 - **v3.141.0 (2026-06-29)** — Pre-clinic Sweep can now book the recall itself and rank QOF gaps by points at risk; Referrals flags suspected-cancer referrals that have gone quiet.
 - **v3.109.0 (2026-06-16)** — New "Record" tab: a live one-screen patient summary, no PDF export needed, alongside a new printable Practice Report for meetings and ICB returns.
-- **v3.60.0 (2026-06-12)** — New "Today" morning-briefing tab, a command palette to jump anywhere, and a suite-wide visual redesign.
-- **v3.38.0 (2026-06-10)** — Three front-desk tabs launched together: guided-capture Reception scripts, Pre-clinic Sweep, and a practice-owned Knowledge base.
 
 ## Safety posture
 
