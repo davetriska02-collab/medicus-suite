@@ -514,6 +514,21 @@
           for (const topic of enc.consultationTopics || []) {
             collectProblemsOnce(seenProblemIds, topic.linkedProblems, encounterProblems);
             for (const heading of topic.headings || []) {
+              // Sibling document/fit-note entries in the SAME heading as a
+              // note entry (2026-07-13) — a heading is a flat mixed-type
+              // array, and a "note" here is often a consultation summary
+              // line rather than a genuine freestanding note, so it can sit
+              // right alongside its own attached document (e.g. an
+              // "Additional" heading with both a "Seen in pain clinic" note
+              // line and a "Document: Attachment" line). Captured once per
+              // heading, cheaply, from data already being walked below — no
+              // new fetch. Used to disambiguate note matches whose
+              // attachments actually differ even though the note text/
+              // author render identically (see hasAttachedDocumentMismatch).
+              const headingAttachedDocIds = (heading.entries || [])
+                .filter((e) => e.entryType === 'document' || e.entryType === 'fit-note')
+                .map((e) => e.id)
+                .filter(Boolean);
               for (const entry of heading.entries || []) {
                 collectProblemsOnce(seenProblemIds, entry.linkedProblems, encounterProblems);
                 if (entry.entryType === 'note') {
@@ -526,7 +541,8 @@
                     entry.recordedByOrganisation,
                     date,
                     item.id,
-                    transfer
+                    transfer,
+                    headingAttachedDocIds.length ? { attachedDocumentIds: headingAttachedDocIds } : undefined
                   );
                 } else if (entry.entryType === 'prescription') {
                   pushEntry(
@@ -1194,6 +1210,41 @@
     return new Set(names.map((n) => n.trim().toLowerCase())).size > 1;
   }
 
+  // Live-confirmed 2026-07-13: a `note`-kind group can tier EXACT purely on
+  // generic consultation-summary text/author (e.g. "Mr Docman PCTI") while
+  // each member's attached document (captured on the entry as
+  // `attachedDocumentIds` by flattenJournal, see its own comment above) is
+  // genuinely different — the same generic-boilerplate risk already
+  // documented for `document`-kind matches, but the tool never looked at a
+  // note's own attachment at all. `fileTypeByEntryId`/`fileSizeByEntryId`
+  // here are keyed by the ATTACHED DOCUMENT's id, not the note's own id —
+  // same maps and same composite-key shape splitDocumentGroupsByFileType
+  // already uses, just a different key space (caller-fetched, on demand,
+  // only for note groups that actually carry an attachment). A member with
+  // no known attachment signature contributes nothing (conservative
+  // pass-through, mirrors that function's own knownKeys.size < 2 rule) —
+  // never guesses a mismatch off incomplete data. Returns false unless at
+  // least two members have a KNOWN signature and they disagree.
+  function hasAttachedDocumentMismatch(group, fileTypeByEntryId, fileSizeByEntryId) {
+    const signatures = (group.entries || [])
+      .map((e) => {
+        const keys = (e.attachedDocumentIds || [])
+          .map((id) => {
+            const ft = fileTypeByEntryId[id];
+            if (!ft) return null;
+            const rawSize = fileSizeByEntryId ? fileSizeByEntryId[id] : null;
+            const fs = rawSize === undefined || rawSize === null || rawSize === '' ? 'unknown-size' : String(rawSize).trim();
+            return `${ft}::${fs}`;
+          })
+          .filter(Boolean)
+          .sort();
+        return keys.length ? keys.join('|') : null;
+      })
+      .filter(Boolean);
+    if (signatures.length < 2) return false;
+    return new Set(signatures).size > 1;
+  }
+
   // Live-confirmed 2026-07-05: two acute Paracetamol issues, same product and
   // dosage text (so already past the issueQuantity exclusion in
   // groupAndTier), but issued ~29 real minutes apart
@@ -1806,6 +1857,7 @@
     sortGroupsByJournalOrder,
     hasQuestionnaireTemplateMismatch,
     hasPrescriptionTimingMismatch,
+    hasAttachedDocumentMismatch,
     isRemovableKind,
     buildRemovalRequest,
     splitWrapperText,

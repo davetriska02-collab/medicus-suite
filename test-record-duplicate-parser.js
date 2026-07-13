@@ -16,6 +16,7 @@ const {
   resolveDocumentTypeLabel,
   hasQuestionnaireTemplateMismatch,
   hasPrescriptionTimingMismatch,
+  hasAttachedDocumentMismatch,
   isRemovableKind,
   buildRemovalRequest,
   splitWrapperText,
@@ -1871,6 +1872,166 @@ console.log('\n--- splitDocumentGroupsByFileType (document over-merge disambigua
         unknownSizePair.entries.length === 2 &&
         unknownSizePair.entries.every((e) => ['b1', 'b2'].includes(e.id)),
       'the two unknown-size entries land together (fileType-only fallback for that pair), never guessed into the known-size bucket'
+    );
+  }
+}
+
+console.log('\n--- Note/consultation entries carry sibling attachment ids from flattenJournal (2026-07-13) ---');
+{
+  const attachDayGroups = [
+    {
+      title: 'Tue 05 Aug 2025',
+      items: [
+        encounter(
+          'enc-att-1',
+          'Mr Docman PCTI',
+          [
+            noteEntry('note-att-1', 'Seen in pain clinic', 'Mr Docman PCTI', 'Mr Docman PCTI', null),
+            nestedDocumentEntry(
+              'doc-att-1',
+              'Attachment',
+              'DCA File Doctor Care Anywhere Virtual GP consultation notes'
+            ),
+          ],
+          false
+        ),
+        encounter(
+          'enc-att-2',
+          'Mr Docman PCTI',
+          [
+            noteEntry('note-att-2', 'Seen in pain clinic', 'Mr Docman PCTI', 'Mr Docman PCTI', null),
+            nestedDocumentEntry(
+              'doc-att-2',
+              'Attachment',
+              'DCA File Doctor Care Anywhere Virtual GP consultation notes'
+            ),
+          ],
+          false
+        ),
+        // Control: a note with no sibling attachment in its heading at all.
+        encounter(
+          'enc-att-3',
+          'Dr Test',
+          [noteEntry('note-att-plain', 'Unrelated note', 'plain text, no attachment', 'Dr Test', null)],
+          false
+        ),
+      ],
+    },
+  ];
+  const attachResult = analyzeJournal(attachDayGroups);
+  const byAttachId = Object.fromEntries(attachResult.entries.map((e) => [e.id, e]));
+  assert(
+    Array.isArray(byAttachId['note-att-1'].attachedDocumentIds) &&
+      byAttachId['note-att-1'].attachedDocumentIds[0] === 'doc-att-1',
+    'a note entry captures its sibling document id from the same heading'
+  );
+  assert(
+    Array.isArray(byAttachId['note-att-2'].attachedDocumentIds) &&
+      byAttachId['note-att-2'].attachedDocumentIds[0] === 'doc-att-2',
+    'a second, independent consultation captures its OWN sibling document id, not the other one'
+  );
+  assert(
+    byAttachId['note-att-plain'].attachedDocumentIds === undefined,
+    'a note with no sibling document in its heading has no attachedDocumentIds field at all'
+  );
+
+  const attGroup = attachResult.groups.find((g) => g.kind === 'note' && g.code === 'Seen in pain clinic');
+  assert(
+    !!attGroup && attGroup.tier === TIER.EXACT,
+    'identical note text/author across two consultations still tiers EXACT at the pure groupAndTier stage — ' +
+      'the attachment mismatch check is a later, on-demand cross-check (applyOnDemandCrossChecks in ' +
+      'duplicate-checker.js), not part of groupAndTier itself, same layering as fileType/fileSize for documents'
+  );
+}
+
+console.log('\n--- hasAttachedDocumentMismatch (2026-07-13) ---');
+{
+  function noteGroupEntry(id, attachedDocumentIds) {
+    return {
+      id,
+      kind: 'note',
+      date: 'Tue 05 Aug 2025',
+      code: 'Seen in pain clinic',
+      rawText: 'Mr Docman PCTI',
+      recordedBy: 'Mr Docman PCTI',
+      recordedByOrganisation: null,
+      attachedDocumentIds,
+    };
+  }
+  function noteGroup(entries) {
+    return {
+      kind: 'note',
+      date: 'Tue 05 Aug 2025',
+      code: 'Seen in pain clinic',
+      tier: TIER.EXACT,
+      gp2gpWrapper: false,
+      recordedByVaries: false,
+      recordedByOrganisationVaries: false,
+      keeperEntryId: null,
+      entries,
+    };
+  }
+
+  {
+    // Known, differing (fileType,fileSize) attachments — the real bug case
+    // (2026-07-13 live example): identical note text/author, genuinely
+    // different underlying attached documents.
+    const group = noteGroup([noteGroupEntry('n1', ['d1']), noteGroupEntry('n2', ['d2'])]);
+    const fileTypes = { d1: 'pdf', d2: 'pdf' };
+    const fileSizes = { d1: '10.44 KB', d2: '58.20 KB' };
+    assert(
+      hasAttachedDocumentMismatch(group, fileTypes, fileSizes) === true,
+      "differing known (fileType,fileSize) between two members' attachments is flagged as a mismatch"
+    );
+  }
+
+  {
+    // Known, matching attachments — genuinely the same document duplicated
+    // alongside a genuinely duplicated note. Must NOT flag.
+    const group = noteGroup([noteGroupEntry('n1', ['d1']), noteGroupEntry('n2', ['d2'])]);
+    const fileTypes = { d1: 'pdf', d2: 'pdf' };
+    const fileSizes = { d1: '10.44 KB', d2: '10.44 KB' };
+    assert(
+      hasAttachedDocumentMismatch(group, fileTypes, fileSizes) === false,
+      'matching known (fileType,fileSize) attachments across members is NOT flagged — a real duplicate note+attachment pair'
+    );
+  }
+
+  {
+    // One member's attachment known, the other's unknown (fetch failed, or
+    // this document type has no fileType field) — conservative
+    // pass-through, never guesses a mismatch off incomplete data. Same
+    // knownKeys.size < 2 rule splitDocumentGroupsByFileType already uses.
+    const group = noteGroup([noteGroupEntry('n1', ['d1']), noteGroupEntry('n2', ['d2'])]);
+    const fileTypes = { d1: 'pdf' };
+    const fileSizes = { d1: '10.44 KB' };
+    assert(
+      hasAttachedDocumentMismatch(group, fileTypes, fileSizes) === false,
+      'one member with an unknown attachment signature is never treated as a mismatch'
+    );
+  }
+
+  {
+    // No attachedDocumentIds on either member at all — the overwhelming
+    // majority case (plain freestanding note duplicates). Must behave
+    // exactly as before this feature existed.
+    const group = noteGroup([noteGroupEntry('n1', undefined), noteGroupEntry('n2', undefined)]);
+    assert(
+      hasAttachedDocumentMismatch(group, {}, {}) === false,
+      'notes with no attachment at all are never flagged — existing note-duplicate behaviour is unchanged'
+    );
+  }
+
+  {
+    // Multiple attachments per member — composite signature must be
+    // order-independent (sorted+joined), so the same SET of attachments in
+    // a different array order still compares as equal, not a false mismatch.
+    const group = noteGroup([noteGroupEntry('n1', ['d1', 'd2']), noteGroupEntry('n2', ['d2', 'd1'])]);
+    const fileTypes = { d1: 'pdf', d2: 'xml' };
+    const fileSizes = { d1: '10.44 KB', d2: '2.00 KB' };
+    assert(
+      hasAttachedDocumentMismatch(group, fileTypes, fileSizes) === false,
+      'the same set of multiple attachments in a different order is not falsely flagged as a mismatch'
     );
   }
 }

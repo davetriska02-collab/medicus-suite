@@ -792,6 +792,7 @@ async function applyOnDemandCrossChecks(analysis, apiBase, isStillActive) {
   const createdDateByEntryId = {};
   const filedDateTimeByEntryId = {};
   let documentPreviewsChecked = 0;
+  let noteAttachmentMismatchTotal = 0;
   // Retained (not just extracted-then-discarded) so the field-by-field
   // comparison UI can read the full preview object later, on demand, when
   // the user clicks "Compare fields…" — well after this function returns.
@@ -824,6 +825,43 @@ async function applyOnDemandCrossChecks(analysis, apiBase, isStillActive) {
       if (await crossCheckQuestionnaireTemplate(apiBase, g, previewByEntryId)) {
         excludedQuestionnaireMismatch.push(g);
         continue;
+      }
+    } else if (g.kind === 'note') {
+      // Attached-document mismatch guard (2026-07-13) — a note/consultation
+      // group can tier EXACT on generic summary text/author alone even
+      // though each member's own attached document (captured on the entry
+      // by flattenJournal as attachedDocumentIds) genuinely differs. Only
+      // fetches for note groups that actually carry an attachment — most
+      // note groups have none and pay nothing here. Shares the same preview
+      // cache/maps the document branch above populates, keyed by the
+      // ATTACHED DOCUMENT's id (not the note's own id), so a document that
+      // happens to appear both as a top-level entry and as an attachment is
+      // only ever fetched once.
+      const attachedIds = new Set();
+      for (const e of g.entries) for (const id of e.attachedDocumentIds || []) attachedIds.add(id);
+      if (attachedIds.size) {
+        for (const id of attachedIds) {
+          if (allDocumentPreviewsByEntryId[id] !== undefined) continue;
+          try {
+            const preview = await apiFetch(`${apiBase}/clinical/data/document/modals/preview/${id}`);
+            allDocumentPreviewsByEntryId[id] = preview;
+            recordDocumentPreviewFields(
+              id,
+              preview,
+              fileTypeByEntryId,
+              fileSizeByEntryId,
+              createdDateByEntryId,
+              filedDateTimeByEntryId
+            );
+          } catch (err) {
+            allDocumentPreviewsByEntryId[id] = null;
+          }
+        }
+        if (window.RecordDuplicateParser.hasAttachedDocumentMismatch(g, fileTypeByEntryId, fileSizeByEntryId)) {
+          noteAttachmentMismatchTotal++;
+          kept.push({ ...g, tier: 'review', attachmentMismatch: true });
+          continue;
+        }
       }
     }
     kept.push(g);
@@ -889,9 +927,38 @@ async function applyOnDemandCrossChecks(analysis, apiBase, isStillActive) {
   analysis.summary.excludedPrescriptionTimingTotal = excludedPrescriptionTiming.length;
   analysis.summary.excludedQuestionnaireMismatchTotal = excludedQuestionnaireMismatch.length;
   analysis.summary.documentGroupsSplitByFileType = documentGroupsSplit;
+  analysis.summary.noteAttachmentMismatchTotal = noteAttachmentMismatchTotal;
   analysis.summary.documentPreviewsChecked = documentPreviewsChecked;
   analysis.summary.documentPreviewsWithFileSize = Object.keys(fileSizeByEntryId).length;
   analysis.documentPreviewsByEntryId = allDocumentPreviewsByEntryId;
+}
+
+// Forces a fresh first-pass re-analysis (a genuine live re-fetch of the
+// journal, same as clicking "Re-analyse") before ever running the file-match
+// second pass (2026-07-13). Fixes a real bug: markEntryRemoved only patches
+// the DOM in place (see its own header comment) — out.__analysis.entries
+// still lists entries the user has already removed from the live record. Run
+// the file-match check straight off that stale analysis and an
+// already-removed document reappears as a "duplicate" to remove a second
+// time, with undefined behaviour if the user tries. Re-running the first
+// pass first guarantees the second pass only ever sees what's still actually
+// in the record. This is why the button is wired to this function, not
+// runFileMatchSecondPass directly.
+async function runFreshFileMatchSecondPass(out) {
+  const idx = out.__idx;
+  const r = out.__patient;
+  if (idx === undefined || !r) return;
+  const myGeneration = _activeGeneration;
+  await runJournalAnalysis(idx, r);
+  // runJournalAnalysis replaces out's children and rebuilds out.__analysis
+  // in place on this same element — no need to re-query it. If the user
+  // switched to a different patient mid-fetch, out.__analysis won't have
+  // been refreshed (runJournalAnalysis bails on its own generation check) —
+  // bail here too rather than risk running the second pass against a
+  // still-stale analysis.
+  if (myGeneration !== _activeGeneration) return;
+  if (!out.__analysis || out.__analysis.__fileMatchChecked) return;
+  await runFileMatchSecondPass(out);
 }
 
 // ── Cross-record file-match second pass (opt-in, 2026-07-08) ────────────────
@@ -1005,18 +1072,22 @@ function patientJournalLinkHtml(apiBase, patientUuid) {
 
 // Opt-in banner for the cross-record file-match second pass (2026-07-08 —
 // see runFileMatchSecondPass's own header comment for why this is opt-in,
-// not automatic). Shown whenever findSuspiciousDocuments flagged anything
-// (computed free, in analyzeJournal, regardless of whether the primary
-// pass found any groups at all) and the second pass hasn't already run for
-// this analysis — this is exactly the scenario that motivated the whole
-// feature: a patient flagged as suspicious with no hits in the normal
-// search.
+// not automatic). Shown whenever this patient has any document entries at
+// all and the second pass hasn't already run for this analysis — originally
+// gated on findSuspiciousDocuments flagging something, but the user found
+// that too narrow (2026-07-13): the check is still worth offering even when
+// the zero-fetch heuristic found nothing, so it's unconditional now. The
+// suspicious-document count, when present, is still surfaced as extra
+// context for why the check might be worth running.
 function fileMatchSecondPassBannerHtml(analysis) {
   if (analysis.__fileMatchChecked) return '';
+  if (!(analysis.entries || []).some((e) => e.kind === 'document')) return '';
   const n = (analysis.suspiciousDocuments || []).length;
-  if (!n) return '';
+  const suspiciousLine = n
+    ? `${n} document${n !== 1 ? 's' : ''} show signs of reimport corruption (a raw filename/GUID left in the title, or a creation time shared with another document) but didn't match anything in the analysis above. `
+    : '';
   return `<div class="file-match-second-pass" style="margin-bottom:10px;padding:8px;border:1px solid var(--amber);border-radius:var(--r-md);font-size:11px">
-    <div style="color:var(--text-1)">${n} document${n !== 1 ? 's' : ''} show signs of reimport corruption (a raw filename/GUID left in the title, or a creation time shared with another document) but didn't match anything in the analysis above. A slower, whole-record check by file size and type may find duplicates the normal matching structurally can't see (e.g. copies filed on different dates).</div>
+    <div style="color:var(--text-1)">${suspiciousLine}A slower, whole-record check by file size and type may find duplicates the normal matching structurally can't see (e.g. copies filed on different dates).</div>
     <button class="run-file-match-btn btn-ghost" style="margin-top:6px">Run full cross-document file-match check…</button>
   </div>`;
 }
@@ -1040,6 +1111,7 @@ function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
     ${summary.excludedPrescriptionTimingTotal ? ` · <span style="color:var(--amber)">${summary.excludedPrescriptionTimingTotal} prescription group(s) excluded after timing cross-check (issued a minute+ apart, not a duplicate)</span>` : ''}
     ${summary.excludedQuestionnaireMismatchTotal ? ` · <span style="color:var(--amber)">${summary.excludedQuestionnaireMismatchTotal} document group(s) excluded after questionnaire-template cross-check (different questionnaire types)</span>` : ''}
     ${summary.documentGroupsSplitByFileType ? ` · <span style="color:var(--amber)">${summary.documentGroupsSplitByFileType} document group(s) split by file type/size (were wrongly merged — different documents sharing a date)</span>` : ''}
+    ${summary.noteAttachmentMismatchTotal ? ` · <span style="color:var(--amber)">${summary.noteAttachmentMismatchTotal} note group(s) downgraded to review after an attached-document mismatch (same note text, different attachment)</span>` : ''}
     ${summary.documentPreviewsChecked ? ` · <span class="mono">${summary.documentPreviewsWithFileSize}/${summary.documentPreviewsChecked}</span> document preview(s) had a usable file-size field` : ''}
     ${summary.documentLinkedGroupsFound ? ` · <span style="color:var(--amber)">${summary.documentLinkedGroupsFound} document-linked duplicate group(s) found (experimental — see warning on each)</span>` : ''}
     ${summary.fileMatchClustersChecked ? ` · <span class="mono">${summary.fileMatchedGroupsFound}/${summary.fileMatchClustersChecked}</span> cross-record file-size/type cluster(s) surfaced as new group(s)` : ''}
@@ -1055,7 +1127,7 @@ function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
       // view hid that entirely). REVIEW and documentLinked groups of any
       // kind keep it too.
       const sideBySide = g.tier === 'review' || g.documentLinked || g.kind === 'note' || g.kind === 'problem';
-      const bodyHtml = sideBySide ? reviewEntriesHtml(g) : standardEntryLinesHtml(g);
+      const bodyHtml = sideBySide ? reviewEntriesHtml(g, analysis.documentPreviewsByEntryId, apiBase) : standardEntryLinesHtml(g);
       return `<div class="dup-group" data-group-idx="${gIdx}">
       <div class="dup-group-head">
         <span class="dup-group-key"><strong>${esc(g.kind)}</strong> · <span class="entry-date">${esc(g.date || 'unknown date')}</span> · <span class="code">${esc(g.code)}</span></span>
@@ -1069,6 +1141,11 @@ function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
       ${
         g.fileMatched
           ? `<div style="font-size:11px;color:var(--amber);margin-top:2px;font-weight:600">⚠ Matched by file size and type across different dates, not by the journal's own type/date fields — the journal grouping missed this pair entirely. Same size and type is strong evidence but not proof of identical content; check the "Download original" links in Compare fields before removing.</div>`
+          : ''
+      }
+      ${
+        g.attachmentMismatch
+          ? `<div style="font-size:11px;color:var(--amber);margin-top:2px;font-weight:600">⚠ These entries have different attached documents (confirmed by file size and type) even though the note text and author match — use the "Download attached document ↗" links below to compare the originals directly before removing.</div>`
           : ''
       }
       <div class="rec-line">${INFO_ICON}<span>${TIER_ACTION[g.tier]}</span></div>
@@ -1466,7 +1543,7 @@ function pickReferenceIdx(entries) {
 // both the 2-copy common case and a 4+ copy group. `entry-line` class kept
 // so markEntryRemoved (used by both the removal and note-merge flows) can
 // still find and strike through the right card after a removal.
-function reviewEntriesHtml(g) {
+function reviewEntriesHtml(g, previewsByEntryId, apiBase) {
   const P = window.RecordDuplicateParser;
   const entries = g.entries;
   // For documentLinked pairs the reference is always the copy still linked
@@ -1506,6 +1583,24 @@ function reviewEntriesHtml(g) {
       const createdLine = fmtIdTime(idTimes[i])
         ? `<div class="mono" style="font-size:10px;margin-top:4px;color:${idTimesDiffer ? 'var(--amber)' : 'var(--text-3)'}">created ${fmtIdTime(idTimes[i])} <span style="color:var(--text-4)">(from record id)</span></div>`
         : '';
+      // Attached-document download links (2026-07-13) — mirrors the
+      // "Download original ↗" link already offered on document-kind field
+      // comparison (renderDocumentFieldComparisonHtml): the closest this
+      // tool gets to "click to compare", especially for an
+      // attachmentMismatch group where the note text/author match but the
+      // underlying attachment doesn't — download both and check directly.
+      // Zero extra fetch here: previews for every attachedDocumentIds entry
+      // were already fetched by applyOnDemandCrossChecks's note-kind branch.
+      const attachmentLinksHtml = (e.attachedDocumentIds || [])
+        .map((docId, docIdx) => {
+          const preview = previewsByEntryId && previewsByEntryId[docId];
+          const url = preview && P.buildDocumentDownloadUrl(apiBase, preview.fileId);
+          if (!url) return null;
+          const label = e.attachedDocumentIds.length > 1 ? `Download attachment ${docIdx + 1} ↗` : 'Download attached document ↗';
+          return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">${label}</a>`;
+        })
+        .filter(Boolean)
+        .join(' · ');
       return `<div class="entry-line" data-entry-id="${esc(e.id)}" style="flex:1 1 240px;min-width:200px;border:1px solid var(--border);border-radius:var(--r-md);padding:8px;background:var(--bg-mid)">
         <div><strong style="color:var(--text-1)">${esc(e.recordedBy || '(unknown author)')}</strong>${e.recordedByOrganisation ? ` · ${esc(e.recordedByOrganisation)}` : ''}</div>
         <div style="font-size:10px;color:var(--text-3);margin-top:2px">
@@ -1522,6 +1617,7 @@ function reviewEntriesHtml(g) {
         </div>
         <div style="margin-top:6px">${bodyHtml}</div>
         ${createdLine}
+        ${attachmentLinksHtml ? `<div style="font-size:10px;margin-top:4px">${attachmentLinksHtml}</div>` : ''}
       </div>`;
     })
     .join('');
@@ -2257,8 +2353,8 @@ function wireRemovalDelegation(out) {
     const runFileMatchBtn = ev.target.closest('.run-file-match-btn');
     if (runFileMatchBtn && !runFileMatchBtn.disabled) {
       runFileMatchBtn.disabled = true;
-      runFileMatchBtn.textContent = 'Checking…';
-      runFileMatchSecondPass(out);
+      runFileMatchBtn.textContent = 'Re-analysing…';
+      runFreshFileMatchSecondPass(out);
       return;
     }
     const applyDocFieldsBtn = ev.target.closest('.apply-doc-fields-btn');

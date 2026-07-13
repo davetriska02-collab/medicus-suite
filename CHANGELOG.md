@@ -2,6 +2,83 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.175.0] — 2026-07-13
+
+### Duplicate-checker: catches a note/consultation EXACT match whose attached documents actually differ
+
+Live example: two "Seen in pain clinic" consultations, same date, both
+authored "Mr Docman PCTI", tiered EXACT with a one-click "Remove 1 duplicate
+copy" button — but each consultation had a genuinely different attached
+document, confirmed by the user, even though the attachment's title/label
+rendered identically in the journal UI (so a title-based check alone
+wouldn't have caught this).
+
+- A `note`-kind comparable entry in this tool is often not a freestanding
+  note at all — it's one heading entry inside
+  `consultationTopics[].headings[].entries[]`, and that same heading can
+  also carry a sibling `document`/`fit-note` attachment. `flattenJournal`
+  now captures any sibling attachment id(s) in the same heading onto the
+  note entry as `attachedDocumentIds` (zero-cost — the data was already
+  being walked, just discarded for the note branch before now).
+- New `hasAttachedDocumentMismatch(group, fileTypeByEntryId,
+  fileSizeByEntryId)` in `engine/record-duplicate-parser.js`, alongside the
+  existing `hasQuestionnaireTemplateMismatch`/`hasPrescriptionTimingMismatch`
+  cross-checks: flags a `note`-kind group when >=2 members carry a KNOWN,
+  differing (fileType, fileSize) signature for their attached document(s) —
+  same composite-key shape and "never guess off incomplete data" rule
+  `splitDocumentGroupsByFileType` already uses for top-level documents, just
+  keyed by the attached document's id instead of the note's own id.
+- `duplicate-checker.js`'s `applyOnDemandCrossChecks` now fetches attached-
+  document previews for `note`-kind candidate groups that carry an
+  attachment (sharing the same preview cache the `document`-kind branch
+  already populates — no duplicate fetch if a document happens to be both a
+  top-level entry and an attachment), and downgrades a mismatched group's
+  tier to REVIEW with a new `attachmentMismatch` flag — REVIEW already
+  routes to the manual-review flow instead of the one-click bulk-remove
+  control, so this actually blocks the unsafe removal rather than just
+  relabelling it. New warning line on the group card, and a
+  `noteAttachmentMismatchTotal` summary count.
+- Downgrade, not split: unlike `splitDocumentGroupsByFileType`, a mismatched
+  note group stays together as one candidate (both consultations visible
+  side-by-side) rather than one member silently vanishing from the list.
+- Every note-kind card (in `reviewEntriesHtml`, the side-by-side compare view
+  every note group already uses) now shows a "Download attached document ↗"
+  link per attachment, mirroring the existing "Download original ↗" link
+  already offered on document-kind field comparison — the same closest-thing-
+  to-"click to compare" pattern, now available for a note's attachment too,
+  not just top-level documents. Zero extra fetch: the previews were already
+  pulled by the mismatch check above regardless of its verdict.
+- `fileId` (also present on the document preview payload) was considered and
+  rejected as the disambiguator — a genuine reimport-duplicate legitimately
+  gets a new `fileId` for the same bytes, so it proves nothing about
+  content. fileType+fileSize is the established signal already proven for
+  top-level document matching.
+
+9 new parser tests (310/310 passing).
+
+## [v3.174.0] — 2026-07-13
+
+### Duplicate-checker: cross-document file-match check no longer replays already-removed entries, and is always offered
+
+- **Fixed:** `markEntryRemoved` only ever patched the DOM in place (deliberate,
+  per its own header comment, to avoid a slow full re-analysis after every
+  removal) — it never touched `out.__analysis.entries`/`groups`. Running the
+  cross-record file-match second pass (`runFileMatchSecondPass`) straight off
+  that in-memory analysis after removing some first-pass duplicates meant
+  already-removed documents were still present in `analysis.entries`, so they
+  could resurface as "duplicates" a second time with undefined behaviour if
+  acted on again. The second pass is now always launched via a new
+  `runFreshFileMatchSecondPass`, which forces a genuine live re-fetch/re-analyse
+  of the journal (the same fetch "Re-analyse" performs) before ever running the
+  file-match check, guaranteeing it only ever sees what's actually still in the
+  record.
+- **Changed:** the "Run full cross-document file-match check…" banner was
+  previously gated on `findSuspiciousDocuments` flagging something (a raw
+  filename/GUID title or a same-minute id cluster). Per user feedback that
+  this was too narrow, it's now offered whenever the patient has any document
+  entries at all — the suspicious-document count, when present, is still
+  shown as extra context.
+
 ## [v3.173.0] — 2026-07-08
 
 ### Cross-record file-match detection moved to an opt-in second pass
