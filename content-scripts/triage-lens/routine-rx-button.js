@@ -287,6 +287,52 @@
     }
   }
 
+  // What to TYPE into the "Assign to" live search to surface a team — an ordered
+  // list of queries tried in turn (step 3 stops at the first that reveals the
+  // matching option). Kept DELIBERATELY SEPARATE from what we MATCH: the option
+  // is always matched by the full team text (step 3), never by the query string.
+  //
+  // Why: typing the whole configured name is fragile. A name like "Prescribing /
+  // Meds Management" carries a "/" and several words, and Medicus's debounced,
+  // server-driven search can return ZERO rows for that exact string even though
+  // the team exists — a query of just "Prescribing" returns it. Coupling "what we
+  // type" to "the full name" is what keeps breaking selection when Medicus tweaks
+  // the picker's search (the v3.143.2 class of regression). So we try a safe
+  // leading token first (the name up to the first character that isn't a
+  // letter / digit / space), then fall back to the full name for any picker where
+  // that string genuinely did work.
+  function searchQueriesFor(team) {
+    var full = String(team == null ? '' : team).trim();
+    var queries = [];
+    var m = /^[a-z0-9 ]+/i.exec(full);
+    var lead = m ? m[0].trim() : '';
+    // Only add the leading token if it's distinct and long enough to be
+    // meaningful — a 1-char or symbol-leading team falls straight through to the
+    // full name (never type nothing, and never a query so short it floods the
+    // picker with unrelated teams).
+    if (lead.length >= 2 && lead.toLowerCase() !== full.toLowerCase()) queries.push(lead);
+    queries.push(full);
+    return queries;
+  }
+
+  // Visible text of every currently-rendered option — a diagnostic breadcrumb
+  // logged only when step 3 fails to match, so a page-console capture (CLAUDE.md
+  // "capture first") distinguishes "search returned nothing / isn't a search
+  // picker" (empty) from "returned options but the configured name doesn't match
+  // any" (non-empty — a team-name mismatch, fixable via the ▾ menu).
+  function renderedOptionTexts(optionSel) {
+    var out = [];
+    try {
+      var opts = document.querySelectorAll(optionSel);
+      for (var i = 0; i < opts.length; i++) {
+        if (visible(opts[i])) out.push(textOf(opts[i]));
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    return out;
+  }
+
   // The "Assign to" picker (Medicus's m-simple-select, replacing the old Quasar
   // q-select) runs a debounced/live server search keyed off real per-keystroke
   // typing — setting the full value in one shot and firing a single keydown for
@@ -366,19 +412,17 @@
       if (!assign) return abort('Couldn’t find the “Assign to” picker. Is this a prescription task?', team, mode);
       assign.focus();
       realClick(assign);
-      // Filter the list by typing the team name character-by-character — the
-      // picker's search is debounced/server-driven and only fires off real
-      // per-keystroke input (see typeText).
-      setNativeValue(assign, '');
-      await typeText(assign, team);
 
-      // 3. the team option — extra margin over the old 4s since this now waits
-      // on a real debounce + server round trip, not a local list filter.
+      // 3. Filter the list by typing, then pick the team option. The picker's
+      // search is debounced/server-driven and only fires off real per-keystroke
+      // input (see typeText). We match ANY rendered option by the FULL team text
+      // (exact first, else contains) — never by the query we typed — so a search
+      // that surfaces the team under a broad token still selects the right team.
       var optionSel =
         DC && DC.get('routine-rx.assignee-option')
           ? DC.get('routine-rx.assignee-option').target.join(', ')
           : '[id^="select-item-"], [role="option"], li[role="option"]';
-      var option = await waitFor(function () {
+      var matchOption = function () {
         var opts = document.querySelectorAll(optionSel);
         var exact = null,
           partial = null;
@@ -392,8 +436,32 @@
           if (!partial && t.indexOf(norm(team)) >= 0) partial = opts[i];
         }
         return exact || partial;
-      }, 6000);
-      if (!option)
+      };
+      // Try each query in turn (safe leading token first, then the full name —
+      // see searchQueriesFor), re-typing from empty each time. 6s margin per
+      // query: a real debounce + server round trip, not a local list filter.
+      var queries = searchQueriesFor(team);
+      var option = null;
+      for (var qi = 0; qi < queries.length && !option; qi++) {
+        setNativeValue(assign, '');
+        await typeText(assign, queries[qi]);
+        option = await waitFor(matchOption, 6000);
+      }
+      if (!option) {
+        // Breadcrumb for a page-console capture (see renderedOptionTexts).
+        try {
+          console.warn(
+            '[ClinHUD:rx] team “' +
+              team +
+              '” not found after searching ' +
+              JSON.stringify(queries) +
+              '. ' +
+              'Rendered options:',
+            renderedOptionTexts(optionSel)
+          );
+        } catch (e) {
+          /* ignore */
+        }
         return abort(
           'Team “' +
             team +
@@ -401,6 +469,7 @@
           team,
           mode
         );
+      }
       realClick(option);
 
       // 4. commit — find the button, then wait until Medicus ENABLES it

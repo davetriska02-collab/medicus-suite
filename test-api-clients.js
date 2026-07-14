@@ -798,10 +798,62 @@ async function runUtilityTests() {
   check(Array.isArray(agg.byStaff) && agg.byStaff.length === 1, 'aggregateSlots: byStaff has one entry');
   check(agg.byStaff[0].name === 'Dr A', 'aggregateSlots: byStaff[0].name correct');
   check(agg.sessionsCount === 1, 'aggregateSlots: sessionsCount counts non-cancelled sessions');
+  check(
+    agg.byStaff[0].sessions === 1,
+    "aggregateSlots: byStaff[0].sessions counts this clinician's non-cancelled sessions"
+  );
 
   // Type whitelist filter
   const aggFiltered = MA.aggregateSlots(rawData, { allowedTypes: ['Nurse'] });
   check(aggFiltered.total === 0, 'aggregateSlots: allowedTypes filter excludes non-matching types');
+
+  console.log('\n--- medicus-api.js: aggregateSlots byStaff[].sessions (manager-pack FEATURE 2) ---');
+  const rawDataMultiSession = {
+    staffSchedules: [
+      {
+        name: 'Dr B',
+        schedule: [
+          // Two non-cancelled sessions + one cancelled session for the same clinician.
+          {
+            summary: { status: { isCancelled: false } },
+            entries: [{ diaryEntryType: { value: 'slot' }, appointmentType: { name: 'GP' } }],
+          },
+          {
+            summary: { status: { isCancelled: false } },
+            entries: [{ diaryEntryType: { value: 'slot' }, appointmentType: { name: 'GP' } }],
+          },
+          {
+            summary: { status: { isCancelled: true } },
+            entries: [{ diaryEntryType: { value: 'slot' }, appointmentType: { name: 'GP' } }],
+          },
+        ],
+      },
+      {
+        // A clinician whose every session is cancelled never appears in byStaff at all
+        // (staffHasSessions gate) — sessions is additive, it doesn't change this contract.
+        name: 'Dr C (all cancelled)',
+        schedule: [{ summary: { status: { isCancelled: true } }, entries: [] }],
+      },
+    ],
+  };
+  const aggMulti = MA.aggregateSlots(rawDataMultiSession);
+  check(
+    aggMulti.byStaff.length === 1,
+    'aggregateSlots: clinician with only cancelled sessions is excluded from byStaff'
+  );
+  const drB = aggMulti.byStaff.find((s) => s.name === 'Dr B');
+  check(!!drB, 'aggregateSlots: Dr B present in byStaff');
+  check(
+    drB.sessions === 2,
+    'aggregateSlots: sessions counts only the 2 non-cancelled sessions, excluding the cancelled one'
+  );
+  // Slot counting is unchanged by this feature: a cancelled SESSION's slot entries still
+  // count toward total/byType exactly as before (aggregateSlots never filtered slots by
+  // session-cancellation) — sessions is a purely additive new field, not a behaviour change.
+  check(
+    drB.total === 3,
+    "aggregateSlots: total slot count still includes the cancelled session's entry (unchanged pre-existing behaviour)"
+  );
 
   console.log('\n--- medicus-api.js: computeStatus ---');
   check(MA.computeStatus(10, 8) === 'sufficient', 'computeStatus: count >= minimum → sufficient');
@@ -896,6 +948,82 @@ async function runUtilityTests() {
   check(actAgg.maxUserTotal === actAgg.users[0].total, 'activity aggregate: maxUserTotal is highest user total');
   check(AA.aggregate([]).users.length === 0, 'activity aggregate: empty array → empty users');
   check(AA.aggregate(null).users.length === 0, 'activity aggregate: null → empty users');
+
+  console.log('\n--- activity-api.js: daysBetweenInclusive ---');
+  check(AA.daysBetweenInclusive('2026-07-01', '2026-07-01') === 1, 'daysBetweenInclusive: same day → 1');
+  check(AA.daysBetweenInclusive('2026-07-01', '2026-07-07') === 7, 'daysBetweenInclusive: 7-day inclusive span');
+  check(AA.daysBetweenInclusive('2026-06-01', '2026-06-30') === 30, 'daysBetweenInclusive: full 30-day June span');
+  check(AA.daysBetweenInclusive(null, '2026-07-01') === 0, 'daysBetweenInclusive: missing start → 0');
+
+  console.log('\n--- activity-api.js: previousRange (manager-pack FEATURE 1b) ---');
+  // Month-to-date: 1st of this month → today. Previous span is the SAME day-of-month
+  // clamp in the prior month (never a full prior month compared to a partial current one).
+  {
+    const [ps, pe] = AA.previousRange('2026-07-01', '2026-07-04');
+    check(
+      ps === '2026-06-01' && pe === '2026-06-04',
+      `month-to-date previous span clamps to same day-of-month (got ${ps}..${pe})`
+    );
+  }
+  // Full calendar month (e.g. the "Last month" preset) → previous is the full prior month.
+  {
+    const [ps, pe] = AA.previousRange('2026-06-01', '2026-06-30');
+    check(
+      ps === '2026-05-01' && pe === '2026-05-31',
+      `full-month previous span is the full prior month (got ${ps}..${pe})`
+    );
+  }
+  // End-of-month clamp: 31 Jan compared against Feb (28/29 days) must not roll into March.
+  {
+    const [ps, pe] = AA.previousRange('2027-01-01', '2027-01-31');
+    check(ps === '2026-12-01' && pe === '2026-12-31', `full Jan compares against full Dec (got ${ps}..${pe})`);
+  }
+  {
+    const [ps, pe] = AA.previousRange('2027-03-01', '2027-03-31');
+    check(
+      ps === '2027-02-01' && pe === '2027-02-28',
+      `full March's previous span clamps to Feb's real length (got ${ps}..${pe})`
+    );
+  }
+  // January rolls back into the prior December.
+  {
+    const [ps, pe] = AA.previousRange('2026-01-01', '2026-01-10');
+    check(
+      ps === '2025-12-01' && pe === '2025-12-10',
+      `January's previous span rolls into prior December (got ${ps}..${pe})`
+    );
+  }
+  // General (non-month) range: the immediately preceding equal-length span.
+  {
+    const [ps, pe] = AA.previousRange('2026-07-08', '2026-07-14');
+    check(
+      ps === '2026-07-01' && pe === '2026-07-07',
+      `equal-length 7-day span immediately precedes the range (got ${ps}..${pe})`
+    );
+  }
+  {
+    const [ps, pe] = AA.previousRange('2026-07-01', '2026-07-01');
+    check(
+      ps === '2026-06-30' && pe === '2026-06-30',
+      `single-day range compares against the immediately preceding day (got ${ps}..${pe})`
+    );
+  }
+
+  console.log('\n--- activity-api.js: comparePct ---');
+  check(AA.comparePct(120, 100).pct === 20, 'comparePct: 100→120 is +20%');
+  check(AA.comparePct(80, 100).pct === -20, 'comparePct: 100→80 is -20%');
+  check(
+    AA.comparePct(100, 100).pct === 0 && AA.comparePct(100, 100).direction === 'flat',
+    'comparePct: no change → 0%/flat'
+  );
+  check(
+    AA.comparePct(0, 0).pct === 0 && AA.comparePct(0, 0).direction === 'flat',
+    'comparePct: 0 vs 0 → 0%/flat, not null'
+  );
+  check(
+    AA.comparePct(5, 0).pct === null && AA.comparePct(5, 0).direction === 'up',
+    'comparePct: up from zero → pct null (undefined %), direction up'
+  );
 }
 
 // ── engine/api-client.js (IIFE / module.exports) ──────────────────────────────

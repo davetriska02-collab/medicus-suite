@@ -578,14 +578,33 @@ const HIGH_RISK_DRUGS = [
   {
     id: 'aspirin_ap',
     label: 'Aspirin (antiplatelet)',
-    terms: ['aspirin 75', 'aspirin 300', 'aspirin tablet'],
+    terms: [
+      'aspirin 75',
+      'aspirin 300',
+      'aspirin tablet',
+      'aspirin dispersible', // 2026-07-11 Keeper: dm+d form name may appear without dose
+      'aspirin gastro', // 2026-07-11 Keeper: gastro-resistant form word-order variant
+      'nu-seals', // 2026-07-11 Keeper: AZ aspirin 75mg brand
+      'caprin', // 2026-07-11 Keeper: Pinewood aspirin 75mg brand
+      'micropirin', // 2026-07-11 Keeper: M&A Pharmachem aspirin 75mg brand
+    ],
     requires: [],
     interval: 0,
   },
   {
     id: 'antipsych',
     label: 'Antipsychotic',
-    terms: ['olanzapine', 'risperidone', 'quetiapine', 'aripiprazole', 'haloperidol', 'clozapine', 'chlorpromazine'],
+    terms: [
+      'olanzapine',
+      'risperidone',
+      'quetiapine',
+      'aripiprazole',
+      'haloperidol',
+      'clozapine',
+      'chlorpromazine',
+      'amisulpride', // 2026-07-11 Keeper: atypical antipsychotic, NICE CG178 monitoring
+      'paliperidone', // 2026-07-11 Keeper: active metabolite of risperidone, NICE CG178 monitoring
+    ],
     requires: ['fbc', 'full blood count', 'u&e', 'lft', 'glucose', 'hba1c', 'cholesterol'],
     interval: 183,
   },
@@ -603,6 +622,8 @@ const HIGH_RISK_DRUGS = [
       'chlordiazepoxide',
       'clonazepam',
       'alprazolam',
+      'loprazolam', // 2026-07-11 Keeper: BNF-listed UK benzo, missing from original list
+      'lormetazepam', // 2026-07-11 Keeper: BNF-listed UK benzo, missing from original list
       'zopiclone',
       'zolpidem',
       'zaleplon',

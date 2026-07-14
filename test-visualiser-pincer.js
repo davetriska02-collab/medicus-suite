@@ -542,6 +542,7 @@ console.log('\n── Drug-table completeness locks ──');
   }
 
   // benzo_z entry (2026-06-11 KD-33 resolution) — parity with content.js BENZO_Z.
+  // 2026-07-11 Keeper: loprazolam and lormetazepam added (BNF-listed UK benzos).
   const benzo = termsOf('benzo_z');
   for (const t of [
     'diazepam',
@@ -552,11 +553,25 @@ console.log('\n── Drug-table completeness locks ──');
     'chlordiazepoxide',
     'clonazepam',
     'alprazolam',
+    'loprazolam',
+    'lormetazepam',
     'zopiclone',
     'zolpidem',
     'zaleplon',
   ]) {
     assert(benzo.includes(t), `benzo_z terms include "${t}"`);
+  }
+
+  // aspirin_ap entry — 2026-07-11 Keeper: brand forms added (nu-seals, caprin, micropirin).
+  const aspirinAp = termsOf('aspirin_ap');
+  for (const t of ['aspirin 75', 'aspirin 300', 'aspirin tablet', 'aspirin dispersible', 'aspirin gastro', 'nu-seals', 'caprin', 'micropirin']) {
+    assert(aspirinAp.includes(t), `aspirin_ap terms include "${t}"`);
+  }
+
+  // antipsych entry — 2026-07-11 Keeper: amisulpride and paliperidone added (NICE CG178 monitoring).
+  const antipsych = termsOf('antipsych');
+  for (const t of ['olanzapine', 'risperidone', 'quetiapine', 'aripiprazole', 'haloperidol', 'clozapine', 'chlorpromazine', 'amisulpride', 'paliperidone']) {
+    assert(antipsych.includes(t), `antipsych terms include "${t}"`);
   }
 }
 

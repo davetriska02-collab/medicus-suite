@@ -5,6 +5,7 @@
 
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
 import { applyReferralFilters, collectClinicians, filtersActive, describeFilters } from './referrals-filter-core.js';
+import { copyText } from '../shared/export-util.js';
 
 function ApiNs() {
   return typeof window !== 'undefined' ? window.ReferralsApi : null;
@@ -20,6 +21,7 @@ const TOP_N = 15;
 const STALE_MS = 30 * 60 * 1000;
 const DISCOVERY_KEY = 'referrals.discovery';
 const CONFIG_KEY = 'referrals.config';
+const LETTERHEAD_KEY = 'suite.letterhead';
 
 let container = null;
 let stalenessTimer = null;
@@ -56,6 +58,13 @@ let state = {
   activityData: null,
   activityError: null,
   activityLoading: false,
+  // 2WW safety-net "Chase draft" — practice letterhead used to auto-fill the
+  // letter sign-off (loaded once, kept fresh via storage.onChanged, same
+  // pattern as sentinel.js's loadLetterhead). chaseDraftId is the referralId
+  // of the row whose draft panel is currently open (at most one at a time);
+  // null when none is open.
+  letterhead: {},
+  chaseDraftId: null,
 };
 
 function resolveStored(stored) {
@@ -145,12 +154,13 @@ export async function init(el) {
     }
   }
 
-  const stored = await chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY]);
+  const stored = await chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY, LETTERHEAD_KEY]);
   const r = resolveStored(stored);
   state.discoveryUrl = r.discoveryUrl;
   state.configUrl = r.configUrl;
   state.configPriorities = r.priorities;
   state.configStatuses = r.statuses;
+  state.letterhead = stored[LETTERHEAD_KEY] || {};
 
   // Restore persisted view state (filters, chart view, search)
   const savedUi = await loadUiState('referrals');
@@ -231,9 +241,23 @@ export async function init(el) {
     tsEl.querySelector('#refTsRefresh')?.addEventListener('click', fetchAndRender);
   }, 60_000);
 
+  // Esc closes an open chase-draft panel (Copy/Close buttons handle click).
+  const onChaseKeyDown = (e) => {
+    if (e.key === 'Escape' && state.chaseDraftId) {
+      state.chaseDraftId = null;
+      render();
+    }
+  };
+  document.addEventListener('keydown', onChaseKeyDown);
+
   const onChange = (ch) => {
     if (ch['suite.practiceCode']) {
       fetchAndRender();
+      return;
+    }
+    if (ch[LETTERHEAD_KEY]) {
+      state.letterhead = ch[LETTERHEAD_KEY].newValue || {};
+      render();
       return;
     }
     if (ch[DISCOVERY_KEY] || ch[CONFIG_KEY]) {
@@ -254,6 +278,7 @@ export async function init(el) {
     clearInterval(stalenessTimer);
     stalenessTimer = null;
     chrome.storage.onChanged.removeListener(onChange);
+    document.removeEventListener('keydown', onChaseKeyDown);
     container = null;
   };
 }
@@ -613,12 +638,17 @@ function renderSafetyNet() {
       // are secondary context, so they move to a sub-line rather than compete
       // with the name for width.
       const sub = svc || clin ? `<div class="ref-sn-sub">${svc}${clin}</div>` : '';
+      const refId = r.referralId || '';
+      const draftOpen = !!refId && state.chaseDraftId === refId;
       return `<div class="ref-sn-row ${sevClass}">
         <div class="ref-sn-row-main">
           <span class="ref-sn-age" title="calendar days since referral">${escHtml(age)}</span>
           <span class="ref-sn-name">${escHtml(name)}</span>
+          <button class="ref-sn-chase-btn" data-chase-btn="${escAttr(refId)}"
+            title="Prepare a chase letter draft for this referral">${draftOpen ? 'Close draft' : 'Chase draft'}</button>
         </div>
         ${sub}
+        ${draftOpen ? renderChaseDraft(r) : ''}
       </div>`;
     })
     .join('');
@@ -641,6 +671,27 @@ function renderSafetyNet() {
       <p class="ref-sn-note">Suspected-cancer (2WW) referrals still showing <strong>Incomplete</strong> — no confirmed outcome yet. Check each has been received and an appointment booked; absent safety-netting/follow-up is the top root cause of cancer-delay claims. Ages are calendar days since referral; thresholds are a guide, not a clinical standard.</p>
       ${legend}
       <div class="ref-sn-rows">${rowsHtml}</div>
+    </div>`;
+}
+
+// Prepared-draft chase letter panel for one safety-net row — a ready-to-edit
+// letter to the referring hospital/service, copy-to-clipboard only, NEVER
+// auto-sent. Text is built by the pure ReferralsApi.buildChaseLetter (mirrors
+// the reception.js #rcpOutputText readonly-textarea + Copy + fineprint
+// pattern). At most one panel is open at a time (state.chaseDraftId).
+function renderChaseDraft(r) {
+  const api = ApiNs();
+  if (!api || !api.buildChaseLetter) return '';
+  const text = api.buildChaseLetter(r, state.letterhead);
+  return `
+    <div class="ref-sn-chase-panel">
+      <textarea class="ref-sn-chase-text" id="refChaseText" readonly rows="11">${escHtml(text)}</textarea>
+      <div class="ref-sn-chase-actions">
+        <button class="ref-sn-chase-copy" id="refChaseCopy">Copy to clipboard</button>
+        <button class="ref-sn-chase-close" id="refChaseClose">Close</button>
+        <span class="ref-sn-chase-msg" id="refChaseMsg"></span>
+      </div>
+      <div class="ref-sn-chase-fineprint">Prepared draft only — review and edit before sending. Double-check you're on the right patient and hospital before pasting.</div>
     </div>`;
 }
 
@@ -1058,6 +1109,31 @@ function wireControls() {
     state.clinicianDropdownFilter = e.target.value;
     persistUiState();
     render();
+  });
+
+  // 2WW safety-net "Chase draft" — toggle open/closed (again-click or Esc
+  // closes; opening a different row's draft replaces the open one, since
+  // chaseDraftId holds at most one referralId at a time).
+  container.querySelectorAll('[data-chase-btn]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.chaseBtn;
+      state.chaseDraftId = id && state.chaseDraftId === id ? null : id || null;
+      render();
+    });
+  });
+  container.querySelector('#refChaseClose')?.addEventListener('click', () => {
+    state.chaseDraftId = null;
+    render();
+  });
+  container.querySelector('#refChaseCopy')?.addEventListener('click', async () => {
+    const ta = container.querySelector('#refChaseText');
+    const msg = container.querySelector('#refChaseMsg');
+    if (!ta) return;
+    const ok = await copyText(ta.value);
+    if (msg) {
+      msg.textContent = ok ? 'Copied.' : 'Copy failed — select the text and copy manually.';
+      msg.className = ok ? 'ref-sn-chase-msg ref-sn-chase-msg-ok' : 'ref-sn-chase-msg';
+    }
   });
 
   container.querySelector('#refDiscoveryOpen')?.addEventListener('click', focusMedicusReferrals);

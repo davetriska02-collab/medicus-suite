@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
 **Version:** v3.162.0
-**Generated:** 2026-07-07 (automated)
+**Generated:** 2026-07-12 (automated)
 
 ## What it is
 
@@ -9,7 +9,7 @@ Medicus Suite is a Chrome browser extension for UK GP practices that runs alongs
 
 ## At a glance
 
-- 16 side-panel modules covering monitoring, demand, capacity, workflow, knowledge and the live patient record
+- 15 side-panel modules covering monitoring, demand, capacity, workflow, knowledge and the live patient record
 - 8 in-page content-script features (queue overlays, workflow buttons and relays) plus 2 full-tab generated reports
 - 7 rule types in the alert engine
 - 27 drug-monitoring rules, 65 QOF register/indicator rules, 5 vaccine rules, 44 investigation-result rules, and 26 starter alerts in the prescribing-safety library
@@ -34,15 +34,11 @@ A calendar view of upcoming appointment capacity against a practice-set minimum,
 
 ### Submissions Tracker
 
-Daily inbound task counts — medical, admin, investigations, prescriptions — with a today view, a custom date range, and day-vs-day comparison. Amber/red thresholds flag unusual volume before it becomes a backlog. Because Medicus only reports still-open tasks, the suite keeps its own day ledger of every request it has seen, so counts reflect true received volume and no longer fall as the team completes work; days the suite wasn't watching are flagged as undercounts rather than shown as history. Once enough history accrues, today reads against its own weekday's baseline in plain English — "busier than usual for a Tuesday, ahead of 7 of the last 9 by this time" (also shown on the Today demand card) — compared to the same hour of day, watched days only, and never claimed from thin history.
+Daily inbound task counts — medical, admin, investigations, prescriptions — with a today view, a custom date range, and day-vs-day comparison. Amber/red thresholds flag unusual volume before it becomes a backlog. Because Medicus only reports still-open tasks, the suite keeps its own day ledger of every request it has seen, so counts reflect true received volume and no longer fall as the team completes work; days the suite wasn't watching are flagged as undercounts rather than shown as history.
 
 ### Signing Queue
 
-Every open repeat-prescription request shown with the requesting patient's recorded drug-monitoring currency alongside — the same engine checks as Monitoring and Sweep — sorted riskiest first, with the loudest flag when the requested drug is itself the one overdue, the latest recorded eGFR (with its age) on every checked row, and each request's collection route at a glance (house glyph = practice dispensary, Rx glyph = community pharmacy) with location filter pills and counts — hidden red flags always called out. The practice's configured prescribing-safety combination alerts (drug–drug interactions, PINCER-style clusters) are re-shown on the row too, with an "in request" flag when the requested drug is itself one leg of the combination — e.g. an acute NSAID request landing on top of an ACE inhibitor and diuretic. Display only: "no flag" is explicitly not an all-clear, records that could not be read sort above quiet rows, and authorisation happens only in Medicus.
-
-### Follow-ups
-
-A personal safety-net ledger: the things a clinician is waiting on — a pending result, a call-back — logged with a due date and resurfaced when the date passes, on the tab and as a line on Today. Reminders can be linked to the open patient from the Monitoring tab (with the same wrong-patient guards as task creation) or added as unlinked notes. Stored on this machine only, excluded from backups, never written to the record, and never acts by itself — it does not replace safety-netting documented in Medicus.
+Every open repeat-prescription request shown with the requesting patient's recorded drug-monitoring currency alongside — the same engine checks as Monitoring and Sweep — sorted riskiest first, with the loudest flag when the requested drug is itself the one overdue, the latest recorded eGFR (with its age) on every checked row, and each request's collection route at a glance (house glyph = practice dispensary, Rx glyph = community pharmacy) with location filter pills and counts — hidden red flags always called out. Display only: "no flag" is explicitly not an all-clear, records that could not be read sort above quiet rows, and authorisation happens only in Medicus.
 
 ### Activity Report
 
@@ -118,12 +114,6 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 
 ## Recent additions (last 4 weeks)
 
-- **v3.162.0 (2026-07-07)** — Demand grows a memory: Today and Submissions now say whether today is genuinely busy for its weekday ("ahead of 7 of the last 9 Tuesdays by this time"), from the suite's own day ledger — same-hour comparison, watched days only, silent until 4 weeks of history exist.
-
-- **v3.161.0 (2026-07-07)** — Signing rows now also show the practice's configured prescribing-safety combination alerts (re-displayed from the same engine pass, no new rule content), loudest when the requested drug completes the combination — e.g. an acute NSAID on top of ACEi + diuretic.
-
-- **v3.160.0 (2026-07-07)** — New Follow-ups tab: a personal safety-net ledger ("MSU pending — chase Friday") resurfaced when due, with patient-linked capture from Monitoring and an overdue line on Today. Machine-local, excluded from backups, never acts by itself.
-
 - **v3.159.0 (2026-07-07)** — One warm line on the genuinely finished signing pile (“✓ Pile’s clear — nothing waiting on you.”) — panel-vetted: static text, no emoji, no animation, and never shown when filters merely hide requests.
 
 - **v3.158.0 (2026-07-07)** — Signing gains location filter pills with counts (“Dispensary 6 · No location 3”, hidden red flags always called out) and glanceable collection glyphs after the name; Monitoring gains Sweep’s “Create task” button for the open patient — one explicit confirm, Medicus’s own task workflow.
@@ -144,8 +134,6 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **v3.143.0 (2026-06-30)** — New "File all normal" button auto-files confirmed-clear lab results — the suite's first feature that can act on the patient record, with strict safety checks and full audit.
 - **v3.141.0 (2026-06-29)** — Pre-clinic Sweep can now book the recall itself and rank QOF gaps by points at risk; Referrals flags suspected-cancer referrals that have gone quiet.
 - **v3.109.0 (2026-06-16)** — New "Record" tab: a live one-screen patient summary, no PDF export needed, alongside a new printable Practice Report for meetings and ICB returns.
-- **v3.60.0 (2026-06-12)** — New "Today" morning-briefing tab, a command palette to jump anywhere, and a suite-wide visual redesign.
-- **v3.38.0 (2026-06-10)** — Three front-desk tabs launched together: guided-capture Reception scripts, Pre-clinic Sweep, and a practice-owned Knowledge base.
 
 ## Safety posture
 

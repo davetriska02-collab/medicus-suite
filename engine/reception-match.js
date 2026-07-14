@@ -172,6 +172,20 @@
       'hives',
       'urticaria',
     ],
+    // Added for the v3.160.0 "sinusitis" pathway (rules/reception-pathways.json; NICE CKS /
+    // Pharmacy First 12+). CSO-reviewable — see the CLINICAL-CONTENT NOTE in this file's header.
+    sinusitis: [
+      'sinusitis',
+      'sinus infection',
+      'sinus pain',
+      'sinus pressure',
+      'blocked sinuses',
+      'facial pain',
+      'facial pressure',
+      'pain around the cheeks',
+      'pain around the eyes',
+      'pain in the face',
+    ],
     // Deliberately narrow: "general" is a catch-all pathway, so its terms are limited to explicit
     // "something not covered" phrasing rather than a bare "general" (too generic — would false-
     // match phrases like "in general I feel..." via a naive substring, defeated by \b in most
@@ -320,6 +334,81 @@
       'suicidal thoughts',
       'self harm thoughts',
       'thoughts of harming someone else',
+    ],
+
+    // ── Added for v3.160.0 red flags (cough weight-loss, GCA visual split, sinusitis pathway,
+    //    feverish-child fontanelle). Topic terms derived conservatively from each red flag's
+    //    `ask` text in rules/reception-pathways.json. CSO-reviewable — see this file's header;
+    //    a missing/unmatched term is the SAFE direction here (the topic reads as a GAP and is
+    //    re-asked), never a silent suppression. ─────────────────────────────────────────────
+    // cough pathway — persistent-cough systemic red flags (lung cancer / TB): weight loss,
+    // night sweats, loss of appetite over a cough lasting > 3 weeks.
+    'rf-weightloss': [
+      'weight loss',
+      'unexplained weight loss',
+      'losing weight',
+      'night sweats',
+      'drenching night sweats',
+      'loss of appetite',
+      'cough for weeks',
+      'cough lasting more than 3 weeks',
+      'persistent cough',
+    ],
+    // headache pathway — giant cell arteritis WITH visual threat (the visual variant of rf-new50).
+    'rf-new50-visual': [
+      'blurred vision',
+      'blurring of vision',
+      'double vision',
+      'loss of vision',
+      'sudden loss of vision',
+      'vision loss',
+      'sight loss',
+      'temple tenderness',
+      'jaw claudication',
+      'pain when chewing',
+    ],
+    // sinusitis pathway — orbital cellulitis: eye swelling / proptosis / vision or eye-movement change.
+    'rf-orbital': [
+      'swelling around the eye',
+      'swelling behind the eye',
+      'eye pushed forward',
+      'bulging eye',
+      'proptosis',
+      'painful eye movement',
+      'cant move the eye',
+      'change in vision',
+      'orbital cellulitis',
+      'red swollen eyelid',
+    ],
+    // sinusitis pathway — frontal osteomyelitis / Pott's puffy tumour: boggy forehead swelling.
+    'rf-frontal-swelling': [
+      'swelling of the forehead',
+      'forehead swelling',
+      'swollen forehead',
+      'boggy swelling on the forehead',
+      'doughy swelling',
+      'redness of the forehead',
+      'potts puffy tumour',
+    ],
+    // sinusitis pathway — severe, rapidly worsening facial pain with high fever, systemically unwell.
+    'rf-severe-unwell': [
+      'severe facial pain',
+      'rapidly worsening facial pain',
+      'facial pain getting rapidly worse',
+      'very high fever',
+      'looking very unwell',
+      'very unwell',
+      'high fever and unwell',
+    ],
+    // feverish-child pathway — bulging / tense fontanelle in a baby under 18 months.
+    'rf-fontanelle': [
+      'bulging fontanelle',
+      'tense fontanelle',
+      'bulging soft spot',
+      'soft spot bulging',
+      'soft spot is bulging',
+      'swollen soft spot',
+      'fontanelle',
     ],
   };
 

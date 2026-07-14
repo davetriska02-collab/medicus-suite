@@ -9,7 +9,7 @@
 
 'use strict';
 
-import { buildPulseRows } from '../pulse-core.js';
+import { buildPulseRows, buildMonthlyPulseRows } from '../pulse-core.js';
 import { sparkline } from '../report/report-render.js';
 
 let cssInjected = false;
@@ -42,6 +42,12 @@ function ensureStyles() {
 .condor-pulse-empty { font-size:12px; color:var(--text-3); padding:6px 0; }
 .condor-pulse-coverage { font-size:10px; color:var(--text-3); margin-top:6px; }
 .condor-pulse-asof { font-size:10px; color:var(--text-3); }
+.condor-pulse-month { margin-top:8px; padding-top:8px; border-top:1px solid var(--border); }
+.condor-pulse-month-title { font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:0.04em; color:var(--text-3); margin-bottom:4px; text-transform:uppercase; }
+.condor-pulse-month-row { display:flex; align-items:center; gap:8px; padding:3px 0; border-bottom:1px solid var(--border); }
+.condor-pulse-month-row:last-of-type { border-bottom:none; }
+.condor-pulse-month-empty { flex:1; text-align:right; font-size:11px; color:var(--text-4); }
+.condor-pulse-month-coverage { font-size:10px; color:var(--text-4); margin:2px 0 6px; }
   `;
   document.head.appendChild(s);
 }
@@ -60,10 +66,74 @@ function deltaText(m) {
   return `${sign}${m.delta}${pctText} vs prior period`;
 }
 
+// Short "1–4 Jul" style label for a calendar span (used by the Month view section).
+function formatSpanLabel(startISO, endISO) {
+  const s = new Date(startISO + 'T12:00:00');
+  const e = new Date(endISO + 'T12:00:00');
+  const dayOnly = { day: 'numeric' };
+  const dayMonth = { day: 'numeric', month: 'short' };
+  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
+    return `${s.toLocaleDateString('en-GB', dayOnly)}–${e.toLocaleDateString('en-GB', dayMonth)}`;
+  }
+  return `${s.toLocaleDateString('en-GB', dayMonth)}–${e.toLocaleDateString('en-GB', dayMonth)}`;
+}
+
+function monthMetricRow(m) {
+  const curCov = m.coverage.current;
+  const prevCov = m.coverage.previous;
+  if (curCov.have === 0 || prevCov.have === 0) {
+    // Never fake a 0 — an uncovered window gets an honest "not enough snapshots" line,
+    // matching the day-based Pulse rows' sparse-coverage discipline.
+    return (
+      `<div class="condor-pulse-month-row">` +
+      `<span class="condor-pulse-label">${esc(m.label)}</span>` +
+      `<span class="condor-pulse-month-empty">Not enough snapshots yet (${curCov.have} of ${curCov.possible} this month, ${prevCov.have} of ${prevCov.possible} last month)</span>` +
+      `</div>`
+    );
+  }
+  const currentText = `${m.current}${m.unit || ''}`;
+  const cls = m.sense || 'unknown';
+  return (
+    `<div class="condor-pulse-month-row">` +
+    `<span class="condor-pulse-label">${esc(m.label)}</span>` +
+    `<span class="condor-pulse-figs">` +
+    `<span class="condor-pulse-current">${esc(currentText)}</span>` +
+    `<span class="condor-pulse-delta ${cls}">${esc(deltaText(m))}</span>` +
+    `</span>` +
+    `</div>` +
+    `<div class="condor-pulse-month-coverage">${curCov.have} of ${curCov.possible} possible snapshots this month · ${prevCov.have} of ${prevCov.possible} last month</div>`
+  );
+}
+
+// Compact month-on-month section (manager-pack FEATURE 1c) — PPI + demand only, per the
+// brief; other metrics stay in the 7d/30d rolling view above. Returns '' when the
+// underlying series has never recorded either metric (same "don't show a permanently-
+// empty row" rule as the day-based rows), so an unconfigured practice sees nothing extra.
+function renderMonthView(snapshots, now) {
+  const built = buildMonthlyPulseRows(snapshots, now);
+  const wanted = ['ppi', 'demand'];
+  const rows = wanted
+    .map((key) => built.metrics.find((m) => m.key === key))
+    .filter(Boolean)
+    .map(monthMetricRow)
+    .join('');
+  if (!rows) return '';
+  const curLabel = formatSpanLabel(built.current.start, built.current.end);
+  const prevLabel = formatSpanLabel(built.previous.start, built.previous.end);
+  return (
+    `<div class="condor-pulse-month">` +
+    `<div class="condor-pulse-month-title">Month view — ${esc(curLabel)} vs ${esc(prevLabel)}</div>` +
+    rows +
+    `</div>`
+  );
+}
+
 // `period` is 7 or 30 (days). `data.pulseSnapshots` (full stored series) is passed by
 // condor.js's poll() — this card does no I/O of its own, staying pure/testable-by-inspection
-// like the other card renderers.
-export function renderPulse(snapshots, period = 7) {
+// like the other card renderers. `now` pins "today" for the Month view section below
+// (manager-pack FEATURE 1c) — defaults to `new Date()` for the live panel; condor.js's
+// caller passes only 2 args, so this always resolves live in production.
+export function renderPulse(snapshots, period = 7, now = new Date()) {
   ensureStyles();
   const safeSnapshots = Array.isArray(snapshots) ? snapshots : [];
   const built = buildPulseRows(safeSnapshots, period);
@@ -119,6 +189,7 @@ export function renderPulse(snapshots, period = 7) {
     `</div>` +
     `<div class="condor-pulse-rows">${rows}</div>` +
     `<div class="condor-pulse-coverage">${esc(best.coverage.text)}. Pressure-index figures are as-recorded on the day, not restated under today's settings. <span class="condor-pulse-asof">${asOfNote}</span></div>` +
+    renderMonthView(safeSnapshots, now) +
     `</div>`
   );
 }

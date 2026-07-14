@@ -354,5 +354,56 @@ safetyRuleIds.forEach((id) => {
   check(r && r.category === 'safety-monitoring', `${id} is tagged category: safety-monitoring`);
 });
 
+// ── 2026-07-11 Keeper: LD register ───────────────────────────────────────────
+console.log('\n--- LD register (Learning Disability, new 2026-07-11) ---');
+const ld = qof.rules.find((r) => r.registerCode === 'LD');
+const onLd = (label) => engine.patientOnRegister([{ label }], ld).matched === true;
+check(!!ld, 'LD register exists in qof-rules.json');
+check(onLd('Learning disability'), 'matches "Learning disability"');
+check(onLd('Intellectual disability'), 'matches "Intellectual disability"');
+check(onLd('Downs syndrome'), 'matches "Downs syndrome"');
+check(onLd('Down syndrome'), 'matches "Down syndrome"');
+check(onLd('Severe learning disability'), 'matches "Severe learning disability"');
+check(!onLd('No learning disability'), 'excludes negated "No learning disability"');
+check(!onLd('Family history of learning disability'), 'excludes "Family history of learning disability"');
+
+// ── 2026-07-11 Keeper: DEM004 indicator ──────────────────────────────────────
+console.log('\n--- DEM004 indicator (annual dementia review, new 2026-07-11) ---');
+const dem004 = qof.rules.find((r) => r.indicatorCode === 'DEM004');
+check(!!dem004, 'DEM004 indicator exists in qof-rules.json');
+check(dem004.enabled === true, 'DEM004 is enabled');
+check(dem004.registerCode === 'DEM' || (dem004.requiresRegister && dem004.requiresRegister.includes('DEM')), 'DEM004 scoped to DEM register');
+
+// ── 2026-07-11 Keeper: CKD002 indicator ──────────────────────────────────────
+console.log('\n--- CKD002 indicator (BP ≤140/90 in CKD, new 2026-07-11) ---');
+const ckd002 = qof.rules.find((r) => r.indicatorCode === 'CKD002');
+check(!!ckd002, 'CKD002 indicator exists in qof-rules.json');
+check(ckd002.enabled === true, 'CKD002 is enabled');
+
+// ── 2026-07-11 Keeper: CKD003 indicator ──────────────────────────────────────
+console.log('\n--- CKD003 indicator (ACEi/ARB in hypertensive CKD, new 2026-07-11) ---');
+const ckd003 = qof.rules.find((r) => r.indicatorCode === 'CKD003');
+check(!!ckd003, 'CKD003 indicator exists in qof-rules.json');
+check(ckd003.enabled === true, 'CKD003 is enabled');
+
+// ── 2026-07-11 Keeper: CHOL003/CHOL004 multi-register expansion ──────────────
+console.log('\n--- CHOL003/CHOL004 multi-register clones (PAD/STIA/CKD, new 2026-07-11) ---');
+const chol003Pad = qof.rules.find((r) => r.id === 'qof-chol003-pad');
+const chol003Stia = qof.rules.find((r) => r.id === 'qof-chol003-stia');
+const chol003Ckd = qof.rules.find((r) => r.id === 'qof-chol003-ckd');
+const chol004Pad = qof.rules.find((r) => r.id === 'qof-chol004-pad');
+const chol004Stia = qof.rules.find((r) => r.id === 'qof-chol004-stia');
+const chol004Ckd = qof.rules.find((r) => r.id === 'qof-chol004-ckd');
+check(!!chol003Pad, 'qof-chol003-pad exists (CHOL003 / PAD register)');
+check(!!chol003Stia, 'qof-chol003-stia exists (CHOL003 / STIA register)');
+check(!!chol003Ckd, 'qof-chol003-ckd exists (CHOL003 / CKD register)');
+check(!!chol004Pad, 'qof-chol004-pad exists (CHOL004 / PAD register)');
+check(!!chol004Stia, 'qof-chol004-stia exists (CHOL004 / STIA register)');
+check(!chol004Ckd, 'qof-chol004-ckd does NOT exist (CKD excluded from CHOL004 per PRN02356)');
+// Verify indicator codes
+check(chol003Pad && chol003Pad.indicatorCode === 'CHOL003', 'qof-chol003-pad has indicatorCode CHOL003');
+check(chol004Pad && chol004Pad.indicatorCode === 'CHOL004', 'qof-chol004-pad has indicatorCode CHOL004');
+check(chol003Ckd && chol003Ckd.indicatorCode === 'CHOL003', 'qof-chol003-ckd has indicatorCode CHOL003');
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

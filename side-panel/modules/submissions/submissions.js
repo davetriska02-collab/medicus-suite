@@ -92,6 +92,11 @@ let state = {
   rangeStart: addDays(todayISO(), -6),
   rangeEnd: todayISO(),
   compareDate: addDays(todayISO(), -1),
+  // 'day' = the original single-day-vs-single-day compare; 'month' = FEATURE 1a's
+  // month-to-date-vs-same-span-last-month comparison. Kept separate from `mode` because
+  // the Compare tab itself has two very different sub-views.
+  compareMode: 'day',
+  monthCompare: null, // { startA, endA, startB, endB } — set when compareMode==='month'
   data: { primary: null, compare: null },
   ledger: null,
   loading: false,
@@ -250,6 +255,8 @@ function renderModeControls() {
         <button class="ghost-btn" data-days="6">7d</button>
         <button class="ghost-btn" data-days="13">14d</button>
         <button class="ghost-btn" data-days="29">30d</button>
+        <button class="ghost-btn" data-month-preset="thisMonth">This month</button>
+        <button class="ghost-btn" data-month-preset="lastMonth">Last month</button>
       </div>`;
     ctr.querySelectorAll('[data-days]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -258,6 +265,31 @@ function renderModeControls() {
         renderModeControls();
         fetchAndRender();
       });
+    });
+    ctr.querySelectorAll('[data-month-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const range = monthRangePreset(btn.dataset.monthPreset);
+        if (!range) return;
+        [state.rangeStart, state.rangeEnd] = range;
+        renderModeControls();
+        fetchAndRender();
+      });
+    });
+  } else if (state.compareMode === 'month') {
+    const spans = state.monthCompare || (state.monthCompare = monthToDateVsLastMonth());
+    ctr.innerHTML = `
+      <div class="dp-wrap"><span class="dp-label">This span</span><span class="dp-readonly">${formatDateShort(spans.startA)} → ${formatDateShort(spans.endA)}</span></div>
+      <div class="dp-wrap"><span class="dp-label">Prior span</span><span class="dp-readonly">${formatDateShort(spans.startB)} → ${formatDateShort(spans.endB)}</span></div>
+      <div class="preset-row">
+        <button class="ghost-btn" data-preset="dayvday">Day vs day</button>
+        <button class="ghost-btn mode-active" data-preset="monthvmonth" disabled>This month vs last month</button>
+      </div>
+      <div class="mode-note">Month to date vs same span last month — a partial current month is never compared against a full prior month.</div>
+    `;
+    ctr.querySelector('[data-preset="dayvday"]')?.addEventListener('click', () => {
+      state.compareMode = 'day';
+      renderModeControls();
+      fetchAndRender();
     });
   } else {
     ctr.innerHTML =
@@ -272,6 +304,7 @@ function renderModeControls() {
       `<div class="preset-row">
         <button class="ghost-btn" data-preset="yesterday">vs yesterday</button>
         <button class="ghost-btn" data-preset="lastweek">vs last week</button>
+        <button class="ghost-btn" data-preset="monthvmonth">This month vs last month</button>
       </div>`;
     ctr.querySelector('[data-preset="yesterday"]')?.addEventListener('click', () => {
       state.primaryDate = todayISO();
@@ -282,6 +315,12 @@ function renderModeControls() {
     ctr.querySelector('[data-preset="lastweek"]')?.addEventListener('click', () => {
       state.primaryDate = todayISO();
       state.compareDate = addDays(todayISO(), -7);
+      renderModeControls();
+      fetchAndRender();
+    });
+    ctr.querySelector('[data-preset="monthvmonth"]')?.addEventListener('click', () => {
+      state.compareMode = 'month';
+      state.monthCompare = monthToDateVsLastMonth();
       renderModeControls();
       fetchAndRender();
     });
@@ -331,8 +370,17 @@ async function fetchAndRender(force = false) {
       if (state.mode === 'today') {
         state.data = { primary: await fetchDay(state.primaryDate), compare: null };
       } else if (state.mode === 'compare') {
-        const [p, c] = await Promise.all([fetchDay(state.primaryDate), fetchDay(state.compareDate)]);
-        state.data = { primary: p, compare: c };
+        if (state.compareMode === 'month') {
+          const spans = state.monthCompare || (state.monthCompare = monthToDateVsLastMonth());
+          const [p, c] = await Promise.all([
+            fetchRange(spans.startA, spans.endA),
+            fetchRange(spans.startB, spans.endB),
+          ]);
+          state.data = { primary: p, compare: c };
+        } else {
+          const [p, c] = await Promise.all([fetchDay(state.primaryDate), fetchDay(state.compareDate)]);
+          state.data = { primary: p, compare: c };
+        }
       } else {
         state.data = { primary: await fetchRange(state.rangeStart, state.rangeEnd), compare: null };
       }
@@ -447,7 +495,9 @@ function downloadSubCsv() {
     state.mode === 'range'
       ? `${state.rangeStart}-to-${state.rangeEnd}`
       : state.mode === 'compare'
-        ? `${state.primaryDate}-vs-${state.compareDate}`
+        ? state.compareMode === 'month' && state.monthCompare
+          ? `${state.monthCompare.startA}-to-${state.monthCompare.endA}-vs-${state.monthCompare.startB}-to-${state.monthCompare.endB}`
+          : `${state.primaryDate}-vs-${state.compareDate}`
         : state.primaryDate;
   const header = ['Category', 'Count'];
   const rows = _lastMetricItems.map((m) => [m.label, m.value]);
@@ -480,8 +530,14 @@ function updateTitles() {
         ? 'Inbound request volume — counts work received, not items submitted'
         : 'Inbound request volume through that day';
   } else if (state.mode === 'compare') {
-    t.textContent = 'Day vs day';
-    s.textContent = `${formatDateShort(state.primaryDate)} vs ${formatDateShort(state.compareDate)}`;
+    if (state.compareMode === 'month' && state.monthCompare) {
+      const { startA, endA, startB, endB } = state.monthCompare;
+      t.textContent = 'Month to date vs last month';
+      s.textContent = `${formatDateShort(startA)}–${formatDateShort(endA)} vs ${formatDateShort(startB)}–${formatDateShort(endB)} · month to date, not a full-month total`;
+    } else {
+      t.textContent = 'Day vs day';
+      s.textContent = `${formatDateShort(state.primaryDate)} vs ${formatDateShort(state.compareDate)}`;
+    }
   } else {
     t.textContent = 'Range';
     const days = daysBetween(state.rangeStart, state.rangeEnd) + 1;
@@ -561,6 +617,10 @@ function renderBaselineLine() {
 }
 
 function renderCompare() {
+  if (state.compareMode === 'month') {
+    renderCompareMonth();
+    return;
+  }
   const dayA = state.data.primary;
   const dayB = state.data.compare;
   if (!dayA || !dayB) return;
@@ -609,6 +669,56 @@ function renderCompare() {
       label: tt.shortLabel,
       value: sA[tt.key].total,
       compareValue: sB[tt.key].total,
+      color: tt.color,
+    })),
+  });
+  renderAlertStrip();
+}
+
+// FEATURE 1a: "This month vs last month" compare sub-mode. Ranges (not single days) come
+// in via fetchRange, one per task type per span — same shape as Range mode's data, so
+// totals are just raw task-list lengths (reconcilable against the tiles, per CLAUDE.md's
+// "every figure must remain reconcilable" convention). The hourly cumulative-through-the-day
+// chart doesn't make sense for a month span, so chart1 is replaced with a note pointing at
+// the totals/delta bar chart below, which reuses the existing grouped-bar + delta renderer.
+function renderCompareMonth() {
+  const rangeA = state.data.primary;
+  const rangeB = state.data.compare;
+  if (!rangeA || !rangeB) return;
+  const totalsA = {};
+  const totalsB = {};
+  for (const tt of TASK_TYPES) {
+    totalsA[tt.key] = (rangeA[tt.key] || []).length;
+    totalsB[tt.key] = (rangeB[tt.key] || []).length;
+  }
+  renderMetrics(
+    TASK_TYPES.map((tt) => ({
+      key: tt.key,
+      label: tt.shortLabel,
+      value: totalsA[tt.key],
+      compareValue: totalsB[tt.key],
+      color: tt.color,
+    }))
+  );
+  const t = container.querySelector('#chart1Title');
+  if (t) t.textContent = 'Month comparison';
+  MWChart.empty(
+    container.querySelector('#chart1'),
+    'Hourly trend view is not shown for month comparisons — see totals below'
+  );
+  const l1 = container.querySelector('#legend1');
+  if (l1) l1.innerHTML = '';
+  const t2 = container.querySelector('#chart2Title');
+  const { startA, endA, startB, endB } = state.monthCompare;
+  if (t2)
+    t2.textContent = `Totals · ${formatDateShort(startA)}–${formatDateShort(endA)} vs ${formatDateShort(startB)}–${formatDateShort(endB)}`;
+  MWChart.bar({
+    container: container.querySelector('#chart2'),
+    bars: TASK_TYPES.map((tt) => ({
+      key: tt.key,
+      label: tt.shortLabel,
+      value: totalsA[tt.key],
+      compareValue: totalsB[tt.key],
       color: tt.color,
     })),
   });
@@ -1040,6 +1150,51 @@ function addDays(iso, n) {
   d.setDate(d.getDate() + n);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+// Calendar-month range for the Range tab's "This month"/"Last month" presets (FEATURE 1a).
+// Mirrors shared/activity-api.js's preset() logic exactly, so "This month" here and
+// "This month" in Activity always resolve to the same [start,end] for the same practice.
+function monthRangePreset(name) {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const start = new Date(now);
+  const end = new Date(now);
+  if (name === 'thisMonth') {
+    start.setDate(1);
+  } else if (name === 'lastMonth') {
+    start.setMonth(start.getMonth() - 1);
+    start.setDate(1);
+    end.setDate(0); // last day of previous month
+  } else {
+    return null;
+  }
+  return [isoFromDate(start), isoFromDate(end)];
+}
+
+function isoFromDate(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// The Compare tab's "This month vs last month" preset (FEATURE 1a): month-to-date
+// (1st of this month → today) vs the SAME SPAN of the previous month (1st → same
+// day-of-month, clamped to that month's length) — a partial current month is deliberately
+// never compared against a full prior month, which would overstate the delta.
+function monthToDateVsLastMonth(todayIso = todayISO()) {
+  const d = new Date(todayIso + 'T12:00:00');
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const day = d.getDate();
+  const startA = `${y}-${pad(m + 1)}-01`;
+  const endA = todayIso;
+  const prevMonthDate = new Date(y, m - 1, 1); // JS Date rolls January back into prior December
+  const py = prevMonthDate.getFullYear();
+  const pm = prevMonthDate.getMonth();
+  const lastDayPrevMonth = new Date(py, pm + 1, 0).getDate();
+  const clampedDay = Math.min(day, lastDayPrevMonth);
+  const startB = `${py}-${pad(pm + 1)}-01`;
+  const endB = `${py}-${pad(pm + 1)}-${pad(clampedDay)}`;
+  return { startA, endA, startB, endB };
+}
+
 function daysBetween(a, b) {
   if (!a || !b) return 0;
   const d = Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 864e5);

@@ -527,6 +527,170 @@ export function summariseQofPointsAtRisk(perPatientResults, pointsByCode) {
   return { totalPoints, cvdPoints, patientCount: byPatient.length, byPatient, byIndicator: byIndicatorArr };
 }
 
+// ---------------------------------------------------------------------------
+// qofPoundsValue(summary, poundsPerPoint)
+//
+// Converts a summariseQofPointsAtRisk() summary into a £ figure, using the
+// PRACTICE'S OWN £-per-point figure (sweep.qofConfig.poundsPerPoint) — there is
+// no national £/point constant anywhere in this repo, deliberately: QOF income
+// depends on a practice's list size and prevalence, so any hard-coded figure
+// would be wrong for most practices and misleadingly precise for all of them.
+// This is explicitly NON-clinical arithmetic (points × rate); it carries no
+// clinical weight of its own beyond what summariseQofPointsAtRisk already
+// attaches.
+//
+// Null-safe: a missing, non-finite, or non-positive rate returns null so the
+// caller renders a "points only" view rather than a nonsense £0 or £NaN
+// figure. Never throws.
+//
+// Returns { totalPounds, cvdPounds } (rounded to the nearest pound) or null.
+// ---------------------------------------------------------------------------
+export function qofPoundsValue(summary, poundsPerPoint) {
+  const rate = Number(poundsPerPoint);
+  if (!Number.isFinite(rate) || rate <= 0) return null;
+  const s = summary || {};
+  const totalPoints = Number(s.totalPoints) || 0;
+  const cvdPoints = Number(s.cvdPoints) || 0;
+  return {
+    totalPounds: Math.round(totalPoints * rate),
+    cvdPounds: Math.round(cvdPoints * rate),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Nurse clinic-prep worklist
+//
+// Panel ask: "everyone booked today due a jab, blood test or review, with what
+// and when, so I prep the tray in advance." Re-reads the SAME action-needed
+// chips Sweep already evaluated (no new fetch), grouped by WHAT KIND of
+// action rather than by patient severity — the QOF/action-row views above
+// answer "who needs something done"; this answers "what do I need to have
+// ready", which is a different axis over the same data.
+//
+// summariseWorklistByAction(perPatientResults)
+//   → { bloods, checks, vaccines, reviews }
+// Each bucket: Array<{ uuid, name, time, clinician, items: string[] }>,
+// patients time-ordered (the order the nurse works the clinic in, same
+// convention as buildHandout). `items` are deduplicated per patient.
+//
+// Bucket rules (only action-needed statuses ever contribute — a chip that is
+// achieved/in_date/no_data/etc. never appears here):
+//   - bloods / checks: drug-monitoring chips, split by isBloodTest() on each
+//     DUE test's own name (overdue/stale/due_soon), NOT by chip type — one
+//     drug (e.g. methotrexate: FBC/LFT + weight) can legitimately contribute
+//     to BOTH buckets for the same patient.
+//   - vaccines: chip.type === 'vaccine' && chip.status === 'vax_due'
+//     (campaign suppression already applied upstream, before chips reach here).
+//   - reviews: action-needed qof-indicator chips, worded via the same
+//     QOF_ACTION_BY_PREFIX table chipInstruction() uses for the reception
+//     handout, so a code always maps to the same booking verb everywhere.
+//
+// Pure: no DOM, no chrome APIs, no fetch. Absence from a bucket is not an
+// all-clear — callers must keep the module's standard "no alert ≠ nothing
+// due" caveat visible alongside this view (H-005 doctrine, same as
+// summariseSweep/summariseQofPointsAtRisk).
+// ---------------------------------------------------------------------------
+export function summariseWorklistByAction(perPatientResults) {
+  const bloodsMap = new Map();
+  const checksMap = new Map();
+  const vaccinesMap = new Map();
+  const reviewsMap = new Map();
+
+  function addItem(bucketMap, r, item) {
+    if (!item) return;
+    let entry = bucketMap.get(r.uuid);
+    if (!entry) {
+      entry = { uuid: r.uuid, name: r.name, time: r.time, clinician: r.clinician || null, items: [] };
+      bucketMap.set(r.uuid, entry);
+    }
+    if (!entry.items.includes(item)) entry.items.push(item);
+  }
+
+  for (const r of perPatientResults || []) {
+    if (!r || r.error || !Array.isArray(r.chips)) continue;
+
+    for (const chip of r.chips) {
+      if (!chip || !isActionNeeded(chip.status)) continue;
+
+      if (chip.type === 'drug-monitoring') {
+        const drug = chip.drugName || 'monitored medication';
+        const dueTests = (chip.tests || []).filter(
+          (t) => t && (t.status === 'overdue' || t.status === 'stale' || t.status === 'due_soon')
+        );
+        for (const t of dueTests) {
+          const name = t.name || t.testName;
+          if (!name) continue;
+          const item = `${name} — ${drug}`;
+          if (isBloodTest(name)) addItem(bloodsMap, r, item);
+          else addItem(checksMap, r, item);
+        }
+      } else if (chip.type === 'vaccine') {
+        if (chip.status !== 'vax_due') continue;
+        addItem(vaccinesMap, r, chip.displayName || 'vaccination');
+      } else if (chip.type === 'qof-indicator') {
+        const code = String(chip.indicatorCode || '').toUpperCase();
+        const hit = QOF_ACTION_BY_PREFIX.find(([prefix]) => code.startsWith(prefix));
+        const verb = hit ? hit[1] : 'Book a review appointment';
+        const detail = `${chip.indicatorCode || 'QOF'}${chip.indicatorName ? ' — ' + chip.indicatorName : ''}`;
+        addItem(reviewsMap, r, `${verb} — ${detail}`);
+      }
+      // Everything else (alerts, event counts, registers, combos, trends) is
+      // out of scope for a tray-prep worklist — it is a clinical judgement,
+      // not a bookable/preppable item (mirrors chipInstruction's own scope).
+    }
+  }
+
+  function timeOrdered(bucketMap) {
+    const arr = Array.from(bucketMap.values());
+    arr.sort((a, b) => {
+      if (!a.time && !b.time) return (a.name || '').localeCompare(b.name || '');
+      if (!a.time) return 1;
+      if (!b.time) return -1;
+      return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;
+    });
+    return arr;
+  }
+
+  return {
+    bloods: timeOrdered(bloodsMap),
+    checks: timeOrdered(checksMap),
+    vaccines: timeOrdered(vaccinesMap),
+    reviews: timeOrdered(reviewsMap),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// buildWorklist(perPatientResults, meta)
+//
+// Build the printable clinic-prep worklist model. Pure: no DOM, no chrome
+// APIs — the caller (sweep.js) writes it to the transient 'sweep.worklist'
+// key and worklist.html renders it, exactly mirroring buildHandout's
+// transient-key + new-tab convention.
+//
+// meta: same shape as buildHandout's — { runAt, clinicDate, clinicians,
+//        clinician, suiteVersion }.
+//
+// Returns { generatedAt, clinicDate, clinicians, clinician, suiteVersion,
+//           bloods, checks, vaccines, reviews }.
+// ---------------------------------------------------------------------------
+export function buildWorklist(perPatientResults, meta) {
+  const m = meta || {};
+  const clinicians = Array.isArray(m.clinicians) ? m.clinicians.filter(Boolean) : m.clinician ? [m.clinician] : [];
+  const clinician = clinicians.length === 1 ? clinicians[0] : null;
+  const { bloods, checks, vaccines, reviews } = summariseWorklistByAction(perPatientResults);
+  return {
+    generatedAt: m.runAt || new Date().toISOString(),
+    clinicDate: m.clinicDate || null,
+    clinicians,
+    clinician,
+    suiteVersion: m.suiteVersion || '',
+    bloods,
+    checks,
+    vaccines,
+    reviews,
+  };
+}
+
 // buildRecallDescription(chips)
 // Build a plain-English task body from a patient's action-needed chips, reusing
 // the SAME instruction grouping as the printable handout (so a patient with
