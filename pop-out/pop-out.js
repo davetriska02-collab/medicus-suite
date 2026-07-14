@@ -324,7 +324,11 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   // (not the chrome.runtime message). Other modules (e.g. sentinel) register their
   // own chrome.runtime.onMessage listener in init(), so they receive
   // waiting:refresh / sentinel:snapshot-updated directly in the pop-out too.
-  if (msg?.type === 'slots:refresh' && activeModule === 'slots') {
+  // Dispatched UNCONDITIONALLY (v3.173.2): Capacity listens for the same DOM
+  // event as its only live-update path — the old `activeModule === 'slots'`
+  // gate froze it. Module cleanup() removes the outgoing module's listener, so
+  // unconditional dispatch cannot double-fire. Mirrors panel.js.
+  if (msg?.type === 'slots:refresh') {
     document.dispatchEvent(new CustomEvent('suite:slots:refresh'));
   }
 });

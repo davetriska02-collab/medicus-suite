@@ -291,7 +291,9 @@ function fullScreen(overrides) {
 // Fast test doubles for the two hard-coded-long-timeout helpers. Same
 // poll-then-resolve(null) / char-by-char-set-then-dispatch contract as the real
 // functions, just capped short so the suite runs fast (see file header).
+const WAITFOR_TIMEOUTS = []; // records the RAW requested timeout per waitFor call, for the per-query-budget assertions
 function fastWaitFor(fn, timeout, interval) {
+  WAITFOR_TIMEOUTS.push(timeout);
   timeout = Math.min(timeout || 5000, 200);
   interval = Math.min(interval || 120, 15);
   return new Promise((resolve) => {
@@ -336,6 +338,7 @@ function makeSandbox(rootEl, pathname) {
   CLICKS = [];
   TOASTS.length = 0;
   HIGHLIGHTED.length = 0;
+  WAITFOR_TIMEOUTS.length = 0;
   const sandbox = {
     console,
     setTimeout,
@@ -590,6 +593,10 @@ function makeSandbox(rootEl, pathname) {
     const q0 = sb.searchQueriesFor(teamName)[0];
     check(q0 === 'Prescribing', 'happy path: safe leading token ("Prescribing") is the first search query');
     check(
+      WAITFOR_TIMEOUTS.indexOf(6000) === -1,
+      'happy path: the long 6s option budget is never requested — the token query used the short (1500ms) budget'
+    );
+    check(
       TYPED_KEYSTROKES.length === q0.length,
       'happy path: typed the search query char-by-char (one step per character)'
     );
@@ -644,6 +651,12 @@ function makeSandbox(rootEl, pathname) {
     clearInterval(iv);
 
     check(CLICKS.indexOf('TeamOption') !== -1, 'full-name fallback: the team option is eventually selected');
+    check(
+      WAITFOR_TIMEOUTS.indexOf(1500) !== -1 &&
+        WAITFOR_TIMEOUTS.indexOf(6000) !== -1 &&
+        WAITFOR_TIMEOUTS.indexOf(1500) < WAITFOR_TIMEOUTS.indexOf(6000),
+      'full-name fallback: the token query gets the SHORT (1500ms) budget, only the final query the full 6s'
+    );
     check(
       CLICKS.indexOf('CommitBtn') !== -1,
       'full-name fallback: commit is clicked after the fallback query succeeds'

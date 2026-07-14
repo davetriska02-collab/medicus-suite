@@ -438,14 +438,19 @@
         return exact || partial;
       };
       // Try each query in turn (safe leading token first, then the full name —
-      // see searchQueriesFor), re-typing from empty each time. 6s margin per
-      // query: a real debounce + server round trip, not a local list filter.
+      // see searchQueriesFor), re-typing from empty each time. The FINAL query
+      // gets the full 6s margin (a real debounce + server round trip, not a
+      // local list filter); non-final queries get a short 1.5s budget so a
+      // leading-token miss falls through to the full name quickly instead of
+      // burning 6s on every miss (v3.173.2 — the reported "very slow but
+      // works" case was exactly this: token query misses, full-name query
+      // succeeds, total wait dominated by the dead 6s).
       var queries = searchQueriesFor(team);
       var option = null;
       for (var qi = 0; qi < queries.length && !option; qi++) {
         setNativeValue(assign, '');
         await typeText(assign, queries[qi]);
-        option = await waitFor(matchOption, 6000);
+        option = await waitFor(matchOption, qi < queries.length - 1 ? 1500 : 6000);
       }
       if (!option) {
         // Breadcrumb for a page-console capture (see renderedOptionTexts).
