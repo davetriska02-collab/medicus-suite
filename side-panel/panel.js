@@ -126,6 +126,10 @@ const MODULES = {
   trends: { js: () => import('./modules/trends/trends.js'), css: './modules/trends/trends.css' },
   reception: { js: () => import('./modules/reception/reception.js'), css: './modules/reception/reception.css' },
   signing: { js: () => import('./modules/signing/signing.js'), css: './modules/signing/signing.css' },
+  followups: {
+    js: () => import('./modules/followups/followups.js'),
+    css: './modules/followups/followups.css',
+  },
   sweep: { js: () => import('./modules/sweep/sweep.js'), css: './modules/sweep/sweep.css' },
   knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
   leaflets: { js: () => import('./modules/leaflets/leaflets.js'), css: './modules/leaflets/leaflets.css' },

@@ -94,6 +94,58 @@ export function requestedDrugFlags(summary, verdictItems) {
   });
 }
 
+// ── Prescribing-safety combinations at signing (Gauntlet B1, slice 1) ────────
+// The engine ALREADY evaluates the practice's drug-combination rules (the
+// CSO-reviewed alert library + practice-authored combos) in every signing
+// evaluation — their chips were simply filtered out by monitoringVerdict.
+// Surfacing them adds NO new clinical rule content: it re-displays an already-
+// evaluated fact at the decision moment. Hazard log: H-038 controls (k)/(l).
+//
+// Scope decision (H-038 (l)): only the alert (red) and caution (amber) tiers
+// are surfaced at signing. The 'noted' awareness tier stays in Monitoring —
+// salience at the point of authorisation is reserved for act-on-it-now
+// combinations, so alarm dilution never erodes the red tier here.
+export const COMBO_STATUS_LEVEL = { alert: 'red', caution: 'amber' };
+
+// Reduce engine chips to a signing-row combination verdict:
+// { level: 'red'|'amber'|null, items: [{ label, level, drugs, ruleId }] }.
+export function combinationVerdict(chips) {
+  const items = [];
+  let red = false;
+  let amber = false;
+  for (const chip of Array.isArray(chips) ? chips : []) {
+    if (!chip || chip.type !== 'drug-combo') continue;
+    const level = COMBO_STATUS_LEVEL[chip.status];
+    if (!level) continue;
+    if (level === 'red') red = true;
+    else amber = true;
+    const drugs = [];
+    for (const set of Array.isArray(chip.matchSummary) ? chip.matchSummary : []) {
+      for (const d of Array.isArray(set && set.drugs) ? set.drugs : []) {
+        if (d) drugs.push(String(d));
+      }
+    }
+    items.push({ label: chip.label || chip.ruleId || 'drug combination', level, drugs, ruleId: chip.ruleId || '' });
+  }
+  return { level: red ? 'red' : amber ? 'amber' : null, items };
+}
+
+// Loudest combination signal: a drug in the REQUEST is itself one leg of a
+// flagged combination — the classic case is an acute NSAID request landing on
+// top of ACEi + diuretic, where the request COMPLETES the AKI cluster. Same
+// best-effort-salience doctrine as requestedDrugFlags (H-038 control (f)):
+// a match can only ADD attention; a miss never hides or downranks the chip.
+export function requestedComboFlags(summary, comboItems) {
+  const text = _norm(summary);
+  if (!text) return [];
+  return (Array.isArray(comboItems) ? comboItems : []).filter((it) =>
+    (it.drugs || []).some((d) => {
+      const n = _norm(d);
+      return n && text.includes(n);
+    })
+  );
+}
+
 // Row states a task can be in while the pass runs.
 export const ROW_STATE = {
   PENDING: 'pending', // not yet checked this pass
@@ -103,17 +155,26 @@ export const ROW_STATE = {
 };
 
 // Sort for the rendered pile — the eye should land on the riskiest first:
-//   1. red with the requested drug itself flagged
+//   1. red with a requested drug itself flagged (monitoring OR combination)
 //   2. red
 //   3. amber
 //   4. error / unchecked (unknown is riskier than a recorded all-clear)
 //   5. no flags recorded
 // Ties: oldest request first (the pile is worked oldest-up).
+// Severity considers BOTH verdicts — monitoring (r.verdict) and combination
+// (r.comboVerdict, optional) — a red combination must never sit below a
+// quiet monitoring row.
 export function sortSigningRows(rows) {
   const bandOf = (r) => {
     if (r.state === ROW_STATE.DONE && r.verdict) {
-      if (r.verdict.level === 'red') return r.requestedHits && r.requestedHits.length ? 0 : 1;
-      if (r.verdict.level === 'amber') return 2;
+      const combo = (r.comboVerdict && r.comboVerdict.level) || null;
+      const level = r.verdict.level === 'red' || combo === 'red' ? 'red' : r.verdict.level || combo;
+      if (level === 'red') {
+        const requested =
+          (r.requestedHits && r.requestedHits.length) || (r.requestedComboHits && r.requestedComboHits.length);
+        return requested ? 0 : 1;
+      }
+      if (level === 'amber') return 2;
       return 4;
     }
     if (r.state === ROW_STATE.ERROR) return 3;
@@ -233,7 +294,7 @@ export function filterHiddenSummary(rows, filterKeys) {
   for (const r of Array.isArray(rows) ? rows : []) {
     if (rowMatchesLocationFilter(r, filterKeys)) continue;
     hidden++;
-    if (r.verdict && r.verdict.level === 'red') hiddenRed++;
+    if ((r.verdict && r.verdict.level === 'red') || (r.comboVerdict && r.comboVerdict.level === 'red')) hiddenRed++;
   }
   return { hidden, hiddenRed };
 }

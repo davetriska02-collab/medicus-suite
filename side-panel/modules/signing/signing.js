@@ -32,6 +32,8 @@ import { extractTaskArray } from '../submissions/submissions-core.js';
 import {
   monitoringVerdict,
   requestedDrugFlags,
+  combinationVerdict,
+  requestedComboFlags,
   sortSigningRows,
   requestAgeDays,
   renalContext,
@@ -235,15 +237,17 @@ async function runMonitoringPass(apiBase) {
           return;
         }
         const { chips, renal } = await evaluatePatient(apiBase, patientUuid, rules);
-        entry = { verdict: monitoringVerdict(chips), renal };
+        entry = { verdict: monitoringVerdict(chips), combo: combinationVerdict(chips), renal };
         _verdictByUuid.set(patientUuid, entry);
         evaluations++;
         await new Promise((r) => setTimeout(r, PER_PATIENT_DELAY_MS));
       }
       row.state = ROW_STATE.DONE;
       row.verdict = entry.verdict;
+      row.comboVerdict = entry.combo || { level: null, items: [] };
       row.renal = entry.renal;
       row.requestedHits = requestedDrugFlags(row.summary, entry.verdict.items);
+      row.requestedComboHits = requestedComboFlags(row.summary, row.comboVerdict.items);
     } catch (e) {
       row.state = ROW_STATE.ERROR;
       row.error = e.message || 'record not read';
@@ -367,8 +371,9 @@ function renderShell() {
       </div>
 
       <div class="sg-honest" role="note">
-        Monitoring shown is what is <strong>recorded</strong>, not what is true. No flag &ne; safe to sign —
-        verify in the record before authorising. This panel never writes to Medicus.
+        Monitoring shown is what is <strong>recorded</strong>, not what is true. Combination alerts are the
+        practice's configured Monitoring rules, re-shown here. No flag &ne; safe to sign — verify in the record
+        before authorising. This panel never writes to Medicus.
       </div>
 
       <div class="sg-controls">
@@ -435,25 +440,43 @@ function verdictHtml(row) {
     return `<span class="sg-status sg-status--error">record not read — check manually (${esc(row.error || 'error')})</span>`;
   }
   const v = row.verdict;
-  if (!v || v.level === null) {
+  const cv = row.comboVerdict;
+  const monItems = (v && v.items) || [];
+  const comboItems = (cv && cv.items) || [];
+  if (!monItems.length && !comboItems.length) {
     return (
       '<span class="sg-status sg-status--clear">no monitoring flags recorded <span class="sg-clear-caveat">&ne; all clear</span></span>' +
       renalHtml(row)
     );
   }
-  const hitNames = new Set(row.requestedHits.map((h) => h.name));
-  return (
-    v.items
-      .map((it) => {
-        const band = ['overdue', 'stale', 'no_data'].includes(it.status) ? 'red' : 'amber';
-        const isRequested = hitNames.has(it.name);
-        return `<span class="sg-chip sg-chip--${band}${isRequested ? ' sg-chip--requested' : ''}">
+  const hitNames = new Set((row.requestedHits || []).map((h) => h.name));
+  const comboHitIds = new Set((row.requestedComboHits || []).map((h) => h.ruleId));
+  const monHtml = monItems
+    .map((it) => {
+      const band = ['overdue', 'stale', 'no_data'].includes(it.status) ? 'red' : 'amber';
+      const isRequested = hitNames.has(it.name);
+      return `<span class="sg-chip sg-chip--${band}${isRequested ? ' sg-chip--requested' : ''}">
         ${isRequested ? '<span class="sg-chip-req" title="This flagged drug appears in the request itself">requested</span>' : ''}
         ${esc(it.name)} — ${esc(CHIP_STATUS_TEXT[it.status] || it.status)}${it.detail ? `: ${esc(it.detail)}` : ''}
       </span>`;
-      })
-      .join('') + renalHtml(row)
-  );
+    })
+    .join('');
+  // Combination chips: the engine's existing drug-combination evaluations
+  // (H-038 k), dashed border = combination family; tooltip carries the
+  // matched drugs verbatim. "in request" = a drug in THIS request is one leg
+  // of the combination (e.g. acute NSAID completing the AKI cluster).
+  const comboHtml = comboItems
+    .map((it) => {
+      const isRequested = comboHitIds.has(it.ruleId);
+      return `<span class="sg-chip sg-chip--${it.level} sg-chip--combo${isRequested ? ' sg-chip--requested' : ''}" title="${esc(
+        (it.drugs || []).join(' + ')
+      )}">
+        ${isRequested ? '<span class="sg-chip-req" title="A drug in this request is one leg of this combination">in request</span>' : ''}
+        ${esc(it.label)}
+      </span>`;
+    })
+    .join('');
+  return monHtml + comboHtml + renalHtml(row);
 }
 
 // Renal fact — verbatim latest recorded eGFR, value NEVER shown without its
@@ -462,7 +485,7 @@ function verdictHtml(row) {
 // a quiet row's missing eGFR would be noise on every young healthy patient.
 function renalHtml(row) {
   const r = row.renal;
-  const flagged = !!(row.verdict && row.verdict.level);
+  const flagged = !!((row.verdict && row.verdict.level) || (row.comboVerdict && row.comboVerdict.level));
   if (!r) {
     return flagged ? '<span class="sg-renal sg-renal--stale">no eGFR on record</span>' : '';
   }

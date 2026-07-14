@@ -159,6 +159,28 @@
   margin-bottom: 12px;
 }
 
+/* Same-weekday baseline line (all categories combined) — hidden until the
+   ledger holds enough watched history. Informational, never red: demand
+   pressure vs thresholds is the alert strip's job, this line answers
+   "is today normal?". */
+.sub-baseline {
+  margin: -6px 0 12px;
+  padding: 5px 9px;
+  border-radius: var(--r-md);
+  font-size: 10.5px;
+  color: var(--text-3);
+  background: var(--bg-elev);
+  border: 1px dashed var(--border-hi);
+}
+.sub-baseline--high {
+  color: var(--amber);
+  border-color: var(--amber-line);
+  background: var(--amber-dim);
+}
+.sub-baseline.hidden {
+  display: none;
+}
+
 .sub-metric {
   background: var(--bg-elev);
   border: 1px solid var(--border);

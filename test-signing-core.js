@@ -24,6 +24,8 @@ const path = require('path');
   const {
     monitoringVerdict,
     requestedDrugFlags,
+    combinationVerdict,
+    requestedComboFlags,
     sortSigningRows,
     requestAgeDays,
     renalContext,
@@ -94,6 +96,39 @@ const path = require('path');
   check(requestedDrugFlags('', items).length === 0, 'empty summary → no hits');
   check(requestedDrugFlags('lithium', null).length === 0, 'null items → no hits');
 
+  // ── combinationVerdict / requestedComboFlags ─────────────────────────────────
+  console.log('\n--- combination verdict ---');
+  const comboChip = (over) => ({
+    type: 'drug-combo',
+    ruleId: 'pincer-4',
+    status: 'alert',
+    label: 'ACEi/ARB + NSAID concurrent',
+    matchSummary: [
+      { setName: 'RAAS blocker', drugs: ['Ramipril 5mg capsules'] },
+      { setName: 'NSAID', drugs: ['Naproxen 250mg tablets'] },
+    ],
+    ...over,
+  });
+  let cvd = combinationVerdict([comboChip({})]);
+  check(cvd.level === 'red' && cvd.items.length === 1, 'alert combo → red');
+  check(
+    cvd.items[0].drugs.join('|') === 'Ramipril 5mg capsules|Naproxen 250mg tablets',
+    'matched drugs flattened from all sets'
+  );
+  cvd = combinationVerdict([comboChip({ status: 'caution', ruleId: 'x' })]);
+  check(cvd.level === 'amber', 'caution combo → amber');
+  cvd = combinationVerdict([comboChip({ status: 'noted' })]);
+  check(cvd.level === null && cvd.items.length === 0, "'noted' awareness tier NOT surfaced at signing (H-038 l)");
+  check(combinationVerdict([chip({})]).items.length === 0, 'drug-monitoring chips ignored by combination verdict');
+  check(combinationVerdict(null).level === null, 'null chips → clean empty verdict');
+
+  const comboItems = combinationVerdict([comboChip({})]).items;
+  let comboHits = requestedComboFlags('NAPROXEN 250mg tablets x28', comboItems);
+  check(comboHits.length === 1, 'request completing the cluster flagged (acute NSAID on ACEi)');
+  check(requestedComboFlags('Atorvastatin 20mg', comboItems).length === 0, 'unrelated request → no combo hit');
+  check(requestedComboFlags('', comboItems).length === 0, 'empty summary → no combo hits');
+  check(requestedComboFlags('naproxen', null).length === 0, 'null items → no combo hits');
+
   // ── sortSigningRows ──────────────────────────────────────────────────────────
   console.log('\n--- sortSigningRows ---');
   const row = (over) => ({
@@ -123,6 +158,29 @@ const path = require('path');
   const b = row({ taskId: 'b', verdict: { level: 'red', items: [{}] }, createdAt: '2026-06-28T08:00:00Z' });
   check(sortSigningRows([a, b])[0].taskId === 'b', 'same band → oldest request first');
   check(Array.isArray(sortSigningRows(null)), 'null input tolerated');
+
+  // combination verdicts join the banding
+  const comboRed = row({ taskId: 'comboRed', comboVerdict: { level: 'red', items: [{}] } });
+  const comboReq = row({
+    taskId: 'comboReq',
+    comboVerdict: { level: 'red', items: [{}] },
+    requestedComboHits: [{}],
+  });
+  const comboAmber = row({ taskId: 'comboAmber', comboVerdict: { level: 'amber', items: [{}] } });
+  const order2 = sortSigningRows([clear, comboAmber, comboRed, comboReq]).map((r) => r.taskId);
+  check(order2[0] === 'comboReq', 'red combo with request participation → band 0');
+  check(order2[1] === 'comboRed' && order2[2] === 'comboAmber', 'combo red above combo amber');
+  check(order2[3] === 'clear', 'quiet row still last');
+
+  // hidden-red note counts combination reds too
+  const hsc = filterHiddenSummary(
+    [
+      { collectionLocation: 'Boots', verdict: { level: null, items: [] }, comboVerdict: { level: 'red', items: [{}] } },
+      { collectionLocation: 'Dispensary', verdict: { level: null, items: [] } },
+    ],
+    new Set(['Dispensary'])
+  );
+  check(hsc.hidden === 1 && hsc.hiddenRed === 1, 'hidden COMBO red counted in the filter note (H-038 j+k)');
 
   // ── requestAgeDays ───────────────────────────────────────────────────────────
   console.log('\n--- requestAgeDays ---');

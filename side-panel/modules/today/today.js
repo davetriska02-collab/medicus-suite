@@ -19,8 +19,9 @@
 import { buildHeadline } from './today-headline.js';
 import { hasEnabledRules, buildBreaches } from '../slots/slots-alert-core.js';
 import { isActionNeeded } from '../sweep/sweep-core.js';
-import { windowTaskList, ledgerSeriesForDay } from '../submissions/submissions-core.js';
+import { windowTaskList, ledgerSeriesForDay, demandBaseline, baselineLine } from '../submissions/submissions-core.js';
 import { recordTaskLists } from '../submissions/submissions-ledger.js';
+import { followupCounts } from '../followups/followups-core.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -195,6 +196,7 @@ async function fetchDemand() {
       return;
     }
     const today = todayISO();
+    let baseline = null;
     const [medRes, admRes] = await Promise.allSettled([
       window.ApiDiag.fetch({
         module: 'today-demand',
@@ -228,6 +230,9 @@ async function fetchDemand() {
       const s = ledgerSeriesForDay(ledger, today, ['medical', 'admin']);
       if (medW) medical = s.medical.total;
       if (admW) admin = s.admin.total;
+      // Same-weekday baseline read (null until enough watched history) —
+      // cumulative to the CURRENT hour, so a half-day is compared honestly.
+      baseline = demandBaseline(ledger, today, new Date().getHours(), ['medical', 'admin']);
     } catch (_) {
       // Storage failure — fall back to the live (open-only) counts above.
     }
@@ -241,7 +246,7 @@ async function fetchDemand() {
       medRes.status === 'rejected' || admRes.status === 'rejected'
         ? medRes.reason?.message || admRes.reason?.message || 'Fetch failed'
         : null;
-    _demandData = { medical, admin, thresholds, error, dataWarn };
+    _demandData = { medical, admin, thresholds, error, dataWarn, baseline };
   } catch (e) {
     _demandData = {
       medical: null,
@@ -491,7 +496,7 @@ function buildDemandBody() {
   if (!_demandData) return '<span class="today-loading">Loading…</span>';
   if (_demandData.noCode) return buildNoCodeMsg();
 
-  const { medical, admin, thresholds, error, dataWarn } = _demandData;
+  const { medical, admin, thresholds, error, dataWarn, baseline } = _demandData;
 
   if (error && medical == null && admin == null) {
     return errMsg(error);
@@ -559,6 +564,11 @@ function buildDemandBody() {
       ${admFlag}
     </div>
     ${meter('admin', admin)}
+    ${
+      baseline
+        ? `<div class="today-baseline today-baseline--${baseline.band}" title="Combined medical + admin received today vs the same weekday's history (watched days only, compared to the same hour)">${esc(baselineLine(baseline))}</div>`
+        : ''
+    }
     ${warnLine}
     ${errLine}
   `;
@@ -755,6 +765,36 @@ function wireCardInteractions() {
       if (mod) navTo(mod);
     });
   });
+
+  container.querySelector('#todayFollowups')?.addEventListener('click', () => navTo('followups'));
+}
+
+// ── Follow-ups line ───────────────────────────────────────────────────────────
+// One compact line under the headline: the personal safety-net ledger's due
+// state. Hidden entirely when the ledger has no open entries (no noise for
+// non-users); red when anything has lapsed, amber when something is due
+// today. Reads storage directly — the ledger is machine-local by design.
+
+function renderFollowupsLine() {
+  const el = container?.querySelector('#todayFollowups');
+  if (!el) return;
+  chrome.storage.local.get(['followups.entries'], (res) => {
+    if (!container) return;
+    const c = followupCounts(res['followups.entries'], Date.now());
+    if (!c.open) {
+      el.classList.add('hidden');
+      return;
+    }
+    const bits = [];
+    if (c.lapsed) bits.push(`<strong>${c.lapsed} overdue</strong>`);
+    if (c.dueToday) bits.push(`${c.dueToday} due today`);
+    const rest = c.open - c.lapsed - c.dueToday;
+    if (rest) bits.push(`${rest} waiting`);
+    el.classList.remove('hidden');
+    el.classList.toggle('today-followups--red', c.lapsed > 0);
+    el.classList.toggle('today-followups--amber', c.lapsed === 0 && c.dueToday > 0);
+    el.innerHTML = `Follow-ups: ${bits.join(' &middot; ')} &rarr;`;
+  });
 }
 
 // ── Full render (scaffold) ────────────────────────────────────────────────────
@@ -801,6 +841,7 @@ function renderScaffold() {
   container.innerHTML = `
     <div class="module-wrap today-module">
       <div class="today-headline today-headline--quiet" aria-live="polite">Working out what needs you…</div>
+      <button class="today-followups hidden" id="todayFollowups" data-nav="followups" aria-label="Open Follow-ups"></button>
       <div class="today-cards">
         ${cards
           .map(
@@ -839,6 +880,7 @@ function onStorageChange(changes) {
   if (changes['submissions.thresholds']) fetchDemand();
   if (changes['sweep.lastRun']) fetchSweep();
   if (changes['suite.alertLog']) fetchAlerts();
+  if (changes['followups.entries']) renderFollowupsLine();
   // Item 9: a rule edited in the Slots tab or options.html#sect-slots should
   // reflect on the Slots Today card / headline without waiting for the next poll.
   if (changes['slots.alertRules']) fetchSlots();
@@ -865,6 +907,7 @@ export async function init(el) {
   fetchSlots();
   fetchSweep();
   fetchAlerts();
+  renderFollowupsLine();
 
   // Pollers
   addTimer(fetchWr, WR_POLL_MS);
@@ -886,6 +929,7 @@ export async function init(el) {
       fetchSlots();
       fetchSweep();
       fetchAlerts();
+      renderFollowupsLine();
     }
   };
   document.addEventListener('visibilitychange', onVisible);

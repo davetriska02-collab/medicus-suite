@@ -2,6 +2,84 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.162.0] — 2026-07-07
+
+### Baselines: "is today busy, or does it just feel busy?"
+
+Gauntlet exceed-plan item B3 / dream-panel D3 (third consecutive panel run
+asking for history): today's demand now reads against the same weekday's own
+ledger history, in plain English.
+
+- **Today demand card + Submissions today view** carry a baseline line —
+  "Busier than usual for a Tuesday — ahead of 7 of the last 9 by this time"
+  (amber ink only when genuinely ahead of most of its history; quieter and
+  typical days stay muted).
+- **Compared honestly**: cumulative to the same hour of day (a half-day is
+  never compared against past full days); a viewed past day compares as a
+  complete day. Counts, not percentiles — checkable by hand from the
+  compare view.
+- **Watched days only, minimum 4 samples**: unwatched ledger days are known
+  undercounts and are excluded (they would bias every ordinary day toward
+  "busier than usual"); until four watched same-weekdays exist, the line
+  simply doesn't render — no baseline invented from two points.
+- Pure logic in `submissions-core.js` (`demandBaseline`, regression-tested:
+  weekday isolation, watched-only sampling, half-day honesty, band edges,
+  minimum-history gate).
+
+## [v3.161.0] — 2026-07-07
+
+### Signing Queue: prescribing-safety combinations at the decision moment
+
+Gauntlet exceed-plan item B1, slice 1 (docs/benchmark/GAUNTLET-2026-07-07.md):
+the engine already evaluates the practice's drug-combination rules (the
+CSO-reviewed alert library + practice-authored combos) on every signing
+check — their chips were simply filtered out. They now render on the row:
+
+- **Combination chips** (dashed border, red/amber tiers) alongside the
+  monitoring chips — e.g. "ACEi/ARB + NSAID concurrent" — with the matched
+  drugs verbatim in the tooltip. No new clinical rule content: this
+  re-displays an already-evaluated fact at the point of authorisation.
+- **"In request" flag** when a drug in the request itself is one leg of a
+  flagged combination — the acute-NSAID-completes-the-AKI-cluster case —
+  additive salience only, same doctrine as the requested-drug tag.
+- Red combinations join the riskiest-first sort banding and the hidden-red
+  filter note; the no-eGFR call-out now also fires on combination-flagged
+  rows. The 'noted' awareness tier deliberately stays in Monitoring so
+  signing-time salience is reserved for act-on-it-now combinations.
+- Hazard log: **H-038 controls (j)–(l)** recorded (re-display-only scope,
+  additive salience, awareness-tier exclusion).
+
+## [v3.160.0] — 2026-07-07
+
+### New Follow-ups tab: the personal safety-net ledger
+
+The strongest convergence of the 2026-07-07 Practice dream-feature panel
+(docs/appraisal/PRACTICE-dream-features-2026-07-07.md, item D1 — 7 of 10
+personas independently asked for loop-closure memory): the things a clinician
+is waiting on — "MSU pending, chase Friday" — held locally and resurfaced when
+the due date passes, instead of living in their head all week.
+
+- **Follow-ups tab** (`side-panel/modules/followups/`): add what you're
+  waiting for with a due date; entries band as waiting → due soon → due today
+  → **overdue** (lapsed is the loudest state — the broken chain IS the
+  product), sorted most-lapsed first. Done entries keep a struck-through
+  30-day trail, then auto-prune.
+- **Add from Monitoring**: an "Add follow-up reminder" action on the open
+  patient (overflow menu) creates a patient-linked entry — UUID captured from
+  the record context with the same open/submit wrong-patient re-check as the
+  create-task form. Entries added on the tab itself are explicitly labelled
+  "unlinked note"; a typed name is never treated as identity.
+- **Today line**: "Follow-ups: 2 overdue · 1 due today" under the headline —
+  red when anything has lapsed, hidden entirely when the ledger is empty.
+- **Honest state, fixed**: the ledger is a personal reminder list on this
+  machine only — not the clinical record, never a safety-netting system of
+  record, and nothing in it acts by itself. Stated permanently on the tab and
+  at the point of capture. Patient-identifiable by nature, so the store is
+  **excluded from suite backups** (machine-local by design, enforced by the
+  backup-coverage test) and open entries are **never silently pruned**
+  (regression-tested). Ledger writes are audited to the event ledger by
+  patient UUID. Hazard log: **H-040**.
+
 ## [v3.161.0] — 2026-07-14
 
 ### Practice-panel wishlist wave 2 (the 1–2-day roadmap items)
