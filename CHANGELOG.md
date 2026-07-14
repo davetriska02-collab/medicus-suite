@@ -41,6 +41,32 @@ when Medicus tweaks the picker's search.
   full-name-fallback scenario (54/54); `test-routine-rx-audit.js` unaffected
   (23/23).
 
+### Also: unblocked two CI checks left red by the v3.160.0 merge
+
+v3.160.0 shipped with two CI checks already failing on `main`; this branch
+rebased onto it and inherited both. Neither is related to the routine-rx fix;
+both are cleared here so the PR can go green. **The clinical content added
+below still requires CSO review** — CI green attests only that the coverage
+guards pass, not that a Clinical Safety Officer has signed off the new terms.
+
+- **`engine/reception-match.js`** — v3.160.0 added the `sinusitis` pathway and
+  new red-flag ids (`rf-weightloss`, `rf-new50-visual`, `rf-orbital`,
+  `rf-frontal-swelling`, `rf-severe-unwell`, `rf-fontanelle`) to
+  `rules/reception-pathways.json` without the matching `SYNONYM_TERMS` /
+  `RED_FLAG_TOPIC_TERMS`, failing `test-reception-match.js`'s coverage guard.
+  Added conservative topic terms for each, derived directly from each item's
+  `ask` text and following the module's fail-safe direction (a missing term
+  makes a red flag read as a GAP that is re-asked, never a silent suppression).
+  Marked CSO-reviewable inline, per the file's existing clinical-content note.
+- **Safety-doc version pins** — v3.160.0 updated the manifest to 3.160.0 but
+  left `docs/CLINICAL-SAFETY-NOTICE.md`, `docs/HAZARD-LOG.md` and
+  `docs/feature-list.md` pinned at `3.159.0`, failing `check-doc-versions.js`.
+  Synced those three pins to `3.160.1` (the established incremental-sync
+  pattern). The `docs/cso-review-ledger.json` record of the last *full* CSO
+  review (3.115.0 / 3.126.0) is deliberately left unchanged — no CSO review is
+  claimed by this sync; `docs/SOUP.md` stays at its ledger pin (STALE, within
+  threshold).
+
 ## [v3.160.0] — 2026-07-11
 
 ### The Keeper: clinical rule currency update (2026-07-11)
