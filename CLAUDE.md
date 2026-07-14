@@ -22,7 +22,7 @@
 4. Add `<name>: { js: () => import('./modules/<name>/<name>.js'), css: '...' }` to `MODULES` in `side-panel/panel.js` AND `pop-out/pop-out.js`
 5. Follow the backup convention below
 
-> **Panel-only tabs (intentional exceptions):** `visualiser` and `about` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. `visualiser` is special-cased in `panel.js` (opens a full browser tab, not a module) and `about` renders inline static text — neither makes sense in the floating pop-out, so they are deliberately omitted there. All *real* modules must still appear in both.
+> **Panel-only tabs (intentional exceptions):** `visualiser`, `about`, and `duplicate-checker` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. `visualiser` and `duplicate-checker` are both special-cased in `panel.js` (each opens a full browser tab via `chrome.tabs.create`, not a module) and `about` renders inline static text — none of these make sense in the floating pop-out, so they are deliberately omitted there. All *real* modules must still appear in both.
 
 ## chrome.storage.local keys — backup convention
 

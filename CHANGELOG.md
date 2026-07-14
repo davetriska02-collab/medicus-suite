@@ -2,6 +2,697 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.173.0] — 2026-07-08
+
+### Cross-record file-match detection moved to an opt-in second pass
+
+Live timing from the user, always-on v3.172.0 vs the pre-feature baseline
+on the same 63-document test-patient record: **54.5s → 79.3s** — a ~25s
+(~46%) slowdown, confirmed too slow to run unconditionally. The matching
+itself was confirmed accurate (correctly found real duplicates filed years
+apart), so the fix is gating, not the algorithm.
+
+- New `findSuspiciousDocuments(documentEntries)` — the free half of the
+  design: flags a document if its title carries a raw filename/GUID prefix
+  (`hasJunkTitlePrefix`, unchanged from v3.172.0) OR its id-timestamp falls
+  in the same MINUTE as another document's (new — buckets by
+  `Math.floor(idTime / 60000)`, reusing the id-timestamp every entry
+  already carries, the same signal the keeper tie-breaker uses). Wired
+  into `analyzeJournal` itself so it's computed on every analysis at zero
+  cost — `analysis.suspiciousDocuments` / `summary.suspiciousDocumentsTotal`
+  are always populated, whether or not the primary pass found anything.
+- `applyOnDemandCrossChecks` no longer fetches previews for un-grouped
+  documents or calls `findFileMatchedDuplicates` — that expensive half
+  moved to a new, user-triggered `runFileMatchSecondPass(out)`.
+- New opt-in banner, shown whenever `findSuspiciousDocuments` flagged
+  anything and the second pass hasn't run yet — including in the
+  **empty-state** case (zero groups found by the normal pass): "N
+  document(s) show signs of reimport corruption … Run full cross-document
+  file-match check…". This is exactly the scenario that motivated the
+  whole feature — a patient flagged as suspicious with no hits in the
+  normal search.
+- `document` entries now carry their own raw `title` field (added in
+  v3.172.0, unchanged) — still needed for the junk-prefix check regardless
+  of pass timing.
+- No change to `findFileMatchedDuplicates`, `hasJunkTitlePrefix`, or
+  `hasCreatedAfterFiled` themselves — only when they run.
+
+11 new parser tests (301/301 passing).
+
+## [v3.172.0] — 2026-07-08
+
+### Added: cross-record file-match duplicate detection for documents, built into the first pass
+
+Real motivating case (test patient 5, live): documents duplicated across
+DIFFERENT journal dates, which the primary `(kind, date, code)` key can
+never catch no matter how the code/date resolve, because the two copies
+genuinely disagree on date. Built at the user's explicit request as an
+**always-on** part of "Analyse current patient" (not opt-in) for a first,
+honest timing test on a document-heavy record (63 documents) — the user's
+plan is to break it out into an opt-in second pass only if it measurably
+slows the analysis down.
+
+- `engine/record-duplicate-parser.js`: `findFileMatchedDuplicates(documentEntries,
+  existingGroups, fileTypeByEntryId, fileSizeByEntryId, createdDateByEntryId,
+  filedDateTimeByEntryId)` — matches document-kind entries ACROSS THE WHOLE
+  RECORD by `(fileType, fileSize)` (the one signal a reimport relabelling
+  pass can't corrupt), the same composite key `splitDocumentGroupsByFileType`
+  already uses, applied the opposite way (forms new groups instead of
+  splitting one apart). Entries with unknown fileType/fileSize are excluded
+  from matching entirely — never guessed. A cluster whose member set is
+  already exactly one existing group is skipped (no duplicate reporting);
+  a cluster only partially covered by existing grouping IS still surfaced
+  — that's the whole point, catching links the primary pass structurally
+  cannot see. Tier is always REVIEW (strong evidence, not proof), tagged
+  `fileMatched: true`.
+- Two zero-fetch diagnostic markers carried per matched entry: `hasJunkTitlePrefix`
+  (a raw filename/GUID fragment before a genericised title's `Type:`/
+  `Author Org:` segments — live example: `"tiff: 1C60D211-...tiff - Type:
+  Admin Letter Author Org: …"` — reuses `parseGenericDocumentTitle`'s own
+  label regex) and `hasCreatedAfterFiled` (a document's creation time
+  postdating its own filing time — a logical-ordering anomaly, not a
+  timing-proximity heuristic).
+- `duplicate-checker.js`: `applyOnDemandCrossChecks` now fetches
+  `clinical/data/document/modals/preview/{id}` for every document-kind
+  entry that never formed a candidate group under the primary pass (reusing
+  previews already fetched for grouped documents — piggybacked on the
+  existing per-document `document/entries` loop, so no extra pass over the
+  document list). Cost is proportional to how many documents the journal
+  grouping missed, not the whole document population twice over. New
+  summary line: "N/M cross-record file-size/type cluster(s) surfaced as new
+  group(s)". Matched groups get an explicit warning banner and per-card
+  badges (own date, junk-title-prefix, created-after-filed) since a
+  file-matched group can span different journal dates and codes.
+- Document entries now retain their own `title` field (previously only the
+  concatenated `rawText` blob was kept) — needed for the junk-prefix check.
+
+29 new parser tests (290/290 passing).
+
+## [v3.171.0] — 2026-07-08
+
+### Added: links out to Medicus for direct comparison (duplicate-checker)
+
+Two navigation links, both confirmed live via DevTools capture:
+
+- **"Open this patient's record in Medicus ↗"** at the top of every
+  patient's analysis, opening the confirmed care-record journal page in a
+  new tab. Its URL only differs from the API host by moving the site code
+  from subdomain to the first path segment
+  (`https://e38a9f.api.england.medicus.health` →
+  `https://england.medicus.health/e38a9f/patient/patient/care-record/{id}?careRecordTab=journal`)
+  — `buildCareRecordJournalUrl` refuses (returns null, no link rendered)
+  rather than guessing if `apiBase` doesn't match the exact confirmed
+  shape.
+- **"Download original ↗"** on each copy's column header in the document
+  Compare-fields table, via the confirmed
+  `GET clinical/document/download-file/{fileId}?convertToPDF=0` endpoint —
+  the same original bytes this tool's fileType/fileSize matching already
+  compares, not a converted copy. Takes the document's own `fileId`
+  (confirmed distinct from `documentId` in the real capture), read from
+  the preview already fetched for the comparison table — no new fetch.
+  `convertToPDF=1` (PDF export) is a plausible but unconfirmed inference
+  from the parameter name and is deliberately not wired without its own
+  capture.
+- Investigation-only: clicking a document in Medicus's own UI opens an
+  in-page modal (every related call sits under `.../modals/...` and
+  returns JSON) — there is no document-specific browser URL to link to,
+  which is why these two links are the practical ceiling for "click to
+  compare" rather than a direct jump into the document viewer.
+
+8 new parser tests (261/261 passing).
+
+## [v3.170.0] — 2026-07-08
+
+### Duplicate-checker: GP2GP wrapper shown as a guide; single keep cue
+
+Two presentation refinements from live use:
+
+- **GP2GP wrapper text is now shown in place, highlighted amber** (badge
+  "GP2GP wrapper detected"), instead of being silently stripped with a grey
+  "wrapper stripped" note. It's a visual guide to which copy is the reimport
+  artifact to reject. The added/removed diff is still computed on the
+  cleaned content, so the wrapper frames the comparison without polluting
+  it; merge suggestions and grouping still strip it as before (display-only
+  change).
+- **Removal/merge confirm: one keep cue, not three.** The per-card
+  "✓ KEEP / ✗ DISCARD" banners that appeared on button-click are gone —
+  they duplicated the form's KEEPING/REMOVING panels with different wording
+  and misaligned with the columns. The kept copy now carries a single green
+  outline (matching the Compare & merge view); the form's KEEPING/REMOVING
+  panels remain the labelled statement. Clicking a card to switch the
+  keeper still works.
+
+No logic changes; 253/253 parser tests pass.
+
+## [v3.169.1] — 2026-07-08
+
+### Fix: document removal now truly removes (was only striking through)
+
+v3.169.0 wired document removal to the wrong endpoint. Live test showed the
+document was marked incorrect (struck through) but stayed VISIBLE. The user
+captured both Medicus actions and they are near-identical but distinct:
+
+- "mark as incorrect only" (struck through, still visible) →
+  `POST clinical/document/mark-incorrect` with `{reason, inboundDocumentId}`
+  — this is what v3.169.0 wired by mistake.
+- **"remove from record" (removed completely)** →
+  `POST clinical/document/mark-incorrect-and-hidden` with
+  `{reason, isConfirmedRemoval: true, inboundDocumentId}` — the correct
+  target, now wired.
+
+So `document` is the same contract family as problem/note/prescription
+after all (the `-and-hidden` suffix + `isConfirmedRemoval: true` is what
+hides/removes across all four); it differs only in the id field name
+(`inboundDocumentId`). The `noConfirmFlag` special-case added in v3.169.0
+is removed — all four contracts carry `isConfirmedRemoval: true`. Exact-body
+test updated to the captured "remove from record" POST. 253/253 tests.
+
+## [v3.169.0] — 2026-07-08
+
+### Added: duplicate documents can now be removed (duplicate-checker)
+
+The user captured the document removal contract live (2026-07-08). Findings:
+
+- **`POST clinical/document/mark-incorrect`** with body
+  `{reason, inboundDocumentId}` — a DIFFERENT shape from the other three
+  removal contracts: the id field is `inboundDocumentId` (not
+  `documentId`) and there is NO `isConfirmedRemoval` flag. This is the
+  "Remove from record" action (document removed completely). Medicus's
+  separate "mark as incorrect only" (struck-through but still visible)
+  path is a different, uncaptured endpoint and is deliberately not wired —
+  a visible struck-through duplicate doesn't reduce visible duplication.
+- `document` added to `WRITE_CONTRACTS`; `buildRemovalRequest` extended to
+  omit `isConfirmedRemoval` for it (exact-body test pins the request to the
+  captured POST). `isRemovableKind('document')` is now true.
+- `duplicate-checker.js`: document REVIEW groups gain a "Remove a duplicate
+  copy…" button that drops into the existing keeper-choice/removal flow
+  (the standalone-removal gap the user hit when "Compare fields" had
+  nothing to apply). After a successful field-apply, the success state now
+  offers removal of the duplicate copy directly instead of saying it can't.
+  Removal-form wording is document-accurate ("permanently remove N
+  document(s) from this patient's record" vs "hide" for the hidden-contract
+  kinds).
+- 2 new parser tests (253/253 passing).
+
+## [v3.168.0] — 2026-07-08
+
+### Previous-practice notes can now auto-merge (duplicate-checker)
+
+The user captured the missing evidence live (2026-07-08): the GET
+edit-note model AND a successful change-note POST for a real
+previous-practice note ("Patient de-registration",
+`recordedAtAnotherOrganisation: true`, manually-typed org). Findings:
+
+- **The POST body is identical in shape to the local-note capture from
+  2026-07-06** — the same 13 keys. `recordedAtAnotherOrganisation`,
+  `recordedByOrganisationManual` and `organisationEntry` are GET-only and
+  never posted; the organisation posts as the structured
+  `{organisationName, organisationIdentifierType,
+  organisationIdentifierValue}` object (null identifiers for a
+  manually-typed name — same shape as the document contract). The old
+  blanket refusals on those two flags are lifted; a new exact-body test
+  pins the builder to the captured POST byte-for-byte.
+- New `resolveNoteOrganisation` evidence chain (structured object →
+  manual text → caller-supplied name). A previous-practice note with NO
+  org name anywhere still refuses — **Medicus's own form refuses to save
+  that state** (user-confirmed live: the form demands a "previous
+  organisation" value) — and the merge flow now shows the same
+  organisation prompt the document flow has (default "Previous GP")
+  instead of a dead end.
+- **Named refusal reasons** replace the generic "an unconfirmed field was
+  present": linked clinical case (still never live-tested — manual path),
+  empty merged text (junk-only copies — points at the Remove button), and
+  the org prompt above.
+
+4 new/updated parser tests (251/251 passing).
+
+## [v3.167.0] — 2026-07-08
+
+### One consistent compare/merge surface for notes; created-date evidence on every card (duplicate-checker)
+
+Three consistency items from the user's v3.166.0 live test:
+
+- **EXACT note/problem pairs get the side-by-side cards too** (previously
+  stacked snippets that made two "identical" entries look pointlessly
+  identical). Every copy card now shows a `created` timestamp recovered
+  from its UUIDv7 record id — zero fetches, the same signal the keeper
+  tie-breaker already uses — highlighted amber across the group when the
+  copies' creation times differ (the user's real EXACT pair was created
+  years apart: original at registration, duplicate by a later reimport;
+  that evidence was previously invisible). Cards also show the
+  "kept (earliest copy)" badge.
+- **"Compare details…" + "Suggest a merge…" unified into one
+  "Compare & merge…"** for note groups (REVIEW + HIGH): the full-record
+  field table (note/overview — linked problems, created timestamps,
+  differs-highlighting) and the merge editor in ONE view, matching the
+  document Compare-fields pattern. The kept column is headed "✓ KEEP" in
+  green with the cards' fate banners live; clicking a card switches the
+  keeper and re-renders (overviews cached, so instant). Only **Note text**
+  is mergeable (the change-note contract is a text replace; all other
+  fields round-trip unchanged), so only that row carries radios — picking
+  a copy loads its junk-stripped text into the editable merge box. Apply
+  drops into the existing confirm-then-remove flow. Problem-kind groups
+  keep "Suggest a merge…" (no problem overview/edit endpoint captured
+  yet).
+- **KEEPING / REMOVING side by side** in the removal and merge confirm
+  forms (green and red bordered panels in one row) instead of stacked —
+  per the user's request to make the keep/discard pattern the consistent
+  default across every merge/removal operation here.
+
+## [v3.166.0] — 2026-07-08
+
+### Fixed + added: junk-only note pairs, note detail comparison, unmistakable KEEP/DISCARD (duplicate-checker)
+
+Three user-driven items from live testing (2026-07-08):
+
+**Fix: null-note vs junk-only-note pairs mis-tiered REVIEW.** Real pair
+(GP2GP original with `note: null` vs reimport copy whose whole body is
+`{Episodicity : code=255217005, displayName=First}`) showed as "same code,
+different content". The episodicity-suffix regex already stripped the
+block correctly — the actual bug was `normText(null)` returning a bare
+string while every other path returns `{text, wrapped}`;
+`buildGroupRecord` SPREADS the result, and spreading a string contributes
+nothing, so the null-text member got `text: undefined` vs the junk-only
+member's `text: ''`. Fixed the null path's shape; the pair now tiers
+EXACT (identical after junk-strip, same author) with the direct remove
+button.
+
+**Added: "Compare details…" for note groups** (REVIEW + HIGH, not
+documentLinked — those ids were never confirmed against this endpoint).
+Read-only side-by-side of each copy's full note record via
+`GET clinical/data/note/overview/{noteId}` (confirmed 2026-07-08 from two
+real payloads): code, note text, record date, recorded by, created,
+created-in-original-system, linked problems, marked-incorrect. Fetched
+on demand, cached per panel. **Linked-problems keeper safety** rides the
+same data: the reimport copy routinely LOSES the problem linkage the
+original keeps, so the removal form now warns (non-blocking, after the
+form renders) when the copy being removed carries linked problems the
+kept copy lacks.
+
+**Added: unmistakable KEEP/DISCARD (user mockup).** While a removal or
+merge confirm is open, every copy card gets a fate banner — "✓ KEEP"
+(green outline) / "✗ DISCARD" (red, faded) — and **clicking a card makes
+it the kept copy**, re-rendering the form to match. The confirm form's
+text is restructured into explicit KEEPING / REMOVING sections (the old
+"Keeping: (unknown author)" + list-on-next-line read as one flowing
+sentence). Text labels are the primary cue, colour reinforcement only,
+per the suite's colourblind doctrine. Card clicks are ignored while a
+removal is in flight.
+
+13 new parser tests (247/247 passing).
+
+## [v3.165.0] — 2026-07-08
+
+### Added: HIGH-tier note/problem groups get side-by-side comparison + remove + merge (duplicate-checker)
+
+User request. Plain HIGH-tier groups ("identical text, different
+author/org" — the classic GP2GP reimport signature) previously rendered as
+stacked truncated snippets with NO action buttons at all (only EXACT and
+documentLinked-HIGH had the removal gate), despite the tool's own help
+copy promising HIGH bulk removal. For `note` and `problem` HIGH groups:
+
+- **Side-by-side cards** — the same diff-card layout REVIEW and
+  documentLinked groups use. The text is identical by definition, so the
+  cards' real value is putting the differing author/org (what HIGH tier is
+  actually about) directly next to each other.
+- **Remove** — the direct EXACT-style removal flow (keeper pre-picked by
+  the UUIDv7 tie-breaker where decodable, else the choose-keeper step). No
+  "are these equivalent?" judgment gate: HIGH means the text already
+  matched exactly.
+- **Suggest a merge…** — the same merge path REVIEW groups get: automated
+  apply-and-remove for note-kind (existing confirmed change-note
+  contract), copy-paste guidance for problem-kind (no confirmed problem
+  edit endpoint yet). Merge-form guidance now names the right removal
+  button per tier.
+
+Deliberately excluded: documentLinked HIGH groups keep their existing
+forced-keeper removal-only flow (merging would edit a document-linked
+pseudo-entry via the note contract — never live-tested), and prescription
+HIGH groups stay action-less (duplicates there are governed by the
+quantity/timing cross-checks; "merging" two prescription issues has no
+meaning).
+
+**On hold at user request (Medicus bug)**: the uncoded-document-type save
+blocker (v3.164.5) — Medicus has been notified that documents imported
+with an uncoded type are un-editable in their own UI; no further tool
+changes for it until their fix lands, then retest.
+
+## [v3.164.5] — 2026-07-08
+
+### Diagnosed + made actionable: uncoded document type blocks ALL saves (duplicate-checker)
+
+Third live refusal, diagnosed definitively from the user's captured keeper
+edit model + Medicus's own error response. The kept copy's type ("Patient
+Letter") was imported with `code.value.conceptId: null` /
+`descriptionId: null` — a degraded/uncoded type. **Such documents are
+un-editable even in Medicus's own UI**: the user's manual save in Medicus
+failed server-side with
+`{"errors":{"code.conceptId":["This value should not be blank."]}}` (the
+UI surfaces it as a generic "This value should not be blank", pointing at
+the wrong field — raised with Medicus as a bug by the user). Our builder's
+refusal was therefore CORRECT — the POST cannot succeed — but its message
+blamed the wrong fields (linked problems/staff/case/specialty).
+
+- `prepareDocumentFieldApply()` now detects the uncoded-keeper-type state
+  specifically, and in order: uses the keeper's own preview `typeCode` if
+  it carries the full code (with an explicit confirmation-card caveat);
+  otherwise names the real problem and the way out — "the other copy's
+  Type ('X') IS properly coded — select its Type radio and re-apply", or
+  "neither copy carries a coded Type; set a proper type in Medicus first".
+  Never silently substitutes a type the user didn't approve.
+- No parser change — the request builder's refusal on an incomplete code
+  is exactly right (server-confirmed); this is a diagnosis/UX layer over
+  it. 234/234 parser tests still passing.
+
+## [v3.164.4] — 2026-07-08
+
+### Fix: Author/organisation no longer blocks document field apply (duplicate-checker)
+
+Second live refusal from the user, now specifically on the Author pick —
+and a product decision to go with it: GP2GP-imported entries routinely
+arrive with the (form-required) organisation entirely blank, so at the
+scale involved (≥0.7% of records, hundreds of duplicated items each)
+"correct it manually" is the wrong default. Writing an organisation NAME
+with null identifiers is a CONFIRMED-valid stored shape (the first real
+edit model captured stored exactly that for a manually-entered org) and is
+precisely what typing into Medicus's own free-text Organisation field
+produces — data improvement, not identifier fabrication.
+
+- New `resolveDocumentOrganisation(editModel, preview)` evidence chain,
+  used everywhere an org is needed: structured `authoredByOrganisation.value`
+  → `manualAuthoredByOrganisation` text → the preview's displayed
+  `authoredByText` → the "Author Org:" segment GP2GP flattens into the
+  genericised title (user observation: the org data isn't lost on import,
+  just demoted from structured data to freetext inside `title`;
+  `parseGenericDocumentTitle`'s segment is label-bounded, so it's clean of
+  the trailing custodian/date text).
+- A picked Author now applies via that chain; `buildDocumentEditRequest`
+  resolves the KEPT copy's own org through the same chain, so a blank
+  keeper org no longer refuses an edit to unrelated fields.
+- **Organisation prompt** when no name exists anywhere on the record: the
+  user is asked for one — default **"Previous GP"** (what the user types
+  when Medicus blocks a save on imported data) — instead of being told to
+  fix it by hand. The confirmation card states explicitly when a
+  previously-blank org is being filled and with what.
+- 9 new/updated parser tests (234/234 passing).
+
+## [v3.164.3] — 2026-07-08
+
+### Fix: "None of the picked values could be read safely" on document field apply (duplicate-checker)
+
+Live failure from the user: every picked field refused with the blanket
+message. Root cause analysis: the comparison table shows the PREVIEW's
+display encodings, but the write needs the structured identifiers behind
+them from each copy's edit-details model ({conceptId, descriptionId} for
+the code, organisation identifier fields for the author) — and on a
+reimport copy those can genuinely be null (unresolved/degraded code,
+manually-typed organisation) even though the preview displays fine.
+Writing the on-screen string alone would mean FABRICATING clinical-code/
+organisation identifiers, so refusal was correct — but it was both
+undiagnosable (no per-field reason) and stricter than the evidence
+requires for two fields:
+
+- **Two confirmed-shape preview fallbacks** in
+  `buildDocumentEditOverrides` (new optional `previewByEntryId` param,
+  fully backward compatible): a null edit-model `code.value` falls back to
+  the preview's `document.typeCode` — the exact {conceptId, description,
+  descriptionId} posted shape, confirmed on every real payload seen — and
+  a null `recordDate` falls back to the preview's `document.recordDate`
+  (already ISO; the request builder's ISO check still guards a surprise
+  format). documentDate (display-formatted in the preview) and author (no
+  identifiers in the preview) get NO fallback — refused, never fabricated.
+- **Per-field failure reasons**: the status message now names each refused
+  field and why ("Type — the other copy's edit form holds no usable
+  structured value behind the displayed text…") instead of the blanket
+  sentence, and the confirmation card's "not applied" caveat carries the
+  same detail.
+- Confirmation card fix: an applied preview-fallback value now displays
+  correctly in the old → new list (previously re-read from the source edit
+  model, which would have shown "→ (none)" for exactly the fallback case).
+
+4 new parser tests (225/225 passing).
+
+## [v3.164.2] — 2026-07-08
+
+### documentLinked groups: side-by-side layout + chronological placement (duplicate-checker)
+
+documentLinked matching confirmed working live by the user (2026-07-08 —
+codes duplicated out of document tasks now correctly flagged). Two follow-up
+requests from that session:
+
+- **Side-by-side cards** — documentLinked groups (HIGH tier, so they
+  previously got the stacked truncated-snippet layout) now always render
+  via the same side-by-side diff-card layout REVIEW groups use. The copy
+  still linked to its source document is always the diff REFERENCE (it's
+  the genuine original/forced keeper), badged
+  "still linked to source document — kept" (green); the other copy is
+  badged "freestanding copy" (amber).
+- **Chronological placement** — documentLinked groups are produced by a
+  separate pass and were concatenated after the main group list, so they
+  all landed at the very bottom instead of adjacent to the document tasks
+  they relate to. New pure `sortGroupsByJournalOrder(groups, entries)`
+  orders every group by its earliest member's position in the journal
+  itself — a documentLinked pseudo-entry (absent from the journal list)
+  falls back to its source document's position via `linkedDocumentId`,
+  which is exactly what places the group next to its document task. No
+  date-string parsing: the sort inherits the journal payload's own order,
+  so it can't mis-parse a date format; unlocatable groups sort last,
+  stable. 6 new parser tests (221/221 passing).
+
+## [v3.164.1] — 2026-07-08
+
+### Fix: Compare-fields polish after first live test (duplicate-checker)
+
+Three user findings from live-testing v3.164.0's comparison table:
+
+- **"[object Object]" for Clinical specialty** — the preview's
+  `document.clinicalSpecialty` is a plain string on some payloads but an
+  OBJECT on others (the tested document's visible "Dermatology" arrived as
+  an object). New `specialtyText()` unwrap in
+  `engine/record-duplicate-parser.js` — known text keys only
+  (description/label/name, incl. nested `.value`); an unrecognised object
+  shape renders "(present — format not recognised; check in Medicus)"
+  rather than guessing or masquerading as "(none)". NOTE: the write-side
+  refusal on non-null clinicalSpecialty still stands — a document WITH a
+  specialty set will decline auto-apply until a Save capture on such a
+  document confirms the posted encoding.
+- **Misaligned radios/values** — each copy now gets two physical table
+  columns (fixed 24px radio column + left-aligned value column, radios
+  label-linked by id) instead of radio+text sharing one auto-width cell.
+- **Created/Filed/File type/File size are now display-only audit rows**
+  (user product decision): they're read-only even in Medicus's own edit
+  pane (absent from the edit-details model), and the kept copy should
+  retain its own creation date, filing date/user and file type/size for
+  audit purposes. Marked 🔒, no radios, dimmed, excluded from the "your
+  chosen record" summary — shown purely as evidence of which copy is
+  which. `buildDocumentFieldComparison` rows expose `systemManaged` so the
+  distinction lives in the tested parser, not the UI.
+
+6 new parser tests (215/215 passing).
+
+## [v3.164.0] — 2026-07-08
+
+### Added: document edit write contract — "Apply chosen ✎ values to kept copy" (duplicate-checker)
+
+The document write path was discovered live by the user (2026-07-08, DevTools
+capture of a real Save on a test-patient document): `GET
+clinical/data/document/edit-details/{documentId}` returns the edit form's
+prefill model, and **`POST clinical/document/edit-details`** (documentId in
+the BODY, not the URL — the one write contract shaped that way) is the
+full-replace save. Confirmed body: `code` and `authoredByOrganisation` post
+their GET-model `.value` objects, `linkedProblems` posts as
+`linkedProblemIds`, `linkedClinicalCase.defaultClinicalCaseId` posts as
+`clinicalCaseId`, `modelVersionHash` echoes back verbatim (concurrency
+guard), and `manualAuthoredByOrganisation`/
+`shouldEnterAuthoredByOrganisationManually`/`documentType`/`patientId`/
+`versionId` are GET-only, never posted. The same capture settled the earlier
+open question: **Created/Filed/File type/File size are absent from the edit
+model entirely** — system-derived, read-only even in Medicus's own UI — so
+Title/Type/Document date/Author/Record date are the writable set.
+
+- `engine/record-duplicate-parser.js`: new `buildDocumentEditDetailsUrl`,
+  `getDocumentEditValue`, `buildDocumentEditOverrides`,
+  `buildDocumentEditRequest` — same refuse-don't-guess discipline as the
+  note contract: refuses (null, never guesses) on non-null
+  authoredByDepartment/Practitioner/clinicalSpecialty, non-empty
+  selectedStaff/linkedProblems, a real clinical case, drafts,
+  marked-incorrect documents, a missing modelVersionHash, any override key
+  outside the confirmed set, and non-ISO dates.
+  `buildDocumentFieldComparison` rows now expose `editKey` for the five
+  writable fields. 42 new tests (209/209 passing), including an exact
+  17-key body match against the real captured POST.
+- `duplicate-checker.js`: the Compare-fields table now marks writable rows
+  ✎ and gains "Apply chosen ✎ values to kept copy…" — collects every row
+  where a non-keeper copy's value was picked, fetches each copy's
+  edit-details model, reads picked values in posted shape from the SOURCE
+  copy's model (never the display-formatted preview), and shows an
+  old → new confirmation before POSTing. Manual-only picks (Created/Filed/
+  etc.) are listed for hand-correction, never silently dropped.
+- **Still open**: removing the duplicate document afterwards. `document`
+  remains outside WRITE_CONTRACTS — no mark-incorrect capture for documents
+  yet — so the success message says so explicitly. That's the remaining
+  half of the user's fuller ask, needing its own DevTools capture (the
+  "Mark incorrect" flow on a test-patient document).
+- Comment correction (v3.162.1): the `attachment` wrapper on document
+  previews is NOT questionnaire-specific — the same capture showed it on an
+  ordinary inbound XML document, alongside the top-level `fileType`/
+  `fileSize` siblings this tool reads (so the root-level read stays
+  correct).
+
+## [v3.163.0] — 2026-07-08
+
+### Added: field-by-field comparison for document-kind REVIEW groups (duplicate-checker)
+
+User's live observation on the existing merge-suggestion UI: for document-kind
+groups it word-diffs one concatenated blob (`documentTypeLabel + title +
+documentDate + organisationName + additionalInformation`) — since
+`documentDate`/`organisationName` usually already match between copies, the diff
+is dominated by `Title`/`Type` and never surfaces `Record date`/`Created`/`Filed`
+at all, because those fields aren't part of the compared text.
+
+- `engine/record-duplicate-parser.js`: new pure `buildDocumentFieldComparison(group, previewByEntryId)`
+  compares 10 fields independently (Title, Type, Document date, Author, Clinical
+  specialty, Record date, Created, Filed, File type, File size), each flagged
+  `differs` or not. Field paths confirmed live 2026-07-08 against real test-patient-1
+  payloads (`clinical/data/document/modals/preview/{id}`, the same endpoint already
+  fetched for the fileType/fileSize checks — no new endpoint). Values shown are the
+  raw API strings, not reformatted to match Medicus's own display style. 13 new
+  tests (167/167 passing).
+- `duplicate-checker.js`: document-kind REVIEW groups now get a "Compare fields…"
+  button (in place of "Suggest a merge…", which stays unchanged for note/
+  prescription/problem — free text genuinely benefits from word-diff, structured
+  document metadata doesn't). Renders a table (one row per field, one radio per
+  copy, defaulting to the group's computed keeper), with a live-updating "your
+  chosen record" summary and a copy-to-clipboard button. `applyOnDemandCrossChecks()`
+  now retains the full document preview objects on `analysis.documentPreviewsByEntryId`
+  (previously fetched-then-discarded, only fileType/fileSize extracted) so this can
+  read them on demand when the button is clicked.
+- **Scope, explicit**: this is comparison/reference-building only — there is still
+  no confirmed write endpoint for editing a document's own metadata in Medicus
+  (`document` isn't in `WRITE_CONTRACTS`), so there is no "Apply" button. The
+  summary is meant to be actioned manually in Medicus, same scope the document
+  merge-suggestion already had.
+- **User's fuller ask, not yet built**: (1) apply the chosen per-field values to
+  the kept document, (2) then remove the duplicate document via the same
+  mark-incorrect-and-hidden pattern already confirmed for note/problem/
+  prescription. Both need their own live DevTools-network-capture discovery
+  first — neither has ever been confirmed for `document` in this project
+  (explicitly parked earlier for "referral/document type-conversion complexity").
+  It's also not yet known whether Medicus's own UI even exposes an edit action for
+  fields like Record date/Created/Filed, or whether those are system-derived and
+  effectively read-only — worth checking directly before assuming a write path
+  exists at all.
+
+## [v3.162.2] — 2026-07-08
+
+### Fix: document-linked-entry matching (v3.162.0) was built against the wrong endpoint — corrected against real payloads
+
+The user supplied real (anonymised) DevTools payloads for a confirmed test-patient
+duplicate pair (test patient 1, filed/recorded `careRecordEntryDate` "Wed 07 May
+2025" per the payloads — the user referred to it as "12 May 2025", which matches
+the files' own embedded creation timestamps instead; see note below) — an NHS 111
+letter and a skin-lesion letter, each with SNOMED-coded entries, each duplicated.
+They show v3.162.0's
+`careRecordElements`-on-the-document-preview approach was simply wrong — that field
+exists but was empty on every real document checked, and isn't where a document's
+linked entries actually live.
+
+- **Real source confirmed**: `GET clinical/document/entries/{documentId}` — returns
+  `{entries: [{id, type, code, text, onClickUrl, isMarkedIncorrect, ...}]}`. On the
+  duplicate copy of a document, this call returns `{"entries":[]}` — direct evidence
+  the reimport process drops the document-to-entry link on the copy while the
+  original keeps it, exactly matching the "broken out into freestanding entries"
+  theory.
+- No date field exists on these entries at all. `flattenDocumentEntries()` now reuses
+  the CALLER's already-known journal `.date` for the document itself (no extra
+  fetch, no format-mismatch risk — resolves the open question flagged in v3.162.1).
+- `text` is `"{code}: {freetext}"` for note-type entries (confirmed against 3 real
+  examples); the code prefix is stripped to recover what a real freestanding note's
+  `.note` field would contain.
+- Only `type === 'note'` entries are usable — `observation`-type entries (e.g.
+  "Alcohol units consumed per week") have no `code` field and `observation` isn't in
+  this tool's comparable-entries pool at all. Explicitly skipped, a known scope gap.
+- **Keeper asymmetry, fixed**: the two "copies" here are NOT interchangeable like
+  everywhere else in this tool — the document-linked entry is the genuine original,
+  still correctly attached to its source document, and must never be offered for
+  removal. `findDocumentLinkedDuplicates()` now FORCES the document-linked entry as
+  keeper, overriding the generic UUIDv7-timestamp tie-breaker. This also means
+  removal here only ever targets an ordinary freestanding note — the same
+  already-confirmed `patient/note/mark-incorrect-and-hidden` contract used
+  everywhere else, not an untested id path — meaningfully safer than v3.162.0's
+  design.
+- `engine/record-duplicate-parser.js`: `flattenCareRecordElements` replaced with
+  `flattenDocumentEntries(documentId, documentDate, entries)`; `findDocumentLinkedDuplicates`
+  rewritten for the new data shape and the forced-keeper behaviour.
+  `duplicate-checker.js`: `applyOnDemandCrossChecks()` now fetches
+  `clinical/document/entries/{id}` for every document-kind entry (dropped the dead
+  `careRecordElements`-from-preview extraction it replaces). UI warning banner
+  reworded to reflect the safer design.
+- 154/154 parser tests passing (test fixtures rewritten for the real shape).
+- **Still not fully proven**: the `text` prefix-stripping is inferred from 3
+  consistent real examples, not exhaustively verified across every possible note
+  shape.
+- **Next step**: live-test against test patient 1's 07 May 2025 entry (the pair
+  this correction is built from — the user's "12 May 2025" refers to the same
+  documents, see the date-mismatch note below) and confirm a `documentLinked`
+  group actually appears
+  for both the NHS 111 letter and the skin-lesion letter.
+
+## [v3.162.1] — 2026-07-07
+
+### Fix: same-fileType document batches (e.g. multiple NHS 111 letters) wrongly merged
+
+Real-world finding from the user: after a 111 contact, a patient's record can gain
+several genuinely separate referral/discharge letters, all uploaded in one batch —
+same received/record date, often the same generic resolved type and the same
+`fileType` (e.g. all PDFs) — which `splitDocumentGroupsByFileType()` (v3.161.1)
+couldn't tell apart, since it only split on `fileType`, requiring >=2 distinct
+types to even attempt a split.
+
+- `engine/record-duplicate-parser.js`: `splitDocumentGroupsByFileType()` now takes
+  an additional `fileSizeByEntryId` param and buckets document-kind members on the
+  composite `(fileType, fileSize)` pair, not fileType alone. A member with a known
+  fileType but unknown fileSize buckets under `${fileType}::unknown-size` — i.e.
+  when size can't be confirmed, this degrades to the old fileType-only behaviour
+  for that member rather than guessing a size match. Fully backward compatible:
+  callers that don't pass the new third argument get identical behaviour to
+  before. 151/151 parser tests passing (11 new).
+- **`fileSize`'s field name and position CONFIRMED live 2026-07-07**, from a
+  real anonymised payload the user supplied
+  (`clinical/data/document/modals/preview/{id}`): `fileType`/`fileSize`/
+  `fileCanExport`/`fileId`/`fileName` all sit as direct top-level siblings on
+  the response root, exactly where the fix already reads them — no code
+  change needed, this just upgrades the earlier "inferred guess" caveat to
+  confirmed. Same payload also confirms `fileType`/`fileSize` are NOT nested
+  under an `attachment` object on ordinary documents — that wrapper shape
+  (`attachment.fileRoute`/`attachment.fileId`, used by
+  `hasQuestionnaireTemplateMismatch`) is specific to questionnaire-response
+  documents, not a general document shape.
+  `duplicate-checker.js` still surfaces "N/M document preview(s) had a
+  usable file-size field" in the summary line — useful general coverage
+  visibility (not every document type may expose it) even though the field
+  name itself is no longer in doubt.
+- **New open question from the same payload**: this document's own
+  `recordDate` is ISO-formatted (`"2025-03-06"`), distinct from
+  `careRecordEntryDate` (`"Thu 06 Mar 2025"`, matching the journal's
+  `day.title` format). Since `flattenCareRecordElements()` (v3.162.0) reads
+  a `recordDate` field OFF EACH `careRecordElements[]` ITEM and compares it
+  by exact string equality against journal `day.title` strings, if the
+  per-element `recordDate` uses the same ISO convention as this document's
+  own top-level `recordDate` (same field name, same API family — plausible
+  but NOT yet directly evidenced, since this particular document's
+  `careRecordElements` array was empty), the document-linked-entry matching
+  feature would systematically fail to match anything live, exactly the
+  failure mode its own code comment already flagged as a risk. Needs one
+  real example of a document with a NON-empty `careRecordElements` array to
+  confirm the actual per-element date format before deciding whether to
+  normalise it.
+- **Next step**: live-test against a patient with a known same-day,
+  same-fileType, different-document batch (a 111 referral bundle is the
+  concrete example given) to confirm the fix behaves as expected; separately,
+  find a document with populated `careRecordElements` to settle the
+  date-format question above.
+
 ## [v3.166.0] — 2026-07-09
 
 ### Assurance pack, Record-tab allergy alerts, read-retry, Trends on the API feed

@@ -108,6 +108,12 @@ export const TAB_HELP = {
     what: 'Opens a full browser tab to analyse an exported patient-record PDF — a multi-year timeline view, separate from the panel.',
     firstStep: 'Export the patient record from Medicus as a PDF, then drop it into the visualiser tab that opens.',
   },
+  'duplicate-checker': {
+    title: 'Duplicates',
+    what: 'Practice-wide scan for GP2GP duplicate-record reimport errors — flags candidate duplicate entries per patient by confidence tier for bulk-removal or merge.',
+    firstStep:
+      'Run a full or incremental practice scan, then click on a flagged patient in the results list to analyse their record.',
+  },
   about: {
     title: 'About',
     what: 'Module version info, an update check, and a feedback form for bugs or feature requests.',

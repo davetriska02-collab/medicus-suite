@@ -2,7 +2,7 @@
 
 **Document reference:** MS-CSO-CSN-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 3.166.0 (full review re-baseline to v3.115.0 on 2026-06-17, incrementally synced since — see `docs/HAZARD-LOG.md` v3.12)  
+**Product version:** 3.173.0 (full review re-baseline to v3.115.0 on 2026-06-17, incrementally synced since — see `docs/HAZARD-LOG.md` v3.12)  
 **Document version:** 3.11  
 **Date issued:** 2026-07-11  
 **Author:** Dr Dave Triska, Graysbrook Ltd  

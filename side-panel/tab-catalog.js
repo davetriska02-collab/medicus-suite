@@ -44,6 +44,11 @@ export const TAB_CATALOG = [
     blurb: 'Live snapshot of the open patient — problems, meds, results, safety prompts. No PDF needed.',
   },
   { id: 'visualiser', name: 'Visualiser', blurb: 'Analyse an exported record PDF in a full browser tab.' },
+  {
+    id: 'duplicate-checker',
+    name: 'Duplicates',
+    blurb: 'Practice-wide scan for GP2GP duplicate-record import errors, with per-patient drill-down.',
+  },
   { id: 'about', name: 'About', blurb: 'Module info, version checks and feedback.' },
 ];
 

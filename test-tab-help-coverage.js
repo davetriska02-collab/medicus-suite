@@ -55,6 +55,7 @@ function check(cond, msg) {
   // shells" (CLAUDE.md), but help coverage must still include them.
   check('visualiser' in TAB_HELP, 'panel-only tab "visualiser" has a help entry');
   check('about' in TAB_HELP, 'panel-only tab "about" has a help entry');
+  check('duplicate-checker' in TAB_HELP, 'panel-only tab "duplicate-checker" has a help entry');
 
   // ── No stale entries for tabs that don't exist in either shell ─────────────
   const stale = Object.keys(TAB_HELP).filter((id) => !allTabIds.has(id));
@@ -79,7 +80,7 @@ function check(cond, msg) {
   //    appear in both, per CLAUDE.md — same guarantee test-tab-catalog.js
   //    doesn't check across shells, so pin it here too since we're already
   //    parsing both files.
-  const PANEL_ONLY_ALLOWED = new Set(['visualiser', 'about']);
+  const PANEL_ONLY_ALLOWED = new Set(['visualiser', 'about', 'duplicate-checker']);
   const missingFromPopout = [...panelIds].filter((id) => !popoutIds.has(id) && !PANEL_ONLY_ALLOWED.has(id));
   check(
     missingFromPopout.length === 0,

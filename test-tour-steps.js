@@ -53,6 +53,7 @@ const NAV_COVERED_BY_OVERVIEW = new Set([
   'sweep',
   'knowledge',
   'visualiser', // opens a full tab, not a panel module — overview mention only
+  'duplicate-checker', // opens a full tab, not a panel module — overview mention only
   'about',
 ]);
 
