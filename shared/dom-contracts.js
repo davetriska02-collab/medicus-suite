@@ -181,7 +181,7 @@
       feature: 'Routine-Rx one-click reassign — step 1 (routing radio)',
       degradation:
         'the reassign macro aborts at step 1 ("Couldn’t find the ‘Save & send to routine requests task list’ option") and the floating action button itself never appears (H-035 gate 2 also reads this control).',
-      source: 'content-scripts/triage-lens/routine-rx-button.js:528-533 (findRoutingControl)',
+      source: 'content-scripts/triage-lens/routine-rx-button.js:~696-704 (findRoutingControl)',
       pageMatch: /\/tasks\/data\/[^/]*prescription[^/]*\/overview\//i,
       anchor: 'button, [role="button"]',
       target: ['label', '[role="radio"]', '.radio'],
@@ -196,7 +196,8 @@
       feature: 'Routine-Rx one-click reassign — step 3 (select team)',
       degradation:
         'the macro times out with "Team … isn’t in the assignee list" even when the team exists — nothing is selected and the commit button never enables.',
-      source: 'content-scripts/triage-lens/routine-rx-button.js:282 (runMacro, step 3)',
+      source:
+        'content-scripts/triage-lens/routine-rx-button.js:~430-465 (runMacro step 3 — searchQueriesFor + matchOption)',
       pageMatch: /\/tasks\/data\/[^/]*prescription[^/]*\/overview\//i,
       anchor: 'label, [role="radio"], .radio',
       target: ['[id^="select-item-"]', '[role="option"]', 'li[role="option"]'],
@@ -213,7 +214,7 @@
       feature: 'Routine-Rx one-click reassign — button placement',
       degradation:
         'the floating "→ Team" button never appears on the prescribing screen even though the routing control is present, so the clinician has no fast path and must use Medicus’s native flow.',
-      source: 'content-scripts/triage-lens/routine-rx-button.js:541 (findActionAnchor)',
+      source: 'content-scripts/triage-lens/routine-rx-button.js:~706-726 (findActionAnchor)',
       pageMatch: /\/tasks\/data\/[^/]*prescription[^/]*\/overview\//i,
       anchor: 'label, [role="radio"], .radio',
       target: ['button', '[role="button"]'],

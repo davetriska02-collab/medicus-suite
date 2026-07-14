@@ -2,6 +2,45 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.160.1] — 2026-07-14
+
+### Fix: "Send to Prescribing / Meds Management" button failing with "isn't in the assignee list"
+
+The routine-prescription re-assign button (`routine-rx-button.js`) aborted at
+step 3 — *"Team 'Prescribing / Meds Management' isn't in the assignee list.
+Open the picker to check the exact name…"* — even though the team exists. Same
+symptom as v3.143.2, different trigger.
+
+Root cause: step 3 typed the **entire configured team name** into Medicus's
+debounced, server-driven "Assign to" search and required a matching option to
+render. A name like `Prescribing / Meds Management` carries a `/` and several
+words; that class of query frequently returns **zero rows** from the live
+search even though a shorter query (`Prescribing`) returns the team. Coupling
+*what we type to filter* with *the full name* is exactly what keeps breaking
+when Medicus tweaks the picker's search.
+
+- **Decoupled the search query from the match.** Step 3 now types a **safe
+  leading token** (the team name up to the first character that isn't a
+  letter/digit/space — e.g. `Prescribing`) to surface the team, then matches
+  the option by its **full team text** (exact, else contains) as before. It
+  falls back to typing the full name for any picker where that string genuinely
+  did work, so no practice that worked before regresses. What we *type* and
+  what we *select* are now independent — a broad token still selects the exact
+  team, never the wrong one.
+- **Diagnostic breadcrumb on failure.** When no option matches after every
+  query, a single `console.warn('[ClinHUD:rx] …')` lists the queries tried and
+  the option texts the picker actually rendered — so a page-console capture
+  (CLAUDE.md "capture first") tells apart *search returned nothing / not a
+  search picker* (empty) from *returned options but the configured name doesn't
+  match* (a team-name mismatch, fixable via the ▾ menu).
+- No selector change (the `[id^="select-item-"]` / `[role="option"]` markup is
+  unchanged), no change to the fail-closed safety guards — the macro still
+  matches every control by visible text, aborts rather than clicking the wrong
+  one, and commits only per `commitMode`.
+- Tests: `test-routine-rx-macro.js` updated for the query ladder and a new
+  full-name-fallback scenario (54/54); `test-routine-rx-audit.js` unaffected
+  (23/23).
+
 ## [v3.160.0] — 2026-07-11
 
 ### The Keeper: clinical rule currency update (2026-07-11)
