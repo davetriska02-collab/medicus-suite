@@ -134,6 +134,52 @@
   flex: 1;
 }
 
+/* ── Compare / Per-session toggles (manager-pack FEATURES 1b & 2) ────────────── */
+
+.act-toggle-row {
+  margin-top: 2px;
+}
+
+/* .act-toggle reuses the .act-preset visual recipe (same pill, active/disabled states) —
+   these are boolean on/off toggles rather than mutually-exclusive presets, but the look
+   is identical, so no new visual language is introduced. */
+.act-toggle {
+  cursor: pointer;
+}
+
+.act-compare-note {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  margin: 2px 0 14px;
+  font-variant-numeric: tabular-nums;
+}
+.act-compare-note--error {
+  color: var(--text-4);
+}
+
+.act-bar-row-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.act-bar-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  padding-left: 2px;
+  margin: 1px 0 2px;
+}
+.act-bar-meta-sep {
+  margin: 0 6px;
+  color: var(--text-5);
+}
+.act-bar-delta--error,
+.act-bar-session-inline--unmatched,
+.act-bar-session-inline--error {
+  font-style: italic;
+}
+
 .act-ts {
   font-family: var(--mono);
   font-size: 10px;

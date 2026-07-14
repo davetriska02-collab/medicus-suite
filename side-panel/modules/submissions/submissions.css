@@ -132,11 +132,53 @@
   gap: 4px;
 }
 
+/* FEATURE 1a: read-only span display for the Compare tab's month-to-date sub-mode
+   (replaces the editable date pickers, which don't apply to a computed calendar span). */
+.dp-readonly {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-2);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 3px 6px;
+}
+
+.mode-note {
+  flex-basis: 100%;
+  font-family: var(--sans);
+  font-size: 10px;
+  color: var(--text-4);
+  margin-top: 2px;
+}
+
 .sub-metrics {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 4px;
   margin-bottom: 12px;
+}
+
+/* Same-weekday baseline line (all categories combined) — hidden until the
+   ledger holds enough watched history. Informational, never red: demand
+   pressure vs thresholds is the alert strip's job, this line answers
+   "is today normal?". */
+.sub-baseline {
+  margin: -6px 0 12px;
+  padding: 5px 9px;
+  border-radius: var(--r-md);
+  font-size: 10.5px;
+  color: var(--text-3);
+  background: var(--bg-elev);
+  border: 1px dashed var(--border-hi);
+}
+.sub-baseline--high {
+  color: var(--amber);
+  border-color: var(--amber-line);
+  background: var(--amber-dim);
+}
+.sub-baseline.hidden {
+  display: none;
 }
 
 .sub-metric {

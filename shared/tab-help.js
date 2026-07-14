@@ -77,6 +77,12 @@ export const TAB_HELP = {
     firstStep:
       'Work the pile top-down; anything flagged red deserves the record open before you sign. No flag is not an all-clear.',
   },
+  followups: {
+    title: 'Follow-ups',
+    what: 'A personal reminder list for things you are waiting on — a pending result, a call-back — resurfaced when the due date passes. Stored on this machine only; it is not the clinical record.',
+    firstStep:
+      'Add what you are chasing with a due date, or add a patient-linked reminder from the Monitoring tab. Keep documenting safety-netting in Medicus as usual.',
+  },
   sweep: {
     title: 'Sweep',
     what: 'A pre-clinic scan of your upcoming patients that flags points worth a look beforehand.',

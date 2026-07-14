@@ -47,6 +47,9 @@ import {
   extractBookedPatients,
   summariseSweep,
   summariseQofPointsAtRisk,
+  qofPoundsValue,
+  summariseWorklistByAction,
+  buildWorklist,
   buildRecallDescription,
   isActionNeeded,
   buildHandout,
@@ -106,6 +109,21 @@ let _canonicalRulesCache = null;
 let _taskFormCache = null;
 let _recallApiBase = '';
 let _storageListener = null;
+
+// QOF £-per-point config (item: manager £ projection) — { poundsPerPoint } | null.
+// Loaded from 'sweep.qofConfig' on init, kept in sync via chrome.storage.onChanged
+// (same pattern as condor.js's _indexConfig). No default value is ever assumed:
+// there is deliberately no national £/point figure in this repo (see sweep-core.js
+// qofPoundsValue doc) — unset means "points only" everywhere it is displayed.
+let _qofConfig = null;
+let _qofEditorOpen = false; // inline editor open state (condor cog precedent)
+
+// The last object passed to renderResults(), so a display-only change (QOF
+// editor open/close, £/point saved) can re-render from module state alone —
+// no re-fetch, no re-evaluation. Re-renders triggered this way always force
+// isResume: true so they never wipe the live batch-selection checkboxes
+// (only a genuinely new run/continue should reset that).
+let _lastRenderArgs = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -700,15 +718,69 @@ function buildQofPointsByCode(rules) {
   return map;
 }
 
+// Small cog icon (condor.js's SVG_COG — an independent copy, same doctrine as
+// condor.js: this module has no shared-icon dependency to reuse). Opens the
+// £-per-point editor on the QOF panel header.
+const SVG_COG = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`;
+
+// True when the practice has entered a usable (finite, positive) £/point figure.
+function hasQofRate(qofConfig) {
+  const rate = Number(qofConfig && qofConfig.poundsPerPoint);
+  return Number.isFinite(rate) && rate > 0;
+}
+
+function gbp(n) {
+  return `£${Math.round(n).toLocaleString('en-GB')}`;
+}
+
+// Inline £-per-point editor — condor.js renderIndexEditor precedent (a cog on
+// the panel header opens a small form; Save normalises + persists, Reset
+// clears the override). Deliberately ONE field: there is no default to fall
+// back to (see sweep-core.js qofPoundsValue), so "reset" means "unset", not
+// "back to a shipped figure".
+function renderQofPoundsEditor(qofConfig) {
+  const current = hasQofRate(qofConfig) ? qofConfig.poundsPerPoint : '';
+  return `
+    <div class="sweep-qof-editor" id="sweepQofEditor">
+      <div class="sweep-qof-editor-head">
+        <span class="sweep-qof-editor-title">£ per QOF point</span>
+        <button class="ghost-btn sweep-qof-editor-close" id="sweepQofEditorClose" type="button" aria-label="Close editor">&#10005;</button>
+      </div>
+      <p class="sweep-qof-editor-note">
+        Your practice's own adjusted figure — there is no national default here because actual income depends on your list size and prevalence; entering your figure absorbs that.
+      </p>
+      <div class="sweep-qof-editor-row">
+        <label class="sweep-qof-editor-label" for="sweepQofRate">£ per point (your practice's adjusted figure)</label>
+        <input type="number" id="sweepQofRate" class="sweep-qof-editor-input" value="${esc(current)}" min="0" step="0.01" placeholder="e.g. 220" />
+      </div>
+      <div class="sweep-qof-editor-actions">
+        <button class="ghost-btn" id="sweepQofReset" type="button"${current === '' ? ' disabled' : ''}>Reset</button>
+        <button class="ghost-btn sweep-qof-editor-save" id="sweepQofSave" type="button">Save</button>
+      </div>
+    </div>`;
+}
+
 // Cohort-level QOF income lens: ranks the QOF gaps Sweep already found by the
 // indicator's own points, so a practice works the highest-value patients first
 // and protects the redirected CVD-prevention domain. Pure read of existing chips.
-function renderQofPointsPanel(summary, siteId) {
+// qofConfig/editorOpen drive the £-per-point cog + inline editor (manager £
+// projection): when a usable rate is set, "≈ £X at risk" is shown next to the
+// total and the CVD subtotal; when unset, points only, plus a one-line hint.
+function renderQofPointsPanel(summary, siteId, qofConfig, editorOpen) {
   if (!summary || summary.patientCount === 0 || summary.totalPoints === 0) return '';
+
+  const pounds = qofPoundsValue(summary, qofConfig && qofConfig.poundsPerPoint);
+  const gbpBadge = pounds
+    ? `<span class="sweep-qof-gbp" title="Your practice's £/point figure — not a national constant">&#8776; ${gbp(pounds.totalPounds)} at risk</span>`
+    : '';
+
+  const cog = `<button class="sweep-qof-cog${hasQofRate(qofConfig) ? ' sweep-qof-cog--custom' : ''}" id="sweepQofCog" type="button"
+    aria-expanded="${!!editorOpen}" aria-label="Set your practice's £ per QOF point"
+    title="${hasQofRate(qofConfig) ? '£/point set — click to edit' : "Set your practice's £ per QOF point"}">${SVG_COG}</button>`;
 
   const cvdBadge =
     summary.cvdPoints > 0
-      ? `<span class="sweep-qof-cvd" title="BP control, lipid/statin and antithrombotic indicators">CVD-prevention ${summary.cvdPoints}</span>`
+      ? `<span class="sweep-qof-cvd" title="BP control, lipid/statin and antithrombotic indicators">CVD-prevention ${summary.cvdPoints}${pounds ? ` (&#8776; ${gbp(pounds.cvdPounds)})` : ''}</span>`
       : '';
 
   const topPatients = summary.byPatient.slice(0, 10);
@@ -756,15 +828,24 @@ function renderQofPointsPanel(summary, siteId) {
     })
     .join('');
 
+  // One-line hint when no rate is set yet — never silent, always points to the cog.
+  const gbpHint = !pounds
+    ? `<p class="sweep-qof-gbp-hint">Enter your practice's £ per point (the &#9881; icon above) to see this at-risk figure in pounds.</p>`
+    : '';
+
   return `
     <details class="sweep-qof-panel" open>
       <summary class="sweep-qof-summary">
         QOF points at risk: <strong>${summary.totalPoints}</strong>
+        ${gbpBadge}
         ${cvdBadge}
         <span class="sweep-qof-sub">${summary.patientCount} patient${summary.patientCount === 1 ? '' : 's'} with gaps</span>
+        ${cog}
       </summary>
+      ${editorOpen ? renderQofPoundsEditor(qofConfig) : ''}
       <div class="sweep-qof-body">
-        <p class="sweep-qof-note">QOF indicator gaps in the patients checked, weighted by each indicator's points — work the highest-value first. Points are the national indicator weights; actual income depends on your list size and prevalence.</p>
+        <p class="sweep-qof-note">QOF indicator gaps in the patients checked, weighted by each indicator's points — work the highest-value first. Points are the national indicator weights; actual income depends on your list size and prevalence. This is explicitly non-clinical arithmetic — it does not change any clinical priority.</p>
+        ${gbpHint}
         <div class="sweep-qof-cols">
           <div class="sweep-qof-col">
             <div class="sweep-qof-col-head">Patients by points at risk</div>
@@ -773,6 +854,71 @@ function renderQofPointsPanel(summary, siteId) {
           <div class="sweep-qof-col">
             <div class="sweep-qof-col-head">By indicator</div>
             <ul class="sweep-qof-ilist">${indicatorList}</ul>
+          </div>
+        </div>
+      </div>
+    </details>`;
+}
+
+// One column of the clinic-prep worklist (bloods/checks/vaccines/reviews) —
+// time-ordered patient lines, each with its own item list. Empty columns say
+// so explicitly rather than rendering nothing, so an empty bloods column
+// reads as "checked, none due" rather than "did this load?".
+function worklistColHtml(rows, siteId) {
+  if (!rows.length) return `<div class="sweep-worklist-empty">None due among patients checked so far.</div>`;
+  return `<ul class="sweep-worklist-list">${rows
+    .map((r) => {
+      const timeStr = r.time ? `<span class="sweep-row-time">${formatTime(r.time)}</span>` : '';
+      const recUrl = `https://england.medicus.health/${esc(siteId)}/patient/${esc(r.uuid)}/`;
+      const items = r.items.map((i) => `<li class="sweep-worklist-item">${esc(i)}</li>`).join('');
+      return `<li class="sweep-worklist-prow">
+        <div class="sweep-worklist-phead">
+          ${timeStr}<span class="sweep-worklist-pname">${esc(r.name)}</span>
+          <a class="sweep-open-record" href="${recUrl}" target="_blank" rel="noopener noreferrer" title="Open record">Open &#8599;</a>
+        </div>
+        <ul class="sweep-worklist-items">${items}</ul>
+      </li>`;
+    })
+    .join('')}</ul>`;
+}
+
+// Nurse clinic-prep worklist: "everyone booked today due a jab, blood test or
+// review, with what and when, so I prep the tray in advance." Re-reads the
+// SAME action-needed chips already evaluated by this sweep run, grouped by
+// WHAT kind of prep is needed rather than by patient — a different axis over
+// the action-needed rows above, not a new fetch. Pure read of _cumulativeResults
+// via sweep-core.js's summariseWorklistByAction.
+function renderWorklistPanel(worklist, siteId) {
+  if (!worklist) return '';
+  const total = worklist.bloods.length + worklist.checks.length + worklist.vaccines.length + worklist.reviews.length;
+  if (total === 0) return '';
+
+  return `
+    <details class="sweep-worklist-panel" open>
+      <summary class="sweep-worklist-summary">
+        Clinic prep worklist
+        <span class="sweep-worklist-sub">${total} patient line${total === 1 ? '' : 's'} across bloods, checks, jabs and reviews</span>
+      </summary>
+      <div class="sweep-worklist-body">
+        <p class="sweep-worklist-note">
+          <strong>Prep aid only, not a checklist to rely on alone.</strong> Verify against the source record before prepping the tray. ${NO_ALERT_CAVEAT} A patient not listed in a column below may still have something due — absence from this list is not an all-clear.
+        </p>
+        <div class="sweep-worklist-cols">
+          <div class="sweep-worklist-col">
+            <div class="sweep-worklist-col-head">Bloods (${worklist.bloods.length})</div>
+            ${worklistColHtml(worklist.bloods, siteId)}
+          </div>
+          <div class="sweep-worklist-col">
+            <div class="sweep-worklist-col-head">Checks (${worklist.checks.length})</div>
+            ${worklistColHtml(worklist.checks, siteId)}
+          </div>
+          <div class="sweep-worklist-col">
+            <div class="sweep-worklist-col-head">Vaccines (${worklist.vaccines.length})</div>
+            ${worklistColHtml(worklist.vaccines, siteId)}
+          </div>
+          <div class="sweep-worklist-col">
+            <div class="sweep-worklist-col-head">Reviews (${worklist.reviews.length})</div>
+            ${worklistColHtml(worklist.reviews, siteId)}
           </div>
         </div>
       </div>
@@ -804,19 +950,25 @@ function skippedEntriesHtml(missingUuidCount, skippedEntries) {
   </details>`;
 }
 
-function renderResults({
-  actionRows,
-  clearRows,
-  errorRows,
-  processedCount,
-  totalCount,
-  missingUuidCount,
-  skippedEntries,
-  runAt,
-  aborted,
-  isResume,
-}) {
+function renderResults(args) {
+  const {
+    actionRows,
+    clearRows,
+    errorRows,
+    processedCount,
+    totalCount,
+    missingUuidCount,
+    skippedEntries,
+    runAt,
+    aborted,
+    isResume,
+  } = args;
   if (!container) return;
+
+  // Remember the call so a display-only re-render (QOF £/point editor
+  // open/close/save) can replay this exact render from module state, with no
+  // re-fetch — see rerenderResults().
+  _lastRenderArgs = args;
 
   // On a fresh run or new batch, clear selection so stale UUIDs don't persist
   // across result sets. On resume (re-render of a stored run), preserve the
@@ -871,7 +1023,17 @@ function renderResults({
     _cumulativeResults,
     buildQofPointsByCode(_sweepRules || _canonicalRulesCache || [])
   );
-  const qofPanelHtml = renderQofPointsPanel(qofPoints, siteIdMatch);
+  const qofPanelHtml = renderQofPointsPanel(qofPoints, siteIdMatch, _qofConfig, _qofEditorOpen);
+
+  // Nurse clinic-prep worklist — same chips, grouped by what kind of prep is
+  // needed rather than by patient severity.
+  const worklist = summariseWorklistByAction(_cumulativeResults);
+  const worklistPanelHtml = renderWorklistPanel(worklist, siteIdMatch);
+  const worklistHasItems =
+    worklist.bloods.length > 0 ||
+    worklist.checks.length > 0 ||
+    worklist.vaccines.length > 0 ||
+    worklist.reviews.length > 0;
 
   const clearSection =
     clearRows.length > 0
@@ -921,6 +1083,10 @@ function renderResults({
       ? `<button class="sweep-print-btn" type="button" title="Open a printable to-do list for reception">Print reception handout</button>`
       : '';
 
+  const printWorklistBtn = worklistHasItems
+    ? `<button class="sweep-print-worklist-btn" type="button" title="Open a printable clinic-prep list — bloods, checks, jabs and reviews due today">Print prep list</button>`
+    : '';
+
   // Batch toolbar — only shown when there are action rows to select
   const batchToolbar =
     actionCount > 0
@@ -939,10 +1105,12 @@ function renderResults({
       <div class="sweep-results-header">
         <div class="sweep-summary-line">${summaryLine}${feedSummaryHtml}</div>
         <div class="sweep-timestamp">Run at ${esc(fmtTs(runAt))}</div>
-        ${printBtn}
+        ${printBtn}${printWorklistBtn}
       </div>
 
       ${missingNote}${batchNote}
+
+      ${worklistPanelHtml}
 
       ${qofPanelHtml}
 
@@ -965,10 +1133,14 @@ function renderResults({
     if (continueBtn) continueBtn.addEventListener('click', onContinueClick);
     const handoutBtn = runArea.querySelector('.sweep-print-btn');
     if (handoutBtn) handoutBtn.addEventListener('click', onPrintHandout);
+    const worklistBtn = runArea.querySelector('.sweep-print-worklist-btn');
+    if (worklistBtn) worklistBtn.addEventListener('click', onPrintWorklist);
     // Batch selection wiring
     wireBatchSelection(runArea, actionRows);
     // Create-recall-task wiring
     wireRecallButtons(runArea);
+    // QOF £-per-point cog + inline editor wiring
+    wireQofEditor(runArea);
   }
 
   // Reset Run sweep button
@@ -1183,6 +1355,74 @@ async function submitRecall(slot) {
   }
 }
 
+// ── QOF £-per-point editor wiring (condor.js bindIndexEditor precedent) ───────
+//
+// The cog sits INSIDE the <summary> (unlike condor's, which floats over a
+// plain div, not a <details>), so its click must not also trigger the
+// browser's native details-toggle. preventDefault() on the click event
+// suppresses that default action regardless of which element in the bubble
+// path calls it, so calling it here (before it reaches <summary>) is enough;
+// stopPropagation() is added for the same belt-and-braces reason condor uses
+// explicit listeners rather than relying on ambient delegation.
+function rerenderResults() {
+  if (!_lastRenderArgs) return;
+  // Always isResume: true — this is a display-only refresh (editor state,
+  // saved rate), never a new run/continue, so it must never wipe the live
+  // batch-selection checkboxes the way a fresh sweep legitimately does.
+  renderResults({ ..._lastRenderArgs, isResume: true });
+}
+
+function wireQofEditor(runArea) {
+  const cog = runArea.querySelector('#sweepQofCog');
+  const closeBtn = runArea.querySelector('#sweepQofEditorClose');
+  const saveBtn = runArea.querySelector('#sweepQofSave');
+  const resetBtn = runArea.querySelector('#sweepQofReset');
+
+  if (cog) {
+    cog.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      _qofEditorOpen = !_qofEditorOpen;
+      rerenderResults();
+    });
+  }
+  if (closeBtn) {
+    closeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      _qofEditorOpen = false;
+      rerenderResults();
+    });
+  }
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const input = runArea.querySelector('#sweepQofRate');
+      const raw = input ? input.value : '';
+      const rate = Number(raw);
+      // Normalise-on-save: an unusable figure saves as unset (null), never a
+      // stray NaN/negative landing in storage. qofPoundsValue re-validates
+      // this again on every read regardless (defence in depth).
+      const poundsPerPoint = Number.isFinite(rate) && rate > 0 ? rate : null;
+      _qofConfig = { poundsPerPoint };
+      await chrome.storage.local.set({ 'sweep.qofConfig': _qofConfig });
+      _qofEditorOpen = false;
+      rerenderResults();
+    });
+  }
+  if (resetBtn) {
+    resetBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      _qofConfig = null;
+      await chrome.storage.local.remove('sweep.qofConfig');
+      _qofEditorOpen = false;
+      rerenderResults();
+    });
+  }
+}
+
 // Build the printable reception handout from the latest results and open it
 // in a full tab. The model is handed over via the transient 'sweep.handout'
 // key (overwritten on every print) because a fresh tab cannot receive an
@@ -1202,6 +1442,35 @@ async function onPrintHandout() {
     chrome.storage.local.remove('sweep.handout');
   }, 60000);
   chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/sweep/handout.html') });
+}
+
+// Build the printable clinic-prep worklist from the latest cumulative results
+// and open it in a full tab. Mirrors onPrintHandout's transient-key + new-tab
+// convention exactly: 'sweep.worklist' is written just before the tab opens,
+// consumed on read by worklist.html/worklist.js, and backstopped by a 60s
+// removal in case the tab never renders.
+async function onPrintWorklist() {
+  const worklist = summariseWorklistByAction(_cumulativeResults);
+  const hasItems =
+    worklist.bloods.length > 0 ||
+    worklist.checks.length > 0 ||
+    worklist.vaccines.length > 0 ||
+    worklist.reviews.length > 0;
+  if (!hasItems) return;
+
+  const model = buildWorklist(_cumulativeResults, {
+    runAt: _sweepMeta?.runAt || new Date().toISOString(),
+    clinicDate: _sweepMeta?.clinicDate || _selectedDate,
+    clinicians: _selectedClinicians.slice(),
+    suiteVersion: chrome.runtime.getManifest().version,
+  });
+  await chrome.storage.local.set({ 'sweep.worklist': model });
+  // best-effort PHI-at-rest backstop (audit L2) — primary clear is consume-on-read
+  // in the print tab; this covers the case where the tab never renders.
+  setTimeout(() => {
+    chrome.storage.local.remove('sweep.worklist');
+  }, 60000);
+  chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/sweep/worklist.html') });
 }
 
 // Build and open the batch print view for the currently-selected action rows.
@@ -1428,6 +1697,8 @@ export async function init(el) {
   _sweepOffset = 0;
   _cumulativeResults = [];
   _selectedUuids = new Set();
+  _qofEditorOpen = false;
+  _lastRenderArgs = null;
 
   container.innerHTML = `
     <div class="sweep-module">
@@ -1469,11 +1740,26 @@ export async function init(el) {
   container.querySelector('#sweepClinAll')?.addEventListener('change', onAllCliniciansToggle);
   container.querySelector('#sweepDate')?.addEventListener('change', onDateChange);
 
-  // Invalidate merged rules cache when rules change (mirrors sentinel.js)
+  // Load the practice's £-per-QOF-point figure (if set) before the first
+  // render, so the very first sweep result already reflects it.
+  try {
+    const stored = await chrome.storage.local.get('sweep.qofConfig');
+    _qofConfig = stored['sweep.qofConfig'] ?? null;
+  } catch (_) {
+    _qofConfig = null;
+  }
+
+  // Invalidate merged rules cache when rules change (mirrors sentinel.js).
+  // Also keep _qofConfig in sync with storage (e.g. changed via a restored
+  // backup, or Options) and re-render so the £ figure never goes stale.
   _storageListener = (changes, area) => {
     if (area !== 'local') return;
     if (changes['sentinel.rules'] || changes['sentinel.orgRules'] || changes['sentinel.customRules']) {
       _mergedRulesCache = null;
+    }
+    if (changes['sweep.qofConfig']) {
+      _qofConfig = changes['sweep.qofConfig'].newValue ?? null;
+      rerenderResults();
     }
   };
   chrome.storage.onChanged.addListener(_storageListener);
@@ -1564,6 +1850,8 @@ function cleanup() {
   _allPatients = [];
   _cumulativeResults = [];
   _selectedUuids = new Set(); // clear batch selection (ephemeral — must not survive module switch)
+  _qofEditorOpen = false;
+  _lastRenderArgs = null;
   if (_storageListener) {
     chrome.storage.onChanged.removeListener(_storageListener);
     _storageListener = null;

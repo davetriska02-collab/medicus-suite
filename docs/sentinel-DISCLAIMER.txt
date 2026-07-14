@@ -359,6 +359,40 @@ Custom indicators are not QOF indicators. They do not constitute QOF achievement
 The hotfix in v1.2.0 removes a developer-side hardcoded practice code that was preventing the extension from working correctly on practices other than the developer's own. The fix is data hygiene only. It does not alter the intended purpose, the clinical behaviour, or any data-handling characteristic of the software. The user's practice code, configured through the Options page, is the sole source for API endpoint selection. No practice code is preconfigured.
 
 
+--- v3.159.0 addendum ---
+
+This addendum records features added between the v3.26.4 addendum and Medicus Suite
+v3.159.0 that materially change the software's surface area. It does not attempt a
+full catch-up of every release in that range (v3.27.0-v3.151.0) - that is a separate,
+larger documentation exercise outside the scope of this addendum - and covers only
+the features shipped 2026-07-05 to 2026-07-07, reviewed against the frozen
+intended-purpose statement at section 3 below.
+
+The Signing Queue (v3.155.0-v3.159.0) displays, per open prescription-request task,
+the same passive drug-monitoring threshold comparisons the Monitoring module already
+computes for that patient, re-ordered by an unknown-above-quiet sort. It produces no
+affirmative "safe to sign" output - the words "safe" and "clear" appear only inside
+explicit negations of the misread the design exists to prevent. It performs no
+prescribing decision, writes nothing to any record, and signing itself remains
+exclusively a Medicus action on Medicus's own signing screen. It remains within the
+frozen intended-purpose statement at section 3: it re-displays a threshold comparison
+already computed by the existing engine against data already in Medicus, for the
+clinician to review before acting in Medicus.
+
+The Quick Leaflet popover and the Leaflets tab (v3.154.0) perform text search over a
+bundled NHS A-Z leaflet index and link out to nhs.uk. They use no patient data as
+search input, compute no clinical output, and transmit no patient data externally -
+the only network activity is the user's own browser navigating to an nhs.uk page of
+their choosing, the same as if the user had typed the search into nhs.uk directly.
+
+The suite self-diagnosis ("health") strip's acknowledge/snooze (v3.154.1-v3.154.2)
+allows a user to silence a known, unchanged degradation warning about the extension's
+own operation for up to 7 days; any change in the underlying problem set re-surfaces
+the warning immediately, and the snoozed state is never backed up or restored to
+another machine. This is an operational convenience for the extension's own
+self-monitoring and has no effect on any clinical chip, threshold, or display.
+
+
 --- v3.26.4 addendum ---
 
 This addendum records the state of the software at Medicus Suite v3.26.4. The

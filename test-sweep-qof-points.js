@@ -27,7 +27,7 @@ const path = require('path');
 
   const sweepCorePath = new URL('side-panel/modules/sweep/sweep-core.js', `file://${path.resolve(__dirname)}/`).href;
   const mod = await import(sweepCorePath);
-  const { summariseQofPointsAtRisk, isCvdQofIndicator } = mod;
+  const { summariseQofPointsAtRisk, isCvdQofIndicator, qofPoundsValue } = mod;
 
   function qof(code, name, status, points) {
     return { type: 'qof-indicator', indicatorCode: code, indicatorName: name, status, points };
@@ -117,6 +117,44 @@ const path = require('path');
   );
   const nul = summariseQofPointsAtRisk(null);
   check(nul.totalPoints === 0 && nul.byIndicator.length === 0, 'null input → zeroed summary');
+
+  // ── qofPoundsValue: manager £ projection ─────────────────────────────────
+  console.log('\n--- qofPoundsValue ---');
+
+  const summary99 = { totalPoints: 99, cvdPoints: 82 };
+
+  check(typeof qofPoundsValue === 'function', 'qofPoundsValue is a function');
+
+  let pv = qofPoundsValue(summary99, 200);
+  check(pv.totalPounds === 19800, `totalPounds = totalPoints × rate (99×200=19800), got ${pv.totalPounds}`);
+  check(pv.cvdPounds === 16400, `cvdPounds = cvdPoints × rate (82×200=16400), got ${pv.cvdPounds}`);
+
+  // Rounds to the nearest pound.
+  pv = qofPoundsValue(summary99, 33.33);
+  check(pv.totalPounds === Math.round(99 * 33.33), 'totalPounds rounded to nearest pound');
+
+  // Unset / invalid rate → null (points-only fallback), never £0 or £NaN.
+  check(qofPoundsValue(summary99, null) === null, 'null poundsPerPoint → null');
+  check(qofPoundsValue(summary99, undefined) === null, 'undefined poundsPerPoint → null');
+  check(qofPoundsValue(summary99, NaN) === null, 'NaN poundsPerPoint → null');
+  check(qofPoundsValue(summary99, 0) === null, '0 poundsPerPoint → null (never a nonsense £0 that reads as "free")');
+  check(qofPoundsValue(summary99, -5) === null, 'negative poundsPerPoint → null');
+  check(qofPoundsValue(summary99, 'not-a-number') === null, 'non-numeric string poundsPerPoint → null');
+  check(qofPoundsValue(summary99, '') === null, 'empty-string poundsPerPoint → null');
+
+  // Null-safe on the summary side too: a valid rate with a missing/empty
+  // summary never throws, and reads as a real zero (points is what's null,
+  // not the rate) — { totalPoints: 0, cvdPoints: 0 } behind the scenes.
+  const nullSummaryPv = qofPoundsValue(null, 200);
+  check(
+    nullSummaryPv && nullSummaryPv.totalPounds === 0 && nullSummaryPv.cvdPounds === 0,
+    'null summary + valid rate → £0 (never throws)'
+  );
+  const zeroSummaryPv = qofPoundsValue({ totalPoints: 0, cvdPoints: 0 }, 200);
+  check(
+    zeroSummaryPv.totalPounds === 0 && zeroSummaryPv.cvdPounds === 0,
+    'zero-points summary with a valid rate → £0 (a real zero, distinct from the null "unset" case)'
+  );
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);

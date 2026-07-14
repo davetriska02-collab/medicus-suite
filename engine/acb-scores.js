@@ -35,6 +35,8 @@
     { term: 'doxepin', score: 3 },
     { term: 'dosulepin', score: 3, note: 'TCA (= dothiepin); Boustani score 3' },
     { term: 'dothiepin', score: 3, note: 'older UK name for dosulepin' },
+    { term: 'trimipramine', score: 3, note: 'TCA; Boustani ACB score 3 (2026-07-11 Keeper addition)' },
+    { term: 'surmontil', score: 3, note: 'brand: trimipramine (2026-07-11 Keeper addition)' },
     // ── Score 2: Tricyclic antidepressant (moderate ACB) ─────────────────────
     // Amoxapine — dibenzoxazepine tricyclic; Boustani/ACBcalc score 2 (medrev-005).
     { term: 'amoxapine', score: 2 },
@@ -60,6 +62,8 @@
     { term: 'vesicare', score: 3, note: 'brand: solifenacin' },
     { term: 'fesoterodine', score: 3 },
     { term: 'toviaz', score: 3, note: 'brand: fesoterodine' },
+    { term: 'darifenacin', score: 3, note: 'M3-selective antimuscarinic (OAB); Boustani ACB score 3 (2026-07-11 Keeper addition)' },
+    { term: 'emselex', score: 3, note: 'brand: darifenacin (2026-07-11 Keeper addition)' },
     // Trospium: quaternary ammonium compound — limited CNS penetration, but
     // ACBcalc assigns score 1; some sources list as score 3. Using score 1
     // (conservative, avoids over-flagging). Included for completeness.
@@ -84,6 +88,7 @@
     { term: 'levomepromazine', score: 3, note: 'Boustani/Campbell ACB score 3 (phenothiazine; = methotrimeprazine)' },
     { term: 'methotrimeprazine', score: 3, note: 'older name for levomepromazine; Boustani/Campbell ACB score 3' },
     { term: 'nozinan', score: 3, note: 'brand: levomepromazine' },
+    { term: 'trifluoperazine', score: 3, note: 'phenothiazine antipsychotic; Boustani ACB score 3; former UK brand Stelazine (discontinued) — no brand term added as no current UK brand (2026-07-11 Keeper addition)' },
     // ── Score 3: Antiparkinson drugs with anticholinergic action ─────────────
     { term: 'procyclidine', score: 3 },
     { term: 'orphenadrine', score: 3 },

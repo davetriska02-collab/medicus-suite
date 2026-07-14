@@ -493,6 +493,93 @@
     return { rows, counts: { total: rows.length, overdue, watch }, watchDays, overdueDays };
   }
 
+  // ── Chase-letter draft (2WW safety-net "Chase draft" action) ────────────────
+  // Pure text builder over one safety-net row (see buildSafetyNet) plus the
+  // suite letterhead setting. Produces a ready-to-edit chase letter to the
+  // referring hospital/service — NEVER auto-sent; the panel only ever offers
+  // it as a copy-to-clipboard draft for a human to review/edit first,
+  // mirroring the "(Prepared draft only...)" framing used by buildAskBackText
+  // in engine/reception-match.js. Carries no clinical detail beyond the
+  // referral facts already on the row.
+  //
+  // `row` — one row from buildSafetyNet().rows (raw referral fields +
+  //   ageDays), or any object with the same shape (referralId, referralDate,
+  //   referralService, referringClinician, priority, patientGivenName,
+  //   patientFamilyName, ageDays).
+  // `letterhead` — { practiceName, clinicianName } from suite.letterhead, or
+  //   null/undefined. Blank fields keep bracketed placeholders — a letter must
+  //   never carry a real-looking but empty sign-off (same convention as
+  //   resolveLetterhead() in side-panel/modules/shared/action-packs.js).
+  // `nowISO` — used as the letter date and as the fallback for computing
+  //   ageDays when the row does not already carry a numeric ageDays. Pass
+  //   explicitly for deterministic output (tests); omit for "now".
+  const PRIORITY_LETTER_LABELS = { Routine: 'Routine', Urgent: 'Urgent', TwoWeekWait: '2WW' };
+
+  function buildChaseLetter(row, letterhead, nowISO) {
+    const r = row || {};
+    const lh = letterhead || {};
+
+    const practiceName = (typeof lh.practiceName === 'string' && lh.practiceName.trim()) || '[Practice name]';
+    const clinicianName = (typeof lh.clinicianName === 'string' && lh.clinicianName.trim()) || '[Clinician name]';
+
+    const now = nowISO ? new Date(nowISO) : new Date();
+    const dateLabel = isNaN(now.getTime()) ? '(date unavailable)' : now.toISOString().slice(0, 10);
+
+    const patientName =
+      [r.patientGivenName, r.patientFamilyName].filter((s) => typeof s === 'string' && s.trim()).join(' ') ||
+      '(patient name not recorded)';
+
+    let serviceLine;
+    if (r.referralService) {
+      const parsed = parseReferralService(r.referralService);
+      const bits = [parsed.specialty, parsed.hospital].filter((s) => s && s !== '(unknown)');
+      serviceLine = bits.length ? bits.join(', ') : r.referralService;
+    } else {
+      serviceLine = '(specialty/hospital not recorded)';
+    }
+
+    const clinician =
+      typeof r.referringClinician === 'string' && r.referringClinician.trim()
+        ? r.referringClinician
+        : '(referring clinician not recorded)';
+
+    const ageDays = typeof r.ageDays === 'number' ? r.ageDays : referralAgeDays(r.referralDate, nowISO);
+    const ageLabel = ageDays == null ? '(days outstanding not available)' : `${ageDays} day${ageDays === 1 ? '' : 's'}`;
+
+    const referralDate = r.referralDate || '(date not recorded)';
+    const referralId = r.referralId || '(not recorded)';
+
+    const priorityKey = normalisePriority(r.priority || '');
+    const priorityLabel =
+      PRIORITY_LETTER_LABELS[priorityKey] || (r.priority ? String(r.priority) : '(priority not recorded)');
+
+    const lines = [];
+    lines.push(
+      '(Prepared draft only — review and edit before sending. Confirm the patient and destination before use.)'
+    );
+    lines.push('');
+    lines.push(practiceName);
+    lines.push(dateLabel);
+    lines.push('');
+    lines.push(`Re: ${priorityLabel} referral — ${patientName}, referred ${referralDate}`);
+    lines.push('');
+    lines.push('Dear colleague,');
+    lines.push('');
+    lines.push(
+      `We are following up on the above referral to ${serviceLine}, made by ${clinician}, which our records still show as open — ${ageLabel} outstanding since referral (our reference: ${referralId}).`
+    );
+    lines.push('');
+    lines.push(
+      `As this is a ${priorityLabel} referral, please could you confirm receipt and let us know the appointment date, so we can update our safety-netting records.`
+    );
+    lines.push('');
+    lines.push('Many thanks,');
+    lines.push(clinicianName);
+    lines.push(practiceName);
+
+    return lines.join('\n').trim() + '\n';
+  }
+
   const api = {
     PRIORITY_COLOURS,
     STATUS_COLOURS,
@@ -500,6 +587,7 @@
     ALL_STATUSES,
     referralAgeDays,
     buildSafetyNet,
+    buildChaseLetter,
     buildApiUrl,
     buildUrlFromTemplate,
     extractBaseUrl,

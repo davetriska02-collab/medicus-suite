@@ -18,6 +18,12 @@ function ApiNs() {
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
 import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
 import { downloadCsv } from '../shared/export-util.js';
+import { fetchManyDates, aggregateSlots, addDays } from '../../../shared/medicus-api.js';
+
+// Ranges longer than this are not eligible for the "Per session" adjustment (FEATURE 2) —
+// fetching one scheduling-overview request per day gets expensive/slow past about a month,
+// and the toggle is disabled with an honest title rather than silently degrading.
+const MAX_SESSION_RANGE_DAYS = 31;
 
 let container = null;
 let _inFlight = false;
@@ -30,6 +36,16 @@ let state = {
   error: null,
   showMode: 'stacked', // 'stacked' | 'total' | single metric key
   lastFetched: null,
+  // FEATURE 1b: "vs previous period" comparison toggle.
+  compareOn: false,
+  compareRange: null, // [prevStart, prevEnd] actually used for the last comparison fetch
+  compareAggregated: null,
+  compareError: null,
+  // FEATURE 2: session-adjusted per-clinician activity.
+  perSessionOn: false,
+  sessionData: null, // { byName: Map(normalisedName -> {sessions, displayName}), errors, days }
+  sessionLoading: false,
+  sessionError: null,
 };
 
 export async function init(el) {
@@ -52,6 +68,8 @@ export async function init(el) {
     // Decision B: derive VALID_MODES from the real metric keys rather than hard-coding stale keys
     const VALID_MODES = ['stacked', 'total', ...(api ? api.METRICS.map((m) => m.key) : [])];
     if (typeof saved.showMode === 'string' && VALID_MODES.includes(saved.showMode)) state.showMode = saved.showMode;
+    if (typeof saved.compareOn === 'boolean') state.compareOn = saved.compareOn;
+    if (typeof saved.perSessionOn === 'boolean') state.perSessionOn = saved.perSessionOn;
   }
 
   render();
@@ -69,6 +87,77 @@ export async function init(el) {
     stopFresh();
     container = null;
   };
+}
+
+// Persist the fields of `state` that make up the module's view — one call site instead
+// of re-listing the same field set at every mutation point (simplification: the original
+// four call sites each repeated { startDate, endDate, showMode } verbatim).
+function persistUi() {
+  saveUiState('activity', {
+    startDate: state.startDate,
+    endDate: state.endDate,
+    showMode: state.showMode,
+    compareOn: state.compareOn,
+    perSessionOn: state.perSessionOn,
+  });
+}
+
+// Normalise a clinician name for matching across data sources (Activity Report vs
+// scheduling overview) — case and incidental whitespace should not cause a false
+// "no session data" (FEATURE 2's manager-trust rule: never guess, but don't miss a
+// real match over trivial formatting differences either).
+function normaliseName(name) {
+  return String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+// The value a user row displays/compares for the active `showMode` — 'stacked'/'total'
+// use the row total, a single metric key uses that metric's count. Shared by renderBars,
+// the compare inline text, and the CSV export so the three never quietly disagree.
+function metricValueFor(user, mode) {
+  if (!user) return 0;
+  return mode === 'stacked' || mode === 'total' ? user.total : user.metrics[mode] || 0;
+}
+
+function rangeDaysInclusive() {
+  const api = ApiNs();
+  return api ? api.daysBetweenInclusive(state.startDate, state.endDate) : 0;
+}
+
+function sessionRangeTooLong() {
+  const days = rangeDaysInclusive();
+  return days === 0 || days > MAX_SESSION_RANGE_DAYS;
+}
+
+// FEATURE 2: sum non-cancelled sessions per clinician across every day in [startISO,endISO],
+// using the same fetchManyDates(concurrency:5)/aggregateSlots pattern report-data.js's
+// fetchCapacityRange uses for month-scale capacity fetches (see CLAUDE.md). Matching is by
+// normalised name — aggregateSlots' byStaff only lists clinicians who had at least one
+// non-cancelled session that day, so summing across days gives an accurate range total.
+async function fetchSessionCounts(siteId, startISO, endISO) {
+  const dates = [];
+  for (let cur = startISO; cur <= endISO; cur = addDays(cur, 1)) dates.push(cur);
+
+  const raw = await fetchManyDates(siteId, dates, { concurrency: 5 });
+  const byName = new Map();
+  const errors = [];
+  dates.forEach((date) => {
+    const dayRaw = raw[date];
+    if (!dayRaw || dayRaw.error) {
+      errors.push(`${date}: ${dayRaw?.error || 'no data'}`);
+      return;
+    }
+    const agg = aggregateSlots(dayRaw, { allowedTypes: null, filterPastTimes: false });
+    (agg.byStaff || []).forEach((s) => {
+      const norm = normaliseName(s.name);
+      const entry = byName.get(norm) || { sessions: 0, displayName: s.name };
+      entry.sessions += s.sessions || 0;
+      byName.set(norm, entry);
+    });
+  });
+  return { byName, errors, days: dates.length };
 }
 
 // ── Fetch ────────────────────────────────────────────────────────────────────
@@ -97,6 +186,7 @@ async function fetchAndRender() {
 
     state.loading = true;
     state.error = null;
+    state.compareError = null;
     render();
 
     try {
@@ -114,11 +204,51 @@ async function fetchAndRender() {
       state.aggregated = api.aggregate(data?.rowData || []);
       state.lastFetched = new Date();
       state.error = null;
+
+      // FEATURE 1b: comparison fetch is independent of the primary fetch's try/catch so a
+      // comparison-only failure (e.g. transient network blip) never blanks out the primary
+      // data the manager actually asked for.
+      state.compareAggregated = null;
+      state.compareRange = null;
+      if (state.compareOn) {
+        try {
+          const [prevStart, prevEnd] = api.previousRange(state.startDate, state.endDate);
+          state.compareRange = [prevStart, prevEnd];
+          const prevData = await api.fetchActivityReport(code, prevStart, prevEnd, {
+            fetch: (url, init) => window.ApiDiag.fetch({ module: 'activity', url, code, codeSource: source, init }),
+          });
+          state.compareAggregated = api.aggregate(prevData?.rowData || []);
+        } catch (e) {
+          state.compareError = e.message || String(e);
+        }
+      }
     } catch (e) {
       state.error = e.message || String(e);
     } finally {
       state.loading = false;
       render();
+    }
+
+    // FEATURE 2: per-session fetch runs after the main render so the manager sees primary
+    // (and comparison) data immediately — it can be slow (up to ~31 requests) and is purely
+    // additive, so there's no reason to gate the rest of the panel behind it.
+    if (state.perSessionOn && !sessionRangeTooLong() && !state.error) {
+      state.sessionLoading = true;
+      state.sessionError = null;
+      render();
+      try {
+        state.sessionData = await fetchSessionCounts(code, state.startDate, state.endDate);
+      } catch (e) {
+        state.sessionError = e.message || String(e);
+        state.sessionData = null;
+      } finally {
+        state.sessionLoading = false;
+        render();
+      }
+    } else {
+      state.sessionData = null;
+      state.sessionError = null;
+      state.sessionLoading = false;
     }
   } finally {
     _inFlight = false;
@@ -179,6 +309,11 @@ function renderControls() {
     }
   }
 
+  const sessionDisabled = sessionRangeTooLong();
+  const sessionTitle = sessionDisabled
+    ? 'Session adjustment available for ranges up to a month'
+    : 'Show activity per clinical session';
+
   return `
     <div class="act-controls">
       <div class="act-date-row">
@@ -195,6 +330,10 @@ function renderControls() {
         <span class="act-spacer"></span>
         ${state.aggregated && state.aggregated.users.length > 0 ? `<button class="act-refresh" id="actCsvBtn">&#x2193; CSV</button>` : ''}
         <button class="act-refresh" id="actRefresh">Refresh</button>
+      </div>
+      <div class="act-preset-row act-toggle-row">
+        <button class="act-preset act-toggle${state.compareOn ? ' active' : ''}" id="actCompareToggle" type="button" aria-pressed="${state.compareOn}">Compare: vs previous period</button>
+        <button class="act-preset act-toggle${state.perSessionOn ? ' active' : ''}" id="actPerSessionToggle" type="button" aria-pressed="${state.perSessionOn}" ${sessionDisabled ? 'disabled' : ''} title="${escAttr(sessionTitle)}">Per session</button>
       </div>
       ${state.lastFetched ? `<div class="act-ts">${freshnessHtml(state.lastFetched)}</div>` : ''}
     </div>
@@ -281,6 +420,7 @@ function renderData() {
         <div class="act-totals-period">${escHtml(periodLabel)}</div>
       </div>
       <div class="act-totals-number">${a.totals.all.toLocaleString('en-GB')}</div>
+      ${renderTotalDelta()}
       <div class="act-totals-metrics">
         ${api.METRICS.map(
           (m) => `
@@ -311,6 +451,27 @@ function renderData() {
   `;
 }
 
+// FEATURE 1b: period-total delta line under the hero number. Direction is stated in
+// plain text/sign, not coloured red/green — a rise or fall in inbound activity isn't
+// inherently good or bad, matching the neutral-delta convention used elsewhere in the
+// suite (e.g. submissions.js's renderDelta).
+function renderTotalDelta() {
+  if (!state.compareOn) return '';
+  const api = ApiNs();
+  if (state.compareError) {
+    return `<div class="act-compare-note act-compare-note--error">Comparison unavailable: ${escHtml(state.compareError)}</div>`;
+  }
+  if (!state.compareAggregated || !state.compareRange) return '';
+  const a = state.aggregated;
+  const [ps, pe] = state.compareRange;
+  const label = ps === pe ? formatDateLabel(ps) : `${formatDateLabel(ps)} → ${formatDateLabel(pe)}`;
+  const diff = a.totals.all - state.compareAggregated.totals.all;
+  const cmp = api.comparePct(a.totals.all, state.compareAggregated.totals.all);
+  const sign = diff > 0 ? '+' : '';
+  const pctText = cmp.pct == null ? '' : ` (${cmp.pct > 0 ? '+' : ''}${cmp.pct}%)`;
+  return `<div class="act-compare-note act-compare-note--${cmp.direction}">${sign}${diff}${pctText} vs ${escHtml(label)}</div>`;
+}
+
 function renderBars() {
   const api = ApiNs();
   const a = state.aggregated;
@@ -329,7 +490,7 @@ function renderBars() {
 
   return a.users
     .map((user) => {
-      const userTotalOrMetric = mode === 'stacked' || mode === 'total' ? user.total : user.metrics[mode] || 0;
+      const userTotalOrMetric = metricValueFor(user, mode);
       const barWidthPct = (userTotalOrMetric / scaleMax) * 100;
 
       let segments;
@@ -359,15 +520,60 @@ function renderBars() {
         ariaLabel = `${user.name}: ${userTotalOrMetric} ${metricDef ? metricDef.short : mode}`;
       }
 
+      const metaLine = renderBarMeta(user, mode, userTotalOrMetric);
+
       return `
-      <div class="act-bar-row" role="listitem" aria-label="${escAttr(ariaLabel)}">
-        <div class="act-bar-name" title="${escAttr(user.name)}">${escHtml(user.name)}</div>
-        <div class="act-bar-track">${segments}</div>
-        <div class="act-bar-total">${userTotalOrMetric.toLocaleString('en-GB')}</div>
+      <div class="act-bar-row-wrap">
+        <div class="act-bar-row" role="listitem" aria-label="${escAttr(ariaLabel)}">
+          <div class="act-bar-name" title="${escAttr(user.name)}">${escHtml(user.name)}</div>
+          <div class="act-bar-track">${segments}</div>
+          <div class="act-bar-total">${userTotalOrMetric.toLocaleString('en-GB')}</div>
+        </div>
+        ${metaLine}
       </div>
     `;
     })
     .join('');
+}
+
+// Combines the FEATURE 1b comparison delta and the FEATURE 2 per-session figure into one
+// meta line under each staff bar row — both are "decomposable" per the manager's-trust rule
+// (the raw prior total / session count is always visible alongside the derived number, never
+// just the percentage or the ratio on its own).
+function renderBarMeta(user, mode, curVal) {
+  const parts = [renderCompareInline(user, mode, curVal), renderSessionInline(user, curVal)].filter(Boolean);
+  if (!parts.length) return '';
+  return `<div class="act-bar-meta">${parts.join('<span class="act-bar-meta-sep">·</span>')}</div>`;
+}
+
+function renderCompareInline(user, mode, curVal) {
+  if (!state.compareOn) return '';
+  const api = ApiNs();
+  if (state.compareError) return `<span class="act-bar-delta act-bar-delta--error">comparison unavailable</span>`;
+  if (!state.compareAggregated) return '';
+  const prevUser = state.compareAggregated.users.find((u) => normaliseName(u.name) === normaliseName(user.name));
+  const prevVal = metricValueFor(prevUser, mode);
+  const cmp = api.comparePct(curVal, prevVal);
+  const diff = curVal - prevVal;
+  const sign = diff > 0 ? '+' : '';
+  const pctText = cmp.pct == null ? '' : ` (${cmp.pct > 0 ? '+' : ''}${cmp.pct}%)`;
+  return `<span class="act-bar-delta act-bar-delta--${cmp.direction}">${sign}${diff}${pctText} vs prior</span>`;
+}
+
+function renderSessionInline(user, curVal) {
+  if (!state.perSessionOn) return '';
+  if (state.sessionLoading) return `<span class="act-bar-session-inline">loading session data…</span>`;
+  if (state.sessionError)
+    return `<span class="act-bar-session-inline act-bar-session-inline--error">session data unavailable</span>`;
+  if (!state.sessionData) return '';
+  const entry = state.sessionData.byName.get(normaliseName(user.name));
+  if (!entry) return `<span class="act-bar-session-inline act-bar-session-inline--unmatched">no session data</span>`;
+  // Manager's trust rule: never divide by an assumed session count and never show
+  // Infinity/NaN — a clinician with activity but zero recorded (non-cancelled) sessions
+  // gets an explicit prompt to check the rota instead of a bogus ratio.
+  if (!entry.sessions) return `<span class="act-bar-session-inline">0 sessions — check rota</span>`;
+  const perSession = Math.round((curVal / entry.sessions) * 10) / 10;
+  return `<span class="act-bar-session-inline">${perSession} per session (${entry.sessions} session${entry.sessions === 1 ? '' : 's'})</span>`;
 }
 
 // ── CSV export ───────────────────────────────────────────────────────────────
@@ -377,8 +583,22 @@ function downloadActCsv() {
   const a = state.aggregated;
   if (!api || !a || a.users.length === 0) return;
   const metricLabels = api.METRICS.map((m) => m.short);
+  // FEATURE 1b: comparison columns are only included when the toggle is on AND the
+  // comparison actually succeeded — a failed comparison must not silently leave stale
+  // or misleading numbers in the export.
+  const compareOn = state.compareOn && state.compareAggregated && !state.compareError;
   const header = ['Staff', ...metricLabels, 'Total'];
-  const rows = a.users.map((u) => [u.name, ...api.METRICS.map((m) => u.metrics[m.key] || 0), u.total]);
+  if (compareOn) header.push('Total (prior period)', 'Delta', 'Delta %');
+  const rows = a.users.map((u) => {
+    const row = [u.name, ...api.METRICS.map((m) => u.metrics[m.key] || 0), u.total];
+    if (compareOn) {
+      const prevUser = state.compareAggregated.users.find((pu) => normaliseName(pu.name) === normaliseName(u.name));
+      const prevTotal = prevUser ? prevUser.total : 0;
+      const cmp = api.comparePct(u.total, prevTotal);
+      row.push(prevTotal, u.total - prevTotal, cmp.pct == null ? '' : cmp.pct);
+    }
+    return row;
+  });
   const start = state.startDate || '';
   const end = state.endDate || '';
   const datePart = start === end ? start : `${start}-to-${end}`;
@@ -401,13 +621,13 @@ function wireControls() {
   if (startEl)
     startEl.addEventListener('change', () => {
       state.startDate = startEl.value;
-      saveUiState('activity', { startDate: state.startDate, endDate: state.endDate, showMode: state.showMode });
+      persistUi();
       fetchAndRender();
     });
   if (endEl)
     endEl.addEventListener('change', () => {
       state.endDate = endEl.value;
-      saveUiState('activity', { startDate: state.startDate, endDate: state.endDate, showMode: state.showMode });
+      persistUi();
       fetchAndRender();
     });
 
@@ -419,7 +639,7 @@ function wireControls() {
       if (range) {
         state.startDate = range[0];
         state.endDate = range[1];
-        saveUiState('activity', { startDate: state.startDate, endDate: state.endDate, showMode: state.showMode });
+        persistUi();
         fetchAndRender();
       }
     });
@@ -431,11 +651,27 @@ function wireControls() {
   const refresh = container.querySelector('#actRefresh');
   if (refresh) refresh.addEventListener('click', fetchAndRender);
 
+  const compareToggle = container.querySelector('#actCompareToggle');
+  if (compareToggle)
+    compareToggle.addEventListener('click', () => {
+      state.compareOn = !state.compareOn;
+      persistUi();
+      fetchAndRender();
+    });
+
+  const perSessionToggle = container.querySelector('#actPerSessionToggle');
+  if (perSessionToggle)
+    perSessionToggle.addEventListener('click', () => {
+      state.perSessionOn = !state.perSessionOn;
+      persistUi();
+      fetchAndRender();
+    });
+
   const modeSel = container.querySelector('#actModeSelect');
   if (modeSel)
     modeSel.addEventListener('change', () => {
       state.showMode = modeSel.value;
-      saveUiState('activity', { startDate: state.startDate, endDate: state.endDate, showMode: state.showMode });
+      persistUi();
       render();
     });
 }

@@ -39,6 +39,11 @@ const path = require('path');
     ledgerSeriesForDay,
     ledgerCountsForDays,
     ledgerDayWatched,
+    sameWeekdayCumulativeSamples,
+    demandBaseline,
+    baselineLine,
+    weekdayName,
+    BASELINE_MIN_SAMPLES,
   } = await import(corePath);
 
   // ── defaults ─────────────────────────────────────────────────────────────────
@@ -210,6 +215,72 @@ const path = require('path');
   );
   check(normaliseLedger(null).days && Object.keys(normaliseLedger(null).days).length === 0, 'null → empty ledger');
   check(normaliseLedger('junk').v === 1, 'non-object → empty ledger');
+
+  // ── Same-weekday baselines ───────────────────────────────────────────────────
+  console.log('\n--- same-weekday baselines ---');
+  // 2026-07-07 is a Tuesday. Build 5 watched prior Tuesdays + noise days.
+  const BTODAY = '2026-07-07';
+  check(weekdayName(BTODAY) === 'Tuesday', 'weekdayName');
+  const hourly = (n, atHour) => {
+    // n tasks all logged at `atHour` — cumulative[h>=atHour] === n
+    const arr = new Array(24).fill(0);
+    arr[atHour] = n;
+    return arr;
+  };
+  const bLedger = { v: 1, days: {} };
+  const tuesdays = ['2026-06-30', '2026-06-23', '2026-06-16', '2026-06-09', '2026-06-02'];
+  const tueTotals = [10, 12, 14, 16, 18];
+  tuesdays.forEach((d, i) => {
+    bLedger.days[d] = { watched: true, medical: { n: tueTotals[i], hourly: hourly(tueTotals[i], 8) } };
+  });
+  // an UNWATCHED Tuesday (undercount) that must be excluded
+  bLedger.days['2026-05-26'] = { medical: { n: 1, hourly: hourly(1, 8) } };
+  // a watched Monday that must not leak into a Tuesday baseline
+  bLedger.days['2026-07-06'] = { watched: true, medical: { n: 99, hourly: hourly(99, 8) } };
+  // today: 15 by 09:00
+  bLedger.days[BTODAY] = { watched: true, medical: { ids: {} } };
+  for (let i = 0; i < 15; i++) bLedger.days[BTODAY].medical.ids['t' + i] = 9;
+
+  const samples = sameWeekdayCumulativeSamples(bLedger, BTODAY, 10, ['medical']);
+  check(samples.length === 5, 'five watched Tuesdays sampled');
+  check(!samples.some((s) => s.date === '2026-05-26'), 'unwatched Tuesday EXCLUDED (undercount would bias low)');
+  check(!samples.some((s) => s.date === '2026-07-06'), 'Monday never leaks into a Tuesday baseline');
+
+  let bl = demandBaseline(bLedger, BTODAY, 10, ['medical']);
+  check(bl && bl.todayValue === 15 && bl.n === 5, 'today value + sample count');
+  check(bl.higher === 3 && bl.lower === 2 && bl.band === 'typical', '15 vs [10,12,14,16,18] → typical');
+  check(baselineLine(bl, true).startsWith('Typical for a Tuesday'), 'typical copy');
+
+  // hour honesty: at 07:00 (before any past-Tuesday tasks landed at 08:00),
+  // today's 0-so-far compares against past Tuesdays' 0-by-07:00 — not their
+  // full-day totals.
+  const early = demandBaseline(bLedger, '2026-07-07', 7, ['medical']);
+  check(
+    early.todayValue === 0 && early.higher === 0 && early.band === 'typical',
+    'half-day never compared to full days'
+  );
+
+  // band edges
+  bLedger.days[BTODAY].medical.ids = {};
+  for (let i = 0; i < 25; i++) bLedger.days[BTODAY].medical.ids['t' + i] = 9;
+  bl = demandBaseline(bLedger, BTODAY, 10, ['medical']);
+  check(bl.band === 'high' && baselineLine(bl).includes('ahead of 5 of the last 5'), '25 beats all 5 → high + copy');
+  bLedger.days[BTODAY].medical.ids = { only: 9 };
+  bl = demandBaseline(bLedger, BTODAY, 10, ['medical']);
+  check(bl.band === 'low' && baselineLine(bl).includes('behind 5 of the last 5'), '1 behind all 5 → low + copy');
+  check(baselineLine(bl, false).indexOf('by this time') === -1, 'complete-day copy drops "by this time"');
+
+  // minimum-history gate
+  const thin = { v: 1, days: {} };
+  tuesdays.slice(0, BASELINE_MIN_SAMPLES - 1).forEach((d, i) => {
+    thin.days[d] = { watched: true, medical: { n: 5, hourly: hourly(5, 8) } };
+  });
+  check(
+    demandBaseline(thin, BTODAY, 10, ['medical']) === null,
+    `< ${BASELINE_MIN_SAMPLES} watched samples → NO baseline`
+  );
+  check(demandBaseline(null, BTODAY, 10, ['medical']) === null, 'null ledger → null');
+  check(baselineLine(null) === '', 'null baseline → empty line');
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);

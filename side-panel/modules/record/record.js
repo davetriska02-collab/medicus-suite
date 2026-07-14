@@ -73,11 +73,13 @@
 import { copyText } from '../shared/export-util.js';
 import { isChipActionNeeded } from '../sentinel/sentinel-core.js';
 import { getTxnBundleIfEnabled, feedSourceLabel } from '../../../shared/panel-txn-feed.js';
+import { buildSmrPack } from './smr-pack-core.js';
 
 let container = null;
 let _runToken = 0; // cancels stale async renders on rapid patient/tab change
 let _onRuntimeMsg = null;
 let _onTabChange = null;
+let _onLetterheadChange = null;
 
 const esc = (s) =>
   String(s == null ? '' : s).replace(
@@ -108,6 +110,14 @@ export async function init(el) {
   if (chrome.tabs?.onActivated) chrome.tabs.onActivated.addListener(_onTabChange);
   if (chrome.tabs?.onUpdated) chrome.tabs.onUpdated.addListener(_onTabChange);
 
+  await loadLetterhead();
+  _onLetterheadChange = (changes, area) => {
+    if (area === 'local' && changes['suite.letterhead']) {
+      _letterhead = changes['suite.letterhead'].newValue || {};
+    }
+  };
+  if (chrome.storage?.onChanged) chrome.storage.onChanged.addListener(_onLetterheadChange);
+
   await load();
 }
 
@@ -118,9 +128,13 @@ export function cleanup() {
     if (chrome.tabs?.onActivated) chrome.tabs.onActivated.removeListener(_onTabChange);
     if (chrome.tabs?.onUpdated) chrome.tabs.onUpdated.removeListener(_onTabChange);
   }
+  if (_onLetterheadChange && chrome.storage?.onChanged) {
+    chrome.storage.onChanged.removeListener(_onLetterheadChange);
+  }
   if (_onDelegatedClick && container) container.removeEventListener('click', _onDelegatedClick);
-  _onRuntimeMsg = _onTabChange = _onDelegatedClick = null;
+  _onRuntimeMsg = _onTabChange = _onDelegatedClick = _onLetterheadChange = null;
   _lastModel = _lastChips = _lastStamp = _lastUuid = null;
+  _letterhead = {};
   _preflightOpen = false;
   _preflightInput = '';
   _preflightResult = null;
@@ -138,6 +152,7 @@ function shell() {
           <h2 class="rec-title">Patient record</h2>
           <div class="rec-title-btns">
             <button type="button" class="rec-copy-btn" id="recCopySummary" disabled title="Copy plain-text summary of what is shown on screen" aria-label="Copy summary">Copy summary</button>
+            <button type="button" class="rec-copy-btn" id="recSmrPack" disabled title="Open a printable SMR (structured medication review) prep pack for this patient" aria-label="SMR prep pack">SMR prep pack</button>
             <button type="button" class="rec-refresh" id="recRefresh" title="Refresh from Medicus" aria-label="Refresh">⟳</button>
           </div>
         </div>
@@ -167,6 +182,12 @@ let _lastStamp = null;
 // the rendered model — the ONLY patient identifier the event ledger may
 // receive (never a name). Module-local; never written to storage by this module.
 let _lastUuid = null;
+
+// Practice letterhead ({ practiceName, clinicianName }) used to auto-fill the
+// SMR prep pack sign-off, read from 'suite.letterhead'. Same convention as
+// sentinel.js's _letterhead — loaded once on init, kept fresh via
+// chrome.storage.onChanged. Module-local; never written to storage here.
+let _letterhead = {};
 
 // ── Pre-flight (what-if safety preview) — module-local state ────────────────
 // Never written to storage; reset on cleanup(). _preflightOpen persists the
@@ -218,12 +239,47 @@ function wireStaticControls() {
     });
   }
 
+  // SMR prep pack — button lives in the shell (not re-rendered), same pattern
+  // as Copy summary. Button is disabled until render() populates _lastModel.
+  const smrBtn = container.querySelector('#recSmrPack');
+  if (smrBtn) {
+    smrBtn.addEventListener('click', () => onPrintSmrPack());
+  }
+
   // Retry button lives inside the re-rendered body, so delegate from the root
   // (listener survives setBody innerHTML replacement).
   _onDelegatedClick = (e) => {
     if (e.target && e.target.id === 'recRetry') load(true);
   };
   container.addEventListener('click', _onDelegatedClick);
+}
+
+// ── SMR (structured medication review) prep pack ────────────────────────────
+// Builds the SMR pack model, writes it to the transient 'record.smrPack' key,
+// then opens smr-pack.html in a new tab. Mirror of sentinel.js's
+// onPrintPassport — see that function for the pattern (this is a FORK of the
+// passport feature for a clinician audience, not an extension of it).
+async function onPrintSmrPack() {
+  if (!_lastModel) return;
+  const model = buildSmrPack(_lastModel, _lastChips, _letterhead, new Date().toISOString());
+  await chrome.storage.local.set({ 'record.smrPack': model });
+  // best-effort PHI-at-rest backstop (mirrors passport's 60s backstop) — primary
+  // clear is consume-on-read in the print tab; this covers the case where the
+  // tab never renders (e.g. the user closes it before it loads).
+  setTimeout(() => {
+    chrome.storage.local.remove('record.smrPack');
+  }, 60000);
+  // F2 Clinical Event Ledger — record that a pack was generated (fire-and-forget;
+  // the ledger swallows its own failures and can never break this button).
+  window.EventLedger?.record({
+    source: 'record',
+    patientRef: _lastUuid,
+    severity: null,
+    ruleId: null,
+    label: 'SMR prep pack generated',
+    action: 'smr-pack-generated',
+  });
+  chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/record/smr-pack.html') });
 }
 
 function setBody(html) {
@@ -239,6 +295,14 @@ function setSource(html, cls) {
 }
 
 // ── load / resolve patient ───────────────────────────────────────────────────
+
+// Practice letterhead — mirrors sentinel.js's loadLetterhead() (same storage
+// key, same shape). Loaded once on init; kept fresh via the onChanged listener
+// wired in init()/cleanup().
+async function loadLetterhead() {
+  const r = await chrome.storage.local.get('suite.letterhead');
+  _letterhead = r['suite.letterhead'] || {};
+}
 
 async function findMedicusTab() {
   // Prefer the active tab; fall back to any open Medicus tab in the window.
@@ -489,6 +553,8 @@ async function render(data, chips, errs, opts) {
   _lastStamp = stamp;
   const copyBtn = container?.querySelector('#recCopySummary');
   if (copyBtn) copyBtn.disabled = false;
+  const smrBtn = container?.querySelector('#recSmrPack');
+  if (smrBtn) smrBtn.disabled = false;
 
   const partial = Object.keys(errs).length
     ? `<div class="rec-partial">⚠ Some sections didn’t load (${esc(Object.keys(errs).join(', '))}). Showing what was returned.</div>`
