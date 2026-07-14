@@ -1273,6 +1273,100 @@
     ];
   }
 
+  // === DRUG-ALLERGY EVALUATOR ===
+  // Fires when a documented allergy (data.allergies) co-occurs with a prescribed
+  // drug from the rule's drug set(s). This is the first rule type that reads the
+  // allergies bundle — only available from the Transactional (GP Connect
+  // Structured) feed; the legacy session/DOM feed provides no allergies.
+  //
+  // FAIL-CLOSED: with no allergy data the rule returns [] and never fires, so it
+  // is dormant (and safe) on any feed that lacks allergies, and lights up only
+  // when a real allergy record is present. It never asserts "no allergy".
+  //
+  // Rule shape:
+  //   { type:'drug-allergy', allergyTerms:[...], drugSets:[{name,match,exclude}],
+  //     crossSensitivity?:bool, severity, ageRange?, sex?, source?, notes? }
+  function evaluateDrugAllergyRule(rule, data) {
+    const traceEntry = _traceBase(data, rule);
+    const allergies = data.allergies || [];
+    if (!allergies.length) {
+      // No allergy source (e.g. session feed) — fail closed, do not fire.
+      if (traceEntry) traceEntry.skipReason = 'no-allergy-data';
+      return [];
+    }
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'age-filter';
+      return [];
+    }
+    if (!passesSexFilter(rule.sex, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'sex-filter';
+      return [];
+    }
+
+    // Only consider ACTIVE allergies (never a resolved/inactive/refuted entry).
+    const activeAllergies = allergies.filter((a) => {
+      const s = String(a.status || 'active').toLowerCase();
+      return s !== 'inactive' && s !== 'resolved' && s !== 'refuted' && s !== 'entered-in-error';
+    });
+    const allergyTerms = rule.allergyTerms || [];
+    const matchedAllergies = activeAllergies.filter((a) => matchesAnyTerm(a.label, allergyTerms));
+    if (!matchedAllergies.length) {
+      if (traceEntry) traceEntry.skipReason = 'no-allergy-match';
+      return [];
+    }
+
+    const meds = data.medications || [];
+    const drugSets = rule.drugSets || [];
+    const matchedPerSet = drugSets.map((set) =>
+      meds.filter((m) => drugMatchesRule(m.name, { drug: { match: set.match, exclude: set.exclude } }))
+    );
+    // A drug-allergy rule fires when ANY of its drug sets is present (a single
+    // set is the common case — the allergy and its contraindicated drug class).
+    const anyDrugMatched = matchedPerSet.some((matched) => matched.length > 0);
+    if (!anyDrugMatched) {
+      if (traceEntry) traceEntry.skipReason = 'no-drug-match';
+      return [];
+    }
+
+    const status = severityToStatus(rule.severity);
+    const matchSummary = `${matchedAllergies.map((a) => a.label).join(', ')} + ${matchedPerSet
+      .flat()
+      .map((m) => m.name)
+      .join(', ')}`;
+    if (traceEntry) {
+      traceEntry.fired = true;
+      traceEntry.status = status;
+      traceEntry.chipRef = rule.id;
+      traceEntry.matchSummary = matchSummary;
+    }
+
+    const facts = [
+      { label: 'Allergy', value: matchedAllergies.map((a) => a.label).join(', ') },
+    ];
+    matchedPerSet.forEach((matched, i) => {
+      if (matched.length) {
+        const set = drugSets[i] || {};
+        facts.push({ label: set.name || `Drug set ${i + 1}`, value: matched.map((m) => m.name).join(', ') });
+      }
+    });
+    if (rule.crossSensitivity) {
+      facts.push({ label: 'Note', value: 'cross-sensitivity caution — review, not an absolute contraindication' });
+    }
+
+    return [
+      {
+        type: 'drug-allergy',
+        ruleId: rule.id,
+        status,
+        label: rule.label || rule.id,
+        matchSummary,
+        source: rule.source || null,
+        notes: rule.notes || null,
+        evidence: { summary: matchSummary, facts },
+      },
+    ];
+  }
+
   // === EVENT-COUNT EVALUATOR ===
   // Counts matching items (problems or observations) within a rolling time window
   // and fires when the count satisfies the threshold operator.
@@ -2012,8 +2106,11 @@
     // Populated from the investigation dashboard's dataYYYYMMDD keys by the normaliser.
     // Falls back to empty array when not available (DOM fallback, mock, old callers).
     const observationHistory = options.observationHistory || [];
+    // allergies: only present on the Transactional (GP Connect Structured) feed;
+    // empty on the legacy session/DOM feed. drug-allergy rules fail closed on [].
+    const allergies = options.allergies || [];
 
-    const data = { medications, observations, observationHistory, problems, patientContext };
+    const data = { medications, observations, observationHistory, problems, patientContext, allergies };
 
     // Trace sink: attach only when tracing is requested (never on the hot path).
     const trace = options.trace ? [] : null;
@@ -2064,6 +2161,7 @@
       else if (type === 'qof-register') out = evaluateQofRegisterRule(rule, data);
       else if (type === 'qof-indicator') out = evaluateQofIndicatorRule(rule, data, now);
       else if (type === 'drug-combo') out = evaluateDrugComboRule(rule, data);
+      else if (type === 'drug-allergy') out = evaluateDrugAllergyRule(rule, data);
       else if (type === 'event-count') out = evaluateEventCountRule(rule, data, now);
       else if (type === 'vaccine') out = evaluateVaccineRule(rule, data, now);
       chips.push(...out);

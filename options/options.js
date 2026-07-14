@@ -238,6 +238,182 @@ testConnectionBtn?.addEventListener('click', async () => {
   }
 });
 
+// ── API Integration (Transactional API) settings ──────────────────────────────
+// shared/txn-config.js (TxnConfig) is service-worker only — not loaded on this
+// page — so the two literal defaults below are mirrored from its DEFAULTS and
+// must be kept in sync if that module's defaults ever change.
+const TXN_DEFAULT_MODE = 'session';
+const TXN_DEFAULT_ENVIRONMENT = 'staging';
+
+const txnModeRadios = document.querySelectorAll('input[name="txnMode"]');
+const txnModeWarning = document.getElementById('txnModeWarning');
+const txnEnvironmentSelect = document.getElementById('txnEnvironment');
+const txnProxyUrlInput = document.getElementById('txnProxyUrl');
+const txnCallerKeyInput = document.getElementById('txnCallerKey');
+const txnUserEmailInput = document.getElementById('txnUserEmail');
+const txnTenantValue = document.getElementById('txnTenantValue');
+const saveTxnBtn = document.getElementById('saveTxnBtn');
+const txnSaved = document.getElementById('txnSaved');
+const txnTestConnectionBtn = document.getElementById('txnTestConnectionBtn');
+const txnTestConnectionResult = document.getElementById('txnTestConnectionResult');
+const txnProdConfirmWarning = document.getElementById('txnProdConfirmWarning');
+const txnParityReportBtn = document.getElementById('txnParityReportBtn');
+
+// Production interlock: saving with environment 'prod' and a non-session
+// integration mode points Suite's live patient-record reads at the real
+// Medicus API, so it gets a deliberate double-click confirmation rather than
+// saving on the first click like every other change. Armed by the first
+// Save click below; a second Save click while armed performs the save; the
+// arm expires silently after 10s (TXN_PROD_CONFIRM_WINDOW_MS) if not
+// confirmed.
+const TXN_PROD_CONFIRM_WINDOW_MS = 10000;
+let txnProdConfirmArmed = false;
+let txnProdConfirmTimer = null;
+
+function txnClearProdConfirm() {
+  txnProdConfirmArmed = false;
+  if (txnProdConfirmTimer) {
+    clearTimeout(txnProdConfirmTimer);
+    txnProdConfirmTimer = null;
+  }
+  if (txnProdConfirmWarning) {
+    txnProdConfirmWarning.style.display = 'none';
+    txnProdConfirmWarning.textContent = '';
+  }
+}
+
+function txnUpdateModeWarning() {
+  if (!txnModeWarning) return;
+  const checked = document.querySelector('input[name="txnMode"]:checked');
+  txnModeWarning.style.display = checked && checked.value === 'transactional' ? 'block' : 'none';
+}
+txnModeRadios.forEach((r) => r.addEventListener('change', txnUpdateModeWarning));
+
+(async function initTxnSection() {
+  try {
+    const res = await chrome.storage.local.get([
+      'txn.integrationMode',
+      'txn.environment',
+      'txn.proxyUrl',
+      'txn.callerKey',
+      'txn.userEmail',
+      'suite.practiceCode',
+    ]);
+
+    const mode = res['txn.integrationMode'] || TXN_DEFAULT_MODE;
+    const modeRadio =
+      document.querySelector(`input[name="txnMode"][value="${escAttr(mode)}"]`) ||
+      document.getElementById('txnModeSession');
+    if (modeRadio) modeRadio.checked = true;
+
+    if (txnEnvironmentSelect) txnEnvironmentSelect.value = res['txn.environment'] || TXN_DEFAULT_ENVIRONMENT;
+    if (txnProxyUrlInput) txnProxyUrlInput.value = res['txn.proxyUrl'] || '';
+    if (txnCallerKeyInput) txnCallerKeyInput.value = res['txn.callerKey'] || '';
+    if (txnUserEmailInput) txnUserEmailInput.value = res['txn.userEmail'] || '';
+    if (txnTenantValue) txnTenantValue.textContent = res['suite.practiceCode'] || '(not set — see Suite section)';
+
+    txnUpdateModeWarning();
+  } catch (e) {
+    console.warn('[Txn section init]', e.message);
+  }
+})();
+
+saveTxnBtn?.addEventListener('click', async () => {
+  const checkedMode = document.querySelector('input[name="txnMode"]:checked');
+  const mode = checkedMode ? checkedMode.value : TXN_DEFAULT_MODE;
+  const environment = txnEnvironmentSelect ? txnEnvironmentSelect.value : TXN_DEFAULT_ENVIRONMENT;
+
+  // Deliberate-confirmation interlock: pointing Suite at PRODUCTION while an
+  // integration mode other than 'session' is selected means live reads will
+  // actually hit real patient data, so the first click only arms a warning —
+  // it does not save. A second click within the window confirms and saves.
+  const needsProdConfirm = environment === 'prod' && mode !== 'session';
+  if (needsProdConfirm && !txnProdConfirmArmed) {
+    txnProdConfirmArmed = true;
+    if (txnProdConfirmTimer) clearTimeout(txnProdConfirmTimer);
+    txnProdConfirmTimer = setTimeout(txnClearProdConfirm, TXN_PROD_CONFIRM_WINDOW_MS);
+    if (txnProdConfirmWarning) {
+      txnProdConfirmWarning.textContent =
+        'You are pointing Suite at the PRODUCTION Medicus API for live patient data. Click Save again within 10 seconds to confirm.';
+      txnProdConfirmWarning.style.display = 'block';
+    }
+    return;
+  }
+  // Either this isn't a prod+non-session save (saves as today), or it's a
+  // confirming second click — either way, clear any armed state.
+  txnClearProdConfirm();
+
+  await chrome.storage.local.set({
+    'txn.integrationMode': mode,
+    'txn.environment': environment,
+    // Trimmed; an empty string is a deliberate clear of a previously-saved value.
+    'txn.proxyUrl': (txnProxyUrlInput?.value || '').trim(),
+    'txn.callerKey': (txnCallerKeyInput?.value || '').trim(),
+    'txn.userEmail': (txnUserEmailInput?.value || '').trim(),
+  });
+
+  txnUpdateModeWarning();
+
+  if (txnSaved) {
+    txnSaved.classList.add('show');
+    setTimeout(() => txnSaved.classList.remove('show'), 2000);
+  }
+});
+
+txnTestConnectionBtn?.addEventListener('click', async () => {
+  if (txnTestConnectionResult) {
+    txnTestConnectionResult.textContent = 'Testing…';
+    txnTestConnectionResult.style.color = 'var(--text-3)';
+  }
+  try {
+    const r = await chrome.runtime.sendMessage({ action: 'txn:testConnection' });
+    if (!txnTestConnectionResult) return;
+    if (r && r.ok) {
+      txnTestConnectionResult.textContent = `Connected — proxy and Medicus API reachable (${r.latencyMs} ms)`;
+      txnTestConnectionResult.style.color = 'var(--green)';
+    } else {
+      txnTestConnectionResult.textContent = (r && r.error) || 'Test failed — no response from the service worker.';
+      txnTestConnectionResult.style.color = 'var(--red)';
+    }
+  } catch (e) {
+    if (txnTestConnectionResult) {
+      txnTestConnectionResult.textContent = `Error: ${e.message}`;
+      txnTestConnectionResult.style.color = 'var(--red)';
+    }
+  }
+});
+
+// Generate parity report — one-click assurance evidence pack: reads the
+// Clinical Event Ledger (shared/event-ledger.js, window.EventLedger, loaded
+// before this script), summarises the crossover-related events with
+// shared/txn-parity-report.js (window.TxnParityReport), and downloads a
+// Markdown document. Same client-side Blob + temporary <a download> pattern
+// as the Event Ledger section's own "Export CSV" (see initLedgerSection
+// below) — no server round-trip, nothing leaves this machine.
+txnParityReportBtn?.addEventListener('click', async () => {
+  const EL = typeof window !== 'undefined' ? window.EventLedger : null;
+  const TPR = typeof window !== 'undefined' ? window.TxnParityReport : null;
+  if (!EL || !TPR) return;
+  try {
+    const events = await EL.getEvents();
+    const report = TPR.buildParityReport(events, { nowIso: new Date().toISOString() });
+    const checkedMode = document.querySelector('input[name="txnMode"]:checked');
+    const mode = checkedMode ? checkedMode.value : TXN_DEFAULT_MODE;
+    const tenantText = txnTenantValue ? txnTenantValue.textContent : '';
+    const practiceLabel = tenantText && !tenantText.startsWith('(') && tenantText !== '—' ? tenantText : '';
+    const md = TPR.renderParityReportMarkdown(report, { practiceLabel, modeNote: `Integration mode: ${mode}` });
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'medicus-suite-api-parity-report.md';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.warn('[Txn parity report]', e.message);
+  }
+});
+
 // ── Capacity Forecast preset editor ──────────────────────────────────────────
 
 const presetEditor = document.getElementById('capPresetEditor');

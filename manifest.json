@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.162.0",
+  "version": "3.166.0",
   "description": "The clinical intelligence layer for Medicus: read-only safety monitoring, triage red-flags, QOF tracking and operational dashboards.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
     "https://*.medicus.health/*",
     "https://*.api.england.medicus.health/*",
     "https://api.github.com/repos/davetriska02-collab/medicus-suite/*",
-    "https://api.nhs.uk/*"
+    "https://api.nhs.uk/*",
+    "https://*.supabase.co/*"
   ],
   "background": { "service_worker": "service-worker.js" },
   "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self'" },
@@ -46,6 +47,9 @@
         "engine/data-fetcher.js",
         "shared/extraction-health.js",
         "shared/chip-renderer.js",
+        "shared/shadow-compare.js",
+        "shared/event-ledger.js",
+        "shared/txn-shadow-summary.js",
         "content-scripts/sentinel.js",
         "content-scripts/referrals-discovery.js"
       ],

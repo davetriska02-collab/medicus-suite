@@ -91,6 +91,16 @@
   color: var(--text-1);
 }
 
+/* Feed provenance ("Data: API feed" / "Data: session") — subtle, not a badge.
+   Mirrors record.css .rec-feed-label's idiom. */
+.trends-source {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-4);
+  padding: 0 12px 4px;
+}
+
 /* ── Picker ──────────────────────────────────────────────────────────────────── */
 .trends-picker {
   display: flex;

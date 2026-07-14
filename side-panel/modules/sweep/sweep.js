@@ -30,6 +30,13 @@
 //    new tab (overwritten on each print; allowlisted in test-backup-coverage).
 //  - Evaluation path: SentinelApiClient.fetchAll → SentinelNormalisers.normaliseAll
 //    → SentinelRules.evaluatePatient — identical to sentinel.js / content-scripts.
+//  - Transactional feed (shared/panel-txn-feed.js): before the session fetch,
+//    each patient is offered the official Transactional API bundle via
+//    getTxnBundleIfEnabled(). It returns null in every case except a practice
+//    explicitly on integrationMode 'transactional' with a healthy feed, so
+//    non-transactional practices take the session path exactly as before.
+//    Per-row provenance ('API' vs 'session') is badged in the UI and rolled
+//    up in the run summary.
 //  - Rule loading: SentinelRulesetIo.mergeRules with canonical JSON + overrides,
 //    identical to the loadRules() path in sentinel.js.
 
@@ -50,6 +57,7 @@ import {
 } from './sweep-core.js';
 import { buildBatchPack } from '../shared/action-packs.js';
 import { fetchTaskCreateForm, createGeneralTask } from '../../../shared/task-api.js';
+import { getTxnBundleIfEnabled, feedSourceLabel } from '../../../shared/panel-txn-feed.js';
 
 // Canonical "no alert ≠ monitoring complete" caveat (shared/provenance.js,
 // loaded as a classic script in panel.html / pop-out.html). Fall back to the
@@ -195,6 +203,7 @@ function serialiseResults(results) {
     chips: r.chips,
     error: r.error,
     hiddenRuleIds: r.hiddenRuleIds ? Array.from(r.hiddenRuleIds) : [],
+    source: r.source || null,
   }));
 }
 
@@ -209,6 +218,7 @@ function deserialiseResults(results) {
     chips: r.chips,
     error: r.error,
     hiddenRuleIds: new Set(Array.isArray(r.hiddenRuleIds) ? r.hiddenRuleIds : []),
+    source: r.source || null,
   }));
 }
 
@@ -306,45 +316,66 @@ async function loadRules() {
 
 // ── Per-patient evaluation ────────────────────────────────────────────────────
 
+// evaluatePatient(apiBase, patientUuid, rules) -> { chips, source: 'API' | 'session' }
+//
+// Sources the normalised engine bundle from the Transactional API feed when
+// (and only when) getTxnBundleIfEnabled() offers one — that only happens for
+// a practice explicitly on integrationMode 'transactional' with a healthy
+// feed; every other case (session/hybrid mode, feed failure, missing uuid)
+// returns null and this falls back to the existing session fetch/normalise
+// path unchanged. Both bundle shapes are evaluated with the SAME rules and
+// the SAME evaluatePatient options (including allergies — see
+// content-scripts/sentinel.js, which threads allergies the same way).
 async function evaluatePatient(apiBase, patientUuid, rules) {
-  const apiClient = window.SentinelApiClient;
-  const normalisers = window.SentinelNormalisers;
   const rulesEngine = window.SentinelRules;
-
-  if (!apiClient || !normalisers || !rulesEngine) {
-    throw new Error('Engine globals not loaded (SentinelApiClient / SentinelNormalisers / SentinelRules)');
+  if (!rulesEngine) {
+    throw new Error('Engine globals not loaded (SentinelRules)');
   }
 
-  const raw = await apiClient.fetchAll(apiBase, patientUuid, { useCache: false });
+  const txnBundle = await getTxnBundleIfEnabled(patientUuid);
 
-  const failedEndpoints = Object.keys(raw.errors || {});
-  if (!raw.banner) {
-    throw new Error(
-      'patient banner unavailable — record not read' +
-        (failedEndpoints.length ? ` (${failedEndpoints.join(', ')} failed)` : '')
-    );
+  let data;
+  if (txnBundle) {
+    data = txnBundle;
+  } else {
+    const apiClient = window.SentinelApiClient;
+    const normalisers = window.SentinelNormalisers;
+    if (!apiClient || !normalisers) {
+      throw new Error('Engine globals not loaded (SentinelApiClient / SentinelNormalisers)');
+    }
+
+    const raw = await apiClient.fetchAll(apiBase, patientUuid, { useCache: false });
+
+    const failedEndpoints = Object.keys(raw.errors || {});
+    if (!raw.banner) {
+      throw new Error(
+        'patient banner unavailable — record not read' +
+          (failedEndpoints.length ? ` (${failedEndpoints.join(', ')} failed)` : '')
+      );
+    }
+    if (failedEndpoints.length > 0) {
+      throw new Error(`incomplete record read — ${failedEndpoints.join(', ')} failed`);
+    }
+
+    const urlContext = {
+      url: `https://england.medicus.health/${apiBase.match(/^https:\/\/([^.]+)\./)?.[1] ?? 'unknown'}/patient/${patientUuid}/`,
+      title: 'Sweep',
+      view: 'sweep',
+      patientUuid: patientUuid,
+    };
+
+    data = normalisers.normaliseAll(raw, urlContext);
   }
-  if (failedEndpoints.length > 0) {
-    throw new Error(`incomplete record read — ${failedEndpoints.join(', ')} failed`);
-  }
-
-  const urlContext = {
-    url: `https://england.medicus.health/${apiBase.match(/^https:\/\/([^.]+)\./)?.[1] ?? 'unknown'}/patient/${patientUuid}/`,
-    title: 'Sweep',
-    view: 'sweep',
-    patientUuid: patientUuid,
-  };
-
-  const data = normalisers.normaliseAll(raw, urlContext);
 
   const chips = rulesEngine.evaluatePatient(data.medications || [], data.observations || [], rules, {
     now: new Date().toISOString(),
     problems: data.problems || [],
     patientContext: data.patientContext,
     observationHistory: data.observationHistory || [],
+    allergies: data.allergies || [],
   });
 
-  return chips;
+  return { chips, source: feedSourceLabel(data) };
 }
 
 // ── Clinician pre-population ──────────────────────────────────────────────────
@@ -497,8 +528,11 @@ async function runNextBatch() {
 
     let chips = null;
     let error = null;
+    let source = null; // 'API' | 'session' — null when the row errored before a source was known
     try {
-      chips = await evaluatePatient(_sweepApiBase, patient.uuid, _sweepRules);
+      const evaluated = await evaluatePatient(_sweepApiBase, patient.uuid, _sweepRules);
+      chips = evaluated.chips;
+      source = evaluated.source;
     } catch (e) {
       error = e.message || String(e);
     }
@@ -520,6 +554,7 @@ async function runNextBatch() {
       chips,
       error,
       hiddenRuleIds,
+      source,
     });
     processedThisBatch++;
 
@@ -599,7 +634,16 @@ function chipSummaryHtml(chips) {
     .join('');
 }
 
-function patientRowHtml(row, apiBase, siteId, selectable) {
+// Small, subtle per-row provenance badge — 'API' (transactional feed) or
+// 'session' (existing per-patient fetch). null (error rows: no bundle was
+// ever successfully sourced) renders nothing.
+function sourceBadgeHtml(source) {
+  if (!source) return '';
+  const cls = source === 'API' ? 'sweep-badge-source-api' : 'sweep-badge-source-session';
+  return `<span class="sweep-badge sweep-badge-source ${cls}" title="Data source for this check">${esc(source)}</span>`;
+}
+
+function patientRowHtml(row, apiBase, siteId, selectable, source) {
   const name = esc(row.name);
   const timeStr = row.time ? `<span class="sweep-row-time">${formatTime(row.time)}</span>` : '';
   const clinStr = row.clinician ? `<span class="sweep-row-clin">${esc(row.clinician)}</span>` : '';
@@ -654,7 +698,7 @@ function patientRowHtml(row, apiBase, siteId, selectable) {
       ${checkboxHtml}${timeStr}<span class="sweep-row-name">${name}</span>
       <span class="sweep-row-badges">${badgeParts.join('')}</span>
     </div>
-    <div class="sweep-row-meta">${clinStr}<a class="sweep-open-record" href="${recUrl}" target="_blank" rel="noopener noreferrer" title="Open record">Open record &#8599;</a></div>
+    <div class="sweep-row-meta">${clinStr}${sourceBadgeHtml(source)}<a class="sweep-open-record" href="${recUrl}" target="_blank" rel="noopener noreferrer" title="Open record">Open record &#8599;</a></div>
     ${chipHtml ? `<div class="sweep-row-chips">${chipHtml}</div>` : ''}
     ${hiddenNote}
     ${recallHtml}
@@ -961,8 +1005,18 @@ function renderResults(args) {
   // Reset the cached assignee/priority options if the practice (API base) changed.
   if (_recallApiBase !== apiBase) _taskFormCache = null;
   _recallApiBase = apiBase;
-  const actionHtml = actionRows.map((r) => patientRowHtml(r, apiBase, siteIdMatch, true)).join('');
-  const errorHtml = errorRows.map((r) => patientRowHtml(r, apiBase, siteIdMatch, false)).join('');
+
+  // Per-patient provenance ('API' feed vs 'session' fetch) — sourced from
+  // _cumulativeResults (summariseSweep's rows don't carry it) and looked up
+  // by uuid for each rendered row's badge.
+  const sourceByUuid = new Map((_cumulativeResults || []).map((r) => [r.uuid, r.source || null]));
+
+  const actionHtml = actionRows
+    .map((r) => patientRowHtml(r, apiBase, siteIdMatch, true, sourceByUuid.get(r.uuid)))
+    .join('');
+  const errorHtml = errorRows
+    .map((r) => patientRowHtml(r, apiBase, siteIdMatch, false, sourceByUuid.get(r.uuid)))
+    .join('');
 
   // QOF points-at-risk prioritiser — cohort income lens over the same chips.
   const qofPoints = summariseQofPointsAtRisk(
@@ -994,7 +1048,7 @@ function renderResults(args) {
                const recUrl = `https://england.medicus.health/${esc(siteIdMatch)}/patient/${esc(r.uuid)}/`;
                return `<div class="sweep-row sweep-row-clear">
                <div class="sweep-row-head">
-                 ${timeStr}<span class="sweep-row-name">${name}</span>${clinStr}
+                 ${timeStr}<span class="sweep-row-name">${name}</span>${clinStr}${sourceBadgeHtml(sourceByUuid.get(r.uuid))}
                  <a class="sweep-open-record" href="${recUrl}" target="_blank" rel="noopener noreferrer" title="Open record">Open &#8599;</a>
                </div>
              </div>`;
@@ -1008,6 +1062,21 @@ function renderResults(args) {
     actionCount > 0
       ? `<strong>${actionCount} of ${processedCount}</strong> patients checked so far have action-needed alerts.`
       : `<strong>No action-needed alerts</strong> found across ${processedCount} patient${processedCount === 1 ? '' : 's'} checked.`;
+
+  // Feed-provenance rollup: only shown once at least one patient was actually
+  // sourced from the Transactional API feed — non-transactional practices
+  // (the overwhelming majority) never see this line (zero visual change).
+  let apiFeedCount = 0;
+  let sessionFeedCount = 0;
+  for (const r of _cumulativeResults || []) {
+    if (r.error) continue;
+    if (r.source === 'API') apiFeedCount++;
+    else if (r.source === 'session') sessionFeedCount++;
+  }
+  const feedSummaryHtml =
+    apiFeedCount > 0
+      ? ` <span class="sweep-feed-summary">via API feed: ${apiFeedCount} &middot; via session: ${sessionFeedCount}</span>`
+      : '';
 
   const printBtn =
     actionCount > 0
@@ -1034,7 +1103,7 @@ function renderResults(args) {
   const resultsHtml = `
     <div class="sweep-results" id="sweepResults">
       <div class="sweep-results-header">
-        <div class="sweep-summary-line">${summaryLine}</div>
+        <div class="sweep-summary-line">${summaryLine}${feedSummaryHtml}</div>
         <div class="sweep-timestamp">Run at ${esc(fmtTs(runAt))}</div>
         ${printBtn}${printWorklistBtn}
       </div>

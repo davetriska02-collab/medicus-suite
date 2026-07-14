@@ -2,6 +2,270 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.166.0] — 2026-07-09
+
+### Assurance pack, Record-tab allergy alerts, read-retry, Trends on the API feed
+
+**API parity report (options page).** One click turns the hybrid-mode shadow
+ledger into a Markdown evidence pack: divergence counts and timeline, feed
+failure reasons, honestly worded (parity views record nothing, so a quiet
+report over a long period is the strong signal). Downloads like the ledger's
+CSV export; contains no patient identifiers (asserted by test); clock-free
+and byte-deterministic (`shared/txn-parity-report.js`).
+
+**Record tab: drug-allergy safety prompts.** When the API feed supplies
+allergies, the Prescribing-safety card now evaluates the drug-allergy rule
+pack (same engine, same rules as sentinel/sweep — no re-implemented matching)
+and lists conflicts first. Session-only renders are pixel-identical to
+before; every layer fails soft. Per-section merge re-audited against the
+v3.165.0 enrichment: `problems` now feed-first (all rendered fields covered,
+including significance); medications/observations stay session-fed with the
+exact missing fields documented in-code (bundle `observations` still strip
+`rawValue` — noted for a future normaliser pass).
+
+**Transport read-retry.** One backed-off retry (capped, jittered) for
+transient READ failures only (timeout, network, 502/503/504/429). Writes are
+never retried — asserted by test (exactly one fetch, ever). 500/501 and other
+4xx are deliberately non-retryable. First-try successes are unchanged.
+
+**Trends tab on the API feed.** In transactional mode the BP/renal/HbA1c/
+cholesterol/weight charts can source from the enriched feed — guarded by a
+runtime per-patient coverage check: the feed only takes over if it yields a
+non-empty series for every metric the session feed found, otherwise the whole
+tab stays on session ("never render worse", enforced live). Subtle
+provenance line matches the Record tab.
+
+Tests: 317 passing (was 277) — new `test-txn-parity-report.js` (18),
+`test-record-allergy-prompts.js` (12), `test-txn-transport-retry.js` (10).
+
+## [v3.165.0] — 2026-07-09
+
+### The API feed becomes the richer source + production guardrails
+
+**FHIR normaliser enrichment.** The transactional bundle previously carried
+LESS than the session feed in places — no medication dosage, no
+abnormal-result flags, no problem significance — which is why v3.164.0's
+Record tab deliberately kept those sections session-fed. The normaliser now
+extracts what GP Connect was carrying all along: `dosage` (from
+dosageInstruction/patientInstruction), `isAbove`/`isBelow` (computed from
+referenceRange, including per-component handling for BP-style observations —
+any component breaching its own range flags the observation), the same flags
+through `observationHistory`, and problem `significance` (major/minor from
+the ProblemSignificance extension). All additive; field names verified
+against the session normaliser and Record-tab reads so consumers adopt them
+without translation; every extraction fails soft per-item. This unlocks
+flipping Record sections and the Trends tab to the API feed in a later
+release.
+
+**Production interlock.** Saving API settings with environment `prod` and a
+non-Session mode now requires a deliberate second Save within 10 seconds,
+behind an explicit live-patient-data warning. Every other combination saves
+exactly as before.
+
+**Service-worker request gate.** All transactional network calls (bundle
+fetches, connection tests) now pass through a shared FIFO concurrency gate
+(max 3 in flight) — Sweep batches, the Record tab, sentinel and shadow
+comparisons across multiple tabs can no longer stampede the proxy or
+Medicus's staging environment. Cache hits bypass the gate entirely.
+
+Tests: 277 passing (was 250) — new `test-fhir-enrichment.js` (20) and
+`test-txn-request-gate.js` (7).
+
+## [v3.164.0] — 2026-07-09
+
+### The API feed reaches the panel: Sweep worklist + pre-consultation brief
+
+**Shared feed selector.** `shared/panel-txn-feed.js`: panel modules source the
+same normalised engine bundle from the Transactional API feed when — and only
+when — the practice has switched to `transactional` mode (via the service
+worker + its 60s cache). Session and hybrid modes return null so the panel is
+byte-for-byte unchanged; every failure falls back to the session path.
+
+**Sweep tab.** Each booked patient's bundle can now come from the API feed,
+per-patient fallback to session, with a subtle `API`/`session` provenance
+badge on every row and a run summary ("via API feed: N · via session: M",
+shown only when the feed served anyone). Persisted/resumed runs keep their
+provenance. Also fixes a pre-existing gap: Sweep now threads `allergies` into
+the rules engine (mirroring sentinel.js), so drug-allergy alerts can fire in
+the pre-clinic sweep — previously they never could.
+
+**Record tab → pre-consultation brief.** New "Since last visit" section at the
+top: on each view the record is fingerprinted (hashed keys only — no clinical
+text is ever stored; `brief.fp.*`, pruned beyond 200 patients) and diffed
+against the previous view — "+ allergy: penicillin", "+ medication: apixaban",
+"N item(s) no longer present — review", or "No changes since DATE".
+Medication identity is dose-insensitive (a dose change is not a stop+start).
+Ported from the population-sweep delta engine (`shared/record-delta.js`), with
+a browser-safe hash substitution documented in the file. The tab can also
+draw on the API feed: per-field audit keeps richer session fields
+(dosage/flags/raw values/significance) session-fed so no section ever renders
+worse; `allergies`/`immunisations` — which the session path never had — come
+from the feed. One provenance line ("Data: API feed"/"Data: session").
+A delta failure can never break the tab (section simply omitted).
+
+Tests: 250 passing (was 241) — new `test-panel-txn-feed.js` (3) and ported
+`test-record-delta.js` (6).
+
+## [v3.163.0] — 2026-07-09
+
+### Staging-friendly caching + dormant check-in prompt builder
+
+**Patient-bundle cache (service worker).** Transactional bundles are now
+cached for 60s per `tenant|environment|patientUuid` (`shared/
+txn-bundle-cache.js`, max 50 entries, oldest evicted). The cache is checked
+only after the integration-enabled/config guards, only successful bundles are
+stored, and ANY change to `txn.*` settings or `suite.practiceCode` flushes it.
+Repeat views within a minute stop re-fetching through the proxy — kinder to
+Medicus's staging environment during live testing, and faster for the
+clinician. Cached responses are marked `cached: true`.
+
+**"While you're here" prompt builder (dormant).** `shared/checkin-prompts.js`
+is the pure core of composite feature B (opportunistic case-finding at
+check-in): it turns engine chips into a short, prioritised, reception-safe
+prompt list. Safety prompts (drug-allergy / drug-combo alerts, prefixed
+"URGENT:") always survive the display cap; monitoring (`overdue`/`stale`),
+vaccines due and unmet QOF indicators follow in clinical-priority order.
+Labels are built only from fields already on the chip — nothing invents
+clinical text. NOTHING calls it yet: it ships dormant, ready to wire the
+moment the Medicus appointments spec lands.
+
+Tests: 241 passing (was 216) — new `test-txn-bundle-cache.js` (6) and
+`test-checkin-prompts.js` (19).
+
+## [v3.162.0] — 2026-07-09
+
+### Live-testing readiness: settings UI, true hybrid shadow mode, failure visibility
+
+Everything a practice needs to trial the Transactional API feed safely,
+without touching devtools — and everything the crossover period needs to
+prove parity between the session feed and the API feed.
+
+**API Integration settings (options page).** New "API Integration" section:
+mode (Session / Hybrid / Transactional, with plain-English explanations and a
+soft warning when selecting Transactional), environment (staging/prod), proxy
+URL, caller key (password field; stored locally, read only by the service
+worker, never included in Suite backups), optional clinician email for
+user-restricted attribution, and a read-only view of the tenant
+(`suite.practiceCode`). A **Test connection** button runs a ping through the
+proxy and reports stage-aware, plain-English results — config missing vs
+"Proxy rejected the caller key" vs "Could not reach the proxy" vs "Proxy timed
+out" vs an upstream Medicus error (new `txn:testConnection` SW message; runs
+even in Session mode so config can be validated before switching).
+
+**True hybrid (shadow) mode.** `hybrid` previously behaved identically to
+`transactional`. Now it is a genuine shadow: the session bundle is ALWAYS what
+renders (identical clinical behaviour to Session mode); the API bundle is
+fetched concurrently, the same rules are evaluated against it, and
+`shared/txn-shadow-summary.js` + `shared/shadow-compare.js` diff the two chip
+sets. The status line shows ` · API shadow: parity` or
+` · API shadow: N difference(s)`, and divergences are recorded in the Event
+Ledger (`txn-shadow-divergence`, with severity regression/escalation-only) —
+the ledger's CSV export is the parity evidence pack for assurance. A hard
+shadow budget (6s) guarantees a slow/hung proxy can never delay the
+clinician's render; budget breaches are recorded as `txn-shadow-unavailable`.
+
+**Failure visibility.** In Transactional mode, falling back to session data is
+now visible (` · API feed unavailable — using session data` + `txn-fallback`
+ledger event) instead of silent. All shadow/status logic is wrapped so a
+telemetry bug can never break clinical rendering.
+
+**Proxy transport timeout.** `shared/txn-transport.js` now aborts proxy calls
+after 10s (configurable `timeoutMs`) with `err.isTimeout`; writes keep their
+never-silently-retried semantics. Previously a hung proxy call could stall a
+fetch for the browser default (30s+).
+
+Tests: 216 passing (was 194) — new `test-txn-transport-timeout.js`,
+`test-txn-hybrid-fetch.js` (incl. shadow-budget render-delay proof),
+`test-txn-shadow-status.js`.
+
+## [v3.161.1] — 2026-07-08
+
+### Fix: drug-allergy chips fired but were never shown to the clinician
+
+The new `drug-allergy` rule type (v3.161.0) evaluated correctly and produced a
+`{ type: 'drug-allergy', ... }` chip (see `test-drug-allergy.js`), but the
+rendering side of the pipeline had no idea the type existed:
+
+- `content-scripts/sentinel.js`'s `chipHtml()` dispatch had no case for
+  `drug-allergy`, so it fell through to the generic `<div>Unknown chip
+  type</div>` fallback.
+- The default grouped view (`chipGrouping: 'by-type'`, `renderGroupedChips()`)
+  only ever built sections for `drug-monitoring` and `qof-indicator` — a fired
+  drug-allergy chip was grouped into `groups['drug-allergy']` but that group
+  was never drawn, so the chip stayed invisible even in the flat view fallback.
+
+A patient could have a live drug-allergy contraindication and the panel would
+show nothing.
+
+- Added `ChipRenderer.renderDrugAllergyChip()` (`shared/chip-renderer.js`) —
+  distinct from `renderDrugComboChip` because `chip.matchSummary` is a plain
+  string here (`"Penicillin allergy + Amoxicillin"`), not an array of
+  `{setName, drugs[]}` sets, so reusing the combo renderer would throw.
+  Surfaces the label, match summary, status badge, source/notes tooltip, and
+  the evidence facts (allergy + matched drug set + cross-sensitivity note)
+  inline, plus the click-to-expand evidence panel affordance shared with the
+  other alert-style chips.
+- Wired `chip.type === 'drug-allergy'` into `chipHtml()`.
+- Added a `drug-allergy` section (label "Drug Allergy") to the default grouped
+  view, listed **first** — ahead of Drug Monitoring and QOF Indicators — since
+  it is a red patient-safety contraindication alert and needs top visual
+  priority.
+- No engine or rule changes — rendering only. `test-drug-allergy-render.js`
+  (6 tests) drives the real `evaluateDrugAllergyRule` → `evaluatePatient`
+  output through the real renderer and pins that it no longer returns
+  "Unknown chip type".
+
+## [v3.161.0] — 2026-07-08
+
+### Drug-allergy safety rules (enabled by the Transactional care record)
+
+A new `drug-allergy` rule type fires when a documented **active** allergy
+co-occurs with a contraindicated drug — the first rule to read the allergies
+bundle, which only the Transactional (GP Connect Structured) feed provides.
+
+- **Fail-closed by design:** with no allergy data the rule never fires and never
+  asserts "no allergy", so it is dormant and zero-risk on the legacy session/DOM
+  feed (which has no allergies) and lights up only when a real allergy record is
+  present. Shipped enabled for that reason; term lists marked PENDING CSO REVIEW.
+- **Starter pack (4 rules)** in `rules/drug-rules.json`: penicillin/beta-lactam
+  (red), penicillin→cephalosporin cross-sensitivity (amber caution, not absolute),
+  NSAID/aspirin hypersensitivity (red, topical excluded), sulfonamide-antibiotic
+  (red). Only ACTIVE allergies count; resolved/inactive/refuted are ignored.
+- Engine reads `data.allergies` (threaded through `evaluatePatient` options and
+  both Sentinel call sites). `test-drug-allergy.js` (5 tests): fires, fails
+  closed, drug-absent, status-filtering, and the real pack on representative data.
+
+## [v3.160.0] — 2026-07-08
+
+### Transactional API integration (dormant by default) + feed-swap safety gate
+
+The official Medicus Transactional API (JWT/JWKS, server-to-server) can now
+source the patient bundle, behind `txn.integrationMode` — default `'session'`,
+so nothing changes until a practice opts in. See
+docs/TRANSACTIONAL-API-INTEGRATION.md for the architecture and settings.
+
+- **New shared modules:** `txn-config` / `txn-transport` / `txn-api` (proxy
+  client — the extension never holds the signing key; our backend signs a ≤60s
+  JWT and forwards), `fhir-normaliser` (GP Connect Structured → the exact
+  engine bundle, now including **allergies and immunisations**, which the
+  session feed cannot provide), `fhir-results-adapter`, `fhir-triage-fields`,
+  `immunisation-bridge`, `record-provider`, `shadow-compare`.
+- **Service worker** owns the proxy credential (`txn.callerKey`, read nowhere
+  else, excluded from backups) and serves `txn:fetchPatientBundle` messages;
+  `engine/data-fetcher.js` tries the transactional feed first when enabled and
+  falls back to `fetchLive()` on ANY failure — the new feed can never make the
+  extension show less than today. Reads only; no write endpoint is wired.
+- **Vaccine status upgrade:** structured `Immunization` resources drive
+  given/declined via `immunisation-bridge` (a false "flu due" resolves to
+  "given") — previously inferred from coded text only.
+- **Safety gate in CI:** `test-txn-shadow.js` runs the REAL rules engine,
+  result-severity and triage matcher on the FHIR feed — parity must hold, and
+  a narrower API record (GP Connect exclusion rules) must be FLAGGED as a
+  regression, never silent. 38 new tests across `test-txn-*.js`.
+- `host_permissions` gains the backend-proxy origin (`https://*.supabase.co/*`).
+- Scheduling/capacity/task/reporting modules are untouched: the Transactional
+  API has no equivalent endpoints, so they stay on the session feed.
+
 ## [v3.162.0] — 2026-07-07
 
 ### Baselines: "is today busy, or does it just feel busy?"
