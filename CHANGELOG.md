@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.160.2] — 2026-07-14
+
+### Fix: Suite-health strip false-alarming "Patient UUID resolution … degraded" on the Appointment Book
+
+The amber Suite-health strip (self-diagnosis, `shared/contract-canary.js`) was
+promoting the `api-client.patient-uuid-dom-fallback` contract to **degraded** on
+the **Appointment Book** — and other patient-less screens — while nothing was
+broken. An amber strip that cries wolf trains users to ignore it, which is worse
+than no strip at all.
+
+Root cause: the v3.75.x-era applicability gate treated the probe as meaningful
+whenever *any* anchor on the page carried a bare UUID. A diary row links to an
+**appointment** UUID (satisfying that gate) but carries no `/care-record/` or
+`/patient/` link (the probe's target), so the probe FAILed and two spaced visits
+promoted a false "degraded".
+
+- **Replaced the `anchorHrefRe` gate with a patient-banner-presence gate**
+  (`applicableWhenPresent` in `shared/dom-contracts.js`). The probe now only runs
+  where a patient is actually in context — mirroring the extension's own
+  patient-context detectors (`content.js`, `patient-context.js`). The appointment
+  book, dashboards and the multi-patient queue (no banner) read
+  **not_applicable**, never FAIL.
+- **Genuine drift detection is preserved**: on a real patient page where Medicus
+  renames the `/care-record/` URL shape, the banner is still present but the
+  care-record links vanish → the probe still FAILs (the banner selector doesn't
+  depend on the care-record URL, so it survives the rename). Per this strip's
+  doctrine ("false-positive discipline beats coverage"), an over-strict banner
+  selector under-alarms — the safe direction.
+- **`stateEpoch` bumped 2 → 3** so the canary discards any currently-stuck
+  'degraded' verdict issued under the old gate; the strip clears itself on the
+  next probe round (e.g. the next Appointment Book visit) with no user action.
+- No change to `engine/api-client.js` (`findPatientUuidFromDom` still scans all
+  `a[href]` — `anchor` is unchanged); tests updated in `test-dom-contracts.js`.
+
 ## [v3.160.1] — 2026-07-14
 
 ### Fix: "Send to Prescribing / Meds Management" button failing with "isn't in the assignee list"

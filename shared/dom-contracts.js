@@ -350,28 +350,35 @@
       anchor: 'a[href]',
       target: ['[data-patient-id]', '[data-patientid]', '[data-patient]', '[data-pid]'],
       legacy: [['a[href*="/care-record/"]', 'a[href*="/patient/"]']],
-      // Applicability gate (2026-07-07 false-positive fix): this contract is
-      // only probed on pages whose URL resolved no id — which includes
-      // patient-LESS screens (appointment book, dashboards, reports). A diary
-      // grid has no patient links, so a plain probe FAILs there and two
-      // spaced visits promote to a 'degraded' banner while nothing is broken.
-      // (Live-DOM capture confirmed the link strategies still work on real
-      // care-record pages; the data-attribute strategy currently matches
-      // nothing on live Medicus, so the legacy link selectors carry the
-      // probe.) Gate: if NO anchor href on the page carries a bare UUID at
-      // all, there is no patient-resolution evidence to test — the round
-      // reads not_applicable, never FAIL. If uuid-bearing links exist but
-      // none match the care-record/patient shapes, that IS a genuine FAIL
-      // (Medicus changed its URL shapes). Known blind spot, accepted: a
-      // Medicus that stops putting UUIDs in hrefs entirely would read
-      // not_applicable rather than degraded — but the fallback would be
-      // unfixable by selector relocation at that point anyway.
-      anchorHrefRe: '[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}',
+      // Applicability gate — patient-banner presence (2026-07-14, supersedes the
+      // 2026-07-07 anchorHrefRe gate). This contract is only probed on pages
+      // whose URL resolved no id (the canary skips it otherwise), which includes
+      // patient-LESS screens — the appointment book, dashboards, reports. The
+      // previous gate ("any anchor href carries a bare UUID") was meant to make
+      // those read not_applicable, but it MIS-FIRED on the appointment book: a
+      // diary row links to an APPOINTMENT UUID (satisfying the gate) yet carries
+      // no /care-record/ or /patient/ link (the probe target), so the round
+      // FAILed and two spaced visits promoted a 'degraded' banner while nothing
+      // was broken. The correct discriminator is whether a PATIENT is actually
+      // in context: probe only where a patient banner is present. Then —
+      //   • patient page, care-record link present  → OK
+      //   • patient page, care-record/patient links GONE (Medicus renamed the
+      //     URL shape) → FAIL, the genuine drift this contract exists to catch
+      //     (the banner selector does not depend on the care-record URL, so it
+      //     survives that rename and still lets the probe FAIL)
+      //   • appointment book / dashboard / queue (no banner) → not_applicable
+      // Banner selectors mirror the extension's own patient-context detectors
+      // (content-scripts/triage-lens/content.js:844,
+      // engine/extractors/patient-context.js:73). An over-strict banner selector
+      // under-alarms (not_applicable), the sanctioned safe direction for this
+      // strip (CLAUDE.md "false-positive discipline beats coverage").
+      applicableWhenPresent: '.m-patient-banner, [class*="patient-banner"], [class*="PatientBanner"]',
       // State epoch: bump to make the canary discard stored verdicts issued
-      // under older probe semantics — without this, pre-gate false positives
-      // stay 'degraded' forever, because not_applicable rounds never touch an
-      // established status. Epoch 2 = the anchorHrefRe gate above.
-      stateEpoch: 2,
+      // under older probe semantics — without this, a pre-gate false-positive
+      // 'degraded' stays forever, because not_applicable rounds never touch an
+      // established status. Epoch 3 = the patient-banner gate above (epoch 2 was
+      // the retired anchorHrefRe gate).
+      stateEpoch: 3,
       runtime: true,
       mirrorOf: null,
     },
@@ -425,27 +432,19 @@
     if (anchorCount === 0) {
       return { id: contract.id, status: STATUS.NOT_APPLICABLE, anchorCount: 0, targetCount: 0, legacyCounts: [] };
     }
-    // Optional applicability gate: when `anchorHrefRe` is set, the probe only
-    // has meaning if at least one anchor's href matches it (e.g. carries a
-    // UUID) — a page with none has no evidence to test, so the round reads
-    // not_applicable rather than FAIL. Never throws: a bad regex or href-less
-    // anchors simply don't gate.
-    if (contract.anchorHrefRe) {
-      let anyHrefMatch = false;
-      try {
-        const re = new RegExp(contract.anchorHrefRe, 'i');
-        const anchors = root.querySelectorAll(contract.anchor);
-        for (const a of anchors) {
-          const href = typeof a.getAttribute === 'function' ? a.getAttribute('href') : null;
-          if (href && re.test(href)) {
-            anyHrefMatch = true;
-            break;
-          }
-        }
-      } catch (_) {
-        anyHrefMatch = true; // fail open — a broken gate must not mask real probes
-      }
-      if (!anyHrefMatch) {
+    // Optional applicability gate: when `applicableWhenPresent` is set, the
+    // probe only has meaning if at least one element matches that selector —
+    // e.g. a patient banner, proving this is a patient-context page. A page
+    // without it (the appointment book, dashboards, the multi-patient queue)
+    // has no single patient to resolve, so an absent target there is NOT a
+    // degradation, even if the page carries unrelated UUID links (appointment /
+    // task ids): the round reads not_applicable rather than FAIL. Never throws
+    // (countMatches try/catches a bad selector to 0). The failure direction is
+    // deliberate — an over-strict gate matches nothing → not_applicable →
+    // under-alarms, which is this strip's sanctioned safe direction (CLAUDE.md
+    // "false-positive discipline beats coverage").
+    if (contract.applicableWhenPresent) {
+      if (countMatches(root, contract.applicableWhenPresent) === 0) {
         return { id: contract.id, status: STATUS.NOT_APPLICABLE, anchorCount, targetCount: 0, legacyCounts: [] };
       }
     }
