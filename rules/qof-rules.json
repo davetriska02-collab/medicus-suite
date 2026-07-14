@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-06-21",
+  "lastUpdated": "2026-07-11",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes.",
-  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported).",
+  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-07-11 (The Keeper): added LD register; DEM004 (dementia care plan review); CKD002 (BP target) and CKD003 (ACEi/ARB in CKD+HYP+proteinuria); CHOL003 extended to PAD, STIA, CKD registers (3 new clones); CHOL004 extended to PAD and STIA registers (2 new clones; CKD explicitly NOT covered by CHOL004 per PRN02356). Primary PDF 403 this run — all corroborated via PRN02356 search.",
   "rules": [
     {
       "id": "qof-reg-dm",
@@ -245,6 +245,33 @@
       ],
       "source": "QOF 26/27 OB register (NEW clinical area for 2026/27, NHS England PRN02356). DRAFT — corroborated via search, pending PRN02356 primary-source confirmation.",
       "notes": "NEW for 26/27. The true QOF Obesity register is BMI-driven (adults with a BMI ≥30, or ≥27.5 for people of South Asian, Chinese, other Asian, Middle Eastern, Black African or African-Caribbean family background, recorded in the preceding 12 months) — it is NOT a problem-coded register. Sentinel approximates it here with substring problem-matching, which will MISS obese patients who have a recorded BMI but no 'obesity' problem label, and is age-agnostic. Proper membership needs a BMI-observation-based register (engine extension) before this should be relied on. Underpins indicators OB004/OB005 (shipped disabled pending confirmation)."
+    },
+    {
+      "id": "qof-reg-ld",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "LD",
+      "registerName": "Learning Disability",
+      "problemMatch": [
+        "learning disability",
+        "learning disabilities",
+        "intellectual disability",
+        "intellectual disabilities",
+        "downs syndrome",
+        "down syndrome",
+        "fragile x syndrome",
+        "fragile x",
+        "angelman syndrome",
+        "williams syndrome",
+        "prader-willi",
+        "severe learning"
+      ],
+      "problemExclude": [
+        "family history",
+        "no learning disability"
+      ],
+      "source": "QOF 26/27 LD register (LD_COD refset approximation — corroborated via PRN02356 search; primary PDF 403 this run). Added 2026-07-11 (The Keeper).",
+      "notes": "The QOF LD register is defined by SNOMED codes for intellectual disability; Sentinel approximates via problem substring matching. This will miss patients with a learning disability not coded using these terms. Down's syndrome and Fragile X are the most commonly encountered specific diagnoses in primary care LD registers. Autism spectrum disorder (ASD) without intellectual disability does NOT qualify for the QOF LD register — autistic patients who do not have a separately coded intellectual disability are correctly not flagged. The LD register underpins the annual health check indicator (LD004, not yet encoded — engine needs a specific encounter-type gate for an LD annual health check; add when engine support lands)."
     },
     {
       "id": "qof-hyp008",
@@ -748,7 +775,103 @@
       },
       "points": 20,
       "source": "QOF 26/27 CHOL003 (NICE IND230)",
-      "notes": "Points reduced from 38 to 20 for 26/27 (consistency with other lipid indicators). Full QOF rule covers CHD, PAD, STIA, CKD registers; Sentinel approximates with CHD only until rules engine supports multi-register OR logic."
+      "notes": "Points reduced from 38 to 20 for 26/27 (consistency with other lipid indicators). Full QOF rule covers CHD, PAD, STIA and CKD registers. Sentinel models this as four separate per-register rules (qof-chol003-chd, qof-chol003-pad, qof-chol003-stia, qof-chol003-ckd) added 2026-07-11 (The Keeper, PRN02356 corroborated). Points (20) are the total indicator allocation — do not double-count if patient sees multiple chips. Primary PDF 403 this run."
+    },
+    {
+      "id": "qof-chol003-pad",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "CHOL003",
+      "indicatorName": "Statin (or alternative LLT) in PAD register patients",
+      "requiresRegister": "PAD",
+      "check": {
+        "kind": "medication-present",
+        "medicationMatch": [
+          "statin",
+          "atorvastatin",
+          "simvastatin",
+          "rosuvastatin",
+          "pravastatin",
+          "fluvastatin",
+          "pitavastatin",
+          "ezetimibe",
+          "inclisiran",
+          "bempedoic",
+          "alirocumab",
+          "evolocumab"
+        ]
+      },
+      "thresholds": {
+        "lower": 70,
+        "upper": 95
+      },
+      "points": 20,
+      "source": "QOF 26/27 CHOL003 (NICE IND230) — PAD register half. Added 2026-07-11 (The Keeper). Primary PDF 403.",
+      "notes": "PAD-register half of CHOL003. Points value (20) is the total indicator allocation; do not double-count."
+    },
+    {
+      "id": "qof-chol003-stia",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "CHOL003",
+      "indicatorName": "Statin (or alternative LLT) in Stroke/TIA register patients",
+      "requiresRegister": "STIA",
+      "check": {
+        "kind": "medication-present",
+        "medicationMatch": [
+          "statin",
+          "atorvastatin",
+          "simvastatin",
+          "rosuvastatin",
+          "pravastatin",
+          "fluvastatin",
+          "pitavastatin",
+          "ezetimibe",
+          "inclisiran",
+          "bempedoic",
+          "alirocumab",
+          "evolocumab"
+        ]
+      },
+      "thresholds": {
+        "lower": 70,
+        "upper": 95
+      },
+      "points": 20,
+      "source": "QOF 26/27 CHOL003 (NICE IND230) — STIA register half. Added 2026-07-11 (The Keeper). Primary PDF 403.",
+      "notes": "STIA-register half of CHOL003. Points value (20) is the total indicator allocation; do not double-count."
+    },
+    {
+      "id": "qof-chol003-ckd",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "CHOL003",
+      "indicatorName": "Statin (or alternative LLT) in CKD register patients",
+      "requiresRegister": "CKD",
+      "check": {
+        "kind": "medication-present",
+        "medicationMatch": [
+          "statin",
+          "atorvastatin",
+          "simvastatin",
+          "rosuvastatin",
+          "pravastatin",
+          "fluvastatin",
+          "pitavastatin",
+          "ezetimibe",
+          "inclisiran",
+          "bempedoic",
+          "alirocumab",
+          "evolocumab"
+        ]
+      },
+      "thresholds": {
+        "lower": 70,
+        "upper": 95
+      },
+      "points": 20,
+      "source": "QOF 26/27 CHOL003 (NICE IND230) — CKD register half. Added 2026-07-11 (The Keeper). Primary PDF 403.",
+      "notes": "CKD-register half of CHOL003. Points value (20) is the total indicator allocation; do not double-count."
     },
     {
       "id": "qof-chol004",
@@ -775,8 +898,64 @@
         "upper": 50
       },
       "points": 44,
-      "source": "QOF 26/27 CHOL004 (NICE IND278)",
-      "notes": "Unchanged in 26/27 (44 points, threshold 20-50). Full rule: LDL ≤2.0 OR non-HDL ≤2.6 mmol/L; LDL takes priority when both present on same date. Highest-value indicator. NICE NG238 aligned."
+      "source": "QOF 26/27 CHOL004 (NICE IND278) — CHD register half. Added multi-register clones (PAD, STIA) 2026-07-11 (The Keeper). CKD is NOT covered by CHOL004 per PRN02356. Primary PDF 403.",
+      "notes": "Unchanged in 26/27 (44 points, threshold 20-50). Full rule: LDL ≤2.0 OR non-HDL ≤2.6 mmol/L; LDL takes priority when both present on same date. Highest-value indicator. NICE NG238 aligned. CHOL004 covers CHD, PAD and STIA only — CKD is explicitly NOT included per PRN02356 (PRN02356 §CHOL004 definition). CSO decision item: the single threshold:2.6 applied to both LDL and non-HDL observations is technically wrong for LDL (should be ≤2.0 for LDL) but correcting this requires an engine change to support OR-combined observation thresholds; a single-threshold approximation is held as the safer default until engine support lands."
+    },
+    {
+      "id": "qof-chol004-pad",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "CHOL004",
+      "indicatorName": "Cholesterol target: LDL <=2.0 or non-HDL <=2.6 in PAD register",
+      "requiresRegister": "PAD",
+      "check": {
+        "kind": "observation-threshold",
+        "observation": [
+          "ldl",
+          "ldl cholesterol",
+          "non-hdl",
+          "non hdl"
+        ],
+        "operator": "<=",
+        "threshold": 2.6,
+        "unit": "mmol/L",
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 20,
+        "upper": 50
+      },
+      "points": 44,
+      "source": "QOF 26/27 CHOL004 (NICE IND278) — PAD register half. Added 2026-07-11 (The Keeper). Primary PDF 403.",
+      "notes": "PAD-register half of CHOL004. Points value (44) is the total indicator allocation; do not double-count. Single threshold approximation applies — see CHD rule notes."
+    },
+    {
+      "id": "qof-chol004-stia",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "CHOL004",
+      "indicatorName": "Cholesterol target: LDL <=2.0 or non-HDL <=2.6 in Stroke/TIA register",
+      "requiresRegister": "STIA",
+      "check": {
+        "kind": "observation-threshold",
+        "observation": [
+          "ldl",
+          "ldl cholesterol",
+          "non-hdl",
+          "non hdl"
+        ],
+        "operator": "<=",
+        "threshold": 2.6,
+        "unit": "mmol/L",
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 20,
+        "upper": 50
+      },
+      "points": 44,
+      "source": "QOF 26/27 CHOL004 (NICE IND278) — STIA register half. Added 2026-07-11 (The Keeper). Primary PDF 403.",
+      "notes": "STIA-register half of CHOL004. Points value (44) is the total indicator allocation; do not double-count. Single threshold approximation applies — see CHD rule notes."
     },
     {
       "id": "qof-af006",
@@ -1506,6 +1685,104 @@
       "points": 13,
       "source": "QOF 26/27 OB005 (NHS England PRN02356); tirzepatide eligibility per NICE TA1026 — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
       "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~13), thresholds (corroborated 50–80%) and definition against PRN02356. The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing. Flip enabled:true once values are confirmed."
+    },
+    {
+      "id": "qof-dem004",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "DEM004",
+      "indicatorName": "Dementia care plan review in preceding 12 months",
+      "requiresRegister": "DEM",
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "dementia review",
+          "dementia care plan",
+          "dementia care plan review",
+          "dementia annual review",
+          "memory clinic review",
+          "dementia health check"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 60,
+        "upper": 90
+      },
+      "points": 30,
+      "source": "QOF 26/27 DEM004 — corroborated via PRN02356 search; primary PDF 403 this run. Added 2026-07-11 (The Keeper).",
+      "notes": "Dementia care plan review in the preceding 12 months. The full QOF requirement includes review of: current symptoms, medications (especially anticholinergic burden), carer needs, and advance care planning status. Sentinel approximates with presence of a dementia-review or care-plan code within the year — it cannot verify that all review components were addressed. Clinician must confirm full review including carer assessment. Frailty exclusion is NOT applied here per PRN02356 (dementia is itself a frailty condition — the review is the intervention, not a treatment target)."
+    },
+    {
+      "id": "qof-ckd002",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "CKD002",
+      "indicatorName": "BP <=140/90 in CKD (no frailty)",
+      "requiresRegister": "CKD",
+      "excludeIfProblem": [
+        "moderate frailty",
+        "severe frailty"
+      ],
+      "check": {
+        "kind": "observation-threshold",
+        "observation": [
+          "blood pressure",
+          "bp"
+        ],
+        "thresholdSystolic": 140,
+        "thresholdDiastolic": 90,
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 40,
+        "upper": 90
+      },
+      "points": 20,
+      "source": "QOF 26/27 CKD002 — corroborated via PRN02356 search; primary PDF 403 this run. Added 2026-07-11 (The Keeper).",
+      "notes": "CKD blood-pressure control indicator. Target ≤140/90 per QOF and NICE NG203; in CKD patients with ACR >70 mg/mmol (proteinuria) the NICE NG203 target is ≤130/80 — QOF indicator uses the 140/90 threshold, which Sentinel enforces here. Frailty exclusion applied per PRN02356 pattern. Note the NICE NG136 (hypertension) BP monitoring is a separate activity; this indicator applies to CKD patients regardless of whether they are also on the HYP register."
+    },
+    {
+      "id": "qof-ckd003",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "CKD003",
+      "indicatorName": "ACE-I or ARB in CKD with hypertension and proteinuria",
+      "requiresRegister": "CKD",
+      "requiresAnyProblem": [
+        "hypertension",
+        "essential hypertension",
+        "hypertensive"
+      ],
+      "check": {
+        "kind": "medication-present",
+        "medicationMatch": [
+          "ramipril",
+          "lisinopril",
+          "perindopril",
+          "enalapril",
+          "captopril",
+          "trandolapril",
+          "fosinopril",
+          "cilazapril",
+          "imidapril",
+          "losartan",
+          "candesartan",
+          "valsartan",
+          "irbesartan",
+          "telmisartan",
+          "olmesartan",
+          "azilsartan",
+          "sacubitril"
+        ]
+      },
+      "thresholds": {
+        "lower": 60,
+        "upper": 90
+      },
+      "points": 15,
+      "source": "QOF 26/27 CKD003 — corroborated via PRN02356 search; primary PDF 403 this run. Added 2026-07-11 (The Keeper).",
+      "notes": "ACE inhibitor or ARB in CKD patients with hypertension and proteinuria (ACR>70 mg/mmol or equivalent). The full QOF definition requires ACR>70 to qualify — Sentinel approximates by checking ACE-I/ARB presence in CKD patients with any coded hypertension (requiresAnyProblem is negation-aware; 'family history of hypertension' does not qualify). This will over-flag CKD+HYP patients without significant proteinuria — clinician must verify ACR status. The requiresAnyProblem approach is the closest expressible approximation; a full ACR-observation-threshold gate requires an engine extension."
     },
     {
       "id": "qof-smok002-chd",

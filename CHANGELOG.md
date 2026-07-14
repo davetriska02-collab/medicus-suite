@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.160.0] — 2026-07-08
+## [v3.161.0] — 2026-07-14
 
 ### Practice-panel wishlist wave 2 (the 1–2-day roadmap items)
 
@@ -58,6 +58,157 @@ Second build wave from `docs/appraisal/PRACTICE-wishlist-whole-suite-2026-07-03.
   monitoring, …); `/` focuses the active module's search; `?` opens the help
   popover with a new shortcuts cheat-sheet. Single shared typing guard with
   the existing Ctrl/Cmd+Alt+←/→ cycler; palette/tour/popovers always win.
+
+## [v3.160.2] — 2026-07-14
+
+### Fix: Suite-health strip false-alarming "Patient UUID resolution … degraded" on the Appointment Book
+
+The amber Suite-health strip (self-diagnosis, `shared/contract-canary.js`) was
+promoting the `api-client.patient-uuid-dom-fallback` contract to **degraded** on
+the **Appointment Book** — and other patient-less screens — while nothing was
+broken. An amber strip that cries wolf trains users to ignore it, which is worse
+than no strip at all.
+
+Root cause: the v3.75.x-era applicability gate treated the probe as meaningful
+whenever *any* anchor on the page carried a bare UUID. A diary row links to an
+**appointment** UUID (satisfying that gate) but carries no `/care-record/` or
+`/patient/` link (the probe's target), so the probe FAILed and two spaced visits
+promoted a false "degraded".
+
+- **Replaced the `anchorHrefRe` gate with a patient-banner-presence gate**
+  (`applicableWhenPresent` in `shared/dom-contracts.js`). The probe now only runs
+  where a patient is actually in context — mirroring the extension's own
+  patient-context detectors (`content.js`, `patient-context.js`). The appointment
+  book, dashboards and the multi-patient queue (no banner) read
+  **not_applicable**, never FAIL.
+- **Genuine drift detection is preserved**: on a real patient page where Medicus
+  renames the `/care-record/` URL shape, the banner is still present but the
+  care-record links vanish → the probe still FAILs (the banner selector doesn't
+  depend on the care-record URL, so it survives the rename). Per this strip's
+  doctrine ("false-positive discipline beats coverage"), an over-strict banner
+  selector under-alarms — the safe direction.
+- **`stateEpoch` bumped 2 → 3** so the canary discards any currently-stuck
+  'degraded' verdict issued under the old gate; the strip clears itself on the
+  next probe round (e.g. the next Appointment Book visit) with no user action.
+- No change to `engine/api-client.js` (`findPatientUuidFromDom` still scans all
+  `a[href]` — `anchor` is unchanged); tests updated in `test-dom-contracts.js`.
+
+## [v3.160.1] — 2026-07-14
+
+### Fix: "Send to Prescribing / Meds Management" button failing with "isn't in the assignee list"
+
+The routine-prescription re-assign button (`routine-rx-button.js`) aborted at
+step 3 — *"Team 'Prescribing / Meds Management' isn't in the assignee list.
+Open the picker to check the exact name…"* — even though the team exists. Same
+symptom as v3.143.2, different trigger.
+
+Root cause: step 3 typed the **entire configured team name** into Medicus's
+debounced, server-driven "Assign to" search and required a matching option to
+render. A name like `Prescribing / Meds Management` carries a `/` and several
+words; that class of query frequently returns **zero rows** from the live
+search even though a shorter query (`Prescribing`) returns the team. Coupling
+*what we type to filter* with *the full name* is exactly what keeps breaking
+when Medicus tweaks the picker's search.
+
+- **Decoupled the search query from the match.** Step 3 now types a **safe
+  leading token** (the team name up to the first character that isn't a
+  letter/digit/space — e.g. `Prescribing`) to surface the team, then matches
+  the option by its **full team text** (exact, else contains) as before. It
+  falls back to typing the full name for any picker where that string genuinely
+  did work, so no practice that worked before regresses. What we *type* and
+  what we *select* are now independent — a broad token still selects the exact
+  team, never the wrong one.
+- **Diagnostic breadcrumb on failure.** When no option matches after every
+  query, a single `console.warn('[ClinHUD:rx] …')` lists the queries tried and
+  the option texts the picker actually rendered — so a page-console capture
+  (CLAUDE.md "capture first") tells apart *search returned nothing / not a
+  search picker* (empty) from *returned options but the configured name doesn't
+  match* (a team-name mismatch, fixable via the ▾ menu).
+- No selector change (the `[id^="select-item-"]` / `[role="option"]` markup is
+  unchanged), no change to the fail-closed safety guards — the macro still
+  matches every control by visible text, aborts rather than clicking the wrong
+  one, and commits only per `commitMode`.
+- Tests: `test-routine-rx-macro.js` updated for the query ladder and a new
+  full-name-fallback scenario (54/54); `test-routine-rx-audit.js` unaffected
+  (23/23).
+
+### Also: unblocked two CI checks left red by the v3.160.0 merge
+
+v3.160.0 shipped with two CI checks already failing on `main`; this branch
+rebased onto it and inherited both. Neither is related to the routine-rx fix;
+both are cleared here so the PR can go green. **The clinical content added
+below still requires CSO review** — CI green attests only that the coverage
+guards pass, not that a Clinical Safety Officer has signed off the new terms.
+
+- **`engine/reception-match.js`** — v3.160.0 added the `sinusitis` pathway and
+  new red-flag ids (`rf-weightloss`, `rf-new50-visual`, `rf-orbital`,
+  `rf-frontal-swelling`, `rf-severe-unwell`, `rf-fontanelle`) to
+  `rules/reception-pathways.json` without the matching `SYNONYM_TERMS` /
+  `RED_FLAG_TOPIC_TERMS`, failing `test-reception-match.js`'s coverage guard.
+  Added conservative topic terms for each, derived directly from each item's
+  `ask` text and following the module's fail-safe direction (a missing term
+  makes a red flag read as a GAP that is re-asked, never a silent suppression).
+  Marked CSO-reviewable inline, per the file's existing clinical-content note.
+- **Safety-doc version pins** — v3.160.0 updated the manifest to 3.160.0 but
+  left `docs/CLINICAL-SAFETY-NOTICE.md`, `docs/HAZARD-LOG.md` and
+  `docs/feature-list.md` pinned at `3.159.0`, failing `check-doc-versions.js`.
+  Synced those three pins to `3.160.1` (the established incremental-sync
+  pattern). The `docs/cso-review-ledger.json` record of the last *full* CSO
+  review (3.115.0 / 3.126.0) is deliberately left unchanged — no CSO review is
+  claimed by this sync; `docs/SOUP.md` stays at its ledger pin (STALE, within
+  threshold).
+
+## [v3.160.0] — 2026-07-11
+
+### The Keeper: clinical rule currency update (2026-07-11)
+
+Automated horizon-scan of all Sentinel rule files against authoritative UK sources.
+All changes are additive or corrective; no monitoring intervals lengthened, no alerts
+removed. Full test suite passes (0 failures). CSO review required before merge.
+
+**Medicines monitoring (`rules/drug-rules.json`)**
+- `ace-arb`: added cilazapril (Vascace), imidapril (Tanatril) — both UK-licensed ACEi brands absent from match list (silent miss; BNF July 2026)
+- `antipsychotic`: added sulpiride (Dolmatil/Sulpitil/Sulpor), zuclopenthixol (Clopixol), flupentixol (Depixol/Fluanxol), fluphenazine (Modecate) — UK-licensed FGA antipsychotics with distinct brands absent from match list
+- `chc-combined-hormonal`: added Logynon, Synphase to match; added Slinda to exclude (POP, false-positive risk)
+- `sodium-valproate`: new monitoring rule (annual FBC/LFT/U&E); match includes "valproic acid" as explicit term (does not substring-match "valproate"); MHRA PPP obligation noted in alert text
+- `finerenone`: new monitoring rule (Kerendia; 4-monthly U&E/K+/eGFR; licensed for CKD+T2DM)
+
+**QOF indicators (`rules/qof-rules.json`)**
+- Added LD register (QOF 2025/26 LD001 reintroduced)
+- Added DEM004 (dementia carer review)
+- Added CKD002 (urine ACR testing) and CKD003 (BP <130/80 in CKD with proteinuria)
+- CHOL003 and CHOL004 cloned to multi-register populations (PAD, STIA; CHOL003 also CKD; CHOL004 excludes CKD per QOF spec)
+
+**Vaccine eligibility (`rules/vaccine-rules.json`)**
+- Flu homelessness cohort: ageMin 16 added
+- Shingles notes: corrected immunosuppressed pathway to 18+
+
+**Alert library (`rules/alert-library.json`)**
+- `pincer-7`: INR interval corrected 90d → 84d (= 12 exact weeks, NPSA/NICE NG196)
+- `prescribing-qtc-combination`: pimozide regression-locked in test
+- `alert-001`: new — NSAID without PPI in GI-risk patient (PINCER 2024; 22 NSAID terms)
+- `alert-002`: new — dual beta-blocker (PINCER 2024; 15 beta-blocker terms)
+- `alert-004`: new — acitretin/alitretinoin PPP in women 12–55 (MHRA)
+- `alert-005`: new — 5-alpha-reductase inhibitor teratogenicity flag (MHRA 2023)
+- `alert-008`: new — dual antiplatelet review (aspirin_ap 8 terms + P2Y12; PINCER 2024)
+- `alert-009`: new — NSAID + anticoagulant (PINCER 2024; 22 NSAID terms)
+
+**Medication review instruments (`engine/acb-scores.js`, `engine/stopp-start.js`, `visualiser-core.js`)**
+- ACB: added trimipramine (Surmontil, score 3), darifenacin (Emselex, score 3), trifluoperazine (score 3)
+- STOPP: added loprazolam, lormetazepam to BENZO_TERMS (criterion 4); alimemazine/trimeprazine to FIRSTGEN_AH_TERMS (criterion 3)
+- START: added pitavastatin to STATIN_TERMS; acebutolol/celiprolol/nadolol/oxprenolol to BETA_BLOCKER_TERMS
+- visualiser-core: aspirin_ap expanded (8 terms); antipsych adds amisulpride/paliperidone; benzo_z adds loprazolam/lormetazepam
+
+**Reception pathways (`rules/reception-pathways.json`)**
+- `backpain` rf-bladder: added "difficulty starting to pass urine" (NICE CKS cauda equina signs)
+- `feverish-child`: added rf-fontanelle (bulging fontanelle → 999; NICE NG143 immediate emergency)
+- `cough`: promoted unexplained weight loss from history question to red flag (duty; NICE NG12)
+- `headache`: split GCA flag into rf-new50-visual (visual symptoms → 999, sight-threatening) and rf-new50 (no visual → duty; NICE CKS GCA / BSR guidelines)
+- `sinusitis`: new pathway, Pharmacy First eligible age 12+, 6 red flags, 6 history questions
+
+**Tests extended:** test-drug-brand-coverage.js, test-qof-indicator-filters.js, test-acb-scores.js, test-stopp-start.js, test-visualiser-pincer.js, test-reception-pathways.js, test-alert-library-coverage.js
+
+**Sources:** BNF (July 2026, corroborated — primary PDFs returned 403); NHS England QOF 2025/26 (PRN02356); NHSE Annual flu letter 2025/26; PHE Green Book ch.19/28a; MHRA DSUs (valproate PPP, pimozide QTc, acitretin/alitretinoin PPP, finasteride/dutasteride); PINCER v2024; NPSA/NICE NG196; STOPP/START v3 (O'Mahony 2023); Boustani ACB/ACBcalc; NICE CKS (backpain, GCA, sinusitis, cough); NICE NG12, NG143; NHSE Pharmacy First spec 2024.
 
 ## [v3.159.0] — 2026-07-07
 

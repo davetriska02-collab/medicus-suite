@@ -37,7 +37,7 @@ for (const q of doc.closingQuestions || []) {
 }
 
 console.log('\n--- pathways ---');
-check(Array.isArray(doc.pathways) && doc.pathways.length >= 8, `>=8 pathways (found ${doc.pathways?.length})`);
+check(Array.isArray(doc.pathways) && doc.pathways.length >= 9, `>=9 pathways (found ${doc.pathways?.length})`);
 check((doc.pathways || []).some(p => p.id === 'general'), 'catch-all "general" pathway exists');
 
 const seenIds = new Set();
@@ -76,6 +76,42 @@ for (const p of doc.pathways || []) {
     check(p.pharmacyFirst.ageMax == null || Number.isFinite(p.pharmacyFirst.ageMax), `[${p.id}] pharmacyFirst.ageMax numeric`);
   }
 }
+
+// ── 2026-07-11 Keeper: content-level regression locks ────────────────────────
+console.log('\n--- 2026-07-11 Keeper: content regression locks ---');
+
+// Sinusitis pathway
+const sinusitis = doc.pathways.find(p => p.id === 'sinusitis');
+check(!!sinusitis, 'sinusitis pathway exists');
+check(sinusitis && sinusitis.pharmacyFirst && sinusitis.pharmacyFirst.ageMin === 12, 'sinusitis pharmacyFirst ageMin = 12');
+
+// Backpain cauda equina — difficulty initiating micturition
+const backpain = doc.pathways.find(p => p.id === 'backpain');
+const rfBladder = backpain && (backpain.redFlags || []).find(rf => rf.id === 'rf-bladder');
+check(!!rfBladder, 'backpain rf-bladder red flag exists');
+check(rfBladder && /difficulty starting/i.test(rfBladder.ask), 'backpain rf-bladder mentions "difficulty starting to pass urine" (cauda equina addition)');
+
+// Feverish child — bulging fontanelle
+const feverishChild = doc.pathways.find(p => p.id === 'feverish-child');
+const rfFontanelle = feverishChild && (feverishChild.redFlags || []).find(rf => rf.id === 'rf-fontanelle');
+check(!!rfFontanelle, 'feverish-child rf-fontanelle red flag exists');
+check(rfFontanelle && rfFontanelle.escalate === '999', 'rf-fontanelle escalates to 999');
+check(rfFontanelle && /bulging|fontanelle/i.test(rfFontanelle.ask), 'rf-fontanelle ask mentions bulging fontanelle');
+
+// Cough — weight loss as red flag
+const cough = doc.pathways.find(p => p.id === 'cough');
+const rfWeightloss = cough && (cough.redFlags || []).find(rf => rf.id === 'rf-weightloss');
+check(!!rfWeightloss, 'cough rf-weightloss red flag exists (was question, now red flag)');
+check(rfWeightloss && rfWeightloss.escalate === 'duty', 'rf-weightloss escalates to duty');
+
+// Headache — GCA split into visual (999) and non-visual (duty)
+const headache = doc.pathways.find(p => p.id === 'headache');
+const rfNew50Visual = headache && (headache.redFlags || []).find(rf => rf.id === 'rf-new50-visual');
+const rfNew50 = headache && (headache.redFlags || []).find(rf => rf.id === 'rf-new50');
+check(!!rfNew50Visual, 'headache rf-new50-visual (GCA with visual threat) exists');
+check(rfNew50Visual && rfNew50Visual.escalate === '999', 'rf-new50-visual escalates to 999');
+check(!!rfNew50, 'headache rf-new50 (GCA without visual threat) still exists');
+check(rfNew50 && rfNew50.escalate === 'duty', 'rf-new50 escalates to duty');
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

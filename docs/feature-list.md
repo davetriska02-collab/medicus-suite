@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.160.0
-**Generated:** 2026-07-08 (automated)
+**Version:** v3.161.0
+**Generated:** 2026-07-12 (automated)
 
 ## What it is
 
@@ -114,7 +114,6 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 
 ## Recent additions (last 4 weeks)
 
-- **v3.160.0 (2026-07-08)** — Practice-panel wishlist wave 2: Sweep gains a nurse clinic-prep worklist (bloods / checks / vaccines / reviews, printable) and an optional QOF £ projection from a practice-entered £/point figure; Submissions and Activity gain month-on-month comparisons (month-to-date vs the same span last month) and Activity a per-session view; Referrals safety-net rows offer a prepare-only 2WW chase-letter draft; the Record tab prints a clinician-facing SMR prep pack with its gaps stated; and the panel gains keyboard navigation (1–9, g-chords, /, ?).
 - **v3.159.0 (2026-07-07)** — One warm line on the genuinely finished signing pile (“✓ Pile’s clear — nothing waiting on you.”) — panel-vetted: static text, no emoji, no animation, and never shown when filters merely hide requests.
 
 - **v3.158.0 (2026-07-07)** — Signing gains location filter pills with counts (“Dispensary 6 · No location 3”, hidden red flags always called out) and glanceable collection glyphs after the name; Monitoring gains Sweep’s “Create task” button for the open patient — one explicit confirm, Medicus’s own task workflow.
@@ -135,8 +134,6 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **v3.143.0 (2026-06-30)** — New "File all normal" button auto-files confirmed-clear lab results — the suite's first feature that can act on the patient record, with strict safety checks and full audit.
 - **v3.141.0 (2026-06-29)** — Pre-clinic Sweep can now book the recall itself and rank QOF gaps by points at risk; Referrals flags suspected-cancer referrals that have gone quiet.
 - **v3.109.0 (2026-06-16)** — New "Record" tab: a live one-screen patient summary, no PDF export needed, alongside a new printable Practice Report for meetings and ICB returns.
-- **v3.60.0 (2026-06-12)** — New "Today" morning-briefing tab, a command palette to jump anywhere, and a suite-wide visual redesign.
-- **v3.38.0 (2026-06-10)** — Three front-desk tabs launched together: guided-capture Reception scripts, Pre-clinic Sweep, and a practice-owned Knowledge base.
 
 ## Safety posture
 

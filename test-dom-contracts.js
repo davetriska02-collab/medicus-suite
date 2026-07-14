@@ -391,44 +391,62 @@ const semanticsContract = {
   check(result.status === DomContracts.STATUS.OK, 'anchor present + target present -> OK');
 }
 
-// anchorHrefRe applicability gate (uuid DOM-fallback false-positive fix):
-// pages whose anchors carry no matching href give NOT_APPLICABLE, never FAIL.
+// applicableWhenPresent gate (uuid DOM-fallback false-positive fix, 2026-07-14
+// — supersedes the retired anchorHrefRe gate): a page WITHOUT the applicability
+// element (e.g. no patient banner) gives NOT_APPLICABLE, never FAIL, so a
+// patient-LESS page carrying unrelated UUID links (the appointment book) can no
+// longer promote a false 'degraded'.
 {
   const gated = {
     id: 'probe.semantics.gated',
-    anchor: 'a',
-    target: ['.probe-target'],
+    anchor: 'a[href]',
+    target: ['[data-patient-id]'],
     legacy: [['a[href*="/care-record/"]']],
-    anchorHrefRe: '[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}',
+    applicableWhenPresent: '.patient-banner',
   };
-  // anchors present but none carries a UUID (patient-less page, e.g. the
-  // appointment book) -> NOT_APPLICABLE
-  let root = asProbeRoot(parseHTML('<div><a href="/560b6c/scheduling/appointment-book">Diary</a></div>'));
+  // No patient banner (patient-less page, e.g. the appointment book — a diary
+  // row's appointment-UUID link is present but there is no patient in context)
+  // -> NOT_APPLICABLE, even though the anchor is present.
+  let root = asProbeRoot(
+    parseHTML('<div><a href="/560b6c/scheduling/appointment-book/deadbeef-dead-4eef-8eef-deadbeefdead">Diary</a></div>')
+  );
   let result = DomContracts.probeContract(gated, root);
   check(
     result.status === DomContracts.STATUS.NOT_APPLICABLE,
-    'anchorHrefRe gate: anchors without a UUID href -> NOT_APPLICABLE (patient-less page is not a failure)'
+    'applicableWhenPresent gate: no banner -> NOT_APPLICABLE (patient-less page is not a failure)'
   );
 
-  // a UUID-bearing anchor exists and matches the legacy selector -> OK
+  // Patient banner present + a care-record link (legacy hit) -> OK
   root = asProbeRoot(
-    parseHTML('<div><a href="/560b6c/patient/patient/care-record/deadbeef-dead-4eef-8eef-deadbeefdead">P</a></div>')
+    parseHTML(
+      '<div class="patient-banner"><a href="/560b6c/care-record/deadbeef-dead-4eef-8eef-deadbeefdead">P</a></div>'
+    )
   );
   result = DomContracts.probeContract(gated, root);
-  check(result.status === DomContracts.STATUS.OK, 'anchorHrefRe gate: UUID href present + legacy hit -> OK');
+  check(result.status === DomContracts.STATUS.OK, 'applicableWhenPresent gate: banner + legacy hit -> OK');
 
-  // UUID-bearing anchors exist but match neither target nor legacy -> genuine FAIL
-  root = asProbeRoot(parseHTML('<div><a href="/560b6c/new-shape/deadbeef-dead-4eef-8eef-deadbeefdead">P</a></div>'));
+  // Patient banner present but NO care-record/patient link (Medicus renamed the
+  // URL shape) -> genuine FAIL — the drift this contract exists to catch.
+  root = asProbeRoot(
+    parseHTML(
+      '<div class="patient-banner"><a href="/560b6c/new-shape/deadbeef-dead-4eef-8eef-deadbeefdead">P</a></div>'
+    )
+  );
   result = DomContracts.probeContract(gated, root);
   check(
     result.status === DomContracts.STATUS.FAIL,
-    'anchorHrefRe gate: UUID hrefs present but no target/legacy match -> FAIL (real URL-shape drift)'
+    'applicableWhenPresent gate: banner present but no target/legacy match -> FAIL (real URL-shape drift)'
   );
 
-  // the shipped uuid contract declares the gate + a state epoch
+  // the shipped uuid contract declares the banner gate + a bumped state epoch,
+  // and no longer carries the retired anchorHrefRe gate
   const shipped = DomContracts.get('api-client.patient-uuid-dom-fallback');
-  check(!!shipped.anchorHrefRe, 'shipped uuid contract declares anchorHrefRe gate');
-  check(shipped.stateEpoch === 2, 'shipped uuid contract declares stateEpoch 2');
+  check(
+    typeof shipped.applicableWhenPresent === 'string' && /patient-banner/i.test(shipped.applicableWhenPresent),
+    'shipped uuid contract declares the applicableWhenPresent patient-banner gate'
+  );
+  check(!shipped.anchorHrefRe, 'shipped uuid contract no longer declares the retired anchorHrefRe gate');
+  check(shipped.stateEpoch === 3, 'shipped uuid contract declares stateEpoch 3 (banner gate)');
 }
 
 // probeContract never throws on a garbage contract/root
