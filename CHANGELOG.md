@@ -2,6 +2,105 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.160.2] — 2026-07-14
+
+### Fix: Suite-health strip false-alarming "Patient UUID resolution … degraded" on the Appointment Book
+
+The amber Suite-health strip (self-diagnosis, `shared/contract-canary.js`) was
+promoting the `api-client.patient-uuid-dom-fallback` contract to **degraded** on
+the **Appointment Book** — and other patient-less screens — while nothing was
+broken. An amber strip that cries wolf trains users to ignore it, which is worse
+than no strip at all.
+
+Root cause: the v3.75.x-era applicability gate treated the probe as meaningful
+whenever *any* anchor on the page carried a bare UUID. A diary row links to an
+**appointment** UUID (satisfying that gate) but carries no `/care-record/` or
+`/patient/` link (the probe's target), so the probe FAILed and two spaced visits
+promoted a false "degraded".
+
+- **Replaced the `anchorHrefRe` gate with a patient-banner-presence gate**
+  (`applicableWhenPresent` in `shared/dom-contracts.js`). The probe now only runs
+  where a patient is actually in context — mirroring the extension's own
+  patient-context detectors (`content.js`, `patient-context.js`). The appointment
+  book, dashboards and the multi-patient queue (no banner) read
+  **not_applicable**, never FAIL.
+- **Genuine drift detection is preserved**: on a real patient page where Medicus
+  renames the `/care-record/` URL shape, the banner is still present but the
+  care-record links vanish → the probe still FAILs (the banner selector doesn't
+  depend on the care-record URL, so it survives the rename). Per this strip's
+  doctrine ("false-positive discipline beats coverage"), an over-strict banner
+  selector under-alarms — the safe direction.
+- **`stateEpoch` bumped 2 → 3** so the canary discards any currently-stuck
+  'degraded' verdict issued under the old gate; the strip clears itself on the
+  next probe round (e.g. the next Appointment Book visit) with no user action.
+- No change to `engine/api-client.js` (`findPatientUuidFromDom` still scans all
+  `a[href]` — `anchor` is unchanged); tests updated in `test-dom-contracts.js`.
+
+## [v3.160.1] — 2026-07-14
+
+### Fix: "Send to Prescribing / Meds Management" button failing with "isn't in the assignee list"
+
+The routine-prescription re-assign button (`routine-rx-button.js`) aborted at
+step 3 — *"Team 'Prescribing / Meds Management' isn't in the assignee list.
+Open the picker to check the exact name…"* — even though the team exists. Same
+symptom as v3.143.2, different trigger.
+
+Root cause: step 3 typed the **entire configured team name** into Medicus's
+debounced, server-driven "Assign to" search and required a matching option to
+render. A name like `Prescribing / Meds Management` carries a `/` and several
+words; that class of query frequently returns **zero rows** from the live
+search even though a shorter query (`Prescribing`) returns the team. Coupling
+*what we type to filter* with *the full name* is exactly what keeps breaking
+when Medicus tweaks the picker's search.
+
+- **Decoupled the search query from the match.** Step 3 now types a **safe
+  leading token** (the team name up to the first character that isn't a
+  letter/digit/space — e.g. `Prescribing`) to surface the team, then matches
+  the option by its **full team text** (exact, else contains) as before. It
+  falls back to typing the full name for any picker where that string genuinely
+  did work, so no practice that worked before regresses. What we *type* and
+  what we *select* are now independent — a broad token still selects the exact
+  team, never the wrong one.
+- **Diagnostic breadcrumb on failure.** When no option matches after every
+  query, a single `console.warn('[ClinHUD:rx] …')` lists the queries tried and
+  the option texts the picker actually rendered — so a page-console capture
+  (CLAUDE.md "capture first") tells apart *search returned nothing / not a
+  search picker* (empty) from *returned options but the configured name doesn't
+  match* (a team-name mismatch, fixable via the ▾ menu).
+- No selector change (the `[id^="select-item-"]` / `[role="option"]` markup is
+  unchanged), no change to the fail-closed safety guards — the macro still
+  matches every control by visible text, aborts rather than clicking the wrong
+  one, and commits only per `commitMode`.
+- Tests: `test-routine-rx-macro.js` updated for the query ladder and a new
+  full-name-fallback scenario (54/54); `test-routine-rx-audit.js` unaffected
+  (23/23).
+
+### Also: unblocked two CI checks left red by the v3.160.0 merge
+
+v3.160.0 shipped with two CI checks already failing on `main`; this branch
+rebased onto it and inherited both. Neither is related to the routine-rx fix;
+both are cleared here so the PR can go green. **The clinical content added
+below still requires CSO review** — CI green attests only that the coverage
+guards pass, not that a Clinical Safety Officer has signed off the new terms.
+
+- **`engine/reception-match.js`** — v3.160.0 added the `sinusitis` pathway and
+  new red-flag ids (`rf-weightloss`, `rf-new50-visual`, `rf-orbital`,
+  `rf-frontal-swelling`, `rf-severe-unwell`, `rf-fontanelle`) to
+  `rules/reception-pathways.json` without the matching `SYNONYM_TERMS` /
+  `RED_FLAG_TOPIC_TERMS`, failing `test-reception-match.js`'s coverage guard.
+  Added conservative topic terms for each, derived directly from each item's
+  `ask` text and following the module's fail-safe direction (a missing term
+  makes a red flag read as a GAP that is re-asked, never a silent suppression).
+  Marked CSO-reviewable inline, per the file's existing clinical-content note.
+- **Safety-doc version pins** — v3.160.0 updated the manifest to 3.160.0 but
+  left `docs/CLINICAL-SAFETY-NOTICE.md`, `docs/HAZARD-LOG.md` and
+  `docs/feature-list.md` pinned at `3.159.0`, failing `check-doc-versions.js`.
+  Synced those three pins to `3.160.1` (the established incremental-sync
+  pattern). The `docs/cso-review-ledger.json` record of the last *full* CSO
+  review (3.115.0 / 3.126.0) is deliberately left unchanged — no CSO review is
+  claimed by this sync; `docs/SOUP.md` stays at its ledger pin (STALE, within
+  threshold).
+
 ## [v3.160.0] — 2026-07-11
 
 ### The Keeper: clinical rule currency update (2026-07-11)
