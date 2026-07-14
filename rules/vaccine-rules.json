@@ -1,6 +1,6 @@
 {
-  "lastUpdated": "2026-06-17",
-  "specVersion": "JCVI/UKHSA 2026/27 season (2026-06-17 CSO-approved: RSV 75+/care-home expansion, flu homelessness cohort, pneumococcal PCV20 relabel — verify against source letters; applied this run without page-verification due to WebFetch 403)",
+  "lastUpdated": "2026-07-11",
+  "specVersion": "JCVI/UKHSA 2026/27 season (2026-06-17 CSO-approved: RSV 75+/care-home expansion, flu homelessness cohort, pneumococcal PCV20 relabel — verify against source letters; applied this run without page-verification due to WebFetch 403). 2026-07-11 (The Keeper): flu homelessness clause corrected to ageMin:16 per gov.uk flu programme amendment letter 9 June 2026; shingles notes corrected to immunosuppressed 18+ (was 50+, expanded from 1 Sept 2025); RSV notes updated re 65-74 clinical-risk future eligibility.",
   "notes": "Seasonal rules (flu, COVID) use schedule+season for campaign-window suppression. One-off lifetime rules (pneumococcal, shingles, RSV) use schedule:once. INTENTIONAL OMISSIONS: pertussis-in-pregnancy and RSV-in-pregnancy are not encoded — the engine has no per-pregnancy episode gate or gestational-age gate; a lifetime lookback cannot distinguish doses given in prior pregnancies.",
   "rules": [
     {
@@ -17,7 +17,7 @@
           { "kind": "age", "ageMin": 65, "label": "Age 65+" },
           { "kind": "age", "ageMin": 2, "ageMax": 17, "label": "Child (2–17 years)" },
           { "kind": "problem", "match": ["pregnan"], "sex": "F", "label": "Pregnancy" },
-          { "kind": "problem", "match": ["homeless","rough sleeper","no fixed abode","night shelter resident","hostel resident"], "label": "Experiencing homelessness" },
+          { "kind": "problem", "match": ["homeless","rough sleeper","no fixed abode","night shelter resident","hostel resident"], "ageMin": 16, "label": "Experiencing homelessness (age 16+)" },
           { "kind": "register", "registers": ["DM","CKD","COPD","CHD","HF","STIA","AF","PAD"], "label": "Clinical risk group (QOF register)" },
           { "kind": "problem", "match": ["cirrhosis","chronic hepatitis b","chronic hepatitis c","chronic liver disease","primary biliary","primary sclerosing cholangitis","biliary atresia","epilepsy","multiple sclerosis","parkinson","cerebral palsy","motor neurone","huntington","splenectomy","asplenia","hyposplenism","sickle cell","thalassaemia major","hereditary spherocytosis","hiv","aids","transplant","leukaemia","lymphoma","myeloma","bronchiectasis","cystic fibrosis","pulmonary fibrosis","interstitial lung","learning disabilit","downs syndrome","down syndrome"], "label": "Clinical risk group (problem)" },
           { "kind": "medication", "match": ["rituximab","adalimumab","infliximab","etanercept","abatacept","tocilizumab","secukinumab","ustekinumab","baricitinib","tofacitinib","azathioprine","ciclosporin","mycophenolate","tacrolimus","sirolimus","methotrexate","cyclophosphamide","chlorambucil","prednisolone","dexamethasone","chemotherapy"], "label": "Immunosuppressive medication" },
@@ -77,7 +77,7 @@
       "displayName": "Shingles vaccine (Shingrix)",
       "schedule": "once",
       "source": "UKHSA Green Book Chapter 28a (Shingles) — phased programme from 1 Sept 2023: routine offer on turning 65 (cohort born on/after 1 Sept 1958) plus existing 70–79 cohort; Shingrix 2 doses 6–12 months apart",
-      "notes": "DOUBLE-CHECK ELIGIBILITY AND DOSES: Shingrix is a 2-dose course (6–12 months apart) — this chip shows GIVEN on ANY recorded shingles/zoster vaccination and CANNOT verify 2-dose completion; check dose count manually. People aged 68–69 who turned 65 before 1 Sept 2023 are NOT yet eligible and are correctly not flagged. Severely immunosuppressed 50+ pathway is NOT encoded (engine cannot combine age + clinical criteria in one clause) — assess manually. Historic Zostavax counts as given.",
+      "notes": "DOUBLE-CHECK ELIGIBILITY AND DOSES: Shingrix is a 2-dose course (6–12 months apart) — this chip shows GIVEN on ANY recorded shingles/zoster vaccination and CANNOT verify 2-dose completion; check dose count manually. People aged 68–69 who turned 65 before 1 Sept 2023 are NOT yet eligible and are correctly not flagged. Severely immunosuppressed adults aged 18+ pathway (from 1 Sept 2025) is NOT encoded (engine cannot combine age + clinical criteria in one clause) — assess manually for immunosuppressed patients from age 18. Historic Zostavax counts as given. 2026-07-11: corrected notes age for immunosuppressed pathway from '50+' to '18+' per UKHSA expansion from 1 Sept 2025 (corroborated via UKHSA Green Book Ch 28a search; primary PDF 403).",
       "eligibility": { "anyOf": [
         { "kind": "age", "ageMin": 70, "ageMax": 79, "label": "Age 70–79 (routine shingles cohort)" },
         { "kind": "age", "ageMin": 65, "ageMax": 69, "bornOnOrAfter": "1958-09-01", "label": "Turned 65 on/after 1 Sept 2023 (phased cohort)" }
@@ -96,7 +96,7 @@
       "displayName": "RSV vaccine",
       "schedule": "once",
       "source": "UKHSA Green Book Chapter 27a (RSV) / JCVI advice — routine offer from age 75; eligibility expanded from 1 April 2026 to all adults aged 80+ and adult care-home residents (CSO-approved 2026-06-17; confirm against the JCVI/NHSE expansion letter).",
-      "notes": "DOUBLE-CHECK ELIGIBILITY: Single dose, no booster currently recommended. Eligibility expanded 1 April 2026 to remove the upper age bound (now age 75+) and to include adult care-home residents — applied on CSO direction; verify against the JCVI/NHSE letter as this run could not page-verify the source. RSV-in-pregnancy pathway (from 28 weeks) is intentionally NOT encoded — see pertussis omission note.",
+      "notes": "DOUBLE-CHECK ELIGIBILITY: Single dose, no booster currently recommended. Eligibility expanded 1 April 2026 to remove the upper age bound (now age 75+) and to include adult care-home residents — applied on CSO direction; verify against the JCVI/NHSE letter as this run could not page-verify the source. RSV-in-pregnancy pathway (from 28 weeks) is intentionally NOT encoded — see pertussis omission note. FUTURE ELIGIBILITY NOTE: JCVI advice (corroborated 2026-07-11) indicates the 65–74 age group with specific clinical risk conditions (immunosuppression, chronic respiratory, cardiovascular, liver or kidney disease) may be added to RSV eligibility from 1 Sept 2026 pending NHSE implementation — NOT YET ENCODED here as the operational letter was not yet issued at this run date. Monitor for the NHSE letter and add an eligibility clause for clinical-risk 65–74 when confirmed. Engine change will also be needed (current schema cannot combine age band + clinical-risk in a single clause).",
       "eligibility": { "anyOf": [
         { "kind": "age", "ageMin": 75, "label": "Age 75+" },
         { "kind": "problem", "match": ["care home resident", "nursing home resident", "residential care"], "label": "Care-home resident (adult)" }

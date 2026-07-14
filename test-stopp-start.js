@@ -478,6 +478,80 @@ console.log('\n--- Flag structure ---');
   assert(f.source.includes('STOPP/START v3'), 'source cites STOPP/START v3');
 }
 
+// ── 2026-07-11 Keeper: BENZO_TERMS additions (loprazolam, lormetazepam) ──────
+console.log('\n--- 2026-07-11 Keeper: BENZO_TERMS additions ---');
+{
+  const flags = computeStoppStart({ drugs: ['loprazolam 1mg tablets'], problems: [], ageYears: 70, egfr: null });
+  assert(!!find(flags, 'stopp_benzo_elderly'), 'STOPP 4 fires: loprazolam (UK benzo) + age 70');
+}
+{
+  const flags = computeStoppStart({ drugs: ['lormetazepam 1mg tablets'], problems: [], ageYears: 72, egfr: null });
+  assert(!!find(flags, 'stopp_benzo_elderly'), 'STOPP 4 fires: lormetazepam (UK benzo) + age 72');
+}
+
+// ── 2026-07-11 Keeper: STATIN_TERMS addition (pitavastatin) ───────────────
+console.log('\n--- 2026-07-11 Keeper: STATIN_TERMS addition (pitavastatin) ---');
+{
+  // Pitavastatin present → no START 11 (IHD + statin is satisfied)
+  const flags = computeStoppStart({
+    drugs: ['pitavastatin 2mg tablets'],
+    problems: [{ name: 'ischaemic heart disease' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_statin_ihd'), 'pitavastatin recognised as statin: START 11 suppressed');
+}
+
+// ── 2026-07-11 Keeper: BETA_BLOCKER_TERMS additions ──────────────────────
+console.log('\n--- 2026-07-11 Keeper: BETA_BLOCKER_TERMS additions ---');
+{
+  const flags = computeStoppStart({
+    drugs: ['acebutolol 200mg capsules'],
+    problems: [{ name: 'myocardial infarction' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bb_post_mi'), 'acebutolol recognised as beta-blocker: START 13 suppressed');
+}
+{
+  const flags = computeStoppStart({
+    drugs: ['celiprolol 200mg tablets'],
+    problems: [{ name: 'myocardial infarction' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bb_post_mi'), 'celiprolol recognised as beta-blocker: START 13 suppressed');
+}
+{
+  const flags = computeStoppStart({
+    drugs: ['nadolol 40mg tablets'],
+    problems: [{ name: 'myocardial infarction' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bb_post_mi'), 'nadolol recognised as beta-blocker: START 13 suppressed');
+}
+{
+  const flags = computeStoppStart({
+    drugs: ['oxprenolol 40mg tablets'],
+    problems: [{ name: 'myocardial infarction' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bb_post_mi'), 'oxprenolol recognised as beta-blocker: START 13 suppressed');
+}
+
+// ── 2026-07-11 Keeper: FIRSTGEN_AH_TERMS additions (alimemazine, trimeprazine) ─
+console.log('\n--- 2026-07-11 Keeper: FIRSTGEN_AH_TERMS additions ---');
+{
+  const flags = computeStoppStart({ drugs: ['alimemazine 7.5mg syrup'], problems: [], ageYears: 70, egfr: null });
+  assert(!!find(flags, 'stopp_firstgen_ah_elderly'), 'STOPP 3 fires: alimemazine + age 70');
+}
+{
+  const flags = computeStoppStart({ drugs: ['trimeprazine 30mg'], problems: [], ageYears: 66, egfr: null });
+  assert(!!find(flags, 'stopp_firstgen_ah_elderly'), 'STOPP 3 fires: trimeprazine + age 66');
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);
