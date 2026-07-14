@@ -181,6 +181,15 @@ const ALLOWLIST = new Set([
   // sweep.handout convention — see side-panel/modules/sentinel/sentinel.js):
   'sentinel.passport',
 
+  // Transient print payload — written on "SMR prep pack", read by
+  // smr-pack.html, overwritten on every print. Not user config (mirrors the
+  // sweep.handout convention — see side-panel/modules/record/record.js).
+  // NOTE: the 'record' top-level prefix is deliberately NOT in KEY_PREFIXES
+  // (triage-lens chip ids like 'record.age' squat on it), so this key is not
+  // reached by the scan today — the entry is kept as documentation and as the
+  // guard if the prefix situation ever changes:
+  'record.smrPack',
+
   // Guided-tour seen marker — localStorage, NOT chrome.storage (per-machine
   // onboarding state, deliberately excluded from backups so a restore onto a
   // new machine still offers the tour). See side-panel/tour/tour.js:
@@ -243,6 +252,26 @@ const ALLOWLIST = new Set([
   // purpose is to allow resuming after a module switch, not to back up.
   // Mirrors sweep.handout pattern:
   'sweep.lastRun',
+
+  // Transient print payload — written on "Print prep list", read by
+  // worklist.html, overwritten on every print. Not user config (mirrors
+  // sweep.handout exactly — see side-panel/modules/sweep/sweep.js):
+  'sweep.worklist',
+
+  // Practice's own £-per-QOF-point figure (manager £ projection — explicitly
+  // non-clinical arithmetic; no national default exists in this repo on
+  // purpose, see sweep-core.js qofPoundsValue). Unlike the transient keys
+  // above, this genuinely IS user config, not PHI or session state — in
+  // principle it should ride a real shared/io/sweep-io.js the way
+  // condor.indexConfig rides condor-io.js (see shared/io/condor-io.js), so a
+  // practice's figure survives a suite backup/restore. Sweep has no io file
+  // today (its other keys are all transient/PHI and were never meant to be
+  // backed up), and this change's scope was restricted to the sweep module +
+  // test files, not options.js/options.html/suite-envelope.js. Allowlisted
+  // for now; a follow-up should add shared/io/sweep-io.js (covering just this
+  // key) and wire it into doFullExport()/applyEnvelope()/previewEnvelope(),
+  // then remove this entry:
+  'sweep.qofConfig',
 
   // Per-machine first-run onboarding state — dismissed/skipped flags.
   // Not user config; deliberately excluded from backups so a restore onto a

@@ -2,7 +2,7 @@
 
 **Document reference:** MS-CSO-HL-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 3.160.1  
+**Product version:** 3.161.0  
 **Last full hazard re-baseline:** v3.115.0 (2026-06-17)  
 **Document version:** 3.12  
 **Date issued:** 2026-07-11  

@@ -140,12 +140,36 @@ const MODULES = {
 let helpOpen = false;
 let _helpCloseHandler = null;
 
+// Keyboard-shortcuts reference appended to every "?" help popover (see
+// wireKeyboardNav below) — one copy, not duplicated per tab. The "g" row's
+// title carries the full chord map so it's discoverable on hover without
+// cluttering the fixed-width popover with 14 lines.
+function buildKeyboardHelpSectionHTML() {
+  const chordList = Object.entries(G_CHORD_MAP)
+    .map(([key, mod]) => `${key}=${TAB_HELP[mod]?.title || mod}`)
+    .join(', ');
+  return `<div class="help-popover-row">
+    <span class="help-popover-lbl">Keyboard shortcuts</span>
+    <div class="help-popover-kbd-list">
+      <span><kbd class="help-popover-kbd">ctrl</kbd>+<kbd class="help-popover-kbd">k</kbd> command palette</span>
+      <span><kbd class="help-popover-kbd">ctrl</kbd>+<kbd class="help-popover-kbd">alt</kbd>+<kbd class="help-popover-kbd">←/→</kbd> cycle tabs</span>
+      <span><kbd class="help-popover-kbd">1</kbd>–<kbd class="help-popover-kbd">9</kbd> jump to tab</span>
+      <span title="${escStrip(chordList)}"><kbd class="help-popover-kbd">g</kbd> then a letter — jump to tab</span>
+      <span><kbd class="help-popover-kbd">/</kbd> focus search</span>
+      <span><kbd class="help-popover-kbd">?</kbd> this help</span>
+      <span><kbd class="help-popover-kbd">esc</kbd> close popovers</span>
+    </div>
+  </div>`;
+}
+
 function buildHelpPopoverHTML() {
   const h = TAB_HELP[activeModule];
+  const kbdSection = buildKeyboardHelpSectionHTML();
   if (!h) {
     return `<div class="help-popover" id="helpPopover" role="dialog" aria-label="Tab help">
       <div class="help-popover-title">Help</div>
       <div class="help-popover-row"><span class="help-popover-text">No help is available for this tab yet.</span></div>
+      ${kbdSection}
     </div>`;
   }
   return `<div class="help-popover" id="helpPopover" role="dialog" aria-label="Help: ${escStrip(h.title)}">
@@ -158,6 +182,7 @@ function buildHelpPopoverHTML() {
       <span class="help-popover-lbl">Do this first</span>
       <span class="help-popover-text">${escStrip(h.firstStep)}</span>
     </div>
+    ${kbdSection}
   </div>`;
 }
 
@@ -291,6 +316,25 @@ function wireAllTabsButton() {
   });
 }
 
+// Shared typing-guard predicate — single source used by wireTabNavShortcuts
+// below AND by wireKeyboardNav's single-key bindings, so the two never drift
+// out of step on what counts as "the user is typing".
+function isTypingTarget(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!el.isContentEditable;
+}
+
+// Visible, jumpable nav tabs in current DOM order — shared by the Ctrl/Cmd+Alt
+// cycler below and by wireKeyboardNav's digit-jump / "g" chord (item 6.1/6.2):
+// hidden tabs (suite.hiddenTabs) and the Visualiser special-case (it opens a
+// full browser tab, not an in-panel switch) are excluded from all three.
+function jumpableTabs() {
+  return Array.from(document.querySelectorAll('.nav-tab')).filter(
+    (t) => !t.classList.contains('nav-tab-hidden') && t.dataset.module !== 'visualiser'
+  );
+}
+
 // Keyboard tab navigation (power-user finding R4): Ctrl/Cmd+Alt+Left/Right cycle
 // the visible in-panel tabs without the mouse. Skipped while typing in a field,
 // and skips Visualiser (it opens a full browser tab, not an in-panel switch).
@@ -300,11 +344,8 @@ function wireTabNavShortcuts() {
     (e) => {
       if (!(e.ctrlKey || e.metaKey) || !e.altKey || e.shiftKey) return;
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-      const ae = document.activeElement;
-      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
-      const tabs = Array.from(document.querySelectorAll('.nav-tab')).filter(
-        (t) => !t.classList.contains('nav-tab-hidden') && t.dataset.module !== 'visualiser'
-      );
+      if (isTypingTarget(document.activeElement)) return;
+      const tabs = jumpableTabs();
       if (!tabs.length) return;
       e.preventDefault();
       const activeIdx = tabs.findIndex((t) => t.classList.contains('active'));
@@ -312,6 +353,187 @@ function wireTabNavShortcuts() {
       const start = activeIdx === -1 ? 0 : activeIdx;
       const next = (start + dir + tabs.length) % tabs.length;
       tabs[next].click();
+    },
+    true
+  );
+}
+
+// ── Keyboard-first panel navigation (power-user partner ask: jump tabs, focus
+// search, no mouse trips) ────────────────────────────────────────────────────
+// A single global keydown layer, thin and additive — it never claims a key
+// already owned elsewhere: Ctrl/Cmd+K (command palette, palette.js), Ctrl/Cmd+
+// Alt+←/→ (tab cycling, wireTabNavShortcuts above) or Esc (popover dismissal,
+// wireHelpButton/wireAllTabsButton). What it adds:
+//   1. Digits 1-9        → jump to the Nth visible tab (jumpableTabs()).
+//   2. "g" then a letter  → chord-jump to a specific tab (G_CHORD_MAP).
+//   3. "/"                → focus the active module's search/filter input.
+//   4. "?" (shift+/)      → open the per-tab help popover (now carrying a
+//                           keyboard-shortcuts section, see buildHelpPopoverHTML).
+// Reduced-attention rule (item 6): none of this fires while typing in a field,
+// or while any shell-level overlay (command palette, tour, tab chooser, or this
+// panel's own help/all-tabs/display popovers) is open — see isOverlayOpen().
+
+// Second key of a "g" chord → module to jump to. Preference is the module's
+// own data-module first letter; where two or more modules share a first
+// letter, one keeps it and the rest are reassigned a letter from elsewhere in
+// their name so every entry stays mnemonic. Collisions and their resolutions:
+//   s* → slots keeps 's'; sentinel → 'm' (Monitoring), submissions → 'u',
+//        sweep → 'w'
+//   c* → condor keeps 'c'; capacity → 'p'
+//   r* → referrals keeps 'r'; record → 'd', reception → 'e'
+//   t* → today keeps 't'; trends → 'n'
+const G_CHORD_MAP = {
+  t: 'today',
+  s: 'slots',
+  m: 'sentinel',
+  r: 'referrals',
+  c: 'condor',
+  a: 'activity',
+  u: 'submissions',
+  k: 'knowledge',
+  l: 'leaflets',
+  p: 'capacity',
+  w: 'sweep',
+  e: 'reception',
+  d: 'record',
+  n: 'trends',
+};
+
+const G_CHORD_TIMEOUT_MS = 1500;
+let _gChordArmed = false;
+let _gChordTimer = null;
+let _gChordIndicatorEl = null;
+
+// Transient "g …" indicator — the chord has no other visible cue, so this is
+// the discoverability affordance the panel ask calls for. Styled to emulate
+// the existing kbd-token + floating-popover patterns (suite-palette-kbd,
+// help-popover) rather than inventing a new visual language.
+function showGChordIndicator() {
+  if (!_gChordIndicatorEl) {
+    _gChordIndicatorEl = document.createElement('div');
+    _gChordIndicatorEl.className = 'kbdnav-chord-indicator';
+    _gChordIndicatorEl.setAttribute('aria-live', 'polite');
+    _gChordIndicatorEl.innerHTML = '<kbd>g</kbd> …';
+    document.body.appendChild(_gChordIndicatorEl);
+  }
+  _gChordIndicatorEl.classList.add('kbdnav-chord-indicator-visible');
+}
+
+function hideGChordIndicator() {
+  _gChordIndicatorEl?.classList.remove('kbdnav-chord-indicator-visible');
+}
+
+function armGChord() {
+  _gChordArmed = true;
+  showGChordIndicator();
+  if (_gChordTimer) clearTimeout(_gChordTimer);
+  _gChordTimer = setTimeout(disarmGChord, G_CHORD_TIMEOUT_MS);
+}
+
+function disarmGChord() {
+  _gChordArmed = false;
+  if (_gChordTimer) {
+    clearTimeout(_gChordTimer);
+    _gChordTimer = null;
+  }
+  hideGChordIndicator();
+}
+
+// Any open shell-level overlay — a keyboard shortcut must never steal focus
+// out from under one of these (reduced-attention rule, item 6). The command
+// palette, tour and tab chooser render into the DOM rather than exposing an
+// importable "is open" flag, so they're checked by their layer class; the
+// panel's own help/all-tabs/display popovers are already tracked in local
+// module state (helpOpen/allTabsOpen/displayOpen) declared above.
+function isOverlayOpen() {
+  return (
+    helpOpen ||
+    allTabsOpen ||
+    displayOpen ||
+    !!document.querySelector('.suite-palette-layer') ||
+    !!document.querySelector('.suite-tour-layer') ||
+    !!document.querySelector('.suite-tabs-layer')
+  );
+}
+
+// "/" target: the active module's own search/filter input, checked in
+// priority order (search-typed input, then anything explicitly marked
+// data-search, then the first visible plain text input). No-op silently if
+// the active module has none of these.
+function isVisible(el) {
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+
+function focusModuleSearch() {
+  if (!content) return;
+  const tiers = ['input[type="search"]', '[data-search]', 'input[type="text"], input:not([type])'];
+  for (const sel of tiers) {
+    const target = Array.from(content.querySelectorAll(sel)).find(isVisible);
+    if (target) {
+      target.focus();
+      if (typeof target.select === 'function') target.select();
+      return;
+    }
+  }
+}
+
+function wireKeyboardNav() {
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (isOverlayOpen()) return;
+      if (isTypingTarget(document.activeElement)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return; // these are single-key/chord bindings only
+      // A bare modifier keydown (e.g. Shift held down before typing "?") must not
+      // itself count as the chord's second key or cancel an armed chord.
+      if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta' || e.key === 'CapsLock') {
+        return;
+      }
+
+      // Mid-chord: this keystroke completes or cancels the "g" chord — either
+      // way it's consumed here, so it never also falls through to the "?"/
+      // "/"/digit handlers below.
+      if (_gChordArmed) {
+        disarmGChord();
+        const mod = e.key.length === 1 ? G_CHORD_MAP[e.key.toLowerCase()] : undefined;
+        const tab = mod && jumpableTabs().find((t) => t.dataset.module === mod);
+        if (tab) {
+          e.preventDefault();
+          tab.click();
+        }
+        return;
+      }
+
+      if (e.key.toLowerCase() === 'g') {
+        e.preventDefault();
+        armGChord();
+        return;
+      }
+
+      if (e.key === '?') {
+        e.preventDefault();
+        if (!helpOpen) {
+          helpOpen = true;
+          renderHelpPopover();
+        }
+        return;
+      }
+
+      if (e.key === '/') {
+        e.preventDefault();
+        focusModuleSearch();
+        return;
+      }
+
+      if (e.key >= '1' && e.key <= '9') {
+        const tabs = jumpableTabs();
+        const idx = Number(e.key) - 1;
+        if (idx < tabs.length) {
+          e.preventDefault();
+          tabs[idx].click();
+        }
+      }
     },
     true
   );
@@ -1816,6 +2038,7 @@ initQuickLeaflet({ switchModule });
 wireHelpButton();
 wireAllTabsButton();
 wireTabNavShortcuts();
+wireKeyboardNav();
 
 // ── Boot — restore last active module ────────────────────────────────────────
 // Read the persisted module name and switch to it, falling back to 'slots' if
