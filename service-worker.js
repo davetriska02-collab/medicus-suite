@@ -101,6 +101,179 @@ try {
   console.warn('[Suite] importScripts shared/quiet-mode.js failed:', e && e.message);
 }
 
+// Transactional API integration (official Medicus API via our backend proxy).
+// The proxy caller credential (txn.callerKey) is only ever read HERE, in the
+// service worker — content scripts request patient bundles by message and
+// never see the credential. See docs/TRANSACTIONAL-API-INTEGRATION.md.
+try {
+  importScripts(
+    'shared/txn-config.js',
+    'shared/txn-transport.js',
+    'shared/txn-api.js',
+    'shared/fhir-normaliser.js',
+    'shared/immunisation-bridge.js',
+    'shared/data-source-transactional.js',
+    'shared/txn-bundle-cache.js',
+    'shared/txn-request-gate.js'
+  );
+} catch (e) {
+  console.warn('[Suite] importScripts txn modules failed:', e && e.message);
+}
+
+// Short-TTL cache for patient bundles (see shared/txn-bundle-cache.js). Clinical
+// trade-off: 60s of possible staleness is acceptable for a chip/summary read —
+// nothing in this integration writes back through the cache, and the
+// shadow/hybrid comparison path benefits equally from not re-fetching on every
+// render. Cleared below whenever txn config changes (see chrome.storage.onChanged).
+const txnBundleCache = TxnBundleCache.createBundleCache({});
+
+// Protects the proxy / Medicus staging from multi-context stampedes — Sweep
+// tab batches, the Record tab, the sentinel content script, and shadow-mode
+// comparisons can all message this service worker at once. Every txn network
+// call (bundle fetch, connection test) runs through this shared gate; cache
+// hits in txnFetchPatientBundle are checked BEFORE the gate so they never
+// queue behind in-flight network calls.
+const txnGate = TxnRequestGate.createRequestGate({});
+
+// ── Transactional feed: patient-bundle fetcher (SW-side; owns the credential) ─
+
+async function txnFetchPatientBundle(patientUuid) {
+  const settings = await TxnConfig.readSettings();
+  if (!TxnConfig.isTransactionalEnabled(settings.integrationMode)) {
+    return { ok: false, error: 'txn integration not enabled' };
+  }
+  const stored = await chrome.storage.local.get('suite.practiceCode');
+  const tenant = stored['suite.practiceCode'] || null;
+  if (!tenant) return { ok: false, error: 'practice code not set' };
+
+  // Cache key includes everything that changes the result: a bundle fetched
+  // for one tenant/environment must never be served for another, and a config
+  // change (e.g. flipping staging <-> prod) must not serve a stale bundle.
+  const cacheKey = `${tenant}|${settings.environment}|${patientUuid}`;
+  const cached = txnBundleCache.get(cacheKey);
+  if (cached) return { ok: true, bundle: cached, cached: true };
+
+  const txnApi = TxnApi.createTxnApi({
+    baseUrl: 'https://proxy.invalid', // unused: the proxy transport forwards {method, path} only
+    fetchFn: TxnTransport.createProxyTransport({
+      proxyUrl: settings.proxyUrl,
+      getCallerCredential: async () => settings.callerKey || null,
+      getTenant: async () => tenant,
+      getEnvironment: async () => settings.environment,
+      getUserEmail: async () => settings.userEmail || null,
+    }),
+  });
+  const fetchFromTransactional = SentinelTransactionalSource.createTransactionalSource({
+    txnApi,
+    normaliseCareRecord: SentinelFhirNormaliser.normaliseCareRecord,
+  });
+  // Cache check above stays outside the gate — only the actual network call
+  // is gated, so a cache hit never waits behind other in-flight requests.
+  const bundle = await txnGate.run(() => fetchFromTransactional({ patientUuid }));
+  const bridged = SentinelImmunisationBridge.bridgeImmunisations(bundle);
+  txnBundleCache.set(cacheKey, bridged); // only successful results are cached — never errors
+  return { ok: true, bundle: bridged };
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return; // F5: intra-extension only
+  if (!msg || msg.action !== 'txn:fetchPatientBundle') return;
+  txnFetchPatientBundle(msg.patientUuid)
+    .then(sendResponse)
+    .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+  return true; // async sendResponse
+});
+
+// Any change to txn.* settings (proxy URL, environment, integration mode,
+// caller key, ...) or suite.practiceCode (tenant) can change what a cached
+// bundle should contain — e.g. flipping environment or re-pointing the proxy
+// must not keep serving a bundle fetched under the old config. Clear the
+// whole cache rather than trying to reason about which entries are affected.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  const changedKeys = Object.keys(changes);
+  if (changedKeys.some((k) => k.startsWith('txn.') || k === 'suite.practiceCode')) {
+    txnBundleCache.clear();
+  }
+});
+
+// ── Transactional feed: connectivity test (SW-side; owns the credential) ────
+// Used by the options page "Test connection" button in the API Integration
+// section. Unlike txnFetchPatientBundle this runs even when integrationMode is
+// 'session' — the whole point is to let a practice validate proxy/caller-key
+// config *before* switching into Hybrid or Transactional.
+//
+// Response shape: { ok: true, latencyMs } | { ok: false, stage, error }
+//   stage: 'config' — proxy URL / caller key / practice code missing
+//          'proxy'  — proxy unreachable, or rejected the caller key (401/403)
+//          'medicus' — proxy reached Medicus but got an upstream error back
+// `error` is always a short, plain-English, caller-key-free string.
+async function txnTestConnection() {
+  const settings = await TxnConfig.readSettings();
+  if (!settings.proxyUrl) return { ok: false, stage: 'config', error: 'Proxy URL not set' };
+  if (!settings.callerKey) return { ok: false, stage: 'config', error: 'Caller key not set' };
+
+  const stored = await chrome.storage.local.get('suite.practiceCode');
+  const tenant = stored['suite.practiceCode'] || null;
+  if (!tenant) return { ok: false, stage: 'config', error: 'Practice code not set (Suite section)' };
+
+  const txnApi = TxnApi.createTxnApi({
+    baseUrl: 'https://proxy.invalid', // unused: the proxy transport forwards {method, path} only
+    fetchFn: TxnTransport.createProxyTransport({
+      proxyUrl: settings.proxyUrl,
+      getCallerCredential: async () => settings.callerKey || null,
+      getTenant: async () => tenant,
+      getEnvironment: async () => settings.environment,
+      getUserEmail: async () => settings.userEmail || null,
+    }),
+  });
+
+  const startedAt = Date.now();
+  try {
+    await txnGate.run(() => txnApi.ping());
+    return { ok: true, latencyMs: Date.now() - startedAt };
+  } catch (e) {
+    const status = e && e.status;
+    if (e && e.isTimeout) {
+      // shared/txn-transport.js aborted the call (default 10s) — the proxy is
+      // resolvable but not answering, which is different from a wrong URL.
+      return { ok: false, stage: 'proxy', error: 'Proxy timed out (no response within 10s)' };
+    }
+    if (status === 401 || status === 403) {
+      return { ok: false, stage: 'proxy', error: 'Proxy rejected the caller key' };
+    }
+    if (!status) {
+      // No HTTP status means we never got a response from the proxy at all
+      // (DNS/connection failure, wrong URL, CORS, etc.) — see the plain
+      // `throw new Error(...)` cases in shared/txn-transport.js.
+      return { ok: false, stage: 'proxy', error: 'Could not reach the proxy (check the URL)' };
+    }
+    // Proxy responded with some other status — it forwarded an upstream
+    // (Medicus) error. Pass through a short, safe message (never the caller key).
+    const message = String((e && e.message) || 'Unknown error')
+      .trim()
+      .slice(0, 200);
+    return { ok: false, stage: 'medicus', error: message };
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return; // F5: intra-extension only
+  if (!msg || msg.action !== 'txn:testConnection') return;
+  txnTestConnection()
+    .then(sendResponse)
+    .catch((e) =>
+      sendResponse({
+        ok: false,
+        stage: 'proxy',
+        error: String((e && e.message) || e)
+          .trim()
+          .slice(0, 200),
+      })
+    );
+  return true; // async sendResponse
+});
+
 // ── Message router ────────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

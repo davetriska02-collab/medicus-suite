@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-06-14",
-  "specVersion": "Reception capture pathways v1.3 — CSO-signed-off 2026-06-14 (escalation re-tiering 2026-06-10; CSO 999-promotion pass 2026-06-14)",
+  "lastUpdated": "2026-07-11",
+  "specVersion": "Reception capture pathways v1.4 — 2026-07-11 (The Keeper): sinusitis pathway added (NICE CKS/Pharmacy First 12+); cauda equina bladder question updated to include difficulty initiating micturition; feverish-child bulging fontanelle added as red flag; cough weight-loss/night-sweats added as duty red flag (NICE NG12); GCA headache rf-new50 split into visual (999) and non-visual (duty); CSO-signed-off base v1.3 from 2026-06-14 preserved.",
   "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes), the NICE NG143 feverish-child traffic-light features, the NHS Pharmacy First clinical pathways, and NICE NG253/NG254/NG255 (suspected sepsis, replacing NG51) for urosepsis / sepsis escalation, re-phrased in lay language for telephone use by non-clinical staff. 2026-06-10: escalation re-tiering pass — several time-critical presentations (urosepsis, cauda equina, PE, large haemoptysis, sepsis, self-harm with means) promoted to 999 level. 2026-06-14: CSO signed off the reception tiers and red-flag escalation levels for live use (DRAFT blocker lifted), and promoted five red flags from urgent-duty to 999 on clinical review — suspected SJS/TEN (rash), sepsis with rigors (UTI), possible cauda equina / bilateral leg weakness or numbness (back pain), mastoiditis (earache), and red painful eye with halos / suspected acute angle-closure glaucoma (headache). This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files.",
   "escalations": {
     "999": "Possible emergency: follow practice emergency policy NOW — advise calling 999 / transfer to the duty clinician immediately. Do not put the caller in a queue.",
@@ -74,6 +74,7 @@
         { "id": "rf-bluelips", "ask": "Any blue or grey lips or face?", "escalate": "999" },
         { "id": "rf-haemoptysis", "ask": "Coughing up a large amount of blood, or blood coughed up together with breathlessness or chest pain?", "escalate": "999" },
         { "id": "rf-haemoptysis-minor", "ask": "Any blood-streaking in the phlegm, even a small amount?", "escalate": "duty" },
+        { "id": "rf-weightloss", "ask": "If the cough has lasted more than 3 weeks: any unexplained weight loss, drenching night sweats, or loss of appetite? (Possible lung cancer or TB — needs same-day referral pathway)", "escalate": "duty" },
         { "id": "rf-pe", "ask": "Sharp chest pain that gets worse when breathing in, especially with a swollen or painful calf, or after recent surgery or a long flight?", "escalate": "999" },
         { "id": "rf-chestpain", "ask": "Severe chest pain, or chest pain with breathlessness or sweating?", "escalate": "999" },
         { "id": "rf-confusion", "ask": "New confusion or unusual drowsiness?", "escalate": "999" },
@@ -124,7 +125,8 @@
         { "id": "rf-meningism", "ask": "Fever with a stiff neck, dislike of bright light, or a rash that doesn't fade when pressed?", "escalate": "999" },
         { "id": "rf-injury", "ask": "A head injury in the last couple of days, with vomiting or drowsiness?", "escalate": "999" },
         { "id": "rf-eye", "ask": "A painful red eye, or halos around lights, with the headache?", "escalate": "999" },
-        { "id": "rf-new50", "ask": "Is this a brand-new type of headache and the patient is over 50, with tenderness at the temple or pain when chewing?", "escalate": "duty" },
+        { "id": "rf-new50-visual", "ask": "Is this a brand-new type of headache in someone over 50 with tenderness at the temple or pain when chewing, AND any new blurring, double vision, or sudden loss of vision? (Possible giant cell arteritis with visual threat — emergency)", "escalate": "999" },
+        { "id": "rf-new50", "ask": "Is this a brand-new type of headache in someone over 50 with tenderness at the temple or pain when chewing, but NO visual symptoms?", "escalate": "duty" },
         { "id": "rf-pregnant", "ask": "Pregnant with severe headache, swelling, or vision changes?", "escalate": "duty" },
         { "id": "rf-thinners", "ask": "On blood thinners (warfarin, a DOAC) — with a new headache AFTER ANY bump or knock to the head? (If yes: 999 now. If new headache on thinners with no head injury, report to duty clinician.)", "escalate": "999" }
       ],
@@ -145,7 +147,7 @@
       "sources": ["NICE CKS: Sciatica / low back pain", "Cauda equina red flags (national CESCQ-style lay phrasing)", "Spinal epidural abscess risk factors (IV drug use / immunosuppression)"],
       "redFlags": [
         { "id": "rf-saddle", "ask": "Any NEW numbness or tingling around the genitals or back passage (the area that would sit on a saddle)? (Needs A&E now — cauda equina emergency)", "escalate": "999" },
-        { "id": "rf-bladder", "ask": "Any new trouble controlling the bladder or bowels, or unable to feel when they are passing urine? (Needs A&E now — cauda equina emergency)", "escalate": "999" },
+        { "id": "rf-bladder", "ask": "Any new trouble controlling the bladder or bowels, difficulty starting to pass urine, or unable to feel when they are passing urine? (Needs A&E now — cauda equina emergency)", "escalate": "999" },
         { "id": "rf-bothlegs", "ask": "Weakness or numbness in BOTH legs?", "escalate": "999" },
         { "id": "rf-trauma", "ask": "Did it start after a significant fall or accident?", "escalate": "duty" },
         { "id": "rf-fever", "ask": "Fever or feeling generally very unwell with the back pain? (Especially if they inject drugs, have a weakened immune system, or have had recent back surgery — risk of spinal infection)", "escalate": "duty" },
@@ -161,6 +163,29 @@
       ]
     },
     {
+      "id": "sinusitis",
+      "title": "Facial pain / sinusitis (adult and child 12+)",
+      "appliesTo": "Adults and children aged 12 and over",
+      "sources": ["NICE CKS: Sinusitis (last reviewed 2023)", "NHS Pharmacy First: acute sinusitis pathway (12+ years)"],
+      "pharmacyFirst": { "label": "Acute sinusitis", "ageMin": 12, "note": "Pharmacy First covers acute sinusitis from age 12 — clinician or care navigator to confirm suitability." },
+      "redFlags": [
+        { "id": "rf-orbital", "ask": "Any swelling around or behind an eye, the eye being pushed forward, or any change in vision or eye movement?", "escalate": "999" },
+        { "id": "rf-frontal-swelling", "ask": "Any swelling or redness of the forehead (especially a doughy or boggy swelling over the centre of the forehead)?", "escalate": "999" },
+        { "id": "rf-meningism", "ask": "Severe headache with a stiff neck, dislike of bright light, or a rash that doesn't fade when pressed?", "escalate": "999" },
+        { "id": "rf-neuro", "ask": "Any new confusion, weakness on one side of the face or body, or slurred speech?", "escalate": "999" },
+        { "id": "rf-severe-unwell", "ask": "Severe facial pain that is rapidly worsening, with a very high fever and looking very unwell overall?", "escalate": "duty" },
+        { "id": "rf-immune", "ask": "Do they take medicines that weaken the immune system (e.g. chemotherapy, methotrexate, steroids long-term, or other immune-suppressing tablets)?", "escalate": "duty" }
+      ],
+      "questions": [
+        { "id": "duration", "ask": "How long have they had the pain or pressure in the face?", "type": "text", "label": "Duration" },
+        { "id": "location", "ask": "Where does the face feel painful or tender — around the cheeks, forehead, or both?", "type": "text", "label": "Location" },
+        { "id": "nasal", "ask": "Any blocked or runny nose? What colour is the mucus?", "type": "text", "label": "Nasal symptoms" },
+        { "id": "fever", "ask": "Any fever?", "type": "yesno", "label": "Fever" },
+        { "id": "toothache", "ask": "Any toothache or pain in the upper teeth on the same side?", "type": "yesno", "label": "Dental pain" },
+        { "id": "previous", "ask": "Have they had sinusitis before?", "type": "text", "label": "Previous sinusitis" }
+      ]
+    },
+    {
       "id": "feverish-child",
       "title": "Feverish child",
       "appliesTo": "Children. Babies under 3 months with fever always need same-day clinical advice.",
@@ -170,6 +195,7 @@
         { "id": "rf-under3m", "ask": "Is the baby under 3 months old with any fever?", "escalate": "duty" },
         { "id": "rf-rash", "ask": "Any rash that does NOT fade when a glass is pressed against it?", "escalate": "999" },
         { "id": "rf-floppy", "ask": "Floppy, very hard to wake, or an unusual high-pitched or weak cry?", "escalate": "999" },
+        { "id": "rf-fontanelle", "ask": "If a baby under 18 months: is the soft spot on top of the head (fontanelle) bulging or tense when they are not crying?", "escalate": "999" },
         { "id": "rf-breathing", "ask": "Breathing very fast, grunting, or sucking in between the ribs?", "escalate": "999" },
         { "id": "rf-colour", "ask": "Blue, grey, mottled, or very pale skin or lips?", "escalate": "999" },
         { "id": "rf-fluids", "ask": "No wet nappy (or not passing urine) for 12 hours, or sunken eyes?", "escalate": "duty" },

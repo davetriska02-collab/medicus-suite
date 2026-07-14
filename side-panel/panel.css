@@ -3080,6 +3080,75 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   color: var(--text-2);
 }
 
+/* ── Keyboard-shortcuts section appended to every help popover ──────────────
+   side-panel/panel.js buildKeyboardHelpSectionHTML(). Kbd token styled like
+   .suite-palette-kbd so the two shortcut surfaces read as one system. */
+.help-popover-kbd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.help-popover-kbd-list > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.help-popover-kbd {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+}
+
+/* ── "g" chord transient indicator ───────────────────────────────────────────
+   side-panel/panel.js wireKeyboardNav()/showGChordIndicator(). Emulates the
+   popover shell (bg-elev/border-hi/shadow-3) + kbd token above rather than a
+   new visual language; fades in/out, never steals focus (pointer-events: none). */
+.kbdnav-chord-indicator {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition:
+    opacity var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
+}
+.kbdnav-chord-indicator-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.kbdnav-chord-indicator kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+}
+
 /* ── Quick Leaflet popover (panel shell — see quick-leaflet/quick-leaflet.js) ─ */
 
 .ql-popover {

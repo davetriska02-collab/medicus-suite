@@ -338,3 +338,75 @@ export function ledgerCountsForDays(ledger, days, keys) {
 export function ledgerDayWatched(ledger, dateISO) {
   return !!(ledger && ledger.days && ledger.days[dateISO] && ledger.days[dateISO].watched);
 }
+
+// ── Same-weekday baselines (Gauntlet B3 / dream-panel D3) ─────────────────────
+// "Is today busy, or does it just feel busy?" — today's demand compared with
+// the same weekday's history from the day ledger, cumulative TO THE SAME HOUR
+// (a half-day today must never be compared against past full days).
+//
+// Honesty rules, in order of importance:
+//   1. Watched days only — unwatched days are known undercounts (residual
+//      open tasks), and using them would bias the baseline low, making every
+//      ordinary day read "busier than usual".
+//   2. No baseline under BASELINE_MIN_SAMPLES watched same-weekdays — the
+//      renderer shows nothing (or an explicit building state), never a
+//      comparison invented from two points.
+//   3. Plain-English counts, not percentiles — "ahead of 7 of the last 9
+//      Tuesdays", which a reader can check by hand from the compare view.
+
+export const BASELINE_MIN_SAMPLES = 4;
+
+export function weekdayName(dateISO) {
+  const t = Date.parse(`${dateISO}T12:00:00`);
+  if (!Number.isFinite(t)) return '';
+  return new Date(t).toLocaleDateString('en-GB', { weekday: 'long' });
+}
+
+// Demand total across `keys` cumulative to `hour` (0–23) for one ledger day.
+function _cumToHour(ledger, dateISO, hour, keys) {
+  const h = Math.max(0, Math.min(23, hour));
+  const s = ledgerSeriesForDay(ledger, dateISO, keys);
+  let sum = 0;
+  for (const k of keys) sum += s[k].cumulative[h];
+  return sum;
+}
+
+// Historical samples: every WATCHED prior same-weekday within retention.
+export function sameWeekdayCumulativeSamples(ledger, todayISO, hour, keys) {
+  const out = [];
+  for (let back = 7; back <= SUB_LEDGER_RETAIN_DAYS; back += 7) {
+    const date = _isoAddDays(todayISO, -back);
+    if (!ledgerDayWatched(ledger, date)) continue;
+    out.push({ date, value: _cumToHour(ledger, date, hour, keys) });
+  }
+  return out;
+}
+
+// Baseline read for `todayISO`'s demand at `hour`, against its own weekday.
+// Returns null when history is insufficient; else
+// { todayValue, n, higher, lower, band: 'high'|'typical'|'low', weekday }.
+export function demandBaseline(ledger, todayISO, hour, keys) {
+  if (!ledger) return null;
+  const samples = sameWeekdayCumulativeSamples(ledger, todayISO, hour, keys);
+  if (samples.length < BASELINE_MIN_SAMPLES) return null;
+  const todayValue = _cumToHour(ledger, todayISO, hour, keys);
+  let higher = 0;
+  let lower = 0;
+  for (const s of samples) {
+    if (todayValue > s.value) higher++;
+    else if (todayValue < s.value) lower++;
+  }
+  const n = samples.length;
+  const band = higher >= n * 0.75 ? 'high' : lower >= n * 0.75 ? 'low' : 'typical';
+  return { todayValue, n, higher, lower, band, weekday: weekdayName(todayISO) };
+}
+
+// Plain-English one-liner for a baseline read. `live` = the day is still in
+// progress ("by this time"); false = comparing complete days.
+export function baselineLine(b, live = true) {
+  if (!b) return '';
+  const tail = live ? ' by this time' : '';
+  if (b.band === 'high') return `Busier than usual for a ${b.weekday} — ahead of ${b.higher} of the last ${b.n}${tail}`;
+  if (b.band === 'low') return `Quieter than usual for a ${b.weekday} — behind ${b.lower} of the last ${b.n}${tail}`;
+  return `Typical for a ${b.weekday} (mid-range of the last ${b.n})`;
+}

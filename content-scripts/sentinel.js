@@ -48,6 +48,7 @@
   let collapsedSections = new Set();
 
   const SECTION_LABELS = {
+    'drug-allergy': 'Drug Allergy',
     'drug-monitoring': 'Drug Monitoring',
     'qof-register': 'QOF Registers',
     'qof-indicator': 'QOF Indicators',
@@ -273,11 +274,13 @@
         }
       }
 
+      const nowIso = new Date().toISOString();
       const allChips = window.SentinelRules.evaluatePatient(data.medications || [], data.observations || [], rules, {
-        now: new Date().toISOString(),
+        now: nowIso,
         problems: data.problems || [],
         patientContext: data.patientContext,
         observationHistory: data.observationHistory || [],
+        allergies: data.allergies || [],
       });
 
       renderPatientBanner(data, allChips);
@@ -293,7 +296,11 @@
       const ds = data.debug?.dataSource || 'unknown';
       const counts = data.debug?.counts;
       const countSummary = counts ? ` (${counts.medications}m / ${counts.observations}o / ${counts.problems}p)` : '';
-      setStatus(`Mode: ${data.mode} / ${ds}${countSummary}`);
+      // Crossover-safety visibility (F3): hybrid shadow parity/divergence, and
+      // transactional-mode fallback — see computeApiShadowStatus. Never blocks
+      // or alters the chips already rendered above.
+      const apiShadowSuffix = computeApiShadowStatus(data, rules, nowIso, allChips);
+      setStatus(`Mode: ${data.mode} / ${ds}${countSummary}${apiShadowSuffix}`);
 
       // Update show-achieved toggle UI state
       const toggle = shadowRoot.querySelector('#show-achieved-toggle');
@@ -301,6 +308,117 @@
     } catch (e) {
       setStatus('Error: ' + e.message);
       console.error('[Sentinel]', e);
+    }
+  }
+
+  // ============================================================
+  // API SHADOW (crossover safety: hybrid parity check + transactional fallback)
+  // ============================================================
+  // Thin glue over shared/txn-shadow-summary.js (SentinelShadowCompare wrapper)
+  // and shared/event-ledger.js — all the actual "is this parity, what does the
+  // status say" logic lives in txn-shadow-summary.js so this stays thin.
+  //
+  // Called from BOTH evaluatePatient() call sites (refresh()'s HUD status line
+  // and evaluateAndPublish()'s side-panel snapshot) with the chips already
+  // decided for the DISPLAYED (session) bundle — this function only computes a
+  // status suffix and (best-effort, never awaited) records a ledger event; it
+  // can never change or delay the chips already rendered/published.
+  //
+  // debug.txnShadow (hybrid mode, see engine/data-fetcher.js fetchHybrid):
+  //   { bundle }  -> shadow-evaluate the same rules against the txn bundle's
+  //                  fields, diff against the displayed chips, append
+  //                  ' · API shadow: parity' or ' · API shadow: N difference(s)'.
+  //                  A divergence also records ONE 'txn-shadow-divergence'
+  //                  ledger event (dedup'd per patient/day).
+  //   { error }   -> ' · API shadow: unavailable', records 'txn-shadow-unavailable'.
+  // debug.txnFallback (transactional mode: the user asked for the API feed but
+  // is seeing session data) -> ' · API feed unavailable — using session data',
+  // records 'txn-fallback' with the reason.
+  //
+  // Wrapped end-to-end in try/catch: a shadow-compare bug must never break
+  // clinical rendering, so any failure collapses to ' · API shadow: error'
+  // (only when we were actually attempting a shadow diff) or '' otherwise.
+  //
+  // EventLedger's SOURCES/ACTIONS are a fixed, validated enum (see
+  // shared/event-ledger.js) that this feature may not extend — 'sentinel' is
+  // the correct source, and the specific "kind" of event (txn-shadow-divergence
+  // / txn-shadow-unavailable / txn-fallback) is carried in `ruleId` (the same
+  // slot shared/contract-canary.js uses for a non-clinical feature id, not
+  // just clinical rule ids). `action` is the closest existing fit: 'shown' for
+  // a divergence surfaced alongside chips that were shown, 'aborted' for the
+  // two cases where the transactional attempt did not complete as intended.
+  function computeApiShadowStatus(data, rules, nowIso, displayedChips) {
+    const TSS = typeof window !== 'undefined' ? window.TxnShadowSummary : null;
+    const EL = typeof window !== 'undefined' ? window.EventLedger : null;
+    const debug = data && data.debug;
+    try {
+      const patientRef = (data && data.patientContext && data.patientContext.patientUuid) || null;
+      if (debug && debug.txnShadow && debug.txnShadow.bundle) {
+        const sb = debug.txnShadow.bundle;
+        const out = window.SentinelRules.evaluatePatient(sb.medications || [], sb.observations || [], rules, {
+          now: nowIso,
+          problems: sb.problems || [],
+          patientContext: sb.patientContext,
+          observationHistory: sb.observationHistory || [],
+          allergies: sb.allergies || [],
+        });
+        const shadowChips = out.chips || out;
+        const summary = TSS ? TSS.summariseShadow({ displayedChips, shadowChips }) : { parity: true };
+        const suffix = TSS
+          ? TSS.buildStatusSuffix(summary.parity ? { kind: 'parity' } : { kind: 'divergence', count: summary.count })
+          : '';
+        if (!summary.parity && EL) {
+          const p = EL.record(
+            {
+              source: 'sentinel',
+              patientRef,
+              ruleId: 'txn-shadow-divergence',
+              label: `missing ${summary.missing.length} added ${summary.added.length} changed ${summary.severityChange.length}`,
+              severity: summary.safe ? 'escalation-only' : 'regression',
+              action: 'shown',
+            },
+            { dedupe: true }
+          );
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        }
+        return suffix;
+      }
+      if (debug && debug.txnShadow && debug.txnShadow.error) {
+        if (EL) {
+          const p = EL.record(
+            {
+              source: 'sentinel',
+              patientRef,
+              ruleId: 'txn-shadow-unavailable',
+              label: String(debug.txnShadow.error).slice(0, 120),
+              action: 'aborted',
+            },
+            { dedupe: true }
+          );
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        }
+        return TSS ? TSS.buildStatusSuffix({ kind: 'unavailable' }) : '';
+      }
+      if (debug && debug.txnFallback) {
+        if (EL) {
+          const p = EL.record(
+            {
+              source: 'sentinel',
+              patientRef,
+              ruleId: 'txn-fallback',
+              label: String(debug.txnFallback).slice(0, 120),
+              action: 'aborted',
+            },
+            { dedupe: true }
+          );
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        }
+        return TSS ? TSS.buildStatusSuffix({ kind: 'fallback' }) : '';
+      }
+      return '';
+    } catch (e) {
+      // Never let a shadow-compare bug break clinical rendering.
+      return debug && debug.txnShadow ? ' · API shadow: error' : '';
     }
   }
 
@@ -538,7 +656,7 @@
     // 'status' is the default order already produced by the engine
 
     // Group by type (default) or flat list
-    const groups = { 'drug-monitoring': [], 'qof-indicator': [], 'qof-register': [] };
+    const groups = { 'drug-allergy': [], 'drug-monitoring': [], 'qof-indicator': [], 'qof-register': [] };
     chips.forEach((c) => {
       const t = c.type || 'drug-monitoring';
       if (!groups[t]) groups[t] = [];
@@ -589,8 +707,10 @@
         wireChipEvents(el, chip, allChips, data);
       });
     } else {
-      // Grouped sections (default)
-      ['drug-monitoring', 'qof-indicator'].forEach((type) => {
+      // Grouped sections (default). drug-allergy is listed first: it is a red
+      // patient-safety contraindication alert and must have top visual priority,
+      // ahead of routine drug-monitoring / QOF housekeeping sections.
+      ['drug-allergy', 'drug-monitoring', 'qof-indicator'].forEach((type) => {
         const groupChips = groups[type] || [];
         if (groupChips.length === 0) return;
         const sectionEl = document.createElement('section');
@@ -778,6 +898,7 @@
     // v3 custom-alert chip types delegate to the shared renderer.
     const CR = typeof window !== 'undefined' ? window.ChipRenderer : null;
     if (CR) {
+      if (chip.type === 'drug-allergy') return CR.renderDrugAllergyChip(chip);
       if (chip.type === 'drug-combo') return CR.renderDrugComboChip(chip);
       if (chip.type === 'event-count') return CR.renderEventCountChip(chip);
       if (chip.type === 'composite') return CR.renderCompositeChip(chip);
@@ -1179,8 +1300,11 @@
               // may show no_data when they should not, which is a silent clinical gap.
               // No patient data in the error message — only the error type/message.
               _journalAugmentFailed = true;
-              _journalAugmentError = (journalErr && journalErr.message) ? String(journalErr.message) : 'unknown error';
-              console.warn('[Sentinel] Journal augmentation failed — QOF journal-coded indicators may show no_data:', _journalAugmentError);
+              _journalAugmentError = journalErr && journalErr.message ? String(journalErr.message) : 'unknown error';
+              console.warn(
+                '[Sentinel] Journal augmentation failed — QOF journal-coded indicators may show no_data:',
+                _journalAugmentError
+              );
             }
           }
           // Evaluate with the FULL merged drug+QOF ruleset, capture the chips, and
@@ -1188,20 +1312,26 @@
           // window.SentinelRules.evaluatePatient (see publishSnapshot for why).
           // options.trace:true produces { chips, trace } instead of a plain array;
           // the trace is in-memory only and never written to chrome.storage.local.
+          const _evalNowIso = new Date().toISOString();
           const evalResult = window.SentinelRules.evaluatePatient(
             data.medications || [],
             data.observations || [],
             rules,
             {
-              now: new Date().toISOString(),
+              now: _evalNowIso,
               problems: data.problems || [],
               patientContext: data.patientContext,
               observationHistory: data.observationHistory || [],
+              allergies: data.allergies || [],
               trace: true,
             }
           );
           if (gen !== _evalGen) return; // a navigation invalidated us mid-evaluation
           const chips = evalResult.chips || evalResult; // back-compat guard
+          // Crossover-safety visibility (F3): hybrid shadow parity/divergence, and
+          // transactional-mode fallback. Computed from the chips already decided
+          // above — never blocks or alters them. See computeApiShadowStatus.
+          const apiShadowSuffix = computeApiShadowStatus(data, rules, _evalNowIso, chips);
           const rawTrace = evalResult.trace || null;
           // Compute medications with no matching drug-monitoring rule. The detailed
           // variant explains WHY each med is unmatched (no-rule vs. excluded).
@@ -1229,7 +1359,20 @@
           // Assess extraction drift (best-effort — never blocks chip publication).
           const drift = await recordAndAssessDrift(data);
           if (gen !== _evalGen) return; // navigation superseded us during drift assess
-          publishSnapshot(chips, data.patientContext, health, data, unmatchedMeds, unmatchedMedsDetailed, trace, drift, _journalAugmentFailed, _journalAugmentError, unmatchedHighRisk);
+          publishSnapshot(
+            chips,
+            data.patientContext,
+            health,
+            data,
+            unmatchedMeds,
+            unmatchedMedsDetailed,
+            trace,
+            drift,
+            _journalAugmentFailed,
+            _journalAugmentError,
+            unmatchedHighRisk,
+            apiShadowSuffix
+          );
         })
         .catch(() => {
           if (gen === _evalGen) invalidateSnapshot();
@@ -1356,7 +1499,20 @@
   // with the triage-lens HUD (content.js:1448, 2092), which evaluates a
   // drug-rules-only set and would otherwise clobber the QOF chips on every
   // record/route tick (e.g. when searching the journal).
-  function publishSnapshot(chips, pc, health, rawData, unmatchedMeds, unmatchedMedsDetailed, trace, drift, journalAugmentFailed, journalAugmentError, unmatchedHighRisk) {
+  function publishSnapshot(
+    chips,
+    pc,
+    health,
+    rawData,
+    unmatchedMeds,
+    unmatchedMedsDetailed,
+    trace,
+    drift,
+    journalAugmentFailed,
+    journalAugmentError,
+    unmatchedHighRisk,
+    apiShadowSuffix
+  ) {
     // Remember the patient we just evaluated so the nav watcher can recognise
     // same-patient sub-navigation and avoid blanking these chips.
     if (pc && pc.patientUuid) _lastPatientUuid = pc.patientUuid;
@@ -1380,7 +1536,12 @@
       // QOF chips that rely on journal codes may show no_data incorrectly.
       // In-memory only — no patient data stored, only the error message string.
       journalAugmentFailed: journalAugmentFailed === true,
-      journalAugmentError: journalAugmentFailed ? (journalAugmentError || 'unknown error') : null,
+      journalAugmentError: journalAugmentFailed ? journalAugmentError || 'unknown error' : null,
+      // Crossover-safety (F3): the same ' · API shadow: ...' / ' · API feed
+      // unavailable — using session data' suffix the HUD status line shows
+      // (see refresh() / computeApiShadowStatus), '' when neither the hybrid
+      // shadow nor the transactional fallback debug signal is present.
+      apiShadowSuffix: apiShadowSuffix || '',
     };
     // Cache the raw observation + problem data for the BP/ACR trend tabs.
     // Written in lockstep with _lastSnapshot and cleared in invalidateSnapshot,

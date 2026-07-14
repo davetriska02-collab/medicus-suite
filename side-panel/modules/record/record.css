@@ -114,6 +114,50 @@
   display: inline-block;
   flex: none;
 }
+/* feed provenance ("Data: API feed" / "Data: session") — subtle, not a badge */
+.rec-feed-label {
+  color: var(--text-4);
+  font-weight: 400;
+}
+
+/* "Since last visit" — the brief's headline, rendered first ------------------ */
+.rec-delta-card {
+  border-left: 4px solid var(--accent);
+}
+.rec-delta-baseline,
+.rec-delta-none {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.rec-delta-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rec-delta-item {
+  font-size: 12.5px;
+  color: var(--text-1);
+  line-height: 1.4;
+}
+.rec-delta-allergy {
+  color: var(--red);
+  font-weight: 700;
+}
+.rec-delta-problem {
+  color: var(--amber);
+  font-weight: 600;
+}
+.rec-delta-medication,
+.rec-delta-immunisation {
+  color: var(--text-1);
+}
+.rec-delta-removed {
+  color: var(--text-3);
+  font-style: italic;
+}
 
 /* demographics -------------------------------------------------------------- */
 .rec-demo {
@@ -442,6 +486,148 @@
 .rec-ss-start {
   background: var(--green-dim);
   color: var(--green);
+}
+
+/* Drug-allergy alert(s) — rendered by buildAllergyPrompts() via the SAME
+   ChipRenderer.renderDrugAllergyChip() markup content-scripts/sentinel.js
+   uses for this exact chip type (shared/chip-renderer.js), so it must carry
+   the same `.sent-chip*` classes here. sentinel.css (where these classes are
+   otherwise defined) is lazy-loaded per-module and is NOT guaranteed to be
+   loaded when the Record tab renders one of these, so the subset actually
+   used by renderDrugAllergyChip is reproduced below, scoped to
+   .rec-allergy-alerts so it can't leak into (or clash with) any other
+   module's rendering. Colour tokens (--red/--amber/--green/...) are suite
+   canon (panel.css), shared across every module. ------------------------- */
+.rec-allergy-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.rec-allergy-alerts .sent-chip {
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  padding: 8px 10px;
+  border-left-width: 3px;
+  position: relative;
+}
+.rec-allergy-alerts .sent-chip-red {
+  border-left-color: var(--red);
+  background: var(--red-dim);
+}
+.rec-allergy-alerts .sent-chip-amber {
+  border-left-color: var(--amber);
+  background: var(--amber-dim);
+}
+.rec-allergy-alerts .sent-chip-green {
+  border-left-color: var(--green);
+  background: var(--green-dim);
+}
+.rec-allergy-alerts .sent-chip-neutral {
+  border-left-color: var(--border-hi);
+}
+.rec-allergy-alerts .sent-chip-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.rec-allergy-alerts .sent-chip-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  flex: 1;
+  min-width: 0;
+}
+.rec-allergy-alerts .sent-chip-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 7px;
+}
+.rec-allergy-alerts .sent-badge-red {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red-line);
+}
+.rec-allergy-alerts .sent-badge-amber {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid var(--amber-line);
+}
+.rec-allergy-alerts .sent-badge-green {
+  background: var(--green-dim);
+  color: var(--green);
+  border: 1px solid var(--green-line);
+}
+.rec-allergy-alerts .sent-badge-neutral {
+  background: var(--bg-mid);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+.rec-allergy-alerts .sent-chip-obs {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 4px;
+  font-family: var(--mono);
+}
+.rec-allergy-alerts .sent-chip-facts {
+  margin-top: 4px;
+}
+.rec-allergy-alerts .sent-chip-fact {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.rec-allergy-alerts .sent-chip-fact-label {
+  font-weight: 600;
+  color: var(--text-2);
+}
+.rec-allergy-alerts .sent-chip-cat {
+  font-size: 10px;
+  color: var(--text-4);
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+.rec-allergy-alerts .sent-custom-tag {
+  --tag-ink: var(--violet);
+  --tag-dim: var(--violet-dim);
+  --tag-line: var(--violet-line);
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 8.5px;
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--tag-ink);
+  background: var(--tag-dim);
+  border: 1px solid var(--tag-line);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+.rec-allergy-alerts .sent-chip-chevron {
+  font-size: 9px;
+  color: var(--text-4);
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+/* No click-to-expand wired in the Record tab (the facts are already shown
+   inline above) — the chevron/data-evidence attributes ride along on the
+   shared chip markup but are inert here, so the "clickable" affordance
+   (pointer cursor, hover glow) is deliberately suppressed rather than
+   promising an interaction that doesn't happen. */
+.rec-allergy-alerts .sent-chip-clickable {
+  cursor: default;
 }
 
 /* Pre-flight — what-if safety preview ---------------------------------------- */

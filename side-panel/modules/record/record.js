@@ -40,14 +40,46 @@
 //   → SentinelApiClient.fetchAll → SentinelNormalisers.normaliseAll
 //   → ACBScores.computeACB / StoppStart.computeStoppStart
 //   live monitoring/QOF chips → getSentinelSnapshot.chips
+//
+// Transactional feed (shared/panel-txn-feed.js): offered ALONGSIDE the session
+// fetch above, not instead of it — see buildRecordModel() below. A practice
+// stays on the session path unless integrationMode is explicitly
+// 'transactional' (getTxnBundleIfEnabled() returns null in every other case,
+// never throws). shared/fhir-normaliser.js's per-item field coverage is
+// re-audited section by section in buildRecordModel()'s comment as it grows —
+// as of v3.165.0's enrichment (dosage, observation range flags, problem
+// significance), medications and observations still each lack one field
+// their renderer needs (overdue/review-due/quantity; rawValue, respectively)
+// and patientContext still lacks isDeceased/testPatient/namedGP, so those
+// three keep preferring the session result; problems/pastProblems now carry
+// everything problemsCard reads and are bundle-preferred in transactional
+// mode. allergies/immunisations are used outright (the session feed has
+// never had either) and also power the drug-allergy safety prompt in
+// safetyCard() (see buildAllergyPrompts()). Session remains the fallback
+// wherever the bundle doesn't supply a field/section. A one-line "Data: API
+// feed"/"Data: session" provenance note (feedSourceLabel()) reflects which
+// bundle was primary for the record AS A WHOLE (not per-field). See the
+// detailed per-section comment at buildRecordModel().
+//
+// "Since last visit" (shared/record-delta.js, global SentinelRecordDelta,
+// lazy-loaded — see loadRecordDelta()): a per-patient fingerprint of
+// allergies/problems/medications/immunisations is diffed against the last
+// time this patient's snapshot was rendered (chrome.storage.local key
+// `brief.fp.<uuid>`) and surfaced as a short "what's new" section at the top
+// of the tab. Works against either feed above, since both produce the same
+// normalised bundle shape. Wrapped end-to-end in try/catch: a delta failure
+// only ever omits the section, never the rest of the tab.
 
 import { copyText } from '../shared/export-util.js';
 import { isChipActionNeeded } from '../sentinel/sentinel-core.js';
+import { getTxnBundleIfEnabled, feedSourceLabel } from '../../../shared/panel-txn-feed.js';
+import { buildSmrPack } from './smr-pack-core.js';
 
 let container = null;
 let _runToken = 0; // cancels stale async renders on rapid patient/tab change
 let _onRuntimeMsg = null;
 let _onTabChange = null;
+let _onLetterheadChange = null;
 
 const esc = (s) =>
   String(s == null ? '' : s).replace(
@@ -78,6 +110,14 @@ export async function init(el) {
   if (chrome.tabs?.onActivated) chrome.tabs.onActivated.addListener(_onTabChange);
   if (chrome.tabs?.onUpdated) chrome.tabs.onUpdated.addListener(_onTabChange);
 
+  await loadLetterhead();
+  _onLetterheadChange = (changes, area) => {
+    if (area === 'local' && changes['suite.letterhead']) {
+      _letterhead = changes['suite.letterhead'].newValue || {};
+    }
+  };
+  if (chrome.storage?.onChanged) chrome.storage.onChanged.addListener(_onLetterheadChange);
+
   await load();
 }
 
@@ -88,9 +128,13 @@ export function cleanup() {
     if (chrome.tabs?.onActivated) chrome.tabs.onActivated.removeListener(_onTabChange);
     if (chrome.tabs?.onUpdated) chrome.tabs.onUpdated.removeListener(_onTabChange);
   }
+  if (_onLetterheadChange && chrome.storage?.onChanged) {
+    chrome.storage.onChanged.removeListener(_onLetterheadChange);
+  }
   if (_onDelegatedClick && container) container.removeEventListener('click', _onDelegatedClick);
-  _onRuntimeMsg = _onTabChange = _onDelegatedClick = null;
+  _onRuntimeMsg = _onTabChange = _onDelegatedClick = _onLetterheadChange = null;
   _lastModel = _lastChips = _lastStamp = _lastUuid = null;
+  _letterhead = {};
   _preflightOpen = false;
   _preflightInput = '';
   _preflightResult = null;
@@ -108,6 +152,7 @@ function shell() {
           <h2 class="rec-title">Patient record</h2>
           <div class="rec-title-btns">
             <button type="button" class="rec-copy-btn" id="recCopySummary" disabled title="Copy plain-text summary of what is shown on screen" aria-label="Copy summary">Copy summary</button>
+            <button type="button" class="rec-copy-btn" id="recSmrPack" disabled title="Open a printable SMR (structured medication review) prep pack for this patient" aria-label="SMR prep pack">SMR prep pack</button>
             <button type="button" class="rec-refresh" id="recRefresh" title="Refresh from Medicus" aria-label="Refresh">⟳</button>
           </div>
         </div>
@@ -137,6 +182,12 @@ let _lastStamp = null;
 // the rendered model — the ONLY patient identifier the event ledger may
 // receive (never a name). Module-local; never written to storage by this module.
 let _lastUuid = null;
+
+// Practice letterhead ({ practiceName, clinicianName }) used to auto-fill the
+// SMR prep pack sign-off, read from 'suite.letterhead'. Same convention as
+// sentinel.js's _letterhead — loaded once on init, kept fresh via
+// chrome.storage.onChanged. Module-local; never written to storage here.
+let _letterhead = {};
 
 // ── Pre-flight (what-if safety preview) — module-local state ────────────────
 // Never written to storage; reset on cleanup(). _preflightOpen persists the
@@ -188,12 +239,47 @@ function wireStaticControls() {
     });
   }
 
+  // SMR prep pack — button lives in the shell (not re-rendered), same pattern
+  // as Copy summary. Button is disabled until render() populates _lastModel.
+  const smrBtn = container.querySelector('#recSmrPack');
+  if (smrBtn) {
+    smrBtn.addEventListener('click', () => onPrintSmrPack());
+  }
+
   // Retry button lives inside the re-rendered body, so delegate from the root
   // (listener survives setBody innerHTML replacement).
   _onDelegatedClick = (e) => {
     if (e.target && e.target.id === 'recRetry') load(true);
   };
   container.addEventListener('click', _onDelegatedClick);
+}
+
+// ── SMR (structured medication review) prep pack ────────────────────────────
+// Builds the SMR pack model, writes it to the transient 'record.smrPack' key,
+// then opens smr-pack.html in a new tab. Mirror of sentinel.js's
+// onPrintPassport — see that function for the pattern (this is a FORK of the
+// passport feature for a clinician audience, not an extension of it).
+async function onPrintSmrPack() {
+  if (!_lastModel) return;
+  const model = buildSmrPack(_lastModel, _lastChips, _letterhead, new Date().toISOString());
+  await chrome.storage.local.set({ 'record.smrPack': model });
+  // best-effort PHI-at-rest backstop (mirrors passport's 60s backstop) — primary
+  // clear is consume-on-read in the print tab; this covers the case where the
+  // tab never renders (e.g. the user closes it before it loads).
+  setTimeout(() => {
+    chrome.storage.local.remove('record.smrPack');
+  }, 60000);
+  // F2 Clinical Event Ledger — record that a pack was generated (fire-and-forget;
+  // the ledger swallows its own failures and can never break this button).
+  window.EventLedger?.record({
+    source: 'record',
+    patientRef: _lastUuid,
+    severity: null,
+    ruleId: null,
+    label: 'SMR prep pack generated',
+    action: 'smr-pack-generated',
+  });
+  chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/record/smr-pack.html') });
 }
 
 function setBody(html) {
@@ -209,6 +295,14 @@ function setSource(html, cls) {
 }
 
 // ── load / resolve patient ───────────────────────────────────────────────────
+
+// Practice letterhead — mirrors sentinel.js's loadLetterhead() (same storage
+// key, same shape). Loaded once on init; kept fresh via the onChanged listener
+// wired in init()/cleanup().
+async function loadLetterhead() {
+  const r = await chrome.storage.local.get('suite.letterhead');
+  _letterhead = r['suite.letterhead'] || {};
+}
 
 async function findMedicusTab() {
   // Prefer the active tab; fall back to any open Medicus tab in the window.
@@ -282,48 +376,174 @@ async function load(force) {
   setSource('Loading live data from Medicus…', 'rec-source-loading');
   setBody(skeleton());
 
-  let raw;
+  // Try the transactional feed first (best-effort; never throws — see header
+  // DATA PATH note). Still followed by the ordinary session fetch below: for
+  // this tab the session result remains the preferred source for most fields
+  // (see buildRecordModel), so both are gathered here rather than short-
+  // circuiting on a bundle alone.
+  let feedBundle = null;
   try {
-    raw = await apiClient.fetchAll(ctx.apiBase, uuid, { useCache: !force });
+    feedBundle = await getTxnBundleIfEnabled(uuid);
+  } catch (_) {
+    feedBundle = null;
+  }
+  if (token !== _runToken) return;
+
+  let sessionData = null;
+  try {
+    const raw = await apiClient.fetchAll(ctx.apiBase, uuid, { useCache: !force });
+    sessionData = normalisers.normaliseAll(raw, ctx);
   } catch (e) {
-    if (token !== _runToken) return;
+    sessionData = null; // fall through — the txn bundle (if any) may still carry this render
+  }
+  if (token !== _runToken) return;
+
+  if (!sessionData && !feedBundle) {
     setSource('Couldn’t reach Medicus', 'rec-source-err');
     setBody(
       stateCard('Couldn’t load the record', 'Medicus did not respond. Check you are signed in, then retry.', true)
     );
     return;
   }
-  if (token !== _runToken) return;
 
-  const data = normalisers.normaliseAll(raw, ctx);
-  const errs = data.apiErrors || {};
+  const errs = (sessionData && sessionData.apiErrors) || {};
   const authFail = Object.values(errs).some((e) => /401|403|sign|auth/i.test(String(e)));
-  if (authFail && !data.patientContext) {
+  if (sessionData && authFail && !sessionData.patientContext && !feedBundle) {
     setSource('Not signed in', 'rec-source-err');
     setBody(stateCard('Sign in to Medicus', 'Your Medicus session looks signed out. Sign in, then retry.', true));
     return;
   }
 
+  const data = buildRecordModel(sessionData, feedBundle);
+
   const chips = await liveChips(tab.id);
   if (token !== _runToken) return;
 
   _lastUuid = uuid;
-  render(data, chips, errs);
+  await render(data, chips, errs, { feedBundle, token, uuid });
+}
+
+// Combine the session-normalised model with the (optional) transactional
+// bundle into the single shape render() consumes.
+//
+// RE-AUDITED for v3.165.0's shared/fhir-normaliser.js enrichment (dosage,
+// observation range flags, problem significance) — the original v3.164.0
+// justification ("the bundle is thinner") has PARTIALLY expired. Checked
+// field-by-field against what each section's renderer actually reads:
+//
+//   patientContext — STILL session-fed. The bundle's patientContext (see
+//     shared/fhir-normaliser.js normaliseCareRecord) has no isDeceased,
+//     testPatient or namedGP — demographicsCard renders all three, and the
+//     deceased badge is a load-bearing safety control per this module's
+//     header. v3.165.0 didn't touch patientContext at all. Falls back to the
+//     bundle only if the session fetch failed outright.
+//
+//   medications — STILL session-fed. The bundle now carries `dosage`
+//     (v3.165.0), which covers medsCard's `m.dosage` line, but still has no
+//     `isOverDue` / `isReviewOverDue` (medsCard's "overdue" / "review due"
+//     flags) and no `quantity` (medsCard's meta line reads `m.quantity`).
+//     Falls back to the bundle only if the session fetch failed outright.
+//
+//   observations — STILL session-fed. The bundle now carries `isAbove` /
+//     `isBelow` (v3.165.0), but still has no `rawValue`: fhir-normaliser.js's
+//     `observations` array deliberately strips rawValue back out after using
+//     it internally to derive isAbove/isBelow (only observationHistory's
+//     per-point history entries keep it). resultsCard's own filter requires
+//     `o.rawValue != null && o.rawValue !== ''`, so a bundle-sourced
+//     observations array would still silently render as "no results" —
+//     exactly the failure mode the original comment warned about, just for a
+//     narrower field now. Falls back to the bundle only if the session fetch
+//     failed outright.
+//
+//   problems / pastProblems — FLIPPED: now bundle-preferred in transactional
+//     mode, session as the fallback. v3.165.0 added `significance`
+//     (ProblemSignificance extension), and the bundle already carried label/
+//     code/codedDate/status — that is every field problemsCard (`p.label`,
+//     `p.codedDate`, `p.significance`) and buildRecordSummaryText read. No
+//     remaining gap, so there is no reason left to prefer the thinner path.
+//
+// observationHistory is merged through unchanged (session-first, same as
+// observations above) — this module never renders it directly (it exists in
+// the model for parity with the other modules — trends/sweep/signing — that
+// share this normalised shape), so it wasn't part of this re-audit.
+//
+// allergies/immunisations have no session equivalent at all — they always
+// come from the bundle when one is offered, and are what feeds the "Since
+// last visit" section below, plus (allergies) the drug-allergy safety prompt
+// in safetyCard() — see buildAllergyPrompts().
+function buildRecordModel(sessionData, feedBundle) {
+  const s = sessionData || {};
+  const b = feedBundle || {};
+  return {
+    patientContext: s.patientContext || b.patientContext || null,
+    medications: s.medications || b.medications || [],
+    observations: s.observations || b.observations || [],
+    observationHistory: s.observationHistory || b.observationHistory || [],
+    problems: b.problems || s.problems || [],
+    pastProblems: b.pastProblems || s.pastProblems || [],
+    allergies: b.allergies || [],
+    immunisations: b.immunisations || [],
+  };
 }
 
 // ── render (loaded state) ────────────────────────────────────────────────────
 
-function render(data, chips, errs) {
+async function render(data, chips, errs, opts) {
+  const { feedBundle, token, uuid } = opts || {};
+
+  // "Since last visit" — computed (and its own storage read/write performed)
+  // BEFORE anything is painted, so a stale/superseded render never writes a
+  // fingerprint for the wrong patient. Failures here only ever omit the
+  // section (see renderSinceLastVisitSection); they must never surface as a
+  // broken Record tab.
+  let deltaSectionHtml = '';
+  try {
+    deltaSectionHtml = await renderSinceLastVisitSection(data, uuid);
+  } catch (_) {
+    deltaSectionHtml = '';
+  }
+  if (token !== undefined && token !== _runToken) return; // a newer load() has already superseded this one
+
+  // Drug-allergy safety prompt (rendered inside safetyCard() below) — only
+  // meaningful when the feed bundle supplied allergies (buildRecordModel:
+  // the session path has never carried them), so this is skipped entirely
+  // for a session-only render — no fetch, no evaluation, no empty state.
+  // Reuses the SAME drug-rules.json fetch pre-flight already caches
+  // (loadPreflightRuleFiles, below), so it costs nothing extra once either
+  // has run once this panel session. Two layers of fail-soft: the rule-file
+  // fetch here, and buildAllergyPrompts()'s own try/catch around the engine
+  // call itself — either failure just omits the allergy prompt, never the
+  // rest of the tab.
+  let allergyHtml = '';
+  if (Array.isArray(data.allergies) && data.allergies.length) {
+    try {
+      const ruleFiles = await loadPreflightRuleFiles();
+      allergyHtml = buildAllergyPrompts(data, (ruleFiles && ruleFiles.drugRules && ruleFiles.drugRules.rules) || []);
+    } catch (_) {
+      allergyHtml = '';
+    }
+  }
+  if (token !== undefined && token !== _runToken) return; // a newer load() has already superseded this one
+
   const pc = data.patientContext || {};
   const meds = data.medications || [];
   const problems = data.problems || [];
   const past = data.pastProblems || [];
   const obs = data.observations || [];
 
-  // Source line: live + freshness
+  // Source line: live + freshness + feed provenance. "API feed" only when the
+  // transactional feed actually supplied the primary bundle for this render
+  // (shared/panel-txn-feed.js feedSourceLabel) — otherwise "session", exactly
+  // as before this feature existed.
   const stamp = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  let feedLabel = 'session';
+  try {
+    feedLabel = feedSourceLabel(feedBundle) === 'API' ? 'API feed' : 'session';
+  } catch (_) {
+    feedLabel = 'session';
+  }
   setSource(
-    `<span class="rec-live-dot" aria-hidden="true"></span>LIVE from Medicus · ${esc(stamp)} · <span class="rec-snapshot-word">snapshot, not the full record</span>`,
+    `<span class="rec-live-dot" aria-hidden="true"></span>LIVE from Medicus · ${esc(stamp)} · <span class="rec-snapshot-word">snapshot, not the full record</span> · <span class="rec-feed-label">Data: ${esc(feedLabel)}</span>`,
     'rec-source-live'
   );
 
@@ -333,28 +553,156 @@ function render(data, chips, errs) {
   _lastStamp = stamp;
   const copyBtn = container?.querySelector('#recCopySummary');
   if (copyBtn) copyBtn.disabled = false;
+  const smrBtn = container?.querySelector('#recSmrPack');
+  if (smrBtn) smrBtn.disabled = false;
 
   const partial = Object.keys(errs).length
     ? `<div class="rec-partial">⚠ Some sections didn’t load (${esc(Object.keys(errs).join(', '))}). Showing what was returned.</div>`
     : '';
 
-  // Order follows how a clinician orients: identity → what's missing (safety
-  // gaps) → what's wrong (problems) → what they're on (meds) → safety scores
-  // that interrogate those → results. Scores sit AFTER problems/meds because
-  // the panel critique found clinicians read the clinical picture first and
-  // use the scores to confirm or challenge it.
+  // Order follows how a clinician orients: what changed since last time →
+  // identity → what's missing (safety gaps) → what's wrong (problems) →
+  // what they're on (meds) → safety scores that interrogate those → results.
+  // Scores sit AFTER problems/meds because the panel critique found
+  // clinicians read the clinical picture first and use the scores to confirm
+  // or challenge it.
   setBody(
-    `${demographicsCard(pc)}
+    `${deltaSectionHtml}
+     ${demographicsCard(pc)}
      ${safetyBanner()}
      ${partial}
      ${gapMarkers()}
      ${problemsCard(problems, past)}
      ${medsCard(meds)}
-     ${safetyCard(meds, problems, obs, pc, chips)}
+     ${safetyCard(meds, problems, obs, pc, chips, allergyHtml)}
      ${preflightCard()}
      ${resultsCard(obs)}`
   );
   wirePreflightControls();
+}
+
+// ── "Since last visit" (shared/record-delta.js) ─────────────────────────────
+//
+// A per-patient fingerprint (hashed identity keys only — see shared/
+// record-delta.js header) is stored per patient and diffed on every render
+// against the CURRENT bundle to produce a short, human "what changed" list.
+// Works identically against either feed (session or transactional) — both
+// produce the same normalised bundle shape this module already renders from.
+//
+// STORAGE DISCIPLINE: chrome.storage.local key `brief.fp.<patientUuid>` holds
+// ONLY { keys: [...hashed fingerprint keys], at: <ISO timestamp> } — exactly
+// what shared/record-delta.js's fingerprintKeys() produces, plus the
+// timestamp this section needs to say "since DATE". The hashed keys carry no
+// PHI (see that module's header); the human-readable added-item LABELS shown
+// below are read fresh off the CURRENT bundle at render time and are never
+// written to storage.
+const BRIEF_FP_PREFIX = 'brief.fp.';
+const BRIEF_FP_MAX_PATIENTS = 200; // simple count-based cap, checked on every write
+
+// shared/record-delta.js is a classic global-style script (window.
+// SentinelRecordDelta), like the other engine globals this module already
+// reads (window.ACBScores, window.StoppStart, ...) — but unlike those, it is
+// not preloaded by a <script> tag, so it is lazy-loaded here via a dynamic
+// import of its own URL purely for the side effect of setting that global
+// (the file has no ES export statements; the import's returned namespace is
+// unused). Cached after the first successful load.
+let _recordDeltaPromise = null;
+function loadRecordDelta() {
+  if (typeof window !== 'undefined' && window.SentinelRecordDelta) {
+    return Promise.resolve(window.SentinelRecordDelta);
+  }
+  if (typeof chrome === 'undefined' || !chrome.runtime?.getURL) return Promise.resolve(null);
+  if (!_recordDeltaPromise) {
+    _recordDeltaPromise = import(chrome.runtime.getURL('shared/record-delta.js'))
+      .then(() => (typeof window !== 'undefined' && window.SentinelRecordDelta) || null)
+      .catch(() => null);
+  }
+  return _recordDeltaPromise;
+}
+
+// renderSinceLastVisitSection(data, patientUuid) -> HTML string (possibly '')
+//
+// Never throws (every failure path resolves to ''); render() additionally
+// wraps the call in try/catch as a second layer of defence — a delta failure
+// must never break the rest of the tab.
+async function renderSinceLastVisitSection(data, patientUuid) {
+  if (!patientUuid) return '';
+  const RecordDelta = await loadRecordDelta();
+  if (!RecordDelta) return '';
+
+  const key = BRIEF_FP_PREFIX + patientUuid;
+  let prevRec = null;
+  try {
+    const stored = await chrome.storage.local.get(key);
+    prevRec = (stored && stored[key]) || null;
+  } catch (_) {
+    prevRec = null;
+  }
+
+  const isFirstView = !prevRec || !Array.isArray(prevRec.keys);
+  let delta;
+  try {
+    delta = RecordDelta.recordDelta(isFirstView ? [] : prevRec.keys, data);
+  } catch (_) {
+    return '';
+  }
+
+  // Fire-and-forget: persist the fingerprint for the NEXT visit. Never
+  // awaited — a storage write failure must not hold up (or break) this
+  // render; saveFingerprint swallows its own errors.
+  saveFingerprint(patientUuid, delta.nextKeys);
+
+  return sinceLastVisitCard(delta, isFirstView, prevRec && prevRec.at);
+}
+
+async function saveFingerprint(patientUuid, nextKeys) {
+  try {
+    const key = BRIEF_FP_PREFIX + patientUuid;
+    await chrome.storage.local.set({ [key]: { keys: nextKeys, at: new Date().toISOString() } });
+    await pruneFingerprintStore();
+  } catch (_) {
+    /* best-effort only — never break the tab over a storage write failure */
+  }
+}
+
+// Simple count-based cap: if more than BRIEF_FP_MAX_PATIENTS fingerprints are
+// stored, drop the oldest (by their `at` timestamp) until back at the cap.
+async function pruneFingerprintStore() {
+  try {
+    const all = await chrome.storage.local.get(null);
+    const entries = Object.keys(all)
+      .filter((k) => k.startsWith(BRIEF_FP_PREFIX))
+      .map((k) => ({ key: k, at: (all[k] && all[k].at) || '' }));
+    if (entries.length <= BRIEF_FP_MAX_PATIENTS) return;
+    entries.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0)); // oldest (smallest ISO) first
+    const toRemove = entries.slice(0, entries.length - BRIEF_FP_MAX_PATIENTS).map((e) => e.key);
+    if (toRemove.length) await chrome.storage.local.remove(toRemove);
+  } catch (_) {
+    /* best-effort prune only */
+  }
+}
+
+function sinceLastVisitCard(delta, isFirstView, prevAtIso) {
+  let body;
+  if (isFirstView) {
+    body = `<div class="rec-delta-baseline">Baseline stored — changes will show from your next visit.</div>`;
+  } else if (delta.added.length === 0 && delta.removedCount === 0) {
+    const dateStr = prevAtIso ? fmtDate(prevAtIso) : 'last visit';
+    body = `<div class="rec-delta-none">No changes since ${esc(dateStr)}.</div>`;
+  } else {
+    const items = delta.added
+      .map((a) => `<li class="rec-delta-item rec-delta-${esc(a.kind)}">+ ${esc(a.kind)}: ${esc(a.label)}</li>`)
+      .join('');
+    const removedNote = delta.removedCount
+      ? `<li class="rec-delta-item rec-delta-removed">${delta.removedCount} item${delta.removedCount === 1 ? '' : 's'} no longer present — review</li>`
+      : '';
+    body = `<ul class="rec-delta-list">${items}${removedNote}</ul>`;
+  }
+  return `
+    <section class="rec-card rec-delta-card">
+      <h3 class="rec-card-h">Since last visit</h3>
+      ${body}
+    </section>`;
 }
 
 // ── Copy summary — plain-text builder ────────────────────────────────────────
@@ -536,6 +884,75 @@ function _latestEgfrPlain(obs) {
   return Number.isFinite(n) ? n : null;
 }
 
+// ── Drug-allergy safety prompt ───────────────────────────────────────────────
+//
+// buildAllergyPrompts(model, rules) -> HTML string (possibly '')
+//
+// `allergies` is ONLY populated on the transactional feed (buildRecordModel:
+// `allergies: b.allergies || []` — the session path has never carried it),
+// so this is the first place the Record tab can run a drug-allergy safety
+// check. It reuses the SAME engine content-scripts/sentinel.js already
+// threads allergies through (window.SentinelRules.evaluatePatient with an
+// `allergies` option — see engine/rules-engine.js's evaluateDrugAllergyRule)
+// and the SAME chip renderer (shared/chip-renderer.js's
+// renderDrugAllergyChip) sentinel.js uses to draw the resulting
+// { type:'drug-allergy', ... } chip. No matching logic (active-only allergy
+// filter, allergy-term / drug-set matching) is reimplemented here — the
+// engine owns all of it, exactly as it does everywhere else this rule type
+// is evaluated.
+//
+// `rules` is the raw rules array as read from rules/drug-rules.json (mixed
+// rule types) — filtered down to `type === 'drug-allergy'` here, the same
+// way test-drug-allergy.js's "real starter pack" test does.
+//
+// Two callers rely on the exact contract below:
+//   - render() (browser): only calls this when data.allergies.length, i.e.
+//     the feed bundle supplied allergies — so the "no allergies data exists
+//     (session-only)" case never even reaches this function in practice.
+//   - test-record-allergy-prompts.js (Node, no browser): calls it directly
+//     with model.allergies == [] / undefined to pin that "no evaluation is
+//     attempted" — see the early return below.
+//
+// FAIL-SOFT end-to-end: any failure (missing engine/renderer globals, a
+// malformed rule, the engine itself throwing) collapses to '' — a broken
+// allergy check must never take down the rest of the Record tab, and must
+// never be mistaken for "no allergy found" (it simply omits the prompt).
+//
+// Exported (like buildRecordSummaryText above) so test-record-allergy-
+// prompts.js can exercise it directly, with the REAL engine and REAL
+// rules/drug-rules.json, without a browser.
+export function buildAllergyPrompts(model, rules) {
+  try {
+    const m = model || {};
+    const allergies = Array.isArray(m.allergies) ? m.allergies : [];
+    // No allergy data (session-only render, or an empty feed bundle) — return
+    // without ever calling the engine. Matches the engine's own fail-closed
+    // semantics (evaluateDrugAllergyRule returns [] on empty allergies) but
+    // avoids paying for a rule-set filter + evaluatePatient call for nothing.
+    if (!allergies.length) return '';
+
+    const SentinelRules = typeof window !== 'undefined' ? window.SentinelRules : null;
+    const ChipRenderer = typeof window !== 'undefined' ? window.ChipRenderer : null;
+    if (!SentinelRules || !ChipRenderer) return '';
+
+    const allergyRules = (Array.isArray(rules) ? rules : []).filter((r) => r && r.type === 'drug-allergy');
+    if (!allergyRules.length) return '';
+
+    const out = SentinelRules.evaluatePatient(m.medications || [], m.observations || [], allergyRules, {
+      problems: m.problems || [],
+      patientContext: m.patientContext || null,
+      allergies,
+    });
+    const chips = (out && (out.chips || out)) || [];
+    const fired = (Array.isArray(chips) ? chips : []).filter((c) => c && c.type === 'drug-allergy');
+    if (!fired.length) return '';
+
+    return fired.map((c) => ChipRenderer.renderDrugAllergyChip(c)).join('');
+  } catch (_) {
+    return ''; // fail-soft — an allergy-check failure must only omit the prompt
+  }
+}
+
 function demographicsCard(pc) {
   const name = pc.patientName || 'Unknown patient';
   const bits = [];
@@ -591,7 +1008,7 @@ function latestEgfr(obs) {
   return Number.isFinite(n) ? n : null;
 }
 
-function safetyCard(meds, problems, obs, pc, chips) {
+function safetyCard(meds, problems, obs, pc, chips, allergyHtml) {
   const drugObjs = meds.map((m) => ({ label: m.name })); // ACB + STOPP read .label
   const probObjs = problems.map((p) => ({ name: p.label })); // STOPP problemName reads .name
 
@@ -685,9 +1102,22 @@ function safetyCard(meds, problems, obs, pc, chips) {
     ? rows.join('')
     : `<div class="rec-empty">No safety scores available for this patient yet.</div>`;
 
+  // Drug-allergy alert(s) — pre-built HTML from buildAllergyPrompts() (real
+  // engine chips, rendered via the SAME ChipRenderer.renderDrugAllergyChip
+  // content-scripts/sentinel.js uses for this exact chip type). Only present
+  // when the feed bundle supplied allergies AND at least one rule fired —
+  // '' otherwise, so a session-only render (or an allergy-free/no-match
+  // outcome) adds nothing here at all. Shown first (most acute finding),
+  // ahead of the caveat below — which still accurately describes the SCORES
+  // that follow it, not this alert.
+  const allergySection = allergyHtml
+    ? `<div class="rec-allergy-alerts" role="group" aria-label="Drug-allergy alerts">${allergyHtml}</div>`
+    : '';
+
   return `
     <section class="rec-card">
       <h3 class="rec-card-h">Prescribing safety</h3>
+      ${allergySection}
       <p class="rec-caveat">These scores exclude allergies and use coded data only. A clear score is
         <strong>not</strong> a complete safety check — read the record. Supplementary to Medicus’s own systems.</p>
       ${body}

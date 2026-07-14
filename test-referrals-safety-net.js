@@ -7,7 +7,7 @@
 
 'use strict';
 const api = require('./shared/referrals-api.js');
-const { referralAgeDays, buildSafetyNet } = api;
+const { referralAgeDays, buildSafetyNet, buildChaseLetter } = api;
 
 const NOW = '2026-06-29T12:00:00';
 
@@ -84,6 +84,60 @@ check(snT.counts.watch === 1, 'watchDays=4 → 5d is watch');
 console.log('\n--- empty / null ---');
 check(buildSafetyNet([], { nowISO: NOW }).counts.total === 0, 'empty → 0 rows');
 check(buildSafetyNet(null, { nowISO: NOW }).rows.length === 0, 'null → 0 rows');
+
+// ── buildChaseLetter ──────────────────────────────────────────────────────────
+console.log('\n--- buildChaseLetter ---');
+
+const HEADER =
+  '(Prepared draft only — review and edit before sending. Confirm the patient and destination before use.)';
+
+// Full row, taken straight out of buildSafetyNet so ageDays is pre-computed.
+const snRow = buildSafetyNet([ref('2026-06-04', 'TwoWeekWait', 'Incomplete', 'Jane', 'Doe')], { nowISO: NOW }).rows[0];
+
+const letterFull = buildChaseLetter(snRow, { practiceName: 'The Grove Surgery', clinicianName: 'Dr A Smith' }, NOW);
+check(letterFull.includes(HEADER), 'includes the prepared-draft header verbatim');
+check(letterFull.includes('The Grove Surgery'), 'includes configured practice name');
+check(letterFull.includes('Dr A Smith'), 'includes configured clinician name');
+check(
+  letterFull.includes('Re: 2WW referral — Jane Doe, referred 2026-06-04'),
+  'subject line uses 2WW label + name + referral date'
+);
+check(letterFull.includes('25 days'), `correct day count (25 days), got: ${letterFull.match(/\d+ days?/)}`);
+
+// Letterhead unset → bracketed placeholders, never a real-looking empty sign-off.
+const letterNoLh = buildChaseLetter(snRow, {}, NOW);
+check(letterNoLh.includes('[Practice name]'), 'unset letterhead → [Practice name] placeholder');
+check(letterNoLh.includes('[Clinician name]'), 'unset letterhead → [Clinician name] placeholder');
+check(!letterNoLh.includes('undefined'), 'no "undefined" leaks with unset letterhead');
+
+const letterNullLh = buildChaseLetter(snRow, null, NOW);
+check(letterNullLh.includes('[Practice name]'), 'null letterhead → [Practice name] placeholder');
+check(letterNullLh.includes('[Clinician name]'), 'null letterhead → [Clinician name] placeholder');
+
+// Single-day count (singular "day").
+const oneDayRow = ref('2026-06-28', 'TwoWeekWait', 'Incomplete', 'Sam', 'One');
+const letterOneDay = buildChaseLetter(oneDayRow, {}, NOW);
+check(letterOneDay.includes('1 day '), `singular "1 day" (no trailing s), got: ${letterOneDay.match(/\d+ days? /)}`);
+
+// Missing referralService/referringClinician — graceful fallback text, never 'undefined'.
+const bareRow = {
+  referralId: 'REF-BARE-1',
+  referralDate: '2026-06-04',
+  priority: 'TwoWeekWait',
+  displayStatus: 'Incomplete',
+  patientGivenName: 'No',
+  patientFamilyName: 'Service',
+  // referralService and referringClinician intentionally omitted
+};
+const letterBare = buildChaseLetter(bareRow, {}, NOW);
+check(!letterBare.includes('undefined'), 'missing referralService/referringClinician never renders "undefined"');
+check(letterBare.includes('(specialty/hospital not recorded)'), 'missing referralService → placeholder text');
+check(letterBare.includes('(referring clinician not recorded)'), 'missing referringClinician → placeholder text');
+
+// Fully empty row/letterhead/now — the most defensive case.
+const letterEmpty = buildChaseLetter({}, {}, NOW);
+check(!letterEmpty.includes('undefined'), 'completely empty row never renders "undefined"');
+check(letterEmpty.includes(HEADER), 'completely empty row still carries the prepared-draft header');
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

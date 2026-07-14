@@ -160,6 +160,87 @@
     return [formatDate(start), formatDate(end)];
   }
 
+  // Inclusive day-count between two ISO dates. Pure date maths — no timezone surprises
+  // because we parse the Y/M/D components ourselves rather than trusting `new Date(iso)`
+  // (which treats a bare YYYY-MM-DD as UTC midnight and can shift a day under some TZs).
+  function daysBetweenInclusive(startISO, endISO) {
+    if (!startISO || !endISO) return 0;
+    const [sy, sm, sd] = startISO.split('-').map(Number);
+    const [ey, em, ed] = endISO.split('-').map(Number);
+    const s = new Date(sy, sm - 1, sd);
+    const e = new Date(ey, em - 1, ed);
+    const days = Math.round((e - s) / 86400000) + 1;
+    return Number.isFinite(days) ? days : 0;
+  }
+
+  function daysInMonth(y, m0) {
+    // m0 is zero-based (Date convention); day 0 of the next month = last day of m0.
+    return new Date(y, m0 + 1, 0).getDate();
+  }
+
+  // The comparison span for the "vs previous period" toggle (Decision: FEATURE 1b).
+  //
+  // Two cases:
+  //  - `[start,end]` is a MONTH-TO-DATE or FULL-CALENDAR-MONTH span (start is the 1st
+  //    of its month) → the previous span is the same calendar span one month earlier:
+  //    1st of the prior month through either the same day-of-month (month-to-date,
+  //    clamped to the prior month's length) or the prior month's own last day (when
+  //    `[start,end]` is itself a complete calendar month, e.g. the "Last month" preset).
+  //    This mirrors the "month to date vs same span last month" convention used by
+  //    Submissions and Condor's Pulse — a partial current month is never compared
+  //    against a full prior month, which would overstate the delta.
+  //  - Any other range (a plain N-day span, e.g. "Last 7d"/"Last 30d" or a custom
+  //    from/to pick) → the immediately preceding span of equal length, mirroring
+  //    condor/report/report-data.js's previousRange() for the day-range case.
+  //
+  // A single DAY pick (start === end) always takes the general branch, even when that
+  // day happens to be the 1st of a month — otherwise "Today" landing on the 1st would
+  // arbitrarily compare against the 1st of last month while every other single-day pick
+  // compares against its immediately preceding day, which would be an inconsistent,
+  // date-dependent surprise rather than a deliberate month view.
+  //
+  // Returns `[prevStartISO, prevEndISO]`.
+  function previousRange(startISO, endISO) {
+    const [sy, sm, sd] = startISO.split('-').map(Number);
+    const [ey, em, ed] = endISO.split('-').map(Number);
+    const sameMonth = sy === ey && sm === em;
+    const isMonthBased = sd === 1 && sameMonth && startISO !== endISO;
+
+    if (isMonthBased) {
+      const prevMonthDate = new Date(sy, sm - 2, 1); // JS Date rolls Jan back into prior Dec
+      const py = prevMonthDate.getFullYear();
+      const pm = prevMonthDate.getMonth();
+      const lastDayPrevMonth = daysInMonth(py, pm);
+      const isFullCurrentMonth = ed === daysInMonth(sy, sm - 1);
+      const prevEndDay = isFullCurrentMonth ? lastDayPrevMonth : Math.min(ed, lastDayPrevMonth);
+      const prevStart = new Date(py, pm, 1);
+      const prevEnd = new Date(py, pm, prevEndDay);
+      return [formatDate(prevStart), formatDate(prevEnd)];
+    }
+
+    // General case: the equal-length span immediately preceding [start,end].
+    const days = daysBetweenInclusive(startISO, endISO);
+    const prevEnd = new Date(sy, sm - 1, sd - 1);
+    const prevStart = new Date(prevEnd);
+    prevStart.setDate(prevStart.getDate() - (days - 1));
+    return [formatDate(prevStart), formatDate(prevEnd)];
+  }
+
+  // Percentage change current vs previous, with a safe direction label. Same semantics
+  // as condor/report/report-data.js's comparePct (kept as a local mirror, not an import,
+  // to avoid coupling the activity module to condor's report internals — see CLAUDE.md's
+  // per-module IO convention).
+  function comparePct(current, previous) {
+    const cur = Number(current) || 0;
+    const prev = Number(previous) || 0;
+    if (prev === 0) {
+      if (cur === 0) return { pct: 0, direction: 'flat' };
+      return { pct: null, direction: 'up' }; // up from zero — percentage undefined
+    }
+    const pct = Math.round(((cur - prev) / prev) * 100);
+    return { pct, direction: pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat' };
+  }
+
   const api = {
     METRICS,
     buildApiUrl,
@@ -167,6 +248,9 @@
     aggregate,
     preset,
     formatDate,
+    daysBetweenInclusive,
+    previousRange,
+    comparePct,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

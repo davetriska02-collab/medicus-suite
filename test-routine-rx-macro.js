@@ -394,6 +394,7 @@ function makeSandbox(rootEl, pathname) {
       'this.findByText = findByText;',
       'this.collectByText = collectByText;',
       'this.findAssignInput = findAssignInput;',
+      'this.searchQueriesFor = searchQueriesFor;',
       'this.cfg = cfg;',
     ].join('\n'),
     sandbox
@@ -582,15 +583,21 @@ function makeSandbox(rootEl, pathname) {
       CLICKS.indexOf('CommitBtn') > CLICKS.indexOf('TeamOption'),
       'happy path: commit clicked LAST, after the team option'
     );
+    // Step 3 now types a SEARCH QUERY (the safe leading token first — see
+    // searchQueriesFor), not necessarily the whole name, and matches the option
+    // by the FULL team text. Here the token surfaces the option, so that's what
+    // gets typed; the option clicked is still the full-name one (asserted above).
+    const q0 = sb.searchQueriesFor(teamName)[0];
+    check(q0 === 'Prescribing', 'happy path: safe leading token ("Prescribing") is the first search query');
     check(
-      TYPED_KEYSTROKES.length === teamName.length,
-      'happy path: typed the team name char-by-char (one step per character)'
+      TYPED_KEYSTROKES.length === q0.length,
+      'happy path: typed the search query char-by-char (one step per character)'
     );
     check(
-      TYPED_KEYSTROKES[TYPED_KEYSTROKES.length - 1] === teamName,
-      'happy path: final typed value is the full team name'
+      TYPED_KEYSTROKES[TYPED_KEYSTROKES.length - 1] === q0,
+      'happy path: final typed value is the safe leading token'
     );
-    check(assign.value === teamName, 'happy path: assign input value ends up as the full team name');
+    check(assign.value === q0, 'happy path: assign input value ends up as the typed search query');
     check(sb.cfg.lastTeam === teamName, 'happy path: cfg.lastTeam updated to the sent team');
     check(
       TOASTS.some((t) => t.kind === 'confirm-prompt' && t.msg.includes(teamName)),
@@ -599,6 +606,52 @@ function makeSandbox(rootEl, pathname) {
     check(
       TOASTS.some((t) => t.kind === 'ok' && /Sent to/.test(t.msg)),
       'happy path: a success toast is shown after commit'
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // step 3: query ladder — falls back to the full name when the safe leading
+  // token surfaces nothing (the v3.159.x fix: what we TYPE is decoupled from
+  // what we MATCH, so a picker whose live search only returns on the complete
+  // string still selects the team instead of aborting "isn't in the list").
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log('\n--- runMacro: falls back to the full-name query when the token surfaces nothing ---');
+  {
+    const radio = el('label', { text: 'Save & send to routine requests task list', label: 'Radio' });
+    const assign = el('input', { attrs: { 'aria-label': 'Assign to' }, label: 'AssignInput' });
+    const root = buildRoot([radio, assign]);
+    const sb = makeSandbox(root, '/tasks/data/prescription-requests/overview/abc-123');
+    CONFIRM_RETURN = true;
+    const teamName = 'Prescribing / Meds Management';
+
+    // The picker only returns the team for the FULL-name query — the leading
+    // token ("Prescribing") yields nothing. Models a picker whose live search
+    // only matches on the complete team string, so the fallback query is what
+    // must reveal (and select) it.
+    let added = false;
+    const iv = setInterval(() => {
+      if (!added && assign.value === teamName) {
+        added = true;
+        root.appendChild(
+          el('li', { attrs: { id: 'select-item-1', role: 'option' }, text: teamName, label: 'TeamOption' })
+        );
+        root.appendChild(el('button', { text: 'Send to routine list', label: 'CommitBtn', disabled: false }));
+        clearInterval(iv);
+      }
+    }, 2);
+
+    await sb.runMacro(teamName, 'auto');
+    clearInterval(iv);
+
+    check(CLICKS.indexOf('TeamOption') !== -1, 'full-name fallback: the team option is eventually selected');
+    check(
+      CLICKS.indexOf('CommitBtn') !== -1,
+      'full-name fallback: commit is clicked after the fallback query succeeds'
+    );
+    check(assign.value === teamName, 'full-name fallback: the full team name was typed on the fallback query');
+    check(
+      TOASTS.some((t) => t.kind === 'ok' && /Sent to/.test(t.msg)),
+      'full-name fallback: a success toast is shown'
     );
   }
 

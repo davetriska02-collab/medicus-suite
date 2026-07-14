@@ -31,6 +31,11 @@ export const TAB_CATALOG = [
     name: 'Signing',
     blurb: 'Open repeat requests with each patient’s recorded monitoring alongside — riskiest first.',
   },
+  {
+    id: 'followups',
+    name: 'Follow-ups',
+    blurb: 'Personal reminders for things you’re waiting on, resurfaced when due. This machine only.',
+  },
   { id: 'knowledge', name: 'Knowledge', blurb: 'Your practice’s reference base — criteria, contacts, pathways.' },
   { id: 'leaflets', name: 'Leaflets', blurb: 'Find and share the right NHS patient information leaflet, fast.' },
   {
@@ -60,6 +65,7 @@ export const ROLE_PRESETS = [
       'trends',
       'sweep',
       'signing',
+      'followups',
       'slots',
       'knowledge',
       'leaflets',

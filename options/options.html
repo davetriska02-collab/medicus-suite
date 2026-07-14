@@ -235,7 +235,8 @@
 
       input[type='text'],
       input[type='email'],
-      input[type='number'] {
+      input[type='number'],
+      input[type='password'] {
         width: 100%;
         background: var(--bg-mid);
         border: 1px solid var(--border);
@@ -247,7 +248,25 @@
       }
       input[type='text']:focus-visible,
       input[type='email']:focus-visible,
-      input[type='number']:focus-visible {
+      input[type='number']:focus-visible,
+      input[type='password']:focus-visible {
+        border-color: var(--accent);
+        background: var(--bg-elev);
+      }
+
+      /* API Integration section (data-section="txn") — select has no other
+         section using it yet, so match the text-input look above. */
+      select {
+        width: 100%;
+        background: var(--bg-mid);
+        border: 1px solid var(--border);
+        color: var(--text-1);
+        font-family: var(--mono);
+        font-size: 13px;
+        border-radius: var(--r-md);
+        padding: 10px 12px;
+      }
+      select:focus-visible {
         border-color: var(--accent);
         background: var(--bg-elev);
       }
@@ -1000,6 +1019,7 @@
         <button class="nav-item" data-section="capacity">Capacity Forecast</button>
         <button class="nav-item" data-section="submissions">Submissions</button>
         <button class="nav-item" data-section="sentinel">Monitoring</button>
+        <button class="nav-item" data-section="txn">API Integration</button>
         <button class="nav-item" data-section="triage">Triage Lens</button>
         <button class="nav-item" data-section="result-rules">Result Rules</button>
         <button class="nav-item" data-section="labfiling">Lab Filing</button>
@@ -1619,6 +1639,156 @@
           <div class="iframe-section">
             <iframe id="sentinelFrame" src="../sentinel-options/options.html" title="Sentinel settings"></iframe>
           </div>
+        </section>
+
+        <!-- API Integration section (Medicus Transactional API, via our backend proxy) -->
+        <section class="opt-section" id="sect-txn">
+          <h1>API Integration</h1>
+          <p class="section-desc">
+            Connects Suite to the official Medicus Transactional API via your practice's backend proxy. The default mode
+            below changes no behaviour — Suite keeps reading the screen exactly as it does today.
+          </p>
+
+          <div class="field">
+            <label class="field-label">Integration mode</label>
+            <div style="display: flex; flex-direction: column; gap: 12px">
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer">
+                <input type="radio" name="txnMode" id="txnModeSession" value="session" style="margin-top: 3px" />
+                <span style="font-size: 12px; color: var(--text-2); line-height: 1.5">
+                  <strong style="color: var(--text-1)">Session only (default):</strong> Suite reads the screen as today;
+                  API off.
+                </span>
+              </label>
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer">
+                <input type="radio" name="txnMode" id="txnModeHybrid" value="hybrid" style="margin-top: 3px" />
+                <span style="font-size: 12px; color: var(--text-2); line-height: 1.5">
+                  <strong style="color: var(--text-1)">Hybrid (live-testing):</strong> Suite behaves exactly as Session,
+                  and silently checks the API feed in parallel, logging any differences.
+                </span>
+              </label>
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer">
+                <input
+                  type="radio"
+                  name="txnMode"
+                  id="txnModeTransactional"
+                  value="transactional"
+                  style="margin-top: 3px"
+                />
+                <span style="font-size: 12px; color: var(--text-2); line-height: 1.5">
+                  <strong style="color: var(--text-1)">Transactional:</strong> Suite reads the patient record from the
+                  API feed, falling back to Session if unavailable.
+                </span>
+              </label>
+            </div>
+            <span
+              id="txnModeWarning"
+              style="
+                display: none;
+                margin-top: 10px;
+                padding: 8px 10px;
+                background: var(--amber-dim);
+                border: 1px solid var(--amber-line);
+                border-radius: var(--r-sm);
+                font-size: 11px;
+                color: var(--amber);
+                line-height: 1.5;
+              "
+            >
+              &#9888; This changes the live data source patients are read from. We recommend running in
+              <strong>Hybrid</strong> first and reviewing the logged differences before switching to Transactional.
+            </span>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="txnEnvironment">Environment</label>
+            <select id="txnEnvironment">
+              <option value="staging">Staging (default)</option>
+              <option value="prod">Production</option>
+            </select>
+            <span class="field-help">Which Medicus Transactional API environment the proxy should call.</span>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="txnProxyUrl">Proxy URL</label>
+            <input type="text" id="txnProxyUrl" placeholder="https://<project>.supabase.co/functions/v1" />
+            <span class="field-help">
+              Your practice's backend proxy base URL. The extension never calls Medicus directly — it always goes
+              through this proxy, which signs a short-lived Medicus JWT.
+            </span>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="txnCallerKey">Caller key</label>
+            <input type="password" id="txnCallerKey" placeholder="Proxy caller credential" autocomplete="off" />
+            <span class="field-help" style="color: var(--amber)">
+              &#9888; Stored locally on this device, read only by the service worker, and never included in Suite
+              backups.
+            </span>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="txnUserEmail">Clinician email (optional)</label>
+            <input type="email" id="txnUserEmail" placeholder="clinician@example.nhs.uk" />
+            <span class="field-help">
+              Used to attribute API calls to the signed-in clinician ("user-restricted" mode). Leave blank for
+              practice-level (unattributed) calls.
+            </span>
+          </div>
+
+          <div class="field">
+            <label class="field-label">Tenant (Medicus site code)</label>
+            <div>
+              <code
+                id="txnTenantValue"
+                style="
+                  font-family: var(--mono);
+                  font-size: 12px;
+                  color: var(--text-1);
+                  background: var(--bg-mid);
+                  padding: 3px 8px;
+                  border-radius: var(--r-sm);
+                "
+                >—</code
+              >
+            </div>
+            <span class="field-help">
+              Set in the <a href="#sect-suite" style="color: var(--accent)">Suite</a> section (practice code). Read-only
+              here.
+            </span>
+          </div>
+
+          <div class="actions">
+            <button class="primary" id="saveTxnBtn">Save</button>
+            <button class="ghost" id="txnTestConnectionBtn">Test connection</button>
+            <button
+              class="ghost"
+              id="txnParityReportBtn"
+              type="button"
+              title="Download a Markdown summary of shadow-comparison divergences and feed failures recorded in the Event Ledger."
+            >
+              Generate parity report
+            </button>
+            <span class="saved" id="txnSaved">Saved &#10003;</span>
+            <span
+              id="txnTestConnectionResult"
+              style="font-family: var(--mono); font-size: 10px; margin-left: 4px"
+            ></span>
+          </div>
+
+          <span
+            id="txnProdConfirmWarning"
+            style="
+              display: none;
+              margin-top: 10px;
+              padding: 8px 10px;
+              background: var(--amber-dim);
+              border: 1px solid var(--amber-line);
+              border-radius: var(--r-sm);
+              font-size: 11px;
+              color: var(--amber);
+              line-height: 1.5;
+            "
+          ></span>
         </section>
 
         <!-- Triage Lens section -->
@@ -2807,6 +2977,7 @@
     <script src="../shared/display-prefs.js"></script>
     <script src="../shared/dom-contracts.js"></script>
     <script src="../shared/event-ledger.js"></script>
+    <script src="../shared/txn-parity-report.js"></script>
     <script src="options.js"></script>
     <script type="module" src="tabs-section.js"></script>
     <script type="module" src="labfiling-section.js"></script>

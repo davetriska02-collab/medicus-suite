@@ -157,6 +157,104 @@ export function buildPulseRows(snapshots, period, opts = {}) {
   return { period: days, asOf, window, priorWindow, metrics };
 }
 
+function dateRangeInclusive(startISO, endISO) {
+  const out = [];
+  let cur = startISO;
+  let guard = 0;
+  while (cur <= endISO && guard < 400) {
+    out.push(cur);
+    cur = addDays(cur, 1);
+    guard++;
+  }
+  return out;
+}
+
+function daysInMonth(y, m0) {
+  // m0 is zero-based (Date convention).
+  return new Date(y, m0 + 1, 0).getDate();
+}
+
+// Calendar-month comparison for the Pulse card's "Month view" (manager-pack FEATURE 1c):
+// this month to date vs the SAME SPAN of the previous calendar month — never a rolling
+// 30-day window, because a manager reading "this month" wants 1 Jul→today vs 1 Jun→same
+// day, not something that straddles the month boundary arbitrarily.
+//
+// Deterministic: `now` is a parameter (defaults to `new Date()`), same convention as
+// buildPulseRows's `opts.today`/`opts.asOf`.
+//
+// Only ppi/demand/etc. that were EVER recorded anywhere in `snapshots` are surfaced
+// (same "never show a permanently-empty row" rule as buildPulseRows) — but a metric
+// that WAS recorded historically and simply has no reading in one of the two windows
+// is still included, with that window's `coverage.have` at 0, so the caller can render
+// an honest "not enough snapshots" line instead of a fabricated value.
+//
+// Returns:
+//   {
+//     asOf,
+//     current:  { start, end, days },   // 1st of this month → asOf
+//     previous: { start, end, days },   // 1st of last month → same day-of-month (clamped),
+//                                       // or the prior month's own last day when `current`
+//                                       // is itself a complete calendar month
+//     metrics: [{ key, label, unit, current, previous, delta, deltaPct, direction, sense,
+//                 coverage: { current: {have,possible}, previous: {have,possible} } }]
+//   }
+// `current`/`previous` on each metric are the MEAN of recorded snapshot values inside
+// that window (Math.round to 1dp, same as buildPulseRows's meanOf) — missing days are
+// excluded from the mean, never treated as 0.
+export function buildMonthlyPulseRows(snapshots, now = new Date()) {
+  const asOf = localISO(now);
+  const [y, m, d] = asOf.split('-').map(Number);
+
+  const curStart = `${y}-${String(m).padStart(2, '0')}-01`;
+  const curEnd = asOf;
+
+  const prevMonthDate = new Date(y, m - 2, 1); // JS Date rolls January back into prior December
+  const py = prevMonthDate.getFullYear();
+  const pm = prevMonthDate.getMonth(); // 0-based
+  const lastDayPrevMonth = daysInMonth(py, pm);
+  const isFullCurrentMonth = d === daysInMonth(y, m - 1);
+  const prevEndDay = isFullCurrentMonth ? lastDayPrevMonth : Math.min(d, lastDayPrevMonth);
+  const prevStart = `${py}-${String(pm + 1).padStart(2, '0')}-01`;
+  const prevEnd = `${py}-${String(pm + 1).padStart(2, '0')}-${String(prevEndDay).padStart(2, '0')}`;
+
+  const all = Array.isArray(snapshots) ? snapshots.filter((s) => s && s.date) : [];
+  const byDate = new Map(all.map((s) => [s.date, s]));
+
+  const curDates = dateRangeInclusive(curStart, curEnd);
+  const prevDates = dateRangeInclusive(prevStart, prevEnd);
+
+  const curRows = curDates.map((dt) => byDate.get(dt)).filter(Boolean);
+  const prevRows = prevDates.map((dt) => byDate.get(dt)).filter(Boolean);
+
+  const metrics = PULSE_METRICS.filter((m2) => all.some((s) => s[m2.key] != null)).map((m2) => {
+    const current = meanOf(curRows, m2.key);
+    const previous = meanOf(prevRows, m2.key);
+    const cmp = classifyDelta(current, previous, m2.worseDirection);
+    return {
+      key: m2.key,
+      label: m2.label,
+      unit: m2.unit,
+      current,
+      previous,
+      delta: cmp.delta,
+      deltaPct: cmp.pct,
+      direction: cmp.direction,
+      sense: cmp.sense,
+      coverage: {
+        current: { have: curRows.filter((r) => r[m2.key] != null).length, possible: curDates.length },
+        previous: { have: prevRows.filter((r) => r[m2.key] != null).length, possible: prevDates.length },
+      },
+    };
+  });
+
+  return {
+    asOf,
+    current: { start: curStart, end: curEnd, days: curDates.length },
+    previous: { start: prevStart, end: prevEnd, days: prevDates.length },
+    metrics,
+  };
+}
+
 // Whole-series coverage line for the UI header ("Pulse is based on snapshots captured while
 // the panel is open — N of the last 30 days have a reading."). Pure convenience wrapper
 // around buildPulseRows's per-metric coverage, using the richest available metric (most

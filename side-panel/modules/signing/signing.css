@@ -116,6 +116,13 @@
   outline-offset: 1px;
 }
 
+/* Combination family (H-038 k): the engine's existing CSO-reviewed
+   drug-combination evaluations, re-shown at the decision moment. Dashed
+   border distinguishes the family; the red/amber classes carry the tier. */
+.sg-chip--combo {
+  border-style: dashed;
+}
+
 .sg-chip-req {
   font-family: var(--mono);
   font-size: 8px;
