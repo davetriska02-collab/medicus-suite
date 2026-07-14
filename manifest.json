@@ -1,21 +1,32 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.173.0",
+  "version": "3.173.1",
   "description": "The clinical intelligence layer for Medicus: read-only safety monitoring, triage red-flags, QOF tracking and operational dashboards.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
     "https://*.medicus.health/*",
     "https://*.api.england.medicus.health/*",
     "https://api.github.com/repos/davetriska02-collab/medicus-suite/*",
-    "https://api.nhs.uk/*"
+    "https://api.nhs.uk/*",
+    "https://*.supabase.co/*"
   ],
-  "background": { "service_worker": "service-worker.js" },
-  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self'" },
-  "side_panel": { "default_path": "side-panel/panel.html" },
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "side_panel": {
+    "default_path": "side-panel/panel.html"
+  },
   "action": {
     "default_title": "Medicus Suite",
-    "default_icon": { "16": "icons/icon-16.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
   },
   "content_scripts": [
     {
@@ -46,6 +57,9 @@
         "engine/data-fetcher.js",
         "shared/extraction-health.js",
         "shared/chip-renderer.js",
+        "shared/shadow-compare.js",
+        "shared/event-ledger.js",
+        "shared/txn-shadow-summary.js",
         "content-scripts/sentinel.js",
         "content-scripts/referrals-discovery.js",
         "content-scripts/api-discovery.js"
@@ -88,5 +102,9 @@
       "matches": ["https://*.medicus.health/*"]
     }
   ],
-  "icons": { "16": "icons/icon-16.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
 }

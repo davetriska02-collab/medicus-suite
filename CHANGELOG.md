@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.173.1] — 2026-07-14
+
+### Fix: restore #208's manifest entries dropped in the PR #209 merge
+
+The PR #209 merge resolved its `manifest.json` conflict by taking the branch's
+copy wholesale, silently dropping three entries PR #208 (v3.166.0) had added:
+
+- `shared/shadow-compare.js`, `shared/event-ledger.js` and
+  `shared/txn-shadow-summary.js` restored to the sentinel content-script block
+  (in #208's original order, before `content-scripts/sentinel.js`) — without
+  them the transactional shadow-comparison path was silently absent
+  (`sentinel.js` null-guards `window.TxnShadowSummary`, so it degraded rather
+  than crashed).
+- `https://*.supabase.co/*` restored to `host_permissions`.
+
+`shared/event-ledger.js` also loads in the triage-lens block; double-loading is
+safe (the script reassigns the same `window.EventLedger` API).
+
+First of a set of post-merge-train regression fixes; further fixes on this
+branch address the reported Sentinel slowness, slots auto-refresh and queue-chip
+regressions as root causes are confirmed.
+
 ## [v3.173.0] — 2026-07-08
 
 ### Cross-record file-match detection moved to an opt-in second pass
