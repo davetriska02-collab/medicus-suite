@@ -78,7 +78,7 @@ the due date passes, instead of living in their head all week.
   **excluded from suite backups** (machine-local by design, enforced by the
   backup-coverage test) and open entries are **never silently pruned**
   (regression-tested). Ledger writes are audited to the event ledger by
-  patient UUID. Hazard log: **H-039**.
+  patient UUID. Hazard log: **H-040**.
 
 ## [v3.159.0] — 2026-07-07
 

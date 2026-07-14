@@ -2124,7 +2124,7 @@ async function toggleCreateTaskForm() {
 // pinning a reminder to the wrong patient. Unlike create-task this NEVER
 // touches Medicus: it writes to the machine-local Follow-ups ledger only
 // (followups.js addFollowup — validation, prune and event-ledger note live
-// there). Hazard log: H-039.
+// there). Hazard log: H-040.
 function toggleFollowupForm() {
   const slot = container?.querySelector('#sentTaskSlot');
   if (!slot) return;

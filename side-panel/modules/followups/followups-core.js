@@ -7,7 +7,7 @@
 // PURPOSE FRAMING (docs/INTENDED-PURPOSE.md): this is a personal reminder
 // list, NOT the clinical record and NOT a safety-netting system of record.
 // It never acts by itself; a lapsed entry is a prompt, nothing more. The UI
-// copy must always carry that honest state. Hazard log: H-039.
+// copy must always carry that honest state. Hazard log: H-040.
 //
 // Entry shape (storage key `followups.entries`, machine-local, excluded from
 // backups — entries carry patient-identifiable free text):

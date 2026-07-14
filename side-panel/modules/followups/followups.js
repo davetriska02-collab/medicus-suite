@@ -9,7 +9,7 @@
 // copy): this is a personal reminder list, NOT the clinical record and NOT a
 // safety-netting system of record. Safety-netting must still be documented
 // in Medicus as usual; the honest-state line is a fixed part of the header,
-// not a dismissable notice. Hazard log: H-039.
+// not a dismissable notice. Hazard log: H-040.
 //
 // Patient linkage (wrong-patient doctrine): entries created from the
 // Monitoring tab carry the open patient's UUID + name verbatim, captured
