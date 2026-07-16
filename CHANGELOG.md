@@ -2,6 +2,41 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.174.0] — 2026-07-16
+
+### Smoking-status flag in the Sentinel patient banner (user-requested, panel-placed)
+
+Requested by a real GP user ("can we get a smoking status flag?"); placement,
+form and content settled by a scoped Practice-panel run
+(docs/appraisal/PRACTICE-smoking-flag-2026-07-16.md — synthetic panel,
+labelled as such). Before this, smoking status surfaced ONLY as QOF SMOK002
+recording-currency cards: the actual value sat in small caption text three
+screens down, tripled for multimorbid patients, and the absent state was a
+quiet grey "NO DATA" every persona misread.
+
+- **One authoritative line in the "Monitoring for" patient card** (panel +
+  pop-out): `Smoking: Ex-smoker · Nov 2025 (8 mo ago)`. Neutral colour in ALL
+  states — the fact is context, not an alert; red/amber stay reserved for
+  needs-action signals. The word carries the state (colourblind-safe); hard
+  single-line ellipsis at 420px.
+- **Honest absence**: `Smoking: no entry in the last 13 months — check
+  record` — bounded to the extension's real data window (the ~400-day journal
+  augment), never "not recorded" (which reads as never-in-her-life) and never
+  "NO DATA". Tooltip explicitly rejects that misread.
+- **Conservative derivation** (`shared/smoking-status.js`, dual-mode):
+  current/ex/never only on unambiguous terms; "smoking cessation advice",
+  "nicotine dependence", bare "tobacco use" render as "unclear — see record"
+  with the verbatim coded term — never a confident guess. Most-recent entry
+  wins the headline; disagreeing entries append a visible "multiple entries"
+  marker. Verbatim source term + exact date + window caveat in the tooltip.
+- Derived content-script-side from the SAME observations the chips are
+  evaluated on (`snapshot.smoking`), so line and chips can never disagree.
+- Hazard log **H-041** (stale/miscoded/out-of-window over-trust) with controls
+  as above; **pending CSO review of the bucketing term lists**.
+- Tests: `test-smoking-status.js` (44 assertions). QOF SMOK002 cards
+  unchanged. Panel follow-ups recorded in the appraisal doc (SMOK002
+  triplication, Brief no-data inversion, Record/SMR echoes).
+
 ## [v3.173.2] — 2026-07-14
 
 ### Fix: post-merge-train slowness + frozen Capacity refresh (four coordinated fixes)
