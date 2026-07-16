@@ -1104,6 +1104,25 @@ function updateFooterTs(ts) {
   if (el) el.textContent = ts ? `Data at ${ts}` : '';
 }
 
+// One calm, truncation-safe smoking-status line inside the patient banner card
+// (Practice-panel ruling 2026-07-16; requested by a real GP user). Deliberately
+// NEUTRAL — never red/amber: smoking status is a clinical fact and a
+// conversation prompt, not a safety alert, and the panel's alarm colours stay
+// reserved for genuine needs-action signals. The WORD carries the state
+// (colourblind-safe); full detail (verbatim coded term, exact date, the
+// 13-month-window honesty caveat, any conflicting-entries warning) rides in
+// the title tooltip. Data: snapshot.smoking, derived content-script-side from
+// the same observations the chips were evaluated on (shared/smoking-status.js).
+function smokingLineHtml(snapshot) {
+  const SS = typeof window !== 'undefined' ? window.SmokingStatus : null;
+  if (!SS) return '';
+  const line = SS.formatSmokingLine(snapshot && snapshot.smoking);
+  const conflict = !!(snapshot && snapshot.smoking && snapshot.smoking.conflict);
+  return `<div class="sent-patient-smoking${conflict ? ' sent-patient-smoking-conflict' : ''}" title="${escAttr(
+    line.title
+  )}">${escHtml(line.text)}</div>`;
+}
+
 function render(payload) {
   if (!container) return;
   const { state, snapshot, message } = payload;
@@ -1233,6 +1252,7 @@ function render(payload) {
       ]
         .filter(Boolean)
         .join(' · ')}</div>
+      ${smokingLineHtml(snapshot)}
     </div>`
     : '';
 
