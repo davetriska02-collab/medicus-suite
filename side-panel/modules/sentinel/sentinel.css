@@ -232,6 +232,27 @@
   letter-spacing: 0.03em;
 }
 
+/* Smoking-status line (Practice-panel ruling 2026-07-16). NEUTRAL by design —
+   never red/amber (the fact is context, not an alert; alarm colours stay
+   reserved for needs-action signals). Hard single-line ellipsis: a wrapped
+   flag defeats the at-a-glance point at 420px (panel truncation rule). */
+.sent-patient-smoking {
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-1);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Conflicting entries: a quiet underline cue, still not an alarm colour — the
+   tooltip explains. The word "multiple entries" already carries the state. */
+.sent-patient-smoking-conflict {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
 /* Extraction drift banner (amber — distinct from red degraded state) */
 .sent-drift-banner {
   border-left: 3px solid var(--amber);

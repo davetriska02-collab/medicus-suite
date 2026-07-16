@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.175.0] — 2026-07-13
+## [v3.176.0] — 2026-07-13
 
 ### Duplicate-checker: catches a note/consultation EXACT match whose attached documents actually differ
 
@@ -56,7 +56,7 @@ wouldn't have caught this).
 
 9 new parser tests (310/310 passing).
 
-## [v3.174.0] — 2026-07-13
+## [v3.175.0] — 2026-07-13
 
 ### Duplicate-checker: cross-document file-match check no longer replays already-removed entries, and is always offered
 
@@ -78,6 +78,113 @@ wouldn't have caught this).
   this was too narrow, it's now offered whenever the patient has any document
   entries at all — the suspicious-document count, when present, is still
   shown as extra context.
+
+## [v3.174.0] — 2026-07-16
+
+### Smoking-status flag in the Sentinel patient banner (user-requested, panel-placed)
+
+Requested by a real GP user ("can we get a smoking status flag?"); placement,
+form and content settled by a scoped Practice-panel run
+(docs/appraisal/PRACTICE-smoking-flag-2026-07-16.md — synthetic panel,
+labelled as such). Before this, smoking status surfaced ONLY as QOF SMOK002
+recording-currency cards: the actual value sat in small caption text three
+screens down, tripled for multimorbid patients, and the absent state was a
+quiet grey "NO DATA" every persona misread.
+
+- **One authoritative line in the "Monitoring for" patient card** (panel +
+  pop-out): `Smoking: Ex-smoker · Nov 2025 (8 mo ago)`. Neutral colour in ALL
+  states — the fact is context, not an alert; red/amber stay reserved for
+  needs-action signals. The word carries the state (colourblind-safe); hard
+  single-line ellipsis at 420px.
+- **Honest absence**: `Smoking: no entry in the last 13 months — check
+  record` — bounded to the extension's real data window (the ~400-day journal
+  augment), never "not recorded" (which reads as never-in-her-life) and never
+  "NO DATA". Tooltip explicitly rejects that misread.
+- **Conservative derivation** (`shared/smoking-status.js`, dual-mode):
+  current/ex/never only on unambiguous terms; "smoking cessation advice",
+  "nicotine dependence", bare "tobacco use" render as "unclear — see record"
+  with the verbatim coded term — never a confident guess. Most-recent entry
+  wins the headline; disagreeing entries append a visible "multiple entries"
+  marker. Verbatim source term + exact date + window caveat in the tooltip.
+- Derived content-script-side from the SAME observations the chips are
+  evaluated on (`snapshot.smoking`), so line and chips can never disagree.
+- Hazard log **H-041** (stale/miscoded/out-of-window over-trust) with controls
+  as above; **pending CSO review of the bucketing term lists**.
+- Tests: `test-smoking-status.js` (44 assertions). QOF SMOK002 cards
+  unchanged. Panel follow-ups recorded in the appraisal doc (SMOK002
+  triplication, Brief no-data inversion, Record/SMR echoes).
+
+## [v3.173.2] — 2026-07-14
+
+### Fix: post-merge-train slowness + frozen Capacity refresh (four coordinated fixes)
+
+Root-caused by four parallel investigations against the v3.160.2 baseline after
+user reports of Sentinel loading slowly, slots not auto-refreshing, the
+routine-rx button being very slow, and queue chips disappearing.
+
+- **Capacity tab frozen ("slots no longer auto refresh")** — the
+  `slots:refresh` runtime→DOM relay in `side-panel/panel.js` and
+  `pop-out/pop-out.js` was gated on `activeModule === 'slots'`, but the
+  Capacity tab listens for the same `suite:slots:refresh` DOM event as its
+  ONLY live-update path — so Capacity never received a single refresh while
+  it was the active tab. Now dispatched unconditionally (module `cleanup()`
+  removes the outgoing module's listener, so it cannot double-fire). This
+  defect pre-dates the merge train; the train's capacity-surface changes put
+  fresh eyes on it.
+- **`content-scripts/api-discovery.js` captured far beyond its stated scope**
+  (a per-page cost on every Medicus page, v3.152.1+): its header scopes it to
+  the patient-listing page and journal tab, but the listing capture ran on
+  EVERY page whose API calls contain `/patient/` — including every care-record
+  page, where the extension's own per-patient fetches (patient-banner,
+  medication-regimen, problems…) each triggered storage round-trips and grew
+  `suite.discoveredAllPatientUrls` unbounded (one entry per patient per
+  endpoint) on every Sentinel boot. Capture is now gated to the
+  patient-listing route, read live per-event (SPA-safe, same pattern as the
+  journal gate). The journal capture is unchanged.
+- **`engine/data-fetcher.js` read `txn.integrationMode` from storage before
+  every patient fetch** (v3.166.0+) — a storage round-trip serialized ahead of
+  `fetchLive()` on every boot and re-eval, even in the default session mode.
+  The mode is now cached module-level; the cache is only trusted when a
+  `chrome.storage.onChanged` listener could be attached to invalidate it
+  (Node tests and contexts without `onChanged` keep per-call reads).
+- **Routine-rx button: leading-token search miss burned a dead 6s**
+  (v3.160.1+): the step-3 query ladder gave every query the full 6s option
+  wait, so when the safe leading token missed, the user sat through 6s of
+  nothing before the full-name query succeeded. Non-final queries now get a
+  1.5s budget; only the final query keeps the full 6s (worst case ~8s, down
+  from ~13.5s; the happy path is unchanged). Pinned in
+  `test-routine-rx-macro.js` (per-query budget assertions).
+
+**Queue chips:** no code defect found — the entire injection chain is
+byte-identical to v3.160.2 and all pinned regression tests pass. All three
+chip families vanishing together is the signature of the content script not
+executing at all, most consistent with orphaned content scripts after the
+extension updated (Chrome does not re-inject into already-open tabs).
+**Reload the Medicus tab after updating the extension.** If chips are still
+missing after a tab reload: `localStorage.setItem('ch-debug','1')` + reload
+and check for `[ClinHUD]` logs per CLAUDE.md's capture-first procedure.
+
+## [v3.173.1] — 2026-07-14
+
+### Fix: restore #208's manifest entries dropped in the PR #209 merge
+
+The PR #209 merge resolved its `manifest.json` conflict by taking the branch's
+copy wholesale, silently dropping three entries PR #208 (v3.166.0) had added:
+
+- `shared/shadow-compare.js`, `shared/event-ledger.js` and
+  `shared/txn-shadow-summary.js` restored to the sentinel content-script block
+  (in #208's original order, before `content-scripts/sentinel.js`) — without
+  them the transactional shadow-comparison path was silently absent
+  (`sentinel.js` null-guards `window.TxnShadowSummary`, so it degraded rather
+  than crashed).
+- `https://*.supabase.co/*` restored to `host_permissions`.
+
+`shared/event-ledger.js` also loads in the triage-lens block; double-loading is
+safe (the script reassigns the same `window.EventLedger` API).
+
+First of a set of post-merge-train regression fixes; further fixes on this
+branch address the reported Sentinel slowness, slots auto-refresh and queue-chip
+regressions as root causes are confirmed.
 
 ## [v3.173.0] — 2026-07-08
 

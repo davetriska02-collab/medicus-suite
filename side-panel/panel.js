@@ -1039,7 +1039,13 @@ function renderAbout() {
 chrome.runtime.onMessage.addListener((msg, sender) => {
   // F5: Only accept messages from this extension's own contexts.
   if (!sender || sender.id !== chrome.runtime.id) return;
-  if (msg?.type === 'slots:refresh' && activeModule === 'slots') {
+  // Dispatched UNCONDITIONALLY (v3.173.2): the Capacity tab listens for this
+  // same DOM event as its ONLY live-update path, so the old
+  // `activeModule === 'slots'` gate silently froze Capacity (the classic
+  // symptom: "slots no longer auto refresh"). Unconditional dispatch cannot
+  // double-fire — module switching runs the outgoing module's cleanup(), which
+  // removes its listener, so at any instant only the active module listens.
+  if (msg?.type === 'slots:refresh') {
     document.dispatchEvent(new CustomEvent('suite:slots:refresh'));
   }
 });

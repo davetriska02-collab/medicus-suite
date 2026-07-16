@@ -412,14 +412,41 @@
     return bundle;
   }
 
+  // txn.integrationMode cache. Reading it from storage before EVERY patient
+  // fetch serialized a storage round-trip ahead of fetchLive() on every boot
+  // and re-eval (v3.173.2 post-merge-train slowness fix). The cache is only
+  // trusted when a chrome.storage.onChanged listener could be attached to
+  // invalidate it — in Node tests (no chrome at require time) and any context
+  // without onChanged, every call still reads storage fresh, so a mode change
+  // can never be missed.
+  let _txnModeCached = null;
+  let _txnModeWatched = false;
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener(function (changes, area) {
+        if (area === 'local' && changes['txn.integrationMode']) _txnModeCached = null;
+      });
+      _txnModeWatched = true;
+    }
+  } catch (e) {
+    /* cache stays disabled — reads fall through to storage */
+  }
+
+  async function getTxnMode() {
+    if (_txnModeWatched && _txnModeCached) return _txnModeCached;
+    const stored = await chrome.storage.local.get('txn.integrationMode');
+    const mode = stored['txn.integrationMode'] || 'session';
+    if (_txnModeWatched) _txnModeCached = mode;
+    return mode;
+  }
+
   async function fetchTransactionalOrLive() {
     try {
       // Node tests / non-extension contexts: no chrome APIs -> session path.
       if (typeof chrome === 'undefined' || !chrome.storage?.local || !chrome.runtime?.sendMessage) {
         return fetchLive();
       }
-      const stored = await chrome.storage.local.get('txn.integrationMode');
-      const txnMode = stored['txn.integrationMode'] || 'session';
+      const txnMode = await getTxnMode();
       if (txnMode !== 'hybrid' && txnMode !== 'transactional') return fetchLive();
 
       // v1 scope: only URL-resolved patient UUIDs use the transactional feed;

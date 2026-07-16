@@ -52,6 +52,18 @@ function isOnJournalPage() {
   return /\/care-record\//i.test(location.pathname) && /careRecordTab=journal/i.test(location.search);
 }
 
+// The listing capture is scoped to the patient-listing route, read live
+// per-event like isOnJournalPage() above. Without this gate every page whose
+// API calls contain /patient/ was captured — including every care-record page,
+// where the extension's OWN per-patient fetches (patient-banner, medication-
+// regimen, problem listing…) each triggered storage round-trips and grew the
+// ALL_URLS_KEY array by one entry per patient per endpoint, unbounded, on
+// every Sentinel boot (v3.173.2 post-merge-train slowness fix). The header's
+// stated scope was always "Patient listing page" — this makes the code match.
+function isOnPatientListingPage() {
+  return /\/patient\/listing/i.test(location.pathname);
+}
+
 // The patient UUID currently being viewed, read live from the SPA route
 // (…/care-record/{uuid}?careRecordTab=journal) — used to turn a captured
 // single-patient API URL into a reusable template for any patient.
@@ -119,6 +131,7 @@ function storeUrl(url) {
     return;
   }
 
+  if (!isOnPatientListingPage()) return;
   if (!PATIENT_PATH_RE.test(url)) return;
   try {
     const u = new URL(url);

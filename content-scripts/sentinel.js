@@ -1519,6 +1519,16 @@
     _lastSnapshot = {
       chips,
       patientContext: pc || null,
+      // Patient-level smoking-status fact for the panel's banner line
+      // (shared/smoking-status.js, Practice-panel ruling 2026-07-16). Derived
+      // from the SAME observations the chips were evaluated on (incl. the
+      // journal augment), so line and chips can never disagree. Null when no
+      // smoking-related entry is visible in the window OR the shared helper
+      // is absent — the panel then renders the honest-absence wording.
+      smoking:
+        typeof window !== 'undefined' && window.SmokingStatus && rawData
+          ? window.SmokingStatus.deriveSmokingStatus(rawData.observations || [])
+          : null,
       evaluatedAt: new Date().toISOString(),
       degraded: !!(health && health.degraded),
       reason: (health && health.reason) || null,
