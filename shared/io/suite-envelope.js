@@ -101,6 +101,7 @@ const VALID_SCOPES = [
   'labfiling',
   'notifications',
   'leaflets',
+  'patientAlerts',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -418,6 +419,31 @@ function previewEnvelope(envelope) {
     );
   } else {
     const m = missing('Leaflets');
+    if (m) lines.push(m);
+  }
+
+  if (mods.patientAlerts) {
+    const store = mods.patientAlerts.byPatient || {};
+    let patients = 0;
+    let alerts = 0;
+    for (const entry of Object.values(store)) {
+      const n = entry && Array.isArray(entry.alerts) ? entry.alerts.length : 0;
+      if (n > 0) {
+        patients += 1;
+        alerts += n;
+      }
+    }
+    const typeCount = Array.isArray(mods.patientAlerts.types) ? mods.patientAlerts.types.length : null;
+    lines.push(
+      `Patient Alerts: ${alerts} alert(s) across ${patients} patient(s)${typeCount != null ? `, ${typeCount} custom preset(s)` : ''}`
+    );
+    if (patients > 0) {
+      lines.push(
+        'WARNING: This backup contains PATIENT-IDENTIFIABLE DATA (names, NHS numbers, alert text). Importing merges it into this install — handle the file as a patient-identifiable document.'
+      );
+    }
+  } else {
+    const m = missing('Patient Alerts');
     if (m) lines.push(m);
   }
 

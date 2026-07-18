@@ -1,0 +1,285 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Patient Alerts module */
+
+.pa-module {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.pa-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pa-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.pa-subtitle {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+.pa-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pa-card-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.pa-card-current {
+  border-left: 3px solid var(--accent-line);
+}
+.pa-idle-text,
+.pa-none,
+.pa-hint {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+.pa-patient-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.pa-patient-meta {
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Alert chips ─────────────────────────────────────────────── */
+
+.pa-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.pa-chip-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.pa-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  max-width: 100%;
+}
+.pa-chip--red {
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+  color: var(--red);
+}
+.pa-chip--amber {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+}
+.pa-chip--info {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+}
+.pa-chip-act {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-4);
+  font-size: 10px;
+  padding: 2px 3px;
+  border-radius: var(--r-sm);
+}
+.pa-chip-act:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+
+.pa-note-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+/* ── Form ────────────────────────────────────────────────────── */
+
+.pa-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+}
+.pa-form-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.pa-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.pa-field input,
+.pa-field select {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-1);
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 5px 8px;
+}
+.pa-field input:focus,
+.pa-field select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.pa-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pa-form-err {
+  font-size: 11px;
+  color: var(--red);
+}
+
+.pa-btn {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 5px 12px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+.pa-btn:hover {
+  background: var(--bg-hover);
+}
+.pa-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.pa-btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+/* ── Browse list ─────────────────────────────────────────────── */
+
+.pa-search {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-1);
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 5px 8px;
+  width: 100%;
+}
+.pa-row {
+  border-top: 1px solid var(--border);
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.pa-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.pa-row-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.pa-row-meta {
+  font-size: 10px;
+  color: var(--text-4);
+  flex: 1 1 auto;
+  font-variant-numeric: tabular-nums;
+}
+.pa-row-del {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-4);
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+}
+.pa-row-del:hover {
+  color: var(--red);
+  background: var(--red-dim);
+}
+
+/* ── Palette editor ──────────────────────────────────────────── */
+
+.pa-palette-summary {
+  cursor: pointer;
+  user-select: none;
+}
+.pa-type-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pa-type-label {
+  flex: 1 1 auto;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-1);
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 4px 7px;
+  min-width: 0;
+}
+.pa-type-sev {
+  font: inherit;
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--text-2);
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 4px 4px;
+  flex-shrink: 0;
+}
+
+.pa-foot {
+  font-size: 10px;
+  color: var(--text-4);
+  line-height: 1.45;
+  padding: 0 2px;
+}

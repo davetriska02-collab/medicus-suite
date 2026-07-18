@@ -103,6 +103,12 @@ export const TAB_HELP = {
     what: 'Find the right NHS patient information leaflet for a condition or medicine, ready to open or copy a link to share.',
     firstStep: 'Type a condition or medicine name — every search also offers a direct nhs.uk search as a fallback.',
   },
+  'patient-alerts': {
+    title: 'Patient Alerts',
+    what: 'Your practice’s own per-patient flags — interpreter required, safeguarding concern, medication-seeking behaviour, or anything you define. Flags appear here, on the alert strip and on the Monitoring banner whenever that patient is open in Medicus. Stored in this browser profile; share practice-wide via Options → Backup.',
+    firstStep:
+      'Open a patient in Medicus, then add an alert — pick a preset or write your own. Keep wording professional and factual: flags are visible to every practice user and disclosable to the patient.',
+  },
   visualiser: {
     title: 'Visualiser',
     what: 'Opens a full browser tab to analyse an exported patient-record PDF — a multi-year timeline view, separate from the panel.',

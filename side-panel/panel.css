@@ -1698,6 +1698,102 @@ html[data-zen='1'] #rmStrip:not(.rm-strip-alerted-amber):not(.rm-strip-alerted-r
   background: var(--bg-hover);
 }
 
+/* ── Patient Alerts strip (global) ─────────────────────────────
+   Per-patient practice flags (patientAlerts.byPatient) for the patient
+   currently open in Medicus. Same band shape as .sub-rag-strip. */
+
+.pa-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  font-size: 11px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  min-height: 28px;
+  white-space: nowrap;
+}
+.pa-strip-hidden {
+  display: none;
+}
+.pa-strip--amber {
+  background: var(--amber-dim);
+  border-bottom-color: var(--amber-line);
+}
+.pa-strip--red {
+  background: var(--red-dim);
+  border-bottom-color: var(--red-line);
+}
+.pa-strip-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.pa-strip--red .pa-strip-icon {
+  color: var(--red);
+}
+.pa-strip--amber .pa-strip-icon {
+  color: var(--amber);
+}
+.pa-strip-label {
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.pa-strip-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pa-strip-pill--red {
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+  color: var(--red);
+}
+.pa-strip-pill--amber {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+}
+.pa-strip-pill--info {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+}
+.pa-strip-more {
+  font-size: 10px;
+  color: var(--text-4);
+  flex-shrink: 0;
+}
+.pa-strip-goto {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 9px;
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+  background: none;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-sm);
+  padding: 2px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pa-strip-goto:hover {
+  color: var(--text-2);
+  border-color: var(--accent);
+}
+
 /* ── Medicus UI-change canary strip (global) ──────────────────────────────────
    Amber banner shown when a patient record is on screen but the extension could
    extract nothing from it — i.e. Medicus likely changed its layout. NOT a

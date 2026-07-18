@@ -43,6 +43,13 @@ const NAV_COVERED_BY_OVERVIEW = new Set([
   // a single add-form + list with a fixed honest-state header, and tab-help
   // carries the first-step guidance. Revisit with the next cap re-balance.
   'followups',
+  // patient-alerts (v3.175.0): 20-step cap still reached, so no dedicated
+  // step — but the feature's visible surface (the #paStrip flag strip) IS
+  // taught: the 'alert-strips' step was reworked to name it and retagged to
+  // TOUR_VERSION 11 so returning users see it in the What's-new pass. The
+  // tab itself is a single card stack with tab-help first-step guidance.
+  // Revisit for a dedicated step at the next cap re-balance.
+  'patient-alerts',
   'trends',
   'capacity',
   'submissions',

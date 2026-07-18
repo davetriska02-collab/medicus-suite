@@ -253,6 +253,44 @@
   text-underline-offset: 2px;
 }
 
+/* Practice-defined per-patient flags (Patient Alerts tab) inside the banner.
+   Severity colour IS the signal here — these are deliberate practice alerts,
+   unlike the neutral smoking fact line above. */
+.sent-pa-row {
+  margin-top: 5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.sent-pa-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sent-pa-chip--red {
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+  color: var(--red);
+}
+.sent-pa-chip--amber {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+}
+.sent-pa-chip--info {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+}
+
 /* Extraction drift banner (amber — distinct from red degraded state) */
 .sent-drift-banner {
   border-left: 3px solid var(--amber);
