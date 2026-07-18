@@ -6630,9 +6630,9 @@
     }
     queueScope().querySelectorAll('.ag-row').forEach(r => { delete r.dataset[QUEUE_DECORATED_KEY]; });
     decorateQueueRows();
-    // Restore result chips synchronously from the per-task cache via each row's row-id.
-    // DOM-driven (like the age chips) so they survive re-renders even when the
-    // bridge-provided row->task map is transiently empty (the SPA keeps clearing it).
+    // Restore result chips synchronously from the per-task cache via the durable
+    // rowIndex→taskUuid map (NOT row-id — on real Medicus row-id is NOT the task
+    // UUID; keying off it was the v3.69.0 no-op, see CLAUDE.md rule #4).
     reinjectCachedResultChips();
     // Re-tint from the same cache the chips above just used — piggybacks this cycle so
     // a config-driven cache invalidation (entry.sev cleared, watchConfig handler below)

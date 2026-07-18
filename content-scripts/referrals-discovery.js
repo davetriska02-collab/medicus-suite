@@ -17,9 +17,16 @@
 (function() {
   'use strict';
 
-  if (!location.pathname.includes('/referrals/clinical-audit-report')) return;
   if (window.__referralsDiscoveryMounted) return;
   window.__referralsDiscoveryMounted = true;
+
+  // Audit M4 (2026-07-18): the pathname gate used to run ONCE at document_idle
+  // and `return` — under SPA navigation (the normal way users reach the audit
+  // report) discovery never activated; it only worked on a hard reload of the
+  // exact URL. The gate is now evaluated live wherever the page type matters.
+  function onAuditReportPage() {
+    return location.pathname.includes('/referrals/clinical-audit-report');
+  }
 
   const DISCOVERY_KEY  = 'referrals.discovery';
   const CONFIG_KEY     = 'referrals.config';
@@ -159,6 +166,9 @@
   // ── PerformanceObserver ─────────────────────────────────────────────────────
 
   function scanEntries(entries) {
+    // Live page-type gate (audit M4): the observer now mounts on every Medicus
+    // page, so capture only while the audit report is actually on screen.
+    if (!onAuditReportPage()) return;
     for (const e of entries) {
       if (e.initiatorType !== 'fetch' && e.initiatorType !== 'xmlhttprequest') continue;
       if (!API_PATTERN.test(e.name)) continue;

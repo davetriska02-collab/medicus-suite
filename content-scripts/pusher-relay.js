@@ -28,7 +28,15 @@
 
     const globals = appEl.__vue_app__.config.globalProperties;
     const pusher = globals.$pusher;
-    if (!pusher) return; // Pusher not loaded on this page — nothing to relay
+    if (!pusher) {
+      // $pusher can attach AFTER the Vue app first appears — retry within the
+      // same budget instead of giving up for the tab's lifetime (audit M3:
+      // this branch used to `return`, silently killing the push relay so the
+      // panel strips fell back to slow polling with no signal why).
+      elapsed += POLL_MS;
+      if (elapsed < MAX_WAIT_MS) setTimeout(tryBind, POLL_MS);
+      return;
+    }
 
     // Derive site ID from the current URL (first path segment)
     const parts = location.pathname.split('/').filter(Boolean);

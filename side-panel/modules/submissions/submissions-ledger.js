@@ -40,12 +40,19 @@ export async function loadLedger() {
 // Returns the updated ledger so callers can render from it without a re-read.
 export async function recordTaskLists(byKey) {
   const ledger = await loadLedger();
+  // Dirty check (audit M9, 2026-07-18): five callers poll at 15-60s and the
+  // merged ledger is usually byte-identical to what was loaded — skipping the
+  // no-op set removes ~50-100 KB/min of storage writes AND narrows the
+  // last-write-wins race window between concurrent writers.
+  const before = JSON.stringify(ledger);
   const today = localDateISO();
   touchLedgerDay(ledger, today);
   for (const [key, tasks] of Object.entries(byKey || {})) {
     mergeTasksIntoLedger(ledger, key, tasks, today);
   }
   compactLedger(ledger, today);
-  await chrome.storage.local.set({ [LEDGER_KEY]: ledger });
+  if (JSON.stringify(ledger) !== before) {
+    await chrome.storage.local.set({ [LEDGER_KEY]: ledger });
+  }
   return ledger;
 }

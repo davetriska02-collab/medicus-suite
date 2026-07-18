@@ -281,6 +281,7 @@
       const allChips = window.SentinelRules.evaluatePatient(data.medications || [], data.observations || [], rules, {
         now: nowIso,
         problems: data.problems || [],
+        pastProblems: data.pastProblems || [],
         patientContext: data.patientContext,
         observationHistory: data.observationHistory || [],
         allergies: data.allergies || [],
@@ -361,6 +362,7 @@
         const out = window.SentinelRules.evaluatePatient(sb.medications || [], sb.observations || [], rules, {
           now: nowIso,
           problems: sb.problems || [],
+          pastProblems: sb.pastProblems || [],
           patientContext: sb.patientContext,
           observationHistory: sb.observationHistory || [],
           allergies: sb.allergies || [],
@@ -1330,6 +1332,7 @@
             {
               now: _evalNowIso,
               problems: data.problems || [],
+        pastProblems: data.pastProblems || [],
               patientContext: data.patientContext,
               observationHistory: data.observationHistory || [],
               allergies: data.allergies || [],

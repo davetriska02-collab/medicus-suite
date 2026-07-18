@@ -2140,8 +2140,13 @@
     // allergies: only present on the Transactional (GP Connect Structured) feed;
     // empty on the legacy session/DOM feed. drug-allergy rules fail closed on [].
     const allergies = options.allergies || [];
+    // pastProblems (audit M22, 2026-07-18): buildHrtContext reads
+    // data.pastProblems (hysterectomy is normally coded as an ENDED problem,
+    // which normaliseProblemsAll routes here) — evaluatePatient used to drop
+    // it, so the HRT progestogen-cover context never saw a hysterectomy.
+    const pastProblems = options.pastProblems || [];
 
-    const data = { medications, observations, observationHistory, problems, patientContext, allergies };
+    const data = { medications, observations, observationHistory, problems, patientContext, allergies, pastProblems };
 
     // Trace sink: attach only when tracing is requested (never on the hot path).
     const trace = options.trace ? [] : null;

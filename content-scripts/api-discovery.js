@@ -86,38 +86,36 @@ function templateUrl(cleanUrl) {
 function storeJournalUrl(url) {
   try {
     const clean = new URL(url).toString();
-    // No path-name heuristic here (unlike the listing capture below) — the
-    // real journal endpoint path is unknown until observed, so surface every
-    // distinct API call made while on the journal tab for manual inspection.
-    chrome.storage.local.get(ALL_JOURNAL_URLS_KEY, (r) => {
-      const existing = r[ALL_JOURNAL_URLS_KEY] || [];
-      if (!existing.includes(clean)) {
-        chrome.storage.local.set({ [ALL_JOURNAL_URLS_KEY]: [...existing, clean] });
-      }
-    });
-
     const pathname = new URL(url).pathname;
-
     const template = templateUrl(clean);
-    if (template) {
-      chrome.storage.local.get(ALL_JOURNAL_TEMPLATES_KEY, (r) => {
+
+    // Audit M6 (2026-07-18): the old raw-URL list embedded patient UUIDs, so
+    // dedupe never converged and the array grew one entry per patient per
+    // endpoint, forever, in chrome.storage.local — the same bug class fixed
+    // for the listing capture in v3.173.2. Templates (UUIDs substituted out)
+    // dedupe properly; a cap bounds the pathological case; and all four keys
+    // are read/written in ONE batched round-trip instead of up to four
+    // racing read-modify-write pairs.
+    const CAP = 50;
+    chrome.storage.local.get([ALL_JOURNAL_TEMPLATES_KEY, JOURNAL_TEMPLATE_KEY, JOURNAL_KEY], (r) => {
+      const toSet = {};
+      if (template) {
         const existing = r[ALL_JOURNAL_TEMPLATES_KEY] || [];
         if (!existing.includes(template)) {
-          chrome.storage.local.set({ [ALL_JOURNAL_TEMPLATES_KEY]: [...existing, template] });
+          toSet[ALL_JOURNAL_TEMPLATES_KEY] = [...existing, template].slice(-CAP);
         }
-      });
-      chrome.storage.local.get(JOURNAL_TEMPLATE_KEY, (r) => {
         if (isBetterJournalGuess(pathname, r[JOURNAL_TEMPLATE_KEY])) {
-          chrome.storage.local.set({ [JOURNAL_TEMPLATE_KEY]: template });
+          toSet[JOURNAL_TEMPLATE_KEY] = template;
         }
-      });
-    }
-
-    chrome.storage.local.get(JOURNAL_KEY, (r) => {
-      if (isBetterJournalGuess(pathname, r[JOURNAL_KEY])) {
-        chrome.storage.local.set({ [JOURNAL_KEY]: clean });
       }
+      if (isBetterJournalGuess(pathname, r[JOURNAL_KEY])) {
+        toSet[JOURNAL_KEY] = clean;
+      }
+      if (Object.keys(toSet).length) chrome.storage.local.set(toSet);
     });
+    // The raw-URL surface (ALL_JOURNAL_URLS_KEY) is deliberately no longer
+    // accumulated; clear any legacy grow-forever value once.
+    chrome.storage.local.remove(ALL_JOURNAL_URLS_KEY);
   } catch (e) {
     /* ignore */
   }

@@ -2,6 +2,70 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.176.2] — 2026-07-18
+
+### Audit remediation, second tranche — engine integrity + day-scale efficiency
+
+Completes the small-to-medium remainder of the 2026-07-18 audit (Milestones
+2–3). All fixes verified by the 327-test suite.
+
+**Engine / data integrity:**
+
+- eval-cache input hash now folds in `observationHistory` and `allergies`
+  digests — a backfiled result or new same-day journal point no longer serves
+  stale trend/event-count chips until midnight (M19); the ruleset signature
+  is memoised per rules-array identity (was a deep stringify of every rule on
+  every render tick).
+- `mergeRules` only merges the ALLOWED override fields — an imported org
+  ruleset can no longer silently rewrite safety-critical fields (e.g.
+  `drug.match`) that the validator claimed were "ignored" (M20).
+- Numeric parsing unified: "1,234" no longer parses as 1.234 (thousands
+  separators recognised), comma-decimals limited to 1–2 trailing digits, and
+  the engine's `parseNumeric` now agrees with the normaliser (M21).
+- `evaluatePatient` accepts and propagates `pastProblems`; the HRT
+  hysterectomy context (progestogen-cover check) sees ended problems for the
+  first time — wired through all three sentinel call sites (M22).
+- `triage-io` empty-config early-return no longer drops the routineRx
+  restore; backups are stamped with the REAL manifest version (was a
+  hard-coded "2.5.0"); backup-coverage guard extended with the four missing
+  key prefixes — immediately catching (and allowlisting, per the documented
+  machine-local decision) `labfiling.suppress` (M18).
+
+**Content scripts:**
+
+- pusher-relay retries when `$pusher` attaches late instead of giving up for
+  the tab's lifetime (M3); referrals-discovery now gates per-event, so it
+  works under SPA navigation instead of only on a hard reload (M4).
+- routine-rx macro aborts every waitFor step (and the final commit) the
+  instant the SPA path changes — no step can drive a different task's
+  controls (M7).
+- api-discovery journal capture stores UUID-substituted templates only,
+  capped at 50, in one batched write; the grow-forever raw-URL key is
+  removed (M6). Stale row-id comment corrected (documents the durable-map
+  design, not the v3.69.0 bug it replaced).
+
+**Panel / day-scale efficiency:**
+
+- Request-Monitor single-poller (H10): the strip renders from the service
+  worker's persisted state when fresh (≤2 poll periods) and only falls back
+  to a direct poll when the SW state is stale — halves RM network traffic
+  and removes the racing dual state writes.
+- `submissions.ledger` writes are dirty-checked (five 15–60s pollers were
+  rewriting byte-identical KB every tick) (M9).
+- Sentinel (10s) and Trends (15s) module polls are visibility-gated — each
+  tick carried executeScript + a full observationHistory IPC payload (M13).
+- WR strip and Follow-ups list gain changed-guards (identical innerHTML no
+  longer rebuilt every poll, preserving hover state); roll-up "Hide" works
+  while the always-expanded preference is on; pa-strip labels "OTHER TAB"
+  when its fallback picked a background Medicus tab (M11); "all four strips"
+  comment drift fixed.
+
+**Deferred to a dedicated follow-up PR (larger blast radius):** event-ledger
+day-sharding (H12), dead Sentinel sidebar removal (M5), queue rowIndex
+fingerprint canary (H6), shared my-appointments fetcher (M10), panel font
+vendoring + CSP tightening (M16), and the restore attestation-preservation
+question (M18, needs a design decision).
+
 ## [v3.176.1] — 2026-07-18
 
 ### Audit remediation — whole-suite bug bash fixes (Milestones 0–2)

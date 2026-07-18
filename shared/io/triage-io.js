@@ -19,11 +19,15 @@ async function triageImport(data, _opts = {}) {
   if (typeof data.config !== 'object' || Array.isArray(data.config)) {
     throw new Error('triagelens.config must be an object.');
   }
-  // Skip the write when the backup carries an empty config object — older suite
-  // backups always included triage even before users had configured anything,
-  // so importing them used to wipe the user's current triage-lens settings.
-  if (Object.keys(data.config).length === 0) return;
-  await chrome.storage.local.set({ 'triagelens.config': data.config });
+  // Skip the CONFIG write when the backup carries an empty config object —
+  // older suite backups always included triage even before users had
+  // configured anything, so importing them used to wipe the user's current
+  // triage-lens settings. Only the config write is skipped (audit M18,
+  // 2026-07-18: this used to be an early `return` that ALSO silently dropped
+  // the routineRx restore below).
+  if (Object.keys(data.config).length > 0) {
+    await chrome.storage.local.set({ 'triagelens.config': data.config });
+  }
   // Restore routine-prescription button prefs when present in the backup.
   if (data.routineRx && typeof data.routineRx === 'object' && !Array.isArray(data.routineRx)) {
     await chrome.storage.local.set({ 'triagelens.routineRx': data.routineRx });

@@ -101,6 +101,12 @@ const KEY_PREFIXES = [
   'ledger',
   'health',
   'leaflets',
+  // Audit M18 (2026-07-18): these four were missing, so the drift guard was
+  // blind to their modules' keys (labfiling.suppress had already escaped it).
+  'labfiling',
+  'patientAlerts',
+  'followups',
+  'practice',
 ];
 
 function hasKeyPrefix(k) {
@@ -153,6 +159,10 @@ for (const f of IO_FILES) {
 // Each entry must have a comment stating why it is excluded from backup.
 
 const ALLOWLIST = new Set([
+  // labfiling.suppress: per-patient "never auto-file" list — DELIBERATELY
+  // machine-local (see shared/io/labfiling-io.js header); surfaced by the
+  // 2026-07-18 audit when the labfiling prefix was added to KEY_PREFIXES.
+  'labfiling.suppress',
   // Transient runtime state (documented in shared/io/request-monitor-io.js):
   'suite.requestMonitor.state', // live poll state object — not user config
   'suite.requestMonitor.notifMap', // service-worker notification tracking map — transient
