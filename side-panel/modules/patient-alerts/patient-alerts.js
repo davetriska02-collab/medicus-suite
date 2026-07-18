@@ -98,7 +98,7 @@ export async function init(el) {
 
   _storageListener = (changes, area) => {
     if (area !== 'local') return;
-    if (!changes[STORE_KEY] && !changes[TYPES_KEY]) return;
+    if (!changes[STORE_KEY] && !changes[TYPES_KEY] && !changes['suite.letterhead']) return;
     if (_ignoreNextChange) {
       _ignoreNextChange = false;
       return;
@@ -161,10 +161,40 @@ export { cleanup };
 // ── State ───────────────────────────────────────────────────────────────────
 
 async function loadState() {
-  const r = await chrome.storage.local.get([STORE_KEY, TYPES_KEY]);
+  const r = await chrome.storage.local.get([STORE_KEY, TYPES_KEY, 'suite.letterhead']);
   _store = r[STORE_KEY] && typeof r[STORE_KEY] === 'object' ? r[STORE_KEY] : {};
   _typesCustomised = Array.isArray(r[TYPES_KEY]);
   _types = sanitiseTypes(r[TYPES_KEY]);
+  // Author attribution (H-042 audit trail): the acting user's name from the
+  // practice letterhead config — the same identity source the action-pack
+  // letters sign with. Null when unset; flags then record no author rather
+  // than a guessed one.
+  const lh = r['suite.letterhead'];
+  _author = lh && typeof lh.clinicianName === 'string' && lh.clinicianName.trim() ? lh.clinicianName.trim() : null;
+}
+
+let _author = null;
+
+// Record a flag mutation in the machine-local Event Ledger (H-042 audit
+// trail). Fire-and-forget: the ledger swallows its own failures and this
+// helper must never block or break the save path. `label` carries the PRESET
+// type id (or 'custom') + severity — NEVER the free-typed alert text (the
+// ledger's no-free-text rule); the author rides on the stored alert itself.
+function recordFlagEvent(action, patientUuid, alert) {
+  try {
+    const EL = typeof window !== 'undefined' ? window.EventLedger : null;
+    if (!EL) return;
+    EL.record({
+      source: 'patient-alerts',
+      patientRef: patientUuid || null,
+      severity: (alert && alert.severity) || null,
+      ruleId: (alert && alert.id) || null,
+      label: `${(alert && alert.typeId) || 'custom'} (${(alert && alert.severity) || '?'})`,
+      action,
+    });
+  } catch (_) {
+    /* never let audit logging break the mutation itself */
+  }
 }
 
 async function persistStore() {
@@ -231,9 +261,14 @@ function render() {
 }
 
 function severityChip(alert) {
-  const title = [alert.note, alert.updatedAt ? `Updated ${String(alert.updatedAt).slice(0, 10)}` : '']
-    .filter(Boolean)
-    .join(' — ');
+  // Attribution in the tooltip (H-042): who recorded the flag and when, plus
+  // the last editor when it has been changed since.
+  const added = alert.createdAt ? `Added ${String(alert.createdAt).slice(0, 10)}${alert.createdBy ? ` by ${alert.createdBy}` : ''}` : '';
+  const edited =
+    alert.updatedAt && alert.updatedAt !== alert.createdAt
+      ? `Updated ${String(alert.updatedAt).slice(0, 10)}${alert.updatedBy ? ` by ${alert.updatedBy}` : ''}`
+      : '';
+  const title = [alert.note, added, edited].filter(Boolean).join(' — ');
   return `<span class="pa-chip pa-chip--${esc(alert.severity)}" title="${esc(title)}">${esc(alert.label)}</span>`;
 }
 
@@ -410,13 +445,20 @@ function onClick(e) {
     container.querySelector('#paLabel')?.focus();
   } else if (act === 'alert-del') {
     if (!confirm('Remove this alert?')) return;
-    _store = removeAlert(_store, btn.dataset.key, btn.dataset.id, new Date().toISOString());
+    const key = btn.dataset.key;
+    const removed = (_store[key]?.alerts || []).find((a) => a.id === btn.dataset.id) || null;
+    _store = removeAlert(_store, key, btn.dataset.id, new Date().toISOString());
+    recordFlagEvent('flag-removed', key, removed);
     persistStore().then(() => render());
   } else if (act === 'pat-del') {
-    const entry = _store[btn.dataset.key];
+    const key = btn.dataset.key;
+    const entry = _store[key];
     const n = entry?.patient?.name || 'this patient';
     if (!confirm(`Remove ${n} and all their alerts?`)) return;
-    _store = removePatient(_store, btn.dataset.key);
+    // One ledger event per removed flag — a whole-patient wipe must not be
+    // less audited than removing the same flags one by one.
+    (entry?.alerts || []).forEach((a) => recordFlagEvent('flag-removed', key, a));
+    _store = removePatient(_store, key);
     persistStore().then(() => render());
   } else if (act === 'type-add') {
     _types = [..._types, { id: generateTypeId('new'), label: 'New alert type', severity: 'amber', description: '' }];
@@ -487,8 +529,14 @@ function saveForm() {
   }
   try {
     const nowIso = new Date().toISOString();
-    const alert = makeAlert({ label, severity, note, typeId: presetId }, nowIso, _editingAlertId || undefined);
+    const editing = !!_editingAlertId;
+    const alert = makeAlert(
+      { label, severity, note, typeId: presetId, author: _author },
+      nowIso,
+      _editingAlertId || undefined
+    );
     _store = upsertAlert(_store, _pc, alert, nowIso);
+    recordFlagEvent(editing ? 'flag-edited' : 'flag-added', patientKey(_pc), alert);
     _formOpen = false;
     _editingAlertId = null;
     persistStore().then(() => render());

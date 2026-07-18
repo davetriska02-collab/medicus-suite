@@ -2,6 +2,45 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.176.0] — 2026-07-18
+
+### Patient Alerts everywhere it matters: on-page banner, queue chips, attribution
+
+Three follow-ups to v3.175.0's Patient Alerts, extending the same store
+(`patientAlerts.byPatient`) to the surfaces where flags earn their keep. All
+three are read-only over the store; the Pt Alerts tab remains the only writer.
+
+- **On-page flag banner** (`content-scripts/patient-alerts-banner.js` + CSS):
+  the patient's flags now render as a slim red/amber banner PREPENDED inside
+  Medicus's own patient header — visible to anyone who opens the record,
+  side panel open or not. Identity is re-resolved from the live page on every
+  render (URL patient UUID first, on-screen NHS number as lookup fallback; a
+  name never matches); no identity or no flags → banner removed, never stale.
+  Survives the SPA's re-renders via the shared rAF observer hub + prepend
+  rule; self-contained CSS (no token dependency to go missing).
+- **Queue flag chips** (`.ch-q-pa`, triage-lens content script): flags appear
+  on task-queue rows — "⚑ Interpreter required +1" — so the flag is seen
+  BEFORE the task is opened or the patient phoned. Task→patient resolution
+  reuses the TTL-cached `resolveTaskToPatient`; chips follow all the queue
+  chip rules (prepend, durable rowIndex→taskUuid re-injection on every
+  refresh, de-dupe, hud.css token-scope registration). Matching is by
+  resolved patient UUID only. Chip colour: red if any red flag, else amber.
+  A store edit in the panel updates the queue on the next churn.
+- **Attribution + audit trail** (H-042): every flag now records
+  `createdBy`/`updatedBy` (from the practice letterhead's clinician name;
+  null when unset — never guessed). Edits preserve the original author and
+  date as immutable provenance; the Pt Alerts chip tooltips show
+  "Added <date> by <name> — Updated <date> by <name>". Every add/edit/remove
+  (including whole-patient removal, one event per flag) is recorded in the
+  machine-local Event Ledger under new source `patient-alerts` (actions
+  `flag-added`/`flag-edited`/`flag-removed`) — patient referenced by UUID
+  only, label carries the preset id + severity, never the free-typed text.
+- New `shared/patient-alerts-lookup.js` (classic, dual-mode) provides the
+  read-side lookup to both content-script surfaces;
+  `test-patient-alerts-lookup.js` asserts parity with the panel's ES core on
+  shared fixtures so the two matching implementations cannot drift (27
+  assertions). Core attribution tests added (56 total).
+
 ## [v3.175.0] — 2026-07-18
 
 ### Patient Alerts — per-patient customisable flags (user-requested)

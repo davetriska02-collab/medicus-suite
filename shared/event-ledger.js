@@ -69,7 +69,14 @@
   // including the clinician declining the confirm dialog — the FULL reason
   // string lives only in the module's own machine-local ring buffer,
   // triagelens.routinerx.auditLog, not in this ledger's fixed shape).
-  const SOURCES = ['sentinel', 'sweep', 'labfiling', 'record', 'preflight', 'health', 'leaflets', 'routinerx'];
+  // 'patient-alerts' — the Pt Alerts tab (side-panel/modules/patient-alerts/)
+  // records every mutation of the persisted per-patient flag store (H-042
+  // audit trail): 'flag-added' / 'flag-edited' / 'flag-removed'. patientRef is
+  // the store's patient UUID. `ruleId` carries the alert's own id (pa-…) and
+  // `label` the alert's PRESET type id (or 'custom') plus severity — NEVER the
+  // free-typed alert text, per the no-free-text rule above. The author initials
+  // ride on the stored alert itself (createdBy/updatedBy), not in this ledger.
+  const SOURCES = ['sentinel', 'sweep', 'labfiling', 'record', 'preflight', 'health', 'leaflets', 'routinerx', 'patient-alerts'];
   const ACTIONS = [
     'shown',
     'dismissed',
@@ -84,6 +91,9 @@
     'committed',
     'highlighted',
     'aborted',
+    'flag-added',
+    'flag-edited',
+    'flag-removed',
   ];
   const MAX_LABEL_LEN = 120;
   const MAX_RULEID_LEN = 80;

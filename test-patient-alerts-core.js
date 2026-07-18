@@ -96,6 +96,24 @@ const path = require('path');
   }
   check(threw, 'missing severity throws (no silent default)');
 
+  console.log('\n--- attribution (H-042 audit trail) ---');
+  const authored = makeAlert({ label: 'Interpreter required', severity: 'amber', author: '  Dr Dave Triska  ' }, NOW);
+  check(authored.createdBy === 'Dr Dave Triska' && authored.updatedBy === 'Dr Dave Triska', 'author is trimmed and stamped on createdBy/updatedBy');
+  const anon = makeAlert({ label: 'No author configured', severity: 'info' }, NOW);
+  check(anon.createdBy === null && anon.updatedBy === null, 'no author → null, never a guessed identity');
+  check(isValidAlert(anon), 'alerts without attribution remain valid (pre-attribution data)');
+  let attrStore = upsertAlert({}, pcA, authored, NOW);
+  const editedByOther = makeAlert(
+    { label: 'Interpreter required — Ukrainian', severity: 'amber', author: 'Dr B Smith' },
+    '2026-07-19T09:00:00.000Z',
+    authored.id
+  );
+  attrStore = upsertAlert(attrStore, pcA, editedByOther, '2026-07-19T09:00:00.000Z');
+  const afterEdit = attrStore[UUID_A].alerts.find((a) => a.id === authored.id);
+  check(afterEdit.createdBy === 'Dr Dave Triska', 'edit preserves the ORIGINAL author (immutable provenance)');
+  check(afterEdit.updatedBy === 'Dr B Smith', 'edit stamps the editing author on updatedBy');
+  check(afterEdit.createdAt === NOW, 'edit preserves the original createdAt alongside createdBy');
+
   console.log('\n--- upsert / remove ---');
   let store = {};
   store = upsertAlert(store, pcA, alert1, NOW);

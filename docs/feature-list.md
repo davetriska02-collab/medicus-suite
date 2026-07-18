@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.175.0
+**Version:** v3.176.0
 **Generated:** 2026-07-12 (automated)
 
 ## What it is
@@ -10,7 +10,7 @@ Medicus Suite is a Chrome browser extension for UK GP practices that runs alongs
 ## At a glance
 
 - 16 side-panel modules covering monitoring, demand, capacity, workflow, knowledge, per-patient practice flags and the live patient record
-- 8 in-page content-script features (queue overlays, workflow buttons and relays) plus 2 full-tab generated reports
+- 9 in-page content-script features (queue overlays, the patient-flag banner, workflow buttons and relays) plus 2 full-tab generated reports
 - 7 rule types in the alert engine
 - 27 drug-monitoring rules, 65 QOF register/indicator rules, 5 vaccine rules, 44 investigation-result rules, and 26 starter alerts in the prescribing-safety library
 
@@ -78,7 +78,7 @@ A live, on-screen snapshot of the patient open in Medicus — problems, medicati
 
 ### Patient Alerts
 
-Practice-defined per-patient flags — interpreter required, safeguarding concern, medication-seeking behaviour, or anything custom — that appear on a global alert strip and the Monitoring banner the moment that patient's record is opened. Managed from the Pt Alerts tab (add/edit/remove, browse all flagged patients, customisable quick-add presets, three severities). Stored locally per browser profile and shareable practice-wide via backup files; not written to the clinical record, and an absent flag is never an all-clear.
+Practice-defined per-patient flags — interpreter required, safeguarding concern, medication-seeking behaviour, or anything custom — that appear on a global alert strip, the Monitoring banner, a banner inside Medicus's own patient header, and as chips on task-queue rows the moment that patient's record or task is on screen. Each flag records who added and last edited it, and every change is logged in the machine-local Event Ledger. Managed from the Pt Alerts tab (add/edit/remove, browse all flagged patients, customisable quick-add presets, three severities). Stored locally per browser profile and shareable practice-wide via backup files; not written to the clinical record, and an absent flag is never an all-clear.
 
 ## In-page features (content scripts)
 
@@ -117,6 +117,8 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.176.0 (2026-07-18)** — Patient Alerts now show on the Medicus page itself (banner in the patient header) and on task-queue rows (flag chips), so a flag is seen before the patient is phoned — plus author attribution on every flag and a full add/edit/remove audit trail in the Event Ledger.
 
 - **v3.175.0 (2026-07-18)** — New Pt Alerts tab: the practice's own per-patient flags (interpreter needed, safeguarding, behaviour, anything custom) shown on a global strip and the Monitoring banner whenever that patient is open. Local storage, merge-safe sharing via backup; never an all-clear when absent.
 
