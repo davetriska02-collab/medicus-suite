@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-CSCR-001
 **Software product:** Medicus Suite (Chrome extension)
-**Product version:** 3.84.2
+**Product version:** 3.174.0 (mechanically synced 2026-07-18 from 3.84.2; see §4 and the flagged item below — this sync did not re-derive every figure in this report from source, only the hazard count/table and the regulatory-position flag)
 **Document version:** 1.0 (DRAFT — pending CSO sign-off)
-**Date issued:** 2026-06-14
+**Date issued:** 2026-06-14 (synced 2026-07-18)
 **Manufacturer:** Graysbrook Ltd
 **Author / Clinical Safety Officer:** Dr Dave Triska (GMC 6159481), registered GP
 **Applicable standard:** Structured as a DCB0129 Clinical Safety Case Report.
@@ -58,6 +58,16 @@ and performs no runtime AI inference. The frozen intended-purpose statement,
 intended users, intended environment, contraindications, and "what this is not"
 list are in `INTENDED-PURPOSE.md`.
 
+> **Flagged exception (added 2026-07-18, pending CSO review — not resolved):** the
+> Record Duplicate Cleanup Tool (`duplicate-checker.html`/`.js`, merged v3.173.0) is
+> a new capability that **does write to the live Medicus record** (soft-deletion
+> and note-merge actions behind an explicit clinician confirm step). This is
+> inconsistent with the "writes nothing to the record" claim above, which the
+> regulatory position in §4 rests on. See `HAZARD-LOG.md` H-042. This report does
+> not assert a resolution either way; it records the inconsistency for the CSO to
+> reconcile (e.g. by scoping this tool outside "Medicus Suite" for the purposes of
+> this claim, or by revisiting the regulatory self-assessment).
+
 **Regulatory position (§4 summary):** the manufacturer asserts, on a good-faith
 reading of MHRA Software-as-a-Medical-Device guidance, that the product falls
 outside the UK Medical Devices Regulations 2002 (as amended): it produces no
@@ -74,9 +84,14 @@ display, point-in-time data reuse), code/security review, and incident learning
 residual score of 12+ blocks release; 10–11 requires explicit written CSO
 acceptance.
 
-**Result:** 30 hazards (H-001…H-030) are recorded and managed.
+**Result:** 44 hazards (H-001…H-044) are recorded and managed.
 **No hazard has a residual risk score exceeding 9.** No hazard at residual 10+ is
-open. The principal hazards and their controls:
+open. **One hazard (H-042) is explicitly flagged for urgent CSO review** — it
+records that the Record Duplicate Cleanup Tool writes to the live record, which
+is inconsistent with the read-only regulatory position in §4 below; the residual
+score of 8 reflects the hazard as an isolated technical risk only and does not
+constitute CSO acceptance of that broader regulatory-position question. The
+principal hazards and their controls:
 
 | Hazard | Control summary | Residual |
 |---|---|---|
@@ -86,6 +101,7 @@ open. The principal hazards and their controls:
 | H-016 PINCER false-negative | Documented partial subset, supplementary to Medicus, visualiser/HUD parity work, test-guarded | (ALARP) |
 | H-026 Triage red-flag false-negative reliance | "Absence of chip ≠ absence of risk" disclosure, expansion test-guarded | 8 (ALARP) |
 | H-030 Results-queue chip misread as assurance | No "safe to file" chip, escalate-only, fail-silent on error, additive attention only | 4 |
+| H-042 Record Duplicate Cleanup Tool — destructive write on a wrong match | Mandatory per-action confirm + reason field, patient-scoped grouping, explicit no-undo warning — **flagged for urgent CSO review of the regulatory-position conflict, see above** | 8 |
 
 The complete register, with causes, controls, and per-hazard acceptability, is in
 `HAZARD-LOG.md §5–6`.
@@ -130,12 +146,23 @@ hazard log under active CSO review. On this basis the product is considered
 acceptably safe for limited distribution to named clinical users who have
 accepted the Clinical Safety Notice and disclaimer.
 
+**Open item requiring CSO decision before this report can be signed off as
+currently worded:** the "read-only, local-only architecture" this conclusion
+rests on is no longer true without qualification — the Record Duplicate Cleanup
+Tool (H-042) writes to the live Medicus record. This report is not asking the
+CSO to accept H-042's technical residual risk score (already ALARP at 8); it is
+flagging that the architectural premise of this entire conclusion needs an
+explicit decision: either the read-only claim is qualified/scoped to exclude
+this tool, or the regulatory self-assessment in §4 is revisited in its light.
+
 ## 9. Clinical Safety Officer declaration
 
-I confirm that the clinical risks of Medicus Suite v3.84.2 have been analysed and
+I confirm that the clinical risks of Medicus Suite v3.174.0 have been analysed and
 managed in line with the process in `HAZARD-LOG.md`, that the controls described
 are in place, and that the residual risks are acceptable for the stated intended
-use and users.
+use and users, **save for the H-042 regulatory-position item flagged above,
+which requires my explicit decision before this declaration can be read as
+covering it.**
 
 **Dr Dave Triska, GMC 6159481**
 **Clinical Safety Officer — Medicus Suite, Graysbrook Ltd**
