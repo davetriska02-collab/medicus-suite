@@ -68,7 +68,9 @@ const alertB = {
   updatedAt: '2026-07-02T00:00:00Z',
 };
 const entryA = {
-  patient: { name: 'Ann Test', nhsNumber: '9434765919', dob: '01 Jan 1980' },
+  // NHS number is deliberately Modulus-11 INVALID — synthetic by construction,
+  // so scripts/check-no-patient-data.js ignores it (see test-patient-alerts-core.js).
+  patient: { name: 'Ann Test', nhsNumber: '9434765911', dob: '01 Jan 1980' },
   alerts: [alertA],
   updatedAt: '2026-07-01T00:00:00Z',
 };

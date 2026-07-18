@@ -48,11 +48,14 @@ const path = require('path');
   const NOW = '2026-07-18T10:00:00.000Z';
   const UUID_A = 'aaaaaaaa-1111-2222-3333-444444444444';
   const UUID_B = 'bbbbbbbb-1111-2222-3333-444444444444';
-  const pcA = { patientUuid: UUID_A, patientName: 'Ann Test', nhsNumber: '943 476 5919', dobRaw: '01 Jan 1980' };
+  // 943 476 5911 is deliberately Modulus-11 INVALID (real check digit would be
+  // 9): synthetic by construction, so scripts/check-no-patient-data.js ignores
+  // it. normaliseNhs only checks length, so the tests are unaffected.
+  const pcA = { patientUuid: UUID_A, patientName: 'Ann Test', nhsNumber: '943 476 5911', dobRaw: '01 Jan 1980' };
 
   console.log('\n--- normaliseNhs ---');
-  check(normaliseNhs('943 476 5919') === '9434765919', 'strips spaces from a 10-digit NHS number');
-  check(normaliseNhs('943-476-5919') === '9434765919', 'strips punctuation');
+  check(normaliseNhs('943 476 5911') === '9434765911', 'strips spaces from a 10-digit NHS number');
+  check(normaliseNhs('943-476-5911') === '9434765911', 'strips punctuation');
   check(normaliseNhs('12345') === null, 'rejects wrong-length numbers');
   check(normaliseNhs(null) === null, 'null in, null out');
 
@@ -61,7 +64,7 @@ const path = require('path');
   check(patientKey({ patientName: 'No Id' }) === null, 'a name alone is never a key');
   check(patientKey(null) === null, 'null context has no key');
   const meta = patientMeta(pcA);
-  check(meta.name === 'Ann Test' && meta.nhsNumber === '9434765919', 'meta denormalises name + normalised NHS');
+  check(meta.name === 'Ann Test' && meta.nhsNumber === '9434765911', 'meta denormalises name + normalised NHS');
 
   console.log('\n--- makeAlert / isValidAlert ---');
   const alert1 = makeAlert(
@@ -97,7 +100,7 @@ const path = require('path');
   let store = {};
   store = upsertAlert(store, pcA, alert1, NOW);
   check(store[UUID_A] && store[UUID_A].alerts.length === 1, 'upsert creates the patient entry');
-  check(store[UUID_A].patient.nhsNumber === '9434765919', 'entry carries normalised patient meta');
+  check(store[UUID_A].patient.nhsNumber === '9434765911', 'entry carries normalised patient meta');
   const alertRed = makeAlert({ label: 'Safeguarding concern', severity: 'red' }, NOW);
   store = upsertAlert(store, pcA, alertRed, NOW);
   check(store[UUID_A].alerts.length === 2, 'second alert appends');
@@ -127,7 +130,7 @@ const path = require('path');
   console.log('\n--- lookup (wrong-patient safety) ---');
   const byUuid = findEntryForPatient(store, { patientUuid: UUID_A });
   check(byUuid && byUuid.key === UUID_A, 'lookup by UUID');
-  const byNhs = findEntryForPatient(store, { nhsNumber: '9434765919' });
+  const byNhs = findEntryForPatient(store, { nhsNumber: '9434765911' });
   check(byNhs && byNhs.key === UUID_A, 'NHS-number fallback lookup (no UUID on this view)');
   check(findEntryForPatient(store, { patientUuid: UUID_B }) === null, 'a different UUID never matches');
   check(findEntryForPatient(store, { patientName: 'Ann Test' }) === null, 'a name alone NEVER matches');
@@ -147,7 +150,7 @@ const path = require('path');
   const counts = countStore(store);
   check(counts.patients === 1 && counts.alerts === 2, 'countStore totals patients and alerts');
   check(searchStore(store, 'ukrainian').length === 1, 'search matches alert label');
-  check(searchStore(store, '9434765919').length === 1, 'search matches NHS number');
+  check(searchStore(store, '9434765911').length === 1, 'search matches NHS number');
   check(searchStore(store, 'zzz-nomatch').length === 0, 'search misses cleanly');
   check(searchStore(store, '').length === 1, 'empty query returns everything');
 
