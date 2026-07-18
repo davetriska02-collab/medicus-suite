@@ -50,6 +50,7 @@
     'sulindac',
     'ketoprofen',
     'dexketoprofen',
+    'dexibuprofen', // 2026-07-18 Keeper: S-enantiomer of ibuprofen; BNF-listed UK NSAID (Seractil)
     'tiaprofenic',
     'mefenamic',
     'tolfenamic',
@@ -102,8 +103,13 @@
   // First-generation (sedating) antihistamines
   const FIRSTGEN_AH_TERMS = [
     'chlorphenamine',
+    'piriton', // 2026-07-18 Keeper: brand: chlorphenamine (GSK Consumer)
     'promethazine',
+    'phenergan', // 2026-07-18 Keeper: brand: promethazine (Sanofi)
+    'sominex', // 2026-07-18 Keeper: brand: promethazine hydrochloride 20 mg (OTC)
     'hydroxyzine',
+    'atarax', // 2026-07-18 Keeper: brand: hydroxyzine (Alliance Pharmaceuticals)
+    'ucerax', // 2026-07-18 Keeper: brand: hydroxyzine (UCB Pharma)
     'diphenhydramine',
     'cyclizine',
     'alimemazine', // 2026-07-11 Keeper: UK sedating AH (= trimeprazine), BNF 3.4.1
@@ -327,6 +333,28 @@
   // Metformin
   const METFORMIN_TERMS = ['metformin'];
 
+  // Potassium-sparing diuretics / aldosterone antagonists (STOPP/START H-section renal)
+  const POTASSIUM_SPARING_TERMS = ['spironolactone', 'eplerenone', 'inspra', 'aldactone'];
+
+  // Dabigatran (renal dosing / eGFR gating)
+  const DABIGATRAN_TERMS = ['dabigatran', 'pradaxa'];
+
+  // Factor Xa inhibitors (renal dosing / eGFR gating)
+  const FACTOR_XA_TERMS = ['rivaroxaban', 'xarelto', 'apixaban', 'eliquis', 'edoxaban', 'lixiana'];
+
+  // Nitrofurantoin (avoid in eGFR < 45 — STOPP criterion H11 / BNF)
+  const NITROFURANTOIN_TERMS = ['nitrofurantoin', 'macrobid', 'macrodantin'];
+
+  // Bisphosphonates (taken with water / remain upright — STOPP criterion K2)
+  const BISPHOSPHONATE_TERMS = [
+    'alendronate', 'alendronic', 'risedronate', 'ibandronate', 'ibandronic',
+    'zoledronate', 'zoledronic',
+    'fosamax', // alendronate (Organon/MSD)
+    'actonel', // risedronate (Warner Chilcott)
+    'bonviva', // ibandronate (Atnahs)
+    'aclasta', // zoledronic acid (Novartis)
+  ];
+
   // ── Main function ─────────────────────────────────────────────────────────
 
   /**
@@ -460,7 +488,7 @@
           'at eGFR <30 (risk of lactic acidosis). Refer to NICE NG28 / BNF: reduce dose at eGFR 30–45, ' +
           'withhold at eGFR <30.',
         severity: 'red',
-        source: 'STOPP/START v3 (2023) — Section H: Renal',
+        source: 'STOPP/START v3 (2023) — Criterion E6: Renal',
       });
     }
 

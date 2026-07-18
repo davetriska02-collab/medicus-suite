@@ -552,6 +552,38 @@ console.log('\n--- 2026-07-11 Keeper: FIRSTGEN_AH_TERMS additions ---');
   assert(!!find(flags, 'stopp_firstgen_ah_elderly'), 'STOPP 3 fires: trimeprazine + age 66');
 }
 
+// ── 2026-07-18 Keeper: term list additions ──────────────────────────────
+console.log('\n--- 2026-07-18 Keeper: term list additions ---');
+// FIRSTGEN_AH_TERMS: UK brands for chlorphenamine, promethazine, hydroxyzine
+{
+  const flags = computeStoppStart({ drugs: ['Piriton 4mg tablets'], problems: [], ageYears: 70, egfr: null });
+  assert(!!find(flags, 'stopp_firstgen_ah_elderly'), 'STOPP 3 fires: Piriton (chlorphenamine brand) + age 70');
+}
+{
+  const flags = computeStoppStart({ drugs: ['Phenergan 25mg tablets'], problems: [], ageYears: 70, egfr: null });
+  assert(!!find(flags, 'stopp_firstgen_ah_elderly'), 'STOPP 3 fires: Phenergan (promethazine brand) + age 70');
+}
+{
+  const flags = computeStoppStart({ drugs: ['Sominex 20mg tablets'], problems: [], ageYears: 70, egfr: null });
+  assert(!!find(flags, 'stopp_firstgen_ah_elderly'), 'STOPP 3 fires: Sominex (promethazine brand) + age 70');
+}
+{
+  const flags = computeStoppStart({ drugs: ['Atarax 25mg tablets'], problems: [], ageYears: 70, egfr: null });
+  assert(!!find(flags, 'stopp_firstgen_ah_elderly'), 'STOPP 3 fires: Atarax (hydroxyzine brand) + age 70');
+}
+{
+  const flags = computeStoppStart({ drugs: ['Ucerax 25mg tablets'], problems: [], ageYears: 70, egfr: null });
+  assert(!!find(flags, 'stopp_firstgen_ah_elderly'), 'STOPP 3 fires: Ucerax (hydroxyzine brand) + age 70');
+}
+// NSAID_TERMS: dexibuprofen — STOPP 1: NSAID + eGFR < 50
+{
+  const flags = computeStoppStart({ drugs: ['dexibuprofen 400mg tablets'], problems: [], ageYears: 72, egfr: 40 });
+  assert(!!find(flags, 'stopp_nsaid_ckd'), 'STOPP_NSAID_CKD fires for dexibuprofen + eGFR 40 (NSAID_TERMS includes dexibuprofen)');
+}
+// New term arrays (POTASSIUM_SPARING, DABIGATRAN, FACTOR_XA, NITROFURANTOIN, BISPHOSPHONATE):
+// Declared as local constants — functional criterion tests added when engine if-blocks land.
+// Module loads without error confirms the declarations are syntactically valid.
+
 // ── Summary ──────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

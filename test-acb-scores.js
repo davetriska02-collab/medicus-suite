@@ -181,6 +181,77 @@ console.log('\n--- 2026-07-11 Keeper ACB additions ---');
   assert(r.perDrug[0] && r.perDrug[0].score === 3, 'trifluoperazine scores 3 (phenothiazine)');
 }
 
+// ── 2026-07-18 Keeper ACB additions ──────────────────────────────────────
+console.log('\n--- 2026-07-18 Keeper ACB additions ---');
+// First-gen antihistamine brands (score 3)
+{
+  const r = computeACB(['Piriton 4mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Piriton (chlorphenamine brand) scores 3');
+}
+{
+  const r = computeACB(['Phenergan 25mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Phenergan (promethazine brand) scores 3');
+}
+{
+  const r = computeACB(['Sominex 20mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Sominex (promethazine brand) scores 3');
+}
+{
+  const r = computeACB(['Atarax 25mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Atarax (hydroxyzine brand) scores 3');
+}
+{
+  const r = computeACB(['Ucerax 25mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Ucerax (hydroxyzine brand) scores 3');
+}
+{
+  const r = computeACB(['alimemazine 7.5mg syrup']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'alimemazine scores 3 (phenothiazine first-gen AH)');
+}
+{
+  const r = computeACB(['trimeprazine 30mg']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'trimeprazine (alimemazine synonym) scores 3');
+}
+{
+  const r = computeACB(['Vallergan 30mg/5ml syrup']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Vallergan (alimemazine brand) scores 3');
+}
+// Bladder antispasmodic brand (score 3)
+{
+  const r = computeACB(['Giraxine 5mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Giraxine (solifenacin brand) scores 3');
+}
+// TCA brands (score 3)
+{
+  const r = computeACB(['Allegron 25mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Allegron (nortriptyline brand) scores 3');
+}
+{
+  const r = computeACB(['Anafranil 25mg capsules']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Anafranil (clomipramine brand) scores 3');
+}
+{
+  const r = computeACB(['Prothiaden 75mg capsules']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Prothiaden (dosulepin brand) scores 3');
+}
+// SSRIs (score 1)
+{
+  const r = computeACB(['sertraline 50mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 1, 'sertraline scores 1 (SSRI)');
+}
+{
+  const r = computeACB(['citalopram 20mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 1, 'citalopram scores 1 (SSRI)');
+}
+{
+  const r = computeACB(['escitalopram 10mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 1, 'escitalopram scores 1 (SSRI)');
+}
+{
+  const r = computeACB(['fluoxetine 20mg capsules']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 1, 'fluoxetine scores 1 (SSRI)');
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

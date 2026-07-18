@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-07-11",
-  "specVersion": "QOF 2026/27",
+  "lastUpdated": "2026-07-18",
+  "specVersion": "QOF 2026/27 — updated 2026-07-18 (The Keeper)",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes.",
   "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-07-11 (The Keeper): added LD register; DEM004 (dementia care plan review); CKD002 (BP target) and CKD003 (ACEi/ARB in CKD+HYP+proteinuria); CHOL003 extended to PAD, STIA, CKD registers (3 new clones); CHOL004 extended to PAD and STIA registers (2 new clones; CKD explicitly NOT covered by CHOL004 per PRN02356). Primary PDF 403 this run — all corroborated via PRN02356 search.",
   "rules": [
@@ -271,7 +271,7 @@
         "no learning disability"
       ],
       "source": "QOF 26/27 LD register (LD_COD refset approximation — corroborated via PRN02356 search; primary PDF 403 this run). Added 2026-07-11 (The Keeper).",
-      "notes": "The QOF LD register is defined by SNOMED codes for intellectual disability; Sentinel approximates via problem substring matching. This will miss patients with a learning disability not coded using these terms. Down's syndrome and Fragile X are the most commonly encountered specific diagnoses in primary care LD registers. Autism spectrum disorder (ASD) without intellectual disability does NOT qualify for the QOF LD register — autistic patients who do not have a separately coded intellectual disability are correctly not flagged. The LD register underpins the annual health check indicator (LD004, not yet encoded — engine needs a specific encounter-type gate for an LD annual health check; add when engine support lands)."
+      "notes": "The QOF LD register is defined by SNOMED codes for intellectual disability; Sentinel approximates via problem substring matching. This will miss patients with a learning disability not coded using these terms. Down's syndrome and Fragile X are the most commonly encountered specific diagnoses in primary care LD registers. Autism spectrum disorder (ASD) without intellectual disability does NOT qualify for the QOF LD register — autistic patients who do not have a separately coded intellectual disability are correctly not flagged. NOTE (2026-07-18 Keeper, VERIFIER-B correction): LD004 (annual health check for patients with learning disability) is a Directed Enhanced Service (DES), NOT a QOF indicator. Payment is £140 per eligible patient aged 14+ per year, claimed via CQRS. The DES runs 2025-28. It is not expressible in the QOF indicator schema and should not be added here. This register entry remains valid as it supports QOF payment to the practice (LD register membership determines the DES-eligible list in Medicus). Updated 2026-07-11 (The Keeper) — source corroborated PRN02356."
     },
     {
       "id": "qof-hyp008",
@@ -898,7 +898,7 @@
         "upper": 50
       },
       "points": 44,
-      "source": "QOF 26/27 CHOL004 (NICE IND278) — CHD register half. Added multi-register clones (PAD, STIA) 2026-07-11 (The Keeper). CKD is NOT covered by CHOL004 per PRN02356. Primary PDF 403.",
+      "source": "QOF 26/27 CHOL004 (NICE IND278) — CHD register half. Added multi-register clones (PAD, STIA) 2026-07-11 (The Keeper). CKD is NOT covered by CHOL004 per PRN02356. Confirmed against PRN02356 primary source 2026-07-18.",
       "notes": "Unchanged in 26/27 (44 points, threshold 20-50). Full rule: LDL ≤2.0 OR non-HDL ≤2.6 mmol/L; LDL takes priority when both present on same date. Highest-value indicator. NICE NG238 aligned. CHOL004 covers CHD, PAD and STIA only — CKD is explicitly NOT included per PRN02356 (PRN02356 §CHOL004 definition). CSO decision item: the single threshold:2.6 applied to both LDL and non-HDL observations is technically wrong for LDL (should be ≤2.0 for LDL) but correcting this requires an engine change to support OR-combined observation thresholds; a single-threshold approximation is held as the safer default until engine support lands."
     },
     {
@@ -926,7 +926,7 @@
         "upper": 50
       },
       "points": 44,
-      "source": "QOF 26/27 CHOL004 (NICE IND278) — PAD register half. Added 2026-07-11 (The Keeper). Primary PDF 403.",
+      "source": "QOF 26/27 CHOL004 (NICE IND278) — PAD register half. Added 2026-07-11 (The Keeper). Confirmed against PRN02356 primary source 2026-07-18.",
       "notes": "PAD-register half of CHOL004. Points value (44) is the total indicator allocation; do not double-count. Single threshold approximation applies — see CHD rule notes."
     },
     {
@@ -954,7 +954,7 @@
         "upper": 50
       },
       "points": 44,
-      "source": "QOF 26/27 CHOL004 (NICE IND278) — STIA register half. Added 2026-07-11 (The Keeper). Primary PDF 403.",
+      "source": "QOF 26/27 CHOL004 (NICE IND278) — STIA register half. Added 2026-07-11 (The Keeper). Confirmed against PRN02356 primary source 2026-07-18.",
       "notes": "STIA-register half of CHOL004. Points value (44) is the total indicator allocation; do not double-count. Single threshold approximation applies — see CHD rule notes."
     },
     {
@@ -1335,6 +1335,163 @@
       "notes": "26/27 MH011 is the LIPID-PROFILE indicator for SMI patients (record of a lipid profile in the preceding 12 months), 7 pts / 50-90%. It is NOT a smoking indicator - smoking-in-SMI moved into SMOK002. Corrected from a stale pre-26/27 mapping that had MH011 as smoking-status-in-SMI (The Keeper, primary-source verified 2026-06-21)."
     },
     {
+      "id": "qof-mh002",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "MH002",
+      "indicatorName": "Care plan review recorded in SMI (preceding 12 months)",
+      "requiresRegister": "SMI",
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "care plan",
+          "care plan review",
+          "mental health care plan",
+          "care programme approach",
+          "cpa review",
+          "mental health review"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 40,
+        "upper": 90
+      },
+      "points": 5,
+      "source": "QOF 26/27 MH002 (NHS England PRN02356); confirmed 2026-07-18 Keeper (VERIFIER-B)",
+      "notes": "MH002: record of a care plan review in the preceding 12 months for patients on the SMI register. 5 points, 40-90% threshold. Sentinel approximates via a care-plan/CPA observation substring match. Missing from rule file prior to 2026-07-18 Keeper."
+    },
+    {
+      "id": "qof-mh003",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "MH003",
+      "indicatorName": "Blood pressure recorded in SMI (preceding 12 months)",
+      "requiresRegister": "SMI",
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "blood pressure",
+          "bp"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 50,
+        "upper": 90
+      },
+      "points": 3,
+      "source": "QOF 26/27 MH003 (NHS England PRN02356); confirmed 2026-07-18 Keeper (VERIFIER-B)",
+      "notes": "MH003: blood pressure recorded in the preceding 12 months for patients on the SMI register. 3 points, 50-90% threshold. Missing from rule file prior to 2026-07-18 Keeper."
+    },
+    {
+      "id": "qof-mh006",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "MH006",
+      "indicatorName": "BMI recorded in SMI (preceding 12 months)",
+      "requiresRegister": "SMI",
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "bmi",
+          "body mass index",
+          "weight"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 50,
+        "upper": 90
+      },
+      "points": 3,
+      "source": "QOF 26/27 MH006 (NHS England PRN02356); confirmed 2026-07-18 Keeper (VERIFIER-B)",
+      "notes": "MH006: BMI (or weight) recorded in the preceding 12 months for patients on the SMI register. 3 points, 50-90% threshold. Missing from rule file prior to 2026-07-18 Keeper."
+    },
+    {
+      "id": "qof-mh007",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "MH007",
+      "indicatorName": "Alcohol consumption recorded in SMI (preceding 12 months)",
+      "requiresRegister": "SMI",
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "alcohol consumption",
+          "alcohol units",
+          "alcohol use",
+          "audit score",
+          "audit-c",
+          "alcohol brief intervention",
+          "alcohol history",
+          "alcohol screening"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 50,
+        "upper": 90
+      },
+      "points": 3,
+      "source": "QOF 26/27 MH007 (NHS England PRN02356); confirmed 2026-07-18 Keeper (VERIFIER-B)",
+      "notes": "MH007: alcohol consumption recorded in the preceding 12 months for patients on the SMI register. 3 points, 50-90% threshold. Matched via AUDIT/AUDIT-C screen or alcohol-history observation. Missing from rule file prior to 2026-07-18 Keeper."
+    },
+    {
+      "id": "qof-mh012",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "MH012",
+      "indicatorName": "HbA1c or fasting plasma glucose recorded in SMI (preceding 12 months)",
+      "requiresRegister": "SMI",
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "hba1c",
+          "haemoglobin a1c",
+          "glycated haemoglobin",
+          "fasting plasma glucose",
+          "fasting glucose",
+          "fpg"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 50,
+        "upper": 90
+      },
+      "points": 7,
+      "source": "QOF 26/27 MH012 (NHS England PRN02356); confirmed 2026-07-18 Keeper (VERIFIER-B)",
+      "notes": "MH012: HbA1c or fasting plasma glucose recorded in the preceding 12 months for patients on the SMI register. 7 points, 50-90% threshold. Screens for metabolic side-effects of antipsychotics / diabetes risk. Missing from rule file prior to 2026-07-18 Keeper."
+    },
+    {
+      "id": "qof-mh021",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "MH021",
+      "indicatorName": "Comprehensive physical health review bundle in SMI (preceding 12 months)",
+      "requiresRegister": "SMI",
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "physical health review",
+          "annual health review",
+          "smi annual review",
+          "smi physical health check",
+          "smi health check",
+          "mental health physical review"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 50,
+        "upper": 80
+      },
+      "points": 6,
+      "source": "QOF 26/27 MH021 (NHS England PRN02356); confirmed 2026-07-18 Keeper (VERIFIER-B)",
+      "notes": "MH021: comprehensive physical health review (all required elements recorded) in the preceding 12 months for SMI patients. 6 points, 50-80% threshold. The full QOF definition requires a bundle of all specified elements (BP, BMI, alcohol, HbA1c/FPG, lipids, smoking status, care plan) — Sentinel approximates by matching an annual-health-review encounter code. This indicator was missing from the rule file prior to 2026-07-18 Keeper; note it predates 2026/27 (added approximately 2023/24) — it is NOT a new indicator for 2026/27. Added 2026-07-18 Keeper (VERIFIER-B confirmed per PRN02356)."
+    },
+    {
       "id": "qof-hf007",
       "type": "qof-indicator",
       "enabled": true,
@@ -1637,7 +1794,7 @@
       "type": "qof-indicator",
       "enabled": false,
       "indicatorCode": "OB004",
-      "indicatorName": "[DRAFT 26/27 — PENDING CONFIRMATION] Offer of referral to a weight-management programme in obesity",
+      "indicatorName": "[DRAFT 26/27] Offer of referral to a weight-management programme in obesity",
       "requiresRegister": "OB",
       "check": {
         "kind": "observation-recent",
@@ -1656,15 +1813,15 @@
         "upper": 30
       },
       "points": 5,
-      "source": "QOF 26/27 OB004 (NHS England PRN02356) — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
-      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~5), thresholds (corroborated 10–30%) and code cluster against PRN02356. The true definition requires the referral to be offered within 90 days of the qualifying BMI being recorded — Sentinel cannot verify that 90-day timing, so this observation-recent approximation checks only for a weight-management-referral code within the QOF year. Flip enabled:true once the values are confirmed. Depends on the OB register, which is itself a BMI-driven approximation."
+      "source": "QOF 26/27 OB004 (NHS England PRN02356) — confirmed against PRN02356 primary source 2026-07-18 (VERIFIER-B).",
+      "notes": "NEW 26/27 indicator, shipped DISABLED. Points (5) and thresholds (10–30%) confirmed against PRN02356 2026-07-18. The true definition requires the referral to be offered within 90 days of the qualifying BMI being recorded — Sentinel cannot verify that 90-day timing, so this observation-recent approximation checks only for a weight-management-referral code within the QOF year. Flip enabled:true once the values are confirmed. Depends on the OB register, which is itself a BMI-driven approximation."
     },
     {
       "id": "qof-ob005",
       "type": "qof-indicator",
       "enabled": false,
       "indicatorCode": "OB005",
-      "indicatorName": "[DRAFT 26/27 — PENDING CONFIRMATION] Weight-management pharmacotherapy / shared decision-making in obesity",
+      "indicatorName": "[DRAFT 26/27] Weight-management pharmacotherapy / shared decision-making in obesity",
       "requiresRegister": "OB",
       "check": {
         "kind": "medication-present",
@@ -1683,8 +1840,8 @@
         "upper": 80
       },
       "points": 13,
-      "source": "QOF 26/27 OB005 (NHS England PRN02356); tirzepatide eligibility per NICE TA1026 — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
-      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~13), thresholds (corroborated 50–80%) and definition against PRN02356. The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing. Flip enabled:true once values are confirmed."
+      "source": "QOF 26/27 OB005 (NHS England PRN02356); tirzepatide eligibility per NICE TA1026 — confirmed against PRN02356 primary source 2026-07-18 (VERIFIER-B).",
+      "notes": "NEW 26/27 indicator, shipped DISABLED. Points (~13) and thresholds (50–80%) confirmed against PRN02356 2026-07-18. The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing. Flip enabled:true once values are confirmed."
     },
     {
       "id": "qof-dem004",
@@ -2064,6 +2221,107 @@
       "points": 12,
       "source": "QOF 26/27 SMOK004 (NICE IND99); confirmed vs primary source PRN02356 2026-06-21",
       "notes": "SHIPPED DISABLED pending engine support. SMOK004 cohort = patients aged 15+ recorded as CURRENT SMOKERS who should have an offer of support/treatment within 24 months. Sentinel gates QOF checks by disease register; \"current smoker\" is not a disease register, so the cohort is not expressible in the current schema (needs a smoking-status cohort gate). Values (12 pts / 40-90%) recorded for when engine support lands."
+    },
+    {
+      "id": "qof-reg-ndh",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "NDH",
+      "registerName": "Non-Diabetic Hyperglycaemia",
+      "problemMatch": [
+        "non-diabetic hyperglycaemia",
+        "non diabetic hyperglycaemia",
+        "prediabetes",
+        "pre-diabetes",
+        "pre-diabetic",
+        "impaired glucose tolerance",
+        "impaired fasting glucose",
+        "impaired fasting glycaemia",
+        "borderline diabetes",
+        "gestational diabetes"
+      ],
+      "problemExclude": [
+        "type 1 diabetes",
+        "type 2 diabetes",
+        "diabetes mellitus",
+        "diabetic"
+      ],
+      "source": "QOF 26/27 NDH register (NHS England PRN02356); confirmed 2026-07-18 Keeper (VERIFIER-B). Gestational diabetes included as a recognised risk state.",
+      "notes": "The NDH register includes patients with non-diabetic hyperglycaemia (impaired glucose tolerance or impaired fasting glucose). Sentinel approximates via problem substring matching — will miss patients where the at-risk state is only captured in observations without a problem label. Underpins NDH003 (annual HbA1c or FPG). NDH002 is retired (absorbed into NDH003). Added 2026-07-18 Keeper."
+    },
+    {
+      "id": "qof-ndh003",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "NDH003",
+      "indicatorName": "HbA1c or fasting plasma glucose recorded in NDH (preceding 12 months)",
+      "requiresRegister": "NDH",
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "hba1c",
+          "haemoglobin a1c",
+          "glycated haemoglobin",
+          "fasting plasma glucose",
+          "fasting glucose",
+          "fpg"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 50,
+        "upper": 90
+      },
+      "points": 20,
+      "source": "QOF 26/27 NDH003 (NHS England PRN02356); confirmed 2026-07-18 Keeper (VERIFIER-B)",
+      "notes": "NDH003: HbA1c or fasting plasma glucose recorded in the preceding 12 months for patients on the NDH register. 20 points, 50-90% threshold. Replaces NDH002 (annual FPG only; retired 26/27 — see qof-ndh002-retired). Added 2026-07-18 Keeper."
+    },
+    {
+      "id": "qof-ndh002-retired",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "NDH002",
+      "indicatorName": "[RETIRED 26/27] Fasting plasma glucose recorded in NDH — absorbed into NDH003",
+      "requiresRegister": "NDH",
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "fasting plasma glucose",
+          "fasting glucose",
+          "fpg"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 50,
+        "upper": 90
+      },
+      "points": 0,
+      "source": "QOF: NDH002 retired from 26/27; absorbed into NDH003 (HbA1c or FPG).",
+      "notes": "Shipped DISABLED as retirement record. NDH002 required fasting plasma glucose only; NDH003 (active) now accepts either HbA1c or FPG. Kept to make the year-on-year diff visible. Added 2026-07-18 Keeper."
+    },
+    {
+      "id": "qof-dm012-retired",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "DM012",
+      "indicatorName": "[RETIRED 26/27] HbA1c <=75 mmol/mol in diabetes — absorbed into DM037",
+      "requiresRegister": "DM",
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["hba1c"],
+        "operator": "<=",
+        "threshold": 75,
+        "unit": "mmol/mol",
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 50,
+        "upper": 90
+      },
+      "points": 0,
+      "source": "QOF: DM012 retired; clinical function absorbed into DM037 (comprehensive care-process bundle).",
+      "notes": "Shipped DISABLED as retirement record. DM012 was a standalone HbA1c threshold indicator; it has been retired and its clinical content is covered by DM037's care-process bundle. Kept to make the year-on-year diff visible. Added 2026-07-18 Keeper."
     }
   ]
 }
