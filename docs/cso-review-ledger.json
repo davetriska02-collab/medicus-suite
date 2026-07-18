@@ -31,9 +31,9 @@
     },
     {
       "file": "docs/SOUP.md",
-      "last_cso_review_version": "3.115.0",
-      "last_cso_review_date": "2026-06-17",
-      "notes": "SOUP v1.9. Reissued at 3.115.0 on 2026-06-17: PDF.js 4.2.67 (CVE-2024-4367 patched), Chart.js 4.4.1 and D3.js 7.8.5 all confirmed unchanged."
+      "last_cso_review_version": "3.175.0",
+      "last_cso_review_date": "2026-07-18",
+      "notes": "SOUP v1.10. Reissued at 3.175.0 on 2026-07-18 (CSO Dr Dave Triska, recorded via PR #216): no SOUP changes since 3.115.0 — PDF.js 4.2.67 (+ worker), Chart.js 4.4.1 and D3.js 7.8.5 all re-verified byte-identical via scripts/verify-vendor.js; the v3.175.0 Patient Alerts module adds no third-party code. Prior reissue was v1.9 at 3.115.0 (2026-06-17)."
     },
     {
       "file": "docs/feature-list.md",
