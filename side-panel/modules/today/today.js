@@ -742,11 +742,15 @@ function buildAlertsBody() {
 // Decision B: wireSweepButtons and wireSwepButtons alias removed entirely.
 // The delegated handler in wireCardInteractions handles open-sweep.
 
+// Named so cleanup() can remove it — the shell reuses the container across
+// modules, so an anonymous delegate stacked one copy per visit (audit H8-class).
+let _cardActionHandler = null;
+
 function wireCardInteractions() {
   if (!container) return;
 
   // Delegated handler — works even after card bodies are re-rendered
-  container.addEventListener('click', (e) => {
+  _cardActionHandler = (e) => {
     const actionEl = e.target.closest('[data-action]');
     if (!actionEl) return;
     const action = actionEl.dataset.action;
@@ -754,7 +758,8 @@ function wireCardInteractions() {
 
     if (action === 'open-setup') openSetup();
     if (action === 'open-sweep') navTo('sweep');
-  });
+  };
+  container.addEventListener('click', _cardActionHandler);
 
   // Decision A: use btn.dataset.nav (not btn.closest('.today-card')?.dataset.card)
   // Decision H: replace title with aria-label on .today-card-open
@@ -939,6 +944,8 @@ export async function init(el) {
     _timers = [];
     chrome.storage.onChanged.removeListener(onStorageChange);
     document.removeEventListener('visibilitychange', onVisible);
+    if (container && _cardActionHandler) container.removeEventListener('click', _cardActionHandler);
+    _cardActionHandler = null;
     container = null;
   };
 }

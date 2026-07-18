@@ -527,7 +527,7 @@
       "source": "Composite example",
       "rule": {
         "type": "composite",
-        "enabled": true,
+        "enabled": false,
         "label": "NSAID + anticoagulant + HF — extreme GI bleed risk",
         "operator": "AND",
         "ruleIds": ["custom-replace-with-pincer-2-id","custom-replace-with-pincer-6-id"],

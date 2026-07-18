@@ -23,6 +23,11 @@ let _snapshotDate = null; // guards the once-a-day Practice Report snapshot writ
 let _indexConfig = null; // raw stored { weights, thresholds } override, or null = defaults
 let _editorOpen = false;
 let _pulsePeriod = 7; // Pulse section's 7d/30d toggle — panel-session only, not persisted
+// Named delegated-click handlers so cleanup() can remove them (audit H8).
+let _onSetupClick = null;
+let _onReportClick = null;
+let _onPulseClick = null;
+let _onCopyClick = null;
 
 // Capture one Practice Report snapshot per calendar day. The live-only metrics
 // (PPI / waiting room / task age) have no per-day history at the source, so this
@@ -40,7 +45,9 @@ function esc(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 async function loadCards() {
@@ -415,40 +422,46 @@ export async function init(el) {
   _indexConfig = stored[INDEX_CONFIG_KEY] ?? null;
   chrome.storage.onChanged.addListener(onIndexConfigChange);
 
-  // Delegated click for "Set up now" buttons rendered inside cards
-  _container.addEventListener('click', (e) => {
+  // Delegated click handlers (audit H8, 2026-07-18): NAMED and removed in
+  // cleanup() — the shell reuses this container across modules, so anonymous
+  // delegates stacked one copy per visit (N visits → one click opened N
+  // report tabs / fired N CSV downloads).
+  _onSetupClick = (e) => {
     if (!e.target.classList.contains('setup-now-btn')) return;
     if (document.getElementById('setupHost')) {
       document.dispatchEvent(new CustomEvent('suite:open-setup'));
     } else {
       chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-suite') });
     }
-  });
+  };
+  _container.addEventListener('click', _onSetupClick);
 
   // Delegated click for the Practice Report launcher — opens the full report page
   // (a browser tab, like the visualiser) at the chosen period.
-  _container.addEventListener('click', (e) => {
+  _onReportClick = (e) => {
     const rb = e.target.closest('.condor-report-btn');
     if (!rb) return;
     const preset = rb.dataset.preset || '7d';
     chrome.tabs.create({
       url: chrome.runtime.getURL(`practice-report.html?preset=${encodeURIComponent(preset)}`),
     });
-  });
+  };
+  _container.addEventListener('click', _onReportClick);
 
   // Delegated click for the Pulse 7d/30d toggle — wired once here because poll() replaces
   // innerHTML; re-polls so the toggle also picks up any snapshot captured since page load.
-  _container.addEventListener('click', (e) => {
+  _onPulseClick = (e) => {
     const tb = e.target.closest('[data-pulse-period]');
     if (!tb) return;
     const period = Number(tb.dataset.pulsePeriod) === 30 ? 30 : 7;
     if (period === _pulsePeriod) return;
     _pulsePeriod = period;
     poll();
-  });
+  };
+  _container.addEventListener('click', _onPulseClick);
 
   // Delegated click for "Copy figures" — wired once here because poll() replaces innerHTML
-  _container.addEventListener('click', async (e) => {
+  _onCopyClick = async (e) => {
     const csvBtn = e.target.closest('#condorCsvBtn');
     if (csvBtn && _lastData) {
       const { header, rows } = buildSnapshotCsv(_lastData);
@@ -465,7 +478,8 @@ export async function init(el) {
         btn.textContent = orig;
       }, 1500);
     }
-  });
+  };
+  _container.addEventListener('click', _onCopyClick);
 
   await poll();
   _stopFresh = attachFreshnessTicker(_container);
@@ -487,5 +501,12 @@ export function cleanup() {
     _stopFresh = null;
   }
   chrome.storage.onChanged.removeListener(onIndexConfigChange);
+  if (_container) {
+    if (_onSetupClick) _container.removeEventListener('click', _onSetupClick);
+    if (_onReportClick) _container.removeEventListener('click', _onReportClick);
+    if (_onPulseClick) _container.removeEventListener('click', _onPulseClick);
+    if (_onCopyClick) _container.removeEventListener('click', _onCopyClick);
+  }
+  _onSetupClick = _onReportClick = _onPulseClick = _onCopyClick = null;
   _container = null;
 }

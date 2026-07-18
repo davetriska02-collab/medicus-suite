@@ -2,6 +2,83 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.176.1] — 2026-07-18
+
+### Audit remediation — whole-suite bug bash fixes (Milestones 0–2)
+
+Fixes from the 2026-07-18 whole-suite audit (5 parallel specialist reviews;
+every Critical/High verified against source, clinical-logic bugs reproduced
+under Node before fixing). Failing-first regression tests were written for
+each correctness fix.
+
+**Critical:**
+
+- **C1 — wrong-patient booking/task-creation race closed.** `booking-inline`
+  and `task-inline` now pin their per-task state instance across every await
+  (a resolution still in flight when the SPA navigates is discarded, never
+  written into the next task's state) and HARD re-verify task→patient at
+  commit time before creating an appointment/task — the same click-time
+  re-check lab filing already used. An orphaned slot reservation made during
+  a navigation is released, not attached.
+- **C2 — false "vaccination GIVEN" chips.** Every vaccine rule's `declined`
+  list now covers refused/contraindicated/not given/not indicated phrasings
+  (covid lacked even "not given"), and an UNDATED "given" record no longer
+  satisfies a seasonal window (fail-closed; one-off vaccines still accept
+  undated records — their window is all-time). New
+  `test-vaccine-status-terms.js` (28 assertions, red-first).
+- **C3 — Record tab cleanup never ran.** `record.js` init now returns its
+  cleanup (the loader only honours the RETURNED function); every visit had
+  permanently leaked 4 listeners, each firing a background full-record fetch
+  on every tab switch. New `test-module-lifecycle.js` statically enforces the
+  init-returns-cleanup contract for all 17 modules.
+
+**High:**
+
+- **H1** — "Non-smoker" no longer displays as "Current smoker": new 'non'
+  bucket (deliberately not 'never' — SNOMED Non-smoker leaves ex-vs-never
+  unspecified); "Passive smoker" now reads unclear, never current.
+- **H2** — nystatin/sandostatin/cilastatin/pentostatin excluded from the four
+  QOF lipid-lowering `"statin"` matches (false MET off Nystatin).
+- **H3** — problem-negation is now clause-bounded with a 30-char reach:
+  "History of MI; heart failure" no longer kills a heart-failure-gated alert;
+  "No/Query/History of heart failure" still negate.
+- **H4** — `findLatestObservation` gains exclude-term support;
+  alert-hyperkalaemia excludes urine/faecal/etc. specimens (a newer urine
+  potassium fired a red serum alert). New `test-matching-false-signals.js`
+  (16 assertions) covers H2–H4.
+- **H5** — journal-fetch failures now THROW instead of returning [] — the
+  panel's journalAugmentFailed warning was unreachable dead wiring, so a
+  500/timeout silently degraded journal-coded QOF indicators to a false
+  all-clear no_data.
+- **H7** — the detail verdict banner's attempted-set is cleared on leaving
+  the detail page: a task's red "N urgent" banner could previously never
+  recompute after its 5-min cache expired, for the whole session.
+- **H8** — Condor's four delegated click handlers (and Today's card handler)
+  are named and removed in cleanup — they stacked one copy per visit (N
+  visits → one click opened N report tabs).
+- **H9** — module switches are now SERIALISED in the loader (at most one init
+  in flight; a superseded init's cleanup can no longer tear down the live
+  instance's timers — the "Sentinel frozen on the last patient's chips"
+  race), and an init that throws part-way gets a best-effort module cleanup.
+- **H11** — queue result-chip cache TTL 5→30 min with a real invalidation
+  signal (cached severity dropped the moment a row's priorityDisplay changes
+  on the bridge) — removes ~19k/day redundant overview GETs on long queues.
+
+**Medium/low quick wins:** own-mutation filter recognises `.ch-q-pa` (each
+flag-chip injection triggered a full queue refresh cycle); queue/OIR caches
+bounded (ts-less bridge entries now prunable via createdAt; FIFO caps on the
+outstanding-investigation caches that retained every patient's full history
+all day); `event-ledger.js` no longer double-loaded by the manifest (+
+re-entry guard); pa-strip poll visibility-gated, demoted to a 60s backstop,
+and its store cached via onChanged; quote-safe escaping in `escStrip` and the
+condor/tabs-section/setup/module-loader esc helpers (staff-typed free text in
+title attributes could break out of the attribute); `alert-library.json`
+`composite-1` template now ships disabled (placeholder ruleIds silently never
+fired).
+
+Full audit (findings, strategy, remaining Milestone 2–3 tasks) delivered as
+a separate document; hazard-log entries for C1/C2 pending CSO review.
+
 ## [v3.176.0] — 2026-07-18
 
 ### Patient Alerts everywhere it matters: on-page banner, queue chips, attribution

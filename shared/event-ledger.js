@@ -49,6 +49,12 @@
 (function (global) {
   'use strict';
 
+  // Re-entry guard (audit, 2026-07-18): this file used to be listed in TWO
+  // manifest content-script blocks; the second load replaced window.EventLedger
+  // and discarded the first instance's session dedupe cache. The duplicate
+  // manifest entry is gone, but the guard makes double-loading harmless.
+  if (global && global.EventLedger) return;
+
   // ── Constants ─────────────────────────────────────────────────────────────
   const STORAGE_KEY = 'ledger.events';
   const MAX_EVENTS = 5000;

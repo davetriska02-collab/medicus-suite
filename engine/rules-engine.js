@@ -216,11 +216,20 @@
   // === OBSERVATION LOOKUP ===
   function findLatestObservation(observations, testSpec) {
     if (!Array.isArray(observations)) return null;
+    // Optional exclude terms (audit H4, 2026-07-18): bare analyte substrings
+    // also match the wrong specimen — "potassium" matched "Urine potassium",
+    // whose latest date then WON the headline and fired a red hyperkalaemia
+    // alert off a urine value. Text matches are rejected when the observation
+    // name contains any exclude term; exact-SNOMED matches bypass excludes
+    // (a code is specimen-specific already).
+    const excludeTerms = Array.isArray(testSpec.exclude) ? testSpec.exclude.map((e) => String(e).toLowerCase()) : null;
     const matches = observations.filter((obs) => {
       if (testSpec.snomed && obs.code && testSpec.snomed.includes(String(obs.code))) return true;
       if (obs.name && Array.isArray(testSpec.match)) {
         const obsLower = String(obs.name).toLowerCase();
-        return testSpec.match.some((m) => obsLower.includes(String(m).toLowerCase()));
+        if (!testSpec.match.some((m) => obsLower.includes(String(m).toLowerCase()))) return false;
+        if (excludeTerms && excludeTerms.some((e) => obsLower.includes(e))) return false;
+        return true;
       }
       return false;
     });
@@ -1130,15 +1139,37 @@
     /\bquery\s+/,
     /\b\?/,
   ];
+  // How close (in characters) a negation cue's END must be to the matched term
+  // for it to negate the match. Bounds the cue to the words immediately before
+  // the term ("no heart failure", "no significant heart failure") without
+  // letting an unrelated earlier cue reach across the clause.
+  const PROBLEM_NEGATION_REACH = 30;
+
   function problemLabelMatchesTerm(label, term) {
     const l = String(label || '').toLowerCase();
     const t = String(term || '').toLowerCase();
     if (!t) return false;
     const idx = l.indexOf(t);
     if (idx < 0) return false;
-    // Strip everything from the match onward; check the prefix for negation.
+    // Audit H3 (2026-07-18): the negation scan used to run over the ENTIRE
+    // prefix, so "History of MI; heart failure" failed a requiresProblem:
+    // ["heart failure"] gate — the "history of" belonged to a different
+    // clause, and the gated safety alert silently never fired. Bound the scan
+    // to (a) the same clause as the match (split on ; . :) and (b) cues whose
+    // end sits within PROBLEM_NEGATION_REACH chars of the term.
     const prefix = l.slice(0, idx);
-    return !PROBLEM_NEGATION_PATTERNS.some((rx) => rx.test(prefix));
+    const clauseStart = Math.max(prefix.lastIndexOf(';'), prefix.lastIndexOf('.'), prefix.lastIndexOf(':')) + 1;
+    const clause = prefix.slice(clauseStart);
+    return !PROBLEM_NEGATION_PATTERNS.some((rx) => {
+      const g = new RegExp(rx.source, 'gi');
+      let m;
+      let lastEnd = -1;
+      while ((m = g.exec(clause)) !== null) {
+        lastEnd = m.index + m[0].length;
+        if (m[0].length === 0) g.lastIndex++; // safety vs zero-width match
+      }
+      return lastEnd >= 0 && clause.length - lastEnd <= PROBLEM_NEGATION_REACH;
+    });
   }
 
   // Shared problem-include / problem-exclude filter. Used by drug-monitoring,
@@ -1653,7 +1684,7 @@
     // never adds green "MET" noise. comparator 'above' = high values are dangerous
     // (e.g. potassium); 'below' = low values are dangerous.
     if (check.kind === 'observation-alert') {
-      const obs = findLatestObservation(data.observations, { match: check.observation });
+      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
       if (!obs || !obs.date) {
         if (traceEntry) traceEntry.skipReason = 'no-observation';
         return [];
@@ -1738,7 +1769,7 @@
     }
 
     if (check.kind === 'observation-threshold') {
-      const obs = findLatestObservation(data.observations, { match: check.observation });
+      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
       // Reject unparseable dates: NaN < _qofStart is false so an invalid date
       // would bypass the window check and surface a spurious 'achieved'/'not_met'.
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
@@ -1800,7 +1831,7 @@
       if (foundMed) evidenceCtx.matchedMed = foundMed.name;
       status = foundMed ? 'achieved' : 'not_met';
     } else if (check.kind === 'observation-recent') {
-      const obs = findLatestObservation(data.observations, { match: check.observation });
+      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
       // Reject unparseable dates: NaN >= _qofStart is false so an invalid date
       // would produce 'overdue' (conservative but misleading — treat as no data).
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
@@ -2235,18 +2266,26 @@
     // IMPORTANT: check declined BEFORE given for each record so that a code
     // like "Flu vaccine declined" (which contains the stem "flu vaccin") is
     // never misclassified as given. This is a clinical-safety requirement.
+    // UNDATED records fail CLOSED against a real season window (audit C2,
+    // 2026-07-18): a dateless historic "given" code used to satisfy EVERY
+    // season forever — a false green for an eligible unvaccinated patient.
+    // One-off vaccines (window start 1900-01-01) still accept undated records:
+    // their window is all-time, so an undated "given" would pass with any date
+    // anyway, and rejecting it would spam false DUE recalls instead.
+    const windowIsSeasonal = seasonStartIso > '1900-01-01';
+    const outOfWindow = (d) => (d ? d < seasonStartIso : windowIsSeasonal);
     // Search problems
     for (const p of data.problems || []) {
       if (!p.label) continue;
       const d = p.codedDate || '';
-      if (d && d < seasonStartIso) continue;
+      if (outOfWindow(d)) continue;
       if (matchesAnyTerm(p.label, declinedTerms)) return { type: 'declined', date: d, source: 'problem' };
       if (matchesAnyTerm(p.label, givenTerms)) return { type: 'given', date: d, source: 'problem' };
     }
     // Search observations (name and value)
     for (const o of data.observations || []) {
       const d = o.date || '';
-      if (d && d < seasonStartIso) continue;
+      if (outOfWindow(d)) continue;
       if (matchesAnyTerm(o.name, declinedTerms)) return { type: 'declined', date: d, source: 'observation' };
       if (matchesAnyTerm(o.name, givenTerms)) return { type: 'given', date: d, source: 'observation' };
     }

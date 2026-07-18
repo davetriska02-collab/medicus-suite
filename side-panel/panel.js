@@ -1400,10 +1400,15 @@ chrome.storage.onChanged.addListener((changes) => {
 _updateQuietPill();
 
 function escStrip(s) {
+  // Quote-safe (audit M8, 2026-07-18): escStrip feeds double-quoted attribute
+  // contexts (pa-strip pill title carries staff-typed free text) — without
+  // quote escaping a '"' broke out of the attribute.
   return String(s ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // ── Failure-backoff poller ────────────────────────────────────────────────────
@@ -2011,11 +2016,23 @@ chrome.storage.onChanged.addListener((changes) => {
 // CLINICAL SAFETY: absence of this strip means "no flags recorded or patient
 // not identified", never a verified "no concerns".
 const paStripEl = document.getElementById('paStrip');
-const PA_STRIP_POLL_MS = 10 * 1000;
+// 60s backstop only (audit M12): the strip's real triggers are the snapshot
+// ping, tabs.onActivated and the store's onChanged below — the poll exists so
+// none of those being missed can strand a stale strip for long.
+const PA_STRIP_POLL_MS = 60 * 1000;
 let _paStripPrevSig = null;
+// patientAlerts.byPatient cached with onChanged invalidation (audit M12) —
+// the strip used to re-read the whole store from chrome.storage every tick.
+let _paStripStore = null;
+chrome.storage.local.get('patientAlerts.byPatient').then((r) => {
+  _paStripStore = r['patientAlerts.byPatient'] || {};
+});
 
 async function fetchAndRenderPaStrip() {
   if (!paStripEl) return true;
+  // Visibility gate (audit M12) — this was the only strip without one; the
+  // tabs.query + IPC round-trip ran ~8,600×/day even while hidden.
+  if (document.visibilityState !== 'visible') return true;
   const hide = () => {
     paStripEl.className = 'pa-strip pa-strip-hidden';
     paStripEl.innerHTML = '';
@@ -2041,8 +2058,11 @@ async function fetchAndRenderPaStrip() {
       hide();
       return true;
     }
-    const r = await chrome.storage.local.get('patientAlerts.byPatient');
-    const found = findEntryForPatient(r['patientAlerts.byPatient'] || {}, pc);
+    if (_paStripStore === null) {
+      const r = await chrome.storage.local.get('patientAlerts.byPatient');
+      _paStripStore = r['patientAlerts.byPatient'] || {};
+    }
+    const found = findEntryForPatient(_paStripStore, pc);
     const alerts = found ? paSortAlerts(found.entry.alerts) : [];
     if (alerts.length === 0) {
       hide();
@@ -2094,6 +2114,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 chrome.tabs.onActivated.addListener(() => schedulePaStripRefresh());
 chrome.storage.onChanged.addListener((changes) => {
   if (changes['patientAlerts.byPatient']) {
+    _paStripStore = changes['patientAlerts.byPatient'].newValue || {};
     _paStripPrevSig = null; // force rebuild — content changed even if patient didn't
     schedulePaStripRefresh();
   }

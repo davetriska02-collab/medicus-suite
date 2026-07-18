@@ -767,6 +767,12 @@
           "bempedoic",
           "alirocumab",
           "evolocumab"
+        ],
+        "medicationExclude": [
+          "cilastatin",
+          "nystatin",
+          "pentostatin",
+          "sandostatin"
         ]
       },
       "thresholds": {
@@ -799,6 +805,12 @@
           "bempedoic",
           "alirocumab",
           "evolocumab"
+        ],
+        "medicationExclude": [
+          "cilastatin",
+          "nystatin",
+          "pentostatin",
+          "sandostatin"
         ]
       },
       "thresholds": {
@@ -831,6 +843,12 @@
           "bempedoic",
           "alirocumab",
           "evolocumab"
+        ],
+        "medicationExclude": [
+          "cilastatin",
+          "nystatin",
+          "pentostatin",
+          "sandostatin"
         ]
       },
       "thresholds": {
@@ -863,6 +881,12 @@
           "bempedoic",
           "alirocumab",
           "evolocumab"
+        ],
+        "medicationExclude": [
+          "cilastatin",
+          "nystatin",
+          "pentostatin",
+          "sandostatin"
         ]
       },
       "thresholds": {
@@ -1597,7 +1621,16 @@
         "amber": 5.5,
         "red": 6,
         "unit": "mmol/L",
-        "withinDays": 180
+        "withinDays": 180,
+        "observationExclude": [
+          "dialysate",
+          "faecal",
+          "fecal",
+          "stool",
+          "sweat",
+          "urinary",
+          "urine"
+        ]
       },
       "source": "NICE CKS Hyperkalaemia / UK Kidney Association (2020)",
       "notes": "Hyperkalaemia clinical-safety alert. AMBER 5.5-5.9 mmol/L (mild): first exclude pseudohyperkalaemia (haemolysed or delayed sample) and recheck; review contributing drugs (ACEi/ARB, MRA/spironolactone, potassium-sparing diuretics, NSAIDs, trimethoprim, potassium supplements) and dietary potassium. RED >=6.0 mmol/L (moderate to severe): arrange urgent same-day clinical assessment and a 12-lead ECG. K+ >=6.5 mmol/L, or any ECG changes (peaked T waves, broadened QRS), is a medical emergency - give IV calcium gluconate for cardioprotection, insulin-glucose +/- salbutamol, continuous ECG monitoring and urgent senior/renal input. Always identify and treat the underlying cause."

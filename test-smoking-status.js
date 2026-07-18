@@ -33,6 +33,15 @@ check(SS.classify('Lifelong non-smoker') === 'never', 'lifelong non-smoker → n
 check(SS.classify('Ex-smoker') === 'ex', 'ex-smoker → ex');
 check(SS.classify('Former smoker') === 'ex', 'former smoker → ex');
 check(SS.classify('Stopped smoking') === 'ex', 'stopped smoking → ex');
+// Audit H1 (2026-07-18): "Non-smoker" used to classify as CURRENT — the bare
+// "smoker" alternative matched the "-smoker" suffix, displaying the opposite
+// of the record. It gets its own bucket ('non' — not 'never', which would
+// overclaim: SNOMED "Non-smoker" leaves ex-vs-never unspecified).
+check(SS.classify('Non-smoker') === 'non', 'Non-smoker → non (NOT current)');
+check(SS.classify('Non smoker') === 'non', 'Non smoker (no hyphen) → non');
+check(SS.classify('Does not smoke') === 'non', 'does not smoke → non');
+check(SS.classify('Passive smoker') === null, 'passive smoker → unclear (exposure, not own status)');
+check(SS.classify('Passive smoking risk') === null, 'passive smoking → unclear');
 check(SS.classify('Current smoker') === 'current', 'current smoker → current');
 check(SS.classify('Cigarette smoker') === 'current', 'cigarette smoker → current');
 check(SS.classify('Smokes 10 cigarettes per day') === 'current', 'smokes N/day → current');

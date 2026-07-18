@@ -3582,12 +3582,29 @@
     _firstResultPassPending = true;
     const pruneTs = Date.now() - 2 * _MON_CACHE_TTL;
     for (const [uuid, entry] of _queueMonCache) {
-      if (entry.ts && entry.ts < pruneTs) _queueMonCache.delete(uuid);
+      // Audit M1: entries with NO ts (bridge-created, never fetched — the
+      // majority of a large queue) used to escape the prune entirely; evict
+      // them once their createdAt passes the same horizon.
+      const anchor = entry.ts || entry.createdAt;
+      if (anchor && anchor < pruneTs) _queueMonCache.delete(uuid);
     }
     const resultPruneTs = Date.now() - 2 * _RESULT_CACHE_TTL;
     for (const [uuid, entry] of _queueResultCache) {
-      if (entry.ts && entry.ts < resultPruneTs) _queueResultCache.delete(uuid);
+      const anchor = entry.ts || entry.createdAt;
+      if (anchor && anchor < resultPruneTs) _queueResultCache.delete(uuid);
     }
+    // Audit M1: cap the outstanding-investigation caches — _oirHistoryCache
+    // holds a FULL observation history per lab-task patient and none of the
+    // four had any eviction, so a duty-doctor tab retained every patient's
+    // payload all day. FIFO-cap is enough: entries are re-fetched on demand.
+    const _capMap = (m, cap) => {
+      while (m.size > cap) m.delete(m.keys().next().value);
+    };
+    _capMap(_oirReportCache, 50);
+    _capMap(_oirHistoryCache, 50);
+    _capMap(_oirPatientCache, 200);
+    _capMap(_queuePaResolved, 400);
+    while (_oirAutoTicked.size > 500) _oirAutoTicked.delete(_oirAutoTicked.values().next().value);
     // Queue re-entry resets the jump cycle (item 1.2) — a "last jumped-to row"
     // from a previous queue visit has no meaning against a fresh row set.
     _queueStatusJumpPos = null;
@@ -3666,6 +3683,12 @@
         teardownOutstandingObserver();
         removeDetailVerdictBanner();
         _detailVerdictTaskUuid = null;
+        // Audit H7 (2026-07-18): the attempted set gates re-computation but was
+        // never cleared, so once a task's cached verdict expired (5-min TTL) the
+        // banner could NEVER come back this session — a red "N urgent" banner
+        // the GP saw earlier silently stopped reappearing. Clearing on leaving
+        // the detail page restores the documented "per page-visit" semantics.
+        _detailVerdictAttempted.clear();
       }
       if (type === 'record') runRecord();
       else if (type === 'detail') runDetail();
@@ -3712,7 +3735,14 @@
   // "nothing due" clear and a failed check both leave sev null; `error`
   // distinguishes them for rendering + retry cadence).
   const _queueResultCache = new Map();
-  const _RESULT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  // 30 minutes (audit H11, 2026-07-18 — was 5): on a long queue the churn
+  // scheduler re-verified every unchanged row each TTL expiry (~19k overview
+  // GETs/day at 200 rows). Result content for a posted task is effectively
+  // immutable; the bridge handler below additionally DROPS a row's cached
+  // severity the moment its priorityDisplay changes (the one cheap change
+  // signal the task-list payload carries), so a genuinely updated row
+  // re-fetches immediately rather than waiting out the TTL.
+  const _RESULT_CACHE_TTL = 30 * 60 * 1000;
   // Error entries get a much shorter TTL than a real result so a transient
   // fetch/eval failure retries soon instead of showing "couldn't check" for
   // the full 5 minutes.
@@ -3906,7 +3936,7 @@
       if (typeof taskUuid !== 'string' || !_BRIDGE_UUID_RE.test(taskUuid)) continue;
       _queueRowUuids.set(rowIndex, taskUuid);
       _durableRowMap.set(rowIndex, taskUuid);
-      if (!_queueMonCache.has(taskUuid)) _queueMonCache.set(taskUuid, { taskTypeSlug });
+      if (!_queueMonCache.has(taskUuid)) _queueMonCache.set(taskUuid, { taskTypeSlug, createdAt: Date.now() });
 
       // Validate and cache result-triage fields (UNTRUSTED — strict rules)
       const rawOverview = row.overviewURL;
@@ -3919,9 +3949,17 @@
       // Only store/update entry if we don't have a fresh sev already
       const existing = _queueResultCache.get(taskUuid);
       if (!existing) {
-        _queueResultCache.set(taskUuid, { overviewURL, priorityDisplay, unmatched });
+        // createdAt lets the prune below evict never-fetched rows too (audit
+        // M1: ts-less bridge entries used to accumulate for the tab's lifetime).
+        _queueResultCache.set(taskUuid, { overviewURL, priorityDisplay, unmatched, createdAt: Date.now() });
       } else {
-        // Update metadata but keep cached sev if still fresh
+        // Update metadata but keep cached sev if still fresh. If the row's
+        // priorityDisplay CHANGED, the task itself changed — drop the cached
+        // severity so it re-fetches now (audit H11 invalidation signal).
+        if (existing.priorityDisplay !== priorityDisplay && existing.sev !== undefined) {
+          delete existing.sev;
+          delete existing.ts;
+        }
         existing.overviewURL = overviewURL;
         existing.priorityDisplay = priorityDisplay;
         existing.unmatched = unmatched;
@@ -6653,7 +6691,9 @@
           if (n.nodeType !== 1) continue; // ignore text nodes
           const cl = n.classList;
           if (!cl) return false;
-          if (!(cl.contains('ch-q-result') || cl.contains('ch-q-mon') || cl.contains('ch-queue-chips') || cl.contains('ch-chip'))) return false;
+          // ch-q-pa included (audit M2): each patient-flag chip injection used
+          // to read as a real grid mutation and trigger a full refresh cycle.
+          if (!(cl.contains('ch-q-result') || cl.contains('ch-q-mon') || cl.contains('ch-queue-chips') || cl.contains('ch-chip') || cl.contains('ch-q-pa'))) return false;
         }
       }
     }
