@@ -627,6 +627,8 @@ const HIGH_RISK_DRUGS = [
       'zopiclone',
       'zolpidem',
       'zaleplon',
+      'zimovane', // 2026-07-18 Keeper: brand: zopiclone (Meda/UK)
+      'stilnoct', // 2026-07-18 Keeper: brand: zolpidem (Vericel/UK)
     ],
     requires: [],
     interval: 0,

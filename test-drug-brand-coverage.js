@@ -76,7 +76,9 @@ const EXPECTED = {
     'Co-Aprovel 150/12.5', 'Karvea 150mg', 'Telmisartan 40mg', 'Micardis 40mg',
     'Micardis Plus 40/12.5', 'Pritor 40mg', 'Tolura 40mg', 'Olmesartan 20mg',
     'Olmetec 20mg', 'Sevikar 20mg/5mg', 'Azilsartan 40mg', 'Edarbi 40mg',
-    'Sacubitril/valsartan 49mg/51mg', 'Entresto 49mg/51mg'
+    'Sacubitril/valsartan 49mg/51mg', 'Entresto 49mg/51mg',
+    // 2026-07-18 Keeper: quinapril added (BNF-listed UK ACE inhibitor)
+    'Quinapril 5mg tablets', 'Accupro 5mg tablets', 'Accuretic 10mg/12.5mg tablets'
   ],
   'spironolactone': [
     'Spironolactone 25mg tablets', 'Aldactone 25mg', 'Eplerenone 25mg', 'Inspra 25mg'
@@ -121,7 +123,9 @@ const EXPECTED = {
     'Sulpiride 200mg tablets', 'Dolmatil 200mg tablets', 'Sulpitil 200mg tablets', 'Sulpor 200mg/5ml oral solution',
     'Zuclopenthixol 25mg tablets', 'Clopixol 25mg tablets', 'Clopixol Acuphase 50mg/ml injection', 'Clopixol Depot 200mg/ml injection',
     'Flupentixol 0.5mg tablets', 'Depixol 20mg/ml injection', 'Fluanxol 0.5mg tablets',
-    'Fluphenazine 1mg tablets', 'Modecate 25mg/ml injection'
+    'Fluphenazine 1mg tablets', 'Modecate 25mg/ml injection',
+    // 2026-07-18 Keeper: pimozide added (BNF-listed antipsychotic, QOF monitoring)
+    'Pimozide 2mg tablets', 'Orap 4mg tablets'
   ],
   'mirabegron': ['Mirabegron 50mg', 'Betmiga 50mg'],
   'levothyroxine': [
@@ -152,7 +156,9 @@ const EXPECTED = {
     'Microgynon 30 tablets', 'Rigevidon tablets', 'Yasmin tablets', 'Marvelon tablets',
     'Cilique tablets', 'Gedarel 30/150 tablets', 'Femodene tablets', 'Lucette tablets',
     'Evra transdermal patch', 'NuvaRing vaginal ring', 'Qlaira tablets', 'Zoely tablets',
-    'Logynon tablets', 'Synphase tablets'
+    'Logynon tablets', 'Synphase tablets',
+    // 2026-07-18 Keeper: drovelis (estetrol/drospirenone), trinovum (norethisterone/ethinylestradiol)
+    'Drovelis 14.2mg/3mg tablets', 'Trinovum tablets'
   ],
   // 2026-07-11 Keeper additions — new drug-monitoring rules
   'sodium-valproate': [
@@ -162,6 +168,14 @@ const EXPECTED = {
   ],
   'finerenone': [
     'Finerenone 10mg tablets', 'Kerendia 10mg tablets', 'Kerendia 20mg tablets'
+  ],
+  // 2026-07-18 Keeper: ciclosporin-maintenance — new rule added (was entirely missing)
+  'ciclosporin-maintenance': [
+    'Ciclosporin 25mg capsules', 'Cyclosporine 100mg/ml oral solution',
+    'Neoral 25mg capsules', 'Neoral 100mg/ml oral solution',
+    'Capimune 25mg capsules', 'Capsorin 25mg capsules',
+    'Deximune 25mg capsules', 'Sandimmun 50mg/ml concentrate',
+    'Vanquoral 25mg capsules'
   ]
 };
 

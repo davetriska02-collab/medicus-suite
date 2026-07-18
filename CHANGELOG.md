@@ -2,6 +2,63 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.175.0] — 2026-07-18
+
+### The Keeper — automated rule currency run (2026-07-18)
+
+Periodic horizon scan. All 6 scanner domains checked. 28 changes applied, 2
+candidates killed. 7 Red (silent monitoring/alerting gaps), 16 Amber, 5 Green.
+All tests pass (16 test files, 1,363 assertions total).
+
+**Red — patient-safety gaps fixed:**
+- `ciclosporin-maintenance` rule added to `drug-rules.json` (was entirely
+  missing — zero monitoring chips for all ciclosporin patients).
+- `prescribing-qtc-combination`: ivabradine/Procoralan added to both
+  drugSets A and B (MHRA DSU).
+- `mhra-valproate-ppg`: belvo, dyzantil, episenta, epival, syonell added
+  (missed brands — silent PPG alert gap).
+- `acb-scores.js`: Piriton (chlorphenamine), Phenergan/Sominex (promethazine),
+  Atarax/Ucerax (hydroxyzine) added at ACB score 3 — silent ACB under-reading
+  for very common OTC-crossover drugs.
+- `qof-rules.json`: 6 SMI physical health indicators added (MH002/003/006/007/
+  012/021 — 28+ QOF points missing from the file).
+- `qof-rules.json`: NDH register + NDH003 indicator added (20pts, prediabetes
+  annual HbA1c/FPG); NDH002 and DM012 retired.
+- `reception-pathways.json`: `rf-shingles-eye` (999 escalation for ophthalmic
+  shingles) added to rash pathway — HZO was not separated from general
+  blistering rash before this run.
+
+**Amber — other clinical updates:**
+- `ace-arb`: quinapril/Accupro/Accuretic added.
+- `antipsychotic`: pimozide/Orap added.
+- `chc-combined-hormonal`: Drovelis (estetrol), Trinovum added.
+- `alert-library.json`: mhra-valproate-males new alert (sex:M, age 16–75,
+  amber; CSO to confirm enabling); GLP-1 NAION note (MHRA DSU Feb 2026);
+  ertugliflozin withdrawal note; pincer-5 beta-blocker set expanded.
+- `acb-scores.js`: alimemazine/trimeprazine/Vallergan (score 3); Giraxine
+  solifenacin brand (score 3); Allegron/Anafranil/Prothiaden TCA brands
+  (score 3); SSRIs sertraline/citalopram/escitalopram/fluoxetine added at
+  score 1.
+- `stopp-start.js`: FIRSTGEN_AH_TERMS UK brands added (Piriton, Phenergan,
+  Sominex, Atarax, Ucerax); dexibuprofen added to NSAID_TERMS; 5 new term
+  arrays declared for future engine expansion.
+- `visualiser-core.js`: zimovane/stilnoct added to benzo_z (PINCER KD-33).
+- `vaccine-rules.json`: PCV20 PEH eligibility clause added (homelessness age
+  16+); RSV notes corrected (65–74 expansion: cardiovascular/liver/kidney NOT
+  included per VERIFIER-B — chronic respiratory + immunosuppressed only).
+- `reception-pathways.json`: rf-immune (duty escalation for immunosuppressed
+  patients with rash) added.
+
+**Not applied (CSO sign-off required):**
+- Buscopan/hyoscine butylbromide ACB score 3→1 correction (weakens_safety).
+- 5 new STOPP/START criteria (needs_engine_change — separate engine PR).
+- RSV 65–74 eligibility encoding (engine cannot combine age band + clinical
+  risk in one eligibility entry).
+
+Sources: JCVI/UKHSA Green Book chapters 19/25/27a/28a, NHS England PRN02356
+(QOF 2026/27), MHRA DSUs, NICE NG238, STOPP/START v3 (O'Mahony 2023),
+Pharmacy First PGD v1.1 (Oct 2025), BNF, ACBcalc.
+
 ## [v3.174.0] — 2026-07-16
 
 ### Smoking-status flag in the Sentinel patient banner (user-requested, panel-placed)

@@ -30,11 +30,14 @@
     // ── Score 3: Tricyclic antidepressants ──────────────────────────────────
     { term: 'amitriptyline', score: 3 },
     { term: 'nortriptyline', score: 3 },
+    { term: 'allegron', score: 3, note: 'brand: nortriptyline (King Pharmaceuticals) — 2026-07-18 Keeper' },
     { term: 'imipramine', score: 3 },
     { term: 'clomipramine', score: 3 },
+    { term: 'anafranil', score: 3, note: 'brand: clomipramine (Mallinckrodt) — 2026-07-18 Keeper' },
     { term: 'doxepin', score: 3 },
     { term: 'dosulepin', score: 3, note: 'TCA (= dothiepin); Boustani score 3' },
     { term: 'dothiepin', score: 3, note: 'older UK name for dosulepin' },
+    { term: 'prothiaden', score: 3, note: 'brand: dosulepin (King Pharmaceuticals) — 2026-07-18 Keeper' },
     { term: 'trimipramine', score: 3, note: 'TCA; Boustani ACB score 3 (2026-07-11 Keeper addition)' },
     { term: 'surmontil', score: 3, note: 'brand: trimipramine (2026-07-11 Keeper addition)' },
     // ── Score 2: Tricyclic antidepressant (moderate ACB) ─────────────────────
@@ -47,7 +50,7 @@
     //    baclofen: score conflict 1-vs-2; levomepromazine: actually score 3). ──
     { term: 'carbamazepine', score: 2, note: 'Boustani/Campbell ACB score 2 (antiepileptic)' },
     { term: 'oxcarbazepine', score: 2, note: 'Boustani/Campbell ACB score 2; 10-keto analogue of carbamazepine (not a substring of carbamazepine — no collision)' },
-    { term: 'amantadine', score: 2, note: 'Boustani/Campbell ACB score 2 (Parkinson)' },
+    { term: 'amantadine', score: 2, note: 'Boustani/Campbell ACB score 2 (Parkinson); corroborated Nawaz 2022 (PMID 35983547), Mühlberg 2017; score-1 assignment in some lists reflects dose-dependent effect — score 2 is the consensus for prescribing-age patients' },
     { term: 'pethidine', score: 2, note: 'Boustani/Campbell ACB score 2 (opioid; UK name — meperidine is US name, not added)' },
     // ── Score 3: SSRIs/SNRIs with notable ACB ───────────────────────────────
     { term: 'paroxetine', score: 3 },
@@ -59,7 +62,8 @@
     { term: 'tolterodine', score: 3 },
     { term: 'detrusitol', score: 3, note: 'brand: tolterodine' },
     { term: 'solifenacin', score: 3 },
-    { term: 'vesicare', score: 3, note: 'brand: solifenacin' },
+    { term: 'vesicare', score: 3, note: 'brand: solifenacin (AstraZeneca)' },
+    { term: 'giraxine', score: 3, note: 'brand: solifenacin (Astellas) — 2026-07-18 Keeper' },
     { term: 'fesoterodine', score: 3 },
     { term: 'toviaz', score: 3, note: 'brand: fesoterodine' },
     { term: 'darifenacin', score: 3, note: 'M3-selective antimuscarinic (OAB); Boustani ACB score 3 (2026-07-11 Keeper addition)' },
@@ -76,10 +80,22 @@
     { term: 'atropine', score: 3 },
     // ── Score 3: First-generation antihistamines ─────────────────────────────
     { term: 'chlorphenamine', score: 3 },
+    { term: 'piriton', score: 3, note: 'brand: chlorphenamine (GSK Consumer) — 2026-07-18 Keeper' },
     { term: 'promethazine', score: 3 },
+    { term: 'phenergan', score: 3, note: 'brand: promethazine (Sanofi) — 2026-07-18 Keeper' },
+    { term: 'sominex', score: 3, note: 'brand: promethazine hydrochloride 20 mg (Dexcel-Pharma/OTC) — 2026-07-18 Keeper' },
     { term: 'hydroxyzine', score: 3 },
+    { term: 'atarax', score: 3, note: 'brand: hydroxyzine (Alliance Pharmaceuticals) — 2026-07-18 Keeper' },
+    { term: 'ucerax', score: 3, note: 'brand: hydroxyzine (UCB Pharma) — 2026-07-18 Keeper' },
     { term: 'diphenhydramine', score: 3 },
     { term: 'cyclizine', score: 3 },
+    // Alimemazine (= trimeprazine): phenothiazine first-gen AH; ACBcalc score 3
+    // (medium confidence — ACBcalc 403; corroborated via NHS formulary reproductions).
+    // CSO note: alimemazine/trimeprazine usage in adults is now mainly palliative;
+    // Vallergan (alimemazine tartrate, Rosemont) is UK paediatric brand.
+    { term: 'alimemazine', score: 3, note: 'phenothiazine first-gen AH; ACBcalc score 3 (medium confidence — ACBcalc 403; NHS formulary corroboration) — 2026-07-18 Keeper' },
+    { term: 'trimeprazine', score: 3, note: 'older name for alimemazine (not a substring of it); same ACB basis — 2026-07-18 Keeper' },
+    { term: 'vallergan', score: 3, note: 'brand: alimemazine tartrate (Rosemont, paediatric) — 2026-07-18 Keeper' },
     // ── Score 3: Antipsychotics with high ACB ────────────────────────────────
     { term: 'olanzapine', score: 3 },
     { term: 'quetiapine', score: 3 },
@@ -99,13 +115,13 @@
     // These are on the Boustani ACB score-1 list. Confidence: high.
     { term: 'cetirizine', score: 1 },
     { term: 'loratadine', score: 1 },
-    // fexofenadine: some lists omit it (low affinity); NOT included as evidence
-    // is weak and omitting it is the safer conservative choice.
+    // fexofenadine: second-generation AH; ACBcalc assigns no ACB score (not listed),
+    // confirming negligible anticholinergic burden. Correctly excluded from this table.
     { term: 'ranitidine', score: 1 },
     { term: 'metoprolol', score: 1 },
     { term: 'atenolol', score: 1 },
     { term: 'captopril', score: 1 },
-    { term: 'codeine', score: 1 },
+    { term: 'codeine', score: 1, note: 'ACBcalc score 1 (opioid; weak anticholinergic effect)' },
     { term: 'colchicine', score: 1 },
     { term: 'diazepam', score: 1 },
     { term: 'digoxin', score: 1 },
@@ -128,6 +144,13 @@
     { term: 'aripiprazole', score: 1 },
     { term: 'asenapine', score: 1 },
     { term: 'mirtazapine', score: 1 },
+    // SSRIs: ACBcalc/Boustani score 1 (mild/possible; paroxetine is score 3 and listed above).
+    // sertraline, citalopram, escitalopram, fluoxetine all confirmed score 1 by VERIFIER-A
+    // 2026-07-18 (Boustani 2012/ACBcalc; corroborated via NHS SPS references). Not score 3.
+    { term: 'sertraline', score: 1, note: 'SSRI; ACBcalc score 1 — 2026-07-18 Keeper' },
+    { term: 'citalopram', score: 1, note: 'SSRI; ACBcalc score 1 — 2026-07-18 Keeper' },
+    { term: 'escitalopram', score: 1, note: 'SSRI; ACBcalc score 1 — 2026-07-18 Keeper' },
+    { term: 'fluoxetine', score: 1, note: 'SSRI; ACBcalc score 1 — 2026-07-18 Keeper' },
   ];
 
   // Sort by term length descending — longest match wins, preventing double-counting

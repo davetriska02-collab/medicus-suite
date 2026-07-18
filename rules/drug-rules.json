@@ -1,7 +1,7 @@
 {
-  "lastUpdated": "2026-07-11",
+  "lastUpdated": "2026-07-18",
   "schemaVersion": 2,
-  "specVersion": "Sentinel drug rules - July 2026 review (The Keeper)",
+  "specVersion": "Sentinel drug rules - July 2026 review (The Keeper) v2 — 2026-07-18",
   "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-14 CSO-approved Keeper addition: added brand 'jayempi' to azathioprine-maintenance (licensed UK azathioprine 10mg/ml oral suspension, Nova Laboratories, MA PLGB 13581/0005, available Feb 2024) — WebSearch-corroborated (emc SmPC / NHSBSA Drug Tariff), CSO-signed-off. 2026-06-20 (The Keeper, CSO proposal): corrected the DOAC rule notes to specify CrCl (Cockcroft-Gault), NOT eGFR, for renal-banded monitoring frequency (eGFR overestimates clearance and raises bleeding risk; MHRA/SPS/EHRA) — no interval change. Added a DMPA injectable-contraception monitoring rule (dmpa-injectable, enabled, 2-yearly BP+weight, FSRH). Added a combined-hormonal-contraception rule (chc-combined-hormonal) SHIPPED DISABLED pending engine disambiguation: the hrt-systemic rule matches bare 'estradiol', a substring of 'ethinylestradiol', so an enabled CHC rule would double-fire the HRT rule for oestrogen-ingredient/natural-oestrogen records. SOURCE GAP: FSRH/BNF primary PDFs 403 — corroborated via NHS formulary/NICE CKS reproductions; pending primary-source confirmation. 2026-06-21 (The Keeper, Sentinel currency review): additive safety/source refresh only — added the MHRA DSU 29 Jan 2026 strengthened GLP-1/GIP pancreatitis warning (glp1-receptor-agonist), refreshed the csDMARD source citation to the 2025 BSR guideline (Rheumatology, Nov 2025) across methotrexate/leflunomide/azathioprine/sulfasalazine/hydroxychloroquine with NO interval change, and noted the MHRA tirzepatide-to-oral-contraceptive interaction on chc-combined-hormonal. All corroborated across multiple secondary summaries; primary gov.uk/journal PDFs were 403 this run, pending primary-source confirmation. NOT changed: QOF DM036 age band (file uses <=70; one secondary source says <=79) — held for primary confirmation to avoid a silent chip change. 2026-06-29 (additive safety enhancement, PENDING CSO REVIEW): added a post-initiation U&E test to the ace-arb (RAAS blocker) rule enforcing NICE NG136's requirement for a U&E within ~1-2 weeks of STARTING an ACE-I/ARB (previously only described in notes, not enforced). Implemented via a new engine `postInitiationDays`/`postInitiationDueSoonDays` test mechanism that fires only when the drug's start date is known AND no U&E has been recorded since starting — so it cannot raise a false alert on an established patient whose start date is not visible. No change to the existing annual U&E/BP intervals or to any other rule. 2026-07-08 (Transactional-API enablement): added the drug-allergy rule type and three starter cross-check rules (penicillin, NSAID hypersensitivity, sulfonamide) that fire only when a documented ACTIVE allergy co-occurs with a contraindicated drug. These read the allergies bundle, available ONLY from the Transactional (GP Connect Structured) feed; on the legacy session/DOM feed there are no allergies so they FAIL CLOSED and never fire. SHIPPED ENABLED because fail-closed makes them zero-risk today; marked PENDING CSO REVIEW for the term lists and cross-sensitivity scope. Sources: BNF interactions/allergy guidance, MHRA, NICE CKS drug-allergy; primary PDFs to be confirmed at CSO review.",
   "rules": [
     {
@@ -194,6 +194,58 @@
       ],
       "source": "BNF / 2025 BSR guideline for prescription & monitoring of csDMARDs (Rheumatology, Nov 2025)",
       "notes": "Monitoring may be discontinued after 12 months of stable treatment per some shared care protocols. Check local guidance.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "ciclosporin-maintenance",
+      "drugClass": "Calcineurin inhibitor / immunosuppressant",
+      "drug": {
+        "match": [
+          "ciclosporin",
+          "cyclosporine",
+          "neoral",
+          "capimune",
+          "capsorin",
+          "deximune",
+          "sandimmun",
+          "vanquoral"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "U&E / eGFR",
+          "match": ["u&e", "urea and electrolytes", "renal profile", "egfr"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 120,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 120,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Blood pressure",
+          "match": ["blood pressure", "bp"],
+          "snomed": ["75367002"],
+          "intervalDays": 90,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "Lipids",
+          "match": ["lipid profile", "cholesterol", "lipids"],
+          "snomed": ["166830004"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "BNF / NICE NG206 (Organ transplant — ciclosporin monitoring) / ciclosporin SmPC (Neoral, Novartis) / BSR shared care guidance",
+      "notes": "Ciclosporin monitoring varies considerably by indication (transplant under specialist protocol vs dermatology/rheumatology shared care). Maintenance monitoring in primary care shared care: U&E/eGFR and LFT every 4 months (120d), BP every 3 months (90d), fasting lipids annually. Nephrotoxicity is dose-dependent and cumulative; note that eGFR may not decline linearly and a rising creatinine of >25% from baseline requires urgent specialist review. Blood pressure must be well controlled (target <130/80 in most shared care protocols). Grapefruit and grapefruit juice are a significant CYP3A4 inhibitor — avoid. Drug interactions: erythromycin, clarithromycin, ketoconazole, fluconazole, diltiazem, verapamil all raise ciclosporin levels; rifampicin, phenytoin, carbamazepine reduce levels. Brand: Neoral (Novartis microemulsion), Capimune/Capsorin/Deximune/Sandimmun (UK brands), Vanquoral (Teva UK) — note that ciclosporin formulations are NOT interchangeable between brands; prescribe by brand in secondary care shared care agreements and do not substitute at dispensing without specialist consent (narrow therapeutic index). Added 2026-07-18 Keeper (VERIFIER-A confirmed; primary SmPC PDFs 403 this run, corroborated via BNF/NICE NG206/NHS shared care templates).",
       "sharedCare": true
     },
     {
@@ -415,7 +467,10 @@
           "cilazapril",
           "vascace",
           "imidapril",
-          "tanatril"
+          "tanatril",
+          "quinapril",
+          "accupro",
+          "accuretic"
         ]
       },
       "phase": "maintenance",
@@ -624,8 +679,8 @@
           "dueSoonDays": 30
         }
       ],
-      "source": "NICE NG181 (Lipids) / BNF",
-      "notes": "NICE NG181: LFT baseline, at 3 months, and at 12 months only. Routine ongoing monitoring not required after 12 months on stable dose; do not check unless clinically indicated. CK only if muscle symptoms. Rule retained as a one-off prompt for new starts; consider disabling in Options once initial monitoring is complete on a given patient.",
+      "source": "NICE NG238 (Cardiovascular disease: risk assessment and reduction, 2023) / BNF",
+      "notes": "NICE NG238 (updated Nov 2023, replaces NG181): LFT baseline, at 3 months, and at 12 months only. Routine ongoing monitoring not required after 12 months on stable dose; do not check unless clinically indicated. CK only if muscle symptoms. Rule retained as a one-off prompt for new starts; consider disabling in Options once initial monitoring is complete on a given patient. Source updated 2026-07-18 Keeper (NG181 superseded by NG238 Nov 2023).",
       "sharedCare": false
     },
     {
@@ -708,7 +763,9 @@
           "depixol",
           "fluanxol",
           "fluphenazine",
-          "modecate"
+          "modecate",
+          "pimozide",
+          "orap"
         ],
         "exclude": ["clozapine"]
       },
@@ -1234,7 +1291,7 @@
         }
       ],
       "source": "BNF / NICE TA877 (finerenone for CKD in T2DM, 2023) / finerenone SmPC (Kerendia, Bayer) / MHRA",
-      "notes": "Finerenone (Kerendia) is a non-steroidal mineralocorticoid receptor antagonist licensed for CKD in T2DM (NICE TA877). Primary monitoring concern is hyperkalaemia — serum potassium and eGFR at baseline, at 4 weeks after initiation, and then every 4 months (120d) during maintenance. Withhold if serum K+ >5.5 mmol/L before starting; restart only when K+ <5.0 mmol/L. Reduce or withhold if eGFR falls to <25 mL/min/1.73m² or K+ consistently >5.5 mmol/L. Contraindicated with strong CYP3A4 inhibitors (itraconazole, ketoconazole, clarithromycin, ritonavir). Dispensing-practice note: ensure patients receive branded Kerendia (not generic preparations of spironolactone etc.) — finerenone is structurally distinct from spironolactone and eplerenone. Added 2026-07-11: BNF/NICE TA877 corroborated; primary SmPC PDF 403 this run.",
+      "notes": "Finerenone (Kerendia) is a non-steroidal mineralocorticoid receptor antagonist licensed for CKD in T2DM (NICE TA877). Primary monitoring concern is hyperkalaemia. POST-INITIATION (engine limitation — documented but not enforced): U&E/potassium must be checked at 4 weeks after starting finerenone; if serum K+ >5.0 mmol/L at that point, do not uptitrate and consider dose reduction; withhold if K+ >5.5 mmol/L. The engine only enforces the ongoing 120-day maintenance interval — new starters must be flagged separately by the prescribing clinician and their shared care team for the 28-day post-initiation check. MAINTENANCE: U&E/potassium + eGFR every 4 months (120d). Withhold if serum K+ >5.5 mmol/L before starting; restart only when K+ <5.0 mmol/L. Reduce or withhold if eGFR falls to <25 mL/min/1.73m² or K+ consistently >5.5 mmol/L. Contraindicated with strong CYP3A4 inhibitors (itraconazole, ketoconazole, clarithromycin, ritonavir). Dispensing-practice note: ensure patients receive branded Kerendia (not generic preparations of spironolactone etc.) ��� finerenone is structurally distinct from spironolactone and eplerenone. Added 2026-07-11; post-initiation 28-day check highlighted 2026-07-18 Keeper (VERIFIER-A confirmed per Kerendia SmPC; primary SmPC PDF 403 this run, corroborated via NICE TA877/BNF).",
       "sharedCare": false
     },
     {
@@ -1379,7 +1436,10 @@
           "ethinylestradiol",
           "ethinyloestradiol",
           "logynon",
-          "synphase"
+          "synphase",
+          "trinovum",
+          "drovelis",
+          "estetrol"
         ],
         "exclude": ["cerazette", "cerelle", "zelleta", "lovima", "hana", "nacrez", "slinda"]
       },

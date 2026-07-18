@@ -558,6 +558,9 @@ console.log('\n── Drug-table completeness locks ──');
     'zopiclone',
     'zolpidem',
     'zaleplon',
+    // 2026-07-18 Keeper: UK Z-drug brands added — parity with stopp-start.js ZDRUG_TERMS
+    'zimovane',
+    'stilnoct',
   ]) {
     assert(benzo.includes(t), `benzo_z terms include "${t}"`);
   }
