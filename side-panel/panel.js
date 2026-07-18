@@ -17,6 +17,11 @@ import { sanitiseHiddenTabs } from './tab-catalog.js';
 import { initSetup } from './setup/setup.js';
 import { TAB_HELP } from '../shared/tab-help.js';
 import { STATUS_RANK } from './modules/sentinel/sentinel-core.js';
+import {
+  findEntryForPatient,
+  maxSeverity as paMaxSeverity,
+  sortAlerts as paSortAlerts,
+} from './modules/patient-alerts/patient-alerts-core.js';
 
 const content = document.getElementById('suiteContent');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -134,6 +139,10 @@ const MODULES = {
   knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
   leaflets: { js: () => import('./modules/leaflets/leaflets.js'), css: './modules/leaflets/leaflets.css' },
   record: { js: () => import('./modules/record/record.js'), css: './modules/record/record.css' },
+  'patient-alerts': {
+    js: () => import('./modules/patient-alerts/patient-alerts.js'),
+    css: './modules/patient-alerts/patient-alerts.css',
+  },
   about: null,
 };
 
@@ -1987,6 +1996,109 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes['health.contracts']) fetchAndRenderHealthStrip();
 });
 
+// ── Patient Alerts strip (global — visible on every module) ───────────────────
+// Shows the practice's own per-patient flags (patientAlerts.byPatient, owned by
+// the Patient Alerts tab) for the patient currently open in Medicus, so the
+// flag is seen the moment the record loads whatever tab the panel is on.
+// Identity comes from the same Sentinel snapshot bridge the Monitoring badge
+// uses; alerts are looked up fresh on every render (wrong-patient safety — a
+// navigation must never leave the previous patient's flags on screen).
+// Panel-only, same convention as the other strips; deliberately NOT in the
+// alert roll-up (ALERT_CHANNELS): those group practice-demand signals, whereas
+// this is patient-context — collapsing a safeguarding flag into a demand
+// roll-up could hide it at exactly the moment it matters.
+//
+// CLINICAL SAFETY: absence of this strip means "no flags recorded or patient
+// not identified", never a verified "no concerns".
+const paStripEl = document.getElementById('paStrip');
+const PA_STRIP_POLL_MS = 10 * 1000;
+let _paStripPrevSig = null;
+
+async function fetchAndRenderPaStrip() {
+  if (!paStripEl) return true;
+  const hide = () => {
+    paStripEl.className = 'pa-strip pa-strip-hidden';
+    paStripEl.innerHTML = '';
+    _paStripPrevSig = null;
+  };
+  try {
+    let pc = null;
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    let tab = tabs[0]?.url && /medicus\.health/.test(tabs[0].url) ? tabs[0] : null;
+    if (!tab) {
+      const any = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
+      tab = any[0] || null;
+    }
+    if (tab?.id) {
+      try {
+        const snap = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
+        if (snap && !snap.unavailable && snap.patientContext) pc = snap.patientContext;
+      } catch (_) {
+        /* content script not mounted */
+      }
+    }
+    if (!pc) {
+      hide();
+      return true;
+    }
+    const r = await chrome.storage.local.get('patientAlerts.byPatient');
+    const found = findEntryForPatient(r['patientAlerts.byPatient'] || {}, pc);
+    const alerts = found ? paSortAlerts(found.entry.alerts) : [];
+    if (alerts.length === 0) {
+      hide();
+      return true;
+    }
+    const level = paMaxSeverity(alerts) === 'red' ? 'red' : 'amber';
+    const name = pc.displayName || pc.patientName || pc.name || '';
+    const sig = `${found.key}|${alerts.map((a) => `${a.id}:${a.severity}`).join(',')}`;
+    if (sig === _paStripPrevSig) return true; // unchanged — don't rebuild (keeps focus/hover stable)
+    _paStripPrevSig = sig;
+    const pills = alerts
+      .slice(0, 4)
+      .map(
+        (a) =>
+          `<span class="pa-strip-pill pa-strip-pill--${a.severity}" title="${escStrip(a.note || a.label)}">${escStrip(a.label)}</span>`
+      )
+      .join('');
+    const more = alerts.length > 4 ? `<span class="pa-strip-more">+${alerts.length - 4} more</span>` : '';
+    paStripEl.className = `pa-strip pa-strip--${level}`;
+    paStripEl.innerHTML = `
+      <span class="pa-strip-icon">&#x2691;</span>
+      <span class="pa-strip-label">PATIENT${name ? ` · ${escStrip(name)}` : ''}</span>
+      ${pills}${more}
+      <button class="pa-strip-goto" title="Open the Patient Alerts tab">Manage &rarr;</button>
+    `;
+    paStripEl.querySelector('.pa-strip-goto')?.addEventListener('click', () => switchModule('patient-alerts'));
+    return true;
+  } catch (_) {
+    hide();
+    return false;
+  }
+}
+
+let paStripPoller = makePoller(fetchAndRenderPaStrip, PA_STRIP_POLL_MS, 'pa-strip').start();
+// React immediately to patient changes (snapshot ping), tab switches, and
+// alert edits — the 10s poll is only the backstop.
+let _paStripDebounce = null;
+function schedulePaStripRefresh() {
+  if (_paStripDebounce) return;
+  _paStripDebounce = setTimeout(() => {
+    _paStripDebounce = null;
+    fetchAndRenderPaStrip();
+  }, 400);
+}
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!sender || sender.id !== chrome.runtime.id) return;
+  if (msg?.type === 'sentinel:snapshot-updated') schedulePaStripRefresh();
+});
+chrome.tabs.onActivated.addListener(() => schedulePaStripRefresh());
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes['patientAlerts.byPatient']) {
+    _paStripPrevSig = null; // force rebuild — content changed even if patient didn't
+    schedulePaStripRefresh();
+  }
+});
+
 // Refresh all four strips immediately when the panel becomes visible again
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
@@ -1994,6 +2106,7 @@ document.addEventListener('visibilitychange', () => {
     fetchAndRenderRmStrip();
     fetchAndRenderSubRagStrip();
     fetchAndRenderHealthStrip();
+    fetchAndRenderPaStrip();
   }
 });
 
@@ -2019,6 +2132,7 @@ window.addEventListener('pagehide', () => {
   if (rmPoller) rmPoller.stop();
   if (subRagPoller) subRagPoller.stop();
   if (healthPoller) healthPoller.stop();
+  if (paStripPoller) paStripPoller.stop();
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

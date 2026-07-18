@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.174.0
+**Version:** v3.175.0
 **Generated:** 2026-07-12 (automated)
 
 ## What it is
@@ -9,7 +9,7 @@ Medicus Suite is a Chrome browser extension for UK GP practices that runs alongs
 
 ## At a glance
 
-- 15 side-panel modules covering monitoring, demand, capacity, workflow, knowledge and the live patient record
+- 16 side-panel modules covering monitoring, demand, capacity, workflow, knowledge, per-patient practice flags and the live patient record
 - 8 in-page content-script features (queue overlays, workflow buttons and relays) plus 2 full-tab generated reports
 - 7 rule types in the alert engine
 - 27 drug-monitoring rules, 65 QOF register/indicator rules, 5 vaccine rules, 44 investigation-result rules, and 26 starter alerts in the prescribing-safety library
@@ -76,6 +76,10 @@ Finds and shares official NHS patient information without leaving the panel. Tie
 
 A live, on-screen snapshot of the patient open in Medicus — problems, medications, recent results and standard prescribing-safety scores — sourced from the same data Medicus already shows, not from an export. Display-copy only: it transcribes what's on screen with a provenance note baked into any copy, and marks gaps (allergies, immunisations, full history) explicitly rather than hiding them.
 
+### Patient Alerts
+
+Practice-defined per-patient flags — interpreter required, safeguarding concern, medication-seeking behaviour, or anything custom — that appear on a global alert strip and the Monitoring banner the moment that patient's record is opened. Managed from the Pt Alerts tab (add/edit/remove, browse all flagged patients, customisable quick-add presets, three severities). Stored locally per browser profile and shareable practice-wide via backup files; not written to the clinical record, and an absent flag is never an all-clear.
+
 ## In-page features (content scripts)
 
 - **Triage Lens — request queue**: overlays the patient request queue with severity chips (red/amber/info/routine) from ~80 built-in rules covering chest pain, sepsis, stroke, anaphylaxis, paediatric red flags and more, plus Pharmacy First signposting — decision support only, never auto-triage.
@@ -107,12 +111,14 @@ The bundled library ships **26 starter alerts** — 23 prescribing-safety combin
 
 - **Practice Profile**: shared-folder managed deployment — an administrator can push config and rules to every seat from one file, with central attestation so accepted gates propagate without a per-user click
 - **Choose your tabs**: pick which side-panel tabs appear and in what order
-- **Backup / restore**: a full suite-wide export/import covering every module and rule set — configuration only, never patient-identifiable data
+- **Backup / restore**: a full suite-wide export/import covering every module and rule set — configuration only, with one deliberate exception: the Patient Alerts scope carries the practice's own per-patient flags (names, NHS numbers, alert text), and both the export card and the import preview warn loudly that such a file is a patient-identifiable document
 - **Display preferences**: theme (light/dark/auto), density, and colourblind mode
 - **Event Ledger**: a capped, machine-local record of what the suite displayed or did, filterable by patient UUID and date, with CSV export — patients recorded by UUID only, excluded from backups
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, instead of the feature silently going quiet
 
 ## Recent additions (last 4 weeks)
+
+- **v3.175.0 (2026-07-18)** — New Pt Alerts tab: the practice's own per-patient flags (interpreter needed, safeguarding, behaviour, anything custom) shown on a global strip and the Monitoring banner whenever that patient is open. Local storage, merge-safe sharing via backup; never an all-clear when absent.
 
 - **v3.159.0 (2026-07-07)** — One warm line on the genuinely finished signing pile (“✓ Pile’s clear — nothing waiting on you.”) — panel-vetted: static text, no emoji, no animation, and never shown when filters merely hide requests.
 

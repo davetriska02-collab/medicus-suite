@@ -293,6 +293,22 @@
             </svg>
             <span>Record</span>
           </button>
+          <button class="nav-tab" data-module="patient-alerts" aria-label="Patient Alerts — per-patient custom flags">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+              <line x1="4" y1="22" x2="4" y2="15" />
+            </svg>
+            <span>Pt Alerts</span>
+          </button>
           <button class="nav-tab" data-module="duplicate-checker" aria-label="Duplicate Problem Checker">
             <svg
               width="14"
@@ -547,6 +563,7 @@
         <div id="rmStrip" class="rm-strip rm-strip-hidden" role="status" aria-live="polite"></div>
         <div id="subRagStrip" class="sub-rag-strip sub-rag-strip-hidden" role="status" aria-live="polite"></div>
         <div id="healthStrip" class="health-strip health-strip-hidden" role="status" aria-live="polite"></div>
+        <div id="paStrip" class="pa-strip pa-strip-hidden" role="status" aria-live="polite"></div>
       </div>
       <div id="setupHost" aria-live="polite" style="display: none"></div>
       <main class="suite-content" id="suiteContent">

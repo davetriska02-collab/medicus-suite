@@ -698,6 +698,7 @@ async function doFullExport() {
     labfiling,
     notifications,
     leaflets,
+    patientAlerts,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -714,6 +715,7 @@ async function doFullExport() {
     labfilingExport(),
     notificationsExport(),
     leafletsExport(),
+    patientAlertsExport(),
   ]);
   const suite = await suiteExport();
   return window.SuiteEnvelope.wrap('suite', {
@@ -732,6 +734,7 @@ async function doFullExport() {
     labfiling,
     notifications,
     leaflets,
+    patientAlerts,
     suite,
   });
 }
@@ -753,6 +756,7 @@ async function doModuleExport(scope) {
     labfiling: () => labfilingExport(),
     notifications: () => notificationsExport(),
     leaflets: () => leafletsExport(),
+    patientAlerts: () => patientAlertsExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -788,6 +792,7 @@ async function applyEnvelope(envelope) {
     mods.labfiling && (() => labfilingImport(mods.labfiling)),
     mods.notifications && (() => notificationsImport(mods.notifications)),
     mods.leaflets && (() => leafletsImport(mods.leaflets)),
+    mods.patientAlerts && (() => patientAlertsImport(mods.patientAlerts)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);

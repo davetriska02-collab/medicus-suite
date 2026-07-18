@@ -2878,6 +2878,24 @@
                   <input type="file" class="mod-file-input" data-mod="leaflets" accept=".json" style="display: none" />
                 </div>
               </div>
+              <div class="module-export-card">
+                <div class="mec-name">Patient Alerts</div>
+                <div class="mec-note" style="font-size: 10px; color: var(--text-muted, #94a3b8); margin-bottom: 4px">
+                  Contains patient-identifiable data (names, NHS numbers, alert text) — handle the file accordingly.
+                  Import merges with what's already here.
+                </div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="patientAlerts">Export</button>
+                  <button class="ghost" data-mod-import="patientAlerts">Import</button>
+                  <input
+                    type="file"
+                    class="mod-file-input"
+                    data-mod="patientAlerts"
+                    accept=".json"
+                    style="display: none"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2967,6 +2985,7 @@
     <script src="../shared/io/notifications-io.js"></script>
     <script src="../shared/leaflets-utils.js"></script>
     <script src="../shared/io/leaflets-io.js"></script>
+    <script src="../shared/io/patient-alerts-io.js"></script>
     <script src="../shared/quiet-mode.js"></script>
     <script src="../shared/practice-code.js"></script>
     <script src="../shared/api-diag.js"></script>

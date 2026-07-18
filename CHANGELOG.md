@@ -2,6 +2,47 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.175.0] — 2026-07-18
+
+### Patient Alerts — per-patient customisable flags (user-requested)
+
+Requested by a practice user: per-patient alerts (interpreter required,
+medication-seeking behaviour, safeguarding, …) that load with the patient in
+Medicus, fully customisable, persisted locally and shareable practice-wide.
+This is the suite's **first deliberately persisted per-patient store**
+(`patientAlerts.byPatient`, keyed by Medicus patient UUID with NHS-number
+display fallback), so every render path resolves identity from the live
+Sentinel snapshot at render time — a navigation can never leave a previous
+patient's flags on screen, and a bare name is never a match key.
+
+- **New "Pt Alerts" tab** (panel + pop-out): add/edit/remove alerts for the
+  patient currently open (auto-followed via the Sentinel snapshot bridge),
+  search every flagged patient, and edit the quick-add preset palette
+  (`patientAlerts.types`, seeded with interpreter/safeguarding/behaviour/carer
+  defaults — add anything, three severities: RED / AMBER / INFO).
+- **Global patient-alert strip** (`#paStrip`, panel-only like the other
+  strips): the flags appear the moment the flagged patient's record loads,
+  whatever tab the panel is on. Red band if any red alert, else amber.
+  Deliberately NOT folded into the demand roll-up — a safeguarding flag must
+  not collapse into a demand summary. Absence of the strip means "no flags
+  recorded or patient not identified", never a verified all-clear.
+- **Monitoring banner chips**: the same flags render read-only inside the
+  Sentinel "Monitoring for" patient card, beside the clinical context.
+- **Backup + practice-wide sharing**: new `shared/io/patient-alerts-io.js`,
+  scope `patientAlerts` in the suite envelope, Options export/import card.
+  Import is a MERGE (union by patient + alert id; incoming wins on the same
+  id) so a colleague's shared file can never silently delete local alerts.
+  The envelope preview and the Options card both warn loudly that this export
+  contains PATIENT-IDENTIFIABLE DATA. An uncustomised palette exports as
+  null so receiving installs keep tracking shipped defaults.
+- Not written to the clinical record (footer says so in-module); wording
+  guidance surfaced in-UI: flags are visible to all practice users and
+  disclosable to the patient.
+- Tests: `test-patient-alerts-core.js` (50 assertions — identity, lookup
+  fallback, pure transforms, merge), `test-patient-alerts-io.js` (21 —
+  round-trip, merge-not-delete, validation throws, prototype-pollution
+  defence).
+
 ## [v3.174.0] — 2026-07-16
 
 ### Smoking-status flag in the Sentinel patient banner (user-requested, panel-placed)
