@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.176.3] — 2026-07-19
+
+### Audit close-out: attestation preservation, hazard-log sync, vendored font
+
+- **Restores no longer wipe local attestations** (audit M18): reception's
+  `disclaimerAcceptedAt` and knowledge/lab-filing's `noticeAcknowledgedAt`
+  are preserved across an import (incoming values still never written) —
+  previously a restore re-locked features the local admin had accepted.
+- **Hazard log v3.13** incremental sync documenting the full audit
+  remediation (v3.176.1–.2), pending CSO review — including the open
+  question of numbered hazards for the booking write race and vaccine
+  false-GIVEN classes.
+- **Panel font vendored** (audit M16): JetBrains Mono v24 latin variable
+  woff2 ships in `vendor/fonts/` (OFL-1.1, SHA-256-catalogued in
+  vendor-versions.json; verify-vendor now walks subdirectories) — the
+  runtime Google Fonts `@import` is gone, and the extension-pages CSP is
+  tightened with `style-src 'self' 'unsafe-inline'; font-src 'self'` so
+  remote styles/fonts now fail closed.
+
+**Remaining from the audit, deliberately future work** (each needs its own
+reviewed PR): event-ledger day-sharding (H12), dead Sentinel sidebar removal
+(M5), queue rowIndex fingerprint canary (H6), shared my-appointments fetcher
+(M10).
+
 ## [v3.176.2] — 2026-07-18
 
 ### Audit remediation, second tranche — engine integrity + day-scale efficiency

@@ -1,7 +1,19 @@
 /* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
 /* Medicus Suite — Side Panel */
 
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* JetBrains Mono vendored locally (audit M16, 2026-07-18): the remote Google
+   Fonts @import made an outbound third-party request on every panel open —
+   an IG/data-minimisation break for software whose posture is "nothing
+   leaves the browser" — and broke typography offline. Latin-subset variable
+   font (weights 100-800 on the wght axis) from fonts.gstatic.com JetBrains
+   Mono v24, OFL-1.1 licensed; see docs/SOUP.md. */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('../vendor/fonts/jetbrains-mono-latin-var.woff2') format('woff2');
+}
 
 *,
 *::before,

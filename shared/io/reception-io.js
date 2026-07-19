@@ -100,6 +100,13 @@ async function receptionImport(data) {
       }
       // Intentionally not written: clean.disclaimerAcceptedAt is omitted.
     }
+    // Preserve the LOCAL attestation (audit M18, 2026-07-18): the whole-config
+    // replace used to WIPE this install's own disclaimerAcceptedAt on restore —
+    // failing safe (pathways re-lock) but destroying local state the contract
+    // says the import ignores. The incoming value is still never written.
+    const existingR = await chrome.storage.local.get('reception.config');
+    const existingAccepted = existingR['reception.config'] && existingR['reception.config'].disclaimerAcceptedAt;
+    if (existingAccepted) clean.disclaimerAcceptedAt = existingAccepted;
     toSet['reception.config'] = clean;
   }
 
