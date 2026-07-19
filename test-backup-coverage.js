@@ -361,6 +361,11 @@ const ALLOWLIST = new Set([
   // misleading "what was shown here" record. The exclusion is stated in the
   // user-facing disclosure block in options.html:
   'ledger.events',
+  // Day-sharded ledger layout (audit H12, v3.176.4): the shard directory key.
+  // The per-day shard keys themselves ('ledger.events.<YYYY-MM-DD>') are built
+  // dynamically and never appear as literals, so this scanner cannot see them;
+  // they follow the exact same never-backed-up doctrine as ledger.events:
+  'ledger.shardIndex',
 
   // Horizon-1 H2 — DOM-contract runtime canary state (shared/contract-canary.js):
   // per-contract { lastProbe, status, sinceTs, probeCount, failStreak, lastFailTs }

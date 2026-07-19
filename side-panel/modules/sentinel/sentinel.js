@@ -446,7 +446,6 @@ let _evidenceHandlersAttached = false;
 // ── Waiting room state ────────────────────────────────────────────────────────
 // Practice code resolved at fetch time from PracticeCode helper. No default.
 let WR_SITE_ID = null;
-let WR_API_URL = null;
 const WR_POLL_MS = 30 * 1000;
 
 let wrPatients = null; // null = not loaded yet, [] = loaded (empty), [...] = loaded
@@ -845,34 +844,26 @@ function wireCoverageToggle() {
 
 async function fetchWaitingRoom(bypassCache = false) {
   if (!bypassCache && wrLastFetch && Date.now() - wrLastFetch < WR_POLL_MS) return;
-  // Resolve practice code on every fetch so user changes take effect immediately.
-  const { code, source } = await window.PracticeCode.resolve();
-  WR_SITE_ID = code;
-  if (!WR_SITE_ID) {
-    wrError = 'No practice code — open a Medicus tab or set it in Options.';
-    wrPatients = [];
-    // Update just the pinned waiting-room block (same as the success path).
-    // Previously this called render({state:'loaded'}) — an unhandled state that
-    // fell through to destructuring an undefined snapshot and threw (swallowed),
-    // so the "no practice code" message never showed.
-    if (container) {
-      const wrEl = container.querySelector('.wr-pinned');
-      if (wrEl) updateWrPinned(wrEl);
-    }
-    return;
-  }
-  WR_API_URL = `https://${WR_SITE_ID}.api.england.medicus.health/scheduling/data/homepage/my-appointments`;
   try {
-    const r = await window.ApiDiag.fetch({
-      module: 'sentinel-wr',
-      url: WR_API_URL,
-      code: WR_SITE_ID,
-      codeSource: source,
-    });
-    const raw = await r.json();
-    const entries = (raw?.schedule?.schedule ?? [])
-      .flatMap((d) => d.entries ?? [])
-      .filter((e) => e?.diaryEntryType?.value === 'appointment' && e?.displayStatus?.value === 'arrived');
+    // Shared memoised fetcher (audit M10) — coalesces with panel.js's WR strip
+    // poll of the same endpoint. Practice code is re-resolved inside on every
+    // call, so user changes take effect immediately.
+    const { raw, code } = await window.AppointmentsFeed.fetchRaw({ module: 'sentinel-wr', bypassCache });
+    WR_SITE_ID = code;
+    if (!code) {
+      wrError = 'No practice code — open a Medicus tab or set it in Options.';
+      wrPatients = [];
+      // Update just the pinned waiting-room block (same as the success path).
+      // Previously this called render({state:'loaded'}) — an unhandled state that
+      // fell through to destructuring an undefined snapshot and threw (swallowed),
+      // so the "no practice code" message never showed.
+      if (container) {
+        const wrEl = container.querySelector('.wr-pinned');
+        if (wrEl) updateWrPinned(wrEl);
+      }
+      return;
+    }
+    const entries = window.AppointmentsFeed.arrivedEntries(raw);
     wrPatients = entries
       .map((e) => ({
         name: e.patient?.name ?? 'Unknown',

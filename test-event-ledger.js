@@ -4,9 +4,11 @@
 // Pins:
 //   • makeEvent shape validation — unknown source/action → null; field clipping
 //   • sanitisePatientRef — UUIDs pass (lowercased), patient NAMES are rejected to null
-//   • record() appends newest-first via a fake chrome.storage.local
-//   • cap: never more than MAX_EVENTS after append (newest kept)
-//   • retention: events older than RETENTION_DAYS pruned on append
+//   • record() appends newest-first into DAY SHARDS (audit H12) via a fake
+//     chrome.storage.local — an append touches only today's shard + index
+//   • legacy monolithic ledger.events migrates into shards on first use
+//   • cap: never more than MAX_EVENTS across all shards (newest kept)
+//   • retention: events older than RETENTION_DAYS pruned
 //   • dedupe: same patient+ruleId+action same calendar day → one event;
 //     different day / action / patient → separate events; opt-in only
 //   • filterEvents — patient UUID exact + prefix, inclusive date range
@@ -54,9 +56,9 @@ global.chrome = {
         if (failMode === 'quota') throw new Error('QUOTA_BYTES quota exceeded');
         Object.assign(store, obj);
       },
-      async remove(key) {
+      async remove(keys) {
         if (failMode === 'get-throws') throw new Error('simulated storage remove failure');
-        delete store[key];
+        for (const k of Array.isArray(keys) ? keys : [keys]) delete store[k];
       },
     },
   },
@@ -64,8 +66,10 @@ global.chrome = {
 
 const Ledger = require('./shared/event-ledger.js');
 const KEY = Ledger.constants.STORAGE_KEY;
+const INDEX_KEY = Ledger.constants.INDEX_KEY;
 const MAX = Ledger.constants.MAX_EVENTS;
 const RETENTION_DAYS = Ledger.constants.RETENTION_DAYS;
+const shardKey = Ledger.shardKeyFor;
 
 const UUID = '0a1b2c3d-4e5f-6789-abcd-ef0123456789';
 const UUID2 = 'ffee0011-2233-4455-6677-889900aabbcc';
@@ -74,6 +78,19 @@ function reset() {
   for (const k of Object.keys(store)) delete store[k];
   failMode = null;
   Ledger.resetSessionDedupe();
+  Ledger.resetMigrationCheck();
+}
+
+/** All stored events across shards, newest day first (each shard newest-first). */
+function storedEvents() {
+  const index = store[INDEX_KEY] || {};
+  const days = Object.keys(index).sort().reverse();
+  let all = [];
+  for (const d of days) {
+    const a = store[shardKey(d)];
+    if (Array.isArray(a)) all = all.concat(a);
+  }
+  return all;
 }
 
 function baseEvent(over) {
@@ -136,25 +153,110 @@ async function runTests() {
   const evName = Ledger.makeEvent(baseEvent({ patientRef: 'Smith, Margaret' }), now);
   check(evName.patientRef === null, 'makeEvent stores null when a name is passed as patientRef');
 
-  // ── record(): append newest-first ─────────────────────────────────────────
-  console.log('\n--- record: append ---');
+  // ── day-shard pure helpers (audit H12) ────────────────────────────────────
+  console.log('\n--- day-shard helpers ---');
+  check(Ledger.dayOf('2026-07-01T09:00:00.000Z') === '2026-07-01', 'dayOf extracts the calendar day');
+  check(Ledger.dayOf('garbage') === '' && Ledger.dayOf(null) === '', 'dayOf rejects non-dates');
+  check(shardKey('2026-07-01') === 'ledger.events.2026-07-01', 'shard key = legacy key + day');
+  check(
+    JSON.stringify(Ledger.sanitiseIndex({ '2026-07-01': 3, bogus: 2, '2026-07-02': -1, '2026-07-03': '4' })) ===
+      JSON.stringify({ '2026-07-01': 3, '2026-07-03': 4 }),
+    'sanitiseIndex keeps only day-keyed positive counts'
+  );
+  check(JSON.stringify(Ledger.sanitiseIndex(['x'])) === '{}', 'sanitiseIndex rejects arrays');
+
+  const merged = Ledger.mergeNewestFirst(
+    [{ ts: '2026-07-01T12:00:00.000Z' }, { ts: '2026-07-01T08:00:00.000Z' }],
+    [{ ts: '2026-07-01T10:00:00.000Z' }, null]
+  );
+  check(
+    merged.length === 3 && merged[0].ts > merged[1].ts && merged[1].ts > merged[2].ts,
+    'mergeNewestFirst sorts newest-first and drops malformed'
+  );
+
+  // planShardPrune: retention drop, whole-day cap drop, boundary trim
+  const nowIso2 = '2026-07-19T12:00:00.000Z';
+  let plan = Ledger.planShardPrune({ '2026-07-19': 10, '2026-03-01': 5 }, nowIso2);
+  check(
+    plan.removeDays.includes('2026-03-01') && plan.index['2026-03-01'] === undefined,
+    'planShardPrune drops whole days beyond retention'
+  );
+  check(plan.index['2026-07-19'] === 10 && Object.keys(plan.trimDays).length === 0, 'in-window day untouched');
+  plan = Ledger.planShardPrune({ '2026-07-19': MAX - 100, '2026-07-18': 300, '2026-07-17': 50 }, nowIso2);
+  check(plan.trimDays['2026-07-18'] === 100, 'boundary day trimmed to the remaining global budget');
+  check(plan.removeDays.includes('2026-07-17'), 'days wholly beyond the global budget dropped');
+  check(plan.index['2026-07-19'] === MAX - 100 && plan.index['2026-07-18'] === 100, 'index reflects the plan');
+
+  // ── record(): append newest-first into day shards ─────────────────────────
+  console.log('\n--- record: append (sharded) ---');
   reset();
   let ok = await Ledger.record(baseEvent({ ts: '2026-07-01T09:00:00.000Z' }));
   check(ok === true, 'first record resolves true');
   ok = await Ledger.record(baseEvent({ ts: '2026-07-01T10:00:00.000Z', ruleId: 'lithium-maintenance' }));
   check(ok === true, 'second record resolves true');
-  let arr = store[KEY];
-  check(Array.isArray(arr) && arr.length === 2, 'two events stored');
-  check(arr[0].ruleId === 'lithium-maintenance', 'newest first');
+  let arr = store[shardKey('2026-07-01')];
+  check(Array.isArray(arr) && arr.length === 2, "two events stored in the day's shard");
+  check(arr[0].ruleId === 'lithium-maintenance', 'newest first within the shard');
   check(!('name' in arr[0]) && !('patientName' in arr[0]), 'no name-like fields in stored shape');
+  check(store[INDEX_KEY] && store[INDEX_KEY]['2026-07-01'] === 2, 'shard index tracks the count');
+  check(!(KEY in store), 'no monolithic legacy key is written');
   ok = await Ledger.record(baseEvent({ source: 'nonsense' }));
-  check(ok === false && store[KEY].length === 2, 'invalid event skipped, nothing written');
+  check(ok === false && store[shardKey('2026-07-01')].length === 2, 'invalid event skipped, nothing written');
+  // Cross-day: a second day gets its own shard
+  ok = await Ledger.record(baseEvent({ ts: '2026-07-02T09:00:00.000Z' }));
+  check(
+    ok === true && store[shardKey('2026-07-02')].length === 1 && store[shardKey('2026-07-01')].length === 2,
+    'a new day gets its own shard, other days untouched'
+  );
+  check(storedEvents().length === 3 && storedEvents()[0].ts.startsWith('2026-07-02'), 'storedEvents newest-day-first');
+
+  // Write-amplification pin: appending today must NOT rewrite other days' shards
+  const day1Ref = store[shardKey('2026-07-01')];
+  await Ledger.record(baseEvent({ ts: '2026-07-02T10:00:00.000Z', ruleId: 'another' }));
+  check(store[shardKey('2026-07-01')] === day1Ref, "append touches only today's shard (other shard object identity unchanged)");
+
+  // ── legacy migration (audit H12) ──────────────────────────────────────────
+  console.log('\n--- legacy ledger.events migration ---');
+  reset();
+  const mNow = Date.now();
+  const mDay = (offset) => new Date(mNow - offset * 86400000).toISOString();
+  store[KEY] = [
+    { ts: mDay(0), source: 'sentinel', patientRef: UUID, severity: 'red', ruleId: 'm1', label: null, action: 'shown' },
+    { ts: mDay(1), source: 'sweep', patientRef: null, severity: null, ruleId: 'm2', label: null, action: 'sweep-run' },
+    { ts: mDay(1), source: 'sweep', patientRef: null, severity: null, ruleId: 'm3', label: null, action: 'sweep-run' },
+    { ts: mDay(RETENTION_DAYS + 5), source: 'sweep', patientRef: null, severity: null, ruleId: 'stale', label: null, action: 'sweep-run' },
+  ];
+  let events = await Ledger.getEvents();
+  check(!(KEY in store), 'legacy key removed after migration');
+  check(events.length === 3, 'migrated events readable (stale one pruned)');
+  check(store[shardKey(mDay(1).slice(0, 10))].length === 2, 'legacy events grouped into day shards');
+  check(store[INDEX_KEY][mDay(0).slice(0, 10)] === 1, 'index built during migration');
+  check(!events.some((x) => x.ruleId === 'stale'), 'beyond-retention legacy event not migrated');
+  // Migration merges with an existing shard rather than clobbering it
+  reset();
+  const keepDay = mDay(0).slice(0, 10);
+  store[shardKey(keepDay)] = [
+    { ts: mDay(0), source: 'record', patientRef: UUID2, severity: null, ruleId: 'already-sharded', label: null, action: 'summary-copied' },
+  ];
+  store[INDEX_KEY] = { [keepDay]: 1 };
+  store[KEY] = [
+    { ts: mDay(0), source: 'sentinel', patientRef: UUID, severity: 'red', ruleId: 'from-legacy', label: null, action: 'shown' },
+  ];
+  events = await Ledger.getEvents();
+  check(
+    events.length === 2 &&
+      events.some((x) => x.ruleId === 'already-sharded') &&
+      events.some((x) => x.ruleId === 'from-legacy'),
+    'migration merges legacy events with an existing shard (no clobber)'
+  );
+  check(store[INDEX_KEY][keepDay] === 2, 'merged shard count recorded in index');
 
   // ── cap (MAX_EVENTS) ──────────────────────────────────────────────────────
   console.log('\n--- cap ---');
   reset();
   const nowMs = Date.now();
-  // Pre-fill at cap with recent events (newest-first), then append one more.
+  // Pre-fill at cap with recent events via the legacy key (newest-first), then
+  // append one more — migration shards them, the append must evict the oldest.
   store[KEY] = [];
   for (let i = 0; i < MAX; i++) {
     store[KEY].push({
@@ -169,9 +271,10 @@ async function runTests() {
   }
   ok = await Ledger.record(baseEvent({ ruleId: 'the-newest-rule', ts: new Date(nowMs + 1000).toISOString() }));
   check(ok === true, 'append at cap succeeds');
-  check(store[KEY].length === MAX, `length stays at cap (${MAX})`);
-  check(store[KEY][0].ruleId === 'the-newest-rule', 'newest event kept at head');
-  check(store[KEY][MAX - 1].ruleId === 'rule-' + (MAX - 2), 'oldest event evicted');
+  let all = await Ledger.getEvents();
+  check(all.length === MAX, `total stays at cap (${MAX})`);
+  check(all[0].ruleId === 'the-newest-rule', 'newest event kept at head');
+  check(!all.some((x) => x.ruleId === 'rule-' + (MAX - 1)), 'oldest event evicted');
 
   // ── retention (RETENTION_DAYS) ────────────────────────────────────────────
   console.log('\n--- retention ---');
@@ -185,11 +288,11 @@ async function runTests() {
     { ts: stale, source: 'sweep', patientRef: null, severity: null, ruleId: null, label: 'c', action: 'sweep-run' },
   ];
   await Ledger.record(baseEvent());
-  arr = store[KEY];
-  check(arr.length === 3, `stale event pruned on append (kept ${arr.length})`);
-  check(!arr.some((x) => x.label === 'c'), 'the >90-day-old event is gone');
+  all = await Ledger.getEvents();
+  check(all.length === 3, `stale event pruned on append (kept ${all.length})`);
+  check(!all.some((x) => x.label === 'c'), 'the >90-day-old event is gone');
   check(
-    arr.some((x) => x.label === 'b'),
+    all.some((x) => x.label === 'b'),
     'the in-window event survives'
   );
 
@@ -206,19 +309,19 @@ async function runTests() {
   ok = await Ledger.record(baseEvent({ ts: day1a }), { dedupe: true });
   check(ok === true, 'first shown event recorded');
   ok = await Ledger.record(baseEvent({ ts: day1b }), { dedupe: true });
-  check(ok === false && store[KEY].length === 1, 'same patient+rule+action same day → deduped');
+  check(ok === false && storedEvents().length === 1, 'same patient+rule+action same day → deduped');
   // Session cache also short-circuits without a storage read:
   Ledger.resetSessionDedupe();
   ok = await Ledger.record(baseEvent({ ts: day1b }), { dedupe: true });
-  check(ok === false && store[KEY].length === 1, 'dedupe holds across a session-cache reset (storage scan)');
+  check(ok === false && storedEvents().length === 1, 'dedupe holds across a session-cache reset (shard scan)');
   ok = await Ledger.record(baseEvent({ ts: day2 }), { dedupe: true });
-  check(ok === true && store[KEY].length === 2, 'next calendar day → new event');
+  check(ok === true && storedEvents().length === 2, 'next calendar day → new event');
   ok = await Ledger.record(baseEvent({ ts: day2, action: 'dismissed' }), { dedupe: true });
-  check(ok === true && store[KEY].length === 3, 'different action same day → new event');
+  check(ok === true && storedEvents().length === 3, 'different action same day → new event');
   ok = await Ledger.record(baseEvent({ ts: day2, patientRef: UUID2 }), { dedupe: true });
-  check(ok === true && store[KEY].length === 4, 'different patient same day → new event');
+  check(ok === true && storedEvents().length === 4, 'different patient same day → new event');
   ok = await Ledger.record(baseEvent({ ts: day2 }));
-  check(ok === true && store[KEY].length === 5, 'without the dedupe flag duplicates are allowed');
+  check(ok === true && storedEvents().length === 5, 'without the dedupe flag duplicates are allowed');
 
   // hasSameDayDuplicate pure form
   const ded = [{ ts: day1a, patientRef: UUID, ruleId: 'r1', action: 'shown' }];
@@ -329,9 +432,14 @@ async function runTests() {
   console.log('\n--- clearLedger ---');
   reset();
   await Ledger.record(baseEvent());
-  check(store[KEY].length === 1, 'precondition: one event stored');
+  check(storedEvents().length === 1, 'precondition: one event stored');
   ok = await Ledger.clearLedger();
-  check(ok === true && !(KEY in store), 'clearLedger removes the key');
+  check(ok === true && storedEvents().length === 0, 'clearLedger removes all shards');
+  check(!(INDEX_KEY in store) && !(KEY in store), 'clearLedger removes the index and legacy keys');
+  check(
+    !Object.keys(store).some((k) => k.startsWith(Ledger.constants.SHARD_PREFIX)),
+    'no shard key survives a wipe'
+  );
   // Dedupe cache is reset too — the same event can be recorded again.
   ok = await Ledger.record(baseEvent(), { dedupe: true });
   check(ok === true, 'after clear, a previously-deduped event records again');

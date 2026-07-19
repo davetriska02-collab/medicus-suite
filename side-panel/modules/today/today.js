@@ -117,20 +117,17 @@ function fmtAge(ms) {
 async function fetchWr() {
   if (document.visibilityState !== 'visible') return;
   try {
-    const { code, source } = await window.PracticeCode.resolve();
+    // Shared memoised fetcher (audit M10) — coalesces with panel.js's WR strip
+    // poll of the same endpoint. Practice code is re-resolved inside.
+    const { raw, code } = await window.AppointmentsFeed.fetchRaw({ module: 'today-wr' });
     if (!code) {
       _wrData = { patients: [], error: null, noCode: true };
       renderCard('wr');
       renderHeadline();
       return;
     }
-    const url = `https://${code}.api.england.medicus.health/scheduling/data/homepage/my-appointments`;
-    const r = await window.ApiDiag.fetch({ module: 'today-wr', url, code, codeSource: source });
-    const raw = await r.json();
     const now = Date.now();
-    const patients = (raw?.schedule?.schedule ?? [])
-      .flatMap((d) => d.entries ?? [])
-      .filter((e) => e?.diaryEntryType?.value === 'appointment' && e?.displayStatus?.value === 'arrived')
+    const patients = window.AppointmentsFeed.arrivedEntries(raw)
       .map((e) => {
         const ms = e.startDateTime ? new Date(e.startDateTime).getTime() : null;
         const mins = ms && !isNaN(ms) ? Math.max(0, Math.round((now - ms) / 60000)) : null;
