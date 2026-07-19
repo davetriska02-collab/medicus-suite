@@ -1169,7 +1169,6 @@ alertRollupEl?.addEventListener('click', () => {
 // ── Waiting Room strip (global — visible on every module) ─────────────────────
 
 let SITE_ID_WR = null;
-let WR_API = null;
 const WR_POLL_MS = 30 * 1000;
 const wrStripEl = document.getElementById('wrStrip');
 let _wrPrevHtml = null; // changed-guard for the 30s poll re-render (see below)
@@ -1203,29 +1202,22 @@ let wrPoller = null;
 
 async function fetchAndRenderStrip(bypassCache = false) {
   if (document.visibilityState !== 'visible') return true;
-  // Resolve practice code on every call so user changes take effect immediately
-  const { code, source } = await window.PracticeCode.resolve();
-  SITE_ID_WR = code;
-  if (!SITE_ID_WR) {
-    // No practice code set — hide strip silently. User will see the prompt in Options.
-    if (wrStripEl) {
-      wrStripEl.className = 'wr-strip wr-strip-hidden';
-      wrStripEl.innerHTML = '';
-    }
-    return true;
-  }
-  WR_API = `https://${SITE_ID_WR}.api.england.medicus.health/scheduling/data/homepage/my-appointments`;
   try {
-    const r = await window.ApiDiag.fetch({
-      module: 'panel-wr-strip',
-      url: WR_API,
-      code: SITE_ID_WR,
-      codeSource: source,
-    });
-    const raw = await r.json();
-    const arrived = (raw?.schedule?.schedule ?? [])
-      .flatMap((d) => d.entries ?? [])
-      .filter((e) => e?.diaryEntryType?.value === 'appointment' && e?.displayStatus?.value === 'arrived')
+    // Shared memoised fetcher (audit M10): coalesces this strip's poll with the
+    // Sentinel/Today modules' waiting-room fetches of the same endpoint.
+    // Practice code is re-resolved inside on every call, so user changes still
+    // take effect immediately.
+    const { raw, code } = await window.AppointmentsFeed.fetchRaw({ module: 'panel-wr-strip', bypassCache });
+    SITE_ID_WR = code;
+    if (!code) {
+      // No practice code set — hide strip silently. User will see the prompt in Options.
+      if (wrStripEl) {
+        wrStripEl.className = 'wr-strip wr-strip-hidden';
+        wrStripEl.innerHTML = '';
+      }
+      return true;
+    }
+    const arrived = window.AppointmentsFeed.arrivedEntries(raw)
       .map((e) => ({
         name: e.patient?.name ?? 'Unknown',
         start: e.start ?? '',

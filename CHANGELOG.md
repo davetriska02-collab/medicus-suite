@@ -2,6 +2,48 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.176.4] — 2026-07-19
+
+### Audit final tranche — the four deferred refactors + CSO sign-off
+
+Closes out the 2026-07-18 whole-suite audit. Hazard log v3.14 records the
+CSO's sign-off of the audit remediation and promotes the two open questions
+to numbered hazards (H-043 inline booking/task wrong-patient write, H-044
+vaccine false-GIVEN classes), both mitigated in v3.176.1.
+
+- **Queue sort canary (H6).** The rowIndex→taskUuid maps that place every
+  fetch-driven queue chip (result / monitoring / patient-flag) are built from
+  the bridge's task-list payload — a client-side AG-Grid sort reorders rows
+  without a new fetch, which would land chips on the WRONG patient's row.
+  The canary watches the grid's sorted-header state and drops both maps the
+  moment it changes: a server-side sort re-fetches and rebuilds them
+  correctly within a tick; a client-side sort leaves the chips safely absent
+  (no chip is safe; a wrong-row chip is not). The bridge re-baselines the
+  canary on every fresh payload so the fetch-first race cannot eat correct
+  maps. 24 regression tests (test-queue-sort-canary.js).
+- **Event-ledger day-sharding (H12).** `record()` used to re-read and
+  re-write the entire ≤5000-event array on every append — a
+  multi-hundred-KB storage churn per chip render on a busy day. The ledger
+  is now day-sharded (`ledger.events.<date>` + a `ledger.shardIndex`
+  directory): an append touches only today's shard plus the small index.
+  Public API, caps (5000 events / 90 days), dedupe and CSV export are
+  unchanged; the legacy monolithic key migrates into shards on first use
+  (merging, never clobbering, and retrying after a failed attempt). The
+  never-backed-up doctrine carries over to all ledger keys.
+- **Shared my-appointments fetcher (M10).** The panel WR strip, Sentinel
+  module and Today module each polled
+  `/scheduling/data/homepage/my-appointments` independently — two or three
+  identical authenticated GETs per poll window with those tabs open. A
+  shared 15s-TTL memo (`shared/appointments-feed.js`) with in-flight
+  coalescing now serves all three; each keeps its own mapping/rendering and
+  diag label. 30 tests (test-appointments-feed.js).
+- **Dead Sentinel sidebar removed (M5).** ~760 lines of unreachable
+  floating-sidebar UI (mount/render*/chipHtml/nav-watcher and friends)
+  deleted from `content-scripts/sentinel.js` (1594 → 833 lines); the file is
+  now the data pipeline + snapshot bridge only, which is all suite mode ever
+  used. Config keys owned by the old UI are kept for stored-config shape
+  compatibility. The deleted code lives in git history (pre-v3.176.4).
+
 ## [v3.176.3] — 2026-07-19
 
 ### Audit close-out: attestation preservation, hazard-log sync, vendored font

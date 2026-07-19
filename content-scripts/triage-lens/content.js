@@ -3925,6 +3925,11 @@
 
     _queueRowUuids.clear();
     _durableRowMap.clear();
+    // A fresh task-list payload is authoritative for the grid's CURRENT state,
+    // so re-baseline the sort canary (H6): without this, a server-side sort
+    // whose fetch lands before the observer notices the new header classes
+    // would have its freshly-correct maps dropped by the canary a tick later.
+    _queueSortSig = undefined;
     // Cap rows processed and validate each entry's shape before acting on it
     const cappedRows = rows.length > _BRIDGE_MAX_ROWS ? rows.slice(0, _BRIDGE_MAX_ROWS) : rows;
     for (const row of cappedRows) {
@@ -6575,6 +6580,39 @@
   // container isn't (yet) tracked. Used by the wipe/re-decorate/re-inject hot paths.
   const queueScope = () => (queueObservedContainer && document.contains(queueObservedContainer)) ? queueObservedContainer : document;
 
+  // ---- Queue sort canary (audit H6) ----
+  // The rowIndex→taskUuid maps (_queueRowUuids/_durableRowMap) are built from the
+  // task-list payload the bridge saw at fetch time. If the GP sorts the grid
+  // CLIENT-side, AG-Grid reassigns row-index attributes to different tasks without
+  // a new task-list fetch, and every rowIndex-keyed chip (result / monitoring /
+  // patient-flag) would attach to the WRONG row — a wrong-patient hazard, not a
+  // cosmetic bug. The isolated world cannot reliably tell client-side from
+  // server-side sorting, so: whenever the grid's sort state CHANGES, drop both
+  // rowIndex maps. A server-side sort re-issues the task-list fetch and the
+  // bridge rebuilds the maps with fresh (correct) indexes within a tick; a
+  // client-side sort never does, leaving the maps empty and the fetch-driven
+  // chips absent — no chip is safe, a wrong-row chip is not (absence-of-alert
+  // ≠ all-clear doctrine). DOM-driven decoration chips read their own row's
+  // cells and are unaffected.
+  let _queueSortSig; // undefined = no baseline yet (fresh queue entry)
+  const queueSortSignature = () => {
+    const cells = queueScope().querySelectorAll('.ag-header-cell-sorted-asc, .ag-header-cell-sorted-desc');
+    if (!cells.length) return '';
+    return Array.from(cells)
+      .map((c) => (c.getAttribute('col-id') || '?') + ':' + (c.classList.contains('ag-header-cell-sorted-asc') ? 'asc' : 'desc'))
+      .sort()
+      .join(',');
+  };
+  const checkQueueSortCanary = () => {
+    const sig = queueSortSignature();
+    if (_queueSortSig === undefined) { _queueSortSig = sig; return; }
+    if (sig === _queueSortSig) return;
+    _queueSortSig = sig;
+    _queueRowUuids.clear();
+    _durableRowMap.clear();
+    log('queue: sort change detected — rowIndex maps dropped (H6 canary), sig=' + (sig || 'none'));
+  };
+
   // Fully tear down the queue observer and forget the container reference.
   // Called whenever we navigate AWAY from the queue so that the next visit
   // to the queue page always rebuilds against the current (possibly fresh) DOM.
@@ -6582,6 +6620,7 @@
     if (queueObserver) { queueObserver.disconnect(); queueObserver = null; }
     queueObservedContainer = null;
     queueRafScheduled = false;
+    _queueSortSig = undefined; // sort-canary baseline re-established on next queue entry (H6)
     removeQueueStatusBar();
     // Leaving the queue page: drop the focus-dim class so it never bleeds onto
     // unrelated Medicus pages that also happen to render `.ag-row` elements.
@@ -6630,6 +6669,10 @@
     }
     queueScope().querySelectorAll('.ag-row').forEach(r => { delete r.dataset[QUEUE_DECORATED_KEY]; });
     decorateQueueRows();
+    // H6 sort canary — MUST run before every reinject* call below: if the sort
+    // state changed since last cycle the rowIndex maps are dropped here, so the
+    // reinjects find nothing and no chip lands on a possibly-reordered row.
+    checkQueueSortCanary();
     // Restore result chips synchronously from the per-task cache via the durable
     // rowIndex→taskUuid map (NOT row-id — on real Medicus row-id is NOT the task
     // UUID; keying off it was the v3.69.0 no-op, see CLAUDE.md rule #4).

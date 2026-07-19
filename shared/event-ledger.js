@@ -16,9 +16,23 @@
 //   - Absence of an event is NOT evidence nothing was shown — the extension
 //     only logs while it is open and running on this machine.
 //
-// Storage key: ledger.events (chrome.storage.local) — newest-first array.
-//   Cap: MAX_EVENTS (5000) AND RETENTION_DAYS (90); pruned on every append.
-//   DELIBERATELY EXCLUDED from suite backup — same doctrine as
+// Storage layout (chrome.storage.local) — DAY-SHARDED (audit H12, 2026-07-19):
+//   ledger.events.<YYYY-MM-DD>  newest-first array of that day's events
+//   ledger.shardIndex           { '<YYYY-MM-DD>': count, … } — the shard
+//                               directory; getEvents/clearLedger only touch
+//                               days listed here.
+//   ledger.events               LEGACY monolithic array (pre-v3.176.4);
+//                               migrated into shards on first API use and
+//                               removed. Kept in the docs so old exports make
+//                               sense.
+//   Why sharded: the monolithic array meant every record() re-read and
+//   re-wrote up to MAX_EVENTS (5000) events — on a busy day that was a
+//   multi-hundred-KB storage churn per chip render. An append now touches
+//   only TODAY's shard plus the small index.
+//   Caps unchanged: MAX_EVENTS (5000) total AND RETENTION_DAYS (90),
+//   enforced on every append via the shard index (whole-day drops + a
+//   boundary-day trim), and belt-and-braces re-applied on read.
+//   ALL keys DELIBERATELY EXCLUDED from suite backup — same doctrine as
 //   labfiling.auditLog / triagelens.oir.auditLog: restoring an event ledger
 //   onto another machine would fabricate a misleading "what was shown here"
 //   record. See test-backup-coverage.js ALLOWLIST.
@@ -56,7 +70,9 @@
   if (global && global.EventLedger) return;
 
   // ── Constants ─────────────────────────────────────────────────────────────
-  const STORAGE_KEY = 'ledger.events';
+  const STORAGE_KEY = 'ledger.events'; // LEGACY monolithic key — migrated to shards
+  const SHARD_PREFIX = STORAGE_KEY + '.'; // + YYYY-MM-DD (one key per day)
+  const INDEX_KEY = 'ledger.shardIndex'; // { day: eventCount } shard directory
   const MAX_EVENTS = 5000;
   const RETENTION_DAYS = 90;
   // 'health' (Horizon-1 H2) — shared/contract-canary.js's own runtime DOM-contract
@@ -241,6 +257,114 @@
     return rows.join('\r\n');
   }
 
+  // ── Day-shard helpers (audit H12 — pure, unit-tested) ─────────────────────
+
+  /** Calendar day of an ISO timestamp ('' when unusable). */
+  function dayOf(ts) {
+    const d = String(ts || '').slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : '';
+  }
+
+  function shardKeyFor(day) {
+    return SHARD_PREFIX + day;
+  }
+
+  /** Sanitise a stored shard index → { day: positive integer count }. */
+  function sanitiseIndex(raw) {
+    const out = {};
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+    for (const day of Object.keys(raw)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+      const n = Number(raw[day]);
+      if (Number.isFinite(n) && n > 0) out[day] = Math.floor(n);
+    }
+    return out;
+  }
+
+  /** Merge two newest-first arrays into one newest-first array (by ts desc). */
+  function mergeNewestFirst(a, b) {
+    const all = [].concat(Array.isArray(a) ? a : [], Array.isArray(b) ? b : []);
+    return all
+      .filter((e) => e && typeof e.ts === 'string')
+      .sort((x, y) => (x.ts < y.ts ? 1 : x.ts > y.ts ? -1 : 0));
+  }
+
+  /**
+   * Enforce RETENTION_DAYS + global MAX_EVENTS over the shard index WITHOUT
+   * reading every shard: whole days beyond retention (or beyond the global
+   * budget, counted newest-day-first) are dropped; the one day straddling the
+   * budget boundary is trimmed to what fits. Returns
+   *   { index, removeDays, trimDays } — the new index, days whose shards
+   *   should be deleted, and { day: keepCount } for boundary trims.
+   */
+  function planShardPrune(index, nowIso) {
+    const cutoffDay = dayOf(new Date(new Date(nowIso).getTime() - RETENTION_DAYS * 86400000).toISOString());
+    const days = Object.keys(index).sort().reverse(); // newest first
+    const keep = {};
+    const removeDays = [];
+    const trimDays = {};
+    let budget = MAX_EVENTS;
+    for (const day of days) {
+      const count = Number(index[day]) || 0;
+      if (day < cutoffDay || budget <= 0) {
+        removeDays.push(day);
+        continue;
+      }
+      if (count <= budget) {
+        keep[day] = count;
+        budget -= count;
+      } else {
+        trimDays[day] = budget;
+        keep[day] = budget;
+        budget = 0;
+      }
+    }
+    return { index: keep, removeDays, trimDays };
+  }
+
+  // ── Legacy-key migration ──────────────────────────────────────────────────
+  // Pre-v3.176.4 installs hold one monolithic ledger.events array. On the
+  // first storage-API call of a session it is split into day shards (merged
+  // with any shards already present — a crash mid-migration must not lose
+  // events) and the legacy key removed. The checked flag is only set on
+  // SUCCESS, so a transient storage failure retries on the next call.
+  let _migrationChecked = false;
+
+  /** Test hook — force the next storage-API call to re-check the legacy key. */
+  function resetMigrationCheck() {
+    _migrationChecked = false;
+  }
+
+  async function ensureMigrated(nowIso) {
+    if (_migrationChecked) return;
+    const r = await chrome.storage.local.get([STORAGE_KEY, INDEX_KEY]);
+    const legacy = r[STORAGE_KEY];
+    if (!Array.isArray(legacy) || legacy.length === 0) {
+      if (STORAGE_KEY in r) await chrome.storage.local.remove(STORAGE_KEY);
+      _migrationChecked = true;
+      return;
+    }
+    const index = sanitiseIndex(r[INDEX_KEY]);
+    const byDay = {};
+    for (const e of pruneEvents(legacy, nowIso)) {
+      const d = dayOf(e.ts);
+      if (!d) continue;
+      (byDay[d] || (byDay[d] = [])).push(e);
+    }
+    const days = Object.keys(byDay);
+    const existing = days.length ? await chrome.storage.local.get(days.map(shardKeyFor)) : {};
+    const writes = {};
+    for (const day of days) {
+      const merged = mergeNewestFirst(existing[shardKeyFor(day)], byDay[day]);
+      writes[shardKeyFor(day)] = merged;
+      index[day] = merged.length;
+    }
+    writes[INDEX_KEY] = index;
+    await chrome.storage.local.set(writes);
+    await chrome.storage.local.remove(STORAGE_KEY);
+    _migrationChecked = true;
+  }
+
   // ── Session dedupe cache ───────────────────────────────────────────────────
   // Keys of events already recorded (or confirmed duplicate) this session.
   // Day is part of the key, so midnight rolls over naturally. Bounded.
@@ -270,14 +394,40 @@
       const key = dedupeKey(evt);
       if (dedupe && _sessionKeys.has(key)) return false;
       if (!storageAvailable()) return false;
-      const r = await chrome.storage.local.get(STORAGE_KEY);
-      const arr = Array.isArray(r[STORAGE_KEY]) ? r[STORAGE_KEY] : [];
-      if (dedupe && hasSameDayDuplicate(arr, evt)) {
+      await ensureMigrated(evt.ts);
+      const day = dayOf(evt.ts);
+      if (!day) return false;
+      const sk = shardKeyFor(day);
+      const r = await chrome.storage.local.get([sk, INDEX_KEY]);
+      const shard = Array.isArray(r[sk]) ? r[sk] : [];
+      // Dedupe is same-calendar-day by definition, so the day's own shard is
+      // the complete search space — no full-ledger read needed.
+      if (dedupe && hasSameDayDuplicate(shard, evt)) {
         _sessionKeys.add(key);
         return false;
       }
-      arr.unshift(evt);
-      await chrome.storage.local.set({ [STORAGE_KEY]: pruneEvents(arr, evt.ts) });
+      shard.unshift(evt);
+      const index = sanitiseIndex(r[INDEX_KEY]);
+      index[day] = shard.length;
+      const plan = planShardPrune(index, evt.ts);
+      const writes = { [INDEX_KEY]: plan.index };
+      if (!plan.removeDays.includes(day)) {
+        writes[sk] = plan.trimDays[day] != null ? shard.slice(0, plan.trimDays[day]) : shard;
+      }
+      // A boundary trim on an OLDER day needs that shard's contents — rare
+      // (only when the global cap is straddled) and one extra read when it is.
+      const otherTrims = Object.keys(plan.trimDays).filter((d) => d !== day);
+      if (otherTrims.length) {
+        const got = await chrome.storage.local.get(otherTrims.map(shardKeyFor));
+        for (const d of otherTrims) {
+          const cur = got[shardKeyFor(d)];
+          writes[shardKeyFor(d)] = (Array.isArray(cur) ? cur : []).slice(0, plan.trimDays[d]);
+        }
+      }
+      await chrome.storage.local.set(writes);
+      if (plan.removeDays.length) {
+        await chrome.storage.local.remove(plan.removeDays.map(shardKeyFor));
+      }
       if (dedupe) {
         if (_sessionKeys.size >= SESSION_CACHE_MAX) resetSessionDedupe();
         _sessionKeys.add(key);
@@ -293,8 +443,26 @@
   async function getEvents() {
     try {
       if (!storageAvailable()) return [];
-      const r = await chrome.storage.local.get(STORAGE_KEY);
-      return Array.isArray(r[STORAGE_KEY]) ? r[STORAGE_KEY] : [];
+      const nowIso = new Date().toISOString();
+      await ensureMigrated(nowIso);
+      const ir = await chrome.storage.local.get([INDEX_KEY, STORAGE_KEY]);
+      const index = sanitiseIndex(ir[INDEX_KEY]);
+      const days = Object.keys(index).sort().reverse(); // newest day first
+      // Belt-and-braces: a legacy array still present here means migration
+      // failed mid-flight — include it rather than silently hide events.
+      const legacy = Array.isArray(ir[STORAGE_KEY]) ? ir[STORAGE_KEY] : [];
+      if (!days.length && !legacy.length) return [];
+      const shards = days.length ? await chrome.storage.local.get(days.map(shardKeyFor)) : {};
+      let all = [];
+      for (const d of days) {
+        const a = shards[shardKeyFor(d)];
+        if (Array.isArray(a)) all = all.concat(a);
+      }
+      if (legacy.length) all = mergeNewestFirst(all, legacy);
+      // Day-level shard drops are coarser than the old time-precise prune, so
+      // re-apply the exact caps on read — cheap, and keeps read semantics
+      // identical to the monolithic ledger.
+      return pruneEvents(all, nowIso);
     } catch (e) {
       warn(e);
       return [];
@@ -305,7 +473,17 @@
   async function clearLedger() {
     try {
       if (!storageAvailable()) return false;
-      await chrome.storage.local.remove(STORAGE_KEY);
+      const r = await chrome.storage.local.get(INDEX_KEY);
+      const index = sanitiseIndex(r[INDEX_KEY]);
+      const keys = new Set([STORAGE_KEY, INDEX_KEY]);
+      for (const day of Object.keys(index)) keys.add(shardKeyFor(day));
+      // Also sweep every possible in-retention day key (plus slack) so an
+      // orphan shard from a crashed index write cannot outlive a user wipe.
+      const nowMs = Date.now();
+      for (let i = 0; i <= RETENTION_DAYS + 14; i++) {
+        keys.add(shardKeyFor(dayOf(new Date(nowMs - i * 86400000).toISOString())));
+      }
+      await chrome.storage.local.remove(Array.from(keys));
       resetSessionDedupe();
       return true;
     } catch (e) {
@@ -329,9 +507,18 @@
     filterEvents,
     eventsCsv,
     csvCell,
+    // day-shard pure helpers (audit H12 — tested directly)
+    dayOf,
+    shardKeyFor,
+    sanitiseIndex,
+    mergeNewestFirst,
+    planShardPrune,
     resetSessionDedupe, // test hook — clears the session dedupe cache
+    resetMigrationCheck, // test hook — re-check the legacy key on next call
     constants: {
       STORAGE_KEY,
+      SHARD_PREFIX,
+      INDEX_KEY,
       MAX_EVENTS,
       RETENTION_DAYS,
       SOURCES,

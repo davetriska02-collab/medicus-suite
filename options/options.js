@@ -3376,9 +3376,10 @@ lfSaveBtn?.addEventListener('click', async () => {
 // ── Event Ledger section (F2) ─────────────────────────────────────────────────
 // Machine-local record of what the suite flagged — filter/table/CSV-export/clear
 // UI over shared/event-ledger.js (window.EventLedger, loaded before this script).
-// The ledger key (ledger.events) is deliberately EXCLUDED from suite backup —
+// The ledger keys (day shards ledger.events.<date> + ledger.shardIndex, plus
+// the legacy ledger.events) are deliberately EXCLUDED from suite backup —
 // same doctrine as labfiling.auditLog; see the disclosure block in options.html
-// and the ALLOWLIST entry in test-backup-coverage.js.
+// and the ALLOWLIST entries in test-backup-coverage.js.
 (function initLedgerSection() {
   const EL = typeof window !== 'undefined' ? window.EventLedger : null;
   const wrap = document.getElementById('ledgerTableWrap');
