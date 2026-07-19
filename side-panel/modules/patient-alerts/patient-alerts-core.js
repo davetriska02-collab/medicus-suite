@@ -145,12 +145,21 @@ export function generateAlertId(now = Date.now()) {
 }
 
 // Build a validated alert entry. Throws on a blank label or bad severity.
-export function makeAlert({ label, severity, note = '', typeId = null }, nowIso, id) {
+// `author` (optional) is the acting user's name/initials (from the practice
+// letterhead config) — stamped as createdBy/updatedBy for the H-042 audit
+// trail ("who put this flag here, when"). Older alerts without these fields
+// stay valid (isValidAlert does not require them).
+export function makeAlert({ label, severity, note = '', typeId = null, author = null }, nowIso, id) {
   const cleanLabel = String(label || '')
     .trim()
     .slice(0, 120);
   if (!cleanLabel) throw new Error('Alert label is required.');
   if (!SEVERITIES.includes(severity)) throw new Error(`Severity must be one of: ${SEVERITIES.join(', ')}.`);
+  const cleanAuthor = author
+    ? String(author)
+        .trim()
+        .slice(0, 60) || null
+    : null;
   return {
     id: id || generateAlertId(),
     typeId: typeId || null,
@@ -161,6 +170,8 @@ export function makeAlert({ label, severity, note = '', typeId = null }, nowIso,
       .slice(0, 500),
     createdAt: nowIso,
     updatedAt: nowIso,
+    createdBy: cleanAuthor,
+    updatedBy: cleanAuthor,
   };
 }
 
@@ -189,9 +200,15 @@ export function upsertAlert(store, pc, alert, nowIso) {
   const prev = store && store[key] && typeof store[key] === 'object' ? store[key] : null;
   const alerts = (prev && Array.isArray(prev.alerts) ? prev.alerts : []).filter(isValidAlert);
   const idx = alerts.findIndex((a) => a.id === alert.id);
+  // Edit path: the original createdAt/createdBy are immutable provenance —
+  // only updatedAt/updatedBy move (H-042 audit trail).
   const nextAlerts =
     idx >= 0
-      ? alerts.map((a, i) => (i === idx ? { ...alert, createdAt: a.createdAt, updatedAt: nowIso } : a))
+      ? alerts.map((a, i) =>
+          i === idx
+            ? { ...alert, createdAt: a.createdAt, createdBy: a.createdBy ?? null, updatedAt: nowIso }
+            : a
+        )
       : [...alerts, alert];
   return {
     ...(store || {}),

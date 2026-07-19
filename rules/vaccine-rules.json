@@ -27,7 +27,7 @@
       },
       "statusTerms": {
         "given": ["influenza vaccination given","influenza vaccine given","flu vaccin","seasonal influenza vaccin","influenza immunisation given"],
-        "declined": ["influenza vaccination declined","flu vaccine declined","influenza immunisation declined","influenza vaccination not given","flu vaccination not given"]
+        "declined": ["influenza vaccination declined", "flu vaccine declined", "influenza immunisation declined", "influenza vaccination not given", "flu vaccination not given", "flu vaccin refused", "flu vaccin contraindicated", "flu vaccin not given", "flu vaccin not indicated", "flu vaccin declined", "influenza immunisation refused", "influenza immunisation contraindicated", "influenza immunisation not given", "influenza immunisation not indicated", "influenza vaccination refused", "influenza vaccination contraindicated", "influenza vaccination not indicated", "influenza vaccine refused", "influenza vaccine contraindicated", "influenza vaccine not given", "influenza vaccine not indicated", "influenza vaccine declined", "seasonal influenza vaccin refused", "seasonal influenza vaccin contraindicated", "seasonal influenza vaccin not given", "seasonal influenza vaccin not indicated", "seasonal influenza vaccin declined"]
       }
     },
     {
@@ -49,7 +49,7 @@
       },
       "statusTerms": {
         "given": ["covid-19 vaccination","covid vaccination","sars-cov-2 vaccin","covid booster","covid-19 booster","covid vaccine given"],
-        "declined": ["covid-19 vaccination declined","covid vaccine declined","covid vaccination declined"]
+        "declined": ["covid-19 vaccination declined", "covid vaccine declined", "covid vaccination declined", "covid booster refused", "covid booster contraindicated", "covid booster not given", "covid booster not indicated", "covid booster declined", "covid vaccination refused", "covid vaccination contraindicated", "covid vaccination not given", "covid vaccination not indicated", "covid vaccine refused", "covid vaccine contraindicated", "covid vaccine not given", "covid vaccine not indicated", "covid-19 booster refused", "covid-19 booster contraindicated", "covid-19 booster not given", "covid-19 booster not indicated", "covid-19 booster declined", "covid-19 vaccination refused", "covid-19 vaccination contraindicated", "covid-19 vaccination not given", "covid-19 vaccination not indicated", "sars-cov-2 vaccin refused", "sars-cov-2 vaccin contraindicated", "sars-cov-2 vaccin not given", "sars-cov-2 vaccin not indicated", "sars-cov-2 vaccin declined"]
       }
     },
 
@@ -65,7 +65,7 @@
       "eligibility": { "anyOf": [ { "kind": "age", "ageMin": 65, "label": "Age 65+" } ] },
       "statusTerms": {
         "given": ["pneumococcal vaccination", "pneumococcal vaccine", "pneumococcal polysaccharide vaccin", "pneumovax", "ppv23", "23-valent pneumococcal", "pcv20", "20-valent pneumococcal", "apexxnar", "prevenar 20", "pneumococcal conjugate vaccin", "pneumococcal immunisation"],
-        "declined": ["pneumococcal vaccination declined", "pneumococcal vaccine declined", "pneumococcal immunisation declined", "pneumococcal vaccination not given"]
+        "declined": ["pneumococcal vaccination declined", "pneumococcal vaccine declined", "pneumococcal immunisation declined", "pneumococcal vaccination not given", "20-valent pneumococcal refused", "20-valent pneumococcal contraindicated", "20-valent pneumococcal not given", "20-valent pneumococcal not indicated", "20-valent pneumococcal declined", "23-valent pneumococcal refused", "23-valent pneumococcal contraindicated", "23-valent pneumococcal not given", "23-valent pneumococcal not indicated", "23-valent pneumococcal declined", "apexxnar refused", "apexxnar contraindicated", "apexxnar not given", "apexxnar not indicated", "apexxnar declined", "pcv20 refused", "pcv20 contraindicated", "pcv20 not given", "pcv20 not indicated", "pcv20 declined", "pneumococcal conjugate vaccin refused", "pneumococcal conjugate vaccin contraindicated", "pneumococcal conjugate vaccin not given", "pneumococcal conjugate vaccin not indicated", "pneumococcal conjugate vaccin declined", "pneumococcal immunisation refused", "pneumococcal immunisation contraindicated", "pneumococcal immunisation not given", "pneumococcal immunisation not indicated", "pneumococcal polysaccharide vaccin refused", "pneumococcal polysaccharide vaccin contraindicated", "pneumococcal polysaccharide vaccin not given", "pneumococcal polysaccharide vaccin not indicated", "pneumococcal polysaccharide vaccin declined", "pneumococcal vaccination refused", "pneumococcal vaccination contraindicated", "pneumococcal vaccination not indicated", "pneumococcal vaccine refused", "pneumococcal vaccine contraindicated", "pneumococcal vaccine not given", "pneumococcal vaccine not indicated", "pneumovax refused", "pneumovax contraindicated", "pneumovax not given", "pneumovax not indicated", "pneumovax declined", "ppv23 refused", "ppv23 contraindicated", "ppv23 not given", "ppv23 not indicated", "ppv23 declined", "prevenar 20 refused", "prevenar 20 contraindicated", "prevenar 20 not given", "prevenar 20 not indicated", "prevenar 20 declined"]
       }
     },
 
@@ -84,7 +84,7 @@
       ] },
       "statusTerms": {
         "given": ["shingles vaccination", "shingles vaccine", "herpes zoster vaccin", "shingrix", "zostavax", "zoster vaccination"],
-        "declined": ["shingles vaccination declined", "shingles vaccine declined", "herpes zoster vaccination declined", "shingles vaccination not given"]
+        "declined": ["shingles vaccination declined", "shingles vaccine declined", "herpes zoster vaccination declined", "shingles vaccination not given", "herpes zoster vaccin refused", "herpes zoster vaccin contraindicated", "herpes zoster vaccin not given", "herpes zoster vaccin not indicated", "herpes zoster vaccin declined", "shingles vaccination refused", "shingles vaccination contraindicated", "shingles vaccination not indicated", "shingles vaccine refused", "shingles vaccine contraindicated", "shingles vaccine not given", "shingles vaccine not indicated", "shingrix refused", "shingrix contraindicated", "shingrix not given", "shingrix not indicated", "shingrix declined", "zostavax refused", "zostavax contraindicated", "zostavax not given", "zostavax not indicated", "zostavax declined", "zoster vaccination refused", "zoster vaccination contraindicated", "zoster vaccination not given", "zoster vaccination not indicated", "zoster vaccination declined"]
       }
     },
 
@@ -103,7 +103,7 @@
       ] },
       "statusTerms": {
         "given": ["respiratory syncytial virus vaccin", "rsv vaccination", "rsv vaccine", "abrysvo", "arexvy"],
-        "declined": ["rsv vaccination declined", "rsv vaccine declined", "respiratory syncytial virus vaccination declined", "rsv vaccination not given"]
+        "declined": ["rsv vaccination declined", "rsv vaccine declined", "respiratory syncytial virus vaccination declined", "rsv vaccination not given", "abrysvo refused", "abrysvo contraindicated", "abrysvo not given", "abrysvo not indicated", "abrysvo declined", "arexvy refused", "arexvy contraindicated", "arexvy not given", "arexvy not indicated", "arexvy declined", "respiratory syncytial virus vaccin refused", "respiratory syncytial virus vaccin contraindicated", "respiratory syncytial virus vaccin not given", "respiratory syncytial virus vaccin not indicated", "respiratory syncytial virus vaccin declined", "rsv vaccination refused", "rsv vaccination contraindicated", "rsv vaccination not indicated", "rsv vaccine refused", "rsv vaccine contraindicated", "rsv vaccine not given", "rsv vaccine not indicated"]
       }
     }
   ]

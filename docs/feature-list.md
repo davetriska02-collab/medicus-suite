@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.175.0
+**Version:** v3.176.0
 **Generated:** 2026-07-19 (automated)
 
 ## What it is
@@ -10,7 +10,7 @@ Medicus Suite is a Chrome browser extension for UK GP practices that runs alongs
 ## At a glance
 
 - 17 side-panel modules covering monitoring, demand, capacity, workflow, knowledge, per-patient practice flags and the live patient record
-- 8 in-page content-script features (queue overlays, workflow buttons and relays) plus 3 full-tab tools (two generated reports and a record-cleanup tool)
+- 9 in-page content-script features (queue overlays, the patient-flag banner, workflow buttons and relays) plus 3 full-tab tools (two generated reports and a record-cleanup tool)
 - 8 rule types in the alert engine
 - 33 drug-monitoring rules, 74 QOF register/indicator rules, 5 vaccine rules, 44 investigation-result rules, and 32 starter alerts in the prescribing-safety library
 
@@ -82,7 +82,7 @@ A live, on-screen snapshot of the patient open in Medicus — problems, medicati
 
 ### Patient Alerts
 
-Practice-defined per-patient flags — interpreter required, safeguarding concern, medication-seeking behaviour, or anything custom — that appear on a global alert strip and the Monitoring banner the moment that patient's record is opened. Managed from the Pt Alerts tab (add/edit/remove, browse all flagged patients, customisable quick-add presets, three severities). Stored locally per browser profile and shareable practice-wide via backup files; not written to the clinical record, and an absent flag is never an all-clear.
+Practice-defined per-patient flags — interpreter required, safeguarding concern, medication-seeking behaviour, or anything custom — that appear on a global alert strip, the Monitoring banner, a banner inside Medicus's own patient header, and as chips on task-queue rows the moment that patient's record or task is on screen. Each flag records who added and last edited it, and every change is logged in the machine-local Event Ledger. Managed from the Pt Alerts tab (add/edit/remove, browse all flagged patients, customisable quick-add presets, three severities). Stored locally per browser profile and shareable practice-wide via backup files; not written to the clinical record, and an absent flag is never an all-clear.
 
 ## In-page features (content scripts)
 
@@ -127,6 +127,8 @@ The bundled library ships **32 starter alerts** — 29 prescribing-safety combin
 
 ## Recent additions (last 4 weeks)
 
+- **v3.176.0 (2026-07-18)** — Patient Alerts now show on the Medicus page itself (banner in the patient header) and on task-queue rows (flag chips), so a flag is seen before the patient is phoned — plus author attribution on every flag and a full add/edit/remove audit trail in the Event Ledger.
+
 - **v3.175.0 (2026-07-18)** — New Pt Alerts tab: per-patient flags (interpreter needed, safeguarding, behaviour, anything custom) on a global strip and the Monitoring banner whenever that patient is open.
 - **v3.174.0 (2026-07-16)** — One authoritative smoking-status line added to the Sentinel patient banner, replacing scattered recording-currency cards.
 - **v3.160.0–v3.173.0 (2026-07-07 to 07-14)** — New Record duplicate cleanup tool: detects GP2GP-related record duplication across the patient list and, within a record, grades likely duplicates by confidence, with safe bulk removal for the clearest matches and manual review for the rest.
@@ -138,6 +140,7 @@ The bundled library ships **32 starter alerts** — 29 prescribing-safety combin
 - **v3.147.0 (2026-07-02)** — New Leaflets tab; the suite began noticing when Medicus changes its own screens and warns instead of a feature silently breaking.
 - **v3.143.0–v3.145.0 (2026-06-30 to 07-01)** — New "File all normal" lab-results auto-filing button; a pre-prescribing risk check, a safety-alert log, and a week-on-week practice workload trend.
 - **v3.138.0–v3.142.0 (2026-06-29)** — Sweep and Sentinel gained a blind-spot guard for unmonitored high-risk drugs and a QOF points-at-risk prioritiser; Referrals gained a Two-Week-Wait safety-net worklist; Sweep can now book a recall in one click.
+
 
 ## Safety posture
 

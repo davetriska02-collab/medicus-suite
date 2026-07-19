@@ -483,7 +483,12 @@ export async function init(el) {
     _briefCollapsed = !!r['sentinel.briefCollapsed'];
   });
   await refresh();
-  pollTimer = setInterval(refresh, 10000);
+  // Visibility-gated (audit M13): each tick costs tabs.query + executeScript +
+  // two IPC round-trips (one carrying the full observationHistory payload) —
+  // pointless while the panel is hidden; triggers re-fire on visibilitychange.
+  pollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') refresh();
+  }, 10000);
   chrome.tabs.onActivated.addListener(refresh);
   chrome.tabs.onUpdated.addListener(onUpdated);
 

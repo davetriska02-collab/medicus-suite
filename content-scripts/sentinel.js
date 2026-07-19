@@ -262,7 +262,10 @@
         (_patientUrlMatch && _patientUrlMatch[1]) ||
         null;
       if (currentMode === 'live' && _resolvedPatientId) {
-        const journalObs = await fetchJournalObservations(_resolvedPatientId, data.observations || []);
+        // Legacy sidebar path: swallow journal failures (fetchJournalObservations
+        // now throws on error — audit H5); the live suite path in
+        // evaluateAndPublish surfaces them via journalAugmentFailed instead.
+        const journalObs = await fetchJournalObservations(_resolvedPatientId, data.observations || []).catch(() => []);
         if (journalObs.length > 0) {
           data.observations = [...(data.observations || []), ...journalObs];
           if (data.debug) {
@@ -278,6 +281,7 @@
       const allChips = window.SentinelRules.evaluatePatient(data.medications || [], data.observations || [], rules, {
         now: nowIso,
         problems: data.problems || [],
+        pastProblems: data.pastProblems || [],
         patientContext: data.patientContext,
         observationHistory: data.observationHistory || [],
         allergies: data.allergies || [],
@@ -358,6 +362,7 @@
         const out = window.SentinelRules.evaluatePatient(sb.medications || [], sb.observations || [], rules, {
           now: nowIso,
           problems: sb.problems || [],
+          pastProblems: sb.pastProblems || [],
           patientContext: sb.patientContext,
           observationHistory: sb.observationHistory || [],
           allergies: sb.allergies || [],
@@ -516,7 +521,12 @@
         credentials: 'include',
         signal: ctrl.signal,
       });
-      if (!resp.ok) return [];
+      // Audit H5 (2026-07-18): failures must THROW, not return [] — an empty
+      // array is indistinguishable from "patient has no journal codes", which
+      // made evaluateAndPublish's journalAugmentFailed warning unreachable and
+      // let a 500/timeout silently degrade journal-coded QOF indicators to a
+      // false-all-clear no_data.
+      if (!resp.ok) throw new Error(`journal fetch HTTP ${resp.status}`);
       const d = await resp.json();
 
       const monthIndex = {
@@ -582,9 +592,11 @@
       }
       return result;
     } catch (e) {
-      if (e.name === 'AbortError') return [];
+      // Rethrow so callers can distinguish "journal unavailable" from "no
+      // journal codes" (audit H5). evaluateAndPublish catches this and stamps
+      // journalAugmentFailed onto the snapshot; the panel shows the warning.
       console.warn('[Sentinel] fetchJournalObservations failed:', e.message);
-      return [];
+      throw e.name === 'AbortError' ? new Error('journal fetch timed out') : e;
     } finally {
       clearTimeout(timer);
     }
@@ -1320,6 +1332,7 @@
             {
               now: _evalNowIso,
               problems: data.problems || [],
+        pastProblems: data.pastProblems || [],
               patientContext: data.patientContext,
               observationHistory: data.observationHistory || [],
               allergies: data.allergies || [],

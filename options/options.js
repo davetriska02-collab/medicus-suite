@@ -718,7 +718,9 @@ async function doFullExport() {
     patientAlertsExport(),
   ]);
   const suite = await suiteExport();
-  return window.SuiteEnvelope.wrap('suite', {
+  return window.SuiteEnvelope.wrap(
+    'suite',
+    {
     sentinel,
     capacity,
     triage,
@@ -736,7 +738,9 @@ async function doFullExport() {
     leaflets,
     patientAlerts,
     suite,
-  });
+    },
+    chrome.runtime.getManifest().version
+  );
 }
 
 async function doModuleExport(scope) {
@@ -760,7 +764,9 @@ async function doModuleExport(scope) {
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
-  return window.SuiteEnvelope.wrap(scope, { [scope]: data });
+  // Real manifest version (audit M18: the envelope's fallback stamped every
+  // backup "2.5.0", defeating the preview's provenance line).
+  return window.SuiteEnvelope.wrap(scope, { [scope]: data }, chrome.runtime.getManifest().version);
 }
 
 async function applyEnvelope(envelope) {

@@ -2,6 +2,210 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.176.3] — 2026-07-19
+
+### Audit close-out: attestation preservation, hazard-log sync, vendored font
+
+- **Restores no longer wipe local attestations** (audit M18): reception's
+  `disclaimerAcceptedAt` and knowledge/lab-filing's `noticeAcknowledgedAt`
+  are preserved across an import (incoming values still never written) —
+  previously a restore re-locked features the local admin had accepted.
+- **Hazard log v3.13** incremental sync documenting the full audit
+  remediation (v3.176.1–.2), pending CSO review — including the open
+  question of numbered hazards for the booking write race and vaccine
+  false-GIVEN classes.
+- **Panel font vendored** (audit M16): JetBrains Mono v24 latin variable
+  woff2 ships in `vendor/fonts/` (OFL-1.1, SHA-256-catalogued in
+  vendor-versions.json; verify-vendor now walks subdirectories) — the
+  runtime Google Fonts `@import` is gone, and the extension-pages CSP is
+  tightened with `style-src 'self' 'unsafe-inline'; font-src 'self'` so
+  remote styles/fonts now fail closed.
+
+**Remaining from the audit, deliberately future work** (each needs its own
+reviewed PR): event-ledger day-sharding (H12), dead Sentinel sidebar removal
+(M5), queue rowIndex fingerprint canary (H6), shared my-appointments fetcher
+(M10).
+
+## [v3.176.2] — 2026-07-18
+
+### Audit remediation, second tranche — engine integrity + day-scale efficiency
+
+Completes the small-to-medium remainder of the 2026-07-18 audit (Milestones
+2–3). All fixes verified by the 327-test suite.
+
+**Engine / data integrity:**
+
+- eval-cache input hash now folds in `observationHistory` and `allergies`
+  digests — a backfiled result or new same-day journal point no longer serves
+  stale trend/event-count chips until midnight (M19); the ruleset signature
+  is memoised per rules-array identity (was a deep stringify of every rule on
+  every render tick).
+- `mergeRules` only merges the ALLOWED override fields — an imported org
+  ruleset can no longer silently rewrite safety-critical fields (e.g.
+  `drug.match`) that the validator claimed were "ignored" (M20).
+- Numeric parsing unified: "1,234" no longer parses as 1.234 (thousands
+  separators recognised), comma-decimals limited to 1–2 trailing digits, and
+  the engine's `parseNumeric` now agrees with the normaliser (M21).
+- `evaluatePatient` accepts and propagates `pastProblems`; the HRT
+  hysterectomy context (progestogen-cover check) sees ended problems for the
+  first time — wired through all three sentinel call sites (M22).
+- `triage-io` empty-config early-return no longer drops the routineRx
+  restore; backups are stamped with the REAL manifest version (was a
+  hard-coded "2.5.0"); backup-coverage guard extended with the four missing
+  key prefixes — immediately catching (and allowlisting, per the documented
+  machine-local decision) `labfiling.suppress` (M18).
+
+**Content scripts:**
+
+- pusher-relay retries when `$pusher` attaches late instead of giving up for
+  the tab's lifetime (M3); referrals-discovery now gates per-event, so it
+  works under SPA navigation instead of only on a hard reload (M4).
+- routine-rx macro aborts every waitFor step (and the final commit) the
+  instant the SPA path changes — no step can drive a different task's
+  controls (M7).
+- api-discovery journal capture stores UUID-substituted templates only,
+  capped at 50, in one batched write; the grow-forever raw-URL key is
+  removed (M6). Stale row-id comment corrected (documents the durable-map
+  design, not the v3.69.0 bug it replaced).
+
+**Panel / day-scale efficiency:**
+
+- Request-Monitor single-poller (H10): the strip renders from the service
+  worker's persisted state when fresh (≤2 poll periods) and only falls back
+  to a direct poll when the SW state is stale — halves RM network traffic
+  and removes the racing dual state writes.
+- `submissions.ledger` writes are dirty-checked (five 15–60s pollers were
+  rewriting byte-identical KB every tick) (M9).
+- Sentinel (10s) and Trends (15s) module polls are visibility-gated — each
+  tick carried executeScript + a full observationHistory IPC payload (M13).
+- WR strip and Follow-ups list gain changed-guards (identical innerHTML no
+  longer rebuilt every poll, preserving hover state); roll-up "Hide" works
+  while the always-expanded preference is on; pa-strip labels "OTHER TAB"
+  when its fallback picked a background Medicus tab (M11); "all four strips"
+  comment drift fixed.
+
+**Deferred to a dedicated follow-up PR (larger blast radius):** event-ledger
+day-sharding (H12), dead Sentinel sidebar removal (M5), queue rowIndex
+fingerprint canary (H6), shared my-appointments fetcher (M10), panel font
+vendoring + CSP tightening (M16), and the restore attestation-preservation
+question (M18, needs a design decision).
+
+## [v3.176.1] — 2026-07-18
+
+### Audit remediation — whole-suite bug bash fixes (Milestones 0–2)
+
+Fixes from the 2026-07-18 whole-suite audit (5 parallel specialist reviews;
+every Critical/High verified against source, clinical-logic bugs reproduced
+under Node before fixing). Failing-first regression tests were written for
+each correctness fix.
+
+**Critical:**
+
+- **C1 — wrong-patient booking/task-creation race closed.** `booking-inline`
+  and `task-inline` now pin their per-task state instance across every await
+  (a resolution still in flight when the SPA navigates is discarded, never
+  written into the next task's state) and HARD re-verify task→patient at
+  commit time before creating an appointment/task — the same click-time
+  re-check lab filing already used. An orphaned slot reservation made during
+  a navigation is released, not attached.
+- **C2 — false "vaccination GIVEN" chips.** Every vaccine rule's `declined`
+  list now covers refused/contraindicated/not given/not indicated phrasings
+  (covid lacked even "not given"), and an UNDATED "given" record no longer
+  satisfies a seasonal window (fail-closed; one-off vaccines still accept
+  undated records — their window is all-time). New
+  `test-vaccine-status-terms.js` (28 assertions, red-first).
+- **C3 — Record tab cleanup never ran.** `record.js` init now returns its
+  cleanup (the loader only honours the RETURNED function); every visit had
+  permanently leaked 4 listeners, each firing a background full-record fetch
+  on every tab switch. New `test-module-lifecycle.js` statically enforces the
+  init-returns-cleanup contract for all 17 modules.
+
+**High:**
+
+- **H1** — "Non-smoker" no longer displays as "Current smoker": new 'non'
+  bucket (deliberately not 'never' — SNOMED Non-smoker leaves ex-vs-never
+  unspecified); "Passive smoker" now reads unclear, never current.
+- **H2** — nystatin/sandostatin/cilastatin/pentostatin excluded from the four
+  QOF lipid-lowering `"statin"` matches (false MET off Nystatin).
+- **H3** — problem-negation is now clause-bounded with a 30-char reach:
+  "History of MI; heart failure" no longer kills a heart-failure-gated alert;
+  "No/Query/History of heart failure" still negate.
+- **H4** — `findLatestObservation` gains exclude-term support;
+  alert-hyperkalaemia excludes urine/faecal/etc. specimens (a newer urine
+  potassium fired a red serum alert). New `test-matching-false-signals.js`
+  (16 assertions) covers H2–H4.
+- **H5** — journal-fetch failures now THROW instead of returning [] — the
+  panel's journalAugmentFailed warning was unreachable dead wiring, so a
+  500/timeout silently degraded journal-coded QOF indicators to a false
+  all-clear no_data.
+- **H7** — the detail verdict banner's attempted-set is cleared on leaving
+  the detail page: a task's red "N urgent" banner could previously never
+  recompute after its 5-min cache expired, for the whole session.
+- **H8** — Condor's four delegated click handlers (and Today's card handler)
+  are named and removed in cleanup — they stacked one copy per visit (N
+  visits → one click opened N report tabs).
+- **H9** — module switches are now SERIALISED in the loader (at most one init
+  in flight; a superseded init's cleanup can no longer tear down the live
+  instance's timers — the "Sentinel frozen on the last patient's chips"
+  race), and an init that throws part-way gets a best-effort module cleanup.
+- **H11** — queue result-chip cache TTL 5→30 min with a real invalidation
+  signal (cached severity dropped the moment a row's priorityDisplay changes
+  on the bridge) — removes ~19k/day redundant overview GETs on long queues.
+
+**Medium/low quick wins:** own-mutation filter recognises `.ch-q-pa` (each
+flag-chip injection triggered a full queue refresh cycle); queue/OIR caches
+bounded (ts-less bridge entries now prunable via createdAt; FIFO caps on the
+outstanding-investigation caches that retained every patient's full history
+all day); `event-ledger.js` no longer double-loaded by the manifest (+
+re-entry guard); pa-strip poll visibility-gated, demoted to a 60s backstop,
+and its store cached via onChanged; quote-safe escaping in `escStrip` and the
+condor/tabs-section/setup/module-loader esc helpers (staff-typed free text in
+title attributes could break out of the attribute); `alert-library.json`
+`composite-1` template now ships disabled (placeholder ruleIds silently never
+fired).
+
+Full audit (findings, strategy, remaining Milestone 2–3 tasks) delivered as
+a separate document; hazard-log entries for C1/C2 pending CSO review.
+
+## [v3.176.0] — 2026-07-18
+
+### Patient Alerts everywhere it matters: on-page banner, queue chips, attribution
+
+Three follow-ups to v3.175.0's Patient Alerts, extending the same store
+(`patientAlerts.byPatient`) to the surfaces where flags earn their keep. All
+three are read-only over the store; the Pt Alerts tab remains the only writer.
+
+- **On-page flag banner** (`content-scripts/patient-alerts-banner.js` + CSS):
+  the patient's flags now render as a slim red/amber banner PREPENDED inside
+  Medicus's own patient header — visible to anyone who opens the record,
+  side panel open or not. Identity is re-resolved from the live page on every
+  render (URL patient UUID first, on-screen NHS number as lookup fallback; a
+  name never matches); no identity or no flags → banner removed, never stale.
+  Survives the SPA's re-renders via the shared rAF observer hub + prepend
+  rule; self-contained CSS (no token dependency to go missing).
+- **Queue flag chips** (`.ch-q-pa`, triage-lens content script): flags appear
+  on task-queue rows — "⚑ Interpreter required +1" — so the flag is seen
+  BEFORE the task is opened or the patient phoned. Task→patient resolution
+  reuses the TTL-cached `resolveTaskToPatient`; chips follow all the queue
+  chip rules (prepend, durable rowIndex→taskUuid re-injection on every
+  refresh, de-dupe, hud.css token-scope registration). Matching is by
+  resolved patient UUID only. Chip colour: red if any red flag, else amber.
+  A store edit in the panel updates the queue on the next churn.
+- **Attribution + audit trail** (H-042): every flag now records
+  `createdBy`/`updatedBy` (from the practice letterhead's clinician name;
+  null when unset — never guessed). Edits preserve the original author and
+  date as immutable provenance; the Pt Alerts chip tooltips show
+  "Added <date> by <name> — Updated <date> by <name>". Every add/edit/remove
+  (including whole-patient removal, one event per flag) is recorded in the
+  machine-local Event Ledger under new source `patient-alerts` (actions
+  `flag-added`/`flag-edited`/`flag-removed`) — patient referenced by UUID
+  only, label carries the preset id + severity, never the free-typed text.
+- New `shared/patient-alerts-lookup.js` (classic, dual-mode) provides the
+  read-side lookup to both content-script surfaces;
+  `test-patient-alerts-lookup.js` asserts parity with the panel's ES core on
+  shared fixtures so the two matching implementations cannot drift (27
+  assertions). Core attribution tests added (56 total).
+
 ## [v3.175.0] — 2026-07-18
 
 ### Patient Alerts — per-patient customisable flags (user-requested)

@@ -109,6 +109,11 @@ async function labfilingImport(data) {
     const commitMode = LF.LF_COMMIT_MODES.includes(c.commitMode) ? c.commitMode : 'manual';
     const out = { commitMode };
     if (c.killSwitch === true) out.killSwitch = true;
+    // Preserve the LOCAL install's attestation across a restore (audit M18) —
+    // the incoming value is still never imported.
+    const existingR = await chrome.storage.local.get('labfiling.config');
+    const localAck = existingR['labfiling.config'] && existingR['labfiling.config'].noticeAcknowledgedAt;
+    if (localAck) out.noticeAcknowledgedAt = localAck;
     toSet['labfiling.config'] = out;
   }
 

@@ -16,6 +16,7 @@
 .ch-queue-chips,
 .ch-q-result,
 .ch-q-mon,
+.ch-q-pa,
 .ch-q-status,
 .ch-q-status-flash,
 .ch-oir-flag,
@@ -324,6 +325,47 @@
   display: inline-flex;
   gap: 4px;
   vertical-align: middle;
+}
+/* Patient-flag chip (Pt Alerts, H-042) — practice-recorded per-patient flags
+   on queue rows. Same host/prepend/dedupe rules as .ch-q-mon. Colour: red when
+   any red flag, otherwise amber — including info-only flags, deliberately: the
+   queue chip exists to be noticed before contact, and a grey tier would vanish
+   into the row. Full severity detail lives in the panel/banner surfaces. */
+.ch-q-pa {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: middle;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 600;
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ch-q-pa-red {
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+  color: var(--red);
+}
+.ch-q-pa-amber {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+}
+.ch-q-pa-flag {
+  flex-shrink: 0;
+}
+.ch-q-pa-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Flat-queue fallback (prepended into the patient-name cell): same width cap
+   rationale as .ch-q-mon-inline — truncate text, never drop the chip. */
+.ch-q-pa-inline {
+  margin-right: 6px;
+  max-width: 40%;
 }
 /* Flat-queue fallback: chips PREPENDED into the narrow patient-name cell, BEFORE
    the name (prepend is mandatory — see content.js; appended nodes get reconciled

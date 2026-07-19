@@ -1509,10 +1509,10 @@ check(/runOutstandingMatch\(\);\s*\n\s*runDetailVerdict\(\);/.test(src), 'runDet
 // Leaving the detail page type must tear the banner down (never lingers into a
 // differently-typed page, e.g. back to the queue) and reset the task-tracking state.
 check(
-  /if \(type !== 'detail'\) \{\s*\n\s*teardownOutstandingObserver\(\);\s*\n\s*removeDetailVerdictBanner\(\);\s*\n\s*_detailVerdictTaskUuid = null;\s*\n\s*\}/.test(
+  /if \(type !== 'detail'\) \{\s*\n\s*teardownOutstandingObserver\(\);\s*\n\s*removeDetailVerdictBanner\(\);\s*\n\s*_detailVerdictTaskUuid = null;[\s\S]{0,700}?_detailVerdictAttempted\.clear\(\);\s*\n\s*\}/.test(
     src
   ),
-  'run() tears down the verdict banner (and resets _detailVerdictTaskUuid) when leaving the detail page type'
+  'run() tears down the verdict banner, resets _detailVerdictTaskUuid AND clears the attempted set (audit H7 — without the clear, an expired cached verdict could never recompute this session)'
 );
 
 const rdvMatch = src.match(/const runDetailVerdict = \(\) => \{[\s\S]*?\n {2}\};/);

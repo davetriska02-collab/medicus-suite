@@ -55,6 +55,7 @@
       open: false,
       loading: false,
       error: null,
+      taskUuid: null,
       patientId: null,
       teams: [],
       staff: [],
@@ -340,27 +341,36 @@
     s.loading = true;
     s.error = null;
     rerender();
+    // WRONG-PATIENT GUARD (audit C1, 2026-07-18): pin THIS task's state object
+    // and task UUID before awaiting. runInject() replaces `s` on every SPA
+    // navigation — without the pin, task A's patient resolution landed in task
+    // B's state and the created task went on the wrong patient's record. All
+    // writes go to the pinned `st`; stale results are discarded.
+    const st = s;
     try {
       const info = getTaskInfo();
-      if (info) s.patientId = await resolvePatientId(info.typeSlug, info.taskUuid);
-      if (!s.patientId) throw new Error('Could not determine the patient for this task.');
-      const form = await apiFetchForm(s.patientId);
-      s.teams = (form.assigneeOptions && form.assigneeOptions.teams) || [];
-      s.staff = (form.assigneeOptions && form.assigneeOptions.staff) || [];
+      st.taskUuid = info ? info.taskUuid : null;
+      if (info) st.patientId = await resolvePatientId(info.typeSlug, info.taskUuid);
+      if (st !== s) return; // navigated mid-resolution — discard
+      if (!st.patientId) throw new Error('Could not determine the patient for this task.');
+      const form = await apiFetchForm(st.patientId);
+      if (st !== s) return; // navigated during the form fetch — discard
+      st.teams = (form.assigneeOptions && form.assigneeOptions.teams) || [];
+      st.staff = (form.assigneeOptions && form.assigneeOptions.staff) || [];
       const pri = Array.isArray(form.priorityOptions)
         ? form.priorityOptions.map((o) => ({ value: o.value, label: o.label }))
         : [];
-      s.priorities = pri.length ? pri : [{ value: 0, label: 'Normal' }];
+      st.priorities = pri.length ? pri : [{ value: 0, label: 'Normal' }];
       const def =
-        s.priorities.find((p) => String(p.label).toLowerCase() === 'normal') ||
-        s.priorities.find((p) => p.value === 0) ||
-        s.priorities[0];
-      s.priority = def ? def.value : 0;
+        st.priorities.find((p) => String(p.label).toLowerCase() === 'normal') ||
+        st.priorities.find((p) => p.value === 0) ||
+        st.priorities[0];
+      st.priority = def ? def.value : 0;
     } catch (err) {
-      s.error = err.message || 'Failed to load the task form.';
+      st.error = err.message || 'Failed to load the task form.';
     } finally {
-      s.loading = false;
-      rerender();
+      st.loading = false;
+      if (st === s) rerender();
     }
   }
 
@@ -369,28 +379,42 @@
     s.creating = true;
     s.createError = null;
     rerender();
+    // WRONG-PATIENT GUARD (audit C1): pin the state and HARD re-verify the
+    // on-screen task still resolves to this patient before the write — task
+    // creation is a clinical write and must never fire off a stale identity.
+    const st = s;
     try {
-      const sep = s.assignee.indexOf('|');
-      const assigneeType = s.assignee.slice(0, sep);
-      const assigneeId = s.assignee.slice(sep + 1);
+      const info = getTaskInfo();
+      if (!info || (st.taskUuid && info.taskUuid !== st.taskUuid) || st !== s) {
+        throw new Error('Task changed — reopen the panel.');
+      }
+      const verifiedPatientId = await resolvePatientId(info.typeSlug, info.taskUuid);
+      if (st !== s) return; // navigated during verification — abort silently
+      if (!verifiedPatientId || verifiedPatientId !== st.patientId) {
+        throw new Error('Patient could not be re-verified for this task — reopen the panel.');
+      }
+      const sep = st.assignee.indexOf('|');
+      const assigneeType = st.assignee.slice(0, sep);
+      const assigneeId = st.assignee.slice(sep + 1);
       const payload = {
-        patientId: s.patientId,
+        patientId: st.patientId,
         contextId: null,
         contextType: null,
         assigneeId,
         assigneeType,
-        description: s.description.trim(),
-        priority: Number(s.priority) || 0,
+        description: st.description.trim(),
+        priority: Number(st.priority) || 0,
         snoozeUntil: null,
       };
       await apiCreateTask(payload);
-      s.createdAssignee = assigneeLabel(s.assignee);
-      s.step = 'created';
+      if (st !== s) return; // task created for the pinned identity; UI state is gone
+      st.createdAssignee = assigneeLabel(st.assignee);
+      st.step = 'created';
     } catch (err) {
-      s.createError = err.message || 'Failed to create the task — please try again.';
+      st.createError = err.message || 'Failed to create the task — please try again.';
     } finally {
-      s.creating = false;
-      rerender();
+      st.creating = false;
+      if (st === s) rerender();
     }
   }
 

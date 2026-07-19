@@ -1,0 +1,73 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Patient Alerts — on-page flag banner (injected into Medicus's patient header).
+   Self-contained colours (the host page is always light; no design-token
+   dependency so a missing token can never render a white rectangle —
+   CLAUDE.md chip rule #5 rationale). Palette mirrors the panel's status
+   triads (panel.css :root). */
+
+.pa-page-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 10px;
+  margin: 2px 0 4px;
+  border-radius: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  box-sizing: border-box;
+}
+.pa-page-banner--amber {
+  background: rgba(180, 83, 9, 0.09);
+  border: 1px solid rgba(180, 83, 9, 0.32);
+}
+.pa-page-banner--red {
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+}
+.pa-page-banner-icon {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.pa-page-banner--amber .pa-page-banner-icon {
+  color: #b45309;
+}
+.pa-page-banner--red .pa-page-banner-icon {
+  color: #dc2626;
+}
+.pa-page-banner-lead {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #475569;
+}
+.pa-page-banner-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #ffffff;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pa-page-banner--amber .pa-page-banner-pill {
+  border: 1px solid rgba(180, 83, 9, 0.32);
+  color: #b45309;
+}
+.pa-page-banner--red .pa-page-banner-pill {
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  color: #dc2626;
+}
+.pa-page-banner-more {
+  font-size: 10px;
+  color: #64748b;
+  flex-shrink: 0;
+}
