@@ -137,7 +137,9 @@ export async function init(el) {
 
   render({ state: 'loading' });
   await refresh();
-  pollTimer = setInterval(refresh, 15000);
+  pollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') (refresh)();
+  }, 15000);
   onRuntimeMsg = (msg, sender) => {
     if (!sender || sender.id !== chrome.runtime.id) return;
     if (msg && msg.type === 'sentinel:snapshot-updated') refresh();

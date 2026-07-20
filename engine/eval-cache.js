@@ -52,16 +52,44 @@
     const pc = opts.patientContext || {};
     const ctx = `${pc.ageYears != null ? pc.ageYears : ''}/${pc.sex || ''}`;
     const day = (opts.now ? String(opts.now) : new Date().toISOString()).slice(0, 10);
+    // observationHistory + allergies digests (audit M19, 2026-07-18): trend /
+    // event-count / allergy rules read these, but the hash used to omit them —
+    // a backfiled result or new same-day journal point with unchanged
+    // latest-per-name values served STALE chips until midnight. name@date per
+    // history point (values don't alter which points exist) + allergy names.
+    const hist = (opts.observationHistory || [])
+      .map(
+        (h) =>
+          `${h && h.name ? String(h.name).toLowerCase() : ''}#` +
+          ((h && h.history) || []).map((pt) => (pt && pt.date) || '').join('.')
+      )
+      .sort()
+      .join('|');
+    const alg = (opts.allergies || [])
+      .map((a) => (a && (a.name || a.label) ? String(a.name || a.label).toLowerCase() : ''))
+      .sort()
+      .join('|');
     const rulesSig = rulesSignature(opts.rules);
-    return djb2(`M:${meds}\nO:${obs}\nP:${probs}\nC:${ctx}\nR:${rulesSig}\nD:${day}`);
+    return djb2(`M:${meds}\nO:${obs}\nP:${probs}\nH:${hist}\nA:${alg}\nC:${ctx}\nR:${rulesSig}\nD:${day}`);
   }
 
   // A cheap signature of the active ruleset — count + each rule's id plus a
   // stable serialisation of the rule's full content (thresholds, match/exclude
   // lists, intervals, enabled flag, etc.) so an edited rule busts the cache even
   // when its id and enabled flag are unchanged. Order-independent.
+  // Memoised per rules-array identity (audit, 2026-07-18): the deep
+  // stableStringify of the whole ruleset ran on EVERY hash computation (each
+  // render/poll tick) although rules only change on config writes — which
+  // produce a NEW array, so identity keying is exact.
+  const _rulesSigMemo = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
   function rulesSignature(rules) {
     if (!Array.isArray(rules)) return '0';
+    if (_rulesSigMemo && _rulesSigMemo.has(rules)) return _rulesSigMemo.get(rules);
+    const sig = computeRulesSignature(rules);
+    if (_rulesSigMemo) _rulesSigMemo.set(rules, sig);
+    return sig;
+  }
+  function computeRulesSignature(rules) {
     return (
       rules.length +
       ':' +

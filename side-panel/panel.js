@@ -17,6 +17,11 @@ import { sanitiseHiddenTabs } from './tab-catalog.js';
 import { initSetup } from './setup/setup.js';
 import { TAB_HELP } from '../shared/tab-help.js';
 import { STATUS_RANK } from './modules/sentinel/sentinel-core.js';
+import {
+  findEntryForPatient,
+  maxSeverity as paMaxSeverity,
+  sortAlerts as paSortAlerts,
+} from './modules/patient-alerts/patient-alerts-core.js';
 
 const content = document.getElementById('suiteContent');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -134,6 +139,10 @@ const MODULES = {
   knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
   leaflets: { js: () => import('./modules/leaflets/leaflets.js'), css: './modules/leaflets/leaflets.css' },
   record: { js: () => import('./modules/record/record.js'), css: './modules/record/record.css' },
+  'patient-alerts': {
+    js: () => import('./modules/patient-alerts/patient-alerts.js'),
+    css: './modules/patient-alerts/patient-alerts.css',
+  },
   about: null,
 };
 
@@ -1112,8 +1121,11 @@ function renderRollup() {
   const maxLevel = hasRed ? 'red' : 'amber';
   // Expanded when: the user pinned it open, OR (default) it's red. Amber starts
   // collapsed unless the session toggle or the persistent pref says otherwise.
-  if (_rollupAlwaysExpanded) _rollupExpanded = true;
-  else if (_rollupExpanded === null) _rollupExpanded = hasRed;
+  // The pinned pref supplies the DEFAULT only — a session click must still be
+  // able to collapse (audit low: the Hide button visibly no-op'd while
+  // suite.rollup.alwaysExpanded was on, because this re-forced true on the
+  // re-render the click itself triggered).
+  if (_rollupExpanded === null) _rollupExpanded = _rollupAlwaysExpanded || hasRed;
 
   const pills = elevated
     .map(
@@ -1157,9 +1169,9 @@ alertRollupEl?.addEventListener('click', () => {
 // ── Waiting Room strip (global — visible on every module) ─────────────────────
 
 let SITE_ID_WR = null;
-let WR_API = null;
 const WR_POLL_MS = 30 * 1000;
 const wrStripEl = document.getElementById('wrStrip');
+let _wrPrevHtml = null; // changed-guard for the 30s poll re-render (see below)
 
 // Waiting-room alert thresholds (minutes). User-configurable via the alert-threshold
 // editor (suite.waitingRoom.thresholds); defaults match the long-standing fixed
@@ -1190,29 +1202,22 @@ let wrPoller = null;
 
 async function fetchAndRenderStrip(bypassCache = false) {
   if (document.visibilityState !== 'visible') return true;
-  // Resolve practice code on every call so user changes take effect immediately
-  const { code, source } = await window.PracticeCode.resolve();
-  SITE_ID_WR = code;
-  if (!SITE_ID_WR) {
-    // No practice code set — hide strip silently. User will see the prompt in Options.
-    if (wrStripEl) {
-      wrStripEl.className = 'wr-strip wr-strip-hidden';
-      wrStripEl.innerHTML = '';
-    }
-    return true;
-  }
-  WR_API = `https://${SITE_ID_WR}.api.england.medicus.health/scheduling/data/homepage/my-appointments`;
   try {
-    const r = await window.ApiDiag.fetch({
-      module: 'panel-wr-strip',
-      url: WR_API,
-      code: SITE_ID_WR,
-      codeSource: source,
-    });
-    const raw = await r.json();
-    const arrived = (raw?.schedule?.schedule ?? [])
-      .flatMap((d) => d.entries ?? [])
-      .filter((e) => e?.diaryEntryType?.value === 'appointment' && e?.displayStatus?.value === 'arrived')
+    // Shared memoised fetcher (audit M10): coalesces this strip's poll with the
+    // Sentinel/Today modules' waiting-room fetches of the same endpoint.
+    // Practice code is re-resolved inside on every call, so user changes still
+    // take effect immediately.
+    const { raw, code } = await window.AppointmentsFeed.fetchRaw({ module: 'panel-wr-strip', bypassCache });
+    SITE_ID_WR = code;
+    if (!code) {
+      // No practice code set — hide strip silently. User will see the prompt in Options.
+      if (wrStripEl) {
+        wrStripEl.className = 'wr-strip wr-strip-hidden';
+        wrStripEl.innerHTML = '';
+      }
+      return true;
+    }
+    const arrived = window.AppointmentsFeed.arrivedEntries(raw)
       .map((e) => ({
         name: e.patient?.name ?? 'Unknown',
         start: e.start ?? '',
@@ -1244,6 +1249,7 @@ function renderStrip(patients) {
     wrStripEl.className = 'wr-strip wr-strip-hidden';
     wrStripEl.innerHTML = '';
     reportAlert('waiting', null);
+    _wrPrevHtml = null;
     // Strip just lost its "Monitoring →" button — the badge falls back to the
     // nav tab (see applySentinelBadgeToDom).
     applySentinelBadgeToDom(_sentBadgeActionCount, _sentBadgeHasRed);
@@ -1273,12 +1279,20 @@ function renderStrip(patients) {
   const extraChip = extra > 0 ? `<span class="wr-chip wr-chip-more">+${extra} more</span>` : '';
 
   wrStripEl.className = `wr-strip wr-strip-${urgency}`;
-  wrStripEl.innerHTML = `
+  // Changed-guard (audit, 2026-07-18): the strip used to rebuild identical
+  // innerHTML on every successful 30s poll, destroying hover/tooltip state
+  // mid-use. Same signature pattern as the pa-strip.
+  const wrHtml = `
     <span class="wr-strip-icon">🚶</span>
     <span class="wr-strip-count">${patients.length} waiting</span>
     <span class="wr-strip-chips">${chips}${extraChip}</span>
     <button class="wr-strip-goto" title="Go to Monitoring">Monitoring →</button>
   `;
+  if (wrHtml === _wrPrevHtml && wrStripEl.firstElementChild) {
+    return; // unchanged — the previous reportAlert payload also still holds
+  }
+  _wrPrevHtml = wrHtml;
+  wrStripEl.innerHTML = wrHtml;
 
   wrStripEl.querySelector('.wr-strip-goto')?.addEventListener('click', () => {
     switchModule('sentinel');
@@ -1391,10 +1405,15 @@ chrome.storage.onChanged.addListener((changes) => {
 _updateQuietPill();
 
 function escStrip(s) {
+  // Quote-safe (audit M8, 2026-07-18): escStrip feeds double-quoted attribute
+  // contexts (pa-strip pill title carries staff-typed free text) — without
+  // quote escaping a '"' broke out of the attribute.
   return String(s ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // ── Failure-backoff poller ────────────────────────────────────────────────────
@@ -1612,12 +1631,31 @@ async function _doFetchAndRenderRmStrip() {
     return true;
   }
 
-  // Direct fetch via API diag so failures show up in the Debug panel
-  let result;
+  // SINGLE-POLLER (audit H10, 2026-07-18): the service worker's alarm already
+  // runs pollAll and persists suite.requestMonitor.state — the panel used to
+  // run a SECOND full poll cycle (8 GETs/min instead of 4, ~1,900 wasted
+  // requests/day) with racing state writes that could double-fire or swallow
+  // "fresh item" notifications. Render from the SW's state when it is fresh
+  // (within 2 poll periods); fall back to a direct poll only when the SW's
+  // state is stale/absent, so a broken SW degrades to the old behaviour
+  // rather than a dead strip.
+  let result = null;
   try {
-    result = await window.RequestMonitor.pollAll(code, cfg.assigneeId, {
-      fetch: (url, init) => window.ApiDiag.fetch({ module: 'request-monitor', url, code, codeSource: source, init }),
-    });
+    const stR = await chrome.storage.local.get('suite.requestMonitor.state');
+    const st = stR['suite.requestMonitor.state'];
+    const freshMs = Math.max(rmPollSeconds, cfg.pollSeconds || rmPollSeconds) * 2000;
+    if (st && st.buckets && typeof st.lastPoll === 'number' && Date.now() - st.lastPoll < freshMs) {
+      result = { buckets: st.buckets, error: st.error || null };
+    }
+  } catch (_) {
+    /* fall through to the direct poll */
+  }
+  try {
+    if (!result) {
+      result = await window.RequestMonitor.pollAll(code, cfg.assigneeId, {
+        fetch: (url, init) => window.ApiDiag.fetch({ module: 'request-monitor', url, code, codeSource: source, init }),
+      });
+    }
   } catch (e) {
     rmStripEl.className = 'rm-strip';
     rmStripEl.innerHTML = `<span class="rm-strip-icon">⚠</span><span class="rm-strip-label">Triage:</span><span class="rm-strip-error">${escStrip(e.message)}</span>`;
@@ -1987,20 +2025,141 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes['health.contracts']) fetchAndRenderHealthStrip();
 });
 
-// Refresh all four strips immediately when the panel becomes visible again
+// ── Patient Alerts strip (global — visible on every module) ───────────────────
+// Shows the practice's own per-patient flags (patientAlerts.byPatient, owned by
+// the Patient Alerts tab) for the patient currently open in Medicus, so the
+// flag is seen the moment the record loads whatever tab the panel is on.
+// Identity comes from the same Sentinel snapshot bridge the Monitoring badge
+// uses; alerts are looked up fresh on every render (wrong-patient safety — a
+// navigation must never leave the previous patient's flags on screen).
+// Panel-only, same convention as the other strips; deliberately NOT in the
+// alert roll-up (ALERT_CHANNELS): those group practice-demand signals, whereas
+// this is patient-context — collapsing a safeguarding flag into a demand
+// roll-up could hide it at exactly the moment it matters.
+//
+// CLINICAL SAFETY: absence of this strip means "no flags recorded or patient
+// not identified", never a verified "no concerns".
+const paStripEl = document.getElementById('paStrip');
+// 60s backstop only (audit M12): the strip's real triggers are the snapshot
+// ping, tabs.onActivated and the store's onChanged below — the poll exists so
+// none of those being missed can strand a stale strip for long.
+const PA_STRIP_POLL_MS = 60 * 1000;
+let _paStripPrevSig = null;
+// patientAlerts.byPatient cached with onChanged invalidation (audit M12) —
+// the strip used to re-read the whole store from chrome.storage every tick.
+let _paStripStore = null;
+chrome.storage.local.get('patientAlerts.byPatient').then((r) => {
+  _paStripStore = r['patientAlerts.byPatient'] || {};
+});
+
+async function fetchAndRenderPaStrip() {
+  if (!paStripEl) return true;
+  // Visibility gate (audit M12) — this was the only strip without one; the
+  // tabs.query + IPC round-trip ran ~8,600×/day even while hidden.
+  if (document.visibilityState !== 'visible') return true;
+  const hide = () => {
+    paStripEl.className = 'pa-strip pa-strip-hidden';
+    paStripEl.innerHTML = '';
+    _paStripPrevSig = null;
+  };
+  try {
+    let pc = null;
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    let tab = tabs[0]?.url && /medicus\.health/.test(tabs[0].url) ? tabs[0] : null;
+    // Audit M11: with 2+ Medicus tabs the fallback pick is arbitrary — label
+    // the strip so a background tab's patient can't be misread as the one on
+    // screen.
+    let fromBackgroundTab = false;
+    if (!tab) {
+      const any = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
+      tab = any[0] || null;
+      fromBackgroundTab = !!tab && any.length > 1;
+    }
+    if (tab?.id) {
+      try {
+        const snap = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
+        if (snap && !snap.unavailable && snap.patientContext) pc = snap.patientContext;
+      } catch (_) {
+        /* content script not mounted */
+      }
+    }
+    if (!pc) {
+      hide();
+      return true;
+    }
+    if (_paStripStore === null) {
+      const r = await chrome.storage.local.get('patientAlerts.byPatient');
+      _paStripStore = r['patientAlerts.byPatient'] || {};
+    }
+    const found = findEntryForPatient(_paStripStore, pc);
+    const alerts = found ? paSortAlerts(found.entry.alerts) : [];
+    if (alerts.length === 0) {
+      hide();
+      return true;
+    }
+    const level = paMaxSeverity(alerts) === 'red' ? 'red' : 'amber';
+    const name = pc.displayName || pc.patientName || pc.name || '';
+    const sig = `${found.key}|${alerts.map((a) => `${a.id}:${a.severity}`).join(',')}`;
+    if (sig === _paStripPrevSig) return true; // unchanged — don't rebuild (keeps focus/hover stable)
+    _paStripPrevSig = sig;
+    const pills = alerts
+      .slice(0, 4)
+      .map(
+        (a) =>
+          `<span class="pa-strip-pill pa-strip-pill--${a.severity}" title="${escStrip(a.note || a.label)}">${escStrip(a.label)}</span>`
+      )
+      .join('');
+    const more = alerts.length > 4 ? `<span class="pa-strip-more">+${alerts.length - 4} more</span>` : '';
+    paStripEl.className = `pa-strip pa-strip--${level}`;
+    paStripEl.innerHTML = `
+      <span class="pa-strip-icon">&#x2691;</span>
+      <span class="pa-strip-label">PATIENT${name ? ` · ${escStrip(name)}` : ''}${fromBackgroundTab ? ' · OTHER TAB' : ''}</span>
+      ${pills}${more}
+      <button class="pa-strip-goto" title="Open the Patient Alerts tab">Manage &rarr;</button>
+    `;
+    paStripEl.querySelector('.pa-strip-goto')?.addEventListener('click', () => switchModule('patient-alerts'));
+    return true;
+  } catch (_) {
+    hide();
+    return false;
+  }
+}
+
+let paStripPoller = makePoller(fetchAndRenderPaStrip, PA_STRIP_POLL_MS, 'pa-strip').start();
+// React immediately to patient changes (snapshot ping), tab switches, and
+// alert edits — the 10s poll is only the backstop.
+let _paStripDebounce = null;
+function schedulePaStripRefresh() {
+  if (_paStripDebounce) return;
+  _paStripDebounce = setTimeout(() => {
+    _paStripDebounce = null;
+    fetchAndRenderPaStrip();
+  }, 400);
+}
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!sender || sender.id !== chrome.runtime.id) return;
+  if (msg?.type === 'sentinel:snapshot-updated') schedulePaStripRefresh();
+});
+chrome.tabs.onActivated.addListener(() => schedulePaStripRefresh());
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes['patientAlerts.byPatient']) {
+    _paStripStore = changes['patientAlerts.byPatient'].newValue || {};
+    _paStripPrevSig = null; // force rebuild — content changed even if patient didn't
+    schedulePaStripRefresh();
+  }
+});
+
+// Refresh all five strips immediately when the panel becomes visible again
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     fetchAndRenderStrip();
     fetchAndRenderRmStrip();
     fetchAndRenderSubRagStrip();
     fetchAndRenderHealthStrip();
+    fetchAndRenderPaStrip();
   }
 });
 
-// Tear down all strip pollers when the panel document goes away. The side
-// panel is normally permanent, but if Chrome re-creates the document (e.g. an
-// extension reload without a browser restart) the old timers would otherwise
-// keep running and a fresh set would stack on top.
 // ── Tab visibility (suite.hiddenTabs — USER-OWNED, never profile-pushed) ─────
 // Hidden tabs disappear from the nav but stay reachable via the Ctrl+K palette.
 function applyTabVisibility(raw) {
@@ -2014,11 +2173,16 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes['suite.hiddenTabs']) applyTabVisibility(changes['suite.hiddenTabs'].newValue);
 });
 
+// Tear down all strip pollers when the panel document goes away. The side
+// panel is normally permanent, but if Chrome re-creates the document (e.g. an
+// extension reload without a browser restart) the old timers would otherwise
+// keep running and a fresh set would stack on top.
 window.addEventListener('pagehide', () => {
   if (wrPoller) wrPoller.stop();
   if (rmPoller) rmPoller.stop();
   if (subRagPoller) subRagPoller.stop();
   if (healthPoller) healthPoller.stop();
+  if (paStripPoller) paStripPoller.stop();
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

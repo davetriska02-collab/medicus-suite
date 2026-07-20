@@ -43,6 +43,11 @@ export const TAB_CATALOG = [
     name: 'Record',
     blurb: 'Live snapshot of the open patient — problems, meds, results, safety prompts. No PDF needed.',
   },
+  {
+    id: 'patient-alerts',
+    name: 'Pt Alerts',
+    blurb: 'Your own per-patient flags — interpreter, safeguarding, behaviour — shown when that patient is open.',
+  },
   { id: 'visualiser', name: 'Visualiser', blurb: 'Analyse an exported record PDF in a full browser tab.' },
   {
     id: 'duplicate-checker',
@@ -62,6 +67,7 @@ export const ROLE_PRESETS = [
       'today',
       'sentinel',
       'record',
+      'patient-alerts',
       'trends',
       'sweep',
       'signing',
@@ -76,7 +82,7 @@ export const ROLE_PRESETS = [
   {
     id: 'reception',
     label: 'Reception',
-    show: ['today', 'reception', 'slots', 'submissions', 'knowledge', 'leaflets', 'about'],
+    show: ['today', 'reception', 'patient-alerts', 'slots', 'submissions', 'knowledge', 'leaflets', 'about'],
   },
   {
     id: 'manager',

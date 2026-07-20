@@ -119,6 +119,11 @@ export async function init(el) {
   if (chrome.storage?.onChanged) chrome.storage.onChanged.addListener(_onLetterheadChange);
 
   await load();
+  // The loader only honours the RETURNED cleanup (module-loader.js setCleanup)
+  // — without this line cleanup() was dead code and every Record visit leaked
+  // its four listeners permanently (audit C3, 2026-07-18). Guarded by
+  // test-module-lifecycle.js.
+  return cleanup;
 }
 
 export function cleanup() {

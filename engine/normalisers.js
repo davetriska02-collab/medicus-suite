@@ -169,9 +169,13 @@
     if (bpMatch) return parseFloat(bpMatch[1]);
     // Strip leading comparison operators (ASCII + Unicode ≤ ≥)
     let stripped = s.replace(/^[<>~=≤≥]+\s*/, '');
-    // European comma-decimal: convert "3,5" → "3.5" only when there's exactly one
-    // comma between digits and no period — otherwise leave alone (e.g. thousands).
-    if (/^\d+,\d+$/.test(stripped)) stripped = stripped.replace(',', '.');
+    // European comma-decimal: convert "3,5" → "3.5" only for 1-2 digits after
+    // the comma (audit M21, 2026-07-18: the old \d+ pattern also matched
+    // thousands-grouped values, so "1,234" parsed as 1.234 — 1000× off for a
+    // platelet count). 3+ digits after a single comma reads as a thousands
+    // separator and the comma is dropped instead.
+    if (/^\d+,\d{1,2}$/.test(stripped)) stripped = stripped.replace(',', '.');
+    else if (/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(stripped)) stripped = stripped.replace(/,/g, '');
     const n = parseFloat(stripped);
     return isFinite(n) ? n : NaN;
   }

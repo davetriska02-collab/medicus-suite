@@ -14,6 +14,10 @@ import { dateOnlyISO } from '../followups/followups-core.js';
 import { buildRecallDescription, isActionNeeded } from '../sweep/sweep-core.js';
 import { buildCoverageView } from './coverage-core.js';
 import { startTour } from '../../tour/tour.js';
+import {
+  findEntryForPatient as paFindEntry,
+  sortAlerts as paSortAlerts,
+} from '../patient-alerts/patient-alerts-core.js';
 
 // Canonical clinical-safety caveats (shared/provenance.js, loaded as a classic
 // script in panel.html / pop-out.html). Sentinel is the primary monitoring
@@ -403,6 +407,20 @@ async function loadHiddenRules() {
   _hiddenRules = r['sentinel.hiddenRules'] || {};
 }
 
+// Practice-defined per-patient flags (Patient Alerts tab owns this store).
+// Cached here so render() can look the current patient up synchronously; the
+// lookup itself always runs against the snapshot's live patient identity at
+// render time (wrong-patient safety), and the onChanged listener keeps the
+// cache fresh when alerts are edited.
+let _paAlertStore = {};
+async function loadPatientAlertsStore() {
+  const r = await chrome.storage.local.get('patientAlerts.byPatient');
+  _paAlertStore =
+    r['patientAlerts.byPatient'] && typeof r['patientAlerts.byPatient'] === 'object'
+      ? r['patientAlerts.byPatient']
+      : {};
+}
+
 // Practice letterhead ({ practiceName, clinicianName }) used to auto-fill the
 // sign-off in action-pack letters and SMS. Loaded once on init and kept fresh via
 // the storage onChanged listener; passed to buildChipActions/buildPatientActions.
@@ -428,7 +446,6 @@ let _evidenceHandlersAttached = false;
 // ── Waiting room state ────────────────────────────────────────────────────────
 // Practice code resolved at fetch time from PracticeCode helper. No default.
 let WR_SITE_ID = null;
-let WR_API_URL = null;
 const WR_POLL_MS = 30 * 1000;
 
 let wrPatients = null; // null = not loaded yet, [] = loaded (empty), [...] = loaded
@@ -459,12 +476,18 @@ export async function init(el) {
 
   await loadHiddenRules();
   await loadLetterhead();
+  await loadPatientAlertsStore();
   // Load brief collapse preference (non-blocking — defaults to expanded).
   chrome.storage.local.get('sentinel.briefCollapsed', (r) => {
     _briefCollapsed = !!r['sentinel.briefCollapsed'];
   });
   await refresh();
-  pollTimer = setInterval(refresh, 10000);
+  // Visibility-gated (audit M13): each tick costs tabs.query + executeScript +
+  // two IPC round-trips (one carrying the full observationHistory payload) —
+  // pointless while the panel is hidden; triggers re-fire on visibilitychange.
+  pollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') refresh();
+  }, 10000);
   chrome.tabs.onActivated.addListener(refresh);
   chrome.tabs.onUpdated.addListener(onUpdated);
 
@@ -544,6 +567,10 @@ export async function init(el) {
     }
     if (changes['suite.letterhead']) {
       _letterhead = changes['suite.letterhead'].newValue || {};
+      refresh();
+    }
+    if (changes['patientAlerts.byPatient']) {
+      _paAlertStore = changes['patientAlerts.byPatient'].newValue || {};
       refresh();
     }
   };
@@ -817,34 +844,26 @@ function wireCoverageToggle() {
 
 async function fetchWaitingRoom(bypassCache = false) {
   if (!bypassCache && wrLastFetch && Date.now() - wrLastFetch < WR_POLL_MS) return;
-  // Resolve practice code on every fetch so user changes take effect immediately.
-  const { code, source } = await window.PracticeCode.resolve();
-  WR_SITE_ID = code;
-  if (!WR_SITE_ID) {
-    wrError = 'No practice code — open a Medicus tab or set it in Options.';
-    wrPatients = [];
-    // Update just the pinned waiting-room block (same as the success path).
-    // Previously this called render({state:'loaded'}) — an unhandled state that
-    // fell through to destructuring an undefined snapshot and threw (swallowed),
-    // so the "no practice code" message never showed.
-    if (container) {
-      const wrEl = container.querySelector('.wr-pinned');
-      if (wrEl) updateWrPinned(wrEl);
-    }
-    return;
-  }
-  WR_API_URL = `https://${WR_SITE_ID}.api.england.medicus.health/scheduling/data/homepage/my-appointments`;
   try {
-    const r = await window.ApiDiag.fetch({
-      module: 'sentinel-wr',
-      url: WR_API_URL,
-      code: WR_SITE_ID,
-      codeSource: source,
-    });
-    const raw = await r.json();
-    const entries = (raw?.schedule?.schedule ?? [])
-      .flatMap((d) => d.entries ?? [])
-      .filter((e) => e?.diaryEntryType?.value === 'appointment' && e?.displayStatus?.value === 'arrived');
+    // Shared memoised fetcher (audit M10) — coalesces with panel.js's WR strip
+    // poll of the same endpoint. Practice code is re-resolved inside on every
+    // call, so user changes take effect immediately.
+    const { raw, code } = await window.AppointmentsFeed.fetchRaw({ module: 'sentinel-wr', bypassCache });
+    WR_SITE_ID = code;
+    if (!code) {
+      wrError = 'No practice code — open a Medicus tab or set it in Options.';
+      wrPatients = [];
+      // Update just the pinned waiting-room block (same as the success path).
+      // Previously this called render({state:'loaded'}) — an unhandled state that
+      // fell through to destructuring an undefined snapshot and threw (swallowed),
+      // so the "no practice code" message never showed.
+      if (container) {
+        const wrEl = container.querySelector('.wr-pinned');
+        if (wrEl) updateWrPinned(wrEl);
+      }
+      return;
+    }
+    const entries = window.AppointmentsFeed.arrivedEntries(raw);
     wrPatients = entries
       .map((e) => ({
         name: e.patient?.name ?? 'Unknown',
@@ -1123,6 +1142,24 @@ function smokingLineHtml(snapshot) {
   )}">${escHtml(line.text)}</div>`;
 }
 
+// Practice-defined per-patient flags rendered inside the patient banner card.
+// Looked up from the SAME patientContext the banner renders (never a cached
+// identity), so the flags can never belong to a different patient than the
+// name above them. Read-only here — managed in the Patient Alerts tab.
+function patientAlertsChipsHtml(patient) {
+  const found = paFindEntry(_paAlertStore, patient);
+  if (!found) return '';
+  const alerts = paSortAlerts(found.entry.alerts);
+  if (alerts.length === 0) return '';
+  const chips = alerts
+    .map(
+      (a) =>
+        `<span class="sent-pa-chip sent-pa-chip--${escAttr(a.severity)}" title="${escAttr(a.note || a.label)}">${escHtml(a.label)}</span>`
+    )
+    .join('');
+  return `<div class="sent-pa-row" title="Practice-recorded patient alerts — manage in the Pt Alerts tab">${chips}</div>`;
+}
+
 function render(payload) {
   if (!container) return;
   const { state, snapshot, message } = payload;
@@ -1253,6 +1290,7 @@ function render(payload) {
         .filter(Boolean)
         .join(' · ')}</div>
       ${smokingLineHtml(snapshot)}
+      ${patientAlertsChipsHtml(patient)}
     </div>`
     : '';
 

@@ -698,6 +698,7 @@ async function doFullExport() {
     labfiling,
     notifications,
     leaflets,
+    patientAlerts,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -714,9 +715,12 @@ async function doFullExport() {
     labfilingExport(),
     notificationsExport(),
     leafletsExport(),
+    patientAlertsExport(),
   ]);
   const suite = await suiteExport();
-  return window.SuiteEnvelope.wrap('suite', {
+  return window.SuiteEnvelope.wrap(
+    'suite',
+    {
     sentinel,
     capacity,
     triage,
@@ -732,8 +736,11 @@ async function doFullExport() {
     labfiling,
     notifications,
     leaflets,
+    patientAlerts,
     suite,
-  });
+    },
+    chrome.runtime.getManifest().version
+  );
 }
 
 async function doModuleExport(scope) {
@@ -753,10 +760,13 @@ async function doModuleExport(scope) {
     labfiling: () => labfilingExport(),
     notifications: () => notificationsExport(),
     leaflets: () => leafletsExport(),
+    patientAlerts: () => patientAlertsExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
-  return window.SuiteEnvelope.wrap(scope, { [scope]: data });
+  // Real manifest version (audit M18: the envelope's fallback stamped every
+  // backup "2.5.0", defeating the preview's provenance line).
+  return window.SuiteEnvelope.wrap(scope, { [scope]: data }, chrome.runtime.getManifest().version);
 }
 
 async function applyEnvelope(envelope) {
@@ -788,6 +798,7 @@ async function applyEnvelope(envelope) {
     mods.labfiling && (() => labfilingImport(mods.labfiling)),
     mods.notifications && (() => notificationsImport(mods.notifications)),
     mods.leaflets && (() => leafletsImport(mods.leaflets)),
+    mods.patientAlerts && (() => patientAlertsImport(mods.patientAlerts)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
@@ -3365,9 +3376,10 @@ lfSaveBtn?.addEventListener('click', async () => {
 // ── Event Ledger section (F2) ─────────────────────────────────────────────────
 // Machine-local record of what the suite flagged — filter/table/CSV-export/clear
 // UI over shared/event-ledger.js (window.EventLedger, loaded before this script).
-// The ledger key (ledger.events) is deliberately EXCLUDED from suite backup —
+// The ledger keys (day shards ledger.events.<date> + ledger.shardIndex, plus
+// the legacy ledger.events) are deliberately EXCLUDED from suite backup —
 // same doctrine as labfiling.auditLog; see the disclosure block in options.html
-// and the ALLOWLIST entry in test-backup-coverage.js.
+// and the ALLOWLIST entries in test-backup-coverage.js.
 (function initLedgerSection() {
   const EL = typeof window !== 'undefined' ? window.EventLedger : null;
   const wrap = document.getElementById('ledgerTableWrap');

@@ -2,7 +2,7 @@
 
 **Document reference:** MS-CSO-CSN-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 3.174.0 (full review re-baseline to v3.115.0 on 2026-06-17, incrementally synced since — see `docs/HAZARD-LOG.md` v3.12)  
+**Product version:** 3.176.0 (full review re-baseline to v3.115.0 on 2026-06-17, incrementally synced since — see `docs/HAZARD-LOG.md` v3.12)  
 **Document version:** 3.11  
 **Date issued:** 2026-07-11  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
@@ -282,6 +282,10 @@ The user and the deploying practice must understand and accept the following kno
 ### Suite self-diagnosis (health strip) acknowledge/snooze (v3.154.1–v3.154.2)
 
 41. **Dismissing the suite-health warning snoozes only that exact problem, for 7 days.** The amber "Medicus may have changed" strip can be dismissed for 7 days; the snooze is tied to the precise set of currently-degraded checks, so if anything changes — a new problem appears, or the mix of problems changes — the warning reappears immediately regardless of an earlier dismissal. Options → Suite health always shows the full current detail regardless of any snooze in effect.
+
+### Patient Alerts — practice-recorded per-patient flags (v3.175.0)
+
+42. **Patient Alerts are the practice's own notes, not the clinical record, and their absence is never an all-clear.** The Pt Alerts tab lets practice users attach their own flags to a patient (interpreter required, safeguarding concern, behaviour flags, or free text); the flags reappear on the alert strip, the Monitoring banner, and (from v3.176.0) as a banner inside Medicus's own patient header and as chips on task-queue rows, whenever that patient's record or task is on screen. They are stored only in the browser profile (shareable via backup files, which contain patient-identifiable data and must be handled accordingly) — anything clinically significant must still be coded in Medicus, where colleagues without the extension can see it. Flags are looked up against the live patient identity on every render and are never matched on name alone; when the patient cannot be identified, nothing is shown — so an absent flag means "none recorded or patient not identified", never a verified "no concerns". Flags have no expiry: the practice must review and remove flags (especially behavioural ones) that no longer have a basis. From v3.176.0 each flag records who added and last edited it, and every change is logged in the machine-local Event Ledger, so 'who put this here, when' is always answerable. See H-042.
 
 ## 8. The single most important safety rule
 

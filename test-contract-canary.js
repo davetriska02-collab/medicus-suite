@@ -68,6 +68,10 @@ global.chrome = {
         if (failMode === 'set-rejects') return Promise.reject(new Error('simulated storage set rejection'));
         Object.assign(store, obj);
       },
+      async remove(keys) {
+        if (failMode === 'get-throws') throw new Error('simulated storage remove failure');
+        for (const k of Array.isArray(keys) ? keys : [keys]) delete store[k];
+      },
     },
   },
 };
@@ -80,6 +84,19 @@ function reset() {
 const CC = require('./shared/contract-canary.js');
 const DomContracts = require('./shared/dom-contracts.js');
 const EventLedger = require('./shared/event-ledger.js');
+
+// The ledger is day-sharded (audit H12) — gather stored events across shards,
+// newest day first, exactly as EventLedger.getEvents() would.
+function storedLedgerEvents() {
+  const index = store[EventLedger.constants.INDEX_KEY] || {};
+  const days = Object.keys(index).sort().reverse();
+  let all = [];
+  for (const d of days) {
+    const a = store[EventLedger.shardKeyFor(d)];
+    if (Array.isArray(a)) all = all.concat(a);
+  }
+  return all;
+}
 
 // ============================================================
 console.log('--- hysteresis: nextContractState() ---');
@@ -346,7 +363,7 @@ function fakeDomContracts(status) {
     !!res && res.transitions.length === 1 && res.transitions[0].transition === 'degraded',
     'the spaced FAIL degrades fake.one this round'
   );
-  let events = store[EventLedger.constants.STORAGE_KEY] || [];
+  let events = storedLedgerEvents();
   check(events.length === 1, 'exactly one ledger event recorded for the degrade');
   check(events[0].source === 'health', "the ledger event's source is 'health'");
   check(events[0].action === 'contract-degraded', "the ledger event's action is 'contract-degraded'");
@@ -360,7 +377,7 @@ function fakeDomContracts(status) {
     res.transitions.length === 1 && res.transitions[0].transition === 'recovered',
     'the next OK probe recovers fake.one'
   );
-  events = store[EventLedger.constants.STORAGE_KEY] || [];
+  events = storedLedgerEvents();
   check(events.length === 2, 'a second ledger event (contract-recovered) is recorded');
   check(events[0].action === 'contract-recovered', 'the newest (recovered) event is first (newest-first ledger)');
 
@@ -379,7 +396,7 @@ function fakeDomContracts(status) {
     res.transitions.length === 1 && res.transitions[0].transition === 'degraded',
     'fake.one degrades a second time the same day'
   );
-  events = store[EventLedger.constants.STORAGE_KEY] || [];
+  events = storedLedgerEvents();
   check(
     events.length === 2,
     'the second same-day contract-degraded event is DEDUPED by the ledger (event count does not grow past 2)'

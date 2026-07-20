@@ -172,15 +172,25 @@ async function renderList() {
   const open = sorted.filter((e) => classifyFollowup(e, nowMs) !== 'done');
   const done = sorted.filter((e) => classifyFollowup(e, nowMs) === 'done').slice(0, 15);
 
-  list.innerHTML = open.length
+  const listHtml = open.length
     ? open.map((e) => rowHtml(e, nowMs)).join('')
     : '<div class="fu-empty">Nothing waiting. Add what you’re chasing and it comes back when it’s due.</div>';
-
-  doneWrap.innerHTML = done.length
+  const doneHtml = done.length
     ? `<div class="fu-done-head">Done (kept ${DONE_RETENTION_DAYS} days)</div>` +
       done.map((e) => rowHtml(e, nowMs)).join('')
     : '';
+  // Changed-guard (audit, 2026-07-18): the 60s ticker rebuilt identical HTML
+  // unconditionally, killing hover state mid-use. Row HTML embeds the due
+  // label, so a day rollover still produces different HTML and re-renders.
+  if (listHtml === _lastListHtml && doneHtml === _lastDoneHtml) return;
+  _lastListHtml = listHtml;
+  _lastDoneHtml = doneHtml;
+  list.innerHTML = listHtml;
+  doneWrap.innerHTML = doneHtml;
 }
+
+let _lastListHtml = null;
+let _lastDoneHtml = null;
 
 function renderScaffold() {
   container.innerHTML = `
@@ -248,6 +258,10 @@ function onStorageChange(changes) {
 }
 
 export async function init(el) {
+  // Fresh container on every visit — the changed-guard must not skip the
+  // first render because the PREVIOUS visit produced identical HTML.
+  _lastListHtml = null;
+  _lastDoneHtml = null;
   container = el;
   renderScaffold();
   renderList();

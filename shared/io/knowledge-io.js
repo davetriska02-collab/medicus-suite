@@ -66,9 +66,11 @@ async function knowledgeImport(data) {
     const c = data.config;
     if (!c || typeof c !== 'object' || Array.isArray(c)) throw new Error('knowledge.config must be an object.');
     // noticeAcknowledgedAt is intentionally NOT imported (per-install attestation —
-    // see header). Nothing else lives in config yet, so we write an empty object
-    // rather than dropping the key from the backup round-trip.
-    toSet['knowledge.config'] = {};
+    // see header) — but the LOCAL install's own value is preserved rather than
+    // wiped by the config replace (audit M18, 2026-07-18).
+    const existingR = await chrome.storage.local.get('knowledge.config');
+    const localAck = existingR['knowledge.config'] && existingR['knowledge.config'].noticeAcknowledgedAt;
+    toSet['knowledge.config'] = localAck ? { noticeAcknowledgedAt: localAck } : {};
   }
 
   if (Object.keys(toSet).length) await chrome.storage.local.set(toSet);

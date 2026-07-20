@@ -117,20 +117,17 @@ function fmtAge(ms) {
 async function fetchWr() {
   if (document.visibilityState !== 'visible') return;
   try {
-    const { code, source } = await window.PracticeCode.resolve();
+    // Shared memoised fetcher (audit M10) — coalesces with panel.js's WR strip
+    // poll of the same endpoint. Practice code is re-resolved inside.
+    const { raw, code } = await window.AppointmentsFeed.fetchRaw({ module: 'today-wr' });
     if (!code) {
       _wrData = { patients: [], error: null, noCode: true };
       renderCard('wr');
       renderHeadline();
       return;
     }
-    const url = `https://${code}.api.england.medicus.health/scheduling/data/homepage/my-appointments`;
-    const r = await window.ApiDiag.fetch({ module: 'today-wr', url, code, codeSource: source });
-    const raw = await r.json();
     const now = Date.now();
-    const patients = (raw?.schedule?.schedule ?? [])
-      .flatMap((d) => d.entries ?? [])
-      .filter((e) => e?.diaryEntryType?.value === 'appointment' && e?.displayStatus?.value === 'arrived')
+    const patients = window.AppointmentsFeed.arrivedEntries(raw)
       .map((e) => {
         const ms = e.startDateTime ? new Date(e.startDateTime).getTime() : null;
         const mins = ms && !isNaN(ms) ? Math.max(0, Math.round((now - ms) / 60000)) : null;
@@ -742,11 +739,15 @@ function buildAlertsBody() {
 // Decision B: wireSweepButtons and wireSwepButtons alias removed entirely.
 // The delegated handler in wireCardInteractions handles open-sweep.
 
+// Named so cleanup() can remove it — the shell reuses the container across
+// modules, so an anonymous delegate stacked one copy per visit (audit H8-class).
+let _cardActionHandler = null;
+
 function wireCardInteractions() {
   if (!container) return;
 
   // Delegated handler — works even after card bodies are re-rendered
-  container.addEventListener('click', (e) => {
+  _cardActionHandler = (e) => {
     const actionEl = e.target.closest('[data-action]');
     if (!actionEl) return;
     const action = actionEl.dataset.action;
@@ -754,7 +755,8 @@ function wireCardInteractions() {
 
     if (action === 'open-setup') openSetup();
     if (action === 'open-sweep') navTo('sweep');
-  });
+  };
+  container.addEventListener('click', _cardActionHandler);
 
   // Decision A: use btn.dataset.nav (not btn.closest('.today-card')?.dataset.card)
   // Decision H: replace title with aria-label on .today-card-open
@@ -939,6 +941,8 @@ export async function init(el) {
     _timers = [];
     chrome.storage.onChanged.removeListener(onStorageChange);
     document.removeEventListener('visibilitychange', onVisible);
+    if (container && _cardActionHandler) container.removeEventListener('click', _cardActionHandler);
+    _cardActionHandler = null;
     container = null;
   };
 }

@@ -3582,12 +3582,29 @@
     _firstResultPassPending = true;
     const pruneTs = Date.now() - 2 * _MON_CACHE_TTL;
     for (const [uuid, entry] of _queueMonCache) {
-      if (entry.ts && entry.ts < pruneTs) _queueMonCache.delete(uuid);
+      // Audit M1: entries with NO ts (bridge-created, never fetched — the
+      // majority of a large queue) used to escape the prune entirely; evict
+      // them once their createdAt passes the same horizon.
+      const anchor = entry.ts || entry.createdAt;
+      if (anchor && anchor < pruneTs) _queueMonCache.delete(uuid);
     }
     const resultPruneTs = Date.now() - 2 * _RESULT_CACHE_TTL;
     for (const [uuid, entry] of _queueResultCache) {
-      if (entry.ts && entry.ts < resultPruneTs) _queueResultCache.delete(uuid);
+      const anchor = entry.ts || entry.createdAt;
+      if (anchor && anchor < resultPruneTs) _queueResultCache.delete(uuid);
     }
+    // Audit M1: cap the outstanding-investigation caches — _oirHistoryCache
+    // holds a FULL observation history per lab-task patient and none of the
+    // four had any eviction, so a duty-doctor tab retained every patient's
+    // payload all day. FIFO-cap is enough: entries are re-fetched on demand.
+    const _capMap = (m, cap) => {
+      while (m.size > cap) m.delete(m.keys().next().value);
+    };
+    _capMap(_oirReportCache, 50);
+    _capMap(_oirHistoryCache, 50);
+    _capMap(_oirPatientCache, 200);
+    _capMap(_queuePaResolved, 400);
+    while (_oirAutoTicked.size > 500) _oirAutoTicked.delete(_oirAutoTicked.values().next().value);
     // Queue re-entry resets the jump cycle (item 1.2) — a "last jumped-to row"
     // from a previous queue visit has no meaning against a fresh row set.
     _queueStatusJumpPos = null;
@@ -3666,6 +3683,12 @@
         teardownOutstandingObserver();
         removeDetailVerdictBanner();
         _detailVerdictTaskUuid = null;
+        // Audit H7 (2026-07-18): the attempted set gates re-computation but was
+        // never cleared, so once a task's cached verdict expired (5-min TTL) the
+        // banner could NEVER come back this session — a red "N urgent" banner
+        // the GP saw earlier silently stopped reappearing. Clearing on leaving
+        // the detail page restores the documented "per page-visit" semantics.
+        _detailVerdictAttempted.clear();
       }
       if (type === 'record') runRecord();
       else if (type === 'detail') runDetail();
@@ -3712,7 +3735,14 @@
   // "nothing due" clear and a failed check both leave sev null; `error`
   // distinguishes them for rendering + retry cadence).
   const _queueResultCache = new Map();
-  const _RESULT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  // 30 minutes (audit H11, 2026-07-18 — was 5): on a long queue the churn
+  // scheduler re-verified every unchanged row each TTL expiry (~19k overview
+  // GETs/day at 200 rows). Result content for a posted task is effectively
+  // immutable; the bridge handler below additionally DROPS a row's cached
+  // severity the moment its priorityDisplay changes (the one cheap change
+  // signal the task-list payload carries), so a genuinely updated row
+  // re-fetches immediately rather than waiting out the TTL.
+  const _RESULT_CACHE_TTL = 30 * 60 * 1000;
   // Error entries get a much shorter TTL than a real result so a transient
   // fetch/eval failure retries soon instead of showing "couldn't check" for
   // the full 5 minutes.
@@ -3870,6 +3900,8 @@
   const _BRIDGE_DEBOUNCE_MS = 150;
   // Debounce timer for scheduleQueueResultTriage
   let _bridgeResultDebounceTimer = null;
+  // Debounce timer for scheduleQueuePaFlags (patient-flag chips)
+  let _bridgePaDebounceTimer = null;
 
   window.addEventListener('ch-task-list-data', (e) => {
     // --- Rate-limit: count events in a rolling window ---
@@ -3893,6 +3925,11 @@
 
     _queueRowUuids.clear();
     _durableRowMap.clear();
+    // A fresh task-list payload is authoritative for the grid's CURRENT state,
+    // so re-baseline the sort canary (H6): without this, a server-side sort
+    // whose fetch lands before the observer notices the new header classes
+    // would have its freshly-correct maps dropped by the canary a tick later.
+    _queueSortSig = undefined;
     // Cap rows processed and validate each entry's shape before acting on it
     const cappedRows = rows.length > _BRIDGE_MAX_ROWS ? rows.slice(0, _BRIDGE_MAX_ROWS) : rows;
     for (const row of cappedRows) {
@@ -3904,7 +3941,7 @@
       if (typeof taskUuid !== 'string' || !_BRIDGE_UUID_RE.test(taskUuid)) continue;
       _queueRowUuids.set(rowIndex, taskUuid);
       _durableRowMap.set(rowIndex, taskUuid);
-      if (!_queueMonCache.has(taskUuid)) _queueMonCache.set(taskUuid, { taskTypeSlug });
+      if (!_queueMonCache.has(taskUuid)) _queueMonCache.set(taskUuid, { taskTypeSlug, createdAt: Date.now() });
 
       // Validate and cache result-triage fields (UNTRUSTED — strict rules)
       const rawOverview = row.overviewURL;
@@ -3917,9 +3954,17 @@
       // Only store/update entry if we don't have a fresh sev already
       const existing = _queueResultCache.get(taskUuid);
       if (!existing) {
-        _queueResultCache.set(taskUuid, { overviewURL, priorityDisplay, unmatched });
+        // createdAt lets the prune below evict never-fetched rows too (audit
+        // M1: ts-less bridge entries used to accumulate for the tab's lifetime).
+        _queueResultCache.set(taskUuid, { overviewURL, priorityDisplay, unmatched, createdAt: Date.now() });
       } else {
-        // Update metadata but keep cached sev if still fresh
+        // Update metadata but keep cached sev if still fresh. If the row's
+        // priorityDisplay CHANGED, the task itself changed — drop the cached
+        // severity so it re-fetches now (audit H11 invalidation signal).
+        if (existing.priorityDisplay !== priorityDisplay && existing.sev !== undefined) {
+          delete existing.sev;
+          delete existing.ts;
+        }
         existing.overviewURL = overviewURL;
         existing.priorityDisplay = priorityDisplay;
         existing.unmatched = unmatched;
@@ -3929,6 +3974,10 @@
     // Debounce the monitoring trigger to coalesce event bursts into a single pass
     clearTimeout(_bridgeMonDebounceTimer);
     _bridgeMonDebounceTimer = setTimeout(scheduleQueueMonitoring, _BRIDGE_DEBOUNCE_MS);
+    // Patient-flag chips ride the same debounce cadence (defined below —
+    // safe: this callback only fires after the whole IIFE has evaluated).
+    clearTimeout(_bridgePaDebounceTimer);
+    _bridgePaDebounceTimer = setTimeout(scheduleQueuePaFlags, _BRIDGE_DEBOUNCE_MS);
     // Result triage trigger. _queueRowUuids/_durableRowMap are already populated by the
     // synchronous loop above, so the leading-edge FIRST pass per queue entry can fire
     // immediately (skipping the 150ms debounce) to overlap the grid's first paint. The
@@ -4053,6 +4102,117 @@
       n++;
     });
     if (n) log('queue-mon: re-injected ' + n + ' cached chip(s) from durable map (visible rows)');
+  };
+
+  // ---- Queue patient-flag chips (Patient Alerts, H-042) ----
+  // Practice-recorded per-patient flags (patientAlerts.byPatient, owned by the
+  // Pt Alerts side-panel tab) shown on queue rows so "interpreter required" /
+  // "safeguarding concern" is visible BEFORE the task is opened or the patient
+  // phoned. Mirror of the monitoring pipeline: task→patient resolution via
+  // SentinelApiClient.resolveTaskToPatient (TTL-cached in the api client),
+  // resolution results cached per taskUuid in _queuePaResolved, and durable
+  // re-injection on every refreshQueueChips via _durableRowMap (CLAUDE.md
+  // chip rule #4). Flag CONTENT is looked up fresh from the store at inject
+  // time, so an edit in the panel updates the queue on the next churn without
+  // any refetch. Matching here is by resolved patient UUID ONLY — the queue
+  // has no trustworthy NHS/DOB surface, and a name is never a match key.
+  // Read-only: this surface never writes the store.
+  let _paQueueStore = null; // null until loaded; then the byPatient object
+  const _queuePaResolved = new Map(); // taskUuid -> { patientUuid|null, ts }
+  const _PA_RESOLVE_TTL = 30 * 60 * 1000; // task→patient link is immutable; long TTL just bounds memory
+  let _queuePaRunning = false;
+  let _queuePaGeneration = 0;
+
+  const loadPaQueueStore = () => {
+    try {
+      chrome.storage.local.get('patientAlerts.byPatient', (r) => {
+        _paQueueStore = r && r['patientAlerts.byPatient'] && typeof r['patientAlerts.byPatient'] === 'object'
+          ? r['patientAlerts.byPatient'] : {};
+      });
+    } catch (_) { _paQueueStore = {}; }
+  };
+  loadPaQueueStore();
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local' || !changes['patientAlerts.byPatient']) return;
+      const nv = changes['patientAlerts.byPatient'].newValue;
+      _paQueueStore = nv && typeof nv === 'object' ? nv : {};
+      // Content changed: wipe + re-inject so edited/removed flags update immediately.
+      if (pageType() === 'queue') refreshQueueChips();
+    });
+  } catch (_) { /* storage unavailable — chips simply stay absent */ }
+
+  const injectQueuePaChip = (rowIndex, patientUuid) => {
+    const LK = window.PatientAlertsLookup;
+    if (!LK || !patientUuid || !_paQueueStore) return;
+    const entry = _paQueueStore[patientUuid];
+    const summary = entry ? LK.summariseFlags(entry.alerts) : null;
+    if (!summary) return;
+    const row = document.querySelector(`.ag-row[row-index="${rowIndex}"]:not(.ag-full-width-row)`);
+    if (!row) return;
+    const host = queueChipHost(row, '.ch-q-pa');
+    if (!host) return; // absent row or chip already present (idempotent)
+    const level = summary.severity === 'red' ? 'red' : 'amber';
+    const span = document.createElement('span');
+    span.className = `ch-q-pa ch-q-pa-${level}` + (host.inPreview ? '' : ' ch-q-pa-inline');
+    // textContent only — flag labels are user-authored free text, never innerHTML.
+    const flag = document.createElement('span');
+    flag.className = 'ch-q-pa-flag';
+    flag.textContent = '⚑';
+    span.appendChild(flag);
+    const label = document.createElement('span');
+    label.className = 'ch-q-pa-label';
+    label.textContent = summary.topLabel + (summary.more > 0 ? ` +${summary.more}` : '');
+    span.appendChild(label);
+    span.title = 'Practice alerts: ' + summary.all.join(' · ') + ' — recorded in the Pt Alerts tab, not the clinical record.';
+    // Always prepend (see injectResultChip — appended nodes are reconciled away).
+    host.target.insertBefore(span, host.target.firstChild);
+  };
+
+  const scheduleQueuePaFlags = async () => {
+    const gen = ++_queuePaGeneration;
+    if (_queuePaRunning) return;
+    _queuePaRunning = true;
+    const API = window.SentinelApiClient;
+    const ctx = API ? API.detectMedicusContext(location.href) : null;
+    const MAX = 12; // resolution is one cached GET per task — cheaper than the monitoring pass
+    let done = 0;
+    for (const [rowIndex, taskUuid] of _queueRowUuids) {
+      if (done >= MAX || pageType() !== 'queue' || _queuePaGeneration !== gen) break;
+      let resolved = _queuePaResolved.get(taskUuid);
+      if (!resolved || !resolved.ts || (Date.now() - resolved.ts) > _PA_RESOLVE_TTL) {
+        if (!API || !ctx) break;
+        const monEntry = _queueMonCache.get(taskUuid);
+        const slug = monEntry && monEntry.taskTypeSlug;
+        if (!slug) continue;
+        const patientUuid = await API.resolveTaskToPatient(ctx.apiBase, slug, taskUuid);
+        resolved = { patientUuid: patientUuid || null, ts: Date.now() };
+        _queuePaResolved.set(taskUuid, resolved);
+        done++;
+      }
+      if (resolved.patientUuid) injectQueuePaChip(rowIndex, resolved.patientUuid);
+    }
+    // Prune stale resolutions so the map cannot grow unbounded across a long session.
+    for (const [uuid, entry] of _queuePaResolved) {
+      if (!entry.ts || (Date.now() - entry.ts) > _PA_RESOLVE_TTL) _queuePaResolved.delete(uuid);
+    }
+    _queuePaRunning = false;
+    if (_queuePaGeneration !== gen) scheduleQueuePaFlags();
+  };
+
+  // Durable re-injection from the rowIndex→taskUuid map on every refresh —
+  // the flag-chip equivalent of reinjectCachedMonitoringChips (rule #4).
+  const reinjectCachedPaChips = () => {
+    const scope = queueScope();
+    scope.querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)').forEach((row) => {
+      const ri = row.getAttribute('row-index');
+      if (ri == null) return;
+      const taskUuid = _durableRowMap.get(Number(ri));
+      if (!taskUuid) return;
+      const resolved = _queuePaResolved.get(taskUuid);
+      if (!resolved || !resolved.patientUuid) return;
+      injectQueuePaChip(Number(ri), resolved.patientUuid);
+    });
   };
 
   // ---- Queue result-triage chips ----
@@ -6420,6 +6580,39 @@
   // container isn't (yet) tracked. Used by the wipe/re-decorate/re-inject hot paths.
   const queueScope = () => (queueObservedContainer && document.contains(queueObservedContainer)) ? queueObservedContainer : document;
 
+  // ---- Queue sort canary (audit H6) ----
+  // The rowIndex→taskUuid maps (_queueRowUuids/_durableRowMap) are built from the
+  // task-list payload the bridge saw at fetch time. If the GP sorts the grid
+  // CLIENT-side, AG-Grid reassigns row-index attributes to different tasks without
+  // a new task-list fetch, and every rowIndex-keyed chip (result / monitoring /
+  // patient-flag) would attach to the WRONG row — a wrong-patient hazard, not a
+  // cosmetic bug. The isolated world cannot reliably tell client-side from
+  // server-side sorting, so: whenever the grid's sort state CHANGES, drop both
+  // rowIndex maps. A server-side sort re-issues the task-list fetch and the
+  // bridge rebuilds the maps with fresh (correct) indexes within a tick; a
+  // client-side sort never does, leaving the maps empty and the fetch-driven
+  // chips absent — no chip is safe, a wrong-row chip is not (absence-of-alert
+  // ≠ all-clear doctrine). DOM-driven decoration chips read their own row's
+  // cells and are unaffected.
+  let _queueSortSig; // undefined = no baseline yet (fresh queue entry)
+  const queueSortSignature = () => {
+    const cells = queueScope().querySelectorAll('.ag-header-cell-sorted-asc, .ag-header-cell-sorted-desc');
+    if (!cells.length) return '';
+    return Array.from(cells)
+      .map((c) => (c.getAttribute('col-id') || '?') + ':' + (c.classList.contains('ag-header-cell-sorted-asc') ? 'asc' : 'desc'))
+      .sort()
+      .join(',');
+  };
+  const checkQueueSortCanary = () => {
+    const sig = queueSortSignature();
+    if (_queueSortSig === undefined) { _queueSortSig = sig; return; }
+    if (sig === _queueSortSig) return;
+    _queueSortSig = sig;
+    _queueRowUuids.clear();
+    _durableRowMap.clear();
+    log('queue: sort change detected — rowIndex maps dropped (H6 canary), sig=' + (sig || 'none'));
+  };
+
   // Fully tear down the queue observer and forget the container reference.
   // Called whenever we navigate AWAY from the queue so that the next visit
   // to the queue page always rebuilds against the current (possibly fresh) DOM.
@@ -6427,6 +6620,7 @@
     if (queueObserver) { queueObserver.disconnect(); queueObserver = null; }
     queueObservedContainer = null;
     queueRafScheduled = false;
+    _queueSortSig = undefined; // sort-canary baseline re-established on next queue entry (H6)
     removeQueueStatusBar();
     // Leaving the queue page: drop the focus-dim class so it never bleeds onto
     // unrelated Medicus pages that also happen to render `.ag-row` elements.
@@ -6456,7 +6650,7 @@
       closeActionMenu();
     }
     if (queueObserver) queueObserver.disconnect();
-    queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result').forEach(s => s.remove());
+    queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result, .ch-q-pa').forEach(s => s.remove());
     // Wipe stale severity tint in the SAME cycle as the chip-node wipe (item 1.3) —
     // a recycled row-index must never keep a previous patient's tint colour.
     clearQueueRowTint();
@@ -6475,9 +6669,13 @@
     }
     queueScope().querySelectorAll('.ag-row').forEach(r => { delete r.dataset[QUEUE_DECORATED_KEY]; });
     decorateQueueRows();
-    // Restore result chips synchronously from the per-task cache via each row's row-id.
-    // DOM-driven (like the age chips) so they survive re-renders even when the
-    // bridge-provided row->task map is transiently empty (the SPA keeps clearing it).
+    // H6 sort canary — MUST run before every reinject* call below: if the sort
+    // state changed since last cycle the rowIndex maps are dropped here, so the
+    // reinjects find nothing and no chip lands on a possibly-reordered row.
+    checkQueueSortCanary();
+    // Restore result chips synchronously from the per-task cache via the durable
+    // rowIndex→taskUuid map (NOT row-id — on real Medicus row-id is NOT the task
+    // UUID; keying off it was the v3.69.0 no-op, see CLAUDE.md rule #4).
     reinjectCachedResultChips();
     // Re-tint from the same cache the chips above just used — piggybacks this cycle so
     // a config-driven cache invalidation (entry.sev cleared, watchConfig handler below)
@@ -6495,6 +6693,9 @@
     // unlike the scheduleQueueMonitoring() fetch-scheduling call below, so cached chips
     // survive the runQueue churn that empties _queueRowUuids (CLAUDE.md rule #4).
     reinjectCachedMonitoringChips();
+    // Same durable-map restore for the patient-flag chips (Pt Alerts, H-042) —
+    // flag content is re-read from the live store at inject time.
+    reinjectCachedPaChips();
     // Re-render the status bar AFTER the tint pass above so its jump-target query
     // (tinted .ag-row elements) sees this cycle's freshly-applied classes, not the
     // previous cycle's. Also re-assert the focus-dim class every cycle — cheap and
@@ -6533,7 +6734,9 @@
           if (n.nodeType !== 1) continue; // ignore text nodes
           const cl = n.classList;
           if (!cl) return false;
-          if (!(cl.contains('ch-q-result') || cl.contains('ch-q-mon') || cl.contains('ch-queue-chips') || cl.contains('ch-chip'))) return false;
+          // ch-q-pa included (audit M2): each patient-flag chip injection used
+          // to read as a real grid mutation and trigger a full refresh cycle.
+          if (!(cl.contains('ch-q-result') || cl.contains('ch-q-mon') || cl.contains('ch-queue-chips') || cl.contains('ch-chip') || cl.contains('ch-q-pa'))) return false;
         }
       }
     }

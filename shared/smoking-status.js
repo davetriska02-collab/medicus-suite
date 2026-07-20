@@ -52,6 +52,15 @@
   // Order matters: never/ex checked before current so "ex-smoker" can never
   // fall through to a "smoker" substring match.
   var NEVER_RE = /never\s+smoked|never[-\s]?smoker|lifelong\s+non[-\s]?smoker/i;
+  // "Non-smoker" (audit H1, 2026-07-18): one of the commonest coded terms, and
+  // the bare-"smoker" alternative in CURRENT_RE used to match its "-smoker"
+  // suffix — displaying the OPPOSITE of the record. It gets its own bucket
+  // rather than 'never': SNOMED "Non-smoker" asserts only "not a current
+  // smoker" (ex vs never unspecified), so 'never' would overclaim.
+  var NON_RE = /non[-\s]?smoker|does\s+not\s+smoke|not\s+a\s+smoker/i;
+  // "Passive smoker" says nothing about the patient's OWN smoking — must fall
+  // through to unclear, never to current.
+  var PASSIVE_RE = /passive\s+smok/i;
   var EX_RE = /ex[-\s]?smoker|former\s+smoker|stopped\s+smoking|smoking\s+ceased|ex[-\s]?cigarette\s+smoker/i;
   var CURRENT_RE =
     /current\s+smoker|smoker\s*[-–—]\s*current|current\s+cigarette|cigarette\s+smoker|smokes\s+\d|cigarettes?\s+(per|a)\s+day|current\s+tobacco|(?:^|\W)smoker(?:\W|$)/i;
@@ -60,13 +69,16 @@
     current: 'Current smoker',
     ex: 'Ex-smoker',
     never: 'Never smoked',
+    non: 'Non-smoker',
   };
 
   function classify(text) {
     var t = String(text || '');
     if (!t) return null;
     if (NEVER_RE.test(t)) return 'never';
+    if (NON_RE.test(t)) return 'non';
     if (EX_RE.test(t)) return 'ex';
+    if (PASSIVE_RE.test(t)) return null; // about exposure, not the patient's own status
     if (CURRENT_RE.test(t)) return 'current';
     return null; // smoking-related but not an unambiguous status
   }

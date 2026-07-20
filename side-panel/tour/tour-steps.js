@@ -44,10 +44,16 @@
 //       by its own requester, so it earns the what's-new spotlight). Same
 //       consolidation pattern as 9: no step added or removed (still 20
 //       steps); addedIn retagged 2 → 10 so returning users get shown.
+//  11 — 'alert-strips' reworked to teach the new Patient Alerts flag strip
+//       (v3.175.0 — per-patient practice flags; #paStrip added to the
+//       target fallbacks). 20-step cap still reached, so the Pt Alerts tab
+//       itself stays overview-only (recorded in test-tour-steps.js
+//       NAV_COVERED_BY_OVERVIEW); addedIn retagged 2 → 11 so returning
+//       users get shown the reworked strip step.
 
 'use strict';
 
-export const TOUR_VERSION = 10;
+export const TOUR_VERSION = 11;
 
 export const TOUR_STEPS = [
   {
@@ -66,11 +72,14 @@ export const TOUR_STEPS = [
   },
   {
     id: 'alert-strips',
-    addedIn: 2,
-    target: ['#wrStrip', '#rmStrip', '#subRagStrip'],
+    // Reworked in v11 to teach the Patient Alerts flag strip (per-patient
+    // practice flags, Pt Alerts tab) — retagged 2 → 11 so returning users see
+    // the new content in their "What's new" pass.
+    addedIn: 11,
+    target: ['#wrStrip', '#rmStrip', '#subRagStrip', '#paStrip'],
     centerFallback: true,
     title: 'Global alert strips',
-    body: 'When patients are waiting, triage queues build, or demand thresholds trip, alert strips appear just under the tab bar — on every tab, so nothing is missed.',
+    body: 'When patients wait, queues build, demand thresholds trip — or the open patient carries one of your practice’s own flags (interpreter needed, safeguarding; set them in Pt Alerts) — a strip appears under the tab bar, on every tab.',
   },
   {
     id: 'today',

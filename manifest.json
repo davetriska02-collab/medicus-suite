@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.176.0",
+  "version": "3.176.6",
   "description": "The clinical intelligence layer for Medicus: read-only safety monitoring, triage red-flags, QOF tracking and operational dashboards.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -15,7 +15,7 @@
     "service_worker": "service-worker.js"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
+    "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'"
   },
   "side_panel": {
     "default_path": "side-panel/panel.html"
@@ -63,8 +63,11 @@
         "shared/smoking-status.js",
         "content-scripts/sentinel.js",
         "content-scripts/referrals-discovery.js",
-        "content-scripts/api-discovery.js"
+        "content-scripts/api-discovery.js",
+        "shared/patient-alerts-lookup.js",
+        "content-scripts/patient-alerts-banner.js"
       ],
+      "css": ["content-scripts/patient-alerts-banner.css"],
       "run_at": "document_idle"
     },
     {
@@ -75,7 +78,6 @@
         "content-scripts/triage-lens/content.js",
         "content-scripts/triage-lens/routine-rx-button.js",
         "shared/lab-filing-utils.js",
-        "shared/event-ledger.js",
         "content-scripts/triage-lens/lab-file-button.js"
       ],
       "css": ["content-scripts/triage-lens/hud.css"],

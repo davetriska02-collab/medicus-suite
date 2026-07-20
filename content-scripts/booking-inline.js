@@ -58,6 +58,7 @@
       open: false,
       loading: false,
       error: null,
+      taskUuid: null,
       patientId: null,
       providerId: null,
       types: [],
@@ -432,29 +433,39 @@
     s.loading = true;
     s.error = null;
     rerender();
+    // WRONG-PATIENT GUARD (audit C1, 2026-07-18): pin THIS task's state object
+    // and task UUID before awaiting. runInject() replaces `s` with a fresh
+    // blankState() on every SPA navigation — without the pin, a resolution
+    // still in flight for task A landed its patientId in task B's state, and
+    // the cache short-circuit above then booked an appointment for patient A
+    // while the GP looked at patient B. All writes go to the pinned `st`; if
+    // `st !== s` after an await, the results belong to a task no longer on
+    // screen and are discarded.
+    const st = s;
     try {
       const info = getTaskInfo();
+      st.taskUuid = info ? info.taskUuid : null;
       // patient-id resolution and the appointment finder are independent — run
       // them in parallel so open latency is one round-trip, not two.
       const [patientId, finder] = await Promise.all([
         info ? resolvePatientId(info.siteId, info.typeSlug, info.taskUuid) : Promise.resolve(null),
         apiFetchFinder(),
       ]);
-      s.patientId = patientId;
-      s.providerId = finder.localOrganisationDetails?.id || null;
+      st.patientId = patientId;
+      st.providerId = finder.localOrganisationDetails?.id || null;
       const types = [];
       for (const svc of finder.localOrganisationDetails?.services || []) {
         for (const t of svc.appointmentTypes || []) {
           if (!types.some((e) => e.value === t.value)) types.push({ value: t.value, label: t.label });
         }
       }
-      s.types = types;
-      if (types.length === 1) s.selectedTypeId = types[0].value;
+      st.types = types;
+      if (types.length === 1) st.selectedTypeId = types[0].value;
     } catch (err) {
-      s.error = err.message || 'Failed to load appointment types.';
+      st.error = err.message || 'Failed to load appointment types.';
     } finally {
-      s.loading = false;
-      rerender();
+      st.loading = false;
+      if (st === s) rerender();
     }
   }
 
@@ -465,18 +476,21 @@
     s.slots = null;
     s.hasSearched = false;
     rerender();
+    // Same wrong-patient pin as doOpen (audit C1): slots fetched for this
+    // task's provider/type must never land in a later task's state.
+    const st = s;
     try {
-      s.slots = await apiFetchSlots({
-        providerId: s.providerId,
-        appointmentTypeId: s.selectedTypeId,
-        date: s.date,
+      st.slots = await apiFetchSlots({
+        providerId: st.providerId,
+        appointmentTypeId: st.selectedTypeId,
+        date: st.date,
       });
     } catch (err) {
-      s.slotsError = err.message || 'Failed to fetch available slots.';
+      st.slotsError = err.message || 'Failed to fetch available slots.';
     } finally {
-      s.slotsLoading = false;
-      s.hasSearched = true;
-      rerender();
+      st.slotsLoading = false;
+      st.hasSearched = true;
+      if (st === s) rerender();
     }
   }
 
@@ -484,6 +498,7 @@
     s.slotsLoading = true;
     s.slotsError = null;
     rerender();
+    const st = s; // audit C1 pin — a reservation must not land in a later task's state
     try {
       const result = await apiReserve({
         diaryId: slot.diaryId,
@@ -491,16 +506,22 @@
         duration: slot.duration,
         appointmentTypeId: slot.appointmentType?.id,
       });
-      s.reservationId = result.slotReservationId;
-      s.selectedSlot = slot;
-      s.step = 'confirm';
-      s.confirmError = null;
-      s.reason = '';
+      if (st !== s) {
+        // Navigated while reserving — release the orphan reservation, never
+        // attach it to the new task's state.
+        apiReleaseReservation(result.slotReservationId);
+        return;
+      }
+      st.reservationId = result.slotReservationId;
+      st.selectedSlot = slot;
+      st.step = 'confirm';
+      st.confirmError = null;
+      st.reason = '';
     } catch (err) {
-      s.slotsError = err.message || 'Could not reserve slot — it may have just been taken.';
+      st.slotsError = err.message || 'Could not reserve slot — it may have just been taken.';
     } finally {
-      s.slotsLoading = false;
-      rerender();
+      st.slotsLoading = false;
+      if (st === s) rerender();
     }
   }
 
@@ -518,27 +539,44 @@
     s.confirming = true;
     s.confirmError = null;
     rerender();
+    // WRONG-PATIENT GUARD (audit C1): pin the state instance, then HARD
+    // re-verify at commit time that the task on screen is still the task this
+    // state belongs to AND that it still resolves to the same patient — the
+    // same click-time re-check discipline lab-file-button uses. Booking is the
+    // suite's only clinical WRITE from this widget; it must never fire off a
+    // stale identity.
+    const st = s;
     try {
+      const info = getTaskInfo();
+      if (!info || (st.taskUuid && info.taskUuid !== st.taskUuid) || st !== s) {
+        throw new Error('Task changed — reopen the booking panel.');
+      }
+      const verifiedPatientId = await resolvePatientId(info.siteId, info.typeSlug, info.taskUuid);
+      if (st !== s) return; // navigated during verification — abort silently
+      if (!verifiedPatientId || verifiedPatientId !== st.patientId) {
+        throw new Error('Patient could not be re-verified for this task — reopen the booking panel.');
+      }
       const formData = await apiFetchCreateForm({
-        slotReservationId: s.reservationId,
-        patientId: s.patientId,
+        slotReservationId: st.reservationId,
+        patientId: st.patientId,
       });
-      const sl = s.selectedSlot;
+      if (st !== s) return; // navigated — do not book
+      const sl = st.selectedSlot;
       const payload = {
         context: 'create-booked-appointment',
         appointmentTemporalType: 'timed',
         appointmentTypeId: sl.appointmentType?.id,
-        patientId: s.patientId,
+        patientId: st.patientId,
         deliveryMode: formData.deliveryMode || sl.defaultDeliveryMode?.value || 'face-to-face',
         intendedDuration: sl.duration,
         diaryId: sl.diaryId,
         isHighPriority: false,
         isHiddenFromPatientFacingServices: false,
         intendedStartDateTime: sl.startDateTime,
-        reasonForAppointment: s.reason || null,
+        reasonForAppointment: st.reason || null,
         additionalInformation: null,
         embargoOverrideReason: null,
-        slotReservationId: s.reservationId,
+        slotReservationId: st.reservationId,
         nhsNationalSlotTypeCategory:
           formData.nhsNationalSlotTypeCategory || sl.nhsNationalSlotTypeCategoryDefault?.value || '10127',
         allowOverlappingAppointments: 'allow',
@@ -548,14 +586,14 @@
         rescheduledAppointmentVersionId: null,
       };
       const result = await apiCreateAppointment(payload);
-      s.bookedId = result.appointmentId;
-      s.reservationId = null;
-      s.step = 'booked';
+      st.bookedId = result.appointmentId;
+      st.reservationId = null;
+      st.step = 'booked';
     } catch (err) {
-      s.confirmError = err.message || 'Booking failed — please try again.';
+      st.confirmError = err.message || 'Booking failed — please try again.';
     } finally {
-      s.confirming = false;
-      rerender();
+      st.confirming = false;
+      if (st === s) rerender();
     }
   }
 

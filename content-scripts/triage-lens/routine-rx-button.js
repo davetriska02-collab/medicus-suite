@@ -240,12 +240,18 @@
     return false;
   }
 
+  // Set by runMacro for the duration of a run; waitFor aborts on any SPA path
+  // change so no macro step can ever drive a DIFFERENT task's controls
+  // (audit M7, 2026-07-18).
+  var _macroPath = null;
+
   function waitFor(fn, timeout, interval) {
     timeout = timeout || 5000;
     interval = interval || 120;
     return new Promise(function (resolve) {
       var t0 = Date.now();
       (function poll() {
+        if (_macroPath !== null && location.pathname !== _macroPath) return resolve(null);
         var v;
         try {
           v = fn();
@@ -393,6 +399,14 @@
     if (running) return;
     running = true;
     setBusy(true);
+    // NAVIGATION GUARD (audit M7, 2026-07-18): the macro spans multi-second
+    // waitFor polls that match controls by visible text against the whole
+    // document. If the SPA swaps tasks mid-run, later steps would happily
+    // drive the NEW task's equivalent controls — re-assigning the wrong task,
+    // in 'auto' mode with no dialog. Pin the path for the run; waitFor's poll
+    // loop aborts (resolves null → the macro's existing not-found handling)
+    // the instant the path changes. Cleared in the finally below.
+    _macroPath = location.pathname;
     try {
       // 1. radio: Save & send to routine requests task list
       var radio = findByText(
@@ -512,8 +526,14 @@
           return;
         }
       }
+      // Belt-and-braces: never commit against a task the run didn't start on.
+      if (location.pathname !== _macroPath) {
+        fail(team, mode, 'Task changed mid-run — nothing was clicked on the new task.');
+        return;
+      }
       commitAndAudit(commit, team, mode);
     } finally {
+      _macroPath = null;
       running = false;
       setBusy(false);
     }

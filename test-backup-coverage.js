@@ -101,6 +101,12 @@ const KEY_PREFIXES = [
   'ledger',
   'health',
   'leaflets',
+  // Audit M18 (2026-07-18): these four were missing, so the drift guard was
+  // blind to their modules' keys (labfiling.suppress had already escaped it).
+  'labfiling',
+  'patientAlerts',
+  'followups',
+  'practice',
 ];
 
 function hasKeyPrefix(k) {
@@ -153,6 +159,10 @@ for (const f of IO_FILES) {
 // Each entry must have a comment stating why it is excluded from backup.
 
 const ALLOWLIST = new Set([
+  // labfiling.suppress: per-patient "never auto-file" list — DELIBERATELY
+  // machine-local (see shared/io/labfiling-io.js header); surfaced by the
+  // 2026-07-18 audit when the labfiling prefix was added to KEY_PREFIXES.
+  'labfiling.suppress',
   // Transient runtime state (documented in shared/io/request-monitor-io.js):
   'suite.requestMonitor.state', // live poll state object — not user config
   'suite.requestMonitor.notifMap', // service-worker notification tracking map — transient
@@ -351,6 +361,11 @@ const ALLOWLIST = new Set([
   // misleading "what was shown here" record. The exclusion is stated in the
   // user-facing disclosure block in options.html:
   'ledger.events',
+  // Day-sharded ledger layout (audit H12, v3.176.4): the shard directory key.
+  // The per-day shard keys themselves ('ledger.events.<YYYY-MM-DD>') are built
+  // dynamically and never appear as literals, so this scanner cannot see them;
+  // they follow the exact same never-backed-up doctrine as ledger.events:
+  'ledger.shardIndex',
 
   // Horizon-1 H2 — DOM-contract runtime canary state (shared/contract-canary.js):
   // per-contract { lastProbe, status, sinceTs, probeCount, failStreak, lastFailTs }
