@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.177.2] — 2026-07-20
+
+### "Save attachment as document": fixed invisible widget — attachments aren't always an `<a>`
+
+Live debugging (page-console DOM/network capture) found the widget never
+appeared on a real communication-thread task with a genuine attachment. Root
+cause: that task type renders the attachment as a plain `<button>` labelled
+with the filename and no href at all — `extractInitialRequest()` only ever
+scanned `<a>` tags, so a real attachment was silently invisible to it.
+
+- `content-scripts/triage-lens/content.js`'s `extractInitialRequest()` now
+  also detects this button pattern, recording `{ href: '', filename }` for it
+  instead of dropping it.
+- `content-scripts/document-file-inline.js` accepts these as eligible (same
+  filename-extension rule as before) and resolves the real download URL
+  lazily — via the SAME `/tasks/data/{slug}/overview/{taskUuid}` fetch already
+  made for patient resolution (one fetch now serves both needs), matched by
+  filename against a live-confirmed `{id, fileName, fileSize, contentType,
+  fileURI}` attachment shape found in that response
+  (`findAttachmentsInOverview` walks the whole response tree rather than a
+  hardcoded path, so it isn't tied to one task type's JSON nesting). The
+  download itself replays the confirmed
+  `GET /communication/data/online-message/download-attachment/{id}` contract
+  — one GET, raw file bytes, no signed-URL indirection. No new eager network
+  call: the fetch already happened when the widget opened, it just also
+  returns attachment metadata now.
+- `docs/learnings-triage-attachment-to-document.md` §8 records the full
+  capture (button markup, download contract, task-overview JSON shape).
+- **Known remaining gap, not fixed here:** this same task type has neither a
+  "Codes & actions" card nor a "More actions" button — the two anchor points
+  every inline widget on this page relies on — so the widget still has
+  nowhere to inject itself there even with attachment detection fixed. Left
+  for a follow-up.
+- `test-document-file-inline.js` extended with coverage for the new
+  resolution functions and the updated eligibility rule (62/62 passing).
+
 ## [v3.177.1] — 2026-07-20
 
 ### "Save attachment as document" — extended to PDF/Word attachments

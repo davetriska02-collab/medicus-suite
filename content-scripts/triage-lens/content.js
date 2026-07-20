@@ -1209,15 +1209,28 @@
     return parseLabelValue(getLines(c), ['Proxy name', 'Relationship to patient', 'Patient mobile', 'Patient email', 'Phone']);
   };
 
+  const ATTACHMENT_EXT_RE = /\.(pdf|docx?|jpe?g|png|tiff?|heic|gif)$/i;
+
   const extractInitialRequest = () => {
     const card = findCardByTitle('Initial Request');
     if (!card) return { text: '', attachmentCount: 0, attachments: [] };
     const c = cardContent(card);
     if (!c) return { text: '', attachmentCount: 0, attachments: [] };
     const text = getText(c).replace(/^Initial Request\s*/i, '').trim();
-    const attachments = [...c.querySelectorAll('a')]
-      .filter(a => /\.(pdf|docx?|jpe?g|png|tiff?|heic|gif)$/i.test((a.href || '') + ' ' + (a.textContent || '')))
+    const linked = [...c.querySelectorAll('a')]
+      .filter(a => ATTACHMENT_EXT_RE.test((a.href || '') + ' ' + (a.textContent || '')))
       .map(a => ({ href: a.href || '', filename: (a.textContent || '').trim() || (a.href || '').split('/').pop() }));
+    // Some task types (confirmed live: communication-thread) render the
+    // attachment as a plain <button> labelled with the filename and NO href at
+    // all — the real download id/URL only exists in that task's overview API
+    // response, not the DOM (docs/learnings-triage-attachment-to-document.md
+    // §8). Record these with href:'' so a consumer (document-file-inline.js)
+    // knows a real download identifier still needs resolving via that API
+    // call, rather than silently dropping a genuine attachment.
+    const unresolved = [...c.querySelectorAll('button')]
+      .filter(b => ATTACHMENT_EXT_RE.test((b.textContent || '').trim()))
+      .map(b => ({ href: '', filename: (b.textContent || '').trim() }));
+    const attachments = linked.concat(unresolved);
     return { text, attachmentCount: attachments.length, attachments };
   };
 

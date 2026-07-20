@@ -39,6 +39,22 @@
 // The side panel and content scripts alike have host_permissions for
 // *.api.england.medicus.health, so this works directly from the content-script
 // context (same as booking-inline.js / task-inline.js).
+//
+// ATTACHMENT RESOLUTION: some task types (confirmed live: communication-thread)
+// render the attachment as a plain <button> labelled with the filename and NO
+// href at all — content.js's extractInitialRequest() records these with
+// href:'' (see that file). This widget resolves them via the SAME
+// `/tasks/data/{typeSlug}/overview/{taskUuid}` call already made to find the
+// patient (one fetch, not two): the response embeds the real attachment
+// `{ id, fileName, fileSize, contentType, fileURI }` somewhere in its tree —
+// the exact nesting differs by task type (confirmed:
+// communicationThread.communications[].patientRequest.attachments /
+// .operativeChannel.attachments), so findAttachmentsInOverview walks the
+// whole JSON looking for that shape rather than hardcoding one path — a
+// missing/wrong hardcoded path would silently drop a real attachment.
+// `fileURI` is used AS GIVEN for the download (relative to the API host) —
+// never reconstructed. Confirmed via live capture 2026-07-20, see
+// docs/learnings-triage-attachment-to-document.md §8.
 'use strict';
 
 (function () {
@@ -83,12 +99,78 @@
 
   // Narrows a raw attachments list (as extracted by content.js's
   // extractInitialRequest) down to the subset this widget can safely file —
-  // see the SCOPE comment at the top of this file for why.
+  // see the SCOPE comment at the top of this file for why. An entry with no
+  // href (button-rendered attachment, href:'') is still eligible as long as
+  // it has a filename to identify/resolve it by — only a filename-less,
+  // href-less entry (nothing to key off at all) is dropped.
   function filterEligibleAttachments(list) {
     if (!Array.isArray(list)) return [];
     return list.filter(function (a) {
-      return a && a.href && documentTypeForFilename(a.filename || a.href) !== null;
+      if (!a || (!a.href && !a.filename)) return false;
+      return documentTypeForFilename(a.filename || a.href) !== null;
     });
+  }
+
+  // Finds every attachment-shaped object ({ id, fileName, fileURI, … })
+  // anywhere in a task-overview API response, deduped by id — see the
+  // ATTACHMENT RESOLUTION header comment for why this walks the whole tree
+  // instead of a hardcoded path. Returns [] for anything not shaped like the
+  // confirmed contract (never guesses a shape).
+  function findAttachmentsInOverview(data) {
+    var out = [];
+    var seen = Object.create(null);
+    (function walk(node) {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      if (typeof node.fileName === 'string' && typeof node.fileURI === 'string' && node.id) {
+        if (!seen[node.id]) {
+          seen[node.id] = true;
+          out.push({
+            id: node.id,
+            filename: node.fileName,
+            fileURI: node.fileURI,
+            fileSize: node.fileSize,
+            contentType: node.contentType,
+          });
+        }
+        return; // an attachment object's own fields are never themselves attachments
+      }
+      for (var k in node) {
+        if (Object.prototype.hasOwnProperty.call(node, k)) walk(node[k]);
+      }
+    })(data);
+    return out;
+  }
+
+  // The same task-overview response's patient-id shape — task types nest this
+  // differently (confirmed: a top-level data.patientId for communication-thread
+  // tasks), so every known fallback is tried, same discipline as before.
+  function patientIdFromOverview(data) {
+    return (
+      (data && data.data && data.data.patient && data.data.patient.id) ||
+      (data && data.data && data.data.patientId) ||
+      (data && data.patient && data.patient.id) ||
+      (data && data.patientId) ||
+      null
+    );
+  }
+
+  // Resolves a single attachment to an absolute, fetchable download URL.
+  // Already-resolved (href present, e.g. a real <a> in the DOM) passes
+  // through unchanged. An unresolved (button-rendered) attachment is matched
+  // by filename against the task-overview attachment list — `base` +
+  // `fileURI` AS GIVEN, never reconstructed. Returns null (never a guess) if
+  // no match is found.
+  function resolveAttachmentUrl(att, resolvedList, base) {
+    if (att && att.href) return att.href;
+    var filename = att && att.filename;
+    var match = (resolvedList || []).find(function (r) {
+      return r.filename === filename;
+    });
+    return match ? String(base || '') + match.fileURI : null;
   }
 
   function titleFromFilename(filename) {
@@ -134,6 +216,9 @@
       titleFromFilename,
       buildFormPayload,
       documentTypeForFilename,
+      findAttachmentsInOverview,
+      patientIdFromOverview,
+      resolveAttachmentUrl,
       DOCUMENT_TYPES,
       IMAGE_EXT_RE,
       DOCFILE_EXT_RE,
@@ -175,6 +260,9 @@
       reviewerAssigneeId: null,
       reviewerAssigneeType: null,
       recordDateDefault: null,
+      // Attachment list from the task-overview API — resolves any DOM-detected
+      // attachment that arrived with no href (see resolveAttachmentUrl above).
+      resolvedAttachments: [],
       selectedIdx: 0,
       title: '',
       documentDate: todayISO(),
@@ -234,17 +322,13 @@
     }
   }
 
-  // Resolve task UUID → patient UUID via the API subdomain (same as
-  // task-inline.js / booking-inline.js).
-  async function resolvePatientId(typeSlug, taskUuid) {
+  // Fetches the task-overview API once (same call task-inline.js/
+  // booking-inline.js make for patient resolution) and pulls BOTH the patient
+  // id and the real attachment list out of it — one fetch serves both needs,
+  // see the ATTACHMENT RESOLUTION header comment for why.
+  async function fetchTaskOverview(typeSlug, taskUuid) {
     var data = await apiFetch('/tasks/data/' + typeSlug + '/overview/' + taskUuid);
-    return (
-      (data && data.data && data.data.patient && data.data.patient.id) ||
-      (data && data.data && data.data.patientId) ||
-      (data && data.patient && data.patient.id) ||
-      (data && data.patientId) ||
-      null
-    );
+    return { patientId: patientIdFromOverview(data), attachments: findAttachmentsInOverview(data) };
   }
 
   async function apiFetchCreateForm(patientId) {
@@ -486,7 +570,11 @@
     rerender();
     try {
       var info = getTaskInfo();
-      if (info) s.patientId = await resolvePatientId(info.typeSlug, info.taskUuid);
+      if (info) {
+        var overview = await fetchTaskOverview(info.typeSlug, info.taskUuid);
+        s.patientId = overview.patientId;
+        s.resolvedAttachments = overview.attachments;
+      }
       if (!s.patientId) throw new Error('Could not determine the patient for this task.');
       var form = await apiFetchCreateForm(s.patientId);
       var sel = form && form.selectedReviewerAssignee;
@@ -513,7 +601,9 @@
     s.createError = null;
     rerender();
     try {
-      var resp = await fetch(att.href, { credentials: 'include' });
+      var downloadUrl = resolveAttachmentUrl(att, s.resolvedAttachments, apiBaseUrl());
+      if (!downloadUrl) throw new Error("Could not locate this attachment's file — try reopening the task.");
+      var resp = await fetch(downloadUrl, { credentials: 'include' });
       if (!resp.ok) throw new Error('Could not fetch the attachment (HTTP ' + resp.status + ').');
       var blob = await resp.blob();
       var result = await apiCreateDocument({
@@ -584,6 +674,7 @@
         reviewerAssigneeId: s.reviewerAssigneeId,
         reviewerAssigneeType: s.reviewerAssigneeType,
         recordDateDefault: s.recordDateDefault,
+        resolvedAttachments: s.resolvedAttachments,
       };
       s = blankState();
       Object.assign(s, cached);

@@ -257,3 +257,111 @@ needs, outside this repo:
 now (it's built, tested, and working) — this is recorded as the target
 migration once the Transactional API's write path is provisioned, not
 something to build against speculatively today.
+
+## 8. The widget was invisible on live tasks: attachments aren't always an `<a>` (2026-07-20)
+
+Live debugging session (page-console DOM/network capture, not guessed) found
+the widget never appeared on a real communication-thread task with a genuine
+patient-submitted attachment. Root cause: **the "Initial Request" card does
+not always render an attachment as `<a href="...">`.** On a communication-
+thread task it's a plain `<button>` with the filename as its label and no
+href, `data-*`, or any other identifier in the DOM at all:
+
+```html
+<div>
+  <p class="m-mt-sm"><strong>Attachment</strong></p>
+  <button class="m-link medicus-outline" type="button" tabindex="0">thisisnotaphoto.png</button>
+</div>
+```
+
+`content.js`'s `extractInitialRequest()` only ever scanned `<a>` tags, so this
+was silently invisible to it — `window.__msTriageAttachments` came back empty
+even with a real attachment present. (Separately, the SAME task type also has
+neither a "Codes & actions" card nor a "More actions" button — the two anchor
+points every inline widget on this page currently relies on — confirmed via
+the same session; **not yet fixed**, tracked as a follow-up.)
+
+### Confirmed: the button's click handler and its real download contract
+
+Captured via `scripts/document-create-capture.js` (`chDocCap`, default filter
+— no `.all()` needed) by clicking the button:
+
+```
+GET /communication/data/online-message/download-attachment/{attachmentId}?convertToPDF=0
+→ 200, Content-Type: image/png   (raw file bytes, ONE GET, no signed-URL indirection)
+```
+
+### Confirmed: where the attachment id/URL actually comes from
+
+A second capture (`chDocCap.all()` across a fresh in-app navigation into the
+task, not a hard reload — a hard reload wipes a console-pasted capture script)
+found the task-overview call every inline widget already makes for patient
+resolution — `GET /tasks/data/{typeSlug}/overview/{taskUuid}` — carries the
+real attachment metadata in its response body. Confirmed real shape (task
+type: `communication_thread_task`):
+
+```json
+{
+  "data": {
+    "patientId": "01923625-8042-7071-a04d-1c610de03944",
+    "communicationThread": {
+      "communications": [
+        {
+          "patientRequest": {
+            "attachments": [
+              {
+                "id": "0195b355-79ea-7380-9707-4d4aac734718",
+                "fileName": "thisisnotaphoto.png",
+                "fileSize": 12765,
+                "contentType": "image/png",
+                "fileURI": "/communication/data/online-message/download-attachment/0195b355-79ea-7380-9707-4d4aac734718?convertToPDF=0"
+              }
+            ]
+          },
+          "operativeChannel": {
+            "attachments": [
+              /* identical object, duplicated — dedupe by id */
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+- `fileURI` is the exact download path above — confirmed real, used AS GIVEN,
+  never reconstructed.
+- The SAME attachment object appears under both `patientRequest.attachments`
+  and `operativeChannel.attachments` for the communication that carries it —
+  any consumer must dedupe by `id`.
+- `data.patientId` (top-level under `data`) is ALSO the patient id for this
+  task type — already covered by `resolvePatientId`'s existing fallback chain
+  in `document-file-inline.js`, so no fix was needed there, only for
+  attachments.
+- Not yet confirmed: whether other task types (e.g. `medical_patient_request_task`,
+  the type the original "patient request" bug report referred to) nest
+  attachments under the same `communicationThread.communications[]` path or a
+  different one. `findAttachmentsInOverview` in `document-file-inline.js`
+  deliberately walks the WHOLE response tree looking for the `{id, fileName,
+fileURI}` shape rather than hardcoding this one path, specifically so it
+  generalises across task types without needing a separate capture for each —
+  but this hasn't been verified live on a task type other than
+  communication-thread.
+
+### What this means for the widget
+
+- `content.js`'s `extractInitialRequest()` now also detects the button
+  pattern, recording `{ href: '', filename }` for it (a real attachment with
+  an unresolved download identifier, not nothing).
+- `document-file-inline.js` accepts these as eligible (by filename extension,
+  same as before) and resolves the real download URL lazily, when the widget
+  is opened or the save button is pressed — via the SAME
+  `/tasks/data/{slug}/overview/{taskUuid}` fetch already made for patient
+  resolution (one fetch serves both needs now), matched by filename against
+  `findAttachmentsInOverview`'s result. No new eager network call is added.
+- **Still open, not fixed in this pass:** the missing anchor point
+  (no "Codes & actions" card, no "More actions" button) on communication-
+  thread tasks. Attachment detection now works, but the widget still has
+  nowhere to inject itself on this specific task type until a new anchor
+  strategy is found for it.

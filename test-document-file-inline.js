@@ -15,6 +15,9 @@ const {
   titleFromFilename,
   buildFormPayload,
   documentTypeForFilename,
+  findAttachmentsInOverview,
+  patientIdFromOverview,
+  resolveAttachmentUrl,
   DOCUMENT_TYPES,
   IMAGE_EXT_RE,
   DOCFILE_EXT_RE,
@@ -81,7 +84,21 @@ console.log('--- filterEligibleAttachments: edge cases ---');
   check(filterEligibleAttachments(null).length === 0, 'non-array input -> empty array, never throws');
   check(filterEligibleAttachments(undefined).length === 0, 'undefined input -> empty array');
   check(filterEligibleAttachments([]).length === 0, 'empty list -> empty list');
-  check(filterEligibleAttachments([{ filename: 'no-href.jpg' }]).length === 0, 'an entry with no href is dropped');
+  // A button-rendered attachment (communication-thread tasks, confirmed live
+  // 2026-07-20) has no href at all — it must stay eligible (resolved later via
+  // the task-overview API), not be dropped, as long as its filename resolves.
+  check(
+    filterEligibleAttachments([{ href: '', filename: 'no-href.jpg' }]).length === 1,
+    'a href-less entry with a resolvable filename is eligible (button-rendered attachment)'
+  );
+  check(
+    filterEligibleAttachments([{ href: '', filename: 'no-href.txt' }]).length === 0,
+    'a href-less entry with an unrecognised extension is still dropped'
+  );
+  check(
+    filterEligibleAttachments([{ href: '', filename: '' }]).length === 0,
+    'no href AND no filename — nothing to key off — is dropped'
+  );
   check(
     filterEligibleAttachments([{ href: 'https://x/doc/1', filename: '' }]).length === 0,
     'a blank filename with a non-matching href is dropped'
@@ -158,6 +175,119 @@ console.log('--- extension regexes sanity ---');
   check(DOCFILE_EXT_RE.test('letter.pdf'), 'pdf matches DOCFILE_EXT_RE');
   check(DOCFILE_EXT_RE.test('report.DOCX'), 'docx matches DOCFILE_EXT_RE, case-insensitive');
   check(!DOCFILE_EXT_RE.test('notes.txt'), 'txt matches neither regex');
+}
+
+console.log('--- findAttachmentsInOverview: walks the task-overview JSON for the confirmed attachment shape ---');
+{
+  // Real shape confirmed via live capture 2026-07-20 (communication-thread
+  // task, docs/learnings-triage-attachment-to-document.md §8): the SAME
+  // attachment object appears twice (patientRequest AND operativeChannel
+  // branches of the first communication) — must dedupe by id.
+  const overview = {
+    data: {
+      patientId: 'patient-uuid',
+      communicationThread: {
+        communications: [
+          {
+            patientRequest: {
+              attachments: [
+                {
+                  id: 'att-1',
+                  fileName: 'thisisnotaphoto.png',
+                  fileSize: 12765,
+                  contentType: 'image/png',
+                  fileURI: '/communication/data/online-message/download-attachment/att-1?convertToPDF=0',
+                },
+              ],
+            },
+            operativeChannel: {
+              attachments: [
+                {
+                  id: 'att-1',
+                  fileName: 'thisisnotaphoto.png',
+                  fileSize: 12765,
+                  contentType: 'image/png',
+                  fileURI: '/communication/data/online-message/download-attachment/att-1?convertToPDF=0',
+                },
+              ],
+            },
+          },
+          { patientMessage: { attachments: [] }, operativeChannel: { attachments: [] } },
+        ],
+      },
+    },
+  };
+  const found = findAttachmentsInOverview(overview);
+  check(
+    found.length === 1,
+    `the duplicated attachment across patientRequest/operativeChannel dedupes by id (got ${found.length})`
+  );
+  check(found[0].filename === 'thisisnotaphoto.png', 'filename read from fileName');
+  check(
+    found[0].fileURI === '/communication/data/online-message/download-attachment/att-1?convertToPDF=0',
+    'fileURI carried through unchanged — never reconstructed'
+  );
+  check(found[0].fileSize === 12765 && found[0].contentType === 'image/png', 'fileSize/contentType carried through');
+
+  check(findAttachmentsInOverview({}).length === 0, 'empty object -> no attachments, never throws');
+  check(findAttachmentsInOverview(null).length === 0, 'null -> no attachments, never throws');
+  check(
+    findAttachmentsInOverview({ a: { b: { c: 1 } } }).length === 0,
+    'a tree with no attachment-shaped object -> []'
+  );
+  check(
+    findAttachmentsInOverview({ x: { fileName: 'a.png' } }).length === 0,
+    'an object with fileName but no fileURI/id is NOT treated as an attachment (partial shape, never guessed)'
+  );
+
+  const twoDistinct = findAttachmentsInOverview({
+    a: { id: '1', fileName: 'one.png', fileURI: '/x/1' },
+    b: { nested: { id: '2', fileName: 'two.pdf', fileURI: '/x/2' } },
+  });
+  check(twoDistinct.length === 2, 'two genuinely distinct attachments at different tree depths are both found');
+}
+
+console.log('--- patientIdFromOverview: every known response shape ---');
+{
+  check(
+    patientIdFromOverview({ data: { patientId: 'p1' } }) === 'p1',
+    'data.patientId (confirmed: communication-thread)'
+  );
+  check(patientIdFromOverview({ data: { patient: { id: 'p2' } } }) === 'p2', 'data.patient.id');
+  check(patientIdFromOverview({ patient: { id: 'p3' } }) === 'p3', 'patient.id');
+  check(patientIdFromOverview({ patientId: 'p4' }) === 'p4', 'top-level patientId');
+  check(patientIdFromOverview({}) === null, 'no matching shape -> null, not a guess');
+  check(patientIdFromOverview(null) === null, 'null input -> null, never throws');
+}
+
+console.log('--- resolveAttachmentUrl: already-resolved passes through; unresolved matched by filename ---');
+{
+  check(
+    resolveAttachmentUrl({ href: 'https://x/doc/1.jpg', filename: 'a.jpg' }, [], 'https://base') ===
+      'https://x/doc/1.jpg',
+    'an attachment with an href already (real <a> in the DOM) passes through unchanged'
+  );
+  const resolved = [{ id: 'att-1', filename: 'thisisnotaphoto.png', fileURI: '/communication/data/x/att-1' }];
+  check(
+    resolveAttachmentUrl(
+      { href: '', filename: 'thisisnotaphoto.png' },
+      resolved,
+      'https://e38a9f.api.medicus.health'
+    ) === 'https://e38a9f.api.medicus.health/communication/data/x/att-1',
+    'a href-less attachment resolves to base + fileURI, matched by filename'
+  );
+  check(
+    resolveAttachmentUrl({ href: '', filename: 'not-in-list.png' }, resolved, 'https://base') === null,
+    'no matching filename in the resolved list -> null, never a guessed URL'
+  );
+  check(
+    resolveAttachmentUrl({ href: '', filename: 'x.png' }, [], 'https://base') === null,
+    'empty resolved list -> null'
+  );
+  check(
+    resolveAttachmentUrl({ href: '', filename: 'x.png' }, null, 'https://base') === null,
+    'null resolved list -> null, never throws'
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
