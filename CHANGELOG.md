@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.177.3] — 2026-07-20
+
+### Inline widgets: fixed the missing anchor point on communication-thread tasks
+
+Follow-up to v3.177.2's attachment-detection fix. That task type has neither
+a "Codes & actions" card nor a "More actions" button — the two anchors
+`task-inline.js` and `document-file-inline.js` rely on — so both widgets had
+nowhere to inject themselves there even after attachment detection was fixed.
+
+- Both files gained a further fallback: anchor after the "Initial Request"
+  card itself, matched by its EXACT heading text (not content.js's own
+  looser starts-with match, so this can never mis-anchor on an unrelated
+  section). Confirmed live: every request/communication task type seen so
+  far has this card, including a task with no attachment at all.
+- `task-inline.js` gets the same fix since it has the identical gap on this
+  task type — one root cause, one fix, applied to both consumers.
+- `docs/learnings-triage-attachment-to-document.md` §8 updated to record the
+  fix (was previously flagged as a known open gap).
+
 ## [v3.177.2] — 2026-07-20
 
 ### "Save attachment as document": fixed invisible widget — attachments aren't always an `<a>`

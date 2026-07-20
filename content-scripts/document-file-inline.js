@@ -355,6 +355,7 @@
   // consumed by every inline widget that anchors this way).
 
   var HEADING_RE = /^Codes\s*(?:&|&amp;|and)\s*actions$/i;
+  var INITIAL_REQUEST_RE = /^Initial Request$/i;
 
   function visible(el) {
     return !!(el && (el.offsetParent !== null || (el.getClientRects && el.getClientRects().length)));
@@ -364,6 +365,12 @@
     if (el.closest('#ms-df-widget')) return false;
     if (el.firstElementChild) return false;
     return HEADING_RE.test(el.textContent.trim());
+  }
+
+  function matchInitialRequestHeading(el) {
+    if (el.closest('#ms-df-widget')) return false;
+    if (el.firstElementChild) return false;
+    return INITIAL_REQUEST_RE.test(el.textContent.trim());
   }
 
   var HEADING_CONTRACT = DC && DC.get('task-widget.codes-actions-heading');
@@ -415,6 +422,35 @@
     return null;
   }
 
+  // Gate 3 fallback — the "Initial Request" card's boundary, same
+  // heading-then-closest-card walk content.js's own findCardByTitle uses, but
+  // matching the heading text EXACTLY ("Initial Request", not a starts-with
+  // match) so this never mis-anchors on an unrelated section. Confirmed live
+  // (2026-07-20): communication-thread tasks have NEITHER a "Codes & actions"
+  // card NOR a "More actions" row (the two anchors above), but DO have this
+  // card — the same one that carries the attachment this widget is FOR.
+  function findInitialRequestCard() {
+    var heading = null;
+    for (var el of document.querySelectorAll(HEADING_NARROW_SEL)) {
+      if (matchInitialRequestHeading(el)) {
+        heading = el;
+        break;
+      }
+    }
+    if (!heading) {
+      for (var el2 of document.querySelectorAll(HEADING_WIDE_SEL)) {
+        if (matchInitialRequestHeading(el2)) {
+          heading = el2;
+          break;
+        }
+      }
+    }
+    if (!heading) return null;
+    return (
+      heading.closest('.m-card-v2') || heading.closest('[class*="m-card"]') || heading.parentElement?.parentElement
+    );
+  }
+
   function injectWidget() {
     if (!getTaskInfo()) return;
     if (eligibleAttachments().length === 0) return;
@@ -435,6 +471,16 @@
     if (row && row.parentElement) {
       withObserverPaused(function () {
         row.parentElement.insertBefore(w, row);
+      });
+      return;
+    }
+    // Last resort: after the "Initial Request" card itself (communication-
+    // thread tasks have neither of the above two anchors — confirmed live
+    // 2026-07-20).
+    var irCard = findInitialRequestCard();
+    if (irCard && irCard.parentElement) {
+      withObserverPaused(function () {
+        irCard.after(w);
       });
       return;
     }

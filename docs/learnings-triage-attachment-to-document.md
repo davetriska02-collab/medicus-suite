@@ -360,8 +360,14 @@ fileURI}` shape rather than hardcoding this one path, specifically so it
   `/tasks/data/{slug}/overview/{taskUuid}` fetch already made for patient
   resolution (one fetch serves both needs now), matched by filename against
   `findAttachmentsInOverview`'s result. No new eager network call is added.
-- **Still open, not fixed in this pass:** the missing anchor point
-  (no "Codes & actions" card, no "More actions" button) on communication-
-  thread tasks. Attachment detection now works, but the widget still has
-  nowhere to inject itself on this specific task type until a new anchor
-  strategy is found for it.
+- **Fixed (follow-up pass, same day):** the missing anchor point (no "Codes &
+  actions" card, no "More actions" button) on communication-thread tasks.
+  Both `task-inline.js` and `document-file-inline.js` gained a fourth/third
+  fallback: anchor after the "Initial Request" card itself — the same card
+  `content.js`'s `extractInitialRequest()` reads, confirmed present on every
+  request/communication task type observed so far (including the "no
+  attachment" control task from the original debugging session). Matches the
+  heading text EXACTLY ("Initial Request", not content.js's own looser
+  starts-with match) so it can never mis-anchor on an unrelated section.
+  `task-inline.js` gained the same fix since it has the identical gap on this
+  task type — one root cause, one fix, applied to both consumers.
