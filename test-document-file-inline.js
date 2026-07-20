@@ -18,10 +18,14 @@ const {
   findAttachmentsInOverview,
   patientIdFromOverview,
   resolveAttachmentUrl,
+  filterDocumentTypes,
+  buildPriorityEntries,
+  findDocumentTypeByConceptId,
   DOCUMENT_TYPES,
   IMAGE_EXT_RE,
   DOCFILE_EXT_RE,
 } = require('./content-scripts/document-file-inline.js');
+const documentTypesData = require('./rules/document-types.json');
 
 let passed = 0,
   failed = 0;
@@ -287,6 +291,97 @@ console.log('--- resolveAttachmentUrl: already-resolved passes through; unresolv
   check(
     resolveAttachmentUrl({ href: '', filename: 'x.png' }, null, 'https://base') === null,
     'null resolved list -> null, never throws'
+  );
+}
+
+console.log('--- rules/document-types.json: the imported SNOMED picklist itself ---');
+{
+  check(Array.isArray(documentTypesData.entries), 'entries is an array');
+  check(documentTypesData.entries.length === 1768, `1768 active entries (got ${documentTypesData.entries.length})`);
+  check(Array.isArray(documentTypesData.priority), 'priority is an array (possibly empty)');
+  const dupeIds = documentTypesData.entries.length - new Set(documentTypesData.entries.map((e) => e.conceptId)).size;
+  check(dupeIds === 0, `no duplicate conceptIds (found ${dupeIds})`);
+  const image = documentTypesData.entries.find((e) => e.conceptId === DOCUMENT_TYPES.image.conceptId);
+  check(
+    !!image &&
+      image.description === DOCUMENT_TYPES.image.description &&
+      image.descriptionId === DOCUMENT_TYPES.image.descriptionId,
+    'the confirmed "Medical photograph" code is present and byte-identical to the hard-coded default'
+  );
+  const doc = documentTypesData.entries.find((e) => e.conceptId === DOCUMENT_TYPES.document.conceptId);
+  check(
+    !!doc &&
+      doc.description === DOCUMENT_TYPES.document.description &&
+      doc.descriptionId === DOCUMENT_TYPES.document.descriptionId,
+    'the confirmed "Patient/Carer Correspondence" code is present and byte-identical to the hard-coded default'
+  );
+}
+
+console.log('--- filterDocumentTypes: case-insensitive substring search, capped ---');
+{
+  const entries = [
+    { conceptId: '1', description: 'Medical photograph' },
+    { conceptId: '2', description: 'Discharge summary' },
+    { conceptId: '3', description: 'Patient/Carer Correspondence' },
+    { conceptId: '4', description: 'Radiology report' },
+  ];
+  check(filterDocumentTypes(entries, '', 40).length === 0, 'empty query -> no results (search does not browse all)');
+  check(filterDocumentTypes(entries, '   ', 40).length === 0, 'whitespace-only query -> no results');
+  check(filterDocumentTypes(null, 'report', 40).length === 0, 'null entries -> no results, never throws');
+  const photo = filterDocumentTypes(entries, 'photo', 40);
+  check(photo.length === 1 && photo[0].conceptId === '1', 'substring match on description');
+  const caseInsensitive = filterDocumentTypes(entries, 'PHOTO', 40);
+  check(caseInsensitive.length === 1 && caseInsensitive[0].conceptId === '1', 'search is case-insensitive');
+  const correspondence = filterDocumentTypes(entries, 'correspond', 40);
+  check(
+    correspondence.length === 1 && correspondence[0].conceptId === '3',
+    'matches mid-word substrings, not just prefixes'
+  );
+  check(filterDocumentTypes(entries, 'zzz-no-match', 40).length === 0, 'no match -> empty array');
+  const capped = filterDocumentTypes(entries, 'e', 2);
+  check(capped.length === 2, `limit is honoured (got ${capped.length})`);
+  // Against the real 1768-entry list: a broad query stays capped, a narrow one doesn't exceed real matches.
+  const broad = filterDocumentTypes(documentTypesData.entries, 'report', 40);
+  check(broad.length <= 40, `real-list broad query capped at 40 (got ${broad.length})`);
+  check(broad.length > 0, 'real-list broad query "report" finds at least one match');
+}
+
+console.log('--- buildPriorityEntries: resolves conceptIds to full entries, preserving order ---');
+{
+  const entries = [
+    { conceptId: '1', description: 'A' },
+    { conceptId: '2', description: 'B' },
+    { conceptId: '3', description: 'C' },
+  ];
+  const built = buildPriorityEntries(entries, ['3', '1']);
+  check(
+    built.length === 2 && built[0].conceptId === '3' && built[1].conceptId === '1',
+    'resolves in the ORDER given, not entries order'
+  );
+  const withMissing = buildPriorityEntries(entries, ['3', 'not-a-real-id', '1']);
+  check(
+    withMissing.length === 2 && withMissing[0].conceptId === '3' && withMissing[1].conceptId === '1',
+    'a conceptId no longer present (e.g. retired in a refset refresh) is silently skipped, not an error'
+  );
+  check(buildPriorityEntries(entries, []).length === 0, 'empty priority list -> empty shortlist');
+  check(buildPriorityEntries(null, ['1']).length === 0, 'null entries -> empty, never throws');
+  check(buildPriorityEntries(entries, null).length === 0, 'null priority list -> empty, never throws');
+}
+
+console.log('--- findDocumentTypeByConceptId ---');
+{
+  const entries = [
+    { conceptId: '1', description: 'A' },
+    { conceptId: '2', description: 'B' },
+  ];
+  check(findDocumentTypeByConceptId(entries, '2').description === 'B', 'finds by conceptId');
+  check(findDocumentTypeByConceptId(entries, 'nope') === null, 'no match -> null');
+  check(findDocumentTypeByConceptId(null, '1') === null, 'null entries -> null, never throws');
+  check(findDocumentTypeByConceptId(entries, null) === null, 'null conceptId -> null, never throws');
+  check(
+    findDocumentTypeByConceptId(documentTypesData.entries, DOCUMENT_TYPES.image.conceptId).description ===
+      'Medical photograph',
+    'finds the confirmed "Medical photograph" entry in the real 1768-entry list'
   );
 }
 

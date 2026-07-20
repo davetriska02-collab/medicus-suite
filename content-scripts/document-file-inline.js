@@ -22,19 +22,27 @@
 // including what's still NOT confirmed.
 //
 // SCOPE: the create call's `documentType` is a SNOMED-coded {conceptId,
-// description, descriptionId} object, normally chosen via Medicus's own live
-// search-as-you-type — this suite has never captured that search endpoint's
-// query contract, so we do not guess it (a wrong SNOMED code silently
-// miscodes the record — the exact failure mode CLAUDE.md's drug-rules
-// section warns against for a different feature; same principle here).
-// Instead we only ever send one of two CONFIRMED real codes, chosen by file
-// extension: "Medical photograph" for images, "Patient/Carer Correspondence"
-// for PDF/Word files — together these cover every extension
-// content.js's extractInitialRequest() itself recognises as an attachment,
-// so this widget's eligibility now matches that extraction exactly, with no
-// narrower carve-out. A filename extension outside that set (there isn't one
-// today, but if extractInitialRequest's regex is ever widened) is NOT
-// filed automatically — see documentTypeForFilename below.
+// description, descriptionId} object. Medicus's own live search-as-you-type
+// (`clinical/gb/snomed/search/description/constrained?constrainingRefsets=
+// 1127551000000109`) was itself captured 2026-07-20 (docs/learnings-
+// triage-attachment-to-document.md §9) and its response shape confirmed —
+// {results:[{label, value:{description, conceptId, descriptionId}}]}, no
+// hierarchy/parent data at all. The FULL active picklist behind that refset
+// (1768 entries, June 2026 SNOMED CT UK Clinical Extension export, inactive
+// members excluded) is bundled as rules/document-types.json and searched
+// client-side here — never a live call to Medicus's own search endpoint (its
+// query contract, e.g. debounce/paging, was never captured, and it isn't
+// needed: the full picklist is small enough to search in memory). A
+// `priority` list of conceptIds in that same file drives the quick-pick
+// shortlist shown before the clinician searches. The extension-based guess
+// (documentTypeForFilename below) still PRE-SELECTS a default — image →
+// "Medical photograph", pdf/doc → "Patient/Carer Correspondence" — but the
+// clinician can always override it via the shortlist or search before saving;
+// nothing is filed without an explicit documentType being set. Ancestor/
+// parent-concept filtering was investigated and ruled out — Medicus does not
+// store a parentConceptIds-style hierarchy for Document entities (confirmed
+// via two HAR-file captures, see §9) — so there is no hierarchy to prune the
+// picklist by.
 //
 // The side panel and content scripts alike have host_permissions for
 // *.api.england.medicus.health, so this works directly from the content-script
@@ -173,6 +181,52 @@
     return match ? String(base || '') + match.fileURI : null;
   }
 
+  // Case-insensitive substring match on `description` against the full
+  // document-type picklist (rules/document-types.json), capped at `limit`
+  // results so a broad query never renders an enormous dropdown. Empty/blank
+  // query returns [] — the search only activates once the user has typed
+  // something, it is not a way to browse all 1768 entries at once.
+  function filterDocumentTypes(entries, query, limit) {
+    var q = String(query || '')
+      .trim()
+      .toLowerCase();
+    if (!q || !Array.isArray(entries)) return [];
+    var cap = limit > 0 ? limit : entries.length;
+    var out = [];
+    for (var i = 0; i < entries.length && out.length < cap; i++) {
+      var e = entries[i];
+      if (e && typeof e.description === 'string' && e.description.toLowerCase().indexOf(q) !== -1) {
+        out.push(e);
+      }
+    }
+    return out;
+  }
+
+  // Resolves an ordered list of conceptIds (rules/document-types.json's
+  // `priority` array) to their full entries — the quick-pick shortlist shown
+  // before search. Silently skips any id no longer present in `entries` (a
+  // future SNOMED refset refresh could retire one) rather than erroring.
+  function buildPriorityEntries(entries, priorityConceptIds) {
+    if (!Array.isArray(entries) || !Array.isArray(priorityConceptIds)) return [];
+    var byId = Object.create(null);
+    entries.forEach(function (e) {
+      if (e && e.conceptId) byId[e.conceptId] = e;
+    });
+    return priorityConceptIds
+      .map(function (id) {
+        return byId[id];
+      })
+      .filter(Boolean);
+  }
+
+  function findDocumentTypeByConceptId(entries, conceptId) {
+    if (!Array.isArray(entries) || !conceptId) return null;
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i] && entries[i].conceptId === conceptId) return entries[i];
+    }
+    return null;
+  }
+
   function titleFromFilename(filename) {
     if (!filename) return 'Attachment';
     var base = filename.replace(/\.[^./]+$/, '');
@@ -219,6 +273,9 @@
       findAttachmentsInOverview,
       patientIdFromOverview,
       resolveAttachmentUrl,
+      filterDocumentTypes,
+      buildPriorityEntries,
+      findDocumentTypeByConceptId,
       DOCUMENT_TYPES,
       IMAGE_EXT_RE,
       DOCFILE_EXT_RE,
@@ -265,6 +322,12 @@
       resolvedAttachments: [],
       selectedIdx: 0,
       title: '',
+      // The SNOMED code that will actually be sent — pre-filled from
+      // documentTypeForFilename's extension-based guess, overridable via the
+      // priority shortlist or search before saving. Nothing is filed while
+      // this is null (see canCreate in renderForm).
+      documentType: null,
+      documentTypeQuery: '',
       documentDate: todayISO(),
       step: 'form', // 'form' | 'created'
       creating: false,
@@ -333,6 +396,35 @@
 
   async function apiFetchCreateForm(patientId) {
     return apiFetch('/clinical/data/document/forms/create-inbound-document-form/' + encodeURIComponent(patientId));
+  }
+
+  // Loads the full document-type picklist (rules/document-types.json, see the
+  // SCOPE header comment) ONCE per page load — a local extension resource,
+  // not a Medicus call, so this is cheap and kicked off at script boot below
+  // rather than waiting for the widget to open. Cached as a promise so a
+  // widget reopen (or a second task page) never re-fetches; falls back to an
+  // empty picklist (never throws) if the resource is somehow unavailable —
+  // the extension-based guess (documentTypeForFilename) still works even
+  // then, only the shortlist/search would be empty.
+  var _dtPromise = null;
+  var _dtCache = null; // { entries, priority } once resolved
+  function ensureDocumentTypesLoaded() {
+    if (_dtPromise) return _dtPromise;
+    _dtPromise = (async function () {
+      try {
+        var url = chrome.runtime.getURL('rules/document-types.json');
+        var doc = await fetch(url).then(function (r) {
+          return r.json();
+        });
+        var entries = Array.isArray(doc && doc.entries) ? doc.entries : [];
+        var priorityIds = Array.isArray(doc && doc.priority) ? doc.priority : [];
+        _dtCache = { entries: entries, priority: buildPriorityEntries(entries, priorityIds) };
+      } catch (e) {
+        _dtCache = { entries: [], priority: [] };
+      }
+      return _dtCache;
+    })();
+    return _dtPromise;
   }
 
   // Builds and sends the confirmed multipart contract — see
@@ -552,11 +644,73 @@
       .join('');
   }
 
+  // ── Document type picker (priority shortlist + full search) ──────────────────
+
+  function documentTypeCurrentHtml() {
+    if (s.documentType) {
+      return (
+        '<div class="ms-df-dt-current">Document type: <strong>' + esc(s.documentType.description) + '</strong></div>'
+      );
+    }
+    return '<div class="ms-df-dt-current ms-df-dt-none">No document type selected yet.</div>';
+  }
+
+  function documentTypePriorityHtml() {
+    var priority = (_dtCache && _dtCache.priority) || [];
+    if (!priority.length) return '';
+    return (
+      '<div class="ms-df-dt-priority">' +
+      priority
+        .map(function (dt) {
+          var active = s.documentType && s.documentType.conceptId === dt.conceptId;
+          return (
+            '<button type="button" class="ms-df-dt-chip' +
+            (active ? ' ms-df-dt-chip-active' : '') +
+            '" data-concept-id="' +
+            esc(dt.conceptId) +
+            '">' +
+            esc(dt.description) +
+            '</button>'
+          );
+        })
+        .join('') +
+      '</div>'
+    );
+  }
+
+  // Inner HTML only (no wrapping element) — shared by the initial render and
+  // the search input's live-update handler, which replaces JUST this
+  // container's innerHTML on every keystroke rather than doing a full
+  // rerender() (which would drop focus from the search box mid-type — same
+  // discipline as the title/date inputs above).
+  function documentTypeResultsInnerHtml() {
+    var q = s.documentTypeQuery.trim();
+    if (!q) return '';
+    var entries = (_dtCache && _dtCache.entries) || [];
+    var matches = filterDocumentTypes(entries, q, 40);
+    if (!matches.length) return '<div class="ms-df-dt-empty">No matches.</div>';
+    return (
+      matches
+        .map(function (dt) {
+          var active = s.documentType && s.documentType.conceptId === dt.conceptId;
+          return (
+            '<button type="button" class="ms-df-dt-result' +
+            (active ? ' ms-df-dt-result-active' : '') +
+            '" data-concept-id="' +
+            esc(dt.conceptId) +
+            '">' +
+            esc(dt.description) +
+            '</button>'
+          );
+        })
+        .join('') +
+      (matches.length >= 40 ? '<div class="ms-df-dt-more">Showing the first 40 — refine your search.</div>' : '')
+    );
+  }
+
   function renderForm() {
     var atts = eligibleAttachments();
-    var att = atts[s.selectedIdx];
-    var docType = att && documentTypeForFilename(att.filename || att.href);
-    var canCreate = atts.length > 0 && s.title.trim() && s.documentDate && !s.creating;
+    var canCreate = atts.length > 0 && s.title.trim() && s.documentDate && s.documentType && !s.creating;
     return (
       '<div class="ms-df-body">' +
       (!s.patientId
@@ -576,11 +730,18 @@
       '<input class="ms-df-input" id="ms-df-date" type="date" value="' +
       esc(s.documentDate) +
       '"></div>' +
-      (docType
-        ? '<div class="ms-df-note">Filed as a "' +
-          esc(docType.description) +
-          '" document type, into this patient\'s record.</div>'
-        : '') +
+      '<div class="ms-df-row">' +
+      '<label class="ms-df-label" for="ms-df-dt-search">Document type</label>' +
+      documentTypeCurrentHtml() +
+      documentTypePriorityHtml() +
+      '<input class="ms-df-input" id="ms-df-dt-search" type="text" autocomplete="off" ' +
+      'placeholder="Search all document types…" value="' +
+      esc(s.documentTypeQuery) +
+      '">' +
+      '<div class="ms-df-dt-results" id="ms-df-dt-results">' +
+      documentTypeResultsInnerHtml() +
+      '</div>' +
+      '</div>' +
       (s.createError ? '<div class="ms-df-error">' + esc(s.createError) + '</div>' : '') +
       '<button class="ms-df-btn" id="ms-df-create"' +
       (canCreate ? '' : ' disabled') +
@@ -628,8 +789,12 @@
       s.reviewerAssigneeType = (sel && sel.type) || null;
       s.recordDateDefault = (form && form.recordDate) || todayISO();
       s.documentDate = s.recordDateDefault;
+      await ensureDocumentTypesLoaded();
       var atts = eligibleAttachments();
-      if (atts[s.selectedIdx]) s.title = titleFromFilename(atts[s.selectedIdx].filename);
+      if (atts[s.selectedIdx]) {
+        s.title = titleFromFilename(atts[s.selectedIdx].filename);
+        s.documentType = documentTypeForFilename(atts[s.selectedIdx].filename || atts[s.selectedIdx].href);
+      }
     } catch (err) {
       s.error = err.message || 'Failed to load the document form.';
     } finally {
@@ -641,7 +806,7 @@
   async function doCreate() {
     var atts = eligibleAttachments();
     var att = atts[s.selectedIdx];
-    var docType = att && documentTypeForFilename(att.filename || att.href);
+    var docType = s.documentType;
     if (s.creating || !s.patientId || !att || !docType || !s.title.trim() || !s.documentDate) return;
     s.creating = true;
     s.createError = null;
@@ -696,19 +861,41 @@
     el.querySelector('#ms-df-attachment')?.addEventListener('change', function (e) {
       s.selectedIdx = Number(e.target.value) || 0;
       var atts = eligibleAttachments();
-      if (atts[s.selectedIdx]) s.title = titleFromFilename(atts[s.selectedIdx].filename);
+      if (atts[s.selectedIdx]) {
+        s.title = titleFromFilename(atts[s.selectedIdx].filename);
+        s.documentType = documentTypeForFilename(atts[s.selectedIdx].filename || atts[s.selectedIdx].href);
+      }
+      s.documentTypeQuery = '';
       rerender();
     });
 
     var createBtn = el.querySelector('#ms-df-create');
+    function canCreateNow() {
+      return !!(s.title.trim() && s.documentDate && s.documentType && !s.creating);
+    }
     el.querySelector('#ms-df-title')?.addEventListener('input', function (e) {
       s.title = e.target.value;
-      if (createBtn) createBtn.disabled = !(s.title.trim() && s.documentDate && !s.creating);
+      if (createBtn) createBtn.disabled = !canCreateNow();
     });
     el.querySelector('#ms-df-date')?.addEventListener('input', function (e) {
       s.documentDate = e.target.value;
-      if (createBtn) createBtn.disabled = !(s.title.trim() && s.documentDate && !s.creating);
+      if (createBtn) createBtn.disabled = !canCreateNow();
     });
+
+    // Search input: state + a TARGETED replace of just the results container's
+    // innerHTML on every keystroke — never a full rerender() here, which would
+    // reset the input's own DOM node and drop focus/cursor mid-type (same
+    // discipline as the title/date inputs above).
+    el.querySelector('#ms-df-dt-search')?.addEventListener('input', function (e) {
+      s.documentTypeQuery = e.target.value;
+      var resultsEl = el.querySelector('#ms-df-dt-results');
+      if (resultsEl) {
+        resultsEl.innerHTML = documentTypeResultsInnerHtml();
+        bindDocumentTypePicks(resultsEl);
+      }
+    });
+
+    bindDocumentTypePicks(el);
 
     el.querySelector('#ms-df-create')?.addEventListener('click', function () {
       doCreate();
@@ -729,8 +916,31 @@
       var atts = eligibleAttachments();
       // Pick an attachment not yet saved isn't tracked — default to the first;
       // the picker lets the clinician choose the right one if several remain.
-      if (atts[0]) s.title = titleFromFilename(atts[0].filename);
+      if (atts[0]) {
+        s.title = titleFromFilename(atts[0].filename);
+        s.documentType = documentTypeForFilename(atts[0].filename || atts[0].href);
+      }
       rerender();
+    });
+  }
+
+  // Wires up both the priority shortlist chips and the search-result buttons
+  // within `root` (the whole widget on initial bind, or just the results
+  // container after a targeted innerHTML replace — see the search input
+  // handler above) to select that document type. A full rerender() here is
+  // fine: these are button clicks, not a text input, so there's no cursor
+  // position to preserve.
+  function bindDocumentTypePicks(root) {
+    root.querySelectorAll('.ms-df-dt-chip, .ms-df-dt-result').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-concept-id');
+        var entries = (_dtCache && _dtCache.entries) || [];
+        var match = findDocumentTypeByConceptId(entries, id);
+        if (!match) return;
+        s.documentType = match;
+        s.documentTypeQuery = '';
+        rerender();
+      });
     });
   }
 
@@ -814,6 +1024,11 @@
       injectWidget();
     });
   }
+
+  // Kicked off at boot, fire-and-forget — a local extension resource fetch,
+  // not a Medicus call, so this overlaps with the clinician reading the task
+  // before ever opening the widget rather than adding latency to doOpen().
+  ensureDocumentTypesLoaded();
 
   var _hub = window.__chObserverHub;
   if (_hub && _hub.subscribe) {

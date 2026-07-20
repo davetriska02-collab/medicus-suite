@@ -371,3 +371,51 @@ fileURI}` shape rather than hardcoding this one path, specifically so it
   starts-with match) so it can never mis-anchor on an unrelated section.
   `task-inline.js` gained the same fix since it has the identical gap on this
   task type — one root cause, one fix, applied to both consumers.
+
+## 9. Full document-type picklist (SNOMED refset export) + ancestor-hierarchy dead end (2026-07-20)
+
+**Full picklist confirmed and imported.** The user's own June 2026 SNOMED CT UK
+Clinical Extension export of the "Record composition type" simple reference
+set (refset `1127551000000109` — the same refset the live search in §1 is
+constrained to) was parsed: 1768 active members (140 inactive excluded per
+`conceptStatus`). Both already-confirmed codes (§2 "Medical photograph",
+§5 "Patient/Carer Correspondence") were found in it at the expected rows with
+byte-identical `conceptId`/`description`/`descriptionId` — strong
+corroboration the refset export's shape (`referencedComponentId` →
+`conceptId`, `preferredTerm` → `description`, `ptermId` → `descriptionId`)
+matches Medicus's own live contract exactly. Stored as
+`rules/document-types.json` (`entries`, plus an empty `priority` array of
+conceptIds the widget shows as quick-picks — edit that array to change the
+shortlist, no code change needed).
+
+**Ancestor-hierarchy filtering — investigated and ruled out, do not
+re-attempt without new evidence.** Medicus's consultation-topic-coding screen
+(a different feature) stores a denormalized `parentConceptIds` transitive
+closure per coded entry, and the idea was to reuse that to prune/group the
+1768-entry picklist. Two capture passes ruled this out for document types
+specifically:
+
+- Live capture of the ACTUAL endpoint the document-upload modal's own
+  "Document type" field uses (`clinical/gb/snomed/search/description/
+  constrained?constrainingRefsets=1127551000000109`) confirmed its response
+  shape is only `{ results: [{ label, value: { description, conceptId,
+  descriptionId } }] }` — no `parentConceptIds` or any hierarchy field at all.
+- The user separately confirmed via two HAR file captures
+  (`england.medicus.health3.har` / `.har4`) that `parentConceptIds` is simply
+  **not stored for Document entities** — it's a feature of a different
+  Medicus entity type, not a generic per-concept property we can rely on
+  anywhere a SNOMED code appears.
+
+Conclusion: there is no ancestor/hierarchy data available for filtering or
+grouping the document-type picklist. The picker uses a flat prioritised
+shortlist + full-text search over all 1768 entries instead (see
+`content-scripts/document-file-inline.js`).
+
+**Capture-tooling side note:** `scripts/document-create-capture.js`'s
+NHS-number redaction regex (`\b\d{3}[ -]?\d{3}[ -]?\d{4}\b`) matches ANY plain
+10-digit number, including SNOMED conceptIds/descriptionIds that happen to be
+10 digits — several results in the capture above were masked as
+`«id-like:10»` even though they were ordinary (non-PII) concept ids, not NHS
+numbers. Harmless for this capture (the values weren't needed), but worth
+knowing before relying on this tool to extract a numeric SNOMED id from a
+future capture.

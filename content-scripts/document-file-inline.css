@@ -160,3 +160,71 @@
   font-size: 18px;
   font-weight: bold;
 }
+
+/* Document type picker — priority shortlist + full search */
+
+#ms-df-widget .ms-df-dt-current {
+  font-size: 13px;
+  color: #1a2030;
+}
+
+#ms-df-widget .ms-df-dt-current.ms-df-dt-none {
+  color: #92400e;
+  font-style: italic;
+}
+
+#ms-df-widget .ms-df-dt-priority {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#ms-df-widget .ms-df-dt-chip,
+#ms-df-widget .ms-df-dt-result {
+  padding: 5px 10px;
+  background: #f0fdfa;
+  border: 1px solid #99e6d8;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #0d6e5e;
+  cursor: pointer;
+  text-align: left;
+}
+
+#ms-df-widget .ms-df-dt-chip:hover,
+#ms-df-widget .ms-df-dt-result:hover {
+  background: #e0faf3;
+}
+
+#ms-df-widget .ms-df-dt-chip-active,
+#ms-df-widget .ms-df-dt-result-active {
+  background: #0d6e5e;
+  border-color: #0d6e5e;
+  color: #fff;
+}
+
+#ms-df-widget .ms-df-dt-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+#ms-df-widget .ms-df-dt-results:empty {
+  display: none;
+}
+
+#ms-df-widget .ms-df-dt-result {
+  border-radius: 5px;
+  width: 100%;
+}
+
+#ms-df-widget .ms-df-dt-empty,
+#ms-df-widget .ms-df-dt-more {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+  padding: 4px 0;
+}

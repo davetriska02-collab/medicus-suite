@@ -2,6 +2,41 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.177.4] — 2026-07-20
+
+### "Save attachment as document": full SNOMED document-type picklist (priority shortlist + search)
+
+Replaces the previous 2-code-only assignment (image → "Medical photograph",
+pdf/doc → "Patient/Carer Correspondence") with the full active picklist
+behind Medicus's own "Document type" refset, plus a proper picker.
+
+- New `rules/document-types.json` — 1768 active entries imported from the
+  user's June 2026 SNOMED CT UK Clinical Extension export of the "Record
+  composition type" simple reference set (`1127551000000109`), 140 inactive
+  members excluded. Both previously hard-coded codes were found in it at the
+  expected rows, byte-identical — strong corroboration the import is correct.
+  Carries an editable `priority` array of conceptIds (empty for now) driving
+  a quick-pick shortlist — add ids there to change it, no code change needed.
+- `content-scripts/document-file-inline.js`: the extension-based guess still
+  PRE-SELECTS a default document type (least friction for the common case),
+  but the clinician can now override it via priority-shortlist chips or a
+  live search box (case-insensitive substring match over all 1768 entries,
+  capped at 40 results) before saving — nothing is filed without an explicit
+  documentType set. The full picklist is loaded once per page load from the
+  bundled JSON (a local extension resource, not a Medicus call) and cached.
+- **Ancestor/parent-concept filtering investigated and ruled out**: Medicus
+  does not store a `parentConceptIds`-style hierarchy for Document entities
+  (confirmed via the live "Document type" search endpoint's own response
+  shape, and separately via two HAR-file captures) — there is no SNOMED
+  hierarchy available to prune or group the picklist by. Recorded in
+  `docs/learnings-triage-attachment-to-document.md` §9 so this isn't
+  re-investigated without new evidence.
+- `manifest.json`: `rules/document-types.json` added to
+  `web_accessible_resources` alongside the other bundled rule files.
+- 88/88 tests passing in `test-document-file-inline.js` (34 new, covering the
+  imported data itself, the search/priority-resolution functions, and the
+  updated eligibility rule).
+
 ## [v3.177.3] — 2026-07-20
 
 ### Inline widgets: fixed the missing anchor point on communication-thread tasks
