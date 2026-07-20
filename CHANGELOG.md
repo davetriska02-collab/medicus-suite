@@ -2,6 +2,218 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.177.1] — 2026-07-20
+
+### "Save attachment as document" — extended to PDF/Word attachments
+
+A follow-up live capture confirmed a second real SNOMED `documentType` code —
+"Patient/Carer Correspondence" (`163181000000107`) — for non-image
+attachments, obtained by searching Medicus's own "Document type" field
+independently of the attached file (the search-select is unrelated to the
+`file` field, so this didn't need a real submitted PDF). Combined with the
+already-confirmed "Medical photograph" code, every attachment extension
+`content.js`'s `extractInitialRequest()` recognises (pdf/doc/docx and
+jpg/png/gif/tiff/heic) now has a confirmed type, so the widget's previous
+"images only" restriction is lifted — it picks the correct type automatically
+by file extension, still with no live search and no guessed codes.
+
+- `content-scripts/document-file-inline.js`: `documentTypeForFilename()`
+  replaces the old image-only eligibility check; `DOCUMENT_TYPES` holds both
+  confirmed codes.
+- `docs/learnings-triage-attachment-to-document.md` updated with the new
+  capture.
+- `test-document-file-inline.js` now covers both document types (40 tests).
+
+## [v3.177.0] — 2026-07-20
+
+### Triage-lens: "Save attachment as document" — one-click filing for patient photos submitted via triage
+
+The suite's first write-capable feature that creates a brand-new Medicus
+record type it has never created before: a clinical **document**. Previously
+the only confirmed writes to a document were edit-existing
+(`clinical/document/edit-details`) and remove-existing
+(`clinical/document/mark-incorrect-and-hidden`) — see
+`engine/record-duplicate-parser.js`. Filing a patient-submitted triage photo
+onto the record required a clinician to manually download it and use
+Medicus's own "Add document" upload feature.
+
+- New inline widget, `content-scripts/document-file-inline.js` +
+  `document-file-inline.css`, injected into triage task-overview pages
+  alongside `task-inline.js`/`booking-inline.js` (same anchor discipline, same
+  credentialed same-origin fetch pattern). Appears only when the task has at
+  least one image attachment (jpg/png/gif/tiff/heic) — see below for why.
+- Drives Medicus's own `POST clinical/document/create` directly (a single
+  multipart request: file bytes + a JSON `formPayload` field) — confirmed via
+  a live capture (`scripts/document-create-capture.js`,
+  `docs/learnings-triage-attachment-to-document.md`), not guessed. A human
+  always presses the explicit "Save as document" button — never auto-submits.
+- **Deliberately scoped to image attachments only.** The create call's
+  `documentType` is a SNOMED-coded picklist populated by a live search-as-
+  you-type endpoint this suite has never captured — the only confirmed real
+  value is "Medical photograph" (`820241000000102`). Rather than guess the
+  search contract for other types (a wrong SNOMED code would silently miscode
+  the record), the widget stays hidden for tasks whose only attachment is a
+  PDF/Word file until a follow-up capture confirms that contract.
+- `content-scripts/triage-lens/content.js`'s `extractInitialRequest()` (see
+  v3.176.11 below) now feeds this widget via `window.__msTriageAttachments`.
+- New `test-document-file-inline.js` (28 tests) covers the pure logic:
+  attachment eligibility filtering, title defaulting, and the create-payload
+  shape against the confirmed contract.
+
+## [v3.176.11] — 2026-07-20
+
+### Triage-lens: capture attachment href/filename, not just a count (groundwork for "save as document")
+
+`extractInitialRequest()` previously only counted `<a>` tags in the Initial
+Request card matching a file-extension regex, discarding the actual href and
+filename. It now returns `{ text, attachmentCount, attachments }` where
+`attachments` is `[{ href, filename }]` per matched anchor — `attachmentCount`
+stays `attachments.length` so the existing `detail.attachments` chip is
+unaffected. The array is also exposed via `window.__msTriageAttachments` on
+every detail render, so a future widget (a one-click "save this attachment as
+a document" action, still pending a live API-discovery pass against Medicus's
+own create-document endpoint) can read it without a second, divergent DOM
+scrape. No user-visible change in this release — the chip and its label are
+unchanged.
+
+## [v3.176.10] — 2026-07-17
+
+### Duplicate-checker: fixed the "Remove 0 duplicate copies" / unresponsive-cards bug for linked-problem groups
+
+A targeted live probe (docs/learnings-vaccination-note-duplicates.md, part
+2) traced the actual root cause of a reported bug — a group's "Remove N
+duplicate copies" button reading "Remove 0" with no entry card individually
+selectable. The group in question was `kind=problem`, not `note` as first
+suspected: 6 entries, all sharing the exact same real problem-list `id`.
+
+- A `problem`-kind journal entry's `id` is the canonical problem-list
+  record's id, not a per-occurrence journal-entry id — and the same real
+  problem can legitimately be linked from more than one
+  encounter/prescription on the same day (confirmed: a real "Immunisations"
+  problem linked from 6 different encounters in one day). Those 6
+  occurrences aren't 6 candidate duplicate records, they're 6 references to
+  one real record — but `groupAndTier` was treating them as a 6-member
+  "duplicate" group. The keeper tie-breaker then picked that one shared id
+  as `keeperEntryId`, so every entry matched it and "N duplicate copies"
+  computed to `0` with nothing left to toggle.
+- `groupAndTier` now dedupes `problem`-kind members by `id` before deciding
+  whether a (date, code) bucket is even a duplicate-record candidate — a
+  bucket is only a real candidate if at least 2 *distinct* problem ids
+  appear in it. Same-record linkage is tracked in a new
+  `suppressedProblemLinkage` diagnostic (surfaced in the analysis summary
+  line) rather than silently dropped.
+- **Fixed a pre-existing test that was asserting the buggy behaviour**: the
+  linked-problems test fixture used the identical problem id across two
+  encounters and asserted the resulting group had 2 entries — that was
+  pinning the exact bug this release fixes. Corrected to assert no group
+  forms for same-record linkage, plus a new control case (two genuinely
+  distinct problem-list records sharing a code/date) confirming real
+  reimport-duplicate detection is unaffected.
+- 6 new/corrected parser tests (336/336 passing).
+
+## [v3.176.9] — 2026-07-17
+
+### Duplicate-checker: note-kind false positives from the generic GP2GP problem-review wrapper
+
+Live-reported by the clinical user: three different vaccinations given the
+same day were tiering "HIGH - identical text" and offered as one-click
+bulk-removable, when they're genuinely different clinical content. Live
+investigation (docs/learnings-vaccination-note-duplicates.md) found the
+`"{Episodicity : code=..., displayName=..., originalText=...}"` wrapper this
+matches on isn't vaccine-specific at all — it's the generic "Problem title"
+review stub GP2GP attaches to essentially every problem across a patient's
+entire history, and it collapses to the same empty string after
+`normText()` regardless of the real underlying content. A real example (Tue
+19 Jun 2007) showed three "Immunisations"-coded entries, three different
+recorders, sharing this same content-free text — and confirmed that
+`consultationTopic.title` (the one plausible disambiguating field) is also
+identical across genuinely different concurrent vaccines, ruling out an
+automatic content-based fix.
+
+- `buildGroupRecord` now caps a `note`-kind group at REVIEW (down from HIGH)
+  when its entire matched text is the content-free wrapper AND its members'
+  `recordedBy` differ — deliberately narrow: the EXACT-tier combination
+  (empty wrapper + SAME author) is left untouched, since that's a
+  live-confirmed genuine GP2GP dual-render duplicate (2026-07-08 "Perianal
+  abscess" pair). New `emptyWrapperOnly` flag on the group record.
+- `duplicate-checker.js` surfaces a warning on any group flagged this way,
+  explaining the match is on a content-free wrapper and to verify
+  independently before removing — same treatment as the existing
+  `attachmentMismatch`/`fileMatched` warnings.
+- 5 new parser tests (333/333 passing), including a regression test pinning
+  the 2026-07-08 EXACT-tier case that a broader first draft of this fix
+  accidentally broke.
+- **Known limitation, not yet fixed**: the REVIEW-tier "These are
+  equivalent — remove duplicates" button still routes into the same
+  removal-button code path as EXACT/HIGH, which has a separate, not-yet-
+  diagnosed bug (reported "Remove 0 duplicate copies", unresponsive entry
+  cards) for at least one real group. A targeted live probe for that
+  specific bug is prepared in docs/learnings-vaccination-note-duplicates.md,
+  pending results.
+
+## [v3.176.8] — 2026-07-17
+
+### Duplicate-checker: accurx URL-attachment false positives in the cross-record file-match pass
+
+Live-reported by the clinical user: accurx delivers a patient message plus
+several photo links as separate `.txt`/"Record Attachment" documents, each
+one just a `"URL: <link>"` wrapper. The previous GP system's export
+templating means these frequently share both `fileType` AND `fileSize` even
+though the actual link — and therefore the real attachment — differs, so
+`findFileMatchedDuplicates` (the opt-in cross-record file-size/type pass)
+was incorrectly clustering genuinely different photo attachments as
+duplicates.
+
+- New `accurxAttachmentUrl(code, title)` in `engine/record-duplicate-parser.js`:
+  extracts the URL from a title matching the exact reported signature (Type
+  "Record Attachment" + title starting "URL:"), case-insensitive, returns
+  `null` for anything else — deliberately narrow so no other document kind
+  is affected.
+- `findFileMatchedDuplicates` now folds the extracted URL into its bucket
+  key for entries carrying this signature: same fileType/fileSize/URL still
+  clusters as a genuine duplicate, a differing URL never does. Zero extra
+  fetch — `title`/`code` are already in memory. New
+  `accurxUrlMismatchAvoided` count returned and surfaced in the analysis
+  summary line.
+- 11 new parser tests (326/326 passing) covering the extraction function,
+  the differing-URL exclusion, the same-URL control case (still a genuine
+  duplicate), and that an unrelated non-accurx same-fileType/fileSize pair
+  is unaffected.
+
+## [v3.176.7] — 2026-07-17
+
+### Duplicate-checker: live-verified prescription/investigation-request journal field names
+
+Continuing the per-patient record-cleansing project
+(`docs/learnings-patient-journal-api.md`), prompted by an observation that
+prescriptions seem to duplicate via GP2GP reimport on some patients where
+lab results don't.
+
+- A PHI-safe field-shape probe (structure only, reuses
+  `duplicate-checker.js`'s `describeShape()` no-values convention) was run
+  live against a real patient's journal. `productName`/`dosageText`/
+  `issueQuantity` (prescription) and `investigationRequestItems`/
+  `requestedBy` (investigation-request) were all confirmed correct as
+  previously guessed.
+- **Fixed:** a prescription entry (flat and nested) has no
+  `recordedBy`/`recordedByOrganisation` field at all — `flattenJournal` was
+  reading two fields that never exist on this entry kind (harmless, always
+  `undefined` → `null`, but wrong). Now passes `null` explicitly, documented
+  as confirmed-absent rather than guessed.
+- **Fixed:** investigation-request entries (flat and nested) carry a real
+  `requestingOrganisation` field that `flattenJournal` was discarding as a
+  hardcoded `null` — now read properly, feeding `recordedByOrganisationVaries`
+  the same way note/document entries already do.
+- Live-evidence hypothesis (not yet a code change): a lab-result
+  (`investigation`) entry carries a `reportIdentifier` and per-comment
+  `createdInOriginalSystemDateTime`/`recordAuthorIsLocal` fields with no
+  prescription equivalent — a plausible mechanism for why results don't
+  reimport-duplicate while prescriptions do, consistent with the existing
+  n=1 finding that lab results carry their own ingestion-time dedup key.
+- 6 new parser tests covering the previously-untested nested prescription/
+  investigation-request branches and the `requestingOrganisation` fix
+  (315/315 passing in `test-record-duplicate-parser.js`).
+
 ## [v3.176.6] — 2026-07-13
 
 ### Duplicate-checker: catches a note/consultation EXACT match whose attached documents actually differ

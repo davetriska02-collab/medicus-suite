@@ -58,6 +58,29 @@
 //    referral-form documents, and a third patient had zero occurrences of
 //    the generic label at all — this behaviour is real but not universal
 //    across every patient/transfer history.
+//  - `prescription`/`investigation-request` field names live-confirmed
+//    2026-07-17 (docs/learnings-patient-journal-api.md's "Live verification"
+//    section): `productName`/`dosageText`/`issueQuantity` (prescription) and
+//    `investigationRequestItems`/`requestedBy` (investigation-request) were
+//    all correct as previously guessed. Two corrections: a prescription
+//    entry has NO `recordedBy`/`recordedByOrganisation` field at all (real
+//    fields are `prescriptionTypeLabel`/`isAcutePrescription`/
+//    `numberOfIssues`/`displayStatus`/`requiresAction`/`isDiscontinued`, none
+//    of them an authorship signal — `flattenJournal` now passes `null` for
+//    both rather than reading nonexistent fields); investigation-request DOES
+//    carry a real `requestingOrganisation` field that was previously read as
+//    a hardcoded `null` — now read properly, feeding
+//    `recordedByOrganisationVaries` same as note/document entries.
+//  - Same live probe, prompted by an observation that prescriptions seem to
+//    duplicate via GP2GP reimport on some patients where lab results don't:
+//    a lab-result (`investigation`) entry carries a `reportIdentifier` and
+//    per-comment `createdInOriginalSystemDateTime`/`recordAuthorIsLocal`
+//    fields that a prescription entry has no equivalent of at all. A stable
+//    external identifier surviving reimport is a plausible mechanism for why
+//    results wouldn't reimport-duplicate while prescriptions do (consistent
+//    with the n=1 finding below) — but this is inferred from structure, not
+//    confirmed as the actual server-side dedup mechanism, so it doesn't
+//    change any handling here.
 //
 // Only problem/note/prescription/investigation-request/document entries are
 // compared for duplicates in this first pass. Investigation *results* (lab
@@ -545,19 +568,29 @@
                     headingAttachedDocIds.length ? { attachedDocumentIds: headingAttachedDocIds } : undefined
                   );
                 } else if (entry.entryType === 'prescription') {
+                  // Live-confirmed 2026-07-17: a prescription entry has NO
+                  // recordedBy/recordedByOrganisation field at all — the real
+                  // fields are prescriptionTypeLabel/isAcutePrescription/
+                  // numberOfIssues/displayStatus/requiresAction/isDiscontinued,
+                  // none of which are authorship signals. productName/
+                  // dosageText/issueQuantity (used below) ARE confirmed real.
                   pushEntry(
                     'prescription',
                     entry.id,
                     entry.productName,
                     `${entry.productName || ''} ${entry.dosageText || ''} ${entry.issueQuantity || ''}`.trim(),
-                    entry.recordedBy,
-                    entry.recordedByOrganisation,
+                    null,
+                    null,
                     date,
                     item.id,
                     transfer,
                     { issueQuantity: entry.issueQuantity || null }
                   );
                 } else if (entry.entryType === 'investigation-request') {
+                  // requestedBy confirmed real 2026-07-17. requestingOrganisation
+                  // is also a real field (previously read as a hardcoded null
+                  // here) — feeds recordedByOrganisationVaries for review-time
+                  // display, same as note/document entries.
                   const label = (entry.investigationRequestItems || []).join(', ');
                   pushEntry(
                     'investigation-request',
@@ -565,7 +598,7 @@
                     label,
                     label,
                     entry.requestedBy,
-                    null,
+                    entry.requestingOrganisation,
                     date,
                     item.id,
                     transfer
@@ -605,23 +638,36 @@
           for (const p of d.linkedProblems || []) pushProblem(p, date, d.recordedBy, null, false);
         } else if (item.type === 'prescription') {
           const d = item.data || {};
+          // Live-confirmed 2026-07-17: no recordedBy/recordedByOrganisation
+          // field here either (see nested branch above for the real field
+          // list) — linkedProblems IS still real and used below.
           pushEntry(
             'prescription',
             d.id,
             d.productName,
             `${d.productName || ''} ${d.dosageText || ''} ${d.issueQuantity || ''}`.trim(),
-            d.recordedBy,
-            d.recordedByOrganisation,
+            null,
+            null,
             date,
             null,
             false,
             { issueQuantity: d.issueQuantity || null }
           );
-          for (const p of d.linkedProblems || []) pushProblem(p, date, d.recordedBy, null, false);
+          for (const p of d.linkedProblems || []) pushProblem(p, date, null, null, false);
         } else if (item.type === 'investigation-request') {
           const d = item.data || {};
           const label = (d.investigationRequestItems || []).join(', ');
-          pushEntry('investigation-request', d.id, label, label, d.requestedBy, null, date, null, false);
+          pushEntry(
+            'investigation-request',
+            d.id,
+            label,
+            label,
+            d.requestedBy,
+            d.requestingOrganisation,
+            date,
+            null,
+            false
+          );
         } else if (item.type === 'document') {
           // Live-confirmed 2026-07-04 (docs/learnings-duplicate-entry-timestamps.md):
           // `item.title`/`item.descriptionText` are always null — a flat
@@ -654,7 +700,7 @@
   // ── Group + tier ──────────────────────────────────────────────────────────
   // Groups flattened entries by (kind, date, normalised code) and assigns a
   // confidence tier per candidate group.
-  function groupAndTier(entries, suppressed, suppressedQuantityMismatch) {
+  function groupAndTier(entries, suppressed, suppressedQuantityMismatch, suppressedProblemLinkage) {
     const groups = new Map();
     for (const e of entries) {
       const key = `${e.kind}|${e.date}|${normCode(e.code)}`;
@@ -663,10 +709,42 @@
     }
 
     const result = [];
-    for (const [key, members] of groups) {
-      if (members.length < 2) continue;
+    for (const [key, rawMembers] of groups) {
+      if (rawMembers.length < 2) continue;
 
       const [kind, date] = key.split('|');
+
+      // A 'problem' entry's id is the REAL canonical problem-list record's
+      // id, not a per-occurrence journal-entry id — and the SAME real
+      // problem can legitimately be linked from more than one
+      // encounter/prescription on the same day (live-confirmed 2026-07-17,
+      // docs/learnings-vaccination-note-duplicates.md: a real
+      // "Immunisations" problem linked from 6 different encounters on one
+      // day). Those 6 occurrences are NOT 6 candidate duplicate records —
+      // they're 6 references to the one real record, and treating them as a
+      // 6-member "duplicate" group broke the removal UI entirely (the
+      // keeper tie-breaker below picks that one shared id, so every entry
+      // matches it and "N duplicate copies" computes to 0 with no member
+      // left to toggle). Dedupe by id BEFORE deciding whether a genuine
+      // multi-record candidate exists: a (date, code) bucket is only a real
+      // duplicate candidate if at least 2 DISTINCT problem ids appear in it.
+      let members = rawMembers;
+      if (kind === 'problem') {
+        const byId = new Map();
+        for (const m of rawMembers) if (!byId.has(m.id)) byId.set(m.id, m);
+        members = Array.from(byId.values());
+        if (members.length < 2) {
+          if (suppressedProblemLinkage) {
+            suppressedProblemLinkage.push({
+              kind,
+              date,
+              code: rawMembers[0].code,
+              linkageCount: rawMembers.length,
+            });
+          }
+          continue;
+        }
+      }
 
       // Two mentions of the same code, same day, from the SAME single
       // consultation are not a GP2GP import duplicate — they're just one
@@ -768,6 +846,33 @@
       tier = TIER.REVIEW;
     }
 
+    // note-kind HIGH-tier matches (different recordedBy) whose ENTIRE text
+    // is a content-free wrapper (nothing survives normText beyond the
+    // GP2GP/Episodicity stripping) are capped down to REVIEW. Deliberately
+    // HIGH only, NOT EXACT — the EXACT combination (empty wrapper + SAME
+    // recordedBy) is a live-confirmed genuine duplicate (2026-07-08 real
+    // "Perianal abscess" pair, note:null vs note:"{Episodicity...}", same
+    // author, two encounters — see the "2026-07-08 real pair" test below)
+    // and must stay untouched. What's unsafe is specifically the
+    // DIFFERENT-author combination: live-confirmed 2026-07-17
+    // (docs/learnings-vaccination-note-duplicates.md) this generic
+    // "{Episodicity : code=...}" problem-review stub is reused across a
+    // patient's ENTIRE history, including for genuinely different
+    // concurrent items recorded by different staff sharing one umbrella
+    // problem/topic (real example: three different vaccines given the same
+    // day, three different recorders, all coded "Immunisations" under topic
+    // "Infectious dis:prevent/control" — proven NOT distinguishable by any
+    // other field a note entry carries, including consultationTopic.title,
+    // which is also identical across the three in that real example).
+    // "Identical text" here means "the wrapper matched", not "the clinical
+    // content matched" — no real signal to offer a one-click bulk-remove on
+    // once the author signal also can't corroborate it.
+    let emptyWrapperCapped = false;
+    if (kind === 'note' && tier === TIER.HIGH && distinctText.size === 1 && distinctText.has('')) {
+      tier = TIER.REVIEW;
+      emptyWrapperCapped = true;
+    }
+
     // Keeper vs. reimport-artifact tie-breaker, from the UUIDv7 id
     // timestamp (see file header) rather than a second per-entry API
     // fetch. Only called when at least two members have a decodable id —
@@ -785,6 +890,7 @@
       code: members[0].code,
       tier,
       gp2gpWrapper: anyWrapped,
+      emptyWrapperOnly: emptyWrapperCapped,
       recordedByVaries: recordedBySet.size > 1,
       recordedByOrganisationVaries: orgSet.size > 1,
       keeperEntryId,
@@ -894,6 +1000,27 @@
     return title.slice(0, matches[0].index).trim().length > 0;
   }
 
+  // Live-reported by the clinical user 2026-07-17 (real accurx-attachment
+  // review, several patients): accurx delivers a patient message plus
+  // several photo links as separate "Record Attachment" documents, each one
+  // just a ".txt" file titled "URL: <link>". The previous GP system's export
+  // templating means these frequently share BOTH fileType and fileSize (the
+  // wrapper structure is near-identical even though the link differs), so
+  // they collide in findFileMatchedDuplicates's fileType::fileSize bucketing
+  // even when they're genuinely different attachments. Extracts the URL from
+  // a title matching this exact signature so the caller can fold it into the
+  // bucket key — same fileType/fileSize/URL still groups as a real duplicate,
+  // a differing URL never does. Returns null (no signal) unless BOTH the
+  // type label and the title shape match — deliberately narrow so this never
+  // affects any other document kind.
+  const ACCURX_ATTACHMENT_TYPE_RE = /^record attachment$/i;
+  const ACCURX_URL_TITLE_RE = /^url:\s*(.+)$/i;
+  function accurxAttachmentUrl(code, title) {
+    if (!ACCURX_ATTACHMENT_TYPE_RE.test((code || '').trim())) return null;
+    const m = typeof title === 'string' ? ACCURX_URL_TITLE_RE.exec(title.trim()) : null;
+    return m ? m[1].trim().toLowerCase() : null;
+  }
+
   // A document whose recorded creation time postdates its own filing time is
   // logically backwards — evidence a later reimport pass rewrote one
   // timestamp but not the other. Both fields are the "YYYY-MM-DD HH:MM:SS"
@@ -968,13 +1095,27 @@
   // same discipline as documentLinked groups.
   function findFileMatchedDuplicates(documentEntries, existingGroups, fileTypeByEntryId, fileSizeByEntryId, createdDateByEntryId, filedDateTimeByEntryId) {
     const buckets = new Map();
+    // baseKey (fileType::fileSize, ignoring the accurx URL refinement below)
+    // -> distinct accurx URLs seen sharing that fileType/fileSize — used only
+    // to report how many entries this refinement kept apart (accurxAttachmentUrl).
+    const baseKeyAccurxUrls = new Map();
     for (const e of documentEntries || []) {
       const ft = fileTypeByEntryId ? fileTypeByEntryId[e.id] : null;
       const fs = fileSizeByEntryId ? fileSizeByEntryId[e.id] : null;
       if (!ft || !fs) continue;
-      const key = `${ft}::${fs}`;
-      if (!buckets.has(key)) buckets.set(key, []);
-      buckets.get(key).push(e);
+      const baseKey = `${ft}::${fs}`;
+      const url = accurxAttachmentUrl(e.code, e.title);
+      if (url != null) {
+        if (!baseKeyAccurxUrls.has(baseKey)) baseKeyAccurxUrls.set(baseKey, new Set());
+        baseKeyAccurxUrls.get(baseKey).add(url);
+      }
+      const key = url != null ? `${baseKey}::${url}` : baseKey;
+      if (!buckets.has(key)) buckets.set(key, { fileType: ft, fileSize: fs, members: [] });
+      buckets.get(key).members.push(e);
+    }
+    let accurxUrlMismatchAvoided = 0;
+    for (const urls of baseKeyAccurxUrls.values()) {
+      if (urls.size > 1) accurxUrlMismatchAvoided += urls.size;
     }
 
     const existingIdSets = (existingGroups || []).map((g) => new Set((g.entries || []).map((e) => e.id)));
@@ -983,13 +1124,14 @@
 
     const groups = [];
     let clustersChecked = 0;
-    for (const [key, members] of buckets) {
+    for (const [, bucket] of buckets) {
+      const members = bucket.members;
       if (members.length < 2) continue;
       clustersChecked++;
       const ids = members.map((m) => m.id);
       if (isAlreadyOneExistingGroup(ids)) continue;
 
-      const [fileType, fileSize] = key.split('::');
+      const { fileType, fileSize } = bucket;
       const dates = new Set(members.map((m) => m.date || ''));
       const date = dates.size === 1 ? members[0].date : `${dates.size} dates`;
       const recordedBySet = new Set(members.map((m) => m.recordedBy || ''));
@@ -1022,7 +1164,7 @@
         })),
       });
     }
-    return { groups, clustersChecked };
+    return { groups, clustersChecked, accurxUrlMismatchAvoided };
   }
 
   // ── Document-linked-entry matching (2026-07-07, corrected 2026-07-08) ─────
@@ -1805,7 +1947,8 @@
     const { entries, transferEncounters } = flattenJournal(dayGroups);
     const suppressedSameConsultation = [];
     const suppressedQuantityMismatch = [];
-    const groups = groupAndTier(entries, suppressedSameConsultation, suppressedQuantityMismatch);
+    const suppressedProblemLinkage = [];
+    const groups = groupAndTier(entries, suppressedSameConsultation, suppressedQuantityMismatch, suppressedProblemLinkage);
     const confirmedTransfers = markTransferConfirmation(transferEncounters, groups);
     const gp2gpWrapperCoverage = analyzeGp2gpWrapperCoverage(entries);
     // Zero-fetch trigger for the opt-in cross-record file-match second pass
@@ -1822,6 +1965,7 @@
       transferEncounters: confirmedTransfers,
       suppressedSameConsultation,
       suppressedQuantityMismatch,
+      suppressedProblemLinkage,
       gp2gpWrapperCoverage,
       suspiciousDocuments,
       summary: {
@@ -1834,6 +1978,7 @@
         suppressedSameConsultationFromTransfer: suppressedSameConsultation.filter((s) => s.allFromTransferEncounter)
           .length,
         suppressedQuantityMismatchTotal: suppressedQuantityMismatch.length,
+        suppressedProblemLinkageTotal: suppressedProblemLinkage.length,
         gp2gpWrapperStrictMatches: gp2gpWrapperCoverage.strictMatches,
         gp2gpWrapperNearMisses: gp2gpWrapperCoverage.nearMisses.length,
         suspiciousDocumentsTotal: suspiciousDocuments.length,
@@ -1877,6 +2022,7 @@
     buildDocumentEditRequest,
     splitDocumentGroupsByFileType,
     hasJunkTitlePrefix,
+    accurxAttachmentUrl,
     hasCreatedAfterFiled,
     findSuspiciousDocuments,
     findFileMatchedDuplicates,

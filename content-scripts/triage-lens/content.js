@@ -1211,14 +1211,14 @@
 
   const extractInitialRequest = () => {
     const card = findCardByTitle('Initial Request');
-    if (!card) return { text: '', attachmentCount: 0 };
+    if (!card) return { text: '', attachmentCount: 0, attachments: [] };
     const c = cardContent(card);
-    if (!c) return { text: '', attachmentCount: 0 };
+    if (!c) return { text: '', attachmentCount: 0, attachments: [] };
     const text = getText(c).replace(/^Initial Request\s*/i, '').trim();
-    const attachmentCount = [...c.querySelectorAll('a')].filter(a =>
-      /\.(pdf|docx?|jpe?g|png|tiff?|heic|gif)$/i.test((a.href || '') + ' ' + (a.textContent || ''))
-    ).length;
-    return { text, attachmentCount };
+    const attachments = [...c.querySelectorAll('a')]
+      .filter(a => /\.(pdf|docx?|jpe?g|png|tiff?|heic|gif)$/i.test((a.href || '') + ' ' + (a.textContent || '')))
+      .map(a => ({ href: a.href || '', filename: (a.textContent || '').trim() || (a.href || '').split('/').pop() }));
+    return { text, attachmentCount: attachments.length, attachments };
   };
 
   const isDocumentTask = () => /\/tasks\/data\/document\/overview\//.test(location.href);
@@ -1658,7 +1658,7 @@
   const computeRequestSignals = (taskDetails, requester, initialReq) => {
     const t = taskDetails || {};
     const r = requester || {};
-    const ir = initialReq || { text: '', attachmentCount: 0 };
+    const ir = initialReq || { text: '', attachmentCount: 0, attachments: [] };
 
     const out = { chips: [], snippet: '' };
     const pushOut = (id, vars) => {
@@ -1699,7 +1699,12 @@
     const rel = r['Relationship to patient'];
     if (rel && !/self/i.test(rel)) pushOut('detail.proxy', { relationship: rel });
 
-    // Attachments
+    // Attachments — window.__msTriageAttachments is a read-only accessor for other
+    // content scripts (e.g. a future "save as document" widget) so they don't need
+    // their own divergent DOM-scraping of the Initial Request card. Set on every
+    // detail render (not just when count>0) so it never strands a stale array from
+    // a previously viewed task.
+    if (typeof window !== 'undefined') window.__msTriageAttachments = ir.attachments || [];
     if (ir.attachmentCount > 0) pushOut('detail.attachments', { count: ir.attachmentCount });
 
     // Snippet of request body for context (truncated, configurable via prefs)
@@ -2927,7 +2932,7 @@
       requester = {};
       const parts = [docInfo.docType, docInfo.specialty || docInfo.author, docInfo.comments, docInfo.codes]
         .filter(Boolean);
-      initialReq = { text: parts.join(' — '), attachmentCount: 0 };
+      initialReq = { text: parts.join(' — '), attachmentCount: 0, attachments: [] };
     } else {
       taskDetails = extractTaskDetails();
       requester = extractRequester();

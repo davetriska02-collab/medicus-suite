@@ -1,0 +1,162 @@
+/* Medicus Suite — inline "save attachment as document" widget injected into task pages */
+/* All selectors scoped to #ms-df-widget to avoid Medicus style conflicts */
+
+#ms-df-widget {
+  margin: 16px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  color: #1a2030;
+}
+
+#ms-df-widget .ms-df-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #f0fdfa;
+  border: 1px solid #99e6d8;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  font-size: 13px;
+  color: #0d6e5e;
+}
+
+#ms-df-widget .ms-df-header:hover {
+  background: #e0faf3;
+}
+
+#ms-df-widget .ms-df-chevron {
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+#ms-df-widget .ms-df-body {
+  border: 1px solid #99e6d8;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  padding: 14px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#ms-df-widget .ms-df-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#ms-df-widget .ms-df-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+#ms-df-widget .ms-df-select,
+#ms-df-widget .ms-df-input {
+  padding: 7px 10px;
+  border: 1px solid #c8cdd6;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #1a2030;
+  background: #fff;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+#ms-df-widget .ms-df-select:disabled,
+#ms-df-widget .ms-df-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#ms-df-widget .ms-df-note {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+}
+
+#ms-df-widget .ms-df-btn {
+  padding: 8px 16px;
+  background: #0d6e5e;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+  font-family: inherit;
+}
+
+#ms-df-widget .ms-df-btn:hover:not(:disabled) {
+  background: #0a5a4d;
+}
+
+#ms-df-widget .ms-df-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#ms-df-widget .ms-df-btn-ghost {
+  padding: 7px 14px;
+  background: transparent;
+  color: #0d6e5e;
+  border: 1px solid #99e6d8;
+  border-radius: 5px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+#ms-df-widget .ms-df-btn-ghost:hover:not(:disabled) {
+  background: #f0fdfa;
+}
+
+#ms-df-widget .ms-df-loading {
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+}
+
+#ms-df-widget .ms-df-error {
+  padding: 8px 10px;
+  background: #fff5f5;
+  border: 1px solid #fca5a5;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #b91c1c;
+}
+
+#ms-df-widget .ms-df-warn {
+  padding: 8px 10px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #92400e;
+}
+
+#ms-df-widget .ms-df-success {
+  align-items: center;
+  text-align: center;
+}
+
+#ms-df-widget .ms-df-success-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #166534;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+}

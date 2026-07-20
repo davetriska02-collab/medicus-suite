@@ -999,7 +999,11 @@ async function runFileMatchSecondPass(out) {
     }
   }
 
-  const { groups: fileMatchedGroups, clustersChecked } = P.findFileMatchedDuplicates(
+  const {
+    groups: fileMatchedGroups,
+    clustersChecked,
+    accurxUrlMismatchAvoided,
+  } = P.findFileMatchedDuplicates(
     allDocumentEntries,
     analysis.groups,
     fileTypeByEntryId,
@@ -1012,6 +1016,7 @@ async function runFileMatchSecondPass(out) {
   analysis.__fileMatchChecked = true;
   analysis.summary.fileMatchClustersChecked = clustersChecked;
   analysis.summary.fileMatchedGroupsFound = fileMatchedGroups.length;
+  analysis.summary.accurxUrlMismatchAvoided = accurxUrlMismatchAvoided;
   const byTier = { exact: 0, high: 0, review: 0 };
   for (const g of analysis.groups) byTier[g.tier]++;
   analysis.summary.byTier = byTier;
@@ -1108,6 +1113,7 @@ function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
     ${summary.transferEncountersTotal ? ` · ${summary.transferEncountersConfirmed}/${summary.transferEncountersTotal} GP2GP transfer encounter(s) content-confirmed` : ''}
     ${summary.suppressedSameConsultationTotal ? ` · <span style="color:var(--amber)">${summary.suppressedSameConsultationTotal} group(s) suppressed as same-consultation (${summary.suppressedSameConsultationFromTransfer} from transfer encounters)</span>` : ''}
     ${summary.suppressedQuantityMismatchTotal ? ` · <span style="color:var(--amber)">${summary.suppressedQuantityMismatchTotal} prescription group(s) suppressed as quantity-mismatch (different issued amounts, not a duplicate)</span>` : ''}
+    ${summary.suppressedProblemLinkageTotal ? ` · <span style="color:var(--amber)">${summary.suppressedProblemLinkageTotal} problem code(s) suppressed as same-record linkage (one real problem linked from multiple encounters, not duplicate records)</span>` : ''}
     ${summary.excludedPrescriptionTimingTotal ? ` · <span style="color:var(--amber)">${summary.excludedPrescriptionTimingTotal} prescription group(s) excluded after timing cross-check (issued a minute+ apart, not a duplicate)</span>` : ''}
     ${summary.excludedQuestionnaireMismatchTotal ? ` · <span style="color:var(--amber)">${summary.excludedQuestionnaireMismatchTotal} document group(s) excluded after questionnaire-template cross-check (different questionnaire types)</span>` : ''}
     ${summary.documentGroupsSplitByFileType ? ` · <span style="color:var(--amber)">${summary.documentGroupsSplitByFileType} document group(s) split by file type/size (were wrongly merged — different documents sharing a date)</span>` : ''}
@@ -1115,6 +1121,7 @@ function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
     ${summary.documentPreviewsChecked ? ` · <span class="mono">${summary.documentPreviewsWithFileSize}/${summary.documentPreviewsChecked}</span> document preview(s) had a usable file-size field` : ''}
     ${summary.documentLinkedGroupsFound ? ` · <span style="color:var(--amber)">${summary.documentLinkedGroupsFound} document-linked duplicate group(s) found (experimental — see warning on each)</span>` : ''}
     ${summary.fileMatchClustersChecked ? ` · <span class="mono">${summary.fileMatchedGroupsFound}/${summary.fileMatchClustersChecked}</span> cross-record file-size/type cluster(s) surfaced as new group(s)` : ''}
+    ${summary.accurxUrlMismatchAvoided ? ` · <span style="color:var(--amber)">${summary.accurxUrlMismatchAvoided} accurx URL-attachment(s) kept apart from a file-size/type match (different link, not a duplicate)</span>` : ''}
   </div>`;
 
   const groupsHtml = groups
@@ -1146,6 +1153,11 @@ function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
       ${
         g.attachmentMismatch
           ? `<div style="font-size:11px;color:var(--amber);margin-top:2px;font-weight:600">⚠ These entries have different attached documents (confirmed by file size and type) even though the note text and author match — use the "Download attached document ↗" links below to compare the originals directly before removing.</div>`
+          : ''
+      }
+      ${
+        g.emptyWrapperOnly
+          ? `<div style="font-size:11px;color:var(--amber);margin-top:2px;font-weight:600">⚠ These entries only "match" on a content-free reimport wrapper — the SNOMED code and problem/topic are shared, but nothing here confirms the underlying content is the same (e.g. several different vaccines given the same day are often coded this way). Verify independently before removing.</div>`
           : ''
       }
       <div class="rec-line">${INFO_ICON}<span>${TIER_ACTION[g.tier]}</span></div>

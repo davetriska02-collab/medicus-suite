@@ -1,14 +1,21 @@
-> **Status (2026-07-02):** the fixes this doc identifies have been applied —
-> `extractDayGroups()` now reads `patientJournalRecords` first,
+> **Status (updated 2026-07-17):** the fixes this doc identifies have been
+> applied — `extractDayGroups()` now reads `patientJournalRecords` first,
 > `flattenJournal()` collects `linkedProblems` from all three confirmed
 > levels (deduped per-encounter by problem id), flat top-level
 > `investigation-request` items are now handled, flat `prescription` items
-> now carry `recordedBy`/`recordedByOrganisation`/`linkedProblems` like the
-> `note` branch does, and `duplicate-checker.js`'s `describeShape()` bug is
-> fixed. Still open: GP2GP-wrapper/transfer-encounter text markers not
-> cross-checked live, prescription/investigation-request field names not
-> cross-checked live, and the `api-discovery.js` auto-capture mystery (see
-> Open Questions below) — none of those blocked landing the confirmed fixes.
+> now carry `linkedProblems` like the `note` branch does (their
+> `recordedBy`/`recordedByOrganisation` were later found NOT to exist — see
+> below), and `duplicate-checker.js`'s `describeShape()` bug is fixed. Since
+> then, the GP2GP-wrapper text marker, the `api-discovery.js` auto-capture
+> mystery, the `"Data Transferred from other system"` transfer-encounter
+> marker's live hit rate, and the prescription/investigation-request field
+> names have all been independently confirmed/fixed live (2026-07-05,
+> 2026-07-08, and twice more on 2026-07-17 — see "Open questions" and "Live
+> verification" below). Only the low-priority `topicCode` double-nesting
+> question remains open on the Journal side. A **companion investigation**
+> on a different tab/endpoint entirely (the Medication history tab) is now
+> closed — hypothesis rejected, no duplicates found, no feature needed — see
+> `docs/learnings-medication-regimen-duplicates.md`.
 
 # Learnings: Patient Journal API (`clinical/data/patient-journal/overview/{patientId}`)
 
@@ -294,21 +301,271 @@ list earlier — a flat item with `item.type: "referral"` apparently carries
 currently only branches on the coarse `item.type` for flat items; if
 finer-grained matching ever matters, `item.data.entryType` is there to use.
 
+**Resolved since (updated 2026-07-17, reconciling this doc against later commits — it had gone stale):**
+- ~~GP2GP `"Problem Info: Problem Notes: ...{Episodicity...}"` text wrapper~~
+  — confirmed live 2026-07-08 on a real GP2GP note pair (original
+  `note:null` vs reimport copy `note:"{Episodicity...}"` — see
+  `record-duplicate-parser.js`'s `normText()` header comment). The null-vs-
+  empty-string mistiering bug this surfaced was fixed the same session.
+- ~~Why `api-discovery.js`'s automatic capture never fired~~ — root-caused
+  and fixed in v3.152.1 (commit `3e729ac`, 2026-07-05): the Resource Timing
+  buffer (default 250 entries) was silently dropping entries before the
+  Journal tab was ever reached, and a later-fetched UI asset could clobber
+  an already-good endpoint guess. Both fixed; `suite.apiDiscoveryLastRun`
+  now confirms a reload picked up the fix.
+- ~~`"Data Transferred from other system"` `consultationTopics[].title`
+  marker's real hit rate~~ — confirmed live 2026-07-17: the developer ran
+  the duplicate-checker against real patients with GP2GP transfer history
+  and read the `X/Y GP2GP transfer encounter(s) content-confirmed` count
+  (`markTransferConfirmation()`) off the analysis panel — no meaningful
+  unconfirmed-transfer bucket turned up, the marker's self-validation
+  agrees with reality in practice.
+
+- ~~Field names specifically for `prescription`/`investigation-request`
+  entries~~ — confirmed live 2026-07-17, see "Live verification" below.
+  `productName`/`dosageText`/`issueQuantity`/`investigationRequestItems`/
+  `requestedBy` were all correct as guessed; `recordedBy`/
+  `recordedByOrganisation` turned out not to exist on prescription entries
+  at all (now read as `null` rather than guessed), and
+  `requestingOrganisation` turned out to be a real investigation-request
+  field that was being discarded as a hardcoded `null` (now read properly).
+  Landed in v3.176.1.
+
 **Still outstanding:**
-1. **GP2GP import markers** — the `"Problem Info: Problem Notes:
-   ...{Episodicity...}"` text wrapper and `"Data Transferred from other
-   system"` `consultationTopics[].title` marker (both load-bearing
-   assumptions in `record-duplicate-parser.js`, from the original 2026-07-01
-   manual sample) still not cross-checked against this endpoint.
-2. **Field names specifically for `prescription`/`investigation-request`
-   entries** (`entry.productName`/`dosageText`/`issueQuantity` /
-   `entry.investigationRequestItems`/`requestedBy`) — entryType values are
-   now confirmed real, but those specific field names within them are still
-   unverified guesses from the original manual sample.
-3. **Why `content-scripts/api-discovery.js`'s automatic capture never
-   fired**, even on a page URL matching its gate regex exactly. Two live
-   attempts both showed zero `suite.discoveredAllJournalUrls` entries, forcing
-   this whole session to fall back to manual DevTools inspection. Root cause
-   not yet diagnosed.
-4. **`topicCode: { topicCode: object }`** — odd doubly-nested field on
-   `consultationTopics[]` items, not inspected further.
+1. **`topicCode: { topicCode: object }`** — odd doubly-nested field on
+   `consultationTopics[]` items, not inspected further. Not load-bearing
+   (unused by the parser) — low priority.
+
+---
+
+## Live verification — prescription/investigation-request field names (RESOLVED 2026-07-17)
+
+**Trigger (2026-07-17):** the developer observed that prescriptions seem to
+duplicate via GP2GP reimport on some patients where investigation results
+don't. That partly echoes an existing n=1 finding above (a lab *result*,
+`item.type === 'investigation'`, was found NOT to duplicate under the same
+reimport event that duplicated notes/prescriptions/documents — see the file
+header comment in `engine/record-duplicate-parser.js`) — but that finding is
+about `investigation` (lab **results**), not `investigation-request` (a
+request/**order**, already flattened and duplicate-checked). The developer's
+phrasing could mean either, so rather than guess, the probe below reports
+both side by side and the developer can see which bucket is actually
+non-empty/relevant for their patient.
+
+This also finally answers outstanding item 1 above (prescription/
+investigation-request field names), last resting on the original 2026-07-01
+manual sample.
+
+### Main probe — paste into the **Medicus page console** (not the extension console)
+
+On the target patient's Journal tab. Structure only — field names/types,
+never clinical values — following `duplicate-checker.js`'s `describeShape()`
+convention (lines 385-397: type-only, 3 levels deep, arrays sample only
+`[0]`), extended with a small fixed allowlist of genuinely non-clinical
+fields (ids/booleans/counts/date-presence) whose actual value is safe and
+useful to see. Derives the URL live from the page route (same pattern as
+`sentinel.js`'s `getMedicusApiOrigin()` / `api-discovery.js`'s
+`currentPatientUuid()`) rather than hardcoding it, and does a credentialed
+`fetch()` sharing the page's cookie auth (per CLAUDE.md's queue-chip
+debugging section).
+
+```js
+// ── PHI-safe journal field-shape probe (paste into the Medicus PAGE console) ──
+// Structure/presence only — never logs a clinical-content VALUE. Reuses the
+// exact no-values convention as duplicate-checker.js's describeShape()
+// (duplicate-checker.js:385-397): field names + types, 3 levels deep, arrays
+// inspect only element [0]. Extended here with a small explicit allowlist of
+// genuinely non-clinical fields (ids, booleans, counts, dates-as-presence)
+// where the actual value is safe and useful to see, per this repo's "never
+// guess API field names, capture and replay live" rule.
+(async function () {
+  'use strict';
+
+  // Same URL-construction pattern as sentinel.js's getMedicusApiOrigin() and
+  // api-discovery.js's currentPatientUuid() — derived live from the page
+  // route, not hardcoded, per this repo's "never construct Medicus API URLs
+  // from scratch" rule.
+  const siteCode = location.pathname.split('/').filter(Boolean)[0];
+  const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+  const patientId = (location.pathname.match(UUID_RE) || [])[0];
+  if (!siteCode || !patientId) {
+    console.error('[probe] Not on a patient care-record page — open the patient\'s Journal tab first.');
+    return;
+  }
+  const url = `https://${siteCode}.api.${location.hostname}/clinical/data/patient-journal/overview/${patientId}`;
+
+  // Explicit value-safe allowlist — ids/booleans/counts/dates ONLY, never
+  // clinical text (no productName, dosageText, note, title, etc. value ever
+  // appears here, even truncated).
+  const SAFE_VALUE_FIELDS = new Set([
+    'id', 'entryType', 'type',
+    'encounterId', 'consultationTopic', // presence/id, not the coded content
+    'createdDateTime', 'recordDate', 'authorisedDate', 'startDate', // presence/format, not compared to clinical meaning
+    'isMarkedIncorrect', 'isDraft', 'hiddenFromPatientFacingServices',
+    'confidentialFromThirdParties', 'isRetrospectivelyAmended',
+  ]);
+
+  // describeShape, ported from duplicate-checker.js:385-397 verbatim (same
+  // depth limit, same array-of-[0] sampling, same "type only" default) plus
+  // the SAFE_VALUE_FIELDS carve-out above.
+  function describeShape(obj, depth, keyName) {
+    if (depth > 3 || obj === null || obj === undefined) return typeof obj;
+    if (Array.isArray(obj)) {
+      return { arrayLength: obj.length, itemShape: obj.length ? describeShape(obj[0], depth + 1, keyName) : 'unknown' };
+    }
+    if (typeof obj === 'object') {
+      return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, describeShape(v, depth + 1, k)]));
+    }
+    // Scalar leaf: only ever return the raw value for an explicitly
+    // allowlisted field name. Everything else — including short-looking
+    // strings — stays type-only.
+    if (keyName && SAFE_VALUE_FIELDS.has(keyName)) return { type: typeof obj, safeValue: obj };
+    return typeof obj;
+  }
+
+  let payload;
+  try {
+    const res = await fetch(url, { credentials: 'include' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    payload = await res.json();
+  } catch (e) {
+    console.error('[probe] Fetch failed:', e.message);
+    return;
+  }
+
+  const days = payload.patientJournalRecords || [];
+  const report = {
+    prescription: { flat: [], nested: [] },
+    'investigation-request': { flat: [], nested: [] },
+    investigation: { flat: [], nested: [] }, // lab RESULTS — separate from investigation-request, see below
+  };
+
+  const MAX_SAMPLES_PER_BUCKET = 3; // cap so console output stays scannable
+
+  for (const day of days) {
+    for (const item of day.items || []) {
+      // Flat top-level items
+      if (report[item.type] && report[item.type].flat.length < MAX_SAMPLES_PER_BUCKET) {
+        report[item.type].flat.push({
+          date: day.title, // day title only — a date bucket, not clinical content
+          shape: describeShape(item.data || {}, 1, null),
+        });
+      }
+      // Nested entries inside encounters
+      if (item.type === 'encounter') {
+        const enc = item.data || {};
+        for (const topic of enc.consultationTopics || []) {
+          for (const heading of topic.headings || []) {
+            for (const entry of heading.entries || []) {
+              const bucket = report[entry.entryType];
+              if (bucket && bucket.nested.length < MAX_SAMPLES_PER_BUCKET) {
+                bucket.nested.push({
+                  date: day.title,
+                  encounterId: item.id, // id only — safe, structural
+                  shape: describeShape(entry, 1, null),
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  console.log('[probe] Structure-only journal field report (no clinical values logged).');
+  console.log('[probe] "investigation-request" = a REQUEST/ORDER (already handled by the parser).');
+  console.log('[probe] "investigation" = a lab RESULT (deliberately NOT flattened — see record-duplicate-parser.js header).');
+  console.log('[probe] If your "duplicated prescriptions but not investigation results" observation means');
+  console.log('[probe] lab RESULTS specifically, look at report.investigation, not report["investigation-request"].');
+  console.log(JSON.stringify(report, null, 2));
+  window.__journalFieldProbe = report; // also left on window for further inspection this session
+})();
+```
+
+### Optional follow-up — compare a known duplicate prescription pair structurally
+
+Run after the main probe, in the same console session, once you've filled in
+the two entry ids you can see are duplicates in the Journal UI (ids are not
+PHI):
+
+```js
+// ── Optional: compare a KNOWN duplicate prescription pair structurally ──
+// Fill in the two entry ids you can see are duplicates in the Journal UI
+// (e.g. right-click → copy, or read off __journalFieldProbe above), then
+// paste this as a follow-up in the same console session.
+(function () {
+  const ID_A = 'PASTE_FIRST_ENTRY_ID_HERE';
+  const ID_B = 'PASTE_SECOND_ENTRY_ID_HERE';
+  const report = window.__journalFieldProbe;
+  if (!report) { console.error('[probe] Run the main probe first.'); return; }
+
+  function decodeIdTimestamp(id) {
+    // Same UUIDv7 decode as record-duplicate-parser.js's decodeIdTimestamp()
+    const UUIDV7_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (typeof id !== 'string' || !UUIDV7_RE.test(id)) return null;
+    const ms = parseInt(id.replace(/-/g, '').slice(0, 12), 16);
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+  }
+  console.log('[probe] id A decodes to (dual-render vs reimport clue — near-identical = same event):', decodeIdTimestamp(ID_A));
+  console.log('[probe] id B decodes to:', decodeIdTimestamp(ID_B));
+})();
+```
+
+A near-identical decoded timestamp between the pair is the existing "same
+reimport batch" signal; a gap of real minutes is the existing "genuinely
+separate event" signal already used by `hasPrescriptionTimingMismatch()`
+(`engine/record-duplicate-parser.js:1256-1264`) — this lets you eyeball which
+case your reported pair actually is before any code change is decided.
+
+### Results (captured 2026-07-17)
+
+Real shapes confirmed (structure only, one patient, three sample entries per
+bucket where available):
+
+**`prescription`** (flat and nested — same shape both places):
+`productName`/`dosageText`/`issueQuantity` confirmed real strings, exactly as
+guessed. **No `recordedBy`/`recordedByOrganisation` field exists at all** —
+the real field set is `prescriptionTypeLabel`, `isAcutePrescription`,
+`numberOfIssues`, `displayStatus`, `requiresAction`, `isDiscontinued`, none
+of which are an authorship signal. `linkedProblems` (flat only, confirmed
+already) still present and empty in every sample.
+
+**`investigation-request`** (flat and nested): `investigationRequestItems`
+(array of strings) and `requestedBy` confirmed real, exactly as guessed.
+**`requestingOrganisation` is a real field** the parser was discarding as a
+hardcoded `null` — also present: `isAwaitingResults`, `requestedDate`,
+`requestedDateIsNotEncounterDate`, `requestedDateIsNotDocumentDate`,
+`sortOrder`.
+
+**`investigation`** (lab results, flat only — confirms the header's
+"nested: []" expectation, never seen nested in this sample): a much richer,
+structurally distinct shape — `reportIdentifier`, `filingStatus`,
+`investigationGroups[]` (with `results`/`multilineResults`),
+`filingComments[]` (each carrying `createdInOriginalSystemDateTime`,
+`recordAuthorIsLocal`, `responsiblePractitioner`/`responsibleOrganisation`),
+`investigationDetails[]`. No `recordedBy` here either, but `reportIdentifier`
+is a plausible candidate for the stable external key the file header
+speculates results carry on ingestion — see the new header-comment bullet in
+`engine/record-duplicate-parser.js` for the caveat (structural evidence only,
+not a confirmed server-side mechanism).
+
+**Applied in v3.176.1:** `flattenJournal` now passes `null` for prescription
+`recordedBy`/`recordedByOrganisation` (confirmed-absent, not guessed) and
+reads the real `requestingOrganisation` for investigation-request instead of
+discarding it. 6 new tests cover the previously-untested nested prescription/
+investigation-request branches plus the `requestingOrganisation` fix — see
+CHANGELOG.md v3.176.1.
+
+**Follow-on (2026-07-17, separate investigation):** the `reportIdentifier`
+hypothesis above prompted a look at whether prescriptions might be
+duplicating somewhere Journal-based detection can't see at all — a
+different tab, the Medication history view, backed by a different endpoint
+(`clinical/data/medication/medication-regimen/{patientId}`) that represents
+medication **regimens/courses**, not individual issue events. **Result:
+hypothesis rejected** — the one apparent duplicate found cross-referenced
+directly to two real, distinct, already-correctly-recorded journal issue
+events (a mid-course reauthorization, not a reimport artifact), and a
+manual sweep of several further patients (including suspected
+SystemOne/EMIS-sourced records) found no definite journal-level medication
+duplicates either. See `docs/learnings-medication-regimen-duplicates.md`
+for the full trace — no code changes resulted.
