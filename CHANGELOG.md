@@ -2,6 +2,54 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.178.1] — 2026-07-22
+
+### "Fix description" widget: cleanup from first live test
+
+- **Button now removes itself once the fix is saved**, instead of leaving a
+  lingering "✓ Saved" chip — the corrected on-screen text is confirmation
+  enough. The panel is removed at the same time.
+- **Tightened the button's padding/line-height** — it was taller than
+  Medicus's own tightly-packed problem-list rows, stretching the whole list
+  out. Smaller font, explicit `line-height`, less padding.
+
+## [v3.178.0] — 2026-07-22
+
+### New: "Fix description" for outdated SNOMED problem codes
+
+Many older problem/diagnosis entries carry a historic Read-code-migration
+display string (a `[X]`/`[D]`/`[M]`-style ICD cross-map prefix, or a trailing
+`NOS`) even though the underlying SNOMED concept has a perfectly good modern
+plain synonym. New inline widget flags these on a patient's Active Problems
+list (Clinical Summary tab) and offers a one-click fix — same code, cleaner
+description — confirmed end-to-end via a real live capture (see
+`docs/learnings-problem-description-cleanup.md`).
+
+- `content-scripts/problem-description-cleanup.js` + `.css`: detects
+  candidates via `clinical-summary/summary/{patientId}`'s
+  `problemCodeDescription` text, injects a small "Fix description" button
+  next to each flagged row (`li.item > a.item__link`, confirmed live), and on
+  click searches Medicus's own SNOMED description-search endpoint, filtered
+  to alternatives sharing the SAME `conceptId` — this is the safety rule: the
+  tool can only ever offer a different synonym of the current code, never a
+  re-code to a different clinical concept. Saves via the confirmed
+  `clinical/problem/edit-problem/{problemId}` endpoint, resending the FULL
+  edit-form prefill with only `problemCode` swapped (a full replace, not a
+  partial patch).
+- New `shared/legacy-coded-description.js`: the detection heuristic
+  (bracket-prefix/NOS-suffix) and the same-concept safety filter are split
+  out as entity-agnostic, since problems are the test bed for this feature,
+  not the only entity type intended — procedures/referrals/journal entries
+  are expected to follow, each needing its own confirmed edit-endpoint
+  capture before being wired up.
+- 36 new unit tests (`test-problem-description-cleanup.js`) covering
+  detection, marker-stripping, the same-concept safety filter, and the
+  full-payload builder (including the `recordedAtAnotherOrganisation`
+  branch, read straight from the captured `.vue` source, not guessed).
+- Not yet verified live end-to-end as a widget (the underlying API calls were
+  individually confirmed via capture, but the injected button/panel itself
+  hasn't been exercised in the real browser yet).
+
 ## [v3.177.7] — 2026-07-22
 
 ### Inline task/document widgets: anchor next to the actual attachment, not always the opening message
