@@ -67,10 +67,7 @@ const ago = (hours) => new Date(NOW - hours * H).toISOString();
 // ── 3. Fail-visible: priority field entirely absent ───────────────────────────
 {
   // Items present but NONE carry a readable priority field (schema change).
-  const items = [
-    { createdAt: ago(6) },
-    { createdAt: ago(1), priority: undefined, priorityDisplay: undefined },
-  ];
+  const items = [{ createdAt: ago(6) }, { createdAt: ago(1), priority: undefined, priorityDisplay: undefined }];
   const r = C.computeBreachRisk(items, OPTS);
   check(r.level === 'unknown', 'no readable priority on any item → level unknown');
   check(r.visible === true, 'unknown → visible (fail-visible)');
@@ -85,7 +82,7 @@ const ago = (hours) => new Date(NOW - hours * H).toISOString();
 // ── 4. Amber / red boundaries ─────────────────────────────────────────────────
 {
   // Just below amber (1h59m) → below, hidden.
-  const belowAmber = [{ priority: 'Urgent', createdAt: ago(2) - 0, }];
+  const belowAmber = [{ priority: 'Urgent', createdAt: ago(2) - 0 }];
   // build precise ages via createdAt timestamps
   const at = (ms) => new Date(NOW - ms).toISOString();
 

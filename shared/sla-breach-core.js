@@ -24,7 +24,7 @@
 //     is non-visible and the strip is simply hidden — matching the four
 //     existing global strips, which are also threshold-gated.
 
-(function(global) {
+(function (global) {
   'use strict';
 
   // Case-insensitive substring match on the priority string. Mirrors the
