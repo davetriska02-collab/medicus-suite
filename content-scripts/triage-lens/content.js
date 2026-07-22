@@ -3591,7 +3591,12 @@
     const resultPruneTs = Date.now() - 2 * _RESULT_CACHE_TTL;
     for (const [uuid, entry] of _queueResultCache) {
       const anchor = entry.ts || entry.createdAt;
-      if (anchor && anchor < resultPruneTs) _queueResultCache.delete(uuid);
+      if (anchor && anchor < resultPruneTs) {
+        _queueResultCache.delete(uuid);
+        // B2: the pending-index entry is a pointer to this severity entry — it dies
+        // with its source (never serve a chip from a pruned result).
+        if (_pendingIndex) _pendingIndex.drop(uuid);
+      }
     }
     // Audit M1: cap the outstanding-investigation caches — _oirHistoryCache
     // holds a FULL observation history per lab-task patient and none of the
@@ -3603,7 +3608,7 @@
     _capMap(_oirReportCache, 50);
     _capMap(_oirHistoryCache, 50);
     _capMap(_oirPatientCache, 200);
-    _capMap(_queuePaResolved, 400);
+    _capMap(_taskPatientCache, 400);
     while (_oirAutoTicked.size > 500) _oirAutoTicked.delete(_oirAutoTicked.values().next().value);
     // Queue re-entry resets the jump cycle (item 1.2) — a "last jumped-to row"
     // from a previous queue visit has no meaning against a fresh row set.
@@ -3618,6 +3623,10 @@
     setupQueueObserver();
     scheduleQueueMonitoring();
     scheduleQueueResultTriage();
+    // B2: cross-link any red/amber result graded earlier this session (results
+    // queue) onto this queue's request rows. No-op on the results queue itself and
+    // when the index is empty; rides the shared resolve cache + its own 8-row cap.
+    scheduleQueuePending();
   };
 
   // ---- Late-card settle-watch (record/detail extraction race) ----
@@ -3749,6 +3758,78 @@
   const _RESULT_ERROR_TTL = 60 * 1000; // 60 seconds
   let _queueResultRunning = false;
   let _queueResultGeneration = 0;
+
+  // ---- B-substrate: ONE shared task→patient resolve cache (per tab) ----
+  // Every fetch-driven queue chip family (monitoring, patient-flag, and the B2
+  // pending cross-link) needs the SAME taskUuid→patientUuid link. Before this,
+  // monitoring and patient-flag each resolved independently. This single map is
+  // the shared substrate: resolvePatientForTask() serves a cache hit for free and
+  // fetches at most once per taskUuid across ALL consumers, so adding B2/B4 to a
+  // request queue does not multiply the resolve fan-out. The link is immutable
+  // (a task never changes patient), so a long TTL just bounds memory; runQueue
+  // FIFO-caps it. `patientUuid: null` is cached too (a genuine "no patient"), so a
+  // failed resolve isn't re-fetched every pass.
+  const _taskPatientCache = new Map(); // taskUuid -> { patientUuid: string|null, ts }
+  const _TASK_PATIENT_TTL = 30 * 60 * 1000;
+  // Synchronous read: returns the fresh { patientUuid, ts } entry or null (unknown /
+  // expired). Callers use this to decide "cache hit (free) vs miss (counts against
+  // the per-pass fetch cap)" — exactly the pattern the monitoring/PA passes use.
+  const getCachedPatientForTask = (taskUuid) => {
+    const r = _taskPatientCache.get(taskUuid);
+    if (r && r.ts && (Date.now() - r.ts) <= _TASK_PATIENT_TTL) return r;
+    return null;
+  };
+  // Async resolve-or-fetch. A cache hit returns immediately with zero fetch. A miss
+  // does ONE credentialed resolve via the shared api-client (itself TTL-cached) and
+  // stores the result (including a null). Callers cap how many MISSES they trigger
+  // per pass (see the 8-row cap pattern) — this function does not self-throttle.
+  const resolvePatientForTask = async (taskTypeSlug, taskUuid) => {
+    if (!taskUuid) return null;
+    const cached = getCachedPatientForTask(taskUuid);
+    if (cached) return cached.patientUuid;
+    const API = window.SentinelApiClient;
+    const ctx = API && API.detectMedicusContext(location.href);
+    if (!API || !ctx || !taskTypeSlug) return null;
+    const patientUuid = (await API.resolveTaskToPatient(ctx.apiBase, taskTypeSlug, taskUuid)) || null;
+    _taskPatientCache.set(taskUuid, { patientUuid, ts: Date.now() });
+    return patientUuid;
+  };
+
+  // ---- B2: pending-abnormal-lab cross-link index ----
+  // A patientUuid→worst-severity index DERIVED from _queueResultCache (keyed by
+  // taskUuid). Populated when a result is graded red/amber on the results queue
+  // (computeQueueRowResult carries report.patientUuid; the scheduler + detail-verdict
+  // paths mirror it + gradedTs onto the cache entry, then call pendingIndexSync).
+  // Every index entry is a POINTER to a live _queueResultCache severity entry and
+  // MUST die with it — see pendingIndexSync + the four teardown hooks
+  // (runQueue TTL prune, bridge priorityDisplay invalidation, config invalidation,
+  // and a re-grade to null/error). The H6 sort canary drops the rowIndex maps, NOT
+  // _queueResultCache, so the index legitimately survives it — chip PLACEMENT is
+  // gated by the durable map instead (reinjectCachedPendingChips), so a reordered
+  // grid can never land a pending chip on the wrong row.
+  const _pendingIndex = window.PendingResultIndex ? window.PendingResultIndex.create() : null;
+  // Reconcile one task's index membership with its current _queueResultCache entry.
+  // Called at every point the entry's severity is (re)written. An entry that is
+  // red/amber AND carries a resolved patientUuid AND is not an error is indexed;
+  // ANY other state (null/none sev, error, missing patient, absent entry) is a drop.
+  const pendingIndexSync = (taskUuid) => {
+    if (!_pendingIndex || !taskUuid) return;
+    const entry = _queueResultCache.get(taskUuid);
+    const sev = entry && entry.sev;
+    const level = sev && typeof sev === 'object' && (sev.level === 'red' || sev.level === 'amber') ? sev.level : null;
+    const patientUuid = entry && entry.patientUuid;
+    if (entry && !entry.error && level && patientUuid) {
+      _pendingIndex.set(taskUuid, patientUuid, level, entry.gradedTs || entry.ts || Date.now());
+    } else {
+      _pendingIndex.drop(taskUuid);
+    }
+  };
+  // Current queue's task-type slug (set by the bridge). B2 is a REQUEST-queue
+  // cross-link ONLY — never shown on the results queue itself (the row's own
+  // result chip already covers it). A results queue whose slug matches this is
+  // skipped by the pending pass + reinject.
+  let _currentQueueSlug = null;
+  const isResultQueueSlug = (slug) => /investigation|result/i.test(String(slug || ''));
 
   // Recently-parsed investigation reports, NEWEST FIRST, served to the options-page
   // result-rule inspector on demand ("Load a recent result" instead of paste-a-JSON).
@@ -3902,6 +3983,8 @@
   let _bridgeResultDebounceTimer = null;
   // Debounce timer for scheduleQueuePaFlags (patient-flag chips)
   let _bridgePaDebounceTimer = null;
+  // Debounce timer for scheduleQueuePending (B2 pending cross-link chips)
+  let _bridgePendingDebounceTimer = null;
 
   window.addEventListener('ch-task-list-data', (e) => {
     // --- Rate-limit: count events in a rolling window ---
@@ -3923,6 +4006,9 @@
     if (!_BRIDGE_SLUG_RE.test(taskTypeSlug)) return;
     if (pageType() !== 'queue') return;
 
+    // Remember which queue we're on so B2's pending cross-link can gate itself to
+    // REQUEST queues (never the results queue, where the row's own result chip shows).
+    _currentQueueSlug = taskTypeSlug;
     _queueRowUuids.clear();
     _durableRowMap.clear();
     // A fresh task-list payload is authoritative for the grid's CURRENT state,
@@ -3964,6 +4050,11 @@
         if (existing.priorityDisplay !== priorityDisplay && existing.sev !== undefined) {
           delete existing.sev;
           delete existing.ts;
+          delete existing.gradedTs;
+          delete existing.patientUuid;
+          // B2: the task changed — its old graded severity is no longer valid, so
+          // its pending-index pointer must die with the invalidated source entry.
+          if (_pendingIndex) _pendingIndex.drop(taskUuid);
         }
         existing.overviewURL = overviewURL;
         existing.priorityDisplay = priorityDisplay;
@@ -3978,6 +4069,9 @@
     // safe: this callback only fires after the whole IIFE has evaluated).
     clearTimeout(_bridgePaDebounceTimer);
     _bridgePaDebounceTimer = setTimeout(scheduleQueuePaFlags, _BRIDGE_DEBOUNCE_MS);
+    // B2 pending cross-link chips ride the same debounce cadence (defined below).
+    clearTimeout(_bridgePendingDebounceTimer);
+    _bridgePendingDebounceTimer = setTimeout(scheduleQueuePending, _BRIDGE_DEBOUNCE_MS);
     // Result triage trigger. _queueRowUuids/_durableRowMap are already populated by the
     // synchronous loop above, so the leading-edge FIRST pass per queue entry can fire
     // immediately (skipping the 150ms debounce) to overlap the grid's first paint. The
@@ -4005,7 +4099,9 @@
     if (!API || !NORM || !engine) { log('queue-mon: globals not loaded', taskUuid); return null; }
     const ctx = API.detectMedicusContext(location.href);
     if (!ctx) { log('queue-mon: no medicus context'); return null; }
-    const patientUuid = await API.resolveTaskToPatient(ctx.apiBase, taskTypeSlug, taskUuid);
+    // B-substrate: resolve via the ONE shared task→patient cache (deduped across
+    // monitoring / patient-flag / pending), not a private per-pass fetch.
+    const patientUuid = await resolvePatientForTask(taskTypeSlug, taskUuid);
     if (!patientUuid) { log('queue-mon: patient resolution failed', taskUuid); return null; }
     let apiResults;
     try { apiResults = await API.fetchAll(ctx.apiBase, patientUuid); }
@@ -4108,18 +4204,15 @@
   // Practice-recorded per-patient flags (patientAlerts.byPatient, owned by the
   // Pt Alerts side-panel tab) shown on queue rows so "interpreter required" /
   // "safeguarding concern" is visible BEFORE the task is opened or the patient
-  // phoned. Mirror of the monitoring pipeline: task→patient resolution via
-  // SentinelApiClient.resolveTaskToPatient (TTL-cached in the api client),
-  // resolution results cached per taskUuid in _queuePaResolved, and durable
-  // re-injection on every refreshQueueChips via _durableRowMap (CLAUDE.md
-  // chip rule #4). Flag CONTENT is looked up fresh from the store at inject
-  // time, so an edit in the panel updates the queue on the next churn without
-  // any refetch. Matching here is by resolved patient UUID ONLY — the queue
-  // has no trustworthy NHS/DOB surface, and a name is never a match key.
-  // Read-only: this surface never writes the store.
+  // phoned. Mirror of the monitoring pipeline: task→patient resolution via the
+  // SHARED B-substrate cache (resolvePatientForTask / getCachedPatientForTask —
+  // deduped with the monitoring + pending passes), and durable re-injection on
+  // every refreshQueueChips via _durableRowMap (CLAUDE.md chip rule #4). Flag
+  // CONTENT is looked up fresh from the store at inject time, so an edit in the
+  // panel updates the queue on the next churn without any refetch. Matching here
+  // is by resolved patient UUID ONLY — the queue has no trustworthy NHS/DOB
+  // surface, and a name is never a match key. Read-only: never writes the store.
   let _paQueueStore = null; // null until loaded; then the byPatient object
-  const _queuePaResolved = new Map(); // taskUuid -> { patientUuid|null, ts }
-  const _PA_RESOLVE_TTL = 30 * 60 * 1000; // task→patient link is immutable; long TTL just bounds memory
   let _queuePaRunning = false;
   let _queuePaGeneration = 0;
 
@@ -4179,22 +4272,19 @@
     let done = 0;
     for (const [rowIndex, taskUuid] of _queueRowUuids) {
       if (done >= MAX || pageType() !== 'queue' || _queuePaGeneration !== gen) break;
-      let resolved = _queuePaResolved.get(taskUuid);
-      if (!resolved || !resolved.ts || (Date.now() - resolved.ts) > _PA_RESOLVE_TTL) {
+      // Shared resolve cache: a hit costs nothing (monitoring/pending may have
+      // resolved it already); only a MISS counts against this pass's cap.
+      let cached = getCachedPatientForTask(taskUuid);
+      if (!cached) {
         if (!API || !ctx) break;
         const monEntry = _queueMonCache.get(taskUuid);
-        const slug = monEntry && monEntry.taskTypeSlug;
+        const slug = (monEntry && monEntry.taskTypeSlug) || _currentQueueSlug;
         if (!slug) continue;
-        const patientUuid = await API.resolveTaskToPatient(ctx.apiBase, slug, taskUuid);
-        resolved = { patientUuid: patientUuid || null, ts: Date.now() };
-        _queuePaResolved.set(taskUuid, resolved);
+        await resolvePatientForTask(slug, taskUuid);
+        cached = getCachedPatientForTask(taskUuid);
         done++;
       }
-      if (resolved.patientUuid) injectQueuePaChip(rowIndex, resolved.patientUuid);
-    }
-    // Prune stale resolutions so the map cannot grow unbounded across a long session.
-    for (const [uuid, entry] of _queuePaResolved) {
-      if (!entry.ts || (Date.now() - entry.ts) > _PA_RESOLVE_TTL) _queuePaResolved.delete(uuid);
+      if (cached && cached.patientUuid) injectQueuePaChip(rowIndex, cached.patientUuid);
     }
     _queuePaRunning = false;
     if (_queuePaGeneration !== gen) scheduleQueuePaFlags();
@@ -4209,9 +4299,110 @@
       if (ri == null) return;
       const taskUuid = _durableRowMap.get(Number(ri));
       if (!taskUuid) return;
-      const resolved = _queuePaResolved.get(taskUuid);
-      if (!resolved || !resolved.patientUuid) return;
-      injectQueuePaChip(Number(ri), resolved.patientUuid);
+      const cached = getCachedPatientForTask(taskUuid);
+      if (!cached || !cached.patientUuid) return;
+      injectQueuePaChip(Number(ri), cached.patientUuid);
+    });
+  };
+
+  // ---- B2: pending-abnormal-lab cross-link chips ----
+  // On a REQUEST queue, if a row's patient has a red/amber result graded THIS
+  // session (while the clinician was on the results queue) still sitting in the
+  // pending index, chip it. Escalate-only, always carries its data age. Mirror of
+  // the patient-flag pipeline: shared resolve cache + durable-map re-inject.
+  const injectQueuePendingChip = (rowIndex, patientUuid, selfTaskUuid) => {
+    if (!_pendingIndex || !patientUuid) return;
+    if (isResultQueueSlug(_currentQueueSlug)) return; // never on the results queue itself
+    const hit = _pendingIndex.query(patientUuid);
+    if (!hit) return;
+    // Belt-and-braces: never cross-link a task to its OWN graded result (the pass is
+    // gated off result queues, so in practice the request row's uuid is never indexed).
+    if (selfTaskUuid && hit.taskUuids.length === 1 && hit.taskUuids[0] === selfTaskUuid) return;
+    const id = 'queue.' + (hit.worstSev === 'red' ? 'pendingResultRed' : 'pendingResultAmber');
+    const PRI = window.PendingResultIndex;
+    const ageLabel = PRI ? PRI.formatAge(Date.now() - hit.gradedTs) : '';
+    const chip = getSystemChip(id, { age: ageLabel, count: hit.count });
+    if (!chip) return; // chip disabled or (pre-regen) not yet in config — fail closed
+    const row = document.querySelector(`.ag-row[row-index="${rowIndex}"]:not(.ag-full-width-row)`);
+    if (!row) return;
+    const host = queueChipHost(row, '.ch-q-pending');
+    if (!host) return; // absent row or chip already present (idempotent)
+    // Surface the top analyte from the worst source entry's cached detail (Phase-2
+    // detail array), when present — the "why", not just the severity + age.
+    let topAnalyte = '';
+    for (const t of hit.taskUuids) {
+      const e = _queueResultCache.get(t);
+      if (e && Array.isArray(e.detail) && e.detail[0] && e.detail[0].name) {
+        topAnalyte = String(e.detail[0].name);
+        if (e.sev && e.sev.level === hit.worstSev) break; // prefer the worst-severity one
+      }
+    }
+    const span = document.createElement('span');
+    span.className = 'ch-q-pending' + (host.inPreview ? '' : ' ch-q-pending-inline');
+    span.setAttribute('role', 'note');
+    span.innerHTML = renderChipHtml(chip);
+    const agoPhrase = ageLabel ? 'graded ' + ageLabel + ' ago' : 'graded earlier this session';
+    span.title =
+      (hit.worstSev === 'red' ? 'Pending urgent result' : 'Pending abnormal result') +
+      (topAnalyte ? ' (' + topAnalyte + ')' : '') +
+      ' for this patient — ' + agoPhrase + ' on the results queue and not yet actioned. ' +
+      'Data age: ' + (ageLabel || 'recent') + '. Cross-linked from this session only.';
+    // Always PREPEND (Vue reconciles away trailing foreign nodes — CLAUDE.md rule 1).
+    host.target.insertBefore(span, host.target.firstChild);
+  };
+
+  // Fetch-scheduling pass (mirrors scheduleQueuePaFlags). Gated OFF the results
+  // queue and skipped entirely when the index is empty (escalate-only, cheap).
+  // Rides the SHARED resolve cache — hits are free, only new resolves count against
+  // the 8-row cap, so on a request queue it shares that fan-out with monitoring/PA
+  // rather than doubling it.
+  let _queuePendingRunning = false;
+  let _queuePendingGeneration = 0;
+  const scheduleQueuePending = async () => {
+    if (!_pendingIndex) return;
+    if (isResultQueueSlug(_currentQueueSlug)) return;
+    if (_pendingIndex.size() === 0) return; // nothing graded to cross-link
+    const gen = ++_queuePendingGeneration;
+    if (_queuePendingRunning) return;
+    _queuePendingRunning = true;
+    const API = window.SentinelApiClient;
+    const ctx = API ? API.detectMedicusContext(location.href) : null;
+    const MAX = 8; // cap NEW resolves per pass (shared-cache hits are free)
+    let done = 0;
+    for (const [rowIndex, taskUuid] of _queueRowUuids) {
+      if (pageType() !== 'queue' || _queuePendingGeneration !== gen) break;
+      let cached = getCachedPatientForTask(taskUuid);
+      if (!cached) {
+        if (done >= MAX) continue;
+        if (!API || !ctx) break;
+        const monEntry = _queueMonCache.get(taskUuid);
+        const slug = (monEntry && monEntry.taskTypeSlug) || _currentQueueSlug;
+        if (!slug) continue;
+        await resolvePatientForTask(slug, taskUuid);
+        cached = getCachedPatientForTask(taskUuid);
+        done++;
+      }
+      if (cached && cached.patientUuid) injectQueuePendingChip(rowIndex, cached.patientUuid, taskUuid);
+    }
+    _queuePendingRunning = false;
+    if (_queuePendingGeneration !== gen) scheduleQueuePending();
+  };
+
+  // Durable re-injection from the rowIndex→taskUuid map on every refresh — the
+  // pending-chip equivalent of reinjectCachedPaChips (CLAUDE.md rule #4). Because
+  // it rides the durable map, the H6 sort canary (which drops that map) halts
+  // pending injection on a reordered grid even though the index itself survives.
+  const reinjectCachedPendingChips = () => {
+    if (!_pendingIndex || isResultQueueSlug(_currentQueueSlug)) return;
+    const scope = queueScope();
+    scope.querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)').forEach((row) => {
+      const ri = row.getAttribute('row-index');
+      if (ri == null) return;
+      const taskUuid = _durableRowMap.get(Number(ri));
+      if (!taskUuid) return;
+      const cached = getCachedPatientForTask(taskUuid);
+      if (!cached || !cached.patientUuid) return;
+      injectQueuePendingChip(Number(ri), cached.patientUuid, taskUuid);
     });
   };
 
@@ -4794,6 +4985,11 @@
     try {
       if (sev && typeof sev === 'object') sev.detail = buildResultDetail(report, sev);
     } catch (e) { log('queue-result: buildResultDetail failed', e.message); }
+    // B2 — carry the report's patient uuid on the sev object so the scheduler can
+    // mirror it onto the cache entry and feed the pending cross-link index. This is
+    // the ONLY place a queue row's patient is known for free (the report already
+    // resolved it); NEVER an extra fetch.
+    if (sev && typeof sev === 'object') sev.patientUuid = report && report.patientUuid ? report.patientUuid : null;
     // Item 4.4 (TRIAGE-LENS-2026-07-02.md) — "all-normal, fileable" queue marker.
     // Reuses shared/lab-filing-utils.js's fileabilityBlockers(report, severity,
     // resultRules) — the EXACT profile-independent gate lab-file-button.js's own
@@ -5578,6 +5774,12 @@
           // Item 4.4 — same mirror as the queue scheduler worker above.
           e2.fileable = !isError && !!(sev && sev.fileable === true);
           e2.ts = Date.now();
+          // B2 — mirror the resolved patient + grade time, then reconcile the
+          // pending cross-link index with this fresh severity (a re-grade to
+          // null/error drops the entry inside pendingIndexSync).
+          e2.patientUuid = !isError && sev && sev.patientUuid ? sev.patientUuid : undefined;
+          e2.gradedTs = Date.now();
+          pendingIndexSync(taskUuid);
         }
         // Only paint if the GP is still on THIS task's detail page — a slow
         // fetch must never land a verdict banner after navigating away (or
@@ -6148,6 +6350,12 @@
             // later pass; a real result keeps the full TTL. Without this a
             // one-off null blanked the row for 5 minutes.
             e2.ts = (!isError && sev === null) ? Date.now() - _RESULT_CACHE_TTL + _RESULT_RETRY_MS : Date.now();
+            // B2 — mirror the resolved patient + grade time (from the report this
+            // pass just fetched, no extra call), then reconcile the pending
+            // cross-link index. A re-grade to null/error drops it in pendingIndexSync.
+            e2.patientUuid = !isError && sev && sev.patientUuid ? sev.patientUuid : undefined;
+            e2.gradedTs = Date.now();
+            pendingIndexSync(taskUuid);
           }
           injectResultChip(rowIndex, isError ? null : sev, taskUuid, isError);
           // Item 1.2: a row just moved out of "checking" (cache entry written
@@ -6650,7 +6858,7 @@
       closeActionMenu();
     }
     if (queueObserver) queueObserver.disconnect();
-    queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result, .ch-q-pa').forEach(s => s.remove());
+    queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result, .ch-q-pa, .ch-q-pending').forEach(s => s.remove());
     // Wipe stale severity tint in the SAME cycle as the chip-node wipe (item 1.3) —
     // a recycled row-index must never keep a previous patient's tint colour.
     clearQueueRowTint();
@@ -6696,6 +6904,10 @@
     // Same durable-map restore for the patient-flag chips (Pt Alerts, H-042) —
     // flag content is re-read from the live store at inject time.
     reinjectCachedPaChips();
+    // B2 — same durable-map restore for the pending cross-link chips. Gated off
+    // the results queue inside reinjectCachedPendingChips; index membership is
+    // re-queried live, so a source entry that has since died never re-injects.
+    reinjectCachedPendingChips();
     // Re-render the status bar AFTER the tint pass above so its jump-target query
     // (tinted .ag-row elements) sees this cycle's freshly-applied classes, not the
     // previous cycle's. Also re-assert the focus-dim class every cycle — cheap and
@@ -6957,7 +7169,12 @@
         entry.detail = undefined;
         entry.unitMismatches = undefined;
         entry.fileable = undefined;
+        entry.patientUuid = undefined;
+        entry.gradedTs = undefined;
       }
+      // B2 — every source severity was just invalidated, so the whole pending
+      // cross-link index must die with them (rebuilt on the next fetch pass).
+      if (_pendingIndex) _pendingIndex.clear();
       // The memoised chip HTML is config-derived too — drop it so edited labels/
       // kinds re-render rather than serving the stale cached string.
       _chipHtmlMemo.clear();

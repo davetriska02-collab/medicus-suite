@@ -159,15 +159,15 @@
     {
       id: 'queue.chip-marker-classes',
       description:
-        'The three injected chip family classes swept on every refreshQueueChips (wipe-and-redecorate) and de-duped on inject. Per CLAUDE.md rule 5, each must also be present in hud.css\'s token-block selector list or it renders as an unstyled "white rectangle" (that check is out of scope for this registry).',
-      feature: 'Queue chips — re-injection / de-dupe',
+        'The injected chip family classes swept on every refreshQueueChips (wipe-and-redecorate) and de-duped on inject: age/decoration (.ch-queue-chips), monitoring (.ch-q-mon), result-triage (.ch-q-result), and the B2 pending-abnormal-lab cross-link (.ch-q-pending). Per CLAUDE.md rule 5, each must also be present in hud.css\'s token-block selector list or it renders as an unstyled "white rectangle" (that check is out of scope for this registry).',
+      feature: 'Queue chips — re-injection / de-dupe (.ch-queue-chips / .ch-q-mon / .ch-q-result / .ch-q-pending)',
       degradation:
         'stale chips are never swept on AG-Grid row recycling (duplicate or orphaned chips), or the de-dupe check stops preventing double-injection.',
       source:
         'content-scripts/triage-lens/content.js:3641,3691 (decorateOneRow de-dupe guard; refreshQueueChips sweep)',
       pageMatch: /\/tasks\/[^/]+\/task-list/,
       anchor: '.ag-row',
-      target: ['.ch-queue-chips', '.ch-q-mon', '.ch-q-result'],
+      target: ['.ch-queue-chips', '.ch-q-mon', '.ch-q-result', '.ch-q-pending'],
       legacy: [],
       runtime: true,
       mirrorOf: 'content.js',

@@ -3901,6 +3901,18 @@
       "kind": "amber",
       "actions": []
     },
+    "queue.pendingResultRed": {
+      "enabled": true,
+      "label": "⚠ pending urgent result · graded {age} ago",
+      "kind": "red",
+      "actions": []
+    },
+    "queue.pendingResultAmber": {
+      "enabled": true,
+      "label": "pending abnormal result · {age}",
+      "kind": "amber",
+      "actions": []
+    },
     "queue.resultUrgent": {
       "enabled": true,
       "label": "{name}",
