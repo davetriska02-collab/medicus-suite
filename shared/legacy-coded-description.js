@@ -21,11 +21,11 @@
 
 (function (global) {
   // Historic ICD/Read cross-map bracket marker ("[X]", "[D]", "[M]", "[V]", …)
-  // and/or a trailing "NOS" (Not Otherwise Specified) — the two textual tells
-  // of a legacy coded-entry description that usually has a cleaner modern
-  // synonym under the SAME SNOMED concept.
+  // and/or a trailing "NOS" (Not Otherwise Specified) or "NEC" (Not Elsewhere
+  // Classified) — the textual tells of a legacy coded-entry description that
+  // usually has a cleaner modern synonym under the SAME SNOMED concept.
   var LEGACY_PREFIX_RE = /^\[[A-Za-z]{1,2}\]\s*/;
-  var LEGACY_SUFFIX_RE = /\s*\bNOS\b\.?\s*$/i;
+  var LEGACY_SUFFIX_RE = /\s*\b(?:NOS|NEC)\b\.?\s*$/i;
 
   function looksOutdated(description) {
     var d = String(description == null ? '' : description);

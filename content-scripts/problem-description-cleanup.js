@@ -49,6 +49,42 @@
 // text pattern is used for a cheap first-pass scan across
 // clinical-summary/summary's plain-text problemCodeDescription list, without
 // a per-problem edit-problem fetch.
+//
+// CODING-SPECIFICITY EXTENSION (2026-07-23): the same click that opens this
+// panel also checks for a laterality hint (rt/right, lt/left, bilateral) in
+// the edit-form's `additionalInformation` free text not already reflected in
+// the current description, and — if found — offers DESCENDANT concepts of
+// the current code (e.g. "Fracture of radius" -> "Fracture of right
+// radius"), not just same-concept synonyms. This is a materially different,
+// higher-risk operation (a real re-code, not a cosmetic relabel) — see
+// shared/coding-specificity.js for the full contract and the descendant
+// safety test. DELIBERATE SCOPE DECISION: this only ever runs for problems
+// ALREADY flagged as outdated (same trigger population as the description
+// fix above) — no new proactive per-patient scanning, no new opt-in
+// affordance, because `additionalInformation` isn't available without a
+// per-problem fetch and this reuses the one the clinician already triggered.
+// Running this across the WHOLE record (every problem, not just outdated
+// ones; other entity types) was explicitly deferred, not built here.
+//
+// CROSS-CONCEPT EXTENSION (2026-07-23): the same click/fetch also checks for
+// a DIFFERENT SNOMED concept whose description is textually identical to the
+// current one once legacy markers are stripped (e.g. "[X]Heroin addiction"
+// -> a different concept, "Heroin addiction") — the case
+// sameConceptAlternatives can never catch, since it's a different conceptId
+// by definition. This is the riskiest of the three categories (no
+// same-concept guarantee, no hierarchy proof) so it renders in its own
+// warning-flagged section — see shared/coding-specificity.js's
+// crossConceptAlternatives for the full contract and its scope limits (exact
+// text match only, not clinical-relatedness).
+//
+// WORD-MISMATCH FIX (2026-07-23): a legacy NEC-labelled problem ("Primary
+// total knee replacement NEC") returned ZERO search results at all — not a
+// filtering bug, the search itself. Medicus's search requires every query
+// word present in a result; the real modern descendants ("Total replacement
+// of left/right knee joint") don't contain "Primary" anywhere, so the whole
+// query silently failed, taking same-concept AND descendant suggestions down
+// with it. See searchDescendantsNarrowed's comment near SEARCH_PATH for the
+// two confirmed-live supplementary searches that fix this.
 'use strict';
 
 (function () {
@@ -59,6 +95,16 @@
       ? require('../shared/legacy-coded-description.js')
       : window.MSLegacyCodedDescription;
   var looksOutdated = shared.looksOutdated;
+
+  // ── Shared "coding specificity" (descendant/laterality) helpers ─────────────
+  var codingSpecificity =
+    typeof module !== 'undefined' && module.exports
+      ? require('../shared/coding-specificity.js')
+      : window.MSCodingSpecificity;
+  var detectLateralityHint = codingSpecificity.detectLateralityHint;
+  var descriptionAlreadySpecifiesLaterality = codingSpecificity.descriptionAlreadySpecifiesLaterality;
+  var descendantAlternatives = codingSpecificity.descendantAlternatives;
+  var crossConceptAlternatives = codingSpecificity.crossConceptAlternatives;
 
   // ── Pure helpers, problem-specific (no window/document/fetch — unit-
   // testable via require()) ───────────────────────────────────────────────────
@@ -118,6 +164,11 @@
       sameConceptAlternatives: shared.sameConceptAlternatives,
       LEGACY_PREFIX_RE: shared.LEGACY_PREFIX_RE,
       LEGACY_SUFFIX_RE: shared.LEGACY_SUFFIX_RE,
+      // Re-exported from shared/coding-specificity.js, same reasoning.
+      detectLateralityHint: codingSpecificity.detectLateralityHint,
+      descriptionAlreadySpecifiesLaterality: codingSpecificity.descriptionAlreadySpecifiesLaterality,
+      descendantAlternatives: codingSpecificity.descendantAlternatives,
+      crossConceptAlternatives: codingSpecificity.crossConceptAlternatives,
       // Problem-specific.
       buildEditProblemPayload,
       findOutdatedProblems,
@@ -193,11 +244,47 @@
     return apiFetch('/clinical/data/problem/edit-problem/' + encodeURIComponent(problemId));
   }
 
+  // outputParentConceptIds=1 is additive — harmless for the existing
+  // same-concept search, and it's what unlocks descendant/laterality
+  // suggestions below (confirmed live 2026-07-23: every result carries a
+  // parentConceptIds ancestor-closure array).
   var SEARCH_PATH =
-    '/clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=404684003,71388002,243796009,48176007,272379006&excludeConstrainingConcepts=307824009&query=';
+    '/clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=404684003,71388002,243796009,48176007,272379006&excludeConstrainingConcepts=307824009&outputParentConceptIds=1&query=';
 
   function searchDescriptions(queryText) {
     return apiFetch(SEARCH_PATH + encodeURIComponent(queryText)).then(function (data) {
+      return (data && data.results) || [];
+    });
+  }
+
+  // WORD-MISMATCH BUG (found live 2026-07-23, patient with "Primary total
+  // knee replacement NEC" — a legacy Read-code-migration label): Medicus's
+  // search requires EVERY word in the query to be present in a result's
+  // description (order-independent, but not fuzzy/partial). The real
+  // modern SNOMED descendants are worded "Total replacement of left/right
+  // knee joint" — no "Primary" anywhere — so a query built from the
+  // stripped legacy text ("Primary total knee replacement") returned ZERO
+  // results, silently breaking BOTH the same-concept alternatives above AND
+  // the descendant search below, for any legacy code with this property.
+  //
+  // Two confirmed-live fixes, both supplementary (never replace the
+  // existing broad query, only add candidates to it):
+  //   1. `query=<conceptId>` (a bare SCTID, not free text) reliably returns
+  //      THAT concept's own synonyms regardless of text phrasing — used
+  //      below to supplement the same-concept search.
+  //   2. Narrowing `constrainingParentConcepts` to the CURRENT concept's own
+  //      ID (instead of the six broad top-level hierarchies) scopes the
+  //      search to true descendants only, so a bare laterality word
+  //      ("left"/"right"/"bilateral") is enough to find them — no
+  //      dependency on the parent's own (possibly mismatched) wording.
+  //      Used below to supplement the descendant/laterality search.
+  function searchDescendantsNarrowed(parentConceptId, queryText) {
+    var path =
+      '/clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=' +
+      encodeURIComponent(parentConceptId) +
+      '&outputParentConceptIds=1&query=' +
+      encodeURIComponent(queryText);
+    return apiFetch(path).then(function (data) {
       return (data && data.results) || [];
     });
   }
@@ -217,10 +304,29 @@
   // exact page. Matched by EXACT trimmed text against the description
   // clinical-summary/summary already gave us — same "match by known string"
   // discipline already proven safe for the attachment-detection work.
-  function findProblemRow(description) {
+  //
+  // DUPLICATE-DESCRIPTION BUG (found live 2026-07-23, fixed here): a patient
+  // can have TWO separate problem entries with the IDENTICAL description
+  // text (e.g. two "[X]Depression NOS" entries, different problemIds). Text
+  // matching alone can't tell them apart — without `claimedAnchors`, both
+  // problems would resolve to the SAME first-matching `<a>`, so both buttons
+  // stacked on the first row (none on the second), and worse, the optimistic
+  // post-save text update for EITHER problem would hit that same shared
+  // anchor. `claimedAnchors` makes each call skip anchors already claimed by
+  // an earlier problem in the same scan pass, so the Nth problem with
+  // matching text claims the Nth matching DOM row, in document order — each
+  // problemId gets its own distinct anchor. (The underlying SAVE was never
+  // affected by this bug — postEditProblem always targets the real,
+  // correct problemId regardless of DOM matching; only button placement and
+  // the on-screen optimistic update were wrong.) Residual risk, accepted:
+  // if Medicus ever reorders duplicate-text rows between scans, the two
+  // problemIds could swap which physical row they're bound to — narrow edge
+  // case, not solved here.
+  function findProblemRow(description, claimedAnchors) {
     var links = document.querySelectorAll('a.item__link, a[class*="item__link"]');
     for (var i = 0; i < links.length; i++) {
       var a = links[i];
+      if (claimedAnchors && claimedAnchors.has(a)) continue;
       if ((a.textContent || '').trim() === description) return a;
     }
     return null;
@@ -243,7 +349,11 @@
         error: null,
         conceptId: null,
         currentDescription: null,
+        additionalInformation: null,
         alternatives: null,
+        laterality: null,
+        descendantAlternatives: null,
+        crossConceptAlternatives: null,
         saving: false,
         saved: false,
       };
@@ -260,26 +370,93 @@
       return '<div class="ms-pdc-panel"><span class="ms-pdc-error">' + esc(st.error) + '</span></div>';
     }
     var alts = st.alternatives || [];
-    if (!alts.length) {
-      return '<div class="ms-pdc-panel"><span class="ms-pdc-empty">No alternative description found for this code.</span></div>';
+    var descendants = st.descendantAlternatives || [];
+    var crossConcept = st.crossConceptAlternatives || [];
+    // Surfaced regardless of whether any suggestion was found — supports the
+    // clinician's own judgement call even when the tool has nothing to
+    // offer (e.g. a "[SO]"/NEC code the search can't currently match).
+    var infoHtml = st.additionalInformation
+      ? '<div class="ms-pdc-additional-info"><span class="ms-pdc-additional-info-label">Additional info:</span> ' +
+        esc(st.additionalInformation) +
+        '</div>'
+      : '';
+    if (!alts.length && !descendants.length && !crossConcept.length) {
+      return (
+        infoHtml +
+        '<div class="ms-pdc-panel"><span class="ms-pdc-empty">No alternative description found for this code.</span></div>'
+      );
     }
-    return (
-      '<div class="ms-pdc-panel">' +
-      alts
-        .map(function (a) {
-          return (
-            '<button type="button" class="ms-pdc-alt" data-problem-id="' +
-            esc(problemId) +
-            '" data-description-id="' +
-            esc(a.descriptionId || '') +
-            '">' +
-            esc(a.description) +
-            '</button>'
-          );
-        })
-        .join('') +
-      '</div>'
-    );
+    var html = infoHtml;
+    if (alts.length) {
+      html +=
+        '<div class="ms-pdc-panel">' +
+        alts
+          .map(function (a) {
+            return (
+              '<button type="button" class="ms-pdc-alt" data-problem-id="' +
+              esc(problemId) +
+              '" data-description-id="' +
+              esc(a.descriptionId || '') +
+              '">' +
+              esc(a.description) +
+              '</button>'
+            );
+          })
+          .join('') +
+        '</div>';
+    }
+    if (descendants.length) {
+      // Deliberately separate from the same-concept panel above and labelled
+      // to make the semantic difference obvious: this changes the CODE, not
+      // just its label — a real coding decision, never auto-applied.
+      html +=
+        '<div class="ms-pdc-descendant-section">' +
+        '<span class="ms-pdc-descendant-label">Additional info suggests a more specific code:</span>' +
+        '<div class="ms-pdc-panel">' +
+        descendants
+          .map(function (a) {
+            return (
+              '<button type="button" class="ms-pdc-descendant" data-problem-id="' +
+              esc(problemId) +
+              '" data-description-id="' +
+              esc(a.descriptionId || '') +
+              '">' +
+              esc(a.description) +
+              '</button>'
+            );
+          })
+          .join('') +
+        '</div>' +
+        '</div>';
+    }
+    if (crossConcept.length) {
+      // Deliberately flagged, not just a third plain section: this is the
+      // riskiest category (a text match to a DIFFERENT concept, no
+      // hierarchy proof) — amber warning styling + explicit copy so a
+      // clinician doesn't mistake it for a same-concept relabel.
+      html +=
+        '<div class="ms-pdc-crossconcept-section">' +
+        '<span class="ms-pdc-crossconcept-label">⚠ Different SNOMED code, same description — verify before applying:</span>' +
+        '<div class="ms-pdc-panel">' +
+        crossConcept
+          .map(function (a) {
+            return (
+              '<button type="button" class="ms-pdc-crossconcept" data-problem-id="' +
+              esc(problemId) +
+              '" data-concept-id="' +
+              esc(a.conceptId) +
+              '" data-description-id="' +
+              esc(a.descriptionId || '') +
+              '">' +
+              esc(a.description) +
+              '</button>'
+            );
+          })
+          .join('') +
+        '</div>' +
+        '</div>';
+    }
+    return html;
   }
 
   function renderPanel(problemId) {
@@ -307,6 +484,16 @@
         applyAlternative(problemId, btn.getAttribute('data-description-id'));
       });
     });
+    root.querySelectorAll('.ms-pdc-descendant').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyDescendant(problemId, btn.getAttribute('data-description-id'));
+      });
+    });
+    root.querySelectorAll('.ms-pdc-crossconcept').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyCrossConcept(problemId, btn.getAttribute('data-concept-id'), btn.getAttribute('data-description-id'));
+      });
+    });
   }
 
   async function openPanel(problemId) {
@@ -326,9 +513,31 @@
       st.prefill = prefill;
       st.conceptId = code.conceptId;
       st.currentDescription = code.description;
+      st.additionalInformation = prefill.additionalInformation || '';
       var queryText = stripLegacyMarkers(code.description);
       var results = await searchDescriptions(queryText);
-      st.alternatives = sameConceptAlternatives(results, code.conceptId, code.description);
+      // Supplement with an SCTID-keyed search for the current concept's own
+      // synonyms — see searchDescendantsNarrowed's comment above for why:
+      // the broad free-text query can return zero results for a legacy
+      // description whose wording doesn't literally match any current
+      // synonym, and this bypasses that entirely.
+      var byConceptId = await searchDescriptions(code.conceptId);
+      var combinedResults = results.concat(byConceptId);
+      st.alternatives = sameConceptAlternatives(combinedResults, code.conceptId, code.description);
+      var laterality = detectLateralityHint(prefill.additionalInformation);
+      if (laterality && !descriptionAlreadySpecifiesLaterality(code.description, laterality)) {
+        st.laterality = laterality;
+        var narrowed = await searchDescendantsNarrowed(code.conceptId, laterality);
+        st.descendantAlternatives = descendantAlternatives(
+          combinedResults.concat(narrowed),
+          code.conceptId,
+          laterality
+        );
+      } else {
+        st.laterality = null;
+        st.descendantAlternatives = [];
+      }
+      st.crossConceptAlternatives = crossConceptAlternatives(combinedResults, code.conceptId, code.description);
     } catch (err) {
       st.error = (err && err.message) || 'Failed to load alternative descriptions.';
     } finally {
@@ -343,11 +552,13 @@
     renderPanel(problemId);
   }
 
-  async function applyAlternative(problemId, descriptionId) {
+  // Core apply path, shared by both the same-concept alternatives (a cosmetic
+  // relabel) and the descendant/laterality suggestions (a real code change) —
+  // the safety difference between the two is entirely in HOW `chosen` was
+  // selected upstream (sameConceptAlternatives vs descendantAlternatives),
+  // not in how it's applied here.
+  async function applyCode(problemId, chosen) {
     var st = rowState(problemId);
-    var chosen = (st.alternatives || []).find(function (a) {
-      return (a.descriptionId || '') === (descriptionId || '');
-    });
     if (!chosen || st.saving) return;
     st.saving = true;
     renderPanel(problemId);
@@ -385,6 +596,34 @@
       st.saving = false;
       renderPanel(problemId);
     }
+  }
+
+  function applyAlternative(problemId, descriptionId) {
+    var st = rowState(problemId);
+    var chosen = (st.alternatives || []).find(function (a) {
+      return (a.descriptionId || '') === (descriptionId || '');
+    });
+    return applyCode(problemId, chosen);
+  }
+
+  function applyDescendant(problemId, descriptionId) {
+    var st = rowState(problemId);
+    var chosen = (st.descendantAlternatives || []).find(function (a) {
+      return (a.descriptionId || '') === (descriptionId || '');
+    });
+    return applyCode(problemId, chosen);
+  }
+
+  // Matched by conceptId + descriptionId together (not descriptionId alone,
+  // unlike the two lookups above) — crossConceptAlternatives candidates come
+  // from DIFFERENT concepts, so descriptionId alone isn't guaranteed unique
+  // across them the way it is within a single concept's synonym list.
+  function applyCrossConcept(problemId, conceptId, descriptionId) {
+    var st = rowState(problemId);
+    var chosen = (st.crossConceptAlternatives || []).find(function (a) {
+      return a.conceptId === conceptId && (a.descriptionId || '') === (descriptionId || '');
+    });
+    return applyCode(problemId, chosen);
   }
 
   // ── Injection: one "Fix description" button per flagged row ─────────────────
@@ -443,9 +682,16 @@
     }
     if (!_problemsCache) return;
     var outdated = findOutdatedProblems(_problemsCache);
+    // See findProblemRow's comment: claimedAnchors ensures two problems with
+    // IDENTICAL description text each get their own distinct DOM row instead
+    // of colliding on the first match.
+    var claimedAnchors = new Set();
     outdated.forEach(function (p) {
-      var row = findProblemRow(p.problemCodeDescription);
-      if (row) injectFixButton(p.id, row);
+      var row = findProblemRow(p.problemCodeDescription, claimedAnchors);
+      if (row) {
+        claimedAnchors.add(row);
+        injectFixButton(p.id, row);
+      }
     });
   }
 

@@ -2,6 +2,115 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.179.0] — 2026-07-23
+
+### "Fix description" widget: surfaces the raw additional-info text
+
+The panel now shows the problem's raw `additionalInformation` free text (when present),
+regardless of whether the tool found any suggestion — supports the clinician's own
+judgement call even in cases the tool can't yet match (e.g. the "[SO]" codes flagged for
+follow-up). Neutral grey styling, deliberately distinct from the three suggestion
+categories' colours so it doesn't read as an actionable option itself.
+
+### "Fix description" widget: fixed a silent word-mismatch search failure
+
+Found live-testing on a patient with "Primary total knee replacement NEC" (a legacy
+Read-code-migration label): the search returned ZERO results for the whole widget, not
+just the new descendant suggestion. Root cause — Medicus's description search requires
+EVERY word in the query to appear in a result; the real modern descendants ("Total
+replacement of left/right knee joint") don't contain the word "Primary" anywhere, so the
+entire query silently failed. This affected the SAME-CONCEPT alternatives too (the
+original, already-shipped v3.178.0 flow), not just today's new work — any legacy
+description with a word not echoed in its concept's modern phrasing could silently
+return nothing, with no error, just an empty "no alternative found" panel.
+
+Two supplementary searches fix this, both confirmed live, both additive (never replace
+the existing broad query, only add candidates to it):
+
+- Same-concept alternatives now also query by a bare SCTID (`query=<conceptId>`), which
+  reliably returns that concept's own synonyms regardless of text phrasing.
+- Descendant/laterality suggestions now also run a narrowed search
+  (`constrainingParentConcepts=<current conceptId>` instead of the six broad top-level
+  hierarchies, `query=<just the laterality word>`) — scoped to true descendants only, so
+  a bare "left"/"right" is enough to find them without depending on the parent's own
+  wording at all.
+- 2 new regression tests using the real captured knee-replacement data.
+
+### "Fix description" widget: fixed duplicate-description row collision
+
+Found live-testing the additions below: if a patient has TWO problem entries with the
+IDENTICAL description text, `findProblemRow`'s exact-text DOM match always returned the
+FIRST matching row — so both problems' buttons stacked on the first row, none appeared
+on the second, and (more seriously) the optimistic post-save text update for either
+problem also hit that same shared first anchor. The underlying SAVE was never affected
+(`postEditProblem` always targets the real, correct `problemId`, independent of DOM
+matching) — only button placement and the on-screen update were wrong. Fixed: `scan()`
+now tracks anchors already claimed within a pass (`claimedAnchors`), so the Nth problem
+with matching text claims the Nth matching row in document order — each problemId gets
+its own distinct anchor.
+
+### "Fix description" widget: now also suggests a more specific code (laterality)
+
+Real example that prompted this: a patient's "Fracture of radius NOS" problem had
+free-text additional info "rt distal end" — implying a more specific SNOMED concept
+("Fracture of right radius") than the one currently coded. Unlike the existing
+description-cleanup flow (which only ever offers a different DESCRIPTION of the SAME
+code — a cosmetic relabel), this can suggest a genuinely different, more specific
+concept — a real coding decision. Scoped deliberately narrow for this pass:
+
+- **Laterality only** (right/rt, left/lt, bilateral/bilat) — not full free-text-to-code
+  NLP, which is large and risky (abbreviation ambiguity means a wrong-but-confident
+  suggestion is worse than none).
+- **Descendants only, never a lateral recode** — confirmed via Medicus's own
+  `outputParentConceptIds=1` search param (added to the existing `SEARCH_PATH`, additive
+  and harmless for the existing same-concept search), which returns each result's full
+  SNOMED IS-A ancestor closure. The safety test: does the CURRENT concept's ID appear in
+  a candidate's `parentConceptIds`? If yes, it's a strict specialisation, safe to offer.
+- **Only runs for problems already flagged as outdated** — same trigger population as
+  the existing "Fix description" button, same one click, same edit-form fetch that click
+  already makes. No new proactive per-patient scanning and no new opt-in affordance,
+  because `additionalInformation` (where the laterality hint lives) isn't available
+  without a per-problem fetch, and this reuses the one the clinician already triggered
+  rather than adding new API cost. Running this across the whole record (every problem,
+  other entity types, or hooking into Medicus's own native "Edit Problem" UI) was
+  discussed and explicitly deferred, not built here.
+
+- New `shared/coding-specificity.js`: `detectLateralityHint`,
+  `descriptionAlreadySpecifiesLaterality`, `descendantAlternatives` — entity-agnostic,
+  mirrors the existing `shared/legacy-coded-description.js` split.
+- `content-scripts/problem-description-cleanup.js`: same click that opens the panel now
+  also computes descendant/laterality suggestions from the same search response; the
+  apply path is refactored into a shared `applyCode()` core used by both same-concept
+  and descendant candidates.
+- `content-scripts/problem-description-cleanup.css`: descendant suggestions render in a
+  visually distinct (blue, not amber) section, so a clinician can tell "cosmetic
+  relabel" and "different, more specific code" apart at a glance.
+
+### "Fix description" widget: also flags a same-text match under a DIFFERENT code
+
+Second gap found in testing: "[X]Heroin addiction" (`75544000`) has NO same-concept
+alternative to offer — the modern term lives under a genuinely different concept,
+`231477003` "Heroin addiction". `sameConceptAlternatives` can never surface this by
+design (it's a different `conceptId`), so nothing was offered even though a clean fix
+exists.
+
+- New `crossConceptAlternatives` in `shared/coding-specificity.js`: finds a DIFFERENT
+  concept whose description is textually IDENTICAL to the current one once legacy
+  markers are stripped, reusing the exact same search response — zero new API calls.
+  This is the riskiest of the three categories now offered (no hierarchy proof, unlike
+  descendants — only a text match), so it renders in its own warning-orange section with
+  explicit "⚠ Different SNOMED code, same description — verify before applying" copy,
+  visually distinct from both the amber same-concept and blue descendant sections.
+  **Scope note**: this only catches an EXACT text match — it will not catch a
+  differently-worded modern replacement (e.g. "Opioid dependence" for the same old
+  code), which would need real terminology-mapping data, not a text match.
+- `shared/legacy-coded-description.js`: the outdated-description detector now also
+  treats a trailing **" NEC"** (Not Elsewhere Classified) as a legacy marker, alongside
+  the existing "[X]"/NOS handling.
+- 12 more new tests in `test-problem-description-cleanup.js` (37 new in total for this
+  release, 73 overall), including a fixture built around the real "[X]Heroin addiction"
+  example.
+
 ## [v3.178.1] — 2026-07-22
 
 ### "Fix description" widget: cleanup from first live test
