@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.176.0
-**Generated:** 2026-07-19 (automated)
+**Version:** v3.177.0
+**Generated:** 2026-07-22 (manual sync — Triage North Star wave 1)
 
 ## What it is
 
@@ -86,7 +86,7 @@ Practice-defined per-patient flags — interpreter required, safeguarding concer
 
 ## In-page features (content scripts)
 
-- **Triage Lens — request queue**: overlays the patient request queue with severity chips (red/amber/info/routine) from ~80 built-in rules covering chest pain, sepsis, stroke, anaphylaxis, paediatric red flags and more, plus Pharmacy First signposting and keyboard-driven triage — decision support only, never auto-triage.
+- **Triage Lens — request queue**: overlays the patient request queue with severity chips (red/amber/info/routine) from ~80 built-in rules covering chest pain, sepsis, stroke, anaphylaxis, paediatric red flags and more, plus Pharmacy First signposting and keyboard-driven triage — decision support only, never auto-triage. From v3.177.0 rows also carry record-context chips: "pending urgent/abnormal result" when this session graded that patient's labs red/amber on the results queue (always age-stamped), "3rd contact in 14d" / "N open requests · this patient" repeat-contact observations from a machine-local UUID-and-date ledger, and "carried over Nd" for tasks this workstation first saw days ago whose displayed date has since reset — all escalate-only; absence of any chip asserts nothing.
 - **Triage Lens — investigation results queue**: per-row severity chips on the lab-results filing queue (Urgent, N abnormal, Under-prioritised, Unmatched), a live red/amber/clear status bar, trend arrows and a detail popover per chip, and an honest "not yet assessed" state rather than a false "clear".
 - **Lab Results Auto-Filing button**: a one-click "File all normal" action that appears only when every value on a result task is confirmed within normal limits — the suite's first feature that writes to the clinical record, gated behind an all-normal fail-closed check, admin-configured profiles that ship disabled, and a per-install kill switch.
 - **Prescribing workflow button**: one-click "send to routine prescriptions," driving Medicus's own re-assign control with a configurable team, fully audited.
@@ -126,6 +126,8 @@ The bundled library ships **32 starter alerts** — 29 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, with a per-warning acknowledge/snooze
 
 ## Recent additions (last 4 weeks)
+
+- **v3.177.0 (2026-07-22)** — Triage North Star wave 1: an urgent breach-risk strip in the side panel (counts Medicus-flagged-urgent requests and alerts when the oldest passes 2h/4h, with a fail-visible "urgency unknown" state); pending-abnormal-result cross-link chips on request-queue rows ("⚠ pending urgent result · graded 12m ago"); repeat-contact chips ("3rd contact in 14d") from a bounded machine-local ledger; and carry-over chips ("carried over 4d") that catch requests bounced between holders whose displayed date reset. All escalate-only, all with visible reasons; hazard log v3.15 (H-045–H-048, pending CSO review).
 
 - **v3.176.0 (2026-07-18)** — Patient Alerts now show on the Medicus page itself (banner in the patient header) and on task-queue rows (flag chips), so a flag is seen before the patient is phoned — plus author attribution on every flag and a full add/edit/remove audit trail in the Event Ledger.
 
