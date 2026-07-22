@@ -220,6 +220,33 @@
     );
   }
 
+  // Finds the specific message card that actually contains a real
+  // attachment, rather than always assuming it's the "Initial Request" card
+  // — confirmed live 2026-07-22: a communication thread can carry the
+  // attachment on a LATER reply card (a "Reply from Requester" card has no
+  // heading at all, so findInitialRequestCard() could never find it), and
+  // anchoring both inline widgets under an attachment-less opening message
+  // was confusing. Matches by filename against window.__msTriageAttachments
+  // (content.js's read-only accessor) — returns null (falls through to
+  // findInitialRequestCard() at the call site) when there's no attachment or
+  // its card can't be located.
+  function findAttachmentCard() {
+    const atts = window.__msTriageAttachments;
+    if (!Array.isArray(atts) || !atts.length) return null;
+    const els = document.querySelectorAll('a, button');
+    for (const att of atts) {
+      const name = (att && att.filename ? att.filename : '').trim();
+      if (!name) continue;
+      for (const el of els) {
+        if ((el.textContent || '').trim() === name) {
+          const card = el.closest('.m-card-v2') || el.closest('[class*="m-card"]');
+          if (card) return card;
+        }
+      }
+    }
+    return null;
+  }
+
   // The bottom-most visible "More actions" button's row, excluding any inside a
   // dialog/drawer. Returns the row element so we can insert the panel above it.
   function findActionRow() {
@@ -252,9 +279,10 @@
       withObserverPaused(() => row.parentElement.insertBefore(w, row));
       return;
     }
-    // 4: after the "Initial Request" card (communication-thread tasks have
-    // neither of the above two anchors — confirmed live 2026-07-20).
-    const irCard = findInitialRequestCard();
+    // 4: after the card that actually carries the attachment if there is
+    // one, else after the "Initial Request" card (communication-thread tasks
+    // have neither of the above two anchors — confirmed live 2026-07-20).
+    const irCard = findAttachmentCard() || findInitialRequestCard();
     if (irCard && irCard.parentElement) {
       withObserverPaused(() => irCard.after(w));
       return;
@@ -268,7 +296,13 @@
   function removeWidget() {
     const w = document.getElementById('ms-tk-widget');
     if (!w) return;
-    withObserverPaused(() => w.remove());
+    withObserverPaused(() => {
+      const row = w.parentElement;
+      w.remove();
+      // Leave no empty .ms-inline-widget-row litter once nothing shares it
+      // (document-file-inline.js wraps this widget in one to sit side by side).
+      if (row && row.classList.contains('ms-inline-widget-row') && !row.children.length) row.remove();
+    });
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────

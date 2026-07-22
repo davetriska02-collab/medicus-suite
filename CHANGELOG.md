@@ -2,6 +2,70 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.177.7] — 2026-07-22
+
+### Inline task/document widgets: anchor next to the actual attachment, not always the opening message
+
+On a communication-thread task with neither a "Codes & actions" card nor a
+"More actions" button, both `task-inline.js` ("Create task for this patient")
+and `document-file-inline.js` ("Save attachment as document") fell back to
+anchoring right after the "Initial Request" card — even when the real
+attachment was on a LATER reply further down the thread, which put both
+buttons under a message that had no attachment at all.
+
+- New `findAttachmentCard()` (identical copy in both files — both widgets
+  need the same anchor decision): matches a real attachment's filename
+  (`window.__msTriageAttachments`, content.js's accessor) against the page's
+  `<a>`/`<button>` elements and returns the enclosing message card. Tried
+  BEFORE the `findInitialRequestCard()` fallback — when there's no attachment,
+  or its card can't be found, behaviour is unchanged.
+- When the attachment IS on the opening message, this resolves to the same
+  card as before (no behaviour change for the common case).
+
+## [v3.177.6] — 2026-07-22
+
+### "Save attachment as document": missed attachments on later replies in a communication thread
+
+Fixes a real live-test miss: a patient photo attached to a "Reply from
+Requester" message further down a communication thread (not the opening
+message) was invisible to the "save as document" widget. Root cause: `content.js`'s
+attachment scan was scoped to the "Initial Request" card only
+(`findCardByTitle('Initial Request')`) — and confirmed live, a reply card has
+no `h2`/`h3`/`h4` heading at all, so it could never be found that way even in
+principle.
+
+- `extractInitialRequest()`'s attachment detection is now a page-wide scan
+  (new `extractAllAttachments()`) instead of being scoped to one specific
+  card — any `<a>`/`<button>` anywhere on the task page whose text/href ends
+  in a known attachment extension is picked up, deduped by filename. Verified
+  safe against false positives via a full-page link/button text dump on the
+  task that surfaced this bug: exactly one match, the real attachment: nothing
+  in Medicus's own nav/page chrome collided.
+- The "Initial Request" card is still used for the request-text snippet
+  (`ir.text`) — only the attachment scan was widened.
+
+## [v3.177.5] — 2026-07-22
+
+### "Save attachment as document": fixes from first live test of the picker
+
+- **Selection now shows in the search box.** Picking a document type (via a
+  priority chip, a search result, or the extension-based pre-select) used to
+  clear the search box back to empty, so the picker looked unselected even
+  though a type was in fact active — the box now displays the selected type's
+  name, and the results dropdown stays hidden until the clinician actually
+  starts typing again.
+- **Document date now defaults to when the triage request was received**,
+  not the date the clinician happens to action the task. `content.js` now
+  exposes the task's own "Created" date (`window.__msTaskCreatedDate`, reusing
+  the same parse already done for the "days open" chip) and
+  `document-file-inline.js` prefers it over the create-form's own
+  `recordDate` default (today).
+- **Layout: "Create task for this patient" and "Save attachment as document"
+  now sit side by side** instead of stacked, when both are present on the
+  same task — `document-file-inline.js` wraps the two widgets in a shared
+  flex row (`.ms-inline-widget-row`) the first time either is injected; each
+  widget's own body still opens full-width in its own column when expanded.
+
 ## [v3.177.4] — 2026-07-20
 
 ### "Save attachment as document": full SNOMED document-type picklist (priority shortlist + search)

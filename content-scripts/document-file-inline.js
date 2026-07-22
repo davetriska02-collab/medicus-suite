@@ -328,6 +328,12 @@
       // this is null (see canCreate in renderForm).
       documentType: null,
       documentTypeQuery: '',
+      // true when documentTypeQuery is just DISPLAYING the current selection
+      // (pre-selected guess, or just picked from the shortlist/search) rather
+      // than an in-progress search the clinician is typing — suppresses the
+      // results dropdown so a freshly-made selection doesn't immediately show
+      // a "here's what else you could pick" list under itself.
+      documentTypeQueryLocked: false,
       documentDate: todayISO(),
       step: 'form', // 'form' | 'created'
       creating: false,
@@ -543,6 +549,51 @@
     );
   }
 
+  // Finds the specific message card that actually contains a real
+  // attachment, rather than always assuming it's the "Initial Request" card
+  // — confirmed live 2026-07-22: a communication thread can carry the
+  // attachment on a LATER reply card (a "Reply from Requester" card has no
+  // heading at all, so findInitialRequestCard() could never find it), and
+  // anchoring both inline widgets under an attachment-less opening message
+  // was confusing. Matches by filename against window.__msTriageAttachments
+  // (content.js's read-only accessor) — returns null (falls through to
+  // findInitialRequestCard() at the call site) when there's no attachment or
+  // its card can't be located. Identical to task-inline.js's own copy (both
+  // widgets need the same anchor decision).
+  function findAttachmentCard() {
+    var atts = window.__msTriageAttachments;
+    if (!Array.isArray(atts) || !atts.length) return null;
+    var els = document.querySelectorAll('a, button');
+    for (var i = 0; i < atts.length; i++) {
+      var name = (atts[i] && atts[i].filename ? atts[i].filename : '').trim();
+      if (!name) continue;
+      for (var j = 0; j < els.length; j++) {
+        var el = els[j];
+        if ((el.textContent || '').trim() === name) {
+          var card = el.closest('.m-card-v2') || el.closest('[class*="m-card"]');
+          if (card) return card;
+        }
+      }
+    }
+    return null;
+  }
+
+  // Puts this widget side by side with the "create task" widget (ms-tk-widget)
+  // rather than stacked underneath it — wraps both in a shared flex row
+  // (.ms-inline-widget-row, styled in both task-inline.css and this file's
+  // CSS) the first time either widget is injected; a later call just reuses
+  // the existing row. Each widget's own body still opens full-width within
+  // its own column (see the CSS), so this only affects the collapsed layout.
+  function ensureWidgetRow(taskWidget) {
+    var row = taskWidget.parentElement;
+    if (row && row.classList.contains('ms-inline-widget-row')) return row;
+    var wrapper = document.createElement('div');
+    wrapper.className = 'ms-inline-widget-row';
+    row.insertBefore(wrapper, taskWidget);
+    wrapper.appendChild(taskWidget);
+    return wrapper;
+  }
+
   function injectWidget() {
     if (!getTaskInfo()) return;
     if (eligibleAttachments().length === 0) return;
@@ -550,9 +601,17 @@
     var w = document.createElement('div');
     w.id = 'ms-df-widget';
     renderInto(w);
-    // Stack after any other inline widget already anchored here (task/booking),
-    // or the "Codes & actions" card, or above the bottom action row.
-    var after = document.getElementById('ms-tk-widget') || document.getElementById('ms-bk-widget') || findCard();
+    // Side by side with the "create task" widget, if present on this task.
+    var taskWidget = document.getElementById('ms-tk-widget');
+    if (taskWidget && taskWidget.parentElement) {
+      withObserverPaused(function () {
+        ensureWidgetRow(taskWidget).appendChild(w);
+      });
+      return;
+    }
+    // Otherwise stack after any other inline widget already anchored here
+    // (booking), or the "Codes & actions" card, or above the bottom action row.
+    var after = document.getElementById('ms-bk-widget') || findCard();
     if (after && after.parentElement) {
       withObserverPaused(function () {
         after.after(w);
@@ -566,10 +625,11 @@
       });
       return;
     }
-    // Last resort: after the "Initial Request" card itself (communication-
-    // thread tasks have neither of the above two anchors — confirmed live
-    // 2026-07-20).
-    var irCard = findInitialRequestCard();
+    // Last resort: after the card that actually carries the attachment if
+    // there is one, else after the "Initial Request" card itself
+    // (communication-thread tasks have neither of the above two anchors —
+    // confirmed live 2026-07-20).
+    var irCard = findAttachmentCard() || findInitialRequestCard();
     if (irCard && irCard.parentElement) {
       withObserverPaused(function () {
         irCard.after(w);
@@ -582,7 +642,10 @@
     var w = document.getElementById('ms-df-widget');
     if (!w) return;
     withObserverPaused(function () {
+      var row = w.parentElement;
       w.remove();
+      // Leave no empty .ms-inline-widget-row litter once nothing shares it.
+      if (row && row.classList.contains('ms-inline-widget-row') && !row.children.length) row.remove();
     });
   }
 
@@ -646,15 +709,6 @@
 
   // ── Document type picker (priority shortlist + full search) ──────────────────
 
-  function documentTypeCurrentHtml() {
-    if (s.documentType) {
-      return (
-        '<div class="ms-df-dt-current">Document type: <strong>' + esc(s.documentType.description) + '</strong></div>'
-      );
-    }
-    return '<div class="ms-df-dt-current ms-df-dt-none">No document type selected yet.</div>';
-  }
-
   function documentTypePriorityHtml() {
     var priority = (_dtCache && _dtCache.priority) || [];
     if (!priority.length) return '';
@@ -684,6 +738,7 @@
   // rerender() (which would drop focus from the search box mid-type — same
   // discipline as the title/date inputs above).
   function documentTypeResultsInnerHtml() {
+    if (s.documentTypeQueryLocked) return '';
     var q = s.documentTypeQuery.trim();
     if (!q) return '';
     var entries = (_dtCache && _dtCache.entries) || [];
@@ -732,12 +787,12 @@
       '"></div>' +
       '<div class="ms-df-row">' +
       '<label class="ms-df-label" for="ms-df-dt-search">Document type</label>' +
-      documentTypeCurrentHtml() +
       documentTypePriorityHtml() +
       '<input class="ms-df-input" id="ms-df-dt-search" type="text" autocomplete="off" ' +
       'placeholder="Search all document types…" value="' +
       esc(s.documentTypeQuery) +
       '">' +
+      (!s.documentType ? '<div class="ms-df-dt-none">No document type selected yet.</div>' : '') +
       '<div class="ms-df-dt-results" id="ms-df-dt-results">' +
       documentTypeResultsInnerHtml() +
       '</div>' +
@@ -788,12 +843,20 @@
       s.reviewerAssigneeId = (sel && sel.value) || null;
       s.reviewerAssigneeType = (sel && sel.type) || null;
       s.recordDateDefault = (form && form.recordDate) || todayISO();
-      s.documentDate = s.recordDateDefault;
+      // Prefer the date the triage request itself was received (this task's
+      // own "Created" date, exposed by content.js) over the create-form's own
+      // recordDate default (today) — a document filed from a triage
+      // attachment should be dated when the patient submitted it, not when
+      // the clinician happened to action the task.
+      s.documentDate =
+        (typeof window.__msTaskCreatedDate === 'string' && window.__msTaskCreatedDate) || s.recordDateDefault;
       await ensureDocumentTypesLoaded();
       var atts = eligibleAttachments();
       if (atts[s.selectedIdx]) {
         s.title = titleFromFilename(atts[s.selectedIdx].filename);
         s.documentType = documentTypeForFilename(atts[s.selectedIdx].filename || atts[s.selectedIdx].href);
+        s.documentTypeQuery = s.documentType ? s.documentType.description : '';
+        s.documentTypeQueryLocked = !!s.documentType;
       }
     } catch (err) {
       s.error = err.message || 'Failed to load the document form.';
@@ -861,11 +924,15 @@
     el.querySelector('#ms-df-attachment')?.addEventListener('change', function (e) {
       s.selectedIdx = Number(e.target.value) || 0;
       var atts = eligibleAttachments();
+      s.documentType = null;
+      s.documentTypeQuery = '';
+      s.documentTypeQueryLocked = false;
       if (atts[s.selectedIdx]) {
         s.title = titleFromFilename(atts[s.selectedIdx].filename);
         s.documentType = documentTypeForFilename(atts[s.selectedIdx].filename || atts[s.selectedIdx].href);
+        s.documentTypeQuery = s.documentType ? s.documentType.description : '';
+        s.documentTypeQueryLocked = !!s.documentType;
       }
-      s.documentTypeQuery = '';
       rerender();
     });
 
@@ -888,6 +955,7 @@
     // discipline as the title/date inputs above).
     el.querySelector('#ms-df-dt-search')?.addEventListener('input', function (e) {
       s.documentTypeQuery = e.target.value;
+      s.documentTypeQueryLocked = false;
       var resultsEl = el.querySelector('#ms-df-dt-results');
       if (resultsEl) {
         resultsEl.innerHTML = documentTypeResultsInnerHtml();
@@ -919,6 +987,8 @@
       if (atts[0]) {
         s.title = titleFromFilename(atts[0].filename);
         s.documentType = documentTypeForFilename(atts[0].filename || atts[0].href);
+        s.documentTypeQuery = s.documentType ? s.documentType.description : '';
+        s.documentTypeQueryLocked = !!s.documentType;
       }
       rerender();
     });
@@ -938,7 +1008,8 @@
         var match = findDocumentTypeByConceptId(entries, id);
         if (!match) return;
         s.documentType = match;
-        s.documentTypeQuery = '';
+        s.documentTypeQuery = match.description;
+        s.documentTypeQueryLocked = true;
         rerender();
       });
     });

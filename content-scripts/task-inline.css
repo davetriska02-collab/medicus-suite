@@ -1,6 +1,25 @@
 /* Medicus Suite — inline "create task" widget injected into task pages */
 /* All selectors scoped to #ms-tk-widget to avoid Medicus style conflicts */
 
+/* Shared row that sits this widget side by side with #ms-df-widget ("save
+   attachment as document") instead of stacked — see document-file-inline.js's
+   ensureWidgetRow(). Duplicated (harmlessly) in document-file-inline.css
+   since either widget may be the one that creates the wrapper. */
+.ms-inline-widget-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.ms-inline-widget-row > #ms-tk-widget,
+.ms-inline-widget-row > #ms-df-widget {
+  margin: 0;
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+
 #ms-tk-widget {
   margin: 16px 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
