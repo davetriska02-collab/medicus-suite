@@ -3627,6 +3627,11 @@
     // queue) onto this queue's request rows. No-op on the results queue itself and
     // when the index is empty; rides the shared resolve cache + its own 8-row cap.
     scheduleQueuePending();
+    // B3: repeat-contact chip (tier-1 session + tier-2 rolling ledger). Rides the
+    // shared resolve cache; request queues only. B5: aged-request carry-over —
+    // task-keyed, no resolve/fetch. Both record into the local ledgers here.
+    scheduleQueueRepeatContact();
+    scheduleQueueCarryOver();
   };
 
   // ---- Late-card settle-watch (record/detail extraction race) ----
@@ -3985,6 +3990,9 @@
   let _bridgePaDebounceTimer = null;
   // Debounce timer for scheduleQueuePending (B2 pending cross-link chips)
   let _bridgePendingDebounceTimer = null;
+  // Debounce timers for scheduleQueueRepeatContact (B3) / scheduleQueueCarryOver (B5)
+  let _bridgeRepeatDebounceTimer = null;
+  let _bridgeCarryDebounceTimer = null;
 
   window.addEventListener('ch-task-list-data', (e) => {
     // --- Rate-limit: count events in a rolling window ---
@@ -4072,6 +4080,12 @@
     // B2 pending cross-link chips ride the same debounce cadence (defined below).
     clearTimeout(_bridgePendingDebounceTimer);
     _bridgePendingDebounceTimer = setTimeout(scheduleQueuePending, _BRIDGE_DEBOUNCE_MS);
+    // B3 repeat-contact + B5 carry-over ride the same debounce cadence — the
+    // task-list event is the coalescing point for both ledger writes and chips.
+    clearTimeout(_bridgeRepeatDebounceTimer);
+    _bridgeRepeatDebounceTimer = setTimeout(scheduleQueueRepeatContact, _BRIDGE_DEBOUNCE_MS);
+    clearTimeout(_bridgeCarryDebounceTimer);
+    _bridgeCarryDebounceTimer = setTimeout(scheduleQueueCarryOver, _BRIDGE_DEBOUNCE_MS);
     // Result triage trigger. _queueRowUuids/_durableRowMap are already populated by the
     // synchronous loop above, so the leading-edge FIRST pass per queue entry can fire
     // immediately (skipping the 150ms debounce) to overlap the grid's first paint. The
@@ -4403,6 +4417,282 @@
       const cached = getCachedPatientForTask(taskUuid);
       if (!cached || !cached.patientUuid) return;
       injectQueuePendingChip(Number(ri), cached.patientUuid, taskUuid);
+    });
+  };
+
+  // ---- B3 repeat-contact + B5 aged-request carry-over ledgers ----
+  // Two escalate-only queue chips backed by the pure shared/contact-ledger.js:
+  //   B3 (.ch-q-repeat) — "3rd contact in 14d" (tier-2 rolling ledger) / "2 open
+  //       requests · this patient" (tier-1, this tab session). Patient-keyed, so
+  //       it rides the SHARED resolve substrate (getCachedPatientForTask), gated
+  //       to REQUEST queues, capped like the pending pass.
+  //   B5 (.ch-q-carry) — "carried over 4d". Task-keyed only (taskUuid + first/
+  //       last-seen day + slug — NO patient identity, NO fetch), so it needs no
+  //       resolve: it reads _durableRowMap/_queueRowUuids directly.
+  // ONE storage surface pattern: two chrome.storage.local keys under the `ledger.`
+  // prefix (contactLog / taskAge), memory-mirrored here for synchronous reinject,
+  // persisted by a debounced dirty-checked flush (never a write per observer tick).
+  // Both keys follow the Event Ledger's deliberately-NOT-backed-up doctrine (device-
+  // local history; a restore onto another machine would fabricate a false "seen
+  // here" trail — allowlisted in test-backup-coverage.js).
+  const CL = window.ContactLedger || null;
+  // Memory mirrors (loaded from storage on init, pruned on load). `null` slug map
+  // never used here — the mirrors are plain objects the pure ops mutate in place.
+  let _contactLogMem = {};
+  let _taskAgeMem = {};
+  // Tier-1 session state: patientUuid → Set(taskUuid) of OPEN request tasks SEEN
+  // this tab session across ALL queues. Deliberately NOT cleared by runQueue (the
+  // cross-queue "both queues" signal), only bounded. Never persisted (session-only,
+  // and only ever claims what was actually observed this session).
+  const _sessionContacts = new Map();
+  const _SESSION_CONTACTS_CAP = 800;
+  // Dirty flags + one coalescing flush timer — batch per task-list event, not per
+  // mutation-observer tick (mirrors the submissions.ledger dirty-check, M9).
+  let _contactLogDirty = false;
+  let _taskAgeDirty = false;
+  let _ledgerFlushTimer = null;
+  const _LEDGER_FLUSH_MS = 1500;
+
+  const loadContactLedgers = () => {
+    if (!CL) return;
+    try {
+      chrome.storage.local.get([CL.constants.CONTACT_KEY, CL.constants.TASK_KEY], (r) => {
+        const now = new Date();
+        _contactLogMem = CL.pruneContacts(CL.sanitiseContactStore(r && r[CL.constants.CONTACT_KEY]), now);
+        _taskAgeMem = CL.pruneTasks(CL.sanitiseTaskStore(r && r[CL.constants.TASK_KEY]), now);
+      });
+    } catch (_) {
+      _contactLogMem = {};
+      _taskAgeMem = {};
+    }
+  };
+  if (CL) loadContactLedgers();
+
+  const scheduleLedgerFlush = () => {
+    if (!CL || (!_contactLogDirty && !_taskAgeDirty)) return;
+    if (_ledgerFlushTimer) return; // already pending — coalesce
+    _ledgerFlushTimer = setTimeout(() => {
+      _ledgerFlushTimer = null;
+      const now = new Date();
+      const writes = {};
+      if (_contactLogDirty) {
+        CL.pruneContacts(_contactLogMem, now);
+        writes[CL.constants.CONTACT_KEY] = _contactLogMem;
+        _contactLogDirty = false;
+      }
+      if (_taskAgeDirty) {
+        CL.pruneTasks(_taskAgeMem, now);
+        writes[CL.constants.TASK_KEY] = _taskAgeMem;
+        _taskAgeDirty = false;
+      }
+      try {
+        chrome.storage.local.set(writes);
+      } catch (_) {
+        /* storage unavailable — mirrors stay in memory for this session */
+      }
+    }, _LEDGER_FLUSH_MS);
+  };
+
+  // Compute the repeat-contact chip for a patient: prefer tier-2 (rolling ledger,
+  // the deterioration signal) over tier-1 (session). Returns { id, vars } or null.
+  const repeatContactChipFor = (patientUuid) => {
+    if (!CL || !patientUuid) return null;
+    const ledgerCount = CL.countRecentContacts(_contactLogMem, patientUuid, new Date(), CL.constants.CONTACT_WINDOW_DAYS);
+    if (ledgerCount >= CL.constants.CONTACT_MIN_COUNT) {
+      return {
+        id: 'queue.repeatContact',
+        vars: { count: ledgerCount, nth: CL.ordinal(ledgerCount), days: CL.constants.CONTACT_WINDOW_DAYS },
+        tier: 2,
+        count: ledgerCount,
+      };
+    }
+    const sess = _sessionContacts.get(patientUuid);
+    const sessCount = sess ? sess.size : 0;
+    if (sessCount >= 2) {
+      return { id: 'queue.repeatContactSession', vars: { count: sessCount }, tier: 1, count: sessCount };
+    }
+    return null;
+  };
+
+  const injectQueueRepeatChip = (rowIndex, patientUuid) => {
+    if (!CL || !patientUuid) return;
+    if (isResultQueueSlug(_currentQueueSlug)) return; // request queues only
+    const pick = repeatContactChipFor(patientUuid);
+    if (!pick) return;
+    const chip = getSystemChip(pick.id, pick.vars);
+    if (!chip) return; // disabled or (pre-regen) not yet in config — fail closed
+    const row = document.querySelector(`.ag-row[row-index="${rowIndex}"]:not(.ag-full-width-row)`);
+    if (!row) return;
+    const host = queueChipHost(row, '.ch-q-repeat');
+    if (!host) return; // absent row or chip already present (idempotent)
+    const span = document.createElement('span');
+    span.className = 'ch-q-repeat' + (host.inPreview ? '' : ' ch-q-repeat-inline');
+    span.setAttribute('role', 'note');
+    span.innerHTML = renderChipHtml(chip);
+    span.title =
+      pick.tier === 2
+        ? `This patient has ${pick.count} distinct requests first seen in the last ${CL.constants.CONTACT_WINDOW_DAYS} days (rolling local ledger — patient/task IDs and dates only, no names or clinical content). Repeat contact is an escalation prompt, not a diagnosis.`
+        : `This patient has ${pick.count} open requests seen in your queues this tab session. Session-only — cleared when the tab closes.`;
+    // Always PREPEND (Vue reconciles away trailing foreign nodes — CLAUDE.md rule 1).
+    host.target.insertBefore(span, host.target.firstChild);
+  };
+
+  // Fetch-scheduling pass (mirrors scheduleQueuePending). Gated OFF the results
+  // queue; skipped when both repeat chips are disabled (no point resolving). Rides
+  // the SHARED resolve cache — hits are free, only new resolves count against the
+  // 8-row cap, so it shares the request-queue fan-out with monitoring/PA/pending.
+  let _queueRepeatRunning = false;
+  let _queueRepeatGeneration = 0;
+  const scheduleQueueRepeatContact = async () => {
+    if (!CL) return;
+    if (isResultQueueSlug(_currentQueueSlug)) return;
+    const c1 = findSystemChip('queue.repeatContact');
+    const c2 = findSystemChip('queue.repeatContactSession');
+    const anyEnabled = (c1 && c1.enabled !== false) || (c2 && c2.enabled !== false);
+    if (!anyEnabled) return;
+    const gen = ++_queueRepeatGeneration;
+    if (_queueRepeatRunning) return;
+    _queueRepeatRunning = true;
+    const API = window.SentinelApiClient;
+    const ctx = API ? API.detectMedicusContext(location.href) : null;
+    const MAX = 8; // cap NEW resolves per pass (shared-cache hits are free)
+    let done = 0;
+    const today = CL.todayStr(new Date());
+    for (const [rowIndex, taskUuid] of _queueRowUuids) {
+      if (pageType() !== 'queue' || _queueRepeatGeneration !== gen) break;
+      let cached = getCachedPatientForTask(taskUuid);
+      if (!cached) {
+        if (done >= MAX) continue;
+        if (!API || !ctx) break;
+        const monEntry = _queueMonCache.get(taskUuid);
+        const slug = (monEntry && monEntry.taskTypeSlug) || _currentQueueSlug;
+        if (!slug) continue;
+        await resolvePatientForTask(slug, taskUuid);
+        cached = getCachedPatientForTask(taskUuid);
+        done++;
+      }
+      if (!cached || !cached.patientUuid) continue;
+      // Tier-1 session accumulation (bounded, cross-queue, session-durable).
+      let set = _sessionContacts.get(cached.patientUuid);
+      if (!set) {
+        if (_sessionContacts.size >= _SESSION_CONTACTS_CAP) {
+          _sessionContacts.delete(_sessionContacts.keys().next().value); // FIFO
+        }
+        set = new Set();
+        _sessionContacts.set(cached.patientUuid, set);
+      }
+      set.add(taskUuid);
+      // Tier-2 rolling ledger record (dedup + earliest-day handled by the pure op).
+      if (CL.recordContact(_contactLogMem, cached.patientUuid, taskUuid, today)) _contactLogDirty = true;
+      injectQueueRepeatChip(rowIndex, cached.patientUuid);
+    }
+    scheduleLedgerFlush();
+    _queueRepeatRunning = false;
+    if (_queueRepeatGeneration !== gen) scheduleQueueRepeatContact();
+  };
+
+  // Durable re-injection on every refresh — repeat-chip equivalent of
+  // reinjectCachedPendingChips (CLAUDE.md rule #4). Reads the session/ledger
+  // (both in-memory) via the resolved-patient cache keyed by the durable map, so
+  // the H6 sort canary (which drops that map) halts injection on a reordered grid.
+  const reinjectCachedRepeatChips = () => {
+    if (!CL || isResultQueueSlug(_currentQueueSlug)) return;
+    const scope = queueScope();
+    scope.querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)').forEach((row) => {
+      const ri = row.getAttribute('row-index');
+      if (ri == null) return;
+      const taskUuid = _durableRowMap.get(Number(ri));
+      if (!taskUuid) return;
+      const cached = getCachedPatientForTask(taskUuid);
+      if (!cached || !cached.patientUuid) return;
+      injectQueueRepeatChip(Number(ri), cached.patientUuid);
+    });
+  };
+
+  // B5 — read the row's own displayed created-date (same cell decorateOneRow reads)
+  // so the carry-over chip can stay COMPLEMENTARY to the taskAge chip, never a
+  // duplicate: we only chip when the ledger has seen the task LONGER than the
+  // displayed date claims (the bounce/re-open case where Medicus resets the shown
+  // date), or when there is no parseable date. Returns the displayed age in days,
+  // or null.
+  const rowDisplayedAgeDays = (row) => {
+    const cell = row.querySelector('[col-id="createdAt"]');
+    if (!cell) return null;
+    const cm = String(cell.textContent || '').match(/(\d{1,2})\s+([A-Z][a-z]{2})\s+(\d{4})/);
+    if (!cm) return null;
+    const d = parseDate(cm[0]);
+    const days = daysAgo(d);
+    return Number.isFinite(days) ? days : null;
+  };
+
+  const injectQueueCarryChip = (rowIndex, taskUuid) => {
+    if (!CL || !taskUuid) return;
+    if (isResultQueueSlug(_currentQueueSlug)) return; // request queues only
+    const carried = CL.taskCarriedDays(_taskAgeMem, taskUuid, new Date());
+    if (carried == null) return;
+    const amberTh = TH('taskAgeAmber');
+    const redTh = TH('taskAgeRed');
+    if (carried < amberTh) return; // below the amber floor — no chip
+    const row = document.querySelector(`.ag-row[row-index="${rowIndex}"]:not(.ag-full-width-row)`);
+    if (!row) return;
+    // Complementary-not-duplicative gate. The row's own displayed-date taskAge chip
+    // already covers the age when the displayed date is at least as old as our
+    // first-seen. Suppress the carry-over chip when:
+    //   (a) the displayed date already fires the RED taskAge chip (explicit rule:
+    //       one age signal per row, prefer the stronger row-date red), OR
+    //   (b) the displayed age is >= our carried days (row date already tells the
+    //       same or older story — carry-over would just duplicate it).
+    // We KEEP the chip when the ledger has seen it longer than the row claims
+    // (carried > displayed, incl. a reset-to-today bounce where displayed is null/0)
+    // — that is exactly the "bounced request whose date reset" B5 exists to catch.
+    const displayed = rowDisplayedAgeDays(row);
+    if (displayed != null && displayed >= redTh) return; // (a)
+    if (displayed != null && displayed >= carried) return; // (b)
+    const id = carried >= redTh ? 'queue.carryOverRed' : 'queue.carryOverAmber';
+    const chip = getSystemChip(id, { days: carried });
+    if (!chip) return; // disabled or (pre-regen) not yet in config — fail closed
+    const host = queueChipHost(row, '.ch-q-carry');
+    if (!host) return; // absent row or chip already present (idempotent)
+    const span = document.createElement('span');
+    span.className = 'ch-q-carry' + (host.inPreview ? '' : ' ch-q-carry-inline');
+    span.setAttribute('role', 'note');
+    span.innerHTML = renderChipHtml(chip);
+    span.title =
+      `This task has been in your queues for ${carried} day${carried === 1 ? '' : 's'} since this extension first saw it` +
+      (displayed != null ? ` (the row shows ${displayed}d — a re-opened or reassigned task can reset the displayed date).` : '.') +
+      ' Local task-age ledger — task ID + dates only, no patient identity.';
+    // Always PREPEND (Vue reconciles away trailing foreign nodes — CLAUDE.md rule 1).
+    host.target.insertBefore(span, host.target.firstChild);
+  };
+
+  // Scheduling pass — records every visible request-row task into the task-age
+  // ledger (firstSeen/lastSeen/slug) and injects. No fetch, no patient resolve, no
+  // per-pass cap needed (synchronous, task-keyed). Records batch into one dirty
+  // flush; gated OFF the results queue.
+  const scheduleQueueCarryOver = () => {
+    if (!CL) return;
+    if (isResultQueueSlug(_currentQueueSlug)) return;
+    const today = CL.todayStr(new Date());
+    for (const [rowIndex, taskUuid] of _queueRowUuids) {
+      if (pageType() !== 'queue') break;
+      if (CL.recordTask(_taskAgeMem, taskUuid, _currentQueueSlug, today)) _taskAgeDirty = true;
+      injectQueueCarryChip(rowIndex, taskUuid);
+    }
+    scheduleLedgerFlush();
+  };
+
+  // Durable re-injection on every refresh — carry-chip equivalent of
+  // reinjectCachedMonitoringChips (CLAUDE.md rule #4); read-only (the ledger write
+  // happens in the scheduling pass above, which fires on each task-list event).
+  const reinjectCachedCarryChips = () => {
+    if (!CL || isResultQueueSlug(_currentQueueSlug)) return;
+    const scope = queueScope();
+    scope.querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)').forEach((row) => {
+      const ri = row.getAttribute('row-index');
+      if (ri == null) return;
+      const taskUuid = _durableRowMap.get(Number(ri));
+      if (!taskUuid) return;
+      injectQueueCarryChip(Number(ri), taskUuid);
     });
   };
 
@@ -6858,7 +7148,7 @@
       closeActionMenu();
     }
     if (queueObserver) queueObserver.disconnect();
-    queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result, .ch-q-pa, .ch-q-pending').forEach(s => s.remove());
+    queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result, .ch-q-pa, .ch-q-pending, .ch-q-repeat, .ch-q-carry').forEach(s => s.remove());
     // Wipe stale severity tint in the SAME cycle as the chip-node wipe (item 1.3) —
     // a recycled row-index must never keep a previous patient's tint colour.
     clearQueueRowTint();
@@ -6908,6 +7198,12 @@
     // the results queue inside reinjectCachedPendingChips; index membership is
     // re-queried live, so a source entry that has since died never re-injects.
     reinjectCachedPendingChips();
+    // B3/B5 — same durable-map restore for the repeat-contact and carry-over
+    // chips. Both gate off the results queue internally; the tier/threshold is
+    // re-evaluated live from the in-memory ledgers so a below-threshold row never
+    // re-injects. Placement rides the durable map (H6-safe).
+    reinjectCachedRepeatChips();
+    reinjectCachedCarryChips();
     // Re-render the status bar AFTER the tint pass above so its jump-target query
     // (tinted .ag-row elements) sees this cycle's freshly-applied classes, not the
     // previous cycle's. Also re-assert the focus-dim class every cycle — cheap and

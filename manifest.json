@@ -76,6 +76,7 @@
         "content-scripts/triage-lens/rule-match.js",
         "engine/reception-match.js",
         "shared/pending-result-index.js",
+        "shared/contact-ledger.js",
         "content-scripts/triage-lens/content.js",
         "content-scripts/triage-lens/routine-rx-button.js",
         "shared/lab-filing-utils.js",
