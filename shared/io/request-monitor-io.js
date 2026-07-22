@@ -15,6 +15,8 @@
     'suite.requestMonitor.pollSeconds',
     'suite.requestMonitor.notifyEnabled',
     'suite.requestMonitor.notifySound',
+    'suite.requestMonitor.urgentAgeAmberHours',
+    'suite.requestMonitor.urgentAgeRedHours',
   ];
 
   async function requestMonitorExport() {
@@ -25,6 +27,8 @@
       pollSeconds:   r['suite.requestMonitor.pollSeconds']   ?? null,
       notifyEnabled: r['suite.requestMonitor.notifyEnabled'] ?? null,
       notifySound:   r['suite.requestMonitor.notifySound']   ?? null,
+      urgentAgeAmberHours: r['suite.requestMonitor.urgentAgeAmberHours'] ?? null,
+      urgentAgeRedHours:   r['suite.requestMonitor.urgentAgeRedHours']   ?? null,
     };
   }
 
@@ -59,6 +63,20 @@
         throw new Error(`requestMonitor.notifySound must be a boolean (got ${JSON.stringify(data.notifySound)}).`);
       }
       toSet['suite.requestMonitor.notifySound'] = data.notifySound;
+    }
+    // Breach-risk thresholds (hours) — reject non-finite/non-positive values at
+    // the import boundary (parity with pollSeconds hardening above).
+    if (data.urgentAgeAmberHours !== undefined && data.urgentAgeAmberHours !== null) {
+      if (!Number.isFinite(data.urgentAgeAmberHours) || data.urgentAgeAmberHours <= 0) {
+        throw new Error(`requestMonitor.urgentAgeAmberHours must be a finite positive number (got ${JSON.stringify(data.urgentAgeAmberHours)}).`);
+      }
+      toSet['suite.requestMonitor.urgentAgeAmberHours'] = data.urgentAgeAmberHours;
+    }
+    if (data.urgentAgeRedHours !== undefined && data.urgentAgeRedHours !== null) {
+      if (!Number.isFinite(data.urgentAgeRedHours) || data.urgentAgeRedHours <= 0) {
+        throw new Error(`requestMonitor.urgentAgeRedHours must be a finite positive number (got ${JSON.stringify(data.urgentAgeRedHours)}).`);
+      }
+      toSet['suite.requestMonitor.urgentAgeRedHours'] = data.urgentAgeRedHours;
     }
     if (Object.keys(toSet).length > 0) {
       await chrome.storage.local.set(toSet);

@@ -1806,6 +1806,81 @@ html[data-zen='1'] #rmStrip:not(.rm-strip-alerted-amber):not(.rm-strip-alerted-r
   border-color: var(--accent);
 }
 
+/* ── Urgent breach-risk strip (global — A2) ───────────────────────────────────
+   Warns when URGENT unactioned requests are ageing towards the same-day
+   contractual cutoff: amber approaching, red past the red threshold. The
+   'unknown' variant is the fail-visible state (priority field unreadable) —
+   amber-toned, since "couldn't tell" is a caution, not a clinical emergency.
+   Same band shape as .sub-rag-strip. */
+.sla-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  font-size: 11px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  min-height: 28px;
+  white-space: nowrap;
+}
+.sla-strip-hidden {
+  display: none;
+}
+.sla-strip--amber,
+.sla-strip--unknown {
+  background: var(--amber-dim);
+  border-bottom-color: var(--amber-line);
+}
+.sla-strip--red {
+  background: var(--red-dim);
+  border-bottom-color: var(--red-line);
+}
+.sla-strip-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.sla-strip--red .sla-strip-icon {
+  color: var(--red);
+}
+.sla-strip--amber .sla-strip-icon,
+.sla-strip--unknown .sla-strip-icon {
+  color: var(--amber);
+}
+.sla-strip-label {
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.sla-strip-text {
+  color: var(--text-2);
+  flex: 1 1 auto;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sla-strip-goto {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 9px;
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+  background: none;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-sm);
+  padding: 2px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sla-strip-goto:hover {
+  color: var(--text-2);
+  border-color: var(--accent);
+}
+
 /* ── Medicus UI-change canary strip (global) ──────────────────────────────────
    Amber banner shown when a patient record is on screen but the extension could
    extract nothing from it — i.e. Medicus likely changed its layout. NOT a

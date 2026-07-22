@@ -11,6 +11,8 @@
 //   suite.requestMonitor.pollSeconds   number  — poll interval, min 30 (default 60)
 //   suite.requestMonitor.notifyEnabled boolean — desktop notifications (default false)
 //   suite.requestMonitor.notifySound   boolean — sound on notification (default false)
+//   suite.requestMonitor.urgentAgeAmberHours number — breach-risk strip amber threshold (default 2)
+//   suite.requestMonitor.urgentAgeRedHours   number — breach-risk strip red threshold (default 4)
 //   suite.requestMonitor.state         object  — { buckets, seenIds, lastPoll, error }
 //   suite.requestMonitor.authError     boolean — transient: true when paused after 401/403
 //
@@ -31,6 +33,10 @@
     pollSeconds:   'suite.requestMonitor.pollSeconds',
     notifyEnabled: 'suite.requestMonitor.notifyEnabled',
     notifySound:   'suite.requestMonitor.notifySound',
+    // A2 breach-risk strip thresholds (hours) — how old the OLDEST urgent
+    // unactioned request must be before the strip goes amber / red.
+    urgentAgeAmberHours: 'suite.requestMonitor.urgentAgeAmberHours',
+    urgentAgeRedHours:   'suite.requestMonitor.urgentAgeRedHours',
   };
   const STATE_KEY     = 'suite.requestMonitor.state';
   const AUTH_ERR_KEY  = 'suite.requestMonitor.authError';
@@ -86,6 +92,8 @@
     pollSeconds: 60,
     notifyEnabled: false,
     notifySound: false,
+    urgentAgeAmberHours: 2,
+    urgentAgeRedHours: 4,
   };
   const MIN_POLL_SECONDS = 30;
 
@@ -107,6 +115,8 @@
       pollSeconds:   Math.max(MIN_POLL_SECONDS, r[CFG_KEYS.pollSeconds] ?? DEFAULTS.pollSeconds),
       notifyEnabled: r[CFG_KEYS.notifyEnabled] ?? DEFAULTS.notifyEnabled,
       notifySound:   r[CFG_KEYS.notifySound]   ?? DEFAULTS.notifySound,
+      urgentAgeAmberHours: r[CFG_KEYS.urgentAgeAmberHours] ?? DEFAULTS.urgentAgeAmberHours,
+      urgentAgeRedHours:   r[CFG_KEYS.urgentAgeRedHours]   ?? DEFAULTS.urgentAgeRedHours,
     };
   }
 
@@ -170,7 +180,11 @@
           id: t.id,
           patient: toInitials(t.patientName),
           summary: t.summary || t.summaryLabel,
+          // Both the raw priority and the display string are captured so the
+          // A2 breach-risk strip (shared/sla-breach-core.js) can read urgency
+          // regardless of which field Medicus populates. Non-PHI status flags.
           priority: t.priority,
+          priorityDisplay: t.priorityDisplay,
           createdAt: t.createdAt,
         })),
         error: null,

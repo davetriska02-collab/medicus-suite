@@ -2149,7 +2149,132 @@ chrome.storage.onChanged.addListener((changes) => {
   }
 });
 
-// Refresh all five strips immediately when the panel becomes visible again
+// ── Urgent breach-risk strip (global — A2, panel-only) ────────────────────────
+// Fifth-family global strip after #wrStrip/#rmStrip/#subRagStrip/#healthStrip/
+// #paStrip (CLAUDE.md "Global demand / alert strips"). Warns when URGENT
+// unactioned requests are ageing towards the April-2026 same-day contractual
+// cutoff. WORKFLOW ONLY: it echoes Medicus's OWN priority flag (unvalidated
+// upstream) and counts timestamps — no clinical interpretation of request
+// content. See docs HAZARD-LOG (A2).
+//
+// Data source: it reuses the Request Monitor's cached poll state
+// (suite.requestMonitor.state, written by the service-worker alarm and the RM
+// strip). NO new API polling — it reads that cached state and reacts to its
+// onChanged; a 60s backstop poll only re-reads storage. When the monitor is
+// disabled/unconfigured there is no state and the strip stays hidden.
+//
+// The computation lives in shared/sla-breach-core.js (tested in
+// test-sla-breach-core.js). This strip can never suppress, reorder or hide a
+// request — it is purely additive. It has NO green/"all clear" state: it is
+// hidden when there is nothing to report, EXCEPT the explicit fail-visible
+// "urgency unknown" state when the fetched items carry no readable priority
+// field (which must never look like a reassuring "zero urgent").
+const slaStripEl = document.getElementById('slaBreachStrip');
+const SLA_STRIP_POLL_MS = 60 * 1000;
+
+async function fetchAndRenderSlaStrip() {
+  if (document.visibilityState !== 'visible') return true;
+  if (!slaStripEl || !window.RequestMonitor || !window.SlaBreachCore) return true;
+
+  const hide = () => {
+    slaStripEl.className = 'sla-strip sla-strip-hidden';
+    slaStripEl.innerHTML = '';
+  };
+
+  const cfg = await window.RequestMonitor.getConfig();
+  if (!cfg.enabled || !cfg.assigneeId) {
+    hide();
+    return true;
+  }
+
+  // Read the Request Monitor's cached poll state — no fetch of our own.
+  const stR = await chrome.storage.local.get('suite.requestMonitor.state');
+  const st = stR['suite.requestMonitor.state'];
+  if (!st || !st.buckets) {
+    hide();
+    return true;
+  }
+
+  // Flatten every open new/reply request item across the four buckets, keeping
+  // a bucket reference so the click-through can target the queue holding the
+  // oldest urgent item.
+  const flat = [];
+  for (const b of window.RequestMonitor.BUCKETS) {
+    const items = st.buckets[b.key]?.items;
+    if (Array.isArray(items)) for (const it of items) flat.push({ it, bucket: b });
+  }
+
+  const amberMs = Math.max(0, Number(cfg.urgentAgeAmberHours) || window.SlaBreachCore.DEFAULT_AMBER_HOURS) * 3600000;
+  const redMs = Math.max(0, Number(cfg.urgentAgeRedHours) || window.SlaBreachCore.DEFAULT_RED_HOURS) * 3600000;
+  const now = Date.now();
+  const result = window.SlaBreachCore.computeBreachRisk(
+    flat.map((f) => f.it),
+    { now, amberMs, redMs }
+  );
+
+  if (!result.visible) {
+    hide();
+    return true;
+  }
+
+  // Pick the bucket of the oldest urgent item for the click-through; default to
+  // the first bucket if none can be aged (e.g. the 'unknown' state).
+  let target = window.RequestMonitor.BUCKETS[0];
+  let oldestAge = -1;
+  for (const f of flat) {
+    if (!window.SlaBreachCore.isUrgentItem(f.it)) continue;
+    const age = window.SlaBreachCore.itemAgeMs(f.it, now);
+    if (age !== null && age > oldestAge) {
+      oldestAge = age;
+      target = f.bucket;
+    }
+  }
+  const { code, source } = await window.PracticeCode.resolve();
+  const clickUrl = code
+    ? window.RequestMonitor.buildClickUrl(code, target.taskType, target.status, cfg.assigneeId)
+    : null;
+  void source;
+
+  let text;
+  if (result.level === 'unknown') {
+    text = 'Urgent requests: urgency unknown — check queue';
+  } else {
+    const oldest = window.SlaBreachCore.formatAge(result.oldestAgeMs);
+    const plural = result.urgentCount === 1 ? '' : 's';
+    text =
+      `${result.urgentCount} urgent request${plural} unactioned` + (oldest ? ` · oldest ${oldest}` : '');
+  }
+
+  slaStripEl.className = `sla-strip sla-strip--${result.level}`;
+  slaStripEl.innerHTML = `
+    <span class="sla-strip-icon">⚠</span>
+    <span class="sla-strip-label">SLA:</span>
+    <span class="sla-strip-text">${escStrip(text)}</span>
+    ${clickUrl ? `<button class="sla-strip-goto" data-sla-url="${escStrip(clickUrl)}" title="Open the request queue">Open queue →</button>` : ''}
+  `;
+  slaStripEl.querySelector('.sla-strip-goto[data-sla-url]')?.addEventListener('click', (e) => {
+    const url = e.currentTarget.dataset.slaUrl;
+    if (url) chrome.tabs.create({ url });
+  });
+  return true;
+}
+
+let slaStripPoller = makePoller(fetchAndRenderSlaStrip, SLA_STRIP_POLL_MS, 'sla-strip').start();
+// React immediately when the Request Monitor writes fresh poll state, and when
+// the breach thresholds change — the 60s poll is only a backstop.
+chrome.storage.onChanged.addListener((changes) => {
+  if (
+    changes['suite.requestMonitor.state'] ||
+    changes['suite.requestMonitor.urgentAgeAmberHours'] ||
+    changes['suite.requestMonitor.urgentAgeRedHours'] ||
+    changes['suite.requestMonitor.enabled'] ||
+    changes['suite.requestMonitor.assigneeId']
+  ) {
+    fetchAndRenderSlaStrip();
+  }
+});
+
+// Refresh all strips immediately when the panel becomes visible again
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     fetchAndRenderStrip();
@@ -2157,6 +2282,7 @@ document.addEventListener('visibilitychange', () => {
     fetchAndRenderSubRagStrip();
     fetchAndRenderHealthStrip();
     fetchAndRenderPaStrip();
+    fetchAndRenderSlaStrip();
   }
 });
 
@@ -2183,6 +2309,7 @@ window.addEventListener('pagehide', () => {
   if (subRagPoller) subRagPoller.stop();
   if (healthPoller) healthPoller.stop();
   if (paStripPoller) paStripPoller.stop();
+  if (slaStripPoller) slaStripPoller.stop();
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
