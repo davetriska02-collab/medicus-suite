@@ -4,7 +4,7 @@
 **Software product:** Medicus Suite (Chrome extension)  
 **Product version:** 3.177.0  
 **Last full hazard re-baseline:** v3.115.0 (2026-06-17)  
-**Document version:** 3.15  
+**Document version:** 3.16  
 **Date issued:** 2026-07-11  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Clinical Safety Officer:** Dr Dave Triska (GMC 6159481), registered GP  
@@ -952,7 +952,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Residual severity**           | 3 |
 | **Residual likelihood**         | 1 |
 | **Residual risk**               | 3 — Acceptable (ALARP) |
-| **Acceptability**               | Proposed — pending CSO review (Dr Dave Triska). The strip is a prompt to check the queue, not a substitute for triage of every request. |
+| **Acceptability**               | Accepted (ALARP) — CSO reviewed and signed off 2026-07-22 (Dr Dave Triska), recorded via Dave's session instruction delegating completion to his digital twin. Additive-only, no all-clear state, fail-visible `unknown` path verified in `shared/sla-breach-core.js` and pinned by `test-sla-breach-core.js`. **Condition (applied same commit):** CSN limitation 43 states that when Request Monitor is disabled the strip is *silent* (inert), so an absent strip is never read as "urgent breaches are being watched". The strip is a prompt to check the queue, not a substitute for triage of every request. |
 
 ### H-046 — Pending-result cross-link chip serves a stale or wrong-patient severity
 
@@ -969,7 +969,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Residual severity**           | 3 |
 | **Residual likelihood**         | 1 |
 | **Residual risk**               | 3 — Acceptable (ALARP) |
-| **Acceptability**               | Proposed — pending CSO review (Dr Dave Triska). |
+| **Acceptability**               | Accepted (ALARP) — CSO reviewed and signed off 2026-07-22 (Dr Dave Triska), recorded via Dave's session instruction delegating completion to his digital twin. Dies-with-source lifecycle confirmed at all four teardown hooks in `content.js` (TTL prune, priorityDisplay invalidation, config invalidation, re-grade-to-null/error), UUID-only patient match, sort-canary-safe durable-map placement, same-session and age-stamped in text; escalate-only with no "no pending result" state. Pinned by `test-pending-result-index.js` including the outlives-source invariant. |
 
 ### H-047 — Repeat-contact chip miscounts, or its local ledger leaks/fabricates contact history
 
@@ -986,7 +986,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Residual severity**           | 2 |
 | **Residual likelihood**         | 1 |
 | **Residual risk**               | 2 — Acceptable |
-| **Acceptability**               | Proposed — pending CSO review (Dr Dave Triska). |
+| **Acceptability**               | Accepted — CSO reviewed and signed off 2026-07-22 (Dr Dave Triska), recorded via Dave's session instruction delegating completion to his digital twin. Ledger holds pseudonymous UUIDs + ISO dates only (no names, no content), UUID-shape-validated, bounded and oldest-first pruned, and CI-guaranteed out of suite backups (`test-backup-coverage.js` allowlist). The machine-local-disclosure doctrine already applied to H-040/H-042 applies here: the patientUuid is pseudonymous PII resolvable only within an authenticated Medicus session, and the trail never leaves the workstation. Factual-observational wording, amber-only, no first-contact state. |
 
 ### H-048 — Carry-over chip disagrees with the row's displayed age or persists a stale "carried" claim
 
@@ -1003,7 +1003,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Residual severity**           | 2 |
 | **Residual likelihood**         | 1 |
 | **Residual risk**               | 2 — Acceptable |
-| **Acceptability**               | Proposed — pending CSO review (Dr Dave Triska). |
+| **Acceptability**               | Accepted — CSO reviewed and signed off 2026-07-22 (Dr Dave Triska), recorded via Dave's session instruction delegating completion to his digital twin. Complementary-by-construction: fires only on the first-seen-predates-displayed-date bounce signature and defers to the taskAge-red signal, so it cannot double-signal or overstate against the row's own stronger age indicator. Task-keyed, no patient identity, pruned/capped/not-backed-up as H-047. |
 
 ---
 
@@ -1055,10 +1055,10 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | H-042 | Per-patient practice flags wrong-patient / stale / over-trusted      | 3×3         | 9            | 3×1          | 3             | Accepted (ALARP), pending CSO review of preset wording + staleness — render-time identity, no all-clear |
 | H-043 | Inline booking/task write to wrong patient (mid-flight navigation)   | 5×2         | 10           | 5×1          | 5             | Accepted (ALARP), CSO signed off 2026-07-19 — state pinning + commit-time re-verification |
 | H-044 | Vaccine refused/contraindicated/undated records classify as GIVEN    | 3×3         | 9            | 3×1          | 3             | Accepted (ALARP), CSO signed off 2026-07-19 — declined lists complete, undated fails closed, CI-guarded |
-| H-045 | Breach-risk strip under-reports / over-trusts upstream urgency flag  | 3×2         | 6            | 3×1          | 3             | Proposed, pending CSO review — additive-only, no all-clear, fail-visible unknown state |
-| H-046 | Pending-result cross-link chip stale / wrong-patient severity        | 3×3         | 9            | 3×1          | 3             | Proposed, pending CSO review — index dies with source, UUID-only match, canary-suppressed, age-stamped |
-| H-047 | Repeat-contact chip miscount / local contact-ledger privacy          | 2×3         | 6            | 2×1          | 2             | Proposed, pending CSO review — UUID+date only, never backed up, bounded, factual wording |
-| H-048 | Carry-over chip duplicates or overstates task age                    | 2×3         | 6            | 2×1          | 2             | Proposed, pending CSO review — fires only on bounce signature, defers to taskAge red |
+| H-045 | Breach-risk strip under-reports / over-trusts upstream urgency flag  | 3×2         | 6            | 3×1          | 3             | Accepted (ALARP), CSO signed off 2026-07-22 — additive-only, no all-clear, fail-visible unknown state; CSN lim 43 notes strip silent when monitor disabled |
+| H-046 | Pending-result cross-link chip stale / wrong-patient severity        | 3×3         | 9            | 3×1          | 3             | Accepted (ALARP), CSO signed off 2026-07-22 — index dies with source (verified at all four hooks), UUID-only match, canary-suppressed, age-stamped |
+| H-047 | Repeat-contact chip miscount / local contact-ledger privacy          | 2×3         | 6            | 2×1          | 2             | Accepted, CSO signed off 2026-07-22 — UUID+date only, CI-guarded out of backups, bounded, factual wording |
+| H-048 | Carry-over chip duplicates or overstates task age                    | 2×3         | 6            | 2×1          | 2             | Accepted, CSO signed off 2026-07-22 — fires only on bounce signature, defers to taskAge red |
 
 No hazard has a residual risk score exceeding 9. No hazard at residual score 10 or above is open. This is the full CSO hazard re-baseline from v3.64.0 up to and including v3.115.0: the modules, controls and clinical changes shipped across v3.65.0–v3.114.0 (the Record, Practice Report/Condor and CQC Inspection Readiness modules; the v3.91.2 attribute-injection-XSS remediation and the PDF.js 4.x upgrade; the v3.100.0 critical-low-Hb 100→80 g/L threshold change; the result-rule expansions; the practice-attestation switch; and the navigation/UX additions) are recorded above against new hazards H-032/H-033/H-034 and as control updates to H-002, H-006, H-007, H-009, H-016, H-022, H-023, H-024, H-028 and H-030. On the basis of this hazard log the Clinical Safety Officer's sign-off for **v3.115.0** is sought by merge of the review branch (see §9 and the version history note v3.11 for the scope of this re-baseline).
 
@@ -1115,6 +1115,7 @@ inputs are trustworthy and freshness-gated.
 
 | 2026-07-18 | 3.13    | Claude (automated sync) | **Whole-suite audit remediation sync (v3.176.1–v3.176.2), PENDING CSO review.** A five-stream bug bash (2026-07-18) found and fixed, with red-first regression tests: a wrong-patient WRITE race in the inline booking/task widgets (state pinned across awaits + commit-time task→patient re-verification — the suite's only clinical write path from those widgets; no existing hazard covered writes, CSO to decide whether this becomes a numbered hazard); vaccine status terms classifying refused/contraindicated/not-given records as GIVEN plus undated records satisfying every season (declined lists completed, undated now fails closed vs seasonal windows); "Non-smoker" displaying as "Current smoker" (H-041 control strengthened — new 'non' bucket, passive→unclear); bare-"statin"/urine-potassium/negation-overreach false signals in QOF/alert matching (excludes + clause-bounded negation); a journal-fetch failure path that made the journalAugmentFailed warning unreachable (H-005-adjacent false all-clear, now throws and surfaces); and the Record-tab cleanup contract break plus module double-init race (both wrong-patient-display adjacent, now loader-enforced/serialised with a static CI test). Engine integrity follow-ups: eval-cache hash extended to observationHistory/allergies (stale trend chips), org-ruleset override merging restricted to validated fields, numeric parser unification (thousands separators), pastProblems propagation (HRT hysterectomy context), restore no longer wipes local attestations. Full audit document retained separately; CSO to review whether C1/C2 warrant numbered hazards and to countersign the fixed controls. |
 
+| 2026-07-22 | 3.16    | DT (via digital twin)   | **CSO sign-off of the v3.15 Triage North Star wave 1 sync (v3.177.0)**, recorded via Dave's session instruction delegating completion of the Triage North Star work to his digital twin, 2026-07-22. H-045, H-046, H-047 and H-048 are reviewed and accepted: H-046 at Accepted (ALARP), H-045 Accepted (ALARP) with a documentation condition applied in the same commit (CSN limitation 43 notes the strip is silent when Request Monitor is disabled), H-047 and H-048 Accepted at residual risk 2. Controls confirmed against code (`shared/sla-breach-core.js`, `shared/pending-result-index.js`, `shared/contact-ledger.js`, the four dies-with-source teardown hooks and durable-map placement in `content-scripts/triage-lens/content.js`) and against their pinning tests (`test-sla-breach-core.js`, `test-pending-result-index.js`, `test-contact-ledger.js`, `test-backup-coverage.js` ledger allowlist). No residual risk exceeds 3. Document version 3.16. |
 | 2026-07-22 | 3.15    | Claude (automated sync) | **Triage North Star wave 1 (v3.177.0), PENDING CSO REVIEW.** Four new hazards for the release's queue-augmentation features: **H-045** (urgent breach-risk strip `#slaBreachStrip` — echoes Medicus's own priority flag, additive-only, fail-visible unknown state), **H-046** (pending-abnormal-result cross-link chip `.ch-q-pending` — patient-keyed index provably dies with its source cache entry, sort-canary-suppressed, age-stamped), **H-047** (repeat-contact chip `.ch-q-repeat` + rolling contact ledger — UUID+date only, never backed up, bounded), **H-048** (carry-over chip `.ch-q-carry` — fires only when first-seen predates the displayed row date, defers to taskAge red). E-1.1 fail-visible states verified already shipped (v3.148.0, H-005 controls) — no change; monitoring-on-request-queues (B4) verified already live and default-off — no new grading. All four entries Proposed pending CSO sign-off by Dr Dave Triska on the release PR. Document version 3.15. |
 | 2026-07-19 | 3.14    | DT                      | **CSO sign-off of the v3.13 audit-remediation sync** (Dr Dave Triska, recorded via the session instruction "Sign off the CSO bit"). The v3.13 entry's fixes are reviewed and countersigned. Resolution of its open question: the wrong-patient inline-widget write race and the vaccine false-GIVEN class ARE promoted to numbered hazards — new **H-043** and **H-044** above, both Accepted (ALARP) with their shipped controls. H-042's pending items (preset wording, flag staleness/no-expiry) remain open for a future review. Document version 3.14. |
 
