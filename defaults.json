@@ -3913,6 +3913,30 @@
       "kind": "amber",
       "actions": []
     },
+    "queue.repeatContact": {
+      "enabled": true,
+      "label": "{nth} contact in {days}d",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.repeatContactSession": {
+      "enabled": true,
+      "label": "{count} open requests · this patient",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.carryOverAmber": {
+      "enabled": true,
+      "label": "carried over {days}d",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.carryOverRed": {
+      "enabled": true,
+      "label": "carried over {days}d",
+      "kind": "red",
+      "actions": []
+    },
     "queue.resultUrgent": {
       "enabled": true,
       "label": "{name}",
