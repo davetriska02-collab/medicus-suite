@@ -2,6 +2,62 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.177.0] — 2026-07-22
+
+### Triage North Star — wave 1: the record next to the request
+
+First implementation wave of `docs/plans/TRIAGE-NORTHSTAR-2026-07-22.md`
+(the market-informed successor to TRIAGE-LENS, also added this release):
+the top clinician-impact items from two independent Practice-board review
+panels. Hazard log v3.15 adds H-045–H-048, all **pending CSO review**.
+Defaults config 24→25.
+
+- **Urgent breach-risk strip (A2, H-045).** New `#slaBreachStrip` global
+  panel strip: counts open requests Medicus itself flags urgent and alerts
+  on the oldest one's age — amber ≥2h, red ≥4h (configurable,
+  `suite.requestMonitor.urgentAgeAmberHours/RedHours`, included in suite
+  backups). Reads the Request Monitor's cached bucket state — no new API
+  polling. Fail-visible: items with no readable priority field render
+  "urgency unknown — check queue", never a silent zero. Additive-only, no
+  all-clear state, hidden when nothing is at risk. Pure computation in
+  `shared/sla-breach-core.js` (47-assertion test).
+- **Pending-abnormal-result cross-link chips (B2, H-046).** When this tab
+  session graded a red/amber investigation report for a patient, that
+  patient's rows on *request* queues now chip "⚠ pending urgent result ·
+  graded 12m ago" / "pending abnormal result · 12m" (top analyte in the
+  tooltip when cached) — the request about tiredness now carries the unfiled
+  K⁺ 6.2 with it. Patient-keyed index (`shared/pending-result-index.js`,
+  39-assertion test) is pointer-only: entries die with their source
+  `_queueResultCache` severity on every teardown path, and placement rides
+  the durable row map so the sort canary suppresses rather than misplaces.
+  Escalate-only; every chip carries its data age; request queues only.
+- **Repeat-contact chips (B3, H-047).** The v3.151.0 deferral unblocked by
+  the new shared task→patient resolve substrate (one resolve per task,
+  shared by the monitoring / patient-flag / pending passes under the
+  existing per-pass cap). Tier 2: "3rd contact in 14d" from a rolling
+  28-day local ledger — patientUuid + date only, no names, no free text,
+  bounded and pruned, deliberately never backed up. Tier 1: "2 open
+  requests · this patient" from identities resolved this session. Amber,
+  factual-observational wording, no "1st contact" state ever.
+- **Carry-over chips (B5, H-048).** "carried over 4d" from a task-keyed
+  first-seen ledger — catches the request bounced between holders whose
+  displayed date reset. Complementary by construction: fires only when the
+  extension's first-seen predates the row's displayed date, and defers to
+  the taskAge red chip when the row's own date already tells the stronger
+  story. Reuses `thresholds.taskAgeAmber/Red` (3/7 days).
+- **Verified, not rebuilt:** E-1.1 fail-visible "not assessed" states were
+  already shipped (v3.148.0, H-005 controls) and monitoring chips already
+  run on request queues (the pipeline is queue-agnostic; the global
+  default-off toggle is the only gate) — both plan claims corrected in the
+  plan's status note rather than re-implemented.
+- **Plan additions from the same-day review panels:** C4 next-green-day
+  disposition assist (capacity-preset-linked slot lookahead + prepare-only
+  reception snippet, v2 one-click reception task via the audited
+  `createGeneralTask` path) and C5 curated resource actions pass
+  (twice-a-year lookups on existing chip popovers, leaflet/knowledge action
+  kinds, CI link checking); role-based chip visibility recorded as an
+  unresolved governance item gating B1.
+
 ## [v3.176.4] — 2026-07-19
 
 ### Audit final tranche — the four deferred refactors + CSO sign-off

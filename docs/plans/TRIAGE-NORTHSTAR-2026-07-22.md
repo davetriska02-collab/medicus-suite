@@ -16,6 +16,17 @@ IDs rather than duplicated. A virtual-Dave verdict pass was applied
 B2 stale-cache/H6 hazards named, B5 carry-over and D3 continuity fallback
 added, MHRA opinion made a release-3 gate.
 
+**Status update (same day, v3.177.0):** the first implementation wave shipped
+— A2 (breach strip), B-substrate, B2, B3, B5 are live on this branch with
+hazard entries H-045–H-048 pending CSO review. Two verify-before-build
+corrections against this plan's claims: **E-1.1 was already shipped**
+(v3.148.0, H-005 controls — this plan's "still open" claim was stale), and
+**B4 was already live** (the monitoring pipeline is queue-agnostic; the only
+gate is the deliberate global default-off toggle — no code change needed).
+Two items were added from the same-day Practice-board and GP-panel reviews:
+C4 and C5 below, plus the cross-cutting role-visibility question under
+"Regulatory & safety programme".
+
 ---
 
 ## Why now — the market context in five lines
@@ -135,6 +146,8 @@ built or measured. We can do both.
 | C1 | **Queue lens: group-by-presentation.** A toggleable overlay (status-bar control, keyboard-reachable) that visually groups/orders rows by matched rule family — reds first, then clinical clusters (UTI-like, MSK, skin+photo, med queries), green admin tail last. Client-side sort *presentation* only — never hides a row, never reorders the underlying grid data model (sort-canary rules apply). Rated honestly: re-presenting row order against a Vue reconciler that strips foreign DOM is the hardest UI item in this plan — the injection smoke harness must cover the lens *before* the first line of it is written, and if a non-destructive presentation layer proves impossible, the fallback is a grouped *listing in the side panel* (bridge data, no DOM surgery) that jump-scrolls the real grid. | 80 shipped request rules + `rule-match.js`, status bar (1.2), keyboard triage (4.6, shipped), 0.1 smoke harness | L |
 | C2 | **Batch disposition packs.** For a selected group, one popover offering the *already-authored* per-rule `actions[]` (snippets/links/ask-back drafts from `reception-pathways.json`) so a like-with-like run reuses one prepared response pattern. Prepare-only, never sends — the shipped Pharmacy First/ask-back posture. | rule `actions[]`, reception-match, action-packs | M |
 | C3 | **Instrument it.** Ledger events for triage session length, decisions/hour, with/without the lens (no patient data). We'd be generating the batching evidence the literature lacks — and our own proof of value. | event-ledger, Condor | S |
+| C4 | **Next-green-day disposition assist.** The disposition half of triage: once the GP decides "not today", make executing that decision one click. The unit of disposition is an existing **capacity preset** (`{name, slotTypes[], tight, low, minimumByDay}` — capacity-core.js): scan the appointment-book embedded-overview forward N days and mark a day green when free slots of the preset's types clear its own thresholds and weekday minimum. v1: picker + timestamped prepare-only snippet ("book [patient] — Routine GP f2f — Thu 25 Jul, 3 free as of 10:42 — or nearest equivalent"). v2: one click creates the actual reception task via the existing `createGeneralTask` write path under 1.4-style confirm/undo/audit. Never holds or books a slot; never *suggests* deferring — activates only after the GP's decision. Slot claims always timestamped. Empty state links to the capacity tab when no presets exist. Pairs with C2 (batch-book a whole group) and D2 (next green day *with Dr X*). | slots/booking-api embedded-overview, capacity presets + capacity-core, submissions demand baselines, action-pack snippet machinery, task-api createGeneralTask | v1 S/M · v2 M |
+| C5 | **Curated resource actions pass (GP-panel verdict: "build-differently").** The link mechanism already shipped (v3.149 chip popovers surface rule `actions[]`); what's missing is content and plumbing, not UI. (1) A curated actions pass over ~15 rules aimed at the *twice-a-year* lookups — fitness-to-fly/DVLA intervals, menopause/HRT, feverish-child thresholds, skin-lesion 2WW/photo guidance, Pharmacy First eligibility — and deliberately nothing on bread-and-butter presentations (a CKS link on a sore-throat chip is condescension that earns the off-switch). Deep links to the relevant section, never topic homepages; inline snippet with the load-bearing number where possible. (2) Two new action kinds: `leaflet` (hands off to the Leaflets tab via the existing `leaflets.pendingQuery` mechanism for patient-facing sends) and `knowledge-ref` (points at a practice-owned Knowledge-tab entry, so local pathway links are practice-curated, never shipped URLs that are wrong for every practice but one). (3) **Stale links are the kill risk:** extend `scripts/verify-nhs-index.js` to sweep every `actions[]` URL in defaults.json in CI; add link review to the Keeper's periodic rule pass. Ceiling: three links per rule (the mh-crisis precedent). Feeds C2's batch packs. | shipped actions[] popovers (v3.149), leaflets module + nhs-az-index verifier, knowledge module, Keeper process | S/M (content + plumbing) |
 
 *Safety posture:* C1 needs a hazard entry proving the lens cannot hide or
 suppress (a "grouped view" that drops a row is the failure mode); H-037
@@ -199,6 +212,14 @@ evidence:
   per-patient urgency, the same boundary the existing grading features
   already sit on. The opinion therefore **must land before release 3** (the
   first B release), alongside the paperwork the existing features need.
+- **Role-based chip visibility (board finding, unresolved).** The care
+  navigator touches every request before any GP and this plan never mentioned
+  roles: if the first-pass sorter can see "risk-to-self"/"palliative" context
+  chips they carry clinical weight they aren't trained for. Before B1 ships,
+  decide on purpose what the navigator screen shows versus the GP screen —
+  a governance/hazard item, not polish. (Same review flagged the A3 evidence
+  ledger as disclosable and surveillance-adjacent: retention, export
+  permissions and the DPIA answer ship *with* release 2, not after.)
 - **DCB0129 as an adoption lever:** a clean safety case + hazard log makes
   every deploying practice's DCB0160 work easier — worth packaging, not just
   keeping. New hazard entries required: A2/A3 (no-suppression proof), B2/B3
