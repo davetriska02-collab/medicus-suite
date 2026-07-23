@@ -17,6 +17,9 @@
 .ch-q-result,
 .ch-q-mon,
 .ch-q-pa,
+.ch-q-pending,
+.ch-q-repeat,
+.ch-q-carry,
 .ch-q-status,
 .ch-q-status-flash,
 .ch-oir-flag,
@@ -321,10 +324,53 @@
    .ch-chip-red/amber resolve correctly instead of rendering as unstyled
    "white rectangles". */
 .ch-q-result,
-.ch-q-mon {
+.ch-q-mon,
+.ch-q-pending,
+.ch-q-repeat,
+.ch-q-carry {
   display: inline-flex;
   gap: 4px;
   vertical-align: middle;
+}
+/* B3 repeat-contact + B5 carry-over chips. Severity COLOUR comes from the inner
+   .ch-chip-red/amber renderChipHtml emits (resolved via the token block above);
+   these wrappers only position + width-cap the flat-queue fallback, exactly like
+   .ch-q-pending-inline. Same host/prepend/dedupe rules as .ch-q-mon. */
+.ch-q-repeat-inline,
+.ch-q-carry-inline {
+  margin-right: 6px;
+  flex-wrap: nowrap;
+  max-width: 45%;
+  overflow: hidden;
+}
+.ch-q-repeat-inline .ch-chip,
+.ch-q-carry-inline .ch-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 18ch;
+}
+/* B2 pending-abnormal-lab cross-link chip. The severity COLOUR comes from the
+   inner .ch-chip-red/amber renderChipHtml emits (resolved via the token block
+   above); this wrapper only positions it. Same host/prepend/dedupe rules as
+   .ch-q-mon. */
+.ch-q-pending-inline {
+  margin-right: 6px;
+  flex-wrap: nowrap;
+  max-width: 45%;
+  overflow: hidden;
+}
+.ch-q-pending-inline .ch-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 18ch;
 }
 /* Patient-flag chip (Pt Alerts, H-042) — practice-recorded per-patient flags
    on queue rows. Same host/prepend/dedupe rules as .ch-q-mon. Colour: red when
@@ -408,6 +454,7 @@
    block is self-contained and can be reverted on its own. */
 [col-id='patientName']:has(> .ch-q-result-inline),
 [col-id='patientName']:has(> .ch-q-mon-inline),
+[col-id='patientName']:has(> .ch-q-pending-inline),
 [col-id='patientName']:has(> .ch-queue-chips) {
   display: flex;
   flex-direction: column;

@@ -367,6 +367,19 @@ const ALLOWLIST = new Set([
   // they follow the exact same never-backed-up doctrine as ledger.events:
   'ledger.shardIndex',
 
+  // B3/B5 contact & task-age ledgers (shared/contact-ledger.js) — a device-local
+  // rolling history of what THIS extension saw in the queues on THIS machine:
+  //   ledger.contactLog — patientUuid → distinct task first-seen days (28d window)
+  //   ledger.taskAge    — taskUuid → first/last-seen day + task-type slug (14d)
+  // Same doctrine as ledger.events / followups.entries: it carries patient/task
+  // UUIDs (no names, no free text) and is an observational trail. Restoring it
+  // onto another machine would fabricate a false "this patient has contacted us N
+  // times"/"we've carried this task N days" history that machine never observed —
+  // a wrong-signal hazard, not just useless. Pruned + capped, machine-local BY
+  // DESIGN, never backed up:
+  'ledger.contactLog',
+  'ledger.taskAge',
+
   // Horizon-1 H2 — DOM-contract runtime canary state (shared/contract-canary.js):
   // per-contract { lastProbe, status, sinceTs, probeCount, failStreak, lastFailTs }
   // written by the content-script probe injected into the live Medicus page.

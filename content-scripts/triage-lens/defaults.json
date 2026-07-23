@@ -1,5 +1,5 @@
 {
-  "version": 24,
+  "version": 25,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3899,6 +3899,42 @@
       "enabled": false,
       "label": "Monitoring {count}",
       "kind": "amber",
+      "actions": []
+    },
+    "queue.pendingResultRed": {
+      "enabled": true,
+      "label": "⚠ pending urgent result · graded {age} ago",
+      "kind": "red",
+      "actions": []
+    },
+    "queue.pendingResultAmber": {
+      "enabled": true,
+      "label": "pending abnormal result · {age}",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.repeatContact": {
+      "enabled": true,
+      "label": "{nth} contact in {days}d",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.repeatContactSession": {
+      "enabled": true,
+      "label": "{count} open requests · this patient",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.carryOverAmber": {
+      "enabled": true,
+      "label": "carried over {days}d",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.carryOverRed": {
+      "enabled": true,
+      "label": "carried over {days}d",
+      "kind": "red",
       "actions": []
     },
     "queue.resultUrgent": {
