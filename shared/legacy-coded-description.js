@@ -27,18 +27,44 @@
   var LEGACY_PREFIX_RE = /^\[[A-Za-z]{1,2}\]\s*/;
   var LEGACY_SUFFIX_RE = /\s*\b(?:NOS|NEC)\b\.?\s*$/i;
 
+  // A trailing bracketed abbreviation immediately before the NOS/NEC suffix
+  // — e.g. "Lower uterine segment caesarean section (LSCS) NEC". Found live
+  // 2026-07-23: the concept behind that description (398307005) is RETIRED
+  // in SNOMED (confirmed via the SNOMED CT browser — no parents/children),
+  // and its real active replacement (788180009) has a synonym that is an
+  // EXACT text match to the current description ONLY once "(LSCS)" is also
+  // stripped — crossConceptAlternatives' exact-match rule can't see past it
+  // otherwise.
+  //
+  // ACCEPTED RISK, explicitly flagged by the user rather than silently
+  // assumed: stripping this unconditionally is a simplification that can be
+  // WRONG for a description where the bracketed text is integral to its
+  // meaning rather than a legacy artefact (e.g. a hypothetical "...disorder
+  // (ADHD)" flagged outdated for an unrelated reason) — over-stripping
+  // there risks a false exact-text cross-concept match. Mitigated by
+  // crossConceptAlternatives already being the "verify before applying"
+  // category, never auto-applied, and by this only ever running on
+  // descriptions ALREADY confirmed outdated (via the prefix/suffix checks
+  // above), not the whole record. Revisit if a false-positive from this
+  // specific step is ever found live — deliberately not solved more
+  // precisely than this for now.
+  var LEGACY_TRAILING_ABBREVIATION_RE = /\s*\([A-Za-z]{2,6}\)\s*$/;
+
   function looksOutdated(description) {
     var d = String(description == null ? '' : description);
     return LEGACY_PREFIX_RE.test(d) || LEGACY_SUFFIX_RE.test(d);
   }
 
-  // Strips the legacy prefix/suffix to build search query text — e.g.
-  // "[X]Attention deficit disorder" -> "Attention deficit disorder",
-  // "Fracture of radius NOS" -> "Fracture of radius".
+  // Strips the legacy prefix/suffix (and, once exposed, a trailing bracketed
+  // abbreviation) to build search query text — e.g. "[X]Attention deficit
+  // disorder" -> "Attention deficit disorder", "Fracture of radius NOS" ->
+  // "Fracture of radius", "Lower uterine segment caesarean section (LSCS)
+  // NEC" -> "Lower uterine segment caesarean section".
   function stripLegacyMarkers(description) {
     return String(description == null ? '' : description)
       .replace(LEGACY_PREFIX_RE, '')
       .replace(LEGACY_SUFFIX_RE, '')
+      .replace(LEGACY_TRAILING_ABBREVIATION_RE, '')
       .trim();
   }
 
@@ -71,6 +97,7 @@
     sameConceptAlternatives,
     LEGACY_PREFIX_RE,
     LEGACY_SUFFIX_RE,
+    LEGACY_TRAILING_ABBREVIATION_RE,
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

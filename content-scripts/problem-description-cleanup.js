@@ -85,6 +85,26 @@
 // query silently failed, taking same-concept AND descendant suggestions down
 // with it. See searchDescendantsNarrowed's comment near SEARCH_PATH for the
 // two confirmed-live supplementary searches that fix this.
+//
+// HINT-EXPANDED EXTENSION (2026-07-23): a DIFFERENT symptom from the
+// word-mismatch bug — a legacy "[SO]Rotator cuff" problem got no suggestion
+// of any kind because 7885001 is a SNOMED BODY STRUCTURE concept (an
+// anatomical site), not a disorder, so it can never appear in the
+// disorder/procedure search same-concept or cross-concept-exact ever
+// matches. When same-concept, descendant, AND cross-concept-exact all come
+// back empty, openPanel tries ONE more fallback search: the base description
+// plus a recognised pathology word (see PATHOLOGY_HINT_WORDS in
+// shared/coding-specificity.js) found in additionalInformation's first
+// sentence — e.g. "Rotator cuff" + "tear" -> finds 926335004 "Rotator cuff
+// tear". This is the riskiest category of the four (no hierarchy proof, and
+// two combined text fragments rather than one exact match), so it renders in
+// its own most-cautious red section. Per explicit discussion with the user:
+// an anatomical structure should never really be coded as a "problem" in its
+// own right, which is what makes this safe to offer for a single flagged
+// problem now — but this category must NEVER be bulk-auto-applied if/when a
+// whole-record bulk-correction feature is built later, unlike same-concept
+// and cross-concept-exact matches which could eventually be "easy" bulk
+// cases.
 'use strict';
 
 (function () {
@@ -105,6 +125,10 @@
   var descriptionAlreadySpecifiesLaterality = codingSpecificity.descriptionAlreadySpecifiesLaterality;
   var descendantAlternatives = codingSpecificity.descendantAlternatives;
   var crossConceptAlternatives = codingSpecificity.crossConceptAlternatives;
+  var detectPathologyHint = codingSpecificity.detectPathologyHint;
+  var descriptionAlreadyMentionsHint = codingSpecificity.descriptionAlreadyMentionsHint;
+  var hintExpandedAlternatives = codingSpecificity.hintExpandedAlternatives;
+  var significantWords = codingSpecificity.significantWords;
 
   // ── Pure helpers, problem-specific (no window/document/fetch — unit-
   // testable via require()) ───────────────────────────────────────────────────
@@ -164,11 +188,16 @@
       sameConceptAlternatives: shared.sameConceptAlternatives,
       LEGACY_PREFIX_RE: shared.LEGACY_PREFIX_RE,
       LEGACY_SUFFIX_RE: shared.LEGACY_SUFFIX_RE,
+      LEGACY_TRAILING_ABBREVIATION_RE: shared.LEGACY_TRAILING_ABBREVIATION_RE,
       // Re-exported from shared/coding-specificity.js, same reasoning.
       detectLateralityHint: codingSpecificity.detectLateralityHint,
       descriptionAlreadySpecifiesLaterality: codingSpecificity.descriptionAlreadySpecifiesLaterality,
       descendantAlternatives: codingSpecificity.descendantAlternatives,
       crossConceptAlternatives: codingSpecificity.crossConceptAlternatives,
+      detectPathologyHint: codingSpecificity.detectPathologyHint,
+      descriptionAlreadyMentionsHint: codingSpecificity.descriptionAlreadyMentionsHint,
+      hintExpandedAlternatives: codingSpecificity.hintExpandedAlternatives,
+      significantWords: codingSpecificity.significantWords,
       // Problem-specific.
       buildEditProblemPayload,
       findOutdatedProblems,
@@ -354,6 +383,7 @@
         laterality: null,
         descendantAlternatives: null,
         crossConceptAlternatives: null,
+        hintExpandedAlternatives: null,
         saving: false,
         saved: false,
       };
@@ -372,6 +402,7 @@
     var alts = st.alternatives || [];
     var descendants = st.descendantAlternatives || [];
     var crossConcept = st.crossConceptAlternatives || [];
+    var hintExpanded = st.hintExpandedAlternatives || [];
     // Surfaced regardless of whether any suggestion was found — supports the
     // clinician's own judgement call even when the tool has nothing to
     // offer (e.g. a "[SO]"/NEC code the search can't currently match).
@@ -380,7 +411,7 @@
         esc(st.additionalInformation) +
         '</div>'
       : '';
-    if (!alts.length && !descendants.length && !crossConcept.length) {
+    if (!alts.length && !descendants.length && !crossConcept.length && !hintExpanded.length) {
       return (
         infoHtml +
         '<div class="ms-pdc-panel"><span class="ms-pdc-empty">No alternative description found for this code.</span></div>'
@@ -415,6 +446,16 @@
         '<div class="ms-pdc-panel">' +
         descendants
           .map(function (a) {
+            // matchScore (0-100): the % of free-text hint words found in
+            // this candidate's own wording — RANKING signal only (ancestry
+            // + "at least one word" already guarantee safety), shown so the
+            // clinician can judge relevance at a glance across candidates,
+            // e.g. "removal of uterine fibroid" (67%) vs "removal of uterine
+            // myoma" (33%) for the same additional info.
+            var scoreHtml =
+              typeof a.matchScore === 'number'
+                ? ' <span class="ms-pdc-descendant-score">(' + a.matchScore + '% match)</span>'
+                : '';
             return (
               '<button type="button" class="ms-pdc-descendant" data-problem-id="' +
               esc(problemId) +
@@ -422,6 +463,7 @@
               esc(a.descriptionId || '') +
               '">' +
               esc(a.description) +
+              scoreHtml +
               '</button>'
             );
           })
@@ -442,6 +484,34 @@
           .map(function (a) {
             return (
               '<button type="button" class="ms-pdc-crossconcept" data-problem-id="' +
+              esc(problemId) +
+              '" data-concept-id="' +
+              esc(a.conceptId) +
+              '" data-description-id="' +
+              esc(a.descriptionId || '') +
+              '">' +
+              esc(a.description) +
+              '</button>'
+            );
+          })
+          .join('') +
+        '</div>' +
+        '</div>';
+    }
+    if (hintExpanded.length) {
+      // The MOST cautious category — riskier than crossConcept above, since
+      // it combines two text fragments (base description + a pathology word
+      // found in free-text notes) rather than one verified exact match, and
+      // has no hierarchy proof either. Never eligible for future bulk
+      // auto-correction — see shared/coding-specificity.js.
+      html +=
+        '<div class="ms-pdc-hintexpand-section">' +
+        '<span class="ms-pdc-hintexpand-label">⚠ Inferred from additional notes — verify carefully before applying:</span>' +
+        '<div class="ms-pdc-panel">' +
+        hintExpanded
+          .map(function (a) {
+            return (
+              '<button type="button" class="ms-pdc-hintexpand" data-problem-id="' +
               esc(problemId) +
               '" data-concept-id="' +
               esc(a.conceptId) +
@@ -494,6 +564,11 @@
         applyCrossConcept(problemId, btn.getAttribute('data-concept-id'), btn.getAttribute('data-description-id'));
       });
     });
+    root.querySelectorAll('.ms-pdc-hintexpand').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyHintExpanded(problemId, btn.getAttribute('data-concept-id'), btn.getAttribute('data-description-id'));
+      });
+    });
   }
 
   async function openPanel(problemId) {
@@ -524,20 +599,65 @@
       var byConceptId = await searchDescriptions(code.conceptId);
       var combinedResults = results.concat(byConceptId);
       st.alternatives = sameConceptAlternatives(combinedResults, code.conceptId, code.description);
+      // Descendant search words: laterality (rt/lt/bilateral) PLUS generic
+      // significant words from the WHOLE additionalInformation field (e.g.
+      // "resection of uterine fibroid" -> "resection"/"uterine"/"fibroid") —
+      // GENERALISED 2026-07-23 from laterality-only, real example:
+      // "Hysteroscopy NEC" (233545006) has a confirmed genuine descendant,
+      // 84064003 "Hysteroscopy with removal of uterine fibroid". Deliberately
+      // tried ALONGSIDE same-concept alternatives, not just as a last-resort
+      // fallback — a clinician may want BOTH a same-concept relabel AND a
+      // more-specific descendant offered together (explicit user decision).
+      //
+      // RETRIEVAL (revised 2026-07-23): a single BLANK-QUERY fetch
+      // (searchDescendantsNarrowed with an empty word) confirmed live to
+      // return the full descendant set of the current concept directly —
+      // `query=` empty bypasses text matching entirely, unlike guessing
+      // individual words, which can silently miss a real descendant worded
+      // differently (e.g. "Hysteroscopic myomectomy" never contains
+      // "fibroid"/"resection"). One fetch, not one per word. Not provably
+      // complete — the response has no total/pagination field, so a very
+      // broad parent concept could in theory have more descendants than one
+      // page returns — but confirmed far more complete than per-word
+      // guessing for this real case. hintWords is then used only to RANK the
+      // candidates (descendantAlternatives' matchScore), not to retrieve
+      // them.
       var laterality = detectLateralityHint(prefill.additionalInformation);
+      var hintWords = [];
       if (laterality && !descriptionAlreadySpecifiesLaterality(code.description, laterality)) {
         st.laterality = laterality;
-        var narrowed = await searchDescendantsNarrowed(code.conceptId, laterality);
-        st.descendantAlternatives = descendantAlternatives(
-          combinedResults.concat(narrowed),
-          code.conceptId,
-          laterality
-        );
+        hintWords.push(laterality);
       } else {
         st.laterality = null;
+      }
+      significantWords(prefill.additionalInformation).forEach(function (w) {
+        if (hintWords.indexOf(w) === -1) hintWords.push(w);
+      });
+      if (hintWords.length) {
+        var allDescendants = await searchDescendantsNarrowed(code.conceptId, '');
+        st.descendantAlternatives = descendantAlternatives(
+          combinedResults.concat(allDescendants),
+          code.conceptId,
+          hintWords
+        );
+      } else {
         st.descendantAlternatives = [];
       }
       st.crossConceptAlternatives = crossConceptAlternatives(combinedResults, code.conceptId, code.description);
+      // FALLBACK ONLY (per the user's explicit scope choice): only tried
+      // when the three categories above ALL came back empty — one extra
+      // fetch in that (by definition, rare) case, none otherwise. See
+      // shared/coding-specificity.js's hintExpandedAlternatives doc for the
+      // full contract, the motivating "[SO]Rotator cuff"/"-tear" case, and
+      // why this category must never be bulk-auto-applied later.
+      st.hintExpandedAlternatives = [];
+      if (!st.alternatives.length && !st.descendantAlternatives.length && !st.crossConceptAlternatives.length) {
+        var pathologyHint = detectPathologyHint(prefill.additionalInformation);
+        if (pathologyHint && !descriptionAlreadyMentionsHint(code.description, pathologyHint)) {
+          var expandedResults = await searchDescriptions(queryText + ' ' + pathologyHint);
+          st.hintExpandedAlternatives = hintExpandedAlternatives(expandedResults, code.conceptId, pathologyHint);
+        }
+      }
     } catch (err) {
       st.error = (err && err.message) || 'Failed to load alternative descriptions.';
     } finally {
@@ -621,6 +741,16 @@
   function applyCrossConcept(problemId, conceptId, descriptionId) {
     var st = rowState(problemId);
     var chosen = (st.crossConceptAlternatives || []).find(function (a) {
+      return a.conceptId === conceptId && (a.descriptionId || '') === (descriptionId || '');
+    });
+    return applyCode(problemId, chosen);
+  }
+
+  // Matched by conceptId + descriptionId together, same reasoning as
+  // applyCrossConcept — candidates come from different concepts.
+  function applyHintExpanded(problemId, conceptId, descriptionId) {
+    var st = rowState(problemId);
+    var chosen = (st.hintExpandedAlternatives || []).find(function (a) {
       return a.conceptId === conceptId && (a.descriptionId || '') === (descriptionId || '');
     });
     return applyCode(problemId, chosen);

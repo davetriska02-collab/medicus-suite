@@ -125,6 +125,13 @@
   background: #dbeafe;
 }
 
+/* Match-score suffix on a descendant button — ranking info only, muted so it
+   doesn't compete visually with the description text itself. */
+.ms-pdc-descendant-score {
+  font-weight: 400;
+  color: #60a5fa;
+}
+
 /* Cross-concept text-match suggestions — the RISKIEST category (a different
    concept whose text happens to be identical, no hierarchy proof unlike the
    descendant section above). Deliberately its OWN palette (warning orange,
@@ -164,4 +171,45 @@
 
 .ms-pdc-crossconcept:hover {
   background: #ffedd5;
+}
+
+/* Hint-expanded suggestions — the MOST cautious category: no hierarchy proof
+   (unlike descendant) and no single exact-text match (unlike cross-concept) —
+   the query itself is a constructed combination of the base description and a
+   pathology word found in free text. Deliberately a red palette, one step
+   more alarming than cross-concept's warning-orange, so the risk ordering
+   (amber < blue < orange < red) reads at a glance. */
+.ms-pdc-hintexpand-section {
+  display: block;
+  margin-top: 6px;
+}
+
+.ms-pdc-hintexpand-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #b91c1c;
+}
+
+.ms-pdc-hintexpand-section .ms-pdc-panel {
+  background: #fef2f2;
+  border: 1px dashed #f87171;
+}
+
+.ms-pdc-hintexpand {
+  padding: 5px 10px;
+  background: #fff;
+  border: 1px solid #f87171;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #b91c1c;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ms-pdc-hintexpand:hover {
+  background: #fee2e2;
 }

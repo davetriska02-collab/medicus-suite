@@ -2,6 +2,101 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.180.0] — 2026-07-23
+
+### "Fix description" widget: fourth suggestion category — hint-expanded matches
+
+Follow-up to the "[SO]" codes deferred at the end of v3.179.0. Live-captured a real
+"[SO]Rotator cuff" problem (additional info "-tear") that got NO suggestion of any kind.
+Root cause — a DIFFERENT bug class from the word-mismatch fix in v3.179.0: `7885001` is a
+SNOMED **body structure** concept ("Rotator cuff (structure)"), not a disorder, so it can
+never appear in the disorder/procedure-hierarchy search that same-concept and
+cross-concept-exact matching both depend on. Confirmed live: searching "rotator cuff
+tear" in that hierarchy finds `926335004` "Rotator cuff tear" — exactly what the "-tear"
+free-text note was pointing at.
+
+New fallback category, tried only when same-concept, descendant, and cross-concept-exact
+all come back empty (one extra search in that case, zero extra fetches otherwise):
+combines the base description with a recognised pathology word (tear, sprain, rupture,
+valvular, …) found in the first sentence of `additionalInformation`, and offers the
+result as a cross-concept suggestion. This is the riskiest of the four categories now
+offered — no hierarchy proof, and two combined text fragments rather than one exact
+match — so it renders in its own most-cautious red section, one step past the existing
+warning-orange cross-concept styling.
+
+Explicit scope decision, discussed and agreed: an anatomical-structure concept should
+never really be coded as a "problem" in its own right, which is what makes this safe to
+offer per-problem now. But when/if a whole-record bulk-correction feature is built later,
+this category must NEVER be bulk-auto-applied — unlike same-concept and cross-concept-
+exact matches, which could eventually be "easy" bulk cases, this one must always prompt a
+clinician.
+
+21 new unit tests using the real captured rotator-cuff data. Not yet confirmed live.
+
+### "Fix description" widget: descendant suggestions generalised beyond laterality, ranked by match %
+
+Real example: a patient's "Hysteroscopy NEC" (`233545006`) problem — already correctly
+offered a same-concept relabel — had `additionalInformation` "resection of uterine
+fibroid", and a genuine SNOMED descendant exists: `84064003` "Hysteroscopy with removal of
+uterine fibroid" (confirmed via live capture — its `parentConceptIds` contains
+`233545006`, exactly the same ancestry proof already used for laterality descendants).
+`descendantAlternatives` previously only ever tried a single laterality word (rt/lt/
+bilateral); it now accepts an arbitrary list of hint words (still fully backward
+compatible with a single string), sourced from the laterality word (if any) plus every
+significant word found anywhere in `additionalInformation`.
+
+Two rounds of live-testing feedback refined this further:
+
+- **Retrieval**: rather than guessing individual words to search for (which can silently
+  miss a real descendant worded differently, e.g. "Hysteroscopic myomectomy" never
+  contains "fibroid"/"resection"), a single BLANK-QUERY fetch (`query=` empty, confirmed
+  live) returns the full descendant set of the current concept directly, bypassing text
+  matching at the retrieval stage entirely. One fetch, not one per word. Not provably
+  complete (no total/pagination field in the response), but far more complete than
+  per-word guessing.
+- **Hint scope**: `additionalInformation` is now scanned in FULL, not just its first
+  sentence. A real case — "& laparoscopy. resection of fibroid." — put the clinically
+  relevant detail in the SECOND sentence, past the original first-clause cutoff, so it was
+  silently missed. (The narrower first-clause scope remains correct and unchanged for the
+  separate `hintExpandedAlternatives`/pathology-word category, which has no structural
+  safety net and so stays conservative about how much free text it trusts.)
+- **Ranking, not just filtering**: each candidate now gets a `matchScore` (0-100%, the
+  proportion of hint words found in its own wording), shown next to the button (e.g.
+  "removal of uterine fibroid (67% match)" vs. "removal of uterine myoma (33% match)"), and
+  results are sorted best-match-first. Still literal word-boundary matching, not clinical
+  synonym-awareness — deliberately: catching "myomectomy" as a fibroid-removal synonym
+  would need either a curated synonym dictionary or an actual semantic-similarity call
+  (sending patient free text to an LLM), and the user explicitly chose to keep this pass to
+  keyword overlap rather than open that architecture/data-handling discussion now.
+
+Deliberately offered ALONGSIDE same-concept alternatives, not gated behind "nothing else
+matched" — the same-concept relabel and the more-specific descendant are both valid,
+independent choices for the clinician to pick from.
+
+19 new unit tests (`significantWords`, the generalised + scored `descendantAlternatives`)
+using the real captured Hysteroscopy/fibroid data. Not yet confirmed live.
+
+## [v3.180.1] — 2026-07-23
+
+### "Fix description" widget: fixed cross-concept matching for a retired legacy concept
+
+Investigated why "Lower uterine segment caesarean section (LSCS) NEC" (`398307005`) got
+NO suggestions at all. A different root cause from both the word-mismatch and
+body-structure bugs already fixed: `398307005` is a RETIRED/inactive SNOMED concept
+(confirmed via the SNOMED CT browser — no parents or children), invisible to every search
+regardless of wording. Its real active replacement, `788180009`, has a synonym worded
+exactly like the current description — but only once the trailing "(LSCS)" abbreviation
+is ALSO stripped, alongside the existing "NEC" suffix strip.
+
+`stripLegacyMarkers` now also strips a trailing bracketed abbreviation (2-6 letters)
+exposed once the NOS/NEC suffix is removed, letting `crossConceptAlternatives` find the
+exact match. Accepted, explicitly-flagged risk: this is a simplification that could
+mis-fire if a bracketed suffix is ever integral to a description's meaning rather than a
+legacy artefact — mitigated by `crossConceptAlternatives` already requiring explicit
+clinician confirmation before applying, and by this only ever running on descriptions
+already confirmed outdated. 3 new unit tests using the real captured LSCS/caesarean-section
+data.
+
 ## [v3.179.0] — 2026-07-23
 
 ### "Fix description" widget: surfaces the raw additional-info text

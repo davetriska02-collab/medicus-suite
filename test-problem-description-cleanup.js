@@ -25,6 +25,10 @@ const {
   descriptionAlreadySpecifiesLaterality,
   descendantAlternatives,
   crossConceptAlternatives,
+  detectPathologyHint,
+  descriptionAlreadyMentionsHint,
+  hintExpandedAlternatives,
+  significantWords,
 } = require('./content-scripts/problem-description-cleanup.js');
 
 let passed = 0,
@@ -61,6 +65,11 @@ check(stripLegacyMarkers('[X]Depression NOS') === 'Depression', 'strips BOTH pre
 check(stripLegacyMarkers('Diabetic complication NEC') === 'Diabetic complication', 'strips trailing "NEC"');
 check(stripLegacyMarkers('Attention deficit disorder') === 'Attention deficit disorder', 'no markers -> unchanged');
 check(stripLegacyMarkers(null) === '', 'null -> empty string, never throws');
+check(
+  stripLegacyMarkers('Lower uterine segment caesarean section (LSCS) NEC') ===
+    'Lower uterine segment caesarean section',
+  'strips a trailing bracketed abbreviation ("(LSCS)") once the "NEC" suffix exposes it (real LSCS case, 2026-07-23)'
+);
 
 console.log('--- sameConceptAlternatives: the safety rule ---');
 const searchResults = [
@@ -449,6 +458,265 @@ check(
     '[X]Heroin addiction'
   ).length === 1,
   'dedupes repeated identical results for the same concept'
+);
+
+console.log('--- crossConceptAlternatives: real "LSCS" retired-concept case (trailing-abbreviation strip) ---');
+// Real capture (2026-07-23): 398307005 "Lower uterine segment caesarean
+// section (LSCS) NEC" is a RETIRED SNOMED concept (confirmed via the SNOMED
+// CT browser — no parents or children). Its real active replacement,
+// 788180009, has a synonym worded EXACTLY like the current description once
+// both the "NEC" suffix AND the trailing "(LSCS)" abbreviation are stripped.
+const lscsResults = [
+  {
+    label: 'Lower uterine segment caesarean section',
+    value: {
+      description: 'Lower uterine segment caesarean section',
+      conceptId: '788180009',
+      descriptionId: '3779485018',
+    },
+  },
+  {
+    label: 'LSCS - lower segment caesarean section',
+    value: {
+      description: 'LSCS - lower segment caesarean section',
+      conceptId: '788180009',
+      descriptionId: '3779488016',
+    },
+  },
+];
+const lscsCrossConcept = crossConceptAlternatives(
+  lscsResults,
+  '398307005',
+  'Lower uterine segment caesarean section (LSCS) NEC'
+);
+check(
+  lscsCrossConcept.length === 1,
+  'only the exact-text match survives once "(LSCS)" is stripped by stripLegacyMarkers upstream (got ' +
+    lscsCrossConcept.length +
+    ')'
+);
+check(
+  lscsCrossConcept[0] && lscsCrossConcept[0].conceptId === '788180009',
+  'surfaces 788180009, the real active replacement for the retired 398307005'
+);
+
+console.log('--- detectPathologyHint ---');
+check(detectPathologyHint('-tear') === 'tear', '"-tear" shorthand -> "tear" (no leading-dash requirement)');
+check(detectPathologyHint('query tear') === 'tear', '"tear" without a leading dash still matches');
+check(detectPathologyHint('valvular disease suspected') === 'valvular', '"valvular" matches');
+check(detectPathologyHint('possible sprain') === 'sprain', '"sprain" matches');
+check(
+  detectPathologyHint('tear. seen 2019, unrelated old note about sprain') === 'tear',
+  'only the FIRST sentence/clause is scanned — a later "sprain" past the first "." is ignored'
+);
+check(detectPathologyHint('rt distal end') === null, 'laterality-only text -> null (no pathology word)');
+check(detectPathologyHint('Nostalgia for the 90s') === null, 'no word-boundary false positive');
+check(detectPathologyHint('') === null, 'empty string -> null');
+check(detectPathologyHint(null) === null, 'null -> null, never throws');
+check(detectPathologyHint(undefined) === null, 'undefined -> null, never throws');
+
+console.log('--- descriptionAlreadyMentionsHint ---');
+check(
+  descriptionAlreadyMentionsHint('Rotator cuff tear', 'tear') === true,
+  'description already mentions the hint word -> true'
+);
+check(
+  descriptionAlreadyMentionsHint('Rotator cuff', 'tear') === false,
+  'description does not mention the hint word -> false'
+);
+check(descriptionAlreadyMentionsHint(null, 'tear') === false, 'null description -> false, never throws');
+check(descriptionAlreadyMentionsHint('Rotator cuff', null) === false, 'null hint word -> false');
+
+console.log('--- hintExpandedAlternatives: real "[SO]Rotator cuff"/"-tear" case ---');
+// Real conceptIds from a live capture (2026-07-23): 7885001 "[SO]Rotator
+// cuff" is a SNOMED BODY STRUCTURE concept (confirmed separately via a
+// constrainingParentConcepts=123037004 query), so it can never appear in
+// this disorder-hierarchy search — that's the whole point of this category.
+// This is the response shape from querying "Rotator cuff tear" (the base
+// description + the "-tear" hint) against the disorder/procedure hierarchies.
+const ROTATOR_CUFF_STRUCTURE_ID = '7885001';
+const rotatorCuffTearResults = [
+  {
+    label: 'Rotator cuff tear',
+    value: { description: 'Rotator cuff tear', conceptId: '926335004', descriptionId: null },
+  },
+  {
+    label: 'Traumatic rotator cuff tear',
+    value: { description: 'Traumatic rotator cuff tear', conceptId: '698299009', descriptionId: null },
+  },
+  {
+    label: 'Rotator cuff repair',
+    value: { description: 'Rotator cuff repair', conceptId: '56060000', descriptionId: null },
+  },
+];
+const hintExpanded = hintExpandedAlternatives(rotatorCuffTearResults, ROTATOR_CUFF_STRUCTURE_ID, 'tear');
+check(hintExpanded.length === 2, 'only results actually containing "tear" survive (got ' + hintExpanded.length + ')');
+check(
+  hintExpanded.some((a) => a.conceptId === '926335004'),
+  'surfaces "Rotator cuff tear" (926335004), the real motivating target'
+);
+check(
+  !hintExpanded.some((a) => a.conceptId === '56060000'),
+  '"Rotator cuff repair" excluded — no "tear" in its description'
+);
+check(
+  !hintExpanded.some((a) => a.conceptId === ROTATOR_CUFF_STRUCTURE_ID),
+  'never includes the current (body-structure) concept itself'
+);
+check(
+  hintExpandedAlternatives(null, ROTATOR_CUFF_STRUCTURE_ID, 'tear').length === 0,
+  'null results -> empty, never throws'
+);
+check(
+  hintExpandedAlternatives(rotatorCuffTearResults, null, 'tear').length === 0,
+  'null conceptId -> empty, never throws'
+);
+check(
+  hintExpandedAlternatives(rotatorCuffTearResults, ROTATOR_CUFF_STRUCTURE_ID, null).length === 0,
+  'null hint word -> empty, never throws'
+);
+
+console.log('--- significantWords ---');
+check(
+  significantWords('resection of uterine fibroid.').join(',') === 'resection,uterine,fibroid',
+  'strips stop-words ("of"), keeps content words in order (got ' +
+    significantWords('resection of uterine fibroid.') +
+    ')'
+);
+check(
+  significantWords('laparoscopy, laparoscopic myomectomy.').join(',') === 'laparoscopy,laparoscopic,myomectomy',
+  'punctuation is not a word boundary problem'
+);
+check(
+  significantWords('& resection of fibroid.').join(',') === 'resection,fibroid',
+  '"&" and short/stop words excluded'
+);
+check(
+  significantWords('tear. seen 2019, unrelated note about fibroid').join(',') ===
+    'tear,seen,unrelated,note,about,fibroid',
+  'scans the WHOLE field, not just the first clause — words after the "." are included too (fixed 2026-07-23 regression)'
+);
+check(
+  significantWords('& laparoscopy. resection of fibroid.').join(',') === 'laparoscopy,resection,fibroid',
+  'real regression case: "resection of fibroid" (the clinically relevant part) is in the SECOND sentence and must not be dropped'
+);
+check(significantWords('').length === 0, 'empty string -> empty array');
+check(significantWords(null).length === 0, 'null -> empty array, never throws');
+check(significantWords(undefined).length === 0, 'undefined -> empty array, never throws');
+check(
+  significantWords('rt distal end').join(',') === 'distal,end',
+  '2-letter words ("rt") are excluded by the length>=3 floor, not treated as stop-words'
+);
+
+console.log(
+  '--- descendantAlternatives: GENERALISED to arbitrary hint words (real "Hysteroscopy NEC"/"fibroid" case) ---'
+);
+// Real conceptIds from a live capture (2026-07-23): 233545006 "Hysteroscopy
+// NEC" has additionalInformation like "resection of uterine fibroid" and a
+// confirmed genuine descendant, 84064003 "Hysteroscopy with removal of
+// uterine fibroid" (three synonyms captured, all sharing 233545006 in their
+// parentConceptIds).
+const HYSTEROSCOPY_CONCEPT_ID = '233545006';
+const fibroidResults = [
+  {
+    label: 'Hysteroscopy with removal of uterine myoma',
+    value: {
+      description: 'Hysteroscopy with removal of uterine myoma',
+      conceptId: '84064003',
+      descriptionId: '5498827013',
+      parentConceptIds: ['233545006', '71388002'],
+    },
+  },
+  {
+    label: 'Hysteroscopy with removal of uterine fibroid',
+    value: {
+      description: 'Hysteroscopy with removal of uterine fibroid',
+      conceptId: '84064003',
+      descriptionId: '5498828015',
+      parentConceptIds: ['233545006', '71388002'],
+    },
+  },
+  {
+    // Real descendant (ancestry matches) but doesn't mention "fibroid" — must
+    // be excluded from a "fibroid"-only search: ancestry alone isn't enough.
+    label: 'Hysteroscopic myomectomy',
+    value: {
+      description: 'Hysteroscopic myomectomy',
+      conceptId: '1290534002',
+      descriptionId: '9999999001',
+      parentConceptIds: ['233545006', '71388002'],
+    },
+  },
+  {
+    // Matches the word "fibroid" but is NOT a real descendant (no 233545006
+    // in its ancestry) — proves text matching alone is not enough either.
+    label: 'Uterine fibroid',
+    value: {
+      description: 'Uterine fibroid',
+      conceptId: '95315005',
+      descriptionId: '9999999002',
+      parentConceptIds: ['64572001'],
+    },
+  },
+];
+const fibroidDescendants = descendantAlternatives(fibroidResults, HYSTEROSCOPY_CONCEPT_ID, [
+  'resection',
+  'uterine',
+  'fibroid',
+]);
+check(
+  fibroidDescendants.length === 2,
+  'only the true descendants mentioning one of the hint words survive (got ' + fibroidDescendants.length + ')'
+);
+check(
+  fibroidDescendants.every((a) => a.conceptId === '84064003'),
+  'both surfaced synonyms belong to 84064003, the real motivating target'
+);
+check(
+  !fibroidDescendants.some((a) => a.conceptId === '95315005'),
+  '"Uterine fibroid" (text match, no ancestry) excluded'
+);
+check(
+  !fibroidDescendants.some((a) => a.conceptId === '1290534002'),
+  '"Hysteroscopic myomectomy" (real descendant, no "fibroid" text) excluded — this is an accepted scope limit, not a bug'
+);
+check(
+  descendantAlternatives(fibroidResults, HYSTEROSCOPY_CONCEPT_ID, 'fibroid').length === 1,
+  'a single string still works exactly as before — backward compatible with the laterality call shape (only the synonym literally saying "fibroid" matches, not the "myoma" one)'
+);
+check(
+  descendantAlternatives(fibroidResults, HYSTEROSCOPY_CONCEPT_ID, []).length === 0,
+  'empty hint-word array -> empty, never throws'
+);
+check(
+  descendantAlternatives(fibroidResults, HYSTEROSCOPY_CONCEPT_ID, null).length === 0,
+  'null hint words -> empty, never throws (still matches the original single-arg contract)'
+);
+
+console.log('--- descendantAlternatives: matchScore ranking (not just filtering) ---');
+// Same fibroidResults/hint words as above: "...removal of uterine fibroid"
+// matches 2 of 3 hint words (uterine, fibroid) = 67%; "...removal of uterine
+// myoma" matches only 1 of 3 (uterine) = 33%.
+const scored = descendantAlternatives(fibroidResults, HYSTEROSCOPY_CONCEPT_ID, ['resection', 'uterine', 'fibroid']);
+check(
+  scored[0] && scored[0].description === 'Hysteroscopy with removal of uterine fibroid' && scored[0].matchScore === 67,
+  'the 2-of-3-word match ("fibroid" synonym, 67%) is ranked FIRST (got ' +
+    (scored[0] && scored[0].matchScore) +
+    '%, "' +
+    (scored[0] && scored[0].description) +
+    '")'
+);
+check(
+  scored[1] && scored[1].description === 'Hysteroscopy with removal of uterine myoma' && scored[1].matchScore === 33,
+  'the 1-of-3-word match ("myoma" synonym, 33%) is ranked SECOND (got ' +
+    (scored[1] && scored[1].matchScore) +
+    '%, "' +
+    (scored[1] && scored[1].description) +
+    '")'
+);
+check(
+  descendantAlternatives(fibroidResults, HYSTEROSCOPY_CONCEPT_ID, 'fibroid')[0].matchScore === 100,
+  'a single matching hint word -> 100% (only one word to match, and it matched)'
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);
