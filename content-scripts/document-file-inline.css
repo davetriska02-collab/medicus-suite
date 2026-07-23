@@ -1,65 +1,97 @@
 /* Medicus Suite — inline "save attachment as document" widget injected into task pages */
-/* All selectors scoped to #ms-df-widget to avoid Medicus style conflicts */
-
-/* Shared row that sits this widget side by side with #ms-tk-widget ("create
-   task for this patient") instead of stacked — see document-file-inline.js's
-   ensureWidgetRow(). Duplicated (harmlessly) in task-inline.css since either
-   widget may be the one that creates the wrapper. */
-.ms-inline-widget-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 16px 0;
-}
-
-.ms-inline-widget-row > #ms-tk-widget,
-.ms-inline-widget-row > #ms-df-widget {
-  margin: 0;
-  flex: 1 1 260px;
-  min-width: 220px;
-}
+/* Form selectors scoped to #ms-df-widget; the chip lives outside it (next to
+   Medicus's own attachment link/button) so .ms-df-chip is a global class. */
 
 #ms-df-widget {
-  margin: 16px 0;
+  margin: 8px 0 16px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 14px;
   color: #1a2030;
+  max-width: 420px;
 }
 
-#ms-df-widget .ms-df-header {
-  display: flex;
+/* Wraps the attachment's own link/button together with our chip so the two
+   sit on one line — Medicus's attachment button is block-level, so a plain
+   sibling insert would drop the chip onto its own line below it instead. */
+.ms-df-chip-wrap {
+  display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  padding: 10px 14px;
+  max-width: 100%;
+}
+
+/* Per-attachment chip — injected immediately after each eligible attachment's
+   own link/button (document-file-inline.js's injectAttachmentChips()). */
+.ms-df-chip {
+  display: inline-block;
+  flex-shrink: 0;
+  margin: 2px 0;
+  padding: 3px 10px;
   background: #f0fdfa;
   border: 1px solid #99e6d8;
-  border-radius: 6px;
-  cursor: pointer;
-  user-select: none;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 12px;
   font-weight: 600;
-  font-size: 13px;
   color: #0d6e5e;
+  cursor: pointer;
 }
 
-#ms-df-widget .ms-df-header:hover {
+.ms-df-chip:hover:not(:disabled) {
   background: #e0faf3;
 }
 
-#ms-df-widget .ms-df-chevron {
-  font-size: 9px;
+.ms-df-chip-active {
+  background: #0d6e5e;
+  border-color: #0d6e5e;
+  color: #fff;
+}
+
+.ms-df-chip-saved {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+  cursor: default;
+}
+
+#ms-df-widget .ms-df-filing-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#ms-df-widget .ms-df-filing {
+  font-size: 12px;
+  color: #666;
+  overflow-wrap: anywhere;
+}
+
+#ms-df-widget .ms-df-close {
   flex-shrink: 0;
+  padding: 0 6px;
+  background: none;
+  border: none;
+  font-size: 16px;
+  line-height: 1;
+  color: #666;
+  cursor: pointer;
+}
+
+#ms-df-widget .ms-df-close:hover {
+  color: #1a2030;
 }
 
 #ms-df-widget .ms-df-body {
   border: 1px solid #99e6d8;
-  border-top: none;
-  border-radius: 0 0 6px 6px;
+  border-radius: 6px;
   padding: 14px;
   background: #fff;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 #ms-df-widget .ms-df-row {
@@ -76,7 +108,6 @@
   letter-spacing: 0.04em;
 }
 
-#ms-df-widget .ms-df-select,
 #ms-df-widget .ms-df-input {
   padding: 7px 10px;
   border: 1px solid #c8cdd6;
@@ -89,7 +120,6 @@
   font-family: inherit;
 }
 
-#ms-df-widget .ms-df-select:disabled,
 #ms-df-widget .ms-df-input:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -123,21 +153,6 @@
   cursor: not-allowed;
 }
 
-#ms-df-widget .ms-df-btn-ghost {
-  padding: 7px 14px;
-  background: transparent;
-  color: #0d6e5e;
-  border: 1px solid #99e6d8;
-  border-radius: 5px;
-  font-size: 13px;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-#ms-df-widget .ms-df-btn-ghost:hover:not(:disabled) {
-  background: #f0fdfa;
-}
-
 #ms-df-widget .ms-df-loading {
   font-size: 13px;
   color: #666;
@@ -162,25 +177,11 @@
   color: #92400e;
 }
 
-#ms-df-widget .ms-df-success {
-  align-items: center;
-  text-align: center;
-}
-
-#ms-df-widget .ms-df-success-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: #dcfce7;
-  color: #166534;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  font-weight: bold;
-}
-
-/* Document type picker — priority shortlist + full search */
+/* Document type picker — the search box shows the current best-guess by
+   default (documentTypeQueryLocked) and becomes a live search once typed
+   into; results are ranked + colour-coded by docPriority (see
+   priorityColor() in document-file-inline.js), not offered as a separate
+   shortlist ahead of search. */
 
 #ms-df-widget .ms-df-dt-none {
   font-size: 12px;
@@ -188,34 +189,26 @@
   font-style: italic;
 }
 
-#ms-df-widget .ms-df-dt-priority {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-#ms-df-widget .ms-df-dt-chip,
 #ms-df-widget .ms-df-dt-result {
   padding: 5px 10px;
   background: #f0fdfa;
   border: 1px solid #99e6d8;
-  border-radius: 999px;
+  border-left-width: 4px;
+  border-radius: 5px;
   font-size: 12px;
   font-family: inherit;
   color: #0d6e5e;
   cursor: pointer;
   text-align: left;
+  width: 100%;
 }
 
-#ms-df-widget .ms-df-dt-chip:hover,
 #ms-df-widget .ms-df-dt-result:hover {
   background: #e0faf3;
 }
 
-#ms-df-widget .ms-df-dt-chip-active,
 #ms-df-widget .ms-df-dt-result-active {
   background: #0d6e5e;
-  border-color: #0d6e5e;
   color: #fff;
 }
 
@@ -229,11 +222,6 @@
 
 #ms-df-widget .ms-df-dt-results:empty {
   display: none;
-}
-
-#ms-df-widget .ms-df-dt-result {
-  border-radius: 5px;
-  width: 100%;
 }
 
 #ms-df-widget .ms-df-dt-empty,

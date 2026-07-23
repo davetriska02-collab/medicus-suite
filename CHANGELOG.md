@@ -2,6 +2,141 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.183.0] — 2026-07-24
+
+### "Bulk remove?" widget: flag and end administrative-noise problem-list codes
+
+GP2GP-imported records can carry entries in the problem list that were never real clinical
+problems — administrative/claim-processing artefacts some source systems file as problems
+(the motivating real example: FP10 temporary-resident-claim codes, filed under SNOMED
+14734007 "Administrative procedure"). New `content-scripts/problem-junk-code-cleanup.js`
+(+`.css`) adds a small "Bulk remove?" toggle above the Active Problems list on the Clinical
+Summary page.
+
+Clicking it fetches each active problem's own conceptId (one fetch per problem — the cheap
+`clinical-summary/summary` list never carries a conceptId, text only) and checks each
+distinct code against `rules/non-problem-root-codes.json`'s configured root list via
+`clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=<all roots,
+comma-joined>&query=<conceptId>` — flagged if the code exactly matches a root or is a
+DESCENDANT of one at any depth (confirmed live reaching 5 hierarchy levels below 14734007
+for the real FP10 codes that motivated this). Flagged problems render as a checklist,
+unchecked by default, each also checked for active child problems (excluded from bulk
+selection, not just warned, if ending it would affect dependents) via the confirmed
+`clinical/data/problem/end-problem/{problemId}` prefill. A shared, editable end-date field
+(defaulting to today) and the fixed reason `"not a problem"` are submitted per selected
+problem via `POST clinical/problem/end-problem` — confirmed contract, from a real captured
+HAR of a manual "end problem" action, `{problemId, endDate, reason} → 200 {}`.
+
+**Root list is data, not code**: 14734007 is the first entry in
+`rules/non-problem-root-codes.json`, not a hardcoded special case — adding another root
+there (a different import-noise category from a different source system) extends the
+check with no code change and no extra fetch cost per candidate, since every configured
+root is checked in ONE combined `constrainingParentConcepts` query rather than one query
+per root. A blank-query fetch to enumerate a root's full descendant set up front was
+deliberately avoided: 14734007 alone has 103 direct children per the SNOMED CT browser,
+and that endpoint caps at ~20 results with no pagination, so it would have silently missed
+most of the hierarchy — checking each patient's own problem conceptId individually never
+hits that cap.
+
+**Scope decision**: the scan is opt-in only, triggered by the "Bulk remove?" click — never
+proactive on page load, since the per-problem conceptId fetches would add real cost to
+every Clinical Summary view for what's a comparatively rare artefact. The cheap
+clinical-summary fetch (used only to place the trigger button) still runs on page load,
+matching `problem-description-cleanup.js`'s existing precedent.
+
+`test-problem-junk-code-cleanup.js` — 36 tests covering the roots-CSV builder, the
+flagged/descendant check, bulk-selectability rules, per-problem conceptId resolution, and
+the end-problem payload shape.
+
+## [v3.182.0] — 2026-07-23
+
+### "Save attachment as document": per-attachment chip replaces the single anchored widget
+
+Live-tested v3.181.0's priority-chip picker on a real 3-attachment task and found a
+placement regression: the widget anchored near a task-level landmark ("Codes & actions"
+card / task widget / bottom action row) in that priority order, with the attachment's
+own card only a last resort. On a task that DOES have a "Codes & actions" card, that
+landmark sits well below the message thread — so the widget (and the task widget it
+paired side-by-side with) ended up far from the attachment it was actually for. With
+several attachments in one request, that also meant only ONE collapsed widget with an
+attachment dropdown, easy to miss (confirmed live: a user with 3 attachments didn't
+notice the dropdown existed at all).
+
+Replaced the whole anchor-priority chain with a small "Save as document" chip injected
+immediately after EACH eligible attachment's own link/button — every attachment gets its
+own unambiguous entry point right next to the file it's for, no dropdown needed. Clicking
+a chip opens a single shared form (there is only ever one on the page) and relocates it
+to sit right after that chip; clicking a different attachment's chip moves the same form
+there and re-populates it, rather than opening a second form (a design choice — an
+independent form per attachment was considered and deferred as a bigger change for little
+benefit). A chip already saved this page visit shows "✓ Saved as document" and disables
+itself, so progress across several attachments is visible at a glance. The old collapsed
+toggle bar, its "Attachment" dropdown, and the "Save another attachment" flow are gone —
+superseded by the per-attachment chips. (`content-scripts/document-file-inline.js`,
+`.css`; `content-scripts/task-inline.css` — removed a now-dead `.ms-inline-widget-row`
+rule that only ever existed to pair with the removed widget.)
+
+Two more fixes from the same live-test pass, on the chips themselves:
+
+- **Layout**: a chip inserted as a plain next sibling of the attachment's own button
+  dropped onto its own line below it (Medicus's attachment button is block-level), not
+  alongside it as intended. Fixed by wrapping the attachment element and the chip
+  together in a small `inline-flex` span (`.ms-df-chip-wrap`) instead of a plain sibling
+  insert, so they render on one line.
+- **Real bug, confirmed live**: clicking a chip was opening Medicus's own "view care
+  related communication" pane — an unrelated side effect. Root cause: the chip is a DOM
+  sibling inside whatever container Medicus wraps each attachment/message in, and that
+  container has its own click handler; the chip's click was bubbling into it. Fixed with
+  `stopPropagation()` on the chip's click handler, and (defensively, since the form can
+  also end up inside that same container once relocated) one `stopPropagation()` listener
+  on the form's own root rather than on every individual control inside it.
+
+### Document type picker: dropped the priority-tier chip shortlist for a ranked, colour-coded search
+
+Both fixes above confirmed live in the same session, then a bigger rethink: the
+docPriority 1-6 scoring behind v3.181.0's priority-chip shortlist was built with INBOUND
+documents in mind (scanned letters, referrals, discharge summaries), not task
+attachments — the author flagged that the resulting shortlist "isn't right for this
+environment" once seen live. Rather than trust it as a hard shortlist, it's now used as a
+SOFT ranking + colour signal instead:
+
+- The priority/priorityMore chip tiers and the "Show more document types" toggle are
+  gone. The search box (which already shows the current best-guess by default, unlocking
+  into search on typing — unchanged) is now the only thing in the Document type row, no
+  chips above it.
+- `filterDocumentTypes` now ranks matches by docPriority (1 first), alphabetically
+  tiebroken, instead of original list order — typing e.g. "care plan" surfaces the
+  highest-priority matches first rather than whatever order they happen to sit in the
+  1768-entry list.
+- Each search result gets a coloured left border on a fixed 6-step green(1)→red(6) scale
+  (new `priorityColor()`); an entry with no/invalid score gets its own neutral grey
+  rather than being lumped in with a real tier-6 ("junk") score.
+- `rules/document-types.json` now carries `docPriority` directly on every entry (all
+  1768, sourced from the full practice-scored priorities spreadsheet) instead of the two
+  `priority`/`priorityMore` conceptId-array tiers, which are removed.
+- `buildPriorityEntries` (the now-unused shortlist-resolver) is removed along with its
+  tests; `test-document-file-inline.js` gained coverage for the new ranking and colour
+  function instead.
+
+## [v3.181.0] — 2026-07-23
+
+### Document-type quick-pick shortlist: tiered "Show more" chips
+
+`rules/document-types.json`'s `priority` array (the quick-pick chip shortlist in the
+"save attachment as document" widget) had shipped empty since v3.177.4 — the picker only
+ever had full search, no shortlist. Populated from a full docPriority 1-6 usefulness scan
+of all 1768 SNOMED document-type codes in the refset, scored against real practice usage.
+
+`priority` now holds the 22 docPriority-1 ("most useful/commonly selected") codes, shown
+as chips by default. A second `priorityMore` array holds the 84 docPriority-2/3 codes
+("high priority anchor" / "genuinely selected, narrower"), revealed only via a new "Show
+more document types" toggle in `content-scripts/document-file-inline.js` — keeps the
+default chip row short and scannable while still making the wider shortlist reachable in
+one click, without ever falling back to a 106-chip wall or the full 1768-entry search.
+Both tiers sorted alphabetically by description. `buildPriorityEntries` (unchanged) now
+resolves either array; new regression tests confirm every conceptId in both tiers
+resolves to a real entry and that the two tiers don't overlap.
+
 ## [v3.180.0] — 2026-07-23
 
 ### "Fix description" widget: fourth suggestion category — hint-expanded matches

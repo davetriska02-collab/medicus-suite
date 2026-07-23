@@ -19,7 +19,7 @@ const {
   patientIdFromOverview,
   resolveAttachmentUrl,
   filterDocumentTypes,
-  buildPriorityEntries,
+  priorityColor,
   findDocumentTypeByConceptId,
   DOCUMENT_TYPES,
   IMAGE_EXT_RE,
@@ -298,7 +298,10 @@ console.log('--- rules/document-types.json: the imported SNOMED picklist itself 
 {
   check(Array.isArray(documentTypesData.entries), 'entries is an array');
   check(documentTypesData.entries.length === 1768, `1768 active entries (got ${documentTypesData.entries.length})`);
-  check(Array.isArray(documentTypesData.priority), 'priority is an array (possibly empty)');
+  check(
+    documentTypesData.entries.every((e) => Number.isInteger(e.docPriority) && e.docPriority >= 1 && e.docPriority <= 6),
+    'every entry carries a docPriority in the 1-6 scale'
+  );
   const dupeIds = documentTypesData.entries.length - new Set(documentTypesData.entries.map((e) => e.conceptId)).size;
   check(dupeIds === 0, `no duplicate conceptIds (found ${dupeIds})`);
   const image = documentTypesData.entries.find((e) => e.conceptId === DOCUMENT_TYPES.image.conceptId);
@@ -346,26 +349,40 @@ console.log('--- filterDocumentTypes: case-insensitive substring search, capped 
   check(broad.length > 0, 'real-list broad query "report" finds at least one match');
 }
 
-console.log('--- buildPriorityEntries: resolves conceptIds to full entries, preserving order ---');
+console.log('--- filterDocumentTypes: ranks matches by docPriority (best first), then alphabetically ---');
 {
-  const entries = [
-    { conceptId: '1', description: 'A' },
-    { conceptId: '2', description: 'B' },
-    { conceptId: '3', description: 'C' },
+  const scored = [
+    { conceptId: '1', description: 'Care plan review', docPriority: 4 },
+    { conceptId: '2', description: 'Care plan summary', docPriority: 1 },
+    { conceptId: '3', description: 'Care plan letter', docPriority: 2 },
+    { conceptId: '4', description: 'Care plan appendix', docPriority: 2 },
   ];
-  const built = buildPriorityEntries(entries, ['3', '1']);
+  const ranked = filterDocumentTypes(scored, 'care plan', 40);
   check(
-    built.length === 2 && built[0].conceptId === '3' && built[1].conceptId === '1',
-    'resolves in the ORDER given, not entries order'
+    ranked.map((e) => e.conceptId).join(',') === '2,4,3,1',
+    `docPriority 1 first, ties broken alphabetically, worst last (got ${ranked.map((e) => e.conceptId).join(',')})`
   );
-  const withMissing = buildPriorityEntries(entries, ['3', 'not-a-real-id', '1']);
+  const unscored = [
+    { conceptId: '1', description: 'Care plan no score' },
+    { conceptId: '2', description: 'Care plan scored', docPriority: 5 },
+  ];
+  const rankedUnscored = filterDocumentTypes(unscored, 'care plan', 40);
   check(
-    withMissing.length === 2 && withMissing[0].conceptId === '3' && withMissing[1].conceptId === '1',
-    'a conceptId no longer present (e.g. retired in a refset refresh) is silently skipped, not an error'
+    rankedUnscored[0].conceptId === '2',
+    'an entry with a docPriority score ranks above one with none, never crashes'
   );
-  check(buildPriorityEntries(entries, []).length === 0, 'empty priority list -> empty shortlist');
-  check(buildPriorityEntries(null, ['1']).length === 0, 'null entries -> empty, never throws');
-  check(buildPriorityEntries(entries, null).length === 0, 'null priority list -> empty, never throws');
+}
+
+console.log('--- priorityColor: green(1) to red(6) sliding scale ---');
+{
+  check(typeof priorityColor(1) === 'string' && priorityColor(1) !== priorityColor(6), '1 and 6 are different colours');
+  check(priorityColor(1) !== priorityColor(3), '1 and 3 are different colours (not just a two-tone split)');
+  for (let p = 1; p <= 6; p++) {
+    check(/^#[0-9a-f]{6}$/i.test(priorityColor(p)), `priorityColor(${p}) returns a hex colour`);
+  }
+  check(priorityColor(0) === priorityColor(7), 'out-of-range values clamp rather than throwing/returning undefined');
+  check(priorityColor(undefined) === priorityColor(7), 'a missing/undefined score is treated as the worst tier');
+  check(priorityColor(null) === priorityColor(7), 'a null score is treated as the worst tier, never throws');
 }
 
 console.log('--- findDocumentTypeByConceptId ---');

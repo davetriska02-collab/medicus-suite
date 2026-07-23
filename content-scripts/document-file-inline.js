@@ -32,17 +32,38 @@
 // members excluded) is bundled as rules/document-types.json and searched
 // client-side here — never a live call to Medicus's own search endpoint (its
 // query contract, e.g. debounce/paging, was never captured, and it isn't
-// needed: the full picklist is small enough to search in memory). A
-// `priority` list of conceptIds in that same file drives the quick-pick
-// shortlist shown before the clinician searches. The extension-based guess
-// (documentTypeForFilename below) still PRE-SELECTS a default — image →
-// "Medical photograph", pdf/doc → "Patient/Carer Correspondence" — but the
-// clinician can always override it via the shortlist or search before saving;
-// nothing is filed without an explicit documentType being set. Ancestor/
-// parent-concept filtering was investigated and ruled out — Medicus does not
-// store a parentConceptIds-style hierarchy for Document entities (confirmed
-// via two HAR-file captures, see §9) — so there is no hierarchy to prune the
-// picklist by.
+// needed: the full picklist is small enough to search in memory). Each entry
+// carries a `docPriority` 1-6 usefulness score (1 = most useful, 6 = never
+// shown/junk) the practice scored against the full refset — used as a SOFT
+// ranking + colour signal (green 1 → red 6) on search results, not a hard
+// filter or fixed shortlist. That scoring was built with INBOUND documents in
+// mind, not task attachments, so treating it as advisory rather than
+// authoritative here was a deliberate call (2026-07-23) — an earlier cut of
+// this widget offered a curated priority-tier chip shortlist ahead of search;
+// live-tested and pulled in favour of this softer sort+colour approach once
+// the priority data's inbound-document framing turned out not to map cleanly
+// onto which document types matter for a task attachment. The
+// extension-based guess (documentTypeForFilename below) still PRE-SELECTS a
+// default — image → "Medical photograph", pdf/doc → "Patient/Carer
+// Correspondence" — but the clinician can always override it via search
+// before saving; nothing is filed without an explicit documentType being
+// set. Ancestor/parent-concept filtering was investigated and ruled out —
+// Medicus does not store a parentConceptIds-style hierarchy for Document
+// entities (confirmed via two HAR-file captures, see §9) — so there is no
+// hierarchy to prune the picklist by.
+//
+// UI: rather than one collapsed toggle bar anchored somewhere on the task
+// page, a small "Save as document" chip is injected immediately after EACH
+// eligible attachment's own link/button (see the "DOM injection" section
+// below) — with several attachments in one request, each gets its own
+// unambiguous entry point right next to the file it's for. Clicking a chip
+// opens ONE shared form (there is only ever one on the page) and relocates
+// it to sit right after that chip; clicking a different attachment's chip
+// moves the same form there and re-populates it, rather than opening a
+// second form (see the "one shared form" design decision, 2026-07-23 — the
+// alternative, an independent form per attachment, was considered and
+// deferred as a bigger change for little benefit). A chip already saved this
+// page visit shows "✓ Saved as document" and is disabled.
 //
 // The side panel and content scripts alike have host_permissions for
 // *.api.england.medicus.health, so this works directly from the content-script
@@ -181,42 +202,63 @@
     return match ? String(base || '') + match.fileURI : null;
   }
 
+  // docPriority values outside 1-6 (missing/null/undefined/out-of-range) are
+  // never trusted as "1" or clamped to the nearest real tier — they sort/
+  // colour as a single, deliberately worse-than-6 "unscored" bucket instead,
+  // so an entry the practice never actually rated can't accidentally read as
+  // high-priority.
+  var UNSCORED_PRIORITY = 7;
+
+  function normalisedPriority(docPriority) {
+    return Number.isInteger(docPriority) && docPriority >= 1 && docPriority <= 6 ? docPriority : UNSCORED_PRIORITY;
+  }
+
   // Case-insensitive substring match on `description` against the full
-  // document-type picklist (rules/document-types.json), capped at `limit`
-  // results so a broad query never renders an enormous dropdown. Empty/blank
-  // query returns [] — the search only activates once the user has typed
-  // something, it is not a way to browse all 1768 entries at once.
+  // document-type picklist (rules/document-types.json), RANKED by docPriority
+  // (1 = most useful, first; unscored entries sort last), tiebroken
+  // alphabetically, and capped at `limit` results so a broad query never
+  // renders an enormous dropdown. Empty/blank query returns [] — the search
+  // only activates once the user has typed something, it is not a way to
+  // browse all 1768 entries at once. docPriority is a SOFT signal (see the
+  // SCOPE header comment) — this ranking never hides a genuine text match,
+  // it only orders them.
   function filterDocumentTypes(entries, query, limit) {
     var q = String(query || '')
       .trim()
       .toLowerCase();
     if (!q || !Array.isArray(entries)) return [];
-    var cap = limit > 0 ? limit : entries.length;
-    var out = [];
-    for (var i = 0; i < entries.length && out.length < cap; i++) {
-      var e = entries[i];
-      if (e && typeof e.description === 'string' && e.description.toLowerCase().indexOf(q) !== -1) {
-        out.push(e);
-      }
-    }
-    return out;
+    var matches = entries.filter(function (e) {
+      return e && typeof e.description === 'string' && e.description.toLowerCase().indexOf(q) !== -1;
+    });
+    matches.sort(function (a, b) {
+      var pa = normalisedPriority(a.docPriority);
+      var pb = normalisedPriority(b.docPriority);
+      if (pa !== pb) return pa - pb;
+      return String(a.description).localeCompare(String(b.description));
+    });
+    var cap = limit > 0 ? limit : matches.length;
+    return matches.slice(0, cap);
   }
 
-  // Resolves an ordered list of conceptIds (rules/document-types.json's
-  // `priority` array) to their full entries — the quick-pick shortlist shown
-  // before search. Silently skips any id no longer present in `entries` (a
-  // future SNOMED refset refresh could retire one) rather than erroring.
-  function buildPriorityEntries(entries, priorityConceptIds) {
-    if (!Array.isArray(entries) || !Array.isArray(priorityConceptIds)) return [];
-    var byId = Object.create(null);
-    entries.forEach(function (e) {
-      if (e && e.conceptId) byId[e.conceptId] = e;
-    });
-    return priorityConceptIds
-      .map(function (id) {
-        return byId[id];
-      })
-      .filter(Boolean);
+  // Green(1) -> red(6) sliding scale for a search result's docPriority — a
+  // fixed 6-step palette rather than a continuous interpolation, so each
+  // tier reads as visually distinct at a glance. A score outside 1-6
+  // (missing/invalid) gets its own neutral grey — deliberately NOT the same
+  // as tier 6's red, since "never scored" isn't the same claim as "scored as
+  // junk".
+  var PRIORITY_COLORS = {
+    1: '#16a34a',
+    2: '#65a30d',
+    3: '#ca8a04',
+    4: '#ea580c',
+    5: '#dc2626',
+    6: '#991b1b',
+  };
+  var UNSCORED_COLOR = '#9ca3af';
+
+  function priorityColor(docPriority) {
+    var p = normalisedPriority(Number(docPriority));
+    return p === UNSCORED_PRIORITY ? UNSCORED_COLOR : PRIORITY_COLORS[p];
   }
 
   function findDocumentTypeByConceptId(entries, conceptId) {
@@ -274,7 +316,7 @@
       patientIdFromOverview,
       resolveAttachmentUrl,
       filterDocumentTypes,
-      buildPriorityEntries,
+      priorityColor,
       findDocumentTypeByConceptId,
       DOCUMENT_TYPES,
       IMAGE_EXT_RE,
@@ -287,8 +329,6 @@
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   if (window.__msDocFileInline) return;
   window.__msDocFileInline = true;
-
-  var DC = window.DomContracts;
 
   function eligibleAttachments() {
     return filterEligibleAttachments(window.__msTriageAttachments);
@@ -312,15 +352,23 @@
       loading: false,
       error: null,
       patientId: null,
-      // Cached across "save another" within the same widget session, exactly
-      // like task-inline.js's doAgain — avoids re-fetching the create form.
+      // Cached once loaded — reused across every chip open/switch on this
+      // task page, so switching between attachments never re-fetches it.
       reviewerAssigneeId: null,
       reviewerAssigneeType: null,
       recordDateDefault: null,
       // Attachment list from the task-overview API — resolves any DOM-detected
       // attachment that arrived with no href (see resolveAttachmentUrl above).
       resolvedAttachments: [],
-      selectedIdx: 0,
+      // The filename of the attachment the currently open form is filing —
+      // the single source of truth for "which attachment", instead of an
+      // array index (a filename is stable across re-extraction passes; an
+      // index isn't, if the underlying attachment list is ever reordered).
+      // null when no form is open.
+      activeFilename: null,
+      // Filenames already saved as a document THIS page visit — drives each
+      // chip's "✓ Saved as document" state (injectAttachmentChips).
+      savedFilenames: [],
       title: '',
       // The SNOMED code that will actually be sent — pre-filled from
       // documentTypeForFilename's extension-based guess, overridable via the
@@ -335,10 +383,8 @@
       // a "here's what else you could pick" list under itself.
       documentTypeQueryLocked: false,
       documentDate: todayISO(),
-      step: 'form', // 'form' | 'created'
       creating: false,
       createError: null,
-      createdDocumentId: null,
     };
   }
 
@@ -411,9 +457,9 @@
   // widget reopen (or a second task page) never re-fetches; falls back to an
   // empty picklist (never throws) if the resource is somehow unavailable —
   // the extension-based guess (documentTypeForFilename) still works even
-  // then, only the shortlist/search would be empty.
+  // then, only search would be empty.
   var _dtPromise = null;
-  var _dtCache = null; // { entries, priority } once resolved
+  var _dtCache = null; // { entries } once resolved
   function ensureDocumentTypesLoaded() {
     if (_dtPromise) return _dtPromise;
     _dtPromise = (async function () {
@@ -422,11 +468,9 @@
         var doc = await fetch(url).then(function (r) {
           return r.json();
         });
-        var entries = Array.isArray(doc && doc.entries) ? doc.entries : [];
-        var priorityIds = Array.isArray(doc && doc.priority) ? doc.priority : [];
-        _dtCache = { entries: entries, priority: buildPriorityEntries(entries, priorityIds) };
+        _dtCache = { entries: Array.isArray(doc && doc.entries) ? doc.entries : [] };
       } catch (e) {
-        _dtCache = { entries: [], priority: [] };
+        _dtCache = { entries: [] };
       }
       return _dtCache;
     })();
@@ -446,206 +490,148 @@
     return apiFetchMultipart('/clinical/document/create', fd);
   }
 
-  // ── DOM injection ─────────────────────────────────────────────────────────────
-  // Same anchor discipline as task-inline.js (shared DOM contracts — see
-  // shared/dom-contracts.js "task-widget.codes-actions-heading" /
-  // "task-widget.card-submit-button" / "task-inline.action-row" — one contract,
-  // consumed by every inline widget that anchors this way).
-
-  var HEADING_RE = /^Codes\s*(?:&|&amp;|and)\s*actions$/i;
-  var INITIAL_REQUEST_RE = /^Initial Request$/i;
+  // ── DOM injection: per-attachment chip + a single relocating form ──────────────
+  // Originally this widget anchored ONE collapsed toggle bar near a
+  // task-level landmark ("Codes & actions" card / booking or task widget /
+  // bottom action row), falling back to the attachment's own card only as a
+  // last resort. Confirmed live 2026-07-23: on a task that DOES have a
+  // "Codes & actions" card, that landmark sits well below the message thread,
+  // so the widget (and, via ensureWidgetRow, the task widget it paired with)
+  // ended up far from the attachment it was actually for — confusing with
+  // multiple attachments in play. Replaced with a small chip injected
+  // immediately after EACH eligible attachment's own DOM element (button or
+  // link) — clicking one opens the SAME single form and relocates it right
+  // after that chip. No more task-landmark anchor priority chain at all.
 
   function visible(el) {
     return !!(el && (el.offsetParent !== null || (el.getClientRects && el.getClientRects().length)));
   }
 
-  function matchHeading(el) {
-    if (el.closest('#ms-df-widget')) return false;
-    if (el.firstElementChild) return false;
-    return HEADING_RE.test(el.textContent.trim());
-  }
-
-  function matchInitialRequestHeading(el) {
-    if (el.closest('#ms-df-widget')) return false;
-    if (el.firstElementChild) return false;
-    return INITIAL_REQUEST_RE.test(el.textContent.trim());
-  }
-
-  var HEADING_CONTRACT = DC && DC.get('task-widget.codes-actions-heading');
-  var HEADING_NARROW_SEL = HEADING_CONTRACT ? HEADING_CONTRACT.target.join(',') : 'h1,h2,h3,h4,h5,h6,strong,b,legend';
-  var HEADING_WIDE_SEL =
-    HEADING_CONTRACT && HEADING_CONTRACT.legacy[0] ? HEADING_CONTRACT.legacy[0].join(',') : 'div,span,p';
-  var SUBMIT_BTN_CONTRACT = DC && DC.get('task-widget.card-submit-button');
-  var SUBMIT_BTN_SEL = SUBMIT_BTN_CONTRACT
-    ? SUBMIT_BTN_CONTRACT.target.join(', ')
-    : 'button, [role="button"], input[type="submit"]';
-  var ACTION_ROW_CONTRACT = DC && DC.get('task-inline.action-row');
-  var ACTION_ROW_SEL = ACTION_ROW_CONTRACT ? ACTION_ROW_CONTRACT.target.join(', ') : 'button, [role="button"]';
-
-  function findHeading() {
-    for (var el of document.querySelectorAll(HEADING_NARROW_SEL)) {
-      if (matchHeading(el)) return el;
-    }
-    for (var el2 of document.querySelectorAll(HEADING_WIDE_SEL)) {
-      if (matchHeading(el2)) return el2;
-    }
-    return null;
-  }
-
-  function findCard() {
-    var heading = findHeading();
-    if (!heading) return null;
-    var node = heading.parentElement;
-    var fallback = node;
-    while (node && node !== document.body) {
-      var btns = node.querySelectorAll(SUBMIT_BTN_SEL);
-      for (var b of btns) {
-        if (/^submit$/i.test((b.value || b.textContent || '').trim())) return node;
-      }
-      fallback = node;
-      node = node.parentElement;
-    }
-    return fallback;
-  }
-
-  function findActionRow() {
-    var btns = document.querySelectorAll(ACTION_ROW_SEL);
-    for (var i = btns.length - 1; i >= 0; i--) {
-      var b = btns[i];
-      if (!/more actions/i.test((b.textContent || '').trim())) continue;
-      if (b.closest('[role="dialog"], [aria-modal="true"]')) continue;
-      if (!visible(b)) continue;
-      return b.parentElement;
-    }
-    return null;
-  }
-
-  // Gate 3 fallback — the "Initial Request" card's boundary, same
-  // heading-then-closest-card walk content.js's own findCardByTitle uses, but
-  // matching the heading text EXACTLY ("Initial Request", not a starts-with
-  // match) so this never mis-anchors on an unrelated section. Confirmed live
-  // (2026-07-20): communication-thread tasks have NEITHER a "Codes & actions"
-  // card NOR a "More actions" row (the two anchors above), but DO have this
-  // card — the same one that carries the attachment this widget is FOR.
-  function findInitialRequestCard() {
-    var heading = null;
-    for (var el of document.querySelectorAll(HEADING_NARROW_SEL)) {
-      if (matchInitialRequestHeading(el)) {
-        heading = el;
-        break;
-      }
-    }
-    if (!heading) {
-      for (var el2 of document.querySelectorAll(HEADING_WIDE_SEL)) {
-        if (matchInitialRequestHeading(el2)) {
-          heading = el2;
-          break;
-        }
-      }
-    }
-    if (!heading) return null;
-    return (
-      heading.closest('.m-card-v2') || heading.closest('[class*="m-card"]') || heading.parentElement?.parentElement
-    );
-  }
-
-  // Finds the specific message card that actually contains a real
-  // attachment, rather than always assuming it's the "Initial Request" card
-  // — confirmed live 2026-07-22: a communication thread can carry the
-  // attachment on a LATER reply card (a "Reply from Requester" card has no
-  // heading at all, so findInitialRequestCard() could never find it), and
-  // anchoring both inline widgets under an attachment-less opening message
-  // was confusing. Matches by filename against window.__msTriageAttachments
-  // (content.js's read-only accessor) — returns null (falls through to
-  // findInitialRequestCard() at the call site) when there's no attachment or
-  // its card can't be located. Identical to task-inline.js's own copy (both
-  // widgets need the same anchor decision).
-  function findAttachmentCard() {
-    var atts = window.__msTriageAttachments;
-    if (!Array.isArray(atts) || !atts.length) return null;
+  // Finds the real attachment <a>/<button> Medicus rendered for a given
+  // filename — same exact-text match content.js's extractAllAttachments()
+  // used to detect it in the first place. Skips anything already inside our
+  // own widget/chips so a coincidental text match there can never self-match.
+  function attachmentElementFor(filename) {
     var els = document.querySelectorAll('a, button');
-    for (var i = 0; i < atts.length; i++) {
-      var name = (atts[i] && atts[i].filename ? atts[i].filename : '').trim();
-      if (!name) continue;
-      for (var j = 0; j < els.length; j++) {
-        var el = els[j];
-        if ((el.textContent || '').trim() === name) {
-          var card = el.closest('.m-card-v2') || el.closest('[class*="m-card"]');
-          if (card) return card;
-        }
-      }
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el.classList.contains('ms-df-chip')) continue;
+      if (el.closest('#ms-df-widget')) continue;
+      if ((el.textContent || '').trim() === filename) return el;
     }
     return null;
   }
 
-  // Puts this widget side by side with the "create task" widget (ms-tk-widget)
-  // rather than stacked underneath it — wraps both in a shared flex row
-  // (.ms-inline-widget-row, styled in both task-inline.css and this file's
-  // CSS) the first time either widget is injected; a later call just reuses
-  // the existing row. Each widget's own body still opens full-width within
-  // its own column (see the CSS), so this only affects the collapsed layout.
-  function ensureWidgetRow(taskWidget) {
-    var row = taskWidget.parentElement;
-    if (row && row.classList.contains('ms-inline-widget-row')) return row;
-    var wrapper = document.createElement('div');
-    wrapper.className = 'ms-inline-widget-row';
-    row.insertBefore(wrapper, taskWidget);
-    wrapper.appendChild(taskWidget);
-    return wrapper;
+  // filename -> injected chip element, so re-injection ticks can find and
+  // refresh an already-placed chip instead of re-scanning for its anchor
+  // every time, and positionWidgetAfterChip can find it without any CSS
+  // selector/escaping concerns over filename punctuation.
+  var _chipEls = Object.create(null);
+
+  function updateChipVisual(chip, filename) {
+    var saved = s.savedFilenames.indexOf(filename) !== -1;
+    var active = s.open && s.activeFilename === filename;
+    chip.disabled = saved;
+    chip.textContent = saved ? '✓ Saved as document' : 'Save as document';
+    chip.classList.toggle('ms-df-chip-saved', saved);
+    chip.classList.toggle('ms-df-chip-active', active);
   }
 
-  function injectWidget() {
-    if (!getTaskInfo()) return;
-    if (eligibleAttachments().length === 0) return;
+  function refreshAllChipVisuals() {
+    for (var filename in _chipEls) {
+      if (!Object.prototype.hasOwnProperty.call(_chipEls, filename)) continue;
+      var chip = _chipEls[filename];
+      if (chip && chip.isConnected) updateChipVisual(chip, filename);
+    }
+  }
+
+  // Idempotent — safe to call on every re-injection tick. Only creates a chip
+  // for an attachment that doesn't already have a live one; existing chips
+  // just get their visual state refreshed (saved/active). Wraps the
+  // attachment element and the chip together in a small inline-flex span
+  // (rather than just inserting the chip as a plain next sibling) so the chip
+  // sits horizontally alongside the attachment link/button — confirmed live
+  // 2026-07-23 that a plain sibling insert dropped below it instead, because
+  // Medicus's own attachment button is block-level.
+  function injectAttachmentChips() {
+    eligibleAttachments().forEach(function (att) {
+      var name = (att && att.filename ? att.filename : '').trim();
+      if (!name) return;
+      var existing = _chipEls[name];
+      if (existing && existing.isConnected) {
+        updateChipVisual(existing, name);
+        return;
+      }
+      var anchorEl = attachmentElementFor(name);
+      if (!anchorEl) return;
+      // Reuse an already-wrapped anchor from an earlier pass whose chip
+      // reference was lost (e.g. _chipEls got reset on a path change but the
+      // DOM survived) rather than nesting a second wrapper around it.
+      var wrap = anchorEl.parentElement;
+      var chip = wrap && wrap.classList.contains('ms-df-chip-wrap') ? wrap.querySelector('.ms-df-chip') : null;
+      if (!chip) {
+        chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'ms-df-chip';
+        chip.setAttribute('data-filename', name);
+        chip.addEventListener('click', function (e) {
+          // Confirmed live 2026-07-23: without this, clicking the chip
+          // bubbled into whatever Medicus wraps the message/attachment in,
+          // which has its own click handler that opened its "view care
+          // related communication" pane — an unrelated side effect of a
+          // click that should only ever open OUR form.
+          e.stopPropagation();
+          if (chip.disabled) return;
+          openFormForAttachment(name);
+        });
+        withObserverPaused(function () {
+          var w2 = document.createElement('span');
+          w2.className = 'ms-df-chip-wrap';
+          anchorEl.parentNode.insertBefore(w2, anchorEl);
+          w2.appendChild(anchorEl);
+          w2.appendChild(chip);
+        });
+      }
+      updateChipVisual(chip, name);
+      _chipEls[name] = chip;
+    });
+  }
+
+  // Moves the (already-mounted) form to sit immediately after the clicked
+  // attachment's whole [attachment element + chip] wrapper, never inside it
+  // (which would squeeze a full form panel into a small inline-flex row).
+  function positionWidgetAfterChip(filename) {
+    var w = document.getElementById('ms-df-widget');
+    var chip = _chipEls[filename];
+    if (!w || !chip || !chip.isConnected) return;
+    var wrap = chip.closest('.ms-df-chip-wrap') || chip;
+    withObserverPaused(function () {
+      wrap.after(w);
+    });
+  }
+
+  function mountWidgetIfNeeded() {
     if (document.getElementById('ms-df-widget')) return;
     var w = document.createElement('div');
     w.id = 'ms-df-widget';
+    // Same reason as the chip's own stopPropagation above: the form can end
+    // up as a DOM sibling inside the same Medicus container the attachment
+    // lives in, so every click inside our own form needs to stop here too,
+    // rather than adding stopPropagation to each individual control.
+    w.addEventListener('click', function (e) {
+      e.stopPropagation();
+    });
+    withObserverPaused(function () {
+      document.body.appendChild(w); // relocated to the right chip immediately after
+    });
     renderInto(w);
-    // Side by side with the "create task" widget, if present on this task.
-    var taskWidget = document.getElementById('ms-tk-widget');
-    if (taskWidget && taskWidget.parentElement) {
-      withObserverPaused(function () {
-        ensureWidgetRow(taskWidget).appendChild(w);
-      });
-      return;
-    }
-    // Otherwise stack after any other inline widget already anchored here
-    // (booking), or the "Codes & actions" card, or above the bottom action row.
-    var after = document.getElementById('ms-bk-widget') || findCard();
-    if (after && after.parentElement) {
-      withObserverPaused(function () {
-        after.after(w);
-      });
-      return;
-    }
-    var row = findActionRow();
-    if (row && row.parentElement) {
-      withObserverPaused(function () {
-        row.parentElement.insertBefore(w, row);
-      });
-      return;
-    }
-    // Last resort: after the card that actually carries the attachment if
-    // there is one, else after the "Initial Request" card itself
-    // (communication-thread tasks have neither of the above two anchors —
-    // confirmed live 2026-07-20).
-    var irCard = findAttachmentCard() || findInitialRequestCard();
-    if (irCard && irCard.parentElement) {
-      withObserverPaused(function () {
-        irCard.after(w);
-      });
-      return;
-    }
   }
 
   function removeWidget() {
     var w = document.getElementById('ms-df-widget');
     if (!w) return;
     withObserverPaused(function () {
-      var row = w.parentElement;
       w.remove();
-      // Leave no empty .ms-inline-widget-row litter once nothing shares it.
-      if (row && row.classList.contains('ms-inline-widget-row') && !row.children.length) row.remove();
     });
   }
 
@@ -656,87 +642,35 @@
     bindEvents(el);
   }
 
+  // Every state-changing action ends here — refreshes the (possibly absent)
+  // form AND every injected chip's saved/active visual in one place, so no
+  // call site has to remember to do both.
   function rerender() {
     var w = document.getElementById('ms-df-widget');
     if (w) renderInto(w);
+    refreshAllChipVisuals();
   }
 
   function buildHtml() {
-    var body = '';
-    if (s.open) {
-      if (s.loading) {
-        body = '<div class="ms-df-body"><div class="ms-df-loading">Loading…</div></div>';
-      } else if (s.error) {
-        body = '<div class="ms-df-body"><div class="ms-df-error">' + esc(s.error) + '</div></div>';
-      } else if (s.step === 'created') {
-        body = renderCreated();
-      } else {
-        body = renderForm();
-      }
+    if (s.loading) {
+      return '<div class="ms-df-body"><div class="ms-df-loading">Loading…</div></div>';
     }
-    var count = eligibleAttachments().length;
-    var label = count > 1 ? 'Save an attachment as a document' : 'Save attachment as document';
-    return (
-      '<div class="ms-df-header" id="ms-df-toggle" role="button" tabindex="0" aria-expanded="' +
-      s.open +
-      '">' +
-      '<span class="ms-df-chevron">' +
-      (s.open ? '▾' : '▸') +
-      '</span>' +
-      '<span>' +
-      esc(label) +
-      '</span>' +
-      '</div>' +
-      body
-    );
+    if (s.error) {
+      return '<div class="ms-df-body"><div class="ms-df-error">' + esc(s.error) + '</div></div>';
+    }
+    return renderForm();
   }
 
-  function attachmentOptionsHtml() {
-    return eligibleAttachments()
-      .map(function (a, i) {
-        return (
-          '<option value="' +
-          i +
-          '"' +
-          (s.selectedIdx === i ? ' selected' : '') +
-          '>' +
-          esc(a.filename || 'Attachment ' + (i + 1)) +
-          '</option>'
-        );
-      })
-      .join('');
-  }
-
-  // ── Document type picker (priority shortlist + full search) ──────────────────
-
-  function documentTypePriorityHtml() {
-    var priority = (_dtCache && _dtCache.priority) || [];
-    if (!priority.length) return '';
-    return (
-      '<div class="ms-df-dt-priority">' +
-      priority
-        .map(function (dt) {
-          var active = s.documentType && s.documentType.conceptId === dt.conceptId;
-          return (
-            '<button type="button" class="ms-df-dt-chip' +
-            (active ? ' ms-df-dt-chip-active' : '') +
-            '" data-concept-id="' +
-            esc(dt.conceptId) +
-            '">' +
-            esc(dt.description) +
-            '</button>'
-          );
-        })
-        .join('') +
-      '</div>'
-    );
-  }
+  // ── Document type picker (best-guess box that becomes a ranked, colour-coded search) ──
 
   // Inner HTML only (no wrapping element) — shared by the initial render and
   // the search input's live-update handler, which replaces JUST this
   // container's innerHTML on every keystroke rather than doing a full
   // rerender() (which would drop focus from the search box mid-type — same
-  // discipline as the title/date inputs above).
+  // discipline as the title/date inputs above). Results are already ranked
+  // best-docPriority-first by filterDocumentTypes; each gets a left-border
+  // dot in that same green(1)->red(6) colour so the ranking is visible at a
+  // glance, not just implied by list order.
   function documentTypeResultsInnerHtml() {
     if (s.documentTypeQueryLocked) return '';
     var q = s.documentTypeQuery.trim();
@@ -751,7 +685,9 @@
           return (
             '<button type="button" class="ms-df-dt-result' +
             (active ? ' ms-df-dt-result-active' : '') +
-            '" data-concept-id="' +
+            '" style="border-left-color: ' +
+            priorityColor(dt.docPriority) +
+            ';" data-concept-id="' +
             esc(dt.conceptId) +
             '">' +
             esc(dt.description) +
@@ -763,19 +699,25 @@
     );
   }
 
+  function currentAttachment() {
+    return eligibleAttachments().find(function (a) {
+      return (a.filename || '').trim() === s.activeFilename;
+    });
+  }
+
   function renderForm() {
-    var atts = eligibleAttachments();
-    var canCreate = atts.length > 0 && s.title.trim() && s.documentDate && s.documentType && !s.creating;
+    var att = currentAttachment();
+    var canCreate = !!att && s.title.trim() && s.documentDate && s.documentType && !s.creating;
     return (
       '<div class="ms-df-body">' +
+      '<div class="ms-df-filing-row">' +
+      '<span class="ms-df-filing">Filing: <strong>' +
+      esc(att ? att.filename : s.activeFilename || '') +
+      '</strong></span>' +
+      '<button type="button" class="ms-df-close" id="ms-df-close" aria-label="Close">×</button>' +
+      '</div>' +
       (!s.patientId
         ? '<div class="ms-df-warn">Could not determine patient ID — try navigating away and back.</div>'
-        : '') +
-      (atts.length > 1
-        ? '<div class="ms-df-row"><label class="ms-df-label" for="ms-df-attachment">Attachment</label>' +
-          '<select class="ms-df-select" id="ms-df-attachment">' +
-          attachmentOptionsHtml() +
-          '</select></div>'
         : '') +
       '<div class="ms-df-row"><label class="ms-df-label" for="ms-df-title">Title</label>' +
       '<input class="ms-df-input" id="ms-df-title" type="text" maxlength="200" value="' +
@@ -787,7 +729,6 @@
       '"></div>' +
       '<div class="ms-df-row">' +
       '<label class="ms-df-label" for="ms-df-dt-search">Document type</label>' +
-      documentTypePriorityHtml() +
       '<input class="ms-df-input" id="ms-df-dt-search" type="text" autocomplete="off" ' +
       'placeholder="Search all document types…" value="' +
       esc(s.documentTypeQuery) +
@@ -807,24 +748,16 @@
     );
   }
 
-  function renderCreated() {
-    var atts = eligibleAttachments();
-    return (
-      '<div class="ms-df-body ms-df-success">' +
-      '<div class="ms-df-success-icon">✓</div>' +
-      '<div><strong>Saved to the patient record</strong></div>' +
-      (atts.length > 1 ? '<button class="ms-df-btn-ghost" id="ms-df-again">Save another attachment</button>' : '') +
-      '</div>'
-    );
-  }
-
   // ── Actions ───────────────────────────────────────────────────────────────────
 
-  async function doOpen() {
-    s.open = true;
+  // Loads everything that's the SAME regardless of which attachment is being
+  // filed (patient id, reviewer defaults, document date, the document-types
+  // picklist) — once per task page. Fast-path returns immediately once
+  // loaded, so switching between attachments (openFormForAttachment) never
+  // re-fetches it.
+  async function ensureLoaded() {
     if (s.patientId && s.reviewerAssigneeId !== null) {
       s.error = null;
-      rerender();
       return;
     }
     s.loading = true;
@@ -851,24 +784,51 @@
       s.documentDate =
         (typeof window.__msTaskCreatedDate === 'string' && window.__msTaskCreatedDate) || s.recordDateDefault;
       await ensureDocumentTypesLoaded();
-      var atts = eligibleAttachments();
-      if (atts[s.selectedIdx]) {
-        s.title = titleFromFilename(atts[s.selectedIdx].filename);
-        s.documentType = documentTypeForFilename(atts[s.selectedIdx].filename || atts[s.selectedIdx].href);
-        s.documentTypeQuery = s.documentType ? s.documentType.description : '';
-        s.documentTypeQueryLocked = !!s.documentType;
-      }
     } catch (err) {
       s.error = err.message || 'Failed to load the document form.';
     } finally {
       s.loading = false;
-      rerender();
     }
   }
 
+  // The chip click handler. Re-clicking the chip that's already active closes
+  // the form; clicking a different attachment's chip relocates the SAME form
+  // there and re-populates it for that attachment (never opens a second
+  // form — see the "one shared form" design decision, 2026-07-23).
+  async function openFormForAttachment(filename) {
+    if (s.open && s.activeFilename === filename) {
+      closeForm();
+      return;
+    }
+    if (s.creating) return; // don't yank the form away mid-save
+    s.activeFilename = filename;
+    s.open = true;
+    s.createError = null;
+    var att = currentAttachment();
+    s.title = att ? titleFromFilename(att.filename) : '';
+    s.documentType = att ? documentTypeForFilename(att.filename || att.href) : null;
+    s.documentTypeQuery = s.documentType ? s.documentType.description : '';
+    s.documentTypeQueryLocked = !!s.documentType;
+    mountWidgetIfNeeded();
+    positionWidgetAfterChip(filename);
+    rerender();
+    await ensureLoaded();
+    // The clinician may have switched to a different attachment while this
+    // was loading — only apply the result if we're still their target.
+    if (s.activeFilename !== filename) return;
+    positionWidgetAfterChip(filename); // in case the page churned during the fetch
+    rerender();
+  }
+
+  function closeForm() {
+    s.open = false;
+    s.activeFilename = null;
+    removeWidget();
+    rerender();
+  }
+
   async function doCreate() {
-    var atts = eligibleAttachments();
-    var att = atts[s.selectedIdx];
+    var att = currentAttachment();
     var docType = s.documentType;
     if (s.creating || !s.patientId || !att || !docType || !s.title.trim() || !s.documentDate) return;
     s.creating = true;
@@ -880,7 +840,7 @@
       var resp = await fetch(downloadUrl, { credentials: 'include' });
       if (!resp.ok) throw new Error('Could not fetch the attachment (HTTP ' + resp.status + ').');
       var blob = await resp.blob();
-      var result = await apiCreateDocument({
+      await apiCreateDocument({
         patientId: s.patientId,
         blob: blob,
         filename: att.filename || 'attachment',
@@ -890,11 +850,11 @@
         reviewerAssigneeId: s.reviewerAssigneeId,
         reviewerAssigneeType: s.reviewerAssigneeType,
       });
-      s.createdDocumentId = (result && result.documentId) || null;
-      s.step = 'created';
+      s.savedFilenames.push(s.activeFilename);
+      s.creating = false;
+      closeForm();
     } catch (err) {
       s.createError = err.message || 'Failed to save this attachment as a document — please try again.';
-    } finally {
       s.creating = false;
       rerender();
     }
@@ -903,37 +863,8 @@
   // ── Event binding ─────────────────────────────────────────────────────────────
 
   function bindEvents(el) {
-    var toggle = el.querySelector('#ms-df-toggle');
-    if (toggle) {
-      toggle.addEventListener('click', function () {
-        if (s.open) {
-          s.open = false;
-          rerender();
-        } else {
-          doOpen();
-        }
-      });
-      toggle.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          toggle.click();
-        }
-      });
-    }
-
-    el.querySelector('#ms-df-attachment')?.addEventListener('change', function (e) {
-      s.selectedIdx = Number(e.target.value) || 0;
-      var atts = eligibleAttachments();
-      s.documentType = null;
-      s.documentTypeQuery = '';
-      s.documentTypeQueryLocked = false;
-      if (atts[s.selectedIdx]) {
-        s.title = titleFromFilename(atts[s.selectedIdx].filename);
-        s.documentType = documentTypeForFilename(atts[s.selectedIdx].filename || atts[s.selectedIdx].href);
-        s.documentTypeQuery = s.documentType ? s.documentType.description : '';
-        s.documentTypeQueryLocked = !!s.documentType;
-      }
-      rerender();
+    el.querySelector('#ms-df-close')?.addEventListener('click', function () {
+      closeForm();
     });
 
     var createBtn = el.querySelector('#ms-df-create');
@@ -968,40 +899,15 @@
     el.querySelector('#ms-df-create')?.addEventListener('click', function () {
       doCreate();
     });
-
-    el.querySelector('#ms-df-again')?.addEventListener('click', function () {
-      var cached = {
-        patientId: s.patientId,
-        reviewerAssigneeId: s.reviewerAssigneeId,
-        reviewerAssigneeType: s.reviewerAssigneeType,
-        recordDateDefault: s.recordDateDefault,
-        resolvedAttachments: s.resolvedAttachments,
-      };
-      s = blankState();
-      Object.assign(s, cached);
-      s.open = true;
-      s.documentDate = cached.recordDateDefault || todayISO();
-      var atts = eligibleAttachments();
-      // Pick an attachment not yet saved isn't tracked — default to the first;
-      // the picker lets the clinician choose the right one if several remain.
-      if (atts[0]) {
-        s.title = titleFromFilename(atts[0].filename);
-        s.documentType = documentTypeForFilename(atts[0].filename || atts[0].href);
-        s.documentTypeQuery = s.documentType ? s.documentType.description : '';
-        s.documentTypeQueryLocked = !!s.documentType;
-      }
-      rerender();
-    });
   }
 
-  // Wires up both the priority shortlist chips and the search-result buttons
-  // within `root` (the whole widget on initial bind, or just the results
-  // container after a targeted innerHTML replace — see the search input
-  // handler above) to select that document type. A full rerender() here is
-  // fine: these are button clicks, not a text input, so there's no cursor
-  // position to preserve.
+  // Wires up the search-result buttons within `root` (the whole widget on
+  // initial bind, or just the results container after a targeted innerHTML
+  // replace — see the search input handler above) to select that document
+  // type. A full rerender() here is fine: these are button clicks, not a
+  // text input, so there's no cursor position to preserve.
   function bindDocumentTypePicks(root) {
-    root.querySelectorAll('.ms-df-dt-chip, .ms-df-dt-result').forEach(function (btn) {
+    root.querySelectorAll('.ms-df-dt-result').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var id = btn.getAttribute('data-concept-id');
         var entries = (_dtCache && _dtCache.entries) || [];
@@ -1079,20 +985,27 @@
     var currentPath = location.pathname;
     if (currentPath !== _lastPath) {
       _lastPath = currentPath;
+      removeWidget();
       s = blankState();
+      _chipEls = Object.create(null);
     }
     if (document.hidden) return;
-    if (!getTaskInfo() || eligibleAttachments().length === 0) {
-      removeWidget();
-      return;
-    }
-    var existing = document.getElementById('ms-df-widget');
-    if (existing && existing.isConnected) return;
+    if (!getTaskInfo()) return;
     requestAnimationFrame(function () {
       if (document.hidden) return;
-      var w = document.getElementById('ms-df-widget');
-      if (w && w.isConnected) return;
-      injectWidget();
+      // Idempotent — creates a chip for any eligible attachment that doesn't
+      // already have a live one, and refreshes existing chips' saved/active
+      // state. Also resolves the ordering race with content.js's own async
+      // DOM extraction: window.__msTriageAttachments may not be populated
+      // yet on the very first tick, but the shared mutation observer keeps
+      // re-evaluating until it is.
+      injectAttachmentChips();
+      // If a form is open, make sure it's still mounted and still sitting
+      // right after its chip — SPA churn can detach either.
+      if (s.open && s.activeFilename) {
+        mountWidgetIfNeeded();
+        positionWidgetAfterChip(s.activeFilename);
+      }
     });
   }
 

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "lastUpdated": "2026-07-24",
+  "notes": "Root SNOMED conceptIds used by the 'Bulk remove?' problem-list widget (content-scripts/problem-junk-code-cleanup.js) to flag problems that are likely administrative/data-import noise rather than genuine clinical problems (e.g. GP2GP-imported FP10/temporary-resident claim codes filed under 'Administrative procedure'). A patient's problem is flagged if its own conceptId EITHER exactly matches a root here OR is a DESCENDANT of one (any depth -- confirmed live 2026-07-23 reaching 5 hierarchy levels below 14734007 for the motivating FP10 case), checked via clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=<all roots, comma-joined>&query=<conceptId>. Add a new root entry to expand coverage -- no code change needed.",
+  "roots": [
+    {
+      "conceptId": "14734007",
+      "description": "Administrative procedure",
+      "addedDate": "2026-07-24",
+      "rationale": "GP2GP-imported FP10/temporary-resident-claim codes (confirmed live, 5 hierarchy levels below this root) are sometimes filed as problems by source systems even though they are pure administrative/claim artefacts, never a real clinical problem."
+    }
+  ]
+}
