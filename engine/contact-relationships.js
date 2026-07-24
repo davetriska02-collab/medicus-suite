@@ -32,6 +32,13 @@
   'use strict';
 
   // ── Load rules/contact-relationships.json — read-only ────────────────────────────────────────
+  // Node: require() resolves the real JSON synchronously at load time. Browser: require() doesn't
+  // exist in a content-script context, so this falls through to an empty-arrays placeholder here
+  // — the REAL data arrives later via an async fetch (content-scripts/contacts-api.js fetches
+  // rules/contact-relationships.json via chrome.runtime.getURL and sets
+  // global.ContactRelationshipsData once it resolves). dataOf() below re-checks that global on
+  // EVERY call rather than caching it once, so the browser path picks up the real data as soon as
+  // it lands, without this module needing to know when that happens.
   function loadDefaultData() {
     if (typeof require === 'function') {
       try {
@@ -41,16 +48,21 @@
         /* not resolvable under this module system/path — fall through to browser hook */
       }
     }
-    if (typeof global !== 'undefined' && global.ContactRelationshipsData) {
-      return global.ContactRelationshipsData;
-    }
     return { tiers: [], modifiers: [], relationships: [] };
   }
 
   const DEFAULT_DATA = loadDefaultData();
 
   function dataOf(data) {
-    return data && Array.isArray(data.relationships) ? data : DEFAULT_DATA;
+    if (data && Array.isArray(data.relationships)) return data;
+    if (
+      typeof global !== 'undefined' &&
+      global.ContactRelationshipsData &&
+      Array.isArray(global.ContactRelationshipsData.relationships)
+    ) {
+      return global.ContactRelationshipsData;
+    }
+    return DEFAULT_DATA;
   }
 
   // ── Basic lookups ─────────────────────────────────────────────────────────────────────────────

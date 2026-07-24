@@ -2,6 +2,90 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.178.4] — 2026-07-24
+
+### Contacts Management — fix duplicate-link 400, suggest relationship from an existing reciprocal
+
+Root-caused via the improved v3.178.3 error surfacing: `POST link-patient` returns 400
+`"Patient Contact already exists."` if the index patient already has a real link to the
+candidate (e.g. the manual entry being converted turned out to represent someone already
+linked, because a reciprocal-cleanup manual contact wasn't actually removed). The tool now
+checks the index patient's own `patientContactsSection` for an existing real link to the
+candidate before writing — if found, the forward link is skipped entirely and the flow just
+removes the stale manual duplicate, with a clear explanation on the confirm screen and the
+done summary.
+
+Also: when the candidate already lists the index patient as their own contact (the
+`existingReciprocal` case, "Listed as Contact For"), that relationship is now inverted
+(using the candidate's own gender) to suggest the correct default forward relationship —
+e.g. a patient already listed as another's "Mother" now defaults to "Daughter"/"Son" rather
+than falling back to a blank/"Other" guess.
+
+## [v3.178.3] — 2026-07-24
+
+### Contacts Management — surface the real API error detail
+
+A failed Medicus API call (e.g. a 400) was only ever shown as a bare "API 400" in the
+widget, discarding whatever reason Medicus's own response body gave. `contacts-api.js` now
+reads and includes that detail (plus the method/path) in the thrown error, so a live failure
+is self-diagnosing from the widget's own error message rather than needing a fresh HAR
+capture every time.
+
+## [v3.178.2] — 2026-07-24
+
+### Contacts Management — refresh prompt + reverse-side manual contact detection
+
+Two follow-ups from live testing of v3.178.1:
+
+- The "done" screen now says plainly that Medicus's own contacts card won't reflect the
+  change until the page is refreshed, with a one-click "Refresh now" button — direct API
+  writes don't trigger Medicus's own Vue app to re-fetch, so without this the card looked
+  unchanged until a manual reload.
+- When a reverse link is newly created, the candidate's own record is checked for a manual
+  contact whose name plausibly matches the index patient (e.g. the mother's own
+  GP2GP-imported "daughter" entry) — found via the same name-similarity scoring as the
+  search-candidate ranking. It is never deleted automatically (no independent confirmation
+  it's really the same person), just offered on the done screen with a one-click removal.
+
+## [v3.178.1] — 2026-07-24
+
+### Contacts Management — fix: no longer duplicates an already-existing reverse link
+
+Found during live testing of v3.178.0's conversion widget: if the candidate patient already
+lists the index patient as their own contact (visible in `patientLinkedContactsSection` /
+"Listed as Contact For"), the widget was firing a reverse `link-patient` call regardless,
+which would have created a second, duplicate relationship entry rather than updating the
+existing one. The confirm panel now checks for an existing reciprocal first and, if found,
+skips the reverse write entirely and tells the user to review/update the existing
+relationship on the candidate's own record instead.
+
+## [v3.178.0] — 2026-07-24
+
+### Contacts Management — Phase 1: manual-to-linked contact conversion
+
+First user-facing slice of the Contacts linking tool (see the build plan): a "Convert a
+manual contact to a linked patient" widget injected onto the patient admin-record page,
+next to the existing manual-contacts card.
+
+- Guided single-contact flow: pick one of the patient's manual (unlinked, GP2GP-style)
+  contacts, search for the real Medicus patient behind it (ranked by name/address match —
+  phone/email are deliberately low-weight, never decisive, since some families share one
+  contact email and children's records can wrongly carry a parent's own number), confirm a
+  relationship from the new 32-entry canonical vocabulary (with Ex-/Step-/Half- modifiers)
+  instead of free text, then link both directions and remove the superseded manual entry.
+- NOK / copy-correspondence are independent checkboxes per direction, unticked by default
+  in every case — never smart-defaulted from the relationship type.
+- Wrong-patient guard re-verifies the live page's patient immediately before every write
+  (mirrors `content-scripts/task-inline.js`'s guard) — a stale identity aborts rather than
+  writing to the wrong record.
+- New pure engines (`engine/contact-relationships.js`, `engine/contact-match.js`,
+  `engine/contact-tree.js`) and `rules/contact-relationships.json` landed unused in the
+  previous release; this release wires them into a real content script
+  (`content-scripts/contacts-api.js` + `contacts-link-button.js`).
+- **Known limitation**: the widget's anchor point (`findContactsHeading()`) is a
+  provisional heuristic, not yet verified against the live admin-record page's actual
+  markup — tighten once real DOM is seen.
+
 ## [v3.177.0] — 2026-07-22
 
 ### Triage North Star — wave 1: the record next to the request

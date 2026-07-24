@@ -1,0 +1,221 @@
+/* Medicus Suite — inline "Convert to linked contact" widget injected into patient admin-record pages */
+/* All selectors scoped to #ms-contacts-widget to avoid Medicus style conflicts — self-contained,
+   not part of the triage-lens hud.css token family (see task-inline.css for the same precedent). */
+
+#ms-contacts-widget {
+  margin: 16px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  color: #1a2030;
+}
+
+#ms-contacts-widget .ms-ct-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #f0f4ff;
+  border: 1px solid #c3cef5;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  font-size: 13px;
+  color: #1e3a8a;
+}
+
+#ms-contacts-widget .ms-ct-header:hover {
+  background: #e0eaff;
+}
+
+#ms-contacts-widget .ms-ct-chevron {
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+#ms-contacts-widget .ms-ct-body {
+  border: 1px solid #c3cef5;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  padding: 14px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#ms-contacts-widget .ms-ct-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#ms-contacts-widget .ms-ct-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+#ms-contacts-widget .ms-ct-input,
+#ms-contacts-widget .ms-ct-select,
+#ms-contacts-widget .ms-ct-textarea {
+  padding: 7px 10px;
+  border: 1px solid #c8cdd6;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #1a2030;
+  background: #fff;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+#ms-contacts-widget .ms-ct-textarea {
+  resize: vertical;
+  min-height: 50px;
+  line-height: 1.4;
+}
+
+#ms-contacts-widget .ms-ct-pick-row,
+#ms-contacts-widget .ms-ct-result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #e2e6f0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+#ms-contacts-widget .ms-ct-pick-row:hover,
+#ms-contacts-widget .ms-ct-result-row:hover {
+  background: #f7f9ff;
+  border-color: #c3cef5;
+}
+
+#ms-contacts-widget .ms-ct-pick-name {
+  font-weight: 600;
+}
+
+#ms-contacts-widget .ms-ct-pick-rel {
+  font-size: 12px;
+  color: #666;
+}
+
+#ms-contacts-widget .ms-ct-tier {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 3px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+#ms-contacts-widget .ms-ct-tier-strong {
+  background: #dcfce7;
+  color: #166534;
+}
+
+#ms-contacts-widget .ms-ct-tier-possible {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+#ms-contacts-widget .ms-ct-tier-weak {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+#ms-contacts-widget .ms-ct-btn {
+  padding: 8px 16px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+  font-family: inherit;
+}
+
+#ms-contacts-widget .ms-ct-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+#ms-contacts-widget .ms-ct-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#ms-contacts-widget .ms-ct-btn-ghost {
+  padding: 6px 12px;
+  background: transparent;
+  color: #2563eb;
+  border: 1px solid #c3cef5;
+  border-radius: 5px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+#ms-contacts-widget .ms-ct-btn-ghost:hover:not(:disabled) {
+  background: #f0f4ff;
+}
+
+#ms-contacts-widget .ms-ct-loading {
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+}
+
+#ms-contacts-widget .ms-ct-empty {
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+}
+
+#ms-contacts-widget .ms-ct-note {
+  font-size: 12px;
+  color: #666;
+}
+
+#ms-contacts-widget .ms-ct-error {
+  padding: 8px 10px;
+  background: #fff5f5;
+  border: 1px solid #fca5a5;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #b91c1c;
+}
+
+#ms-contacts-widget .ms-ct-warn {
+  padding: 8px 10px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #92400e;
+}
+
+#ms-contacts-widget .ms-ct-success {
+  align-items: center;
+  text-align: center;
+}
+
+#ms-contacts-widget .ms-ct-success-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #166534;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+}
