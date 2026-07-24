@@ -258,6 +258,84 @@
     return null;
   }
 
+  // ── Contact-info extraction (shared between the wizard widget and the canvas) ────────────────
+  // Pure extractors over a patient-details response's OWN registered phone/email (not a manual
+  // contact's — the patient's own patientContactInformationSection) — used to show comparison
+  // evidence (e.g. "does this manual entry's phone match the patient's own registered number")
+  // in both the merge panel and the reverse-manual-match removal prompt.
+
+  function extractPreferredEmail(patientDetails) {
+    const emails =
+      (patientDetails &&
+        patientDetails.patientContactInformationSection &&
+        patientDetails.patientContactInformationSection.patientEmailAddresses) ||
+      [];
+    if (!emails.length) return null;
+    const preferred = emails.find((e) => e.preferredEmailAddress);
+    return (preferred || emails[0]).emailAddress || null;
+  }
+
+  function extractPreferredPhone(patientDetails) {
+    const phones =
+      (patientDetails &&
+        patientDetails.patientContactInformationSection &&
+        patientDetails.patientContactInformationSection.patientTelephoneNumbers) ||
+      [];
+    if (!phones.length) return null;
+    const preferred = phones.find((p) => p.preferredTelephoneNumberForSms);
+    return (preferred || phones[0]).telephoneNumber || null;
+  }
+
+  // ── Existing-link detection (shared between the wizard widget and the canvas) ────────────────
+  // Pure functions over a patient-details response — safety-critical duplicate-prevention logic
+  // that must not drift between the two UI surfaces that both create real Medicus links, so it
+  // lives here (unit-tested) rather than being duplicated in each content script.
+
+  // findExistingReciprocal(indexPatientDetails, candidatePatientId) -> the "Listed as Contact For"
+  // entry (if any) proving the candidate ALREADY lists the index patient as one of their own
+  // contacts. Checking this before offering a reverse link matters because POST link-patient has
+  // no idempotency guard of its own — firing it again creates a genuine duplicate relationship on
+  // the candidate's record, not an update.
+  function findExistingReciprocal(indexPatientDetails, candidatePatientId) {
+    const list =
+      (indexPatientDetails &&
+        indexPatientDetails.patientLinkedContactsSection &&
+        indexPatientDetails.patientLinkedContactsSection.patientContacts) ||
+      [];
+    return list.find((c) => c.linkedPatientId === candidatePatientId) || null;
+  }
+
+  // findExistingForwardLink(indexPatientDetails, candidatePatientId) -> an entry from the index
+  // patient's OWN patientContactsSection that's already a REAL link to this candidate
+  // (patientContactPatientId set, not a manual entry). Confirmed live: POST link-patient rejects a
+  // duplicate with a 400 ("Patient Contact already exists.") rather than silently no-op'ing —
+  // checking this first lets a caller skip the redundant write instead of erroring out.
+  function findExistingForwardLink(indexPatientDetails, candidatePatientId) {
+    const list =
+      (indexPatientDetails &&
+        indexPatientDetails.patientContactsSection &&
+        indexPatientDetails.patientContactsSection.patientContacts) ||
+      [];
+    return list.find((c) => c.patientContactPatientId === candidatePatientId) || null;
+  }
+
+  // suggestForwardFromReciprocal(reciprocalEntry, candidateGenderIdentity) -> { baseId, modifierId } | null
+  // When the candidate already lists the index patient as their own contact (e.g. "Mother"), that's
+  // a stronger signal for what the FORWARD relationship should default to than any manual entry's
+  // own free text — invert the already-established relationship using the CANDIDATE's own gender
+  // (they're the one whose son/daughter-type label depends on it, since the relationship was
+  // recorded from their side).
+  function suggestForwardFromReciprocal(reciprocalEntry, candidateGenderIdentity, data) {
+    if (!reciprocalEntry) return null;
+    const guess = normaliseFreeText(reciprocalEntry.patientContactRelationship, data);
+    if (!guess) return null;
+    const inv = invertRelationship(
+      { baseId: guess.baseId, modifierId: guess.modifierId, indexGender: candidateGenderIdentity },
+      data
+    );
+    return inv.ambiguous ? null : { baseId: inv.baseId, modifierId: inv.modifierId };
+  }
+
   // ── Medicus API payload builders ──────────────────────────────────────────────────────────────
 
   // buildLinkPatientBody(...) -> exact POST /patient/patient-contact/link-patient body shape
@@ -326,6 +404,11 @@
     invertRelationship,
     normaliseFreeText,
     ALIAS_TERMS,
+    findExistingReciprocal,
+    findExistingForwardLink,
+    suggestForwardFromReciprocal,
+    extractPreferredEmail,
+    extractPreferredPhone,
     buildLinkPatientBody,
     buildManualContactBody,
   };

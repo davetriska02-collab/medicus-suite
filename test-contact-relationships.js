@@ -129,5 +129,106 @@ console.log('5: normaliseFreeText');
 }
 
 // ============================================================
+// 6 — findExistingReciprocal / findExistingForwardLink / suggestForwardFromReciprocal
+// ============================================================
+console.log('6: existing-link detection (shared between the wizard and the canvas)');
+{
+  const indexDetails = {
+    patientLinkedContactsSection: {
+      patientContacts: [{ linkedPatientId: 'mother-id', patientContactRelationship: 'Mother' }],
+    },
+    patientContactsSection: {
+      patientContacts: [{ patientContactPatientId: 'sister-id', patientContactRelationship: 'Sister' }],
+    },
+  };
+
+  check(
+    CR.findExistingReciprocal(indexDetails, 'mother-id').patientContactRelationship === 'Mother',
+    'findExistingReciprocal finds an entry that already lists the index patient'
+  );
+  check(
+    CR.findExistingReciprocal(indexDetails, 'unrelated-id') === null,
+    'findExistingReciprocal returns null when nothing matches'
+  );
+  check(
+    CR.findExistingReciprocal(null, 'mother-id') === null,
+    'findExistingReciprocal is defensive against a missing patient-details object'
+  );
+
+  check(
+    CR.findExistingForwardLink(indexDetails, 'sister-id').patientContactRelationship === 'Sister',
+    'findExistingForwardLink finds an already-real-linked entry'
+  );
+  check(
+    CR.findExistingForwardLink(indexDetails, 'mother-id') === null,
+    'findExistingForwardLink does not match a patientLinkedContactsSection-only entry'
+  );
+
+  const suggestion = CR.suggestForwardFromReciprocal(
+    { patientContactRelationship: 'Mother' },
+    'Female' // the CANDIDATE's own gender — they are the "child" in the recorded relationship
+  );
+  check(
+    suggestion && suggestion.baseId === 'daughter',
+    'suggestForwardFromReciprocal inverts using the candidate’s gender'
+  );
+  check(
+    CR.suggestForwardFromReciprocal({ patientContactRelationship: 'Test relationship' }, 'Female') === null,
+    'suggestForwardFromReciprocal returns null when the recorded text does not normalise'
+  );
+  check(
+    CR.suggestForwardFromReciprocal(null, 'Female') === null,
+    'suggestForwardFromReciprocal returns null with no reciprocal entry'
+  );
+}
+
+// ============================================================
+// 7 — extractPreferredEmail / extractPreferredPhone
+// ============================================================
+console.log('7: extractPreferredEmail / extractPreferredPhone');
+{
+  const withPreferred = {
+    patientContactInformationSection: {
+      patientEmailAddresses: [
+        { emailAddress: 'old@example.com', preferredEmailAddress: false },
+        { emailAddress: 'preferred@example.com', preferredEmailAddress: true },
+      ],
+      patientTelephoneNumbers: [
+        { telephoneNumber: '01234567890', preferredTelephoneNumberForSms: false },
+        { telephoneNumber: '07911111111', preferredTelephoneNumberForSms: true },
+      ],
+    },
+  };
+  check(
+    CR.extractPreferredEmail(withPreferred) === 'preferred@example.com',
+    'extractPreferredEmail picks the entry flagged preferred over the first one'
+  );
+  check(
+    CR.extractPreferredPhone(withPreferred) === '07911111111',
+    'extractPreferredPhone picks the entry flagged preferred for SMS over the first one'
+  );
+
+  const noPreferredFlag = {
+    patientContactInformationSection: {
+      patientEmailAddresses: [{ emailAddress: 'only@example.com', preferredEmailAddress: false }],
+      patientTelephoneNumbers: [],
+    },
+  };
+  check(
+    CR.extractPreferredEmail(noPreferredFlag) === 'only@example.com',
+    'extractPreferredEmail falls back to the first entry when none is flagged preferred'
+  );
+  check(
+    CR.extractPreferredPhone(noPreferredFlag) === null,
+    'extractPreferredPhone returns null when the list is empty'
+  );
+  check(
+    CR.extractPreferredEmail(null) === null,
+    'extractPreferredEmail is defensive against a missing patient-details object'
+  );
+  check(CR.extractPreferredEmail({}) === null, 'extractPreferredEmail is defensive against a missing section');
+}
+
+// ============================================================
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

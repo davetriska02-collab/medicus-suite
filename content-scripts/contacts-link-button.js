@@ -186,6 +186,7 @@
       .join('');
     return `<div class="ms-ct-body">${empty}${rows}
       <button class="ms-ct-btn-ghost" id="ms-ct-switch-import">Or import contacts already linked on another patient's record</button>
+      <button class="ms-ct-btn-ghost" id="ms-ct-open-canvas">Or manage contacts as a family tree</button>
     </div>`;
   }
 
@@ -293,6 +294,27 @@
     `;
   }
 
+  // reverseManualMatchComparisonHtml(match, indexPatientDetails) -> a couple of plain evidence
+  // lines (not a full interactive table like the merge panel — this decision is just binary
+  // remove-or-not) so the user isn't asked to trust a name-similarity score blind, same spirit as
+  // the merge panel's comparison but lighter weight for a lighter-weight decision.
+  function reverseManualMatchComparisonHtml(match, indexPatientDetails) {
+    if (!match.detail) return '';
+    const CR = window.ContactRelationships;
+    const theirPhone =
+      (match.detail.patientContactMobileTelephoneNumber && match.detail.patientContactMobileTelephoneNumber.value) ||
+      (match.detail.patientContactHomeTelephoneNumber && match.detail.patientContactHomeTelephoneNumber.value) ||
+      '(none recorded)';
+    const theirEmail =
+      (match.detail.patientContactEmailAddress && match.detail.patientContactEmailAddress.value) || '(none recorded)';
+    const indexPhone = CR.extractPreferredPhone(indexPatientDetails) || '(none recorded)';
+    const indexEmail = CR.extractPreferredEmail(indexPatientDetails) || '(none recorded)';
+    return `
+      <div class="ms-ct-note">Their manual entry: phone ${esc(theirPhone)}, email ${esc(theirEmail)}</div>
+      <div class="ms-ct-note">This patient's own record: phone ${esc(indexPhone)}, email ${esc(indexEmail)}</div>
+    `;
+  }
+
   function renderDone() {
     return `
       <div class="ms-ct-body ms-ct-success">
@@ -305,6 +327,7 @@
             ? `<div class="ms-ct-warn">${esc(s.selectedCandidate.displayName)} also has a manual contact named
                  "${esc(s.reverseManualMatch.patientContactName)}" that may represent this patient — it was NOT
                  removed automatically since no one has confirmed the match. Remove it too?</div>
+               ${reverseManualMatchComparisonHtml(s.reverseManualMatch, s.indexPatientDetails)}
                <button class="ms-ct-btn-ghost" id="ms-ct-remove-reverse-manual">Remove it</button>`
             : ''
         }
@@ -556,94 +579,15 @@
     rerender();
   }
 
-  // findExistingReciprocal(candidatePatientId) -> the "Listed as Contact For" entry (if any) that
-  // proves the candidate ALREADY lists this index patient as one of their own contacts. Sourced
-  // from patient-details' patientLinkedContactsSection, fetched once in doOpen(). Checking this
-  // before offering a reverse link matters because POST link-patient has no idempotency guard of
-  // its own — firing it again would create a genuine duplicate relationship on the candidate's
-  // record, not update the existing one.
-  function findExistingReciprocal(candidatePatientId) {
-    const list =
-      (s.indexPatientDetails &&
-        s.indexPatientDetails.patientLinkedContactsSection &&
-        s.indexPatientDetails.patientLinkedContactsSection.patientContacts) ||
-      [];
-    return list.find((c) => c.linkedPatientId === candidatePatientId) || null;
-  }
-
-  // findExistingForwardLink(candidatePatientId) -> an entry from the index patient's OWN
-  // patientContactsSection that's already a REAL link to this candidate (patientContactPatientId
-  // set, not a manual entry). Found the hard way: Medicus's own POST link-patient rejects a
-  // duplicate with a 400 ("Patient Contact already exists.") rather than silently no-op'ing or
-  // updating — this happens when a manual contact turns out to represent someone already linked
-  // (e.g. its reciprocal-cleanup counterpart wasn't actually removed). Checking this first lets us
-  // skip the redundant forward write and just clean up the stale manual duplicate instead of
-  // erroring out.
-  function findExistingForwardLink(candidatePatientId) {
-    const list =
-      (s.indexPatientDetails &&
-        s.indexPatientDetails.patientContactsSection &&
-        s.indexPatientDetails.patientContactsSection.patientContacts) ||
-      [];
-    return list.find((c) => c.patientContactPatientId === candidatePatientId) || null;
-  }
-
-  // suggestForwardFromReciprocal(reciprocalEntry, candidateGenderIdentity) -> { baseId, modifierId } | null
-  // When the candidate already lists the index patient as their own contact (e.g. "Mother"), that's
-  // a stronger signal for what the FORWARD relationship should default to than the manual entry's
-  // own (possibly blank or unreliable) free text — invert the already-established relationship
-  // using the CANDIDATE's own gender (they're the one whose son/daughter-type label depends on it,
-  // since the relationship was recorded from their side).
-  function suggestForwardFromReciprocal(reciprocalEntry, candidateGenderIdentity) {
-    if (!reciprocalEntry) return null;
-    const guess = window.ContactRelationships.normaliseFreeText(reciprocalEntry.patientContactRelationship);
-    if (!guess) return null;
-    const inv = window.ContactRelationships.invertRelationship({
-      baseId: guess.baseId,
-      modifierId: guess.modifierId,
-      indexGender: candidateGenderIdentity,
-    });
-    return inv.ambiguous ? null : { baseId: inv.baseId, modifierId: inv.modifierId };
-  }
-
-  // findReverseManualMatch(candidatePatientId) -> best-guess manual contact on the CANDIDATE's own
-  // record that might represent the index patient (e.g. the mother's own GP2GP-imported "daughter"
-  // manual entry), so it can be OFFERED for cleanup after we've just created a fresh reverse link.
-  // Deliberately best-effort and NEVER auto-deletes: we have no independent confirmation this
-  // manual entry is really the same person (only a name match against a patient we've never
-  // viewed from their side), so the human always makes the final call, same as every other match
-  // in this tool. Returns null on any failure or if nothing scores highly enough.
-  async function findReverseManualMatch(candidatePatientId) {
-    try {
-      const candidateDetails = await window.ContactsApi.getPatientDetails(s.apiBase, candidatePatientId);
-      const manuals = (
-        (candidateDetails.patientContactsSection && candidateDetails.patientContactsSection.patientContacts) ||
-        []
-      ).filter((c) => !c.patientContactPatientId);
-      const indexName =
-        s.indexPatientDetails &&
-        s.indexPatientDetails.patientDetailsSection &&
-        s.indexPatientDetails.patientDetailsSection.fullOfficialName;
-      if (!manuals.length || !indexName) return null;
-      let best = null;
-      for (const m of manuals) {
-        const score = window.ContactMatch.nameSimilarity(indexName, m.patientContactName);
-        if (!best || score > best.score) best = { contact: m, score };
-      }
-      return best && best.score >= 0.6 ? best.contact : null;
-    } catch (_) {
-      return null; // best-effort only — never blocks or fails the main conversion
-    }
-  }
-
   async function pickCandidate(patientId) {
     const result = s.searchResults.find((r) => r.candidate.patientId === patientId);
     if (!result) return;
+    const CR = window.ContactRelationships;
     s.selectedCandidate = result.candidate;
-    s.existingReciprocal = findExistingReciprocal(patientId);
-    s.existingForwardLink = findExistingForwardLink(patientId);
+    s.existingReciprocal = CR.findExistingReciprocal(s.indexPatientDetails, patientId);
+    s.existingForwardLink = CR.findExistingForwardLink(s.indexPatientDetails, patientId);
     s.step = 'confirm';
-    const reciprocalSuggestion = suggestForwardFromReciprocal(s.existingReciprocal, result.candidate.genderIdentity);
+    const reciprocalSuggestion = CR.suggestForwardFromReciprocal(s.existingReciprocal, result.candidate.genderIdentity);
     s.baseIdSuggestedFromReciprocal = !!reciprocalSuggestion;
     s.baseId =
       (reciprocalSuggestion && reciprocalSuggestion.baseId) ||
@@ -686,55 +630,34 @@
     s.step = 'working';
     s.workingError = null;
     rerender();
-    // WRONG-PATIENT GUARD: pin state and re-verify the live page still shows this same patient
-    // immediately before firing any write — a real clinical-record write must never land on the
-    // wrong patient because the SPA silently navigated while this widget was open.
+    // WRONG-PATIENT GUARD lives inside performLinkAndCleanup() now (shared with the canvas) — it
+    // re-verifies the live page's patient identity immediately before any write.
     const st = s;
     try {
-      const ctx = window.ContactsApi.resolveContext();
-      if (!ctx || ctx.patientId !== st.patientId) {
-        throw new Error('The page has moved to a different patient — reopen the panel and try again.');
-      }
-      if (!st.existingForwardLink) {
-        const forwardBody = window.ContactRelationships.buildLinkPatientBody({
-          patientId: st.patientId,
-          linkPatientId: st.selectedCandidate.patientId,
-          baseId: st.baseId,
-          modifierId: st.modifierId,
-          isNextOfKin: st.forwardIsNextOfKin,
-          copyCorrespondence: st.forwardCopyCorrespondence,
-          notes: st.notes,
-        });
-        await window.ContactsApi.linkPatient(st.apiBase, forwardBody);
-        if (st !== s) return;
-      }
-
-      if (st.reverseBaseId) {
-        const reverseBody = window.ContactRelationships.buildLinkPatientBody({
-          patientId: st.selectedCandidate.patientId,
-          linkPatientId: st.patientId,
-          baseId: st.reverseBaseId,
-          modifierId: st.modifierId,
-          isNextOfKin: st.reverseIsNextOfKin,
-          copyCorrespondence: st.reverseCopyCorrespondence,
-          notes: null,
-        });
-        await window.ContactsApi.linkPatient(st.apiBase, reverseBody);
-        if (st !== s) return;
-        // Best-effort only — never blocks completion of the main conversion above.
-        st.reverseManualMatch = await findReverseManualMatch(st.selectedCandidate.patientId);
-        if (st !== s) return;
-      }
-
-      await window.ContactsApi.deletePatientContactRelationship(st.apiBase, st.selectedManualContact.patientContactId);
+      const result = await window.ContactsApi.performLinkAndCleanup({
+        apiBase: st.apiBase,
+        patientId: st.patientId,
+        candidatePatientId: st.selectedCandidate.patientId,
+        candidateDisplayName: st.selectedCandidate.displayName,
+        indexPatientFullName:
+          st.indexPatientDetails &&
+          st.indexPatientDetails.patientDetailsSection &&
+          st.indexPatientDetails.patientDetailsSection.fullOfficialName,
+        baseId: st.baseId,
+        modifierId: st.modifierId,
+        forwardIsNextOfKin: st.forwardIsNextOfKin,
+        forwardCopyCorrespondence: st.forwardCopyCorrespondence,
+        notes: st.notes,
+        existingForwardLink: st.existingForwardLink,
+        reverseBaseId: st.reverseBaseId,
+        reverseIsNextOfKin: st.reverseIsNextOfKin,
+        reverseCopyCorrespondence: st.reverseCopyCorrespondence,
+        existingReciprocal: st.existingReciprocal,
+        manualContactIdToDelete: st.selectedManualContact.patientContactId,
+      });
       if (st !== s) return;
-
-      const notes = [];
-      if (st.existingForwardLink) notes.push('the forward link already existed, so no new link was created');
-      if (st.existingReciprocal) notes.push('their existing reverse link back to this patient was left untouched');
-      st.doneSummary = notes.length
-        ? `Removed the stale manual contact (${notes.join('; ')}).`
-        : `Linked to ${st.selectedCandidate.displayName} and removed the old manual contact.`;
+      st.doneSummary = result.summary;
+      st.reverseManualMatch = result.reverseManualMatch;
       st.step = 'done';
     } catch (err) {
       st.step = 'confirm';
@@ -1006,6 +929,10 @@
         rerender();
       }
     });
+
+    // ── Phase 3: full canvas ──────────────────────────────────────────────────────────────────
+
+    el.querySelector('#ms-ct-open-canvas')?.addEventListener('click', () => window.ContactsCanvas.open());
 
     // ── Phase 2: bulk import ──────────────────────────────────────────────────────────────────
 

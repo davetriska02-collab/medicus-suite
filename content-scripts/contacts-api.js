@@ -176,6 +176,114 @@
     return apiFetch(apiBase, `/patient/data/home-address/overview/${encodeURIComponent(addressId)}`);
   }
 
+  // ── Shared write orchestration (used by both the wizard widget and the canvas) ─────────────────
+  // Safety-critical logic — the wrong-patient guard and duplicate-link avoidance — lives here ONCE
+  // so the two UI surfaces that both create real Medicus links can't drift out of sync on it.
+
+  // findReverseManualMatch(apiBase, candidatePatientId, indexPatientFullName) -> best-guess manual
+  // contact on the CANDIDATE's own record that might represent the index patient (e.g. the
+  // mother's own GP2GP-imported "daughter" manual entry), offered for cleanup after a fresh
+  // reverse link is created. Deliberately best-effort and NEVER auto-deletes — only a name match
+  // against a patient we've never viewed from their side, so the human always makes the final
+  // call. Returns null on any failure or if nothing scores highly enough. The returned object also
+  // carries the match's own full detail (phone/email/notes, via view-patient-contact) so a caller
+  // can show the same kind of comparison evidence as the main merge panel before the user decides
+  // whether to remove it — a best-effort ADDITION, never blocks returning the match itself if this
+  // second fetch fails.
+  async function findReverseManualMatch(apiBase, candidatePatientId, indexPatientFullName) {
+    try {
+      const candidateDetails = await getPatientDetails(apiBase, candidatePatientId);
+      const manuals = (
+        (candidateDetails.patientContactsSection && candidateDetails.patientContactsSection.patientContacts) ||
+        []
+      ).filter((c) => !c.patientContactPatientId);
+      if (!manuals.length || !indexPatientFullName) return null;
+      let best = null;
+      for (const m of manuals) {
+        const score = window.ContactMatch.nameSimilarity(indexPatientFullName, m.patientContactName);
+        if (!best || score > best.score) best = { contact: m, score };
+      }
+      if (!best || best.score < 0.6) return null;
+      const detail = await viewPatientContact(apiBase, best.contact.patientContactId).catch(() => null);
+      return Object.assign({}, best.contact, { detail });
+    } catch (_) {
+      return null; // best-effort only — never blocks or fails the main write
+    }
+  }
+
+  // performLinkAndCleanup(params) -> { summary, reverseManualMatch }
+  //   apiBase, patientId (index patient, the identity the WRONG-PATIENT GUARD re-verifies),
+  //   candidatePatientId, candidateDisplayName, indexPatientFullName,
+  //   baseId, modifierId, forwardIsNextOfKin, forwardCopyCorrespondence, notes,
+  //   existingForwardLink (entry|null — skips the forward write if set),
+  //   reverseBaseId (string|null — fires the reverse write only if set), reverseIsNextOfKin, reverseCopyCorrespondence,
+  //   existingReciprocal (entry|null — informational only, for the summary text),
+  //   manualContactIdToDelete (string|null)
+  //
+  // WRONG-PATIENT GUARD lives HERE (not in each caller) so it can never be forgotten or
+  // implemented slightly differently by a second UI surface: re-derives the live page's current
+  // patient identity via resolveContext() and aborts before any write if it no longer matches the
+  // patientId the caller pinned when the user opened this confirm action.
+  async function performLinkAndCleanup(params) {
+    const ctx = resolveContext();
+    if (!ctx || ctx.patientId !== params.patientId) {
+      throw new Error('The page has moved to a different patient — reopen the panel and try again.');
+    }
+    const CR = window.ContactRelationships;
+
+    if (!params.existingForwardLink) {
+      const forwardBody = CR.buildLinkPatientBody({
+        patientId: params.patientId,
+        linkPatientId: params.candidatePatientId,
+        baseId: params.baseId,
+        modifierId: params.modifierId,
+        isNextOfKin: params.forwardIsNextOfKin,
+        copyCorrespondence: params.forwardCopyCorrespondence,
+        notes: params.notes,
+      });
+      await linkPatient(params.apiBase, forwardBody);
+    }
+
+    let reverseManualMatch = null;
+    if (params.reverseBaseId) {
+      const reverseBody = CR.buildLinkPatientBody({
+        patientId: params.candidatePatientId,
+        linkPatientId: params.patientId,
+        baseId: params.reverseBaseId,
+        modifierId: params.modifierId,
+        isNextOfKin: params.reverseIsNextOfKin,
+        copyCorrespondence: params.reverseCopyCorrespondence,
+        notes: null,
+      });
+      await linkPatient(params.apiBase, reverseBody);
+      reverseManualMatch = await findReverseManualMatch(
+        params.apiBase,
+        params.candidatePatientId,
+        params.indexPatientFullName
+      );
+    }
+
+    if (params.manualContactIdToDelete) {
+      await deletePatientContactRelationship(params.apiBase, params.manualContactIdToDelete);
+    }
+
+    // Built from what actually happened rather than assumed, since callers differ: the wizard
+    // widget always has a manual contact to delete, but the canvas can also link a fresh
+    // Medicus-only candidate with no manual precedent at all.
+    const parts = [];
+    parts.push(
+      params.existingForwardLink
+        ? `${params.candidateDisplayName} was already linked — no new forward link created`
+        : `Linked to ${params.candidateDisplayName}`
+    );
+    if (params.manualContactIdToDelete) parts.push('removed the old manual contact');
+    if (params.reverseBaseId) parts.push('created the reverse link on their record');
+    else if (params.existingReciprocal) parts.push('left their existing reverse link untouched');
+    const summary = parts.join('; ') + '.';
+
+    return { summary, reverseManualMatch };
+  }
+
   window.ContactsApi = {
     ensureRelationshipsData,
     resolveContext,
@@ -190,6 +298,8 @@
     viewPatientContact,
     deletePatientContactRelationship,
     getAddressOverview,
+    findReverseManualMatch,
+    performLinkAndCleanup,
   };
 
   // Fire-and-forget — see ensureRelationshipsData()'s comment above.

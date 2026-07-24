@@ -2,6 +2,108 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.180.4] — 2026-07-25
+
+### Contacts Management — row-aligned columns, locked merges, comparison on removal
+
+- Manual and Medicus columns are now row-aligned: each manual contact's row shows ONLY the
+  candidates its own search produced, via `forManualId` rather than one flat list sorted by
+  raw score across every manual contact combined — fixes two same-named manual contacts
+  (e.g. two "John Smith" entries for two different real people) landing in arbitrary,
+  unrelated rows. Implemented as a CSS grid with an explicit `grid-row` per cell, which is
+  what actually guarantees the two columns line up regardless of how much content either
+  cell holds. Already-linked contacts (no manual counterpart) get their own medicus-only
+  rows, leading with a gap in the manual column as expected.
+- A manual card is no longer draggable once merged — the only way to finish is dragging its
+  (outlined) Medicus counterpart, never the faded manual card a second time.
+- The reverse-manual-match removal prompt (both the wizard and the canvas) now shows a
+  quick phone/email comparison — the match's own recorded contact details vs. the index
+  patient's own registered ones — via two new shared, unit-tested extractors
+  (`extractPreferredEmail`/`extractPreferredPhone` in `engine/contact-relationships.js`),
+  reusing the same `view-patient-contact` fetch `findReverseManualMatch` already makes.
+- The close-while-merged warning now spells out which button does what.
+- Noted in the plan for Phase 4: show the family-tree slots populated from the start rather
+  than only appearing once a card is dropped, which would also retire Phase 3's
+  row-alignment workaround in favour of the real thing.
+
+## [v3.180.3] — 2026-07-25
+
+### Contacts Management — canvas: clearer close-warning, restore reverse-manual-match offer
+
+- The close-while-merged warning now spells out which button does what ("Click CANCEL to
+  go back and drag... / Click OK to close anyway...") instead of relying on the reader to
+  infer it from a generic OK/Cancel dialog.
+- Root-caused a regression: `performLinkAndCleanup()` (shared with the wizard since the
+  Phase 3 refactor) already computes a best-guess manual-contact match on the candidate's
+  own record after creating a reverse link, but the canvas never surfaced it or offered
+  removal the way the wizard's done screen does — so a second-order stale manual duplicate
+  (e.g. patient B's own manual entry for a newly-linked patient A) went undetected. The
+  canvas's "done" state now shows the same warning + "Remove it" action as the wizard.
+
+## [v3.180.2] — 2026-07-25
+
+### Contacts Management — merge panel: email/DOB, close-warning, visual fate
+
+- Colour-coding confirmed correct via live diagnostic (all three cards were genuinely
+  recorded as "Family member" — too vague to map to any specific relationship, correctly
+  routed to "needs review" grey rather than guessed) — diagnostic log removed.
+- Merge compare panel now also shows date of birth (from the existing `link-patient`
+  preview call, no extra fetch) and a real email comparison — a new `patient-details` fetch
+  for the candidate, since `link-patient`'s preview doesn't return email at all. A
+  differing email gets the same "note it in the new link too" checkbox as phone.
+- Closing the canvas while a merge is paired but not yet linked now warns first (nothing
+  is written to Medicus until the merged card is dragged to the family tree, so closing
+  would silently discard the pairing) — same `confirm()` pattern `duplicate-checker.js`
+  uses for an in-progress decision about to be discarded.
+- Merged cards now visually fade (mirroring `duplicate-checker.js`'s
+  keep/discard fate treatment) and their paired Medicus card gets a green outline, so it's
+  clear at a glance which manual cards are already spoken for.
+
+## [v3.180.1] — 2026-07-25
+
+### Contacts Management — first-round canvas fixes from live testing
+
+- Renamed the canvas entry point to "Or manage contacts as a family tree" (from "Or open
+  the full contacts canvas").
+- Drag-to-merge now opens a proper compare panel before pairing two cards — modelled on
+  `duplicate-checker.js`'s note-compare-merge pattern (side-by-side table, a "kept" column
+  that always wins — here, the live Medicus record, never a symmetric either-side pick —
+  differing rows flagged). Phone number and notes are the only genuinely mergeable content;
+  each gets its own checkbox to carry it into the new link's notes field, everything else is
+  read-only evidence that the two cards are the same person. Previously merging just paired
+  the cards silently with no way to preserve anything from the manual record.
+- Added a temporary diagnostic log for the "all cards show as grey/unmatched" colour-coding
+  report — logs each card's name, recorded relationship text, and resolved colour, to be
+  removed once the root cause is confirmed from real data.
+
+## [v3.180.0] — 2026-07-24
+
+### Contacts Management — Phase 3: three-column canvas (untested against live Medicus)
+
+New "Or open the full contacts canvas" option from the widget: a three-column overlay —
+manual contacts, Medicus contacts (already-linked + name/address-ranked search suggestions,
+full `engine/contact-match.js` scoring), and other patients registered at the same address
+— colour-coded by a normalised category of each contact's relationship text so a manual
+card and its likely Medicus counterpart share a colour at a glance. Drag a manual card onto
+a Medicus/address card to pair them (drag-to-merge); drag any card onto the "link" drop
+zone to open a confirm form and fire the link (drag-to-assign) — same relationship
+vocabulary, same shared write path as the wizard.
+
+Refactor alongside this: the duplicate/reciprocal-link detection logic
+(`findExistingReciprocal`, `findExistingForwardLink`, `suggestForwardFromReciprocal`) moved
+from `contacts-link-button.js` into `engine/contact-relationships.js` as pure, now
+unit-tested functions, and the write-orchestration + wrong-patient guard moved into a new
+`ContactsApi.performLinkAndCleanup()` — both the wizard and the new canvas call the exact
+same implementation for anything safety-critical, rather than two copies that could drift.
+
+**Known simplifications, not yet live-tested**: the merge step pairs cards but doesn't yet
+offer the richer per-field phone/email keep-mine/keep-theirs/keep-both comparison originally
+scoped for it; the canvas doesn't tear down if the page navigates away while open (the
+wrong-patient guard in `performLinkAndCleanup` still prevents an unsafe write either way,
+but the displayed context could go stale); same-address candidates carry no scoring
+signals (the endpoint returns name only). This phase has not yet been through live-testing
+the way Phases 1–2 were — expect a bug-fixing round once tried against real Medicus.
+
 ## [v3.179.2] — 2026-07-24
 
 ### Contacts Management — fix bulk-import eligibility cross-reference

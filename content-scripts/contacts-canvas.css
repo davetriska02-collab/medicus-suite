@@ -1,0 +1,231 @@
+/* Medicus Suite — three-column contacts canvas overlay (Phase 3) */
+/* Self-contained, not part of the triage-lens hud.css token family (same convention as
+   contacts-link-button.css / task-inline.css). */
+
+#ms-contacts-canvas-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  color: #1a2030;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-panel {
+  background: #fff;
+  border-radius: 8px;
+  width: min(1100px, 94vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+#ms-contacts-canvas-overlay .ms-cv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: #f0f4ff;
+  border-bottom: 1px solid #c3cef5;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-loading {
+  padding: 40px;
+  text-align: center;
+  color: #666;
+  font-style: italic;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-columns {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+  padding: 16px 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The manual/Medicus pair: a 2-column sub-grid with each cell's grid-row set explicitly (inline,
+   per cell) rather than relying on flex source order — that's what makes row N in one column
+   guaranteed to line up with row N in the other, however tall either cell's content is (e.g. a
+   card with several stacked candidate matches vs. an empty placeholder). */
+#ms-contacts-canvas-overlay .ms-cv-aligned-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  align-items: start;
+  min-width: 0;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-grid-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 20px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-column-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-card {
+  border: 1px solid #e2e6f0;
+  border-left: 4px solid #94a3b8;
+  border-radius: 5px;
+  padding: 8px 10px;
+  cursor: grab;
+  background: #fff;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-card[draggable='true']:hover {
+  background: #f7f9ff;
+  border-color: #c3cef5;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-card:not([draggable]) {
+  cursor: default;
+  opacity: 0.85;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-card-faded {
+  opacity: 0.55;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-card-outlined {
+  outline: 2px solid #16a34a;
+  outline-offset: -1px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-card-name {
+  font-weight: 600;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-card-sub {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-badge {
+  font-size: 11px;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-empty {
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-dropzone {
+  margin: 0 18px 18px;
+  border: 2px dashed #c3cef5;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  color: #666;
+  font-style: italic;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-dropzone-active,
+#ms-contacts-canvas-overlay .ms-cv-dropzone-done {
+  text-align: left;
+  font-style: normal;
+  color: #1a2030;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-dropzone-done {
+  align-items: center;
+  text-align: center;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-dropzone select,
+#ms-contacts-canvas-overlay .ms-cv-dropzone label {
+  font-size: 13px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-merge-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-merge-table th {
+  text-align: left;
+  padding: 4px 8px;
+  color: #666;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-merge-table td {
+  padding: 5px 8px;
+  border-top: 1px solid #e2e6f0;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-merge-label {
+  color: #666;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-merge-keep-col {
+  border-left: 2px solid #16a34a;
+  color: #166534;
+  font-weight: 600;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-merge-row-differs {
+  background: #fffbeb;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-dropzone-actions {
+  display: flex;
+  gap: 8px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-success-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #166534;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+/* Buttons/warnings/notes/select intentionally reuse contacts-link-button.css's .ms-ct-* classes —
+   that file's rules for .ms-ct-btn/.ms-ct-btn-ghost/.ms-ct-error/.ms-ct-warn/.ms-ct-note/
+   .ms-ct-select/.ms-ct-import-mods are extended with an #ms-contacts-canvas-overlay selector
+   alongside their #ms-contacts-widget one, rather than duplicating the declarations here — both
+   files are always loaded together (same manifest block), so this avoids the two ever drifting
+   visually apart for the shared vocabulary. */

@@ -60,7 +60,8 @@
 
 #ms-contacts-widget .ms-ct-input,
 #ms-contacts-widget .ms-ct-select,
-#ms-contacts-widget .ms-ct-textarea {
+#ms-contacts-widget .ms-ct-textarea,
+#ms-contacts-canvas-overlay .ms-ct-select {
   padding: 7px 10px;
   border: 1px solid #c8cdd6;
   border-radius: 5px;
@@ -108,7 +109,8 @@
   border-radius: 5px;
 }
 
-#ms-contacts-widget .ms-ct-import-mods label {
+#ms-contacts-widget .ms-ct-import-mods label,
+#ms-contacts-canvas-overlay .ms-ct-import-mods label {
   margin-right: 8px;
   font-size: 12px;
 }
@@ -147,7 +149,8 @@
   color: #475569;
 }
 
-#ms-contacts-widget .ms-ct-btn {
+#ms-contacts-widget .ms-ct-btn,
+#ms-contacts-canvas-overlay .ms-ct-btn {
   padding: 8px 16px;
   background: #2563eb;
   color: #fff;
@@ -160,16 +163,19 @@
   font-family: inherit;
 }
 
-#ms-contacts-widget .ms-ct-btn:hover:not(:disabled) {
+#ms-contacts-widget .ms-ct-btn:hover:not(:disabled),
+#ms-contacts-canvas-overlay .ms-ct-btn:hover:not(:disabled) {
   background: #1d4ed8;
 }
 
-#ms-contacts-widget .ms-ct-btn:disabled {
+#ms-contacts-widget .ms-ct-btn:disabled,
+#ms-contacts-canvas-overlay .ms-ct-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-#ms-contacts-widget .ms-ct-btn-ghost {
+#ms-contacts-widget .ms-ct-btn-ghost,
+#ms-contacts-canvas-overlay .ms-ct-btn-ghost {
   padding: 6px 12px;
   background: transparent;
   color: #2563eb;
@@ -180,7 +186,8 @@
   cursor: pointer;
 }
 
-#ms-contacts-widget .ms-ct-btn-ghost:hover:not(:disabled) {
+#ms-contacts-widget .ms-ct-btn-ghost:hover:not(:disabled),
+#ms-contacts-canvas-overlay .ms-ct-btn-ghost:hover:not(:disabled) {
   background: #f0f4ff;
 }
 
@@ -196,12 +203,14 @@
   font-style: italic;
 }
 
-#ms-contacts-widget .ms-ct-note {
+#ms-contacts-widget .ms-ct-note,
+#ms-contacts-canvas-overlay .ms-ct-note {
   font-size: 12px;
   color: #666;
 }
 
-#ms-contacts-widget .ms-ct-error {
+#ms-contacts-widget .ms-ct-error,
+#ms-contacts-canvas-overlay .ms-ct-error {
   padding: 8px 10px;
   background: #fff5f5;
   border: 1px solid #fca5a5;
@@ -210,7 +219,8 @@
   color: #b91c1c;
 }
 
-#ms-contacts-widget .ms-ct-warn {
+#ms-contacts-widget .ms-ct-warn,
+#ms-contacts-canvas-overlay .ms-ct-warn {
   padding: 8px 10px;
   background: #fffbeb;
   border: 1px solid #fcd34d;
