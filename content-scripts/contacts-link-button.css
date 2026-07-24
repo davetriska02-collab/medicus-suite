@@ -79,7 +79,8 @@
 }
 
 #ms-contacts-widget .ms-ct-pick-row,
-#ms-contacts-widget .ms-ct-result-row {
+#ms-contacts-widget .ms-ct-result-row,
+#ms-contacts-widget .ms-ct-import-result-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -91,9 +92,25 @@
 }
 
 #ms-contacts-widget .ms-ct-pick-row:hover,
-#ms-contacts-widget .ms-ct-result-row:hover {
+#ms-contacts-widget .ms-ct-result-row:hover,
+#ms-contacts-widget .ms-ct-import-result-row:hover {
   background: #f7f9ff;
   border-color: #c3cef5;
+}
+
+#ms-contacts-widget .ms-ct-import-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px;
+  border: 1px solid #e2e6f0;
+  border-radius: 5px;
+}
+
+#ms-contacts-widget .ms-ct-import-mods label {
+  margin-right: 8px;
+  font-size: 12px;
 }
 
 #ms-contacts-widget .ms-ct-pick-name {

@@ -40,7 +40,8 @@
       indexPatientDetails: null, // full patient-details response for the page's own patient
       loading: false,
       error: null,
-      step: 'pick', // 'pick' | 'search' | 'confirm' | 'working' | 'done'
+      mode: 'convert', // 'convert' | 'import' — Phase 1's single-contact flow, or Phase 2's bulk import
+      step: 'pick', // convert: 'pick'|'search'|'confirm'|'working'|'done'; import: 'import-search'|'import-pick'|'import-working'|'import-done'
 
       manualContacts: [], // [{ patientContactId, patientContactName, patientContactRelationship }]
       selectedManualContact: null,
@@ -69,6 +70,16 @@
       doneSummary: null,
       reverseManualMatch: null, // a likely-matching manual contact found on the candidate's OWN record, offered for removal
       reverseManualMatchError: null,
+
+      // ── Phase 2: bulk import of already-linked contacts from another patient's record ──────────
+      importSearchQuery: '',
+      importSearchResults: [], // raw patient-finder results — no fuzzy scoring needed, this is picking a KNOWN patient
+      importSourcePatient: null,
+      importEligibleContacts: [], // [{ patientContactId, patientId, name, baseId, modifierId, isNextOfKin, copyCorrespondence, selected }]
+      importIneligibleCount: 0, // source's own manual-only entries, filtered out (bulk-copying them would just create another manual duplicate)
+      importAlreadyLinkedCount: 0, // entries the index patient already has a real link to, filtered out
+      importWorkingError: null,
+      importDoneSummary: null,
     };
   }
 
@@ -138,21 +149,29 @@
         body = `<div class="ms-ct-body"><div class="ms-ct-loading">Linking contact…</div></div>`;
       } else if (s.step === 'done') {
         body = renderDone();
+      } else if (s.step === 'import-search') {
+        body = renderImportSearch();
+      } else if (s.step === 'import-pick') {
+        body = renderImportPick();
+      } else if (s.step === 'import-working') {
+        body = `<div class="ms-ct-body"><div class="ms-ct-loading">Importing contacts…</div></div>`;
+      } else if (s.step === 'import-done') {
+        body = renderImportDone();
       }
     }
     return `
       <div class="ms-ct-header" id="ms-ct-toggle" role="button" tabindex="0" aria-expanded="${s.open}">
         <span class="ms-ct-chevron">${s.open ? '▾' : '▸'}</span>
-        <span>Convert a manual contact to a linked patient</span>
+        <span>Manage this patient's contacts</span>
       </div>
       ${body}
     `;
   }
 
   function renderPick() {
-    if (!s.manualContacts.length) {
-      return `<div class="ms-ct-body"><div class="ms-ct-empty">No manual (unlinked) contacts found on this record.</div></div>`;
-    }
+    const empty = !s.manualContacts.length
+      ? `<div class="ms-ct-empty">No manual (unlinked) contacts found on this record.</div>`
+      : '';
     const rows = s.manualContacts
       .map(
         (c) => `
@@ -165,7 +184,9 @@
         </div>`
       )
       .join('');
-    return `<div class="ms-ct-body">${rows}</div>`;
+    return `<div class="ms-ct-body">${empty}${rows}
+      <button class="ms-ct-btn-ghost" id="ms-ct-switch-import">Or import contacts already linked on another patient's record</button>
+    </div>`;
   }
 
   function renderSearch() {
@@ -289,6 +310,129 @@
         }
         ${s.reverseManualMatchError ? `<div class="ms-ct-error">${esc(s.reverseManualMatchError)}</div>` : ''}
         <button class="ms-ct-btn-ghost" id="ms-ct-again">Convert another</button>
+      </div>
+    `;
+  }
+
+  function renderImportSearch() {
+    const results = s.importSearchResults
+      .map(
+        (r) => `
+        <div class="ms-ct-row ms-ct-import-result-row" data-import-patient-id="${esc(r.patientId)}" data-import-patient-name="${esc(r.displayName)}">
+          <div>
+            <div class="ms-ct-pick-name">${esc(r.displayName)}</div>
+            <div class="ms-ct-pick-rel">${esc(r.dateOfBirth || '')}</div>
+          </div>
+        </div>`
+      )
+      .join('');
+    // "Listed as Contact For" — patients who already list THIS patient as their own contact.
+    // Already fetched in doOpen() as part of indexPatientDetails, so these are free, likely-family
+    // shortcuts to start an import from, rather than making the user type a name they might not
+    // even know is already connected.
+    const reciprocalEntries =
+      (s.indexPatientDetails.patientLinkedContactsSection &&
+        s.indexPatientDetails.patientLinkedContactsSection.patientContacts) ||
+      [];
+    const quickPicks = reciprocalEntries
+      .map(
+        (c) => `
+        <div class="ms-ct-row ms-ct-import-result-row" data-import-patient-id="${esc(c.linkedPatientId)}" data-import-patient-name="${esc(c.linkedPatientContactName)}">
+          <div>
+            <div class="ms-ct-pick-name">${esc(c.linkedPatientContactName)}</div>
+            <div class="ms-ct-pick-rel">Lists this patient as their "${esc(c.patientContactRelationship)}"</div>
+          </div>
+        </div>`
+      )
+      .join('');
+    return `
+      <div class="ms-ct-body">
+        <button class="ms-ct-btn-ghost" id="ms-ct-import-back">← Back</button>
+        ${
+          quickPicks
+            ? `<div class="ms-ct-row"><span class="ms-ct-label">Already listed as a contact for</span></div>${quickPicks}`
+            : ''
+        }
+        <div class="ms-ct-row">
+          <label class="ms-ct-label" for="ms-ct-import-search">Or search for another patient</label>
+          <input class="ms-ct-input" id="ms-ct-import-search" type="text" value="${esc(s.importSearchQuery)}" placeholder="Patient name" />
+        </div>
+        ${results || (s.importSearchQuery.trim() ? '<div class="ms-ct-empty">No matches yet — refine the search.</div>' : '')}
+      </div>
+    `;
+  }
+
+  function renderImportPick() {
+    const rel = window.ContactRelationships;
+    const allRelIds = Object.keys(rel.ALIAS_TERMS).concat(['other']);
+    const notes = [];
+    if (s.importIneligibleCount) {
+      notes.push(
+        `${s.importIneligibleCount} of ${s.importSourcePatient.displayName}'s own contact${s.importIneligibleCount === 1 ? '' : 's'} ${s.importIneligibleCount === 1 ? 'is' : 'are'} still manual (not yet linked to a real Medicus patient) and can't be safely bulk-imported this way — convert ${s.importIneligibleCount === 1 ? 'it' : 'them'} on their own record first if needed.`
+      );
+    }
+    if (s.importAlreadyLinkedCount) {
+      notes.push(
+        `${s.importAlreadyLinkedCount} already linked to this patient and ${s.importAlreadyLinkedCount === 1 ? 'was' : 'were'} left out to avoid a duplicate.`
+      );
+    }
+    if (!s.importEligibleContacts.length) {
+      return `<div class="ms-ct-body">
+        <button class="ms-ct-btn-ghost" id="ms-ct-import-back">← Back</button>
+        <div class="ms-ct-empty">Nothing eligible to import from ${esc(s.importSourcePatient.displayName)}'s record.${notes.length ? ' ' + esc(notes.join(' ')) : ''}</div>
+      </div>`;
+    }
+    const rows = s.importEligibleContacts
+      .map((c) => {
+        const validMods = rel.validModifiersForBase(c.baseId);
+        const baseSelect = allRelIds
+          .map((id) => {
+            const r = rel.getRelationship(id);
+            if (!r) return '';
+            return `<option value="${esc(id)}"${c.baseId === id ? ' selected' : ''}>${esc(r.label)}</option>`;
+          })
+          .join('');
+        const modRadios = validMods.length
+          ? `<span class="ms-ct-import-mods" data-import-contact-id="${esc(c.patientContactId)}">
+              <label><input type="radio" name="ms-ct-import-mod-${esc(c.patientContactId)}" value="" ${!c.modifierId ? 'checked' : ''}/> None</label>
+              ${validMods
+                .map(
+                  (m) =>
+                    `<label><input type="radio" name="ms-ct-import-mod-${esc(c.patientContactId)}" value="${esc(m)}" ${c.modifierId === m ? 'checked' : ''}/> ${esc(rel.getModifiers().find((mm) => mm.id === m).label)}</label>`
+                )
+                .join(' ')}
+            </span>`
+          : '';
+        return `
+        <div class="ms-ct-row ms-ct-import-row">
+          <label><input type="checkbox" class="ms-ct-import-select" data-import-contact-id="${esc(c.patientContactId)}" ${c.selected ? 'checked' : ''}/> <strong>${esc(c.name)}</strong> <span class="ms-ct-note">(recorded as "${esc(c.sourceRelationship)}" on their record)</span></label>
+          <select class="ms-ct-select ms-ct-import-base" data-import-contact-id="${esc(c.patientContactId)}">${baseSelect}</select>
+          ${modRadios}
+          <label><input type="checkbox" class="ms-ct-import-nok" data-import-contact-id="${esc(c.patientContactId)}" ${c.isNextOfKin ? 'checked' : ''}/> Next of kin</label>
+          <label><input type="checkbox" class="ms-ct-import-copy" data-import-contact-id="${esc(c.patientContactId)}" ${c.copyCorrespondence ? 'checked' : ''}/> Copy correspondence</label>
+        </div>`;
+      })
+      .join('');
+    return `
+      <div class="ms-ct-body">
+        <button class="ms-ct-btn-ghost" id="ms-ct-import-back">← Back</button>
+        <div class="ms-ct-row"><span class="ms-ct-label">Importing from</span><strong>${esc(s.importSourcePatient.displayName)}</strong></div>
+        ${notes.length ? `<div class="ms-ct-note">${esc(notes.join(' '))}</div>` : ''}
+        ${rows}
+        ${s.importWorkingError ? `<div class="ms-ct-error">${esc(s.importWorkingError)}</div>` : ''}
+        <button class="ms-ct-btn" id="ms-ct-import-confirm">Import selected contacts</button>
+      </div>
+    `;
+  }
+
+  function renderImportDone() {
+    return `
+      <div class="ms-ct-body ms-ct-success">
+        <div class="ms-ct-success-icon">✓</div>
+        <div>${esc(s.importDoneSummary || 'Contacts imported.')}</div>
+        <div class="ms-ct-note">Medicus's own contacts card won't show this change until the page is refreshed.</div>
+        <button class="ms-ct-btn" id="ms-ct-reload">Refresh now</button>
+        <button class="ms-ct-btn-ghost" id="ms-ct-import-again">Import more from another patient</button>
       </div>
     `;
   }
@@ -600,6 +744,173 @@
     }
   }
 
+  // ── Phase 2: bulk import of already-linked contacts from another patient's record ──────────────
+
+  function switchToImportMode() {
+    s.mode = 'import';
+    s.step = 'import-search';
+    s.importSearchQuery = '';
+    s.importSearchResults = [];
+    s.importSourcePatient = null;
+    s.importEligibleContacts = [];
+    rerender();
+  }
+
+  function backToConvertMode() {
+    s.mode = 'convert';
+    s.step = 'pick';
+    rerender();
+  }
+
+  async function runImportSearch() {
+    const query = s.importSearchQuery.trim();
+    if (query.length < 2) {
+      s.importSearchResults = [];
+      rerender();
+      return;
+    }
+    try {
+      s.importSearchResults = await window.ContactsApi.searchPatients(s.apiBase, query);
+    } catch (err) {
+      s.error = err.message || 'Search failed.';
+    }
+    rerender();
+  }
+
+  // pickImportSource({patientId, displayName}) — fetches the source patient's own full contact
+  // list twice over: lookup-patient-contacts (Medicus's own "add contacts from another patient"
+  // listing) and patient-details (which, unlike the lookup response, carries
+  // patientContactPatientId per entry — the only way to tell a REAL link apart from a still-manual
+  // one on their side). Confirmed live behaviour: bulk-copying a still-manual source entry via
+  // link-contacts does NOT create a real link, just another manual duplicate — so entries without
+  // a real patientContactPatientId are filtered out here rather than offered.
+  // Accepts a plain {patientId, displayName} object directly (rather than looking one up by id in
+  // s.importSearchResults) so it works equally for a typed search result AND a "Listed as Contact
+  // For" quick-pick, which isn't sourced from patient-finder at all.
+  //
+  // CROSS-REFERENCE NOTE (confirmed live): lookup-patient-contacts' patientContactId is NOT the
+  // same identifier as patientContactsSection's patientContactId for the same relationship —
+  // they're distinct UUIDs (same creation-time prefix, since Medicus mints both around the same
+  // moment, but genuinely different values). There is no shared id to join on. Matching by name +
+  // relationship text is what actually lines up between the two responses, so that's the join key
+  // used below — good enough given both fields are always present, but a source patient with two
+  // contacts sharing an identical name AND relationship text (rare) could cross-reference the
+  // wrong one. The lookup response's OWN patientContactId is still exactly what gets sent back to
+  // Medicus in the link-contacts POST body — only the cross-reference below needed to change.
+  async function pickImportSource(source) {
+    if (!source || !source.patientId) return;
+    s.importSourcePatient = source;
+    s.loading = true;
+    rerender();
+    try {
+      const [lookup, sourceDetails] = await Promise.all([
+        window.ContactsApi.lookupPatientContacts(s.apiBase, s.patientId, source.patientId),
+        window.ContactsApi.getPatientDetails(s.apiBase, source.patientId),
+      ]);
+      const sourceContacts =
+        (sourceDetails.patientContactsSection && sourceDetails.patientContactsSection.patientContacts) || [];
+      const alreadyLinkedIds = new Set(
+        (
+          (s.indexPatientDetails.patientContactsSection &&
+            s.indexPatientDetails.patientContactsSection.patientContacts) ||
+          []
+        )
+          .map((c) => c.patientContactPatientId)
+          .filter(Boolean)
+      );
+      let ineligible = 0;
+      let alreadyLinked = 0;
+      const eligible = [];
+      for (const entry of lookup.lookupPatientRelationships || []) {
+        const sourceEntry = sourceContacts.find(
+          (c) =>
+            c.patientContactName === entry.patientContactName &&
+            c.patientContactRelationship === entry.patientContactRelationship
+        );
+        const realPatientId = sourceEntry && sourceEntry.patientContactPatientId;
+        if (!realPatientId) {
+          ineligible++;
+          continue;
+        }
+        if (alreadyLinkedIds.has(realPatientId)) {
+          alreadyLinked++;
+          continue;
+        }
+        const guess = window.ContactRelationships.normaliseFreeText(entry.patientContactRelationship);
+        eligible.push({
+          patientContactId: entry.patientContactId,
+          patientId: realPatientId,
+          name: entry.patientContactName,
+          sourceRelationship: entry.patientContactRelationship,
+          baseId: (guess && guess.baseId) || 'other',
+          modifierId: (guess && guess.modifierId) || null,
+          isNextOfKin: false,
+          copyCorrespondence: false,
+          selected: false,
+        });
+      }
+      s.importEligibleContacts = eligible;
+      s.importIneligibleCount = ineligible;
+      s.importAlreadyLinkedCount = alreadyLinked;
+      s.step = 'import-pick';
+    } catch (err) {
+      s.error = err.message || 'Failed to load contacts from that patient’s record.';
+    } finally {
+      s.loading = false;
+      rerender();
+    }
+  }
+
+  function updateImportRow(contactId, patch) {
+    const row = s.importEligibleContacts.find((c) => c.patientContactId === contactId);
+    if (!row) return;
+    Object.assign(row, patch);
+  }
+
+  async function doImportConfirm() {
+    const selected = s.importEligibleContacts.filter((c) => c.selected);
+    if (s.step !== 'import-pick' || !selected.length) return;
+    s.step = 'import-working';
+    s.importWorkingError = null;
+    rerender();
+    // WRONG-PATIENT GUARD: same discipline as doConfirm() — re-verify immediately before the write.
+    const st = s;
+    try {
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the panel and try again.');
+      }
+      const body = {
+        patientId: st.patientId,
+        patientContactRelationships: selected.map((c) => ({
+          patientContactId: c.patientContactId,
+          relationship: window.ContactRelationships.formatLabel(c.baseId, c.modifierId),
+          nextOfKin: c.isNextOfKin,
+          copyCorrespondence: c.copyCorrespondence,
+          notes: '',
+        })),
+      };
+      await window.ContactsApi.linkContactsBulk(st.apiBase, body);
+      if (st !== s) return;
+      st.importDoneSummary = `Imported ${selected.length} contact${selected.length === 1 ? '' : 's'} from ${st.importSourcePatient.displayName}'s record.`;
+      st.step = 'import-done';
+      // Refresh the cached index-patient details in the background so a subsequent "import more"
+      // in this same widget session has an up-to-date already-linked list to de-dup against —
+      // best-effort, never blocks the done screen from showing.
+      window.ContactsApi.getPatientDetails(st.apiBase, st.patientId).then(
+        (details) => {
+          if (st === s) st.indexPatientDetails = details;
+        },
+        () => {}
+      );
+    } catch (err) {
+      st.step = 'import-pick';
+      st.importWorkingError = err.message || 'Failed to import the selected contacts — nothing was changed.';
+    } finally {
+      if (st === s) rerender();
+    }
+  }
+
   // ── Event binding ─────────────────────────────────────────────────────────────────────────────
 
   function bindEvents(el) {
@@ -695,6 +1006,60 @@
         rerender();
       }
     });
+
+    // ── Phase 2: bulk import ──────────────────────────────────────────────────────────────────
+
+    el.querySelector('#ms-ct-switch-import')?.addEventListener('click', () => switchToImportMode());
+    el.querySelector('#ms-ct-import-back')?.addEventListener('click', () => backToConvertMode());
+
+    let importSearchTimer = null;
+    el.querySelector('#ms-ct-import-search')?.addEventListener('input', (e) => {
+      s.importSearchQuery = e.target.value;
+      if (importSearchTimer) clearTimeout(importSearchTimer);
+      importSearchTimer = setTimeout(runImportSearch, 300);
+    });
+
+    el.querySelectorAll('.ms-ct-import-result-row').forEach((row) => {
+      row.addEventListener('click', () =>
+        pickImportSource({
+          patientId: row.getAttribute('data-import-patient-id'),
+          displayName: row.getAttribute('data-import-patient-name'),
+        })
+      );
+    });
+
+    el.querySelectorAll('.ms-ct-import-select').forEach((cb) => {
+      cb.addEventListener('change', (e) => {
+        updateImportRow(cb.getAttribute('data-import-contact-id'), { selected: e.target.checked });
+      });
+    });
+    el.querySelectorAll('.ms-ct-import-base').forEach((sel) => {
+      sel.addEventListener('change', (e) => {
+        updateImportRow(sel.getAttribute('data-import-contact-id'), { baseId: e.target.value, modifierId: null });
+        rerender();
+      });
+    });
+    el.querySelectorAll('.ms-ct-import-mods input[type="radio"]').forEach((r) => {
+      r.addEventListener('change', (e) => {
+        if (!e.target.checked) return;
+        updateImportRow(r.closest('.ms-ct-import-mods').getAttribute('data-import-contact-id'), {
+          modifierId: e.target.value || null,
+        });
+      });
+    });
+    el.querySelectorAll('.ms-ct-import-nok').forEach((cb) => {
+      cb.addEventListener('change', (e) => {
+        updateImportRow(cb.getAttribute('data-import-contact-id'), { isNextOfKin: e.target.checked });
+      });
+    });
+    el.querySelectorAll('.ms-ct-import-copy').forEach((cb) => {
+      cb.addEventListener('change', (e) => {
+        updateImportRow(cb.getAttribute('data-import-contact-id'), { copyCorrespondence: e.target.checked });
+      });
+    });
+
+    el.querySelector('#ms-ct-import-confirm')?.addEventListener('click', () => doImportConfirm());
+    el.querySelector('#ms-ct-import-again')?.addEventListener('click', () => switchToImportMode());
   }
 
   // ── SPA navigation & re-injection ─────────────────────────────────────────────────────────────

@@ -2,6 +2,50 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.179.2] — 2026-07-24
+
+### Contacts Management — fix bulk-import eligibility cross-reference
+
+Root-caused via a live diagnostic capture: `lookup-patient-contacts`' `patientContactId`
+values are NOT the same identifiers as the source patient's own `patientContactsSection`
+`patientContactId` values — they're distinct UUIDs Medicus mints moments apart (same
+creation-time prefix, different value), not a shared key. The eligibility cross-reference
+was matching on this non-existent shared id, so every entry silently fell through to
+"still manual" regardless of its real status. Now matches on name + relationship text
+instead, which is confirmed to line up between the two responses. The lookup response's own
+`patientContactId` is unaffected — it's still exactly what gets sent back in the
+`link-contacts` POST body.
+
+## [v3.179.1] — 2026-07-24
+
+### Contacts Management — quick-pick import sources from "Listed as Contact For"
+
+The bulk-import search screen now leads with quick-pick shortcuts for any patient who
+already lists this patient as their own contact (`patientLinkedContactsSection`, already
+fetched in `doOpen()` — no extra API call) — the most likely candidates to import further
+already-linked contacts from, without the user needing to type a name they might not even
+know is already connected the other way. Free-text search remains available underneath for
+anyone not in that list.
+
+## [v3.179.0] — 2026-07-24
+
+### Contacts Management — Phase 2: bulk import of already-linked contacts
+
+Second user-facing slice of the Contacts linking tool (see the build plan): from the same
+widget, "Or import contacts already linked on another patient's record" starts a bulk-import
+flow — search for another patient (e.g. a parent), and import their already-linked contacts
+(e.g. siblings) onto this patient in one action via Medicus's own `link-contacts` endpoint.
+
+- Only contacts that are already REAL links on the source patient's own record are ever
+  offered — bulk-copying a still-manual entry via `link-contacts` doesn't create a real link
+  (confirmed live during the build), it just creates another manual duplicate, so those are
+  filtered out with a plain-language explanation of why, alongside anything already linked to
+  this patient (skipped to avoid a duplicate, same discipline as Phase 1).
+- Each eligible contact gets its own relationship/modifier/NOK/copy-correspondence controls
+  (defaulted from the source's own free-text relationship where it maps to the canonical
+  vocabulary, always editable) — nothing is bulk-applied without visibility per contact.
+- Same wrong-patient guard and "Refresh now" prompt as Phase 1.
+
 ## [v3.178.4] — 2026-07-24
 
 ### Contacts Management — fix duplicate-link 400, suggest relationship from an existing reciprocal
