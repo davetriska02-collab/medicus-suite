@@ -58,9 +58,36 @@ console.log('--- rules/non-problem-root-codes.json: the imported roots list itse
     !!regForm && regForm.description === 'Patient signed reg. form',
     '184063008 "Patient signed reg. form" is present (added 2026-07-25)'
   );
+  // 18 more roots added 2026-07-25 (LMP/EDD/B12-monitoring/wound-care/B12-treatment/
+  // flu-vaccination/referral/medication-review/NHS-Health-Check family/admin-statuses/
+  // diary-entry) -- researched via the public termbrowser API, see rules file rationale.
+  const expectedNewRoots = [
+    ['21840007', 'Date of last menstrual period'],
+    ['161714006', 'Estimated date of delivery'],
+    ['170818005', 'B12 deficiency monitoring'],
+    ['243863004', 'B12 deficiency monitoring status'],
+    ['225358003', 'Wound care'],
+    ['709544008', 'Administration of vitamin B12'],
+    ['86198006', 'Influenza vaccination'],
+    ['3457005', 'Patient referral'],
+    ['182836005', 'Review of medication'],
+    ['314529007', 'Medication review due'],
+    ['314530002', 'Medication review done'],
+    ['523221000000100', 'NHS Health Check completed'],
+    ['523201000000109', 'NHS Health Check indicated'],
+    ['763661000000101', 'NHS Health Check annual review'],
+    ['519961000000106', 'NHS Health check programme'],
+    ['268565007', 'Adult health examination'],
+    ['307824009', 'Administrative statuses (finding)'],
+    ['1239671000000106', 'Primary care diary entry'],
+  ];
+  for (const [conceptId, description] of expectedNewRoots) {
+    const root = nonProblemRootCodes.roots.find((r) => r.conceptId === conceptId);
+    check(!!root && root.description === description, `${conceptId} "${description}" is present (added 2026-07-25)`);
+  }
   check(
-    nonProblemRootCodes.roots.length === 3,
-    'exactly 3 roots configured (got ' + nonProblemRootCodes.roots.length + ')'
+    nonProblemRootCodes.roots.length === 21,
+    'exactly 21 roots configured (got ' + nonProblemRootCodes.roots.length + ')'
   );
 }
 

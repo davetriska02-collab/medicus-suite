@@ -2,6 +2,57 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.191.0] — 2026-07-25
+
+### "Bulk remove?" gains 18 more non-problem roots — beyond pure admin/claim artefacts
+
+Extends `rules/non-problem-root-codes.json` (used by `content-scripts/problem-junk-code-cleanup.js`)
+with a new class of candidate, beyond the original administrative/claim-artefact roots
+(14734007/12821000000103/184063008): genuine clinical DATA or ACTIVITIES that clinicians agreed
+should never sit in the problem list itself, even though they belong in the record.
+
+User's own reasoning, per category:
+- **LMP / EDD** (`21840007`, `161714006`) — real clinical markers, but treating them as
+  "problems" would generate ~12 fake problem entries a year for LMP alone; self-evidently not
+  what the problem list is for.
+- **B12 deficiency monitoring** (`170818005` finding + `243863004` status) — the deficiency
+  itself is a real problem; the ongoing monitoring of it is admin, not the problem.
+- **Wound care** (`225358003`) and **B12 administration** (`709544008`) — treatment FOR a
+  problem, not the problem itself (explicitly NOT a hard rule — clinically significant
+  treatment like chemotherapy would still belong on the problem list; these are minor by
+  comparison).
+- **Influenza vaccination** (`86198006`) — same over-counting logic as LMP (many adults get 2 a
+  year); deliberately scoped to flu only, not all vaccines.
+- **Patient referral** (`3457005`) — a broad root by design: referral status/type entries are
+  admin for a problem, not the problem itself, whichever specialty or urgency.
+- **Medication review** (`182836005` + due/done statuses `314529007`/`314530002`) and **Adult
+  health examination** (`268565007`) — genuine clinical activities that GP2GP source systems
+  sometimes file as problems, even though the activity isn't a diagnosis.
+- **NHS Health Check family** (`523221000000100` completed, `523201000000109` indicated,
+  `763661000000101` annual review, `519961000000106` programme) — administrative
+  programme-status markers; SNOMED models these as separate branches with no shared ancestor
+  narrow enough to use as one root, hence four leaf entries (the "invitation" variant was
+  already covered by the existing 14734007 root).
+- **Administrative statuses** (`307824009`) — a broad, well-precedented "Clinical finding"
+  subtree (not the whole hierarchy) already explicitly excluded elsewhere in this codebase's own
+  SNOMED search scope as "not a real clinical finding"; covers follow-up status/arranged, notes
+  summary on computer, and letter sent to patient in one root.
+- **Diary event recall** (`1239671000000106`) — a system-generated administrative record
+  artefact.
+
+All 18 roots were researched via the PUBLIC no-auth NHS termbrowser API (ancestor-chain lookups
+confirming ROOT-of coverage — e.g. that LMP's two other wordings and EDD's two other wordings
+are genuine descendants of a single concept each), not yet re-confirmed against Medicus's own
+live search on a real patient — same provisional caveat as any rules-file entry added without a
+live capture.
+
+Several candidates raised in the same discussion were deliberately EXCLUDED: "Student"
+(parked — could go either way), and several terms with no confident SNOMED match found via
+public search (Routine Child Health Exam, Elderly Health Assessment, Flu immunisation protocol,
+Health Clinic) — left for a future session with a real patient example.
+
+18 new coverage checks in `test-problem-junk-code-cleanup.js` (58 total, up from 40).
+
 ## [v3.190.0] — 2026-07-25
 
 ### "Fix description" scan gains two more independent checks: Read-code-derived text, generic import noise
