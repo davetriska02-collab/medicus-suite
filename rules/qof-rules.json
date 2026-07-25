@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-07-11",
+  "lastUpdated": "2026-07-25",
   "specVersion": "QOF 2026/27",
-  "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes.",
-  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-07-11 (The Keeper): added LD register; DEM004 (dementia care plan review); CKD002 (BP target) and CKD003 (ACEi/ARB in CKD+HYP+proteinuria); CHOL003 extended to PAD, STIA, CKD registers (3 new clones); CHOL004 extended to PAD and STIA registers (2 new clones; CKD explicitly NOT covered by CHOL004 per PRN02356). Primary PDF 403 this run — all corroborated via PRN02356 search.",
+  "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes. NOTE (qof-007, 2026-07-25): a July 2026 amendment document exists (PRN02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf); content not readable this run (403) — next Keeper run should check all indicators against the amendment. DEM004 is the only indicator confirmed to have been wrong (now corrected in this run).",
+  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-07-11 (The Keeper): added LD register; DEM004 (dementia care plan review); CKD002 (BP target) and CKD003 (ACEi/ARB in CKD+HYP+proteinuria); CHOL003 extended to PAD, STIA, CKD registers (3 new clones); CHOL004 extended to PAD and STIA registers (2 new clones; CKD explicitly NOT covered by CHOL004 per PRN02356). Primary PDF 403 that run — all corroborated via PRN02356 search. 2026-07-25 (The Keeper): CORRECTED DEM004 (30pts/60-90% → 14pts/35-70% — was wrong due to 403 on primary PDF); ENABLED OB register with ageMin:18 corrected (was 16, wrong for QOF 2026/27 definition); LD notes updated to clarify DES/enhanced-service status of annual health check; AF006 upper:95 CONFIRMED correct for 26/27 (proposed revert to 90% killed by VERIFIER-B). PRN02356 July 2026 amendment noted above.",
   "rules": [
     {
       "id": "qof-reg-dm",
@@ -227,9 +227,10 @@
     {
       "id": "qof-reg-ob",
       "type": "qof-register",
-      "enabled": false,
+      "enabled": true,
       "registerCode": "OB",
       "registerName": "Obesity",
+      "ageMin": 18,
       "problemMatch": [
         "obesity",
         "obese",
@@ -243,8 +244,8 @@
         "maternal obesity",
         "history of obesity in family"
       ],
-      "source": "QOF 26/27 OB register (NEW clinical area for 2026/27, NHS England PRN02356). DRAFT — corroborated via search, pending PRN02356 primary-source confirmation.",
-      "notes": "NEW for 26/27. The true QOF Obesity register is BMI-driven (adults with a BMI ≥30, or ≥27.5 for people of South Asian, Chinese, other Asian, Middle Eastern, Black African or African-Caribbean family background, recorded in the preceding 12 months) — it is NOT a problem-coded register. Sentinel approximates it here with substring problem-matching, which will MISS obese patients who have a recorded BMI but no 'obesity' problem label, and is age-agnostic. Proper membership needs a BMI-observation-based register (engine extension) before this should be relied on. Underpins indicators OB004/OB005 (shipped disabled pending confirmation)."
+      "source": "QOF 26/27 OB register (NHS England PRN02356). ENABLED 2026-07-25 (The Keeper, qof-003 AMBER): register is active in QOF 2026/27. ageMin corrected from 16 to 18 simultaneously — the QOF register definition specifies adults aged 18+ (BMI ≥30, or ≥27.5 for South Asian, Chinese, other Asian, Middle Eastern, Black African or African-Caribbean patients). VERIFIER-B confirmed at HIGH confidence from multiple NHS England QOF 2026/27 sources. CSO should review before first QOF claim.",
+      "notes": "NEW for 26/27. The true QOF Obesity register is BMI-driven (adults aged 18+ with a BMI ≥30, or ≥27.5 for people of South Asian, Chinese, other Asian, Middle Eastern, Black African or African-Caribbean family background, recorded in the preceding 12 months) — it is NOT a problem-coded register. Sentinel approximates it here with substring problem-matching (ageMin:18 enforced to match QOF definition — 16-17 year olds are correctly excluded), which will MISS obese patients who have a recorded BMI but no 'obesity' problem label. Proper membership needs a BMI-observation-based register (engine extension) before this can be fully relied on. OB004 and OB005 remain disabled pending correct definition — qof-004/qof-005 killed by VERIFIER-B (OB003 retired; OB004 wrong description); correct OB004/OB005 parameters to be encoded in a future Keeper run."
     },
     {
       "id": "qof-reg-ld",
@@ -270,8 +271,8 @@
         "family history",
         "no learning disability"
       ],
-      "source": "QOF 26/27 LD register (LD_COD refset approximation — corroborated via PRN02356 search; primary PDF 403 this run). Added 2026-07-11 (The Keeper).",
-      "notes": "The QOF LD register is defined by SNOMED codes for intellectual disability; Sentinel approximates via problem substring matching. This will miss patients with a learning disability not coded using these terms. Down's syndrome and Fragile X are the most commonly encountered specific diagnoses in primary care LD registers. Autism spectrum disorder (ASD) without intellectual disability does NOT qualify for the QOF LD register — autistic patients who do not have a separately coded intellectual disability are correctly not flagged. The LD register underpins the annual health check indicator (LD004, not yet encoded — engine needs a specific encounter-type gate for an LD annual health check; add when engine support lands)."
+      "source": "QOF 26/27 LD register (LD_COD refset approximation — corroborated via PRN02356 search; primary PDF 403 this run). Added 2026-07-11 (The Keeper). 2026-07-25 (qof-006, VERIFIER-B GREEN): LD annual health check confirmed as a Directed Enhanced Service (DES), NOT a core QOF clinical indicator — notes updated accordingly.",
+      "notes": "The QOF LD register is defined by SNOMED codes for intellectual disability; Sentinel approximates via problem substring matching. This will miss patients with a learning disability not coded using these terms. Down's syndrome and Fragile X are the most commonly encountered specific diagnoses in primary care LD registers. Autism spectrum disorder (ASD) without intellectual disability does NOT qualify for the QOF LD register — autistic patients who do not have a separately coded intellectual disability are correctly not flagged. LD ANNUAL HEALTH CHECK: confirmed as a Directed Enhanced Service (DES/Learning Disability Health Check Scheme 2025-2028, managed via CQRS), NOT a core QOF clinical domain indicator — the QOF LD register identifies eligible patients but the health check itself and its £140 payment sit in enhanced services. Health check indicator (LD004-equivalent) not encoded here; the DES-linked check should be tracked separately via the enhanced-services workflow."
     },
     {
       "id": "qof-hyp008",
@@ -1739,11 +1740,11 @@
         "withinDays": 365
       },
       "thresholds": {
-        "lower": 60,
-        "upper": 90
+        "lower": 35,
+        "upper": 70
       },
-      "points": 30,
-      "source": "QOF 26/27 DEM004 — corroborated via PRN02356 search; primary PDF 403 this run. Added 2026-07-11 (The Keeper).",
+      "points": 14,
+      "source": "QOF 26/27 DEM004 — PRN02356 (NHS England). CORRECTED 2026-07-25 (The Keeper, qof-001 RED): previous encoding at 30pts/60-90% was wrong (primary PDF was 403 on 2026-07-11 run; incorrect values were used). Correct values 14pts/35-70% confirmed at HIGH confidence from multiple independent QOF 2026/27 guidance sources (PracticeIndex, QMasters, Primary Care IT) all citing PRN02356 directly. VERIFIER-B confirmed at HIGH confidence.",
       "notes": "Dementia care plan review in the preceding 12 months. The full QOF requirement includes review of: current symptoms, medications (especially anticholinergic burden), carer needs, and advance care planning status. Sentinel approximates with presence of a dementia-review or care-plan code within the year — it cannot verify that all review components were addressed. Clinician must confirm full review including carer assessment. Frailty exclusion is NOT applied here per PRN02356 (dementia is itself a frailty condition — the review is the intervention, not a treatment target)."
     },
     {

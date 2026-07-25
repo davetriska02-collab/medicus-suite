@@ -80,6 +80,9 @@
     { term: 'hydroxyzine', score: 3 },
     { term: 'diphenhydramine', score: 3 },
     { term: 'cyclizine', score: 3 },
+    { term: 'alimemazine', score: 3, note: '2026-07-25 Keeper: sedating first-gen AH (= trimeprazine); ACBcalc score 3; UK brand Vallergan' },
+    { term: 'trimeprazine', score: 3, note: '2026-07-25 Keeper: older name for alimemazine; ACBcalc score 3; not substring of alimemazine so listed separately' },
+    { term: 'brompheniramine', score: 3, note: '2026-07-25 Keeper: first-gen AH; ACBcalc score 3; found in some OTC combination products in UK' },
     // ── Score 3: Antipsychotics with high ACB ────────────────────────────────
     { term: 'olanzapine', score: 3 },
     { term: 'quetiapine', score: 3 },

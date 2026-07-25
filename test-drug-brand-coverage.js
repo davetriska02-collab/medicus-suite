@@ -158,7 +158,9 @@ const EXPECTED = {
   'sodium-valproate': [
     'Sodium valproate 200mg tablets', 'Epilim 200mg tablets', 'Epilim Chrono 300mg tablets',
     'Episenta 150mg capsules', 'Orlept 200mg tablets', 'Convulex 300mg capsules',
-    'Depakote 250mg tablets', 'Valproic acid 300mg capsules'
+    'Depakote 250mg tablets', 'Valproic acid 300mg capsules',
+    // 2026-07-25 Keeper: new UK brands from MHRA DSU Feb 2025
+    'Belvo 200mg tablets', 'Dyzantil 200mg tablets', 'Epival 200mg tablets', 'Syonell 200mg tablets'
   ],
   'finerenone': [
     'Finerenone 10mg tablets', 'Kerendia 10mg tablets', 'Kerendia 20mg tablets'

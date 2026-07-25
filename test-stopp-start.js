@@ -552,6 +552,24 @@ console.log('\n--- 2026-07-11 Keeper: FIRSTGEN_AH_TERMS additions ---');
   assert(!!find(flags, 'stopp_firstgen_ah_elderly'), 'STOPP 3 fires: trimeprazine + age 66');
 }
 
+// ── 2026-07-25 Keeper: NSAID_TERMS celebrex, LOOP_DIURETIC_TERMS torasemide, FIRSTGEN_AH brompheniramine ─
+console.log('\n--- 2026-07-25 Keeper: NSAID celebrex, loop diuretic torasemide, firstgen-AH brompheniramine ---');
+{
+  // celebrex is the Pfizer brand of celecoxib; not a substring of 'celecoxib', must be listed explicitly
+  const flags = computeStoppStart({ drugs: ['Celebrex 200mg capsules'], problems: ['chronic kidney disease stage 3'], ageYears: 72, egfr: 45 });
+  assert(!!find(flags, 'stopp_nsaid_ckd'), 'STOPP 1 fires: Celebrex (celecoxib brand) + CKD — celebrex recognised as NSAID');
+}
+{
+  // torasemide is a BNF 2.2.2 loop diuretic, brand Torem; LOOP_DIURETIC_TERMS feeds stopp_nsaid_loop (NSAID+loop diuretic combo)
+  const flags = computeStoppStart({ drugs: ['ibuprofen 400mg', 'torasemide 5mg tablets'], problems: [], ageYears: 78, egfr: null });
+  assert(!!find(flags, 'stopp_nsaid_loop'), 'STOPP nsaid_loop fires: ibuprofen + torasemide — torasemide recognised as loop diuretic');
+}
+{
+  // brompheniramine: first-gen sedating AH, must fire STOPP_3 in older patients
+  const flags = computeStoppStart({ drugs: ['brompheniramine 4mg tablets'], problems: [], ageYears: 68, egfr: null });
+  assert(!!find(flags, 'stopp_firstgen_ah_elderly'), 'STOPP 3 fires: brompheniramine + age 68 — brompheniramine recognised as first-gen AH');
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

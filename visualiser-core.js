@@ -631,6 +631,35 @@ const HIGH_RISK_DRUGS = [
     requires: [],
     interval: 0,
   },
+  // 2026-07-25 Keeper additions — confirmed against BNF / BSR / NICE sources:
+  {
+    id: 'leflunomide',
+    label: 'Leflunomide',
+    terms: ['leflunomide', 'arava'],
+    requires: ['fbc', 'full blood count', 'liver function', 'lft', 'u&e', 'urea'],
+    interval: 84, // BNF / BSR: 3-monthly (12-weekly) after stabilisation
+  },
+  {
+    id: 'carbamazepine',
+    label: 'Carbamazepine',
+    terms: ['carbamazepine', 'tegretol', 'carbagen'],
+    requires: ['fbc', 'full blood count', 'liver function', 'lft', 'u&e', 'sodium', 'carbamazepine level'],
+    interval: 182, // BNF: 6-monthly once stable; more frequent on initiation/dose change
+  },
+  {
+    id: 'valproate',
+    label: 'Sodium valproate / Valproic acid',
+    terms: ['sodium valproate', 'valproate', 'valproic acid', 'epilim', 'episenta', 'orlept', 'convulex', 'depakote', 'belvo', 'dyzantil', 'epival', 'syonell'],
+    requires: ['fbc', 'full blood count', 'liver function', 'lft', 'u&e'],
+    interval: 365, // BNF: annually once stable; Valproate Pregnancy Prevention Programme triggers 3-monthly for WOCBP
+  },
+  {
+    id: 'finerenone',
+    label: 'Finerenone',
+    terms: ['finerenone', 'kerendia'],
+    requires: ['u&e', 'urea', 'potassium', 'egfr'],
+    interval: 120, // NICE TA877 / SmPC: U&E at 1 month then every 4 months; using 120d (4 months) as recurring interval
+  },
 ];
 
 // PINCER-style drug-disease and monitoring-overdue rules. Run after both the

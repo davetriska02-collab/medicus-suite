@@ -2,6 +2,102 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.178.0] — 2026-07-25
+
+### The Keeper — 2026-07-25 rule-set update (CSO review required before merge)
+
+Automated horizon scan against MHRA DSUs, NICE NG12, QOF PRN02356, NHSE RSV/pneumococcal
+letters, BNF, BSR, NICE TA877, and ACBcalc. All verified by VERIFIER-A and VERIFIER-B subagents.
+Full sourced change-proposal report at `/tmp/the-keeper/the-keeper-report.md`.
+
+#### Medicines monitoring (`rules/drug-rules.json`)
+
+- **Sodium valproate (RED):** Added 4 new UK brands to `drug.match` — Belvo, Dyzantil, Epival,
+  Syonell — per MHRA Drug Safety Update February 2025. Without these, patients dispensed a new
+  brand receive no monitoring chip (silent safety gap). Source: MHRA DSU Feb 2025.
+- **Amiodarone (AMBER / CSO FLAG):** Added U&E/Creatinine as a 6-monthly monitoring test.
+  BNF and SmPC both specify renal monitoring; interval varies (BNF annual, SmPC 6-monthly) — change
+  adopts 6-monthly as the safer default. **CSO to confirm preferred interval before merge.**
+  Source: BNF / MHRA amiodarone SmPC.
+- **GLP-1 (Green):** Added note that lixisenatide (Lyxumia, Sanofi) has been withdrawn from the
+  UK market; terms retained in match[] for legacy records.
+
+#### QOF (`rules/qof-rules.json`)
+
+- **DEM004 CORRECTION (RED):** Previous Keeper run (2026-07-11) encoded DEM004 with wrong values
+  (30 points, 60–90%) because the primary PRN02356 PDF returned 403. Correct QOF 2026/27 values
+  per PRN02356: **14 points, 35–70% payment range**. Source: NHS England PRN02356.
+- **OB register (AMBER):** Re-enabled (was `enabled:false`); `ageMin:18` added per QOF 2026/27
+  business rules. Source: NHS England PRN02356.
+- **LD register (Green):** Notes corrected — annual health check is a DES (£140/patient, CQRS),
+  not a core QOF indicator.
+
+#### Vaccines (`rules/vaccine-rules.json`)
+
+- **RSV 65–74 expansion (AMBER):** Notes updated confirming NHSE operational letter (2 July 2026)
+  — respiratory disease + immunosuppression groups eligible from 1 Sept 2026 (Abrysvo® only).
+  Engine change pending (conditional-age eligibility not yet supported); manual assessment required.
+- **mRESVIA (AMBER):** Added `mresvia` to RSV `statusTerms.given` — MHRA-licensed Feb 2025 for
+  private use; prevents false "unvaccinated" flag for privately vaccinated patients.
+- **PPV23 homelessness cohort (AMBER):** Added eligibility clause for people experiencing
+  homelessness (rough sleeper / no fixed abode / hostel resident, 16+) effective 1 October 2026.
+  Source: GOV.UK letter June 2026; JCVI June 2024 advice.
+- **RSV care home label (Green):** Corrected to "Care-home resident (adult, all ages)" — NHSE
+  policy covers all adult residents, no minimum age.
+
+#### Prescribing-safety alerts (`rules/alert-library.json`) — version 1.5
+
+- **NEW RED alert — domperidone + phaeochromocytoma/paraganglioma:** Absolute contraindication per
+  MHRA DSU July 2026; risk of hypertensive crisis. `alert-domperidone-phaeo`.
+- **NEW RED alert — ACEi + history of angioedema:** Absolute contraindication per MHRA DSU 17 June
+  2026. Full UK ACEi drug set with brands; excludes hereditary angioedema. `alert-acei-angioedema`.
+- **NEW AMBER alert — antipsychotic + dementia:** NICE NG97 / MHRA 2009 / STOPP v3 B11.
+  Ships AMBER with prominent LBD escalation note (engine cannot auto-escalate on secondary problem
+  coding — clinician to treat as RED when Lewy body dementia coded). `alert-antipsychotic-dementia`.
+- **GLP-1 alert notes (AMBER):** Added NAION warning from MHRA DSU 5 Feb 2026 (semaglutide and
+  sudden painless vision loss).
+- **HELD — digoxin + CKD alert:** Citation errors (STOPP B5 vs correct E1) and CKD stage 3
+  RED threshold over-fires. Not shipped — CSO review required.
+
+#### Medication review (`engine/acb-scores.js`, `engine/stopp-start.js`, `visualiser-core.js`)
+
+- **ACB_TABLE (AMBER):** Added alimemazine (score 3), trimeprazine (score 3), brompheniramine
+  (score 3) to first-gen AH section. ACB total was silently under-counted for patients on these.
+  Source: ACBcalc / Boustani scale.
+- **STOPP-START (AMBER):** Added `celebrex` to NSAID_TERMS (brand not substring of celecoxib);
+  `torasemide` to LOOP_DIURETIC_TERMS (BNF 2.2.2 loop diuretic, brand Torem); `brompheniramine`
+  to FIRSTGEN_AH_TERMS. Three silent STOPP misses resolved.
+- **HIGH_RISK_DRUGS (AMBER):** Added 4 new visualiser monitoring entries:
+  - leflunomide (84d, FBC/LFT/U&E) — BNF/BSR
+  - carbamazepine (182d, FBC/LFT/U&E/sodium/drug level) — BNF
+  - sodium valproate (365d, FBC/LFT/U&E, with all MHRA Feb 2025 brands) — BNF/MHRA PPP
+  - finerenone (120d, U&E/potassium/eGFR) — NICE TA877
+
+#### Reception pathways (`rules/reception-pathways.json`) — version 1.5
+
+- **rf-morning-vomit (999):** Added to headache pathway — progressive morning headache waking from
+  sleep with vomiting = raised ICP. Source: NICE CKS Headache assessment.
+- **rf-nasal-unilateral (duty):** Added to sinusitis pathway — unilateral nasal symptoms = NG12
+  ENT 2WW sinonasal cancer referral.
+- **rf-skin-lesion (duty):** Added to rash pathway — new or changing mole = NG12 melanoma 2WW.
+- **rf-haematuria (duty):** Added to general pathway — visible haematuria 45+ without UTI = NG12
+  urology 2WW.
+- **rf-hoarseness (duty):** Added to general pathway — persistent hoarseness ≥3 weeks = NG12 ENT
+  2WW.
+
+#### Test suite
+
+All 16 test files pass. Updated: `test-drug-brand-coverage.js`, `test-qof-indicator-filters.js`,
+`test-acb-scores.js`, `test-stopp-start.js`, `test-visualiser-pincer.js`,
+`test-reception-pathways.js`.
+
+#### Killed candidates
+
+- **qof-002 (AF006 upper):** KILLED — current encoding of 95% is correct for QOF 2026/27 (raised
+  from 90%). Scanner proposal to revert to 90% would have introduced an error.
+- **qof-004/005 (OB003/OB004):** KILLED — wrong descriptions; correct OB004 params noted for next
+  Keeper run.
+
 ## [v3.177.0] — 2026-07-22
 
 ### Triage North Star — wave 1: the record next to the request
