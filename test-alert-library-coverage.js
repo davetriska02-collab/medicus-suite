@@ -134,6 +134,10 @@ const EXPECTED = {
   'alert-005': { type: 'drug-combo', severity: 'amber', terms: ['finasteride', 'propecia', 'dutasteride', 'avodart'] },
   'alert-008': { type: 'drug-combo', severity: 'amber', terms: ['aspirin 75', 'clopidogrel', 'ticagrelor', 'prasugrel'] },
   'alert-009': { type: 'drug-combo', severity: 'amber', terms: ['ibuprofen', 'naproxen', 'diclofenac'] },
+  // 2026-07-25 Keeper additions: new prescribing-safety alerts (MHRA DSUs + NICE NG97)
+  'alert-domperidone-phaeo': { type: 'drug-combo', severity: 'red', terms: ['domperidone', 'motilium'] },
+  'alert-acei-angioedema': { type: 'drug-combo', severity: 'red', terms: ['ramipril', 'lisinopril', 'perindopril', 'enalapril', 'captopril'] },
+  'alert-antipsychotic-dementia': { type: 'drug-combo', severity: 'amber', terms: ['olanzapine', 'risperidone', 'quetiapine', 'aripiprazole', 'haloperidol'] },
 };
 
 for (const [id, exp] of Object.entries(EXPECTED)) {

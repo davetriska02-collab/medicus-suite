@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-11",
-  "specVersion": "Reception capture pathways v1.4 — 2026-07-11 (The Keeper): sinusitis pathway added (NICE CKS/Pharmacy First 12+); cauda equina bladder question updated to include difficulty initiating micturition; feverish-child bulging fontanelle added as red flag; cough weight-loss/night-sweats added as duty red flag (NICE NG12); GCA headache rf-new50 split into visual (999) and non-visual (duty); CSO-signed-off base v1.3 from 2026-06-14 preserved.",
+  "lastUpdated": "2026-07-25",
+  "specVersion": "Reception capture pathways v1.5 — 2026-07-25 (The Keeper): added 5 new red flags across headache, sinusitis, rash, and general pathways: rf-morning-vomit (headache, 999 — raised ICP, NICE CKS Headache); rf-nasal-unilateral (sinusitis, duty — unilateral nasal obstruction, NICE NG12 2WW); rf-skin-lesion (rash, duty — new/changing mole, NICE NG12 2WW); rf-haematuria (general, duty — visible haematuria 45+, NICE NG12 2WW); rf-hoarseness (general, duty — persistent 3+ weeks, NICE NG12 ENT 2WW). Base v1.4 from 2026-07-11 preserved.",
   "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes), the NICE NG143 feverish-child traffic-light features, the NHS Pharmacy First clinical pathways, and NICE NG253/NG254/NG255 (suspected sepsis, replacing NG51) for urosepsis / sepsis escalation, re-phrased in lay language for telephone use by non-clinical staff. 2026-06-10: escalation re-tiering pass — several time-critical presentations (urosepsis, cauda equina, PE, large haemoptysis, sepsis, self-harm with means) promoted to 999 level. 2026-06-14: CSO signed off the reception tiers and red-flag escalation levels for live use (DRAFT blocker lifted), and promoted five red flags from urgent-duty to 999 on clinical review — suspected SJS/TEN (rash), sepsis with rigors (UTI), possible cauda equina / bilateral leg weakness or numbness (back pain), mastoiditis (earache), and red painful eye with halos / suspected acute angle-closure glaucoma (headache). This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files.",
   "escalations": {
     "999": "Possible emergency: follow practice emergency policy NOW — advise calling 999 / transfer to the duty clinician immediately. Do not put the caller in a queue.",
@@ -128,7 +128,8 @@
         { "id": "rf-new50-visual", "ask": "Is this a brand-new type of headache in someone over 50 with tenderness at the temple or pain when chewing, AND any new blurring, double vision, or sudden loss of vision? (Possible giant cell arteritis with visual threat — emergency)", "escalate": "999" },
         { "id": "rf-new50", "ask": "Is this a brand-new type of headache in someone over 50 with tenderness at the temple or pain when chewing, but NO visual symptoms?", "escalate": "duty" },
         { "id": "rf-pregnant", "ask": "Pregnant with severe headache, swelling, or vision changes?", "escalate": "duty" },
-        { "id": "rf-thinners", "ask": "On blood thinners (warfarin, a DOAC) — with a new headache AFTER ANY bump or knock to the head? (If yes: 999 now. If new headache on thinners with no head injury, report to duty clinician.)", "escalate": "999" }
+        { "id": "rf-thinners", "ask": "On blood thinners (warfarin, a DOAC) — with a new headache AFTER ANY bump or knock to the head? (If yes: 999 now. If new headache on thinners with no head injury, report to duty clinician.)", "escalate": "999" },
+        { "id": "rf-morning-vomit", "ask": "Is the headache consistently at its worst first thing in the morning, or does it wake them from sleep, AND has it been getting progressively worse over days or weeks — especially if there is also vomiting that is not explained by something else?", "escalate": "999" }
       ],
       "questions": [
         { "id": "duration", "ask": "How long has this headache been going on, and is it constant or does it come and go?", "type": "text", "label": "Duration/pattern" },
@@ -174,7 +175,8 @@
         { "id": "rf-meningism", "ask": "Severe headache with a stiff neck, dislike of bright light, or a rash that doesn't fade when pressed?", "escalate": "999" },
         { "id": "rf-neuro", "ask": "Any new confusion, weakness on one side of the face or body, or slurred speech?", "escalate": "999" },
         { "id": "rf-severe-unwell", "ask": "Severe facial pain that is rapidly worsening, with a very high fever and looking very unwell overall?", "escalate": "duty" },
-        { "id": "rf-immune", "ask": "Do they take medicines that weaken the immune system (e.g. chemotherapy, methotrexate, steroids long-term, or other immune-suppressing tablets)?", "escalate": "duty" }
+        { "id": "rf-immune", "ask": "Do they take medicines that weaken the immune system (e.g. chemotherapy, methotrexate, steroids long-term, or other immune-suppressing tablets)?", "escalate": "duty" },
+        { "id": "rf-nasal-unilateral", "ask": "Is the blocked nose or discharge on ONE side only — not both sides — especially if the discharge is yellow-green or contains blood, and it has not improved after a few weeks?", "escalate": "duty" }
       ],
       "questions": [
         { "id": "duration", "ask": "How long have they had the pain or pressure in the face?", "type": "text", "label": "Duration" },
@@ -225,7 +227,8 @@
         { "id": "rf-spreading", "ask": "An area of skin that is red, hot, very painful and spreading FAST, AND they feel very unwell, have a fever, or look or sound seriously ill? (Possible necrotising fasciitis — emergency)", "escalate": "999" },
         { "id": "rf-blistering", "ask": "Widespread blistering, skin peeling, or rawness or blistering also affecting the mouth, eyes, or genitals, with feeling unwell? (Possible SJS/TEN)", "escalate": "999" },
         { "id": "rf-meningism", "ask": "Rash with severe headache, stiff neck, or dislike of bright light?", "escalate": "999" },
-        { "id": "rf-newdrug", "ask": "Started a new medicine recently, now a widespread rash and feeling unwell?", "escalate": "duty" }
+        { "id": "rf-newdrug", "ask": "Started a new medicine recently, now a widespread rash and feeling unwell?", "escalate": "duty" },
+        { "id": "rf-skin-lesion", "ask": "A new mole or pigmented skin mark that has appeared recently, or an existing mole or skin mark that has changed in size, shape, or colour over the last few weeks or months?", "escalate": "duty" }
       ],
       "questions": [
         { "id": "where", "ask": "Where on the body is it?", "type": "text", "label": "Location" },
@@ -252,7 +255,9 @@
         { "id": "rf-allergy", "ask": "Signs of a severe allergic reaction — swelling of lips or tongue, struggling to breathe?", "escalate": "999" },
         { "id": "rf-sepsis", "ask": "Shivering or shaking uncontrollably, skin that looks very pale, mottled (blotchy), or feels cold and clammy, or the person is saying they feel like they might die?", "escalate": "999" },
         { "id": "rf-mentalhealth-attempt", "ask": "Is the patient actively attempting to harm themselves right now, or do they have a plan and the means to carry it out immediately?", "escalate": "999" },
-        { "id": "rf-mentalhealth", "ask": "Is the patient saying they have thoughts of harming themselves or someone else, but no immediate plan or means?", "escalate": "duty" }
+        { "id": "rf-mentalhealth", "ask": "Is the patient saying they have thoughts of harming themselves or someone else, but no immediate plan or means?", "escalate": "duty" },
+        { "id": "rf-haematuria", "ask": "Blood in the urine — pink, red, or brown-coloured urine — in someone aged 45 or over, without urinary infection symptoms, or returning after a urine infection was treated?", "escalate": "duty" },
+        { "id": "rf-hoarseness", "ask": "A hoarse voice or voice change that has lasted 3 weeks or more without an obvious cause such as a cold or throat infection?", "escalate": "duty" }
       ],
       "questions": [
         { "id": "duration", "ask": "How long has this been going on?", "type": "text", "label": "Duration" },

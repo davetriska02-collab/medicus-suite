@@ -70,10 +70,11 @@
     'relifex', // nabumetone
     'surgam', // tiaprofenic acid
     'lodine', // etodolac
+    'celebrex', // celecoxib — 2026-07-25 Keeper: brand not substring of generic; MHRA/BNF confirmed active UK brand
   ];
 
   // Loop diuretics — subset of HIGH_RISK_DRUGS id:'diuretic'
-  const LOOP_DIURETIC_TERMS = ['furosemide', 'frusemide', 'bumetanide'];
+  const LOOP_DIURETIC_TERMS = ['furosemide', 'frusemide', 'bumetanide', 'torasemide']; // 2026-07-25 Keeper: torasemide (BNF 2.2.2 loop diuretic, active UK licence, brand Torem)
 
   // Benzodiazepines — standard UK generics
   const BENZO_TERMS = [
@@ -108,6 +109,7 @@
     'cyclizine',
     'alimemazine', // 2026-07-11 Keeper: UK sedating AH (= trimeprazine), BNF 3.4.1
     'trimeprazine', // 2026-07-11 Keeper: older name for alimemazine (not substring of it)
+    'brompheniramine', // 2026-07-25 Keeper: first-gen sedating AH; ACBcalc score 3; in OTC combination products
   ];
 
   // PPIs — from HIGH_RISK_DRUGS id:'ppi'

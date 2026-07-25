@@ -373,6 +373,12 @@ const dem004 = qof.rules.find((r) => r.indicatorCode === 'DEM004');
 check(!!dem004, 'DEM004 indicator exists in qof-rules.json');
 check(dem004.enabled === true, 'DEM004 is enabled');
 check(dem004.registerCode === 'DEM' || (dem004.requiresRegister && dem004.requiresRegister.includes('DEM')), 'DEM004 scoped to DEM register');
+// ── 2026-07-25 Keeper: DEM004 threshold correction ─────────────────────────
+// Previous Keeper run (2026-07-11) encoded wrong values (30pts/60-90%) due to primary PDF 403.
+// Correct 2026/27 QOF values (PRN02356): 14 points, 35-70% payment range.
+check(dem004 && dem004.points === 14, 'DEM004 points corrected to 14 (was wrongly 30 in 2026-07-11 run)');
+check(dem004 && dem004.thresholds && dem004.thresholds.lower === 35, 'DEM004 lower threshold corrected to 35% (was wrongly 60)');
+check(dem004 && dem004.thresholds && dem004.thresholds.upper === 70, 'DEM004 upper threshold corrected to 70% (was wrongly 90)');
 
 // ── 2026-07-11 Keeper: CKD002 indicator ──────────────────────────────────────
 console.log('\n--- CKD002 indicator (BP ≤140/90 in CKD, new 2026-07-11) ---');

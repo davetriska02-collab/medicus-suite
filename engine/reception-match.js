@@ -410,6 +410,79 @@
       'swollen soft spot',
       'fontanelle',
     ],
+
+    // ── 2026-07-25 Keeper additions (rf-morning-vomit, rf-nasal-unilateral, rf-skin-lesion,
+    //    rf-haematuria, rf-hoarseness). Terms derived conservatively from each red flag's `ask`
+    //    text in reception-pathways.json. CSO-reviewable content — see file header. ────────────
+
+    // headache pathway — raised intracranial pressure: progressive morning headache, waking from
+    // sleep, with vomiting not explained by another cause (NICE CKS Headache red flags).
+    'rf-morning-vomit': [
+      'headache in the morning',
+      'morning headache',
+      'headache wakes them',
+      'headache waking from sleep',
+      'progressively worse headache',
+      'headache getting worse',
+      'headache with vomiting',
+      'vomiting with headache',
+      'raised intracranial pressure',
+    ],
+
+    // sinusitis pathway — unilateral nasal obstruction/discharge: possible sinonasal cancer
+    // (NICE NG12 ENT 2WW). 'One side only' is the key lay term.
+    'rf-nasal-unilateral': [
+      'one side only',
+      'only one side',
+      'blocked on one side',
+      'runny on one side',
+      'unilateral nasal',
+      'one nostril',
+      'blood in nasal discharge',
+      'blood stained nasal',
+      'not improving after weeks',
+    ],
+
+    // rash pathway — new or changing mole: possible melanoma (NICE NG12 2WW).
+    'rf-skin-lesion': [
+      'new mole',
+      'changing mole',
+      'mole changed',
+      'mole getting bigger',
+      'skin mark',
+      'pigmented lesion',
+      'dark spot',
+      'mole changing shape',
+      'mole changing colour',
+    ],
+
+    // general pathway — visible haematuria in 45+: possible bladder or kidney cancer
+    // (NICE NG12 urology 2WW).
+    'rf-haematuria': [
+      'blood in urine',
+      'blood in the urine',
+      'red urine',
+      'pink urine',
+      'brown urine',
+      'bloody urine',
+      'haematuria',
+      'blood in pee',
+      'blood when passing water',
+    ],
+
+    // general pathway — persistent hoarseness ≥3 weeks: possible laryngeal or thyroid cancer
+    // (NICE NG12 head and neck 2WW).
+    'rf-hoarseness': [
+      'hoarse voice',
+      'voice change',
+      'losing their voice',
+      'lost their voice',
+      'hoarseness',
+      'horse voice',
+      'voice gone hoarse',
+      'voice has changed',
+      'croaky voice',
+    ],
   };
 
   // ── matchPathways(requestText, pathways?) ─────────────────────────────────────────────────────
