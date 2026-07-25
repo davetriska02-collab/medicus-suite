@@ -2,6 +2,68 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.178.1] — 2026-07-25
+
+Audit remediation — first four findings from the 2026-07-25 repo audit. No rule
+content changed, so `defaults.json` is untouched and no shipped-config version
+bump is required.
+
+### Tests — `observation-trend` coverage (audit finding: High)
+
+- **New `test-observation-trend.js` (55 assertions).** The `observation-trend`
+  check kind had no functional test coverage: `test-rule-schema.js` only listed
+  the kind and `test-import-hardening.js` only exercised import rejection —
+  neither ran any evaluation logic. Two enabled shipped rules depend on it
+  (`trend-egfr-falling`, `trend-hba1c-rising`), so a regression would have been
+  silent in both directions: a deteriorating patient's chip disappearing, or a
+  chip firing on any lab movement at all.
+- Covers both directions, the `minDelta` boundary (inclusive) and near-miss, the
+  flat-line guard (delta exactly 0 must not fire as either direction),
+  `minPoints` shortfall, window exclusion of out-of-range readings,
+  richest-series selection across multiple matching investigations,
+  `NaN`/`Infinity`/bad-date filtering, and the evidence payload the panel
+  sparkline reads. Also asserts the shipped rules' parameters are well-formed.
+
+### Security — output escaping and console diagnostics
+
+- **`options/options.js` — escape all interpolations in the debug endpoint
+  probe.** The probe wrote `e.message`, `p.name` and `p.url` into `innerHTML`
+  unescaped, and the two adjacent lines used a partial `.replace(/</g,'&lt;')`
+  that misses `&` and `>`. All now go through the existing `escHtml()`. The
+  substantive vector was `p.url`: it embeds the resolved practice code, and
+  `PracticeCode.getFromStorage()` returns `suite.practiceCode` verbatim without
+  re-checking it against `SITE_CODE_RE`, so a crafted backup or hand-edited
+  setting could place arbitrary markup in the URL.
+- **`content-scripts/triage-lens/page-world.js` — stop logging raw task
+  objects.** This file runs in the page's MAIN world, so its console output is
+  readable by any other extension or page script on the Medicus tab. The
+  no-UUID warning logged `items[0]` — a whole task record, carrying patient
+  UUIDs, assignee names and free-text task descriptions. It now logs field
+  **names** only. JSON parse failures log the error name rather than the error
+  object, which in V8 can echo a fragment of the response body.
+- All diagnostics in that file are now gated behind the repo's existing opt-in
+  debug flag (`localStorage 'ch-debug' = '1'`, then reload), matching the
+  isolated content script and the debugging technique documented in CLAUDE.md.
+
+### Release hygiene
+
+- **`.github/workflows/release.yml` — internal development material no longer
+  ships.** The build excluded `.claude/`, `scripts/` and `README.md` but not
+  `docs/` (2.4 MB) or `design-system/`. Every install therefore received the
+  staff onboarding guide and PDF, a DRAFT clinical-safety resync document, the
+  CSO review ledger, the pen-test report, and the internal `plans/`,
+  `appraisal/`, `archive/`, `keeper/` and `benchmark/` directories.
+- `docs/` is deliberately **not** excluded wholesale: `side-panel/panel.js`
+  links to `../docs/sentinel-DISCLAIMER.txt` as a package-relative URL, and the
+  governance set (DPIA, HAZARD-LOG, CLINICAL-SAFETY-*, CSO-DECLARATION, SOUP,
+  INTENDED-PURPOSE, DTAC-STATUS, ACCESSIBILITY-STATEMENT,
+  INTEROPERABILITY-STATEMENT) is shipped on purpose for practice information
+  governance. Both halves of that contract are now enforced by a new **Verify
+  release payload contents** step that fails the build if a required file goes
+  missing or internal material reappears.
+- The build step was split into staging → verify → zip so the check runs against
+  the tree before it is packaged.
+
 ## [v3.178.0] — 2026-07-25
 
 ### The Keeper — 2026-07-25 rule-set update (CSO review required before merge)

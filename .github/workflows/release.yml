@@ -43,7 +43,7 @@ jobs:
             "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG")
           echo "release_exists=$([ "$STATUS" = '200' ] && echo 'true' || echo 'false')" >> "$GITHUB_OUTPUT"
 
-      - name: Build extension zip
+      - name: Build extension staging tree
         if: steps.check.outputs.release_exists == 'false'
         run: |
           mkdir -p _build/medicus-suite-v${{ steps.version.outputs.version }}
@@ -67,7 +67,79 @@ jobs:
             --exclude='.prettierignore' \
             --exclude='.githooks/' \
             --exclude='brand/generate-icons.mjs' \
+            --exclude='design-system/' \
+            --exclude='.design-sync/' \
+            --exclude='docs/plans/' \
+            --exclude='docs/appraisal/' \
+            --exclude='docs/archive/' \
+            --exclude='docs/keeper/' \
+            --exclude='docs/benchmark/' \
+            --exclude='docs/ONBOARDING-*' \
+            --exclude='docs/*-DRAFT.md' \
+            --exclude='docs/draft-*.md' \
+            --exclude='docs/learnings-*.md' \
+            --exclude='docs/cso-review-ledger.json' \
+            --exclude='docs/AGENTS-AND-THE-BOYS.md' \
+            --exclude='docs/PR-REVIEW-SETUP.md' \
+            --exclude='docs/PEN-TEST-*.md' \
+            --exclude='docs/feature-list.docx' \
+            --exclude='docs/v1.5.0-design.md' \
+            --exclude='docs/viewer-roadmap.md' \
             ./ _build/medicus-suite-v${{ steps.version.outputs.version }}/
+
+      # docs/ is NOT excluded wholesale: side-panel/panel.js links to
+      # ../docs/sentinel-DISCLAIMER.txt as a package-relative URL, and the
+      # governance set (DPIA, HAZARD-LOG, CLINICAL-SAFETY-*, CSO-DECLARATION,
+      # SOUP, INTENDED-PURPOSE, DTAC-STATUS, ACCESSIBILITY-STATEMENT,
+      # INTEROPERABILITY-STATEMENT) is deliberately shipped for practice
+      # information governance. The excludes above drop internal development
+      # material only. This step fails the build if either half of that
+      # contract breaks.
+      - name: Verify release payload contents
+        if: steps.check.outputs.release_exists == 'false'
+        run: |
+          PKG="_build/medicus-suite-v${{ steps.version.outputs.version }}"
+          fail=0
+
+          # Must ship — referenced from the extension UI or required for governance.
+          for f in \
+            docs/sentinel-DISCLAIMER.txt \
+            docs/HAZARD-LOG.md \
+            docs/DPIA.md \
+            docs/INTENDED-PURPOSE.md \
+            docs/CLINICAL-SAFETY-NOTICE.md ; do
+            if [ ! -f "$PKG/$f" ]; then
+              echo "::error::release zip is missing required file: $f"
+              fail=1
+            fi
+          done
+
+          # Must NOT ship — internal development material.
+          LEAKED=$(find "$PKG" \( \
+               -path "$PKG/docs/plans" -o \
+               -path "$PKG/docs/appraisal" -o \
+               -path "$PKG/docs/archive" -o \
+               -path "$PKG/docs/keeper" -o \
+               -path "$PKG/docs/benchmark" -o \
+               -path "$PKG/design-system" -o \
+               -name "ONBOARDING-*" -o \
+               -name "*-DRAFT.md" -o \
+               -name "learnings-*.md" -o \
+               -name "cso-review-ledger.json" -o \
+               -name "PEN-TEST-*.md" \
+             \) -print)
+          if [ -n "$LEAKED" ]; then
+            echo "::error::release payload contains internal development material:"
+            echo "$LEAKED"
+            fail=1
+          fi
+
+          [ "$fail" = '0' ] || exit 1
+          echo "Release payload verified."
+
+      - name: Create extension zip
+        if: steps.check.outputs.release_exists == 'false'
+        run: |
           cd _build
           zip -r ../medicus-suite-v${{ steps.version.outputs.version }}.zip medicus-suite-v${{ steps.version.outputs.version }}/
 

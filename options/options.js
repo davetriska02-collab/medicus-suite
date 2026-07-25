@@ -1749,7 +1749,7 @@ document.getElementById('debugProbeBtn')?.addEventListener('click', async () => 
   lines.push(`Resolved code: ${code || '(none)'} (${source || 'no source'})`);
   if (!code) {
     lines.push('Cannot probe without a practice code. Open a Medicus tab or set one in Suite.');
-    results.innerHTML = lines.map((l) => `<div>${l.replace(/</g, '&lt;')}</div>`).join('');
+    results.innerHTML = lines.map((l) => `<div>${escHtml(l)}</div>`).join('');
     return;
   }
 
@@ -1769,7 +1769,16 @@ document.getElementById('debugProbeBtn')?.addEventListener('click', async () => 
     },
   ];
 
-  results.innerHTML = lines.map((l) => `<div>${l.replace(/</g, '&lt;')}</div>`).join('');
+  // Every interpolation below goes through escHtml(). Two of these values are
+  // NOT trust-worthy despite looking internal:
+  //   • p.url embeds the resolved practice code, and the storage path in
+  //     PracticeCode.getFromStorage() returns suite.practiceCode verbatim
+  //     without re-checking it against SITE_CODE_RE — so a crafted backup or a
+  //     hand-edited settings value can put arbitrary text in the URL.
+  //   • e.message is a browser-authored string but is still untrusted input as
+  //     far as this sink is concerned.
+  // Escape at the sink, unconditionally, rather than reasoning about each one.
+  results.innerHTML = lines.map((l) => `<div>${escHtml(l)}</div>`).join('');
   for (const p of probes) {
     const t0 = Date.now();
     let line;
@@ -1777,9 +1786,9 @@ document.getElementById('debugProbeBtn')?.addEventListener('click', async () => 
       const r = await fetch(p.url, { credentials: 'include' });
       const dur = Date.now() - t0;
       const colour = r.ok ? '#4ade80' : '#f87171';
-      line = `<div style="color:${colour}"><strong>${p.name}:</strong> ${r.status} (${dur}ms) <span style="color:var(--text-4); font-size:10px">${p.url}</span></div>`;
+      line = `<div style="color:${colour}"><strong>${escHtml(p.name)}:</strong> ${r.status} (${dur}ms) <span style="color:var(--text-4); font-size:10px">${escHtml(p.url)}</span></div>`;
     } catch (e) {
-      line = `<div style="color:#f87171"><strong>${p.name}:</strong> network error: ${e.message}</div>`;
+      line = `<div style="color:#f87171"><strong>${escHtml(p.name)}:</strong> network error: ${escHtml(e && e.message)}</div>`;
     }
     results.innerHTML += line;
   }

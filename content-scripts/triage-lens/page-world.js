@@ -25,6 +25,47 @@
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var TL_RE = new RegExp('/tasks/data/([^/?]+)/task-list');
 
+  // Diagnostics are opt-in, mirroring the isolated content script's DEBUG flag
+  // (localStorage 'ch-debug' = '1', then reload — see CLAUDE.md "Debugging
+  // injected queue chips").
+  //
+  // This file runs in the PAGE'S MAIN WORLD, so anything it logs lands in the
+  // page console, where any other extension or page script can read it. A
+  // task-list item carries patient UUIDs, assignee names and free-text task
+  // descriptions, so raw items must NEVER be logged — not even behind the flag.
+  // Log field NAMES and counts only; those are enough to diagnose a shape change
+  // and disclose no patient data.
+  var DEBUG = (function () {
+    try {
+      return localStorage.getItem('ch-debug') === '1';
+    } catch (_) {
+      return false;
+    }
+  })();
+
+  function dbg() {
+    if (!DEBUG) return;
+    try {
+      console.debug.apply(console, arguments);
+    } catch (_) {}
+  }
+
+  function dwarn() {
+    if (!DEBUG) return;
+    try {
+      console.warn.apply(console, arguments);
+    } catch (_) {}
+  }
+
+  // Field names of a value, for diagnostics. Never returns values.
+  function keysOf(v) {
+    try {
+      return v && typeof v === 'object' ? Object.keys(v) : typeof v;
+    } catch (_) {
+      return '(unreadable)';
+    }
+  }
+
   // ---- Queue task-list ----
   function pickUuid(item) {
     if (!item || typeof item !== 'object') return null;
@@ -46,12 +87,12 @@
     if (!m) return;
     var items = body && (body.tasks || body.data || body.results || body.rows || (Array.isArray(body) ? body : null));
     if (!Array.isArray(items)) {
-      console.warn('[ClinHUD] task-list: no array found; body keys=', body ? Object.keys(body) : body);
+      dwarn('[ClinHUD] task-list: no array found; body keys=', keysOf(body));
       return;
     }
     if (items.length && !window.__chTaskKeysLogged) {
       window.__chTaskKeysLogged = 1;
-      console.debug('[ClinHUD] task-list first item keys:', Object.keys(items[0]));
+      dbg('[ClinHUD] task-list first item keys:', keysOf(items[0]));
     }
     var rows = items
       .map(function (item, i) {
@@ -69,7 +110,13 @@
     if (rows.length) {
       window.dispatchEvent(new CustomEvent('ch-task-list-data', { detail: { rows: rows, taskTypeSlug: m[1] } }));
     } else {
-      console.warn('[ClinHUD] task-list: no task UUIDs from ' + items.length + ' items; sample=', items[0]);
+      // Was: `sample=', items[0]` — that logged a whole raw task object (patient
+      // UUIDs, assignee names, task text) to the page console on this error path.
+      // Field names alone identify the shape change that caused the miss.
+      dwarn(
+        '[ClinHUD] task-list: no task UUIDs from ' + items.length + ' items; first item keys=',
+        items.length ? keysOf(items[0]) : '(empty)'
+      );
     }
   }
 
@@ -89,7 +136,9 @@
                   handleTaskList(u, b);
                 })
                 .catch(function (e) {
-                  console.warn('[ClinHUD] task-list parse error', e);
+                  // Log the message only, never the error object: a JSON parse
+                  // failure can echo a fragment of the response body.
+                  dwarn('[ClinHUD] task-list parse error:', (e && e.name) || 'Error');
                 });
             } catch (_) {}
           });
@@ -117,7 +166,7 @@
           try {
             handleTaskList(u, JSON.parse(xhr.responseText));
           } catch (e) {
-            console.warn('[ClinHUD] interceptor parse error', e);
+            dwarn('[ClinHUD] interceptor parse error:', (e && e.name) || 'Error');
           }
         });
       }
@@ -125,5 +174,5 @@
     return origSend.apply(this, arguments);
   };
 
-  console.debug('[ClinHUD] page-world interceptors installed (MAIN world)');
+  dbg('[ClinHUD] page-world interceptors installed (MAIN world)');
 })();
