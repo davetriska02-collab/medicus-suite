@@ -86,6 +86,26 @@
 // is a soft hierarchy signal, not a guarantee every flagged item is genuinely
 // non-clinical, so bulk-ending requires the clinician to actively tick each
 // one after reviewing the list, never a single "select all and go".
+//
+// NO TEXT-BASED VISIBILITY GATE (explicit, 2026-07-25 — tried and reverted
+// same day): a text-substring pre-check on the trigger button's visibility
+// was built and shipped, then reverted before ever reaching a release, once
+// live testing showed it could hide a GENUINE code-based match — a problem
+// correctly coded as a descendant of a configured root, but whose free-text
+// description didn't happen to contain any of the configured hint words (the
+// real motivating case: "FP/RF - new reg.check to FPC" needed a hint added
+// after the fact just to make the button appear at all). The code is the
+// ground truth for this widget, never the text — a problem miscoded under a
+// junk root MUST always be reachable for the clinician to consider, however
+// unrelated its free text looks. Storing the full descendant tree locally to
+// make an automatic scan cheap enough to run on every page load was also
+// considered and rejected: the dominant cost is resolving each ACTIVE
+// problem's own conceptId (one fetch per problem, unavoidable — the cheap
+// list endpoint never carries one), which a stored tree does nothing for:
+// only the per-distinct-conceptId descendant check would get cheaper. The
+// trigger button therefore always renders whenever the patient has ANY
+// active problems, same as the original v3.183.0 behaviour, so the
+// authoritative SNOMED-based scan is always one click away.
 'use strict';
 
 (function () {
@@ -592,7 +612,18 @@
     bindEvents(el);
   }
 
-  // ── Injection: one "Bulk remove?" trigger, placed above the problem list ─────
+  // ── Injection: one "Bulk remove?" trigger, next to the "Major" heading ───────
+  // (placement confirmed live 2026-07-25, resuming the item deferred from the
+  // original v3.183.0 build): the Active Problems card renders as
+  // `.m-card-v2__content > h3#problems-major-label, ul[aria-labelledby=
+  // "problems-major-label"], …` — "Major" is a SECTION HEADING for the whole
+  // major-problems <ul>, not a per-problem badge. Anchoring on that heading's
+  // own <ul> (rather than "whichever list holds the first cached problem",
+  // the old approach) means the widget lands next to "Major" specifically
+  // even when the first problem in clinical-summary's own list order happens
+  // to be a minor one. `problems-minor-label` is INFERRED by naming symmetry,
+  // never observed live (this capture's patient had no minor problems) — not
+  // relied on here, only used as a documented assumption for future readers.
 
   function findFirstProblemRow(problems) {
     for (var i = 0; i < problems.length; i++) {
@@ -602,12 +633,23 @@
     return null;
   }
 
+  function findMajorProblemsList() {
+    return document.querySelector('ul[aria-labelledby="problems-major-label"]');
+  }
+
   function injectTrigger() {
     if (document.getElementById('ms-pjc-widget')) return;
     if (!_problemsCache || !_problemsCache.length) return;
-    var row = findFirstProblemRow(_problemsCache);
-    if (!row) return;
-    var list = row.closest('li') ? row.closest('li').parentElement : row.parentElement;
+    var list = findMajorProblemsList();
+    if (!list) {
+      // Fallback for the shape not (yet) confirmed live: no "Major" heading
+      // on the page at all (e.g. every active problem is minor) — anchor on
+      // whichever list holds the first cached problem, same as before this
+      // placement change, rather than not injecting at all.
+      var row = findFirstProblemRow(_problemsCache);
+      if (!row) return;
+      list = row.closest('li') ? row.closest('li').parentElement : row.parentElement;
+    }
     if (!list || !list.parentElement) return;
     var w = document.createElement('div');
     w.id = 'ms-pjc-widget';

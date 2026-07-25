@@ -50,9 +50,29 @@
   // precisely than this for now.
   var LEGACY_TRAILING_ABBREVIATION_RE = /\s*\([A-Za-z]{2,6}\)\s*$/;
 
+  // "H/O" ("history of") free-text prefix (2026-07-25, user-requested
+  // expansion; colon variant added same day after the user found "H/O:" on
+  // their own real data) — a DIFFERENT origin from the ICD-bracket prefix
+  // above (that's a Read-code migration artefact; this is a GP2GP-era
+  // shorthand some source systems prepend to the description text).
+  // CORRECTED ASSUMPTION (2026-07-25, explicit user correction against this
+  // comment's own first draft — do not revert to the earlier framing): these
+  // are USUALLY miscoded to the plain disease concept itself, picked for
+  // convenience at the time of writing rather than accuracy, not to a
+  // dedicated SNOMED "history of X" concept — so the offered same-concept
+  // alternatives should almost never carry "history of" wording, and that is
+  // the DESIRED outcome here, not a residual edge case to warn about. Still
+  // safe by the same construction as the other legacy markers regardless of
+  // which case a given problem turns out to be: sameConceptAlternatives only
+  // ever offers a synonym of the CURRENT conceptId, never a different
+  // concept, so whatever that concept actually means, every offered
+  // alternative means the same thing — the search text stripped of "H/O" is
+  // only used to FIND candidates, never to decide what gets offered.
+  var LEGACY_HO_PREFIX_RE = /^h\/o(?:\s+|:\s*)/i;
+
   function looksOutdated(description) {
     var d = String(description == null ? '' : description);
-    return LEGACY_PREFIX_RE.test(d) || LEGACY_SUFFIX_RE.test(d);
+    return LEGACY_PREFIX_RE.test(d) || LEGACY_SUFFIX_RE.test(d) || LEGACY_HO_PREFIX_RE.test(d);
   }
 
   // Strips the legacy prefix/suffix (and, once exposed, a trailing bracketed
@@ -63,6 +83,7 @@
   function stripLegacyMarkers(description) {
     return String(description == null ? '' : description)
       .replace(LEGACY_PREFIX_RE, '')
+      .replace(LEGACY_HO_PREFIX_RE, '')
       .replace(LEGACY_SUFFIX_RE, '')
       .replace(LEGACY_TRAILING_ABBREVIATION_RE, '')
       .trim();
@@ -98,6 +119,7 @@
     LEGACY_PREFIX_RE,
     LEGACY_SUFFIX_RE,
     LEGACY_TRAILING_ABBREVIATION_RE,
+    LEGACY_HO_PREFIX_RE,
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

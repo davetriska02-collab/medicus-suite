@@ -48,6 +48,20 @@ console.log('--- rules/non-problem-root-codes.json: the imported roots list itse
   );
   const admin = nonProblemRootCodes.roots.find((r) => r.conceptId === '14734007');
   check(!!admin && admin.description === 'Administrative procedure', '14734007 "Administrative procedure" is present');
+  const iosClaim = nonProblemRootCodes.roots.find((r) => r.conceptId === '12821000000103');
+  check(
+    !!iosClaim && iosClaim.description === 'Item of service claim statuses',
+    '12821000000103 "Item of service claim statuses" is present (added 2026-07-25)'
+  );
+  const regForm = nonProblemRootCodes.roots.find((r) => r.conceptId === '184063008');
+  check(
+    !!regForm && regForm.description === 'Patient signed reg. form',
+    '184063008 "Patient signed reg. form" is present (added 2026-07-25)'
+  );
+  check(
+    nonProblemRootCodes.roots.length === 3,
+    'exactly 3 roots configured (got ' + nonProblemRootCodes.roots.length + ')'
+  );
 }
 
 console.log('--- rootConceptIdsCsv: combined constrainingParentConcepts value ---');
@@ -101,6 +115,11 @@ console.log('--- isFlaggedConceptId: exact root match OR genuine descendant ---'
   check(
     isFlaggedConceptId('14734007', null, []) === false,
     'null roots -> not flagged (root-match check), never throws'
+  );
+  check(
+    isFlaggedConceptId('184063008', nonProblemRootCodes.roots, []) === true,
+    'the real rules file exact-matches 184063008 ("Patient signed reg. form", found live 2026-07-25) as a root ' +
+      'itself, with no descendant-search hit needed'
   );
 }
 

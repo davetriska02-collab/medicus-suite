@@ -48,7 +48,16 @@
 // confirmed" section for the caveat on sample size). The bracket-prefix/NOS
 // text pattern is used for a cheap first-pass scan across
 // clinical-summary/summary's plain-text problemCodeDescription list, without
-// a per-problem edit-problem fetch.
+// a per-problem edit-problem fetch. A leading "H/O" ("history of") prefix —
+// either "H/O " or "H/O:" — was added to this same first-pass scan
+// 2026-07-25 (LEGACY_HO_PREFIX_RE in
+// shared/legacy-coded-description.js) — see that file's own comment for why
+// it's safe by the same same-concept-only construction as the other legacy
+// markers, at the cost of the pre-existing descriptionId-correlation not yet
+// being separately confirmed for this specific prefix (the ICD-bracket/NOS
+// correlation doesn't necessarily transfer — this is a differently-sourced
+// text pattern, only the DETECTION heuristic and downstream safety filter
+// are shared, not the empirical correlation evidence).
 //
 // CODING-SPECIFICITY EXTENSION (2026-07-23): the same click that opens this
 // panel also checks for a laterality hint (rt/right, lt/left, bilateral) in
@@ -130,6 +139,14 @@
   var hintExpandedAlternatives = codingSpecificity.hintExpandedAlternatives;
   var significantWords = codingSpecificity.significantWords;
 
+  // ── Shared SNOMED-retirement parsing (active/inactivationReason/replacement) ──
+  var snomedRetirement =
+    typeof module !== 'undefined' && module.exports
+      ? require('../shared/snomed-retirement.js')
+      : window.MSSnomedRetirement;
+  var parseConceptRetirement = snomedRetirement.parseConceptRetirement;
+  var buildConceptUrl = snomedRetirement.buildConceptUrl;
+
   // ── Pure helpers, problem-specific (no window/document/fetch — unit-
   // testable via require()) ───────────────────────────────────────────────────
 
@@ -142,8 +159,21 @@
   // recordedByStaff is the field actually sent (read straight from the
   // .vue source captured in docs/learnings-problem-description-cleanup.md,
   // not guessed).
-  function buildEditProblemPayload(prefill, newProblemCode) {
+  // overrideAdditionalInformation (optional, added 2026-07-25 for the
+  // generic-additional-info-text cleanup below): when passed, replaces
+  // p.additionalInformation entirely — used for the ONE apply path that
+  // changes additionalInformation instead of problemCode (removing known
+  // GP2GP boilerplate lines), keeping problemCode itself untouched. Omitted
+  // (undefined) preserves the original behaviour exactly for every existing
+  // caller, which all change problemCode and never additionalInformation.
+  function buildEditProblemPayload(prefill, newProblemCode, overrideAdditionalInformation) {
     var p = prefill || {};
+    var additionalInformation =
+      overrideAdditionalInformation !== undefined
+        ? overrideAdditionalInformation
+        : p.additionalInformation != null
+          ? p.additionalInformation
+          : null;
     var payload = {
       onsetDate: p.onsetDate != null ? p.onsetDate : null,
       contextId: p.contextId != null ? p.contextId : null,
@@ -151,7 +181,7 @@
       significance: p.significance != null ? p.significance : null,
       episode: p.episode != null ? p.episode : null,
       problemCode: newProblemCode,
-      additionalInformation: p.additionalInformation != null ? p.additionalInformation : null,
+      additionalInformation: additionalInformation,
       hiddenFromPatientFacingServices: !!p.hiddenFromPatientFacingServices,
       confidentialFromThirdParties: !!p.confidentialFromThirdParties,
       endDate: p.endDate != null ? p.endDate : null,
@@ -178,6 +208,124 @@
     });
   }
 
+  // Bridges the termbrowser API's confirmed REPLACED BY conceptId (see
+  // shared/snomed-retirement.js) into something actually POST-able to
+  // Medicus: Medicus's edit-problem contract needs a {description, conceptId,
+  // descriptionId} sourced from MEDICUS'S OWN search index (same shape
+  // sameConceptAlternatives/crossConceptAlternatives already produce), not
+  // raw SNOMED RF2 data straight from termbrowser — a descriptionId invented
+  // from a different data source wouldn't necessarily match what Medicus's
+  // own index has for that concept and could behave unexpectedly on save.
+  // Deliberately DIFFERENT from crossConceptAlternatives: this is matched by
+  // conceptId ONLY (not by text at all) — the replacement is already
+  // confirmed by SNOMED itself, so no text-similarity check is needed or
+  // wanted. Returns null (never guesses) if Medicus's own search doesn't
+  // have this concept indexed at all — the confirmed replacement still
+  // exists, it just isn't offered as a one-click button; the caller shows
+  // the concept's own name as a manual-search pointer instead.
+  function confirmedReplacementAlternative(results, replacementConceptId) {
+    if (!Array.isArray(results) || !replacementConceptId) return null;
+    var match = results.find(function (r) {
+      var v = r && r.value;
+      return !!(v && v.conceptId === replacementConceptId);
+    });
+    if (!match) return null;
+    var v = match.value;
+    return { description: v.description, conceptId: v.conceptId, descriptionId: v.descriptionId || null };
+  }
+
+  // Manual-search results (2026-07-25, explicit user request — the "H/O:
+  // urinary disease-UTI's" case, where "UTIs" is neither a same-concept
+  // synonym, a hierarchy descendant, nor a text match of the current
+  // description, so none of the automated categories above could ever find
+  // it): normalises a RAW, UNFILTERED Medicus search response into
+  // {description, conceptId, descriptionId}[] — deliberately NOT filtered by
+  // conceptId at all, unlike every other function in this file. This is the
+  // ONE category with no automated safety constraint whatsoever — the
+  // clinician can pick any concept the search returns, exactly like
+  // Medicus's own Edit Problem search box. Deduped by descriptionId (falling
+  // back to conceptId+description, since results can span many different
+  // concepts here, unlike sameConceptAlternatives' single-concept dedup).
+  function normalizedSearchResults(results) {
+    if (!Array.isArray(results)) return [];
+    var seen = Object.create(null);
+    var out = [];
+    results.forEach(function (r) {
+      var v = r && r.value;
+      if (!v || !v.conceptId) return;
+      var key = v.descriptionId || v.conceptId + '|' + v.description;
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push({ description: v.description, conceptId: v.conceptId, descriptionId: v.descriptionId || null });
+    });
+    return out;
+  }
+
+  // Legacy Read-code-derived description detection (2026-07-25, explicit
+  // user request, real example: 359609001 "Acute nonsupp. otitis media R",
+  // problemCode.originalCodes: [{codeSystem:"read-v2", code:"F510.00",
+  // description:"Acute non suppurative otitis media"}]). A DIFFERENT,
+  // STRUCTURAL signal from every other detection in this file — not a text
+  // pattern (this description contains no "[X]"/NOS/NEC/H-O marker at all,
+  // so looksOutdated() would never catch it) and not concept retirement
+  // (359609001 can be perfectly active/current) — the concept itself may be
+  // entirely correctly forward-mapped, but the DESCRIPTION TEXT still
+  // carries the old Read code's own abbreviated wording ("nonsupp.", a bare
+  // "R" for right) verbatim. Per the user: these "almost always need
+  // cleaned up even where they've been forward-mapped to a valid SNOMED
+  // code" — so this flags independently of retirement status. Only
+  // "read-v2" is checked (confirmed on TWO real examples so far — see the
+  // retirement work's own 184063008 capture) — a different codeSystem value
+  // (e.g. a CTV3/read-v3 variant) would need its own live confirmation
+  // before being added, same discipline as every other code list in this
+  // repo. Only available from the FULL edit-problem prefill (never the
+  // cheap clinical-summary list), so — like retirement — this can only ever
+  // be checked by the opt-in scan, never the automatic per-load text scan.
+  function findLegacyReadCodeOrigin(originalCodes) {
+    if (!Array.isArray(originalCodes)) return null;
+    var match = originalCodes.find(function (oc) {
+      return oc && oc.codeSystem === 'read-v2';
+    });
+    if (!match) return null;
+    return { code: match.code, description: match.description };
+  }
+
+  // Generic GP2GP-import additionalInformation text (2026-07-25, explicit
+  // user request, real example: additionalInformation "ear\nActive Problem,
+  // Significant" — "ear" is a genuine free-text note, the second line is
+  // pure boilerplate restating problemStatus/significance metadata already
+  // captured structurally elsewhere on the problem). rules/
+  // generic-additional-info-text.json holds the list of known generic
+  // lines. Matching is PER LINE (split on "\n", trimmed, case-insensitive
+  // exact match) — NEVER against the whole field — so a genuine free-text
+  // line sharing the field with a generic one is always preserved. Returns
+  // {cleaned, removed}: `removed` is the matched line(s) (empty if none —
+  // callers check removed.length, not truthiness, to decide whether
+  // anything is offered), `cleaned` is additionalInformation with those
+  // lines stripped and surrounding whitespace trimmed, ready to submit as
+  // the override to buildEditProblemPayload above.
+  function stripGenericAdditionalInfoLines(additionalInformation, genericTexts) {
+    var text = additionalInformation == null ? '' : String(additionalInformation);
+    var genericSet = (Array.isArray(genericTexts) ? genericTexts : [])
+      .map(function (t) {
+        return String(t == null ? '' : t)
+          .trim()
+          .toLowerCase();
+      })
+      .filter(Boolean);
+    var kept = [];
+    var removed = [];
+    text.split('\n').forEach(function (line) {
+      var trimmed = line.trim();
+      if (trimmed && genericSet.indexOf(trimmed.toLowerCase()) !== -1) {
+        removed.push(trimmed);
+      } else {
+        kept.push(line);
+      }
+    });
+    return { cleaned: kept.join('\n').trim(), removed: removed };
+  }
+
   // ── Node test hook ────────────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -189,6 +337,7 @@
       LEGACY_PREFIX_RE: shared.LEGACY_PREFIX_RE,
       LEGACY_SUFFIX_RE: shared.LEGACY_SUFFIX_RE,
       LEGACY_TRAILING_ABBREVIATION_RE: shared.LEGACY_TRAILING_ABBREVIATION_RE,
+      LEGACY_HO_PREFIX_RE: shared.LEGACY_HO_PREFIX_RE,
       // Re-exported from shared/coding-specificity.js, same reasoning.
       detectLateralityHint: codingSpecificity.detectLateralityHint,
       descriptionAlreadySpecifiesLaterality: codingSpecificity.descriptionAlreadySpecifiesLaterality,
@@ -198,9 +347,16 @@
       descriptionAlreadyMentionsHint: codingSpecificity.descriptionAlreadyMentionsHint,
       hintExpandedAlternatives: codingSpecificity.hintExpandedAlternatives,
       significantWords: codingSpecificity.significantWords,
+      // Re-exported from shared/snomed-retirement.js, same reasoning.
+      parseConceptRetirement: snomedRetirement.parseConceptRetirement,
+      buildConceptUrl: snomedRetirement.buildConceptUrl,
       // Problem-specific.
       buildEditProblemPayload,
       findOutdatedProblems,
+      confirmedReplacementAlternative,
+      normalizedSearchResults,
+      findLegacyReadCodeOrigin,
+      stripGenericAdditionalInfoLines,
     };
     return;
   }
@@ -273,6 +429,18 @@
     return apiFetch('/clinical/data/problem/edit-problem/' + encodeURIComponent(problemId));
   }
 
+  // Same endpoint content-scripts/problem-junk-code-cleanup.js already uses
+  // (GET clinical/data/problem/slideover/overview/{problemId}) — used HERE
+  // only to read problemCode.originalCodes for the legacy-Read-code check
+  // (findLegacyReadCodeOrigin's own comment has the full story on why this
+  // is a SEPARATE fetch from fetchEditProblemForm above, not a re-read of
+  // the same data: originalCodes is confirmed present on THIS shape, not
+  // confirmed on edit-problem's problemCode.value shape that openPanel's
+  // apply flow relies on).
+  function fetchProblemOverview(problemId) {
+    return apiFetch('/clinical/data/problem/slideover/overview/' + encodeURIComponent(problemId));
+  }
+
   // outputParentConceptIds=1 is additive — harmless for the existing
   // same-concept search, and it's what unlocks descendant/laterality
   // suggestions below (confirmed live 2026-07-23: every result carries a
@@ -324,6 +492,83 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+  }
+
+  // Loads rules/generic-additional-info-text.json ONCE per page load — a
+  // local extension resource, not a Medicus call. Falls back to an empty
+  // list (never throws) if the resource is unavailable, same "fail open to
+  // inert, not to a crash" discipline as ensureNonProblemRootsLoaded in
+  // content-scripts/problem-junk-code-cleanup.js.
+  var _genericAdditionalInfoPromise = null;
+  function ensureGenericAdditionalInfoTextLoaded() {
+    if (_genericAdditionalInfoPromise) return _genericAdditionalInfoPromise;
+    _genericAdditionalInfoPromise = (async function () {
+      try {
+        var url = chrome.runtime.getURL('rules/generic-additional-info-text.json');
+        var doc = await fetch(url).then(function (r) {
+          return r.json();
+        });
+        return Array.isArray(doc && doc.entries)
+          ? doc.entries
+              .map(function (e) {
+                return e && e.text;
+              })
+              .filter(Boolean)
+          : [];
+      } catch (e) {
+        return [];
+      }
+    })();
+    return _genericAdditionalInfoPromise;
+  }
+
+  // ── Retirement check (public NHS termbrowser API — a SEPARATE, no-auth
+  // external host, not Medicus's own API) ──────────────────────────────────
+  // See rules/snomed-terminology-server.json's own notes for why this API
+  // and not the official NHS England Terminology Server FHIR API (that one
+  // needs a system-to-system account, which can't be safely embedded in a
+  // distributed browser extension).
+  var _termServerConfigPromise = null;
+  function ensureTermServerConfigLoaded() {
+    if (_termServerConfigPromise) return _termServerConfigPromise;
+    _termServerConfigPromise = (async function () {
+      try {
+        var url = chrome.runtime.getURL('rules/snomed-terminology-server.json');
+        return await fetch(url).then(function (r) {
+          return r.json();
+        });
+      } catch (e) {
+        return null;
+      }
+    })();
+    return _termServerConfigPromise;
+  }
+
+  // Fails closed to {active: null, ...} (via parseConceptRetirement) on ANY
+  // problem — network error, non-2xx, malformed JSON, or the real
+  // wrong-release-string response (a bare `false`, confirmed live
+  // 2026-07-25) — never guesses a concept is active or inactive when the
+  // check itself didn't cleanly succeed. Callers must treat active:null as
+  // "skip", the same discipline as every other fail-open-to-inert pattern
+  // in this codebase.
+  async function fetchRetirementStatus(conceptId) {
+    try {
+      var config = await ensureTermServerConfigLoaded();
+      var url = buildConceptUrl(config, conceptId);
+      if (!url) return parseConceptRetirement(null);
+      var resp = await fetch(url, { headers: { Accept: 'application/json, text/plain, */*' } });
+      if (!resp.ok) return parseConceptRetirement(null);
+      var text = await resp.text();
+      var data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        return parseConceptRetirement(null);
+      }
+      return parseConceptRetirement(data);
+    } catch (e) {
+      return parseConceptRetirement(null);
+    }
   }
 
   // ── DOM: finding each flagged problem's row ──────────────────────────────────
@@ -384,11 +629,153 @@
         descendantAlternatives: null,
         crossConceptAlternatives: null,
         hintExpandedAlternatives: null,
+        retiredInfo: null, // {inactivationReason, replacement} — set by the opt-in retirement scan, never by the automatic text scan
+        confirmedReplacement: null, // {description, conceptId, descriptionId} resolved from Medicus's own search, or null
+        legacyReadCode: null, // {code, description} — set by the opt-in scan when originalCodes shows a read-v2 origin
+        genericAdditionalInfo: null, // {cleaned, removed} — computed in openPanel from prefill.additionalInformation, ANY row
+        genericAdditionalInfoSaving: false,
+        manualSearchQuery: '',
+        manualSearchResults: null,
+        manualSearchLoading: false,
+        manualSearchError: null,
         saving: false,
         saved: false,
       };
     }
     return _rows[problemId];
+  }
+
+  // Retirement banner — only rendered for rows flagged by the opt-in
+  // retirement scan (st.retiredInfo set), never for text-flagged rows. Three
+  // shapes, from best to worst evidence: a confirmed replacement Medicus's
+  // own search recognises (one-click button, HIGHEST trust — SNOMED itself
+  // names this as the successor, no text-similarity guess involved); a
+  // confirmed replacement SNOMED names but Medicus's own search doesn't
+  // recognise (informational only — nothing safe to offer a button for);
+  // no replacement recorded at all (informational only — the suggestions
+  // below, if any, are the clinician's best remaining option).
+  function retiredInfoHtml(problemId, st) {
+    if (!st.retiredInfo) return '';
+    var reason = st.retiredInfo.inactivationReason;
+    var reasonText = reason ? esc(reason.description) : 'unspecified reason';
+    var html =
+      '<div class="ms-pdc-retired-note">⚠ This code has been RETIRED by SNOMED CT (' + reasonText + ').</div>';
+    if (st.confirmedReplacement) {
+      html +=
+        '<div class="ms-pdc-retired-replacement-section">' +
+        '<span class="ms-pdc-retired-replacement-label">✓ SNOMED confirms the replacement code:</span>' +
+        '<div class="ms-pdc-panel">' +
+        '<button type="button" class="ms-pdc-retired-replacement-btn" data-problem-id="' +
+        esc(problemId) +
+        '">' +
+        esc(st.confirmedReplacement.description) +
+        '</button>' +
+        '</div></div>';
+    } else if (st.retiredInfo.replacement) {
+      html +=
+        '<div class="ms-pdc-retired-replacement-unmatched">SNOMED replaced this code with "' +
+        esc(st.retiredInfo.replacement.description) +
+        '" but it could not be matched in Medicus’s own search index — please search for it manually via Edit Problem.</div>';
+    } else {
+      html +=
+        '<div class="ms-pdc-retired-no-replacement">No automatic replacement is recorded for this retirement — review the suggestions below, or search manually via Edit Problem.</div>';
+    }
+    return html;
+  }
+
+  // Legacy Read-code-origin banner (2026-07-25) — see
+  // findLegacyReadCodeOrigin's own comment for the full detection story.
+  // Purely informational, same family as retiredInfoHtml's neutral notes —
+  // this ISN'T saying the code is wrong, just that its description text is
+  // Read-code-derived and worth checking against the suggestions below.
+  function legacyReadCodeHtml(st) {
+    if (!st.legacyReadCode) return '';
+    return (
+      '<div class="ms-pdc-legacy-readcode-note">ℹ This description is derived from an old Read code (' +
+      esc(st.legacyReadCode.code) +
+      ' “' +
+      esc(st.legacyReadCode.description) +
+      '”) — even if the SNOMED code itself is current, review the suggestions below for a clearer modern wording.</div>'
+    );
+  }
+
+  // Generic-additional-info-text cleanup (2026-07-25) — see
+  // stripGenericAdditionalInfoLines' own comment for the full story. Changes
+  // additionalInformation only, NEVER problemCode — the safest apply path in
+  // this whole file (surgical removal of an exact-matched known-boilerplate
+  // line, no coding decision involved at all), so styled plainly rather than
+  // with any of the risk-graded palettes above.
+  function genericAdditionalInfoHtml(problemId, st) {
+    if (!st.genericAdditionalInfo) return '';
+    var lines = st.genericAdditionalInfo.removed;
+    return (
+      '<div class="ms-pdc-genericinfo-section">' +
+      '<span class="ms-pdc-genericinfo-label">Generic import text found in Additional info (' +
+      lines.map(esc).join(', ') +
+      '):</span>' +
+      '<button type="button" class="ms-pdc-genericinfo-btn" data-problem-id="' +
+      esc(problemId) +
+      '"' +
+      (st.genericAdditionalInfoSaving ? ' disabled' : '') +
+      '>' +
+      (st.genericAdditionalInfoSaving ? 'Removing…' : 'Remove generic import text') +
+      '</button>' +
+      '</div>'
+    );
+  }
+
+  // Manual search box (2026-07-25) — the ONE section always rendered
+  // regardless of whether any automated category above found anything (see
+  // panelHtml's call sites: it's appended in BOTH the early "nothing found"
+  // return and the normal path), since it exists specifically to cover
+  // cases none of the automated categories can reach. Deliberately styled
+  // and labelled as distinct from every category above — this is the only
+  // one with NO automated safety constraint, functionally identical to
+  // typing into Medicus's own Edit Problem search box.
+  function manualSearchHtml(problemId, st) {
+    var results = st.manualSearchResults || [];
+    var html =
+      '<div class="ms-pdc-manualsearch-section">' +
+      '<span class="ms-pdc-manualsearch-label">Or search manually — no automated check, same as Medicus’s own search:</span>' +
+      '<div class="ms-pdc-manualsearch-row">' +
+      '<input type="text" class="ms-pdc-manualsearch-input" data-problem-id="' +
+      esc(problemId) +
+      '" placeholder="e.g. UTI" value="' +
+      esc(st.manualSearchQuery || '') +
+      '">' +
+      '<button type="button" class="ms-pdc-manualsearch-btn" data-problem-id="' +
+      esc(problemId) +
+      '"' +
+      (st.manualSearchLoading ? ' disabled' : '') +
+      '>' +
+      (st.manualSearchLoading ? 'Searching…' : 'Search') +
+      '</button>' +
+      '</div>';
+    if (st.manualSearchError) {
+      html += '<div class="ms-pdc-manualsearch-error">' + esc(st.manualSearchError) + '</div>';
+    } else if (st.manualSearchResults !== null) {
+      html += results.length
+        ? '<div class="ms-pdc-panel">' +
+          results
+            .map(function (a) {
+              return (
+                '<button type="button" class="ms-pdc-manualsearch-result" data-problem-id="' +
+                esc(problemId) +
+                '" data-concept-id="' +
+                esc(a.conceptId) +
+                '" data-description-id="' +
+                esc(a.descriptionId || '') +
+                '">' +
+                esc(a.description) +
+                '</button>'
+              );
+            })
+            .join('') +
+          '</div>'
+        : '<div class="ms-pdc-manualsearch-empty">No results.</div>';
+    }
+    html += '</div>';
+    return html;
   }
 
   function panelHtml(problemId) {
@@ -406,15 +793,20 @@
     // Surfaced regardless of whether any suggestion was found — supports the
     // clinician's own judgement call even when the tool has nothing to
     // offer (e.g. a "[SO]"/NEC code the search can't currently match).
-    var infoHtml = st.additionalInformation
-      ? '<div class="ms-pdc-additional-info"><span class="ms-pdc-additional-info-label">Additional info:</span> ' +
-        esc(st.additionalInformation) +
-        '</div>'
-      : '';
+    var infoHtml =
+      (st.additionalInformation
+        ? '<div class="ms-pdc-additional-info"><span class="ms-pdc-additional-info-label">Additional info:</span> ' +
+          esc(st.additionalInformation) +
+          '</div>'
+        : '') +
+      genericAdditionalInfoHtml(problemId, st) +
+      retiredInfoHtml(problemId, st) +
+      legacyReadCodeHtml(st);
     if (!alts.length && !descendants.length && !crossConcept.length && !hintExpanded.length) {
       return (
         infoHtml +
-        '<div class="ms-pdc-panel"><span class="ms-pdc-empty">No alternative description found for this code.</span></div>'
+        '<div class="ms-pdc-panel"><span class="ms-pdc-empty">No alternative description found for this code.</span></div>' +
+        manualSearchHtml(problemId, st)
       );
     }
     var html = infoHtml;
@@ -526,6 +918,7 @@
         '</div>' +
         '</div>';
     }
+    html += manualSearchHtml(problemId, st);
     return html;
   }
 
@@ -569,6 +962,43 @@
         applyHintExpanded(problemId, btn.getAttribute('data-concept-id'), btn.getAttribute('data-description-id'));
       });
     });
+    root.querySelectorAll('.ms-pdc-retired-replacement-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyConfirmedReplacement(problemId);
+      });
+    });
+    root.querySelectorAll('.ms-pdc-manualsearch-result').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyManualSearchResult(
+          problemId,
+          btn.getAttribute('data-concept-id'),
+          btn.getAttribute('data-description-id')
+        );
+      });
+    });
+    var searchInput = root.querySelector('.ms-pdc-manualsearch-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', function (e) {
+        rowState(problemId).manualSearchQuery = e.target.value;
+      });
+      searchInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          runManualSearch(problemId);
+        }
+      });
+    }
+    var searchBtn = root.querySelector('.ms-pdc-manualsearch-btn');
+    if (searchBtn) {
+      searchBtn.addEventListener('click', function () {
+        runManualSearch(problemId);
+      });
+    }
+    root.querySelectorAll('.ms-pdc-genericinfo-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyRemoveGenericAdditionalInfo(problemId);
+      });
+    });
   }
 
   async function openPanel(problemId) {
@@ -582,13 +1012,24 @@
     st.error = null;
     renderPanel(problemId);
     try {
-      var prefill = await fetchEditProblemForm(problemId);
+      // Reuse the prefill already fetched by the retirement scan (see
+      // runRetiredCodesScan) when this row was flagged that way, instead of
+      // re-fetching the identical edit-problem form a second time.
+      var prefill = st.prefill || (await fetchEditProblemForm(problemId));
       var code = prefill && prefill.problemCode && prefill.problemCode.value;
       if (!code || !code.conceptId) throw new Error('Could not read this problem’s code.');
       st.prefill = prefill;
       st.conceptId = code.conceptId;
       st.currentDescription = code.description;
       st.additionalInformation = prefill.additionalInformation || '';
+      // Computed for EVERY open panel, regardless of why this row was
+      // flagged — additionalInformation is already in hand here whether the
+      // fetch above just ran or was reused from the retirement/legacy-code
+      // scan's own cache, so this costs nothing extra (one local extension
+      // resource load, cached after the first panel opens).
+      var genericTexts = await ensureGenericAdditionalInfoTextLoaded();
+      var stripped = stripGenericAdditionalInfoLines(prefill.additionalInformation, genericTexts);
+      st.genericAdditionalInfo = stripped.removed.length ? stripped : null;
       var queryText = stripLegacyMarkers(code.description);
       var results = await searchDescriptions(queryText);
       // Supplement with an SCTID-keyed search for the current concept's own
@@ -657,6 +1098,21 @@
           var expandedResults = await searchDescriptions(queryText + ' ' + pathologyHint);
           st.hintExpandedAlternatives = hintExpandedAlternatives(expandedResults, code.conceptId, pathologyHint);
         }
+      }
+      // Confirmed SNOMED replacement (only set when this row was flagged by
+      // the opt-in retirement scan, never by the automatic text scan) — one
+      // more search, this time by the REPLACEMENT concept's own conceptId
+      // (bare SCTID — see the WORD-MISMATCH FIX comment above for why this
+      // reliably returns that concept's own synonyms regardless of text
+      // phrasing), to find Medicus's own indexed form of it.
+      if (st.retiredInfo && st.retiredInfo.replacement) {
+        var replacementResults = await searchDescriptions(st.retiredInfo.replacement.conceptId);
+        st.confirmedReplacement = confirmedReplacementAlternative(
+          replacementResults,
+          st.retiredInfo.replacement.conceptId
+        );
+      } else {
+        st.confirmedReplacement = null;
       }
     } catch (err) {
       st.error = (err && err.message) || 'Failed to load alternative descriptions.';
@@ -756,6 +1212,76 @@
     return applyCode(problemId, chosen);
   }
 
+  // Only one candidate ever exists here (SNOMED's own confirmed replacement,
+  // resolved once in openPanel), so no id-matching needed unlike the lookups
+  // above — just apply whatever's already on the row's state.
+  function applyConfirmedReplacement(problemId) {
+    var st = rowState(problemId);
+    return applyCode(problemId, st.confirmedReplacement);
+  }
+
+  // Manual search (2026-07-25) — available on every open panel regardless of
+  // whether the automated categories above found anything, since it exists
+  // specifically for cases none of them can reach (see
+  // normalizedSearchResults' own comment for the motivating "UTIs" example).
+  // Reuses the SAME broad SEARCH_PATH query the automated categories already
+  // use, just without the conceptId/text-match filtering they apply.
+  async function runManualSearch(problemId) {
+    var st = rowState(problemId);
+    var query = (st.manualSearchQuery || '').trim();
+    if (!query || st.manualSearchLoading) return;
+    st.manualSearchLoading = true;
+    st.manualSearchError = null;
+    renderPanel(problemId);
+    try {
+      var results = await searchDescriptions(query);
+      st.manualSearchResults = normalizedSearchResults(results);
+    } catch (err) {
+      st.manualSearchError = (err && err.message) || 'Search failed — please try again.';
+      st.manualSearchResults = null;
+    } finally {
+      st.manualSearchLoading = false;
+      renderPanel(problemId);
+    }
+  }
+
+  // Matched by conceptId + descriptionId together, same reasoning as
+  // applyCrossConcept — manual search results can span many different
+  // concepts, not just one.
+  function applyManualSearchResult(problemId, conceptId, descriptionId) {
+    var st = rowState(problemId);
+    var chosen = (st.manualSearchResults || []).find(function (a) {
+      return a.conceptId === conceptId && (a.descriptionId || '') === (descriptionId || '');
+    });
+    return applyCode(problemId, chosen);
+  }
+
+  // Removes the confirmed generic-import line(s) from additionalInformation
+  // ONLY — problemCode is resent completely unchanged (buildEditProblemPayload's
+  // overrideAdditionalInformation param, see its own comment). Separate from
+  // applyCode: that function always changes problemCode and leaves
+  // additionalInformation alone; this one is its exact mirror.
+  async function applyRemoveGenericAdditionalInfo(problemId) {
+    var st = rowState(problemId);
+    if (!st.genericAdditionalInfo || st.genericAdditionalInfoSaving || !st.prefill) return;
+    var code = st.prefill.problemCode && st.prefill.problemCode.value;
+    if (!code) return;
+    st.genericAdditionalInfoSaving = true;
+    renderPanel(problemId);
+    try {
+      var payload = buildEditProblemPayload(st.prefill, code, st.genericAdditionalInfo.cleaned);
+      await postEditProblem(problemId, payload);
+      st.additionalInformation = st.genericAdditionalInfo.cleaned;
+      st.prefill = Object.assign({}, st.prefill, { additionalInformation: st.genericAdditionalInfo.cleaned });
+      st.genericAdditionalInfo = null;
+    } catch (err) {
+      st.error = (err && err.message) || 'Failed to remove generic text — please try again.';
+    } finally {
+      st.genericAdditionalInfoSaving = false;
+      renderPanel(problemId);
+    }
+  }
+
   // ── Injection: one "Fix description" button per flagged row ─────────────────
 
   function injectFixButton(problemId, anchorEl) {
@@ -783,6 +1309,195 @@
     if (st.open) renderPanel(problemId);
   }
 
+  // ── Code-health scan: opt-in trigger, checks EVERY active problem ──────────
+  // (retirement check added 2026-07-25 per explicit user request; the
+  // legacy-Read-code check added the same day — see findLegacyReadCodeOrigin
+  // and fetchProblemOverview's own comments for that one's full story).
+  // Deliberately NOT folded into the automatic per-load text scan above:
+  // `looksOutdated()` is a cheap, no-fetch heuristic, but BOTH checks here
+  // need a per-problem fetch — retirement needs the conceptId (via
+  // edit-problem, the SAME endpoint "Fix description" already uses when
+  // clicked) PLUS one external NHS termbrowser fetch per DISTINCT conceptId;
+  // the Read-code check needs slideover/overview's problemCode.originalCodes
+  // — real per-patient cost, same class as problem-junk-code-cleanup.js's
+  // "Bulk remove?" scan, so this is its own opt-in click, never automatic.
+  // Internal names below still say "retired" (kept as-is rather than a
+  // mechanical rename across every identifier) even though the scan and its
+  // button now cover both signals — see the button's own label text for
+  // what's actually shown to the clinician. A flagged row gets its "Fix
+  // description" button injected (reusing injectFixButton, which already
+  // de-dupes against a row already flagged by the text scan) with
+  // st.retiredInfo and/or st.legacyReadCode pre-populated — see
+  // retiredInfoHtml/legacyReadCodeHtml/openPanel above for how those render
+  // and reuse the cached prefill.
+
+  var _retiredScanState = 'idle'; // 'idle' | 'scanning' | 'done' | 'error'
+  var _retiredScanError = null;
+  var _retiredFlaggedCount = 0;
+
+  async function runRetiredCodesScan() {
+    _retiredScanState = 'scanning';
+    _retiredScanError = null;
+    renderRetiredWidget();
+    try {
+      if (!_problemsCache || !_problemsCache.length) throw new Error('No active problems to check.');
+      // Pre-claim anchors already used by text-flagged rows so this scan's
+      // own findProblemRow calls can't collide with them on duplicate text —
+      // same discipline findOutdatedProblems' own scan already relies on.
+      var claimedAnchors = new Set();
+      findOutdatedProblems(_problemsCache).forEach(function (p) {
+        var row = findProblemRow(p.problemCodeDescription, claimedAnchors);
+        if (row) claimedAnchors.add(row);
+      });
+      var prefillsById = Object.create(null);
+      var overviewsById = Object.create(null);
+      await Promise.all(
+        _problemsCache.map(function (p) {
+          return Promise.all([
+            fetchEditProblemForm(p.id)
+              .then(function (prefill) {
+                prefillsById[p.id] = prefill;
+              })
+              .catch(function () {
+                prefillsById[p.id] = null;
+              }),
+            fetchProblemOverview(p.id)
+              .then(function (overview) {
+                overviewsById[p.id] = overview;
+              })
+              .catch(function () {
+                overviewsById[p.id] = null;
+              }),
+          ]);
+        })
+      );
+      // One retirement-status fetch per DISTINCT conceptId, never one per
+      // problem — same discipline as problem-junk-code-cleanup.js.
+      var conceptIdByProblemId = Object.create(null);
+      var distinctConceptIds = [];
+      _problemsCache.forEach(function (p) {
+        var prefill = prefillsById[p.id];
+        var code = prefill && prefill.problemCode && prefill.problemCode.value;
+        var conceptId = code && code.conceptId;
+        if (!conceptId) return;
+        conceptIdByProblemId[p.id] = conceptId;
+        if (distinctConceptIds.indexOf(conceptId) === -1) distinctConceptIds.push(conceptId);
+      });
+      var retirementByConceptId = Object.create(null);
+      await Promise.all(
+        distinctConceptIds.map(function (conceptId) {
+          return fetchRetirementStatus(conceptId).then(function (info) {
+            retirementByConceptId[conceptId] = info;
+          });
+        })
+      );
+      // Zero extra fetches — prefillsById[p.id].additionalInformation is
+      // already in hand from the edit-problem fetch above, so this THIRD
+      // flagging reason costs only one local resource load (cached after
+      // the first call), same as it does inside openPanel.
+      var genericTexts = await ensureGenericAdditionalInfoTextLoaded();
+      var flaggedCount = 0;
+      _problemsCache.forEach(function (p) {
+        var conceptId = conceptIdByProblemId[p.id];
+        var retirement = conceptId ? retirementByConceptId[conceptId] : null;
+        // active:null means the check itself didn't cleanly resolve (network
+        // error, stale release string, …) — never treat as retired.
+        var isRetired = !!(retirement && retirement.active === false);
+        var overview = overviewsById[p.id];
+        var legacyReadCode = findLegacyReadCodeOrigin(
+          overview && overview.problemCode && overview.problemCode.originalCodes
+        );
+        var prefill = prefillsById[p.id];
+        var genericInfo = stripGenericAdditionalInfoLines(prefill && prefill.additionalInformation, genericTexts);
+        var hasGenericInfo = genericInfo.removed.length > 0;
+        if (!isRetired && !legacyReadCode && !hasGenericInfo) return;
+        flaggedCount++;
+        var st = rowState(p.id);
+        st.prefill = prefill;
+        if (isRetired) {
+          st.retiredInfo = { inactivationReason: retirement.inactivationReason, replacement: retirement.replacement };
+        }
+        if (legacyReadCode) st.legacyReadCode = legacyReadCode;
+        if (hasGenericInfo) st.genericAdditionalInfo = genericInfo;
+        var row = findProblemRow(p.problemCodeDescription, claimedAnchors);
+        if (row) {
+          claimedAnchors.add(row);
+          injectFixButton(p.id, row);
+        }
+      });
+      _retiredFlaggedCount = flaggedCount;
+      _retiredScanState = 'done';
+    } catch (err) {
+      _retiredScanState = 'error';
+      _retiredScanError = (err && err.message) || 'Failed to check for retired/legacy codes.';
+    } finally {
+      renderRetiredWidget();
+    }
+  }
+
+  function buildRetiredWidgetHtml() {
+    if (_retiredScanState === 'scanning') {
+      return '<span class="ms-pdc-retired-scan-status ms-pdc-loading">Checking for retired/legacy codes and import noise…</span>';
+    }
+    if (_retiredScanState === 'error') {
+      return (
+        '<span class="ms-pdc-retired-scan-status ms-pdc-error">' +
+        esc(_retiredScanError) +
+        '</span> <button type="button" class="ms-pdc-retired-scan-retry" id="ms-pdc-retired-scan-retry">Retry</button>'
+      );
+    }
+    if (_retiredScanState === 'done') {
+      return (
+        '<span class="ms-pdc-retired-scan-status">' +
+        (_retiredFlaggedCount
+          ? _retiredFlaggedCount +
+            ' problem' +
+            (_retiredFlaggedCount === 1 ? '' : 's') +
+            ' flagged (retired code, Read-code-derived description, and/or generic import text) — see "Fix description" on the flagged problem(s) above.'
+          : 'Nothing flagged.') +
+        '</span>'
+      );
+    }
+    return '<button type="button" class="ms-pdc-retired-scan-btn" id="ms-pdc-retired-scan-btn">Check for retired/legacy codes?</button>';
+  }
+
+  function bindRetiredWidgetEvents(el) {
+    var btn = el.querySelector('#ms-pdc-retired-scan-btn');
+    if (btn) btn.addEventListener('click', runRetiredCodesScan);
+    var retry = el.querySelector('#ms-pdc-retired-scan-retry');
+    if (retry) retry.addEventListener('click', runRetiredCodesScan);
+  }
+
+  function renderRetiredWidget() {
+    var el = document.getElementById('ms-pdc-retired-widget');
+    if (!el) return;
+    el.innerHTML = buildRetiredWidgetHtml();
+    bindRetiredWidgetEvents(el);
+  }
+
+  // Placement mirrors content-scripts/problem-junk-code-cleanup.js's own
+  // "Major" heading anchor (duplicated rather than shared — see
+  // findProblemRow's comment above for the precedent of small DOM-finding
+  // helpers being kept local to each content script rather than factored
+  // out for one call site). Falls back to whichever list holds the first
+  // cached problem if no confirmed "Major" section exists on the page.
+  function injectRetiredWidgetTrigger() {
+    if (document.getElementById('ms-pdc-retired-widget')) return;
+    if (!_problemsCache || !_problemsCache.length) return;
+    var list = document.querySelector('ul[aria-labelledby="problems-major-label"]');
+    if (!list) {
+      var row = findProblemRow(_problemsCache[0].problemCodeDescription, null);
+      if (!row) return;
+      list = row.closest('li') ? row.closest('li').parentElement : row.parentElement;
+    }
+    if (!list || !list.parentElement) return;
+    var w = document.createElement('div');
+    w.id = 'ms-pdc-retired-widget';
+    w.innerHTML = buildRetiredWidgetHtml();
+    list.parentElement.insertBefore(w, list);
+    bindRetiredWidgetEvents(w);
+  }
+
   // ── Scan + re-injection ───────────────────────────────────────────────────────
   // Same discipline as the other inline widgets (document-file-inline.js,
   // task-inline.js): re-check on every mutation tick since Vue re-renders
@@ -799,6 +1514,11 @@
       _lastPatientId = info.patientId;
       _problemsCache = null;
       _rows = Object.create(null);
+      _retiredScanState = 'idle';
+      _retiredScanError = null;
+      _retiredFlaggedCount = 0;
+      var staleRetiredWidget = document.getElementById('ms-pdc-retired-widget');
+      if (staleRetiredWidget) staleRetiredWidget.remove();
     }
     if (!_problemsCache && !_scanInFlight) {
       _scanInFlight = true;
@@ -823,6 +1543,7 @@
         injectFixButton(p.id, row);
       }
     });
+    if (_problemsCache.length) injectRetiredWidgetTrigger();
   }
 
   var _throttle = null;
@@ -840,16 +1561,17 @@
         m.target &&
         m.target.nodeType === 1 &&
         m.target.closest &&
-        m.target.closest('.ms-pdc-panel-wrap, .ms-pdc-fix-btn')
+        m.target.closest('.ms-pdc-panel-wrap, .ms-pdc-fix-btn, #ms-pdc-retired-widget')
       ) {
         continue;
       }
       for (var nodes of [m.addedNodes, m.removedNodes]) {
         for (var n of nodes) {
           if (n.nodeType !== 1) continue;
+          if (n.id === 'ms-pdc-retired-widget') continue;
           if (n.classList && (n.classList.contains('ms-pdc-panel-wrap') || n.classList.contains('ms-pdc-fix-btn')))
             continue;
-          if (n.closest && n.closest('.ms-pdc-panel-wrap, .ms-pdc-fix-btn')) continue;
+          if (n.closest && n.closest('.ms-pdc-panel-wrap, .ms-pdc-fix-btn, #ms-pdc-retired-widget')) continue;
           return false;
         }
       }

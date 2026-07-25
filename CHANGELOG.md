@@ -2,6 +2,233 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.190.0] — 2026-07-25
+
+### "Fix description" scan gains two more independent checks: Read-code-derived text, generic import noise
+
+Two more requests from the same live-testing session as v3.188.0/v3.189.0's retirement
+scan and manual search box.
+
+**Legacy Read-code-derived descriptions.** Real example: `359609001` "Acute nonsupp.
+otitis media R" — `problemCode.originalCodes: [{codeSystem:"read-v2", code:"F510.00",
+description:"Acute non suppurative otitis media"}]`. A DIFFERENT, structural signal from
+everything else this tool checks: not a text pattern (no `[X]`/NOS/NEC/H-O marker, so
+`looksOutdated()` never catches it) and not retirement (the concept can be entirely
+current) — the description text still carries the OLD Read code's own abbreviated wording
+verbatim. Per the user: these "almost always need cleaned up even where they've been
+forward-mapped to a valid SNOMED code," so this flags independently of retirement status.
+Only available from `slideover/overview` (confirmed live — NOT confirmed present on
+`edit-problem`'s own shape, so this fetches that endpoint separately rather than assuming),
+so — like retirement — only ever checked by the opt-in scan, one more fetch per active
+problem. Only `codeSystem: "read-v2"` is recognised (confirmed on two real examples now);
+other Read-derived codeSystem values would need their own live confirmation first.
+
+**Generic GP2GP-import "Additional info" text.** Real example: `additionalInformation:
+"ear\nActive Problem, Significant"` — "ear" is a genuine free-text note, the second line
+is pure boilerplate restating `problemStatus`/`significance` metadata already captured
+structurally elsewhere on the problem. New `rules/generic-additional-info-text.json`
+(starting with `"Active Problem, Significant"`) and `stripGenericAdditionalInfoLines()` —
+matching is PER LINE (split, trimmed, case-insensitive), never against the whole field, so
+a genuine note sharing the field with a generic line is always preserved. Offered on
+**every** open panel regardless of trigger (the field is already fetched for any flagged
+row) — new "Remove generic import text" button submits `additionalInformation` with just
+the matched line(s) stripped, `problemCode` completely unchanged (`buildEditProblemPayload`
+gained an optional `overrideAdditionalInformation` third parameter for this, backward
+compatible with every existing 2-argument caller). The safest apply path in this file —
+surgical removal of an exact-matched known-boilerplate string, no coding decision at all —
+styled plainly rather than with any risk-graded colour.
+
+Both checks are folded into the SAME opt-in "Check for retired/legacy codes?" scan as the
+retirement check (button/status text updated to reflect all three), since all three reuse
+data already being fetched per active problem — the generic-text check in particular costs
+nothing extra at all, reusing the SAME edit-problem fetch every row already needed.
+
+24 new tests across `test-problem-description-cleanup.js` (171 total, up from 147).
+
+## [v3.189.0] — 2026-07-25
+
+### "Fix description" gains a manual search box
+
+v3.188.0's retirement scan shipped and was confirmed live the same day — flagging real
+retired codes (`30989003`) and correctly suggesting confirmed replacements (`1003722009`).
+This adds one more panel section, motivated by a real problem on the same patient: "H/O:
+urinary disease-UTI's" is better coded via "UTIs", but that's neither a same-concept
+synonym, a hierarchy descendant, nor an exact text match of the current description — none
+of the four automated categories could ever find it.
+
+New manual search box (`content-scripts/problem-description-cleanup.js`), shown at the
+bottom of every open panel regardless of whether the automated categories found anything.
+Reuses the same broad `SEARCH_PATH` query the automated categories already call, but
+**deliberately unfiltered** — `normalizedSearchResults` returns every result across every
+concept the search finds, not narrowed to one conceptId or one exact text match like every
+other function in this file. This is the ONE category with no automated safety constraint
+at all, functionally identical to typing into Medicus's own Edit Problem search box —
+styled in neutral grey, explicitly separated from the amber/blue/orange/red/green
+risk-graded categories above it, with copy stating plainly there's no automated check.
+
+6 new tests in `test-problem-description-cleanup.js`.
+
+## [v3.188.0] — 2026-07-25
+
+### "Fix description" gains a "Check for retired codes?" scan
+
+Extends `content-scripts/problem-description-cleanup.js` with an opt-in scan that checks
+every ACTIVE problem's own SNOMED conceptId against the public, no-auth NHS SNOMED CT
+UK-edition termbrowser API (`termbrowser.nhs.uk` — a SEPARATE service from the official
+NHS England Terminology Server FHIR API, which requires a system-to-system account that
+can't be safely embedded in a distributed browser extension; new host permission
+`https://termbrowser.nhs.uk/*`). A confirmed-retired problem gets its "Fix description"
+button injected the same way a text-flagged one does — reusing all of that flow's existing
+apply/safety machinery — with a new retirement banner rendered above the usual suggestion
+categories.
+
+**Deliberately routes to "Fix description", never "Bulk remove?"** — an explicit user
+correction during design: retirement of a SNOMED code doesn't by itself mean the clinical
+data entered is invalid or that the problem isn't real; it only means the CODE needs
+attention. Two real examples confirmed live: `184063008` ("Patient signed registration
+form") is retired with NO replacement recorded (`memberships[]` has an inactivation-reason
+entry, "Nonconformance to editorial policy component", but no historical-association
+pointing anywhere); `398307005` (the LSCS code already documented in this repo) is retired
+WITH a confirmed `REPLACED BY` replacement, `788180009`. Both cases feed into the SAME
+existing description-search flow (same-concept/descendant/cross-concept/hint-expanded), so
+even the no-replacement case still gets the clinician a route to an active code via text
+search — plus, when a `REPLACED BY` association exists, a new highest-trust "SNOMED
+confirms the replacement code" suggestion appears above everything else (green, distinct
+from the amber/blue/orange/red risk-ordered categories already there — this one isn't a
+risk category, it's the closest thing to a verified answer this tool offers). That
+suggestion is only offered as a clickable button once Medicus's OWN search index is
+confirmed to recognise the replacement concept (`confirmedReplacementAlternative` in
+`content-scripts/problem-description-cleanup.js`) — a `descriptionId` invented from
+termbrowser's raw SNOMED data wouldn't necessarily match what Medicus's own index expects
+on save, so an unmatched replacement is shown as text only, never a button.
+
+**Only the confirmed `REPLACED BY` association type (refset `900000000000526001`) is
+implemented** — SNOMED's historical-association family also includes SAME AS, POSSIBLY
+EQUIVALENT TO, MOVED TO and others, none of which have a live-confirmed example yet, so
+their refset IDs are deliberately NOT hardcoded (this codebase's standing rule: never
+hardcode a SNOMED metadata ID without live confirmation). Both real captures also carry an
+unrelated `ASSOCIATION`-type membership (`1322291000000109`, "NHS Care Record Element
+association") that is explicitly excluded from replacement detection — confirmed as a
+confusable case, not a replacement pointer.
+
+**Opt-in, not automatic** — checking every active problem costs one Medicus fetch per
+problem (reusing the same edit-problem endpoint "Fix description" already calls) plus one
+external termbrowser fetch per distinct conceptId; real per-patient cost, so this is its
+own "Check for retired codes?" trigger, same class as `problem-junk-code-cleanup.js`'s
+"Bulk remove?" scan, never run automatically on page load. The release-string config
+(`rules/snomed-terminology-server.json`, currently `v20260603`) fails closed to
+"unknown, skip" on any error or the literal `false` this API returns for an unrecognised
+release/edition path (confirmed live) — never guesses active or inactive when the check
+itself didn't cleanly succeed.
+
+New `shared/snomed-retirement.js` (entity-agnostic parsing, mirrors the
+`shared/legacy-coded-description.js` split), new `rules/snomed-terminology-server.json`.
+30 new tests in `test-snomed-retirement.js`, 10 new tests in
+`test-problem-description-cleanup.js`.
+
+## [v3.187.0] — 2026-07-25
+
+### "Bulk remove?" widget: third root added — "Patient signed reg. form"
+
+Added `184063008` ("Patient signed reg. form") as a third root in
+`rules/non-problem-root-codes.json` — a Read-v2-migrated concept (original code `9122.00`)
+recording that a patient signed a registration form, pure administrative record-keeping,
+never a real clinical problem. Found live on a real patient while investigating whether
+Medicus's API exposes SNOMED concept retirement status (see below) — added as its own root
+regardless of the retirement question, since it's unambiguously the same category of
+administrative noise the widget already targets.
+
+**Investigated, not built: automated retired-SNOMED-code detection.** Captured the full
+`slideover/overview`, `edit-problem` prefill, and SNOMED search responses for a real
+`184063008`-coded problem, looking for any `active`/`retired`/`status` field to reuse this
+widget's mechanism for a different purpose. None of the three responses expose one. The
+closest candidate signal, `descriptionId: null` on the problem's own code, is already used
+elsewhere (`problem-description-cleanup.js`'s outdated-description detection) but is NOT
+exclusive to retired concepts — `test-problem-description-cleanup.js`'s own test fixture
+has a `descriptionId: null` example for a presumably normal, current concept ("Adult
+attention deficit hyperactivity disorder"). Building a detector on this would risk flagging
+genuinely active, correctly-coded problems — a patient-safety-relevant false positive, not
+a cosmetic one — so this was deliberately not built. Would need a real API-exposed
+active/inactive field to revisit safely.
+
+2 new tests in `test-problem-junk-code-cleanup.js` covering the new root entry.
+
+## [v3.186.0] — 2026-07-25
+
+### "Bulk remove?" widget: second root added — item-of-service claim-status codes
+
+Added `12821000000103` ("Item of service claim statuses") as a second root in
+`rules/non-problem-root-codes.json` — no code change needed, per the data-file convention
+this widget was built around (v3.183.0). Same rationale as the first root (14734007
+"Administrative procedure"): GP2GP source systems sometimes file item-of-service
+claim-status codes as problems even though they're pure claim-processing artefacts, never
+a real clinical problem. Real example found live 2026-07-25: `"FP/RF - new reg.check to
+FPC"` (a new-registration check submitted to the old Family Practitioner Committee).
+
+2 new tests in `test-problem-junk-code-cleanup.js` covering the new root entry.
+
+## [v3.185.0] — 2026-07-25
+
+### "Fix description" now also catches "H/O" (history of) legacy-prefixed problems
+
+Extends the existing legacy-description detection (`shared/legacy-coded-description.js`,
+used by `content-scripts/problem-description-cleanup.js`'s "Fix description" button) to
+also flag a leading "H/O" ("history of") free-text prefix — either "H/O " (space) or
+"H/O:" (colon, the variant actually found live once the first version of this shipped) —
+alongside the existing ICD-bracket ("[X]"/"[D]"/"[M]") and trailing NOS/NEC patterns.
+
+**Deliberately NOT added to the "Bulk remove?" junk-problem-code widget** (v3.183.0-
+v3.184.0) — that widget ENDS a problem with reason "not a problem", which is only correct
+for genuine non-clinical administrative artefacts. A "H/O stroke" entry is real clinical
+history, not noise, and ending it would delete a genuine past-medical-history fact.
+
+Instead this reuses the SAME-CONCEPT-ONLY safety rule "Fix description" already relies on:
+`sameConceptAlternatives` only ever offers a different synonym of the CURRENT conceptId,
+never a re-code to a different concept — so whatever the flagged problem's concept
+actually means, every offered alternative means the same thing, only the wording changes.
+Per explicit user correction during build (their own real-data experience, not a generic
+assumption): these "H/O"-prefixed problems are USUALLY coded to the plain disease concept
+itself, picked for convenience at the time of writing rather than accuracy — not to a
+dedicated SNOMED "history of X" concept — so the suggested alternatives should almost
+never carry "history of" wording, and that's the intended outcome, not an edge case.
+
+New `LEGACY_HO_PREFIX_RE` in `shared/legacy-coded-description.js`, folded into
+`looksOutdated`/`stripLegacyMarkers`. 13 new tests plus an updated `findOutdatedProblems`
+case, all in `test-problem-description-cleanup.js`.
+
+## [v3.184.0] — 2026-07-25
+
+### "Bulk remove?" widget: moved next to the "Major" heading
+
+Follow-up to v3.183.0's "Bulk remove?" widget. Live DOM capture of the Active Problems
+card confirmed its actual shape: `.m-card-v2__content > h3#problems-major-label ("Major"),
+ul[aria-labelledby="problems-major-label"], …` — "Major" is a section heading for the whole
+major-problems list, not a per-problem badge. The widget already landed in the right DOM
+position (right after that heading, right before the list) but rendered as its own stacked
+block below it.
+
+Two changes: `injectTrigger()` now anchors explicitly on `ul[aria-labelledby=
+"problems-major-label"]` rather than "whichever list holds the first cached problem", so
+it lands next to "Major" specifically even when clinical-summary's own problem order
+starts with a minor one (falls back to the old anchor if no Major section exists on the
+page at all). And new CSS makes the collapsed toggle sit on the same row as the heading —
+scoped via `.m-card-v2__content:has(> #ms-pjc-widget)` so the layout change can't leak
+onto Medicus's other cards that reuse the same generic `.m-card-v2__content` class —
+dropping to its own full-width row only once expanded.
+
+`problems-minor-label` is assumed by naming symmetry, not confirmed live (the capture
+patient had no minor problems) — documented as an assumption in the code, not relied on.
+
+A **text-based visibility pre-check** (only show the trigger button when a problem's free
+text looked like a likely match) was also tried during this same round of follow-up work,
+then reverted before ever shipping: live testing showed it could hide a GENUINE code-based
+match whose free text didn't happen to contain a configured hint (the "FP/RF - new
+reg.check to FPC" case above needed a hint added after the fact just to make the button
+appear). The trigger button always renders whenever a patient has any active problems, same
+as the original v3.183.0 behaviour — the code is the sole source of truth for what this
+widget flags, and it must always be reachable regardless of how unrelated a problem's free
+text looks.
+
 ## [v3.183.0] — 2026-07-24
 
 ### "Bulk remove?" widget: flag and end administrative-noise problem-list codes

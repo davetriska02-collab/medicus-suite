@@ -46,6 +46,48 @@
   color: #374151;
 }
 
+/* Generic-import-text cleanup (2026-07-25) — changes additionalInformation
+   only, never problemCode, so deliberately plain/neutral rather than any of
+   the risk-graded palettes elsewhere in this file: no coding decision is
+   involved at all, just removing an exact-matched known-boilerplate line. */
+.ms-pdc-genericinfo-section {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: #f9fafb;
+  border-left: 2px solid #9ca3af;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.ms-pdc-genericinfo-label {
+  color: #4b5563;
+}
+
+.ms-pdc-genericinfo-btn {
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #9ca3af;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-pdc-genericinfo-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.ms-pdc-genericinfo-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .ms-pdc-panel {
   display: flex;
   flex-wrap: wrap;
@@ -212,4 +254,208 @@
 
 .ms-pdc-hintexpand:hover {
   background: #fee2e2;
+}
+
+/* Retirement banner (from the opt-in "Check for retired codes?" scan, never
+   the automatic text scan) — informational, not itself an actionable
+   suggestion, so styled distinctly from every category above: an amber
+   left-border note, same family as .ms-pdc-additional-info. */
+.ms-pdc-retired-note {
+  display: block;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: #fffbeb;
+  border-left: 2px solid #fbbf24;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #92400e;
+}
+
+.ms-pdc-retired-replacement-unmatched,
+.ms-pdc-retired-no-replacement,
+.ms-pdc-legacy-readcode-note {
+  display: block;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: #f9fafb;
+  border-left: 2px solid #d1d5db;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #4b5563;
+}
+
+/* SNOMED-confirmed replacement — the MOST TRUSTED category of all (a real
+   historical-association record, not a text-similarity guess), so
+   deliberately green ("confirmed correct") rather than any of the
+   amber/blue/orange/red risk-ordered palette above — this one isn't a risk
+   category, it's the closest thing to a verified answer this tool ever
+   offers. */
+.ms-pdc-retired-replacement-section {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.ms-pdc-retired-replacement-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #15803d;
+}
+
+.ms-pdc-retired-replacement-section .ms-pdc-panel {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.ms-pdc-retired-replacement-btn {
+  padding: 5px 10px;
+  background: #fff;
+  border: 1px solid #86efac;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #15803d;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ms-pdc-retired-replacement-btn:hover {
+  background: #dcfce7;
+}
+
+/* ── Retirement scan trigger (page-level, opt-in — separate from the
+   automatic per-row "Fix description" buttons above) ─────────────────────── */
+
+#ms-pdc-retired-widget {
+  display: block;
+  margin: 6px 0 10px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.ms-pdc-retired-scan-btn {
+  padding: 4px 10px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-pdc-retired-scan-btn:hover {
+  background: #e5e7eb;
+}
+
+.ms-pdc-retired-scan-status {
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.ms-pdc-retired-scan-retry {
+  margin-left: 6px;
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+/* Manual search (2026-07-25) — deliberately NEUTRAL GREY, not any of the
+   amber/blue/orange/red/green categories above: this is the one category
+   with no automated safety constraint at all, functionally identical to
+   Medicus's own Edit Problem search box, so it shouldn't read as belonging
+   to the same risk-graded system as everything else in this panel. */
+.ms-pdc-manualsearch-section {
+  display: block;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #d1d5db;
+}
+
+.ms-pdc-manualsearch-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #6b7280;
+}
+
+.ms-pdc-manualsearch-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.ms-pdc-manualsearch-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1a2030;
+  background: #fff;
+}
+
+.ms-pdc-manualsearch-btn {
+  padding: 4px 12px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-pdc-manualsearch-btn:hover:not(:disabled) {
+  background: #e5e7eb;
+}
+
+.ms-pdc-manualsearch-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ms-pdc-manualsearch-error {
+  font-size: 11px;
+  color: #b91c1c;
+}
+
+.ms-pdc-manualsearch-empty {
+  font-size: 11px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.ms-pdc-manualsearch-section .ms-pdc-panel {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.ms-pdc-manualsearch-result {
+  padding: 5px 10px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ms-pdc-manualsearch-result:hover {
+  background: #f3f4f6;
 }

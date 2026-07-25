@@ -1,13 +1,25 @@
 {
   "version": 1,
-  "lastUpdated": "2026-07-24",
-  "notes": "Root SNOMED conceptIds used by the 'Bulk remove?' problem-list widget (content-scripts/problem-junk-code-cleanup.js) to flag problems that are likely administrative/data-import noise rather than genuine clinical problems (e.g. GP2GP-imported FP10/temporary-resident claim codes filed under 'Administrative procedure'). A patient's problem is flagged if its own conceptId EITHER exactly matches a root here OR is a DESCENDANT of one (any depth -- confirmed live 2026-07-23 reaching 5 hierarchy levels below 14734007 for the motivating FP10 case), checked via clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=<all roots, comma-joined>&query=<conceptId>. Add a new root entry to expand coverage -- no code change needed.",
+  "lastUpdated": "2026-07-25",
+  "notes": "Root SNOMED conceptIds used by the 'Bulk remove?' problem-list widget (content-scripts/problem-junk-code-cleanup.js) to flag problems that are likely administrative/data-import noise rather than genuine clinical problems (e.g. GP2GP-imported FP10/temporary-resident claim codes filed under 'Administrative procedure'). A patient's problem is flagged if its own conceptId EITHER exactly matches a root here OR is a DESCENDANT of one (any depth -- confirmed live 2026-07-23 reaching 5 hierarchy levels below 14734007 for the motivating FP10 case), checked via clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=<all roots, comma-joined>&query=<conceptId>. Add a new root entry to expand coverage -- no code change needed. The 'Bulk remove?' trigger button always renders whenever a patient has any active problems (no text-based visibility gate -- one was tried 2026-07-24 and reverted 2026-07-25 after live testing showed it could hide a genuine code-based match; see CHANGELOG for the full story). The code is the sole source of truth for what gets flagged here, never free text.",
   "roots": [
     {
       "conceptId": "14734007",
       "description": "Administrative procedure",
       "addedDate": "2026-07-24",
       "rationale": "GP2GP-imported FP10/temporary-resident-claim codes (confirmed live, 5 hierarchy levels below this root) are sometimes filed as problems by source systems even though they are pure administrative/claim artefacts, never a real clinical problem."
+    },
+    {
+      "conceptId": "12821000000103",
+      "description": "Item of service claim statuses",
+      "addedDate": "2026-07-25",
+      "rationale": "A second administrative/claim-status coding category, added on user request the same way as 14734007 — item-of-service claim-status codes are sometimes filed as problems by GP2GP source systems even though they are pure claim-processing artefacts, never a real clinical problem. Real example found live 2026-07-25: \"FP/RF - new reg.check to FPC\" (a new-registration check submitted to the old Family Practitioner Committee)."
+    },
+    {
+      "conceptId": "184063008",
+      "description": "Patient signed reg. form",
+      "addedDate": "2026-07-25",
+      "rationale": "A third administrative-noise category, found live 2026-07-25 on a real patient: a Read-v2-migrated concept (original code 9122.00) recording that a patient signed a registration form — pure administrative record-keeping, never a real clinical problem. Added as its own root (rather than checked for descendants) since it's a specific leaf-level artefact; the exact-match branch of isFlaggedConceptId catches it either way, whether or not it turns out to also have genuine descendants of its own."
     }
   ]
 }

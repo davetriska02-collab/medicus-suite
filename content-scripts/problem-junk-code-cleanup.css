@@ -3,8 +3,43 @@
 
 #ms-pjc-widget {
   display: block;
-  margin: 6px 0 10px;
+  margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Placement (2026-07-25, resuming deferred work): sit the collapsed toggle
+   on the same row as the "Major" heading instead of stacked below it as its
+   own row. Scoped via :has() to ONLY the one .m-card-v2__content div that
+   actually contains #ms-pjc-widget as a direct child -- .m-card-v2__content
+   is Medicus's own generic card-body class, reused by unrelated cards
+   (Allergies, Medications, ...), so an unscoped override here would leak
+   this layout change onto cards this widget never touches. */
+.m-card-v2__content:has(> #ms-pjc-widget) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+}
+
+/* Every other direct child of that content div (the problem <ul> itself,
+   the "*Not the onset date" footnote, any conditional Vue placeholder
+   nodes) still gets its own full-width row -- only the "Major" heading and
+   the widget share the top row. */
+.m-card-v2__content:has(> #ms-pjc-widget) > *:not(#problems-major-label):not(#ms-pjc-widget) {
+  flex-basis: 100%;
+}
+
+#problems-major-label {
+  margin: 0;
+}
+
+/* Collapsed, the widget is just the small toggle button -- shares the
+   heading's row. Expanded (has a .ms-pjc-body child), the whole widget
+   drops to its own full-width row below the heading, same as the checklist
+   always needed. */
+#ms-pjc-widget:has(.ms-pjc-body) {
+  flex-basis: 100%;
+  margin-top: 6px;
 }
 
 .ms-pjc-toggle {

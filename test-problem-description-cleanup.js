@@ -29,7 +29,14 @@ const {
   descriptionAlreadyMentionsHint,
   hintExpandedAlternatives,
   significantWords,
+  parseConceptRetirement,
+  buildConceptUrl,
+  confirmedReplacementAlternative,
+  normalizedSearchResults,
+  findLegacyReadCodeOrigin,
+  stripGenericAdditionalInfoLines,
 } = require('./content-scripts/problem-description-cleanup.js');
+const genericAdditionalInfoText = require('./rules/generic-additional-info-text.json');
 
 let passed = 0,
   failed = 0;
@@ -57,6 +64,24 @@ check(looksOutdated('Connect the dots') === false, '"NEC" mid-word never false-p
 check(looksOutdated('') === false, 'empty string -> not outdated');
 check(looksOutdated(null) === false, 'null -> not outdated, never throws');
 check(looksOutdated(undefined) === false, 'undefined -> not outdated, never throws');
+check(looksOutdated('H/O Stroke') === true, '"H/O " (space) prefix -> outdated (2026-07-25)');
+check(looksOutdated('H/O: Stroke') === true, '"H/O: " (colon + space) prefix -> outdated (found live 2026-07-25)');
+check(looksOutdated('H/O:Stroke') === true, '"H/O:" (colon, no following space) prefix -> outdated');
+check(looksOutdated('h/o stroke') === true, '"h/o" prefix is case-insensitive');
+check(looksOutdated('h/o:  Myocardial infarction') === true, '"h/o:" case-insensitive with extra space after colon');
+check(
+  looksOutdated('H/O  Myocardial infarction') === true,
+  '"H/O " prefix with extra internal whitespace still matches'
+);
+check(looksOutdated('Historical stroke') === false, '"Historical" never false-positives as "H/O" (not the same token)');
+check(
+  looksOutdated('Something H/O else mid-string') === false,
+  '"H/O" only recognised as a leading prefix, not mid-string'
+);
+check(
+  looksOutdated('H/OStroke') === false,
+  '"H/O" with no separator (no space, no colon) at all is NOT recognised — avoids guessing at an unseen shape'
+);
 
 console.log('--- stripLegacyMarkers ---');
 check(stripLegacyMarkers('[X]Attention deficit disorder') === 'Attention deficit disorder', 'strips "[X]" prefix');
@@ -70,6 +95,10 @@ check(
     'Lower uterine segment caesarean section',
   'strips a trailing bracketed abbreviation ("(LSCS)") once the "NEC" suffix exposes it (real LSCS case, 2026-07-23)'
 );
+check(stripLegacyMarkers('H/O Stroke') === 'Stroke', 'strips "H/O " (space) prefix (2026-07-25)');
+check(stripLegacyMarkers('H/O: Stroke') === 'Stroke', 'strips "H/O: " (colon + space) prefix');
+check(stripLegacyMarkers('H/O:Stroke') === 'Stroke', 'strips "H/O:" (colon, no following space) prefix');
+check(stripLegacyMarkers('h/o Myocardial infarction') === 'Myocardial infarction', 'strips "h/o" case-insensitively');
 
 console.log('--- sameConceptAlternatives: the safety rule ---');
 const searchResults = [
@@ -193,6 +222,30 @@ check(
   'null prefill -> safe defaults, never throws'
 );
 
+console.log('--- buildEditProblemPayload: overrideAdditionalInformation (2026-07-25 generic-text cleanup) ---');
+{
+  const originalCode = { conceptId: '359609001', description: 'Acute nonsupp. otitis media R', descriptionId: null };
+  const payloadWithOverride = buildEditProblemPayload(prefill, originalCode, 'ear');
+  check(
+    payloadWithOverride.additionalInformation === 'ear',
+    'overrideAdditionalInformation replaces the prefill value entirely (got "' +
+      payloadWithOverride.additionalInformation +
+      '")'
+  );
+  check(
+    payloadWithOverride.problemCode === originalCode,
+    'problemCode is passed through as given — this apply path changes additionalInformation, never the code'
+  );
+  check(
+    buildEditProblemPayload(prefill, newCode).additionalInformation === 'adult ( provisional diagnosis )',
+    'omitting the third argument entirely preserves the original 2-arg behaviour — every existing caller is unaffected'
+  );
+  check(
+    buildEditProblemPayload(prefill, newCode, '').additionalInformation === '',
+    'an explicit empty string override is respected (all generic lines removed, nothing left) — not treated as "no override"'
+  );
+}
+
 console.log('--- findOutdatedProblems ---');
 const summaryProblems = [
   { id: 'p1', problemCodeDescription: 'Attention deficit disorder' },
@@ -200,12 +253,13 @@ const summaryProblems = [
   { id: 'p3', problemCodeDescription: 'Torticollis - symptom' },
   { id: 'p4', problemCodeDescription: 'Fracture of radius NOS' },
   { id: 'p5', problemCodeDescription: 'Glandular fever' },
+  { id: 'p6', problemCodeDescription: 'H/O Stroke' },
 ];
 const outdated = findOutdatedProblems(summaryProblems);
-check(outdated.length === 2, 'flags exactly the 2 legacy-style entries (got ' + outdated.length + ')');
+check(outdated.length === 3, 'flags exactly the 3 legacy-style entries (got ' + outdated.length + ')');
 check(
-  outdated.map((p) => p.id).join(',') === 'p2,p4',
-  'flags the right ones (p2 "[X]Depression NOS", p4 "Fracture of radius NOS")'
+  outdated.map((p) => p.id).join(',') === 'p2,p4,p6',
+  'flags the right ones (p2 "[X]Depression NOS", p4 "Fracture of radius NOS", p6 "H/O Stroke")'
 );
 check(findOutdatedProblems(null).length === 0, 'null problems -> empty, never throws');
 check(findOutdatedProblems([]).length === 0, 'empty problems -> empty');
@@ -718,6 +772,167 @@ check(
   descendantAlternatives(fibroidResults, HYSTEROSCOPY_CONCEPT_ID, 'fibroid')[0].matchScore === 100,
   'a single matching hint word -> 100% (only one word to match, and it matched)'
 );
+
+console.log('--- confirmedReplacementAlternative: SNOMED-confirmed replacement, matched by conceptId only ---');
+{
+  const results = [
+    {
+      label: 'Lower uterine segment cesarean section',
+      value: { description: 'Lower uterine segment cesarean section', conceptId: '788180009', descriptionId: '999' },
+    },
+    { label: 'Something else', value: { description: 'Something else', conceptId: '111', descriptionId: '222' } },
+  ];
+  check(
+    confirmedReplacementAlternative(results, '788180009').conceptId === '788180009',
+    'finds the result matching the confirmed replacement conceptId'
+  );
+  check(
+    confirmedReplacementAlternative(results, '788180009').description === 'Lower uterine segment cesarean section',
+    'description passed through from the matching result'
+  );
+  check(
+    confirmedReplacementAlternative(results, '788180009').descriptionId === '999',
+    'descriptionId passed through — this is what makes it POST-able to Medicus, unlike raw termbrowser data'
+  );
+  check(
+    confirmedReplacementAlternative(results, '999999999') === null,
+    "replacement conceptId not present in Medicus's own search results -> null, never guessed"
+  );
+  check(confirmedReplacementAlternative([], '788180009') === null, 'empty results -> null');
+  check(confirmedReplacementAlternative(null, '788180009') === null, 'null results -> null, never throws');
+  check(confirmedReplacementAlternative(results, null) === null, 'null replacementConceptId -> null, never throws');
+  check(
+    confirmedReplacementAlternative([{ conceptId: '788180009' }], '788180009') === null,
+    'a result with no `value` wrapper is not matched (this is not the sameConceptAlternatives shape) — defensive, not a crash'
+  );
+}
+
+console.log('--- re-exported shared/snomed-retirement.js functions work through this file too ---');
+{
+  const retired = parseConceptRetirement({ active: false, memberships: [] });
+  check(retired.active === false, 'parseConceptRetirement is re-exported and callable');
+  const url = buildConceptUrl(
+    { baseUrl: 'https://termbrowser.nhs.uk/sct-browser-api/snomed', edition: 'uk-edition', release: 'v1' },
+    '123'
+  );
+  check(
+    url === 'https://termbrowser.nhs.uk/sct-browser-api/snomed/uk-edition/v1/concepts/123',
+    'buildConceptUrl is re-exported and callable'
+  );
+}
+
+console.log('--- normalizedSearchResults: unfiltered manual-search results, deduped ---');
+{
+  const results = [
+    { label: 'UTI', value: { description: 'Urinary tract infection', conceptId: '68566005', descriptionId: '111' } },
+    {
+      label: 'UTIs',
+      value: { description: 'Urinary tract infectious disease', conceptId: '431956005', descriptionId: '222' },
+    },
+    // Duplicate descriptionId — should be deduped, not doubled.
+    {
+      label: 'UTI dup',
+      value: { description: 'Urinary tract infection', conceptId: '68566005', descriptionId: '111' },
+    },
+  ];
+  const normalized = normalizedSearchResults(results);
+  check(normalized.length === 2, 'duplicate descriptionId deduped (got ' + normalized.length + ')');
+  check(
+    normalized.some((a) => a.conceptId === '68566005') && normalized.some((a) => a.conceptId === '431956005'),
+    'spans MULTIPLE different concepts — deliberately unfiltered, unlike every other alternatives function here'
+  );
+  check(
+    normalizedSearchResults([
+      { value: { conceptId: '1', description: 'a' } },
+      { value: { conceptId: '1', description: 'a' } },
+    ]).length === 1,
+    'entries with no descriptionId are deduped by conceptId+description instead, not doubled'
+  );
+  check(
+    normalizedSearchResults([{ value: { description: 'no concept id' } }]).length === 0,
+    'a result with no conceptId is skipped'
+  );
+  check(normalizedSearchResults([]).length === 0, 'empty results -> empty');
+  check(normalizedSearchResults(null).length === 0, 'null results -> empty, never throws');
+}
+
+console.log('--- findLegacyReadCodeOrigin: structural Read-code-origin detection (real 2026-07-25 example) ---');
+{
+  // Real capture: 359609001 "Acute nonsupp. otitis media R", originally
+  // Read v2 F510.00 "Acute non suppurative otitis media" — the concept can
+  // be perfectly current/active; this detects the LEGACY TEXT origin, not
+  // retirement.
+  const originalCodes = [{ codeSystem: 'read-v2', code: 'F510.00', description: 'Acute non suppurative otitis media' }];
+  const result = findLegacyReadCodeOrigin(originalCodes);
+  check(!!result, 'a read-v2 originalCodes entry is detected');
+  check(result.code === 'F510.00', 'the original Read code is passed through');
+  check(result.description === 'Acute non suppurative otitis media', 'the original Read description is passed through');
+  check(
+    findLegacyReadCodeOrigin([{ codeSystem: 'snomed-ct', code: '123', description: 'x' }]) === null,
+    'a NON-read-v2 codeSystem is not flagged — only the confirmed "read-v2" value is recognised'
+  );
+  check(findLegacyReadCodeOrigin([]) === null, 'empty originalCodes -> null');
+  check(findLegacyReadCodeOrigin(null) === null, 'null originalCodes -> null, never throws');
+  check(findLegacyReadCodeOrigin(undefined) === null, 'undefined originalCodes -> null, never throws');
+  check(
+    findLegacyReadCodeOrigin([
+      { codeSystem: 'ctv3', code: 'x', description: 'y' },
+      { codeSystem: 'read-v2', code: 'F510.00', description: 'Acute non suppurative otitis media' },
+    ]).code === 'F510.00',
+    'finds the read-v2 entry even when it is not the first item in the array'
+  );
+}
+
+console.log('--- rules/generic-additional-info-text.json: the imported list itself ---');
+{
+  check(Array.isArray(genericAdditionalInfoText.entries), 'entries is an array');
+  check(genericAdditionalInfoText.entries.length > 0, 'at least one entry is configured');
+  check(
+    genericAdditionalInfoText.entries.some((e) => e.text === 'Active Problem, Significant'),
+    '"Active Problem, Significant" is present (added 2026-07-25)'
+  );
+}
+
+console.log('--- stripGenericAdditionalInfoLines: real 2026-07-25 example ("ear\\nActive Problem, Significant") ---');
+{
+  const genericTexts = genericAdditionalInfoText.entries.map((e) => e.text);
+  const result = stripGenericAdditionalInfoLines('ear\nActive Problem, Significant', genericTexts);
+  check(result.cleaned === 'ear', 'the genuine free-text line survives, the generic line is stripped');
+  check(
+    result.removed.length === 1 && result.removed[0] === 'Active Problem, Significant',
+    'the removed generic line is reported (got ' + JSON.stringify(result.removed) + ')'
+  );
+  check(
+    stripGenericAdditionalInfoLines('EAR', genericTexts).cleaned === 'EAR',
+    'a line that does NOT match the generic list is never touched'
+  );
+  check(
+    stripGenericAdditionalInfoLines('active problem, significant', genericTexts).removed.length === 1,
+    'matching is case-insensitive'
+  );
+  check(
+    stripGenericAdditionalInfoLines('  Active Problem, Significant  ', genericTexts).removed.length === 1,
+    'matching trims surrounding whitespace on each line before comparing'
+  );
+  check(
+    stripGenericAdditionalInfoLines('Active Problem, Significant', genericTexts).cleaned === '',
+    'a field that is ENTIRELY generic text -> cleaned is empty, not left dangling'
+  );
+  check(
+    stripGenericAdditionalInfoLines(null, genericTexts).cleaned === '' &&
+      stripGenericAdditionalInfoLines(null, genericTexts).removed.length === 0,
+    'null additionalInformation -> empty cleaned, no removals, never throws'
+  );
+  check(
+    stripGenericAdditionalInfoLines('ear\nActive Problem, Significant', null).removed.length === 0,
+    'null genericTexts -> nothing removed, never throws (fails to "leave it alone", not "strip everything")'
+  );
+  check(
+    stripGenericAdditionalInfoLines('topic A\nActive Problem, Significant\nActive Problem, Significant', genericTexts)
+      .removed.length === 2,
+    'multiple matching lines are all reported, not just the first'
+  );
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
