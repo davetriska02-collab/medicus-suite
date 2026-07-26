@@ -7,6 +7,18 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* Keyboard focus ring (2026-07-26) -- this file had NO :focus-visible rule
+   at all before this, on any control (Medicus's page never loads panel.css,
+   so the suite's global ring doesn't reach here). One wildcard rule rather
+   than one per class so it stays complete as buttons get added/renamed --
+   #2563eb matches the suite's --accent light-theme value (this file can't
+   consume the var(), Medicus's page doesn't load panel.css). */
+button[class*='ms-pjc-']:focus-visible,
+input[class*='ms-pjc-']:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
 /* Placement (2026-07-25, resuming deferred work): sit the collapsed toggle
    on the same row as the "Major" heading instead of stacked below it as its
    own row. Scoped via :has() to ONLY the one .m-card-v2__content div that
@@ -24,8 +36,14 @@
 /* Every other direct child of that content div (the problem <ul> itself,
    the "*Not the onset date" footnote, any conditional Vue placeholder
    nodes) still gets its own full-width row -- only the "Major" heading and
-   the widget share the top row. */
-.m-card-v2__content:has(> #ms-pjc-widget) > *:not(#problems-major-label):not(#ms-pjc-widget) {
+   the widget share the top row. #ms-pdc-retired-widget (the separate
+   "Check for retired/legacy codes?" trigger injected by
+   problem-description-cleanup.js into the same spot) is also excluded here
+   so it isn't forced full-width by THIS rule when both widgets are present
+   -- problem-description-cleanup.css carries the mirror-image rule for the
+   reverse case. Keep both files' exclusion lists in lock-step. */
+.m-card-v2__content:has(> #ms-pjc-widget)
+  > *:not(#problems-major-label):not(#ms-pjc-widget):not(#ms-pdc-retired-widget) {
   flex-basis: 100%;
 }
 

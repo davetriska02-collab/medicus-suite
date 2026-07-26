@@ -26,6 +26,8 @@ const {
   descendantAlternatives,
   crossConceptAlternatives,
   detectPathologyHint,
+  detectAnatomicalSiteHint,
+  ANATOMICAL_SITE_HINT_WORDS,
   descriptionAlreadyMentionsHint,
   hintExpandedAlternatives,
   significantWords,
@@ -628,6 +630,82 @@ check(
 check(
   hintExpandedAlternatives(rotatorCuffTearResults, ROTATOR_CUFF_STRUCTURE_ID, null).length === 0,
   'null hint word -> empty, never throws'
+);
+
+console.log('--- detectAnatomicalSiteHint (returns an ARRAY of every match, not just the first) ---');
+// Real regression case (found live, 2026-07-26): "descending" precedes "colon" in
+// ANATOMICAL_SITE_HINT_WORDS, so a single-match design (list-order-first, mirroring
+// detectPathologyHint) picked "descending" and never tried "colon" — but the real
+// target concept's own SNOMED wording is "...of colon", which never contains
+// "descending" at all, so the one search that would have worked never ran. Every
+// matched word must survive, in list order, so "colon" isn't shadowed.
+const tubularAdenomaSiteHints = detectAnatomicalSiteHint('Descending colon and sigmoid colon - removed.');
+check(
+  tubularAdenomaSiteHints.includes('descending') &&
+    tubularAdenomaSiteHints.includes('sigmoid') &&
+    tubularAdenomaSiteHints.includes('colon'),
+  'finds ALL THREE site words ("descending", "sigmoid", "colon"), not just the first by list order (got ' +
+    JSON.stringify(tubularAdenomaSiteHints) +
+    ')'
+);
+check(detectAnatomicalSiteHint('sigmoid colon polyp').includes('sigmoid'), 'finds "sigmoid"');
+check(detectAnatomicalSiteHint('resection of caecum').includes('caecum'), 'British spelling "caecum" matches');
+check(detectAnatomicalSiteHint('resection of cecum').includes('cecum'), 'American spelling "cecum" also matches');
+check(
+  !detectAnatomicalSiteHint('colon. seen later, unrelated note about sigmoid').includes('sigmoid'),
+  'only the FIRST sentence/clause is scanned, same discipline as detectPathologyHint — a later "sigmoid" past the first "." is ignored'
+);
+check(detectAnatomicalSiteHint('rt distal end').length === 0, 'laterality-only text -> empty array (no site word)');
+check(detectAnatomicalSiteHint('').length === 0, 'empty string -> empty array');
+check(detectAnatomicalSiteHint(null).length === 0, 'null -> empty array, never throws');
+check(detectAnatomicalSiteHint(undefined).length === 0, 'undefined -> empty array, never throws');
+check(
+  Array.isArray(ANATOMICAL_SITE_HINT_WORDS) && ANATOMICAL_SITE_HINT_WORDS.length > 0,
+  'word list is exported and non-empty'
+);
+
+console.log('--- hintExpandedAlternatives: array hintWords (real "[M]Tubular adenoma NOS"/colon case, 2026-07-26) ---');
+// Real conceptIds (live-verified via the public NHS termbrowser API, 2026-07-26):
+// 443897009 "[M]Tubular adenoma NOS" is a RETIRED morphologic-abnormality-axis
+// concept (REPLACED BY 1156654007, also morphology-axis) with NO IS-A path to
+// the disorder-axis "Tubular adenoma of colon" family — so descendantAlternatives'
+// hierarchy proof can never reach 444898006 "Tubular adenomatous polyp of colon".
+// This is the response shape from querying "Tubular adenoma colon" (base
+// description + the "colon" site hint).
+const TUBULAR_ADENOMA_RETIRED_ID = '443897009';
+const tubularAdenomaColonResults = [
+  {
+    label: 'Tubular adenomatous polyp of colon',
+    value: { description: 'Tubular adenomatous polyp of colon', conceptId: '444898006', descriptionId: null },
+  },
+  {
+    label: 'Tubular adenoma',
+    value: { description: 'Tubular adenoma', conceptId: '444408007', descriptionId: null },
+  },
+];
+const tubularHintExpanded = hintExpandedAlternatives(tubularAdenomaColonResults, TUBULAR_ADENOMA_RETIRED_ID, [
+  'colon',
+  'sigmoid',
+]);
+check(
+  tubularHintExpanded.some((a) => a.conceptId === '444898006'),
+  'surfaces 444898006 (matches "colon", one of two hint words) even though "sigmoid" never matched anything'
+);
+check(
+  !tubularHintExpanded.some((a) => a.conceptId === '444408007'),
+  '"Tubular adenoma" (444408007) excluded — its own description contains neither "colon" nor "sigmoid"'
+);
+check(
+  hintExpandedAlternatives(rotatorCuffTearResults, ROTATOR_CUFF_STRUCTURE_ID, ['tear']).length === 2,
+  'array form with ONE word still matches the original single-string behaviour'
+);
+check(
+  hintExpandedAlternatives(rotatorCuffTearResults, ROTATOR_CUFF_STRUCTURE_ID, []).length === 0,
+  'empty array -> empty, never throws'
+);
+check(
+  hintExpandedAlternatives(rotatorCuffTearResults, ROTATOR_CUFF_STRUCTURE_ID, [null, undefined]).length === 0,
+  'array of only null/undefined -> empty (filtered out), never throws'
 );
 
 console.log('--- significantWords ---');

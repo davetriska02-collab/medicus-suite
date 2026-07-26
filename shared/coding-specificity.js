@@ -278,6 +278,30 @@
     'aneurysm',
   ];
 
+  // Curated starter set of anatomical-site words (2026-07-26 — real example:
+  // "[M]Tubular adenoma NOS" with additionalInformation "Descending colon
+  // and sigmoid colon - removed", currently coded to a RETIRED
+  // morphologic-abnormality-axis concept with no IS-A path to the
+  // disorder-axis "Tubular adenoma of colon" family — so descendantAlternatives'
+  // hierarchy proof can never reach it, and PATHOLOGY_HINT_WORDS has no site
+  // vocabulary at all). Deliberately scoped to the GI-tract segments that
+  // motivated this — same "safe to grow incrementally, a miss just means no
+  // suggestion" property as PATHOLOGY_HINT_WORDS, not an attempt at
+  // whole-body coverage. British spelling ("caecum") listed first since
+  // Medicus's SNOMED edition is UK; American spelling included too since a
+  // miss here costs nothing.
+  var ANATOMICAL_SITE_HINT_WORDS = [
+    'caecum',
+    'cecum',
+    'ascending',
+    'transverse',
+    'descending',
+    'sigmoid',
+    'rectosigmoid',
+    'rectum',
+    'colon',
+  ];
+
   // Grabs everything before the first '.'/';'/newline — deliberately not the
   // WHOLE additionalInformation field, per the user's explicit scope choice,
   // to avoid picking up a hint word from unrelated later free-text notes.
@@ -287,17 +311,61 @@
     return m ? m[0] : t;
   }
 
+  // Shared by detectPathologyHint/detectAnatomicalSiteHint below — returns
+  // the first word from `wordList` found in the first sentence/clause of
+  // `text` (lowercase, canonical form), or null.
+  function detectFirstClauseHint(text, wordList) {
+    var clause = firstClause(text);
+    for (var i = 0; i < wordList.length; i++) {
+      var word = wordList[i];
+      if (new RegExp('\\b' + word + '\\b', 'i').test(clause)) return word;
+    }
+    return null;
+  }
+
+  // Returns EVERY recognised word from `wordList` found in the first
+  // sentence/clause of `text` (lowercase, canonical form, in `wordList`
+  // order), not just the first. Used by detectAnatomicalSiteHint below —
+  // unlike detectFirstClauseHint's single-match contract (fine for
+  // PATHOLOGY_HINT_WORDS, whose words tend to be mutually exclusive per real
+  // case), site words routinely CO-OCCUR while naming the same underlying
+  // concept from different angles (e.g. "descending colon and sigmoid
+  // colon" for one polyp near that junction) — a single-match pick is at
+  // the mercy of curated-list ORDER, not which word the real SNOMED
+  // description actually uses. Real case that exposed this (2026-07-26):
+  // additionalInformation "Descending colon and sigmoid colon - removed"
+  // matched "descending" first by list order, but the actual target
+  // concept's own wording is "...of colon" — "descending" never appears in
+  // it at all, so the one search that would have worked (the "colon" word)
+  // never ran. Trying every matched word (each as its own separate query,
+  // per hintExpandedAlternatives' word-mismatch discipline) costs one extra
+  // fetch per additional word, never a wrong suggestion — a miss still just
+  // means no suggestion for that word, same safety property as ever.
+  function detectAllClauseHints(text, wordList) {
+    var clause = firstClause(text);
+    var out = [];
+    for (var i = 0; i < wordList.length; i++) {
+      var word = wordList[i];
+      if (new RegExp('\\b' + word + '\\b', 'i').test(clause)) out.push(word);
+    }
+    return out;
+  }
+
   // Returns the first recognised pathology word found in the first
   // sentence/clause of `text` (lowercase, canonical form), or null. Does NOT
   // require the leading-dash shorthand seen in the motivating example
   // ("-tear") — any word-boundary occurrence in the first clause counts.
   function detectPathologyHint(text) {
-    var clause = firstClause(text);
-    for (var i = 0; i < PATHOLOGY_HINT_WORDS.length; i++) {
-      var word = PATHOLOGY_HINT_WORDS[i];
-      if (new RegExp('\\b' + word + '\\b', 'i').test(clause)) return word;
-    }
-    return null;
+    return detectFirstClauseHint(text, PATHOLOGY_HINT_WORDS);
+  }
+
+  // Same first-clause-scoped discipline as detectPathologyHint (no hierarchy
+  // backstop, so stays conservative about how much free text it trusts), but
+  // returns an ARRAY of every matched anatomical-site word, not just one —
+  // see detectAllClauseHints' comment for why this differs from
+  // detectPathologyHint's single-match contract.
+  function detectAnatomicalSiteHint(text) {
+    return detectAllClauseHints(text, ANATOMICAL_SITE_HINT_WORDS);
   }
 
   // Generic (non-clinical) stop-words only — deliberately NOT a
@@ -352,23 +420,41 @@
     return new RegExp('\\b' + hintWord + '\\b', 'i').test(d);
   }
 
-  // Filters the results of a SEPARATE search (query = stripped base
-  // description + hintWord — a new fetch, not a re-filter of the existing
-  // combinedResults, since this is a different query text) down to genuine
-  // candidates: never the current concept itself, and — belt and braces on
-  // top of Medicus's own all-words-required search behaviour — the result's
-  // own description must actually contain the hint word. Same dedupe
-  // discipline as crossConceptAlternatives (by conceptId + descriptionId,
-  // since candidates come from different concepts).
-  function hintExpandedAlternatives(results, currentConceptId, hintWord) {
-    if (!Array.isArray(results) || !currentConceptId || !hintWord) return [];
-    var hintRe = new RegExp('\\b' + hintWord + '\\b', 'i');
+  // Filters the results of one or more SEPARATE searches (query = stripped
+  // base description + a hint word — a new fetch per word, not a re-filter
+  // of the existing combinedResults, since each is a different query text)
+  // down to genuine candidates: never the current concept itself, and —
+  // belt and braces on top of Medicus's own all-words-required search
+  // behaviour — the result's own description must actually contain AT
+  // LEAST ONE of the hint words. Same dedupe discipline as
+  // crossConceptAlternatives (by conceptId + descriptionId, since
+  // candidates come from different concepts).
+  //
+  // `hintWords` accepts a single string (the original pathology-hint call
+  // shape) OR an array (GENERALISED 2026-07-26, mirroring
+  // descendantAlternatives' own hintWords generalisation — pathology AND
+  // anatomical-site hints can now both feed one combined result set, e.g. a
+  // problem whose additionalInformation mentions BOTH a pathology word and
+  // a site word). `results` must already be the concatenation of every
+  // per-word search's raw results — this function only filters, it does
+  // not fetch.
+  function hintExpandedAlternatives(results, currentConceptId, hintWords) {
+    if (!Array.isArray(results) || !currentConceptId) return [];
+    var words = (Array.isArray(hintWords) ? hintWords : [hintWords]).filter(Boolean);
+    if (!words.length) return [];
+    var wordRes = words.map(function (w) {
+      return new RegExp('\\b' + w + '\\b', 'i');
+    });
     var seen = Object.create(null);
     var out = [];
     results.forEach(function (r) {
       var v = r && r.value;
       if (!v || !v.conceptId || v.conceptId === currentConceptId) return;
-      if (!hintRe.test(String(v.description || ''))) return;
+      var desc = String(v.description || '');
+      var matched = wordRes.some(function (re) {
+        return re.test(desc);
+      });
+      if (!matched) return;
       var key = v.conceptId + '|' + (v.descriptionId || v.description);
       if (seen[key]) return;
       seen[key] = true;
@@ -384,6 +470,8 @@
     crossConceptAlternatives,
     PATHOLOGY_HINT_WORDS,
     detectPathologyHint,
+    ANATOMICAL_SITE_HINT_WORDS,
+    detectAnatomicalSiteHint,
     descriptionAlreadyMentionsHint,
     hintExpandedAlternatives,
     significantWords,

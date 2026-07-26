@@ -42,22 +42,29 @@
 //        resent unchanged, confirmed via the real captured request body).
 //        → 200 {}
 //
-// DETECTION: descriptionId === null on the current problemCode is the
-// reliable machine signal (confirmed correlated with the bracket/NOS text on
-// every example captured so far — see the learnings doc's "what's NOT yet
-// confirmed" section for the caveat on sample size). The bracket-prefix/NOS
-// text pattern is used for a cheap first-pass scan across
-// clinical-summary/summary's plain-text problemCodeDescription list, without
-// a per-problem edit-problem fetch. A leading "H/O" ("history of") prefix —
-// either "H/O " or "H/O:" — was added to this same first-pass scan
-// 2026-07-25 (LEGACY_HO_PREFIX_RE in
-// shared/legacy-coded-description.js) — see that file's own comment for why
-// it's safe by the same same-concept-only construction as the other legacy
-// markers, at the cost of the pre-existing descriptionId-correlation not yet
-// being separately confirmed for this specific prefix (the ICD-bracket/NOS
-// correlation doesn't necessarily transfer — this is a differently-sourced
-// text pattern, only the DETECTION heuristic and downstream safety filter
-// are shared, not the empirical correlation evidence).
+// DETECTION: descriptionId === null on the current problemCode is a
+// reliable machine signal for the ICD-bracket/NOS/NEC patterns (confirmed
+// correlated on every example captured so far — see the learnings doc's
+// "what's NOT yet confirmed" section for the caveat on sample size). Also
+// now confirmed for the "H/O" prefix specifically — live-verified
+// 2026-07-26 on a genuine pre-existing patient problem ("H/O: varicose
+// veins", conceptId 161509009, descriptionId null), after an earlier same-day
+// probe against a problem the tester had just added themselves came back
+// non-null and was correctly discarded as not evidential (a freshly-coded
+// problem is trivially expected to carry a populated descriptionId
+// regardless of the H/O hypothesis — only a genuine historic entry tests it).
+// n=1 genuine example, same caution as the bracket/NOS pattern's own small
+// sample — see docs/learnings-problem-description-cleanup.md. The
+// bracket-prefix/NOS text pattern is used for a cheap first-pass scan
+// across clinical-summary/summary's plain-text problemCodeDescription list,
+// without a per-problem edit-problem fetch. A leading "H/O" ("history of")
+// prefix — either "H/O " or "H/O:" — was added to this same first-pass scan
+// 2026-07-25 (LEGACY_HO_PREFIX_RE in shared/legacy-coded-description.js) —
+// see that file's own comment for why it's safe by the same
+// same-concept-only construction as the other legacy markers regardless of
+// this correlation: descriptionId is never used as a detection gate
+// (looksOutdated() is purely text-pattern-based), only ever available as a
+// bonus confirmatory signal once a candidate is already flagged and fetched.
 //
 // CODING-SPECIFICITY EXTENSION (2026-07-23): the same click that opens this
 // panel also checks for a laterality hint (rt/right, lt/left, bilateral) in
@@ -135,6 +142,7 @@
   var descendantAlternatives = codingSpecificity.descendantAlternatives;
   var crossConceptAlternatives = codingSpecificity.crossConceptAlternatives;
   var detectPathologyHint = codingSpecificity.detectPathologyHint;
+  var detectAnatomicalSiteHint = codingSpecificity.detectAnatomicalSiteHint;
   var descriptionAlreadyMentionsHint = codingSpecificity.descriptionAlreadyMentionsHint;
   var hintExpandedAlternatives = codingSpecificity.hintExpandedAlternatives;
   var significantWords = codingSpecificity.significantWords;
@@ -344,6 +352,8 @@
       descendantAlternatives: codingSpecificity.descendantAlternatives,
       crossConceptAlternatives: codingSpecificity.crossConceptAlternatives,
       detectPathologyHint: codingSpecificity.detectPathologyHint,
+      detectAnatomicalSiteHint: codingSpecificity.detectAnatomicalSiteHint,
+      ANATOMICAL_SITE_HINT_WORDS: codingSpecificity.ANATOMICAL_SITE_HINT_WORDS,
       descriptionAlreadyMentionsHint: codingSpecificity.descriptionAlreadyMentionsHint,
       hintExpandedAlternatives: codingSpecificity.hintExpandedAlternatives,
       significantWords: codingSpecificity.significantWords,
@@ -675,10 +685,10 @@
       html +=
         '<div class="ms-pdc-retired-replacement-unmatched">SNOMED replaced this code with "' +
         esc(st.retiredInfo.replacement.description) +
-        '" but it could not be matched in Medicus’s own search index — please search for it manually via Edit Problem.</div>';
+        '" but it could not be matched in Medicus’s own search index — try the manual search below (it may need a different SNOMED hierarchy scope than this panel searches by default).</div>';
     } else {
       html +=
-        '<div class="ms-pdc-retired-no-replacement">No automatic replacement is recorded for this retirement — review the suggestions below, or search manually via Edit Problem.</div>';
+        '<div class="ms-pdc-retired-no-replacement">No automatic replacement is recorded for this retirement — review the suggestions below, or try the manual search further down this panel.</div>';
     }
     return html;
   }
@@ -1085,18 +1095,51 @@
         st.descendantAlternatives = [];
       }
       st.crossConceptAlternatives = crossConceptAlternatives(combinedResults, code.conceptId, code.description);
-      // FALLBACK ONLY (per the user's explicit scope choice): only tried
-      // when the three categories above ALL came back empty — one extra
-      // fetch in that (by definition, rare) case, none otherwise. See
-      // shared/coding-specificity.js's hintExpandedAlternatives doc for the
-      // full contract, the motivating "[SO]Rotator cuff"/"-tear" case, and
-      // why this category must never be bulk-auto-applied later.
+      // TRIGGER CONDITION (revised 2026-07-26 — real example: "[M]Tubular
+      // adenoma NOS" coded to a RETIRED morphologic-abnormality-axis
+      // concept with no IS-A path to the disorder-axis "of colon" family,
+      // so descendantAlternatives can never reach it; crossConceptAlternatives
+      // DOES find a same-text replacement (a real, separate recode), which
+      // under the old "only when ALL THREE other categories are empty" rule
+      // meant this fallback never even attempted a site-word search). Now
+      // runs whenever same-concept AND descendant are both empty, REGARDLESS
+      // of cross-concept-exact — mirrors descendantAlternatives' own
+      // alongside-not-fallback trigger. Still the riskiest category (no
+      // hierarchy proof, no exact-text guarantee) and still never
+      // bulk-auto-applied later — see shared/coding-specificity.js's
+      // hintExpandedAlternatives doc for the full contract.
       st.hintExpandedAlternatives = [];
-      if (!st.alternatives.length && !st.descendantAlternatives.length && !st.crossConceptAlternatives.length) {
+      if (!st.alternatives.length && !st.descendantAlternatives.length) {
+        // Pathology (symptom/injury-type) AND anatomical-site hints are
+        // both tried — a problem's additionalInformation can carry either
+        // or both. Each recognised word gets its OWN supplementary search
+        // (never combined into one query): Medicus's search requires EVERY
+        // query word to be present in a result, so "Tubular adenoma
+        // descending sigmoid colon" as a single query would silently
+        // zero-result against a real match worded just "...of colon" (the
+        // same word-mismatch failure class already fixed once for the
+        // knee-replacement case) — one word per query sidesteps that
+        // entirely, and hintExpandedAlternatives (generalised 2026-07-26)
+        // now accepts the combined raw results plus the full hint-word
+        // list in one filtering pass.
         var pathologyHint = detectPathologyHint(prefill.additionalInformation);
-        if (pathologyHint && !descriptionAlreadyMentionsHint(code.description, pathologyHint)) {
-          var expandedResults = await searchDescriptions(queryText + ' ' + pathologyHint);
-          st.hintExpandedAlternatives = hintExpandedAlternatives(expandedResults, code.conceptId, pathologyHint);
+        // detectAnatomicalSiteHint returns an ARRAY (every matched site
+        // word, not just one) — see its own comment for why: site words
+        // routinely co-occur while naming one concept, and a single pick is
+        // at the mercy of curated-list order, not which word the real
+        // target concept's description actually uses.
+        var siteHints = detectAnatomicalSiteHint(prefill.additionalInformation);
+        var expandHints = [pathologyHint].concat(siteHints).filter(function (h) {
+          return h && !descriptionAlreadyMentionsHint(code.description, h);
+        });
+        if (expandHints.length) {
+          var expandedResultSets = await Promise.all(
+            expandHints.map(function (h) {
+              return searchDescriptions(queryText + ' ' + h);
+            })
+          );
+          var expandedResults = [].concat.apply([], expandedResultSets);
+          st.hintExpandedAlternatives = hintExpandedAlternatives(expandedResults, code.conceptId, expandHints);
         }
       }
       // Confirmed SNOMED replacement (only set when this row was flagged by
@@ -1106,11 +1149,30 @@
       // reliably returns that concept's own synonyms regardless of text
       // phrasing), to find Medicus's own indexed form of it.
       if (st.retiredInfo && st.retiredInfo.replacement) {
-        var replacementResults = await searchDescriptions(st.retiredInfo.replacement.conceptId);
-        st.confirmedReplacement = confirmedReplacementAlternative(
-          replacementResults,
-          st.retiredInfo.replacement.conceptId
-        );
+        var replacementConceptId = st.retiredInfo.replacement.conceptId;
+        var replacementResults = await searchDescriptions(replacementConceptId);
+        st.confirmedReplacement = confirmedReplacementAlternative(replacementResults, replacementConceptId);
+        // BODY-STRUCTURE FALLBACK (2026-07-26 — real case: 443897009 "[M]Tubular
+        // adenoma NOS", REPLACED BY 1156654007 "Benign tubular adenoma
+        // (morphologic abnormality)"). SEARCH_PATH's constrainingParentConcepts
+        // scopes to Clinical finding/Procedure/Situation/Social context/Event —
+        // a confirmed SNOMED replacement that's itself on the Body structure /
+        // morphologic-abnormality axis is invisible to that search regardless of
+        // query text, not because Medicus doesn't index it but because this
+        // scope pre-emptively excludes that whole hierarchy. Live-confirmed via
+        // the public NHS termbrowser API (2026-07-26): 1156654007 genuinely
+        // descends from 123037004 "Body structure" (the SAME root already
+        // confirmed live for the unrelated Rotator Cuff body-structure case,
+        // 2026-07-17) — reuses searchDescendantsNarrowed exactly as-is (already
+        // shipped, already used for hierarchy-descendant search elsewhere in
+        // this file), just with the replacement's bare conceptId as the query
+        // text instead of a hint word. One extra fetch, ONLY when the primary
+        // broad search comes up empty — the common case (most replacements ARE
+        // disorder/procedure-axis) stays exactly as cheap as before.
+        if (!st.confirmedReplacement) {
+          var bodyStructureResults = await searchDescendantsNarrowed('123037004', replacementConceptId);
+          st.confirmedReplacement = confirmedReplacementAlternative(bodyStructureResults, replacementConceptId);
+        }
       } else {
         st.confirmedReplacement = null;
       }

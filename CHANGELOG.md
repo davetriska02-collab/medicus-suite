@@ -2,6 +2,183 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.193.0] — 2026-07-26
+
+### Retirement scan's confirmed-replacement search now reaches Body structure / morphologic-abnormality-axis replacements too
+
+Follow-up to v3.192.1's copy fix (which hinted at this without claiming a fix). Real case:
+443897009 "[M]Tubular adenoma NOS" is `REPLACED BY` 1156654007 "Benign tubular adenoma
+(morphologic abnormality)" — SNOMED genuinely records this replacement, but the panel showed
+"could not be matched in Medicus's own search index — search manually" instead of the usual
+one-click confirmed-replacement button.
+
+Root cause: `st.confirmedReplacement` is found via `searchDescriptions(replacementConceptId)`
+— `SEARCH_PATH`'s `constrainingParentConcepts` scopes to Clinical finding/Procedure/
+Situation/Social context/Event. 1156654007 is on an entirely different SNOMED hierarchy
+(Body structure / morphologic abnormality), invisible to that search regardless of query
+text — not a Medicus indexing gap, a scope exclusion by the caller itself.
+
+**Live-verified via the public NHS termbrowser API before building** (six concept lookups,
+no patient data): 1156654007 → 1187375007 → 1187227004 → … → 49755003 "Morphologically
+abnormal structure" → 118956008 → **123037004 "Body structure"** — a genuine, traced IS-A
+descendant chain. `123037004` is the same constraining root already confirmed live for the
+unrelated Rotator Cuff body-structure case (2026-07-17) — though that fix never actually
+needed to *query* body-structure scope (it searched for the disorder-axis target text
+instead), so there was no existing code to reuse the pattern from, only the diagnostic
+precedent.
+
+**Fixed**: when the primary broad-scoped replacement search comes up empty,
+`openPanel()` now falls back to `searchDescendantsNarrowed('123037004', replacementConceptId)`
+— reusing the existing, already-shipped descendant-search fetch verbatim (already used
+elsewhere in this same function for hierarchy-descendant search), just with the replacement's
+bare conceptId as the query instead of a hint word. One extra fetch, only when the primary
+search fails — the common case (most replacements ARE disorder/procedure-axis) is unchanged.
+
+No new unit test (this is orchestration/fetch wiring, not pure logic — `confirmedReplacementAlternative`,
+the pure filter it feeds into, is already covered; consistent with how this file tests
+everything else touching `apiFetch`). 186/186 existing tests still pass. **Not yet
+live-confirmed** — next step if resumed is checking whether the confirmed-replacement button
+now appears for this real patient's tubular-adenoma problem via the retirement-scan-first
+path.
+
+## [v3.192.1] — 2026-07-26
+
+### Fixed v3.192.0 before it ever went live: detectAnatomicalSiteHint was silently picking the wrong word
+
+Live-tested by the user immediately after v3.192.0 landed, on the real motivating patient —
+result: still no anatomy match offered, on either entry path (direct "Fix description" click,
+or via "Check for retired/legacy codes?" first).
+
+Root cause: `detectAnatomicalSiteHint` copied `detectPathologyHint`'s "return only the first
+match" contract, scanning `ANATOMICAL_SITE_HINT_WORDS` in **list order**, not text order. For
+"Descending colon and sigmoid colon - removed", `descending` precedes `colon` in the list, so
+it was picked and returned — but 444898006's actual SNOMED wording is "...of **colon**",
+which never contains "descending" at all. The one search that would have worked (`colon`)
+never ran, because a single-match design is at the mercy of curated-list order, not which
+word the real target concept's own description happens to use — a real risk that doesn't
+apply to `PATHOLOGY_HINT_WORDS` the same way, since pathology words tend to be mutually
+exclusive per real case (a "tear" case doesn't usually also mention "rupture").
+
+**Fixed**: `detectAnatomicalSiteHint` now returns an ARRAY of every matched site word (not
+just the first) — `detectPathologyHint` is untouched, still single-word, since this
+list-order risk doesn't apply there. `openPanel()` now combines the (still-singular)
+pathology hint with every detected site hint into one `expandHints` list, each still getting
+its own separate search (the word-mismatch-avoidance discipline from v3.192.0 is unchanged,
+just now covers more candidate words).
+
+**Also fixed, same session (sidenote from the user)**: the "search manually via Edit Problem"
+copy in `retiredInfoHtml`'s two informational branches was stale — this panel has carried a
+built-in manual search section since 2026-07-25 (v3.189.0), so telling a clinician to leave
+the tool was misleading. Both messages now point at "the manual search below/further down
+this panel" instead. The "could not be matched" message also now hints at the likely real
+cause (a SNOMED hierarchy-scope mismatch) without over-claiming a fix — see the diagnosis in
+the session notes for the separate, not-yet-fixed morphology-axis search gap this points at.
+
+Tests updated for the array-return contract, including a direct regression test pinning the
+real "descending before colon" list-order bug so it can't silently return. 186/186 still
+passing (no new count — existing tests updated in place, not added to, since the site-hint
+test coverage from v3.192.0 was rewritten rather than supplemented).
+
+## [v3.192.0] — 2026-07-26
+
+### "Fix description" hint-expanded suggestions gain anatomical-site words + run alongside cross-concept matches
+
+Real example: a patient's "[M]Tubular adenoma NOS" problem, `additionalInformation`
+"Descending colon and sigmoid colon - removed." User suspected SNOMED 444898006
+("Tubular adenomatous polyp of colon") would be a better code, inferable from the site
+text. Live-verified via the public NHS SNOMED CT termbrowser API (no patient data
+involved) before writing anything: the currently-coded concept, 443897009, is a **retired**
+morphologic-abnormality-axis concept (`REPLACED BY` 1156654007, also morphology-axis) with
+**no IS-A path** to the disorder-axis "Tubular adenoma of colon" family that 444898006
+belongs to — confirmed by walking the ancestor chain (444898006 → 1197339007 → 444408007)
+and finding no intersection with 443897009's own lineage. So `descendantAlternatives`'
+hierarchy-proof mechanism can never reach 444898006 from what's actually coded, and
+correctly doesn't try to.
+
+Two real, separate gaps found in `hintExpandedAlternatives` (the one category that doesn't
+require hierarchy proof) instead:
+
+1. **No site vocabulary.** `PATHOLOGY_HINT_WORDS` (tear, rupture, sprain, stenosis, …) has
+   zero anatomical-site words — "colon"/"sigmoid"/"descending" would never match. New
+   `ANATOMICAL_SITE_HINT_WORDS` in `shared/coding-specificity.js` (caecum/cecum, ascending,
+   transverse, descending, sigmoid, rectosigmoid, rectum, colon) and `detectAnatomicalSiteHint`
+   — same first-clause-scoped, curated-list, "a miss just means no suggestion" safety
+   profile as the existing pathology list, deliberately scoped to the GI segments that
+   motivated it rather than whole-body coverage.
+2. **Wrong trigger gate.** `hintExpandedAlternatives` only ran when same-concept, descendant,
+   AND cross-concept-exact were ALL empty — but this case already has a cross-concept match
+   (444408007, the real "Tubular adenoma (disorder)" replacement), so the fallback never
+   even attempted a site search. **Changed the trigger** (explicit user decision, weighing
+   the tradeoff first): now runs whenever same-concept AND descendant are empty, regardless
+   of cross-concept — mirrors how `descendantAlternatives` already runs alongside
+   same-concept rather than as a last resort. Still the riskiest category (no hierarchy
+   proof, no exact-text guarantee) and still never eligible for future bulk auto-correction.
+
+**`hintExpandedAlternatives` generalised** (`shared/coding-specificity.js`) to accept an
+array of hint words, not just one string — fully backward compatible with every existing
+single-string caller. Pathology and site hints are detected independently and each gets its
+**own** supplementary search rather than one combined query: Medicus's search requires every
+query word to be present in a result, so "Tubular adenoma descending sigmoid colon" as one
+query would silently zero-result against a real match worded just "...of colon" — the same
+word-mismatch failure class already fixed once for the knee-replacement case (v3.179.0). One
+word per query sidesteps that; the filtering pass then accepts a candidate matching ANY of
+the words.
+
+15 new tests in `test-problem-description-cleanup.js` (186 total, up from 171), including the
+real tubular-adenoma/colon case and array-form backward-compatibility checks.
+
+**Not yet confirmed live** — built and unit-tested only; next step if resumed is checking
+whether 444898006 now actually appears in the hint-expanded section for this real patient.
+
+## [v3.191.2] — 2026-07-26
+
+### "Bulk remove?" + "Check for retired/legacy codes?" triggers sit alongside "Major", plus keyboard focus rings
+
+Two cosmetic fixes on the same Active Problems card triggers, live-confirmed.
+
+**Placement.** `#ms-pjc-widget`'s ("Bulk remove?") own `.m-card-v2__content:has(...)` flex
+placement (landed 2026-07-25) forced every OTHER direct child of that card — including
+`#ms-pdc-retired-widget` ("Check for retired/legacy codes?"), a separate widget injected by a
+different content script into the same spot — onto its own full-width row, so only one of the
+two triggers ever actually sat next to "Major" despite looking like a matched pair.
+`problem-description-cleanup.css` gained the mirror-image `:has()` rule, and both files'
+catch-all exclusion lists now name both widget ids, so the container becomes flex and both
+triggers share the top row regardless of which one(s) are present. Each still drops to its own
+full-width row once opened/clicked, same as before.
+
+**Focus rings.** Consulted Atelier on trigger-button colour first (see below) — verdict: keep
+both neutral, don't risk-colour a disclosure trigger for what's behind it. While in these
+files, found neither had a single `:focus-visible` rule on ANY control (Medicus's page never
+loads `panel.css`, so the suite's global ring never reached here — not a regression, just
+never built). One wildcard `button[class*='ms-pjc-']`/`input[class*='ms-pjc-']` rule per file
+(and the `ms-pdc-` equivalent) rather than enumerating every class, `outline: 2px solid
+#2563eb` matching the suite's `--accent` light value (can't consume the token itself here).
+
+**Design consult (Atelier, no code from this part):** should the two trigger buttons be
+colour-differentiated — one gates a destructive bulk-end action, the other a purely cosmetic
+scan? Verdict: no. A trigger isn't the risky moment (the actual destructive action, "End N
+selected problems", is already correctly red); colouring the trigger too would dilute what red
+means at the point that actually matters. Mirrors the same philosophy this feature already
+applies one level deeper — `problem-description-cleanup.js`'s safest fix category is
+deliberately left uncoloured rather than forced into the amber/blue/orange/red/green ramp.
+
+## [v3.191.1] — 2026-07-26
+
+### "Bulk remove?" auto-refreshes the page after a fully-successful end-batch
+
+User-reported: after clicking "End N selected problems," Medicus's own native problem-list
+UI (outside this widget) kept showing the ended problem(s) as still active until a manual
+page refresh — the widget's own checklist correctly showed "Ended," but that's a separate
+DOM tree from Medicus's own Vue-rendered list, which never re-fetches on its own after this
+widget's `POST /clinical/problem/end-problem` call.
+
+- `endSelected()` (`content-scripts/problem-junk-code-cleanup.js`) now calls
+  `location.reload()` automatically, but **only when every targeted end in the batch
+  succeeded** — a 900ms pause first, so the "Ended" tags are actually visible before the
+  reload fires. If any end in the batch failed, no reload happens at all: a failed row must
+  stay on screen with its error message so the clinician can see and retry it, not get wiped
+  by a reload they didn't ask for.
+
 ## [v3.191.0] — 2026-07-25
 
 ### "Bulk remove?" gains 18 more non-problem roots — beyond pure admin/claim artefacts

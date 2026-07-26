@@ -443,6 +443,7 @@
         return postEndProblem(f.id, _endDate, REASON_NOT_A_PROBLEM);
       })
     );
+    var allSucceeded = true;
     results.forEach(function (r, i) {
       var f = targets[i];
       if (r.status === 'fulfilled') {
@@ -451,11 +452,24 @@
         f.endError = null;
         if (f.anchorEl) f.anchorEl.classList.add('ms-pjc-anchor-ended');
       } else {
+        allSucceeded = false;
         f.endError = (r.reason && r.reason.message) || 'Failed to end this problem — please try again.';
       }
     });
     _ending = false;
     render();
+    // Medicus's own problem-list UI (outside this widget) doesn't reflect an
+    // ended problem until the page is refreshed — confirmed live, reported by
+    // the user 2026-07-26. Auto-reload ONLY when every targeted end
+    // succeeded, after a brief pause so the "Ended" tags are actually visible
+    // first — a failed end must stay on screen with its error message so the
+    // clinician can see and retry it, not get wiped by a reload they didn't
+    // ask for.
+    if (allSucceeded && targets.length) {
+      setTimeout(function () {
+        location.reload();
+      }, 900);
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────

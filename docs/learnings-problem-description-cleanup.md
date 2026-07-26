@@ -203,3 +203,246 @@ exactly this shorter path — not independently captured this session.
   root concepts by general SNOMED knowledge; the other three parent concepts
   and the excluded one were not individually verified against a SNOMED
   browser in this session.
+- Whether `descriptionId === null` correlates with the "H/O"/"H/O:" free-text
+  prefix (`LEGACY_HO_PREFIX_RE`, `shared/legacy-coded-description.js`,
+  2026-07-25) the same way it's confirmed to for the ICD-bracket/NOS/NEC
+  patterns above. Different origin (GP2GP-era free-text shorthand, not a
+  Read-code migration artefact) — the correlation is not assumed to transfer,
+  per that file's own comment. Doesn't affect the fix action's safety either
+  way (`sameConceptAlternatives` always re-derives the current `conceptId`
+  live and only ever offers same-concept synonyms) — this is purely about
+  whether `descriptionId` could additionally be trusted as a confirmatory
+  signal for this specific prefix. Live probe below, not yet run.
+
+## Probe: does `descriptionId === null` hold for H/O-prefixed problems?
+
+Paste into the Medicus **page console** on a patient's care-record page (any
+tab under `/care-record/{patientId}` or `/patient/patient/care-record/{patientId}`
+works — matches the widget's own URL detection). Finds every current problem
+whose description starts "H/O " or "H/O:", fetches each one's `edit-problem`
+prefill, and reports whether `descriptionId` is null — same real ids/PHI only
+ever printed to your own browser console, per this project's established
+convention.
+
+```js
+// ── H/O-prefix descriptionId-correlation probe (Medicus PAGE console) ──
+(async function () {
+  'use strict';
+  const RECORD_URL_RE = /\/([0-9a-f]{4,})\/(?:patient\/patient\/care-record|care-record)\/([0-9a-f-]{36})/i;
+  const m = location.pathname.match(RECORD_URL_RE);
+  if (!m) {
+    console.error('[probe] Not on a patient care-record page.');
+    return;
+  }
+  const [, siteId, patientId] = m;
+  const apiBase = `https://${siteId}.api.${location.hostname}`;
+  const HO_RE = /^h\/o(?:\s+|:\s*)/i;
+
+  async function apiFetch(path) {
+    const res = await fetch(apiBase + path, { credentials: 'include', headers: { Accept: 'application/json, text/plain, */*' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
+    return res.json();
+  }
+
+  let summary;
+  try {
+    summary = await apiFetch(`/clinical/data/clinical-summary/summary/${encodeURIComponent(patientId)}`);
+  } catch (e) {
+    console.error('[probe] clinical-summary fetch failed:', e.message);
+    return;
+  }
+  const candidates = (summary.problems || []).filter((p) => HO_RE.test(String(p.problemCodeDescription || '')));
+  console.log(`[probe] ${candidates.length} problem(s) with an H/O prefix found.`);
+  if (!candidates.length) {
+    console.warn('[probe] No H/O-prefixed problems on this patient — try a different patient.');
+    return;
+  }
+
+  const results = [];
+  for (const p of candidates) {
+    try {
+      const form = await apiFetch(`/clinical/data/problem/edit-problem/${encodeURIComponent(p.id)}`);
+      const val = (form.problemCode && form.problemCode.value) || {};
+      results.push({
+        problemId: p.id,
+        description: p.problemCodeDescription,
+        conceptId: val.conceptId || null,
+        descriptionId: val.descriptionId,
+        descriptionIdIsNull: val.descriptionId === null,
+      });
+    } catch (e) {
+      results.push({ problemId: p.id, description: p.problemCodeDescription, error: e.message });
+    }
+  }
+
+  console.table(results);
+  const withNull = results.filter((r) => r.descriptionIdIsNull).length;
+  console.log(
+    `[probe] ${withNull} / ${results.length} H/O-prefixed problems have descriptionId === null.`,
+    withNull === results.length
+      ? 'Correlation HOLDS for every example — matches the bracket/NOS pattern.'
+      : 'Correlation does NOT hold for every example — see the table above for which ones differ.'
+  );
+  window.__hoDescriptionIdProbe = results;
+})();
+```
+
+**What to look for:** if `descriptionId` is null on every H/O-prefixed problem found, the
+correlation holds and the code comment's caveat can be dropped. If some are non-null, the
+correlation doesn't transfer — worth noting in the comment as a confirmed negative
+(no code change needed either way, since the fix action doesn't rely on this signal).
+
+### Results (captured 2026-07-26) — invalid test sample; question still open
+
+One H/O-prefixed problem found: **"H/O: hay fever"**, `conceptId: 161524000`,
+`descriptionId: 251711015` — not null. **But this example doesn't answer the question**:
+the tester added this problem themselves via Medicus's own current SNOMED search moments
+before probing it, rather than finding a genuine pre-existing historic entry. A
+freshly-coded problem is trivially expected to carry a populated `descriptionId` regardless
+of the H/O-prefix hypothesis — the whole question is about problems that were
+**historically** imported/migrated with this prefix already in place (the same population
+the bracket/NOS correlation was itself confirmed against), not ones coded fresh through
+the current UI. This result is discarded as not evidential either way.
+
+**No code change made** (the fix action never depended on this signal regardless — see the
+DETECTION comment in `content-scripts/problem-description-cleanup.js`), but the comment was
+corrected to keep this framed as genuinely unconfirmed, not refuted, pending a real example.
+
+### Results, take 2 (captured 2026-07-26) — genuine example confirms the correlation
+
+Re-run against a genuine pre-existing patient problem (not tester-added this time):
+**"H/O: varicose veins"**, `conceptId: 161509009`, `descriptionId: null` — **null**, matching
+the ICD-bracket/NOS pattern. 1/1 genuine H/O-prefixed problems found so far have
+`descriptionId === null`.
+
+**Correlation confirmed** for the H/O prefix, same evidential weight (n=1 genuine example) as
+the bracket/NOS pattern's own original small sample — worth widening if more examples turn up
+naturally, not worth a dedicated hunt. Code comment
+(`content-scripts/problem-description-cleanup.js`, DETECTION section) updated to reflect
+this. No code change needed either way, since (as already noted) the fix action never relied
+on this signal for safety — it was only ever a potential bonus corroborating signal, and is
+now confirmed usable as one. Investigation closed.
+
+## Probe: does the existing descendant-alternative pipeline already catch a site-specific GI-polyp recode?
+
+Raised 2026-07-26: a real "[M]Tubular adenoma NOS" problem with `additionalInformation`
+"Descending colon and sigmoid colon - removed." — user suggests SNOMED 444898006 would be a
+better code, inferred from the site text. `descendantAlternatives()`
+(`shared/coding-specificity.js`, generalised 2026-07-23 from laterality-only to any
+significant word in the whole `additionalInformation` field) may already attempt exactly
+this with zero new code — but two things need live confirmation before trusting it or
+building anything further: (1) whether 444898006's own SNOMED wording literally contains a
+matching word (the pipeline has already hit a word-literalism miss once, on
+"myomectomy"/"resection"), and (2) whether it's a TRUE descendant of the currently-coded
+concept at all (never assume — this feature's entire safety model rests on the
+`parentConceptIds` ancestry check, confirmed per-concept, not inferred from a code number).
+
+Paste into the Medicus **page console** on this patient's care-record page:
+
+```js
+// ── Descendant-alternative pipeline replay for a GI-polyp problem (Medicus PAGE console) ──
+(async function () {
+  'use strict';
+  const RECORD_URL_RE = /\/([0-9a-f]{4,})\/(?:patient\/patient\/care-record|care-record)\/([0-9a-f-]{36})/i;
+  const m = location.pathname.match(RECORD_URL_RE);
+  if (!m) {
+    console.error('[probe] Not on a patient care-record page.');
+    return;
+  }
+  const [, siteId, patientId] = m;
+  const apiBase = `https://${siteId}.api.${location.hostname}`;
+  const TARGET_CODE = '444898006';
+  const SEARCH_PATH =
+    '/clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=404684003,71388002,243796009,48176007,272379006&excludeConstrainingConcepts=307824009&outputParentConceptIds=1&query=';
+
+  async function apiFetch(path) {
+    const res = await fetch(apiBase + path, { credentials: 'include', headers: { Accept: 'application/json, text/plain, */*' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
+    return res.json();
+  }
+  async function searchDescriptions(queryText) {
+    const data = await apiFetch(SEARCH_PATH + encodeURIComponent(queryText));
+    return (data && data.results) || [];
+  }
+  async function searchDescendantsNarrowed(parentConceptId, queryText) {
+    const path =
+      `/clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=${encodeURIComponent(parentConceptId)}` +
+      `&outputParentConceptIds=1&query=${encodeURIComponent(queryText)}`;
+    const data = await apiFetch(path);
+    return (data && data.results) || [];
+  }
+  // Mirrors shared/coding-specificity.js's significantWords exactly.
+  const GENERIC_STOP_WORDS = ['a', 'an', 'and', 'at', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to', 'with'];
+  function significantWords(text) {
+    const whole = String(text == null ? '' : text).toLowerCase();
+    const candidates = whole.match(/[a-z]+/g) || [];
+    const seen = new Set();
+    const out = [];
+    candidates.forEach((w) => {
+      if (w.length < 3 || GENERIC_STOP_WORDS.includes(w) || seen.has(w)) return;
+      seen.add(w);
+      out.push(w);
+    });
+    return out;
+  }
+
+  let summary;
+  try {
+    summary = await apiFetch(`/clinical/data/clinical-summary/summary/${encodeURIComponent(patientId)}`);
+  } catch (e) {
+    console.error('[probe] clinical-summary fetch failed:', e.message);
+    return;
+  }
+  const target = (summary.problems || []).find((p) => /tubular adenoma/i.test(String(p.problemCodeDescription || '')));
+  if (!target) {
+    console.warn('[probe] No "tubular adenoma" problem found on this patient.');
+    return;
+  }
+  console.log('[probe] Found problem:', target.problemCodeDescription, target.id);
+
+  const prefill = await apiFetch(`/clinical/data/problem/edit-problem/${encodeURIComponent(target.id)}`);
+  const code = prefill.problemCode && prefill.problemCode.value;
+  if (!code || !code.conceptId) {
+    console.error('[probe] No conceptId on this problem\'s prefill.');
+    return;
+  }
+  console.log('[probe] Current code:', code.conceptId, code.description, '| additionalInformation:', prefill.additionalInformation);
+
+  const hintWords = significantWords(prefill.additionalInformation);
+  console.log('[probe] Extracted hint words:', hintWords);
+
+  const allDescendants = await searchDescendantsNarrowed(code.conceptId, '');
+  console.log(`[probe] Blank-query descendant fetch returned ${allDescendants.length} result(s).`);
+
+  const targetResult = allDescendants.find((r) => r.value && r.value.conceptId === TARGET_CODE);
+  if (targetResult) {
+    const isTrueDescendant = Array.isArray(targetResult.value.parentConceptIds) && targetResult.value.parentConceptIds.includes(code.conceptId);
+    const matchedWords = hintWords.filter((w) => new RegExp(`\\b${w}\\b`, 'i').test(targetResult.value.description || ''));
+    console.log(`[probe] ${TARGET_CODE} FOUND in the descendant fetch:`, targetResult.value.description);
+    console.log('[probe]   true descendant of current concept (parentConceptIds contains it)?', isTrueDescendant);
+    console.log('[probe]   hint words that literally match its description:', matchedWords, matchedWords.length ? '-> WOULD be offered today' : '-> word-literalism miss, would NOT be offered despite being a true descendant');
+  } else {
+    console.warn(`[probe] ${TARGET_CODE} NOT present in the blank-query descendant fetch at all.`);
+    // Independent check: search for it directly by its own conceptId, to see what
+    // it actually IS (label/description) and whether it's a true descendant —
+    // separates "doesn't exist / not what I think" from "exists but the
+    // descendant-fetch pagination/scope missed it".
+    const direct = await searchDescriptions(TARGET_CODE);
+    const match = direct.find((r) => r.value && r.value.conceptId === TARGET_CODE);
+    if (match) {
+      const isTrueDescendant = Array.isArray(match.value.parentConceptIds) && match.value.parentConceptIds.includes(code.conceptId);
+      console.log(`[probe] ${TARGET_CODE} DOES exist as a concept:`, match.value.description);
+      console.log('[probe]   true descendant of the CURRENT coded concept?', isTrueDescendant, isTrueDescendant ? '(genuinely missed by the descendant fetch — a real gap)' : '(NOT a descendant of what\'s currently coded — would be unsafe to offer via this mechanism regardless)');
+    } else {
+      console.error(`[probe] ${TARGET_CODE} not found via direct search either — double-check the code.`);
+    }
+  }
+  window.__giPolypProbe = { target, code, hintWords, allDescendants };
+})();
+```
+
+**What the output tells us:**
+- `444898006` found, true descendant, hint words matched → **already works today, no code change**, just confirms live.
+- `444898006` found, true descendant, but zero hint-word matches → the word-literalism gap, same class of bug as the earlier myomectomy case — a real, scoped fix (broaden matching, e.g. stem/synonym awareness for anatomical terms).
+- `444898006` missing from the blank-query fetch but confirmed a true descendant via direct search → the "not provably complete" pagination caveat already flagged in this file's own comments has a real instance — worth a targeted fix to the retrieval, not the matching.
+- `444898006` exists but is **not** a true descendant of what's currently coded → the suggestion would be clinically wrong regardless of matching, and this file's safety rule (ancestry only, never guessed) is correctly protecting against it not being offered.
