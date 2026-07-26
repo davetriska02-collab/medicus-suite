@@ -36,6 +36,11 @@ const NHS_ADD_ALLOWLIST = new Set([
   // This guard's own regression test deliberately embeds synthetic Modulus-11
   // numbers to prove detection works — they are not patient data.
   'test-no-patient-data-guard.js',
+  // SNOMED descriptionId values are 10-digit terminology identifiers, and
+  // some coincidentally pass the NHS Modulus-11 check. These files carry
+  // descriptionIds only — no patient identifiers.
+  'rules/document-types.json',
+  'test-problem-description-cleanup.js',
 ]);
 
 // Never NHS-scan these (binaries / vendored bundles / lockfiles).
@@ -71,87 +76,92 @@ module.exports = { isValidNhsNumber, isForbiddenPath, FORBIDDEN_DIRS };
 function main() {
   const errors = [];
 
-// --- Check 1: forbidden paths (whole tree) -----------------------------------
-const tracked = sh('git ls-files').split('\n').map((s) => s.trim()).filter(Boolean);
-for (const f of tracked) {
-  if (FORBIDDEN_DIRS.some((d) => f === d.slice(0, -1) || f.startsWith(d))) {
-    errors.push(`FORBIDDEN PATH: ${f} is under a patient-data directory and must never be committed.`);
+  // --- Check 1: forbidden paths (whole tree) -----------------------------------
+  const tracked = sh('git ls-files')
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const f of tracked) {
+    if (FORBIDDEN_DIRS.some((d) => f === d.slice(0, -1) || f.startsWith(d))) {
+      errors.push(`FORBIDDEN PATH: ${f} is under a patient-data directory and must never be committed.`);
+    }
   }
-}
 
-// --- Check 2: checksum-valid NHS numbers in ADDED lines ----------------------
-const NHS_RE = /\b(\d{3})[ -]?(\d{3})[ -]?(\d{4})\b/g;
+  // --- Check 2: checksum-valid NHS numbers in ADDED lines ----------------------
+  const NHS_RE = /\b(\d{3})[ -]?(\d{3})[ -]?(\d{4})\b/g;
 
-function resolveBase() {
-  const base = process.env.BASE_REF || 'origin/main';
-  try {
-    sh(`git rev-parse --verify ${base}`);
-    return base;
-  } catch {
-    // Try to fetch it (CI shallow clones often lack the base ref).
-    const branch = base.replace(/^origin\//, '');
+  function resolveBase() {
+    const base = process.env.BASE_REF || 'origin/main';
     try {
-      sh(`git fetch --no-tags --quiet origin ${branch}`);
       sh(`git rev-parse --verify ${base}`);
       return base;
     } catch {
-      return null;
+      // Try to fetch it (CI shallow clones often lack the base ref).
+      const branch = base.replace(/^origin\//, '');
+      try {
+        sh(`git fetch --no-tags --quiet origin ${branch}`);
+        sh(`git rev-parse --verify ${base}`);
+        return base;
+      } catch {
+        return null;
+      }
     }
   }
-}
 
-const base = resolveBase();
-if (!base) {
-  console.warn('⚠️  Patient-data guard: could not resolve a base ref — skipping NHS-number diff scan (path check still ran).');
-} else {
-  // -U0: no context lines, so we only see actually-added content.
-  let diff = '';
-  try {
-    diff = sh(`git diff --no-color -U0 ${base}...HEAD`);
-  } catch {
-    diff = '';
-  }
-  let curFile = null;
-  let newLine = 0;
-  for (const raw of diff.split('\n')) {
-    if (raw.startsWith('+++ ')) {
-      const m = raw.match(/^\+\+\+ b\/(.*)$/);
-      curFile = m ? m[1] : null;
-      continue;
+  const base = resolveBase();
+  if (!base) {
+    console.warn(
+      '⚠️  Patient-data guard: could not resolve a base ref — skipping NHS-number diff scan (path check still ran).'
+    );
+  } else {
+    // -U0: no context lines, so we only see actually-added content.
+    let diff = '';
+    try {
+      diff = sh(`git diff --no-color -U0 ${base}...HEAD`);
+    } catch {
+      diff = '';
     }
-    if (raw.startsWith('@@')) {
-      const m = raw.match(/\+(\d+)/);
-      newLine = m ? Number(m[1]) : 0;
-      continue;
-    }
-    if (raw.startsWith('+') && !raw.startsWith('+++')) {
-      const line = raw.slice(1);
-      if (curFile && !NHS_ADD_ALLOWLIST.has(curFile) && !SKIP_NHS_SCAN.some((re) => re.test(curFile))) {
-        NHS_RE.lastIndex = 0;
-        let m;
-        while ((m = NHS_RE.exec(line)) !== null) {
-          const digits = m[1] + m[2] + m[3];
-          if (isValidNhsNumber(digits)) {
-            errors.push(
-              `POSSIBLE NHS NUMBER: ${curFile}:${newLine} adds "${m[0]}" (passes Modulus-11). ` +
-                `If this is genuinely synthetic test data, add the file to NHS_ADD_ALLOWLIST in this script.`
-            );
+    let curFile = null;
+    let newLine = 0;
+    for (const raw of diff.split('\n')) {
+      if (raw.startsWith('+++ ')) {
+        const m = raw.match(/^\+\+\+ b\/(.*)$/);
+        curFile = m ? m[1] : null;
+        continue;
+      }
+      if (raw.startsWith('@@')) {
+        const m = raw.match(/\+(\d+)/);
+        newLine = m ? Number(m[1]) : 0;
+        continue;
+      }
+      if (raw.startsWith('+') && !raw.startsWith('+++')) {
+        const line = raw.slice(1);
+        if (curFile && !NHS_ADD_ALLOWLIST.has(curFile) && !SKIP_NHS_SCAN.some((re) => re.test(curFile))) {
+          NHS_RE.lastIndex = 0;
+          let m;
+          while ((m = NHS_RE.exec(line)) !== null) {
+            const digits = m[1] + m[2] + m[3];
+            if (isValidNhsNumber(digits)) {
+              errors.push(
+                `POSSIBLE NHS NUMBER: ${curFile}:${newLine} adds "${m[0]}" (passes Modulus-11). ` +
+                  `If this is genuinely synthetic test data, add the file to NHS_ADD_ALLOWLIST in this script.`
+              );
+            }
           }
         }
+        newLine++;
+        continue;
       }
-      newLine++;
-      continue;
+      // context/removed lines don't advance the +line counter under -U0
     }
-    // context/removed lines don't advance the +line counter under -U0
   }
-}
 
-if (errors.length) {
-  console.error('❌ Patient-data guard failed:\n');
-  for (const e of errors) console.error('  - ' + e);
-  console.error('\nNothing from uploads/, data/sars/, output/, and no real NHS numbers, may be committed.');
-  process.exit(1);
-}
+  if (errors.length) {
+    console.error('❌ Patient-data guard failed:\n');
+    for (const e of errors) console.error('  - ' + e);
+    console.error('\nNothing from uploads/, data/sars/, output/, and no real NHS numbers, may be committed.');
+    process.exit(1);
+  }
 
   console.log('✅ Patient-data guard: clean (no forbidden paths; no checksum-valid NHS numbers in added lines).');
 }

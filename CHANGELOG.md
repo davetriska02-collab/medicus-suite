@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.193.1] — 2026-07-26
+
+### PR #223 review fixes (CSO review): bulk-remove safety gates + housekeeping
+
+Remediation of the four items from the pre-merge review of PR #223.
+
+- **"Bulk remove?" caution roots (`rules/non-problem-root-codes.json` v2).** Three
+  configured roots are usually GP2GP import noise but can be LIVE clinical flags:
+  `3457005` Patient referral (an in-flight 2WW/urgent referral is a safety-net),
+  `161714006` Estimated date of delivery (an active EDD often flags a current
+  pregnancy — a prescribing-safety cue), and `307824009` Administrative statuses
+  (descendants include "Follow-up arranged"). Each now carries a per-root
+  `caution`; the widget renders it as a ⚠ warning on every flagged row attributed
+  to that root (attribution via a per-caution-root constrained search, since the
+  scan's one combined query can't say which root matched; attribution failure
+  fails CLOSED to cautioned), and **"Select all" never ticks a ⚠ row** — those
+  must be reviewed and ticked individually. Summary copy no longer calls every
+  flagged row "likely import noise". Caution set regression-locked in
+  `test-problem-junk-code-cleanup.js` (new `cautionRootsOf` helper + 7 checks).
+- **Empty end-date guard.** Clearing the end-date field could POST `endDate: ""`
+  to the live record. The "End N selected" button is now disabled with no date,
+  and `endSelected()` refuses to POST without one regardless of button state.
+- **CHANGELOG version collision actually resolved.** The 2026-07-25 merge from
+  `main` left two v3.177.0 and two v3.178.0 entries (each side had assigned the
+  numbers independently). This branch's two entries are renumbered into the free
+  v3.176.12 / v3.176.13 slots with renumber notes; main's already-released
+  entries are untouched. Their follow-ups keep their original v3.177.1–.7 /
+  v3.178.1 numbers.
+- **CI patient-data guard false positives.** `rules/document-types.json` and
+  `test-problem-description-cleanup.js` carry SNOMED descriptionIds — 10-digit
+  terminology identifiers, some of which coincidentally pass the NHS Modulus-11
+  check. Both files added to `NHS_ADD_ALLOWLIST` in
+  `scripts/check-no-patient-data.js` with the reason documented in place.
+
 ## [v3.193.0] — 2026-07-26
 
 ### Retirement scan's confirmed-replacement search now reaches Body structure / morphologic-abnormality-axis replacements too
@@ -705,7 +739,7 @@ just the new descendant suggestion. Root cause — Medicus's description search 
 EVERY word in the query to appear in a result; the real modern descendants ("Total
 replacement of left/right knee joint") don't contain the word "Primary" anywhere, so the
 entire query silently failed. This affected the SAME-CONCEPT alternatives too (the
-original, already-shipped v3.178.0 flow), not just today's new work — any legacy
+original, already-shipped v3.176.13 flow, formerly numbered v3.178.0), not just today's new work — any legacy
 description with a word not echoed in its concept's modern phrasing could silently
 return nothing, with no error, just an empty "no alternative found" panel.
 
@@ -807,7 +841,12 @@ exists.
   Medicus's own tightly-packed problem-list rows, stretching the whole list
   out. Smaller font, explicit `line-height`, less padding.
 
-## [v3.178.0] — 2026-07-22
+## [v3.176.13] — 2026-07-22
+
+> Renumbered from v3.178.0 on 2026-07-26: the 2026-07-25 merge from `main` brought in
+> main's own v3.178.0 (The Keeper rule-set update), which had been assigned the same
+> number independently. This entry keeps its original date and content; its follow-up
+> below retains its original v3.178.1 number.
 
 ### New: "Fix description" for outdated SNOMED problem codes
 
@@ -1020,7 +1059,12 @@ by file extension, still with no live search and no guessed codes.
   capture.
 - `test-document-file-inline.js` now covers both document types (40 tests).
 
-## [v3.177.0] — 2026-07-20
+## [v3.176.12] — 2026-07-20
+
+> Renumbered from v3.177.0 on 2026-07-26: the 2026-07-25 merge from `main` brought in
+> main's own v3.177.0 (Triage North Star wave 1), which had been assigned the same
+> number independently. This entry keeps its original date and content; its follow-ups
+> above retain their original v3.177.1–.7 numbers.
 
 ### Triage-lens: "Save attachment as document" — one-click filing for patient photos submitted via triage
 

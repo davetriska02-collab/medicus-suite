@@ -84,8 +84,14 @@
 //
 // Checkboxes default UNCHECKED (explicit, 2026-07-23) — the descendant match
 // is a soft hierarchy signal, not a guarantee every flagged item is genuinely
-// non-clinical, so bulk-ending requires the clinician to actively tick each
-// one after reviewing the list, never a single "select all and go".
+// non-clinical, so nothing is ever pre-ticked. A "Select all" convenience
+// exists, but it deliberately SKIPS any row attributed to a root carrying a
+// `caution` in rules/non-problem-root-codes.json (2026-07-26: referrals, EDD,
+// administrative statuses — categories that are usually import noise but can
+// be LIVE clinical flags, e.g. an in-flight 2WW referral). Cautioned rows
+// render a per-row ⚠ warning and must be reviewed and ticked individually;
+// a row whose caution attribution could not be verified (fetch failure) is
+// treated as cautioned, never as clean.
 //
 // NO TEXT-BASED VISIBILITY GATE (explicit, 2026-07-25 — tried and reverted
 // same day): a text-substring pre-check on the trigger button's visibility
@@ -164,6 +170,15 @@
     return !!entry && !entry.ended && (entry.activeChildCount || 0) === 0;
   }
 
+  // Roots that carry a per-root `caution` (see the rules file's notes):
+  // categories that are usually import noise but can be live clinical flags.
+  // "Select all" never ticks a row attributed to one of these.
+  function cautionRootsOf(roots) {
+    return (Array.isArray(roots) ? roots : []).filter(function (r) {
+      return !!(r && r.conceptId && typeof r.caution === 'string' && r.caution);
+    });
+  }
+
   // Narrows clinical-summary/summary's `problems[]` down to just
   // {id, description, conceptId} once each has been resolved via the
   // per-problem overview fetch — drops any whose conceptId couldn't be read
@@ -199,6 +214,7 @@
       isFlaggedConceptId: isFlaggedConceptId,
       buildEndProblemPayload: buildEndProblemPayload,
       isEndable: isEndable,
+      cautionRootsOf: cautionRootsOf,
       withResolvedConceptIds: withResolvedConceptIds,
       uniqueConceptIds: uniqueConceptIds,
     };
@@ -340,7 +356,7 @@
   var _open = false;
   var _scanState = 'idle'; // 'idle' | 'scanning' | 'done' | 'error'
   var _scanError = null;
-  var _flagged = []; // [{ id, description, conceptId, activeChildCount, anchorEl, checked, ended, endError }]
+  var _flagged = []; // [{ id, description, conceptId, activeChildCount, anchorEl, caution, checked, ended, endError }]
   var _rootLabels = []; // descriptions of the configured roots, for the summary copy — never hardcode a root's name
   var _endDate = todayISO();
   var _ending = false;
@@ -397,6 +413,39 @@
       var candidates = withConcept.filter(function (p) {
         return isFlaggedConceptId(p.conceptId, roots, descendantResultsByConceptId[p.conceptId]);
       });
+      // Attribute cautioned roots per candidate. The main scan's ONE combined
+      // constrained search can't say WHICH root matched, so each candidate
+      // concept gets checked against each caution root individually (caution
+      // roots are few and candidates are typically a handful — this only runs
+      // after the explicit opt-in scan). Fail CLOSED: a candidate whose
+      // caution check errors is treated as cautioned, never as clean.
+      var cautionRoots = cautionRootsOf(roots);
+      var cautionByConceptId = Object.create(null);
+      await Promise.all(
+        uniqueConceptIds(candidates).map(function (id) {
+          return (async function () {
+            for (var i = 0; i < cautionRoots.length; i++) {
+              var root = cautionRoots[i];
+              if (root.conceptId === id) {
+                cautionByConceptId[id] = root.caution;
+                return;
+              }
+              var hit;
+              try {
+                hit = resultContainsConceptId(await fetchDescendantSearchResults(id, root.conceptId), id);
+              } catch (_) {
+                cautionByConceptId[id] =
+                  'Could not verify this entry against the caution list — check it individually before ending.';
+                return;
+              }
+              if (hit) {
+                cautionByConceptId[id] = root.caution;
+                return;
+              }
+            }
+          })();
+        })
+      );
       var endForms = await Promise.all(
         candidates.map(function (p) {
           return fetchEndProblemForm(p.id).catch(function () {
@@ -417,6 +466,7 @@
           conceptId: p.conceptId,
           activeChildCount: activeChildCount,
           anchorEl: anchorEl,
+          caution: cautionByConceptId[p.conceptId] || null,
           checked: false,
           ended: false,
           endError: null,
@@ -435,7 +485,9 @@
     var targets = _flagged.filter(function (f) {
       return f.checked && isEndable(f);
     });
-    if (!targets.length || _ending) return;
+    // No end date -> no POST, ever. The button is disabled without one, but a
+    // cleared date field must not slip an `endDate: ""` through to the record.
+    if (!targets.length || _ending || !_endDate) return;
     _ending = true;
     render();
     var results = await Promise.allSettled(
@@ -505,6 +557,7 @@
           (f.activeChildCount > 0
             ? '<span class="ms-pjc-row-warn">Has linked problems — review individually in Medicus</span>'
             : '') +
+          (f.caution ? '<span class="ms-pjc-row-warn">⚠ ' + esc(f.caution) + '</span>' : '') +
           (f.endError ? '<span class="ms-pjc-row-error">' + esc(f.endError) + '</span>' : '') +
           '</label>'
         );
@@ -519,8 +572,11 @@
       (_flagged.length === 1 ? '' : 's') +
       ' coded under "' +
       rootLabelsText +
-      '" in SNOMED — likely GP2GP import noise, not a real clinical ' +
-      'problem. Review before ending; nothing is ticked by default.</div>' +
+      '" in SNOMED — often GP2GP import artefacts rather than real clinical ' +
+      'problems, but not always: rows marked ⚠ can be live clinical flags ' +
+      '(e.g. an in-flight urgent referral) and must be reviewed individually. ' +
+      'Review each row before ending; nothing is ticked by default, and ' +
+      '"Select all" skips ⚠ rows.</div>' +
       '<div class="ms-pjc-select-row">' +
       '<button type="button" class="ms-pjc-select-all" id="ms-pjc-select-all">Select all</button>' +
       '<button type="button" class="ms-pjc-select-none" id="ms-pjc-select-none">Select none</button>' +
@@ -536,7 +592,7 @@
       '<span class="ms-pjc-reason-note">Reason: "not a problem"</span>' +
       '</div>' +
       '<button type="button" class="ms-pjc-end-btn" id="ms-pjc-end-selected"' +
-      (selectedCount === 0 || _ending ? ' disabled' : '') +
+      (selectedCount === 0 || _ending || !_endDate ? ' disabled' : '') +
       '>' +
       (_ending ? 'Ending…' : 'End ' + selectedCount + ' selected problem' + (selectedCount === 1 ? '' : 's')) +
       '</button>' +
@@ -601,7 +657,8 @@
     });
     el.querySelector('#ms-pjc-select-all')?.addEventListener('click', function () {
       _flagged.forEach(function (f) {
-        if (isEndable(f)) f.checked = true;
+        // Cautioned rows are never swept up by Select all — see header comment.
+        if (isEndable(f) && !f.caution) f.checked = true;
       });
       render();
     });

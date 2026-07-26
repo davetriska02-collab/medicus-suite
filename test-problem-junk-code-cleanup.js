@@ -21,6 +21,7 @@ const {
   isFlaggedConceptId,
   buildEndProblemPayload,
   isEndable,
+  cautionRootsOf,
   withResolvedConceptIds,
   uniqueConceptIds,
 } = require('./content-scripts/problem-junk-code-cleanup.js');
@@ -88,6 +89,35 @@ console.log('--- rules/non-problem-root-codes.json: the imported roots list itse
   check(
     nonProblemRootCodes.roots.length === 21,
     'exactly 21 roots configured (got ' + nonProblemRootCodes.roots.length + ')'
+  );
+}
+
+console.log('--- cautionRootsOf: roots whose rows "Select all" must never tick ---');
+{
+  // Regression-lock the caution set (added 2026-07-26, CSO review of the root
+  // list): these categories are usually import noise but can be LIVE clinical
+  // flags — an in-flight 2WW referral, an active EDD marking a current
+  // pregnancy, a "Follow-up arranged" administrative status. Removing a
+  // caution silently re-exposes those rows to a blanket "Select all" sweep,
+  // so the exact set is pinned here.
+  const expectedCautioned = ['3457005', '161714006', '307824009'];
+  const cautioned = cautionRootsOf(nonProblemRootCodes.roots);
+  check(
+    cautioned.length === expectedCautioned.length,
+    `exactly ${expectedCautioned.length} roots carry a caution (got ${cautioned.length})`
+  );
+  for (const conceptId of expectedCautioned) {
+    const root = cautioned.find((r) => r.conceptId === conceptId);
+    check(!!root && root.caution.length > 0, `${conceptId} carries a non-empty caution`);
+  }
+  check(cautionRootsOf(null).length === 0, 'null roots -> empty list, never throws');
+  check(cautionRootsOf([{ conceptId: '1' }]).length === 0, 'a root without a caution is not included');
+  check(
+    cautionRootsOf([
+      { conceptId: '1', caution: '' },
+      { conceptId: '2', caution: 'x' },
+    ]).length === 1,
+    'an empty-string caution does not count as cautioned'
   );
 }
 
