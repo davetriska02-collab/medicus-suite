@@ -575,6 +575,42 @@ console.log('\n── Drug-table completeness locks ──');
   }
 }
 
+// ── 2026-07-25 Keeper: new HIGH_RISK_DRUGS entries ────────────────────────
+console.log('\n── 2026-07-25 Keeper: new monitoring drug entries ──');
+{
+  const termsOf = (id) => (HIGH_RISK_DRUGS.find((d) => d.id === id)?.terms || []).map((t) => t.toLowerCase());
+
+  // leflunomide (BNF / BSR: 3-monthly monitoring, FBC/LFT/U&E)
+  const lef = termsOf('leflunomide');
+  assert(lef.includes('leflunomide'), 'leflunomide entry: term "leflunomide" present');
+  assert(lef.includes('arava'), 'leflunomide entry: brand "arava" present');
+  const lefEntry = HIGH_RISK_DRUGS.find(d => d.id === 'leflunomide');
+  assert(lefEntry && lefEntry.interval === 84, 'leflunomide interval is 84 days (3-monthly)');
+
+  // carbamazepine (BNF: 6-monthly FBC/LFT/U&E/sodium/drug level)
+  const cbz = termsOf('carbamazepine');
+  assert(cbz.includes('carbamazepine'), 'carbamazepine entry: term "carbamazepine" present');
+  assert(cbz.includes('tegretol'), 'carbamazepine entry: brand "tegretol" present');
+  assert(cbz.includes('carbagen'), 'carbamazepine entry: brand "carbagen" present');
+  const cbzEntry = HIGH_RISK_DRUGS.find(d => d.id === 'carbamazepine');
+  assert(cbzEntry && cbzEntry.interval === 182, 'carbamazepine interval is 182 days (6-monthly)');
+
+  // valproate (BNF / MHRA Valproate PPP: annual FBC/LFT/U&E; includes MHRA Feb 2025 DSU brands)
+  const val = termsOf('valproate');
+  for (const t of ['sodium valproate', 'valproate', 'valproic acid', 'epilim', 'episenta', 'orlept', 'convulex', 'depakote', 'belvo', 'dyzantil', 'epival', 'syonell']) {
+    assert(val.includes(t), `valproate entry includes term "${t}"`);
+  }
+  const valEntry = HIGH_RISK_DRUGS.find(d => d.id === 'valproate');
+  assert(valEntry && valEntry.interval === 365, 'valproate interval is 365 days (annual)');
+
+  // finerenone (NICE TA877 / SmPC: U&E/potassium/eGFR every 4 months after initiation)
+  const fin = termsOf('finerenone');
+  assert(fin.includes('finerenone'), 'finerenone entry: term "finerenone" present');
+  assert(fin.includes('kerendia'), 'finerenone entry: brand "kerendia" present');
+  const finEntry = HIGH_RISK_DRUGS.find(d => d.id === 'finerenone');
+  assert(finEntry && finEntry.interval === 120, 'finerenone interval is 120 days (4-monthly)');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

@@ -113,5 +113,41 @@ check(rfNew50Visual && rfNew50Visual.escalate === '999', 'rf-new50-visual escala
 check(!!rfNew50, 'headache rf-new50 (GCA without visual threat) still exists');
 check(rfNew50 && rfNew50.escalate === 'duty', 'rf-new50 escalates to duty');
 
+// ── 2026-07-25 Keeper: 5 new red flags (NG12 2WW + raised ICP) ──────────────
+console.log('\n--- 2026-07-25 Keeper: new red flag content locks ---');
+
+// rf-morning-vomit: headache pathway, 999 — raised ICP (NICE CKS Headache, progressive morning headache + vomiting)
+const rfMorningVomit = headache && (headache.redFlags || []).find(rf => rf.id === 'rf-morning-vomit');
+check(!!rfMorningVomit, 'headache rf-morning-vomit red flag exists');
+check(rfMorningVomit && rfMorningVomit.escalate === '999', 'rf-morning-vomit escalates to 999');
+check(rfMorningVomit && /morning|sleep|worsening/i.test(rfMorningVomit.ask), 'rf-morning-vomit ask mentions morning/sleep/worsening');
+
+// rf-nasal-unilateral: sinusitis pathway, duty — unilateral nasal obstruction (NICE NG12 ENT 2WW)
+const sinusitisP = doc.pathways.find(p => p.id === 'sinusitis');
+const rfNasalUnilateral = sinusitisP && (sinusitisP.redFlags || []).find(rf => rf.id === 'rf-nasal-unilateral');
+check(!!rfNasalUnilateral, 'sinusitis rf-nasal-unilateral red flag exists');
+check(rfNasalUnilateral && rfNasalUnilateral.escalate === 'duty', 'rf-nasal-unilateral escalates to duty');
+check(rfNasalUnilateral && /one side|unilateral/i.test(rfNasalUnilateral.ask), 'rf-nasal-unilateral ask mentions one side/unilateral');
+
+// rf-skin-lesion: rash pathway, duty — new/changing mole (NICE NG12 melanoma 2WW)
+const rashP = doc.pathways.find(p => p.id === 'rash');
+const rfSkinLesion = rashP && (rashP.redFlags || []).find(rf => rf.id === 'rf-skin-lesion');
+check(!!rfSkinLesion, 'rash rf-skin-lesion red flag exists');
+check(rfSkinLesion && rfSkinLesion.escalate === 'duty', 'rf-skin-lesion escalates to duty');
+check(rfSkinLesion && /mole|skin mark/i.test(rfSkinLesion.ask), 'rf-skin-lesion ask mentions mole or skin mark');
+
+// rf-haematuria: general pathway, duty — visible haematuria 45+ (NICE NG12 bladder/kidney 2WW)
+const generalP = doc.pathways.find(p => p.id === 'general');
+const rfHaematuria = generalP && (generalP.redFlags || []).find(rf => rf.id === 'rf-haematuria');
+check(!!rfHaematuria, 'general rf-haematuria red flag exists');
+check(rfHaematuria && rfHaematuria.escalate === 'duty', 'rf-haematuria escalates to duty');
+check(rfHaematuria && /blood in the urine|45/i.test(rfHaematuria.ask), 'rf-haematuria ask mentions blood in urine and age 45');
+
+// rf-hoarseness: general pathway, duty — persistent 3+ weeks (NICE NG12 laryngeal/thyroid 2WW)
+const rfHoarseness = generalP && (generalP.redFlags || []).find(rf => rf.id === 'rf-hoarseness');
+check(!!rfHoarseness, 'general rf-hoarseness red flag exists');
+check(rfHoarseness && rfHoarseness.escalate === 'duty', 'rf-hoarseness escalates to duty');
+check(rfHoarseness && /3 weeks|hoarse/i.test(rfHoarseness.ask), 'rf-hoarseness ask mentions 3 weeks and hoarse voice');
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

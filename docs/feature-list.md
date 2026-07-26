@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.177.0
-**Generated:** 2026-07-22 (manual sync — Triage North Star wave 1)
+**Version:** v3.178.0
+**Generated:** 2026-07-25 (manual sync — The Keeper clinical-rule currency check)
 
 ## What it is
 
@@ -12,7 +12,7 @@ Medicus Suite is a Chrome browser extension for UK GP practices that runs alongs
 - 17 side-panel modules covering monitoring, demand, capacity, workflow, knowledge, per-patient practice flags and the live patient record
 - 9 in-page content-script features (queue overlays, the patient-flag banner, workflow buttons and relays) plus 3 full-tab tools (two generated reports and a record-cleanup tool)
 - 8 rule types in the alert engine
-- 33 drug-monitoring rules, 74 QOF register/indicator rules, 5 vaccine rules, 44 investigation-result rules, and 32 starter alerts in the prescribing-safety library
+- 33 drug-monitoring rules, 74 QOF register/indicator rules, 5 vaccine rules, 44 investigation-result rules, and 35 starter alerts in the prescribing-safety library
 
 ## Side-panel modules
 
@@ -114,7 +114,7 @@ Sentinel's rules engine scans a patient's medications, problems, results and all
 - **Vaccine** — flags a patient eligible for a seasonal vaccination who hasn't yet had it recorded as given, checking for a recorded decline first so it's never mistaken for one still due.
 - **Composite** — combines other rules with AND/OR logic, including a result trending in a concerning direction over time, for escalated warnings.
 
-The bundled library ships **32 starter alerts** — 29 prescribing-safety combinations (drug interactions, teratogenicity safeguards, monitoring recalls for drugs like warfarin, lithium and amiodarone) and 3 clinical-review alerts (recurrent UTIs, recurrent falls, rising PSA), drawn from recognised UK sources (PINCER, MHRA, NICE) and periodically re-checked for currency. Every bundled rule is an editable starting point — practices can adjust thresholds, author their own rules, and export/import rule sets at whole-practice or per-clinician level.
+The bundled library ships **35 starter alerts** — 32 prescribing-safety combinations (drug interactions, teratogenicity safeguards, monitoring recalls for drugs like warfarin, lithium and amiodarone) and 3 clinical-review alerts (recurrent UTIs, recurrent falls, rising PSA), drawn from recognised UK sources (PINCER, MHRA, NICE) and periodically re-checked for currency. Every bundled rule is an editable starting point — practices can adjust thresholds, author their own rules, and export/import rule sets at whole-practice or per-clinician level.
 
 ## Settings & customisation
 
@@ -126,6 +126,8 @@ The bundled library ships **32 starter alerts** — 29 prescribing-safety combin
 - **Suite health**: the extension self-diagnoses its Medicus integration points and shows a calm amber warning (never red) if a Medicus interface change has degraded a feature, with a per-warning acknowledge/snooze
 
 ## Recent additions (last 4 weeks)
+
+- **v3.178.0 (2026-07-25)** — Scheduled clinical-rule currency check (The Keeper) against UK source guidance: corrected the QOF DEM004 indicator to its published 2026/27 values (14 points, 35–70% thresholds); added three prescribing-safety alerts (domperidone in phaeochromocytoma, ACE inhibitor after prior angioedema, antipsychotics in dementia) taking the starter library to 35; added five NICE NG12/CKS reception red flags (progressive morning headache, unilateral nasal obstruction, new or changing mole, visible haematuria at 45+, hoarseness lasting 3 weeks); and closed silent monitoring gaps by adding missing UK brands and drugs to the monitoring, anticholinergic-burden and STOPP/START term lists (now 33 drug rules, 74 QOF rules, 35 starter alerts).
 
 - **v3.177.0 (2026-07-22)** — Triage North Star wave 1: an urgent breach-risk strip in the side panel (counts Medicus-flagged-urgent requests and alerts when the oldest passes 2h/4h, with a fail-visible "urgency unknown" state); pending-abnormal-result cross-link chips on request-queue rows ("⚠ pending urgent result · graded 12m ago"); repeat-contact chips ("3rd contact in 14d") from a bounded machine-local ledger; and carry-over chips ("carried over 4d") that catch requests bounced between holders whose displayed date reset. All escalate-only, all with visible reasons; hazard log v3.15 (H-045–H-048, pending CSO review).
 
