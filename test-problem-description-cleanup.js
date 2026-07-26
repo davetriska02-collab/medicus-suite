@@ -224,6 +224,36 @@ check(
   'null prefill -> safe defaults, never throws'
 );
 
+console.log(
+  '--- buildEditProblemPayload: unwraps a UI-select-shaped recordedByOrganisation (real 2026-07-26 400, author-less GP2GP import) ---'
+);
+{
+  const wrappedOrgPrefill = Object.assign({}, prefill, {
+    recordedByOrganisation: {
+      label: 'Park Road Surgery',
+      value: {
+        organisationName: 'Park Road Surgery',
+        organisationIdentifierType: 'nhs-england-ods-code',
+        organisationIdentifierValue: 'H84002',
+      },
+    },
+  });
+  const wrappedPayload = buildEditProblemPayload(wrappedOrgPrefill, newCode);
+  check(
+    wrappedPayload.recordedByOrganisation.organisationName === 'Park Road Surgery' &&
+      wrappedPayload.recordedByOrganisation.organisationIdentifierValue === 'H84002' &&
+      !('label' in wrappedPayload.recordedByOrganisation) &&
+      !('value' in wrappedPayload.recordedByOrganisation),
+    'wrapped {label, value:{organisationName,...}} shape is unwrapped to the inner object'
+  );
+  check(
+    payload.recordedByOrganisation.organisationName === 'The Park Road Surgery',
+    'the ORIGINAL already-unwrapped shape (organisationName directly) still passes through unchanged'
+  );
+  const nullOrgPayload = buildEditProblemPayload(Object.assign({}, prefill, { recordedByOrganisation: null }), newCode);
+  check(nullOrgPayload.recordedByOrganisation === null, 'null recordedByOrganisation -> null, never throws');
+}
+
 console.log('--- buildEditProblemPayload: overrideAdditionalInformation (2026-07-25 generic-text cleanup) ---');
 {
   const originalCode = { conceptId: '359609001', description: 'Acute nonsupp. otitis media R', descriptionId: null };
@@ -968,6 +998,30 @@ console.log('--- rules/generic-additional-info-text.json: the imported list itse
   check(
     genericAdditionalInfoText.entries.some((e) => e.text === 'Active Problem, Significant'),
     '"Active Problem, Significant" is present (added 2026-07-25)'
+  );
+  check(
+    genericAdditionalInfoText.entries.some((e) => e.text === 'Unspecified Significance: Defaulted to Minor'),
+    '"Unspecified Significance: Defaulted to Minor" is present (added 2026-07-26)'
+  );
+  check(
+    genericAdditionalInfoText.entries.some((e) => e.text === 'Problem severity: Minor'),
+    '"Problem severity: Minor" is present (added 2026-07-26)'
+  );
+}
+
+console.log('--- stripGenericAdditionalInfoLines: real 2026-07-26 example (Read-v2 "Infantile eczema" problem) ---');
+{
+  const genericTexts = genericAdditionalInfoText.entries.map((e) => e.text);
+  const result = stripGenericAdditionalInfoLines(
+    'Unspecified Significance: Defaulted to Minor\nProblem severity: Minor',
+    genericTexts
+  );
+  check(result.cleaned === '', 'both lines are pure boilerplate -> cleaned is empty');
+  check(
+    result.removed.length === 2 &&
+      result.removed.includes('Unspecified Significance: Defaulted to Minor') &&
+      result.removed.includes('Problem severity: Minor'),
+    'both generic lines are reported as removed (got ' + JSON.stringify(result.removed) + ')'
   );
 }
 

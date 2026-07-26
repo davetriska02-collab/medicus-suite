@@ -7,6 +7,16 @@
       "text": "Active Problem, Significant",
       "addedDate": "2026-07-25",
       "rationale": "GP2GP import boilerplate restating metadata already captured structurally on the problem itself (problemStatus:\"Active\", significance:\"Major\"/\"Minor\") -- confirmed on a real patient's problem list, carries no information not already available elsewhere on the record."
+    },
+    {
+      "text": "Unspecified Significance: Defaulted to Minor",
+      "addedDate": "2026-07-26",
+      "rationale": "GP2GP import boilerplate: the source record carried no significance value, so the importer defaulted it to Minor and recorded that decision as a free-text line -- restates significance:\"minor\" already captured structurally on the problem, no clinical meaning. Confirmed real example (\"Infantile eczema\", 90823000, Read-v2 origin): additionalInformation \"Unspecified Significance: Defaulted to Minor\\nProblem severity: Minor\". A \"...Defaulted to Major\" sibling is plausible by the same template but NOT yet seen on a real patient -- add it only once actually observed, don't guess it in."
+    },
+    {
+      "text": "Problem severity: Minor",
+      "addedDate": "2026-07-26",
+      "rationale": "Sibling boilerplate line to \"Unspecified Significance: Defaulted to Minor\" above, same real example, same restates-existing-metadata reasoning. A \"Problem severity: Major\" sibling is plausible but NOT yet seen on a real patient -- add it only once actually observed."
     }
   ]
 }

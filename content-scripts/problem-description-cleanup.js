@@ -1,5 +1,10 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
-// Medicus Suite — "Fix description" widget for outdated SNOMED problem codes.
+// Medicus Suite — "Clean up code" widget for outdated SNOMED problem codes
+// (renamed 2026-07-26 from "Fix description" once the widget grew beyond
+// same-concept relabelling to also cover better-code suggestions, retired/
+// Read-code-derived detection, and generic import-text removal — internal
+// identifiers (ms-pdc-* CSS classes, file name) are unchanged, this is a
+// display-text-only rename).
 //
 // Many older problem/diagnosis entries carry a historic Read-code-migration
 // display string — a "[X]"/"[D]"/"[M]"-style ICD cross-map prefix, or a
@@ -197,12 +202,37 @@
       recordDate: p.recordDate != null ? p.recordDate : null,
     };
     if (p.recordedAtAnotherOrganisation) {
-      payload.recordedByOrganisation = p.recordedByOrganisation != null ? p.recordedByOrganisation : null;
+      payload.recordedByOrganisation = unwrapRecordedByOrganisation(p.recordedByOrganisation);
       payload.recordedByPractitioner = p.recordedByPractitioner != null ? p.recordedByPractitioner : null;
     } else {
       payload.recordedByStaff = p.recordedByStaff != null ? p.recordedByStaff : null;
     }
     return payload;
+  }
+
+  // Found live 2026-07-26, real example: a GP2GP-imported problem recorded
+  // with no defined author. edit-problem's GET can return
+  // recordedByOrganisation wrapped as a UI-select shape —
+  // {label:"Park Road Surgery", value:{organisationName:"Park Road Surgery",
+  // organisationIdentifierType:"nhs-england-ods-code",
+  // organisationIdentifierValue:"H84002"}} — rather than the plain
+  // {organisationName, …} object the POST actually wants. Round-tripping the
+  // wrapper verbatim 400'd: {"recordedByOrganisation.organisationName":
+  // ["This field is missing."], ".label"/".value": ["This field was not
+  // expected."]} — confirmed via apiFetch's error-body surfacing (see its own
+  // comment). The data was never actually missing, just double-wrapped.
+  // Unwraps ONLY when this exact wrapped shape is detected (a real inner
+  // object carrying organisationName); otherwise passes the field through
+  // completely unchanged, since the ORIGINAL confirmed-live capture
+  // (docs/learnings-problem-description-cleanup.md) showed
+  // recordedByOrganisation already unwrapped ({organisationName, …} directly)
+  // for a normally-recorded problem — both shapes are real, this must not
+  // assume only one of them.
+  function unwrapRecordedByOrganisation(org) {
+    if (org && org.value && typeof org.value === 'object' && org.value.organisationName != null) {
+      return org.value;
+    }
+    return org != null ? org : null;
   }
 
   // Narrows clinical-summary/summary's `problems[]` list down to candidates
@@ -419,7 +449,18 @@
       headers: Object.assign({ Accept: 'application/json, text/plain, */*' }, opts.headers),
       body: opts.body,
     });
-    if (!resp.ok) throw new Error('API ' + resp.status);
+    if (!resp.ok) {
+      // Surfaces Medicus's own validation message (e.g. which field a 400
+      // rejected) instead of a bare status code — found live 2026-07-26
+      // debugging applyRemoveGenericAdditionalInfo's 400, where "API 400"
+      // alone gave no way to confirm which field was wrong without a
+      // separate Network-tab capture. Truncated (errors are for display in
+      // st.error, not a payload to parse further).
+      var errorBody = await resp.text().catch(function () {
+        return '';
+      });
+      throw new Error('API ' + resp.status + (errorBody ? ': ' + errorBody.slice(0, 300) : ''));
+    }
     var text = await resp.text();
     if (!text) return {};
     try {
@@ -606,14 +647,89 @@
   // if Medicus ever reorders duplicate-text rows between scans, the two
   // problemIds could swap which physical row they're bound to — narrow edge
   // case, not solved here.
-  function findProblemRow(description, claimedAnchors) {
-    var links = document.querySelectorAll('a.item__link, a[class*="item__link"]');
+  // scopeEl (added 2026-07-26, see buildAnchorMap below): when given, only
+  // that element's own descendant links are searched — lets a caller
+  // disambiguate duplicate-text problems that live in DIFFERENT significance
+  // lists (Major vs Minor) instead of matching against the whole page.
+  function findProblemRow(description, claimedAnchors, scopeEl) {
+    var root = scopeEl || document;
+    var links = root.querySelectorAll('a.item__link, a[class*="item__link"]');
     for (var i = 0; i < links.length; i++) {
       var a = links[i];
       if (claimedAnchors && claimedAnchors.has(a)) continue;
       if ((a.textContent || '').trim() === description) return a;
     }
     return null;
+  }
+
+  // WRONG-ROW BUG (found live 2026-07-26; first fix attempt below was
+  // INSUFFICIENT, see the 2026-07-26(2) note underneath for the real cause).
+  // The Nth-claims-Nth-row invariant documented on findProblemRow above only
+  // holds if EVERY problem sharing that duplicate text calls findProblemRow,
+  // in list order — not just whichever ones later turn out to be flagged.
+  // scan() and runRetiredCodesScan() each used to build their OWN
+  // claimedAnchors Set and only call findProblemRow for the subset they were
+  // about to flag. Real case: two problems, both "Infantile eczema"
+  // (90823000), one GP2GP-imported with a Read-v2 origin (flagged by the
+  // retirement scan), one not. First fix: compute ONE shared anchor map,
+  // up front, from the FULL problem list in order, so every problem claims
+  // its own row here regardless of flag status.
+  //
+  // 2026-07-26(2) — first fix confirmed live-tested as STILL BROKEN, same
+  // symptom. Root cause is one level deeper: clinical-summary/summary's
+  // `problems` array is NOT in whole-page DOM order at all — it groups by
+  // `significance.value` ("minor" then "major", confirmed live via a raw
+  // console capture: 11 minor-significance entries at array indices 0-10,
+  // then 9 major-significance entries at 11-19), while the PAGE renders a
+  // Major `<ul aria-labelledby="problems-major-label">` BEFORE the Minor
+  // `<ul aria-labelledby="problems-minor-label">`. So the very first
+  // "Infantile eczema" the array reaches (index 2, the Minor/Read-v2 one)
+  // greedily claimed the Major list's "Infantile eczema" row, since that one
+  // appears first in a flat whole-document query — exactly backwards.
+  // **Confirmed (same live capture) that WITHIN one significance group, the
+  // API's relative order DOES match that group's own `<ul>`'s DOM order** —
+  // the invariant is real, just scoped narrower than assumed.
+  //
+  // Fix: partition problems by significance.value, resolve each partition's
+  // OWN `<ul aria-labelledby="problems-<value>-label">` (falls back to an
+  // unscoped/whole-document search if no such list exists for that value —
+  // e.g. a patient with zero Major problems), and run the existing
+  // claim-in-order logic SEPARATELY per partition/scope, sharing one
+  // claimedAnchors Set throughout (harmless once scoped, and still a safety
+  // net if a fallback ever lands two partitions in the same unscoped root).
+  function significanceValue(p) {
+    return (p && p.significance && p.significance.value) || '';
+  }
+
+  function significanceListElement(value) {
+    if (!value) return null;
+    return document.querySelector('ul[aria-labelledby="problems-' + value + '-label"]');
+  }
+
+  function buildAnchorMap(problems) {
+    var claimedAnchors = new Set();
+    var byProblemId = Object.create(null);
+    var buckets = Object.create(null); // significance value -> problems, original relative order
+    var bucketOrder = [];
+    (problems || []).forEach(function (p) {
+      var value = significanceValue(p);
+      if (!buckets[value]) {
+        buckets[value] = [];
+        bucketOrder.push(value);
+      }
+      buckets[value].push(p);
+    });
+    bucketOrder.forEach(function (value) {
+      var scopeEl = significanceListElement(value);
+      buckets[value].forEach(function (p) {
+        var row = findProblemRow(p.problemCodeDescription, claimedAnchors, scopeEl);
+        if (row) {
+          claimedAnchors.add(row);
+          byProblemId[p.id] = row;
+        }
+      });
+    });
+    return byProblemId;
   }
 
   // ── Per-row widget state ─────────────────────────────────────────────────────
@@ -1326,8 +1442,26 @@
   async function applyRemoveGenericAdditionalInfo(problemId) {
     var st = rowState(problemId);
     if (!st.genericAdditionalInfo || st.genericAdditionalInfoSaving || !st.prefill) return;
-    var code = st.prefill.problemCode && st.prefill.problemCode.value;
-    if (!code) return;
+    var codeValue = st.prefill.problemCode && st.prefill.problemCode.value;
+    if (!codeValue) return;
+    // Narrowed to the same 3-field shape applyCode already sends
+    // successfully (found live 2026-07-26: passing edit-problem's raw
+    // problemCode.value straight through — untouched, since this apply path
+    // only changes additionalInformation — 400'd; that GET shape is
+    // confirmed to carry EXTRA fields beyond what the POST accepts, e.g.
+    // slideover/overview's sibling shape for the same field carries
+    // originalCodes, and edit-problem's own .value was never actually
+    // confirmed safe to round-trip verbatim, only assumed — see
+    // findLegacyReadCodeOrigin's comment for that open question). Every
+    // other apply path in this file already builds problemCode fresh from
+    // exactly {description, conceptId, descriptionId} — this is a no-op
+    // change (same concept, same description), so building the same narrow
+    // shape here is not a behaviour change, just the correct payload.
+    var code = {
+      description: codeValue.description,
+      conceptId: codeValue.conceptId,
+      descriptionId: codeValue.descriptionId,
+    };
     st.genericAdditionalInfoSaving = true;
     renderPanel(problemId);
     try {
@@ -1359,7 +1493,7 @@
     btn.type = 'button';
     btn.className = 'ms-pdc-fix-btn';
     btn.setAttribute('data-problem-id', problemId);
-    btn.textContent = 'Fix description';
+    btn.textContent = 'Clean up code';
     st.btnEl = btn;
     btn.addEventListener('click', function (e) {
       e.preventDefault();
@@ -1403,14 +1537,11 @@
     renderRetiredWidget();
     try {
       if (!_problemsCache || !_problemsCache.length) throw new Error('No active problems to check.');
-      // Pre-claim anchors already used by text-flagged rows so this scan's
-      // own findProblemRow calls can't collide with them on duplicate text —
-      // same discipline findOutdatedProblems' own scan already relies on.
-      var claimedAnchors = new Set();
-      findOutdatedProblems(_problemsCache).forEach(function (p) {
-        var row = findProblemRow(p.problemCodeDescription, claimedAnchors);
-        if (row) claimedAnchors.add(row);
-      });
+      // See buildAnchorMap's comment: one shared map built from the FULL
+      // problem list, so a problem this scan is about to flag can never
+      // steal an unrelated, unflagged duplicate-text problem's row (or
+      // vice versa) — replaces this scan's own former partial claiming.
+      var anchorsByProblemId = buildAnchorMap(_problemsCache);
       var prefillsById = Object.create(null);
       var overviewsById = Object.create(null);
       await Promise.all(
@@ -1458,6 +1589,69 @@
       // flagging reason costs only one local resource load (cached after
       // the first call), same as it does inside openPanel.
       var genericTexts = await ensureGenericAdditionalInfoTextLoaded();
+
+      // Compute the Read-v2-origin signal for every problem up front (no
+      // fetch — reads overview data already in hand) so we know which
+      // DISTINCT conceptIds need the "is there actually a better wording"
+      // check below.
+      var legacyReadCodeByProblemId = Object.create(null);
+      _problemsCache.forEach(function (p) {
+        var overview = overviewsById[p.id];
+        var legacyReadCode = findLegacyReadCodeOrigin(
+          overview && overview.problemCode && overview.problemCode.originalCodes
+        );
+        if (legacyReadCode) legacyReadCodeByProblemId[p.id] = legacyReadCode;
+      });
+
+      // NO-OP READ-V2 FLAG SUPPRESSION (found live 2026-07-26, real example:
+      // "Infantile eczema" 90823000) — a Read-v2 import origin only tells us
+      // the RECORD is old; it says nothing about whether the description
+      // CURRENTLY recorded is still outdated. This patient has two problems
+      // for the same concept: one genuinely Read-v2-derived, one already
+      // carrying the modern preferred wording (SNOMED offers nothing better
+      // for it) — flagging both as "needs review" is noise for the one
+      // that's already correct, and clicking its button correctly finds no
+      // alternatives (there aren't any), which reads as broken rather than
+      // "nothing to fix". Reuses the SAME same-concept search "Fix
+      // description" already runs when opened (searchDescriptions on the
+      // stripped description text PLUS the bare conceptId, concatenated,
+      // exactly mirroring openPanel's own two-part fetch) rather than a new
+      // heuristic — if that search finds no OTHER synonym for this exact
+      // conceptId beyond what's already recorded, there is genuinely
+      // nothing to offer, so the Read-v2 signal alone is suppressed
+      // (isRetired/hasGenericInfo below are independent reasons and are
+      // unaffected). One extra search per DISTINCT conceptId among
+      // Read-v2-flagged problems only — never per problem, never for a
+      // conceptId with no Read-v2 signal at all — same "distinct concept,
+      // not distinct problem" cost discipline as the retirement check above.
+      var readCodeConceptIds = [];
+      _problemsCache.forEach(function (p) {
+        if (!legacyReadCodeByProblemId[p.id]) return;
+        var conceptId = conceptIdByProblemId[p.id];
+        if (conceptId && readCodeConceptIds.indexOf(conceptId) === -1) readCodeConceptIds.push(conceptId);
+      });
+      var sameConceptResultsByConceptId = Object.create(null);
+      await Promise.all(
+        readCodeConceptIds.map(function (conceptId) {
+          var describingProblem = _problemsCache.find(function (p) {
+            return conceptIdByProblemId[p.id] === conceptId && legacyReadCodeByProblemId[p.id];
+          });
+          var prefillForQuery = describingProblem && prefillsById[describingProblem.id];
+          var codeForQuery = prefillForQuery && prefillForQuery.problemCode && prefillForQuery.problemCode.value;
+          var descriptionForQuery = (codeForQuery && codeForQuery.description) || '';
+          return Promise.all([
+            searchDescriptions(stripLegacyMarkers(descriptionForQuery)),
+            searchDescriptions(conceptId),
+          ])
+            .then(function (resultsPair) {
+              sameConceptResultsByConceptId[conceptId] = resultsPair[0].concat(resultsPair[1]);
+            })
+            .catch(function () {
+              sameConceptResultsByConceptId[conceptId] = [];
+            });
+        })
+      );
+
       var flaggedCount = 0;
       _problemsCache.forEach(function (p) {
         var conceptId = conceptIdByProblemId[p.id];
@@ -1465,11 +1659,15 @@
         // active:null means the check itself didn't cleanly resolve (network
         // error, stale release string, …) — never treat as retired.
         var isRetired = !!(retirement && retirement.active === false);
-        var overview = overviewsById[p.id];
-        var legacyReadCode = findLegacyReadCodeOrigin(
-          overview && overview.problemCode && overview.problemCode.originalCodes
-        );
+        var legacyReadCode = legacyReadCodeByProblemId[p.id] || null;
         var prefill = prefillsById[p.id];
+        if (legacyReadCode) {
+          var code = prefill && prefill.problemCode && prefill.problemCode.value;
+          var currentDescription = code && code.description;
+          var sameConceptResults = sameConceptResultsByConceptId[conceptId] || [];
+          var hasBetterWording = sameConceptAlternatives(sameConceptResults, conceptId, currentDescription).length > 0;
+          if (!hasBetterWording) legacyReadCode = null;
+        }
         var genericInfo = stripGenericAdditionalInfoLines(prefill && prefill.additionalInformation, genericTexts);
         var hasGenericInfo = genericInfo.removed.length > 0;
         if (!isRetired && !legacyReadCode && !hasGenericInfo) return;
@@ -1481,11 +1679,8 @@
         }
         if (legacyReadCode) st.legacyReadCode = legacyReadCode;
         if (hasGenericInfo) st.genericAdditionalInfo = genericInfo;
-        var row = findProblemRow(p.problemCodeDescription, claimedAnchors);
-        if (row) {
-          claimedAnchors.add(row);
-          injectFixButton(p.id, row);
-        }
+        var row = anchorsByProblemId[p.id];
+        if (row) injectFixButton(p.id, row);
       });
       _retiredFlaggedCount = flaggedCount;
       _retiredScanState = 'done';
@@ -1515,7 +1710,7 @@
           ? _retiredFlaggedCount +
             ' problem' +
             (_retiredFlaggedCount === 1 ? '' : 's') +
-            ' flagged (retired code, Read-code-derived description, and/or generic import text) — see "Fix description" on the flagged problem(s) above.'
+            ' flagged (retired code, Read-code-derived description, and/or generic import text) — see "Clean up code" on the flagged problem(s) above.'
           : 'Nothing flagged.') +
         '</span>'
       );
@@ -1594,16 +1789,12 @@
     }
     if (!_problemsCache) return;
     var outdated = findOutdatedProblems(_problemsCache);
-    // See findProblemRow's comment: claimedAnchors ensures two problems with
-    // IDENTICAL description text each get their own distinct DOM row instead
-    // of colliding on the first match.
-    var claimedAnchors = new Set();
+    // See buildAnchorMap's comment: computed from the FULL problem list so a
+    // duplicate-text problem not in 'outdated' still claims its own row.
+    var anchorsByProblemId = buildAnchorMap(_problemsCache);
     outdated.forEach(function (p) {
-      var row = findProblemRow(p.problemCodeDescription, claimedAnchors);
-      if (row) {
-        claimedAnchors.add(row);
-        injectFixButton(p.id, row);
-      }
+      var row = anchorsByProblemId[p.id];
+      if (row) injectFixButton(p.id, row);
     });
     if (_problemsCache.length) injectRetiredWidgetTrigger();
   }

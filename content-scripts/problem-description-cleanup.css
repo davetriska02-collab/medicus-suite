@@ -1,4 +1,4 @@
-/* Medicus Suite — "Fix description" inline widget for outdated SNOMED problem codes */
+/* Medicus Suite — "Clean up code" inline widget for outdated SNOMED problem codes (renamed 2026-07-26 from "Fix description") */
 /* All selectors scoped to ms-pdc-* classes to avoid Medicus style conflicts */
 
 /* Keyboard focus ring (2026-07-26) -- this file had NO :focus-visible rule

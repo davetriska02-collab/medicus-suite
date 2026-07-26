@@ -2,6 +2,75 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.194.0] — 2026-07-26
+
+### Renamed "Fix description" to "Clean up code"
+
+The widget grew well beyond same-concept relabelling — it now also suggests better/more
+specific codes, detects retired and Read-code-derived codes, and removes generic GP2GP
+import noise from `additionalInformation`. Button text and the retirement-scan status
+message updated to match; internal identifiers (`ms-pdc-*` CSS classes, file names) are
+unchanged — display text only.
+
+### Fixed: duplicate-description problems could get the wrong row's "Clean up code" button
+
+Real case: two "Infantile eczema" (90823000) problems on one patient, one Major
+significance, one Minor. `clinical-summary/summary`'s `problems` array groups by
+significance (all Minor entries, then all Major), but the page renders a Major `<ul
+aria-labelledby="problems-major-label">` BEFORE the Minor list — so a flat, whole-document
+duplicate-text row search claimed the wrong list's row for whichever problem was flagged.
+
+Confirmed live (within one significance group, the API's relative order DOES match that
+group's own `<ul>`'s DOM order — the invariant just needed the narrower scope). Fixed:
+`buildAnchorMap` now partitions problems by `significance.value` and resolves each
+partition's own `problems-<value>-label` list before claiming rows, instead of one flat
+whole-page search. (A first attempt — computing one shared anchor map from the full problem
+list regardless of flag status — fixed a related but different collision and was necessary,
+but insufficient on its own for this cross-section case.)
+
+### Fixed: a Read-v2-derived problem flagged for cleanup when there was nothing to fix
+
+A GP2GP import origin (`originalCodes` showing a `read-v2` code) only means the record is
+old — it says nothing about whether the CURRENT description is already the best available
+wording. A patient can have two problems on the same concept, one genuinely needing a
+relabel, one already correctly worded; flagging both read as broken when the already-correct
+one offered no alternatives on click.
+
+Fixed: before flagging the Read-v2 signal, the scan now runs the same same-concept SNOMED
+search "Clean up code" already runs on open (once per distinct conceptId among Read-v2-
+flagged problems, not per problem) and suppresses the flag if there's genuinely no better
+wording to offer. Retirement and generic-import-text flags are independent and unaffected.
+
+### Fixed: removing generic import text 400'd on a GP2GP-imported problem recorded with no defined author
+
+`edit-problem`'s GET can return `recordedByOrganisation` wrapped in a UI-select shape
+(`{label, value:{organisationName, ...}}`) instead of the plain `{organisationName, ...}`
+object the POST validates against — confirmed via a real author-less import, where
+round-tripping the wrapper verbatim 400'd (`recordedByOrganisation.organisationName`
+missing, `.label`/`.value` not expected). `buildEditProblemPayload` now unwraps this shape
+when detected, passing the original already-unwrapped shape through unchanged otherwise
+(both are confirmed real). The generic-text-removal apply path also now rebuilds
+`problemCode` from the same narrow `{description, conceptId, descriptionId}` shape every
+other apply path already uses, instead of round-tripping the raw GET value. `apiFetch`
+now surfaces the API's actual error body (truncated) instead of a bare status code, so a
+future rejection is self-diagnosing without a separate Network-tab capture.
+
+### `rules/generic-additional-info-text.json`: two more confirmed GP2GP boilerplate lines
+
+"Unspecified Significance: Defaulted to Minor" and "Problem severity: Minor" — real example,
+a Read-v2-derived "Infantile eczema" problem whose `additionalInformation` carried both as
+pure import boilerplate restating the `significance` field already captured structurally.
+
+### `rules/non-problem-root-codes.json`: the 18 roots added in v3.191.0 re-confirmed against Medicus's own live API
+
+Previously researched via the public NHS termbrowser API only. Every cited descendant for
+all 18 roots — including the two broad ones, `3457005` Patient referral and `307824009`
+Administrative statuses — now additionally confirmed live against Medicus's own
+`constrainingParentConcepts` search, matching the confidence level of the original 3 roots.
+No code change; end-to-end behaviour on a real patient's coded problem is still unobserved.
+
+193/193 tests passing (7 new), lint/format clean.
+
 ## [v3.193.1] — 2026-07-26
 
 ### PR #223 review fixes (CSO review): bulk-remove safety gates + housekeeping
