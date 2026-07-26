@@ -1209,16 +1209,51 @@
     return parseLabelValue(getLines(c), ['Proxy name', 'Relationship to patient', 'Patient mobile', 'Patient email', 'Phone']);
   };
 
+  const ATTACHMENT_EXT_RE = /\.(pdf|docx?|jpe?g|png|tiff?|heic|gif)$/i;
+
+  // Finds every attachment-shaped <a>/<button> anywhere on a request/
+  // communication task page — NOT scoped to the "Initial Request" card.
+  // Confirmed live 2026-07-22: a communication-thread task can carry a
+  // patient-submitted photo on a REPLY message further down the thread (a
+  // "Reply from Requester" card), not only the opening message — and that
+  // reply card has no h2/h3/h4 heading at all, so findCardByTitle('Initial
+  // Request') never finds it (a card-scoped scan silently missed a real
+  // attachment). Scanning the whole page instead is safe: ATTACHMENT_EXT_RE
+  // only matches genuine file extensions, and a full-page dump on the task
+  // that surfaced this bug found exactly one match (the real attachment,
+  // nothing else in the page's nav/chrome false-positived).
+  const extractAllAttachments = () => {
+    const linked = [...document.querySelectorAll('a')]
+      .filter(a => ATTACHMENT_EXT_RE.test((a.href || '') + ' ' + (a.textContent || '')))
+      .map(a => ({ href: a.href || '', filename: (a.textContent || '').trim() || (a.href || '').split('/').pop() }));
+    // Some task types (confirmed live: communication-thread) render the
+    // attachment as a plain <button> labelled with the filename and NO href at
+    // all — the real download id/URL only exists in that task's overview API
+    // response, not the DOM (docs/learnings-triage-attachment-to-document.md
+    // §8). Record these with href:'' so a consumer (document-file-inline.js)
+    // knows a real download identifier still needs resolving via that API
+    // call, rather than silently dropping a genuine attachment.
+    const unresolved = [...document.querySelectorAll('button')]
+      .filter(b => ATTACHMENT_EXT_RE.test((b.textContent || '').trim()))
+      .map(b => ({ href: '', filename: (b.textContent || '').trim() }));
+    // Dedupe by filename — the same attachment can legitimately appear twice
+    // in the DOM/API response (communicationThread's patientRequest vs
+    // operativeChannel duplication, already confirmed at the API layer —
+    // see findAttachmentsInOverview in document-file-inline.js).
+    const seen = new Set();
+    return linked.concat(unresolved).filter(a => {
+      if (seen.has(a.filename)) return false;
+      seen.add(a.filename);
+      return true;
+    });
+  };
+
   const extractInitialRequest = () => {
     const card = findCardByTitle('Initial Request');
-    if (!card) return { text: '', attachmentCount: 0 };
-    const c = cardContent(card);
-    if (!c) return { text: '', attachmentCount: 0 };
-    const text = getText(c).replace(/^Initial Request\s*/i, '').trim();
-    const attachmentCount = [...c.querySelectorAll('a')].filter(a =>
-      /\.(pdf|docx?|jpe?g|png|tiff?|heic|gif)$/i.test((a.href || '') + ' ' + (a.textContent || ''))
-    ).length;
-    return { text, attachmentCount };
+    const c = card ? cardContent(card) : null;
+    const text = c ? getText(c).replace(/^Initial Request\s*/i, '').trim() : '';
+    const attachments = extractAllAttachments();
+    return { text, attachmentCount: attachments.length, attachments };
   };
 
   const isDocumentTask = () => /\/tasks\/data\/document\/overview\//.test(location.href);
@@ -1658,7 +1693,7 @@
   const computeRequestSignals = (taskDetails, requester, initialReq) => {
     const t = taskDetails || {};
     const r = requester || {};
-    const ir = initialReq || { text: '', attachmentCount: 0 };
+    const ir = initialReq || { text: '', attachmentCount: 0, attachments: [] };
 
     const out = { chips: [], snippet: '' };
     const pushOut = (id, vars) => {
@@ -1699,8 +1734,33 @@
     const rel = r['Relationship to patient'];
     if (rel && !/self/i.test(rel)) pushOut('detail.proxy', { relationship: rel });
 
-    // Attachments
+    // Attachments — window.__msTriageAttachments is a read-only accessor for other
+    // content scripts (e.g. a future "save as document" widget) so they don't need
+    // their own divergent DOM-scraping of the Initial Request card. Set on every
+    // detail render (not just when count>0) so it never strands a stale array from
+    // a previously viewed task.
+    if (typeof window !== 'undefined') window.__msTriageAttachments = ir.attachments || [];
     if (ir.attachmentCount > 0) pushOut('detail.attachments', { count: ir.attachmentCount });
+
+    // Task-created date — window.__msTaskCreatedDate is a read-only ISO-date
+    // accessor for document-file-inline.js, so "save attachment as document"
+    // can default the document date to when the triage request actually
+    // arrived (this task's own Created date) rather than today. Reuses the
+    // same Created-field parse already done for the "days open" chip above —
+    // no new extraction. null (not stale) when this task has no Created field.
+    if (typeof window !== 'undefined') {
+      window.__msTaskCreatedDate = null;
+      const createdMatch = t.Created && t.Created.match(/(\d{1,2})\s+([A-Z][a-z]{2})\s+(\d{4})/);
+      const createdDate = createdMatch && parseDate(createdMatch[0]);
+      if (createdDate) {
+        window.__msTaskCreatedDate =
+          createdDate.getFullYear() +
+          '-' +
+          String(createdDate.getMonth() + 1).padStart(2, '0') +
+          '-' +
+          String(createdDate.getDate()).padStart(2, '0');
+      }
+    }
 
     // Snippet of request body for context (truncated, configurable via prefs)
     if (ir.text && PREF('showRequestSnippet', true)) {
@@ -2927,7 +2987,7 @@
       requester = {};
       const parts = [docInfo.docType, docInfo.specialty || docInfo.author, docInfo.comments, docInfo.codes]
         .filter(Boolean);
-      initialReq = { text: parts.join(' — '), attachmentCount: 0 };
+      initialReq = { text: parts.join(' — '), attachmentCount: 0, attachments: [] };
     } else {
       taskDetails = extractTaskDetails();
       requester = extractRequester();

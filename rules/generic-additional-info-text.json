@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "lastUpdated": "2026-07-25",
+  "notes": "Free-text lines Medicus's edit-problem 'additionalInformation' field carries verbatim from GP2GP import that add no clinical meaning of their own -- pure boilerplate restating fields already captured structurally elsewhere on the problem (e.g. problemStatus/significance). additionalInformation is often multi-line (confirmed live 2026-07-25, real example: \"ear\\nActive Problem, Significant\" -- 'ear' is a genuine free-text note, the second line is pure noise), so matching is done PER LINE (trimmed, case-insensitive exact match against this list), never against the whole field -- a genuine free-text line must never be silently dropped because the field ALSO happens to contain a generic one. Used by content-scripts/problem-description-cleanup.js's stripGenericAdditionalInfoLines() to offer removing just the matched line(s), keeping the rest of the field untouched. Add a new entry here to expand coverage -- no code change needed.",
+  "entries": [
+    {
+      "text": "Active Problem, Significant",
+      "addedDate": "2026-07-25",
+      "rationale": "GP2GP import boilerplate restating metadata already captured structurally on the problem itself (problemStatus:\"Active\", significance:\"Major\"/\"Minor\") -- confirmed on a real patient's problem list, carries no information not already available elsewhere on the record."
+    }
+  ]
+}

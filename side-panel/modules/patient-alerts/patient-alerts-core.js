@@ -155,11 +155,7 @@ export function makeAlert({ label, severity, note = '', typeId = null, author = 
     .slice(0, 120);
   if (!cleanLabel) throw new Error('Alert label is required.');
   if (!SEVERITIES.includes(severity)) throw new Error(`Severity must be one of: ${SEVERITIES.join(', ')}.`);
-  const cleanAuthor = author
-    ? String(author)
-        .trim()
-        .slice(0, 60) || null
-    : null;
+  const cleanAuthor = author ? String(author).trim().slice(0, 60) || null : null;
   return {
     id: id || generateAlertId(),
     typeId: typeId || null,
@@ -205,9 +201,7 @@ export function upsertAlert(store, pc, alert, nowIso) {
   const nextAlerts =
     idx >= 0
       ? alerts.map((a, i) =>
-          i === idx
-            ? { ...alert, createdAt: a.createdAt, createdBy: a.createdBy ?? null, updatedAt: nowIso }
-            : a
+          i === idx ? { ...alert, createdAt: a.createdAt, createdBy: a.createdBy ?? null, updatedAt: nowIso } : a
         )
       : [...alerts, alert];
   return {

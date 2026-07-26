@@ -263,7 +263,9 @@ function render() {
 function severityChip(alert) {
   // Attribution in the tooltip (H-042): who recorded the flag and when, plus
   // the last editor when it has been changed since.
-  const added = alert.createdAt ? `Added ${String(alert.createdAt).slice(0, 10)}${alert.createdBy ? ` by ${alert.createdBy}` : ''}` : '';
+  const added = alert.createdAt
+    ? `Added ${String(alert.createdAt).slice(0, 10)}${alert.createdBy ? ` by ${alert.createdBy}` : ''}`
+    : '';
   const edited =
     alert.updatedAt && alert.updatedAt !== alert.createdAt
       ? `Updated ${String(alert.updatedAt).slice(0, 10)}${alert.updatedBy ? ` by ${alert.updatedBy}` : ''}`

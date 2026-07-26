@@ -1,0 +1,136 @@
+{
+  "version": 2,
+  "lastUpdated": "2026-07-26",
+  "notes": "Root SNOMED conceptIds used by the 'Bulk remove?' problem-list widget (content-scripts/problem-junk-code-cleanup.js) to flag problems that are likely administrative/data-import noise rather than genuine clinical problems (e.g. GP2GP-imported FP10/temporary-resident claim codes filed under 'Administrative procedure'). A patient's problem is flagged if its own conceptId EITHER exactly matches a root here OR is a DESCENDANT of one (any depth -- confirmed live 2026-07-23 reaching 5 hierarchy levels below 14734007 for the motivating FP10 case), checked via clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=<all roots, comma-joined>&query=<conceptId>. Add a new root entry to expand coverage -- no code change needed. The 'Bulk remove?' trigger button always renders whenever a patient has any active problems (no text-based visibility gate -- one was tried 2026-07-24 and reverted 2026-07-25 after live testing showed it could hide a genuine code-based match; see CHANGELOG for the full story). The code is the sole source of truth for what gets flagged here, never free text. The 14 roots added 2026-07-25 (LMP onward) were researched via the PUBLIC no-auth NHS termbrowser API (same one used by shared/snomed-retirement.js) -- ancestor chains confirmed that way, NOT yet re-confirmed against Medicus's own live constrained-search endpoint on a real patient; treat as provisional until live-tested, same caution as any other rules-file entry added without a live capture. A root MAY carry an optional 'caution' string (added 2026-07-26): categories that are usually import noise but can be LIVE clinical flags (an in-flight 2WW referral, an active EDD marking a current pregnancy, a 'Follow-up arranged' status). The widget renders the caution on every flagged row attributed to that root and its 'Select all' button never ticks those rows -- they must be reviewed and ticked individually.",
+  "roots": [
+    {
+      "conceptId": "14734007",
+      "description": "Administrative procedure",
+      "addedDate": "2026-07-24",
+      "rationale": "GP2GP-imported FP10/temporary-resident-claim codes (confirmed live, 5 hierarchy levels below this root) are sometimes filed as problems by source systems even though they are pure administrative/claim artefacts, never a real clinical problem."
+    },
+    {
+      "conceptId": "12821000000103",
+      "description": "Item of service claim statuses",
+      "addedDate": "2026-07-25",
+      "rationale": "A second administrative/claim-status coding category, added on user request the same way as 14734007 — item-of-service claim-status codes are sometimes filed as problems by GP2GP source systems even though they are pure claim-processing artefacts, never a real clinical problem. Real example found live 2026-07-25: \"FP/RF - new reg.check to FPC\" (a new-registration check submitted to the old Family Practitioner Committee)."
+    },
+    {
+      "conceptId": "184063008",
+      "description": "Patient signed reg. form",
+      "addedDate": "2026-07-25",
+      "rationale": "A third administrative-noise category, found live 2026-07-25 on a real patient: a Read-v2-migrated concept (original code 9122.00) recording that a patient signed a registration form — pure administrative record-keeping, never a real clinical problem. Added as its own root (rather than checked for descendants) since it's a specific leaf-level artefact; the exact-match branch of isFlaggedConceptId catches it either way, whether or not it turns out to also have genuine descendants of its own."
+    },
+    {
+      "conceptId": "21840007",
+      "description": "Date of last menstrual period",
+      "addedDate": "2026-07-25",
+      "rationale": "User's explicit clinical reasoning: LMP is genuine clinical data that belongs in the record, but is not itself a 'problem' -- a woman of childbearing years would 'ordinarily' generate ~12 of these a year if it were treated as one, which is self-evidently not what the problem list is for. Confirmed via termbrowser ancestor check that both '161713000 Last menstrual period - First day' and '248993009 Date of last normal period' are direct descendants of this concept, so one root covers all three wordings."
+    },
+    {
+      "conceptId": "161714006",
+      "description": "Estimated date of delivery",
+      "addedDate": "2026-07-25",
+      "caution": "An active EDD often flags a current pregnancy (a prescribing-safety cue) — check this one individually before ending.",
+      "rationale": "User's explicit clinical reasoning: an ESTIMATED date is a clinical marker, not a problem in its own right -- belongs in the record but not the problem list. Confirmed via termbrowser ancestor check that both '289206005 EDD from last period' and '738070007 EDD by antenatal ultrasound scan' are direct descendants, so one root covers all wordings."
+    },
+    {
+      "conceptId": "170818005",
+      "description": "B12 deficiency monitoring",
+      "addedDate": "2026-07-25",
+      "rationale": "User's explicit distinction: B12 deficiency itself is a real problem, but the ongoing MONITORING of it is admin, not the problem -- this concept is the monitoring regime/therapy, confirmed (via termbrowser) to sit under 'Chronic disease monitoring', not under any B12-deficiency diagnosis branch."
+    },
+    {
+      "conceptId": "243863004",
+      "description": "B12 deficiency monitoring status",
+      "addedDate": "2026-07-25",
+      "rationale": "Same rationale as 170818005 (B12 deficiency monitoring) -- this is the sibling 'finding/status' encoding of the same monitoring-is-admin concept (confirmed via termbrowser NOT to be a descendant of 170818005, so needs its own root entry to be caught)."
+    },
+    {
+      "conceptId": "225358003",
+      "description": "Wound care",
+      "addedDate": "2026-07-25",
+      "rationale": "User's explicit distinction: wound care is treatment FOR a problem (e.g. a leg ulcer), not the problem itself. Confirmed via termbrowser that both 'Care of open wound' (1153457002) and 'Care of closed wound' (1153458007) are direct descendants, so one root covers both."
+    },
+    {
+      "conceptId": "709544008",
+      "description": "Administration of vitamin B12",
+      "addedDate": "2026-07-25",
+      "rationale": "User's explicit distinction: this is treatment for a problem (e.g. B12 deficiency), not the problem itself -- severity judged minor enough to include, unlike e.g. chemotherapy which the user said they WOULD still regard as problem-list-appropriate. Deliberately scoped to B12 specifically (its own parent, 'Administration of vitamin', was rejected as the root because it would also sweep in vitamin D/folic acid etc. administration, which was never asked about). Covers 'Intramuscular injection of vitamin B12' (308752009) as a confirmed descendant."
+    },
+    {
+      "conceptId": "86198006",
+      "description": "Influenza vaccination",
+      "addedDate": "2026-07-25",
+      "rationale": "User's explicit reasoning: flu vaccination should exist in the record but not as a problem -- otherwise many adults would generate 2 problem entries a year, pure clutter, same over-counting logic as LMP. Deliberately scoped to influenza specifically, not the broader 'administration of vaccine' concept (which would sweep in every other vaccine, never asked about)."
+    },
+    {
+      "conceptId": "3457005",
+      "description": "Patient referral",
+      "addedDate": "2026-07-25",
+      "caution": "Referrals can be live safety-nets (2WW/urgent) — check this one individually before ending.",
+      "rationale": "User's explicit reasoning: referral status entries (urgent referral, referral for further care, etc.) are admin for a problem, not the problem itself. Deliberately used as a broad root (confirmed via termbrowser that 'Urgent referral' 134403003 is a direct descendant, and 'Referral for further care' 183444007 rolls up via 'Referral to service' 306206005) so ANY referral-type entry filed as a problem is caught, not just the specific examples given -- consistent with the checkbox-defaults-unchecked / clinician-must-review safety gate already in place, since this is a candidate list, not an auto-removal."
+    },
+    {
+      "conceptId": "182836005",
+      "description": "Review of medication",
+      "addedDate": "2026-07-25",
+      "rationale": "Same category as 'Adult health examination' below -- a genuine clinical ACTIVITY that GP2GP source systems sometimes file as a problem, even though the activity itself is not a diagnosis."
+    },
+    {
+      "conceptId": "314529007",
+      "description": "Medication review due",
+      "addedDate": "2026-07-25",
+      "rationale": "An administrative due-status marker, not a problem. Added as its own leaf root (not folded into a broader ancestor) because its actual parent chain ('Procedure with explicit context' / 'Situation with explicit context') is a whole SNOMED top-level hierarchy -- far too broad to use as a root, would sweep in huge numbers of legitimate clinical situations."
+    },
+    {
+      "conceptId": "314530002",
+      "description": "Medication review done",
+      "addedDate": "2026-07-25",
+      "rationale": "Sibling of 314529007 (Medication review due) -- same reasoning, added as its own leaf root for the same reason (its ancestor chain is too broad to use directly)."
+    },
+    {
+      "conceptId": "523221000000100",
+      "description": "NHS Health Check completed",
+      "addedDate": "2026-07-25",
+      "rationale": "Administrative completion marker for the NHS Health Check programme, not a clinical problem. SNOMED models the various NHS Health Check states (completed/indicated/annual review/programme, etc.) as separate branches with no single shared ancestor narrow enough to use as one root, so each is its own leaf entry."
+    },
+    {
+      "conceptId": "523201000000109",
+      "description": "NHS Health Check indicated",
+      "addedDate": "2026-07-25",
+      "rationale": "Same NHS Health Check administrative-status family as 523221000000100 -- see that entry's rationale for why this is a separate leaf root rather than folded into a shared ancestor."
+    },
+    {
+      "conceptId": "763661000000101",
+      "description": "NHS Health Check annual review",
+      "addedDate": "2026-07-25",
+      "rationale": "Same NHS Health Check administrative-status family as 523221000000100 -- see that entry's rationale."
+    },
+    {
+      "conceptId": "519961000000106",
+      "description": "NHS Health check programme",
+      "addedDate": "2026-07-25",
+      "rationale": "Same NHS Health Check administrative-status family as 523221000000100 -- see that entry's rationale. Also confirmed live-relevant since 'NHS Health Check invitation' (523241000000107) already falls under the EXISTING root 14734007 (Administrative procedure) via 'Prevention/screening invitation' -- no separate root needed for that one variant."
+    },
+    {
+      "conceptId": "268565007",
+      "description": "Adult health examination",
+      "addedDate": "2026-07-25",
+      "rationale": "A genuine clinical activity (a health check/examination) that GP2GP source systems sometimes file as a problem, even though the activity of examining a patient is not itself a diagnosis -- same category as 'Review of medication' above."
+    },
+    {
+      "conceptId": "307824009",
+      "description": "Administrative statuses (finding)",
+      "addedDate": "2026-07-25",
+      "caution": "Descendants include live workflow flags like 'Follow-up arranged' — check this one individually before ending.",
+      "rationale": "A broad, well-precedented administrative-status branch of SNOMED's 'Clinical finding' top-level hierarchy (NOT the whole hierarchy itself -- confirmed its own parent is 404684003 Clinical finding, same 'properly scoped subtree' shape as the existing 14734007 root). This exact conceptId is already explicitly EXCLUDED elsewhere in this codebase's own SNOMED search scope (content-scripts/problem-description-cleanup.js's excludeConstrainingConcepts=307824009) as 'not a real clinical finding' -- independent precedent for treating it as non-problem noise here too. Confirmed via termbrowser to cover, as descendants: 'Follow-up status'/'Follow-up arranged' (308273005/183616001), 'Notes summary on computer' (184229000), and 'Letter sent to patient' (2051000000104) -- covering several of the user's listed examples with one root."
+    },
+    {
+      "conceptId": "1239671000000106",
+      "description": "Primary care diary entry",
+      "addedDate": "2026-07-25",
+      "rationale": "Best available match for the user's 'Diary event recall' example -- a system-generated administrative diary/recall record artefact, not a clinical problem."
+    }
+  ]
+}

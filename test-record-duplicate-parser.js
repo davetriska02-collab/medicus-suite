@@ -16,6 +16,7 @@ const {
   resolveDocumentTypeLabel,
   hasQuestionnaireTemplateMismatch,
   hasPrescriptionTimingMismatch,
+  hasAttachedDocumentMismatch,
   isRemovableKind,
   buildRemovalRequest,
   splitWrapperText,
@@ -35,6 +36,7 @@ const {
   buildDocumentEditRequest,
   splitDocumentGroupsByFileType,
   hasJunkTitlePrefix,
+  accurxAttachmentUrl,
   hasCreatedAfterFiled,
   findSuspiciousDocuments,
   findFileMatchedDuplicates,
@@ -85,10 +87,10 @@ function flatNoteItem(id, code, note, recordedBy, recordedByOrganisation) {
   };
 }
 
-function flatInvestigationRequestItem(id, items, requestedBy) {
+function flatInvestigationRequestItem(id, items, requestedBy, requestingOrganisation) {
   return {
     type: 'investigation-request',
-    data: { id, entryType: 'investigation-request', investigationRequestItems: items, requestedBy },
+    data: { id, entryType: 'investigation-request', investigationRequestItems: items, requestedBy, requestingOrganisation },
   };
 }
 
@@ -114,6 +116,18 @@ function flatDocumentItem(id, documentTypeLabel, title, extra) {
 
 function nestedDocumentEntry(id, documentTypeLabel, title, extra) {
   return Object.assign({ entryType: 'document', id, documentTypeLabel, title }, extra);
+}
+
+// Live-confirmed 2026-07-17: a nested prescription entry has NO recordedBy/
+// recordedByOrganisation field (see record-duplicate-parser.js header) —
+// deliberately omitted here, not just unused, to mirror the real shape.
+function nestedPrescriptionEntry(id, productName, dosageText, issueQuantity) {
+  return { entryType: 'prescription', id, productName, dosageText, issueQuantity };
+}
+
+// requestingOrganisation live-confirmed 2026-07-17 as a real field.
+function nestedInvestigationRequestEntry(id, items, requestedBy, requestingOrganisation) {
+  return { entryType: 'investigation-request', id, investigationRequestItems: items, requestedBy, requestingOrganisation };
 }
 
 function problemRef(id, desc) {
@@ -238,6 +252,56 @@ assert(
   'Group D (same generic code, different content) tiers REVIEW, not auto-merged'
 );
 assert(!byCode['Annual review'], 'Unique entry does not form a candidate group');
+assert(!byCode['Medication review'].emptyWrapperOnly, 'Group B (real free text) is not flagged emptyWrapperOnly');
+assert(!byCode['Pigmented naevus'].emptyWrapperOnly, 'Group C (wrapper + real prose survives stripping) is not flagged emptyWrapperOnly');
+
+console.log('\n--- note-kind empty-wrapper cap (live-confirmed 2026-07-17, docs/learnings-vaccination-note-duplicates.md) ---');
+{
+  // Real motivating case: three different vaccines given the same day, each
+  // recorded as a note entry whose ENTIRE body is the content-free
+  // Episodicity problem-review wrapper — no vaccine-specific text survives
+  // normText's stripping, so "identical text" carries zero real signal.
+  const vaccineDayGroups = [
+    {
+      title: 'Tue 19 Jun 2007',
+      items: [
+        flatNoteItem('vax-1', 'Immunisations', '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}', 'Dr J R Jones', null),
+        flatNoteItem('vax-2', 'Immunisations', '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}', 'Mrs Janine McGilly', null),
+        flatNoteItem('vax-3', 'Immunisations', '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}', 'Ms Clare Lower', null),
+      ],
+    },
+  ];
+  const vaccineResult = analyzeJournal(vaccineDayGroups);
+  const vaccineGroup = vaccineResult.groups.find((g) => g.kind === 'note' && g.code === 'Immunisations');
+  assert(!!vaccineGroup, 'Three same-day, same-code, wrapper-only note entries still form a candidate group');
+  assert(
+    vaccineGroup.tier === TIER.REVIEW,
+    'A HIGH-would-be note group (different recordedBy) whose ENTIRE text is the content-free wrapper is capped down to REVIEW'
+  );
+  assert(vaccineGroup.emptyWrapperOnly === true, 'The group is flagged emptyWrapperOnly so the UI can explain why');
+
+  // Control: SAME recordedBy too — must NOT be capped. This is deliberately
+  // the live-confirmed 2026-07-08 "Perianal abscess" shape (see the
+  // "2026-07-08 real pair" test below) — an empty-wrapper match with
+  // matching authors is a genuine dual-render duplicate, not a false
+  // positive, and the cap must not touch it.
+  const sameAuthorDayGroups = [
+    {
+      title: 'Tue 19 Jun 2007',
+      items: [
+        flatNoteItem('vax-a', 'Immunisations', '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}', 'Dr Test', null),
+        flatNoteItem('vax-b', 'Immunisations', '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}', 'Dr Test', null),
+      ],
+    },
+  ];
+  const sameAuthorResult = analyzeJournal(sameAuthorDayGroups);
+  const sameAuthorGroup = sameAuthorResult.groups.find((g) => g.kind === 'note');
+  assert(
+    sameAuthorGroup.tier === TIER.EXACT,
+    'Matching recordedBy + empty wrapper still tiers EXACT — the cap only fires on the HIGH (different-author) combination'
+  );
+  assert(sameAuthorGroup.emptyWrapperOnly === false, 'EXACT-tier groups are never flagged emptyWrapperOnly (the cap never fired)');
+}
 
 console.log('\n--- Transfer encounter confirmation ---');
 const transferByCode = Object.fromEntries(result.transferEncounters.map((t) => [t.encounterId, t]));
@@ -263,7 +327,7 @@ assert(
   'analyzeJournal({ patientJournalRecords }) matches analyzeJournal(bareArray)'
 );
 
-console.log('\n--- linkedProblems: dedup within one encounter, count across encounters ---');
+console.log('\n--- linkedProblems: dedup within one encounter AND across encounters (fixed 2026-07-17) ---');
 const asthmaProblem = problemRef('prob-asthma', 'Asthma');
 const linkedProblemsDayGroups = [
   {
@@ -279,18 +343,51 @@ const linkedProblemsDayGroups = [
         [asthmaProblem],
         [asthmaProblem]
       ),
-      // A second, separate encounter linking the same problem — a genuine second
-      // occurrence, must still be counted.
+      // A second, separate encounter linking the SAME real problem (same
+      // problem.id) — live-confirmed 2026-07-17
+      // (docs/learnings-vaccination-note-duplicates.md, a real
+      // "Immunisations" problem linked from 6 encounters on one day) that
+      // this is NOT a duplicate-record candidate: it's one real problem
+      // referenced twice, not two problem-list records. A group used to
+      // form here with both entries sharing prob-asthma's id, which broke
+      // the removal UI (keeperEntryId equals every entry's id, so "N
+      // duplicate copies" always computed to 0 with no member left to
+      // toggle) — see the CHANGELOG entry for the full trace.
       encounter('enc-p2', 'Dr Test', [], false, [], [asthmaProblem]),
     ],
   },
 ];
 const problemsResult = analyzeJournal(linkedProblemsDayGroups);
 const asthmaGroup = problemsResult.groups.find((g) => g.kind === 'problem' && g.code === 'Asthma');
-assert(!!asthmaGroup, 'Asthma linked-problem duplicate group found');
+assert(!asthmaGroup, 'The SAME real problem linked from two different encounters does NOT form a candidate group');
 assert(
-  asthmaGroup && asthmaGroup.entries.length === 2,
-  'Multi-level linkage within one encounter dedups to 1; two separate encounters still count as 2'
+  problemsResult.summary.suppressedProblemLinkageTotal === 1,
+  'The same-record linkage is tracked in the suppressed-problem-linkage diagnostic, not silently dropped'
+);
+assert(
+  problemsResult.suppressedProblemLinkage[0].linkageCount === 2,
+  'The suppression record carries how many linkage occurrences were collapsed'
+);
+
+// Control: TWO DIFFERENT problem-list records sharing the same code/date —
+// a genuine reimport-duplicate candidate — must still form a real group.
+const asthmaProblemA = problemRef('prob-asthma-a', 'Asthma');
+const asthmaProblemB = problemRef('prob-asthma-b', 'Asthma');
+const distinctProblemsDayGroups = [
+  {
+    title: 'Mon 01 Jan 2024',
+    items: [
+      encounter('enc-pa', 'Dr Test', [], false, [], [asthmaProblemA]),
+      encounter('enc-pb', 'Dr Test', [], false, [], [asthmaProblemB]),
+    ],
+  },
+];
+const distinctProblemsResult = analyzeJournal(distinctProblemsDayGroups);
+const distinctAsthmaGroup = distinctProblemsResult.groups.find((g) => g.kind === 'problem' && g.code === 'Asthma');
+assert(!!distinctAsthmaGroup, 'Two DISTINCT problem records sharing the same code/date still form a candidate group');
+assert(
+  distinctAsthmaGroup && distinctAsthmaGroup.entries.length === 2,
+  'The genuine-duplicate case is unaffected by the same-record linkage fix'
 );
 
 console.log('\n--- Flat top-level investigation-request items ---');
@@ -307,6 +404,59 @@ const invReqResult = analyzeJournal(invReqDayGroups);
 const invReqGroup = invReqResult.groups.find((g) => g.kind === 'investigation-request');
 assert(!!invReqGroup, 'Duplicated flat investigation-request items form a candidate group');
 assert(invReqGroup && invReqGroup.tier === TIER.EXACT, 'Identical flat investigation-request duplicates tier EXACT');
+
+console.log('\n--- requestingOrganisation live-confirmed 2026-07-17 (previously read as hardcoded null) ---');
+const invReqOrgDayGroups = [
+  {
+    title: 'Wed 10 Jan 2024',
+    items: [
+      flatInvestigationRequestItem('ir-org-1', ['FBC', 'U&E'], 'Dr Test', 'Test Surgery'),
+      flatInvestigationRequestItem('ir-org-2', ['FBC', 'U&E'], 'Dr Test', 'Other Practice'),
+    ],
+  },
+];
+const invReqOrgResult = analyzeJournal(invReqOrgDayGroups);
+const invReqOrgGroup = invReqOrgResult.groups.find((g) => g.kind === 'investigation-request');
+assert(
+  invReqOrgGroup && invReqOrgGroup.recordedByOrganisationVaries === true,
+  'requestingOrganisation is actually read now — differing values are reflected in recordedByOrganisationVaries'
+);
+
+console.log('\n--- Nested prescription/investigation-request entries (live-confirmed 2026-07-17) ---');
+const nestedRxInvReqDayGroups = [
+  {
+    title: 'Fri 18 Jul 2025',
+    items: [
+      encounter('enc-rx-a', 'Dr Test', [
+        nestedPrescriptionEntry('rx-nested-a', 'Amoxicillin 250mg capsules', 'Take one three times a day', '21 capsule'),
+      ]),
+      encounter('enc-rx-b', 'Dr Test', [
+        nestedPrescriptionEntry('rx-nested-b', 'Amoxicillin 250mg capsules', 'Take one three times a day', '21 capsule'),
+      ]),
+      encounter('enc-ir-a', 'Dr Test', [
+        nestedInvestigationRequestEntry('ir-nested-a', ['FBC', 'U&E'], 'Dr Test', 'Test Surgery'),
+      ]),
+      encounter('enc-ir-b', 'Dr Test', [
+        nestedInvestigationRequestEntry('ir-nested-b', ['FBC', 'U&E'], 'Dr Test', 'Test Surgery'),
+      ]),
+    ],
+  },
+];
+const nestedRxInvReqResult = analyzeJournal(nestedRxInvReqDayGroups);
+const nestedRxGroup = nestedRxInvReqResult.groups.find(
+  (g) => g.kind === 'prescription' && g.code === 'Amoxicillin 250mg capsules'
+);
+assert(!!nestedRxGroup, 'Two nested prescription entries in separate encounters form a candidate group');
+assert(
+  nestedRxGroup && nestedRxGroup.tier === TIER.EXACT,
+  'Identical nested prescription duplicates tier EXACT (no recordedBy field to vary — never blocks EXACT)'
+);
+const nestedIrGroup = nestedRxInvReqResult.groups.find((g) => g.kind === 'investigation-request');
+assert(!!nestedIrGroup, 'Two nested investigation-request entries in separate encounters form a candidate group');
+assert(
+  nestedIrGroup && nestedIrGroup.tier === TIER.EXACT,
+  'Identical nested investigation-request duplicates tier EXACT'
+);
 
 console.log('\n--- Flat top-level document items ---');
 const docDayGroups = [
@@ -1875,6 +2025,166 @@ console.log('\n--- splitDocumentGroupsByFileType (document over-merge disambigua
   }
 }
 
+console.log('\n--- Note/consultation entries carry sibling attachment ids from flattenJournal (2026-07-13) ---');
+{
+  const attachDayGroups = [
+    {
+      title: 'Tue 05 Aug 2025',
+      items: [
+        encounter(
+          'enc-att-1',
+          'Mr Docman PCTI',
+          [
+            noteEntry('note-att-1', 'Seen in pain clinic', 'Mr Docman PCTI', 'Mr Docman PCTI', null),
+            nestedDocumentEntry(
+              'doc-att-1',
+              'Attachment',
+              'DCA File Doctor Care Anywhere Virtual GP consultation notes'
+            ),
+          ],
+          false
+        ),
+        encounter(
+          'enc-att-2',
+          'Mr Docman PCTI',
+          [
+            noteEntry('note-att-2', 'Seen in pain clinic', 'Mr Docman PCTI', 'Mr Docman PCTI', null),
+            nestedDocumentEntry(
+              'doc-att-2',
+              'Attachment',
+              'DCA File Doctor Care Anywhere Virtual GP consultation notes'
+            ),
+          ],
+          false
+        ),
+        // Control: a note with no sibling attachment in its heading at all.
+        encounter(
+          'enc-att-3',
+          'Dr Test',
+          [noteEntry('note-att-plain', 'Unrelated note', 'plain text, no attachment', 'Dr Test', null)],
+          false
+        ),
+      ],
+    },
+  ];
+  const attachResult = analyzeJournal(attachDayGroups);
+  const byAttachId = Object.fromEntries(attachResult.entries.map((e) => [e.id, e]));
+  assert(
+    Array.isArray(byAttachId['note-att-1'].attachedDocumentIds) &&
+      byAttachId['note-att-1'].attachedDocumentIds[0] === 'doc-att-1',
+    'a note entry captures its sibling document id from the same heading'
+  );
+  assert(
+    Array.isArray(byAttachId['note-att-2'].attachedDocumentIds) &&
+      byAttachId['note-att-2'].attachedDocumentIds[0] === 'doc-att-2',
+    'a second, independent consultation captures its OWN sibling document id, not the other one'
+  );
+  assert(
+    byAttachId['note-att-plain'].attachedDocumentIds === undefined,
+    'a note with no sibling document in its heading has no attachedDocumentIds field at all'
+  );
+
+  const attGroup = attachResult.groups.find((g) => g.kind === 'note' && g.code === 'Seen in pain clinic');
+  assert(
+    !!attGroup && attGroup.tier === TIER.EXACT,
+    'identical note text/author across two consultations still tiers EXACT at the pure groupAndTier stage — ' +
+      'the attachment mismatch check is a later, on-demand cross-check (applyOnDemandCrossChecks in ' +
+      'duplicate-checker.js), not part of groupAndTier itself, same layering as fileType/fileSize for documents'
+  );
+}
+
+console.log('\n--- hasAttachedDocumentMismatch (2026-07-13) ---');
+{
+  function noteGroupEntry(id, attachedDocumentIds) {
+    return {
+      id,
+      kind: 'note',
+      date: 'Tue 05 Aug 2025',
+      code: 'Seen in pain clinic',
+      rawText: 'Mr Docman PCTI',
+      recordedBy: 'Mr Docman PCTI',
+      recordedByOrganisation: null,
+      attachedDocumentIds,
+    };
+  }
+  function noteGroup(entries) {
+    return {
+      kind: 'note',
+      date: 'Tue 05 Aug 2025',
+      code: 'Seen in pain clinic',
+      tier: TIER.EXACT,
+      gp2gpWrapper: false,
+      recordedByVaries: false,
+      recordedByOrganisationVaries: false,
+      keeperEntryId: null,
+      entries,
+    };
+  }
+
+  {
+    // Known, differing (fileType,fileSize) attachments — the real bug case
+    // (2026-07-13 live example): identical note text/author, genuinely
+    // different underlying attached documents.
+    const group = noteGroup([noteGroupEntry('n1', ['d1']), noteGroupEntry('n2', ['d2'])]);
+    const fileTypes = { d1: 'pdf', d2: 'pdf' };
+    const fileSizes = { d1: '10.44 KB', d2: '58.20 KB' };
+    assert(
+      hasAttachedDocumentMismatch(group, fileTypes, fileSizes) === true,
+      "differing known (fileType,fileSize) between two members' attachments is flagged as a mismatch"
+    );
+  }
+
+  {
+    // Known, matching attachments — genuinely the same document duplicated
+    // alongside a genuinely duplicated note. Must NOT flag.
+    const group = noteGroup([noteGroupEntry('n1', ['d1']), noteGroupEntry('n2', ['d2'])]);
+    const fileTypes = { d1: 'pdf', d2: 'pdf' };
+    const fileSizes = { d1: '10.44 KB', d2: '10.44 KB' };
+    assert(
+      hasAttachedDocumentMismatch(group, fileTypes, fileSizes) === false,
+      'matching known (fileType,fileSize) attachments across members is NOT flagged — a real duplicate note+attachment pair'
+    );
+  }
+
+  {
+    // One member's attachment known, the other's unknown (fetch failed, or
+    // this document type has no fileType field) — conservative
+    // pass-through, never guesses a mismatch off incomplete data. Same
+    // knownKeys.size < 2 rule splitDocumentGroupsByFileType already uses.
+    const group = noteGroup([noteGroupEntry('n1', ['d1']), noteGroupEntry('n2', ['d2'])]);
+    const fileTypes = { d1: 'pdf' };
+    const fileSizes = { d1: '10.44 KB' };
+    assert(
+      hasAttachedDocumentMismatch(group, fileTypes, fileSizes) === false,
+      'one member with an unknown attachment signature is never treated as a mismatch'
+    );
+  }
+
+  {
+    // No attachedDocumentIds on either member at all — the overwhelming
+    // majority case (plain freestanding note duplicates). Must behave
+    // exactly as before this feature existed.
+    const group = noteGroup([noteGroupEntry('n1', undefined), noteGroupEntry('n2', undefined)]);
+    assert(
+      hasAttachedDocumentMismatch(group, {}, {}) === false,
+      'notes with no attachment at all are never flagged — existing note-duplicate behaviour is unchanged'
+    );
+  }
+
+  {
+    // Multiple attachments per member — composite signature must be
+    // order-independent (sorted+joined), so the same SET of attachments in
+    // a different array order still compares as equal, not a false mismatch.
+    const group = noteGroup([noteGroupEntry('n1', ['d1', 'd2']), noteGroupEntry('n2', ['d2', 'd1'])]);
+    const fileTypes = { d1: 'pdf', d2: 'xml' };
+    const fileSizes = { d1: '10.44 KB', d2: '2.00 KB' };
+    assert(
+      hasAttachedDocumentMismatch(group, fileTypes, fileSizes) === false,
+      'the same set of multiple attachments in a different order is not falsely flagged as a mismatch'
+    );
+  }
+}
+
 {
   // flattenDocumentEntries — pure conversion of the real
   // `clinical/document/entries/{documentId}` shape (confirmed live
@@ -2342,6 +2652,72 @@ console.log('\n--- findFileMatchedDuplicates (cross-record file-size/type duplic
   assert(
     findFileMatchedDuplicates(null, null, {}, {}, {}, {}).groups.length === 0,
     'null document entries degrades to no groups, never throws'
+  );
+}
+
+console.log('\n--- accurxAttachmentUrl / accurx URL-attachment false-positive fix (live-reported 2026-07-17) ---');
+{
+  assert(
+    accurxAttachmentUrl('Record Attachment', 'URL: https://example.com/photo1') === 'https://example.com/photo1',
+    'extracts the URL from a matching Record Attachment + "URL: " title'
+  );
+  assert(
+    accurxAttachmentUrl('record attachment', 'url: https://example.com/PHOTO1') === 'https://example.com/photo1',
+    'case-insensitive on both the type label and the URL prefix; extracted value is lowercased for comparison'
+  );
+  assert(accurxAttachmentUrl('Admin Letter', 'URL: https://example.com/x') === null, 'a different Type never matches, however URL-shaped the title is');
+  assert(accurxAttachmentUrl('Record Attachment', 'Two week wait referral') === null, 'a Record Attachment whose title is not "URL: ..." never matches');
+  assert(accurxAttachmentUrl('Record Attachment', null) === null, 'a null title never matches, never throws');
+  assert(accurxAttachmentUrl(null, 'URL: https://example.com/x') === null, 'a null code never matches, never throws');
+
+  // Real motivating case: accurx delivers a patient message plus several
+  // photo links as separate ".txt"/"Record Attachment" documents. The
+  // previous GP system's export templating means these often share BOTH
+  // fileType and fileSize even though the actual URL (and therefore the
+  // real attachment) differs.
+  const urlA = { id: 'accurx-a', kind: 'document', date: 'Mon 1 Jan 2024', code: 'Record Attachment', recordedBy: 'X', recordedByOrganisation: null, idTime: 1, title: 'URL: https://accurx.nhs.uk/p/photo-1' };
+  const urlB = { id: 'accurx-b', kind: 'document', date: 'Mon 1 Jan 2024', code: 'Record Attachment', recordedBy: 'X', recordedByOrganisation: null, idTime: 2, title: 'URL: https://accurx.nhs.uk/p/photo-2' };
+  const urlC = { id: 'accurx-c', kind: 'document', date: 'Mon 1 Jan 2024', code: 'Record Attachment', recordedBy: 'X', recordedByOrganisation: null, idTime: 3, title: 'URL: https://accurx.nhs.uk/p/photo-3' };
+  const sameFileType = { 'accurx-a': 'txt', 'accurx-b': 'txt', 'accurx-c': 'txt' };
+  const sameFileSize = { 'accurx-a': '1.2 KB', 'accurx-b': '1.2 KB', 'accurx-c': '1.2 KB' };
+
+  const differingUrls = findFileMatchedDuplicates([urlA, urlB, urlC], [], sameFileType, sameFileSize, {}, {});
+  assert(
+    differingUrls.groups.length === 0,
+    'three accurx URL-attachments sharing fileType/fileSize but each pointing at a DIFFERENT URL never form a candidate group'
+  );
+  assert(
+    differingUrls.accurxUrlMismatchAvoided === 3,
+    'all 3 entries are counted as kept apart by the URL-mismatch refinement'
+  );
+
+  // Control: a genuine re-send of the SAME link (same fileType/fileSize AND
+  // same URL) must still be caught as a real duplicate — the fix must not
+  // blanket-exclude every accurx attachment, only ones that actually differ.
+  const urlD = { ...urlA, id: 'accurx-d' };
+  const genuineDuplicate = findFileMatchedDuplicates([urlA, urlD], [], { 'accurx-a': 'txt', 'accurx-d': 'txt' }, { 'accurx-a': '1.2 KB', 'accurx-d': '1.2 KB' }, {}, {});
+  assert(
+    genuineDuplicate.groups.length === 1 && genuineDuplicate.groups[0].entries.length === 2,
+    'two accurx URL-attachments sharing fileType/fileSize AND the same URL still group as a genuine duplicate'
+  );
+  assert(genuineDuplicate.accurxUrlMismatchAvoided === 0, 'no mismatch avoided when the URLs actually match');
+
+  // Mixed bucket: differing-URL accurx entries must not disturb an unrelated
+  // genuine same-fileType/fileSize document pair sharing the same base key
+  // by coincidence (accurx entries route to a disjoint key space).
+  const plainX = { id: 'plain-x', kind: 'document', date: 'Mon 1 Jan 2024', code: 'Admin Letter', recordedBy: 'X', recordedByOrganisation: null, idTime: 4, title: 'Type: Admin Letter' };
+  const plainY = { id: 'plain-y', kind: 'document', date: 'Mon 1 Jan 2024', code: 'Admin Letter', recordedBy: 'X', recordedByOrganisation: null, idTime: 5, title: 'Type: Admin Letter' };
+  const mixed = findFileMatchedDuplicates(
+    [urlA, urlB, plainX, plainY],
+    [],
+    { ...sameFileType, 'plain-x': 'txt', 'plain-y': 'txt' },
+    { ...sameFileSize, 'plain-x': '1.2 KB', 'plain-y': '1.2 KB' },
+    {},
+    {}
+  );
+  assert(
+    mixed.groups.length === 1 && mixed.groups[0].entries.map((e) => e.id).sort().join(',') === 'plain-x,plain-y',
+    'a genuine non-accurx duplicate pair sharing the same fileType/fileSize as the split-apart accurx entries still groups normally'
   );
 }
 

@@ -1,0 +1,512 @@
+/* Medicus Suite — "Fix description" inline widget for outdated SNOMED problem codes */
+/* All selectors scoped to ms-pdc-* classes to avoid Medicus style conflicts */
+
+/* Keyboard focus ring (2026-07-26) -- this file had NO :focus-visible rule
+   at all before this, on any control (Medicus's page never loads panel.css,
+   so the suite's global ring doesn't reach here). One wildcard rule rather
+   than one per class (ms-pdc-fix-btn, -alt, -descendant, -crossconcept,
+   -hintexpand, -genericinfo-btn, -retired-*, -manualsearch-*, ...) so it
+   stays complete as buttons get added/renamed -- #2563eb matches the
+   suite's --accent light-theme value (this file can't consume the var(),
+   Medicus's page doesn't load panel.css). */
+button[class*='ms-pdc-']:focus-visible,
+input[class*='ms-pdc-']:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.ms-pdc-fix-btn {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  line-height: 1.5;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #92400e;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.ms-pdc-fix-btn:hover {
+  background: #fef3c7;
+}
+
+.ms-pdc-panel-wrap {
+  display: block;
+  margin: 4px 0 8px;
+}
+
+/* Raw additionalInformation text — supports the clinician's own judgement,
+   shown regardless of whether the tool found anything to suggest. Neutral
+   styling, deliberately not amber/blue/orange, so it doesn't read as one of
+   the actionable suggestion categories. */
+.ms-pdc-additional-info {
+  display: block;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: #f9fafb;
+  border-left: 2px solid #d1d5db;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #4b5563;
+}
+
+.ms-pdc-additional-info-label {
+  font-weight: 600;
+  color: #374151;
+}
+
+/* Generic-import-text cleanup (2026-07-25) — changes additionalInformation
+   only, never problemCode, so deliberately plain/neutral rather than any of
+   the risk-graded palettes elsewhere in this file: no coding decision is
+   involved at all, just removing an exact-matched known-boilerplate line. */
+.ms-pdc-genericinfo-section {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: #f9fafb;
+  border-left: 2px solid #9ca3af;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.ms-pdc-genericinfo-label {
+  color: #4b5563;
+}
+
+.ms-pdc-genericinfo-btn {
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #9ca3af;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-pdc-genericinfo-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.ms-pdc-genericinfo-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ms-pdc-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+}
+
+.ms-pdc-alt {
+  padding: 5px 10px;
+  background: #fff;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #92400e;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ms-pdc-alt:hover {
+  background: #fef3c7;
+}
+
+.ms-pdc-loading,
+.ms-pdc-empty {
+  font-size: 12px;
+  color: #92400e;
+  font-style: italic;
+}
+
+.ms-pdc-error {
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+/* Descendant/laterality suggestions — deliberately a DIFFERENT palette
+   (blue, not amber) from the same-concept alternatives above: this changes
+   the SNOMED code itself, not just its label, and should read as visually
+   distinct at a glance. */
+.ms-pdc-descendant-section {
+  display: block;
+  margin-top: 6px;
+}
+
+.ms-pdc-descendant-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #1e40af;
+}
+
+.ms-pdc-descendant-section .ms-pdc-panel {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.ms-pdc-descendant {
+  padding: 5px 10px;
+  background: #fff;
+  border: 1px solid #93c5fd;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1e40af;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ms-pdc-descendant:hover {
+  background: #dbeafe;
+}
+
+/* Match-score suffix on a descendant button — ranking info only, muted so it
+   doesn't compete visually with the description text itself. */
+.ms-pdc-descendant-score {
+  font-weight: 400;
+  color: #60a5fa;
+}
+
+/* Cross-concept text-match suggestions — the RISKIEST category (a different
+   concept whose text happens to be identical, no hierarchy proof unlike the
+   descendant section above). Deliberately its OWN palette (warning orange,
+   not the plain amber used for same-concept alternatives, and not the blue
+   used for hierarchy-proven descendants) plus a bold warning-icon label, so
+   it can't be mistaken for either safer category at a glance. */
+.ms-pdc-crossconcept-section {
+  display: block;
+  margin-top: 6px;
+}
+
+.ms-pdc-crossconcept-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #c2410c;
+}
+
+.ms-pdc-crossconcept-section .ms-pdc-panel {
+  background: #fff7ed;
+  border: 1px dashed #fb923c;
+}
+
+.ms-pdc-crossconcept {
+  padding: 5px 10px;
+  background: #fff;
+  border: 1px solid #fb923c;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #c2410c;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ms-pdc-crossconcept:hover {
+  background: #ffedd5;
+}
+
+/* Hint-expanded suggestions — the MOST cautious category: no hierarchy proof
+   (unlike descendant) and no single exact-text match (unlike cross-concept) —
+   the query itself is a constructed combination of the base description and a
+   pathology word found in free text. Deliberately a red palette, one step
+   more alarming than cross-concept's warning-orange, so the risk ordering
+   (amber < blue < orange < red) reads at a glance. */
+.ms-pdc-hintexpand-section {
+  display: block;
+  margin-top: 6px;
+}
+
+.ms-pdc-hintexpand-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #b91c1c;
+}
+
+.ms-pdc-hintexpand-section .ms-pdc-panel {
+  background: #fef2f2;
+  border: 1px dashed #f87171;
+}
+
+.ms-pdc-hintexpand {
+  padding: 5px 10px;
+  background: #fff;
+  border: 1px solid #f87171;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #b91c1c;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ms-pdc-hintexpand:hover {
+  background: #fee2e2;
+}
+
+/* Retirement banner (from the opt-in "Check for retired codes?" scan, never
+   the automatic text scan) — informational, not itself an actionable
+   suggestion, so styled distinctly from every category above: an amber
+   left-border note, same family as .ms-pdc-additional-info. */
+.ms-pdc-retired-note {
+  display: block;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: #fffbeb;
+  border-left: 2px solid #fbbf24;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #92400e;
+}
+
+.ms-pdc-retired-replacement-unmatched,
+.ms-pdc-retired-no-replacement,
+.ms-pdc-legacy-readcode-note {
+  display: block;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: #f9fafb;
+  border-left: 2px solid #d1d5db;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #4b5563;
+}
+
+/* SNOMED-confirmed replacement — the MOST TRUSTED category of all (a real
+   historical-association record, not a text-similarity guess), so
+   deliberately green ("confirmed correct") rather than any of the
+   amber/blue/orange/red risk-ordered palette above — this one isn't a risk
+   category, it's the closest thing to a verified answer this tool ever
+   offers. */
+.ms-pdc-retired-replacement-section {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.ms-pdc-retired-replacement-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #15803d;
+}
+
+.ms-pdc-retired-replacement-section .ms-pdc-panel {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.ms-pdc-retired-replacement-btn {
+  padding: 5px 10px;
+  background: #fff;
+  border: 1px solid #86efac;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #15803d;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ms-pdc-retired-replacement-btn:hover {
+  background: #dcfce7;
+}
+
+/* ── Retirement scan trigger (page-level, opt-in — separate from the
+   automatic per-row "Fix description" buttons above) ─────────────────────── */
+
+#ms-pdc-retired-widget {
+  display: block;
+  margin: 6px 0 10px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Placement (2026-07-26): sit the collapsed trigger on the same row as the
+   "Major" heading instead of stacked below it, mirroring
+   problem-junk-code-cleanup.css's own #ms-pjc-widget treatment for the
+   "Bulk remove?" trigger (both scripts anchor to the same
+   ul[aria-labelledby="problems-major-label"] spot, independently). Scoped
+   via :has() to ONLY the .m-card-v2__content that actually contains
+   #ms-pdc-retired-widget, same reasoning as the other file's copy of this
+   rule -- .m-card-v2__content is Medicus's own generic card-body class,
+   reused by unrelated cards. #ms-pjc-widget is also excluded from the
+   full-width catch-all here so the two triggers share the row when both are
+   present -- keep both files' exclusion lists in lock-step. */
+.m-card-v2__content:has(> #ms-pdc-retired-widget) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+}
+
+.m-card-v2__content:has(> #ms-pdc-retired-widget)
+  > *:not(#problems-major-label):not(#ms-pdc-retired-widget):not(#ms-pjc-widget) {
+  flex-basis: 100%;
+}
+
+#problems-major-label {
+  margin: 0;
+}
+
+/* Collapsed, the widget is just the small toggle button -- shares the
+   heading's row. Any clicked state (scanning/error/done) renders a
+   .ms-pdc-retired-scan-status span instead of the button -- that's the
+   point the widget drops to its own full-width row, same trigger-vs-content
+   split as #ms-pjc-widget:has(.ms-pjc-body) in the other file. */
+#ms-pdc-retired-widget:has(.ms-pdc-retired-scan-status) {
+  flex-basis: 100%;
+  margin-top: 6px;
+}
+
+.ms-pdc-retired-scan-btn {
+  padding: 4px 10px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-pdc-retired-scan-btn:hover {
+  background: #e5e7eb;
+}
+
+.ms-pdc-retired-scan-status {
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.ms-pdc-retired-scan-retry {
+  margin-left: 6px;
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+/* Manual search (2026-07-25) — deliberately NEUTRAL GREY, not any of the
+   amber/blue/orange/red/green categories above: this is the one category
+   with no automated safety constraint at all, functionally identical to
+   Medicus's own Edit Problem search box, so it shouldn't read as belonging
+   to the same risk-graded system as everything else in this panel. */
+.ms-pdc-manualsearch-section {
+  display: block;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #d1d5db;
+}
+
+.ms-pdc-manualsearch-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #6b7280;
+}
+
+.ms-pdc-manualsearch-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.ms-pdc-manualsearch-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1a2030;
+  background: #fff;
+}
+
+.ms-pdc-manualsearch-btn {
+  padding: 4px 12px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-pdc-manualsearch-btn:hover:not(:disabled) {
+  background: #e5e7eb;
+}
+
+.ms-pdc-manualsearch-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ms-pdc-manualsearch-error {
+  font-size: 11px;
+  color: #b91c1c;
+}
+
+.ms-pdc-manualsearch-empty {
+  font-size: 11px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.ms-pdc-manualsearch-section .ms-pdc-panel {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.ms-pdc-manualsearch-result {
+  padding: 5px 10px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ms-pdc-manualsearch-result:hover {
+  background: #f3f4f6;
+}

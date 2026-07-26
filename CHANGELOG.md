@@ -2,6 +2,1335 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.193.1] — 2026-07-26
+
+### PR #223 review fixes (CSO review): bulk-remove safety gates + housekeeping
+
+Remediation of the four items from the pre-merge review of PR #223.
+
+- **"Bulk remove?" caution roots (`rules/non-problem-root-codes.json` v2).** Three
+  configured roots are usually GP2GP import noise but can be LIVE clinical flags:
+  `3457005` Patient referral (an in-flight 2WW/urgent referral is a safety-net),
+  `161714006` Estimated date of delivery (an active EDD often flags a current
+  pregnancy — a prescribing-safety cue), and `307824009` Administrative statuses
+  (descendants include "Follow-up arranged"). Each now carries a per-root
+  `caution`; the widget renders it as a ⚠ warning on every flagged row attributed
+  to that root (attribution via a per-caution-root constrained search, since the
+  scan's one combined query can't say which root matched; attribution failure
+  fails CLOSED to cautioned), and **"Select all" never ticks a ⚠ row** — those
+  must be reviewed and ticked individually. Summary copy no longer calls every
+  flagged row "likely import noise". Caution set regression-locked in
+  `test-problem-junk-code-cleanup.js` (new `cautionRootsOf` helper + 7 checks).
+- **Empty end-date guard.** Clearing the end-date field could POST `endDate: ""`
+  to the live record. The "End N selected" button is now disabled with no date,
+  and `endSelected()` refuses to POST without one regardless of button state.
+- **CHANGELOG version collision actually resolved.** The 2026-07-25 merge from
+  `main` left two v3.177.0 and two v3.178.0 entries (each side had assigned the
+  numbers independently). This branch's two entries are renumbered into the free
+  v3.176.12 / v3.176.13 slots with renumber notes; main's already-released
+  entries are untouched. Their follow-ups keep their original v3.177.1–.7 /
+  v3.178.1 numbers.
+- **CI patient-data guard false positives.** `rules/document-types.json` and
+  `test-problem-description-cleanup.js` carry SNOMED descriptionIds — 10-digit
+  terminology identifiers, some of which coincidentally pass the NHS Modulus-11
+  check. Both files added to `NHS_ADD_ALLOWLIST` in
+  `scripts/check-no-patient-data.js` with the reason documented in place.
+
+## [v3.193.0] — 2026-07-26
+
+### Retirement scan's confirmed-replacement search now reaches Body structure / morphologic-abnormality-axis replacements too
+
+Follow-up to v3.192.1's copy fix (which hinted at this without claiming a fix). Real case:
+443897009 "[M]Tubular adenoma NOS" is `REPLACED BY` 1156654007 "Benign tubular adenoma
+(morphologic abnormality)" — SNOMED genuinely records this replacement, but the panel showed
+"could not be matched in Medicus's own search index — search manually" instead of the usual
+one-click confirmed-replacement button.
+
+Root cause: `st.confirmedReplacement` is found via `searchDescriptions(replacementConceptId)`
+— `SEARCH_PATH`'s `constrainingParentConcepts` scopes to Clinical finding/Procedure/
+Situation/Social context/Event. 1156654007 is on an entirely different SNOMED hierarchy
+(Body structure / morphologic abnormality), invisible to that search regardless of query
+text — not a Medicus indexing gap, a scope exclusion by the caller itself.
+
+**Live-verified via the public NHS termbrowser API before building** (six concept lookups,
+no patient data): 1156654007 → 1187375007 → 1187227004 → … → 49755003 "Morphologically
+abnormal structure" → 118956008 → **123037004 "Body structure"** — a genuine, traced IS-A
+descendant chain. `123037004` is the same constraining root already confirmed live for the
+unrelated Rotator Cuff body-structure case (2026-07-17) — though that fix never actually
+needed to *query* body-structure scope (it searched for the disorder-axis target text
+instead), so there was no existing code to reuse the pattern from, only the diagnostic
+precedent.
+
+**Fixed**: when the primary broad-scoped replacement search comes up empty,
+`openPanel()` now falls back to `searchDescendantsNarrowed('123037004', replacementConceptId)`
+— reusing the existing, already-shipped descendant-search fetch verbatim (already used
+elsewhere in this same function for hierarchy-descendant search), just with the replacement's
+bare conceptId as the query instead of a hint word. One extra fetch, only when the primary
+search fails — the common case (most replacements ARE disorder/procedure-axis) is unchanged.
+
+No new unit test (this is orchestration/fetch wiring, not pure logic — `confirmedReplacementAlternative`,
+the pure filter it feeds into, is already covered; consistent with how this file tests
+everything else touching `apiFetch`). 186/186 existing tests still pass. **Not yet
+live-confirmed** — next step if resumed is checking whether the confirmed-replacement button
+now appears for this real patient's tubular-adenoma problem via the retirement-scan-first
+path.
+
+## [v3.192.1] — 2026-07-26
+
+### Fixed v3.192.0 before it ever went live: detectAnatomicalSiteHint was silently picking the wrong word
+
+Live-tested by the user immediately after v3.192.0 landed, on the real motivating patient —
+result: still no anatomy match offered, on either entry path (direct "Fix description" click,
+or via "Check for retired/legacy codes?" first).
+
+Root cause: `detectAnatomicalSiteHint` copied `detectPathologyHint`'s "return only the first
+match" contract, scanning `ANATOMICAL_SITE_HINT_WORDS` in **list order**, not text order. For
+"Descending colon and sigmoid colon - removed", `descending` precedes `colon` in the list, so
+it was picked and returned — but 444898006's actual SNOMED wording is "...of **colon**",
+which never contains "descending" at all. The one search that would have worked (`colon`)
+never ran, because a single-match design is at the mercy of curated-list order, not which
+word the real target concept's own description happens to use — a real risk that doesn't
+apply to `PATHOLOGY_HINT_WORDS` the same way, since pathology words tend to be mutually
+exclusive per real case (a "tear" case doesn't usually also mention "rupture").
+
+**Fixed**: `detectAnatomicalSiteHint` now returns an ARRAY of every matched site word (not
+just the first) — `detectPathologyHint` is untouched, still single-word, since this
+list-order risk doesn't apply there. `openPanel()` now combines the (still-singular)
+pathology hint with every detected site hint into one `expandHints` list, each still getting
+its own separate search (the word-mismatch-avoidance discipline from v3.192.0 is unchanged,
+just now covers more candidate words).
+
+**Also fixed, same session (sidenote from the user)**: the "search manually via Edit Problem"
+copy in `retiredInfoHtml`'s two informational branches was stale — this panel has carried a
+built-in manual search section since 2026-07-25 (v3.189.0), so telling a clinician to leave
+the tool was misleading. Both messages now point at "the manual search below/further down
+this panel" instead. The "could not be matched" message also now hints at the likely real
+cause (a SNOMED hierarchy-scope mismatch) without over-claiming a fix — see the diagnosis in
+the session notes for the separate, not-yet-fixed morphology-axis search gap this points at.
+
+Tests updated for the array-return contract, including a direct regression test pinning the
+real "descending before colon" list-order bug so it can't silently return. 186/186 still
+passing (no new count — existing tests updated in place, not added to, since the site-hint
+test coverage from v3.192.0 was rewritten rather than supplemented).
+
+## [v3.192.0] — 2026-07-26
+
+### "Fix description" hint-expanded suggestions gain anatomical-site words + run alongside cross-concept matches
+
+Real example: a patient's "[M]Tubular adenoma NOS" problem, `additionalInformation`
+"Descending colon and sigmoid colon - removed." User suspected SNOMED 444898006
+("Tubular adenomatous polyp of colon") would be a better code, inferable from the site
+text. Live-verified via the public NHS SNOMED CT termbrowser API (no patient data
+involved) before writing anything: the currently-coded concept, 443897009, is a **retired**
+morphologic-abnormality-axis concept (`REPLACED BY` 1156654007, also morphology-axis) with
+**no IS-A path** to the disorder-axis "Tubular adenoma of colon" family that 444898006
+belongs to — confirmed by walking the ancestor chain (444898006 → 1197339007 → 444408007)
+and finding no intersection with 443897009's own lineage. So `descendantAlternatives`'
+hierarchy-proof mechanism can never reach 444898006 from what's actually coded, and
+correctly doesn't try to.
+
+Two real, separate gaps found in `hintExpandedAlternatives` (the one category that doesn't
+require hierarchy proof) instead:
+
+1. **No site vocabulary.** `PATHOLOGY_HINT_WORDS` (tear, rupture, sprain, stenosis, …) has
+   zero anatomical-site words — "colon"/"sigmoid"/"descending" would never match. New
+   `ANATOMICAL_SITE_HINT_WORDS` in `shared/coding-specificity.js` (caecum/cecum, ascending,
+   transverse, descending, sigmoid, rectosigmoid, rectum, colon) and `detectAnatomicalSiteHint`
+   — same first-clause-scoped, curated-list, "a miss just means no suggestion" safety
+   profile as the existing pathology list, deliberately scoped to the GI segments that
+   motivated it rather than whole-body coverage.
+2. **Wrong trigger gate.** `hintExpandedAlternatives` only ran when same-concept, descendant,
+   AND cross-concept-exact were ALL empty — but this case already has a cross-concept match
+   (444408007, the real "Tubular adenoma (disorder)" replacement), so the fallback never
+   even attempted a site search. **Changed the trigger** (explicit user decision, weighing
+   the tradeoff first): now runs whenever same-concept AND descendant are empty, regardless
+   of cross-concept — mirrors how `descendantAlternatives` already runs alongside
+   same-concept rather than as a last resort. Still the riskiest category (no hierarchy
+   proof, no exact-text guarantee) and still never eligible for future bulk auto-correction.
+
+**`hintExpandedAlternatives` generalised** (`shared/coding-specificity.js`) to accept an
+array of hint words, not just one string — fully backward compatible with every existing
+single-string caller. Pathology and site hints are detected independently and each gets its
+**own** supplementary search rather than one combined query: Medicus's search requires every
+query word to be present in a result, so "Tubular adenoma descending sigmoid colon" as one
+query would silently zero-result against a real match worded just "...of colon" — the same
+word-mismatch failure class already fixed once for the knee-replacement case (v3.179.0). One
+word per query sidesteps that; the filtering pass then accepts a candidate matching ANY of
+the words.
+
+15 new tests in `test-problem-description-cleanup.js` (186 total, up from 171), including the
+real tubular-adenoma/colon case and array-form backward-compatibility checks.
+
+**Not yet confirmed live** — built and unit-tested only; next step if resumed is checking
+whether 444898006 now actually appears in the hint-expanded section for this real patient.
+
+## [v3.191.2] — 2026-07-26
+
+### "Bulk remove?" + "Check for retired/legacy codes?" triggers sit alongside "Major", plus keyboard focus rings
+
+Two cosmetic fixes on the same Active Problems card triggers, live-confirmed.
+
+**Placement.** `#ms-pjc-widget`'s ("Bulk remove?") own `.m-card-v2__content:has(...)` flex
+placement (landed 2026-07-25) forced every OTHER direct child of that card — including
+`#ms-pdc-retired-widget` ("Check for retired/legacy codes?"), a separate widget injected by a
+different content script into the same spot — onto its own full-width row, so only one of the
+two triggers ever actually sat next to "Major" despite looking like a matched pair.
+`problem-description-cleanup.css` gained the mirror-image `:has()` rule, and both files'
+catch-all exclusion lists now name both widget ids, so the container becomes flex and both
+triggers share the top row regardless of which one(s) are present. Each still drops to its own
+full-width row once opened/clicked, same as before.
+
+**Focus rings.** Consulted Atelier on trigger-button colour first (see below) — verdict: keep
+both neutral, don't risk-colour a disclosure trigger for what's behind it. While in these
+files, found neither had a single `:focus-visible` rule on ANY control (Medicus's page never
+loads `panel.css`, so the suite's global ring never reached here — not a regression, just
+never built). One wildcard `button[class*='ms-pjc-']`/`input[class*='ms-pjc-']` rule per file
+(and the `ms-pdc-` equivalent) rather than enumerating every class, `outline: 2px solid
+#2563eb` matching the suite's `--accent` light value (can't consume the token itself here).
+
+**Design consult (Atelier, no code from this part):** should the two trigger buttons be
+colour-differentiated — one gates a destructive bulk-end action, the other a purely cosmetic
+scan? Verdict: no. A trigger isn't the risky moment (the actual destructive action, "End N
+selected problems", is already correctly red); colouring the trigger too would dilute what red
+means at the point that actually matters. Mirrors the same philosophy this feature already
+applies one level deeper — `problem-description-cleanup.js`'s safest fix category is
+deliberately left uncoloured rather than forced into the amber/blue/orange/red/green ramp.
+
+## [v3.191.1] — 2026-07-26
+
+### "Bulk remove?" auto-refreshes the page after a fully-successful end-batch
+
+User-reported: after clicking "End N selected problems," Medicus's own native problem-list
+UI (outside this widget) kept showing the ended problem(s) as still active until a manual
+page refresh — the widget's own checklist correctly showed "Ended," but that's a separate
+DOM tree from Medicus's own Vue-rendered list, which never re-fetches on its own after this
+widget's `POST /clinical/problem/end-problem` call.
+
+- `endSelected()` (`content-scripts/problem-junk-code-cleanup.js`) now calls
+  `location.reload()` automatically, but **only when every targeted end in the batch
+  succeeded** — a 900ms pause first, so the "Ended" tags are actually visible before the
+  reload fires. If any end in the batch failed, no reload happens at all: a failed row must
+  stay on screen with its error message so the clinician can see and retry it, not get wiped
+  by a reload they didn't ask for.
+
+## [v3.191.0] — 2026-07-25
+
+### "Bulk remove?" gains 18 more non-problem roots — beyond pure admin/claim artefacts
+
+Extends `rules/non-problem-root-codes.json` (used by `content-scripts/problem-junk-code-cleanup.js`)
+with a new class of candidate, beyond the original administrative/claim-artefact roots
+(14734007/12821000000103/184063008): genuine clinical DATA or ACTIVITIES that clinicians agreed
+should never sit in the problem list itself, even though they belong in the record.
+
+User's own reasoning, per category:
+- **LMP / EDD** (`21840007`, `161714006`) — real clinical markers, but treating them as
+  "problems" would generate ~12 fake problem entries a year for LMP alone; self-evidently not
+  what the problem list is for.
+- **B12 deficiency monitoring** (`170818005` finding + `243863004` status) — the deficiency
+  itself is a real problem; the ongoing monitoring of it is admin, not the problem.
+- **Wound care** (`225358003`) and **B12 administration** (`709544008`) — treatment FOR a
+  problem, not the problem itself (explicitly NOT a hard rule — clinically significant
+  treatment like chemotherapy would still belong on the problem list; these are minor by
+  comparison).
+- **Influenza vaccination** (`86198006`) — same over-counting logic as LMP (many adults get 2 a
+  year); deliberately scoped to flu only, not all vaccines.
+- **Patient referral** (`3457005`) — a broad root by design: referral status/type entries are
+  admin for a problem, not the problem itself, whichever specialty or urgency.
+- **Medication review** (`182836005` + due/done statuses `314529007`/`314530002`) and **Adult
+  health examination** (`268565007`) — genuine clinical activities that GP2GP source systems
+  sometimes file as problems, even though the activity isn't a diagnosis.
+- **NHS Health Check family** (`523221000000100` completed, `523201000000109` indicated,
+  `763661000000101` annual review, `519961000000106` programme) — administrative
+  programme-status markers; SNOMED models these as separate branches with no shared ancestor
+  narrow enough to use as one root, hence four leaf entries (the "invitation" variant was
+  already covered by the existing 14734007 root).
+- **Administrative statuses** (`307824009`) — a broad, well-precedented "Clinical finding"
+  subtree (not the whole hierarchy) already explicitly excluded elsewhere in this codebase's own
+  SNOMED search scope as "not a real clinical finding"; covers follow-up status/arranged, notes
+  summary on computer, and letter sent to patient in one root.
+- **Diary event recall** (`1239671000000106`) — a system-generated administrative record
+  artefact.
+
+All 18 roots were researched via the PUBLIC no-auth NHS termbrowser API (ancestor-chain lookups
+confirming ROOT-of coverage — e.g. that LMP's two other wordings and EDD's two other wordings
+are genuine descendants of a single concept each), not yet re-confirmed against Medicus's own
+live search on a real patient — same provisional caveat as any rules-file entry added without a
+live capture.
+
+Several candidates raised in the same discussion were deliberately EXCLUDED: "Student"
+(parked — could go either way), and several terms with no confident SNOMED match found via
+public search (Routine Child Health Exam, Elderly Health Assessment, Flu immunisation protocol,
+Health Clinic) — left for a future session with a real patient example.
+
+18 new coverage checks in `test-problem-junk-code-cleanup.js` (58 total, up from 40).
+
+## [v3.190.0] — 2026-07-25
+
+### "Fix description" scan gains two more independent checks: Read-code-derived text, generic import noise
+
+Two more requests from the same live-testing session as v3.188.0/v3.189.0's retirement
+scan and manual search box.
+
+**Legacy Read-code-derived descriptions.** Real example: `359609001` "Acute nonsupp.
+otitis media R" — `problemCode.originalCodes: [{codeSystem:"read-v2", code:"F510.00",
+description:"Acute non suppurative otitis media"}]`. A DIFFERENT, structural signal from
+everything else this tool checks: not a text pattern (no `[X]`/NOS/NEC/H-O marker, so
+`looksOutdated()` never catches it) and not retirement (the concept can be entirely
+current) — the description text still carries the OLD Read code's own abbreviated wording
+verbatim. Per the user: these "almost always need cleaned up even where they've been
+forward-mapped to a valid SNOMED code," so this flags independently of retirement status.
+Only available from `slideover/overview` (confirmed live — NOT confirmed present on
+`edit-problem`'s own shape, so this fetches that endpoint separately rather than assuming),
+so — like retirement — only ever checked by the opt-in scan, one more fetch per active
+problem. Only `codeSystem: "read-v2"` is recognised (confirmed on two real examples now);
+other Read-derived codeSystem values would need their own live confirmation first.
+
+**Generic GP2GP-import "Additional info" text.** Real example: `additionalInformation:
+"ear\nActive Problem, Significant"` — "ear" is a genuine free-text note, the second line
+is pure boilerplate restating `problemStatus`/`significance` metadata already captured
+structurally elsewhere on the problem. New `rules/generic-additional-info-text.json`
+(starting with `"Active Problem, Significant"`) and `stripGenericAdditionalInfoLines()` —
+matching is PER LINE (split, trimmed, case-insensitive), never against the whole field, so
+a genuine note sharing the field with a generic line is always preserved. Offered on
+**every** open panel regardless of trigger (the field is already fetched for any flagged
+row) — new "Remove generic import text" button submits `additionalInformation` with just
+the matched line(s) stripped, `problemCode` completely unchanged (`buildEditProblemPayload`
+gained an optional `overrideAdditionalInformation` third parameter for this, backward
+compatible with every existing 2-argument caller). The safest apply path in this file —
+surgical removal of an exact-matched known-boilerplate string, no coding decision at all —
+styled plainly rather than with any risk-graded colour.
+
+Both checks are folded into the SAME opt-in "Check for retired/legacy codes?" scan as the
+retirement check (button/status text updated to reflect all three), since all three reuse
+data already being fetched per active problem — the generic-text check in particular costs
+nothing extra at all, reusing the SAME edit-problem fetch every row already needed.
+
+24 new tests across `test-problem-description-cleanup.js` (171 total, up from 147).
+
+## [v3.189.0] — 2026-07-25
+
+### "Fix description" gains a manual search box
+
+v3.188.0's retirement scan shipped and was confirmed live the same day — flagging real
+retired codes (`30989003`) and correctly suggesting confirmed replacements (`1003722009`).
+This adds one more panel section, motivated by a real problem on the same patient: "H/O:
+urinary disease-UTI's" is better coded via "UTIs", but that's neither a same-concept
+synonym, a hierarchy descendant, nor an exact text match of the current description — none
+of the four automated categories could ever find it.
+
+New manual search box (`content-scripts/problem-description-cleanup.js`), shown at the
+bottom of every open panel regardless of whether the automated categories found anything.
+Reuses the same broad `SEARCH_PATH` query the automated categories already call, but
+**deliberately unfiltered** — `normalizedSearchResults` returns every result across every
+concept the search finds, not narrowed to one conceptId or one exact text match like every
+other function in this file. This is the ONE category with no automated safety constraint
+at all, functionally identical to typing into Medicus's own Edit Problem search box —
+styled in neutral grey, explicitly separated from the amber/blue/orange/red/green
+risk-graded categories above it, with copy stating plainly there's no automated check.
+
+6 new tests in `test-problem-description-cleanup.js`.
+
+## [v3.188.0] — 2026-07-25
+
+### "Fix description" gains a "Check for retired codes?" scan
+
+Extends `content-scripts/problem-description-cleanup.js` with an opt-in scan that checks
+every ACTIVE problem's own SNOMED conceptId against the public, no-auth NHS SNOMED CT
+UK-edition termbrowser API (`termbrowser.nhs.uk` — a SEPARATE service from the official
+NHS England Terminology Server FHIR API, which requires a system-to-system account that
+can't be safely embedded in a distributed browser extension; new host permission
+`https://termbrowser.nhs.uk/*`). A confirmed-retired problem gets its "Fix description"
+button injected the same way a text-flagged one does — reusing all of that flow's existing
+apply/safety machinery — with a new retirement banner rendered above the usual suggestion
+categories.
+
+**Deliberately routes to "Fix description", never "Bulk remove?"** — an explicit user
+correction during design: retirement of a SNOMED code doesn't by itself mean the clinical
+data entered is invalid or that the problem isn't real; it only means the CODE needs
+attention. Two real examples confirmed live: `184063008` ("Patient signed registration
+form") is retired with NO replacement recorded (`memberships[]` has an inactivation-reason
+entry, "Nonconformance to editorial policy component", but no historical-association
+pointing anywhere); `398307005` (the LSCS code already documented in this repo) is retired
+WITH a confirmed `REPLACED BY` replacement, `788180009`. Both cases feed into the SAME
+existing description-search flow (same-concept/descendant/cross-concept/hint-expanded), so
+even the no-replacement case still gets the clinician a route to an active code via text
+search — plus, when a `REPLACED BY` association exists, a new highest-trust "SNOMED
+confirms the replacement code" suggestion appears above everything else (green, distinct
+from the amber/blue/orange/red risk-ordered categories already there — this one isn't a
+risk category, it's the closest thing to a verified answer this tool offers). That
+suggestion is only offered as a clickable button once Medicus's OWN search index is
+confirmed to recognise the replacement concept (`confirmedReplacementAlternative` in
+`content-scripts/problem-description-cleanup.js`) — a `descriptionId` invented from
+termbrowser's raw SNOMED data wouldn't necessarily match what Medicus's own index expects
+on save, so an unmatched replacement is shown as text only, never a button.
+
+**Only the confirmed `REPLACED BY` association type (refset `900000000000526001`) is
+implemented** — SNOMED's historical-association family also includes SAME AS, POSSIBLY
+EQUIVALENT TO, MOVED TO and others, none of which have a live-confirmed example yet, so
+their refset IDs are deliberately NOT hardcoded (this codebase's standing rule: never
+hardcode a SNOMED metadata ID without live confirmation). Both real captures also carry an
+unrelated `ASSOCIATION`-type membership (`1322291000000109`, "NHS Care Record Element
+association") that is explicitly excluded from replacement detection — confirmed as a
+confusable case, not a replacement pointer.
+
+**Opt-in, not automatic** — checking every active problem costs one Medicus fetch per
+problem (reusing the same edit-problem endpoint "Fix description" already calls) plus one
+external termbrowser fetch per distinct conceptId; real per-patient cost, so this is its
+own "Check for retired codes?" trigger, same class as `problem-junk-code-cleanup.js`'s
+"Bulk remove?" scan, never run automatically on page load. The release-string config
+(`rules/snomed-terminology-server.json`, currently `v20260603`) fails closed to
+"unknown, skip" on any error or the literal `false` this API returns for an unrecognised
+release/edition path (confirmed live) — never guesses active or inactive when the check
+itself didn't cleanly succeed.
+
+New `shared/snomed-retirement.js` (entity-agnostic parsing, mirrors the
+`shared/legacy-coded-description.js` split), new `rules/snomed-terminology-server.json`.
+30 new tests in `test-snomed-retirement.js`, 10 new tests in
+`test-problem-description-cleanup.js`.
+
+## [v3.187.0] — 2026-07-25
+
+### "Bulk remove?" widget: third root added — "Patient signed reg. form"
+
+Added `184063008` ("Patient signed reg. form") as a third root in
+`rules/non-problem-root-codes.json` — a Read-v2-migrated concept (original code `9122.00`)
+recording that a patient signed a registration form, pure administrative record-keeping,
+never a real clinical problem. Found live on a real patient while investigating whether
+Medicus's API exposes SNOMED concept retirement status (see below) — added as its own root
+regardless of the retirement question, since it's unambiguously the same category of
+administrative noise the widget already targets.
+
+**Investigated, not built: automated retired-SNOMED-code detection.** Captured the full
+`slideover/overview`, `edit-problem` prefill, and SNOMED search responses for a real
+`184063008`-coded problem, looking for any `active`/`retired`/`status` field to reuse this
+widget's mechanism for a different purpose. None of the three responses expose one. The
+closest candidate signal, `descriptionId: null` on the problem's own code, is already used
+elsewhere (`problem-description-cleanup.js`'s outdated-description detection) but is NOT
+exclusive to retired concepts — `test-problem-description-cleanup.js`'s own test fixture
+has a `descriptionId: null` example for a presumably normal, current concept ("Adult
+attention deficit hyperactivity disorder"). Building a detector on this would risk flagging
+genuinely active, correctly-coded problems — a patient-safety-relevant false positive, not
+a cosmetic one — so this was deliberately not built. Would need a real API-exposed
+active/inactive field to revisit safely.
+
+2 new tests in `test-problem-junk-code-cleanup.js` covering the new root entry.
+
+## [v3.186.0] — 2026-07-25
+
+### "Bulk remove?" widget: second root added — item-of-service claim-status codes
+
+Added `12821000000103` ("Item of service claim statuses") as a second root in
+`rules/non-problem-root-codes.json` — no code change needed, per the data-file convention
+this widget was built around (v3.183.0). Same rationale as the first root (14734007
+"Administrative procedure"): GP2GP source systems sometimes file item-of-service
+claim-status codes as problems even though they're pure claim-processing artefacts, never
+a real clinical problem. Real example found live 2026-07-25: `"FP/RF - new reg.check to
+FPC"` (a new-registration check submitted to the old Family Practitioner Committee).
+
+2 new tests in `test-problem-junk-code-cleanup.js` covering the new root entry.
+
+## [v3.185.0] — 2026-07-25
+
+### "Fix description" now also catches "H/O" (history of) legacy-prefixed problems
+
+Extends the existing legacy-description detection (`shared/legacy-coded-description.js`,
+used by `content-scripts/problem-description-cleanup.js`'s "Fix description" button) to
+also flag a leading "H/O" ("history of") free-text prefix — either "H/O " (space) or
+"H/O:" (colon, the variant actually found live once the first version of this shipped) —
+alongside the existing ICD-bracket ("[X]"/"[D]"/"[M]") and trailing NOS/NEC patterns.
+
+**Deliberately NOT added to the "Bulk remove?" junk-problem-code widget** (v3.183.0-
+v3.184.0) — that widget ENDS a problem with reason "not a problem", which is only correct
+for genuine non-clinical administrative artefacts. A "H/O stroke" entry is real clinical
+history, not noise, and ending it would delete a genuine past-medical-history fact.
+
+Instead this reuses the SAME-CONCEPT-ONLY safety rule "Fix description" already relies on:
+`sameConceptAlternatives` only ever offers a different synonym of the CURRENT conceptId,
+never a re-code to a different concept — so whatever the flagged problem's concept
+actually means, every offered alternative means the same thing, only the wording changes.
+Per explicit user correction during build (their own real-data experience, not a generic
+assumption): these "H/O"-prefixed problems are USUALLY coded to the plain disease concept
+itself, picked for convenience at the time of writing rather than accuracy — not to a
+dedicated SNOMED "history of X" concept — so the suggested alternatives should almost
+never carry "history of" wording, and that's the intended outcome, not an edge case.
+
+New `LEGACY_HO_PREFIX_RE` in `shared/legacy-coded-description.js`, folded into
+`looksOutdated`/`stripLegacyMarkers`. 13 new tests plus an updated `findOutdatedProblems`
+case, all in `test-problem-description-cleanup.js`.
+
+## [v3.184.0] — 2026-07-25
+
+### "Bulk remove?" widget: moved next to the "Major" heading
+
+Follow-up to v3.183.0's "Bulk remove?" widget. Live DOM capture of the Active Problems
+card confirmed its actual shape: `.m-card-v2__content > h3#problems-major-label ("Major"),
+ul[aria-labelledby="problems-major-label"], …` — "Major" is a section heading for the whole
+major-problems list, not a per-problem badge. The widget already landed in the right DOM
+position (right after that heading, right before the list) but rendered as its own stacked
+block below it.
+
+Two changes: `injectTrigger()` now anchors explicitly on `ul[aria-labelledby=
+"problems-major-label"]` rather than "whichever list holds the first cached problem", so
+it lands next to "Major" specifically even when clinical-summary's own problem order
+starts with a minor one (falls back to the old anchor if no Major section exists on the
+page at all). And new CSS makes the collapsed toggle sit on the same row as the heading —
+scoped via `.m-card-v2__content:has(> #ms-pjc-widget)` so the layout change can't leak
+onto Medicus's other cards that reuse the same generic `.m-card-v2__content` class —
+dropping to its own full-width row only once expanded.
+
+`problems-minor-label` is assumed by naming symmetry, not confirmed live (the capture
+patient had no minor problems) — documented as an assumption in the code, not relied on.
+
+A **text-based visibility pre-check** (only show the trigger button when a problem's free
+text looked like a likely match) was also tried during this same round of follow-up work,
+then reverted before ever shipping: live testing showed it could hide a GENUINE code-based
+match whose free text didn't happen to contain a configured hint (the "FP/RF - new
+reg.check to FPC" case above needed a hint added after the fact just to make the button
+appear). The trigger button always renders whenever a patient has any active problems, same
+as the original v3.183.0 behaviour — the code is the sole source of truth for what this
+widget flags, and it must always be reachable regardless of how unrelated a problem's free
+text looks.
+
+## [v3.183.0] — 2026-07-24
+
+### "Bulk remove?" widget: flag and end administrative-noise problem-list codes
+
+GP2GP-imported records can carry entries in the problem list that were never real clinical
+problems — administrative/claim-processing artefacts some source systems file as problems
+(the motivating real example: FP10 temporary-resident-claim codes, filed under SNOMED
+14734007 "Administrative procedure"). New `content-scripts/problem-junk-code-cleanup.js`
+(+`.css`) adds a small "Bulk remove?" toggle above the Active Problems list on the Clinical
+Summary page.
+
+Clicking it fetches each active problem's own conceptId (one fetch per problem — the cheap
+`clinical-summary/summary` list never carries a conceptId, text only) and checks each
+distinct code against `rules/non-problem-root-codes.json`'s configured root list via
+`clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=<all roots,
+comma-joined>&query=<conceptId>` — flagged if the code exactly matches a root or is a
+DESCENDANT of one at any depth (confirmed live reaching 5 hierarchy levels below 14734007
+for the real FP10 codes that motivated this). Flagged problems render as a checklist,
+unchecked by default, each also checked for active child problems (excluded from bulk
+selection, not just warned, if ending it would affect dependents) via the confirmed
+`clinical/data/problem/end-problem/{problemId}` prefill. A shared, editable end-date field
+(defaulting to today) and the fixed reason `"not a problem"` are submitted per selected
+problem via `POST clinical/problem/end-problem` — confirmed contract, from a real captured
+HAR of a manual "end problem" action, `{problemId, endDate, reason} → 200 {}`.
+
+**Root list is data, not code**: 14734007 is the first entry in
+`rules/non-problem-root-codes.json`, not a hardcoded special case — adding another root
+there (a different import-noise category from a different source system) extends the
+check with no code change and no extra fetch cost per candidate, since every configured
+root is checked in ONE combined `constrainingParentConcepts` query rather than one query
+per root. A blank-query fetch to enumerate a root's full descendant set up front was
+deliberately avoided: 14734007 alone has 103 direct children per the SNOMED CT browser,
+and that endpoint caps at ~20 results with no pagination, so it would have silently missed
+most of the hierarchy — checking each patient's own problem conceptId individually never
+hits that cap.
+
+**Scope decision**: the scan is opt-in only, triggered by the "Bulk remove?" click — never
+proactive on page load, since the per-problem conceptId fetches would add real cost to
+every Clinical Summary view for what's a comparatively rare artefact. The cheap
+clinical-summary fetch (used only to place the trigger button) still runs on page load,
+matching `problem-description-cleanup.js`'s existing precedent.
+
+`test-problem-junk-code-cleanup.js` — 36 tests covering the roots-CSV builder, the
+flagged/descendant check, bulk-selectability rules, per-problem conceptId resolution, and
+the end-problem payload shape.
+
+## [v3.182.0] — 2026-07-23
+
+### "Save attachment as document": per-attachment chip replaces the single anchored widget
+
+Live-tested v3.181.0's priority-chip picker on a real 3-attachment task and found a
+placement regression: the widget anchored near a task-level landmark ("Codes & actions"
+card / task widget / bottom action row) in that priority order, with the attachment's
+own card only a last resort. On a task that DOES have a "Codes & actions" card, that
+landmark sits well below the message thread — so the widget (and the task widget it
+paired side-by-side with) ended up far from the attachment it was actually for. With
+several attachments in one request, that also meant only ONE collapsed widget with an
+attachment dropdown, easy to miss (confirmed live: a user with 3 attachments didn't
+notice the dropdown existed at all).
+
+Replaced the whole anchor-priority chain with a small "Save as document" chip injected
+immediately after EACH eligible attachment's own link/button — every attachment gets its
+own unambiguous entry point right next to the file it's for, no dropdown needed. Clicking
+a chip opens a single shared form (there is only ever one on the page) and relocates it
+to sit right after that chip; clicking a different attachment's chip moves the same form
+there and re-populates it, rather than opening a second form (a design choice — an
+independent form per attachment was considered and deferred as a bigger change for little
+benefit). A chip already saved this page visit shows "✓ Saved as document" and disables
+itself, so progress across several attachments is visible at a glance. The old collapsed
+toggle bar, its "Attachment" dropdown, and the "Save another attachment" flow are gone —
+superseded by the per-attachment chips. (`content-scripts/document-file-inline.js`,
+`.css`; `content-scripts/task-inline.css` — removed a now-dead `.ms-inline-widget-row`
+rule that only ever existed to pair with the removed widget.)
+
+Two more fixes from the same live-test pass, on the chips themselves:
+
+- **Layout**: a chip inserted as a plain next sibling of the attachment's own button
+  dropped onto its own line below it (Medicus's attachment button is block-level), not
+  alongside it as intended. Fixed by wrapping the attachment element and the chip
+  together in a small `inline-flex` span (`.ms-df-chip-wrap`) instead of a plain sibling
+  insert, so they render on one line.
+- **Real bug, confirmed live**: clicking a chip was opening Medicus's own "view care
+  related communication" pane — an unrelated side effect. Root cause: the chip is a DOM
+  sibling inside whatever container Medicus wraps each attachment/message in, and that
+  container has its own click handler; the chip's click was bubbling into it. Fixed with
+  `stopPropagation()` on the chip's click handler, and (defensively, since the form can
+  also end up inside that same container once relocated) one `stopPropagation()` listener
+  on the form's own root rather than on every individual control inside it.
+
+### Document type picker: dropped the priority-tier chip shortlist for a ranked, colour-coded search
+
+Both fixes above confirmed live in the same session, then a bigger rethink: the
+docPriority 1-6 scoring behind v3.181.0's priority-chip shortlist was built with INBOUND
+documents in mind (scanned letters, referrals, discharge summaries), not task
+attachments — the author flagged that the resulting shortlist "isn't right for this
+environment" once seen live. Rather than trust it as a hard shortlist, it's now used as a
+SOFT ranking + colour signal instead:
+
+- The priority/priorityMore chip tiers and the "Show more document types" toggle are
+  gone. The search box (which already shows the current best-guess by default, unlocking
+  into search on typing — unchanged) is now the only thing in the Document type row, no
+  chips above it.
+- `filterDocumentTypes` now ranks matches by docPriority (1 first), alphabetically
+  tiebroken, instead of original list order — typing e.g. "care plan" surfaces the
+  highest-priority matches first rather than whatever order they happen to sit in the
+  1768-entry list.
+- Each search result gets a coloured left border on a fixed 6-step green(1)→red(6) scale
+  (new `priorityColor()`); an entry with no/invalid score gets its own neutral grey
+  rather than being lumped in with a real tier-6 ("junk") score.
+- `rules/document-types.json` now carries `docPriority` directly on every entry (all
+  1768, sourced from the full practice-scored priorities spreadsheet) instead of the two
+  `priority`/`priorityMore` conceptId-array tiers, which are removed.
+- `buildPriorityEntries` (the now-unused shortlist-resolver) is removed along with its
+  tests; `test-document-file-inline.js` gained coverage for the new ranking and colour
+  function instead.
+
+## [v3.181.0] — 2026-07-23
+
+### Document-type quick-pick shortlist: tiered "Show more" chips
+
+`rules/document-types.json`'s `priority` array (the quick-pick chip shortlist in the
+"save attachment as document" widget) had shipped empty since v3.177.4 — the picker only
+ever had full search, no shortlist. Populated from a full docPriority 1-6 usefulness scan
+of all 1768 SNOMED document-type codes in the refset, scored against real practice usage.
+
+`priority` now holds the 22 docPriority-1 ("most useful/commonly selected") codes, shown
+as chips by default. A second `priorityMore` array holds the 84 docPriority-2/3 codes
+("high priority anchor" / "genuinely selected, narrower"), revealed only via a new "Show
+more document types" toggle in `content-scripts/document-file-inline.js` — keeps the
+default chip row short and scannable while still making the wider shortlist reachable in
+one click, without ever falling back to a 106-chip wall or the full 1768-entry search.
+Both tiers sorted alphabetically by description. `buildPriorityEntries` (unchanged) now
+resolves either array; new regression tests confirm every conceptId in both tiers
+resolves to a real entry and that the two tiers don't overlap.
+
+## [v3.180.0] — 2026-07-23
+
+### "Fix description" widget: fourth suggestion category — hint-expanded matches
+
+Follow-up to the "[SO]" codes deferred at the end of v3.179.0. Live-captured a real
+"[SO]Rotator cuff" problem (additional info "-tear") that got NO suggestion of any kind.
+Root cause — a DIFFERENT bug class from the word-mismatch fix in v3.179.0: `7885001` is a
+SNOMED **body structure** concept ("Rotator cuff (structure)"), not a disorder, so it can
+never appear in the disorder/procedure-hierarchy search that same-concept and
+cross-concept-exact matching both depend on. Confirmed live: searching "rotator cuff
+tear" in that hierarchy finds `926335004` "Rotator cuff tear" — exactly what the "-tear"
+free-text note was pointing at.
+
+New fallback category, tried only when same-concept, descendant, and cross-concept-exact
+all come back empty (one extra search in that case, zero extra fetches otherwise):
+combines the base description with a recognised pathology word (tear, sprain, rupture,
+valvular, …) found in the first sentence of `additionalInformation`, and offers the
+result as a cross-concept suggestion. This is the riskiest of the four categories now
+offered — no hierarchy proof, and two combined text fragments rather than one exact
+match — so it renders in its own most-cautious red section, one step past the existing
+warning-orange cross-concept styling.
+
+Explicit scope decision, discussed and agreed: an anatomical-structure concept should
+never really be coded as a "problem" in its own right, which is what makes this safe to
+offer per-problem now. But when/if a whole-record bulk-correction feature is built later,
+this category must NEVER be bulk-auto-applied — unlike same-concept and cross-concept-
+exact matches, which could eventually be "easy" bulk cases, this one must always prompt a
+clinician.
+
+21 new unit tests using the real captured rotator-cuff data. Not yet confirmed live.
+
+### "Fix description" widget: descendant suggestions generalised beyond laterality, ranked by match %
+
+Real example: a patient's "Hysteroscopy NEC" (`233545006`) problem — already correctly
+offered a same-concept relabel — had `additionalInformation` "resection of uterine
+fibroid", and a genuine SNOMED descendant exists: `84064003` "Hysteroscopy with removal of
+uterine fibroid" (confirmed via live capture — its `parentConceptIds` contains
+`233545006`, exactly the same ancestry proof already used for laterality descendants).
+`descendantAlternatives` previously only ever tried a single laterality word (rt/lt/
+bilateral); it now accepts an arbitrary list of hint words (still fully backward
+compatible with a single string), sourced from the laterality word (if any) plus every
+significant word found anywhere in `additionalInformation`.
+
+Two rounds of live-testing feedback refined this further:
+
+- **Retrieval**: rather than guessing individual words to search for (which can silently
+  miss a real descendant worded differently, e.g. "Hysteroscopic myomectomy" never
+  contains "fibroid"/"resection"), a single BLANK-QUERY fetch (`query=` empty, confirmed
+  live) returns the full descendant set of the current concept directly, bypassing text
+  matching at the retrieval stage entirely. One fetch, not one per word. Not provably
+  complete (no total/pagination field in the response), but far more complete than
+  per-word guessing.
+- **Hint scope**: `additionalInformation` is now scanned in FULL, not just its first
+  sentence. A real case — "& laparoscopy. resection of fibroid." — put the clinically
+  relevant detail in the SECOND sentence, past the original first-clause cutoff, so it was
+  silently missed. (The narrower first-clause scope remains correct and unchanged for the
+  separate `hintExpandedAlternatives`/pathology-word category, which has no structural
+  safety net and so stays conservative about how much free text it trusts.)
+- **Ranking, not just filtering**: each candidate now gets a `matchScore` (0-100%, the
+  proportion of hint words found in its own wording), shown next to the button (e.g.
+  "removal of uterine fibroid (67% match)" vs. "removal of uterine myoma (33% match)"), and
+  results are sorted best-match-first. Still literal word-boundary matching, not clinical
+  synonym-awareness — deliberately: catching "myomectomy" as a fibroid-removal synonym
+  would need either a curated synonym dictionary or an actual semantic-similarity call
+  (sending patient free text to an LLM), and the user explicitly chose to keep this pass to
+  keyword overlap rather than open that architecture/data-handling discussion now.
+
+Deliberately offered ALONGSIDE same-concept alternatives, not gated behind "nothing else
+matched" — the same-concept relabel and the more-specific descendant are both valid,
+independent choices for the clinician to pick from.
+
+19 new unit tests (`significantWords`, the generalised + scored `descendantAlternatives`)
+using the real captured Hysteroscopy/fibroid data. Not yet confirmed live.
+
+## [v3.180.1] — 2026-07-23
+
+### "Fix description" widget: fixed cross-concept matching for a retired legacy concept
+
+Investigated why "Lower uterine segment caesarean section (LSCS) NEC" (`398307005`) got
+NO suggestions at all. A different root cause from both the word-mismatch and
+body-structure bugs already fixed: `398307005` is a RETIRED/inactive SNOMED concept
+(confirmed via the SNOMED CT browser — no parents or children), invisible to every search
+regardless of wording. Its real active replacement, `788180009`, has a synonym worded
+exactly like the current description — but only once the trailing "(LSCS)" abbreviation
+is ALSO stripped, alongside the existing "NEC" suffix strip.
+
+`stripLegacyMarkers` now also strips a trailing bracketed abbreviation (2-6 letters)
+exposed once the NOS/NEC suffix is removed, letting `crossConceptAlternatives` find the
+exact match. Accepted, explicitly-flagged risk: this is a simplification that could
+mis-fire if a bracketed suffix is ever integral to a description's meaning rather than a
+legacy artefact — mitigated by `crossConceptAlternatives` already requiring explicit
+clinician confirmation before applying, and by this only ever running on descriptions
+already confirmed outdated. 3 new unit tests using the real captured LSCS/caesarean-section
+data.
+
+## [v3.179.0] — 2026-07-23
+
+### "Fix description" widget: surfaces the raw additional-info text
+
+The panel now shows the problem's raw `additionalInformation` free text (when present),
+regardless of whether the tool found any suggestion — supports the clinician's own
+judgement call even in cases the tool can't yet match (e.g. the "[SO]" codes flagged for
+follow-up). Neutral grey styling, deliberately distinct from the three suggestion
+categories' colours so it doesn't read as an actionable option itself.
+
+### "Fix description" widget: fixed a silent word-mismatch search failure
+
+Found live-testing on a patient with "Primary total knee replacement NEC" (a legacy
+Read-code-migration label): the search returned ZERO results for the whole widget, not
+just the new descendant suggestion. Root cause — Medicus's description search requires
+EVERY word in the query to appear in a result; the real modern descendants ("Total
+replacement of left/right knee joint") don't contain the word "Primary" anywhere, so the
+entire query silently failed. This affected the SAME-CONCEPT alternatives too (the
+original, already-shipped v3.176.13 flow, formerly numbered v3.178.0), not just today's new work — any legacy
+description with a word not echoed in its concept's modern phrasing could silently
+return nothing, with no error, just an empty "no alternative found" panel.
+
+Two supplementary searches fix this, both confirmed live, both additive (never replace
+the existing broad query, only add candidates to it):
+
+- Same-concept alternatives now also query by a bare SCTID (`query=<conceptId>`), which
+  reliably returns that concept's own synonyms regardless of text phrasing.
+- Descendant/laterality suggestions now also run a narrowed search
+  (`constrainingParentConcepts=<current conceptId>` instead of the six broad top-level
+  hierarchies, `query=<just the laterality word>`) — scoped to true descendants only, so
+  a bare "left"/"right" is enough to find them without depending on the parent's own
+  wording at all.
+- 2 new regression tests using the real captured knee-replacement data.
+
+### "Fix description" widget: fixed duplicate-description row collision
+
+Found live-testing the additions below: if a patient has TWO problem entries with the
+IDENTICAL description text, `findProblemRow`'s exact-text DOM match always returned the
+FIRST matching row — so both problems' buttons stacked on the first row, none appeared
+on the second, and (more seriously) the optimistic post-save text update for either
+problem also hit that same shared first anchor. The underlying SAVE was never affected
+(`postEditProblem` always targets the real, correct `problemId`, independent of DOM
+matching) — only button placement and the on-screen update were wrong. Fixed: `scan()`
+now tracks anchors already claimed within a pass (`claimedAnchors`), so the Nth problem
+with matching text claims the Nth matching row in document order — each problemId gets
+its own distinct anchor.
+
+### "Fix description" widget: now also suggests a more specific code (laterality)
+
+Real example that prompted this: a patient's "Fracture of radius NOS" problem had
+free-text additional info "rt distal end" — implying a more specific SNOMED concept
+("Fracture of right radius") than the one currently coded. Unlike the existing
+description-cleanup flow (which only ever offers a different DESCRIPTION of the SAME
+code — a cosmetic relabel), this can suggest a genuinely different, more specific
+concept — a real coding decision. Scoped deliberately narrow for this pass:
+
+- **Laterality only** (right/rt, left/lt, bilateral/bilat) — not full free-text-to-code
+  NLP, which is large and risky (abbreviation ambiguity means a wrong-but-confident
+  suggestion is worse than none).
+- **Descendants only, never a lateral recode** — confirmed via Medicus's own
+  `outputParentConceptIds=1` search param (added to the existing `SEARCH_PATH`, additive
+  and harmless for the existing same-concept search), which returns each result's full
+  SNOMED IS-A ancestor closure. The safety test: does the CURRENT concept's ID appear in
+  a candidate's `parentConceptIds`? If yes, it's a strict specialisation, safe to offer.
+- **Only runs for problems already flagged as outdated** — same trigger population as
+  the existing "Fix description" button, same one click, same edit-form fetch that click
+  already makes. No new proactive per-patient scanning and no new opt-in affordance,
+  because `additionalInformation` (where the laterality hint lives) isn't available
+  without a per-problem fetch, and this reuses the one the clinician already triggered
+  rather than adding new API cost. Running this across the whole record (every problem,
+  other entity types, or hooking into Medicus's own native "Edit Problem" UI) was
+  discussed and explicitly deferred, not built here.
+
+- New `shared/coding-specificity.js`: `detectLateralityHint`,
+  `descriptionAlreadySpecifiesLaterality`, `descendantAlternatives` — entity-agnostic,
+  mirrors the existing `shared/legacy-coded-description.js` split.
+- `content-scripts/problem-description-cleanup.js`: same click that opens the panel now
+  also computes descendant/laterality suggestions from the same search response; the
+  apply path is refactored into a shared `applyCode()` core used by both same-concept
+  and descendant candidates.
+- `content-scripts/problem-description-cleanup.css`: descendant suggestions render in a
+  visually distinct (blue, not amber) section, so a clinician can tell "cosmetic
+  relabel" and "different, more specific code" apart at a glance.
+
+### "Fix description" widget: also flags a same-text match under a DIFFERENT code
+
+Second gap found in testing: "[X]Heroin addiction" (`75544000`) has NO same-concept
+alternative to offer — the modern term lives under a genuinely different concept,
+`231477003` "Heroin addiction". `sameConceptAlternatives` can never surface this by
+design (it's a different `conceptId`), so nothing was offered even though a clean fix
+exists.
+
+- New `crossConceptAlternatives` in `shared/coding-specificity.js`: finds a DIFFERENT
+  concept whose description is textually IDENTICAL to the current one once legacy
+  markers are stripped, reusing the exact same search response — zero new API calls.
+  This is the riskiest of the three categories now offered (no hierarchy proof, unlike
+  descendants — only a text match), so it renders in its own warning-orange section with
+  explicit "⚠ Different SNOMED code, same description — verify before applying" copy,
+  visually distinct from both the amber same-concept and blue descendant sections.
+  **Scope note**: this only catches an EXACT text match — it will not catch a
+  differently-worded modern replacement (e.g. "Opioid dependence" for the same old
+  code), which would need real terminology-mapping data, not a text match.
+- `shared/legacy-coded-description.js`: the outdated-description detector now also
+  treats a trailing **" NEC"** (Not Elsewhere Classified) as a legacy marker, alongside
+  the existing "[X]"/NOS handling.
+- 12 more new tests in `test-problem-description-cleanup.js` (37 new in total for this
+  release, 73 overall), including a fixture built around the real "[X]Heroin addiction"
+  example.
+
+## [v3.178.1] — 2026-07-22
+
+### "Fix description" widget: cleanup from first live test
+
+- **Button now removes itself once the fix is saved**, instead of leaving a
+  lingering "✓ Saved" chip — the corrected on-screen text is confirmation
+  enough. The panel is removed at the same time.
+- **Tightened the button's padding/line-height** — it was taller than
+  Medicus's own tightly-packed problem-list rows, stretching the whole list
+  out. Smaller font, explicit `line-height`, less padding.
+
+## [v3.176.13] — 2026-07-22
+
+> Renumbered from v3.178.0 on 2026-07-26: the 2026-07-25 merge from `main` brought in
+> main's own v3.178.0 (The Keeper rule-set update), which had been assigned the same
+> number independently. This entry keeps its original date and content; its follow-up
+> below retains its original v3.178.1 number.
+
+### New: "Fix description" for outdated SNOMED problem codes
+
+Many older problem/diagnosis entries carry a historic Read-code-migration
+display string (a `[X]`/`[D]`/`[M]`-style ICD cross-map prefix, or a trailing
+`NOS`) even though the underlying SNOMED concept has a perfectly good modern
+plain synonym. New inline widget flags these on a patient's Active Problems
+list (Clinical Summary tab) and offers a one-click fix — same code, cleaner
+description — confirmed end-to-end via a real live capture (see
+`docs/learnings-problem-description-cleanup.md`).
+
+- `content-scripts/problem-description-cleanup.js` + `.css`: detects
+  candidates via `clinical-summary/summary/{patientId}`'s
+  `problemCodeDescription` text, injects a small "Fix description" button
+  next to each flagged row (`li.item > a.item__link`, confirmed live), and on
+  click searches Medicus's own SNOMED description-search endpoint, filtered
+  to alternatives sharing the SAME `conceptId` — this is the safety rule: the
+  tool can only ever offer a different synonym of the current code, never a
+  re-code to a different clinical concept. Saves via the confirmed
+  `clinical/problem/edit-problem/{problemId}` endpoint, resending the FULL
+  edit-form prefill with only `problemCode` swapped (a full replace, not a
+  partial patch).
+- New `shared/legacy-coded-description.js`: the detection heuristic
+  (bracket-prefix/NOS-suffix) and the same-concept safety filter are split
+  out as entity-agnostic, since problems are the test bed for this feature,
+  not the only entity type intended — procedures/referrals/journal entries
+  are expected to follow, each needing its own confirmed edit-endpoint
+  capture before being wired up.
+- 36 new unit tests (`test-problem-description-cleanup.js`) covering
+  detection, marker-stripping, the same-concept safety filter, and the
+  full-payload builder (including the `recordedAtAnotherOrganisation`
+  branch, read straight from the captured `.vue` source, not guessed).
+- Not yet verified live end-to-end as a widget (the underlying API calls were
+  individually confirmed via capture, but the injected button/panel itself
+  hasn't been exercised in the real browser yet).
+
+## [v3.177.7] — 2026-07-22
+
+### Inline task/document widgets: anchor next to the actual attachment, not always the opening message
+
+On a communication-thread task with neither a "Codes & actions" card nor a
+"More actions" button, both `task-inline.js` ("Create task for this patient")
+and `document-file-inline.js` ("Save attachment as document") fell back to
+anchoring right after the "Initial Request" card — even when the real
+attachment was on a LATER reply further down the thread, which put both
+buttons under a message that had no attachment at all.
+
+- New `findAttachmentCard()` (identical copy in both files — both widgets
+  need the same anchor decision): matches a real attachment's filename
+  (`window.__msTriageAttachments`, content.js's accessor) against the page's
+  `<a>`/`<button>` elements and returns the enclosing message card. Tried
+  BEFORE the `findInitialRequestCard()` fallback — when there's no attachment,
+  or its card can't be found, behaviour is unchanged.
+- When the attachment IS on the opening message, this resolves to the same
+  card as before (no behaviour change for the common case).
+
+## [v3.177.6] — 2026-07-22
+
+### "Save attachment as document": missed attachments on later replies in a communication thread
+
+Fixes a real live-test miss: a patient photo attached to a "Reply from
+Requester" message further down a communication thread (not the opening
+message) was invisible to the "save as document" widget. Root cause: `content.js`'s
+attachment scan was scoped to the "Initial Request" card only
+(`findCardByTitle('Initial Request')`) — and confirmed live, a reply card has
+no `h2`/`h3`/`h4` heading at all, so it could never be found that way even in
+principle.
+
+- `extractInitialRequest()`'s attachment detection is now a page-wide scan
+  (new `extractAllAttachments()`) instead of being scoped to one specific
+  card — any `<a>`/`<button>` anywhere on the task page whose text/href ends
+  in a known attachment extension is picked up, deduped by filename. Verified
+  safe against false positives via a full-page link/button text dump on the
+  task that surfaced this bug: exactly one match, the real attachment: nothing
+  in Medicus's own nav/page chrome collided.
+- The "Initial Request" card is still used for the request-text snippet
+  (`ir.text`) — only the attachment scan was widened.
+
+## [v3.177.5] — 2026-07-22
+
+### "Save attachment as document": fixes from first live test of the picker
+
+- **Selection now shows in the search box.** Picking a document type (via a
+  priority chip, a search result, or the extension-based pre-select) used to
+  clear the search box back to empty, so the picker looked unselected even
+  though a type was in fact active — the box now displays the selected type's
+  name, and the results dropdown stays hidden until the clinician actually
+  starts typing again.
+- **Document date now defaults to when the triage request was received**,
+  not the date the clinician happens to action the task. `content.js` now
+  exposes the task's own "Created" date (`window.__msTaskCreatedDate`, reusing
+  the same parse already done for the "days open" chip) and
+  `document-file-inline.js` prefers it over the create-form's own
+  `recordDate` default (today).
+- **Layout: "Create task for this patient" and "Save attachment as document"
+  now sit side by side** instead of stacked, when both are present on the
+  same task — `document-file-inline.js` wraps the two widgets in a shared
+  flex row (`.ms-inline-widget-row`) the first time either is injected; each
+  widget's own body still opens full-width in its own column when expanded.
+
+## [v3.177.4] — 2026-07-20
+
+### "Save attachment as document": full SNOMED document-type picklist (priority shortlist + search)
+
+Replaces the previous 2-code-only assignment (image → "Medical photograph",
+pdf/doc → "Patient/Carer Correspondence") with the full active picklist
+behind Medicus's own "Document type" refset, plus a proper picker.
+
+- New `rules/document-types.json` — 1768 active entries imported from the
+  user's June 2026 SNOMED CT UK Clinical Extension export of the "Record
+  composition type" simple reference set (`1127551000000109`), 140 inactive
+  members excluded. Both previously hard-coded codes were found in it at the
+  expected rows, byte-identical — strong corroboration the import is correct.
+  Carries an editable `priority` array of conceptIds (empty for now) driving
+  a quick-pick shortlist — add ids there to change it, no code change needed.
+- `content-scripts/document-file-inline.js`: the extension-based guess still
+  PRE-SELECTS a default document type (least friction for the common case),
+  but the clinician can now override it via priority-shortlist chips or a
+  live search box (case-insensitive substring match over all 1768 entries,
+  capped at 40 results) before saving — nothing is filed without an explicit
+  documentType set. The full picklist is loaded once per page load from the
+  bundled JSON (a local extension resource, not a Medicus call) and cached.
+- **Ancestor/parent-concept filtering investigated and ruled out**: Medicus
+  does not store a `parentConceptIds`-style hierarchy for Document entities
+  (confirmed via the live "Document type" search endpoint's own response
+  shape, and separately via two HAR-file captures) — there is no SNOMED
+  hierarchy available to prune or group the picklist by. Recorded in
+  `docs/learnings-triage-attachment-to-document.md` §9 so this isn't
+  re-investigated without new evidence.
+- `manifest.json`: `rules/document-types.json` added to
+  `web_accessible_resources` alongside the other bundled rule files.
+- 88/88 tests passing in `test-document-file-inline.js` (34 new, covering the
+  imported data itself, the search/priority-resolution functions, and the
+  updated eligibility rule).
+
+## [v3.177.3] — 2026-07-20
+
+### Inline widgets: fixed the missing anchor point on communication-thread tasks
+
+Follow-up to v3.177.2's attachment-detection fix. That task type has neither
+a "Codes & actions" card nor a "More actions" button — the two anchors
+`task-inline.js` and `document-file-inline.js` rely on — so both widgets had
+nowhere to inject themselves there even after attachment detection was fixed.
+
+- Both files gained a further fallback: anchor after the "Initial Request"
+  card itself, matched by its EXACT heading text (not content.js's own
+  looser starts-with match, so this can never mis-anchor on an unrelated
+  section). Confirmed live: every request/communication task type seen so
+  far has this card, including a task with no attachment at all.
+- `task-inline.js` gets the same fix since it has the identical gap on this
+  task type — one root cause, one fix, applied to both consumers.
+- `docs/learnings-triage-attachment-to-document.md` §8 updated to record the
+  fix (was previously flagged as a known open gap).
+
+## [v3.177.2] — 2026-07-20
+
+### "Save attachment as document": fixed invisible widget — attachments aren't always an `<a>`
+
+Live debugging (page-console DOM/network capture) found the widget never
+appeared on a real communication-thread task with a genuine attachment. Root
+cause: that task type renders the attachment as a plain `<button>` labelled
+with the filename and no href at all — `extractInitialRequest()` only ever
+scanned `<a>` tags, so a real attachment was silently invisible to it.
+
+- `content-scripts/triage-lens/content.js`'s `extractInitialRequest()` now
+  also detects this button pattern, recording `{ href: '', filename }` for it
+  instead of dropping it.
+- `content-scripts/document-file-inline.js` accepts these as eligible (same
+  filename-extension rule as before) and resolves the real download URL
+  lazily — via the SAME `/tasks/data/{slug}/overview/{taskUuid}` fetch already
+  made for patient resolution (one fetch now serves both needs), matched by
+  filename against a live-confirmed `{id, fileName, fileSize, contentType,
+  fileURI}` attachment shape found in that response
+  (`findAttachmentsInOverview` walks the whole response tree rather than a
+  hardcoded path, so it isn't tied to one task type's JSON nesting). The
+  download itself replays the confirmed
+  `GET /communication/data/online-message/download-attachment/{id}` contract
+  — one GET, raw file bytes, no signed-URL indirection. No new eager network
+  call: the fetch already happened when the widget opened, it just also
+  returns attachment metadata now.
+- `docs/learnings-triage-attachment-to-document.md` §8 records the full
+  capture (button markup, download contract, task-overview JSON shape).
+- **Known remaining gap, not fixed here:** this same task type has neither a
+  "Codes & actions" card nor a "More actions" button — the two anchor points
+  every inline widget on this page relies on — so the widget still has
+  nowhere to inject itself there even with attachment detection fixed. Left
+  for a follow-up.
+- `test-document-file-inline.js` extended with coverage for the new
+  resolution functions and the updated eligibility rule (62/62 passing).
+
+## [v3.177.1] — 2026-07-20
+
+### "Save attachment as document" — extended to PDF/Word attachments
+
+A follow-up live capture confirmed a second real SNOMED `documentType` code —
+"Patient/Carer Correspondence" (`163181000000107`) — for non-image
+attachments, obtained by searching Medicus's own "Document type" field
+independently of the attached file (the search-select is unrelated to the
+`file` field, so this didn't need a real submitted PDF). Combined with the
+already-confirmed "Medical photograph" code, every attachment extension
+`content.js`'s `extractInitialRequest()` recognises (pdf/doc/docx and
+jpg/png/gif/tiff/heic) now has a confirmed type, so the widget's previous
+"images only" restriction is lifted — it picks the correct type automatically
+by file extension, still with no live search and no guessed codes.
+
+- `content-scripts/document-file-inline.js`: `documentTypeForFilename()`
+  replaces the old image-only eligibility check; `DOCUMENT_TYPES` holds both
+  confirmed codes.
+- `docs/learnings-triage-attachment-to-document.md` updated with the new
+  capture.
+- `test-document-file-inline.js` now covers both document types (40 tests).
+
+## [v3.176.12] — 2026-07-20
+
+> Renumbered from v3.177.0 on 2026-07-26: the 2026-07-25 merge from `main` brought in
+> main's own v3.177.0 (Triage North Star wave 1), which had been assigned the same
+> number independently. This entry keeps its original date and content; its follow-ups
+> above retain their original v3.177.1–.7 numbers.
+
+### Triage-lens: "Save attachment as document" — one-click filing for patient photos submitted via triage
+
+The suite's first write-capable feature that creates a brand-new Medicus
+record type it has never created before: a clinical **document**. Previously
+the only confirmed writes to a document were edit-existing
+(`clinical/document/edit-details`) and remove-existing
+(`clinical/document/mark-incorrect-and-hidden`) — see
+`engine/record-duplicate-parser.js`. Filing a patient-submitted triage photo
+onto the record required a clinician to manually download it and use
+Medicus's own "Add document" upload feature.
+
+- New inline widget, `content-scripts/document-file-inline.js` +
+  `document-file-inline.css`, injected into triage task-overview pages
+  alongside `task-inline.js`/`booking-inline.js` (same anchor discipline, same
+  credentialed same-origin fetch pattern). Appears only when the task has at
+  least one image attachment (jpg/png/gif/tiff/heic) — see below for why.
+- Drives Medicus's own `POST clinical/document/create` directly (a single
+  multipart request: file bytes + a JSON `formPayload` field) — confirmed via
+  a live capture (`scripts/document-create-capture.js`,
+  `docs/learnings-triage-attachment-to-document.md`), not guessed. A human
+  always presses the explicit "Save as document" button — never auto-submits.
+- **Deliberately scoped to image attachments only.** The create call's
+  `documentType` is a SNOMED-coded picklist populated by a live search-as-
+  you-type endpoint this suite has never captured — the only confirmed real
+  value is "Medical photograph" (`820241000000102`). Rather than guess the
+  search contract for other types (a wrong SNOMED code would silently miscode
+  the record), the widget stays hidden for tasks whose only attachment is a
+  PDF/Word file until a follow-up capture confirms that contract.
+- `content-scripts/triage-lens/content.js`'s `extractInitialRequest()` (see
+  v3.176.11 below) now feeds this widget via `window.__msTriageAttachments`.
+- New `test-document-file-inline.js` (28 tests) covers the pure logic:
+  attachment eligibility filtering, title defaulting, and the create-payload
+  shape against the confirmed contract.
+
+## [v3.176.11] — 2026-07-20
+
+### Triage-lens: capture attachment href/filename, not just a count (groundwork for "save as document")
+
+`extractInitialRequest()` previously only counted `<a>` tags in the Initial
+Request card matching a file-extension regex, discarding the actual href and
+filename. It now returns `{ text, attachmentCount, attachments }` where
+`attachments` is `[{ href, filename }]` per matched anchor — `attachmentCount`
+stays `attachments.length` so the existing `detail.attachments` chip is
+unaffected. The array is also exposed via `window.__msTriageAttachments` on
+every detail render, so a future widget (a one-click "save this attachment as
+a document" action, still pending a live API-discovery pass against Medicus's
+own create-document endpoint) can read it without a second, divergent DOM
+scrape. No user-visible change in this release — the chip and its label are
+unchanged.
+
+## [v3.176.10] — 2026-07-17
+
+### Duplicate-checker: fixed the "Remove 0 duplicate copies" / unresponsive-cards bug for linked-problem groups
+
+A targeted live probe (docs/learnings-vaccination-note-duplicates.md, part
+2) traced the actual root cause of a reported bug — a group's "Remove N
+duplicate copies" button reading "Remove 0" with no entry card individually
+selectable. The group in question was `kind=problem`, not `note` as first
+suspected: 6 entries, all sharing the exact same real problem-list `id`.
+
+- A `problem`-kind journal entry's `id` is the canonical problem-list
+  record's id, not a per-occurrence journal-entry id — and the same real
+  problem can legitimately be linked from more than one
+  encounter/prescription on the same day (confirmed: a real "Immunisations"
+  problem linked from 6 different encounters in one day). Those 6
+  occurrences aren't 6 candidate duplicate records, they're 6 references to
+  one real record — but `groupAndTier` was treating them as a 6-member
+  "duplicate" group. The keeper tie-breaker then picked that one shared id
+  as `keeperEntryId`, so every entry matched it and "N duplicate copies"
+  computed to `0` with nothing left to toggle.
+- `groupAndTier` now dedupes `problem`-kind members by `id` before deciding
+  whether a (date, code) bucket is even a duplicate-record candidate — a
+  bucket is only a real candidate if at least 2 *distinct* problem ids
+  appear in it. Same-record linkage is tracked in a new
+  `suppressedProblemLinkage` diagnostic (surfaced in the analysis summary
+  line) rather than silently dropped.
+- **Fixed a pre-existing test that was asserting the buggy behaviour**: the
+  linked-problems test fixture used the identical problem id across two
+  encounters and asserted the resulting group had 2 entries — that was
+  pinning the exact bug this release fixes. Corrected to assert no group
+  forms for same-record linkage, plus a new control case (two genuinely
+  distinct problem-list records sharing a code/date) confirming real
+  reimport-duplicate detection is unaffected.
+- 6 new/corrected parser tests (336/336 passing).
+
+## [v3.176.9] — 2026-07-17
+
+### Duplicate-checker: note-kind false positives from the generic GP2GP problem-review wrapper
+
+Live-reported by the clinical user: three different vaccinations given the
+same day were tiering "HIGH - identical text" and offered as one-click
+bulk-removable, when they're genuinely different clinical content. Live
+investigation (docs/learnings-vaccination-note-duplicates.md) found the
+`"{Episodicity : code=..., displayName=..., originalText=...}"` wrapper this
+matches on isn't vaccine-specific at all — it's the generic "Problem title"
+review stub GP2GP attaches to essentially every problem across a patient's
+entire history, and it collapses to the same empty string after
+`normText()` regardless of the real underlying content. A real example (Tue
+19 Jun 2007) showed three "Immunisations"-coded entries, three different
+recorders, sharing this same content-free text — and confirmed that
+`consultationTopic.title` (the one plausible disambiguating field) is also
+identical across genuinely different concurrent vaccines, ruling out an
+automatic content-based fix.
+
+- `buildGroupRecord` now caps a `note`-kind group at REVIEW (down from HIGH)
+  when its entire matched text is the content-free wrapper AND its members'
+  `recordedBy` differ — deliberately narrow: the EXACT-tier combination
+  (empty wrapper + SAME author) is left untouched, since that's a
+  live-confirmed genuine GP2GP dual-render duplicate (2026-07-08 "Perianal
+  abscess" pair). New `emptyWrapperOnly` flag on the group record.
+- `duplicate-checker.js` surfaces a warning on any group flagged this way,
+  explaining the match is on a content-free wrapper and to verify
+  independently before removing — same treatment as the existing
+  `attachmentMismatch`/`fileMatched` warnings.
+- 5 new parser tests (333/333 passing), including a regression test pinning
+  the 2026-07-08 EXACT-tier case that a broader first draft of this fix
+  accidentally broke.
+- **Known limitation, not yet fixed**: the REVIEW-tier "These are
+  equivalent — remove duplicates" button still routes into the same
+  removal-button code path as EXACT/HIGH, which has a separate, not-yet-
+  diagnosed bug (reported "Remove 0 duplicate copies", unresponsive entry
+  cards) for at least one real group. A targeted live probe for that
+  specific bug is prepared in docs/learnings-vaccination-note-duplicates.md,
+  pending results.
+
+## [v3.176.8] — 2026-07-17
+
+### Duplicate-checker: accurx URL-attachment false positives in the cross-record file-match pass
+
+Live-reported by the clinical user: accurx delivers a patient message plus
+several photo links as separate `.txt`/"Record Attachment" documents, each
+one just a `"URL: <link>"` wrapper. The previous GP system's export
+templating means these frequently share both `fileType` AND `fileSize` even
+though the actual link — and therefore the real attachment — differs, so
+`findFileMatchedDuplicates` (the opt-in cross-record file-size/type pass)
+was incorrectly clustering genuinely different photo attachments as
+duplicates.
+
+- New `accurxAttachmentUrl(code, title)` in `engine/record-duplicate-parser.js`:
+  extracts the URL from a title matching the exact reported signature (Type
+  "Record Attachment" + title starting "URL:"), case-insensitive, returns
+  `null` for anything else — deliberately narrow so no other document kind
+  is affected.
+- `findFileMatchedDuplicates` now folds the extracted URL into its bucket
+  key for entries carrying this signature: same fileType/fileSize/URL still
+  clusters as a genuine duplicate, a differing URL never does. Zero extra
+  fetch — `title`/`code` are already in memory. New
+  `accurxUrlMismatchAvoided` count returned and surfaced in the analysis
+  summary line.
+- 11 new parser tests (326/326 passing) covering the extraction function,
+  the differing-URL exclusion, the same-URL control case (still a genuine
+  duplicate), and that an unrelated non-accurx same-fileType/fileSize pair
+  is unaffected.
+
+## [v3.176.7] — 2026-07-17
+
+### Duplicate-checker: live-verified prescription/investigation-request journal field names
+
+Continuing the per-patient record-cleansing project
+(`docs/learnings-patient-journal-api.md`), prompted by an observation that
+prescriptions seem to duplicate via GP2GP reimport on some patients where
+lab results don't.
+
+- A PHI-safe field-shape probe (structure only, reuses
+  `duplicate-checker.js`'s `describeShape()` no-values convention) was run
+  live against a real patient's journal. `productName`/`dosageText`/
+  `issueQuantity` (prescription) and `investigationRequestItems`/
+  `requestedBy` (investigation-request) were all confirmed correct as
+  previously guessed.
+- **Fixed:** a prescription entry (flat and nested) has no
+  `recordedBy`/`recordedByOrganisation` field at all — `flattenJournal` was
+  reading two fields that never exist on this entry kind (harmless, always
+  `undefined` → `null`, but wrong). Now passes `null` explicitly, documented
+  as confirmed-absent rather than guessed.
+- **Fixed:** investigation-request entries (flat and nested) carry a real
+  `requestingOrganisation` field that `flattenJournal` was discarding as a
+  hardcoded `null` — now read properly, feeding `recordedByOrganisationVaries`
+  the same way note/document entries already do.
+- Live-evidence hypothesis (not yet a code change): a lab-result
+  (`investigation`) entry carries a `reportIdentifier` and per-comment
+  `createdInOriginalSystemDateTime`/`recordAuthorIsLocal` fields with no
+  prescription equivalent — a plausible mechanism for why results don't
+  reimport-duplicate while prescriptions do, consistent with the existing
+  n=1 finding that lab results carry their own ingestion-time dedup key.
+- 6 new parser tests covering the previously-untested nested prescription/
+  investigation-request branches and the `requestingOrganisation` fix
+  (315/315 passing in `test-record-duplicate-parser.js`).
+
+## [v3.176.6] — 2026-07-13
+
+### Duplicate-checker: catches a note/consultation EXACT match whose attached documents actually differ
+
+Live example: two "Seen in pain clinic" consultations, same date, both
+authored "Mr Docman PCTI", tiered EXACT with a one-click "Remove 1 duplicate
+copy" button — but each consultation had a genuinely different attached
+document, confirmed by the user, even though the attachment's title/label
+rendered identically in the journal UI (so a title-based check alone
+wouldn't have caught this).
+
+- A `note`-kind comparable entry in this tool is often not a freestanding
+  note at all — it's one heading entry inside
+  `consultationTopics[].headings[].entries[]`, and that same heading can
+  also carry a sibling `document`/`fit-note` attachment. `flattenJournal`
+  now captures any sibling attachment id(s) in the same heading onto the
+  note entry as `attachedDocumentIds` (zero-cost — the data was already
+  being walked, just discarded for the note branch before now).
+- New `hasAttachedDocumentMismatch(group, fileTypeByEntryId,
+  fileSizeByEntryId)` in `engine/record-duplicate-parser.js`, alongside the
+  existing `hasQuestionnaireTemplateMismatch`/`hasPrescriptionTimingMismatch`
+  cross-checks: flags a `note`-kind group when >=2 members carry a KNOWN,
+  differing (fileType, fileSize) signature for their attached document(s) —
+  same composite-key shape and "never guess off incomplete data" rule
+  `splitDocumentGroupsByFileType` already uses for top-level documents, just
+  keyed by the attached document's id instead of the note's own id.
+- `duplicate-checker.js`'s `applyOnDemandCrossChecks` now fetches attached-
+  document previews for `note`-kind candidate groups that carry an
+  attachment (sharing the same preview cache the `document`-kind branch
+  already populates — no duplicate fetch if a document happens to be both a
+  top-level entry and an attachment), and downgrades a mismatched group's
+  tier to REVIEW with a new `attachmentMismatch` flag — REVIEW already
+  routes to the manual-review flow instead of the one-click bulk-remove
+  control, so this actually blocks the unsafe removal rather than just
+  relabelling it. New warning line on the group card, and a
+  `noteAttachmentMismatchTotal` summary count.
+- Downgrade, not split: unlike `splitDocumentGroupsByFileType`, a mismatched
+  note group stays together as one candidate (both consultations visible
+  side-by-side) rather than one member silently vanishing from the list.
+- Every note-kind card (in `reviewEntriesHtml`, the side-by-side compare view
+  every note group already uses) now shows a "Download attached document ↗"
+  link per attachment, mirroring the existing "Download original ↗" link
+  already offered on document-kind field comparison — the same closest-thing-
+  to-"click to compare" pattern, now available for a note's attachment too,
+  not just top-level documents. Zero extra fetch: the previews were already
+  pulled by the mismatch check above regardless of its verdict.
+- `fileId` (also present on the document preview payload) was considered and
+  rejected as the disambiguator — a genuine reimport-duplicate legitimately
+  gets a new `fileId` for the same bytes, so it proves nothing about
+  content. fileType+fileSize is the established signal already proven for
+  top-level document matching.
+
+9 new parser tests (310/310 passing).
+
+## [v3.176.5] — 2026-07-13
+
+### Duplicate-checker: cross-document file-match check no longer replays already-removed entries, and is always offered
+
+- **Fixed:** `markEntryRemoved` only ever patched the DOM in place (deliberate,
+  per its own header comment, to avoid a slow full re-analysis after every
+  removal) — it never touched `out.__analysis.entries`/`groups`. Running the
+  cross-record file-match second pass (`runFileMatchSecondPass`) straight off
+  that in-memory analysis after removing some first-pass duplicates meant
+  already-removed documents were still present in `analysis.entries`, so they
+  could resurface as "duplicates" a second time with undefined behaviour if
+  acted on again. The second pass is now always launched via a new
+  `runFreshFileMatchSecondPass`, which forces a genuine live re-fetch/re-analyse
+  of the journal (the same fetch "Re-analyse" performs) before ever running the
+  file-match check, guaranteeing it only ever sees what's actually still in the
+  record.
+- **Changed:** the "Run full cross-document file-match check…" banner was
+  previously gated on `findSuspiciousDocuments` flagging something (a raw
+  filename/GUID title or a same-minute id cluster). Per user feedback that
+  this was too narrow, it's now offered whenever the patient has any document
+  entries at all — the suspicious-document count, when present, is still
+  shown as extra context.
+
 ## [v3.178.0] — 2026-07-25
 
 ### The Keeper — 2026-07-25 rule-set update (CSO review required before merge)

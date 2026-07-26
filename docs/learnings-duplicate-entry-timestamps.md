@@ -286,6 +286,200 @@ Problem-duplicate counts are unchanged as expected — `detectDuplicates()`/`run
 
 **Open, deliberately parked (2026-07-04):** the specific 16 Aug 2025 document pair examined earlier this doc does **NOT** appear in Patient 3's post-fix candidate list at all. We never captured `item.data` for those two specific ids (`019a1134-5464-...` / `0198c81a-cc26-...`) — only for an unrelated sample document (`documentTypeLabel: 'Consultation report'`) — so it's not yet known whether they fail to group because their `documentTypeLabel`/`title` genuinely differ between copies, or some other reason (e.g. a `recordDate`-style day-title mismatch, per finding 7). **Next step when resumed:** dump `item.data` for those two specific ids directly and compare.
 
+## Update 2026-07-26 — resuming the parked 16 Aug 2025 pair investigation
+
+Resumed per the "next step when resumed" note above. Re-reading `groupAndTier()`
+(`engine/record-duplicate-parser.js`) before writing a new probe found a candidate
+explanation that doesn't require live data to state, only to confirm: the grouping key is
+`` `${kind}|${date}|${normCode(code)}` `` where `date` is `day.title` — the journal's own
+day-heading string — not `documentDate`/`careRecordEntryDate`. Finding 7 above already
+showed `recordDate` mismatching between an original/duplicate document pair (2025-08-20 vs
+2025-08-16, on this same patient's document set). If the day-heading the API buckets an
+entry under is derived the same way `recordDate` is, the 16 Aug pair may never even reach
+the `documentTypeLabel`/`title` comparison — they'd be sorted into two different day
+buckets before grouping looks at content at all. `careRecordEntryDate`/`recordDate` are
+confirmed **not read anywhere** in the current parser (grep, 2026-07-26) — so if this is
+the cause, it's a live latent bug, not yet fixed.
+
+**Live probe, not yet run** (needs the patient's own Journal tab open — this investigation's
+established convention: real ids/dates only ever printed in the user's own browser
+console, never sent elsewhere). Paste into the Medicus **page console** on Patient 3
+(a.k.a. Patient C above)'s Journal tab:
+
+```js
+// ── 16 Aug 2025 document-pair probe: why didn't they group post-fix? (Medicus PAGE console) ──
+(async function () {
+  'use strict';
+  const siteCode = location.pathname.split('/').filter(Boolean)[0];
+  const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+  const patientId = (location.pathname.match(UUID_RE) || [])[0];
+  if (!siteCode || !patientId) {
+    console.error("[probe] Not on a patient care-record page — open the patient's Journal tab first.");
+    return;
+  }
+  const journalUrl = `https://${siteCode}.api.${location.hostname}/clinical/data/patient-journal/overview/${patientId}`;
+
+  let journal;
+  try {
+    const res = await fetch(journalUrl, { credentials: 'include' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    journal = await res.json();
+  } catch (e) {
+    console.error('[probe] Fetch failed:', e.message);
+    return;
+  }
+
+  // ── Mirrors record-duplicate-parser.js's document-type resolution exactly ──
+  const GENERIC_DOCUMENT_LABEL = 'other digital signal';
+  const TITLE_LABELS = ['Type', 'Author Org', 'Custodian Org', 'Description'];
+  const TITLE_LABEL_RE = new RegExp(`\\b(${TITLE_LABELS.join('|')}):\\s*`, 'g');
+  function normCode(s) {
+    return (s || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  }
+  function parseGenericDocumentTitle(title) {
+    if (typeof title !== 'string') return {};
+    const matches = [...title.matchAll(TITLE_LABEL_RE)];
+    if (!matches.length) return {};
+    const result = {};
+    for (let i = 0; i < matches.length; i++) {
+      const label = matches[i][1];
+      const start = matches[i].index + matches[i][0].length;
+      const end = i + 1 < matches.length ? matches[i + 1].index : title.length;
+      result[label] = title.slice(start, end).trim();
+    }
+    return result;
+  }
+  function resolveDocumentTypeLabel(documentTypeLabel, title) {
+    if (normCode(documentTypeLabel) !== GENERIC_DOCUMENT_LABEL) return documentTypeLabel;
+    const parsed = parseGenericDocumentTitle(title);
+    return parsed.Type || documentTypeLabel;
+  }
+  const UUIDV7_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  function decodeIdTimestamp(id) {
+    if (typeof id !== 'string' || !UUIDV7_RE.test(id)) return null;
+    const ms = parseInt(id.replace(/-/g, '').slice(0, 12), 16);
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+  }
+
+  // Known from this investigation so far — the confirmed original id, and the
+  // reimport-batch id-prefix already established for this patient (see "Update
+  // 2026-07-04" above). Also casts a wide net on the calendar window in case
+  // neither id is captured exactly right from memory.
+  const KNOWN_ORIGINAL_ID = '0198c81a-cc26-73fb-af8e-2bd734cfe431';
+  const KNOWN_BATCH_PREFIX = '019a1134';
+  const AUG_WINDOW_RE = /\b(1[0-9]|2[0-2])\s*Aug(ust)?\s*2025\b/i;
+
+  const found = [];
+  const days = journal.patientJournalRecords || [];
+  for (const day of days) {
+    for (const item of day.items || []) {
+      const pushIfDoc = (entryType, entry, source) => {
+        if (entryType !== 'document' && entryType !== 'fit-note') return;
+        const isMatch =
+          entry.id === KNOWN_ORIGINAL_ID ||
+          (typeof entry.id === 'string' && entry.id.startsWith(KNOWN_BATCH_PREFIX)) ||
+          AUG_WINDOW_RE.test(day.title || '') ||
+          AUG_WINDOW_RE.test(entry.documentDate || '') ||
+          AUG_WINDOW_RE.test(entry.careRecordEntryDate || '');
+        if (!isMatch) return;
+        const resolvedType = resolveDocumentTypeLabel(entry.documentTypeLabel, entry.title) || null;
+        found.push({
+          source, // 'flat' | 'nested'
+          dayTitle: day.title, // ← this is the `date` groupAndTier() uses
+          id: entry.id,
+          idDecodedTime: decodeIdTimestamp(entry.id),
+          documentTypeLabel_raw: entry.documentTypeLabel,
+          resolvedType, // ← this is the `code` groupAndTier() uses
+          title: entry.title,
+          documentDate: entry.documentDate,
+          careRecordEntryDate: entry.careRecordEntryDate, // NOT currently read by the parser
+          recordDate: entry.recordDate, // NOT currently read by the parser for documents
+          organisationName: entry.organisationName,
+          additionalInformation: entry.additionalInformation,
+          groupingKey: `document|${day.title}|${normCode(resolvedType)}`, // exact key groupAndTier() computes today
+        });
+      };
+      if (item.type === 'document') {
+        const d = item.data || {};
+        pushIfDoc('document', { ...d, id: d.id || item.id }, 'flat');
+      } else if (item.type === 'encounter') {
+        for (const topic of (item.data || {}).consultationTopics || []) {
+          for (const heading of topic.headings || []) {
+            for (const entry of heading.entries || []) {
+              pushIfDoc(entry.entryType, entry, 'nested');
+            }
+          }
+        }
+      }
+    }
+  }
+
+  console.log(
+    `[probe] Found ${found.length} candidate document entr${found.length === 1 ? 'y' : 'ies'} in the mid-Aug-2025 window / matching known ids.`
+  );
+  console.table(
+    found.map((f) => ({
+      source: f.source,
+      id: f.id.slice(0, 13) + '…',
+      idTime: f.idDecodedTime,
+      dayTitle: f.dayTitle,
+      resolvedType: f.resolvedType,
+      documentDate: f.documentDate,
+      careRecordEntryDate: f.careRecordEntryDate,
+      recordDate: f.recordDate,
+    }))
+  );
+  console.log(
+    "[probe] Full detail (includes groupingKey — entries sharing this key WOULD group; entries that don't are why they split):",
+    JSON.stringify(found, null, 2)
+  );
+
+  const byKey = new Map();
+  for (const f of found) {
+    if (!byKey.has(f.groupingKey)) byKey.set(f.groupingKey, []);
+    byKey.get(f.groupingKey).push(f.id);
+  }
+  console.log(
+    '[probe] Entries sharing an identical groupingKey (would group together):',
+    Array.from(byKey.entries()).filter(([, ids]) => ids.length > 1)
+  );
+  console.log(
+    '[probe] Entries NOT sharing a groupingKey with anything else found (would NOT group):',
+    Array.from(byKey.entries())
+      .filter(([, ids]) => ids.length === 1)
+      .map(([k]) => k)
+  );
+
+  window.__docPairProbe = found;
+})();
+```
+
+**What to look for in the output:** if the two matched entries have different `dayTitle`
+values, that confirms the day-bucket hypothesis — `groupAndTier()` would need a new date
+key for documents (`documentDate`/`careRecordEntryDate` instead of `day.title`) to catch
+this class of pair, a real code change, not yet made pending this result. If `dayTitle`
+matches but `resolvedType` differs, the cause is on the content side instead
+(`documentTypeLabel`/`title` genuinely differing between copies) and no date-key change is
+needed. Either result is useful; paste the console output back for the next step.
+
+### Results (captured 2026-07-26) — hypothesis refuted; investigation closed
+
+Live run against Patient 3 found both entries with **identical** `dayTitle` ("Sat 16 Aug
+2025") and **identical** `resolvedType` ("Lower gastrointestinal tract endoscopy report") —
+so today's `groupAndTier()` computes the same key for both
+(`document|Sat 16 Aug 2025|lower gastrointestinal tract endoscopy report`). The day-bucket
+hypothesis above is refuted: they were never in different buckets. `careRecordEntryDate`/
+`recordDate` are absent (`undefined`) on this document shape in the bulk journal payload for
+every entry sampled, not just this pair — consistent with finding 7's caveat that those
+values were only ever seen via a per-entry detail fetch, not the bulk payload.
+
+The user confirmed live in the duplicate-checker tool itself: **the pair now appears as a
+candidate group.** Given the identical keys found here, and that no document-grouping code
+changed between 2026-07-04 and now, the most likely explanation is that one of the parser
+fixes that landed in between (v3.176.7–v3.176.10, 2026-07-13 to 07-17 — none targeted at this
+pair specifically) incidentally fixed it too, and nobody had re-checked this specific pair
+until now. **No code change needed. Investigation closed.**
+
 ## Open questions
 
 - Does the per-entry-type batch-clustering (finding 4) hold across more

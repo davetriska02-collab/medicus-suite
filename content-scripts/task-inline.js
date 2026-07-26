@@ -125,13 +125,19 @@
   //   3. above the bottom "More actions" action row — prescribing overviews
   //      (Routine / Non-Routine Repeat Request, Medications for Re-authorisation)
   //      have NO "Codes & actions" card, so anchoring to it alone meant the widget
-  //      never injected there. Every task overview has the action row, so this is
-  //      the universal fallback.
+  //      never injected there.
+  //   4. after the "Initial Request" card — confirmed live (2026-07-20):
+  //      communication-thread tasks have NEITHER a Codes & actions card NOR a
+  //      More-actions row, so gates 2/3 both miss. Every request/communication
+  //      task type observed so far DOES have an Initial Request card (the same
+  //      one content.js's extractInitialRequest() reads), so this is the
+  //      universal last-resort fallback.
   // Heading scan is kept cheap exactly as booking-inline does (narrow heading
   // carriers first, skip container nodes whose textContent would concatenate a
   // big subtree).
 
   const HEADING_RE = /^Codes\s*(?:&|&amp;|and)\s*actions$/i;
+  const INITIAL_REQUEST_RE = /^Initial Request$/i;
 
   function visible(el) {
     return !!(el && (el.offsetParent !== null || (el.getClientRects && el.getClientRects().length)));
@@ -141,6 +147,12 @@
     if (el.closest('#ms-tk-widget')) return false;
     if (el.firstElementChild) return false;
     return HEADING_RE.test(el.textContent.trim());
+  }
+
+  function matchInitialRequestHeading(el) {
+    if (el.closest('#ms-tk-widget')) return false;
+    if (el.firstElementChild) return false;
+    return INITIAL_REQUEST_RE.test(el.textContent.trim());
   }
 
   var HEADING_CONTRACT = DC && DC.get('task-widget.codes-actions-heading');
@@ -180,6 +192,61 @@
     return fallback;
   }
 
+  // Gate 4 fallback — the "Initial Request" card's boundary, same
+  // heading-then-closest-card walk content.js's own findCardByTitle uses (see
+  // that function in content-scripts/triage-lens/content.js), but matching
+  // the heading text EXACTLY ("Initial Request", not a starts-with match) so
+  // this never mis-anchors on an unrelated section that merely begins with
+  // those words.
+  function findInitialRequestCard() {
+    let heading = null;
+    for (const el of document.querySelectorAll(HEADING_NARROW_SEL)) {
+      if (matchInitialRequestHeading(el)) {
+        heading = el;
+        break;
+      }
+    }
+    if (!heading) {
+      for (const el of document.querySelectorAll(HEADING_WIDE_SEL)) {
+        if (matchInitialRequestHeading(el)) {
+          heading = el;
+          break;
+        }
+      }
+    }
+    if (!heading) return null;
+    return (
+      heading.closest('.m-card-v2') || heading.closest('[class*="m-card"]') || heading.parentElement?.parentElement
+    );
+  }
+
+  // Finds the specific message card that actually contains a real
+  // attachment, rather than always assuming it's the "Initial Request" card
+  // — confirmed live 2026-07-22: a communication thread can carry the
+  // attachment on a LATER reply card (a "Reply from Requester" card has no
+  // heading at all, so findInitialRequestCard() could never find it), and
+  // anchoring both inline widgets under an attachment-less opening message
+  // was confusing. Matches by filename against window.__msTriageAttachments
+  // (content.js's read-only accessor) — returns null (falls through to
+  // findInitialRequestCard() at the call site) when there's no attachment or
+  // its card can't be located.
+  function findAttachmentCard() {
+    const atts = window.__msTriageAttachments;
+    if (!Array.isArray(atts) || !atts.length) return null;
+    const els = document.querySelectorAll('a, button');
+    for (const att of atts) {
+      const name = (att && att.filename ? att.filename : '').trim();
+      if (!name) continue;
+      for (const el of els) {
+        if ((el.textContent || '').trim() === name) {
+          const card = el.closest('.m-card-v2') || el.closest('[class*="m-card"]');
+          if (card) return card;
+        }
+      }
+    }
+    return null;
+  }
+
   // The bottom-most visible "More actions" button's row, excluding any inside a
   // dialog/drawer. Returns the row element so we can insert the panel above it.
   function findActionRow() {
@@ -212,6 +279,14 @@
       withObserverPaused(() => row.parentElement.insertBefore(w, row));
       return;
     }
+    // 4: after the card that actually carries the attachment if there is
+    // one, else after the "Initial Request" card (communication-thread tasks
+    // have neither of the above two anchors — confirmed live 2026-07-20).
+    const irCard = findAttachmentCard() || findInitialRequestCard();
+    if (irCard && irCard.parentElement) {
+      withObserverPaused(() => irCard.after(w));
+      return;
+    }
     // Nothing to anchor to on this page — leave it for a later mutation tick.
   }
 
@@ -221,7 +296,13 @@
   function removeWidget() {
     const w = document.getElementById('ms-tk-widget');
     if (!w) return;
-    withObserverPaused(() => w.remove());
+    withObserverPaused(() => {
+      const row = w.parentElement;
+      w.remove();
+      // Leave no empty .ms-inline-widget-row litter once nothing shares it
+      // (document-file-inline.js wraps this widget in one to sit side by side).
+      if (row && row.classList.contains('ms-inline-widget-row') && !row.children.length) row.remove();
+    });
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────

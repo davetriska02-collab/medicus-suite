@@ -98,7 +98,10 @@ const path = require('path');
 
   console.log('\n--- attribution (H-042 audit trail) ---');
   const authored = makeAlert({ label: 'Interpreter required', severity: 'amber', author: '  Dr Dave Triska  ' }, NOW);
-  check(authored.createdBy === 'Dr Dave Triska' && authored.updatedBy === 'Dr Dave Triska', 'author is trimmed and stamped on createdBy/updatedBy');
+  check(
+    authored.createdBy === 'Dr Dave Triska' && authored.updatedBy === 'Dr Dave Triska',
+    'author is trimmed and stamped on createdBy/updatedBy'
+  );
   const anon = makeAlert({ label: 'No author configured', severity: 'info' }, NOW);
   check(anon.createdBy === null && anon.updatedBy === null, 'no author → null, never a guessed identity');
   check(isValidAlert(anon), 'alerts without attribution remain valid (pre-attribution data)');
