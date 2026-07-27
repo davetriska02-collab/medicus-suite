@@ -174,6 +174,26 @@
   // GP2GP boilerplate lines), keeping problemCode itself untouched. Omitted
   // (undefined) preserves the original behaviour exactly for every existing
   // caller, which all change problemCode and never additionalInformation.
+  //
+  // OPTION-OBJECT ROUND-TRIP (found live 2026-07-27, the first "API 400"
+  // apply failure — an EMIS-imported problem, the first ever seen with a
+  // non-null episode): the GET prefill returns select-backed fields as the
+  // SELECTED OPTION OBJECT (`episode: {value:"subsequent",label:"Subsequent"}`),
+  // but the POST contract takes the bare enum value — compare `significance`,
+  // a plain "major" string in BOTH directions of the confirmed capture, and
+  // the staff[] options list, whose {value,label} entries exist precisely so
+  // the form can submit `.value`. Every previously-confirmed apply happened
+  // to be on an episode:null problem, so round-tripping the whole object
+  // never surfaced until now. unwrapOptionValue() takes `.value` from
+  // anything shaped exactly like an option ({value,label}) and passes every
+  // other shape through untouched — deliberately strict, so a REAL object
+  // field (recordedByOrganisation's {organisationName,...}) can never be
+  // mangled by it.
+  function unwrapOptionValue(field) {
+    if (field && typeof field === 'object' && 'value' in field && 'label' in field) return field.value;
+    return field;
+  }
+
   function buildEditProblemPayload(prefill, newProblemCode, overrideAdditionalInformation) {
     var p = prefill || {};
     var additionalInformation =
@@ -186,21 +206,21 @@
       onsetDate: p.onsetDate != null ? p.onsetDate : null,
       contextId: p.contextId != null ? p.contextId : null,
       contextType: p.contextType != null ? p.contextType : null,
-      significance: p.significance != null ? p.significance : null,
-      episode: p.episode != null ? p.episode : null,
+      significance: p.significance != null ? unwrapOptionValue(p.significance) : null,
+      episode: p.episode != null ? unwrapOptionValue(p.episode) : null,
       problemCode: newProblemCode,
       additionalInformation: additionalInformation,
       hiddenFromPatientFacingServices: !!p.hiddenFromPatientFacingServices,
       confidentialFromThirdParties: !!p.confidentialFromThirdParties,
       endDate: p.endDate != null ? p.endDate : null,
-      reasonEnded: p.reasonEnded != null ? p.reasonEnded : null,
+      reasonEnded: p.reasonEnded != null ? unwrapOptionValue(p.reasonEnded) : null,
       recordDate: p.recordDate != null ? p.recordDate : null,
     };
     if (p.recordedAtAnotherOrganisation) {
       payload.recordedByOrganisation = p.recordedByOrganisation != null ? p.recordedByOrganisation : null;
       payload.recordedByPractitioner = p.recordedByPractitioner != null ? p.recordedByPractitioner : null;
     } else {
-      payload.recordedByStaff = p.recordedByStaff != null ? p.recordedByStaff : null;
+      payload.recordedByStaff = p.recordedByStaff != null ? unwrapOptionValue(p.recordedByStaff) : null;
     }
     return payload;
   }
@@ -393,6 +413,7 @@
       buildConceptUrl: snomedRetirement.buildConceptUrl,
       // Problem-specific.
       buildEditProblemPayload,
+      unwrapOptionValue,
       apiErrorMessage,
       findOutdatedProblems,
       confirmedReplacementAlternative,

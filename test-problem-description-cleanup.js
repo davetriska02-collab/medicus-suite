@@ -20,6 +20,7 @@ const {
   stripLegacyMarkers,
   sameConceptAlternatives,
   buildEditProblemPayload,
+  unwrapOptionValue,
   apiErrorMessage,
   findOutdatedProblems,
   detectLateralityHint,
@@ -1011,6 +1012,76 @@ console.log('--- stripGenericAdditionalInfoLines: real 2026-07-25 example ("ear\
       .removed.length === 2,
     'multiple matching lines are all reported, not just the first'
   );
+}
+
+console.log('--- unwrapOptionValue + episode round-trip: the real 2026-07-27 "API 400" case ---');
+{
+  // The GET prefill returns select-backed fields as the SELECTED OPTION
+  // OBJECT; the POST contract takes the bare value. First seen live
+  // 2026-07-27 on an EMIS-imported problem with episode
+  // {value:"subsequent",label:"Subsequent"} — the first non-null episode
+  // ever captured — where round-tripping the whole object was rejected
+  // with a 400.
+  check(
+    unwrapOptionValue({ value: 'subsequent', label: 'Subsequent' }) === 'subsequent',
+    'an option object {value,label} unwraps to its value'
+  );
+  check(unwrapOptionValue('major') === 'major', 'a plain string passes through untouched');
+  check(unwrapOptionValue(null) === null, 'null passes through untouched');
+  check(
+    unwrapOptionValue({ value: 'x' }) !== 'x' && typeof unwrapOptionValue({ value: 'x' }) === 'object',
+    'an object with value but NO label is NOT unwrapped (strict option shape only)'
+  );
+  {
+    const org = { organisationName: 'The Park Road Surgery', organisationIdentifierType: null };
+    check(unwrapOptionValue(org) === org, 'a real object field (recordedByOrganisation shape) is never mangled');
+  }
+
+  // The full payload, built from the pseudonymised real prefill that 400'd.
+  const prefill = {
+    onsetDate: '2015-03-10',
+    contextId: null,
+    contextType: null,
+    significance: 'major',
+    episode: { value: 'subsequent', label: 'Subsequent' },
+    additionalInformation: 'monitoring\nLast review: 20 Oct 2021',
+    hiddenFromPatientFacingServices: false,
+    confidentialFromThirdParties: false,
+    endDate: null,
+    reasonEnded: null,
+    recordDate: '2015-03-10',
+    recordedAtAnotherOrganisation: true,
+    recordedByOrganisation: null,
+    recordedByPractitioner: 'Dr A Smith',
+  };
+  const newCode = { description: 'Angiomyolipoma', conceptId: '999999999', descriptionId: '111111111' };
+  const payload = buildEditProblemPayload(prefill, newCode);
+  check(payload.episode === 'subsequent', 'episode option object is flattened to its bare value in the POST body');
+  check(payload.significance === 'major', 'significance (already a plain string) is unchanged');
+  check(payload.recordedByOrganisation === null, 'a null recordedByOrganisation round-trips as null, not dropped');
+  check(payload.recordedByPractitioner === 'Dr A Smith', 'recordedByPractitioner round-trips untouched');
+  check(payload.problemCode === newCode, 'problemCode is the chosen suggestion');
+  check(
+    payload.additionalInformation === 'monitoring\nLast review: 20 Oct 2021',
+    'multi-line additionalInformation round-trips untouched'
+  );
+
+  // recordedByStaff branch: staff options are {value,label}, so a prefill
+  // that returns the selected one as an option object must flatten too.
+  const localPrefill = {
+    recordedAtAnotherOrganisation: false,
+    recordedByStaff: { value: 'staff-uuid-1', label: 'Dr B Jones' },
+  };
+  const localPayload = buildEditProblemPayload(localPrefill, newCode);
+  check(
+    localPayload.recordedByStaff === 'staff-uuid-1',
+    'recordedByStaff option object is flattened to its bare value'
+  );
+  const localPlain = buildEditProblemPayload(
+    { recordedAtAnotherOrganisation: false, recordedByStaff: 'plain' },
+    newCode
+  );
+  check(localPlain.recordedByStaff === 'plain', 'a plain recordedByStaff value is unchanged');
 }
 
 console.log('--- apiErrorMessage: non-2xx responses surface the server reason, never just the status ---');

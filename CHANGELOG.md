@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.193.3] — 2026-07-27
+
+### "Fix description": flatten option-object fields in the edit-problem POST (the actual API 400 root cause)
+
+The live capture behind v3.193.2's diagnosability work landed and named the
+culprit: the failing record was the **first ever seen with a non-null
+`episode`**, and the edit-problem GET returns select-backed fields as the
+selected **option object** (`episode: {value:"subsequent",label:"Subsequent"}`)
+while the POST contract takes the bare value (compare `significance` — a plain
+`"major"` string in both directions of the original §3 capture). Every
+previously-confirmed apply happened to be on an `episode: null` problem, so
+round-tripping the whole object never surfaced until now.
+
+- New pure helper `unwrapOptionValue()` flattens a value shaped exactly like a
+  select option (an object with BOTH `value` and `label` keys) to its `value`;
+  everything else passes through untouched — deliberately strict so a real
+  object field (`recordedByOrganisation`'s `{organisationName, …}`) can never
+  be mangled by it.
+- Applied to `significance`, `episode`, `reasonEnded` and `recordedByStaff` in
+  `buildEditProblemPayload`. `problemCode` (replaced wholesale) and the
+  organisation/practitioner fields (round-tripped verbatim) are unchanged.
+- 12 new assertions in `test-problem-description-cleanup.js`, including the
+  full pseudonymised failing prefill as a fixture.
+- `docs/learnings-problem-description-cleanup.md` §3b records the trap, the
+  capture, and the legitimate `recordedByOrganisation: null` +
+  `recordedAtAnotherOrganisation: true` combination seen on the same record.
+
+Pending live confirmation on the motivating record — if the flatten isn't the
+whole story, v3.193.2's error surfacing will name whatever remains.
+
 ## [v3.193.2] — 2026-07-27
 
 ### "Fix description": API errors now say WHY the server refused
