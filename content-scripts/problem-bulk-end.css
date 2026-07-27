@@ -1,5 +1,6 @@
-/* Medicus Suite — "Bulk end problems" widget for the Clinical Summary */
-/* All selectors scoped to ms-pbe-* classes to avoid Medicus style conflicts */
+/* Medicus Suite — "Bulk remove?" widget for the Clinical Summary problem list */
+/* (ms-pbe-* prefix kept from its "Bulk end problems" origin — see the JS
+   header's merge history; all selectors scoped to avoid Medicus conflicts) */
 
 #ms-pbe-widget {
   display: block;
@@ -9,18 +10,18 @@
 
 /* Keyboard focus ring — same single wildcard rule (and the same #2563eb
    --accent stand-in, since Medicus's page never loads panel.css) as
-   problem-junk-code-cleanup.css. */
+   problem-description-cleanup.css. */
 button[class*='ms-pbe-']:focus-visible,
 input[class*='ms-pbe-']:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 1px;
 }
 
-/* Placement: shares the "Major" heading's row with the other two triggers
-   (#ms-pjc-widget "Bulk remove?" and #ms-pdc-retired-widget "Check for
-   retired/legacy codes?"). Same :has() scoping as those files; their
-   exclusion lists have been extended with #ms-pbe-widget — keep all THREE
-   files' lists in lock-step. */
+/* Placement: shares the "Major" heading's row with the retired-codes trigger
+   (#ms-pdc-retired-widget, problem-description-cleanup.css). Same :has()
+   scoping as that file; keep BOTH files' exclusion lists in lock-step.
+   (#ms-pjc-widget was the third sharer until the 2026-07-27 merge retired
+   problem-junk-code-cleanup.js — see the JS header.) */
 .m-card-v2__content:has(> #ms-pbe-widget) {
   display: flex;
   flex-wrap: wrap;
@@ -29,7 +30,7 @@ input[class*='ms-pbe-']:focus-visible {
 }
 
 .m-card-v2__content:has(> #ms-pbe-widget)
-  > *:not(#problems-major-label):not(#ms-pbe-widget):not(#ms-pjc-widget):not(#ms-pdc-retired-widget) {
+  > *:not(#problems-major-label):not(#ms-pbe-widget):not(#ms-pdc-retired-widget) {
   flex-basis: 100%;
 }
 
@@ -306,6 +307,119 @@ input[class*='ms-pbe-']:focus-visible {
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
+}
+
+.ms-pbe-flag-note {
+  font-size: 11px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+.ms-pbe-select-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ms-pbe-select-flagged,
+.ms-pbe-select-none {
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-pbe-select-flagged:hover,
+.ms-pbe-select-none:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.ms-pbe-select-none:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ms-pbe-fail-list {
+  margin-bottom: 8px;
+}
+
+/* ── Inline checkboxes injected into Medicus's own problem rows ──────────────
+   (2026-07-27 rework: the boxes sit beside every problem in the live list;
+   the panel is just the action bar). Prepended into each <li> — see the JS
+   header's INLINE INJECTION rules. */
+.ms-pbe-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 7px;
+  vertical-align: middle;
+}
+
+.ms-pbe-inline-cb {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #b91c1c;
+}
+
+.ms-pbe-inline-cb:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ms-pbe-inline-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ms-pbe-inline-flag {
+  padding: 1px 6px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #92400e;
+  cursor: help;
+}
+
+.ms-pbe-inline-warn {
+  padding: 1px 6px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: help;
+}
+
+.ms-pbe-inline-caution {
+  font-size: 12px;
+  color: #92400e;
+  cursor: help;
+}
+
+.ms-pbe-inline-error {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b91c1c;
+  cursor: help;
+}
+
+.ms-pbe-inline-tag {
+  padding: 1px 6px;
+  background: #dcfce7;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #166534;
 }
 
 /* Optimistic strike-through on the real problem-list row once its end POST

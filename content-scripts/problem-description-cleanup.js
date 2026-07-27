@@ -500,7 +500,7 @@
     return apiFetch('/clinical/data/problem/edit-problem/' + encodeURIComponent(problemId));
   }
 
-  // Same endpoint content-scripts/problem-junk-code-cleanup.js already uses
+  // Same endpoint content-scripts/problem-bulk-end.js already uses
   // (GET clinical/data/problem/slideover/overview/{problemId}) — used HERE
   // only to read problemCode.originalCodes for the legacy-Read-code check
   // (findLegacyReadCodeOrigin's own comment has the full story on why this
@@ -569,7 +569,7 @@
   // local extension resource, not a Medicus call. Falls back to an empty
   // list (never throws) if the resource is unavailable, same "fail open to
   // inert, not to a crash" discipline as ensureNonProblemRootsLoaded in
-  // content-scripts/problem-junk-code-cleanup.js.
+  // content-scripts/problem-bulk-end.js.
   var _genericAdditionalInfoPromise = null;
   function ensureGenericAdditionalInfoTextLoaded() {
     if (_genericAdditionalInfoPromise) return _genericAdditionalInfoPromise;
@@ -1442,7 +1442,7 @@
   // edit-problem, the SAME endpoint "Fix description" already uses when
   // clicked) PLUS one external NHS termbrowser fetch per DISTINCT conceptId;
   // the Read-code check needs slideover/overview's problemCode.originalCodes
-  // — real per-patient cost, same class as problem-junk-code-cleanup.js's
+  // — real per-patient cost, same class as problem-bulk-end.js's
   // "Bulk remove?" scan, so this is its own opt-in click, never automatic.
   // Internal names below still say "retired" (kept as-is rather than a
   // mechanical rename across every identifier) even though the scan and its
@@ -1495,7 +1495,7 @@
         })
       );
       // One retirement-status fetch per DISTINCT conceptId, never one per
-      // problem — same discipline as problem-junk-code-cleanup.js.
+      // problem — same discipline as problem-bulk-end.js's badge scan.
       var conceptIdByProblemId = Object.create(null);
       var distinctConceptIds = [];
       _problemsCache.forEach(function (p) {
@@ -1598,7 +1598,7 @@
     bindRetiredWidgetEvents(el);
   }
 
-  // Placement mirrors content-scripts/problem-junk-code-cleanup.js's own
+  // Placement mirrors content-scripts/problem-bulk-end.js's own
   // "Major" heading anchor (duplicated rather than shared — see
   // findProblemRow's comment above for the precedent of small DOM-finding
   // helpers being kept local to each content script rather than factored

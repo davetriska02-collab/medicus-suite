@@ -2,6 +2,41 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.195.0] — 2026-07-27
+
+### "Bulk remove?" reworked: ungated, boxes inline next to every problem
+
+User feedback on the v3.194.0 pair of triggers, same day it shipped: "I'd
+envisage Bulk remove as click on it, boxes appear next to ALL problems, you
+can tick and retire them. not gated." The two sibling widgets — the SNOMED-
+gated "Bulk remove?" (`problem-junk-code-cleanup.js`) and the panel-checklist
+"Bulk end problems" (`problem-bulk-end.js`) — are now ONE widget, under the
+"Bulk remove?" label, in `problem-bulk-end.js`:
+
+- **Ungated**: clicking "Bulk remove?" puts a checkbox next to **every**
+  active problem — no admin-code scan decides who gets a box any more.
+- **Inline**: the boxes are injected into Medicus's own problem rows (Major /
+  Unknown Significance / Minor alike), not a duplicate list in a panel. The
+  queue-chip injection discipline applies (prepend, re-inject on every
+  mutation tick, all state in JS keyed by problem id, idempotent); any row
+  that can't be matched to the on-screen list falls back to a panel checkbox
+  so it stays reachable.
+- **The SNOMED junk-code detection survives as a badge, not a gate**: after
+  the checklist is already usable, the old scan (combined
+  constrainingParentConcepts query per distinct conceptId, caution
+  attribution, fail-closed on caution-check errors) runs in the background
+  and badges matching rows "admin?" (+ ⚠ with the caution text where
+  applicable). A new **"Select flagged"** button ticks only badged, endable,
+  non-⚠ rows — the successor of the old widget's "Select all", still never a
+  blanket select-all (CSO posture unchanged: nothing pre-ticked, linked
+  problems excluded, two-step ENDING/KEEPING confirm, double-layer
+  date/reason guard, no auto-reload, ledger entry per batch, server error
+  bodies surfaced per row).
+- `problem-junk-code-cleanup.js`/`.css` retired; pure helpers and their tests
+  (including the 21-root rules-file regression locks) moved into
+  `problem-bulk-end.js`/`test-problem-bulk-end.js`. `rules/non-problem-root-
+  codes.json` is unchanged and still the place to add new junk categories.
+
 ## [v3.194.0] — 2026-07-27
 
 ### New: "Bulk end problems" on the Clinical Summary
