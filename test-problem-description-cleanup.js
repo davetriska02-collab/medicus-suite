@@ -20,6 +20,7 @@ const {
   stripLegacyMarkers,
   sameConceptAlternatives,
   buildEditProblemPayload,
+  apiErrorMessage,
   findOutdatedProblems,
   detectLateralityHint,
   descriptionAlreadySpecifiesLaterality,
@@ -1009,6 +1010,51 @@ console.log('--- stripGenericAdditionalInfoLines: real 2026-07-25 example ("ear\
     stripGenericAdditionalInfoLines('topic A\nActive Problem, Significant\nActive Problem, Significant', genericTexts)
       .removed.length === 2,
     'multiple matching lines are all reported, not just the first'
+  );
+}
+
+console.log('--- apiErrorMessage: non-2xx responses surface the server reason, never just the status ---');
+{
+  // The live "API 400" round (2026-07-27): an edit-problem apply was
+  // rejected and the discarded response body was the only thing that could
+  // have said why. These pin the extraction rules.
+  check(apiErrorMessage(400, '') === 'API 400', 'no body -> bare status, unchanged from the old behaviour');
+  check(apiErrorMessage(400, null) === 'API 400', 'null body -> bare status, never throws');
+  check(
+    apiErrorMessage(400, '{"message":"onsetDate must not be in the future"}') ===
+      'API 400 — onsetDate must not be in the future',
+    'a JSON body with .message surfaces the message'
+  );
+  check(
+    apiErrorMessage(400, '{"error":"Bad Request"}') === 'API 400 — Bad Request',
+    'a JSON body with .error surfaces the error string'
+  );
+  check(
+    apiErrorMessage(422, '{"errors":{"recordedByStaff":"is required"}}') ===
+      'API 422 — {"recordedByStaff":"is required"}',
+    'a JSON body with an .errors object surfaces the per-field errors'
+  );
+  check(
+    apiErrorMessage(400, '{"unexpected":"shape"}') === 'API 400 — {"unexpected":"shape"}',
+    'an unrecognised JSON shape falls back to the whole (stringified) object'
+  );
+  check(
+    apiErrorMessage(500, 'Internal Server Error') === 'API 500 — Internal Server Error',
+    'a non-JSON body is used as-is'
+  );
+  check(
+    apiErrorMessage(400, '  {"message":"x"}  ') === 'API 400 — x',
+    'surrounding whitespace is trimmed before parsing'
+  );
+  {
+    const long = 'a'.repeat(500);
+    const msg = apiErrorMessage(400, long);
+    check(msg.length <= 'API 400 — '.length + 221, `a long body is truncated (got length ${msg.length})`);
+    check(msg.endsWith('…'), 'truncation is marked with an ellipsis');
+  }
+  check(
+    apiErrorMessage(400, 'line1\n   line2\t\tline3') === 'API 400 — line1 line2 line3',
+    'internal whitespace/newlines are collapsed for the inline panel'
   );
 }
 

@@ -205,6 +205,37 @@
     return payload;
   }
 
+  // Turns a non-2xx API response into an error message that actually says
+  // WHY the server refused. A bare "API 400" cost a live round (2026-07-27,
+  // an edit-problem apply rejected on a real patient with nothing to act
+  // on): Medicus validation failures carry a response body naming the
+  // offending field, and apiFetch was discarding it. Best-effort extraction:
+  // prefer the common message fields of a JSON body, fall back to the raw
+  // body text, truncate hard (the UI renders this inline in a small panel),
+  // and never throw — a diagnostic that crashes is worse than none. The
+  // caller renders the result through esc(), so raw server text is safe to
+  // include here.
+  function apiErrorMessage(status, bodyText) {
+    var base = 'API ' + status;
+    var detail = typeof bodyText === 'string' ? bodyText.trim() : '';
+    if (detail) {
+      try {
+        var data = JSON.parse(detail);
+        if (data && typeof data === 'object') {
+          if (typeof data.message === 'string' && data.message) detail = data.message;
+          else if (typeof data.error === 'string' && data.error) detail = data.error;
+          else if (data.errors && typeof data.errors === 'object') detail = JSON.stringify(data.errors);
+          else detail = JSON.stringify(data);
+        }
+      } catch (_) {
+        /* not JSON — use the raw text as-is */
+      }
+    }
+    detail = detail.replace(/\s+/g, ' ').trim();
+    if (detail.length > 220) detail = detail.slice(0, 220) + '…';
+    return detail ? base + ' — ' + detail : base;
+  }
+
   // Narrows clinical-summary/summary's `problems[]` list down to candidates
   // worth offering a fix for — cheap first-pass text scan, no extra API
   // calls. Each entry is `{ id, problemCodeDescription, … }` (confirmed
@@ -362,6 +393,7 @@
       buildConceptUrl: snomedRetirement.buildConceptUrl,
       // Problem-specific.
       buildEditProblemPayload,
+      apiErrorMessage,
       findOutdatedProblems,
       confirmedReplacementAlternative,
       normalizedSearchResults,
@@ -419,7 +451,15 @@
       headers: Object.assign({ Accept: 'application/json, text/plain, */*' }, opts.headers),
       body: opts.body,
     });
-    if (!resp.ok) throw new Error('API ' + resp.status);
+    if (!resp.ok) {
+      var errBody = '';
+      try {
+        errBody = await resp.text();
+      } catch (_) {
+        /* unreadable body — the status alone will have to do */
+      }
+      throw new Error(apiErrorMessage(resp.status, errBody));
+    }
     var text = await resp.text();
     if (!text) return {};
     try {

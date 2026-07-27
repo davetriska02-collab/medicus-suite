@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.193.2] — 2026-07-27
+
+### "Fix description": API errors now say WHY the server refused
+
+Live report (2026-07-27): applying a suggestion on a Clinical Summary problem
+failed with a bare **"API 400"** — the widget discarded the server's response
+body, which is the one thing that says which field the validation rejected.
+Diagnosing the actual 400 needs a live capture (this release ships the
+diagnosability; the root cause gets fixed once the server's reason is visible).
+
+- `apiFetch` in `content-scripts/problem-description-cleanup.js` now reads the
+  error response body on any non-2xx and surfaces it through a new pure helper
+  `apiErrorMessage(status, bodyText)`: prefers a JSON body's
+  `message`/`error`/`errors` fields, falls back to the raw text, collapses
+  whitespace and truncates to fit the inline panel, and never throws. No body →
+  the old bare `API <status>`, unchanged.
+- The message flows through the existing `st.error` / `esc()` render path, so
+  it appears in the same place the bare "API 400" did — just with the reason.
+- 11 new assertions in `test-problem-description-cleanup.js` pin the extraction
+  rules (message/error/errors preference, non-JSON fallback, truncation,
+  whitespace collapse, null-safety).
+
+The same discard-the-body pattern exists in `problem-junk-code-cleanup.js` and
+`document-file-inline.js` — deliberately not touched here (one focused change);
+worth the same treatment in a follow-up.
+
 ## [v3.193.1] — 2026-07-26
 
 ### PR #223 review fixes (CSO review): bulk-remove safety gates + housekeeping
