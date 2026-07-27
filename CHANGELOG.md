@@ -2,6 +2,114 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.194.0] — 2026-07-27
+
+### New: "Bulk end problems" on the Clinical Summary
+
+User request: busy problem lists carry many problems that plainly need ending,
+and Medicus's own UI is one dialog per problem. New trigger button next to the
+"Major" heading (sharing the row with "Bulk remove?" and the retired-codes
+check) opens a checklist of **every** active problem — the general-purpose
+sibling of the SNOMED-scoped "Bulk remove?" widget, using the identical
+confirmed contract (`GET …/end-problem/{id}` for `activeChildProblems`,
+`POST /clinical/problem/end-problem` `{problemId, endDate, reason}`). No
+SNOMED resolution at all, so the opt-in scan is one cheap form fetch per
+problem.
+
+Because every row here is potentially a REAL clinical problem, the CSO
+guardrails from the 2026-07-26 review of the sibling widget apply from day
+one, several deliberately stricter:
+
+- Nothing pre-ticked and **no "Select all" of any kind** — each problem is
+  individually reviewed and ticked.
+- Problems with active child problems are excluded (disabled), not warned.
+- **Two-step confirm**: "Review N selected…" renders an explicit ENDING /
+  KEEPING summary (the duplicate-checker's house pattern for "about to change
+  the live record") with the end date and batch reason echoed back and a
+  no-bulk-undo warning; only that summary's Confirm button POSTs.
+- End date AND reason (free text, default "Resolved", batch-wide) guarded at
+  both layers — buttons disable without them and `endSelected()` refuses to
+  POST regardless of button state (`canSubmit` is the single guard both
+  consult).
+- **No auto-reload** after success — a "Refresh page" button instead (the
+  CSO-preferred pattern; a reload the clinician didn't ask for can bin a
+  half-typed consultation).
+- Every successful batch writes a machine-local Clinical Event Ledger entry
+  (source `record`, action `committed`, patient UUID + count only — never the
+  free-typed reason, per the ledger's no-free-text rule).
+- Failed POSTs surface the server's response body per row (the v3.193.2
+  lesson) and return to the checklist for retry; successes strike through the
+  live row optimistically.
+
+New `content-scripts/problem-bulk-end.js`/`.css` (registered in
+`manifest.json`), 29 assertions in new `test-problem-bulk-end.js` covering the
+payload contract, selectability, the double-layer `canSubmit` guard, the
+ENDING/KEEPING partition (a ticked-but-linked row can never reach ENDING),
+and error-body extraction. Shared-row CSS exclusion lists in
+`problem-junk-code-cleanup.css` / `problem-description-cleanup.css` extended
+for the third trigger (kept in lock-step). `defaults.json` untouched.
+
+Not yet live-confirmed on a real record — the POST contract is the same
+already-proven one the junk widget ships, but the reason string has only ever
+been live-captured as "not a problem"; if the server rejects another value,
+the per-row error now names the constraint.
+
+## [v3.193.3] — 2026-07-27
+
+### "Fix description": flatten option-object fields in the edit-problem POST (the actual API 400 root cause)
+
+The live capture behind v3.193.2's diagnosability work landed and named the
+culprit: the failing record was the **first ever seen with a non-null
+`episode`**, and the edit-problem GET returns select-backed fields as the
+selected **option object** (`episode: {value:"subsequent",label:"Subsequent"}`)
+while the POST contract takes the bare value (compare `significance` — a plain
+`"major"` string in both directions of the original §3 capture). Every
+previously-confirmed apply happened to be on an `episode: null` problem, so
+round-tripping the whole object never surfaced until now.
+
+- New pure helper `unwrapOptionValue()` flattens a value shaped exactly like a
+  select option (an object with BOTH `value` and `label` keys) to its `value`;
+  everything else passes through untouched — deliberately strict so a real
+  object field (`recordedByOrganisation`'s `{organisationName, …}`) can never
+  be mangled by it.
+- Applied to `significance`, `episode`, `reasonEnded` and `recordedByStaff` in
+  `buildEditProblemPayload`. `problemCode` (replaced wholesale) and the
+  organisation/practitioner fields (round-tripped verbatim) are unchanged.
+- 12 new assertions in `test-problem-description-cleanup.js`, including the
+  full pseudonymised failing prefill as a fixture.
+- `docs/learnings-problem-description-cleanup.md` §3b records the trap, the
+  capture, and the legitimate `recordedByOrganisation: null` +
+  `recordedAtAnotherOrganisation: true` combination seen on the same record.
+
+Pending live confirmation on the motivating record — if the flatten isn't the
+whole story, v3.193.2's error surfacing will name whatever remains.
+
+## [v3.193.2] — 2026-07-27
+
+### "Fix description": API errors now say WHY the server refused
+
+Live report (2026-07-27): applying a suggestion on a Clinical Summary problem
+failed with a bare **"API 400"** — the widget discarded the server's response
+body, which is the one thing that says which field the validation rejected.
+Diagnosing the actual 400 needs a live capture (this release ships the
+diagnosability; the root cause gets fixed once the server's reason is visible).
+
+- `apiFetch` in `content-scripts/problem-description-cleanup.js` now reads the
+  error response body on any non-2xx and surfaces it through a new pure helper
+  `apiErrorMessage(status, bodyText)`: prefers a JSON body's
+  `message`/`error`/`errors` fields, falls back to the raw text, collapses
+  whitespace and truncates to fit the inline panel, and never throws. No body →
+  the old bare `API <status>`, unchanged.
+- The message flows through the existing `st.error` / `esc()` render path, so
+  it appears in the same place the bare "API 400" did — just with the reason.
+- 11 new assertions in `test-problem-description-cleanup.js` pin the extraction
+  rules (message/error/errors preference, non-JSON fallback, truncation,
+  whitespace collapse, null-safety).
+
+The same discard-the-body pattern exists in `problem-junk-code-cleanup.js` and
+`document-file-inline.js` — deliberately not touched here (one focused change);
+worth the same treatment in a follow-up.
+
 ## [v3.193.1] — 2026-07-26
 
 ### PR #223 review fixes (CSO review): bulk-remove safety gates + housekeeping

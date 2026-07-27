@@ -358,8 +358,9 @@ input[class*='ms-pdc-']:focus-visible {
    #ms-pdc-retired-widget, same reasoning as the other file's copy of this
    rule -- .m-card-v2__content is Medicus's own generic card-body class,
    reused by unrelated cards. #ms-pjc-widget is also excluded from the
-   full-width catch-all here so the two triggers share the row when both are
-   present -- keep both files' exclusion lists in lock-step. */
+   full-width catch-all here so the triggers share the row when several are
+   present, as is #ms-pbe-widget ("Bulk end problems", problem-bulk-end.css,
+   2026-07-27) -- keep all three files' exclusion lists in lock-step. */
 .m-card-v2__content:has(> #ms-pdc-retired-widget) {
   display: flex;
   flex-wrap: wrap;
@@ -368,7 +369,7 @@ input[class*='ms-pdc-']:focus-visible {
 }
 
 .m-card-v2__content:has(> #ms-pdc-retired-widget)
-  > *:not(#problems-major-label):not(#ms-pdc-retired-widget):not(#ms-pjc-widget) {
+  > *:not(#problems-major-label):not(#ms-pdc-retired-widget):not(#ms-pjc-widget):not(#ms-pbe-widget) {
   flex-basis: 100%;
 }
 
