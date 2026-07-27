@@ -100,9 +100,16 @@
   // Returns { active, past } — active for QOF/rule matching, past for
   // procedure-history checks (e.g. hysterectomy coded as a past/ended problem).
   function normaliseProblemsAll(listing) {
-    if (!listing || !Array.isArray(listing.activeProblems)) return { active: [], past: [] };
+    // Guard ONLY on the listing itself (audit 2026-07-27): the old
+    // `|| !Array.isArray(listing.activeProblems)` returned before the
+    // inactiveProblems block below, so a patient with NO active problems but a
+    // coded past procedure (hysterectomy is normally filed as an ended
+    // problem) lost pastProblems entirely — and buildHrtContext /
+    // cervical-screening logic silently read it as "never happened".
+    if (!listing) return { active: [], past: [] };
     const active = [],
       past = [];
+    if (!Array.isArray(listing.activeProblems)) listing = { ...listing, activeProblems: [] };
     listing.activeProblems
       .filter((p) => !p.isMarkedAsIncorrect)
       .forEach((p) => {
@@ -201,9 +208,28 @@
       const dataKeys = Object.keys(row).filter((k) => /^data\d{8}$/.test(k));
       if (dataKeys.length === 0) return;
       dataKeys.sort();
-      const latestKey = dataKeys[dataKeys.length - 1];
-      const cell = row[latestKey];
-      if (!cell || cell.result == null || cell.result === '') return;
+      // SPARSE-MATRIX FIX (audit 2026-07-27, patient-safety High): rowData is a
+      // DATE-COLUMN MATRIX — every analyte row carries a key for every column
+      // date in the dashboard, and null/'' where that particular test wasn't
+      // done on that date. Reading only dataKeys[last] and returning when it
+      // was empty discarded EVERY earlier result on the row: a potassium of 6.9
+      // taken on 01 Jul vanished entirely as soon as an unrelated lipid profile
+      // on 20 Jul added a newer column, so alert-hyperkalaemia emitted nothing
+      // at all — not even no_data — and the U&Es group aggregate was lost with
+      // it (a false "never monitored" for panel-level monitoring rules).
+      // Scan newest-first for the first column that actually holds a result,
+      // matching what normaliseObservationHistory below has always done.
+      let latestKey = null;
+      let cell = null;
+      for (let i = dataKeys.length - 1; i >= 0; i--) {
+        const c = row[dataKeys[i]];
+        if (c && c.result != null && c.result !== '') {
+          latestKey = dataKeys[i];
+          cell = c;
+          break;
+        }
+      }
+      if (!cell) return;
       const dateIso = keyToIsoDate(latestKey);
       const valueWithUnit = row.unit ? `${cell.result} ${row.unit}` : String(cell.result);
       out.push({
@@ -467,6 +493,17 @@
       patientUuid: null,
       unmatched: false,
       results: [],
+      // FAIL-VISIBLE (audit 2026-07-27, Critical): set true when any part of
+      // this payload could not be parsed. Previously a throw part-way through
+      // the result loop was swallowed and whatever had been built so far was
+      // returned — so a report whose 2nd of 3 results had a malformed
+      // referenceRanges block came back with results.length === 1 and NO
+      // indication that a result had been lost. An abnormal value silently
+      // dropped that way is never graded and never raises a chip, and the
+      // caller could not tell it apart from a genuinely empty report. Callers
+      // must treat parseError === true as "this report is incomplete", never
+      // as "nothing abnormal here".
+      parseError: false,
     };
     try {
       if (!payload || !payload.data) return safe;
@@ -525,127 +562,138 @@
       }
 
       rawResults.forEach((entry) => {
-        // Each entry is { _raw, _specimen } from grouped path, or { _raw, _specimen: null }
-        // from ungrouped. Guard against any stray non-object entries.
-        if (!entry || typeof entry !== 'object') return;
-        const r = entry._raw;
-        const specimenHeader = entry._specimen !== undefined ? entry._specimen : null;
-        if (!r || typeof r !== 'object') return;
-        const name = r.description || null;
-        // text-result types (e.g. microbiology / culture) carry their content in
-        // `resultText`, not `resultValue` (which is absent entirely). Fall back to it
-        // so the result has a displayable value and the searchable text below is populated.
-        const rawValue =
-          r.resultValue != null ? String(r.resultValue) : r.resultText != null ? String(r.resultText) : '';
-        const numValue = parseObservationValue(rawValue);
-        const { low, high } = parseRefRange(r.referenceRanges);
+        // Per-result isolation (audit 2026-07-27, Critical): one malformed
+        // result must cost only ITSELF, not every result after it. The outer
+        // catch is now a genuine last resort rather than the routine
+        // truncation path it used to be.
+        try {
+          // Each entry is { _raw, _specimen } from grouped path, or { _raw, _specimen: null }
+          // from ungrouped. Guard against any stray non-object entries.
+          if (!entry || typeof entry !== 'object') return;
+          const r = entry._raw;
+          const specimenHeader = entry._specimen !== undefined ? entry._specimen : null;
+          if (!r || typeof r !== 'object') return;
+          const name = r.description || null;
+          // text-result types (e.g. microbiology / culture) carry their content in
+          // `resultText`, not `resultValue` (which is absent entirely). Fall back to it
+          // so the result has a displayable value and the searchable text below is populated.
+          const rawValue =
+            r.resultValue != null ? String(r.resultValue) : r.resultText != null ? String(r.resultText) : '';
+          const numValue = parseObservationValue(rawValue);
+          const { low, high } = parseRefRange(r.referenceRanges);
 
-        // Best available date: prefer formattedSpecimenCollectionDate, then specimenCollectionDate, then issuedDateTime
-        const date =
-          normaliseDateString(r.formattedSpecimenCollectionDate) ||
-          normaliseDateString(r.specimenCollectionDate) ||
-          normaliseDateString(r.issuedDateTime) ||
-          null;
+          // Best available date: prefer formattedSpecimenCollectionDate, then specimenCollectionDate, then issuedDateTime
+          const date =
+            normaliseDateString(r.formattedSpecimenCollectionDate) ||
+            normaliseDateString(r.specimenCollectionDate) ||
+            normaliseDateString(r.issuedDateTime) ||
+            null;
 
-        // Build history array (newest-first) from previousResults
-        const history = [];
-        if (Array.isArray(r.previousResults)) {
-          r.previousResults.forEach((pr) => {
-            if (!pr || typeof pr !== 'object') return;
-            const prevRaw = pr.result != null ? String(pr.result) : '';
-            const prevNum = parseObservationValue(prevRaw);
-            const prevDate =
-              normaliseDateString(pr.formattedSpecimenCollectionDate) ||
-              normaliseDateString(pr.specimenCollectionDate) ||
-              null;
-            // unit — ADDITIVE (item 2.6, TRIAGE-LENS-2026-07-02.md trend arrows): a
-            // previousResults entry from the API has never been observed to carry its
-            // own unit (same analyte/test code as the parent result, reported over
-            // time), so this inherits the parent result's unit unless the entry
-            // explicitly states a different one. Consumers (result-severity.js
-            // extractPrior) compare this against the CURRENT result's unit before ever
-            // showing a trend — inheriting here just lets that guard pass in the
-            // ordinary case instead of always failing closed for lack of data; an
-            // explicit differing unit on the historical entry still blocks the trend.
-            history.push({
-              date: prevDate,
-              value: prevNum,
-              flag: deriveHistoryFlag(prevNum, low, high),
-              unit: pr.resultUnit != null ? String(pr.resultUnit) : r.resultUnit || null,
+          // Build history array (newest-first) from previousResults
+          const history = [];
+          if (Array.isArray(r.previousResults)) {
+            r.previousResults.forEach((pr) => {
+              if (!pr || typeof pr !== 'object') return;
+              const prevRaw = pr.result != null ? String(pr.result) : '';
+              const prevNum = parseObservationValue(prevRaw);
+              const prevDate =
+                normaliseDateString(pr.formattedSpecimenCollectionDate) ||
+                normaliseDateString(pr.specimenCollectionDate) ||
+                null;
+              // unit — ADDITIVE (item 2.6, TRIAGE-LENS-2026-07-02.md trend arrows): a
+              // previousResults entry from the API has never been observed to carry its
+              // own unit (same analyte/test code as the parent result, reported over
+              // time), so this inherits the parent result's unit unless the entry
+              // explicitly states a different one. Consumers (result-severity.js
+              // extractPrior) compare this against the CURRENT result's unit before ever
+              // showing a trend — inheriting here just lets that guard pass in the
+              // ordinary case instead of always failing closed for lack of data; an
+              // explicit differing unit on the historical entry still blocks the trend.
+              history.push({
+                date: prevDate,
+                value: prevNum,
+                flag: deriveHistoryFlag(prevNum, low, high),
+                unit: pr.resultUnit != null ? String(pr.resultUnit) : r.resultUnit || null,
+              });
             });
-          });
-          // Sort newest-first (nulls last)
-          history.sort((a, b) => {
-            if (!a.date && !b.date) return 0;
-            if (!a.date) return 1;
-            if (!b.date) return -1;
-            return b.date < a.date ? -1 : b.date > a.date ? 1 : 0;
-          });
-        }
+            // Sort newest-first (nulls last)
+            history.sort((a, b) => {
+              if (!a.date && !b.date) return 0;
+              if (!a.date) return 1;
+              if (!b.date) return -1;
+              return b.date < a.date ? -1 : b.date > a.date ? 1 : 0;
+            });
+          }
 
-        // Build a single searchable text string for text-classification rules
-        // (microbiology / free-text results that have no numeric high/low flag).
-        // We gather rawValue, interpretation, performerComments, resultPerformerComments,
-        // and filingComments defensively, then join with spaces. Case is preserved;
-        // callers must lowercase before searching.
-        const textParts = [];
-        if (rawValue) textParts.push(rawValue);
-        // resultText explicitly (covers results that carry BOTH a numeric resultValue
-        // and a separate free-text resultText where a normal phrase may live).
-        if (r.resultText && typeof r.resultText === 'string' && r.resultText !== rawValue) {
-          textParts.push(r.resultText);
-        }
-        if (r.interpretation && typeof r.interpretation === 'string') {
-          textParts.push(r.interpretation);
-        }
-        if (r.performerComments && typeof r.performerComments === 'string') {
-          textParts.push(r.performerComments);
-        }
-        // resultPerformerComments — may be an array of strings or objects
-        if (Array.isArray(r.resultPerformerComments)) {
-          r.resultPerformerComments.forEach((item) => {
-            if (typeof item === 'string') {
-              textParts.push(item);
-            } else if (item && typeof item === 'object') {
-              // Pull any of text / comment / value sub-field present
-              const sub = item.text || item.comment || item.value;
-              if (sub && typeof sub === 'string') textParts.push(sub);
-            }
-          });
-        }
-        // filingComments — may be an array of strings or objects
-        if (Array.isArray(r.filingComments)) {
-          r.filingComments.forEach((item) => {
-            if (typeof item === 'string') {
-              textParts.push(item);
-            } else if (item && typeof item === 'object') {
-              const sub = item.text || item.comment || item.value;
-              if (sub && typeof sub === 'string') textParts.push(sub);
-            }
-          });
-        }
-        const text = textParts.join(' ');
+          // Build a single searchable text string for text-classification rules
+          // (microbiology / free-text results that have no numeric high/low flag).
+          // We gather rawValue, interpretation, performerComments, resultPerformerComments,
+          // and filingComments defensively, then join with spaces. Case is preserved;
+          // callers must lowercase before searching.
+          const textParts = [];
+          if (rawValue) textParts.push(rawValue);
+          // resultText explicitly (covers results that carry BOTH a numeric resultValue
+          // and a separate free-text resultText where a normal phrase may live).
+          if (r.resultText && typeof r.resultText === 'string' && r.resultText !== rawValue) {
+            textParts.push(r.resultText);
+          }
+          if (r.interpretation && typeof r.interpretation === 'string') {
+            textParts.push(r.interpretation);
+          }
+          if (r.performerComments && typeof r.performerComments === 'string') {
+            textParts.push(r.performerComments);
+          }
+          // resultPerformerComments — may be an array of strings or objects
+          if (Array.isArray(r.resultPerformerComments)) {
+            r.resultPerformerComments.forEach((item) => {
+              if (typeof item === 'string') {
+                textParts.push(item);
+              } else if (item && typeof item === 'object') {
+                // Pull any of text / comment / value sub-field present
+                const sub = item.text || item.comment || item.value;
+                if (sub && typeof sub === 'string') textParts.push(sub);
+              }
+            });
+          }
+          // filingComments — may be an array of strings or objects
+          if (Array.isArray(r.filingComments)) {
+            r.filingComments.forEach((item) => {
+              if (typeof item === 'string') {
+                textParts.push(item);
+              } else if (item && typeof item === 'object') {
+                const sub = item.text || item.comment || item.value;
+                if (sub && typeof sub === 'string') textParts.push(sub);
+              }
+            });
+          }
+          const text = textParts.join(' ');
 
-        safe.results.push({
-          name,
-          value: numValue,
-          rawValue,
-          comparator: r.resultComparator || null,
-          unit: r.resultUnit || null,
-          low,
-          high,
-          isAbove: !!r.isAboveReferenceRange,
-          isBelow: !!r.isBelowReferenceRange,
-          urgent: !!r.requiresUrgentReview,
-          interpretation: r.interpretation || null,
-          date,
-          history,
-          text,
-          specimen: specimenHeader,
-        });
+          safe.results.push({
+            name,
+            value: numValue,
+            rawValue,
+            comparator: r.resultComparator || null,
+            unit: r.resultUnit || null,
+            low,
+            high,
+            isAbove: !!r.isAboveReferenceRange,
+            isBelow: !!r.isBelowReferenceRange,
+            urgent: !!r.requiresUrgentReview,
+            interpretation: r.interpretation || null,
+            date,
+            history,
+            text,
+            specimen: specimenHeader,
+          });
+        } catch (_) {
+          // This one result is lost; the rest of the report still parses.
+          safe.parseError = true;
+        }
       });
     } catch (_) {
-      // Never throw — return whatever safe shape we've built so far
+      // Never throw — return whatever safe shape we've built so far, but SAY
+      // that it is incomplete (see safe.parseError above).
+      safe.parseError = true;
     }
     return safe;
   }

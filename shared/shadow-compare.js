@@ -16,24 +16,56 @@
   // Higher = more clinically urgent. Covers Sentinel statuses AND triage levels
   // (red/amber) so a dropped triage alert is treated as a regression too.
   // Override via opts.rank.
+  // COVERAGE (audit 2026-07-27, High): this table must know EVERY status the
+  // engine can emit. It previously listed 9 and the engine emits at least 15 —
+  // not_met, stale, vax_due, due_soon, caution, recently_initiated, noted,
+  // in_date, vax_given and vax_declined were all absent, and an absent status
+  // scored 0, which meant `dropped` recorded the loss while `regressions` did
+  // not and the report came back safe:true. A lost vaccine-due or QOF not_met
+  // alert was therefore filed as feed-swap assurance evidence saying no safety
+  // was lost. Note the engine's own STATUS_RANK (engine/rules-engine.js:29) is
+  // INVERTED relative to this one (there 0 = most urgent), so it is mapped
+  // deliberately here rather than imported.
   const DEFAULT_RANK = {
     red: 5,
     alert: 4,
     overdue: 3,
+    not_met: 3,
     amber: 3,
     due: 2,
+    due_soon: 2,
+    caution: 2,
+    stale: 2,
+    vax_due: 2,
     no_data: 1,
+    noted: 1,
+    recently_initiated: 1,
+    // Genuinely benign outcomes — losing one of these is not a safety
+    // regression, so they stay at 0 on purpose.
     achieved: 0,
+    in_date: 0,
+    vax_given: 0,
+    vax_declined: 0,
     ok: 0,
     none: 0,
     null: 0,
   };
 
+  // An unrecognised status must FAIL VISIBLE. A new status added to the engine
+  // (or a typo in a rule) previously ranked 0 and so was silently treated as
+  // benign by the safety gate; ranking it as a real signal means the worst case
+  // is a false "unsafe" that a human reviews, not a true loss reported as safe.
+  const UNKNOWN_STATUS_RANK = 1;
+
   function keyOf(c) {
     return c.ruleId || `${c.type || '?'}:${c.label || c.id || ''}`;
   }
   function rankOf(rank, status) {
-    return rank[String(status)] != null ? rank[String(status)] : 0;
+    const s = String(status);
+    if (rank[s] != null) return rank[s];
+    // Undefined/null/empty status carries no clinical claim — treat as benign.
+    if (status == null || s === '' || s === 'undefined') return 0;
+    return UNKNOWN_STATUS_RANK;
   }
 
   // diffChips(legacyChips, txnChips, opts) -> report

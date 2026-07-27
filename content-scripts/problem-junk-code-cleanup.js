@@ -745,14 +745,23 @@
       resetForPatient();
     }
     if (!_problemsCache && !_fetchInFlight) {
+      // WRONG-PATIENT RACE (audit 2026-07-27, Critical) — see the same guard in
+      // content-scripts/problem-bulk-end.js for the full sequence. In short: an
+      // in-flight fetch for patient A makes patient B skip its own fetch, and
+      // A's response was then cached with no re-check, so this widget could
+      // flag (and bulk-end) problems belonging to a patient nobody was viewing.
+      var pid = info.patientId;
       _fetchInFlight = true;
+      var fetched;
       try {
-        _problemsCache = await fetchClinicalSummaryProblems(info.patientId);
+        fetched = await fetchClinicalSummaryProblems(pid);
       } catch (_) {
-        _problemsCache = [];
+        fetched = [];
       } finally {
         _fetchInFlight = false;
       }
+      if (pid !== _lastPatientId) return;
+      _problemsCache = fetched;
     }
     if (_problemsCache) injectTrigger();
   }

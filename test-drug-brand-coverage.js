@@ -76,7 +76,12 @@ const EXPECTED = {
     'Co-Aprovel 150/12.5', 'Karvea 150mg', 'Telmisartan 40mg', 'Micardis 40mg',
     'Micardis Plus 40/12.5', 'Pritor 40mg', 'Tolura 40mg', 'Olmesartan 20mg',
     'Olmetec 20mg', 'Sevikar 20mg/5mg', 'Azilsartan 40mg', 'Edarbi 40mg',
-    'Sacubitril/valsartan 49mg/51mg', 'Entresto 49mg/51mg'
+    'Sacubitril/valsartan 49mg/51mg', 'Entresto 49mg/51mg',
+    // Audit 2026-07-27: quinapril was missing entirely from the rule, so a
+    // patient on it got no annual U&E, no annual BP and no post-initiation
+    // U&E — and HIGH_RISK_UNMATCHED_CLASSES had no ACEi/ARB class, so the
+    // backstop missed it too. alert-library.json already listed quinapril.
+    'Quinapril 20mg tablets', 'Accupro 20mg tablets', 'Accuretic 20mg/12.5mg tablets'
   ],
   'spironolactone': [
     'Spironolactone 25mg tablets', 'Aldactone 25mg', 'Eplerenone 25mg', 'Inspra 25mg'
@@ -121,7 +126,14 @@ const EXPECTED = {
     'Sulpiride 200mg tablets', 'Dolmatil 200mg tablets', 'Sulpitil 200mg tablets', 'Sulpor 200mg/5ml oral solution',
     'Zuclopenthixol 25mg tablets', 'Clopixol 25mg tablets', 'Clopixol Acuphase 50mg/ml injection', 'Clopixol Depot 200mg/ml injection',
     'Flupentixol 0.5mg tablets', 'Depixol 20mg/ml injection', 'Fluanxol 0.5mg tablets',
-    'Fluphenazine 1mg tablets', 'Modecate 25mg/ml injection'
+    'Fluphenazine 1mg tablets', 'Modecate 25mg/ml injection',
+    // Audit 2026-07-27 — the typical phenothiazine tail was missing, so no
+    // CG178 metabolic monitoring (HbA1c/lipids/weight/BP/ECG) fired for these.
+    // Note 'chlorpromazine' does NOT substring-cover 'promazine' (containment
+    // runs the wrong way), which is why plain promazine was missed too.
+    'Trifluoperazine 5mg tablets', 'Stelazine 5mg tablets',
+    'Levomepromazine 25mg tablets', 'Nozinan 25mg tablets',
+    'Promazine 25mg tablets', 'Pericyazine 5mg tablets'
   ],
   'mirabegron': ['Mirabegron 50mg', 'Betmiga 50mg'],
   'levothyroxine': [
@@ -131,7 +143,10 @@ const EXPECTED = {
   'hrt-systemic': [
     'Estradiol 1mg tablets', 'Progynova 1mg', 'Zumenon 2mg', 'Climaval 1mg',
     'Estraderm MX 50 patches', 'Nuvelle Continuous', 'Evorel 50 patches',
-    'Femoston-conti 1mg/5mg', 'Estradot 50 patches', 'Oestrogel pump', 'Premarin 0.625mg'
+    'Femoston-conti 1mg/5mg', 'Estradot 50 patches', 'Oestrogel pump', 'Premarin 0.625mg',
+    // Audit 2026-07-27: brand-only systemic HRT products with no generic stem
+    // in their name — none matched, so no annual BP/weight review fired.
+    'Angeliq 1mg/2mg tablets', 'Duavive 0.45mg/20mg tablets', 'Novofem 1mg/10mg tablets'
   ],
   'adhd-stimulant-paediatric': [
     'Medikinet XL 20mg', 'methylphenidate', 'Tranquilyn 10mg', 'Ritalin 10mg',

@@ -1644,14 +1644,24 @@
       if (staleRetiredWidget) staleRetiredWidget.remove();
     }
     if (!_problemsCache && !_scanInFlight) {
+      // WRONG-PATIENT RACE (audit 2026-07-27, Critical) — see the same guard in
+      // content-scripts/problem-bulk-end.js for the full sequence. An in-flight
+      // fetch for patient A makes patient B skip its own fetch; without the
+      // post-await re-check, A's problem list was cached and this widget then
+      // offered "Fix description" edits against A's problemIds while the
+      // clinician was viewing B.
+      var pid = info.patientId;
       _scanInFlight = true;
+      var fetched;
       try {
-        _problemsCache = await fetchClinicalSummaryProblems(info.patientId);
+        fetched = await fetchClinicalSummaryProblems(pid);
       } catch (_) {
-        _problemsCache = [];
+        fetched = [];
       } finally {
         _scanInFlight = false;
       }
+      if (pid !== _lastPatientId) return;
+      _problemsCache = fetched;
     }
     if (!_problemsCache) return;
     var outdated = findOutdatedProblems(_problemsCache);

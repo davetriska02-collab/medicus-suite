@@ -2,6 +2,74 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.194.1] — 2026-07-27
+
+### Audit remediation, milestone 1 — six silent clinical failures (CSO REVIEW REQUIRED)
+
+Fixes the Critical and clinical-safety High findings from the 2026-07-27 whole-suite
+audit (`main` e17e15c). Every one of these failed **silently** — no error, no chip, and
+in most cases indistinguishable from "nothing to report". Each is fixed with a
+regression test that fails on the old behaviour.
+
+- **Wrong-patient problem list and wrong-patient record writes (Critical).** The
+  clinical-summary in-flight guard made a newly-opened patient skip its own fetch, and
+  the previous patient's response was then cached with no post-await re-check. The
+  widget could list patient A's problems while the clinician viewed patient B — and
+  "Bulk end problems" would POST `end-problem` for **A's problemIds**, writing to a
+  record nobody was looking at, while the event-ledger entry recorded it against B.
+  All three problem widgets now capture the patient id before the await and discard the
+  response if the patient changed (the `_evalGen`/`_runToken` discipline already used in
+  `sentinel.js` and `record.js`). `problem-bulk-end.js` also now removes its widget on
+  patient change, which previously left A's checklist and ticks on screen under B.
+- **An entire analyte could vanish from the record (High, patient safety).**
+  `normaliseObservations` read only the newest date column of the sparse
+  investigation-dashboard matrix and discarded the whole row if that cell was empty. A
+  potassium of **6.9 mmol/L** disappeared as soon as an unrelated later test added a
+  newer column, so `alert-hyperkalaemia` emitted nothing at all — not even `no_data` —
+  and the panel aggregate was lost with it (a false "never monitored"). Now scans
+  newest-first for the first column that actually holds a result, matching what
+  `normaliseObservationHistory` has always done.
+- **A malformed lab result silently truncated the whole report (Critical).** One bare
+  `catch` wrapped the entire result loop, so a throw on result 2 of 3 returned a partial
+  array with no error field — the dropped result was never graded and the report was
+  indistinguishable from an empty one. Each result now parses in its own try/catch, and
+  the report carries **`parseError: true`** when anything was lost. A genuinely empty
+  report still reports `parseError: false`.
+- **Three drug rules missed real UK products (High, patient safety).** `ace-arb` had no
+  **quinapril/Accupro/Accuretic** (no annual U&E, no annual BP, no post-initiation U&E);
+  `antipsychotic` had no **trifluoperazine/levomepromazine/promazine/pericyazine** (no
+  NICE CG178 metabolic monitoring — note `"chlorpromazine"` does *not* substring-cover
+  `"promazine"`); `hrt-systemic` had no **Angeliq/Duavive/Novofem** (no annual HRT
+  review). All added to the rules and to `EXPECTED` in `test-drug-brand-coverage.js`.
+  `rules/alert-library.json` already listed quinapril, so the two rule files had drifted
+  apart on what an ACE inhibitor is.
+- **The unmatched-drug backstop had no ACEi/ARB class (High).** With the rule gap above,
+  *both* safety nets missed quinapril. `HIGH_RISK_UNMATCHED_CLASSES` now carries an
+  ACEi/ARB class. (`test-high-risk-unmatched.js`'s "benign unmatched" fixture was
+  ramipril, which is now correctly flagged — the fixture moved to paracetamol and a
+  regression lock was added for quinapril/losartan.)
+- **The feed-swap safety gate reported PASS while dropping an alert (High).**
+  `shared/shadow-compare.js` ranked 9 statuses; the engine emits at least 15. An
+  unlisted status scored 0, so a dropped `vax_due`/`not_met`/`stale` alert was recorded
+  in the ledger as "a difference, but no safety loss". The table now covers every engine
+  status, and an **unrecognised** status fails visible instead of scoring 0. New
+  `test-shadow-compare.js` (32 assertions) — this module had no test file at all, which
+  is how the hole survived.
+- **Past problems were discarded when a patient had no active ones (High).**
+  `normaliseProblemsAll` returned before the `inactiveProblems` block unless
+  `activeProblems` was an array, so a coded hysterectomy (normally filed as an ended
+  problem) vanished and the HRT progestogen-cover and cervical-screening logic read it
+  as "never happened".
+
+New tests: `test-shadow-compare.js`, `test-normalise-sparse-observations.js`; extended
+`test-normalise-investigation-report.js`, `test-drug-brand-coverage.js`,
+`test-high-risk-unmatched.js`. `npm test` 339 passing. `defaults.json` untouched (the
+drug rules live in `rules/drug-rules.json`, outside the shipped-config migration), so no
+integer config bump is required.
+
+Remaining audit milestones (security perimeter, correctness/robustness, optimisation)
+are not in this change — see the audit report for the prioritised plan.
+
 ## [v3.194.0] — 2026-07-27
 
 ### New: "Bulk end problems" on the Clinical Summary

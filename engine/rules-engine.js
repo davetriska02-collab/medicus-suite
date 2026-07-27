@@ -134,9 +134,20 @@
     {
       label: 'DMARD / immunosuppressant',
       stems: [
-        'methotrexate', 'azathioprine', 'mercaptopurine', 'leflunomide', 'sulfasalazine',
-        'ciclosporin', 'cyclosporin', 'tacrolimus', 'mycophenolate', 'penicillamine',
-        'sirolimus', 'everolimus', 'hydroxycarbamide', 'cyclophosphamide',
+        'methotrexate',
+        'azathioprine',
+        'mercaptopurine',
+        'leflunomide',
+        'sulfasalazine',
+        'ciclosporin',
+        'cyclosporin',
+        'tacrolimus',
+        'mycophenolate',
+        'penicillamine',
+        'sirolimus',
+        'everolimus',
+        'hydroxycarbamide',
+        'cyclophosphamide',
       ],
     },
     { label: 'Antimalarial (retinopathy/marrow monitoring)', stems: ['hydroxychloroquine'] },
@@ -153,6 +164,34 @@
       stems: ['valproate', 'valproic', 'carbamazepine', 'phenytoin'],
     },
     { label: 'Antipsychotic (clozapine)', stems: ['clozapine'] },
+    // ACEi/ARB (audit 2026-07-27): this class was absent, so when the ace-arb
+    // rule's match list turned out to omit quinapril entirely, BOTH safety nets
+    // missed it — no monitoring chip and no unmatched-drug flag either. These
+    // are generic stems only; the rule's own match list carries the brands.
+    {
+      label: 'ACE inhibitor / ARB (renal + electrolyte monitoring)',
+      stems: [
+        'ramipril',
+        'lisinopril',
+        'perindopril',
+        'enalapril',
+        'captopril',
+        'trandolapril',
+        'quinapril',
+        'fosinopril',
+        'imidapril',
+        'moexipril',
+        'cilazapril',
+        'losartan',
+        'candesartan',
+        'irbesartan',
+        'valsartan',
+        'olmesartan',
+        'telmisartan',
+        'eprosartan',
+        'azilsartan',
+      ],
+    },
   ];
 
   // Returns the subset of an unmatched-detail list (the listUnmatchedMedicationsDetailed
@@ -299,7 +338,7 @@
     'units/l': 'iu/l',
     'ml/min': 'ml/min',
     'ml/min/1.73m2': 'ml/min',
-    'mmhg': 'mmhg',
+    mmhg: 'mmhg',
     '10*9/l': '10*9/l',
     'x10^9/l': '10*9/l',
     '10^9/l': '10*9/l',
@@ -307,12 +346,7 @@
   };
   function canonUnit(u) {
     if (u == null) return null;
-    const k = String(u)
-      .toLowerCase()
-      .replace(/\s+/g, '')
-      .replace(/²/g, '2')
-      .replace(/³/g, '3')
-      .replace(/\.$/, '');
+    const k = String(u).toLowerCase().replace(/\s+/g, '').replace(/²/g, '2').replace(/³/g, '3').replace(/\.$/, '');
     return UNIT_CANON[k] || null; // unknown unit → null → "can't tell" → fail open
   }
   function unitsConflict(expectedUnit, actualUnit) {
@@ -1371,9 +1405,7 @@
       traceEntry.matchSummary = matchSummary;
     }
 
-    const facts = [
-      { label: 'Allergy', value: matchedAllergies.map((a) => a.label).join(', ') },
-    ];
+    const facts = [{ label: 'Allergy', value: matchedAllergies.map((a) => a.label).join(', ') }];
     matchedPerSet.forEach((matched, i) => {
       if (matched.length) {
         const set = drugSets[i] || {};
@@ -1684,7 +1716,10 @@
     // never adds green "MET" noise. comparator 'above' = high values are dangerous
     // (e.g. potassium); 'below' = low values are dangerous.
     if (check.kind === 'observation-alert') {
-      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
+      const obs = findLatestObservation(data.observations, {
+        match: check.observation,
+        exclude: check.observationExclude,
+      });
       if (!obs || !obs.date) {
         if (traceEntry) traceEntry.skipReason = 'no-observation';
         return [];
@@ -1769,7 +1804,10 @@
     }
 
     if (check.kind === 'observation-threshold') {
-      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
+      const obs = findLatestObservation(data.observations, {
+        match: check.observation,
+        exclude: check.observationExclude,
+      });
       // Reject unparseable dates: NaN < _qofStart is false so an invalid date
       // would bypass the window check and surface a spurious 'achieved'/'not_met'.
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
@@ -1831,7 +1869,10 @@
       if (foundMed) evidenceCtx.matchedMed = foundMed.name;
       status = foundMed ? 'achieved' : 'not_met';
     } else if (check.kind === 'observation-recent') {
-      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
+      const obs = findLatestObservation(data.observations, {
+        match: check.observation,
+        exclude: check.observationExclude,
+      });
       // Reject unparseable dates: NaN >= _qofStart is false so an invalid date
       // would produce 'overdue' (conservative but misleading — treat as no data).
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {

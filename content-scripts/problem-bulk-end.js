@@ -244,6 +244,13 @@
   var _ending = false;
 
   function resetForPatient() {
+    // Remove the rendered widget too (audit 2026-07-27) — clearing state alone
+    // left the PREVIOUS patient's checklist, descriptions and ticks on screen
+    // under the new patient, because injectTrigger() early-returns while the
+    // node exists and nothing re-renders it. Mirrors the same removal in
+    // problem-description-cleanup.js's own reset.
+    var stale = document.getElementById('ms-pbe-widget');
+    if (stale) stale.remove();
     _problemsCache = null;
     _open = false;
     _step = 'select';
@@ -628,14 +635,30 @@
       resetForPatient();
     }
     if (!_problemsCache && !_fetchInFlight) {
+      // WRONG-PATIENT RACE (audit 2026-07-27, Critical — fixed here and in the
+      // two sibling problem widgets): the response must be re-checked against
+      // the patient we are STILL on before it is cached. Sequence that used to
+      // poison the cache: patient A's fetch is in flight -> clinician clicks
+      // through to patient B -> B's tick sees _fetchInFlight and skips its own
+      // fetch -> A's response lands and is stored -> _problemsCache is truthy
+      // so nothing ever refetches. The widget then listed A's problems under B
+      // and its end-problem POSTs carried A's problemIds — a write to a record
+      // nobody was looking at. Same _evalGen/_runToken discipline as
+      // content-scripts/sentinel.js and side-panel/modules/record/record.js.
+      var pid = info.patientId;
       _fetchInFlight = true;
+      var fetched;
       try {
-        _problemsCache = await fetchClinicalSummaryProblems(info.patientId);
+        fetched = await fetchClinicalSummaryProblems(pid);
       } catch (_) {
-        _problemsCache = [];
+        fetched = [];
       } finally {
         _fetchInFlight = false;
       }
+      // Patient changed while we were awaiting — discard this response entirely
+      // and let the current patient's own tick fetch afresh. Never cache it.
+      if (pid !== _lastPatientId) return;
+      _problemsCache = fetched;
     }
     if (_problemsCache) injectTrigger();
   }

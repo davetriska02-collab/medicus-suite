@@ -129,14 +129,21 @@ console.log('\n--- empty / null input ---');
 console.log('\n--- end-to-end: listUnmatchedMedicationsDetailed → flagHighRiskUnmatched ---');
 
 {
-  // Only a methotrexate rule exists. An unrecognised amiodarone brand and a plain
-  // ramipril both go unmatched; only the amiodarone is high-risk-classed.
+  // Only a methotrexate rule exists. An unrecognised amiodarone brand and a
+  // plain paracetamol both go unmatched; only the amiodarone is
+  // high-risk-classed.
+  //
+  // (Audit 2026-07-27: the benign slot here used to be "Ramipril 5mg capsules".
+  // An ACE inhibitor / ARB class was added to HIGH_RISK_UNMATCHED_CLASSES after
+  // the ace-arb rule was found to omit quinapril entirely — with no class, BOTH
+  // safety nets missed it. An unmatched ACE inhibitor is now correctly
+  // high-risk, so the fixture needed a genuinely benign drug instead.)
   const rules = [{ id: 'mtx-001', type: 'drug-monitoring', drug: { match: ['methotrexate'] }, tests: [] }];
   const meds = [
     { name: 'methotrexate 2.5mg tablets' }, // matched → not unmatched
     { name: 'Cordarone X 200mg tablets' }, // amiodarone BRAND only → unmatched, not classifiable
     { name: 'Amiodarone 100mg tablets' }, // generic → unmatched AND high-risk
-    { name: 'Ramipril 5mg capsules' }, // unmatched but benign here
+    { name: 'Paracetamol 500mg tablets' }, // unmatched but genuinely benign
   ];
   const unmatchedDetailed = listUnmatchedMedicationsDetailed(meds, rules);
   const flagged = flagHighRiskUnmatched(unmatchedDetailed);
@@ -148,6 +155,29 @@ console.log('\n--- end-to-end: listUnmatchedMedicationsDetailed → flagHighRisk
     flagged.length === 1 && /amiodarone/i.test(flagged[0].name),
     'only the generic amiodarone is flagged high-risk (brand-only Cordarone is not)'
   );
+}
+
+{
+  // Audit 2026-07-27 regression lock: an unmatched ACE inhibitor or ARB MUST be
+  // flagged high-risk. Before the class was added, a quinapril the ace-arb rule
+  // did not recognise produced no monitoring chip AND no unmatched-drug flag —
+  // two safety nets, zero catches.
+  const rules = [{ id: 'mtx-001', type: 'drug-monitoring', drug: { match: ['methotrexate'] }, tests: [] }];
+  const flagged = flagHighRiskUnmatched(
+    listUnmatchedMedicationsDetailed(
+      [{ name: 'Quinapril 20mg tablets' }, { name: 'Losartan 50mg tablets' }, { name: 'Paracetamol 500mg tablets' }],
+      rules
+    )
+  );
+  check(
+    flagged.some((f) => /quinapril/i.test(f.name)),
+    'an unmatched ACE inhibitor (quinapril) is flagged high-risk'
+  );
+  check(
+    flagged.some((f) => /losartan/i.test(f.name)),
+    'an unmatched ARB (losartan) is flagged high-risk'
+  );
+  check(!flagged.some((f) => /paracetamol/i.test(f.name)), 'a genuinely benign unmatched drug is still not flagged');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

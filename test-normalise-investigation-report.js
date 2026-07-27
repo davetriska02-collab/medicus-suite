@@ -435,6 +435,53 @@ console.log('\n--- specimen field: named group + ungrouped in same report ---');
   assert(byName['RDW'].specimen === null, 'RDW from ungrouped has specimen null');
 }
 
+// ── Partial-parse isolation (audit 2026-07-27, Critical) ─────────────────────
+// A throw part-way through the result loop used to be swallowed by one bare
+// catch wrapping the WHOLE loop, returning whatever had been built so far —
+// so a report whose 2nd of 3 results was malformed came back with 1 result,
+// no error field, and nothing to distinguish it from a genuinely empty report.
+// The dropped result is never graded, so an abnormal value raises no chip.
+{
+  console.log('\n--- partial-parse isolation ---');
+  // A proxy that throws on ANY property read — stands in for the malformed
+  // referenceRanges block that motivated this.
+  const poisoned = new Proxy(
+    {},
+    {
+      get() {
+        throw new Error('malformed result');
+      },
+    }
+  );
+  const report = normaliseInvestigationReport({
+    data: {
+      investigationReport: {
+        isMatchedToPatient: true,
+        ungroupedResults: [
+          { description: 'Sodium', resultValue: '140' },
+          poisoned,
+          { description: 'Creatinine', resultValue: '310', isAboveReferenceRange: true },
+        ],
+      },
+    },
+  });
+  assert(report.results.length === 2, 'the two parseable results survive a malformed sibling');
+  assert(
+    report.results.some((r) => r.rawValue === '310'),
+    'a result AFTER the malformed one is still parsed (no truncation)'
+  );
+  assert(report.parseError === true, 'parseError flags the report as incomplete');
+
+  const empty = normaliseInvestigationReport({
+    data: { investigationReport: { isMatchedToPatient: true, ungroupedResults: [] } },
+  });
+  assert(empty.results.length === 0 && empty.parseError === false, 'a genuinely empty report does NOT set parseError');
+  assert(
+    normaliseInvestigationReport(null).parseError === false,
+    'a null payload is empty-but-clean, not a parse failure'
+  );
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);
