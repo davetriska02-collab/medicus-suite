@@ -41,9 +41,10 @@ input[class*='ms-pjc-']:focus-visible {
    problem-description-cleanup.js into the same spot) is also excluded here
    so it isn't forced full-width by THIS rule when both widgets are present
    -- problem-description-cleanup.css carries the mirror-image rule for the
-   reverse case. Keep both files' exclusion lists in lock-step. */
+   reverse case, and problem-bulk-end.css (#ms-pbe-widget, 2026-07-27) a
+   third. Keep all three files' exclusion lists in lock-step. */
 .m-card-v2__content:has(> #ms-pjc-widget)
-  > *:not(#problems-major-label):not(#ms-pjc-widget):not(#ms-pdc-retired-widget) {
+  > *:not(#problems-major-label):not(#ms-pjc-widget):not(#ms-pdc-retired-widget):not(#ms-pbe-widget) {
   flex-basis: 100%;
 }
 

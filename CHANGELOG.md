@@ -2,6 +2,58 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.194.0] — 2026-07-27
+
+### New: "Bulk end problems" on the Clinical Summary
+
+User request: busy problem lists carry many problems that plainly need ending,
+and Medicus's own UI is one dialog per problem. New trigger button next to the
+"Major" heading (sharing the row with "Bulk remove?" and the retired-codes
+check) opens a checklist of **every** active problem — the general-purpose
+sibling of the SNOMED-scoped "Bulk remove?" widget, using the identical
+confirmed contract (`GET …/end-problem/{id}` for `activeChildProblems`,
+`POST /clinical/problem/end-problem` `{problemId, endDate, reason}`). No
+SNOMED resolution at all, so the opt-in scan is one cheap form fetch per
+problem.
+
+Because every row here is potentially a REAL clinical problem, the CSO
+guardrails from the 2026-07-26 review of the sibling widget apply from day
+one, several deliberately stricter:
+
+- Nothing pre-ticked and **no "Select all" of any kind** — each problem is
+  individually reviewed and ticked.
+- Problems with active child problems are excluded (disabled), not warned.
+- **Two-step confirm**: "Review N selected…" renders an explicit ENDING /
+  KEEPING summary (the duplicate-checker's house pattern for "about to change
+  the live record") with the end date and batch reason echoed back and a
+  no-bulk-undo warning; only that summary's Confirm button POSTs.
+- End date AND reason (free text, default "Resolved", batch-wide) guarded at
+  both layers — buttons disable without them and `endSelected()` refuses to
+  POST regardless of button state (`canSubmit` is the single guard both
+  consult).
+- **No auto-reload** after success — a "Refresh page" button instead (the
+  CSO-preferred pattern; a reload the clinician didn't ask for can bin a
+  half-typed consultation).
+- Every successful batch writes a machine-local Clinical Event Ledger entry
+  (source `record`, action `committed`, patient UUID + count only — never the
+  free-typed reason, per the ledger's no-free-text rule).
+- Failed POSTs surface the server's response body per row (the v3.193.2
+  lesson) and return to the checklist for retry; successes strike through the
+  live row optimistically.
+
+New `content-scripts/problem-bulk-end.js`/`.css` (registered in
+`manifest.json`), 29 assertions in new `test-problem-bulk-end.js` covering the
+payload contract, selectability, the double-layer `canSubmit` guard, the
+ENDING/KEEPING partition (a ticked-but-linked row can never reach ENDING),
+and error-body extraction. Shared-row CSS exclusion lists in
+`problem-junk-code-cleanup.css` / `problem-description-cleanup.css` extended
+for the third trigger (kept in lock-step). `defaults.json` untouched.
+
+Not yet live-confirmed on a real record — the POST contract is the same
+already-proven one the junk widget ships, but the reason string has only ever
+been live-captured as "not a problem"; if the server rejects another value,
+the per-row error now names the constraint.
+
 ## [v3.193.3] — 2026-07-27
 
 ### "Fix description": flatten option-object fields in the edit-problem POST (the actual API 400 root cause)
