@@ -2,17 +2,24 @@
 
 ## Project layout
 
-| Path | Purpose |
-|---|---|
-| `side-panel/` | Side-panel shell (`panel.html`, `panel.js`, `panel.css`) + per-module subdirectories |
-| `side-panel/modules/<name>/` | Each module: `<name>.js` (ES module), `<name>.css` |
-| `pop-out/` | Floating pop-out window shell (mirrors panel nav) |
-| `shared/` | APIs, utilities, IO helpers used by multiple contexts |
-| `shared/io/` | Per-module backup/restore IO files |
-| `engine/` | Business logic (rules engine, extractors, triage engine) |
-| `content-scripts/` | Injected into Medicus pages |
-| `options/` | Settings page |
-| `visualiser.html` / `visualiser-core.html` | Patient record visualiser (opens as full tab) |
+| Path                                       | Purpose                                                                              |
+| ------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `side-panel/`                              | Side-panel shell (`panel.html`, `panel.js`, `panel.css`) + per-module subdirectories |
+| `side-panel/modules/<name>/`               | Each module: `<name>.js` (ES module), `<name>.css`                                   |
+| `pop-out/`                                 | Floating pop-out window shell (mirrors panel nav)                                    |
+| `shared/`                                  | APIs, utilities, IO helpers used by multiple contexts                                |
+| `shared/io/`                               | Per-module backup/restore IO files                                                   |
+| `engine/`                                  | Business logic (rules engine, extractors, triage engine)                             |
+| `content-scripts/`                         | Injected into Medicus pages                                                          |
+| `options/`                                 | Settings page                                                                        |
+| `visualiser.html` / `visualiser-core.html` | Patient record visualiser (opens as full tab)                                        |
+
+**Official Medicus partner APIs:** `docs/medicus-build-portal-notes.md` holds captured knowledge of
+`build.medicus.health` (Transactional API, IM1 bulk extracts, PFS — auth, onboarding, endpoint
+catalogue). The portal itself 403s non-browser requests, so use those notes; note they are a
+second-hand capture, not verified against the live docs. The extension's own content scripts replay
+Medicus's _internal_ browser APIs, which are a different, undocumented surface (HAR-confirmed per
+feature).
 
 ## Adding a new side-panel module
 
@@ -22,15 +29,17 @@
 4. Add `<name>: { js: () => import('./modules/<name>/<name>.js'), css: '...' }` to `MODULES` in `side-panel/panel.js` AND `pop-out/pop-out.js`
 5. Follow the backup convention below
 
-> **Panel-only tabs (intentional exceptions):** `visualiser`, `about`, and `duplicate-checker` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. `visualiser` and `duplicate-checker` are both special-cased in `panel.js` (each opens a full browser tab via `chrome.tabs.create`, not a module) and `about` renders inline static text — none of these make sense in the floating pop-out, so they are deliberately omitted there. All *real* modules must still appear in both.
+> **Panel-only tabs (intentional exceptions):** `visualiser`, `about`, and `duplicate-checker` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. `visualiser` and `duplicate-checker` are both special-cased in `panel.js` (each opens a full browser tab via `chrome.tabs.create`, not a module) and `about` renders inline static text — none of these make sense in the floating pop-out, so they are deliberately omitted there. All _real_ modules must still appear in both.
 
 ## chrome.storage.local keys — backup convention
 
 **When you add a new storage key to an existing module:**
+
 1. Update `shared/io/<module>-io.js` — add the key to both the `*Export()` and `*Import()` functions.
 2. That's all. `options/options.js`'s `doFullExport()` delegates to those functions, so the new key is captured automatically in suite backups.
 
 **When you add a brand-new module with its own storage keys:**
+
 1. Create `shared/io/<module>-io.js` with `async function <module>Export()` and `async function <module>Import(data)`
 2. Add the scope name to `VALID_SCOPES` in `shared/io/suite-envelope.js`
 3. Add the module to `doFullExport()` and `applyEnvelope()` in `options/options.js`
@@ -43,6 +52,7 @@
 ## Global demand / alert strips
 
 Four permanent strips live in `side-panel/panel.html` outside `<main>`, polled independently by `panel.js`:
+
 - `#wrStrip` — waiting room patients (`wr-strip-*` CSS)
 - `#rmStrip` — new medical/admin requests (`rm-strip-*` CSS)
 - `#subRagStrip` — submissions RAG threshold alerts (`sub-rag-strip-*` CSS)
@@ -57,10 +67,10 @@ nodes** on every render. Three chip families are injected into it
 (`content-scripts/triage-lens/content.js`), by two strategies — pick the right one or
 chips flash-and-vanish:
 
-- **Age/decoration (`.ch-queue-chips`)** — *DOM-driven*: `decorateOneRow` reads what it
+- **Age/decoration (`.ch-queue-chips`)** — _DOM-driven_: `decorateOneRow` reads what it
   needs from the row's own cells and is rebuilt on every refresh. No async, no external
   state → inherently durable. **This is the template; copy it.**
-- **Monitoring (`.ch-q-mon`) / result-triage (`.ch-q-result`)** — *fetch-driven*: they
+- **Monitoring (`.ch-q-mon`) / result-triage (`.ch-q-result`)** — _fetch-driven_: they
   need data not on the row (drug record / lab values), fetched per row from the API and
   cached (`_queueResultCache`, keyed by **taskUuid**).
 
@@ -81,7 +91,7 @@ Non-negotiable rules (each cost a debugging session):
    never cleared by `runQueue`. `reinjectCachedResultChips()` iterates it, looks up the
    cached severity in `_queueResultCache` (keyed by taskUuid), and re-injects via the
    **row-index** path on every refresh — the result-chip equivalent of `decorateOneRow`.
-   The transient `_queueRowUuids` is only for scheduling the initial *fetch* of
+   The transient `_queueRowUuids` is only for scheduling the initial _fetch_ of
    not-yet-cached rows. **`row-id` is NOT the task UUID on real Medicus — do not key off
    it** (that no-op shipped as v3.69.0; the durable map fixed it in v3.70.0).
 5. **CSS token scope:** the chip's top-level class must be in the `hud.css` token-block
@@ -101,28 +111,30 @@ trust the eye** — the inject→wipe race is faster than a human can see. Reach
 
 Why a page-console capture (and its limits): the content script runs in the **isolated
 world**, so the page console (MAIN world) **cannot** read its `CONFIG`/closure state. But
-from the page console you *can*: count injected DOM (shared), read shared-origin
+from the page console you _can_: count injected DOM (shared), read shared-origin
 `localStorage`, do **credentialed `fetch`** (the page shares the extension's cookie auth,
 so you can replay the exact API path), and read `window.__chPageWorld` (the MAIN-world
 bridge flag set by `page-world.js`). Build diagnostics around those.
 
 The toolkit, in order:
+
 1. **Presence + counts** — `window.__chPageWorld` and counts of `.ch-chip`,
-   `.ch-queue-chips`, `.ch-q-mon`, `.ch-q-result`. Distinguishes *not injecting* vs
-   *decoration works but triage doesn't* vs *injected-then-wiped*.
+   `.ch-queue-chips`, `.ch-q-mon`, `.ch-q-result`. Distinguishes _not injecting_ vs
+   _decoration works but triage doesn't_ vs _injected-then-wiped_.
 2. **Timed lifecycle poll** — sample those counts over ~20s and record **peak** and
    **final**. `peak>0, final=0` = injected then wiped (persistence/re-inject bug);
    `peak=0` = never injected (event/rules/host problem). This is what catches the flash.
 3. **Data-path replay** — `fetch` `/tasks/data/{slug}/task-list` then each row's
-   `overviewURL`, normalise, and run the rule yourself. Separates *rule wrong* from
-   *pipeline broken* (the values are reachable from the queue via the overview endpoint).
+   `overviewURL`, normalise, and run the rule yourself. Separates _rule wrong_ from
+   _pipeline broken_ (the values are reachable from the queue via the overview endpoint).
 4. **The content script's own logs** — `localStorage.setItem('ch-debug','1')` + reload
    turns on `[ClinHUD]` pipeline logging (`DEBUG` reads that flag). Shows `triage start,
-   rows=`, per-report `sev=`, `chip injected`, `refreshQueueChips`.
+rows=`, per-report `sev=`, `chip injected`, `refreshQueueChips`.
 
 Hard rules learned the slow way:
+
 - **Inject by PREPEND (`insertBefore(node, target.firstChild)`), never `appendChild`.**
-  Medicus's Vue reconciler strips *trailing* foreign nodes on its next re-render;
+  Medicus's Vue reconciler strips _trailing_ foreign nodes on its next re-render;
   prepended nodes survive. (Appending was the v3.67.0 regression — chips vanished
   instantly; fixed v3.68.0.)
 - **CSS-variable scope:** injected chips only get the design tokens if their top-level
@@ -136,14 +148,15 @@ Hard rules learned the slow way:
 Drug matching in `engine/rules-engine.js` (`drugMatchesRule`) is **case-insensitive substring** matching against the `drug.match` list. Two consequences you must keep in mind, because the failure mode is **silent** — a med that doesn't match simply never fires its alert; there is no error, just a missing chip (a patient-safety risk, not a cosmetic one):
 
 - A **generic** term auto-covers its qualified generic forms — `"lithium"` already matches `"lithium carbonate"` / `"lithium citrate"`, so those don't need listing.
-- Every **distinct brand** must be listed explicitly or it will never match. When adding or editing a rule, enumerate the *complete* current UK brand set (check the BNF / dm+d), not just the generic plus a couple of common brands. Brand-list completeness is the default expectation.
-- **`drug.exclude` is sharp.** An exclude string silently drops *every* med whose name contains it, including legitimate ones. Use it only to suppress genuine false positives, and whenever you add one ask: "could a real patient who *needs* this monitoring match this string?" (e.g. the injectable-methotrexate exclusion was dropping valid parenteral-MTX patients.)
+- Every **distinct brand** must be listed explicitly or it will never match. When adding or editing a rule, enumerate the _complete_ current UK brand set (check the BNF / dm+d), not just the generic plus a couple of common brands. Brand-list completeness is the default expectation.
+- **`drug.exclude` is sharp.** An exclude string silently drops _every_ med whose name contains it, including legitimate ones. Use it only to suppress genuine false positives, and whenever you add one ask: "could a real patient who _needs_ this monitoring match this string?" (e.g. the injectable-methotrexate exclusion was dropping valid parenteral-MTX patients.)
 
 After changing `match`/`exclude`, run `node test-drug-brand-coverage.js` and add the new drug/brands to its `EXPECTED` map so the coverage is regression-guarded. This converts "a clinician notices a missing alert months later" into "CI fails on the PR".
 
 ## Version bumping
 
 Bump `manifest.json` `version` for every pushed change. Use semantic versioning:
+
 - **patch** (1.x.y → 1.x.y+1): bug fix, config update
 - **minor** (1.x.0 → 1.x+1.0): new feature or tab
 - **major** (1.x.0 → 2.0.0): major architecture change
@@ -165,8 +178,8 @@ the v3.75.0 `Urgent:` chip-label change and the bowel-screening rule were strand
 CHANGELOG v3.75.2.)
 
 - A **changed existing value** needs more than the bump to land: the merge is
-  `{ ...shipped, ...cfg }`, so the user's stored value wins. New *keys* arrive; changed
-  *values* do not. For chip labels, add the old value to **`RETIRED_CHIP_LABELS`** (kept
+  `{ ...shipped, ...cfg }`, so the user's stored value wins. New _keys_ arrive; changed
+  _values_ do not. For chip labels, add the old value to **`RETIRED_CHIP_LABELS`** (kept
   in lock-step in content.js + options.js) so it un-sticks on migration.
 - After editing `defaults.json`: run `node scripts/regen-defaults.js` (propagates the two
   derived copies) **and** `node scripts/defaults-config-lock.js` (refreshes the version
@@ -183,9 +196,11 @@ CHANGELOG v3.75.2.)
 ## Tooling (ESLint / Prettier / pre-commit hook)
 
 Run once after cloning (or when `package.json` changes):
+
 ```
 npm install
 ```
+
 This installs ESLint + Prettier devDeps and activates the `.githooks/pre-commit` hook
 (`git config core.hooksPath .githooks`) which lints and format-checks staged JS files only.
 
