@@ -272,6 +272,89 @@
     return { description: v.description, conceptId: v.conceptId, descriptionId: v.descriptionId || null };
   }
 
+  // Same conceptId-match discipline as confirmedReplacementAlternative above,
+  // but returns EVERY matching description row (deduped by descriptionId,
+  // falling back to description text), not just the first. Found live
+  // 2026-07-28: a SNOMED concept resolved as a confirmed/possibly/partially
+  // -equivalent candidate can itself carry SEVERAL synonyms — real example,
+  // 402222007 "Pompholyx of hand" ALSO carries the synonym "Chiropompholyx",
+  // and 201201000 "Pompholyx of foot" ALSO carries "Podopompholyx".
+  // confirmedReplacementAlternative's `.find()` picked whichever synonym
+  // happened to sort first in Medicus's bare-SCTID search response — often
+  // the more obscure/eponymous one, purely by accident of array order, never
+  // a deliberate choice (there is no preferred-term/acceptability signal in
+  // Medicus's own search response to rank by, so guessing "which wording
+  // looks nicer" would just be a different accident). Used by
+  // resolveSnomedNamedCandidate so this whole SNOMED-confirmed-candidate
+  // family of buttons behaves like every OTHER alternatives category in this
+  // file (sameConceptAlternatives, descendantAlternatives, …) — show every
+  // real synonym, let the clinician pick the wording, never silently guess.
+  function confirmedReplacementAlternatives(results, replacementConceptId) {
+    if (!Array.isArray(results) || !replacementConceptId) return [];
+    var seen = Object.create(null);
+    var out = [];
+    results.forEach(function (r) {
+      var v = r && r.value;
+      if (!v || v.conceptId !== replacementConceptId) return;
+      var key = v.descriptionId || v.description;
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push({ description: v.description, conceptId: v.conceptId, descriptionId: v.descriptionId || null });
+    });
+    return out;
+  }
+
+  // Groups a flat list of {description, conceptId, descriptionId, matchScore?}
+  // candidates by conceptId — 2026-07-28, explicit user request after the
+  // Pompholyx case above: several rows sharing one conceptId (structurally
+  // ONE SNOMED code, several wordings) were rendering as several separate
+  // buttons, reading as several different codes. Groups preserve first-seen
+  // conceptId order; each group's `options` keeps every distinct synonym
+  // (deduped by descriptionId, falling back to description text) in the
+  // order they were found. `bestScore` carries descendantAlternatives' own
+  // matchScore through grouping (the highest score among that concept's
+  // synonyms — the ranking signal is about the CODE's relevance, a per-
+  // synonym artefact of which words happen to appear in which wording isn't
+  // meaningful once grouped) — null when the input has no matchScore field
+  // at all (every other category). When any group has a score, groups are
+  // re-sorted by bestScore descending, same ranking intent
+  // descendantAlternatives already had before grouping existed.
+  function groupCandidatesByConcept(items) {
+    var order = [];
+    var byConceptId = Object.create(null);
+    (Array.isArray(items) ? items : []).forEach(function (item) {
+      if (!item || !item.conceptId) return;
+      if (!byConceptId[item.conceptId]) {
+        byConceptId[item.conceptId] = { conceptId: item.conceptId, options: [], bestScore: null };
+        order.push(item.conceptId);
+      }
+      var group = byConceptId[item.conceptId];
+      var key = item.descriptionId || item.description;
+      var alreadyListed = group.options.some(function (o) {
+        return (o.descriptionId || o.description) === key;
+      });
+      if (!alreadyListed) {
+        group.options.push({ description: item.description, descriptionId: item.descriptionId || null });
+      }
+      if (typeof item.matchScore === 'number') {
+        group.bestScore = group.bestScore === null ? item.matchScore : Math.max(group.bestScore, item.matchScore);
+      }
+    });
+    var groups = order.map(function (conceptId) {
+      return byConceptId[conceptId];
+    });
+    if (
+      groups.some(function (g) {
+        return g.bestScore !== null;
+      })
+    ) {
+      groups.sort(function (a, b) {
+        return (b.bestScore || 0) - (a.bestScore || 0);
+      });
+    }
+    return groups;
+  }
+
   // Manual-search results (2026-07-25, explicit user request — the "H/O:
   // urinary disease-UTI's" case, where "UTIs" is neither a same-concept
   // synonym, a hierarchy descendant, nor a text match of the current
@@ -394,6 +477,8 @@
       buildEditProblemPayload,
       findOutdatedProblems,
       confirmedReplacementAlternative,
+      confirmedReplacementAlternatives,
+      groupCandidatesByConcept,
       normalizedSearchResults,
       findLegacyReadCodeOrigin,
       stripGenericAdditionalInfoLines,
@@ -535,6 +620,26 @@
     return apiFetch(path).then(function (data) {
       return (data && data.results) || [];
     });
+  }
+
+  // Resolves a SNOMED-NAMED candidate conceptId — a REPLACED BY or POSSIBLY
+  // EQUIVALENT TO target from shared/snomed-retirement.js — against Medicus's
+  // OWN search index. Extracted 2026-07-27 (previously inlined only for the
+  // single REPLACED BY case) so the same two-step lookup — bare-SCTID query
+  // against the broad 6-hierarchy scope, then a Body-structure-scoped
+  // fallback (see BODY-STRUCTURE FALLBACK's own history, v3.193.0) if that
+  // comes up empty — can also resolve MULTIPLE possibly-equivalent
+  // candidates, not just the one confirmed replacement. Returns EVERY
+  // matching synonym (via confirmedReplacementAlternatives, plural — see its
+  // own comment for why picking just one is a silent guess), never a single
+  // arbitrary pick — an empty array (never null) if neither search finds
+  // this conceptId at all.
+  async function resolveSnomedNamedCandidate(conceptId) {
+    var results = await searchDescriptions(conceptId);
+    var matches = confirmedReplacementAlternatives(results, conceptId);
+    if (matches.length) return matches;
+    var bodyStructureResults = await searchDescendantsNarrowed('123037004', conceptId);
+    return confirmedReplacementAlternatives(bodyStructureResults, conceptId);
   }
 
   function postEditProblem(problemId, payload) {
@@ -755,8 +860,10 @@
         descendantAlternatives: null,
         crossConceptAlternatives: null,
         hintExpandedAlternatives: null,
-        retiredInfo: null, // {inactivationReason, replacement} — set by the opt-in retirement scan, never by the automatic text scan
-        confirmedReplacement: null, // {description, conceptId, descriptionId} resolved from Medicus's own search, or null
+        retiredInfo: null, // {inactivationReason, replacement, possiblyEquivalentTo, partiallyEquivalentTo} — set by the opt-in retirement scan, never by the automatic text scan
+        confirmedReplacement: null, // [{description, conceptId, descriptionId}, …] — EVERY synonym Medicus's own search has for the REPLACED BY target concept (may be several — see confirmedReplacementAlternatives), or null
+        confirmedPossibleEquivalents: null, // [{description, conceptId, descriptionId}, …] — every synonym of every POSSIBLY EQUIVALENT TO candidate concept resolved from Medicus's own search (multiple candidates AND multiple synonyms per candidate can both contribute)
+        confirmedPartiallyEquivalents: null, // [{description, conceptId, descriptionId}, …] — same shape as confirmedPossibleEquivalents but for PARTIALLY EQUIVALENT TO, a distinct SNOMED association (see partiallyEquivalentHtml)
         legacyReadCode: null, // {code, description} — set by the opt-in scan when originalCodes shows a read-v2 origin
         genericAdditionalInfo: null, // {cleaned, removed} — computed in openPanel from prefill.additionalInformation, ANY row
         genericAdditionalInfoSaving: false,
@@ -786,27 +893,167 @@
     var reasonText = reason ? esc(reason.description) : 'unspecified reason';
     var html =
       '<div class="ms-pdc-retired-note">⚠ This code has been RETIRED by SNOMED CT (' + reasonText + ').</div>';
-    if (st.confirmedReplacement) {
+    if (st.confirmedReplacement && st.confirmedReplacement.length) {
       html +=
         '<div class="ms-pdc-retired-replacement-section">' +
         '<span class="ms-pdc-retired-replacement-label">✓ SNOMED confirms the replacement code:</span>' +
         '<div class="ms-pdc-panel">' +
-        '<button type="button" class="ms-pdc-retired-replacement-btn" data-problem-id="' +
-        esc(problemId) +
-        '">' +
-        esc(st.confirmedReplacement.description) +
-        '</button>' +
+        candidateGroupsHtml(
+          problemId,
+          st.confirmedReplacement,
+          'confirmedreplacement',
+          'ms-pdc-retired-replacement-btn',
+          false
+        ) +
         '</div></div>';
     } else if (st.retiredInfo.replacement) {
       html +=
         '<div class="ms-pdc-retired-replacement-unmatched">SNOMED replaced this code with "' +
         esc(st.retiredInfo.replacement.description) +
         '" but it could not be matched in Medicus’s own search index — try the manual search below (it may need a different SNOMED hierarchy scope than this panel searches by default).</div>';
-    } else {
+    } else if (
+      (!st.retiredInfo.possiblyEquivalentTo || !st.retiredInfo.possiblyEquivalentTo.length) &&
+      (!st.retiredInfo.partiallyEquivalentTo || !st.retiredInfo.partiallyEquivalentTo.length)
+    ) {
       html +=
         '<div class="ms-pdc-retired-no-replacement">No automatic replacement is recorded for this retirement — review the suggestions below, or try the manual search further down this panel.</div>';
     }
+    html += possiblyEquivalentHtml(problemId, st);
+    html += partiallyEquivalentHtml(problemId, st);
     return html;
+  }
+
+  // POSSIBLY EQUIVALENT TO banner (2026-07-27 — real example: 69878008
+  // "Polycystic ovaries", retired as "Ambiguous component" with two
+  // candidates of genuinely different clinical meaning, 237055002 "Polycystic
+  // ovary syndrome" the disease vs. 781067001 "Polycystic ovary" a structural
+  // finding). DELIBERATELY kept visually and behaviourally separate from the
+  // confirmed-replacement section above: SNOMED itself is hedging here (not a
+  // confident successor pointer), and this can genuinely offer SEVERAL
+  // lozenges at once — one per candidate CONCEPT (see groupCandidatesByConcept
+  // above — several candidate concepts, or one concept with several
+  // synonyms, both collapse to one lozenge per real SNOMED code).
+  function possiblyEquivalentHtml(problemId, st) {
+    var candidates = st.retiredInfo && st.retiredInfo.possiblyEquivalentTo;
+    if (!candidates || !candidates.length) return '';
+    var resolved = st.confirmedPossibleEquivalents || [];
+    if (resolved.length) {
+      return (
+        '<div class="ms-pdc-possibly-equivalent-section">' +
+        '<span class="ms-pdc-possibly-equivalent-label">⚠ SNOMED marks this as POSSIBLY (not confirmed) equivalent to — verify which applies before applying:</span>' +
+        '<div class="ms-pdc-panel">' +
+        candidateGroupsHtml(problemId, resolved, 'possiblyequivalent', 'ms-pdc-possibly-equivalent-btn', true) +
+        '</div></div>'
+      );
+    }
+    return (
+      '<div class="ms-pdc-possibly-equivalent-unmatched">SNOMED marks this as possibly equivalent to ' +
+      candidates
+        .map(function (c) {
+          return '"' + esc(c.description) + '"';
+        })
+        .join(' or ') +
+      ' (not a confirmed replacement) but neither could be matched in Medicus’s own search index — try the manual search below.</div>'
+    );
+  }
+
+  // PARTIALLY EQUIVALENT TO banner (2026-07-28 — real example: 199317008
+  // "Twin pregnancy - delivered", retired as "Classification derived
+  // component" with two candidates — 65147003 "Twin pregnancy" and 289256000
+  // "Mother delivered" — that TOGETHER reconstruct the retired concept's
+  // meaning, unlike possiblyEquivalentHtml's candidates which are
+  // alternatives to CHOOSE BETWEEN). Deliberately separate section/copy from
+  // possiblyEquivalentHtml even though the resolve/render shape is identical,
+  // because the clinical instruction is different: "this record may need
+  // splitting into several problems" vs "pick whichever of these applies".
+  // Still offered as one-click apply-and-replace buttons like every other
+  // category — this widget doesn't attempt to auto-create the second problem
+  // entry, only lets the clinician swap toward whichever single candidate is
+  // the more clinically useful record now (same one-code-at-a-time model as
+  // every other suggestion here).
+  function partiallyEquivalentHtml(problemId, st) {
+    var candidates = st.retiredInfo && st.retiredInfo.partiallyEquivalentTo;
+    if (!candidates || !candidates.length) return '';
+    var resolved = st.confirmedPartiallyEquivalents || [];
+    if (resolved.length) {
+      return (
+        '<div class="ms-pdc-partially-equivalent-section">' +
+        '<span class="ms-pdc-partially-equivalent-label">⚠ SNOMED marks this retired concept\'s meaning as split across several codes — this record may need reviewing as more than one problem:</span>' +
+        '<div class="ms-pdc-panel">' +
+        candidateGroupsHtml(problemId, resolved, 'partiallyequivalent', 'ms-pdc-partially-equivalent-btn', true) +
+        '</div></div>'
+      );
+    }
+    return (
+      '<div class="ms-pdc-partially-equivalent-unmatched">SNOMED marks this retired concept\'s meaning as split across ' +
+      candidates
+        .map(function (c) {
+          return '"' + esc(c.description) + '"';
+        })
+        .join(' and ') +
+      ' but neither could be matched in Medicus’s own search index — try the manual search below.</div>'
+    );
+  }
+
+  // Renders ONE lozenge per DISTINCT SNOMED code (see groupCandidatesByConcept)
+  // instead of one per synonym — 2026-07-28, explicit user request after the
+  // Pompholyx grouping was missing: a code with only one offered synonym
+  // keeps its EXISTING single-button markup/class/click-binding untouched
+  // (`singleBtnClass` — ms-pdc-alt, ms-pdc-descendant, …, so nothing
+  // downstream needs to change for the common case); a code with several
+  // synonyms gets a <select> of the wordings plus one shared "Use" button
+  // (`.ms-pdc-multi-apply-btn`, bound once in bindPanelEvents and routed by
+  // `category` through applyGroupedCandidate — see its own comment).
+  // `includeConceptId` mirrors whichever existing single-button markup this
+  // category used (some apply-functions match by descriptionId alone, some
+  // need conceptId too — see each applyX function's own comment).
+  function candidateGroupsHtml(problemId, items, category, singleBtnClass, includeConceptId) {
+    var groups = groupCandidatesByConcept(items);
+    return groups
+      .map(function (g) {
+        var scoreHtml =
+          typeof g.bestScore === 'number'
+            ? ' <span class="ms-pdc-descendant-score">(' + g.bestScore + '% match)</span>'
+            : '';
+        if (g.options.length === 1) {
+          var only = g.options[0];
+          return (
+            '<button type="button" class="' +
+            singleBtnClass +
+            '" data-problem-id="' +
+            esc(problemId) +
+            '"' +
+            (includeConceptId ? ' data-concept-id="' + esc(g.conceptId) + '"' : '') +
+            ' data-description-id="' +
+            esc(only.descriptionId || '') +
+            '">' +
+            esc(only.description) +
+            scoreHtml +
+            '</button>'
+          );
+        }
+        var options = g.options
+          .map(function (o) {
+            return '<option value="' + esc(o.descriptionId || '') + '">' + esc(o.description) + '</option>';
+          })
+          .join('');
+        return (
+          '<span class="ms-pdc-multi-group" data-concept-id="' +
+          esc(g.conceptId) +
+          '">' +
+          '<select class="ms-pdc-multi-select">' +
+          options +
+          '</select>' +
+          scoreHtml +
+          '<button type="button" class="ms-pdc-multi-apply-btn" data-problem-id="' +
+          esc(problemId) +
+          '" data-category="' +
+          esc(category) +
+          '">Use</button>' +
+          '</span>'
+        );
+      })
+      .join('');
   }
 
   // Legacy Read-code-origin banner (2026-07-25) — see
@@ -938,54 +1185,23 @@
     var html = infoHtml;
     if (alts.length) {
       html +=
-        '<div class="ms-pdc-panel">' +
-        alts
-          .map(function (a) {
-            return (
-              '<button type="button" class="ms-pdc-alt" data-problem-id="' +
-              esc(problemId) +
-              '" data-description-id="' +
-              esc(a.descriptionId || '') +
-              '">' +
-              esc(a.description) +
-              '</button>'
-            );
-          })
-          .join('') +
-        '</div>';
+        '<div class="ms-pdc-panel">' + candidateGroupsHtml(problemId, alts, 'alt', 'ms-pdc-alt', false) + '</div>';
     }
     if (descendants.length) {
       // Deliberately separate from the same-concept panel above and labelled
       // to make the semantic difference obvious: this changes the CODE, not
       // just its label — a real coding decision, never auto-applied.
+      // matchScore (0-100, see candidateGroupsHtml/groupCandidatesByConcept):
+      // the % of free-text hint words found in a candidate's own wording —
+      // RANKING signal only (ancestry + "at least one word" already
+      // guarantee safety), shown so the clinician can judge relevance at a
+      // glance, e.g. "removal of uterine fibroid" (67%) vs "removal of
+      // uterine myoma" (33%) for the same additional info.
       html +=
         '<div class="ms-pdc-descendant-section">' +
         '<span class="ms-pdc-descendant-label">Additional info suggests a more specific code:</span>' +
         '<div class="ms-pdc-panel">' +
-        descendants
-          .map(function (a) {
-            // matchScore (0-100): the % of free-text hint words found in
-            // this candidate's own wording — RANKING signal only (ancestry
-            // + "at least one word" already guarantee safety), shown so the
-            // clinician can judge relevance at a glance across candidates,
-            // e.g. "removal of uterine fibroid" (67%) vs "removal of uterine
-            // myoma" (33%) for the same additional info.
-            var scoreHtml =
-              typeof a.matchScore === 'number'
-                ? ' <span class="ms-pdc-descendant-score">(' + a.matchScore + '% match)</span>'
-                : '';
-            return (
-              '<button type="button" class="ms-pdc-descendant" data-problem-id="' +
-              esc(problemId) +
-              '" data-description-id="' +
-              esc(a.descriptionId || '') +
-              '">' +
-              esc(a.description) +
-              scoreHtml +
-              '</button>'
-            );
-          })
-          .join('') +
+        candidateGroupsHtml(problemId, descendants, 'descendant', 'ms-pdc-descendant', false) +
         '</div>' +
         '</div>';
     }
@@ -998,21 +1214,7 @@
         '<div class="ms-pdc-crossconcept-section">' +
         '<span class="ms-pdc-crossconcept-label">⚠ Different SNOMED code, same description — verify before applying:</span>' +
         '<div class="ms-pdc-panel">' +
-        crossConcept
-          .map(function (a) {
-            return (
-              '<button type="button" class="ms-pdc-crossconcept" data-problem-id="' +
-              esc(problemId) +
-              '" data-concept-id="' +
-              esc(a.conceptId) +
-              '" data-description-id="' +
-              esc(a.descriptionId || '') +
-              '">' +
-              esc(a.description) +
-              '</button>'
-            );
-          })
-          .join('') +
+        candidateGroupsHtml(problemId, crossConcept, 'crossconcept', 'ms-pdc-crossconcept', true) +
         '</div>' +
         '</div>';
     }
@@ -1026,21 +1228,7 @@
         '<div class="ms-pdc-hintexpand-section">' +
         '<span class="ms-pdc-hintexpand-label">⚠ Inferred from additional notes — verify carefully before applying:</span>' +
         '<div class="ms-pdc-panel">' +
-        hintExpanded
-          .map(function (a) {
-            return (
-              '<button type="button" class="ms-pdc-hintexpand" data-problem-id="' +
-              esc(problemId) +
-              '" data-concept-id="' +
-              esc(a.conceptId) +
-              '" data-description-id="' +
-              esc(a.descriptionId || '') +
-              '">' +
-              esc(a.description) +
-              '</button>'
-            );
-          })
-          .join('') +
+        candidateGroupsHtml(problemId, hintExpanded, 'hintexpand', 'ms-pdc-hintexpand', true) +
         '</div>' +
         '</div>';
     }
@@ -1090,7 +1278,25 @@
     });
     root.querySelectorAll('.ms-pdc-retired-replacement-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        applyConfirmedReplacement(problemId);
+        applyConfirmedReplacement(problemId, btn.getAttribute('data-description-id'));
+      });
+    });
+    root.querySelectorAll('.ms-pdc-possibly-equivalent-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyPossiblyEquivalent(
+          problemId,
+          btn.getAttribute('data-concept-id'),
+          btn.getAttribute('data-description-id')
+        );
+      });
+    });
+    root.querySelectorAll('.ms-pdc-partially-equivalent-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyPartiallyEquivalent(
+          problemId,
+          btn.getAttribute('data-concept-id'),
+          btn.getAttribute('data-description-id')
+        );
       });
     });
     root.querySelectorAll('.ms-pdc-manualsearch-result').forEach(function (btn) {
@@ -1123,6 +1329,22 @@
     root.querySelectorAll('.ms-pdc-genericinfo-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         applyRemoveGenericAdditionalInfo(problemId);
+      });
+    });
+    // Grouped multi-synonym "Use" button (see candidateGroupsHtml) — reads
+    // the sibling <select>'s current value, not a fixed data attribute,
+    // since the whole point is the clinician picks the wording at click time.
+    root.querySelectorAll('.ms-pdc-multi-apply-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var group = btn.closest('.ms-pdc-multi-group');
+        var select = group && group.querySelector('select');
+        if (!group || !select) return;
+        applyGroupedCandidate(
+          problemId,
+          btn.getAttribute('data-category'),
+          group.getAttribute('data-concept-id'),
+          select.value
+        );
       });
     });
   }
@@ -1164,6 +1386,21 @@
       // description whose wording doesn't literally match any current
       // synonym, and this bypasses that entirely.
       var byConceptId = await searchDescriptions(code.conceptId);
+      // SAME-CONCEPT BODY-STRUCTURE FALLBACK (2026-07-28 — real case:
+      // "[M]Tubulovillous adenoma", conceptId 61722000, an ACTIVE concept —
+      // this isn't a retirement case at all). SEARCH_PATH's
+      // constrainingParentConcepts is Clinical finding/Procedure/Situation/
+      // Social context/Event only, so a bare-SCTID query for a concept that
+      // itself lives on the Body structure / morphologic-abnormality axis
+      // (like every "(morphologic abnormality)"-suffixed ICD-O [M]-code
+      // concept) returns ZERO results regardless of query text — same root
+      // cause as resolveSnomedNamedCandidate's own BODY-STRUCTURE FALLBACK
+      // (v3.193.0), just hit here on the everyday same-concept-alternatives
+      // path instead of the retirement-replacement path. Same two-step fix:
+      // only retried when the broad-scope bare-SCTID query came back empty.
+      if (!byConceptId.length) {
+        byConceptId = await searchDescendantsNarrowed('123037004', code.conceptId);
+      }
       var combinedResults = results.concat(byConceptId);
       st.alternatives = sameConceptAlternatives(combinedResults, code.conceptId, code.description);
       // Descendant search words: laterality (rt/lt/bilateral) PLUS generic
@@ -1176,19 +1413,40 @@
       // fallback — a clinician may want BOTH a same-concept relabel AND a
       // more-specific descendant offered together (explicit user decision).
       //
-      // RETRIEVAL (revised 2026-07-23): a single BLANK-QUERY fetch
-      // (searchDescendantsNarrowed with an empty word) confirmed live to
-      // return the full descendant set of the current concept directly —
-      // `query=` empty bypasses text matching entirely, unlike guessing
-      // individual words, which can silently miss a real descendant worded
-      // differently (e.g. "Hysteroscopic myomectomy" never contains
-      // "fibroid"/"resection"). One fetch, not one per word. Not provably
-      // complete — the response has no total/pagination field, so a very
-      // broad parent concept could in theory have more descendants than one
-      // page returns — but confirmed far more complete than per-word
-      // guessing for this real case. hintWords is then used only to RANK the
-      // candidates (descendantAlternatives' matchScore), not to retrieve
-      // them.
+      // RETRIEVAL (revised 2026-07-23, then AGAIN 2026-07-27 — see below): a
+      // single BLANK-QUERY fetch (searchDescendantsNarrowed with an empty
+      // word) confirmed live to return the full descendant set of the
+      // current concept directly — `query=` empty bypasses text matching
+      // entirely, unlike guessing individual words, which can silently miss
+      // a real descendant worded differently (e.g. "Hysteroscopic
+      // myomectomy" never contains "fibroid"/"resection"). Confirmed far
+      // more complete than per-word guessing FOR A NARROW PARENT CONCEPT.
+      //
+      // 2026-07-27 — the blank-query enumeration ALONE was found live to be
+      // NOT enough for a BROAD parent concept: real case, "Closed Left
+      // radial head fracture." coded to 125605004 "Fracture" (effectively
+      // the root of every fracture in the body). The blank-query fetch caps
+      // at 20 results (no pagination — the "could in theory have more" risk
+      // below is a real, common failure here, not just theoretical) and for
+      // a subtree this size those 20 are an arbitrary slice (hip/foot/jaw/
+      // rib/skull fractures in the live capture) containing ZERO
+      // radius-related entries — the real answers (68854005, 263196008)
+      // never got fetched at all, so descendantAlternatives' filter had
+      // nothing to match against regardless of ranking. Live-confirmed fix
+      // (console probe against Medicus's own index): a narrowed query using
+      // an actual hint word — `constrainingParentConcepts=125605004&query=
+      // head` — finds BOTH target codes directly, each confirmed via their
+      // own `parentConceptIds` to be true descendants; "radial" alone finds
+      // one of the two. Now fires ONE narrowed query per hint word (same
+      // discipline as the pathology/site hint searches below — one word per
+      // query, never combined, since Medicus's all-words-required search
+      // would silently zero-result a combined multi-word query) IN ADDITION
+      // TO the blank-query fetch, concatenating every result set before
+      // filtering — additive, not a replacement, since blank-query retrieval
+      // is still the more complete option for a narrower parent concept.
+      // descendantAlternatives already dedupes by descriptionId/description
+      // and computes matchScore from each result's own text, so candidates
+      // found by more than one word are never offered twice.
       var laterality = detectLateralityHint(prefill.additionalInformation);
       var hintWords = [];
       if (laterality && !descriptionAlreadySpecifiesLaterality(code.description, laterality)) {
@@ -1201,7 +1459,12 @@
         if (hintWords.indexOf(w) === -1) hintWords.push(w);
       });
       if (hintWords.length) {
-        var allDescendants = await searchDescendantsNarrowed(code.conceptId, '');
+        var narrowedResultSets = await Promise.all(
+          [''].concat(hintWords).map(function (word) {
+            return searchDescendantsNarrowed(code.conceptId, word);
+          })
+        );
+        var allDescendants = [].concat.apply([], narrowedResultSets);
         st.descendantAlternatives = descendantAlternatives(
           combinedResults.concat(allDescendants),
           code.conceptId,
@@ -1264,33 +1527,57 @@
       // (bare SCTID — see the WORD-MISMATCH FIX comment above for why this
       // reliably returns that concept's own synonyms regardless of text
       // phrasing), to find Medicus's own indexed form of it.
+      // BODY-STRUCTURE FALLBACK (2026-07-26 — real case: 443897009 "[M]Tubular
+      // adenoma NOS", REPLACED BY 1156654007 "Benign tubular adenoma
+      // (morphologic abnormality)"). SEARCH_PATH's constrainingParentConcepts
+      // scopes to Clinical finding/Procedure/Situation/Social context/Event —
+      // a confirmed SNOMED replacement that's itself on the Body structure /
+      // morphologic-abnormality axis is invisible to that search regardless of
+      // query text, not because Medicus doesn't index it but because this
+      // scope pre-emptively excludes that whole hierarchy. Live-confirmed via
+      // the public NHS termbrowser API (2026-07-26): 1156654007 genuinely
+      // descends from 123037004 "Body structure" (the SAME root already
+      // confirmed live for the unrelated Rotator Cuff body-structure case,
+      // 2026-07-17) — resolveSnomedNamedCandidate (see its own comment) now
+      // does this two-step lookup for both this single confirmed replacement
+      // AND the possibly-equivalent candidates below.
       if (st.retiredInfo && st.retiredInfo.replacement) {
-        var replacementConceptId = st.retiredInfo.replacement.conceptId;
-        var replacementResults = await searchDescriptions(replacementConceptId);
-        st.confirmedReplacement = confirmedReplacementAlternative(replacementResults, replacementConceptId);
-        // BODY-STRUCTURE FALLBACK (2026-07-26 — real case: 443897009 "[M]Tubular
-        // adenoma NOS", REPLACED BY 1156654007 "Benign tubular adenoma
-        // (morphologic abnormality)"). SEARCH_PATH's constrainingParentConcepts
-        // scopes to Clinical finding/Procedure/Situation/Social context/Event —
-        // a confirmed SNOMED replacement that's itself on the Body structure /
-        // morphologic-abnormality axis is invisible to that search regardless of
-        // query text, not because Medicus doesn't index it but because this
-        // scope pre-emptively excludes that whole hierarchy. Live-confirmed via
-        // the public NHS termbrowser API (2026-07-26): 1156654007 genuinely
-        // descends from 123037004 "Body structure" (the SAME root already
-        // confirmed live for the unrelated Rotator Cuff body-structure case,
-        // 2026-07-17) — reuses searchDescendantsNarrowed exactly as-is (already
-        // shipped, already used for hierarchy-descendant search elsewhere in
-        // this file), just with the replacement's bare conceptId as the query
-        // text instead of a hint word. One extra fetch, ONLY when the primary
-        // broad search comes up empty — the common case (most replacements ARE
-        // disorder/procedure-axis) stays exactly as cheap as before.
-        if (!st.confirmedReplacement) {
-          var bodyStructureResults = await searchDescendantsNarrowed('123037004', replacementConceptId);
-          st.confirmedReplacement = confirmedReplacementAlternative(bodyStructureResults, replacementConceptId);
-        }
+        st.confirmedReplacement = await resolveSnomedNamedCandidate(st.retiredInfo.replacement.conceptId);
       } else {
         st.confirmedReplacement = null;
+      }
+      // POSSIBLY EQUIVALENT TO candidates (2026-07-27) — see
+      // possiblyEquivalentHtml's own comment for why these are kept separate
+      // from confirmedReplacement above: SEVERAL candidates can genuinely
+      // exist, each resolved independently, none discarded just because
+      // another one also resolved. resolveSnomedNamedCandidate now returns
+      // an ARRAY per candidate (every synonym that concept has, not just
+      // one — see its own comment), so the per-candidate arrays are
+      // flattened into one flat button list, not filtered to one-per-candidate.
+      var possiblyEquivalentTo = (st.retiredInfo && st.retiredInfo.possiblyEquivalentTo) || [];
+      if (possiblyEquivalentTo.length) {
+        var resolvedPossibleEquivalents = await Promise.all(
+          possiblyEquivalentTo.map(function (c) {
+            return resolveSnomedNamedCandidate(c.conceptId);
+          })
+        );
+        st.confirmedPossibleEquivalents = [].concat.apply([], resolvedPossibleEquivalents);
+      } else {
+        st.confirmedPossibleEquivalents = null;
+      }
+      // PARTIALLY EQUIVALENT TO candidates (2026-07-28) — same resolution
+      // shape as possiblyEquivalentTo above, distinct field (see
+      // partiallyEquivalentHtml's own comment for why these stay separate).
+      var partiallyEquivalentTo = (st.retiredInfo && st.retiredInfo.partiallyEquivalentTo) || [];
+      if (partiallyEquivalentTo.length) {
+        var resolvedPartialEquivalents = await Promise.all(
+          partiallyEquivalentTo.map(function (c) {
+            return resolveSnomedNamedCandidate(c.conceptId);
+          })
+        );
+        st.confirmedPartiallyEquivalents = [].concat.apply([], resolvedPartialEquivalents);
+      } else {
+        st.confirmedPartiallyEquivalents = null;
       }
     } catch (err) {
       st.error = (err && err.message) || 'Failed to load alternative descriptions.';
@@ -1390,12 +1677,67 @@
     return applyCode(problemId, chosen);
   }
 
-  // Only one candidate ever exists here (SNOMED's own confirmed replacement,
-  // resolved once in openPanel), so no id-matching needed unlike the lookups
-  // above — just apply whatever's already on the row's state.
-  function applyConfirmedReplacement(problemId) {
+  // Always the SAME conceptId (SNOMED's own confirmed REPLACED BY target),
+  // but that concept can carry several of its own synonyms (see
+  // confirmedReplacementAlternatives' own comment — real example,
+  // "Pompholyx of hand" ALSO carries "Chiropompholyx") — matched by
+  // descriptionId, same discipline as applyAlternative/applyDescendant.
+  function applyConfirmedReplacement(problemId, descriptionId) {
     var st = rowState(problemId);
-    return applyCode(problemId, st.confirmedReplacement);
+    var chosen = (st.confirmedReplacement || []).find(function (a) {
+      return (a.descriptionId || '') === (descriptionId || '');
+    });
+    return applyCode(problemId, chosen);
+  }
+
+  // Several candidates can genuinely exist here (see possiblyEquivalentHtml's
+  // own comment), AND each candidate concept can itself carry several
+  // synonyms — matched by conceptId + descriptionId together, same
+  // discipline as applyCrossConcept/applyHintExpanded.
+  function applyPossiblyEquivalent(problemId, conceptId, descriptionId) {
+    var st = rowState(problemId);
+    var chosen = (st.confirmedPossibleEquivalents || []).find(function (c) {
+      return c.conceptId === conceptId && (c.descriptionId || '') === (descriptionId || '');
+    });
+    return applyCode(problemId, chosen);
+  }
+
+  // Same matching discipline as applyPossiblyEquivalent — several candidates,
+  // each with possibly several synonyms, matched by conceptId + descriptionId.
+  function applyPartiallyEquivalent(problemId, conceptId, descriptionId) {
+    var st = rowState(problemId);
+    var chosen = (st.confirmedPartiallyEquivalents || []).find(function (c) {
+      return c.conceptId === conceptId && (c.descriptionId || '') === (descriptionId || '');
+    });
+    return applyCode(problemId, chosen);
+  }
+
+  // Routes a click on the grouped multi-synonym "Use" button (see
+  // candidateGroupsHtml) to whichever category's own apply function actually
+  // owns that state array — the `category` tag is set once, in
+  // candidateGroupsHtml's caller, per section (alt/descendant/crossconcept/
+  // hintexpand/confirmedreplacement/possiblyequivalent/partiallyequivalent).
+  // Single-synonym lozenges never go through here — they keep calling their
+  // existing per-category apply function directly, unchanged.
+  function applyGroupedCandidate(problemId, category, conceptId, descriptionId) {
+    switch (category) {
+      case 'alt':
+        return applyAlternative(problemId, descriptionId);
+      case 'descendant':
+        return applyDescendant(problemId, descriptionId);
+      case 'crossconcept':
+        return applyCrossConcept(problemId, conceptId, descriptionId);
+      case 'hintexpand':
+        return applyHintExpanded(problemId, conceptId, descriptionId);
+      case 'confirmedreplacement':
+        return applyConfirmedReplacement(problemId, descriptionId);
+      case 'possiblyequivalent':
+        return applyPossiblyEquivalent(problemId, conceptId, descriptionId);
+      case 'partiallyequivalent':
+        return applyPartiallyEquivalent(problemId, conceptId, descriptionId);
+      default:
+        return undefined;
+    }
   }
 
   // Manual search (2026-07-25) — available on every open panel regardless of
@@ -1675,7 +2017,12 @@
         var st = rowState(p.id);
         st.prefill = prefill;
         if (isRetired) {
-          st.retiredInfo = { inactivationReason: retirement.inactivationReason, replacement: retirement.replacement };
+          st.retiredInfo = {
+            inactivationReason: retirement.inactivationReason,
+            replacement: retirement.replacement,
+            possiblyEquivalentTo: retirement.possiblyEquivalentTo || [],
+            partiallyEquivalentTo: retirement.partiallyEquivalentTo || [],
+          };
         }
         if (legacyReadCode) st.legacyReadCode = legacyReadCode;
         if (hasGenericInfo) st.genericAdditionalInfo = genericInfo;

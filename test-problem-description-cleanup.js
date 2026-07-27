@@ -34,6 +34,8 @@ const {
   parseConceptRetirement,
   buildConceptUrl,
   confirmedReplacementAlternative,
+  confirmedReplacementAlternatives,
+  groupCandidatesByConcept,
   normalizedSearchResults,
   findLegacyReadCodeOrigin,
   stripGenericAdditionalInfoLines,
@@ -915,6 +917,124 @@ console.log('--- confirmedReplacementAlternative: SNOMED-confirmed replacement, 
   );
 }
 
+console.log(
+  '--- confirmedReplacementAlternatives (plural): returns EVERY synonym, not just the first (real 2026-07-28 "Pompholyx of hand"/"Chiropompholyx" case) ---'
+);
+{
+  // Real live-confirmed shape: 402222007 "Pompholyx of hand" ALSO carries
+  // the synonym "Chiropompholyx" — confirmedReplacementAlternative (singular)
+  // would have arbitrarily returned whichever of these came first in Medicus's
+  // own bare-SCTID search response; confirmedReplacementAlternatives must
+  // keep BOTH.
+  const pompholyxResults = [
+    { label: 'Chiropompholyx', value: { description: 'Chiropompholyx', conceptId: '402222007', descriptionId: '1' } },
+    {
+      label: 'Pompholyx of hand',
+      value: { description: 'Pompholyx of hand', conceptId: '402222007', descriptionId: '2' },
+    },
+    { label: 'Something else', value: { description: 'Something else', conceptId: '111', descriptionId: '3' } },
+  ];
+  const matches = confirmedReplacementAlternatives(pompholyxResults, '402222007');
+  check(matches.length === 2, 'BOTH synonyms of the target concept are kept (got ' + matches.length + ')');
+  check(
+    matches.some((m) => m.description === 'Chiropompholyx' && m.descriptionId === '1'),
+    'the eponymous synonym is present'
+  );
+  check(
+    matches.some((m) => m.description === 'Pompholyx of hand' && m.descriptionId === '2'),
+    'the plain-English synonym is ALSO present, not silently dropped'
+  );
+  check(
+    !matches.some((m) => m.conceptId === '111'),
+    'a result for a DIFFERENT concept is excluded, same discipline as the singular function'
+  );
+  check(confirmedReplacementAlternatives([], '402222007').length === 0, 'empty results -> empty array, never throws');
+  check(confirmedReplacementAlternatives(null, '402222007').length === 0, 'null results -> empty array, never throws');
+  check(
+    confirmedReplacementAlternatives(pompholyxResults, null).length === 0,
+    'null replacementConceptId -> empty array, never throws'
+  );
+  const dupedResults = [
+    { label: 'Chiropompholyx', value: { description: 'Chiropompholyx', conceptId: '402222007', descriptionId: '1' } },
+    { label: 'Chiropompholyx', value: { description: 'Chiropompholyx', conceptId: '402222007', descriptionId: '1' } },
+  ];
+  check(
+    confirmedReplacementAlternatives(dupedResults, '402222007').length === 1,
+    'the same descriptionId referenced twice is deduped, not listed twice'
+  );
+}
+
+console.log(
+  '--- groupCandidatesByConcept: one group per SNOMED code, not one per synonym (2026-07-28 user request) ---'
+);
+{
+  // Real shape: 402222007 "Pompholyx of hand" has two synonyms; 201201000
+  // "Pompholyx of foot" has one. Should collapse to exactly 2 groups, not 3
+  // separate lozenges.
+  const items = [
+    { description: 'Chiropompholyx', conceptId: '402222007', descriptionId: '1' },
+    { description: 'Pompholyx of hand', conceptId: '402222007', descriptionId: '2' },
+    { description: 'Podopompholyx', conceptId: '201201000', descriptionId: '3' },
+  ];
+  const groups = groupCandidatesByConcept(items);
+  check(groups.length === 2, 'one group per DISTINCT conceptId (got ' + groups.length + ')');
+  check(groups[0].conceptId === '402222007', 'first group is the first-seen conceptId, order preserved');
+  check(groups[0].options.length === 2, 'the hand group keeps BOTH synonyms (got ' + groups[0].options.length + ')');
+  check(
+    groups[0].options.some((o) => o.description === 'Chiropompholyx') &&
+      groups[0].options.some((o) => o.description === 'Pompholyx of hand'),
+    'both wordings are present, neither silently dropped'
+  );
+  check(groups[1].conceptId === '201201000', 'second group is the foot concept');
+  check(groups[1].options.length === 1, 'the foot group has exactly its one synonym');
+  check(groups[0].bestScore === null, 'no matchScore field on the input -> bestScore stays null');
+
+  const dupedOptionItems = [
+    { description: 'Chiropompholyx', conceptId: '402222007', descriptionId: '1' },
+    { description: 'Chiropompholyx', conceptId: '402222007', descriptionId: '1' },
+  ];
+  check(
+    groupCandidatesByConcept(dupedOptionItems)[0].options.length === 1,
+    'the same descriptionId within one group is deduped, not listed twice'
+  );
+
+  const noDescriptionIdItems = [
+    { description: 'Same text', conceptId: '999', descriptionId: null },
+    { description: 'Same text', conceptId: '999', descriptionId: null },
+    { description: 'Different text', conceptId: '999', descriptionId: null },
+  ];
+  const noIdGroups = groupCandidatesByConcept(noDescriptionIdItems);
+  check(
+    noIdGroups[0].options.length === 2,
+    'entries with no descriptionId are deduped by description text instead (got ' + noIdGroups[0].options.length + ')'
+  );
+
+  const scoredItems = [
+    { description: 'Fracture of right radius', conceptId: '1', descriptionId: 'a', matchScore: 50 },
+    { description: 'Fracture of distal radius, right side', conceptId: '1', descriptionId: 'b', matchScore: 100 },
+    { description: 'Fracture of left radius', conceptId: '2', descriptionId: 'c', matchScore: 20 },
+  ];
+  const scoredGroups = groupCandidatesByConcept(scoredItems);
+  check(
+    scoredGroups[0].conceptId === '1' && scoredGroups[0].bestScore === 100,
+    "a group's bestScore is the MAX across its own synonyms, not the first one seen (got " +
+      (scoredGroups[0] && scoredGroups[0].bestScore) +
+      ')'
+  );
+  check(
+    scoredGroups[0].bestScore >= scoredGroups[1].bestScore,
+    'groups are re-sorted by bestScore descending once any group carries a score'
+  );
+
+  check(groupCandidatesByConcept([]).length === 0, 'empty input -> empty array');
+  check(groupCandidatesByConcept(null).length === 0, 'null input -> empty array, never throws');
+  check(
+    groupCandidatesByConcept([null, { description: 'x' }, { conceptId: '1', description: 'y', descriptionId: 'd' }])
+      .length === 1,
+    'entries with no conceptId (or null entries) are skipped, not crashed on'
+  );
+}
+
 console.log('--- re-exported shared/snomed-retirement.js functions work through this file too ---');
 {
   const retired = parseConceptRetirement({ active: false, memberships: [] });
@@ -926,6 +1046,14 @@ console.log('--- re-exported shared/snomed-retirement.js functions work through 
   check(
     url === 'https://termbrowser.nhs.uk/sct-browser-api/snomed/uk-edition/v1/concepts/123',
     'buildConceptUrl is re-exported and callable'
+  );
+  check(
+    Array.isArray(retired.possiblyEquivalentTo),
+    'parseConceptRetirement re-export also carries possiblyEquivalentTo (full coverage in test-snomed-retirement.js)'
+  );
+  check(
+    Array.isArray(retired.partiallyEquivalentTo),
+    'parseConceptRetirement re-export also carries partiallyEquivalentTo (full coverage in test-snomed-retirement.js)'
   );
 }
 

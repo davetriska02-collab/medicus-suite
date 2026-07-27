@@ -2,6 +2,61 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.195.0] — 2026-07-28
+
+### Added: "PARTIALLY EQUIVALENT TO" retirement association support
+
+Real case: 199317008 "Twin pregnancy - delivered" is retired ("Classification derived
+component") with a `PARTIALLY EQUIVALENT TO` association (refset `1186924009`) to TWO
+concepts — 65147003 "Twin pregnancy" and 289256000 "Mother delivered" — but
+`shared/snomed-retirement.js` only recognised `REPLACED BY` and `POSSIBLY EQUIVALENT TO`,
+so this association was silently skipped and no replacement was ever offered.
+
+`parseConceptRetirement` now also parses `partiallyEquivalentTo` (same multi-candidate,
+deduped shape as `possiblyEquivalentTo`, kept as its own field — SNOMED's own semantics
+differ: "partially equivalent" means the retired concept's meaning is SPLIT across the
+candidates, not a hedge between alternatives). The "Clean up code" panel renders it as its
+own violet-styled banner with distinct copy ("this record may need reviewing as more than
+one problem"), resolved against Medicus's own search index the same way as
+`possiblyEquivalentTo`.
+
+### Fixed: same-concept alternatives search invisible to codes on the Body structure axis
+
+Real case: "[M]Tubulovillous adenoma" (conceptId 61722000, an ACTIVE concept — not a
+retirement case) never got a same-concept relabel suggestion. `61722000` is a
+`(morphologic abnormality)` concept, and the ordinary same-concept-alternatives search
+scopes to Clinical finding/Procedure/Situation/Social context/Event only — the same root
+cause as v3.193.0's retirement-replacement fix, this time hit on the everyday "Clean up
+code" path that every `[M]`/`[X]`/NOS-flagged problem goes through. `openPanel` now retries
+the current concept's own bare-SCTID search against the Body structure hierarchy when the
+broad-scope search comes back empty, same two-step fallback already proven for retirement
+replacements.
+
+### Fixed: a SNOMED code's own eponymous/technical synonym could silently win over its plain-English one
+
+Real case: 402222007 "Pompholyx of hand" also carries the synonym "Chiropompholyx", and
+201201000 "Pompholyx of foot" also carries "Podopompholyx". `confirmedReplacementAlternative`
+picked whichever synonym happened to sort first in Medicus's own bare-SCTID search response
+— an accident of array order, not a deliberate choice (Medicus's search response carries no
+preferred-term/acceptability flag to rank by). `confirmedReplacementAlternatives` (plural)
+now returns every synonym for a candidate concept instead of just the first, used by
+`resolveSnomedNamedCandidate` for the confirmed-replacement / possibly-equivalent /
+partially-equivalent categories.
+
+### Changed: one lozenge per SNOMED code, not one per synonym
+
+Follow-up to the fix above: showing every synonym as its own button made one real SNOMED
+code look like several different codes when it had multiple wordings. `groupCandidatesByConcept`
+now groups every candidate-list category (same-concept alternatives, descendants,
+cross-concept, hint-expanded, confirmed replacement, possibly/partially equivalent) by
+`conceptId`: a code with one offered synonym keeps its existing single-button lozenge
+unchanged; a code with several renders a `<select>` of the wordings plus one shared "Use"
+button, routed through `applyGroupedCandidate` to whichever category's own apply function
+owns that state.
+
+276/276 tests passing across `test-snomed-retirement.js` (59) and
+`test-problem-description-cleanup.js` (217), lint/format clean.
+
 ## [v3.194.0] — 2026-07-26
 
 ### Renamed "Fix description" to "Clean up code"

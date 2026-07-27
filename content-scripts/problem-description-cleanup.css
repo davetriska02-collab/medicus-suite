@@ -137,6 +137,56 @@ input[class*='ms-pdc-']:focus-visible {
   font-style: italic;
 }
 
+/* Grouped multi-synonym control (2026-07-28) — when one SNOMED code has
+   several offered synonyms, it renders as this <select> + "Use" button
+   instead of one lozenge per synonym (see candidateGroupsHtml/
+   groupCandidatesByConcept in the content script) — several buttons for
+   what's structurally one code were reading as several different codes,
+   per explicit user request. Shared across EVERY category (same-concept,
+   descendant, cross-concept, hint-expanded, confirmed/possibly/partially
+   equivalent) — deliberately neutral, not tied to any one category's own
+   colour palette, since it sits inside whichever category's own coloured
+   .ms-pdc-panel background already supplies that context. A code with only
+   one offered synonym keeps its EXISTING single-lozenge styling (.ms-pdc-alt,
+   .ms-pdc-descendant, …) untouched — this control only appears when there's
+   an actual wording choice to make. */
+.ms-pdc-multi-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 3px 3px 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+}
+
+.ms-pdc-multi-select {
+  max-width: 220px;
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-pdc-multi-apply-btn {
+  padding: 3px 10px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-pdc-multi-apply-btn:hover {
+  background: #e5e7eb;
+}
+
 .ms-pdc-error {
   font-size: 12px;
   color: #b91c1c;
@@ -338,6 +388,114 @@ input[class*='ms-pdc-']:focus-visible {
 
 .ms-pdc-retired-replacement-btn:hover {
   background: #dcfce7;
+}
+
+/* POSSIBLY EQUIVALENT TO — a genuinely lower-confidence signal than the
+   confirmed-replacement green above (SNOMED itself is hedging, and there can
+   be several candidates with materially different clinical meaning; real
+   example, 2026-07-27: 69878008 "Polycystic ovaries" possibly-equivalent to
+   EITHER the disease 237055002 or the structural finding 781067001). Reuses
+   the same warning-orange palette as cross-concept suggestions above — same
+   "no confident single answer, verify before applying" risk tier — but with
+   its own class names since the two mechanisms are otherwise unrelated. */
+.ms-pdc-possibly-equivalent-section {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.ms-pdc-possibly-equivalent-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #c2410c;
+}
+
+.ms-pdc-possibly-equivalent-section .ms-pdc-panel {
+  background: #fff7ed;
+  border: 1px dashed #fb923c;
+}
+
+.ms-pdc-possibly-equivalent-btn {
+  padding: 5px 10px;
+  background: #fff;
+  border: 1px solid #fb923c;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #c2410c;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ms-pdc-possibly-equivalent-btn:hover {
+  background: #ffedd5;
+}
+
+.ms-pdc-possibly-equivalent-unmatched {
+  display: block;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: #f9fafb;
+  border-left: 2px solid #d1d5db;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #4b5563;
+}
+
+/* PARTIALLY EQUIVALENT TO — a DIFFERENT signal from POSSIBLY EQUIVALENT TO
+   above, not a re-skin of it: SNOMED is saying the retired concept's meaning
+   was SPLIT across the candidates (together, not "pick one"), real example
+   2026-07-28: 199317008 "Twin pregnancy - delivered" partially-equivalent to
+   BOTH 65147003 "Twin pregnancy" and 289256000 "Mother delivered". Given its
+   own violet palette (distinct from possibly-equivalent's orange) so the two
+   are visually distinguishable at a glance, same "verify before applying"
+   risk tier otherwise. */
+.ms-pdc-partially-equivalent-section {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.ms-pdc-partially-equivalent-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #6d28d9;
+}
+
+.ms-pdc-partially-equivalent-section .ms-pdc-panel {
+  background: #f5f3ff;
+  border: 1px dashed #a78bfa;
+}
+
+.ms-pdc-partially-equivalent-btn {
+  padding: 5px 10px;
+  background: #fff;
+  border: 1px solid #a78bfa;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #6d28d9;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ms-pdc-partially-equivalent-btn:hover {
+  background: #ede9fe;
+}
+
+.ms-pdc-partially-equivalent-unmatched {
+  display: block;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: #f9fafb;
+  border-left: 2px solid #d1d5db;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #4b5563;
 }
 
 /* ── Retirement scan trigger (page-level, opt-in — separate from the
