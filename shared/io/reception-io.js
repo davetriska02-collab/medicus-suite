@@ -50,6 +50,10 @@ async function receptionExport() {
 
 const ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
 
+// Length clamp for the practice-editable reception free-text config fields
+// (safeguardingContact, crisisLineText). Matches the options-page maxlength.
+const CONTACT_MAX_LEN = 200;
+
 function _isFlagMap(v) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
   return Object.values(v).every(x => typeof x === 'boolean');
@@ -87,6 +91,40 @@ async function receptionImport(data) {
       if (!_isFlagMap(c.hiddenChipRules)) throw new Error('reception.config.hiddenChipRules must map rule ids to booleans.');
       _assertFlagMapKeys(c.hiddenChipRules, 'reception.config.hiddenChipRules');
       clean.hiddenChipRules = c.hiddenChipRules;
+    }
+    // Practice-editable free text surfaced verbatim to reception staff (the
+    // safeguarding-lead contact on the escalation banner, and the crisis route on
+    // sensitive pathways). Strings only, trimmed and clamped — a backup must not
+    // be able to inject a wall of text into a red-flag banner. Both render via
+    // textContent, so there is no markup path; the clamp is a size guard.
+    if (c.safeguardingContact !== undefined && c.safeguardingContact !== null) {
+      if (typeof c.safeguardingContact !== 'string') {
+        throw new Error('reception.config.safeguardingContact must be a string.');
+      }
+      clean.safeguardingContact = c.safeguardingContact.trim().slice(0, CONTACT_MAX_LEN);
+    }
+    if (c.crisisLineText !== undefined && c.crisisLineText !== null) {
+      if (typeof c.crisisLineText !== 'string') {
+        throw new Error('reception.config.crisisLineText must be a string.');
+      }
+      clean.crisisLineText = c.crisisLineText.trim().slice(0, CONTACT_MAX_LEN);
+    }
+    // seenBundledIds — which bundled pathway ids the practice has already been
+    // shown (drives the NEW badge in options). Cosmetic, but the ids are the same
+    // shape as every other reception id map, so they get the same key discipline
+    // as _assertFlagMapKeys: anything not id-shaped is a crafted backup, not a typo.
+    if (c.seenBundledIds !== undefined && c.seenBundledIds !== null) {
+      if (!Array.isArray(c.seenBundledIds)) {
+        throw new Error('reception.config.seenBundledIds must be an array of pathway ids.');
+      }
+      const ids = [];
+      for (const id of c.seenBundledIds) {
+        if (typeof id !== 'string' || !_FLAG_KEY_RE.test(id)) {
+          throw new Error(`reception.config.seenBundledIds contains an invalid id "${id}" (ids must match [a-z0-9][a-z0-9-]{0,49}).`);
+        }
+        if (ids.indexOf(id) === -1) ids.push(id);
+      }
+      clean.seenBundledIds = ids;
     }
     // disclaimerAcceptedAt is intentionally NOT imported: acceptance is a per-install
     // attestation that must only be set when a local admin explicitly clicks "Accept"

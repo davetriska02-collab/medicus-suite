@@ -1,13 +1,14 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-25",
-  "specVersion": "Reception capture pathways v1.5 — 2026-07-25 (The Keeper): added 5 new red flags across headache, sinusitis, rash, and general pathways: rf-morning-vomit (headache, 999 — raised ICP, NICE CKS Headache); rf-nasal-unilateral (sinusitis, duty — unilateral nasal obstruction, NICE NG12 2WW); rf-skin-lesion (rash, duty — new/changing mole, NICE NG12 2WW); rf-haematuria (general, duty — visible haematuria 45+, NICE NG12 2WW); rf-hoarseness (general, duty — persistent 3+ weeks, NICE NG12 ENT 2WW). Base v1.4 from 2026-07-11 preserved.",
+  "lastUpdated": "2026-07-28",
+  "specVersion": "Reception capture pathways v1.6 — 2026-07-28 (DRAFT — PENDING CSO SIGN-OFF, do not enable until signed off): added three new capture pathways from the reception-feedback build plan section B — gu-male (Urinary / genital problems, male), gyn-female (Gynae / urinary problems, female), and mental-health (Mental health / emotional distress). Neither GU pathway carries a pharmacyFirst block: male UTI is excluded from the NHS Pharmacy First service spec, and the gynae pathway is clinician-only by design. mental-health carries the new pathway-level flag \"sensitive\": true (capture drafts are never auto-saved and the taker's initials are mandatory) and, per NICE NG225 — which explicitly advises against risk-stratification tools and scales — is deliberately a minimal, non-stratifying capture-and-escalate script: binary red-flag triggers only, few questions, no scoring, no category or disposition output. Its first two red flags are the two mental-health flags that also remain in the \"general\" pathway, kept in BOTH because callers do not announce the right pathway. Also added: the new red-flag-level flag \"safeguarding\": true (escalate immediately to the duty clinician AND the practice safeguarding lead; bypasses all routing), and a new shared closing question \"caller\" capturing whether reception is speaking to the patient or to someone calling on their behalf. All conditional escalation drafts were split into separate single-level flags — \"escalate\" remains strictly \"999\" or \"duty\". The three new pathways ship DISABLED like every bundled pathway (enabledPathways defaults to off) and must not be enabled until the CSO has signed off the wording; the CKS phrasing still needs verifying against the primary NICE pages. Base v1.5 from 2026-07-25 preserved. Reception capture pathways v1.5 — 2026-07-25 (The Keeper): added 5 new red flags across headache, sinusitis, rash, and general pathways: rf-morning-vomit (headache, 999 — raised ICP, NICE CKS Headache); rf-nasal-unilateral (sinusitis, duty — unilateral nasal obstruction, NICE NG12 2WW); rf-skin-lesion (rash, duty — new/changing mole, NICE NG12 2WW); rf-haematuria (general, duty — visible haematuria 45+, NICE NG12 2WW); rf-hoarseness (general, duty — persistent 3+ weeks, NICE NG12 ENT 2WW). Base v1.4 from 2026-07-11 preserved.",
   "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes), the NICE NG143 feverish-child traffic-light features, the NHS Pharmacy First clinical pathways, and NICE NG253/NG254/NG255 (suspected sepsis, replacing NG51) for urosepsis / sepsis escalation, re-phrased in lay language for telephone use by non-clinical staff. 2026-06-10: escalation re-tiering pass — several time-critical presentations (urosepsis, cauda equina, PE, large haemoptysis, sepsis, self-harm with means) promoted to 999 level. 2026-06-14: CSO signed off the reception tiers and red-flag escalation levels for live use (DRAFT blocker lifted), and promoted five red flags from urgent-duty to 999 on clinical review — suspected SJS/TEN (rash), sepsis with rigors (UTI), possible cauda equina / bilateral leg weakness or numbness (back pain), mastoiditis (earache), and red painful eye with halos / suspected acute angle-closure glaucoma (headache). This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files.",
   "escalations": {
     "999": "Possible emergency: follow practice emergency policy NOW — advise calling 999 / transfer to the duty clinician immediately. Do not put the caller in a queue.",
     "duty": "Alert the duty clinician now — this needs same-day clinical review. Do not book as routine."
   },
   "closingQuestions": [
+    { "id": "caller", "ask": "Am I speaking to the patient, or someone calling on their behalf? (who — and relationship)", "type": "text", "label": "Caller" },
     { "id": "tried", "ask": "Have you tried anything for it already? Did it help?", "type": "text", "label": "Tried so far" },
     { "id": "lastSeen", "ask": "Who did you last see about this problem (or anything else recently)?", "type": "text", "label": "Last seen" },
     { "id": "course", "ask": "Is it getting better, worse, or staying the same?", "type": "choice", "options": ["Better", "Worse", "Same", "Comes and goes"], "label": "Course" },
@@ -263,6 +264,101 @@
         { "id": "duration", "ask": "How long has this been going on?", "type": "text", "label": "Duration" },
         { "id": "worst", "ask": "What is the main thing worrying them about it?", "type": "text", "label": "Main concern" },
         { "id": "impact", "ask": "How is it affecting day-to-day life?", "type": "text", "label": "Impact" }
+      ]
+    },
+    {
+      "id": "gu-male",
+      "title": "Urinary / genital problems (male)",
+      "appliesTo": "Men and boys. Not covered by Pharmacy First — male urinary infections always need a clinician.",
+      "sources": [
+        "NICE CKS: Urinary tract infection (lower) — men",
+        "NICE CKS: Prostatitis — acute",
+        "NICE CKS: Scrotal pain and swelling",
+        "NICE NG12: Suspected cancer — urological (visible haematuria; testicular lump or change)",
+        "NICE NG253/NG254/NG255: Suspected sepsis (replacing NG51) — urosepsis cluster",
+        "DRAFT 2026-07-28 — pending CSO sign-off. No pharmacyFirst block: NHS Pharmacy First does not cover UTI in men, so this pathway must never route to a pharmacy."
+      ],
+      "redFlags": [
+        { "id": "rf-torsion", "ask": "Sudden, severe pain in a testicle — especially if it started within the last few hours, or comes with feeling sick or vomiting?", "escalate": "999" },
+        { "id": "rf-retention", "ask": "Completely unable to pass any urine at all, with a painful, full feeling low down in the tummy?", "escalate": "999" },
+        { "id": "rf-sepsis", "ask": "Fever with shaking or uncontrollable shivering (rigors), new confusion, or looking or feeling seriously unwell, alongside the urinary or testicle symptoms?", "escalate": "999" },
+        { "id": "rf-loin", "ask": "Fever together with pain in the back or side, around kidney level, alongside the urinary symptoms?", "escalate": "duty" },
+        { "id": "rf-haematuria", "ask": "Any visible blood in the urine — urine that looks pink, red, or brown?", "escalate": "duty" },
+        { "id": "rf-testis-lump", "ask": "A lump or swelling in a testicle, or a change in its shape, size, or how it feels — even if it does not hurt at all?", "escalate": "duty" }
+      ],
+      "questions": [
+        { "id": "area", "ask": "Which part is the problem — the waterworks, a testicle, or something else?", "type": "choice", "options": ["Waterworks (passing urine)", "Testicle or scrotum", "Both", "Something else"], "label": "Problem area" },
+        { "id": "dysuria", "ask": "Any burning or stinging when passing urine?", "type": "yesno", "label": "Burning/stinging" },
+        { "id": "blood", "ask": "Have they noticed any blood in the urine?", "type": "yesno", "label": "Blood in urine" },
+        { "id": "fever", "ask": "Any fever, or feeling generally unwell?", "type": "yesno", "label": "Fever/unwell" },
+        { "id": "perineal", "ask": "Any pain low down between the legs, or around the back passage?", "type": "yesno", "label": "Perineal/rectal pain" },
+        { "id": "luts", "ask": "Any of these with passing urine?", "type": "multi", "options": ["Going more often than usual", "Weak or slow stream", "Trouble getting started", "Getting up at night to pass urine", "Sudden urgency", "Dribbling at the end"], "label": "Waterworks pattern" },
+        { "id": "testicle", "ask": "If there is testicle pain or swelling — which side, and how quickly did it come on?", "type": "text", "label": "Testicle pain/swelling" },
+        { "id": "prostate", "ask": "Any known prostate problems, or a PSA blood test in the past?", "type": "text", "label": "Prostate / PSA history" }
+      ]
+    },
+    {
+      "id": "gyn-female",
+      "title": "Gynae / urinary problems (female)",
+      "appliesTo": "Women and girls. For straightforward cystitis symptoms in a woman aged 16–64, use the Urinary symptoms pathway instead.",
+      "sources": [
+        "NICE CKS: Vaginal discharge",
+        "NICE NG126: Ectopic pregnancy and miscarriage — diagnosis and initial management",
+        "NICE NG12: Suspected cancer — gynaecological (postmenopausal bleeding; ovarian symptom cluster)",
+        "NICE CKS: Menopause",
+        "DRAFT 2026-07-28 — pending CSO sign-off. Complements, and does not replace, the \"Urinary symptoms (woman 16–64)\" pathway. No pharmacyFirst block: this pathway is clinician-only by design."
+      ],
+      "redFlags": [
+        { "id": "rf-ectopic-pain", "ask": "Is there any chance she could be pregnant, AND she has severe or sudden pain on one side of the lower tummy, or feels faint or dizzy?", "escalate": "999" },
+        { "id": "rf-ectopic-shoulder", "ask": "Is there any chance she could be pregnant, AND she has pain in the tip of the shoulder?", "escalate": "999" },
+        { "id": "rf-early-preg-bleed", "ask": "In early pregnancy, is she bleeding heavily — soaking through a pad an hour or more — or passing clots or tissue?", "escalate": "999" },
+        { "id": "rf-torsion-pelvic", "ask": "Sudden, severe pain on one side of the lower tummy, together with vomiting or feeling faint?", "escalate": "999" },
+        { "id": "rf-pmb", "ask": "Any vaginal bleeding after the menopause — after her periods had already stopped for a year or more — that is not explained by her HRT?", "escalate": "duty" },
+        { "id": "rf-pcb", "ask": "Bleeding after sex that has happened more than once?", "escalate": "duty" },
+        { "id": "rf-ovarian", "ask": "Persistent bloating, feeling full very quickly when eating, or loss of appetite — on most days for three weeks or more, especially if she is 50 or over?", "escalate": "duty" }
+      ],
+      "questions": [
+        { "id": "pregnancy", "ask": "Is there any chance she is pregnant, or has she missed a period?", "type": "text", "label": "Pregnancy possible" },
+        { "id": "bleeding", "ask": "Is there any bleeding at the moment — and how does it compare with a normal period?", "type": "text", "label": "Bleeding vs normal period" },
+        { "id": "pain", "ask": "If there is pain — when did it start, which side, and how bad is it out of 10?", "type": "text", "label": "Pain" },
+        { "id": "discharge", "ask": "Any unusual vaginal discharge — what colour, any smell, any itching?", "type": "text", "label": "Discharge" },
+        { "id": "menopause", "ask": "Has she been through the menopause? When was her last period?", "type": "text", "label": "Menopause / last period" },
+        { "id": "postcoital", "ask": "Any bleeding after sex?", "type": "yesno", "label": "Bleeding after sex" },
+        { "id": "ovarian", "ask": "Any of these, most days for the last three weeks or more?", "type": "multi", "options": ["Bloating", "Feeling full quickly when eating", "Loss of appetite", "Needing to pass urine more often", "Tummy or pelvic pain", "None of these"], "label": "Ovarian symptom screen" },
+        { "id": "unwell", "ask": "Any fever, feeling faint, or feeling generally unwell?", "type": "yesno", "label": "Fever/faint/unwell" }
+      ]
+    },
+    {
+      "id": "mental-health",
+      "title": "Mental health / emotional distress",
+      "appliesTo": "Anyone in emotional distress or with a mental-health concern. A clinician always reviews.",
+      "sensitive": true,
+      "sources": [
+        "NICE NG225: Self-harm — assessment, management and preventing recurrence",
+        "NICE CKS: Depression",
+        "NICE CKS: Self-harm",
+        "DESIGN NOTE — NICE NG225 explicitly advises AGAINST the use of risk-stratification tools and scales. This pathway is therefore deliberately a MINIMAL, NON-STRATIFYING capture-and-escalate script: binary red-flag triggers only, deliberately few questions, no scoring, no risk category, and no disposition or routing output of any kind. It closes with the practice's configured crisis route instead.",
+        "DESIGN NOTE — the first two red flags are the two mental-health red flags that also remain in the \"general\" pathway. They are kept in BOTH deliberately: callers do not announce the right pathway.",
+        "DRAFT 2026-07-28 — pending CSO sign-off. \"sensitive\": true — capture drafts are never auto-saved and the taker's initials are mandatory."
+      ],
+      "redFlags": [
+        { "id": "rf-mentalhealth-attempt", "ask": "Is the patient actively attempting to harm themselves right now, or do they have a plan and the means to carry it out immediately?", "escalate": "999" },
+        { "id": "rf-mentalhealth", "ask": "Is the patient saying they have thoughts of harming themselves or someone else, but no immediate plan or means?", "escalate": "duty" },
+        { "id": "rf-danger-now", "ask": "Is anyone in danger right now — have they taken an overdose, seriously injured themselves, or is someone else at risk?", "escalate": "999" },
+        { "id": "rf-selfharm-injury-urgent", "ask": "Have they harmed themselves today, AND does the injury itself need emergency treatment — for example heavy bleeding, a deep wound, or a burn?", "escalate": "999" },
+        { "id": "rf-selfharm-not-urgent", "ask": "Have they harmed themselves today, where the injury itself does NOT need emergency treatment?", "escalate": "duty" },
+        { "id": "rf-psychosis-acute", "ask": "Are they hearing, seeing, or believing things that other people say are not real, which are getting rapidly worse right now and they cannot cope?", "escalate": "999" },
+        { "id": "rf-psychosis-present", "ask": "Are they hearing, seeing, or believing things that other people say are not real, which are there but are NOT getting rapidly worse?", "escalate": "duty" },
+        { "id": "rf-safeguarding", "ask": "Is a child or a vulnerable adult at risk of harm, neglect, or abuse in this situation?", "escalate": "duty", "safeguarding": true },
+        { "id": "rf-no-safe-place", "ask": "Do they have nowhere safe to be, or is there nobody with them while they are in distress?", "escalate": "duty" }
+      ],
+      "questions": [
+        { "id": "safe-now", "ask": "Are you safe right now?", "type": "yesno", "label": "Safe right now" },
+        { "id": "today", "ask": "Can you tell me what's happening today? (write down their own words — do not interpret or summarise)", "type": "text", "label": "What's happening today" },
+        { "id": "harm-thoughts", "ask": "Are you having any thoughts of harming yourself?", "type": "yesno", "label": "Thoughts of self-harm" },
+        { "id": "who-with", "ask": "Is there anyone with you at the moment?", "type": "text", "label": "Anyone with them" },
+        { "id": "known-team", "ask": "Are you already known to a mental health team or a crisis service?", "type": "text", "label": "Known to MH team / crisis service" },
+        { "id": "hoping", "ask": "What were you hoping for today?", "type": "text", "label": "Hoping for" }
       ]
     }
   ]

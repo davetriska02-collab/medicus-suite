@@ -186,6 +186,117 @@
       'pain around the eyes',
       'pain in the face',
     ],
+    // ── DRAFT 2026-07-28 — pending CSO sign-off (reception-feedback plan section B) ─────────────
+    // Synonyms for the three new pathways (gu-male, gyn-female, mental-health). CSO-reviewable
+    // content exactly like the entries above — see this file's CLINICAL-CONTENT NOTE header.
+    //
+    // gu-male DELIBERATELY repeats the generic UTI terms ('uti', 'waterworks', 'urine infection')
+    // that `urinary` also carries. That is the INTENDED behaviour, not a bug: matchPathways
+    // returns BOTH candidates so the surface can OFFER both and a human picks — male UTI is
+    // excluded from Pharmacy First and must never be silently routed down the women's UTI
+    // pathway. test-reception-pathway-coverage.js pins this tie-break; do not "fix" it into
+    // first-match-wins.
+    'gu-male': [
+      'testicle',
+      'testicles',
+      'testicular',
+      'scrotum',
+      'scrotal',
+      'epididymitis',
+      'orchitis',
+      'prostate',
+      'prostatitis',
+      'psa',
+      'foreskin',
+      'penis',
+      'male uti',
+      'man uti',
+      'uti',
+      'urine infection',
+      'urinary tract infection',
+      'waterworks',
+      'water infection',
+      'weak stream',
+      'cant pass urine',
+      'unable to pass urine',
+      'urinary retention',
+    ],
+    // gyn-female: bare 'bleeding' and bare 'discharge' are deliberately NOT listed — they match
+    // nosebleeds, ear discharge and hospital discharge far more often than gynae presentations,
+    // and a synonym that fires on everything is no signal at all. The qualified forms below
+    // carry the same lay wording without the noise.
+    'gyn-female': [
+      'period',
+      'periods',
+      'missed period',
+      'period pain',
+      'heavy periods',
+      'irregular bleeding',
+      'vaginal bleeding',
+      'bleeding after sex',
+      'bleeding after the menopause',
+      'postmenopausal bleeding',
+      'vaginal discharge',
+      'smelly discharge',
+      'pelvic pain',
+      'pregnant',
+      'pregnancy',
+      'could be pregnant',
+      'miscarriage',
+      'ectopic',
+      'gynae',
+      'gynaecology',
+      'gynaecological',
+      'menopause',
+      'menopausal',
+      'ovarian',
+      'ovary',
+    ],
+    // mental-health: matched DELIBERATELY BROADLY. For this pathway the fail-safe direction is
+    // over-offering, not under-offering — an unnecessary tile costs a receptionist one glance,
+    // a missed one costs a distressed caller the right script. Terms cover lay wording for
+    // distress, self-harm, and the named diagnoses callers use about themselves.
+    'mental-health': [
+      'mental health',
+      'mental health crisis',
+      'mental breakdown',
+      'breakdown',
+      'anxiety',
+      'anxious',
+      'depression',
+      'depressed',
+      'low mood',
+      'feeling low',
+      'panic',
+      'panic attack',
+      'panic attacks',
+      'self harm',
+      'selfharm',
+      'self harming',
+      'harming themselves',
+      'harm myself',
+      'suicidal',
+      'suicide',
+      'ending their life',
+      'end my life',
+      'take my own life',
+      'overdose',
+      'crisis',
+      'not coping',
+      'cant cope',
+      'distressed',
+      'in distress',
+      'psychosis',
+      'psychotic',
+      'hearing voices',
+      'paranoid',
+      'bipolar',
+      'ptsd',
+      'ocd',
+      'eating disorder',
+      'counselling',
+      'talking therapy',
+    ],
     // Deliberately narrow: "general" is a catch-all pathway, so its terms are limited to explicit
     // "something not covered" phrasing rather than a bare "general" (too generic — would false-
     // match phrases like "in general I feel..." via a naive substring, defeated by \b in most
@@ -482,6 +593,181 @@
       'voice gone hoarse',
       'voice has changed',
       'croaky voice',
+    ],
+
+    // ── DRAFT 2026-07-28 — pending CSO sign-off. Red-flag topic terms for the three new
+    //    pathways (gu-male, gyn-female, mental-health) added in reception-pathways.json v1.6.
+    //    Terms derived conservatively from each red flag's `ask` text. CSO-reviewable content
+    //    — see this file's header. Ids already listed above (rf-sepsis, rf-loin,
+    //    rf-haematuria, rf-mentalhealth, rf-mentalhealth-attempt) are REUSED with the same
+    //    clinical meaning and are not repeated here. A missing/unmatched term is the SAFE
+    //    direction (the topic reads as a GAP and is re-asked). ─────────────────────────────
+
+    // gu-male — testicular torsion: sudden severe testicular pain, ± nausea/vomiting.
+    'rf-torsion': [
+      'testicular pain',
+      'testicle pain',
+      'painful testicle',
+      'sudden testicle pain',
+      'severe pain in the testicle',
+      'torsion',
+      'twisted testicle',
+      'pain in the balls',
+    ],
+    // gu-male — acute urinary retention: unable to pass any urine, painful full bladder.
+    'rf-retention': [
+      'cant pass urine',
+      'unable to pass urine',
+      'not passing any urine',
+      'cant wee',
+      'urinary retention',
+      'full bladder',
+      'bladder is full',
+      'desperate to go but cant',
+    ],
+    // gu-male — testicular lump or change in shape/texture (NICE NG12 testicular 2WW).
+    'rf-testis-lump': [
+      'lump in the testicle',
+      'testicular lump',
+      'lump on the testicle',
+      'swollen testicle',
+      'swelling in the scrotum',
+      'change in the testicle',
+      'hard testicle',
+    ],
+
+    // gyn-female — ectopic pregnancy: possible pregnancy with severe/sudden one-sided pain,
+    // faintness or dizziness (NICE NG126).
+    'rf-ectopic-pain': [
+      'pregnant and in pain',
+      'possible pregnancy with pain',
+      'one sided tummy pain',
+      'pain on one side of the tummy',
+      'severe tummy pain',
+      'feeling faint',
+      'dizzy',
+      'ectopic',
+    ],
+    // gyn-female — ectopic pregnancy: shoulder-tip pain in possible pregnancy (NICE NG126).
+    'rf-ectopic-shoulder': [
+      'shoulder tip pain',
+      'pain in the shoulder tip',
+      'shoulder pain and pregnant',
+      'tip of the shoulder',
+    ],
+    // gyn-female — early-pregnancy heavy bleeding or passing tissue.
+    'rf-early-preg-bleed': [
+      'heavy bleeding in pregnancy',
+      'bleeding in early pregnancy',
+      'soaking a pad',
+      'soaking through a pad',
+      'passing clots',
+      'passing tissue',
+      'miscarriage',
+    ],
+    // gyn-female — ovarian torsion / cyst accident: sudden severe one-sided pelvic pain with
+    // vomiting or faintness.
+    'rf-torsion-pelvic': [
+      'sudden severe pelvic pain',
+      'severe pelvic pain',
+      'one sided pelvic pain',
+      'pelvic pain and vomiting',
+      'ovarian torsion',
+      'ovarian cyst',
+    ],
+    // gyn-female — postmenopausal bleeding not explained by HRT (NICE NG12 gynae 2WW).
+    'rf-pmb': [
+      'bleeding after the menopause',
+      'postmenopausal bleeding',
+      'post menopausal bleeding',
+      'bleeding since the menopause',
+      'periods stopped years ago',
+    ],
+    // gyn-female — repeated post-coital bleeding (NICE NG12 gynae 2WW).
+    'rf-pcb': ['bleeding after sex', 'post coital bleeding', 'postcoital bleeding', 'bleeds after intercourse'],
+    // gyn-female — ovarian symptom cluster: persistent bloating / early satiety / appetite loss
+    // most days for 3+ weeks (NICE NG12 ovarian).
+    'rf-ovarian': [
+      'bloating',
+      'bloated',
+      'feeling full quickly',
+      'full after a few mouthfuls',
+      'loss of appetite',
+      'early satiety',
+      'tummy swelling',
+    ],
+
+    // mental-health — immediate danger: overdose taken, serious injury, someone else at risk.
+    'rf-danger-now': [
+      'in danger',
+      'taken an overdose',
+      'overdose',
+      'seriously injured themselves',
+      'someone else at risk',
+      'at risk right now',
+      'threatening someone',
+    ],
+    // mental-health — self-harm today where the INJURY needs emergency treatment.
+    'rf-selfharm-injury-urgent': [
+      'self harmed today',
+      'cut themselves',
+      'deep wound',
+      'heavy bleeding',
+      'wont stop bleeding',
+      'burn',
+      'burned themselves',
+      'needs stitches',
+    ],
+    // mental-health — self-harm today where the injury does NOT need emergency treatment.
+    'rf-selfharm-not-urgent': [
+      'self harmed',
+      'self harming',
+      'harmed themselves',
+      'superficial cuts',
+      'scratches',
+      'minor injury from self harm',
+    ],
+    // mental-health — acutely worsening psychosis, unable to cope.
+    'rf-psychosis-acute': [
+      'hearing voices',
+      'seeing things',
+      'things that arent real',
+      'getting worse quickly',
+      'cannot cope',
+      'cant cope',
+      'psychotic',
+      'psychosis',
+    ],
+    // mental-health — psychosis present but not acutely escalating.
+    'rf-psychosis-present': [
+      'hearing voices',
+      'seeing things',
+      'things that arent real',
+      'paranoid',
+      'delusions',
+      'voices in their head',
+    ],
+    // mental-health — safeguarding: a child or vulnerable adult at risk. safeguarding:true on
+    // the flag itself; matching here only decides whether the topic still needs asking.
+    'rf-safeguarding': [
+      'child at risk',
+      'children at risk',
+      'vulnerable adult',
+      'safeguarding',
+      'neglect',
+      'abuse',
+      'children in the house',
+      'child protection',
+    ],
+    // mental-health — nowhere safe to be / nobody with them while in distress.
+    'rf-no-safe-place': [
+      'nowhere safe',
+      'nowhere to go',
+      'no safe place',
+      'on their own',
+      'nobody with them',
+      'alone and distressed',
+      'homeless',
     ],
   };
 

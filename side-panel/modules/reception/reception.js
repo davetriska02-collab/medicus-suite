@@ -16,13 +16,22 @@
 //      never triages, diagnoses, or advises beyond red-flag escalation.
 //
 // Storage (managed in Options, read-only here):
-//   reception.config           { enabledPathways, hiddenChipRules, disclaimerAcceptedAt }
+//   reception.config           { enabledPathways, hiddenChipRules, disclaimerAcceptedAt,
+//                                safeguardingContact, crisisLineText, seenBundledIds }
 //   reception.customPathways   [pathway]
 //   reception.pathwayOverrides { id: pathway }
 
 'use strict';
 
-import { summariseActionChips, evaluateRedFlags, buildCaptureText, pharmacyFirstHint } from './reception-core.js';
+import {
+  summariseActionChips,
+  evaluateRedFlags,
+  buildCaptureText,
+  pharmacyFirstHint,
+  isSensitivePathway,
+  safeguardingActionLine,
+  crisisLineText,
+} from './reception-core.js';
 
 // Canonical "no alert ≠ monitoring complete" caveat (shared/provenance.js,
 // loaded as a classic script in panel.html / pop-out.html). Fall back to the
@@ -46,10 +55,24 @@ let _patientCardGen = 0; // request-token guard against stale fetchSnapshot() re
 // ── Draft autosave ────────────────────────────────────────────────────────────
 // reception.captureDraft — transient working state, PHI-bearing, TTL 4 h.
 // Never backed up (allowlisted in test-backup-coverage.js).
+//
+// SENSITIVE PATHWAYS ARE EXCLUDED ENTIRELY (pathway `sensitive: true`, e.g.
+// mental-health). Suicidal-ideation free text must not sit in
+// chrome.storage.local for four hours on a shared front-desk profile, so for a
+// sensitive pathway there is no save, no restore banner, and any pre-existing
+// stored draft is deleted the moment the form opens or the draft is read back.
 
 const DRAFT_KEY = 'reception.captureDraft';
 const DRAFT_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 let _draftDebounceTimer = null;
+
+// pathwayIsSensitive(id) — looks the id up in the resolved set (bundled, edited,
+// or custom) so the guard also covers a practice fork that turns `sensitive` on.
+function pathwayIsSensitive(pathwayId) {
+  if (!pathwayId) return false;
+  const entry = (_effective.all || []).find((e) => e.pathway && e.pathway.id === pathwayId);
+  return isSensitivePathway(entry && entry.pathway);
+}
 
 async function loadDraft() {
   try {
@@ -57,6 +80,13 @@ async function loadDraft() {
     const d = r[DRAFT_KEY];
     if (!d || typeof d !== 'object') return null;
     if (typeof d.savedAt !== 'number' || Date.now() - d.savedAt > DRAFT_TTL_MS) {
+      chrome.storage.local.remove(DRAFT_KEY);
+      return null;
+    }
+    // A draft belonging to a sensitive pathway must never be offered or restored.
+    // (Reachable when a practice edit switches `sensitive` on after a draft was
+    // stored, or after an upgrade — delete it rather than leave it lying around.)
+    if (pathwayIsSensitive(d.pathwayId)) {
       chrome.storage.local.remove(DRAFT_KEY);
       return null;
     }
@@ -104,6 +134,9 @@ function saveDraft(pathwayId, form) {
 }
 
 function scheduleDraftSave(pathwayId, form) {
+  // Sensitive pathways: no autosave at all. Guarded here as well as at the call
+  // site so a future caller can't reintroduce the leak by forgetting the check.
+  if (pathwayIsSensitive(pathwayId)) return;
   if (_draftDebounceTimer !== null) clearTimeout(_draftDebounceTimer);
   _draftDebounceTimer = setTimeout(() => {
     _draftDebounceTimer = null;
@@ -693,6 +726,11 @@ async function renderCaptureForm(pathway) {
   const body = container?.querySelector('#rcpCaptureBody');
   if (!body || !_bundledDoc) return;
 
+  const sensitive = isSensitivePathway(pathway);
+  // Sensitive pathway: bin any stored draft the moment the form opens, before a
+  // single keystroke can be autosaved, and never offer a restore banner below.
+  if (sensitive) clearDraft();
+
   const rfRows = (pathway.redFlags || [])
     .map(
       (rf) => `
@@ -719,6 +757,15 @@ async function renderCaptureForm(pathway) {
     )
     .join('');
 
+  // Sensitive pathways: the crisis route is a fixed footer on the form (and goes
+  // into the pasted text too). Practice-editable via reception.config.
+  const crisisFooter = sensitive
+    ? `<div class="rcp-crisis-line" id="rcpCrisisLine">${esc(crisisLineText(_config.crisisLineText))}</div>`
+    : '';
+  const sensitiveNote = sensitive
+    ? `<div class="rcp-fineprint">This pathway is marked sensitive: nothing typed here is saved as a draft, and your initials are required before a summary can be generated.</div>`
+    : '';
+
   body.innerHTML = `
     <form class="rcp-form" id="rcpForm">
       <div class="rcp-form-head">
@@ -726,6 +773,7 @@ async function renderCaptureForm(pathway) {
         <span class="rcp-form-title">${esc(pathway.title)}</span>
         <label class="rcp-initials">Your initials <input type="text" id="rcpInitials" maxlength="5" value="${esc(_takerInitials)}"></label>
       </div>
+      ${sensitiveNote}
 
       <div class="rcp-draft-banner rcp-draft-banner-hidden" id="rcpDraftBanner" aria-live="polite"></div>
 
@@ -752,12 +800,14 @@ async function renderCaptureForm(pathway) {
         <button type="submit" class="rcp-btn rcp-btn-primary">Generate summary</button>
         <span class="rcp-form-msg" id="rcpFormMsg"></span>
       </div>
+      ${crisisFooter}
     </form>`;
 
   const form = body.querySelector('#rcpForm');
 
-  // Check for a restorable draft for this specific pathway
-  const draft = await loadDraft();
+  // Check for a restorable draft for this specific pathway (never for a sensitive
+  // one — there is no stored draft to restore, and offering one would be a leak).
+  const draft = sensitive ? null : await loadDraft();
   if (draft && draft.pathwayId === pathway.id) {
     const banner = form.querySelector('#rcpDraftBanner');
     if (banner) {
@@ -785,9 +835,11 @@ async function renderCaptureForm(pathway) {
   // Escalation banner reacts the moment any red flag is answered YES.
   form.addEventListener('change', () => {
     updateEscalationBanner(form, pathway);
-    scheduleDraftSave(pathway.id, form);
+    if (!sensitive) scheduleDraftSave(pathway.id, form);
   });
-  form.addEventListener('input', () => scheduleDraftSave(pathway.id, form));
+  form.addEventListener('input', () => {
+    if (!sensitive) scheduleDraftSave(pathway.id, form);
+  });
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     generateSummary(form, pathway);
@@ -818,6 +870,15 @@ function updateEscalationBanner(form, pathway) {
   // Fallback includes the level so the receptionist always knows 999-vs-duty even if
   // the escalations map entry is missing (near-unreachable; validation forces level ∈ {999,duty}).
   banner.textContent = `RED FLAG — ${(_bundledDoc.escalations && _bundledDoc.escalations[level]) || `ACTION (level ${level}): Escalate immediately.`}`;
+  // A safeguarding-flagged positive adds its own line INSIDE the same banner: duty
+  // clinician AND the practice safeguarding lead, bypassing all other routing.
+  // textContent throughout — the configured contact is free practice text.
+  if (positives.some((p) => p.safeguarding === true)) {
+    const sg = document.createElement('div');
+    sg.className = 'rcp-banner-safeguarding';
+    sg.textContent = safeguardingActionLine(_config.safeguardingContact);
+    banner.appendChild(sg);
+  }
 }
 
 function readQuestionAnswers(form, scope, questions) {
@@ -848,6 +909,16 @@ function generateSummary(form, pathway) {
     form.querySelector('.rcp-rf-missing')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
+  // Sensitive pathways: the taker's initials are mandatory (same block-and-tell
+  // UX as the unanswered-red-flag guard above — nothing is generated until it's
+  // clear who took the call).
+  if (isSensitivePathway(pathway) && !_takerInitials.trim()) {
+    if (msg) msg.textContent = 'Enter your initials before generating the summary (required for this pathway).';
+    const initials = form.querySelector('#rcpInitials');
+    initials?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    initials?.focus();
+    return;
+  }
   if (msg) msg.textContent = '';
 
   const pc = _snapshot?.patientContext || null;
@@ -871,6 +942,8 @@ function generateSummary(form, pathway) {
       suiteVersion: chrome.runtime.getManifest?.().version || '',
       patientLine,
       pharmacyFirstHint: pharmacyFirstHint(pathway, pc?.ageYears ?? null),
+      safeguardingContact: _config.safeguardingContact || '',
+      crisisLine: _config.crisisLineText || '',
     },
   });
 

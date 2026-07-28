@@ -6,6 +6,9 @@
 //   evaluateRedFlags(redFlags, answers)        — positives + unanswered for a pathway's red flags
 //   buildCaptureText(input)                    — the plain-text capture block for copy-paste
 //   pharmacyFirstHint(pathway, ageYears)       — eligibility hint line (age-gated), or null
+//   isSensitivePathway(pathway)                — pathway.sensitive === true (strict)
+//   safeguardingActionLine(contact)            — the safeguarding escalation sentence
+//   crisisLineText(configured)                 — practice crisis route, or the shipped default
 
 'use strict';
 
@@ -68,8 +71,11 @@ function summariseActionChips(chips, hiddenRuleIds) {
 // ---------------------------------------------------------------------------
 // evaluateRedFlags(redFlags, answers)
 // answers: { [flagId]: 'yes' | 'no' | undefined }
-// Returns { unanswered: string[], positives: [{ id, ask, escalate }] }.
+// Returns { unanswered: string[], positives: [{ id, ask, escalate, safeguarding? }] }.
 // Every flag must be explicitly answered — an undefined answer is NOT a "no".
+// `safeguarding: true` is carried through (strict boolean) so the escalation
+// banner and the pasted capture text can both mark it — the mechanism behind the
+// "safeguarding bypasses all routing" guardrail.
 // ---------------------------------------------------------------------------
 function evaluateRedFlags(redFlags, answers) {
   const unanswered = [];
@@ -77,9 +83,46 @@ function evaluateRedFlags(redFlags, answers) {
   for (const rf of (redFlags || [])) {
     const a = answers ? answers[rf.id] : undefined;
     if (a !== 'yes' && a !== 'no') { unanswered.push(rf.id); continue; }
-    if (a === 'yes') positives.push({ id: rf.id, ask: rf.ask, escalate: rf.escalate });
+    if (a === 'yes') {
+      const entry = { id: rf.id, ask: rf.ask, escalate: rf.escalate };
+      if (rf.safeguarding === true) entry.safeguarding = true;
+      positives.push(entry);
+    }
   }
   return { unanswered, positives };
+}
+
+// ---------------------------------------------------------------------------
+// Sensitive pathways / safeguarding / crisis line — pure helpers shared by
+// reception.js (DOM) and buildCaptureText below. Chrome-free by design.
+// ---------------------------------------------------------------------------
+
+// isSensitivePathway(pathway) — strict: only the literal boolean true counts, so
+// a malformed pathway can never accidentally read as "not sensitive"… and never
+// accidentally read as sensitive either. Validation already enforces the type.
+function isSensitivePathway(pathway) {
+  return !!pathway && pathway.sensitive === true;
+}
+
+// safeguardingActionLine(contact) — the sentence shown on the escalation banner
+// and written into the capture text when a safeguarding-flagged red flag is
+// positive. `contact` is free practice-configured text (a name / extension);
+// when it is blank the wording stays generic rather than dropping the escalation.
+function safeguardingActionLine(contact) {
+  const who = (contact == null) ? '' : String(contact).trim();
+  return 'SAFEGUARDING CONCERN — escalate NOW to the duty clinician AND the practice safeguarding lead' +
+    (who ? ` (${who})` : '') +
+    '. Do not route or book this contact anywhere else first.';
+}
+
+// Shipped default crisis route for sensitive (mental-health) pathways. The
+// practice can override it in Options → Reception; the default must never be
+// empty, so a blank/absent config falls back to this line.
+const DEFAULT_CRISIS_LINE = 'If the patient needs urgent mental-health support now: NHS 111, option 2 (24/7)';
+
+function crisisLineText(configured) {
+  const s = (configured == null) ? '' : String(configured).trim();
+  return s || DEFAULT_CRISIS_LINE;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +141,9 @@ function evaluateRedFlags(redFlags, answers) {
 //     nowIso,           // ISO datetime string for the header
 //     suiteVersion,     // manifest version string
 //     patientLine,      // optional "Name, DOB ..." line from the OPEN record
-//     pharmacyFirstHint // optional hint line (already age-checked), or null
+//     pharmacyFirstHint,// optional hint line (already age-checked), or null
+//     safeguardingContact, // optional practice safeguarding-lead free text
+//     crisisLine        // optional practice crisis-route text (sensitive pathways)
 //   }
 // }
 //
@@ -129,6 +174,12 @@ function buildCaptureText(input) {
       // (validation forces escalate ∈ {999,duty}) but must never silently hide the level.
       const esc = (escalations && escalations[p.escalate]) || `ACTION (level ${p.escalate}): Escalate immediately.`;
       lines.push(`*** RED FLAG REPORTED: ${p.ask} — YES`);
+      // A safeguarding-flagged positive gets its own loud line ABOVE the routine
+      // escalation text: it bypasses all routing and goes to the safeguarding lead
+      // as well as the duty clinician.
+      // safeguardingActionLine() already opens with "SAFEGUARDING CONCERN — ", so
+      // the *** marker prefixes it directly rather than repeating the word.
+      if (p.safeguarding) lines.push(`*** ${safeguardingActionLine(m.safeguardingContact)}`);
       lines.push(`*** ACTION: ${esc}`);
     }
     lines.push('');
@@ -170,6 +221,15 @@ function buildCaptureText(input) {
   if (m.pharmacyFirstHint) {
     lines.push('');
     lines.push(`Pharmacy First: ${m.pharmacyFirstHint}`);
+  }
+
+  // Sensitive pathways close with the practice's crisis route, in the pasted text
+  // as well as on screen — the receptionist may have read it out, and the reading
+  // clinician needs to see what the caller was told. Falls back to the shipped
+  // default when the practice has not configured one, so it is never omitted.
+  if (isSensitivePathway(pathway)) {
+    lines.push('');
+    lines.push(`Crisis route given: ${crisisLineText(m.crisisLine)}`);
   }
 
   lines.push('');
@@ -223,5 +283,9 @@ export {
   evaluateRedFlags,
   buildCaptureText,
   pharmacyFirstHint,
+  isSensitivePathway,
+  safeguardingActionLine,
+  crisisLineText,
+  DEFAULT_CRISIS_LINE,
   STATUS_COLOUR
 };

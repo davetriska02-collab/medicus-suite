@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.200.0] — 2026-07-28
+
+### Reception: three new capture pathways — DRAFT, disabled pending CSO sign-off (reception feedback, Phase B)
+
+- **New pathways** (ship OFF; enable in options after CSO review):
+  `gu-male` (torsion/retention/sepsis 999s; loin pain, visible haematuria,
+  testicular lump duty; no Pharmacy First — male UTI excluded by the
+  service spec), `gyn-female` (ectopic cluster + early-pregnancy bleeding
+  + pelvic torsion 999s; PMB, persistent PCB, ovarian symptom cluster
+  duty), `mental-health` (NG225-conformant minimal capture — binary
+  triggers, no scoring; the two `general` MH flags stay in `general` too).
+- **Schema**: red flags may carry `safeguarding: true` (banner + capture
+  text render the practice safeguarding contact; bypasses routing);
+  pathways may carry `sensitive: true` — **drafts are never autosaved,
+  any stored draft is deleted, taker initials become mandatory**, and a
+  practice-editable crisis-route line (default NHS 111 option 2) renders
+  on the form and in the capture text. LLM authoring prompt documents
+  both plus the no-conditional-escalations rule.
+- **New closing question** (all pathways, asked first): am I speaking to
+  the patient or someone on their behalf.
+- **Queue-chip wiring**: synonym + red-flag topic terms for all three
+  pathways (DRAFT-marked for CSO), with the deliberate `urinary`/`gu-male`
+  tie-break (generic UTI wording offers both, never auto-picks).
+- **New regression guard** `test-reception-pathway-coverage.js`: every
+  pathway id must have synonym + topic terms (the silent-no-chip failure
+  mode is now a CI failure), tie-break pinned.
+- Options: NEW badge on unseen bundled pathways, SENSITIVE badge,
+  safeguarding-contact + crisis-line settings, editor checkboxes for the
+  new flags; backup import sanitises the new config fields.
+
 ## [v3.199.1] — 2026-07-28
 
 ### Governance resync: safety case corrected to describe the real write paths (reception feedback, Phase 0)

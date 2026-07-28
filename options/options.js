@@ -2680,6 +2680,32 @@ lfSaveBtn?.addEventListener('click', async () => {
     await chrome.storage.local.set({ 'reception.config': Object.assign({}, config, patch) });
   }
 
+  // Practice-editable free-text config (safeguarding lead, crisis line). Clamped
+  // to the same 200 chars the backup importer enforces, so a value that survives
+  // a save/export/restore round-trip is always the value the practice typed.
+  const RCPO_TEXT_MAX = 200;
+
+  // ── "NEW" badge on freshly-bundled pathways ─────────────────────────────────
+  // New bundled pathways ship DISABLED (correct for CSO-gated clinical content),
+  // which means a practice would otherwise never learn they arrived. seenBundledIds
+  // records the bundled ids this practice has already been shown; anything bundled,
+  // still off, and not in that list gets a NEW badge. Marked seen when the practice
+  // toggles it, edits it, or dismisses the badge — never automatically on render,
+  // or the badge would vanish before anyone read it.
+  async function markBundledSeen(ids) {
+    const { config } = await getState();
+    const seen = Array.isArray(config.seenBundledIds) ? config.seenBundledIds.slice() : [];
+    let changed = false;
+    for (const id of ids || []) {
+      if (id && seen.indexOf(id) === -1) {
+        seen.push(id);
+        changed = true;
+      }
+    }
+    if (changed) await setConfig({ seenBundledIds: seen });
+    return changed;
+  }
+
   async function loadBundled() {
     if (_bundled) return _bundled;
     const r = await fetch(chrome.runtime.getURL('rules/reception-pathways.json'));
@@ -2762,10 +2788,20 @@ lfSaveBtn?.addEventListener('click', async () => {
   function renderPathwayList(resolved, config) {
     const host = $('rcpoPathwayList');
     if (!host) return;
+    const seenBundled = new Set(Array.isArray(config.seenBundledIds) ? config.seenBundledIds : []);
     host.innerHTML =
       resolved.all
         .map((e) => {
           const p = e.pathway;
+          // Bundled (or practice-edited bundled) pathway the practice has not been
+          // shown yet and has not enabled — flag it as newly arrived.
+          const isNew = e.origin !== 'custom' && !e.enabled && !seenBundled.has(p.id);
+          const newBadge = isNew
+            ? `<span style="font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px; background:rgba(22,163,74,0.15); color:var(--green, #16a34a);">NEW</span>`
+            : '';
+          const newDismiss = isNew
+            ? `<button class="ghost" data-rcpo-seen="${escAttr(p.id)}" title="Stop showing the NEW badge for this pathway" style="font-size:10px; padding:3px 9px;">Dismiss</button>`
+            : '';
           const [label, bg, fg] = ORIGIN_BADGE[e.origin] || ORIGIN_BADGE.bundled;
           const invalid = e.invalid
             ? `<span style="font-size:10px; font-weight:700; color:var(--red, #b91c1c);">INVALID — not shown to reception</span>`
@@ -2773,6 +2809,7 @@ lfSaveBtn?.addEventListener('click', async () => {
               ? `<span style="font-size:10px; font-weight:700; color:var(--amber, #b45309);">EDIT INVALID — bundled version active</span>`
               : '';
           const actions = [
+            newDismiss,
             `<button class="ghost" data-rcpo-edit="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Edit</button>`,
             e.origin === 'edited'
               ? `<button class="ghost" data-rcpo-reset="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Reset to bundled</button>`
@@ -2787,6 +2824,8 @@ lfSaveBtn?.addEventListener('click', async () => {
             <input type="checkbox" data-rcpo-toggle="${escAttr(p.id)}" ${e.enabled ? 'checked' : ''} ${e.invalid ? 'disabled' : ''}>
             <span style="font-weight:600; font-size:12px;">${escHtml(p.title)}</span>
             <span style="font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px; background:${bg}; color:${fg};">${label}</span>
+            ${newBadge}
+            ${p.sensitive === true ? `<span style="font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px; background:rgba(180,83,9,0.15); color:var(--amber, #b45309);" title="Capture drafts are never auto-saved; taker initials required">SENSITIVE</span>` : ''}
             ${invalid}
           </label>
           <div style="display:flex; gap:6px;">${actions}</div>
@@ -2807,11 +2846,22 @@ lfSaveBtn?.addEventListener('click', async () => {
         if (cb.checked) map[id] = true;
         else delete map[id];
         await setConfig({ enabledPathways: map });
+        // Touching a pathway counts as having seen it — clear its NEW badge.
+        await markBundledSeen([id]);
+        refresh();
+      });
+    });
+    host.querySelectorAll('[data-rcpo-seen]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await markBundledSeen([btn.dataset.rcpoSeen]);
         refresh();
       });
     });
     host.querySelectorAll('[data-rcpo-edit]').forEach((btn) => {
-      btn.addEventListener('click', () => openEditor(btn.dataset.rcpoEdit, resolved));
+      btn.addEventListener('click', async () => {
+        await markBundledSeen([btn.dataset.rcpoEdit]);
+        openEditor(btn.dataset.rcpoEdit, resolved);
+      });
     });
     host.querySelectorAll('[data-rcpo-reset]').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -2848,6 +2898,9 @@ lfSaveBtn?.addEventListener('click', async () => {
           <option value="999" ${rf?.escalate === '999' ? 'selected' : ''}>999-level</option>
           <option value="duty" ${rf?.escalate !== '999' ? 'selected' : ''}>Duty clinician</option>
         </select>
+        <label style="display:flex; align-items:center; gap:4px; font-size:11px; color:var(--text-3); white-space:nowrap;" title="A YES also escalates to the practice safeguarding lead and bypasses all routing">
+          <input type="checkbox" class="rcpo-rf-sg" ${rf?.safeguarding === true ? 'checked' : ''}> Safeguarding
+        </label>
         <button type="button" class="ghost rcpo-row-del" style="font-size:10px; padding:3px 8px;">✕</button>
       </div>`;
   }
@@ -2895,6 +2948,10 @@ lfSaveBtn?.addEventListener('click', async () => {
           <input type="text" id="rcpoEdTitle" value="${escAttr(pathway?.title || '')}" placeholder="Pathway title" style="flex:1; font-size:12px; padding:5px 8px;">
           <input type="text" id="rcpoEdApplies" value="${escAttr(pathway?.appliesTo || '')}" placeholder="Applies to (e.g. Adults)" style="flex:1; font-size:12px; padding:5px 8px;">
         </div>
+        <label style="display:flex; align-items:flex-start; gap:7px; font-size:12px; color:var(--text-2); margin-bottom:8px; cursor:pointer;">
+          <input type="checkbox" id="rcpoEdSensitive" ${pathway?.sensitive === true ? 'checked' : ''} style="margin-top:2px;">
+          <span>Sensitive pathway &mdash; capture drafts are <strong>never</strong> auto-saved, and the receptionist's initials are required before a summary can be generated. Use for content that must not sit on a shared front-desk machine (e.g. mental health).</span>
+        </label>
         <div style="font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-3); margin:10px 0 5px;">Red flags — asked first, every one must be answered</div>
         <div id="rcpoEdRf">${rfRows}</div>
         <button type="button" class="ghost" id="rcpoEdAddRf" style="font-size:10px; padding:3px 9px;">+ Add red flag</button>
@@ -2955,11 +3012,17 @@ lfSaveBtn?.addEventListener('click', async () => {
     const title = $('rcpoEdTitle')?.value.trim() || '';
     const appliesTo = $('rcpoEdApplies')?.value.trim() || '';
 
-    const redFlags = Array.from(host.querySelectorAll('.rcpo-rf-row')).map((row) => ({
-      id: row.dataset.rfid,
-      ask: row.querySelector('.rcpo-rf-ask')?.value.trim() || '',
-      escalate: row.querySelector('.rcpo-rf-esc')?.value || 'duty',
-    }));
+    const redFlags = Array.from(host.querySelectorAll('.rcpo-rf-row')).map((row) => {
+      const rf = {
+        id: row.dataset.rfid,
+        ask: row.querySelector('.rcpo-rf-ask')?.value.trim() || '',
+        escalate: row.querySelector('.rcpo-rf-esc')?.value || 'duty',
+      };
+      // Omitted rather than written false — absence is the schema's "not a
+      // safeguarding flag", and sanitisePathway only keeps a literal true.
+      if (row.querySelector('.rcpo-rf-sg')?.checked) rf.safeguarding = true;
+      return rf;
+    });
     const questions = Array.from(host.querySelectorAll('.rcpo-q-row')).map((row) => {
       const type = row.querySelector('.rcpo-q-type')?.value || 'text';
       const q = {
@@ -2999,6 +3062,7 @@ lfSaveBtn?.addEventListener('click', async () => {
       questions,
       pharmacyFirst: original?.pharmacyFirst, // not editable in v1; preserved on bundled edits
     };
+    if ($('rcpoEdSensitive')?.checked) candidate.sensitive = true;
     if (!candidate.pharmacyFirst) delete candidate.pharmacyFirst;
     if (!candidate.appliesTo) delete candidate.appliesTo;
 
@@ -3021,6 +3085,40 @@ lfSaveBtn?.addEventListener('click', async () => {
     if (host) host.innerHTML = '';
     _editing = null;
     refresh();
+  }
+
+  // ── Escalation contacts (safeguarding lead / crisis line) ───────────────────
+  // Free practice text rendered verbatim to reception staff. Stored trimmed and
+  // clamped to RCPO_TEXT_MAX — the same clamp shared/io/reception-io.js applies on
+  // import, so a value cannot change shape by travelling through a backup.
+
+  let _contactsWired = false;
+
+  function renderContacts(config) {
+    const sg = $('rcpoSafeguardingContact');
+    const cl = $('rcpoCrisisLine');
+    if (!sg || !cl) return;
+    // Don't stomp what the admin is mid-way through typing.
+    if (document.activeElement !== sg) sg.value = config.safeguardingContact || '';
+    if (document.activeElement !== cl) cl.value = config.crisisLineText || '';
+    if (_contactsWired) return;
+    _contactsWired = true;
+
+    const status = $('rcpoContactsStatus');
+    const save = async () => {
+      await setConfig({
+        safeguardingContact: (sg.value || '').trim().slice(0, RCPO_TEXT_MAX),
+        crisisLineText: (cl.value || '').trim().slice(0, RCPO_TEXT_MAX),
+      });
+      if (status) {
+        status.textContent = 'Saved.';
+        setTimeout(() => {
+          if (status.textContent === 'Saved.') status.textContent = '';
+        }, 2000);
+      }
+    };
+    sg.addEventListener('change', save);
+    cl.addEventListener('change', save);
   }
 
   // ── Quick-wins chip filter ──────────────────────────────────────────────────
@@ -3099,6 +3197,7 @@ lfSaveBtn?.addEventListener('click', async () => {
       } catch (_) {}
       renderDisclaimerArea(config, resolved, centralProv);
       renderPathwayList(resolved, config);
+      renderContacts(config);
       renderChipList(config);
     } catch (e) {
       const host = $('rcpoPathwayList');

@@ -29,6 +29,13 @@ check(doc.escalations && typeof doc.escalations['duty'] === 'string' && doc.esca
 console.log('\n--- closing questions ---');
 const VALID_TYPES = new Set(['yesno', 'text', 'choice', 'multi']);
 check(Array.isArray(doc.closingQuestions) && doc.closingQuestions.length >= 3, 'closingQuestions present (>=3)');
+// v1.6: caller-vs-patient capture. Load-bearing for safeguarding and for any
+// later age-confirmation rule — asked first because it frames every later answer.
+const qCaller = (doc.closingQuestions || []).find(q => q.id === 'caller');
+check(!!qCaller, 'closing question "caller" (patient vs someone calling on their behalf) exists');
+check(qCaller && qCaller.type === 'text', 'closing question "caller" is free text');
+check(qCaller && /patient|behalf/i.test(qCaller.ask), 'closing question "caller" asks patient-vs-on-their-behalf');
+check((doc.closingQuestions || [])[0] && doc.closingQuestions[0].id === 'caller', 'closing question "caller" is asked first');
 for (const q of doc.closingQuestions || []) {
   check(q.id && q.ask && VALID_TYPES.has(q.type), `closing question "${q.id}" has id/ask/valid type`);
   if (q.type === 'choice' || q.type === 'multi') {
@@ -37,7 +44,7 @@ for (const q of doc.closingQuestions || []) {
 }
 
 console.log('\n--- pathways ---');
-check(Array.isArray(doc.pathways) && doc.pathways.length >= 9, `>=9 pathways (found ${doc.pathways?.length})`);
+check(Array.isArray(doc.pathways) && doc.pathways.length >= 13, `>=13 pathways (found ${doc.pathways?.length})`);
 check((doc.pathways || []).some(p => p.id === 'general'), 'catch-all "general" pathway exists');
 
 const seenIds = new Set();
@@ -148,6 +155,79 @@ const rfHoarseness = generalP && (generalP.redFlags || []).find(rf => rf.id === 
 check(!!rfHoarseness, 'general rf-hoarseness red flag exists');
 check(rfHoarseness && rfHoarseness.escalate === 'duty', 'rf-hoarseness escalates to duty');
 check(rfHoarseness && /3 weeks|hoarse/i.test(rfHoarseness.ask), 'rf-hoarseness ask mentions 3 weeks and hoarse voice');
+
+// ── 2026-07-28 (plan section B): three new pathways + v1.6 schema flags ──────
+// DRAFT clinical content — pending CSO sign-off. These locks guard the STRUCTURE
+// (which is what fails silently); the wording itself is the CSO's call.
+console.log('\n--- 2026-07-28: gu-male / gyn-female / mental-health + v1.6 schema flags ---');
+
+// Escalation levels are a closed enum everywhere. No pathway may introduce a
+// conditional or third level — a conditional level is how an author quietly
+// picks the lower one (plan B.4).
+const allRedFlags = (doc.pathways || []).flatMap(p => (p.redFlags || []).map(rf => ({ p: p.id, rf })));
+check(
+  allRedFlags.every(({ rf }) => rf.escalate === '999' || rf.escalate === 'duty'),
+  'no red flag anywhere has an escalate level outside 999|duty'
+);
+check(
+  allRedFlags.every(({ rf }) => rf.safeguarding === undefined || rf.safeguarding === true),
+  'safeguarding, where present, is the literal boolean true (never a truthy string/number)'
+);
+check(
+  (doc.pathways || []).every(p => p.sensitive === undefined || p.sensitive === true),
+  'sensitive, where present, is the literal boolean true'
+);
+
+// gu-male — male GU. NO pharmacyFirst block: male UTI is excluded from the
+// Pharmacy First service spec, so a block here would be a routing hazard.
+const guMale = doc.pathways.find(p => p.id === 'gu-male');
+check(!!guMale, 'gu-male pathway exists');
+check(guMale && guMale.pharmacyFirst === undefined, 'gu-male has NO pharmacyFirst block (male UTI excluded from Pharmacy First)');
+check(guMale && (guMale.redFlags || []).some(rf => rf.id === 'rf-torsion' && rf.escalate === '999'), 'gu-male rf-torsion escalates to 999 (testicular torsion)');
+check(guMale && (guMale.redFlags || []).some(rf => rf.id === 'rf-retention' && rf.escalate === '999'), 'gu-male rf-retention escalates to 999 (acute retention)');
+check(guMale && (guMale.redFlags || []).some(rf => rf.id === 'rf-testis-lump' && rf.escalate === 'duty'), 'gu-male rf-testis-lump escalates to duty (NG12 testicular)');
+
+// gyn-female — complements the existing women's UTI pathway; clinician-only, so
+// no pharmacyFirst block here either.
+const gynFemale = doc.pathways.find(p => p.id === 'gyn-female');
+check(!!gynFemale, 'gyn-female pathway exists');
+check(gynFemale && gynFemale.pharmacyFirst === undefined, 'gyn-female has NO pharmacyFirst block (clinician-only pathway)');
+check(gynFemale && (gynFemale.redFlags || []).some(rf => rf.id === 'rf-ectopic-shoulder' && rf.escalate === '999'), 'gyn-female rf-ectopic-shoulder escalates to 999 (NG126 ectopic)');
+check(gynFemale && (gynFemale.redFlags || []).some(rf => rf.id === 'rf-pmb' && rf.escalate === 'duty'), 'gyn-female rf-pmb escalates to duty (NG12 postmenopausal bleeding)');
+check(gynFemale && (gynFemale.sources || []).some(s => /NG126/.test(s)), 'gyn-female cites NICE NG126 (ectopic)');
+
+// mental-health — sensitive, safeguarding-flagged, and explicitly non-stratifying.
+const mentalHealth = doc.pathways.find(p => p.id === 'mental-health');
+check(!!mentalHealth, 'mental-health pathway exists');
+check(mentalHealth && mentalHealth.sensitive === true, 'mental-health is marked sensitive:true (no draft autosave; initials mandatory)');
+check(mentalHealth && (mentalHealth.redFlags || []).filter(rf => rf.safeguarding === true).length >= 1, 'mental-health has at least one safeguarding:true red flag');
+check(
+  mentalHealth && (mentalHealth.redFlags || []).every(rf => rf.safeguarding !== true || rf.escalate === 'duty' || rf.escalate === '999'),
+  'every safeguarding red flag still carries a normal escalation level (safeguarding is in addition, not instead)'
+);
+check(mentalHealth && (mentalHealth.sources || []).some(s => /NG225/.test(s)), 'mental-health cites NICE NG225');
+check(
+  mentalHealth && (mentalHealth.sources || []).some(s => /non-stratif|risk-stratification/i.test(s)),
+  'mental-health sources record the NG225 non-stratifying design note'
+);
+check(mentalHealth && mentalHealth.pharmacyFirst === undefined, 'mental-health has NO pharmacyFirst block');
+// The two general-pathway mental-health flags live in BOTH places on purpose —
+// callers do not announce the right pathway.
+for (const id of ['rf-mentalhealth-attempt', 'rf-mentalhealth']) {
+  check(generalP && (generalP.redFlags || []).some(rf => rf.id === id), `general still carries "${id}" (kept in both pathways deliberately)`);
+  check(mentalHealth && (mentalHealth.redFlags || []).some(rf => rf.id === id), `mental-health also carries "${id}"`);
+}
+// The plan's conditional drafts must be SPLIT, never collapsed into one flag.
+for (const [hi, lo] of [['rf-selfharm-injury-urgent', 'rf-selfharm-not-urgent'], ['rf-psychosis-acute', 'rf-psychosis-present']]) {
+  const a = mentalHealth && (mentalHealth.redFlags || []).find(rf => rf.id === hi);
+  const b = mentalHealth && (mentalHealth.redFlags || []).find(rf => rf.id === lo);
+  check(!!a && a.escalate === '999', `mental-health "${hi}" exists and escalates to 999`);
+  check(!!b && b.escalate === 'duty', `mental-health "${lo}" exists and escalates to duty (conditional draft split, not collapsed)`);
+}
+
+// specVersion must record the v1.6 additions AND that they are draft/unsigned.
+check(/v1\.6/.test(doc.specVersion || ''), 'specVersion records the v1.6 additions');
+check(/DRAFT/i.test(doc.specVersion || ''), 'specVersion flags the new content as DRAFT pending CSO sign-off');
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

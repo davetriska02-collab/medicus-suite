@@ -35,6 +35,12 @@
     if (p.sources != null && (!Array.isArray(p.sources) || p.sources.some(s => !isStr(s)))) {
       errs.push('sources: must be a list of text entries.');
     }
+    // sensitive (optional, v1.6) — a pathway whose free text is too sensitive to
+    // persist. Capture drafts are NEVER auto-saved for it and taker initials are
+    // mandatory. Boolean only: an unrecognised value must not read as "true".
+    if (p.sensitive != null && typeof p.sensitive !== 'boolean') {
+      errs.push('sensitive: must be true or false.');
+    }
 
     if (!Array.isArray(p.redFlags) || p.redFlags.length < 1) {
       errs.push('redFlags: at least one red-flag question is required.');
@@ -48,6 +54,12 @@
         else seen.add(rf.id);
         if (!nonEmpty(rf.ask) || rf.ask.trim().length < 10) errs.push(`${tag}.ask: required, at least 10 characters.`);
         if (VALID_ESCALATE.indexOf(rf.escalate) === -1) errs.push(`${tag}.escalate: must be "999" or "duty".`);
+        // safeguarding (optional, v1.6) — marks a safeguarding concern: escalate
+        // immediately to the duty clinician AND the practice safeguarding lead,
+        // bypassing all routing. Boolean only, for the same reason as `sensitive`.
+        if (rf.safeguarding != null && typeof rf.safeguarding !== 'boolean') {
+          errs.push(`${tag}.safeguarding: must be true or false.`);
+        }
       });
     }
 
@@ -95,7 +107,13 @@
       title: t(p.title),
       appliesTo: nonEmpty(p.appliesTo) ? t(p.appliesTo) : undefined,
       sources: Array.isArray(p.sources) ? p.sources.filter(nonEmpty).map(t) : undefined,
-      redFlags: (p.redFlags || []).map(rf => ({ id: t(rf.id), ask: t(rf.ask), escalate: rf.escalate })),
+      redFlags: (p.redFlags || []).map(rf => {
+        const crf = { id: t(rf.id), ask: t(rf.ask), escalate: rf.escalate };
+        // Only the literal boolean true survives — "true", 1, {} etc. are dropped,
+        // so a crafted import cannot smuggle a truthy safeguarding marker through.
+        if (rf.safeguarding === true) crf.safeguarding = true;
+        return crf;
+      }),
       questions: (p.questions || []).map(q => {
         const cq = { id: t(q.id), ask: t(q.ask), type: q.type };
         if (q.type === 'choice' || q.type === 'multi') cq.options = (q.options || []).filter(nonEmpty).map(t);
@@ -110,6 +128,8 @@
         ageMax: typeof p.pharmacyFirst.ageMax === 'number' ? p.pharmacyFirst.ageMax : undefined,
       };
     }
+    // Same strict-true rule as redFlags[].safeguarding above.
+    if (p.sensitive === true) out.sensitive = true;
     if (out.appliesTo === undefined) delete out.appliesTo;
     if (out.sources === undefined) delete out.sources;
     return out;
@@ -216,6 +236,15 @@ Top-level fields:
   appliesTo   (string, optional)
               Audience note, e.g. "Adults". Omit if not needed.
 
+  sensitive   (boolean, optional — set to true, or omit entirely)
+              Marks the pathway as carrying especially sensitive free text (e.g. mental
+              health / emotional distress). When true:
+                - capture drafts are NEVER auto-saved to local storage (nothing the
+                  caller says is left sitting on a shared front-desk machine), and
+                - the receptionist's initials become MANDATORY before a summary can be
+                  generated.
+              Use it sparingly and only where the content genuinely warrants it.
+
   sources     (array of strings, optional)
               List the NICE CKS topic, NICE guideline number, or other guidance you based
               each part of the pathway on. Always include at least one source so the practice
@@ -232,6 +261,15 @@ Top-level fields:
                            "999" = immediate life-threatening emergency (call 999 / emergency
                                    ambulance; do not put in a queue)
                            "duty" = same-day clinician review required (alert the duty GP now)
+                           There is NO conditional level. Never write a flag whose answer means
+                           "999 in one case, duty in another" — split it into two separate flags
+                           with unambiguous lay wording, one per level.
+                safeguarding (boolean, optional — set to true, or omit entirely)
+                           Marks this flag as a SAFEGUARDING concern (a child or vulnerable
+                           adult at risk of harm, neglect, or abuse). A positive answer must be
+                           escalated immediately to the duty clinician AND the practice
+                           safeguarding lead, and bypasses all other routing. Set "escalate"
+                           as well — safeguarding is in addition to, not instead of, a level.
 
   questions   (array, required — minimum 1 item)
               History questions asked after all red flags are clear. Each item:

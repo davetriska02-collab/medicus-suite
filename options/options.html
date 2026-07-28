@@ -1956,6 +1956,38 @@
             </div>
           </details>
 
+          <h2 style="font-size: 14px; margin: 24px 0 6px">Escalation contacts</h2>
+          <p class="section-desc" style="margin-top: 0">
+            Free text shown to reception staff exactly as typed. The
+            <strong>safeguarding lead</strong> is named on the escalation banner whenever a red flag marked as a
+            safeguarding concern is answered &ldquo;yes&rdquo;. The <strong>crisis line</strong> is the closing line on
+            pathways marked <em>sensitive</em> (e.g. mental health) and is also written into the pasted summary. Leave
+            either blank to use the generic wording.
+          </p>
+          <div style="display: flex; flex-direction: column; gap: 10px; max-width: 640px">
+            <label style="font-size: 12px; color: var(--text-2); display: flex; flex-direction: column; gap: 4px">
+              Safeguarding lead contact
+              <input
+                type="text"
+                id="rcpoSafeguardingContact"
+                maxlength="200"
+                placeholder="e.g. Dr A Patel, safeguarding lead — ext 214"
+                style="font-size: 12px; padding: 5px 8px"
+              />
+            </label>
+            <label style="font-size: 12px; color: var(--text-2); display: flex; flex-direction: column; gap: 4px">
+              Crisis line text (sensitive pathways)
+              <input
+                type="text"
+                id="rcpoCrisisLine"
+                maxlength="200"
+                placeholder="If the patient needs urgent mental-health support now: NHS 111, option 2 (24/7)"
+                style="font-size: 12px; padding: 5px 8px"
+              />
+            </label>
+            <span id="rcpoContactsStatus" style="font-size: 11px; color: var(--text-3)"></span>
+          </div>
+
           <h2 style="font-size: 14px; margin: 24px 0 6px">Quick-wins alert &mdash; chips shown to reception</h2>
           <p class="section-desc" style="margin-top: 0">
             The Reception tab shows a single green/amber/red status for the open patient. Untick any

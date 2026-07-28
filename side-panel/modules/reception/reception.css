@@ -603,6 +603,28 @@
   border-left: 4px solid var(--amber);
   color: var(--amber);
 }
+/* Safeguarding line appended inside the escalation banner when a red flag with
+   safeguarding:true is answered YES. Deliberately reads as an additional,
+   separate instruction rather than a second banner — the escalation and the
+   safeguarding route both apply. */
+.rcp-banner-safeguarding {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid currentcolor;
+  font-weight: 700;
+}
+/* Fixed closing line on sensitive (mental-health) capture forms — the practice's
+   crisis route. Not a clinical instruction, a signposting line. */
+.rcp-crisis-line {
+  margin-top: 10px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-md);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
 
 .rcp-section {
   margin-bottom: 12px;
