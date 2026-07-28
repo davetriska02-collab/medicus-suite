@@ -1,5 +1,25 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
-// Medicus Suite — Booking API client for the Slots module.
+// Medicus Suite — Booking API shim for the Slots module.
+//
+// THE SPLIT (Phase D1 of docs/plans/RECEPTION-FEEDBACK-2026-07-28.md):
+//
+//   shared/booking-core.js  — the ENDPOINTS. Every /scheduling/* call, the
+//                             window search and its caps, the keepalive release.
+//                             One copy, shared by every booking surface; it
+//                             exports NO tab detection and refuses to create an
+//                             appointment without an explicit patientId.
+//   this file (the shim)    — the slots module's IDENTITY resolution
+//                             (detectMedicusTab / detectPatientId) plus a
+//                             re-export of the core, so slots.js's existing
+//                             `import { … } from './booking-api.js'` is
+//                             unchanged by the extraction.
+//
+// Why detection stays here and not in the core: two identity sources exist in
+// the suite and can disagree — reception resolves the *active* tab, this file
+// resolves the *first matching* Medicus tab, active or not. Baking either one
+// into the shared core would let a caller book the patient from tab 2 while
+// showing the patient from tab 1, with a commit-time re-verify that passes
+// because it re-checks the same wrong source (plan D1.2, hazard H-043).
 //
 // The /scheduling/* endpoints live on the API subdomain
 // ({siteId}.api.england.medicus.health) — the SAME host the slots-overview call
@@ -10,9 +30,17 @@
 // credentials, exactly like the overview call does.
 'use strict';
 
-function pad(n) {
-  return String(n).padStart(2, '0');
-}
+export {
+  MAX_WINDOW_DAYS,
+  MAX_CONCURRENCY,
+  fetchAppointmentFinder,
+  fetchAvailableSlots,
+  reserveSlot,
+  fetchCreateForm,
+  createAppointment,
+  releaseReservation,
+  findSlotsInWindow,
+} from '../../../shared/booking-core.js';
 
 // Returns { tabId, origin, apiBase, tab } for the best available Medicus app tab,
 // or null if no Medicus tab is open / signed in. apiBase is the scheduling API
@@ -75,104 +103,4 @@ export async function detectPatientId(tab) {
   }
 
   return null;
-}
-
-// Direct credentialed fetch against the scheduling API subdomain. Reads the body
-// as text first so a stray HTML response yields a clear message rather than a
-// cryptic JSON-parse error.
-async function apiFetch(url, opts) {
-  opts = opts || {};
-  const resp = await fetch(url, {
-    method: opts.method || 'GET',
-    credentials: 'include',
-    headers: Object.assign({ Accept: 'application/json, text/plain, */*' }, opts.headers),
-    body: opts.body,
-  });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  const text = await resp.text();
-  try {
-    return JSON.parse(text);
-  } catch (_) {
-    throw new Error('Scheduling API returned an unexpected response.');
-  }
-}
-
-export async function fetchAppointmentFinder(apiBase) {
-  return apiFetch(`${apiBase}/scheduling/data/appointment-service/available-appointment-finder`);
-}
-
-export async function fetchAvailableSlots(apiBase, { providerId, appointmentTypeId, date }) {
-  const now = new Date();
-  const todayYmd = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  const minDateTime =
-    date === todayYmd ? `${date} ${pad(now.getHours())}:${pad(now.getMinutes())}:00` : `${date} 00:00:00`;
-  const qs = new URLSearchParams({
-    providerId,
-    providerIsLocalOrganisation: 'true',
-    minDateTime,
-    'localOrganisationFilters[appointmentTypeId]': appointmentTypeId,
-  });
-  const data = await apiFetch(
-    `${apiBase}/scheduling/data/appointment-service/available-appointment-places-between-range?${qs}`
-  );
-  const slots = [];
-  for (const diary of data.availablePlaces?.[date]?.diaries || []) {
-    for (const entry of diary.entries || []) {
-      if (entry.diaryEntryType?.isSlot) slots.push(entry);
-    }
-  }
-  return slots;
-}
-
-export async function reserveSlot(apiBase, { diaryId, startDateTime, duration, appointmentTypeId }) {
-  return apiFetch(`${apiBase}/scheduling/slot-reservation/reserve-slot-and-broadcast-appointment-booking-in-progress`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      diaryId,
-      intendedStartDateTime: startDateTime,
-      intendedDuration: duration,
-      allowMatchingSlotsFromOtherDiaries: true,
-      substituteSlotFilters: {
-        staffIds: [],
-        siteIds: [],
-        appointmentTypeId,
-        preferredStaffGenders: null,
-        jobRoleIds: [],
-        preferredLanguages: [],
-      },
-    }),
-  });
-}
-
-export async function fetchCreateForm(apiBase, { slotReservationId, patientId }) {
-  const qs = new URLSearchParams({
-    context: 'create-booked-appointment',
-    appointmentTemporalType: 'timed',
-    slotReservationId,
-    patientId,
-  });
-  return apiFetch(`${apiBase}/scheduling/data/appointment/create-appointment?${qs}`);
-}
-
-export async function createAppointment(apiBase, payload) {
-  return apiFetch(`${apiBase}/scheduling/appointment/create-appointment`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function releaseReservation(apiBase, slotReservationId) {
-  if (!apiBase || !slotReservationId) return;
-  try {
-    await apiFetch(
-      `${apiBase}/scheduling/slot-reservation/remove-slot-reservation-and-broadcast-appointment-booking-ended`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slotReservationId }),
-      }
-    );
-  } catch (_) {}
 }

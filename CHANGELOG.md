@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.199.0] — 2026-07-28
+
+### Booking core extracted to shared/ + slots commit-time patient re-verify (reception feedback, Phase D1)
+
+- **New `shared/booking-core.js`**: the six booking endpoints move out of
+  `slots/booking-api.js` (now a re-export shim keeping tab/patient
+  detection). Dual-mode export (ES + `window.BookingCore`), zero
+  `chrome.tabs` in the core, `createAppointment` throws without an explicit
+  `patientId` — the core can never self-detect the patient.
+- **`findSlotsInWindow`**: pooled multi-day slot search (cap 28 days,
+  concurrency ≤4, weekend skip, abort on 429/5xx, early stop at limit,
+  results sorted + grouped by day). Foundation for the reception 1–4-week
+  window search (D2). TODO recorded to spike the endpoint's native range
+  support.
+- **`releaseReservation` now `keepalive: true`** — panel-close releases
+  were silently dropped before (live bug, fixed for slots too).
+- **slots.js hardening (H-043)**: `doConfirmBooking` now re-resolves the
+  patient (and site) immediately before `createAppointment` and aborts +
+  releases the reservation on any mismatch — the commit-time re-verify the
+  inline widget already had, retrofitted to the panel.
+- First CI coverage for the booking write path: `test-booking-core.js`
+  (86 assertions incl. shim identity and no-tab-detection guarantees).
+
 ## [v3.198.0] — 2026-07-28
 
 ### Quick actions: new shipped presets + version-gated merge (reception feedback, Phase A)
