@@ -2,6 +2,56 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.197.0] — 2026-07-28
+
+### GP → Reception quick-actions composer on the task Internal comment
+
+User request: "What I specifically want as an insert around that internal
+comment box is a quick actions type menu for communication from GP to reception
+team. Specifically, this is about what needs to happen with them, ie do they
+need an appointment or similar. Second, with whom? Third, within what time
+frame? … It needs to be configurable by the GP surgery … probably needs a free
+text thing because we won't add all the members of staff."
+
+- **A collapsed strip now sits directly above the Internal comment box** on task
+  overviews ("▸ Reception instruction — *writes text only — books nothing*").
+  Expanded, it is three chip rows — **Action** ("Book F2F appt", "Phone
+  patient", "Book bloods (HCA/phlebotomy)", …), **With whom** ("Any GP", "Duty
+  doctor", "Practice nurse", … plus a **+ name** chip that saves a name for the
+  whole practice), **Timeframe** ("Today", "Within 48h", "Routine (next
+  available)", …) — plus one free-text "If not / other:" box with tap-to-fill
+  suggestions. Single-select per row, tap again to deselect; only Action is
+  required.
+- **It composes one plain-English sentence, shown live before you insert it.**
+  Verb first, one sentence, full stop, no prefixes, pipes, CAPS or emoji — e.g.
+  picking *Book F2F appt* / *Any GP* / *Within 2 weeks* writes `Book F2F appt
+  with any GP, within 2 weeks.` Shipped role and timeframe labels are rendered
+  so they read mid-sentence ("Usual GP" → "their usual GP", "Routine (next
+  available)" → "routine"); a name a practice adds is used verbatim, so "Nat"
+  stays "Nat". An "FYI" action collapses to `FYI — no action needed.`
+- **It writes text only — it books nothing and submits nothing.** Insert is an
+  explicit button, disabled until an Action is picked; it *appends* to the
+  comment box and never clears or rewrites what you already typed; afterwards it
+  **highlights** the card's own Submit / "Submit as new" control rather than
+  clicking it, and says "Text added to internal comment — **not yet
+  submitted**". The task UUID is pinned when the composer opens and re-verified
+  synchronously at insert, so a mid-flight SPA navigation aborts with "Task
+  changed — reopen and re-pick." instead of writing into the wrong task. The
+  free-text note is transient — it never reaches storage.
+- **All four lists are practice-configurable** in Options → **Quick Actions**
+  (add / edit / reorder / delete, restore shipped defaults, and a live example
+  sentence so wording is checked at edit time). The lists ride
+  `triagelens.quickActions` and are captured in suite backups via the triage
+  scope; the composer's ⚙ button opens that section directly.
+- **New DOM contract `quick-actions.internal-comment`** plus a synthesised
+  fixture (`fixtures/medicus/quick-actions-internal-comment.html`) so a Medicus
+  markup change that hides the comment box shows up as contract drift rather
+  than a widget that silently stops appearing.
+- **New hazard H-049** — "quick-action composer text mistaken for an executed
+  action or a safety net" (initial 9, residual 3, Accepted ALARP pending CSO
+  review), with `test-quick-actions-core.js` pinning every canonical sentence
+  verbatim.
+
 ## [v3.196.0] — 2026-07-28
 
 ### Monitoring Brief: per-group RAG (Meds / QOF / General) + loud green all-clear
