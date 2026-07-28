@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.197.0",
+  "version": "3.198.0",
   "description": "The clinical intelligence layer for Medicus: read-only safety monitoring, triage red-flags, QOF tracking and operational dashboards.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -91,6 +91,8 @@
       "js": [
         "content-scripts/booking-inline.js",
         "content-scripts/task-inline.js",
+        "shared/quick-actions-core.js",
+        "content-scripts/reception-quick-actions.js",
         "content-scripts/document-file-inline.js",
         "shared/legacy-coded-description.js",
         "shared/coding-specificity.js",
@@ -103,6 +105,7 @@
       "css": [
         "content-scripts/booking-inline.css",
         "content-scripts/task-inline.css",
+        "content-scripts/reception-quick-actions.css",
         "content-scripts/document-file-inline.css",
         "content-scripts/problem-description-cleanup.css",
         "content-scripts/problem-bulk-end.css",

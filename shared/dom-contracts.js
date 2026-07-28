@@ -160,7 +160,8 @@
       id: 'queue.chip-marker-classes',
       description:
         'The injected chip family classes swept on every refreshQueueChips (wipe-and-redecorate) and de-duped on inject: age/decoration (.ch-queue-chips), monitoring (.ch-q-mon), result-triage (.ch-q-result), the B2 pending-abnormal-lab cross-link (.ch-q-pending), the B3 repeat-contact chip (.ch-q-repeat) and the B5 aged-request carry-over chip (.ch-q-carry). Per CLAUDE.md rule 5, each must also be present in hud.css\'s token-block selector list or it renders as an unstyled "white rectangle" (that check is out of scope for this registry).',
-      feature: 'Queue chips — re-injection / de-dupe (.ch-queue-chips / .ch-q-mon / .ch-q-result / .ch-q-pending / .ch-q-repeat / .ch-q-carry)',
+      feature:
+        'Queue chips — re-injection / de-dupe (.ch-queue-chips / .ch-q-mon / .ch-q-result / .ch-q-pending / .ch-q-repeat / .ch-q-carry)',
       degradation:
         'stale chips are never swept on AG-Grid row recycling (duplicate or orphaned chips), or the de-dupe check stops preventing double-injection.',
       source:
@@ -315,6 +316,26 @@
       runtime: false,
       runtimeNote:
         'the "more actions" text filter and visibility/dialog exclusion happen at runtime beyond what a selector-only probe encodes, and this target family is a near-subset of its own anchor family. Fixture-regression only.',
+      mirrorOf: null,
+    },
+
+    // ── reception-quick-actions.js — GP → reception composer ────────────────
+    {
+      id: 'quick-actions.internal-comment',
+      description:
+        'The task overview\'s "Internal comment" <textarea> — the box the GP → reception quick-actions composer injects directly above (parent.insertBefore) and appends its composed sentence into. findCommentBox() scans visible textareas, prefers one whose aria-label/placeholder matches /comment/i, and otherwise falls back to one whose nearby preceding text matches /internal\\s*comment/i; textareas inside the widget itself or a dialog/modal are excluded.',
+      feature: 'Quick-actions composer — host + write target',
+      degradation:
+        'findCommentBox() returns null and the composer silently never appears (it is presence-gated by design), so the GP falls back to typing the reception instruction free-hand — no wrong write, but the feature is invisibly absent.',
+      source: 'content-scripts/reception-quick-actions.js:200-217 (findCommentBox)',
+      pageMatch:
+        /\/([0-9a-f]{4,})\/tasks\/data\/([^/]+)\/overview\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
+      anchor: 'h1, h2, h3, h4, h5, h6, strong, b, legend',
+      target: ['textarea'],
+      legacy: [],
+      runtime: false,
+      runtimeNote:
+        'the /internal comment/i text-proximity walk and the aria-label/placeholder hint match happen at runtime beyond what a selector-only probe encodes — a bare "textarea" probe would pass on any page with any textarea at all, so a runtime probe would be reassurance rather than evidence. Fixture-regression only.',
       mirrorOf: null,
     },
 

@@ -1,0 +1,23 @@
+<!--
+  Fixture: quick-actions.internal-comment
+  Provenance: SYNTHESISED from v3.197.0 selector expectations — mined from
+  content-scripts/reception-quick-actions.js (findCommentBox / findSubmitControl)
+  when the GP → reception quick-actions composer was built (2026-07-28).
+  Zero patient data. See fixtures/medicus/README.md.
+  Runtime probing is disabled for this contract (see registry runtimeNote) —
+  the "Internal comment" label-proximity and aria-label/placeholder discovery
+  happen at runtime beyond what a selector-only probe encodes, so this is
+  fixture-regression only.
+-->
+<div class="task-overview">
+  <h3>Codes &amp; actions</h3>
+  <div class="m-form-field">
+    <strong>Internal comment</strong>
+    <textarea rows="3" aria-label="Internal comment" placeholder="Add an internal comment"></textarea>
+  </div>
+  <div class="m-form-field">
+    <strong>Assign to</strong>
+    <span>PST/Reception</span>
+  </div>
+  <button type="button">Submit as new</button>
+</div>

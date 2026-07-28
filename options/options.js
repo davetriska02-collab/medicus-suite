@@ -3582,3 +3582,152 @@ lfSaveBtn?.addEventListener('click', async () => {
     if (changes['health.contracts']) refreshHealth();
   });
 })();
+
+// ── Quick Actions — GP → reception composer lists ──────────────────────────────
+//
+// Practice-wide editor for the four chip lists the injected composer
+// (content-scripts/reception-quick-actions.js) renders above a task's Internal
+// comment box. Same doctrine as the slot-alert-rules editor above: plain rows,
+// save-on-change, no drag. Nothing here is patient data — the GP's free-text
+// note is transient state in the widget and never reaches storage.
+//
+// The live example line is deliberately rendered through the SAME composeLine()
+// the widget uses, so a label that reads badly mid-sentence ("Book F2F appt with
+// Usual GP") is visible while it is being typed, not after it reaches reception.
+
+(async function initQuickActions() {
+  try {
+    const QA = window.QuickActionsCore;
+    const STORE_KEY = 'triagelens.quickActions';
+    const savedTag = document.getElementById('qaSaved');
+    const exampleEl = document.getElementById('qaExample');
+    const LISTS = [
+      { key: 'actions', host: 'qaActionsList', add: 'qaAddActions', max: 28, placeholder: 'e.g. Book F2F appt' },
+      { key: 'who', host: 'qaWhoList', add: 'qaAddWho', max: 28, placeholder: 'e.g. Duty doctor, or a name' },
+      { key: 'when', host: 'qaWhenList', add: 'qaAddWhen', max: 28, placeholder: 'e.g. Within 48h' },
+      {
+        key: 'fallbacks',
+        host: 'qaFallbacksList',
+        add: 'qaAddFallbacks',
+        max: 140,
+        placeholder: 'e.g. if no answer, text booking link',
+      },
+    ];
+    if (!QA || !exampleEl) return;
+
+    const r = await chrome.storage.local.get(STORE_KEY);
+    let cfg = QA.sanitiseConfig(r[STORE_KEY]);
+
+    function activeSet() {
+      return cfg.sets[cfg.activeSet] || cfg.sets.default;
+    }
+
+    function save() {
+      cfg = QA.sanitiseConfig(cfg);
+      chrome.storage.local.set({ [STORE_KEY]: cfg });
+      if (savedTag) {
+        savedTag.classList.add('show');
+        setTimeout(() => savedTag.classList.remove('show'), 2000);
+      }
+    }
+
+    // The example uses the first entry of each list — the composer's own output
+    // for the simplest possible pick.
+    function renderExample() {
+      const set = activeSet();
+      const line = QA.composeLine({
+        action: set.actions[0] || '',
+        who: set.who[0] || '',
+        when: set.when[0] || '',
+        note: set.fallbacks[0] || '',
+      });
+      exampleEl.textContent = line || 'Add at least one action to see the composed sentence.';
+    }
+
+    function renderList(spec) {
+      const host = document.getElementById(spec.host);
+      if (!host) return;
+      const items = activeSet()[spec.key] || [];
+      host.innerHTML = '';
+      items.forEach((value, i) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:6px;';
+        row.innerHTML = `
+          <input type="text" class="qa-item" value="${escAttr(value)}" maxlength="${spec.max}"
+            placeholder="${escAttr(spec.placeholder)}"
+            style="flex:1; min-width:140px; background:var(--bg-elev); border:1px solid var(--border-hi);
+                   color:var(--text-2); font-family:var(--mono); font-size:11px; border-radius:5px; padding:4px 8px;" />
+          <button class="qa-up ghost" style="padding:2px 8px; font-size:11px;" title="Move up"${i === 0 ? ' disabled' : ''}>▲</button>
+          <button class="qa-down ghost" style="padding:2px 8px; font-size:11px;" title="Move down"${i === items.length - 1 ? ' disabled' : ''}>▼</button>
+          <button class="qa-del ghost" style="padding:2px 8px; font-size:11px;" title="Remove">✕</button>
+        `;
+        row.querySelector('.qa-item').addEventListener('change', (e) => {
+          const v = e.target.value.trim().slice(0, spec.max);
+          if (!v) {
+            items.splice(i, 1);
+          } else {
+            items[i] = v;
+          }
+          save();
+          renderAll();
+        });
+        row.querySelector('.qa-up').addEventListener('click', () => {
+          if (i === 0) return;
+          [items[i - 1], items[i]] = [items[i], items[i - 1]];
+          save();
+          renderAll();
+        });
+        row.querySelector('.qa-down').addEventListener('click', () => {
+          if (i >= items.length - 1) return;
+          [items[i + 1], items[i]] = [items[i], items[i + 1]];
+          save();
+          renderAll();
+        });
+        row.querySelector('.qa-del').addEventListener('click', () => {
+          items.splice(i, 1);
+          save();
+          renderAll();
+        });
+        host.appendChild(row);
+      });
+    }
+
+    function renderAll() {
+      LISTS.forEach(renderList);
+      renderExample();
+    }
+
+    LISTS.forEach((spec) => {
+      document.getElementById(spec.add)?.addEventListener('click', () => {
+        const items = activeSet()[spec.key];
+        if (items.length >= 24) return; // QA_LIMITS.list — sanitiseConfig would drop the overflow anyway
+        items.push('');
+        renderAll();
+        const host = document.getElementById(spec.host);
+        host?.querySelector('div:last-child .qa-item')?.focus();
+      });
+    });
+
+    document.getElementById('qaRestoreDefaults')?.addEventListener('click', () => {
+      if (!confirm('Replace all four Quick Actions lists with the shipped defaults? Your edits will be lost.')) return;
+      cfg = QA.sanitiseConfig(JSON.parse(JSON.stringify(QA.DEFAULT_CONFIG)));
+      save();
+      renderAll();
+    });
+
+    renderAll();
+
+    // Render lazily on nav click too, so a change made in another tab (or by a
+    // GP's "+ name" chip on the live page) is reflected when the section opens.
+    document.querySelectorAll('.nav-item').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (btn.dataset.section !== 'quickactions') return;
+        const fresh = await chrome.storage.local.get(STORE_KEY);
+        cfg = QA.sanitiseConfig(fresh[STORE_KEY]);
+        renderAll();
+      });
+    });
+  } catch (e) {
+    console.warn('[Quick Actions init]', e.message);
+  }
+})();

@@ -1025,6 +1025,7 @@
         <button class="nav-item" data-section="labfiling">Lab Filing</button>
         <button class="nav-item" data-section="oir">Outstanding Requests</button>
         <button class="nav-item" data-section="reception">Reception</button>
+        <button class="nav-item" data-section="quickactions">Quick Actions</button>
         <button class="nav-item" data-section="knowledge">Knowledge</button>
         <button class="nav-item" data-section="leaflets">Leaflets</button>
         <button class="nav-item" data-section="safety">Clinical Safety</button>
@@ -1962,6 +1963,104 @@
             tab; the Reception tab notes when alerts are filtered).
           </p>
           <div id="rcpoChipList"><div style="font-size: 12px; color: var(--text-3)">Loading rules&hellip;</div></div>
+        </section>
+
+        <!-- Quick Actions section -->
+        <section class="opt-section" id="sect-quickactions">
+          <h1>Quick Actions <span class="module-badge">GP &rarr; reception composer</span></h1>
+          <p class="section-desc">
+            Inserts a plain-English instruction into a task's Internal comment. It writes text only &mdash; it never
+            books, submits, or sends anything. The GP still reads the comment and presses Medicus's own Submit button.
+          </p>
+          <p class="section-desc">
+            These lists are shared by the whole practice. They appear as chips above the Internal comment box on task
+            overviews, in three rows &mdash; <strong>Action</strong>, <strong>With whom</strong>,
+            <strong>Timeframe</strong> &mdash; plus the &ldquo;If not / other&rdquo; suggestions below them. Only
+            <strong>Action</strong> is required; the composed sentence drops any row left unpicked.
+          </p>
+
+          <div class="field">
+            <label class="field-label">Before you edit these</label>
+            <p class="field-help">
+              &bull; <strong>Timeframes are deadlines</strong> &mdash; &ldquo;by when at the latest&rdquo;, not a
+              booking window the suite enforces. Nothing here chases, books or safety-nets; the instruction is only as
+              good as the person who reads it.<br />
+              &bull; <strong>&ldquo;Usual GP&rdquo; can bounce back.</strong> If reception cannot identify who that is
+              for this patient, the task comes back to you &mdash; name the clinician explicitly when it matters.<br />
+              &bull; <strong>Names are unvalidated free text.</strong> Nothing checks a name against your staff list, so
+              keep this list current when staff join or leave &mdash; a leaver's name still composes a perfectly
+              readable instruction that nobody can act on.
+            </p>
+          </div>
+
+          <div style="margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border)">
+            <h2 style="font-size: 13px; margin: 0 0 4px">Actions</h2>
+            <p class="section-desc" style="margin-bottom: 10px">
+              What needs to happen. Verb first &mdash; the label is the start of the sentence. Max 28 characters, 24
+              entries. An action starting &ldquo;FYI&rdquo; composes &ldquo;FYI &mdash; no action needed.&rdquo; and
+              suppresses the who/when clauses.
+            </p>
+            <div id="qaActionsList" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px"></div>
+            <button class="ghost" id="qaAddActions">+ Add action</button>
+          </div>
+
+          <div style="margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border)">
+            <h2 style="font-size: 13px; margin: 0 0 4px">With whom</h2>
+            <p class="section-desc" style="margin-bottom: 10px">
+              Roles and named staff. Shipped roles are rendered into the sentence for you (&ldquo;Usual GP&rdquo; reads
+              as &ldquo;their usual GP&rdquo;); anything you add is used <em>verbatim</em>, so type it exactly as
+              reception says it. GPs can also add a name on the fly from the composer's &ldquo;+ name&rdquo; chip, which
+              saves it here.
+            </p>
+            <div id="qaWhoList" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px"></div>
+            <button class="ghost" id="qaAddWho">+ Add name or role</button>
+          </div>
+
+          <div style="margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border)">
+            <h2 style="font-size: 13px; margin: 0 0 4px">Timeframes</h2>
+            <p class="section-desc" style="margin-bottom: 10px">
+              The deadline &mdash; by when at the latest. Keep them short; they read mid-sentence (&ldquo;&hellip;,
+              within 48h.&rdquo;).
+            </p>
+            <div id="qaWhenList" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px"></div>
+            <button class="ghost" id="qaAddWhen">+ Add timeframe</button>
+          </div>
+
+          <div style="margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border)">
+            <h2 style="font-size: 13px; margin: 0 0 4px">&ldquo;If not&rdquo; suggestions</h2>
+            <p class="section-desc" style="margin-bottom: 10px">
+              One-tap text for the composer's free-text box &mdash; what reception should do if the first instruction
+              cannot be met. Tapping one <em>fills</em> the box so the GP can edit it; it never inserts on its own. Max
+              140 characters.
+            </p>
+            <div id="qaFallbacksList" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px"></div>
+            <button class="ghost" id="qaAddFallbacks">+ Add suggestion</button>
+          </div>
+
+          <div style="margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border)">
+            <h2 style="font-size: 13px; margin: 0 0 4px">Example sentence</h2>
+            <p class="section-desc" style="margin-bottom: 8px">
+              Built live from the first entry of each list above, exactly as the composer would write it into the
+              Internal comment. Check it reads as English &mdash; a receptionist reads this, not a form.
+            </p>
+            <div
+              id="qaExample"
+              style="
+                font-family: var(--mono);
+                font-size: 12px;
+                color: var(--text-2);
+                background: var(--bg-elev);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                padding: 10px 12px;
+                line-height: 1.5;
+              "
+            ></div>
+            <div style="margin-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+              <button class="ghost" id="qaRestoreDefaults">Restore shipped defaults</button>
+              <span class="saved" id="qaSaved">Saved &check;</span>
+            </div>
+          </div>
         </section>
 
         <!-- Knowledge section -->
@@ -2980,6 +3079,7 @@
     <script src="../shared/io/reception-io.js"></script>
     <script src="../shared/knowledge-utils.js"></script>
     <script src="../shared/io/knowledge-io.js"></script>
+    <script src="../shared/quick-actions-core.js"></script>
     <script src="../shared/lab-filing-utils.js"></script>
     <script src="../shared/io/labfiling-io.js"></script>
     <script src="../shared/io/notifications-io.js"></script>
