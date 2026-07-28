@@ -1,0 +1,245 @@
+/* Medicus Suite — "Find evidence?" inline widget for the Clinical Summary Allergies card */
+/* All selectors scoped to ms-alc-* classes to avoid Medicus style conflicts. */
+/* Light theme only, matching its sibling content-scripts/problem-description-cleanup.css:
+   Medicus's own page never loads the suite's panel.css, so there are no design
+   tokens to consume here and no dark surface to match — the values below are
+   deliberately the same literal palette the sibling widget uses. */
+
+/* Keyboard focus ring — one wildcard rule rather than one per class, so it
+   stays complete as controls get added (same approach, and the same #2563eb
+   accent literal, as problem-description-cleanup.css). */
+button[class*='ms-alc-']:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+/* The per-row trigger. Same pill shape/size as .ms-pdc-fix-btn so the two
+   widgets read as one system on the same screen, but a NEUTRAL grey rather
+   than the sibling's amber: this button asserts nothing about the allergy
+   entry (it is offered on every row, and the tool never proposes a change),
+   whereas amber on a problem row means "this one looks wrong". */
+.ms-alc-find-btn {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  line-height: 1.5;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #374151;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.ms-alc-find-btn:hover {
+  background: #e5e7eb;
+}
+
+.ms-alc-panel-wrap {
+  display: block;
+  margin: 4px 0 8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.ms-alc-head {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+}
+
+.ms-alc-head-sub {
+  font-weight: 400;
+  color: #6b7280;
+}
+
+.ms-alc-body {
+  display: block;
+  padding: 8px 10px;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+/* Mandatory standing caution (plan doc, Phase 3). Amber note, same family as
+   .ms-pdc-retired-note — informational, deliberately not styled as anything
+   clickable, because there is nothing to click: the clinician acts in
+   Medicus's own UI. */
+.ms-alc-caution {
+  display: block;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: #fffbeb;
+  border-left: 2px solid #fbbf24;
+  font-size: 11px;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.ms-alc-provenance {
+  display: block;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  background: #fff;
+  border-left: 2px solid #d1d5db;
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.ms-alc-list {
+  display: block;
+}
+
+/* One evidence item. Plain white card on the panel's grey — the ranking is
+   carried by ORDER plus the --strong highlight below, not by a risk-graded
+   palette (nothing here is an action to be graded). */
+.ms-alc-item {
+  display: block;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+}
+
+.ms-alc-item:last-child {
+  margin-bottom: 0;
+}
+
+/* Score 3 — substance and a reaction term close together in the same field.
+   A subtle blue left-edge, NOT a warning colour: it means "read this one
+   first", never "this is confirmed". */
+.ms-alc-item--strong {
+  border-left: 3px solid #93c5fd;
+  background: #f8fbff;
+}
+
+.ms-alc-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.ms-alc-item-date {
+  font-weight: 700;
+  color: #374151;
+}
+
+.ms-alc-item-source {
+  font-style: italic;
+}
+
+.ms-alc-item-author {
+  color: #4b5563;
+}
+
+.ms-alc-terms {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+.ms-alc-terms-label {
+  margin-right: 2px;
+  color: #6b7280;
+}
+
+.ms-alc-tag {
+  display: inline-block;
+  padding: 0 6px;
+  line-height: 1.6;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #1e40af;
+}
+
+/* GP2GP-imported evidence — grey, not blue, so it never reads as a matched
+   clinical term, and paired with the spelled-out note below it. */
+.ms-alc-tag--import {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  color: #4b5563;
+}
+
+.ms-alc-import-note {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 10px;
+  color: #6b7280;
+}
+
+/* The verbatim quote — the whole point of the panel, so it is the most
+   prominent thing in the item and is visually marked as a quotation, never
+   as the tool's own words. white-space: pre-wrap preserves the source's own
+   line breaks (the engine slices source text verbatim). */
+.ms-alc-snippet {
+  display: block;
+  margin: 0 0 6px;
+  padding: 4px 8px;
+  background: #f9fafb;
+  border-left: 3px solid #9ca3af;
+  font-size: 12px;
+  font-style: italic;
+  color: #1a2030;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ms-alc-copy-btn {
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #9ca3af;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-alc-copy-btn:hover {
+  background: #f3f4f6;
+}
+
+.ms-alc-loading,
+.ms-alc-empty {
+  font-size: 12px;
+  color: #4b5563;
+  font-style: italic;
+}
+
+.ms-alc-error {
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.ms-alc-retry-btn {
+  margin-left: 6px;
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-alc-retry-btn:hover {
+  background: #f3f4f6;
+}
