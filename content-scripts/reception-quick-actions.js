@@ -111,12 +111,23 @@
     return cfg.sets[cfg.activeSet] || cfg.sets.default || { actions: [], who: [], when: [], fallbacks: [] };
   }
 
+  // Version-gated shipped-preset migration. Runs in LOCK-STEP with the options
+  // editor's load path (options/options.js initQuickActions) — if only one surface
+  // migrated, the other would write its stale-version config back and un-migrate
+  // the practice on the next save. Persists only when the merge changed something,
+  // so the storage.onChanged listener below cannot loop (a second merge is a no-op).
+  function applyShippedMerge(stored) {
+    var merged = QA.mergeShippedPresets(stored);
+    cfg = merged.cfg;
+    if (merged.changed) saveCfg();
+    return cfg;
+  }
+
   function loadCfg() {
     return new Promise(function (resolve) {
       try {
         chrome.storage.local.get(STORE_KEY, function (r) {
-          cfg = QA.sanitiseConfig(r && r[STORE_KEY]);
-          resolve(cfg);
+          resolve(applyShippedMerge(r && r[STORE_KEY]));
         });
       } catch (e) {
         cfg = QA.sanitiseConfig(null);
@@ -408,6 +419,13 @@
     if (set.who.indexOf(name) === -1) {
       set.who.push(name);
       cfg = QA.sanitiseConfig(cfg);
+      // Re-adding a shipped role the practice had deleted clears its tombstone, so
+      // the config never claims an entry is both present and removed (same rule as
+      // the options editor — keep the two in lock-step).
+      var norm = QA.normaliseLabel(name);
+      cfg.removedShipped = cfg.removedShipped.filter(function (t) {
+        return t !== norm;
+      });
       saveCfg();
     }
     pinTask();

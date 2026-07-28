@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.198.0] — 2026-07-28
+
+### Quick actions: new shipped presets + version-gated merge (reception feedback, Phase A)
+
+- **New shipped presets**: actions `Book medication review`, `Book DOAC
+  review`, `Book CVD review`, `Add to jobs list`; roles `Registrar`,
+  `First-contact physio`, `Mental health practitioner` (with mid-sentence
+  `WHO_RENDER` renderings).
+- **Version-gated preset merge** (`DEFAULT_CONFIG.version` 2 +
+  `mergeShippedPresets`): existing installs now receive new shipped presets
+  without losing their own entries. Runs lock-step in both consumers of
+  `triagelens.quickActions` (widget + options editor).
+- **Deletions stick**: removing a shipped preset records a `removedShipped`
+  tombstone so migrations never resurrect it; re-adding the entry clears
+  the tombstone. Options page documents the behaviour.
+- **Fixed a silently-clamped shipped label**: `No appt needed — inform
+  patient` (31 chars, clamped mid-word since ship) is now `No appt —
+  inform patient`. Existing installs keep their stored clamped copy — a
+  one-click delete (which now tombstones) removes it.
+- Tests: label-length/cap assertions over every shipped list + full merge
+  suite (175 checks in `test-quick-actions-core.js`).
+
 ## [v3.197.3] — 2026-07-28
 
 ### Docs: reception-feedback plan — Dave's decisions folded in

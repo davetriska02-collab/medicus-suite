@@ -3615,11 +3615,35 @@ lfSaveBtn?.addEventListener('click', async () => {
     ];
     if (!QA || !exampleEl) return;
 
+    // Version-gated shipped-preset migration (mergeShippedPresets sanitises for us).
+    // Kept in LOCK-STEP with the widget's load path in
+    // content-scripts/reception-quick-actions.js: if only the widget migrated, this
+    // editor would save a stale-version config back and un-migrate the practice.
+    function migrate(stored) {
+      const merged = QA.mergeShippedPresets(stored);
+      if (merged.changed) chrome.storage.local.set({ [STORE_KEY]: merged.cfg });
+      return merged.cfg;
+    }
+
     const r = await chrome.storage.local.get(STORE_KEY);
-    let cfg = QA.sanitiseConfig(r[STORE_KEY]);
+    let cfg = migrate(r[STORE_KEY]);
 
     function activeSet() {
       return cfg.sets[cfg.activeSet] || cfg.sets.default;
+    }
+
+    // Deleting a SHIPPED entry records a tombstone so mergeShippedPresets never
+    // resurrects it on the next version bump; typing it back in clears the mark.
+    function tombstone(key, label) {
+      if (!QA.isShippedLabel(key, label)) return;
+      const n = QA.normaliseLabel(label);
+      if (n && !cfg.removedShipped.includes(n)) cfg.removedShipped.push(n);
+    }
+
+    function untombstone(label) {
+      const n = QA.normaliseLabel(label);
+      if (!n) return;
+      cfg.removedShipped = cfg.removedShipped.filter((t) => t !== n);
     }
 
     function save() {
@@ -3664,8 +3688,13 @@ lfSaveBtn?.addEventListener('click', async () => {
         row.querySelector('.qa-item').addEventListener('change', (e) => {
           const v = e.target.value.trim().slice(0, spec.max);
           if (!v) {
+            tombstone(spec.key, value); // emptying the box is a removal
             items.splice(i, 1);
           } else {
+            if (v !== value) {
+              tombstone(spec.key, value); // edited away from a shipped label
+              untombstone(v);
+            }
             items[i] = v;
           }
           save();
@@ -3684,6 +3713,7 @@ lfSaveBtn?.addEventListener('click', async () => {
           renderAll();
         });
         row.querySelector('.qa-del').addEventListener('click', () => {
+          tombstone(spec.key, value);
           items.splice(i, 1);
           save();
           renderAll();
@@ -3723,7 +3753,7 @@ lfSaveBtn?.addEventListener('click', async () => {
       btn.addEventListener('click', async () => {
         if (btn.dataset.section !== 'quickactions') return;
         const fresh = await chrome.storage.local.get(STORE_KEY);
-        cfg = QA.sanitiseConfig(fresh[STORE_KEY]);
+        cfg = migrate(fresh[STORE_KEY]);
         renderAll();
       });
     });
