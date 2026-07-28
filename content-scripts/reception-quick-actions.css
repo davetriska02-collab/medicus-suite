@@ -1,0 +1,244 @@
+/* Medicus Suite — GP → reception "Quick actions" composer, injected directly
+   above the task overview's Internal-comment textarea.
+   All selectors scoped to #ms-qa-widget to avoid Medicus style conflicts.
+   Same font stack and palette family as content-scripts/task-inline.css. */
+
+#ms-qa-widget {
+  margin: 0 0 8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  color: #1a2030;
+}
+
+/* ── Collapsed strip ─────────────────────────────────────────────────────── */
+
+#ms-qa-widget .ms-qa-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  background: #f0f4ff;
+  border: 1px solid #c3cef5;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  line-height: 1.3;
+  color: #1e3a8a;
+}
+
+#ms-qa-widget .ms-qa-header:hover {
+  background: #e0eaff;
+}
+
+#ms-qa-widget .ms-qa-header:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+#ms-qa-widget .ms-qa-chevron {
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+#ms-qa-widget .ms-qa-title {
+  font-weight: 600;
+}
+
+/* The safety suffix — deliberately muted and never coloured like a status. */
+#ms-qa-widget .ms-qa-muted {
+  font-size: 11px;
+  font-weight: 400;
+  color: #6b7280;
+}
+
+/* ── Expanded body ───────────────────────────────────────────────────────── */
+
+#ms-qa-widget .ms-qa-body {
+  border: 1px solid #c3cef5;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  background: #fff;
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+#ms-qa-widget .ms-qa-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#ms-qa-widget .ms-qa-rowlabel {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+#ms-qa-widget .ms-qa-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* ── Chips ───────────────────────────────────────────────────────────────── */
+
+#ms-qa-widget .ms-qa-chip {
+  padding: 3px 10px;
+  border: 1px solid #c3cef5;
+  border-radius: 999px;
+  background: #fff;
+  color: #1e3a8a;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#ms-qa-widget .ms-qa-chip:hover {
+  background: #f0f4ff;
+}
+
+#ms-qa-widget .ms-qa-chip:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+#ms-qa-widget .ms-qa-chip-on {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+#ms-qa-widget .ms-qa-chip-on:hover {
+  background: #1d4ed8;
+}
+
+#ms-qa-widget .ms-qa-chip-add {
+  border-style: dashed;
+  color: #4b5563;
+}
+
+/* Suggestions fill the free-text box; they never insert on their own, so they
+   read as hints rather than as commit buttons. */
+#ms-qa-widget .ms-qa-chip-suggest {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #4b5563;
+  font-size: 11px;
+  white-space: normal;
+  text-align: left;
+}
+
+#ms-qa-widget .ms-qa-suggests {
+  margin-top: 3px;
+}
+
+/* ── Free-text note ──────────────────────────────────────────────────────── */
+
+#ms-qa-widget .ms-qa-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  border: 1px solid #c8cdd6;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 12px;
+  color: #1a2030;
+  background: #fff;
+}
+
+#ms-qa-widget .ms-qa-input:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+/* ── Footer: insert + settings + live preview ────────────────────────────── */
+
+#ms-qa-widget .ms-qa-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+#ms-qa-widget .ms-qa-btn {
+  padding: 5px 12px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#ms-qa-widget .ms-qa-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+#ms-qa-widget .ms-qa-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#ms-qa-widget .ms-qa-gear {
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid #c3cef5;
+  border-radius: 5px;
+  color: #4b5563;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#ms-qa-widget .ms-qa-gear:hover {
+  background: #f0f4ff;
+}
+
+/* The exact sentence that will be appended — shown before the GP commits to it. */
+#ms-qa-widget .ms-qa-preview {
+  flex: 1 1 220px;
+  min-width: 160px;
+  font-size: 12px;
+  font-style: italic;
+  color: #374151;
+  line-height: 1.4;
+}
+
+/* ── Transient notices ───────────────────────────────────────────────────── */
+
+#ms-qa-widget .ms-qa-notice {
+  font-size: 11.5px;
+  line-height: 1.4;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+#ms-qa-widget .ms-qa-notice-on {
+  opacity: 1;
+}
+
+#ms-qa-widget .ms-qa-notice-ok {
+  color: #166534;
+}
+
+#ms-qa-widget .ms-qa-notice-err {
+  color: #92400e;
+}
+
+/* Fallback ring for the card's own Submit control if the inline highlight
+   treatment ever needs a class instead of an inline style. */
+.ms-qa-submit-flash {
+  box-shadow: 0 0 0 3px #d97706 !important;
+}

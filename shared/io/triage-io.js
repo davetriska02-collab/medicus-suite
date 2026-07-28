@@ -4,12 +4,19 @@
 'use strict';
 
 async function triageExport() {
-  const r = await chrome.storage.local.get(['triagelens.config', 'config', 'triagelens.routineRx']);
+  const r = await chrome.storage.local.get([
+    'triagelens.config',
+    'config',
+    'triagelens.routineRx',
+    'triagelens.quickActions',
+  ]);
   // Prefer namespaced key; fall back to legacy key during transition
   const config = r['triagelens.config'] ?? r['config'] ?? {};
   const out = { config };
   // Routine-prescription button prefs (team list / last team / commit mode).
   if (r['triagelens.routineRx'] !== undefined) out.routineRx = r['triagelens.routineRx'];
+  // GP → reception quick-actions composer lists (actions / who / when / fallbacks).
+  if (r['triagelens.quickActions'] !== undefined) out.quickActions = r['triagelens.quickActions'];
   return out;
 }
 
@@ -31,6 +38,10 @@ async function triageImport(data, _opts = {}) {
   // Restore routine-prescription button prefs when present in the backup.
   if (data.routineRx && typeof data.routineRx === 'object' && !Array.isArray(data.routineRx)) {
     await chrome.storage.local.set({ 'triagelens.routineRx': data.routineRx });
+  }
+  // Restore the quick-actions composer lists when present in the backup.
+  if (data.quickActions && typeof data.quickActions === 'object' && !Array.isArray(data.quickActions)) {
+    await chrome.storage.local.set({ 'triagelens.quickActions': data.quickActions });
   }
   // Clean up legacy bare 'config' key from pre-1.x installs, but only if it
   // actually exists — gating prevents removing a key some other module owns.

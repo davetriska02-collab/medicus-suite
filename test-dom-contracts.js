@@ -288,6 +288,7 @@ const FIXTURES = {
   },
   'task-widget.card-submit-button': { current: 'task-widget-card-submit-button.html', legacy: [] },
   'task-inline.action-row': { current: 'task-inline-action-row.html', legacy: [] },
+  'quick-actions.internal-comment': { current: 'quick-actions-internal-comment.html', legacy: [] },
   'sentinel.mount-anchor': { current: 'sentinel-mount-anchor.html', legacy: [] },
   'api-client.patient-uuid-dom-fallback': {
     current: 'api-client-patient-uuid-dom-fallback-current.html',
