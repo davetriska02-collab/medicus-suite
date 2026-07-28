@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.202.0] — 2026-07-28
+
+### Reception: in-panel appointment search + booking — DRAFT, hazard H-051 PENDING CSO (reception feedback, Phase D2/D3)
+
+- **New booking card** in the reception capture view: appointment-type
+  select (no pre-selection), date modes `Specific day · 1wk · 2wks ·
+  3wks · 4wks` (window search via booking-core's capped
+  `findSlotsInWindow`), slot list grouped by day earliest-first (empty
+  day distinguishable from not-searched), confirm step with **name+DOB
+  read-back gated by an explicit right-patient tick**, reason pre-filled
+  from the pathway title, **visible/editable booking-confirmation
+  channels** (payload = exactly the ticked subset; TODO recorded to
+  capture Medicus's own default), booked line written into the capture
+  text.
+- **Gates (fail-closed truth table, 32 combinations tested):** pop-out →
+  note only (booking is panel-only, recorded ruling); sensitive pathways
+  (mental health) → never shown; no open record with resolvable patient
+  uuid → disabled with instruction; any positive or unanswered red flag
+  → hidden (same single evaluateRedFlags gate as the disposition card).
+- **Identity (H-051):** active-tab snapshot is the single documented
+  identity source; the panel arms only when both resolvers agree; at
+  commit the patient AND site are re-detected fresh and must match the
+  pin and the current context (three-source agreement) or the booking
+  aborts, releases the reservation, and says "nothing was booked".
+- Reservation released on five exit paths + pagehide keepalive; nothing
+  persisted to chrome.storage; no third copy of the booking flow.
+- New shared `booking-panel(-core).js` component (reusable by future
+  surfaces), `test-reception-booking.js` (113 checks); suite total 341.
+- Hazard **H-051** (initial 5×3 → residual 5×1), PENDING CSO REVIEW with
+  four named review questions; Phase 0 governance resync is a stated
+  prerequisite to enabling any of this for live reception use.
+
 ## [v3.201.0] — 2026-07-28
 
 ### Reception: if-this-then-that disposition engine — DRAFT, suggestion-only (reception feedback, Phase E, hazard H-050)

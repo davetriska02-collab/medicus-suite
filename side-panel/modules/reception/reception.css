@@ -889,3 +889,272 @@
   flex: 1;
   min-width: 140px;
 }
+
+/* ── Booking card (plan D3) ──────────────────────────────────────────────────
+   Card 3, mounted under the capture form by side-panel/modules/shared/
+   booking-panel.js and destroyed with it. Styled deliberately QUIETER than the
+   red/amber escalation banner and no louder than the disposition card: this is
+   a write the receptionist performs, not something the suite is urging. The
+   blocked states get their own treatment so "you cannot book yet, here is why"
+   never looks like a clinical alert. */
+.rcp-bk {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Blocked states: pop-out note and the open-record hard gate. */
+.rcp-bk-note,
+.rcp-bk-blocked {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+  background: var(--bg-mid);
+  border: 1px dashed var(--border-hi);
+  border-radius: var(--r-sm);
+  padding: 6px 9px;
+}
+
+.rcp-bk-loading,
+.rcp-bk-empty {
+  font-size: 12px;
+  color: var(--text-3);
+  padding: 4px 0;
+}
+
+.rcp-bk-fineprint {
+  font-size: 11px;
+  color: var(--text-4);
+  line-height: 1.45;
+}
+
+.rcp-bk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rcp-bk-label {
+  font-size: 11px;
+  color: var(--text-3);
+  min-width: 42px;
+}
+.rcp-bk-select,
+.rcp-bk-date,
+.rcp-bk-text {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 4px 7px;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  color: var(--text-1);
+}
+.rcp-bk-select:focus-visible,
+.rcp-bk-date:focus-visible,
+.rcp-bk-text:focus-visible {
+  border-color: var(--accent);
+}
+
+/* Date-mode chips: Specific day · 1 wk · 2 wks · 3 wks · 4 wks */
+.rcp-bk-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rcp-bk-chip {
+  border: 1px solid var(--border-hi);
+  background: var(--bg-elev);
+  color: var(--text-3);
+  border-radius: var(--r-pill);
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+.rcp-bk-chip:hover {
+  border-color: var(--accent);
+  color: var(--text-2);
+}
+.rcp-bk-chip-on {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.rcp-bk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Slot list — grouped by day, earliest first, nothing pre-selected. */
+.rcp-bk-days {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.rcp-bk-day-head {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.rcp-bk-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rcp-bk-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  border-radius: var(--r-sm);
+  padding: 4px 8px;
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: 12px;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.rcp-bk-slot:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+.rcp-bk-slot:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.rcp-bk-slot-time {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.rcp-bk-slot-meta {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-4);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rcp-bk-slot-dur {
+  color: var(--text-4);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* Confirm step: name + DOB read-back and the explicit tick that gates Confirm.
+   Booking is a write — this block is the last human check before it fires, so
+   it is the loudest thing on the card. */
+.rcp-bk-readback {
+  border: 1px solid var(--accent-line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--bg-mid);
+  padding: 7px 9px;
+}
+.rcp-bk-readback-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  margin-bottom: 3px;
+}
+.rcp-bk-readback-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+.rcp-bk-readback-id {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 5px;
+}
+.rcp-bk-tick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.rcp-bk-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.rcp-bk-sum-row {
+  display: flex;
+  gap: 8px;
+}
+.rcp-bk-sum-label {
+  min-width: 42px;
+  color: var(--text-4);
+  font-size: 11px;
+}
+
+/* Confirmation channels — visible and editable (plan D3.5). Both older booking
+   surfaces send every channel silently; here the desk can see and un-tick them
+   before anything reaches the patient. */
+.rcp-bk-recips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 5px 8px 7px;
+  margin: 0;
+}
+.rcp-bk-recips-legend {
+  font-size: 11px;
+  color: var(--text-4);
+  padding: 0 4px;
+}
+.rcp-bk-recip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.rcp-bk-booked {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rcp-bk-booked-head {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+}
+.rcp-bk-booked-tick {
+  font-size: 14px;
+}
+.rcp-bk-booked-detail {
+  font-size: 12px;
+  color: var(--text-2);
+}

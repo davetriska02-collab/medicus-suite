@@ -1,7 +1,7 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Reception module
 //
-// A reception-facing panel with two cards:
+// A reception-facing panel with three cards:
 //   1. Patient — a single green/amber/red status pill for the patient open in
 //      the Medicus tab; clicking it expands the action-needed monitoring/QOF
 //      detail ("book the overdue bloods while they're on the phone"). Which
@@ -14,6 +14,11 @@
 //      with escalation prompts; output is a structured plain-text block to
 //      copy-paste into the Medicus triage entry. Capture only — the tool
 //      never triages, diagnoses, or advises beyond red-flag escalation.
+//   3. Book an appointment (plan D3, hazard H-051) — the shared booking panel,
+//      created and destroyed WITH the capture form. It is the suite's first
+//      clinical write surface aimed at non-clinical staff, so it is gated hard:
+//      docked panel only, an open record required, and suppressed entirely on
+//      any positive or unanswered red flag and on every sensitive pathway.
 //
 // Storage (managed in Options, read-only here):
 //   reception.config              { enabledPathways, hiddenChipRules, disclaimerAcceptedAt,
@@ -38,6 +43,9 @@ import {
   destinationLabel,
   overrideDestinations,
 } from './reception-core.js';
+
+import { createBookingPanel } from '../shared/booking-panel.js';
+import { bookingGateState } from '../shared/booking-panel-core.js';
 
 // Canonical "no alert ≠ monitoring complete" caveat (shared/provenance.js,
 // loaded as a classic script in panel.html / pop-out.html). Fall back to the
@@ -346,6 +354,11 @@ function cleanup() {
     clearTimeout(_draftDebounceTimer);
     _draftDebounceTimer = null;
   }
+  // Panel teardown must release a held slot reservation (plan D3.6). The
+  // component's own `pagehide` listener covers a window/panel close; this
+  // covers a module switch, where pagehide never fires.
+  destroyBookingCard();
+  _bookedLines = [];
   _snapshot = null;
   container = null;
 }
@@ -416,6 +429,10 @@ async function refreshPatientCard() {
   if (!container) return; // cleaned up mid-fetch
   _snapshot = snapshot;
   renderPatientCard();
+  // The open record IS the booking identity source, so a snapshot refresh that
+  // changes (or loses) the patient must reach the booking card: it re-gates and,
+  // if the patient changed under an armed panel, the panel releases and re-arms.
+  if (_bookingCtx) updateBookingCard(_bookingCtx.form, _bookingCtx.pathway);
 }
 
 function renderPatientCard() {
@@ -488,6 +505,10 @@ function renderPatientCard() {
 
 function renderPathwayPicker(_activeDraft) {
   if (!container) return;
+  // Leaving the capture form (tile navigation, an Options storage-change
+  // re-render, "New capture") tears the booking card down and releases any
+  // reservation it was holding.
+  destroyBookingCard();
   const body = container.querySelector('#rcpCaptureBody');
   if (!body || !_bundledDoc) return;
 
@@ -743,6 +764,12 @@ async function renderCaptureForm(pathway) {
   // single keystroke can be autosaved, and never offer a restore banner below.
   if (sensitive) clearDraft();
 
+  // A new capture starts with no bookings recorded, and any booking panel left
+  // over from the previous pathway is torn down (releasing its reservation)
+  // before this one's is built.
+  destroyBookingCard();
+  _bookedLines = [];
+
   const rfRows = (pathway.redFlags || [])
     .map(
       (rf) => `
@@ -842,6 +869,7 @@ async function renderCaptureForm(pathway) {
         // Restoring red-flag answers can complete the screen — re-evaluate the
         // disposition too (the age is never restored; it must be re-confirmed).
         updateDispositionCard(form, pathway);
+        updateBookingCard(form, pathway);
         banner.className = 'rcp-draft-banner rcp-draft-banner-hidden';
       });
       banner.querySelector('#rcpDraftDiscard')?.addEventListener('click', () => {
@@ -864,6 +892,9 @@ async function renderCaptureForm(pathway) {
   form.addEventListener('change', () => {
     updateEscalationBanner(form, pathway);
     updateDispositionCard(form, pathway);
+    // Same hook, same red-flag evaluation: a flag flipped to YES pulls the
+    // booking card and releases any slot it was holding.
+    updateBookingCard(form, pathway);
     if (!sensitive) scheduleDraftSave(pathway.id, form);
   });
   form.addEventListener('input', () => {
@@ -875,6 +906,7 @@ async function renderCaptureForm(pathway) {
   // the call every time, never restored from an earlier contact.
   form.querySelector('#rcpDispAge')?.addEventListener('input', () => updateDispositionCard(form, pathway));
   updateDispositionCard(form, pathway);
+  updateBookingCard(form, pathway);
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     generateSummary(form, pathway);
@@ -942,8 +974,17 @@ function readConfirmedAge(form) {
   return n;
 }
 
+// The single red-flag evaluation for this form, shared by the disposition card
+// and the booking gate (plan D3.3: "same gate as E's guardrail 1; write it
+// once, use it twice"). Both must see identical positives/unanswered — a
+// booking card that disagreed with the disposition card about whether a flag
+// was answered is the whole hazard.
+function redFlagState(form, pathway) {
+  return evaluateRedFlags(pathway.redFlags, readRedFlagAnswers(form, pathway));
+}
+
 function dispositionContext(form, pathway) {
-  const { positives, unanswered } = evaluateRedFlags(pathway.redFlags, readRedFlagAnswers(form, pathway));
+  const { positives, unanswered } = redFlagState(form, pathway);
   const entry = (_effective.all || []).find((e) => e.pathway && e.pathway.id === pathway.id);
   const origin = entry ? entry.origin : 'custom';
   return {
@@ -1058,6 +1099,142 @@ function updateDispositionCard(form, pathway) {
   });
 }
 
+// ── Card 3: booking (plan D3, hazard H-051) ───────────────────────────────────
+//
+// The suite's first clinical WRITE surface aimed at non-clinical staff. It is
+// created and destroyed WITH the capture form — never in the pathway picker,
+// never in the summary/output view — and every gate below is load-bearing:
+//
+//   • Docked panel only. Reception also renders in the floating pop-out, and a
+//     slot list + write flow in a narrow always-on-top window that can sit over
+//     a DIFFERENT Medicus tab is exactly the identity hazard the booking-core
+//     extraction (plan D1.2) exists to kill. The pop-out gets a one-line note
+//     pointing at the docked panel instead — recorded deliberately, the same
+//     convention as the panel-only demand strips.
+//   • An open record is mandatory. Capture deliberately works with no record
+//     open; booking must never fire against an ambient one.
+//   • Any positive OR unanswered red flag suppresses the card, using the SAME
+//     evaluation the disposition card uses (redFlagState above).
+//   • Sensitive pathways (mental-health) NEVER show it, red flags or not:
+//     what to offer someone in distress is a clinician's decision, not a slot
+//     the front desk picks off a list mid-call.
+//
+// All of that lives in bookingGateState() (booking-panel-core.js) as a pure
+// truth table so test-reception-booking.js can drive it directly.
+
+let _bookingPanel = null; // createBookingPanel() instance, or null
+let _bookingCtx = null; // { form, pathway } the panel's closures read
+let _bookingGateKey = null; // last rendered gate+patient key (re-render only on change)
+let _bookedLines = []; // capture-text lines for appointments booked in THIS capture
+
+// POP-OUT DETECTION. The reception module is loaded by both shells; the pop-out
+// shell lives at /pop-out/pop-out.html and the docked panel at
+// /side-panel/panel.html. Anything we cannot classify counts as "not the docked
+// panel" — the gate fails closed towards no booking.
+function isPopOutContext() {
+  try {
+    return /(^|\/)pop-out\//.test(location.pathname);
+  } catch (_) {
+    return true;
+  }
+}
+
+// THE BOOKING IDENTITY SOURCE — deliberately singular and documented here.
+// It is the Sentinel snapshot taken from the ACTIVE Medicus tab
+// (fetchSnapshot() queries { active: true, currentWindow: true }), i.e. the
+// same record whose name/DOB the patient card is showing the receptionist. The
+// booking shim's own detectMedicusTab() resolves the FIRST matching Medicus
+// tab instead, which can be a different one; the booking panel therefore
+// requires the two to AGREE both when it arms and again at commit rather than
+// trusting either alone (plan D1.2, hazard H-043).
+//
+// No patient uuid → no booking: the panel could not re-verify at commit, so the
+// card renders in its disabled "open the caller's record" state rather than
+// leading the receptionist to a dead end.
+function bookingPatientContext() {
+  const pc = _snapshot?.patientContext;
+  if (!pc) return null;
+  const patientId = pc.patientUuid || pc.patientId || null;
+  if (!patientId) return null;
+  return {
+    patientId,
+    name: pc.patientName || '',
+    dob: pc.dateOfBirth || pc.dobRaw || pc.dob || '',
+    nhsNumber: pc.nhsNumber || '',
+  };
+}
+
+function bookingGateFor(form, pathway) {
+  const flags = form && pathway ? redFlagState(form, pathway) : { positives: [], unanswered: ['*'] };
+  return bookingGateState({
+    hasPatientContext: !!bookingPatientContext(),
+    redFlagPositives: flags.positives,
+    redFlagUnanswered: flags.unanswered,
+    isSensitivePathway: isSensitivePathway(pathway),
+    isPopOut: isPopOutContext(),
+  });
+}
+
+function ensureBookingCard() {
+  if (!container) return null;
+  const captureCard = container.querySelector('#rcpCaptureCard');
+  if (!captureCard) return null;
+  let card = container.querySelector('#rcpBookingCard');
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'rcp-card';
+    card.id = 'rcpBookingCard';
+    card.innerHTML = `<div class="rcp-card-title">Book an appointment</div><div class="rcp-card-body" id="rcpBookingBody"></div>`;
+    captureCard.insertAdjacentElement('afterend', card);
+  }
+  if (!_bookingPanel) {
+    _bookingPanel = createBookingPanel({
+      mountEl: card.querySelector('#rcpBookingBody'),
+      getPatientContext: bookingPatientContext,
+      getGateState: () => bookingGateFor(_bookingCtx?.form, _bookingCtx?.pathway),
+      // Reason pre-fill = the active pathway's title, editable at the confirm
+      // step (plan D3.1). The clinician reading the record sees what the caller
+      // was booked for, in the practice's own pathway wording.
+      getDefaultReason: () => _bookingCtx?.pathway?.title || '',
+      onBooked: (summary) => {
+        if (summary && summary.line) _bookedLines.push(summary.line);
+      },
+    });
+  }
+  return card;
+}
+
+// Called on first render of the capture form and on every answer change, so a
+// red flag flipped to YES pulls the card (and hands back any held slot) in the
+// same beat as the escalation banner appearing.
+function updateBookingCard(form, pathway) {
+  if (!container) return;
+  _bookingCtx = { form, pathway };
+  const gate = bookingGateFor(form, pathway);
+  const card = ensureBookingCard();
+  if (!card) return;
+  card.hidden = gate.render === 'hidden';
+  const key = [gate.render, gate.reason, bookingPatientContext()?.patientId || ''].join('|');
+  if (key === _bookingGateKey) return; // nothing the panel needs to redraw for
+  _bookingGateKey = key;
+  _bookingPanel?.render();
+}
+
+// EVERY exit from the capture form runs through here: pathway-tile navigation
+// ("All pathways"), the picker re-render triggered by an Options storage change,
+// the summary/output view, and module cleanup(). destroy() releases any held
+// reservation, so no exit path can leave a slot locked for the rest of the
+// practice (plan D3.6).
+function destroyBookingCard() {
+  if (_bookingPanel) {
+    _bookingPanel.destroy();
+    _bookingPanel = null;
+  }
+  _bookingCtx = null;
+  _bookingGateKey = null;
+  container?.querySelector('#rcpBookingCard')?.remove();
+}
+
 function readQuestionAnswers(form, scope, questions) {
   const out = {};
   for (const q of questions || []) {
@@ -1126,6 +1303,10 @@ function generateSummary(form, pathway) {
       // Withheld states are recorded too (an SEA needs to see what the tool
       // did NOT say); 'none' writes nothing.
       disposition: dispositionRecord(form, pathway),
+      // Appointments booked from card 3 during THIS capture (plan D3.1 — the
+      // chosen type and slot land in the capture text so the clinician sees
+      // what reception booked). In-memory only; never persisted.
+      bookedLines: _bookedLines.slice(),
     },
   });
 
@@ -1138,6 +1319,9 @@ function generateSummary(form, pathway) {
 function renderOutput(text, pathway) {
   const body = container?.querySelector('#rcpCaptureBody');
   if (!body) return;
+  // The capture is finished: the booking card belongs to the form, not the
+  // summary view. Tearing it down here also releases any reservation still held.
+  destroyBookingCard();
   body.innerHTML = `
     <div class="rcp-output">
       <div class="rcp-output-head">

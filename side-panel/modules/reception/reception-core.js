@@ -147,8 +147,10 @@ function crisisLineText(configured) {
 //     pharmacyFirstHint,// optional hint line (already age-checked), or null
 //     safeguardingContact, // optional practice safeguarding-lead free text
 //     crisisLine,       // optional practice crisis-route text (sensitive pathways)
-//     disposition       // optional evaluateDisposition() result + the receptionist's
+//     disposition,      // optional evaluateDisposition() result + the receptionist's
 //                       //   decision — see dispositionCaptureLines() below
+//     bookedLines       // optional string[] — "Booked: <type> — <when> — reason: <r>"
+//                       //   lines for appointments booked from the booking card
 //   }
 // }
 //
@@ -235,6 +237,19 @@ function buildCaptureText(input) {
   if (dispLines.length > 0) {
     lines.push('');
     for (const l of dispLines) lines.push(l);
+  }
+
+  // Appointments booked from the reception booking card during this capture
+  // (plan D3). Pre-formatted by bookedCaptureLine() in
+  // side-panel/modules/shared/booking-panel-core.js and passed through verbatim:
+  // the pure core stays free of booking-panel knowledge, and the clinician
+  // reading this block sees the type, slot and reason reception actually booked.
+  const bookedLines = Array.isArray(m.bookedLines)
+    ? m.bookedLines.filter(l => typeof l === 'string' && l.trim() !== '')
+    : [];
+  if (bookedLines.length > 0) {
+    lines.push('');
+    for (const l of bookedLines) lines.push(l);
   }
 
   // Sensitive pathways close with the practice's crisis route, in the pasted text
