@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.197.1] — 2026-07-28
+
+### Docs: reception-feedback build plan
+
+- Added `docs/plans/RECEPTION-FEEDBACK-2026-07-28.md` — the build plan for the
+  reception team's feedback session: GP→Reception preset additions (registrar /
+  first-contact physio / mental health practitioner, medication / DOAC / CVD
+  review, jobs list) with a version-gated preset merge; three new capture
+  pathways (male GU, female GU/gynae, mental health — NG225 no-stratification
+  posture); the honest status of patient messaging (no send primitive exists —
+  spike first, prepare-only v1); embedded slot search/booking in reception on
+  an extracted shared booking-core with 1–4-week window search and H-043
+  commit-time re-verification; and an editable if-this-then-that disposition
+  engine with hard-coded clinician-only guardrails. Docs only — no code change.
+
 ## [v3.197.0] — 2026-07-28
 
 ### GP → Reception quick-actions composer on the task Internal comment
