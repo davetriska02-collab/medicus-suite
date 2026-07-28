@@ -2,6 +2,50 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.198.0] — 2026-07-28
+
+### Allergy tidy-up wave 1: "Find evidence?" on the Allergies card (read-only)
+
+User request: "often the providence of the allergy is unknown — and indeed what
+the reaction is. is there a way to trawl through notes to find what it was and
+tidy the allergy entry up?"
+
+First shipped slice of docs/plans/ALLERGY-CLEANUP-2026-07-28.md — the evidence
+trawl, deliberately WITHOUT any write path (the edit-allergy contract is
+unconfirmed until the Phase 0 capture session runs; see
+docs/learnings-allergy-cleanup.md for the prepared probes and capture
+checklist).
+
+- **`engine/allergy-evidence.js`** — pure, deterministic journal trawl. Given
+  an allergy label and the confirmed patient-journal payload
+  (docs/learnings-patient-journal-api.md), it normalises the label to
+  substance terms (stripping "Allergy to"/"adverse reaction"/legacy markers),
+  matches substance + a curated reaction lexicon with proximity-tiered
+  scoring across notes, prescriptions, documents and consultation entries,
+  and returns ranked verbatim snippets with date + authorship, provenance
+  from the earliest mention, and a GP2GP-import flag wherever the evidence
+  sits inside a "Data Transferred from other system" encounter (that
+  recordedBy is the importer, not the author). No LLM, no fetch, no DOM;
+  fail-soft on malformed payloads. 118 assertions in
+  test-allergy-evidence.js.
+- **`content-scripts/allergy-cleanup.js/.css`** — per-row "Find evidence?"
+  button on the clinical-summary Allergies card (DOM-driven, fail-to-inert if
+  the card shape differs; same observer-hub/re-injection discipline as
+  problem-description-cleanup). The panel shows the provenance line and the
+  ranked evidence timeline — dated, attributed, verbatim quotes only, framed
+  as "Possible documented evidence — open and review the source entry", never
+  "the reaction was X". Empty result states the safety line: absence of
+  evidence is not evidence the allergy is wrong. Per-item "Copy citation"
+  produces a pasteable line for Medicus's own edit form — "Reaction
+  documented in…" only when a reaction term actually matched, "Mention found
+  in…" otherwise, with the GP2GP caveat travelling inside the text. The file
+  is structurally GET-only (no method/body parameter exists). 21 wording-
+  contract assertions in test-allergy-cleanup.js.
+- **Not in this wave (plan Phases 0/1/4):** structured detection of
+  which allergies are under-specified, and the guarded additive apply — both
+  gated on the Phase 0 live capture; the apply step additionally gates on
+  HAZARD-LOG entries + CSO review per the plan's safety rules.
+
 ## [v3.197.0] — 2026-07-28
 
 ### GP → Reception quick-actions composer on the task Internal comment
