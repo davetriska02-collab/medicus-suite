@@ -27,11 +27,11 @@ The five asks:
 |---|---|---|---|
 | A | GP→Reception message presets: book registrar / first-contact physio / MHP; medication review / DOAC review / CVD review; "add to jobs list" | Config + one migration mechanism — the composer shipped in v3.197.0 already does the rest | S |
 | B | New structured-question pathways: genito-urinary (male), genito-urinary/gynae (female), mental health | Data-only for the panel + synonym maps + CSO gate | M |
-| C | In-line "message the patient (reply-able) / ask for a photo" button inside every pathway | No *deliberate* send primitive exists (see caveat). Discovery spike first; prepare-only fallback exists | Spike → M/L |
+| C | ~~In-line "message the patient (reply-able) / ask for a photo" button~~ | **DROPPED — Dave, 2026-07-28.** See the stub in section C for what survives (booking-confirmation channel control in D; inbound photo filing already shipped) | — |
 | D | Slots-page-style appointment search + booking inside the reception view (type × specific day / 1–4 week windows) | Extract shared booking core (3rd copy is forbidden), add window search, gate hard on identity | M/L |
 | E | If-this-then-that disposition routing (Pharmacy First / ANP / paramedic / GP), editable for practice-authored packs, MH always to triage doctor | Schema + engine + editor; guardrails frozen in engine code, NOT in data | M |
 
-**Order (post-review): 0 → A → D1 → B → E → D2/D3 → C-spike.**
+**Order (post-review, C dropped): 0 → A → D1 → B → E → D2/D3.**
 D1 (the booking-core extraction + slots retrofit) is a pure refactor that
 closes an existing gap — lowest-risk item on the list, ship it early. E lands
 *before* the reception Book button exists, because a Book button under a
@@ -42,7 +42,7 @@ recorded"). E without D2 is inert; inert is the safe direction.
 
 ---
 
-## Phase 0 — governance resync (BLOCKS phases D and C-v2)
+## Phase 0 — governance resync (BLOCKS phase D)
 
 The safety case currently says things this plan will make false:
 
@@ -50,7 +50,7 @@ The safety case currently says things this plan will make false:
   path to Medicus… does not submit any data to Medicus… does not assign
   tasks."* Already false at v3.197.1 (`createAppointment` in booking-inline
   and slots, task-inline, routine-rx, lab filing — H-043 itself names the
-  booking write paths). D and C-v2 extend the write surface further.
+  booking write paths). D extends the write surface further.
 - `docs/INTENDED-PURPOSE.md` repeats the no-write claim inside the
   **frozen** statement and restricts intended users to "Qualified
   clinicians". Reception hands a write path to non-clinical staff.
@@ -109,6 +109,20 @@ class as the stranded v3.75.0 chip labels, minus the fix). Approach:
    both-surface parity.
 2. "Restore shipped defaults" alone — rejected: silently discards
    practice-added names.
+
+**User add/remove is a first-class requirement (Dave, 2026-07-28), and it's
+mostly already there:** the options Quick Actions editor edits all four
+lists (actions / who / when / fallbacks), and the widget's `+ name` chip
+adds `who` entries in-flow. Two things to make it actually easy:
+
+- **One-click remove per entry in the options editor**, per list, with the
+  live example sentence updating so the effect is visible before save.
+- **Removals must survive migrations.** A naive union merge would
+  resurrect every shipped preset the practice deliberately deleted, on
+  every version bump. `mergeShippedPresets` keeps a `removedShipped`
+  tombstone list (normalised labels the user deleted from the shipped
+  set); the union skips tombstoned entries, and re-adding one manually
+  clears its tombstone. Test: delete shipped entry → migrate → still gone.
 
 **"Jobs list": does not exist** — anywhere in the codebase or the observed
 Medicus API surface. `Add to jobs list` as a free-text action label works
@@ -249,43 +263,30 @@ Pharmacy First / ANP / paramedic.
 
 ---
 
-## C. In-pathway "message the patient / ask for a photo" button
+## C. Patient messaging — DROPPED (Dave, 2026-07-28)
 
-**Status, corrected by review: the extension has no *deliberate* patient
-messaging — but it already messages patients as a side effect.** The
-booking create payload sets `bookingConfirmationRecipients` to **every**
-channel the create-form offers (slots.js and booking-inline.js both), which
-fires Medicus's SMS/email booking confirmations. That's a fact to manage in
-D (show and control the channels at confirm), and a caveat on any "we can't
-message patients" claim. What does *not* exist is a reply-able
-conversational send: the communication-thread model is readable
-(`download-attachment`, reply-from-requester cards already parsed by
-triage-lens) but no thread-send endpoint has ever been captured, and the
-transactional API has no messaging op.
+The "message the patient (reply-able) / ask for a photo" ask is dropped
+from this programme. Recorded so nobody resurrects it without the context:
+no reply-able send endpoint has ever been captured (the communication-thread
+model is readable but write-less to us; the transactional API has no
+messaging op), a real send would be an H-043-class wrong-patient hazard
+**worse than booking** (PHI leaves the building), and the reception team's
+underlying needs are partly met elsewhere.
 
-- **C-spike (do first, timeboxed):** run `scripts/booking-flow-capture.js`
-  (the MAIN-world recorder that reverse-engineered the six booking
-  endpoints) against Medicus's own "message patient" flow on a live
-  session — payload, recipient resolution, reply-thread creation,
-  attachment-request semantics. Outcome is a go/no-go note in `docs/`.
-- **C-v1 (buildable regardless of spike):** the **prepare-only** pattern
-  that already has hazard-log sanction (`lab-file-button.js`
-  `fileAndMessage`): a button on the capture form that composes the ask
-  ("Please reply to this message with a photo of the affected area…",
-  template per pathway) and — on the Medicus task page — selects the native
-  "message patient" next step and pre-fills the body, **never sends**.
-  In the side panel (no task page under it), the same button copies the
-  composed message + shows "paste into Medicus → Message patient". Weak,
-  but shippable and safe.
-- **C-v2 (only if the spike lands a clean endpoint):** real send with
-  reply-able thread + photo request. New clinical write surface: new hazard
-  entry (wrong-patient send is an H-043-class hazard **worse than booking**
-  — PHI leaves the building), pin-and-re-verify discipline, Phase 0 doc
-  posture already in place, CSO sign-off before enable, default OFF.
+Two facts from the C investigation survive and stay in scope:
 
-Do not promise C-v2 to the reception team until the spike reports.
-Photo *inbound* is already solved — `document-file-inline.js` files
-patient-submitted photos into the record.
+1. **The extension already messages patients as a side effect of booking.**
+   The create payload sets `bookingConfirmationRecipients` to **every**
+   channel the create-form offers (slots.js and booking-inline.js both),
+   firing Medicus's SMS/email booking confirmations. Managed in D3.5
+   (show and control channels at confirm, match Medicus's own default).
+2. **Photo *inbound* is already solved** — `document-file-inline.js` files
+   patient-submitted photos into the record.
+
+If this ever reopens, the entry point is a timeboxed capture spike
+(`scripts/booking-flow-capture.js` against Medicus's own "message patient"
+flow), and the prepare-only `lab-file-button.js` `fileAndMessage` pattern
+is the only pre-sanctioned shape.
 
 ---
 
@@ -467,9 +468,11 @@ valid whole-object fork, so a fork of `mental-health` declaring
    three-year-old caller is the unsafe direction.
 6. **Custom/edited packs default clinician-only.** Non-clinician
    destinations on any custom or edited pathway are OFF until unlocked by
-   a second options toggle with its own attestation ("a clinician has
-   reviewed this routing" — recorded who and when), separate from
-   `disclaimerAcceptedAt`.
+   a second options toggle with its own attestation, separate from
+   `disclaimerAcceptedAt`. **Decision (Dave, 2026-07-28): the attester is
+   the CSO or a partner** — the attestation records name, role
+   (CSO/partner), and timestamp, and the options UI says so explicitly
+   ("routing sign-off: CSO or partner only").
 7. **Fallback line, in the artefact:** every rendered suggestion includes
    *"Or a clinician callback if the patient prefers — always offer it."*
    — in the **pasted capture text**, not just on screen.
@@ -527,7 +530,8 @@ validator, same frozen guardrails, same editor.
 | 3 | B (3 pathways, schema additions, synonym maps + coverage test, caller-relationship closing question, options NEW badge) | minor | **CSO sign-off before any practice enables**; Keeper verifies CKS wording |
 | 4 | E (disposition engine, frozen guardrails, editor, attestation, shipped blocks) | minor | H-050 + CSO sign-off on shipped blocks; guardrail truth-table tests |
 | 5 | D2/D3 (window search + reception booking panel, panel-only) | minor | Phase 0 complete; hazard-log entry; CSO |
-| 6 | C-spike → C-v1 (prepare-only) → C-v2 decision | v1 minor | C-v2 requires new hazard entry + CSO, default OFF |
+
+(C dropped 2026-07-28 — see section C stub.)
 
 Every phase: manifest bump + CHANGELOG on the same commit. `defaults.json`
 is untouched by all of this (reception pathways are not part of it).
@@ -539,7 +543,6 @@ is untouched by all of this (reception pathways are not part of it).
    practice-specific strings in Medicus — confirm the exact names so D3's
    type filter can surface them from the finder enumeration (no
    pre-selection either way).
-3. C-v2 appetite: if the spike finds a clean send endpoint, do you want
-   real patient messaging in the extension at all, given the hazard class?
-4. E.6 attestation: who at the practice is the named clinician for custom
-   routing sign-off — and should the attestation record their role too?
+(Resolved 2026-07-28: patient messaging dropped entirely; custom-routing
+attestation is signed by the CSO or a partner, with name + role + timestamp
+recorded.)

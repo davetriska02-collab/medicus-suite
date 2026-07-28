@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.197.3] — 2026-07-28
+
+### Docs: reception-feedback plan — Dave's decisions folded in
+
+- **Patient messaging (item C) dropped** — replaced by a decision stub
+  recording why (no captured send endpoint; wrong-patient send hazard class)
+  and what survives (D3's booking-confirmation recipient control; inbound
+  photo filing already shipped). Sequencing is now 0 → A → D1 → B → E →
+  D2/D3.
+- **Quick-action presets: user add/remove is a first-class requirement** —
+  one-click per-entry removal in the options editor, and the version-gated
+  merge gains a `removedShipped` tombstone list so deliberately deleted
+  shipped presets are not resurrected on migration.
+- **Custom-routing attestation: CSO or partner signs off** (name + role +
+  timestamp recorded) — resolves the plan's open question 4.
+
 ## [v3.197.2] — 2026-07-28
 
 ### Docs: reception-feedback plan — virtual-Dave review pass applied
