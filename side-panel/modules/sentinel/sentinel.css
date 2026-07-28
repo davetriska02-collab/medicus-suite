@@ -2096,6 +2096,104 @@
   text-transform: uppercase;
 }
 
+/* ── Brief: all-clear (loudly green) state ────────────────────────────────── */
+/* Same green treatment as .wr-clear — an explicit "nothing to do" signal,
+   not an absent card. */
+.sent-brief-card-clear {
+  background: var(--green-dim);
+  border-color: var(--green-line);
+}
+.sent-brief-card-clear .sent-brief-body {
+  border-top-color: var(--green-line);
+}
+.sent-brief-card-clear .sent-brief-label {
+  color: var(--green);
+}
+
+.sent-brief-allclear {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0 2px;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+  line-height: 1.4;
+}
+
+/* ── Brief: per-group RAG pills (header, survive collapse) ────────────────── */
+.sent-brief-pill {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.sent-brief-pill-clear {
+  background: var(--green-dim);
+  color: var(--green);
+  border: 1px solid var(--green-line);
+}
+.sent-brief-pill-amber {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid var(--amber-line);
+}
+.sent-brief-pill-red {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red-line);
+}
+
+/* ── Brief: grouped body sections (Meds monitoring / QOF / General) ───────── */
+.sent-brief-group {
+  padding: 4px 0 2px;
+}
+.sent-brief-group + .sent-brief-group {
+  border-top: 1px solid var(--border);
+}
+
+.sent-brief-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 2px 0;
+}
+.sent-brief-group-name {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.sent-brief-group-state {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.sent-brief-group-state-clear {
+  color: var(--green);
+}
+.sent-brief-group-state-amber {
+  color: var(--amber);
+}
+.sent-brief-group-state-red {
+  color: var(--red);
+}
+
+/* A clear group inside a non-clear card is itself a positive signal — tint
+   its name green too so "Meds monitoring · none due ✓" reads at a glance. */
+.sent-brief-group-clear .sent-brief-group-name {
+  color: var(--green);
+}
+
 /* ── Unmatched meds: excluded-by annotation ───────────────────────────────── */
 /* Amber inline annotation shown next to meds silently suppressed by an
    exclude term — surfaces the "wrong injection suppresses everything" class of

@@ -1905,21 +1905,59 @@ function renderChip(chip) {
 
 // Render the brief card HTML from a brief object (output of buildBrief()).
 // Returns an HTML string with CSS prefix sent-brief-*.
+//
+// The card is split into three RAG groups — meds monitoring (prescribing
+// safety), QOF, and general (vaccines etc.) — so a prescriber can glance
+// "meds green → prescribing checks clear" even when QOF/general are amber.
+// When NOTHING is action-needed the whole card goes loudly green (allClear)
+// instead of disappearing.
+const BRIEF_GROUPS = [
+  ['meds', 'Meds', 'Meds monitoring'],
+  ['qof', 'QOF', 'QOF'],
+  ['general', 'Gen', 'General'],
+];
+
+// Per-group RAG pill for the brief header. Text labels + tooltip carry the
+// state for colour-blind safety (never colour alone).
+function briefGroupPill(shortLabel, fullLabel, g) {
+  if (g.status === 'clear') {
+    return (
+      `<span class="sent-brief-pill sent-brief-pill-clear" ` +
+      `title="${escAttr(fullLabel)}: nothing due">${escHtml(shortLabel)} &#10003;</span>`
+    );
+  }
+  const breakdown = [g.red > 0 ? `${g.red} red` : '', g.amber > 0 ? `${g.amber} amber` : ''].filter(Boolean).join(', ');
+  const cls = g.status === 'red' ? 'sent-brief-pill-red' : 'sent-brief-pill-amber';
+  return (
+    `<span class="sent-brief-pill ${cls}" title="${escAttr(fullLabel)}: ${escAttr(breakdown)}">` +
+    `${escHtml(shortLabel)} ${g.red + g.amber}</span>`
+  );
+}
+
+// Group-section state text, e.g. "2 red · 1 amber" or "none due ✓".
+function briefGroupStateText(g) {
+  if (g.status === 'clear') return 'none due &#10003;';
+  const parts = [];
+  if (g.red > 0) parts.push(`${g.red} red`);
+  if (g.amber > 0) parts.push(`${g.amber} amber`);
+  return parts.join(' · ');
+}
+
 function renderBriefCard(brief) {
   const collapsed = _briefCollapsed;
+  const allClear = !!brief.allClear;
+  const cardClass = `sent-brief-card${allClear ? ' sent-brief-card-clear' : ''}`;
 
-  // Header: "Brief" label + patientLine + red/amber count badges
+  // Header: "Brief" label + patientLine + per-group RAG pills. The pills are
+  // always in the header so the meds/QOF/general glance survives collapsing.
   const patPart = brief.patientLine
     ? ` <span class="sent-brief-patient" title="${escAttr(brief.patientLine)}">${escHtml(brief.patientLine)}</span>`
     : '';
 
-  // Count badges — include text labels for colour-blind safety
-  const redBadge =
-    brief.counts.red > 0 ? `<span class="sent-brief-badge sent-brief-badge-red">${brief.counts.red} red</span>` : '';
-  const amberBadge =
-    brief.counts.amber > 0
-      ? `<span class="sent-brief-badge sent-brief-badge-amber">${brief.counts.amber} amber</span>`
-      : '';
+  const groups = brief.groups || {};
+  const pills = BRIEF_GROUPS.map(([key, shortLabel, fullLabel]) =>
+    briefGroupPill(shortLabel, fullLabel, groups[key] || { red: 0, amber: 0, status: 'clear' })
+  ).join('');
 
   const chevron = collapsed ? '▶' : '▼';
 
@@ -1927,26 +1965,15 @@ function renderBriefCard(brief) {
     <div class="sent-brief-header" id="sentBriefHeader" role="button" tabindex="0" aria-expanded="${!collapsed}" aria-controls="sentBriefBody">
       <span class="sent-brief-label">Brief</span>
       ${patPart}
-      <span class="sent-brief-badges">${redBadge}${amberBadge}</span>
+      <span class="sent-brief-badges">${pills}</span>
       <span class="sent-brief-chevron" aria-hidden="true">${chevron}</span>
     </div>`;
 
   if (collapsed) {
-    return `<div class="sent-brief-card sent-brief-collapsed">${headerHtml}</div>`;
+    return `<div class="${cardClass} sent-brief-collapsed">${headerHtml}</div>`;
   }
 
-  // Signal lines: severity dot + text
-  const signalLines = brief.signals
-    .map(
-      (sig) =>
-        `<div class="sent-brief-signal sent-brief-signal-${escHtml(sig.severity)}">` +
-        `<span class="sent-brief-dot" aria-hidden="true"></span>` +
-        `<span class="sent-brief-signal-text">${escHtml(sig.text)}</span>` +
-        `</div>`
-    )
-    .join('');
-
-  // Trend notes: ↑/↓ arrows + text
+  // Trend notes: ↑/↓ arrows + text (shown in both clear and action states)
   const trendLines = brief.trendNotes
     .map(
       (note) =>
@@ -1957,6 +1984,49 @@ function renderBriefCard(brief) {
     )
     .join('');
 
+  if (allClear) {
+    // Loud green all-clear: nothing action-needed anywhere. Wording stays
+    // honest — it reports the checks run, it does not assert absolute safety.
+    const bodyHtml = `
+    <div class="sent-brief-body" id="sentBriefBody">
+      <div class="sent-brief-allclear">&#10003; Nothing to do — meds monitoring, QOF and vaccines all clear</div>
+      ${trendLines}
+    </div>`;
+    return `<div class="${cardClass}">${headerHtml}${bodyHtml}</div>`;
+  }
+
+  // Grouped signal sections, fixed order: meds → QOF → general. Each section
+  // shows its own RAG state line; a clear section renders as a compact green
+  // row (that IS the signal — e.g. "meds clear, safe-to-prescribe checks done"
+  // while QOF is amber). Signal lines beyond the global max-4 cap are counted
+  // in the group state text and the "+N more below" line.
+  const signalsByGroup = { meds: [], qof: [], general: [] };
+  for (const sig of brief.signals) {
+    (signalsByGroup[sig.group] || signalsByGroup.general).push(sig);
+  }
+
+  const sections = BRIEF_GROUPS.map(([key, , fullLabel]) => {
+    const g = groups[key] || { red: 0, amber: 0, status: 'clear' };
+    const lines = (signalsByGroup[key] || [])
+      .map(
+        (sig) =>
+          `<div class="sent-brief-signal sent-brief-signal-${escHtml(sig.severity)}">` +
+          `<span class="sent-brief-dot" aria-hidden="true"></span>` +
+          `<span class="sent-brief-signal-text">${escHtml(sig.text)}</span>` +
+          `</div>`
+      )
+      .join('');
+    return (
+      `<div class="sent-brief-group sent-brief-group-${g.status}">` +
+      `<div class="sent-brief-group-header">` +
+      `<span class="sent-brief-group-name">${escHtml(fullLabel)}</span>` +
+      `<span class="sent-brief-group-state sent-brief-group-state-${g.status}">${briefGroupStateText(g)}</span>` +
+      `</div>` +
+      lines +
+      `</div>`
+    );
+  }).join('');
+
   // "+N more below" text (plain, not a link). R6: when some of the hidden
   // chips are RED, annotate the count so a red item is never silently swallowed.
   const moreLine =
@@ -1966,12 +2036,12 @@ function renderBriefCard(brief) {
 
   const bodyHtml = `
     <div class="sent-brief-body" id="sentBriefBody">
-      ${signalLines}
+      ${sections}
       ${trendLines}
       ${moreLine}
     </div>`;
 
-  return `<div class="sent-brief-card">${headerHtml}${bodyHtml}</div>`;
+  return `<div class="${cardClass}">${headerHtml}${bodyHtml}</div>`;
 }
 
 // Attach the brief card toggle handler after render. Idempotent — safe to call on every render.

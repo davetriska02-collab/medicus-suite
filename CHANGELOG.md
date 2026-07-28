@@ -2,6 +2,44 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.196.0] — 2026-07-28
+
+### Monitoring Brief: per-group RAG (Meds / QOF / General) + loud green all-clear
+
+User request: "I want the brief summary box at the top very obviously green if
+there's nothing to do for this person. Can it be split into meds monitoring
+(i.e. bloods, height weight etc), QOF and general things like vaccines so the
+person can at a glance see if the person is safe to prescribe for — i.e. green
+monitoring box but amber QOF and general means I could glance and prescribe
+safely."
+
+- **The Brief card no longer disappears when nothing is due** — it now renders
+  an explicitly green all-clear card ("✓ Nothing to do — meds monitoring, QOF
+  and vaccines all clear"), same green treatment as the "Waiting room clear"
+  strip. An absent card was ambiguous ("did it even check?"); the green card is
+  a positive finding. It only renders in the `data` state — loading/degraded/
+  unreadable-record states still clear the slot, so a half-loaded record can
+  never show a false green.
+- **Chips are split into three RAG groups**, each with its own state:
+  - *Meds monitoring* — everything bearing on prescribing safety: drug-
+    monitoring bloods/checks, interaction combos, allergy flags, composites.
+  - *QOF* — indicators and registers (recall/payment work).
+  - *General* — vaccines, event-count clinical reviews (falls, recurrent UTI),
+    and any unknown/future chip type (deliberate fall-through: a new chip type
+    must never silently inflate the safe-to-prescribe meds group).
+- **Header pills `Meds ✓ / QOF n / Gen n`** (green tick or red/amber count)
+  replace the old aggregate red/amber badges and survive collapsing the card —
+  the "meds green → prescribing checks clear, even though QOF is amber" glance
+  works from the collapsed header alone. Tooltips carry the full breakdown
+  (never colour alone, colour-blind safe).
+- **Expanded body is sectioned** Meds monitoring → QOF → General, each with a
+  state line ("2 red · 1 amber" or green "none due ✓"); signal lines render
+  under their own section. The max-4 signal cap, red-first ordering and
+  "+N more (n red) below" line are unchanged.
+- `buildBrief()` now returns `groups` (per-group red/amber/status), `allClear`,
+  and a `group` on each signal; it returns a brief for an all-green record
+  instead of null. `test-brief-core.js` re-pinned accordingly (95 checks).
+
 ## [v3.195.0] — 2026-07-27
 
 ### "Bulk remove?" reworked: ungated, boxes inline next to every problem
