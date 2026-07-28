@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.202.2] — 2026-07-28
+
+### Dev tooling: request-flow capture recorder (reception feedback, Phase F1)
+
+- New `scripts/request-flow-capture.js` — the booking-flow recorder retuned
+  to reverse-engineer the TRUE **Admin request / Medical request** create
+  endpoints (the objects the RM strip counts), which have only ever been
+  read, never created, by the suite. Same observation-only wrap + PII
+  redactor; protocol in the header (arm on a TEST patient, create one of
+  each request type end-to-end with `chReq.mark()` between, `summary()` +
+  `save()`, hand the JSON over for F2 client implementation).
+- Plan doc gains Phase F (F1 capture → F2 endpoint client → F3 reception
+  "File as request" wiring with booking-card identity discipline and a new
+  hazard entry; jobs-list preconditions apply).
+
 ## [v3.202.1] — 2026-07-28
 
 ### CSO review pass (delegated virtual-Dave review at Dave's instruction) — sign-offs + clinical corrections
