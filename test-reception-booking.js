@@ -69,7 +69,13 @@ const RECEPTION = 'side-panel/modules/reception/reception.js';
       ['sensitive', 'sensitive', 'hidden'],
       ['noRecord', 'no-record', 'disabled'],
       ['positive', 'red-flag-positive', 'hidden'],
-      ['unanswered', 'red-flag-unanswered', 'hidden'],
+      // CSO decision 2026-07-28 (H-051 review question 4): unanswered renders an
+      // explanatory NOTE, not a hidden card. Unanswered is the normal state at the
+      // start of every capture, and a card that is simply absent teaches the desk
+      // to book outside the panel — where none of these controls exist. A positive
+      // flag still HIDES: there is nothing to unlock, and a Book control under a
+      // duty-escalation banner is the automation-bias failure this gate exists for.
+      ['unanswered', 'red-flag-unanswered', 'note'],
     ];
 
     let combos = 0;
@@ -146,6 +152,32 @@ const RECEPTION = 'side-panel/modules/reception/reception.js';
         'red-flag-unanswered',
       'an unanswered red flag blocks booking (undefined is not a "no")'
     );
+    {
+      // The CSO's H-051 q4 decision, pinned: unanswered explains itself, positive
+      // does not appear at all. If someone collapses these two back into one
+      // render mode, this fails.
+      const un = core.bookingGateState({
+        hasPatientContext: true,
+        redFlagPositives: [],
+        redFlagUnanswered: ['rf1'],
+      });
+      check(
+        un.allowed === false && un.render === 'note',
+        'an unanswered red flag renders the explanatory NOTE (not a hidden card, not a Book button)'
+      );
+      check(
+        /answer every red-flag question/i.test(un.message) && /appears once/i.test(un.message),
+        'the unanswered note tells the receptionist what to do and that booking will then appear'
+      );
+      check(
+        core.bookingGateState({
+          hasPatientContext: true,
+          redFlagPositives: [{ id: 'rf1' }],
+          redFlagUnanswered: ['rf2'],
+        }).render === 'hidden',
+        'a POSITIVE flag still hides the card even when other flags are also unanswered'
+      );
+    }
     check(
       core.bookingGateState({ hasPatientContext: true, isPopOut: true }).render === 'note',
       'pop-out context renders the "booking lives in the docked panel" note'

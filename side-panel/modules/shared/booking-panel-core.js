@@ -58,7 +58,8 @@ export const BOOKING_GATE_MESSAGES = Object.freeze({
   'no-record':
     "Open the caller's record in Medicus first — booking stays off until the panel can see who you're booking.",
   'red-flag-positive': 'A red flag was answered YES — follow the escalation above. Booking is off.',
-  'red-flag-unanswered': 'Answer every red-flag question before booking.',
+  'red-flag-unanswered':
+    'Answer every red-flag question first — the booking option appears once they are all answered.',
 });
 
 /**
@@ -80,12 +81,27 @@ export const BOOKING_GATE_MESSAGES = Object.freeze({
  *   2. sensitive pathway      → 'hidden'   (mental-health: a clinician decides)
  *   3. no open-record context → 'disabled' (never book against an ambient record)
  *   4. any POSITIVE red flag  → 'hidden'   (same gate as the disposition card)
- *   5. any UNANSWERED red flag→ 'hidden'
+ *   5. any UNANSWERED red flag→ 'note'     (see the CSO decision below)
  *
- * Positive/unanswered red flags HIDE rather than disable, deliberately: a Book
- * button greyed out under a duty-escalation banner still reads as "the system
- * expects a booking here", which is the automation-bias failure H-024/H-050
- * describe. The disposition card behaves identically for the same reason.
+ * A POSITIVE red flag HIDES the card rather than disabling it, deliberately: a
+ * Book button greyed out under a duty-escalation banner still reads as "the
+ * system expects a booking here", which is the automation-bias failure
+ * H-024/H-050 describe. There is also nothing to "unlock" — the answer is no.
+ * The disposition card behaves identically for the same reason.
+ *
+ * CSO DECISION 2026-07-28 (H-051 review question 4; Dr D. Triska, via delegated
+ * virtual-Dave agent at Dave's instruction — chat): the UNANSWERED state is
+ * treated DIFFERENTLY from the positive one and renders an explanatory NOTE, not
+ * a hidden card and not a disabled Book button. Reasons: (i) unanswered is the
+ * NORMAL state at the start of every single capture, so "the card simply is not
+ * there" is the state a receptionist sees most of the time — it teaches the desk
+ * that panel booking is unreliable and pushes them to book the same appointment
+ * in Medicus or the Slots tab instead, outside every control in this file, which
+ * is the worse outcome; (ii) a one-line sentence is not a control affordance —
+ * there is no button to press, so it carries none of the automation pull a greyed
+ * Book button does; (iii) it makes completing the red-flag screen the visible
+ * route to the thing the receptionist wants, which is the behaviour we are trying
+ * to produce. Pinned in test-reception-booking.js and recorded in H-051.
  */
 export function bookingGateState(input) {
   const i = input || {};
@@ -97,7 +113,7 @@ export function bookingGateState(input) {
   if (i.isSensitivePathway === true) return block('sensitive', 'hidden');
   if (!i.hasPatientContext) return block('no-record', 'disabled');
   if (positives.length > 0) return block('red-flag-positive', 'hidden');
-  if (unanswered.length > 0) return block('red-flag-unanswered', 'hidden');
+  if (unanswered.length > 0) return block('red-flag-unanswered', 'note');
   return { allowed: true, reason: '', render: 'panel', message: '' };
 }
 

@@ -364,6 +364,11 @@ own booking UI pre-selects for confirmation recipients** (feeds D3.5).
    `evaluateRedFlags` already returns both. A duty-escalation banner with a
    Book button under it is the exact automation-bias failure H-024
    describes. Same gate as E's guardrail 1; write it once, use it twice.
+   **CSO amendment 2026-07-28 (H-051 q4):** suppressed, but not identically.
+   *Positive* → card hidden (nothing to unlock). *Unanswered* → a one-line
+   note in its place, because unanswered is the normal state at the start of
+   every capture and a card that is simply absent teaches the desk to book
+   the same appointment in Medicus instead, outside every control here.
 4. **Name + DOB read-back at confirm.** Booking is a write; fineprint is
    not enough. Confirm step shows patient name + DOB + the slot with an
    explicit tick before `createAppointment` fires — on top of the
@@ -536,13 +541,84 @@ validator, same frozen guardrails, same editor.
 Every phase: manifest bump + CHANGELOG on the same commit. `defaults.json`
 is untouched by all of this (reception pathways are not part of it).
 
-**Open questions for Dave (none block Phases 0–2):**
-1. "Jobs list" — Medicus team-task queue, or a label for humans? (A ships
-   label-only either way; the task-write version is a C4-v2-shaped decision.)
-2. Appointment-type names for registrar/FCP/MHP bookings are
-   practice-specific strings in Medicus — confirm the exact names so D3's
-   type filter can surface them from the finder enumeration (no
-   pre-selection either way).
+**Open questions for Dave — ANSWERED 2026-07-28** (Dave's verdicts, recorded by
+the delegated virtual-Dave agent at Dave's instruction; neither blocked any phase):
+
+1. **"Jobs list" — Medicus team-task queue, or a label for humans?
+   VERDICT: PARK. Do not build the write version.** The label-only version
+   already ships and already works, because a human reads it and does the
+   thing. The only write primitive we have is a Medicus **general task**
+   assigned to a team, and pointing "add to jobs list" at that creates a
+   *second* place where jobs live — with the failure mode being a job sitting
+   in a queue nobody has agreed to watch, which is H-040's
+   safety-net-of-record misreading with a new coat of paint. Two things would
+   have to be true before this is worth building, and only the practice can
+   make them true: a **named team queue** in Medicus that jobs go to, and a
+   **named person who checks it daily**. Until both exist, a general task
+   assigned to a team is worse than a sentence a receptionist reads. Revisit
+   only as C4-v2 (`TRIAGE-NORTHSTAR-2026-07-22.md`), never as a preset tweak.
+
+2. **Appointment-type names for registrar / FCP / MHP.
+   ANSWER: unknown from here, and correctly so — nothing blocks on it.**
+   These are practice-specific strings held in the live Medicus appointment-type
+   list; inventing plausible-looking names ("Registrar 15min", "FCP MSK") would
+   put fiction into a clinical-adjacent config file, and the wrong string is
+   silent — it matches nothing and the type never appears. It needs a
+   two-minute look at the practice's own appointment-type list in Medicus.
+   **Nothing waits on it:** D3's type select is populated by
+   `fetchAppointmentFinder` from the live system, so whatever the practice has
+   configured is what reception sees, with no pre-selection either way (H-051
+   control (h)). The names are only needed if we later want to *filter* or
+   *order* that list — a convenience, not a dependency. The quick-action
+   presets in A are free text about a **role** ("with the registrar"), not
+   Medicus type identifiers, so they are unaffected.
+
 (Resolved 2026-07-28: patient messaging dropped entirely; custom-routing
 attestation is signed by the CSO or a partner, with name + role + timestamp
 recorded.)
+
+---
+
+## CSO review record — 2026-07-28
+
+Signed off: Dr D. Triska (CSO) — review performed by delegated virtual-Dave
+agent at Dave's instruction, 2026-07-28 (chat). Recorded in
+`docs/cso-review-ledger.json`; the substance lives in the artefacts themselves.
+
+| Item | Verdict | Where it is recorded |
+|---|---|---|
+| Frozen intended-purpose re-freeze | **Signed with an amendment** — re-issued as **v3.202.0** (not v3.199.1) after a Data-flow-and-egress paragraph was added at review | `docs/INTENDED-PURPOSE.md`, change log |
+| The three v1.6 pathways (`gu-male`, `gyn-female`, `mental-health`) | **Signed with changes** — 3 red-flag changes (see below) | `rules/reception-pathways.json` specVersion v1.8 + per-pathway `sources` |
+| Match terms for the three pathways (`engine/reception-match.js`) | **Signed with changes** — hyphen normalisation bug fixed; 4 missing lay/clinical terms added | `engine/reception-match.js` header comments |
+| The nine v1.7 `disposition` blocks | **Signed with one change** — `rash` no longer auto-suggests Pharmacy First | H-050 Acceptability |
+| **H-050** | **Signed — Accepted (ALARP)** | `docs/HAZARD-LOG.md` |
+| **H-051** | **Signed — Accepted (ALARP)**, four review questions answered, one control changed | `docs/HAZARD-LOG.md` |
+
+**Clinical changes made at review** (each is part of what was signed, not a
+follow-up): `gyn-female` gains `rf-sepsis` (999 — the drafted pathway screened
+for no septic presentation at all, while both sibling GU pathways do);
+`gyn-female`'s `rf-early-preg-bleed` is split into a 999 arm (heavy bleeding or
+faintness) and a duty arm `rf-early-preg-tissue` (bleeding or passing tissue
+without those), per NG126's A&E-vs-EPAU distinction and section B.4's
+no-conditional-escalations rule; `gu-male` gains `rf-priapism` (999) and
+`rf-paraphimosis` (duty); `rash`'s automatic Pharmacy First routing rule is
+removed. `rf-retention` was reviewed and deliberately left at 999.
+
+**Engineering change made at review:** `normalise()` in
+`engine/reception-match.js` now folds hyphens to spaces. Without it the
+standard written spellings "self-harm", "post-coital bleeding" and
+"shoulder-tip pain" matched **nothing** — the silent-failure class this
+programme is most exposed to, live on all three new pathways.
+
+**D3.3 amendment:** the booking gate no longer treats "positive" and
+"unanswered" red flags identically. Positive still hides the card; unanswered
+now renders "answer every red-flag question first — the booking option appears
+once they are all answered". Reasoning in `booking-panel-core.js` and in
+H-051's Acceptability row.
+
+**Raised, not closed (outside this programme):** the optional Medicus
+Transactional API integration (`txn.integrationMode` = `hybrid`/`transactional`,
+off by default) routes patient reads through a Graysbrook-operated UK proxy and
+appears in **no** safety document. It is now described accurately in the signed
+intended-purpose statement and flagged in CSN §6; it still needs a hazard entry,
+a DPIA section and a CSN rewrite. No practice should enable it until then.

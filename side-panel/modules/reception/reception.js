@@ -1113,8 +1113,11 @@ function updateDispositionCard(form, pathway) {
 //     convention as the panel-only demand strips.
 //   • An open record is mandatory. Capture deliberately works with no record
 //     open; booking must never fire against an ambient one.
-//   • Any positive OR unanswered red flag suppresses the card, using the SAME
-//     evaluation the disposition card uses (redFlagState above).
+//   • Any positive OR unanswered red flag stops a booking, using the SAME
+//     evaluation the disposition card uses (redFlagState above). A POSITIVE flag
+//     hides the card outright; an UNANSWERED one leaves an explanatory note in
+//     its place ("answer every red-flag question first") — CSO decision
+//     2026-07-28, H-051 review question 4, reasoning in booking-panel-core.js.
 //   • Sensitive pathways (mental-health) NEVER show it, red flags or not:
 //     what to offer someone in distress is a clinician's decision, not a slot
 //     the front desk picks off a list mid-call.

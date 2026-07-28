@@ -645,7 +645,13 @@ const path = require('path');
     check(!!d && d.default === 'gp_routine', `[${id}] default gp_routine (conservative)`);
     check(!!d && d.allowed.indexOf('gp_routine') !== -1, `[${id}] gp_routine always allowed`);
   }
-  for (const id of ['sore-throat', 'earache', 'sinusitis', 'urinary', 'rash']) {
+  // CSO review 2026-07-28 removed `rash` from this list. The other four pathways'
+  // Pharmacy First age bands each map 1:1 onto ONE named PF condition, so the age
+  // gate is a fair proxy for eligibility. The rash block's single band stands in for
+  // three conditions with different bands, and its match terms also catch cellulitis
+  // — which PF does not cover — so an age-only gate would have suggested a pharmacy
+  // for a rash the pharmacist cannot treat. pharmacy_first stays SELECTABLE there.
+  for (const id of ['sore-throat', 'earache', 'sinusitis', 'urinary']) {
     const d = byId[id].disposition;
     check(
       JSON.stringify(d.rules) ===
@@ -654,6 +660,18 @@ const path = require('path');
     );
     check(!!byId[id].pharmacyFirst, `[${id}] has the pharmacyFirst block that gate reads`);
   }
+  check(
+    JSON.stringify(byId.rash.disposition.rules) === '[]',
+    'rash suggests NO automatic Pharmacy First route (CSO review 2026-07-28)'
+  );
+  check(
+    byId.rash.disposition.allowed.indexOf('pharmacy_first') !== -1,
+    'rash still ALLOWS pharmacy_first as a receptionist-chosen override'
+  );
+  check(
+    (byId.rash.sources || []).some((s) => /CSO REVIEW 2026-07-28/.test(s)),
+    'the rash pathway records why its Pharmacy First rule was removed'
+  );
   check(byId.cough.disposition.allowed.indexOf('pharmacy_first') === -1, 'cough cannot suggest Pharmacy First');
   check(byId.backpain.disposition.allowed.indexOf('paramedic') !== -1, 'backpain may suggest a paramedic practitioner');
   check(byId.headache.disposition.allowed.length === 1, 'headache allows gp_routine only');
@@ -676,8 +694,16 @@ const path = require('path');
   check(shipped('mental-health', 30).status === 'none', 'mental-health → nothing, ever');
   check(shipped('general', 30).status === 'withheld', 'general → withheld (catch-all is clinician-only)');
   check(
-    /DRAFT/i.test(doc.specVersion) && /v1\.7/.test(doc.specVersion),
-    'specVersion records the v1.7 blocks as DRAFT pending CSO'
+    /v1\.7/.test(doc.specVersion) && /v1\.8/.test(doc.specVersion),
+    'specVersion records the v1.7 blocks and the v1.8 review that signed them off'
+  );
+  check(
+    /CSO SIGN-OFF RECORDED/i.test(doc.specVersion) && /delegated virtual-Dave agent/i.test(doc.specVersion),
+    'the disposition blocks carry a provenance-honest CSO sign-off'
+  );
+  check(
+    shipped('rash', 40).destination === 'gp_routine',
+    'rash, adult, no red flags → GP appointment (no automatic Pharmacy First suggestion)'
   );
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

@@ -186,6 +186,11 @@ check(guMale && guMale.pharmacyFirst === undefined, 'gu-male has NO pharmacyFirs
 check(guMale && (guMale.redFlags || []).some(rf => rf.id === 'rf-torsion' && rf.escalate === '999'), 'gu-male rf-torsion escalates to 999 (testicular torsion)');
 check(guMale && (guMale.redFlags || []).some(rf => rf.id === 'rf-retention' && rf.escalate === '999'), 'gu-male rf-retention escalates to 999 (acute retention)');
 check(guMale && (guMale.redFlags || []).some(rf => rf.id === 'rf-testis-lump' && rf.escalate === 'duty'), 'gu-male rf-testis-lump escalates to duty (NG12 testicular)');
+// Added at CSO review 2026-07-28: the two male genital emergencies a non-clinical
+// taker cannot be expected to recognise. Both are reachable from this pathway's own
+// match terms (foreskin / penis), so their absence was a silent gap, not a scope call.
+check(guMale && (guMale.redFlags || []).some(rf => rf.id === 'rf-priapism' && rf.escalate === '999'), 'gu-male rf-priapism escalates to 999 (ischaemic priapism, CSO review 2026-07-28)');
+check(guMale && (guMale.redFlags || []).some(rf => rf.id === 'rf-paraphimosis' && rf.escalate === 'duty'), 'gu-male rf-paraphimosis escalates to duty (CSO review 2026-07-28)');
 
 // gyn-female — complements the existing women's UTI pathway; clinician-only, so
 // no pharmacyFirst block here either.
@@ -195,6 +200,26 @@ check(gynFemale && gynFemale.pharmacyFirst === undefined, 'gyn-female has NO pha
 check(gynFemale && (gynFemale.redFlags || []).some(rf => rf.id === 'rf-ectopic-shoulder' && rf.escalate === '999'), 'gyn-female rf-ectopic-shoulder escalates to 999 (NG126 ectopic)');
 check(gynFemale && (gynFemale.redFlags || []).some(rf => rf.id === 'rf-pmb' && rf.escalate === 'duty'), 'gyn-female rf-pmb escalates to duty (NG12 postmenopausal bleeding)');
 check(gynFemale && (gynFemale.sources || []).some(s => /NG126/.test(s)), 'gyn-female cites NICE NG126 (ectopic)');
+// CSO review 2026-07-28. (1) The drafted pathway screened for NO septic presentation
+// at all — septic miscarriage / severe PID / toxic shock would have produced a plain
+// "unwell = yes" answer and no escalation banner, while both sibling GU pathways
+// screen for it.
+{
+  const rfSepsis = gynFemale && (gynFemale.redFlags || []).find(rf => rf.id === 'rf-sepsis');
+  check(!!rfSepsis && rfSepsis.escalate === '999', 'gyn-female rf-sepsis exists and escalates to 999 (CSO review 2026-07-28)');
+}
+// (2) The heavy-bleeding flag must stay SPLIT from the passing-tissue one: NICE NG126
+// sends instability / significant bleeding straight to A&E but refers stable bleeding
+// to early-pregnancy assessment within 24h. Collapsing them 999s ordinary miscarriages
+// and re-introduces exactly the conditional-escalation shape the file forbids.
+{
+  const bleed = gynFemale && (gynFemale.redFlags || []).find(rf => rf.id === 'rf-early-preg-bleed');
+  const tissue = gynFemale && (gynFemale.redFlags || []).find(rf => rf.id === 'rf-early-preg-tissue');
+  check(!!bleed && bleed.escalate === '999', 'gyn-female rf-early-preg-bleed escalates to 999');
+  check(!!bleed && /faint|dizzy|unwell/i.test(bleed.ask), 'rf-early-preg-bleed is the HEAVY/unstable arm (mentions faint/dizzy/unwell)');
+  check(!!bleed && !/passing (clots|tissue)/i.test(bleed.ask), 'rf-early-preg-bleed no longer bundles passing clots/tissue into the 999 arm');
+  check(!!tissue && tissue.escalate === 'duty', 'gyn-female rf-early-preg-tissue exists and escalates to duty (NG126 EPAU-within-24h arm)');
+}
 
 // mental-health — sensitive, safeguarding-flagged, and explicitly non-stratifying.
 const mentalHealth = doc.pathways.find(p => p.id === 'mental-health');
@@ -216,6 +241,15 @@ check(mentalHealth && mentalHealth.pharmacyFirst === undefined, 'mental-health h
 for (const id of ['rf-mentalhealth-attempt', 'rf-mentalhealth']) {
   check(generalP && (generalP.redFlags || []).some(rf => rf.id === id), `general still carries "${id}" (kept in both pathways deliberately)`);
   check(mentalHealth && (mentalHealth.redFlags || []).some(rf => rf.id === id), `mental-health also carries "${id}"`);
+  // CSO review 2026-07-28: "duplicated" has to mean IDENTICAL. Two copies of a
+  // self-harm question that drift apart give two different escalation prompts for
+  // the same caller depending on which tile reception happened to open — and the
+  // third-person wording of these two is accepted only BECAUSE the identical-text
+  // property is load-bearing. Pin the text, not just the id.
+  const a = generalP && (generalP.redFlags || []).find(rf => rf.id === id);
+  const b = mentalHealth && (mentalHealth.redFlags || []).find(rf => rf.id === id);
+  check(!!a && !!b && a.ask === b.ask, `"${id}" ask text is IDENTICAL in general and mental-health`);
+  check(!!a && !!b && a.escalate === b.escalate, `"${id}" escalation level is IDENTICAL in general and mental-health`);
 }
 // The plan's conditional drafts must be SPLIT, never collapsed into one flag.
 for (const [hi, lo] of [['rf-selfharm-injury-urgent', 'rf-selfharm-not-urgent'], ['rf-psychosis-acute', 'rf-psychosis-present']]) {
@@ -225,9 +259,22 @@ for (const [hi, lo] of [['rf-selfharm-injury-urgent', 'rf-selfharm-not-urgent'],
   check(!!b && b.escalate === 'duty', `mental-health "${lo}" exists and escalates to duty (conditional draft split, not collapsed)`);
 }
 
-// specVersion must record the v1.6 additions AND that they are draft/unsigned.
+// specVersion must record the v1.6 additions AND their CSO sign-off. Until
+// 2026-07-28 this asserted the DRAFT marker; the sign-off replaced it, and the
+// assertion moved with it rather than being deleted — an un-asserted governance
+// state is one nobody notices regressing.
 check(/v1\.6/.test(doc.specVersion || ''), 'specVersion records the v1.6 additions');
-check(/DRAFT/i.test(doc.specVersion || ''), 'specVersion flags the new content as DRAFT pending CSO sign-off');
+check(/v1\.8/.test(doc.specVersion || ''), 'specVersion records the v1.8 CSO review');
+check(/CSO SIGN-OFF RECORDED/i.test(doc.specVersion || ''), 'specVersion records that CSO sign-off was given');
+check(/Signed off: Dr D\. Triska/.test(doc.specVersion || ''), 'specVersion names the signing CSO');
+check(
+  /delegated virtual-Dave agent/i.test(doc.specVersion || ''),
+  'the sign-off is provenance-honest about how the review was performed'
+);
+check(
+  !/^Reception capture pathways v1\.8[^.]*\(DRAFT/i.test(doc.specVersion || ''),
+  'the CURRENT spec version is not itself marked DRAFT (historical draft markers below it are fine)'
+);
 
 // ── 2026-07-28 (plan section E): disposition routing blocks ──────────────────
 // Structural locks only — the guardrail truth table lives in

@@ -88,12 +88,22 @@
 
   // ── Text-matching helpers ─────────────────────────────────────────────────────────────────────
 
-  // normalise(s) — lowercase + strip apostrophes, so "can't breathe" (typed text) and "cant
-  // breathe" (a term below) compare equal without listing both spellings everywhere.
+  // normalise(s) — lowercase, strip apostrophes, and treat hyphens/en-dashes as spaces, so
+  // "can't breathe" (typed text) and "cant breathe" (a term below) compare equal, and so does
+  // "self-harm" against the term "self harm", without listing every spelling everywhere.
+  //
+  // CSO REVIEW 2026-07-28 (Dr D. Triska, via delegated virtual-Dave agent): the hyphen rule was
+  // ADDED at this review. Without it, `\b` anchoring meant the standard written spellings
+  // "self-harm", "post-coital bleeding", "shoulder-tip pain" and "one-sided pain" matched NOTHING
+  // — the terms lists carry the spaced forms only. That is the silent failure class this file's
+  // header warns about (no error, no match, no chip), and it was live on the three DRAFT pathways.
+  // Applying it in the normaliser rather than by adding hyphenated duplicates fixes every term at
+  // once and keeps the lists reviewable. Pinned by test-reception-match.js.
   function normalise(s) {
     return String(s == null ? '' : s)
       .toLowerCase()
-      .replace(/[’']/g, '');
+      .replace(/[’']/g, '')
+      .replace(/[-–—]/g, ' ');
   }
 
   function escapeRegExp(s) {
@@ -186,9 +196,14 @@
       'pain around the eyes',
       'pain in the face',
     ],
-    // ── DRAFT 2026-07-28 — pending CSO sign-off (reception-feedback plan section B) ─────────────
-    // Synonyms for the three new pathways (gu-male, gyn-female, mental-health). CSO-reviewable
-    // content exactly like the entries above — see this file's CLINICAL-CONTENT NOTE header.
+    // ── CSO-REVIEWED 2026-07-28 — signed off (reception-feedback plan section B) ────────────────
+    // Signed off: Dr D. Triska (CSO) — review performed by delegated virtual-Dave agent at Dave's
+    // instruction, 2026-07-28 (chat). Reviewed against rules/reception-pathways.json v1.8.
+    // Changes made at review: hyphen normalisation added to normalise() above (see the note
+    // there); 'balls' + 'testes' added to gu-male and 'thrush' to gyn-female as common lay terms
+    // that were missing. Synonyms for the three pathways (gu-male, gyn-female, mental-health) —
+    // CSO-reviewable content exactly like the entries above; see this file's CLINICAL-CONTENT
+    // NOTE header.
     //
     // gu-male DELIBERATELY repeats the generic UTI terms ('uti', 'waterworks', 'urine infection')
     // that `urinary` also carries. That is the INTENDED behaviour, not a bug: matchPathways
@@ -200,6 +215,11 @@
       'testicle',
       'testicles',
       'testicular',
+      'testes',
+      // The word most male callers actually use. Added at CSO review 2026-07-28 — it was already
+      // in this file's rf-torsion topic terms ("pain in the balls") but missing from the terms
+      // that decide whether the pathway is OFFERED at all.
+      'balls',
       'scrotum',
       'scrotal',
       'epididymitis',
@@ -234,10 +254,19 @@
       'irregular bleeding',
       'vaginal bleeding',
       'bleeding after sex',
+      // Added at CSO review 2026-07-28: the clinical wording a triage note or a
+      // referring colleague actually uses. The rf-pcb topic terms already carried
+      // it; the pathway-offer terms did not, so a note written in those words
+      // offered no gynae tile at all.
+      'post coital bleeding',
+      'postcoital bleeding',
       'bleeding after the menopause',
       'postmenopausal bleeding',
       'vaginal discharge',
       'smelly discharge',
+      // Added at CSO review 2026-07-28: a very common lay presenting word, and NOT a Pharmacy
+      // First condition — it belongs on the clinician-only gynae pathway, not nowhere.
+      'thrush',
       'pelvic pain',
       'pregnant',
       'pregnancy',
@@ -595,8 +624,12 @@
       'croaky voice',
     ],
 
-    // ── DRAFT 2026-07-28 — pending CSO sign-off. Red-flag topic terms for the three new
-    //    pathways (gu-male, gyn-female, mental-health) added in reception-pathways.json v1.6.
+    // ── CSO-REVIEWED 2026-07-28 — signed off. Red-flag topic terms for the three new
+    //    pathways (gu-male, gyn-female, mental-health) added in reception-pathways.json v1.6,
+    //    plus the four red flags added at CSO review in v1.8 (rf-priapism, rf-paraphimosis,
+    //    rf-early-preg-tissue; gyn-female's rf-sepsis reuses the shared entry above).
+    //    Signed off: Dr D. Triska (CSO) — review performed by delegated virtual-Dave agent at
+    //    Dave's instruction, 2026-07-28 (chat).
     //    Terms derived conservatively from each red flag's `ask` text. CSO-reviewable content
     //    — see this file's header. Ids already listed above (rf-sepsis, rf-loin,
     //    rf-haematuria, rf-mentalhealth, rf-mentalhealth-attempt) are REUSED with the same
@@ -624,6 +657,27 @@
       'full bladder',
       'bladder is full',
       'desperate to go but cant',
+    ],
+    // gu-male — priapism: a painful erection lasting >4 hours (ischaemic priapism is a
+    // time-critical urological emergency). Added at CSO review 2026-07-28.
+    'rf-priapism': [
+      'priapism',
+      'erection that wont go',
+      'erection that will not go',
+      'painful erection',
+      'erection for hours',
+      'stuck erection',
+    ],
+    // gu-male — paraphimosis: foreskin retracted and stuck behind the glans, swelling/pain.
+    // Added at CSO review 2026-07-28.
+    'rf-paraphimosis': [
+      'paraphimosis',
+      'foreskin stuck',
+      'foreskin is stuck',
+      'foreskin wont go back',
+      'foreskin will not go back',
+      'swollen foreskin',
+      'trapped foreskin',
     ],
     // gu-male — testicular lump or change in shape/texture (NICE NG12 testicular 2WW).
     'rf-testis-lump': [
@@ -664,6 +718,17 @@
       'passing clots',
       'passing tissue',
       'miscarriage',
+    ],
+    // gyn-female — early-pregnancy bleeding WITHOUT heavy loss or faintness: passing clots or
+    // tissue, i.e. the EPAU-within-24-hours group rather than the straight-to-A&E group
+    // (NICE NG126). Split out from rf-early-preg-bleed at CSO review 2026-07-28.
+    'rf-early-preg-tissue': [
+      'passing clots',
+      'passing tissue',
+      'miscarriage',
+      'bleeding in early pregnancy',
+      'losing the pregnancy',
+      'think shes miscarrying',
     ],
     // gyn-female — ovarian torsion / cyst accident: sudden severe one-sided pelvic pain with
     // vomiting or faintness.

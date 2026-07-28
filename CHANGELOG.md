@@ -2,6 +2,39 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.202.1] — 2026-07-28
+
+### CSO review pass (delegated virtual-Dave review at Dave's instruction) — sign-offs + clinical corrections
+
+- **Intended Purpose re-frozen and SIGNED as v3.202.0** (provenance-honest
+  delegated signature) — after correcting a false blanket no-egress claim:
+  the optional transactional-API integration routes reads via a
+  Graysbrook-operated proxy (dormant by default); a Data flow and egress
+  paragraph now states it. CSN gains the W12 row + egress note (CSN full
+  review deliberately left unsigned — see pending list).
+- **Pathways signed as v1.8 with corrections**: `gyn-female` gains the
+  missing sepsis red flag (999) and the early-pregnancy flag is split
+  (999 heavy bleeding / duty tissue passed, per NG126 and the
+  no-conditional-escalations rule); `gu-male` gains priapism (999) and
+  paraphimosis (duty); retention deliberately stays 999 (reasoning in
+  sources). MH byte-identical duplication with `general` now pinned.
+- **Live matcher bug fixed**: the normaliser stripped apostrophes but not
+  hyphens, so "self-harm", "post-coital bleeding", "shoulder-tip pain"
+  silently matched nothing; fixed + pinned, plus balls/testes/thrush terms.
+- **Disposition**: `rash` loses its automatic Pharmacy First rule (one age
+  gate stood in for three PF conditions and its terms include cellulitis,
+  which PF doesn't cover — receptionist can still choose PF manually).
+- **H-050 + H-051 SIGNED (ALARP)**; H-051 question 4 resolved by code:
+  positive red flags still hide the booking card; *unanswered* flags now
+  show "answer the red flags to unlock" instead of nothing.
+- Plan: jobs-list task-write **parked** (needs a named team queue + a
+  named daily checker first); appointment-type names confirmed as a
+  two-minute live-Medicus lookup, blocking nothing.
+- **Left unsigned, honestly**: CSN full document review, DPIA (no
+  assessment of the proxy transfer exists), transactional-proxy hazard
+  entry (raised, not written). Do not enable txn hybrid/transactional
+  mode until they exist.
+
 ## [v3.202.0] — 2026-07-28
 
 ### Reception: in-panel appointment search + booking — DRAFT, hazard H-051 PENDING CSO (reception feedback, Phase D2/D3)
