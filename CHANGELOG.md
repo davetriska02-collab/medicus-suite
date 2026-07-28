@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.199.1] — 2026-07-28
+
+### Governance resync: safety case corrected to describe the real write paths (reception feedback, Phase 0)
+
+- **CLINICAL-SAFETY-NOTICE** (doc v3.14, PENDING CSO REVIEW): §6.2/6.3 no
+  longer claim "no write path to Medicus" — new §6.1 enumerates all eleven
+  write surfaces (W1–W11: both booking flows incl. patient booking-
+  confirmation SMS/email, task creation ×2, inbound-document filing, lab
+  filing, routine-rx commit assist, problem edit/end, duplicate
+  hide/merge) with endpoints, triggers and controls, plus two honestly
+  stated gaps. §2/§5 "passive, read-only" claims corrected.
+- **INTENDED-PURPOSE**: new frozen statement v3.199.1 drafted — **DRAFT,
+  unsigned, not in force** (signature lines empty; v3.16.0 remains the
+  statement in force, now carrying a marked-inaccurate caveat). Adds
+  non-clinical reception/admin staff under practice delegated authority as
+  proposed intended users. A re-freeze convention is now written into the
+  doc.
+- **DPIA** (v1.1 draft): new reception-module section (special-category
+  phone-triage capture, draft persistence, shared-workstation processing,
+  paste-into-Medicus flow), six new risk rows, "writes nothing back"
+  corrected.
+- **cso-review-ledger**: CSN correction recorded as pending;
+  INTENDED-PURPOSE and DPIA added with `last_cso_review_version: null`
+  (never formally reviewed — no review fabricated).
+
 ## [v3.199.0] — 2026-07-28
 
 ### Booking core extracted to shared/ + slots commit-time patient re-verify (reception feedback, Phase D1)
