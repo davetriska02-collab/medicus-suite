@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.197.2] — 2026-07-28
+
+### Docs: reception-feedback plan — virtual-Dave review pass applied
+
+- Reworked `docs/plans/RECEPTION-FEEDBACK-2026-07-28.md` after the review
+  pass. Load-bearing corrections: added **Phase 0 governance resync** (the
+  Clinical Safety Notice / Intended Purpose statement currently assert "no
+  write path" and clinician-only users — both must be re-frozen before
+  reception booking ships); corrected the patient-messaging claim (the
+  booking payload's `bookingConfirmationRecipients` already fires patient
+  SMS/email today — D gains a recipient-channel control); moved E's
+  guardrails out of editable pathway data into **frozen engine constants
+  applied after override resolution**, with an adversarial-fork test, a
+  hard age floor (<1 clinician-only), confirmed-age-only routing, and
+  clinician attestation for custom-pack routing; D gained
+  no-self-detection booking-core identity rules, open-record gating,
+  red-flag suppression, name+DOB read-back, and a panel-only pop-out
+  ruling; B gained `safeguarding`/`sensitive` schema flags (MH drafts skip
+  autosave), split conditional escalations, a caller-vs-patient closing
+  question, and no disposition card at all for mental health;
+  A's preset merge now runs in both storage-key consumers. Sequencing
+  re-ordered: 0 → A → D1 (booking-core refactor) → B → E → D2/D3 → C-spike.
+
 ## [v3.197.1] — 2026-07-28
 
 ### Docs: reception-feedback build plan
