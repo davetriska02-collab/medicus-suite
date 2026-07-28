@@ -39,11 +39,19 @@ export default [
     languageOptions: { sourceType: 'module' },
   },
   {
-    // shared/medicus-api.js, shared/task-api.js, shared/tab-help.js and
-    // shared/panel-txn-feed.js are ES modules (export keyword), imported by
-    // side-panel modules / panel.js / pop-out.js rather than loaded as classic
-    // scripts.
-    files: ['shared/medicus-api.js', 'shared/task-api.js', 'shared/tab-help.js', 'shared/panel-txn-feed.js'],
+    // shared/medicus-api.js, shared/task-api.js, shared/tab-help.js,
+    // shared/panel-txn-feed.js and shared/booking-core.js are ES modules
+    // (export keyword), imported by side-panel modules / panel.js / pop-out.js
+    // rather than loaded as classic scripts. (booking-core.js additionally
+    // assigns window.BookingCore behind a typeof guard so a classic script can
+    // adopt it later — that does not change how it is parsed.)
+    files: [
+      'shared/medicus-api.js',
+      'shared/task-api.js',
+      'shared/tab-help.js',
+      'shared/panel-txn-feed.js',
+      'shared/booking-core.js',
+    ],
     languageOptions: { sourceType: 'module' },
   },
   {

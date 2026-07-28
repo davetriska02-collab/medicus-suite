@@ -2,6 +2,259 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.202.1] — 2026-07-28
+
+### CSO review pass (delegated virtual-Dave review at Dave's instruction) — sign-offs + clinical corrections
+
+- **Intended Purpose re-frozen and SIGNED as v3.202.0** (provenance-honest
+  delegated signature) — after correcting a false blanket no-egress claim:
+  the optional transactional-API integration routes reads via a
+  Graysbrook-operated proxy (dormant by default); a Data flow and egress
+  paragraph now states it. CSN gains the W12 row + egress note (CSN full
+  review deliberately left unsigned — see pending list).
+- **Pathways signed as v1.8 with corrections**: `gyn-female` gains the
+  missing sepsis red flag (999) and the early-pregnancy flag is split
+  (999 heavy bleeding / duty tissue passed, per NG126 and the
+  no-conditional-escalations rule); `gu-male` gains priapism (999) and
+  paraphimosis (duty); retention deliberately stays 999 (reasoning in
+  sources). MH byte-identical duplication with `general` now pinned.
+- **Live matcher bug fixed**: the normaliser stripped apostrophes but not
+  hyphens, so "self-harm", "post-coital bleeding", "shoulder-tip pain"
+  silently matched nothing; fixed + pinned, plus balls/testes/thrush terms.
+- **Disposition**: `rash` loses its automatic Pharmacy First rule (one age
+  gate stood in for three PF conditions and its terms include cellulitis,
+  which PF doesn't cover — receptionist can still choose PF manually).
+- **H-050 + H-051 SIGNED (ALARP)**; H-051 question 4 resolved by code:
+  positive red flags still hide the booking card; *unanswered* flags now
+  show "answer the red flags to unlock" instead of nothing.
+- Plan: jobs-list task-write **parked** (needs a named team queue + a
+  named daily checker first); appointment-type names confirmed as a
+  two-minute live-Medicus lookup, blocking nothing.
+- **Left unsigned, honestly**: CSN full document review, DPIA (no
+  assessment of the proxy transfer exists), transactional-proxy hazard
+  entry (raised, not written). Do not enable txn hybrid/transactional
+  mode until they exist.
+
+## [v3.202.0] — 2026-07-28
+
+### Reception: in-panel appointment search + booking — DRAFT, hazard H-051 PENDING CSO (reception feedback, Phase D2/D3)
+
+- **New booking card** in the reception capture view: appointment-type
+  select (no pre-selection), date modes `Specific day · 1wk · 2wks ·
+  3wks · 4wks` (window search via booking-core's capped
+  `findSlotsInWindow`), slot list grouped by day earliest-first (empty
+  day distinguishable from not-searched), confirm step with **name+DOB
+  read-back gated by an explicit right-patient tick**, reason pre-filled
+  from the pathway title, **visible/editable booking-confirmation
+  channels** (payload = exactly the ticked subset; TODO recorded to
+  capture Medicus's own default), booked line written into the capture
+  text.
+- **Gates (fail-closed truth table, 32 combinations tested):** pop-out →
+  note only (booking is panel-only, recorded ruling); sensitive pathways
+  (mental health) → never shown; no open record with resolvable patient
+  uuid → disabled with instruction; any positive or unanswered red flag
+  → hidden (same single evaluateRedFlags gate as the disposition card).
+- **Identity (H-051):** active-tab snapshot is the single documented
+  identity source; the panel arms only when both resolvers agree; at
+  commit the patient AND site are re-detected fresh and must match the
+  pin and the current context (three-source agreement) or the booking
+  aborts, releases the reservation, and says "nothing was booked".
+- Reservation released on five exit paths + pagehide keepalive; nothing
+  persisted to chrome.storage; no third copy of the booking flow.
+- New shared `booking-panel(-core).js` component (reusable by future
+  surfaces), `test-reception-booking.js` (113 checks); suite total 341.
+- Hazard **H-051** (initial 5×3 → residual 5×1), PENDING CSO REVIEW with
+  four named review questions; Phase 0 governance resync is a stated
+  prerequisite to enabling any of this for live reception use.
+
+## [v3.201.0] — 2026-07-28
+
+### Reception: if-this-then-that disposition engine — DRAFT, suggestion-only (reception feedback, Phase E, hazard H-050)
+
+- **`evaluateDisposition`** (pure, truth-table-tested): after a fully
+  answered, red-flag-clear capture, suggests a route (Pharmacy First /
+  ANP / paramedic / GP routine) from the pathway's `disposition` block.
+  Suggestion-only — a human confirms or overrides, and every suggestion
+  carries "Or a clinician callback if the patient prefers — always offer
+  it." on screen and in the pasted capture text.
+- **Guardrails frozen in engine code, applied after override resolution**
+  (a practice fork cannot edit them away — adversarial fixture tested):
+  mental-health/sensitive pathways render no disposition output at all;
+  gu-male, gyn-female and general are clinician-only; positive OR
+  unanswered red flags withhold; hard age floor (<1 clinician-only, <5
+  strips ANP/paramedic incl. from the override control); age must be
+  explicitly confirmed on the call (never the open record's) and fails
+  closed to GP routine; Pharmacy First suggestions re-use the existing
+  age gates, failing closed. Downgrading overrides are rejected as
+  invalid at resolve time.
+- **Custom routing sign-off: CSO or partner only.** Custom/edited
+  pathways stay clinician-only until a `reception.routingAttestation`
+  (name + role + timestamp, revocable) is recorded in options; backups
+  import it validate-or-drop and the restore preview warns when one is
+  present.
+- **Audit trail in the capture text**: suggested/confirmed/overridden
+  routes AND withheld dispositions (with reason) are recorded, so an SEA
+  can reconstruct what the tool did and didn't say.
+- Nine conservative shipped disposition blocks (DRAFT pending CSO;
+  pathways remain disabled by default); pathway editor gains a
+  Disposition section with clinician-only greying; hazard entry
+  **H-050** (initial 4×2 → residual 4×1, ALARP, PENDING CSO REVIEW).
+- New `test-reception-disposition.js` (214 checks); suite total 340.
+
+## [v3.200.0] — 2026-07-28
+
+### Reception: three new capture pathways — DRAFT, disabled pending CSO sign-off (reception feedback, Phase B)
+
+- **New pathways** (ship OFF; enable in options after CSO review):
+  `gu-male` (torsion/retention/sepsis 999s; loin pain, visible haematuria,
+  testicular lump duty; no Pharmacy First — male UTI excluded by the
+  service spec), `gyn-female` (ectopic cluster + early-pregnancy bleeding
+  + pelvic torsion 999s; PMB, persistent PCB, ovarian symptom cluster
+  duty), `mental-health` (NG225-conformant minimal capture — binary
+  triggers, no scoring; the two `general` MH flags stay in `general` too).
+- **Schema**: red flags may carry `safeguarding: true` (banner + capture
+  text render the practice safeguarding contact; bypasses routing);
+  pathways may carry `sensitive: true` — **drafts are never autosaved,
+  any stored draft is deleted, taker initials become mandatory**, and a
+  practice-editable crisis-route line (default NHS 111 option 2) renders
+  on the form and in the capture text. LLM authoring prompt documents
+  both plus the no-conditional-escalations rule.
+- **New closing question** (all pathways, asked first): am I speaking to
+  the patient or someone on their behalf.
+- **Queue-chip wiring**: synonym + red-flag topic terms for all three
+  pathways (DRAFT-marked for CSO), with the deliberate `urinary`/`gu-male`
+  tie-break (generic UTI wording offers both, never auto-picks).
+- **New regression guard** `test-reception-pathway-coverage.js`: every
+  pathway id must have synonym + topic terms (the silent-no-chip failure
+  mode is now a CI failure), tie-break pinned.
+- Options: NEW badge on unseen bundled pathways, SENSITIVE badge,
+  safeguarding-contact + crisis-line settings, editor checkboxes for the
+  new flags; backup import sanitises the new config fields.
+
+## [v3.199.1] — 2026-07-28
+
+### Governance resync: safety case corrected to describe the real write paths (reception feedback, Phase 0)
+
+- **CLINICAL-SAFETY-NOTICE** (doc v3.14, PENDING CSO REVIEW): §6.2/6.3 no
+  longer claim "no write path to Medicus" — new §6.1 enumerates all eleven
+  write surfaces (W1–W11: both booking flows incl. patient booking-
+  confirmation SMS/email, task creation ×2, inbound-document filing, lab
+  filing, routine-rx commit assist, problem edit/end, duplicate
+  hide/merge) with endpoints, triggers and controls, plus two honestly
+  stated gaps. §2/§5 "passive, read-only" claims corrected.
+- **INTENDED-PURPOSE**: new frozen statement v3.199.1 drafted — **DRAFT,
+  unsigned, not in force** (signature lines empty; v3.16.0 remains the
+  statement in force, now carrying a marked-inaccurate caveat). Adds
+  non-clinical reception/admin staff under practice delegated authority as
+  proposed intended users. A re-freeze convention is now written into the
+  doc.
+- **DPIA** (v1.1 draft): new reception-module section (special-category
+  phone-triage capture, draft persistence, shared-workstation processing,
+  paste-into-Medicus flow), six new risk rows, "writes nothing back"
+  corrected.
+- **cso-review-ledger**: CSN correction recorded as pending;
+  INTENDED-PURPOSE and DPIA added with `last_cso_review_version: null`
+  (never formally reviewed — no review fabricated).
+
+## [v3.199.0] — 2026-07-28
+
+### Booking core extracted to shared/ + slots commit-time patient re-verify (reception feedback, Phase D1)
+
+- **New `shared/booking-core.js`**: the six booking endpoints move out of
+  `slots/booking-api.js` (now a re-export shim keeping tab/patient
+  detection). Dual-mode export (ES + `window.BookingCore`), zero
+  `chrome.tabs` in the core, `createAppointment` throws without an explicit
+  `patientId` — the core can never self-detect the patient.
+- **`findSlotsInWindow`**: pooled multi-day slot search (cap 28 days,
+  concurrency ≤4, weekend skip, abort on 429/5xx, early stop at limit,
+  results sorted + grouped by day). Foundation for the reception 1–4-week
+  window search (D2). TODO recorded to spike the endpoint's native range
+  support.
+- **`releaseReservation` now `keepalive: true`** — panel-close releases
+  were silently dropped before (live bug, fixed for slots too).
+- **slots.js hardening (H-043)**: `doConfirmBooking` now re-resolves the
+  patient (and site) immediately before `createAppointment` and aborts +
+  releases the reservation on any mismatch — the commit-time re-verify the
+  inline widget already had, retrofitted to the panel.
+- First CI coverage for the booking write path: `test-booking-core.js`
+  (86 assertions incl. shim identity and no-tab-detection guarantees).
+
+## [v3.198.0] — 2026-07-28
+
+### Quick actions: new shipped presets + version-gated merge (reception feedback, Phase A)
+
+- **New shipped presets**: actions `Book medication review`, `Book DOAC
+  review`, `Book CVD review`, `Add to jobs list`; roles `Registrar`,
+  `First-contact physio`, `Mental health practitioner` (with mid-sentence
+  `WHO_RENDER` renderings).
+- **Version-gated preset merge** (`DEFAULT_CONFIG.version` 2 +
+  `mergeShippedPresets`): existing installs now receive new shipped presets
+  without losing their own entries. Runs lock-step in both consumers of
+  `triagelens.quickActions` (widget + options editor).
+- **Deletions stick**: removing a shipped preset records a `removedShipped`
+  tombstone so migrations never resurrect it; re-adding the entry clears
+  the tombstone. Options page documents the behaviour.
+- **Fixed a silently-clamped shipped label**: `No appt needed — inform
+  patient` (31 chars, clamped mid-word since ship) is now `No appt —
+  inform patient`. Existing installs keep their stored clamped copy — a
+  one-click delete (which now tombstones) removes it.
+- Tests: label-length/cap assertions over every shipped list + full merge
+  suite (175 checks in `test-quick-actions-core.js`).
+
+## [v3.197.3] — 2026-07-28
+
+### Docs: reception-feedback plan — Dave's decisions folded in
+
+- **Patient messaging (item C) dropped** — replaced by a decision stub
+  recording why (no captured send endpoint; wrong-patient send hazard class)
+  and what survives (D3's booking-confirmation recipient control; inbound
+  photo filing already shipped). Sequencing is now 0 → A → D1 → B → E →
+  D2/D3.
+- **Quick-action presets: user add/remove is a first-class requirement** —
+  one-click per-entry removal in the options editor, and the version-gated
+  merge gains a `removedShipped` tombstone list so deliberately deleted
+  shipped presets are not resurrected on migration.
+- **Custom-routing attestation: CSO or partner signs off** (name + role +
+  timestamp recorded) — resolves the plan's open question 4.
+
+## [v3.197.2] — 2026-07-28
+
+### Docs: reception-feedback plan — virtual-Dave review pass applied
+
+- Reworked `docs/plans/RECEPTION-FEEDBACK-2026-07-28.md` after the review
+  pass. Load-bearing corrections: added **Phase 0 governance resync** (the
+  Clinical Safety Notice / Intended Purpose statement currently assert "no
+  write path" and clinician-only users — both must be re-frozen before
+  reception booking ships); corrected the patient-messaging claim (the
+  booking payload's `bookingConfirmationRecipients` already fires patient
+  SMS/email today — D gains a recipient-channel control); moved E's
+  guardrails out of editable pathway data into **frozen engine constants
+  applied after override resolution**, with an adversarial-fork test, a
+  hard age floor (<1 clinician-only), confirmed-age-only routing, and
+  clinician attestation for custom-pack routing; D gained
+  no-self-detection booking-core identity rules, open-record gating,
+  red-flag suppression, name+DOB read-back, and a panel-only pop-out
+  ruling; B gained `safeguarding`/`sensitive` schema flags (MH drafts skip
+  autosave), split conditional escalations, a caller-vs-patient closing
+  question, and no disposition card at all for mental health;
+  A's preset merge now runs in both storage-key consumers. Sequencing
+  re-ordered: 0 → A → D1 (booking-core refactor) → B → E → D2/D3 → C-spike.
+
+## [v3.197.1] — 2026-07-28
+
+### Docs: reception-feedback build plan
+
+- Added `docs/plans/RECEPTION-FEEDBACK-2026-07-28.md` — the build plan for the
+  reception team's feedback session: GP→Reception preset additions (registrar /
+  first-contact physio / mental health practitioner, medication / DOAC / CVD
+  review, jobs list) with a version-gated preset merge; three new capture
+  pathways (male GU, female GU/gynae, mental health — NG225 no-stratification
+  posture); the honest status of patient messaging (no send primitive exists —
+  spike first, prepare-only v1); embedded slot search/booking in reception on
+  an extracted shared booking-core with 1–4-week window search and H-043
+  commit-time re-verification; and an editable if-this-then-that disposition
+  engine with hard-coded clinician-only guardrails. Docs only — no code change.
+
 ## [v3.197.0] — 2026-07-28
 
 ### GP → Reception quick-actions composer on the task Internal comment

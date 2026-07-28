@@ -1,5 +1,6 @@
 {
   "_comment": "Machine-readable record of the manifest version and date at which each clinical safety document was last formally reviewed and signed off by the Clinical Safety Officer (CSO). Update this file — not check-doc-versions.js — whenever a CSO review is completed. The check script reads these entries to compute 'minor releases behind' and escalate accordingly.",
+  "_comment_pending": "last_cso_review_version/date record SIGNED reviews only. A doc change made between reviews is recorded in that doc's 'notes' prefixed 'PENDING CSO REVIEW (date):' and does NOT move last_cso_review_version — a pending change is not a review. A null last_cso_review_version means the document has never been formally CSO-reviewed.",
   "docs": [
     {
       "file": "docs/CLINICAL-SAFETY-NOTICE.md",
@@ -19,13 +20,19 @@
           "doc_version": "3.13"
         }
       ],
-      "notes": "CSN v3.10. FULL CSO clinical-hazard re-baseline completed at 3.115.0 (Dr Dave Triska, 2026-06-17, signed off by merge): the 3.64->3.113 backlog was closed — §2 intended-purpose updated for the Record tab, Practice Report/Condor, CQC Inspection Readiness, result-rule expansions and chrome/attestation additions; known-limitations 36 (Record snapshot/gap-markers), 37 (CQC supporting-evidence-not-proof) and 38 (Select-all) added; the v3.91.2 attribute-injection-XSS remediation and PDF.js 4.x upgrade are covered via HAZARD-LOG. Prior baseline was 3.64.0 (2026-06-13)."
+      "notes": "STILL PENDING CSO REVIEW after 2026-07-28 — deliberately NOT signed at the H-050/H-051 review, because a CSN review is a whole-document review of a user-facing binding notice and was not in scope of that session; last_cso_review_version therefore stays at 3.177.0. TWO EDITS WERE MADE to this document on 2026-07-28 as part of that review and are themselves pending: (a) section 6.1 gains row W12, the reception booking panel — the surface shipped at v3.202.0 while the table that claims to list every write path in the product did not mention it, and the newly-signed INTENDED-PURPOSE statement cross-references that table as complete; (b) a CORRECTION NOTE was placed above section 6 items 1/8/9, which assert without qualification that nothing is transmitted externally — untrue when the optional Medicus Transactional API integration is enabled (txn.integrationMode hybrid/transactional, off by default, read-only, via a Graysbrook-operated UK proxy; see docs/TRANSACTIONAL-API-INTEGRATION.md). Rewriting items 1/8/9 properly, and deciding what the notice should say about that path, is the first item for the next CSN review. || PENDING CSO REVIEW (2026-07-28): CSN doc version 3.14 corrects sections 6.2/6.3, which asserted 'no write path to Medicus', 'does not submit any data to Medicus' and 'does not assign tasks' — false since the booking and task widgets shipped (H-043 names them). New section 6.1 enumerates all eleven write paths (W1-W11) with triggers, controls and two stated gaps (the slots booking surface historically had open-time patient capture only, without the commit-time re-verification implemented on the inline surfaces — retrofitted by the D1 booking-core extraction, so W1 carries a check-your-release note; and both booking surfaces pass every bookingConfirmationRecipients channel Medicus offers). Section 2 no longer says 'passive, read-only'; section 5 gains item 8. Content synced to v3.199.1; the Product-version pin is deliberately LEFT at 3.177.0 (= last_cso_review_version) so scripts/check-doc-versions.js keeps reporting the gap. Prepared as Phase 0 of docs/plans/RECEPTION-FEEDBACK-2026-07-28.md. NO CSO SIGNATURE GIVEN — last_cso_review_version is unchanged. || CSN v3.10. FULL CSO clinical-hazard re-baseline completed at 3.115.0 (Dr Dave Triska, 2026-06-17, signed off by merge): the 3.64->3.113 backlog was closed — §2 intended-purpose updated for the Record tab, Practice Report/Condor, CQC Inspection Readiness, result-rule expansions and chrome/attestation additions; known-limitations 36 (Record snapshot/gap-markers), 37 (CQC supporting-evidence-not-proof) and 38 (Select-all) added; the v3.91.2 attribute-injection-XSS remediation and PDF.js 4.x upgrade are covered via HAZARD-LOG. Prior baseline was 3.64.0 (2026-06-13)."
     },
     {
       "file": "docs/HAZARD-LOG.md",
-      "last_cso_review_version": "3.177.0",
-      "last_cso_review_date": "2026-07-22",
+      "last_cso_review_version": "3.202.0",
+      "last_cso_review_date": "2026-07-28",
       "incremental_reviews": [
+        {
+          "version": "3.202.0",
+          "date": "2026-07-28",
+          "scope": "H-050 (reception disposition suggestion) and H-051 (reception-desk booking) reviewed against code and signed off; both move from 'pending CSO review' to Accepted (ALARP). TWO CONTROLS CHANGED AT REVIEW: (a) the rash pathway's automatic pharmacyFirstEligible routing rule removed (one age band standing in for three PF conditions, and its match terms also catch cellulitis, which PF does not cover); (b) the booking gate now splits positive red flags (card hidden) from unanswered ones (explanatory note), because unanswered is the normal state of every capture and a silently absent card drives booking outside the gate. H-051's four named review questions answered in full in its Acceptability row (reception may hold the capability; name+DOB read-back stands and NHS number is NOT to be read back; all-channels default stands until the D2 capture, then match Medicus; hidden-vs-note split as above). NOT a full re-baseline — the rest of the register was not re-examined. Recorded via Dave's chat instruction of 2026-07-28 delegating completion to his digital twin; review performed by that delegated virtual-Dave agent.",
+          "doc_version": "3.18"
+        },
         {
           "version": "3.114.0",
           "date": "2026-06-17",
@@ -45,13 +52,34 @@
           "doc_version": "3.16"
         }
       ],
-      "notes": "Hazard Log v3.16. CSO sign-off 2026-07-22 (Dr Dave Triska, via digital twin per session delegation) of the v3.15 Triage North Star wave 1 sync; H-045-H-048 added and accepted, no residual risk above 3. Prior full re-baseline remains 3.115.0 (2026-06-17)."
+      "notes": "Hazard Log v3.18. CSO sign-off 2026-07-28 (Dr D. Triska; review performed by delegated virtual-Dave agent at Dave's instruction, chat) of H-050 and H-051, with two controls changed at review — see the 3.202.0 incremental entry. Product-version pin moved 3.177.0 -> 3.202.0. Ledger continuity: H-049 (doc v3.17), H-050 and H-051 were added by automated syncs; H-050/H-051 arrived with no version-history row and the header document version was left at 3.16 — the 3.18 entry closes that gap. OPEN, NOT CLOSED BY THIS REVIEW: the optional Medicus Transactional API proxy read path (shared/txn-transport.js, shared/data-source-transactional.js, service-worker.js txnFetchPatientBundle; txn.integrationMode defaults to 'session' so it is dormant) has NO hazard entry and no DPIA assessment. It was found during the INTENDED-PURPOSE review and is named in that document's v3.202.0 change-log row and in a correction note in CLINICAL-SAFETY-NOTICE.md section 6. No practice should enable hybrid/transactional mode until it is covered. Prior full re-baseline remains 3.115.0 (2026-06-17)."
     },
     {
       "file": "docs/SOUP.md",
       "last_cso_review_version": "3.175.0",
       "last_cso_review_date": "2026-07-18",
       "notes": "SOUP v1.10. Reissued at 3.175.0 on 2026-07-18 (CSO Dr Dave Triska, recorded via PR #216): no SOUP changes since 3.115.0 — PDF.js 4.2.67 (+ worker), Chart.js 4.4.1 and D3.js 7.8.5 all re-verified byte-identical via scripts/verify-vendor.js; the v3.175.0 Patient Alerts module adds no third-party code. Prior reissue was v1.9 at 3.115.0 (2026-06-17)."
+    },
+    {
+      "file": "docs/INTENDED-PURPOSE.md",
+      "last_cso_review_version": "3.202.0",
+      "last_cso_review_date": "2026-07-28",
+      "incremental_reviews": [
+        {
+          "version": "3.202.0",
+          "date": "2026-07-28",
+          "scope": "First formally recorded CSO review of this document. The v3.199.1 draft was reviewed, AMENDED, re-issued as frozen statement v3.202.0 and SIGNED; v3.16.0 and the never-signed v3.199.1 draft are both retained per the re-freeze convention. Write-capability paragraph verified against code (every POST write site in the repo maps onto a CLINICAL-SAFETY-NOTICE.md section 6.1 row; the two macro surfaces that drive Medicus's own controls are stated as such) — accurate, signed as drafted. Intended-user amendment (non-clinical reception/admin staff under practice delegated authority) and the shared-front-desk intended-environment amendment promoted to in force. AMENDMENT MADE AT REVIEW: a 'Data flow and egress' paragraph was added because the draft repeated the blanket claim that no patient data leaves the browser, which is false when the optional Medicus Transactional API integration is enabled (txn.integrationMode hybrid/transactional, off by default, read-only, via a Graysbrook-operated UK proxy). Signing that blanket claim would have repeated, in the document written to fix exactly this failure mode, the error that made v3.16.0 out of date. Signed off: Dr D. Triska (CSO) — review performed by delegated virtual-Dave agent at Dave's instruction, 2026-07-28 (chat).",
+          "doc_version": "3.202.0"
+        }
+      ],
+      "notes": "Frozen intended-purpose statement v3.202.0 SIGNED 2026-07-28 and in force. This is the first formally recorded CSO review of the document (v3.16.0, May 2026, carried no signature block — hence the previously null entry, which was left null rather than fabricated). OPEN ACTIONS created by the signature and NOT closed by it: (i) CLINICAL-SAFETY-NOTICE.md section 6 items 1/8/9 still assert unqualified 'no external transmission' and must be rewritten at the next CSN review — a correction note has been placed above them in the interim; (ii) DPIA.md carries no controller/processor or transfer assessment of the Transactional API proxy path; (iii) HAZARD-LOG.md carries no hazard entry for it. Until (i)-(iii) are closed no practice should set txn.integrationMode to hybrid or transactional. Phase D of docs/plans/RECEPTION-FEEDBACK-2026-07-28.md is no longer gated: its prerequisite signature exists. Not pinned by scripts/check-doc-versions.js."
+    },
+    {
+      "file": "docs/DPIA.md",
+      "last_cso_review_version": null,
+      "last_cso_review_date": null,
+      "incremental_reviews": [],
+      "notes": "Never formally reviewed or signed — the document has been 'DRAFT — pending sign-off' since v1.0 (2026-06-14), so last_cso_review_version is null rather than fabricated. PENDING SIGN-OFF (2026-07-28): doc version 1.1 adds section 2.1 (Reception module — special-category phone-capture text; transient reception.captureDraft persistence at 4 h TTL, never backed up, with sensitive-pathway autosave exclusion marked PLANNED for phase B; shared front-desk workstation processing; paste-into-Medicus flow with Medicus as system of record; planned reception booking marked not shipped), a section 4 paragraph recording NO change of lawful basis (Art.6(1)(e) / Art.9(2)(h) unchanged), five reception rows plus one no-egress row in the section 5 risk table, and a correction to the section 2 claim that the extension 'writes nothing back to Medicus'. Residual for the shared-workstation row is Medium, resting on practice-side workstation controls. NO SIGN-OFF GIVEN. Not pinned by scripts/check-doc-versions.js."
     },
     {
       "file": "docs/feature-list.md",

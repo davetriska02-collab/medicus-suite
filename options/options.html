@@ -1956,6 +1956,78 @@
             </div>
           </details>
 
+          <h2 style="font-size: 14px; margin: 24px 0 6px">Escalation contacts</h2>
+          <p class="section-desc" style="margin-top: 0">
+            Free text shown to reception staff exactly as typed. The
+            <strong>safeguarding lead</strong> is named on the escalation banner whenever a red flag marked as a
+            safeguarding concern is answered &ldquo;yes&rdquo;. The <strong>crisis line</strong> is the closing line on
+            pathways marked <em>sensitive</em> (e.g. mental health) and is also written into the pasted summary. Leave
+            either blank to use the generic wording.
+          </p>
+          <div style="display: flex; flex-direction: column; gap: 10px; max-width: 640px">
+            <label style="font-size: 12px; color: var(--text-2); display: flex; flex-direction: column; gap: 4px">
+              Safeguarding lead contact
+              <input
+                type="text"
+                id="rcpoSafeguardingContact"
+                maxlength="200"
+                placeholder="e.g. Dr A Patel, safeguarding lead — ext 214"
+                style="font-size: 12px; padding: 5px 8px"
+              />
+            </label>
+            <label style="font-size: 12px; color: var(--text-2); display: flex; flex-direction: column; gap: 4px">
+              Crisis line text (sensitive pathways)
+              <input
+                type="text"
+                id="rcpoCrisisLine"
+                maxlength="200"
+                placeholder="If the patient needs urgent mental-health support now: NHS 111, option 2 (24/7)"
+                style="font-size: 12px; padding: 5px 8px"
+              />
+            </label>
+            <span id="rcpoContactsStatus" style="font-size: 11px; color: var(--text-3)"></span>
+          </div>
+
+          <h2 style="font-size: 14px; margin: 24px 0 6px">Custom routing sign-off</h2>
+          <p class="section-desc" style="margin-top: 0">
+            Bundled pathways can suggest where a patient could safely go &mdash; Pharmacy First, a nurse, a paramedic
+            practitioner or a GP &mdash; once every red-flag question has been answered and none is positive. It is
+            always a <strong>suggestion</strong>: nothing is booked, and the receptionist always also offers a clinician
+            callback. <strong>Pathways you have written or edited yourself suggest nothing but a clinician</strong>
+            until the sign-off below is recorded. Mental-health and other sensitive pathways never suggest a route at
+            all, and no suggestion is ever shown while a red flag is positive or unanswered.
+          </p>
+          <p class="section-desc" style="margin-top: 0">
+            <strong>Routing sign-off: CSO or partner only.</strong> By recording it you confirm that a clinical safety
+            officer or a practice partner has reviewed the routing rules on the practice's custom and edited pathways
+            and accepts responsibility for them. It is recorded with a name, a role and a timestamp, and can be revoked
+            at any time &mdash; revoking immediately returns custom pathways to clinician-only.
+          </p>
+          <div id="rcpoRoutingState" style="margin-bottom: 10px"></div>
+          <div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; max-width: 640px">
+            <label style="font-size: 12px; color: var(--text-2); display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 220px">
+              Name of the person signing off
+              <input
+                type="text"
+                id="rcpoRoutingName"
+                maxlength="120"
+                placeholder="e.g. Dr A Patel"
+                style="font-size: 12px; padding: 5px 8px"
+              />
+            </label>
+            <label style="font-size: 12px; color: var(--text-2); display: flex; flex-direction: column; gap: 4px">
+              Role
+              <select id="rcpoRoutingRole" style="font-size: 12px; padding: 5px 8px">
+                <option value="cso">Clinical safety officer</option>
+                <option value="partner">Partner</option>
+              </select>
+            </label>
+            <button class="primary" id="rcpoRoutingAttest" style="font-size: 11px; padding: 6px 14px">
+              Record sign-off
+            </button>
+            <span id="rcpoRoutingStatus" style="font-size: 11px; color: var(--text-3)"></span>
+          </div>
+
           <h2 style="font-size: 14px; margin: 24px 0 6px">Quick-wins alert &mdash; chips shown to reception</h2>
           <p class="section-desc" style="margin-top: 0">
             The Reception tab shows a single green/amber/red status for the open patient. Untick any
@@ -1989,7 +2061,10 @@
               for this patient, the task comes back to you &mdash; name the clinician explicitly when it matters.<br />
               &bull; <strong>Names are unvalidated free text.</strong> Nothing checks a name against your staff list, so
               keep this list current when staff join or leave &mdash; a leaver's name still composes a perfectly
-              readable instruction that nobody can act on.
+              readable instruction that nobody can act on.<br />
+              &bull; <strong>Removals stick.</strong> Use &#10005; to delete an entry. If it was one the suite ships, it
+              stays deleted &mdash; a later update will not put it back. Type it in again to bring it back (and
+              &ldquo;Restore shipped defaults&rdquo; below restores the whole shipped set).
             </p>
           </div>
 

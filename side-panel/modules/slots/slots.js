@@ -1009,7 +1009,30 @@ function doCancelBooking() {
   render();
 }
 
+// Commit-time wrong-patient abort (H-043). Releases the held reservation —
+// never leave a slot locked by a booking we refused to make — drops back to the
+// browse step and surfaces the reason there (bk.slotsError is what renders in
+// browse; bk.confirmError is set too so the message survives either view).
+function abortBookingOnIdentityMismatch(message) {
+  const { bk } = state;
+  if (bk.reservationId && bk.apiBase) {
+    releaseReservation(bk.apiBase, bk.reservationId).catch(() => {});
+  }
+  bk.reservationId = null;
+  bk.selectedSlot = null;
+  bk.formData = null;
+  bk.step = 'browse';
+  bk.slots = null;
+  bk.hasSearched = false;
+  bk.slotsError = message;
+  bk.confirmError = message;
+}
+
 async function doConfirmBooking() {
+  // `bk` is the pinned booking-state instance for every write below: `state` is
+  // a module singleton and `state.bk` is never reassigned, so this destructure
+  // is the slots-module equivalent of booking-inline.js's `const st = s` pin —
+  // nothing awaited here can land in a different booking state (H-043).
   const { bk } = state;
   if (bk.confirming || !bk.reservationId || !bk.patientId || !bk.selectedSlot) return;
   bk.confirming = true;
@@ -1045,6 +1068,27 @@ async function doConfirmBooking() {
       bookingConfirmationRecipients: (formData.bookingConfirmationRecipientOptions || []).map((o) => o.value),
       rescheduledAppointmentVersionId: null,
     };
+
+    // ── COMMIT-TIME WRONG-PATIENT RE-VERIFICATION (plan D1.5, hazard H-043) ──
+    // Until now slots.js captured the patient ONCE, at panel open
+    // (doInitBooking), and then booked against that captured id however much
+    // later — while booking-inline.js has re-verified at commit since the
+    // 2026-07-18 audit. Booking is a clinical WRITE: re-detect the Medicus tab
+    // and re-resolve its patient immediately before createAppointment, and
+    // abort on any mismatch or failure to resolve. Note the apiBase check —
+    // a different practice/site in the tab means the captured id is being sent
+    // to the wrong instance even if the UUIDs happened to match.
+    const verifyTab = await detectMedicusTab();
+    const verifiedPatientId = verifyTab ? await detectPatientId(verifyTab.tab) : null;
+    if (!verifiedPatientId || verifiedPatientId !== bk.patientId || verifyTab.apiBase !== bk.apiBase) {
+      abortBookingOnIdentityMismatch(
+        verifiedPatientId
+          ? 'The patient open in Medicus has changed — booking cancelled, nothing was booked. Open the right record and search again.'
+          : 'Could not re-verify the patient in Medicus — booking cancelled, nothing was booked. Open the patient record and try again.'
+      );
+      return;
+    }
+
     const result = await createAppointment(bk.apiBase, payload);
     bk.bookedId = result.appointmentId;
     bk.reservationId = null; // server releases on create

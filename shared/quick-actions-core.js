@@ -31,6 +31,8 @@
 //   composeLine({action, who, when, note})  — the one sentence ('' when no action)
 //   appendToComment(existing, line)         — append-only join, never rewrites `existing`
 //   sanitiseConfig(raw)                     — a valid config from ANY input
+//   mergeShippedPresets(raw)                — version-gated union of new shipped presets
+//   normaliseLabel(label) / isShippedLabel(listKey, label) — tombstone helpers
 
 'use strict';
 
@@ -41,6 +43,7 @@
     fallback: 140, // one "if not / other" suggestion, and the free-text note itself
     list: 24, // entries per list
     line: 240, // the whole composed sentence
+    tombstones: 96, // removedShipped entries (4 lists × `list`) — see mergeShippedPresets
   };
 
   // Prototype-pollution defence for user-supplied set keys — same doctrine as the
@@ -51,9 +54,13 @@
   // Deliberately short lists: this is a picker a GP taps mid-triage, not a taxonomy.
   // Per-surgery edits happen on the options page (Quick Actions section).
 
+  // `version` gates mergeShippedPresets(): bump it whenever an entry is ADDED to a
+  // list below, or existing installs (which all carry a stored config) never see it —
+  // the same stranded-defaults failure class as defaults.json's integer version.
   const DEFAULT_CONFIG = deepFreeze({
-    version: 1,
+    version: 2,
     activeSet: 'default',
+    removedShipped: [],
     sets: {
       default: {
         actions: [
@@ -62,8 +69,15 @@
           'Send booking link',
           'Phone patient',
           'Book bloods (HCA/phlebotomy)',
+          'Book medication review',
+          'Book DOAC review',
+          'Book CVD review',
           'Add to duty list',
-          'No appt needed — inform patient',
+          'Add to jobs list',
+          // "No appt needed — inform patient" was 31 chars and silently clamped to
+          // "No appt needed — inform pati" (QA_LIMITS.label) — the exact failure the
+          // label-length assertion in test-quick-actions-core.js now guards.
+          'No appt — inform patient',
           'FYI only — no action',
         ],
         who: [
@@ -71,10 +85,13 @@
           'Usual GP',
           'Me',
           'Duty doctor',
+          'Registrar',
           'Practice nurse',
           'HCA / phlebotomy',
           'Pharmacist',
           'ANP / Paramedic',
+          'First-contact physio',
+          'Mental health practitioner',
         ],
         when: [
           'Today',
@@ -103,10 +120,16 @@
     'Usual GP': 'their usual GP',
     Me: 'me',
     'Duty doctor': 'the duty doctor',
+    Registrar: 'the registrar',
     'Practice nurse': 'the practice nurse',
     'HCA / phlebotomy': 'HCA/phlebotomy',
     Pharmacist: 'the pharmacist',
     'ANP / Paramedic': 'the ANP/paramedic',
+    // "a", not "the": a practice has one duty doctor on a given day but may have
+    // several of these, and "book with the first-contact physio" reads as a named
+    // individual reception is expected to identify.
+    'First-contact physio': 'a first-contact physio',
+    'Mental health practitioner': 'a mental health practitioner',
   };
 
   const WHEN_RENDER = {
@@ -152,6 +175,26 @@
 
   function capitalise(s) {
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  }
+
+  // The identity used for "is this the same entry?" everywhere outside rendering:
+  // trim, collapse internal whitespace, lower-case. Deliberately loose, because it
+  // decides whether a migration RE-ADDS a preset the practice already has under a
+  // slightly different casing ("Duty Doctor") — a duplicate chip is the failure.
+  function normaliseLabel(label) {
+    return String(label ?? '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+  }
+
+  // Is this label one the suite ships for that list? (Only shipped labels are worth
+  // tombstoning — a practice's own entry is never re-added by a migration.)
+  function isShippedLabel(listKey, label) {
+    if (!LIST_KEYS.includes(listKey)) return false;
+    const n = normaliseLabel(label);
+    if (!n) return false;
+    return DEFAULT_CONFIG.sets.default[listKey].some((x) => normaliseLabel(x) === n);
   }
 
   function renderWho(who) {
@@ -257,6 +300,23 @@
     return out;
   }
 
+  // Tombstones: normalised labels of SHIPPED entries the practice deleted. Stored
+  // normalised (that is the comparison key), de-duplicated, and capped like every
+  // other list so a corrupt import cannot grow unbounded.
+  function sanitiseTombstones(arr) {
+    const out = [];
+    const seen = new Set();
+    for (const x of Array.isArray(arr) ? arr : []) {
+      if (typeof x !== 'string') continue;
+      const n = normaliseLabel(clamp(x, QA_LIMITS.fallback));
+      if (!n || seen.has(n)) continue;
+      seen.add(n);
+      out.push(n);
+      if (out.length >= QA_LIMITS.tombstones) break;
+    }
+    return out;
+  }
+
   function sanitiseConfig(raw) {
     const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
 
@@ -280,7 +340,58 @@
     const wanted = clamp(src.activeSet, QA_LIMITS.label);
     const activeSet = wanted && Object.prototype.hasOwnProperty.call(sets, wanted) ? wanted : 'default';
 
-    return { version, activeSet, sets };
+    return { version, activeSet, removedShipped: sanitiseTombstones(src.removedShipped), sets };
+  }
+
+  // ── mergeShippedPresets ───────────────────────────────────────────────────────
+  //
+  // Version-gated migration: a practice with a stored config would otherwise never
+  // receive a preset added after their first save (the stranded-defaults failure
+  // class — see CHANGELOG v3.75.2). When the stored `version` is behind the shipped
+  // one, union in shipped entries the config does not already have, matching on
+  // normalised label. Pure and idempotent: nothing is ever removed or reordered,
+  // user entries keep their positions, and a second run is a no-op.
+  //
+  // MUST be called on BOTH storage-key load paths in lock-step — the injected widget
+  // (content-scripts/reception-quick-actions.js) and the options editor
+  // (options/options.js initQuickActions) — or whichever surface loads second saves
+  // a stale-version config back and un-migrates the practice.
+  //
+  // Deletions survive: a shipped label in `removedShipped` is skipped, so a preset
+  // the practice deliberately deleted is not resurrected on every version bump.
+  //
+  // Returns { cfg, changed } — `changed` is the caller's cue to persist (the version
+  // stamp alone must be written, or the migration re-runs on every load).
+  function mergeShippedPresets(raw) {
+    const cfg = sanitiseConfig(raw);
+    if (cfg.version >= DEFAULT_CONFIG.version) return { cfg, changed: false };
+
+    const tombstoned = new Set(cfg.removedShipped);
+
+    for (const setName of Object.keys(cfg.sets)) {
+      const set = cfg.sets[setName];
+      for (const key of LIST_KEYS) {
+        const list = set[key];
+        // An EMPTY list is left empty on purpose: it is either a practice's second
+        // set (sanitiseSet ships those empty by design) or a list the practice
+        // cleared. Seeding either one from the shipped defaults would be a
+        // resurrection, not a migration.
+        if (!Array.isArray(list) || list.length === 0) continue;
+        const present = new Set(list.map(normaliseLabel));
+        for (const shipped of DEFAULT_CONFIG.sets.default[key]) {
+          const n = normaliseLabel(shipped);
+          if (!n || present.has(n) || tombstoned.has(n)) continue;
+          // Never displace a user entry: sanitiseConfig would slice the overflow
+          // off the TAIL, which is exactly where the practice's own entries sit.
+          if (list.length >= QA_LIMITS.list) break;
+          list.push(shipped);
+          present.add(n);
+        }
+      }
+    }
+
+    cfg.version = DEFAULT_CONFIG.version;
+    return { cfg, changed: true };
   }
 
   // ── Module export (dual-mode: Node require OR browser global) ─────────────────
@@ -290,6 +401,9 @@
     composeLine,
     appendToComment,
     sanitiseConfig,
+    mergeShippedPresets,
+    normaliseLabel,
+    isShippedLabel,
     // Exposed so the options-page editor and the tests can pin the rendering maps.
     WHO_RENDER,
     WHEN_RENDER,

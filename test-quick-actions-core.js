@@ -77,6 +77,43 @@ eq(
   'FYI action collapses to the fixed line'
 );
 
+// The v2 presets (reception feedback 2026-07-28) — pinned like every other line.
+eq(
+  QA.composeLine({ action: 'Book DOAC review', who: 'Registrar', when: 'Within 2 weeks' }),
+  'Book DOAC review with the registrar, within 2 weeks.',
+  'DOAC review + registrar'
+);
+eq(
+  QA.composeLine({ action: 'Book medication review', who: 'Pharmacist', when: 'Within 4 weeks' }),
+  'Book medication review with the pharmacist, within 4 weeks.',
+  'medication review + pharmacist'
+);
+eq(
+  QA.composeLine({ action: 'Book CVD review', who: 'Practice nurse', when: 'Within 4 weeks' }),
+  'Book CVD review with the practice nurse, within 4 weeks.',
+  'CVD review + practice nurse'
+);
+eq(
+  QA.composeLine({ action: 'Book F2F appt', who: 'First-contact physio', when: 'This week' }),
+  'Book F2F appt with a first-contact physio, this week.',
+  'first-contact physio reads with "a", not "the"'
+);
+eq(
+  QA.composeLine({ action: 'Book telephone appt', who: 'Mental health practitioner', when: 'Within 2 weeks' }),
+  'Book telephone appt with a mental health practitioner, within 2 weeks.',
+  'mental health practitioner reads mid-sentence'
+);
+eq(
+  QA.composeLine({ action: 'Add to jobs list', who: '', when: 'This week' }),
+  'Add to jobs list, this week.',
+  'jobs list is a plain instruction — no who clause needed'
+);
+eq(
+  QA.composeLine({ action: 'No appt — inform patient' }),
+  'No appt — inform patient.',
+  'the "no appointment" action composes in full (it used to clamp to "…inform pati")'
+);
+
 // ── who rendering map ─────────────────────────────────────────────────────────
 console.log('\n--- who rendering ---');
 
@@ -85,10 +122,13 @@ const WHO_EXPECT = {
   'Usual GP': 'their usual GP',
   Me: 'me',
   'Duty doctor': 'the duty doctor',
+  Registrar: 'the registrar',
   'Practice nurse': 'the practice nurse',
   'HCA / phlebotomy': 'HCA/phlebotomy',
   Pharmacist: 'the pharmacist',
   'ANP / Paramedic': 'the ANP/paramedic',
+  'First-contact physio': 'a first-contact physio',
+  'Mental health practitioner': 'a mental health practitioner',
 };
 for (const [label, rendered] of Object.entries(WHO_EXPECT)) {
   eq(
@@ -159,6 +199,37 @@ eq(
   QA.composeLine({ action: 'Phone patient', when: 'next Tuesday' }),
   'Phone patient, next Tuesday.',
   'already-lower-case custom timeframe unchanged'
+);
+
+// ── shipped label lengths ─────────────────────────────────────────────────────
+// Every shipped label must survive sanitiseConfig()'s clamp UNCHANGED. An
+// over-long preset does not fail loudly — it is silently sliced mid-word ("Book
+// mental health practition") and ships that way to a receptionist.
+console.log('\n--- shipped labels fit their limits ---');
+
+for (const [setName, set] of Object.entries(QA.DEFAULT_CONFIG.sets)) {
+  for (const key of ['actions', 'who', 'when', 'fallbacks']) {
+    const limit = key === 'fallbacks' ? QA.QA_LIMITS.fallback : QA.QA_LIMITS.label;
+    const tooLong = set[key].filter((label) => label.length > limit);
+    check(
+      tooLong.length === 0,
+      `every shipped ${setName}.${key} label is ≤ ${limit} chars${tooLong.length ? ` (over: ${JSON.stringify(tooLong)})` : ''}`
+    );
+    const untrimmed = set[key].filter((label) => label !== label.trim());
+    check(untrimmed.length === 0, `no shipped ${setName}.${key} label has stray whitespace`);
+    check(
+      set[key].length <= QA.QA_LIMITS.list,
+      `shipped ${setName}.${key} is within the ${QA.QA_LIMITS.list}-entry cap`
+    );
+  }
+}
+
+// The clamp itself, applied to the shipped config — belt and braces, because the
+// length check above would pass if QA_LIMITS ever changed shape.
+const roundTripped = QA.sanitiseConfig(JSON.parse(JSON.stringify(QA.DEFAULT_CONFIG)));
+check(
+  JSON.stringify(roundTripped.sets) === JSON.stringify(QA.DEFAULT_CONFIG.sets),
+  'the shipped config survives sanitiseConfig() byte-for-byte (nothing clamps)'
 );
 
 // ── FYI suppression ───────────────────────────────────────────────────────────
@@ -396,6 +467,245 @@ check(
 const secondSet = QA.sanitiseConfig({ sets: { branch: { actions: ['Book at branch'] } } });
 check(JSON.stringify(secondSet.sets.branch.who) === '[]', 'a non-default set gets empty lists, not shipped defaults');
 check(!!secondSet.sets.default, 'sets.default is always created even when the input never mentions it');
+
+// ── removedShipped tombstones (sanitiseConfig) ────────────────────────────────
+console.log('\n--- removedShipped tombstones ---');
+
+check(JSON.stringify(QA.sanitiseConfig(null).removedShipped) === '[]', 'removedShipped defaults to an empty array');
+check(
+  JSON.stringify(QA.sanitiseConfig({ removedShipped: 'nope' }).removedShipped) === '[]',
+  'a non-array removedShipped falls back to []'
+);
+check(
+  JSON.stringify(
+    QA.sanitiseConfig({ removedShipped: ['  Duty   Doctor  ', 'Pharmacist', 'pharmacist', 42, null, '', ['x']] })
+      .removedShipped
+  ) === JSON.stringify(['duty doctor', 'pharmacist']),
+  'tombstones are normalised, de-duplicated, and non-strings dropped'
+);
+check(
+  QA.sanitiseConfig({ removedShipped: ['X'.repeat(300)] }).removedShipped[0].length === 140,
+  'a tombstone label is clamped to 140 characters'
+);
+check(
+  QA.sanitiseConfig({ removedShipped: Array.from({ length: 300 }, (_, i) => `Entry ${i}`) }).removedShipped.length ===
+    QA.QA_LIMITS.tombstones,
+  `removedShipped is capped at ${QA.QA_LIMITS.tombstones} entries`
+);
+// options.js re-sanitises cfg on every save — a tombstone must survive that.
+check(
+  QA.sanitiseConfig(QA.sanitiseConfig({ removedShipped: ['Pharmacist'] })).removedShipped[0] === 'pharmacist',
+  'removedShipped survives a sanitise round-trip (every save re-sanitises)'
+);
+
+// ── normaliseLabel / isShippedLabel ───────────────────────────────────────────
+console.log('\n--- label identity helpers ---');
+
+eq(QA.normaliseLabel('  Duty   Doctor  '), 'duty doctor', 'normaliseLabel trims, collapses whitespace, lower-cases');
+eq(QA.normaliseLabel(null), '', 'normaliseLabel(null) → ""');
+check(QA.isShippedLabel('who', 'duty  DOCTOR') === true, 'isShippedLabel matches on the normalised label');
+check(QA.isShippedLabel('who', 'Nat') === false, "a practice's own name is not a shipped label");
+check(QA.isShippedLabel('actions', 'Duty doctor') === false, 'isShippedLabel is per-list');
+check(QA.isShippedLabel('nonsense', 'Duty doctor') === false, 'an unknown list key is never shipped');
+check(QA.isShippedLabel('who', '  ') === false, 'a blank label is never shipped');
+
+// ── mergeShippedPresets ───────────────────────────────────────────────────────
+// The v1 shipped lists, verbatim, plus a practice's own entries — i.e. exactly
+// what sits in chrome.storage for a surgery that saved before v2 shipped.
+console.log('\n--- mergeShippedPresets ---');
+
+const V1_ACTIONS = [
+  'Book F2F appt',
+  'Book telephone appt',
+  'Send booking link',
+  'Phone patient',
+  'Book bloods (HCA/phlebotomy)',
+  'Add to duty list',
+  'No appt needed — inform patient',
+  'FYI only — no action',
+];
+const V1_WHO = [
+  'Any GP',
+  'Usual GP',
+  'Me',
+  'Duty doctor',
+  'Practice nurse',
+  'HCA / phlebotomy',
+  'Pharmacist',
+  'ANP / Paramedic',
+];
+const v1Config = () => ({
+  version: 1,
+  activeSet: 'default',
+  sets: {
+    default: {
+      actions: V1_ACTIONS.concat(['Chase secondary care letter']),
+      who: V1_WHO.concat(['Nat', 'Dr Okonkwo']),
+      when: [
+        'Today',
+        'Tomorrow',
+        'Within 48h',
+        'This week',
+        'Within 2 weeks',
+        'Within 4 weeks',
+        'Routine (next available)',
+      ],
+      fallbacks: ['if no answer, text booking link'],
+    },
+  },
+});
+
+const migrated = QA.mergeShippedPresets(v1Config());
+check(migrated.changed === true, 'a v1 config reports changed → the caller persists it');
+check(migrated.cfg.version === QA.DEFAULT_CONFIG.version, 'the new version is stamped on the migrated config');
+
+const mWho = migrated.cfg.sets.default.who;
+const mActions = migrated.cfg.sets.default.actions;
+check(
+  JSON.stringify(mWho.slice(0, V1_WHO.length + 2)) === JSON.stringify(V1_WHO.concat(['Nat', 'Dr Okonkwo'])),
+  'existing entries keep their exact order and position — new ones are appended after them'
+);
+for (const label of ['Registrar', 'First-contact physio', 'Mental health practitioner']) {
+  check(mWho.indexOf(label) > -1, `new shipped who "${label}" is merged in`);
+}
+for (const label of ['Book medication review', 'Book DOAC review', 'Book CVD review', 'Add to jobs list']) {
+  check(mActions.indexOf(label) > -1, `new shipped action "${label}" is merged in`);
+}
+check(mActions.indexOf('Chase secondary care letter') > -1, "the practice's own action is untouched");
+check(
+  mWho.filter((w) => w === 'Pharmacist').length === 1,
+  'an entry the practice already has is not duplicated by the union'
+);
+check(
+  JSON.stringify(migrated.cfg.sets.default.when) === JSON.stringify(v1Config().sets.default.when),
+  'a list with no new shipped entries is left exactly as authored'
+);
+check(
+  migrated.cfg.sets.default.fallbacks.length === QA.DEFAULT_CONFIG.sets.default.fallbacks.length,
+  'the fallbacks the practice had removed pre-tombstone are unioned back (documented v1 limitation)'
+);
+
+// Idempotent: the second run is a no-op, so the widget and the options editor can
+// both call it on every load without fighting over the storage key.
+const again = QA.mergeShippedPresets(migrated.cfg);
+check(again.changed === false, 're-running the merge reports no change');
+check(
+  JSON.stringify(again.cfg) === JSON.stringify(migrated.cfg),
+  're-running the merge produces a byte-identical config (idempotent)'
+);
+const thrice = QA.mergeShippedPresets(again.cfg);
+check(JSON.stringify(thrice.cfg) === JSON.stringify(migrated.cfg), 'still identical on a third run');
+
+// Purity: the caller's object is never mutated in place.
+const beforeMerge = v1Config();
+const beforeJson = JSON.stringify(beforeMerge);
+QA.mergeShippedPresets(beforeMerge);
+check(JSON.stringify(beforeMerge) === beforeJson, 'mergeShippedPresets does not mutate its argument');
+
+// A config already on the current version is left alone entirely.
+const current = QA.mergeShippedPresets({ version: QA.DEFAULT_CONFIG.version, sets: { default: { who: ['Nat'] } } });
+check(current.changed === false, 'a current-version config is not touched');
+check(JSON.stringify(current.cfg.sets.default.who) === JSON.stringify(['Nat']), 'and its lists are left as authored');
+
+// Tombstones: a deleted shipped preset is NOT resurrected.
+const tombstoned = QA.mergeShippedPresets({
+  version: 1,
+  removedShipped: ['pharmacist', 'REGISTRAR', 'book doac review'],
+  sets: {
+    default: {
+      actions: V1_ACTIONS.slice(),
+      who: V1_WHO.filter((w) => w !== 'Pharmacist'),
+      when: ['Today'],
+      fallbacks: ['if no answer, text booking link'],
+    },
+  },
+});
+check(tombstoned.cfg.sets.default.who.indexOf('Pharmacist') === -1, 'a tombstoned shipped who is not resurrected');
+check(tombstoned.cfg.sets.default.who.indexOf('Registrar') === -1, 'a tombstoned NEW shipped who is never added');
+check(
+  tombstoned.cfg.sets.default.actions.indexOf('Book DOAC review') === -1,
+  'a tombstoned new shipped action is never added (tombstone match is case-insensitive)'
+);
+check(
+  tombstoned.cfg.sets.default.who.indexOf('Mental health practitioner') > -1,
+  'untombstoned new presets still arrive alongside the tombstoned ones'
+);
+check(
+  JSON.stringify(tombstoned.cfg.removedShipped) === JSON.stringify(['pharmacist', 'registrar', 'book doac review']),
+  'the tombstone list itself survives the migration'
+);
+
+// The options editor's delete → re-add cycle, using the same exported helpers the
+// editor calls (options/options.js tombstone()/untombstone()).
+function editorDelete(cfg, key, label) {
+  const set = cfg.sets[cfg.activeSet];
+  set[key] = set[key].filter((x) => x !== label);
+  if (QA.isShippedLabel(key, label)) {
+    const n = QA.normaliseLabel(label);
+    if (!cfg.removedShipped.includes(n)) cfg.removedShipped.push(n);
+  }
+  return QA.sanitiseConfig(cfg); // the editor re-sanitises on every save
+}
+function editorAdd(cfg, key, label) {
+  cfg.sets[cfg.activeSet][key].push(label);
+  const n = QA.normaliseLabel(label);
+  cfg.removedShipped = cfg.removedShipped.filter((t) => t !== n);
+  return QA.sanitiseConfig(cfg);
+}
+
+let lifecycle = QA.mergeShippedPresets(v1Config()).cfg;
+lifecycle = editorDelete(lifecycle, 'who', 'Registrar');
+check(lifecycle.removedShipped.indexOf('registrar') > -1, 'deleting a shipped entry records its tombstone');
+lifecycle.version = 1; // pretend the next shipped version has landed
+lifecycle = QA.mergeShippedPresets(lifecycle).cfg;
+check(lifecycle.sets.default.who.indexOf('Registrar') === -1, 'delete → migrate → still gone');
+
+lifecycle = editorAdd(lifecycle, 'who', 'Registrar');
+check(lifecycle.removedShipped.indexOf('registrar') === -1, 're-adding an entry by hand clears its tombstone');
+lifecycle.version = 1;
+lifecycle = QA.mergeShippedPresets(lifecycle).cfg;
+check(
+  lifecycle.sets.default.who.filter((w) => w === 'Registrar').length === 1,
+  're-add → migrate → present exactly once (no duplicate)'
+);
+
+// A full list must never be trimmed to make room for shipped entries: the overflow
+// slice takes from the TAIL, which is where the practice's own entries live.
+const full = QA.mergeShippedPresets({
+  version: 1,
+  sets: { default: { actions: Array.from({ length: 24 }, (_, i) => `Practice action ${i}`) } },
+});
+check(full.cfg.sets.default.actions.length === 24, 'a full list stays at the 24-entry cap');
+check(
+  full.cfg.sets.default.actions[23] === 'Practice action 23',
+  'no user entry is displaced when the list is already full'
+);
+
+// Every set is migrated (they all derive from the shipped lists) — but an EMPTY
+// list is a deliberate edit (or a second set, which ships empty by design) and is
+// never seeded.
+const multi = QA.mergeShippedPresets({
+  version: 1,
+  activeSet: 'branch',
+  sets: {
+    default: { actions: V1_ACTIONS.slice(), who: V1_WHO.slice(), when: ['Today'], fallbacks: [] },
+    branch: { actions: ['Book F2F appt'], who: [], when: [], fallbacks: [] },
+  },
+});
+check(multi.cfg.sets.branch.actions.indexOf('Book CVD review') > -1, 'a non-default set is migrated too');
+check(JSON.stringify(multi.cfg.sets.branch.who) === '[]', 'an empty list is left empty — never seeded from shipped');
+check(JSON.stringify(multi.cfg.sets.default.fallbacks) === '[]', 'a deliberately emptied list stays emptied');
+check(multi.cfg.activeSet === 'branch', 'activeSet is preserved across the migration');
+
+// Garbage in still yields a usable config (the merge sanitises first).
+for (const garbage of [null, undefined, 'nonsense', 42, [], true]) {
+  const g = QA.mergeShippedPresets(garbage);
+  check(
+    g.cfg.version === QA.DEFAULT_CONFIG.version &&
+      JSON.stringify(g.cfg.sets.default) === JSON.stringify(D.sets.default),
+    `mergeShippedPresets(${JSON.stringify(garbage)}) → shipped defaults at the current version`
+  );
+}
 
 // Markup is carried as INERT TEXT — the core never renders HTML, and every
 // consumer escapes at render time (esc() in the widget, escHtml/escAttr in options).
