@@ -622,3 +622,32 @@ off by default) routes patient reads through a Graysbrook-operated UK proxy and
 appears in **no** safety document. It is now described accurately in the signed
 intended-purpose statement and flagged in CSN §6; it still needs a hazard entry,
 a DPIA section and a CSN rewrite. No practice should enable it until then.
+
+---
+
+## Phase F (added post-merge, Dave 2026-07-28): TRUE medical/admin request creation — capture first
+
+Decision: the general-task stand-in is not enough — the reception flow's
+output should file as a real Medicus **Admin request** / **Medical request**
+(the objects the RM strip counts, with their own workflow states). Their
+create endpoint has never been captured (only the read side:
+`/tasks/data/{slug}/task-list` / `overview`), so this phase starts with a
+live capture session, not code.
+
+- **F1 — capture (Dave, on the live system, TEST patient):**
+  `scripts/request-flow-capture.js` — the booking-flow recorder retuned for
+  request/task/workflow paths. Protocol is in the script header: arm, create
+  one Admin request and one Medical request end-to-end with `chReq.mark()`
+  between them, optionally open/complete one for the state-transition calls,
+  `chReq.summary()` then `chReq.save()`, hand the JSON over.
+- **F2 — endpoint client:** from the capture, add the create pair (form-fetch
+  + create) to a shared module (task-api or a new request-api), byte-pinned
+  payload test, same credentialed-fetch pattern as every other write.
+- **F3 — reception wiring:** "File as Admin request / Medical request" on the
+  capture output card, inheriting the booking card's identity discipline
+  (pin + commit-time re-verify, name+DOB read-back) and the same gate rules;
+  sensitive (mental-health) captures stay clipboard-only unless the CSO
+  decides otherwise. New hazard entry (H-052-shaped: reception files a
+  request against the wrong patient / wrong queue), CSO review before
+  enable. The parked jobs-list preconditions apply: a named queue and a
+  named daily checker.
