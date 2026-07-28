@@ -16,10 +16,13 @@
 //      never triages, diagnoses, or advises beyond red-flag escalation.
 //
 // Storage (managed in Options, read-only here):
-//   reception.config           { enabledPathways, hiddenChipRules, disclaimerAcceptedAt,
-//                                safeguardingContact, crisisLineText, seenBundledIds }
-//   reception.customPathways   [pathway]
-//   reception.pathwayOverrides { id: pathway }
+//   reception.config              { enabledPathways, hiddenChipRules, disclaimerAcceptedAt,
+//                                   safeguardingContact, crisisLineText, seenBundledIds }
+//   reception.customPathways      [pathway]
+//   reception.pathwayOverrides    { id: pathway }
+//   reception.routingAttestation  { attestedBy, role, attestedAt, scope } — the CSO/partner
+//                                 sign-off that lets CUSTOM/EDITED pathways suggest a
+//                                 non-clinician destination. Read-only here.
 
 'use strict';
 
@@ -31,6 +34,9 @@ import {
   isSensitivePathway,
   safeguardingActionLine,
   crisisLineText,
+  evaluateDisposition,
+  destinationLabel,
+  overrideDestinations,
 } from './reception-core.js';
 
 // Canonical "no alert ≠ monitoring complete" caveat (shared/provenance.js,
@@ -44,6 +50,7 @@ const NO_ALERT_CAVEAT =
 let container = null;
 let _bundledDoc = null; // reception-pathways.json document
 let _config = {}; // reception.config
+let _routingAttestation = null; // reception.routingAttestation (custom-routing sign-off)
 let _effective = { all: [], enabled: [] };
 let _snapshot = null; // last Sentinel snapshot (or null)
 let _takerInitials = ''; // in-memory only, per panel session
@@ -311,6 +318,7 @@ export async function init(el) {
       changes['reception.config'] ||
       changes['reception.customPathways'] ||
       changes['reception.pathwayOverrides'] ||
+      changes['reception.routingAttestation'] ||
       changes['suite.practiceAcceptedAt'] // the single "Accept for practice" switch
     ) {
       loadConfigAndResolve().then(async () => {
@@ -350,9 +358,13 @@ async function loadConfigAndResolve() {
     'reception.customPathways',
     'reception.pathwayOverrides',
     'reception.tilePrefs',
+    'reception.routingAttestation',
     'suite.practiceAcceptedAt',
   ]);
   _config = r['reception.config'] || {};
+  // Validated inside evaluateDisposition — anything malformed simply fails the
+  // check there and custom pathways stay clinician-only.
+  _routingAttestation = r['reception.routingAttestation'] || null;
   // Acceptance is satisfied by EITHER the per-install reception disclaimer OR the
   // single suite-level "Accept for practice" switch (which travels in backups).
   const accepted = _config.disclaimerAcceptedAt != null || r['suite.practiceAcceptedAt'] != null;
@@ -796,6 +808,16 @@ async function renderCaptureForm(pathway) {
         ${cRows}
       </div>
 
+      <div class="rcp-disposition rcp-disposition-hidden" id="rcpDisposition">
+        <div class="rcp-disp-head">
+          <span class="rcp-disp-title">Where could this patient safely go?</span>
+          <label class="rcp-disp-age">Age confirmed on the call
+            <input type="number" id="rcpDispAge" min="0" max="120" step="1" inputmode="numeric" placeholder="yrs" autocomplete="off">
+          </label>
+        </div>
+        <div id="rcpDispBody"></div>
+      </div>
+
       <div class="rcp-form-actions">
         <button type="submit" class="rcp-btn rcp-btn-primary">Generate summary</button>
         <span class="rcp-form-msg" id="rcpFormMsg"></span>
@@ -804,6 +826,7 @@ async function renderCaptureForm(pathway) {
     </form>`;
 
   const form = body.querySelector('#rcpForm');
+  resetDispositionState();
 
   // Check for a restorable draft for this specific pathway (never for a sensitive
   // one — there is no stored draft to restore, and offering one would be a leak).
@@ -816,6 +839,9 @@ async function renderCaptureForm(pathway) {
       banner.querySelector('#rcpDraftRestore')?.addEventListener('click', () => {
         restoreDraftFields(form, draft.fields);
         updateEscalationBanner(form, pathway);
+        // Restoring red-flag answers can complete the screen — re-evaluate the
+        // disposition too (the age is never restored; it must be re-confirmed).
+        updateDispositionCard(form, pathway);
         banner.className = 'rcp-draft-banner rcp-draft-banner-hidden';
       });
       banner.querySelector('#rcpDraftDiscard')?.addEventListener('click', () => {
@@ -832,14 +858,23 @@ async function renderCaptureForm(pathway) {
     _takerInitials = e.target.value.trim();
   });
 
-  // Escalation banner reacts the moment any red flag is answered YES.
+  // Escalation banner reacts the moment any red flag is answered YES; the
+  // disposition card re-evaluates on the same hook, so a red flag flipped to
+  // YES removes a suggestion that was already on screen.
   form.addEventListener('change', () => {
     updateEscalationBanner(form, pathway);
+    updateDispositionCard(form, pathway);
     if (!sensitive) scheduleDraftSave(pathway.id, form);
   });
   form.addEventListener('input', () => {
     if (!sensitive) scheduleDraftSave(pathway.id, form);
   });
+  // The confirmed-age field re-evaluates live (an age typed digit by digit
+  // would otherwise only take effect on blur). It is deliberately NOT part of
+  // the draft autosave (no `name` attribute): the age must be re-confirmed on
+  // the call every time, never restored from an earlier contact.
+  form.querySelector('#rcpDispAge')?.addEventListener('input', () => updateDispositionCard(form, pathway));
+  updateDispositionCard(form, pathway);
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     generateSummary(form, pathway);
@@ -879,6 +914,148 @@ function updateEscalationBanner(form, pathway) {
     sg.textContent = safeguardingActionLine(_config.safeguardingContact);
     banner.appendChild(sg);
   }
+}
+
+// ── Disposition card (plan E) ─────────────────────────────────────────────────
+// A SUGGESTION, never a booking. It renders only when evaluateDisposition says
+// 'suggest' — i.e. every red flag answered and none positive, the pathway is not
+// clinician-only, and (for custom/edited packs) a CSO/partner routing sign-off
+// exists. Withheld and 'none' states render nothing on the form; withheld states
+// are still recorded in the pasted capture text.
+//
+// The receptionist's own decision lives here, not in storage: it is part of the
+// contact in front of them and dies with the form.
+let _disp = { decision: null, decidedFor: null, overrideOpen: false, overrideTo: '', overrideNote: '' };
+
+function resetDispositionState() {
+  _disp = { decision: null, decidedFor: null, overrideOpen: false, overrideTo: '', overrideNote: '' };
+}
+
+// The age the RECEPTIONIST confirmed on the call. Never seeded from the open
+// record's ageYears — a wrong record open is exactly how a three-year-old
+// caller would be handed an adult Pharmacy First suggestion.
+function readConfirmedAge(form) {
+  const raw = (form.querySelector('#rcpDispAge')?.value ?? '').trim();
+  if (raw === '') return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0 || n > 120) return null;
+  return n;
+}
+
+function dispositionContext(form, pathway) {
+  const { positives, unanswered } = evaluateRedFlags(pathway.redFlags, readRedFlagAnswers(form, pathway));
+  const entry = (_effective.all || []).find((e) => e.pathway && e.pathway.id === pathway.id);
+  const origin = entry ? entry.origin : 'custom';
+  return {
+    redFlagPositives: positives,
+    redFlagUnanswered: unanswered,
+    confirmedAge: readConfirmedAge(form),
+    // A practice-edited bundled pathway keeps its bundled id, which is what the
+    // frozen clinician-only sets are keyed on.
+    bundledId: origin === 'custom' ? null : pathway.id,
+    origin,
+    routingAttestation: _routingAttestation,
+  };
+}
+
+// The full record written into the capture text: what the engine said plus what
+// the receptionist did with it. Re-evaluated at submit time, never trusted from
+// the last render.
+function dispositionRecord(form, pathway) {
+  const result = evaluateDisposition(pathway, dispositionContext(form, pathway));
+  if (result.status !== 'suggest') return result;
+  if (_disp.decision && _disp.decidedFor === result.destination) {
+    return Object.assign({}, result, {
+      decision: _disp.decision,
+      overrideTo: _disp.overrideTo,
+      overrideNote: _disp.overrideNote,
+    });
+  }
+  return result;
+}
+
+function updateDispositionCard(form, pathway) {
+  const card = form.querySelector('#rcpDisposition');
+  const body = form.querySelector('#rcpDispBody');
+  if (!card || !body) return;
+  const ctx = dispositionContext(form, pathway);
+  const result = evaluateDisposition(pathway, ctx);
+
+  if (result.status !== 'suggest') {
+    card.className = 'rcp-disposition rcp-disposition-hidden';
+    body.innerHTML = '';
+    return;
+  }
+  // The suggestion changed under a recorded decision (e.g. the age was edited
+  // after Confirm) — drop the decision rather than carry it onto a different
+  // destination.
+  if (_disp.decision && _disp.decidedFor !== result.destination) {
+    _disp.decision = null;
+    _disp.decidedFor = null;
+  }
+  card.className = 'rcp-disposition';
+
+  const decided =
+    _disp.decision === 'confirmed'
+      ? `<div class="rcp-disp-decided">Recorded: receptionist confirmed this route.</div>`
+      : _disp.decision === 'overridden'
+        ? `<div class="rcp-disp-decided">Recorded: overridden to ${esc(destinationLabel(_disp.overrideTo))}${_disp.overrideNote ? ` — ${esc(_disp.overrideNote)}` : ''}.</div>`
+        : '';
+
+  const dests = overrideDestinations(pathway, ctx.confirmedAge);
+  const overridePanel = _disp.overrideOpen
+    ? `<div class="rcp-disp-override">
+        <label class="rcp-disp-override-lbl">Send instead to
+          <select id="rcpDispOverrideTo">${dests
+            .map(
+              (d) =>
+                `<option value="${esc(d)}" ${d === (_disp.overrideTo || '') ? 'selected' : ''}>${esc(destinationLabel(d))}</option>`
+            )
+            .join('')}</select>
+        </label>
+        <input type="text" id="rcpDispOverrideNote" maxlength="120" placeholder="Note (optional) — why this route" autocomplete="off" value="${esc(_disp.overrideNote)}">
+        <button type="button" class="rcp-btn rcp-btn-small" id="rcpDispOverrideSave">Record override</button>
+       </div>`
+    : '';
+
+  body.innerHTML = `
+    <div class="rcp-disp-suggest">Suggested route: <strong>${esc(destinationLabel(result.destination))}</strong>${result.basis ? ` &mdash; ${esc(result.basis)}` : ''}</div>
+    <div class="rcp-disp-fallback">${esc(result.fallbackLine)}</div>
+    ${decided}
+    <div class="rcp-disp-actions">
+      <button type="button" class="rcp-btn rcp-btn-small" id="rcpDispConfirm">Confirm</button>
+      <button type="button" class="rcp-link-btn" id="rcpDispOverride">${_disp.overrideOpen ? 'Cancel override' : 'Override…'}</button>
+    </div>
+    ${overridePanel}
+    <div class="rcp-fineprint">A suggestion only &mdash; nothing is booked and nothing is sent. A clinician decides. If in any doubt, offer the clinician callback.</div>`;
+
+  body.querySelector('#rcpDispConfirm')?.addEventListener('click', () => {
+    _disp.decision = 'confirmed';
+    _disp.decidedFor = result.destination;
+    _disp.overrideOpen = false;
+    updateDispositionCard(form, pathway);
+  });
+  body.querySelector('#rcpDispOverride')?.addEventListener('click', () => {
+    _disp.overrideOpen = !_disp.overrideOpen;
+    if (_disp.overrideOpen && !_disp.overrideTo) _disp.overrideTo = dests[0] || 'gp_routine';
+    updateDispositionCard(form, pathway);
+  });
+  body.querySelector('#rcpDispOverrideNote')?.addEventListener('input', (e) => {
+    _disp.overrideNote = e.target.value;
+  });
+  body.querySelector('#rcpDispOverrideTo')?.addEventListener('change', (e) => {
+    _disp.overrideTo = e.target.value;
+  });
+  body.querySelector('#rcpDispOverrideSave')?.addEventListener('click', () => {
+    const sel = body.querySelector('#rcpDispOverrideTo');
+    const note = body.querySelector('#rcpDispOverrideNote');
+    _disp.overrideTo = sel ? sel.value : 'gp_routine';
+    _disp.overrideNote = (note ? note.value : '').trim();
+    _disp.decision = 'overridden';
+    _disp.decidedFor = result.destination;
+    _disp.overrideOpen = false;
+    updateDispositionCard(form, pathway);
+  });
 }
 
 function readQuestionAnswers(form, scope, questions) {
@@ -944,6 +1121,11 @@ function generateSummary(form, pathway) {
       pharmacyFirstHint: pharmacyFirstHint(pathway, pc?.ageYears ?? null),
       safeguardingContact: _config.safeguardingContact || '',
       crisisLine: _config.crisisLineText || '',
+      // Re-evaluated here, not read off the last render: what goes in the
+      // record is what the guardrails say at the moment the summary is built.
+      // Withheld states are recorded too (an SEA needs to see what the tool
+      // did NOT say); 'none' writes nothing.
+      disposition: dispositionRecord(form, pathway),
     },
   });
 

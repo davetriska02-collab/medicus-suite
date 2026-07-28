@@ -9,6 +9,9 @@
 //   isSensitivePathway(pathway)                — pathway.sensitive === true (strict)
 //   safeguardingActionLine(contact)            — the safeguarding escalation sentence
 //   crisisLineText(configured)                 — practice crisis route, or the shipped default
+//   evaluateDisposition(pathway, ctx)          — suggest/withhold a destination (plan E)
+//   dispositionCaptureLines(record)            — the disposition lines for the pasted text
+//   isValidRoutingAttestation(a)               — CSO/partner custom-routing sign-off check
 
 'use strict';
 
@@ -143,7 +146,9 @@ function crisisLineText(configured) {
 //     patientLine,      // optional "Name, DOB ..." line from the OPEN record
 //     pharmacyFirstHint,// optional hint line (already age-checked), or null
 //     safeguardingContact, // optional practice safeguarding-lead free text
-//     crisisLine        // optional practice crisis-route text (sensitive pathways)
+//     crisisLine,       // optional practice crisis-route text (sensitive pathways)
+//     disposition       // optional evaluateDisposition() result + the receptionist's
+//                       //   decision — see dispositionCaptureLines() below
 //   }
 // }
 //
@@ -223,6 +228,15 @@ function buildCaptureText(input) {
     lines.push(`Pharmacy First: ${m.pharmacyFirstHint}`);
   }
 
+  // Disposition routing (plan E). Suggested-and-decided routes AND withheld
+  // ones are both recorded; status 'none' writes nothing at all (sensitive
+  // pathways have a deliberate no-output posture).
+  const dispLines = dispositionCaptureLines(m.disposition);
+  if (dispLines.length > 0) {
+    lines.push('');
+    for (const l of dispLines) lines.push(l);
+  }
+
   // Sensitive pathways close with the practice's crisis route, in the pasted text
   // as well as on screen — the receptionist may have read it out, and the reading
   // clinician needs to see what the caller was told. Falls back to the shipped
@@ -270,12 +284,291 @@ function formatWhen(nowIso) {
 function pharmacyFirstHint(pathway, ageYears) {
   const pf = pathway && pathway.pharmacyFirst;
   if (!pf) return null;
-  if (ageYears == null || !Number.isFinite(ageYears)) {
-    return `${pf.note} (Patient age unknown — check age criteria.)`;
-  }
-  if (pf.ageMin != null && ageYears < pf.ageMin) return null;
-  if (pf.ageMax != null && ageYears > pf.ageMax) return null;
+  const status = pharmacyFirstAgeStatus(pathway, ageYears);
+  if (status === 'unknown-age') return `${pf.note} (Patient age unknown — check age criteria.)`;
+  if (status === 'out-of-band') return null;
   return pf.note;
+}
+
+// pharmacyFirstAgeStatus(pathway, ageYears)
+//   'no-block'    — the pathway is not a Pharmacy First condition at all
+//   'unknown-age' — PF condition, but no usable age: eligibility CANNOT be asserted
+//   'out-of-band' — PF condition, age known, outside the ageMin/ageMax band
+//   'eligible'    — PF condition, age known, inside the band
+// The single age gate shared by the hint line (above) and the disposition engine
+// (below), so "Pharmacy First" can never mean one thing in the hint and another
+// in the routing suggestion.
+function pharmacyFirstAgeStatus(pathway, ageYears) {
+  const pf = pathway && pathway.pharmacyFirst;
+  if (!pf) return 'no-block';
+  if (ageYears == null || !Number.isFinite(ageYears)) return 'unknown-age';
+  if (pf.ageMin != null && ageYears < pf.ageMin) return 'out-of-band';
+  if (pf.ageMax != null && ageYears > pf.ageMax) return 'out-of-band';
+  return 'eligible';
+}
+
+// ---------------------------------------------------------------------------
+// Disposition routing (plan section E)
+//
+// The engine SUGGESTS, a human DECIDES, and every suggestion carries the
+// offer-a-clinician fallback line. Nothing here books, sends or automates
+// anything: evaluateDisposition returns a plain object that the panel renders
+// and the receptionist accepts or overrides.
+//
+// The guardrails below are FROZEN IN CODE and applied AFTER override
+// resolution, keyed on the BUNDLED pathway id — a practice fork that relabels
+// its domain cannot walk past them (plan E, corrected guardrail design).
+// ---------------------------------------------------------------------------
+
+// Kept in lock-step with shared/reception-pathway-utils.js (a classic script
+// that cannot be imported from this ES module). test-reception-disposition.js
+// asserts the two copies are identical.
+const CLINICIAN_ONLY_IDS = Object.freeze(['mental-health', 'gu-male', 'gyn-female', 'general']);
+const CLINICIAN_ONLY_DOMAINS = Object.freeze(['mental_health', 'gu_male', 'gyn_female']);
+
+// The single sentence every rendered suggestion carries — on screen AND in the
+// pasted capture text (plan E guardrail 7). Constant, never practice-editable.
+const DISPOSITION_FALLBACK_LINE = 'Or a clinician callback if the patient prefers — always offer it.';
+
+// Human labels for the pasted text and the panel. 'duty' is reachable as a
+// pathway `default`, not as an `allowed` destination.
+const DESTINATION_LABELS = Object.freeze({
+  pharmacy_first: 'Pharmacy First',
+  anp: 'ANP / minor-illness nurse',
+  paramedic: 'Paramedic practitioner',
+  gp_routine: 'GP appointment',
+  duty: 'Duty clinician',
+});
+
+function destinationLabel(dest) {
+  return DESTINATION_LABELS[dest] || String(dest || '');
+}
+
+// Destinations no patient under 5 may be routed to by this tool. There is no
+// "declared paediatric competence" flag in the pathway schema yet, so these are
+// stripped for EVERY pathway with a confirmed age under 5 — the plan allows a
+// pathway to declare paediatric competence, but until that field exists the
+// conservative reading is the only safe one. Adding such a field is a
+// clinical-safety change (CSO review), not a schema tidy-up.
+const NO_UNDER_FIVE = Object.freeze(['anp', 'paramedic']);
+
+// isValidRoutingAttestation(a) — the CSO/partner sign-off that unlocks routing
+// on custom / practice-edited pathways.
+//   { attestedBy: string, role: 'cso'|'partner', attestedAt: ISO, scope: 'custom-routing' }
+// KEEP IN SYNC with shared/reception-pathway-utils.js.
+const _ATTEST_ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+function isValidRoutingAttestation(a) {
+  if (!a || typeof a !== 'object' || Array.isArray(a)) return false;
+  if (typeof a.attestedBy !== 'string' || a.attestedBy.trim().length === 0) return false;
+  if (a.role !== 'cso' && a.role !== 'partner') return false;
+  if (typeof a.attestedAt !== 'string' || !_ATTEST_ISO_RE.test(a.attestedAt)) return false;
+  if (a.scope !== 'custom-routing') return false;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// evaluateDisposition(pathway, ctx) → { status, destination?, reason, basis, fallbackLine }
+//
+// ctx = {
+//   redFlagPositives,    // [{ id, ask, escalate, safeguarding? }] from evaluateRedFlags
+//   redFlagUnanswered,   // [flagId] from evaluateRedFlags
+//   confirmedAge,        // number of years the RECEPTIONIST confirmed on the call.
+//                        //   NEVER the ageYears of the open record — a wrong record
+//                        //   open would turn a three-year-old into an adult.
+//   bundledId,           // the BUNDLED pathway id this pathway came from, or null
+//                        //   for a practice-authored one. The frozen sets are keyed
+//                        //   on this, so a fork cannot relabel its way out.
+//   origin,              // 'bundled' | 'edited' | 'custom' (optional; inferred when absent)
+//   routingAttestation,  // reception.routingAttestation, or null
+// }
+//
+// status:
+//   'none'     — render nothing, record nothing (sensitive / mental-health, or the
+//                pathway simply has no disposition block)
+//   'withheld' — render nothing on the form, but RECORD the reason in the capture
+//                text so an SEA can reconstruct what the tool did not say
+//   'suggest'  — render the card; `destination` is the suggestion
+//
+// ORDER OF APPLICATION — each earlier rule wins outright:
+//   a1. sensitive pathway, or mental-health (bundled or effective id) → 'none'
+//   a2. any other clinician-only frozen id / clinician-only domain    → withheld
+//   a3. custom or practice-edited pathway with no valid CSO/partner
+//       routing attestation                                          → withheld
+//   b1. any POSITIVE red flag                                        → withheld
+//   b2. any UNANSWERED red flag                                      → withheld
+//   c.  no disposition block                                         → 'none'
+//   d.  confirmed age unknown/invalid → suggest gp_routine (fail closed)
+//   e1. confirmed age < 1             → suggest gp_routine (clinician only)
+//   e2. confirmed age < 5             → anp/paramedic stripped, then rules run
+//   f.  rules in order, first match wins; otherwise the pathway's `default`
+// ---------------------------------------------------------------------------
+function evaluateDisposition(pathway, ctx) {
+  const c = ctx || {};
+  const p = pathway || {};
+  const positives = c.redFlagPositives || [];
+  const unanswered = c.redFlagUnanswered || [];
+  const disp = p.disposition;
+  const bundledId = c.bundledId || null;
+  const origin = c.origin || (bundledId && bundledId === p.id ? 'bundled' : 'custom');
+  const out = (status, extra) =>
+    Object.assign({ status, reason: '', basis: '', fallbackLine: DISPOSITION_FALLBACK_LINE }, extra || {});
+
+  // ── a1/a2. Frozen clinician-only sets, applied AFTER override resolution ────
+  const ids = [bundledId, p.id].filter(Boolean);
+  const frozenId = ids.some((id) => CLINICIAN_ONLY_IDS.indexOf(id) !== -1);
+  const frozenDomain = !!(disp && CLINICIAN_ONLY_DOMAINS.indexOf(disp.domain) !== -1);
+  // mental-health and any sensitive pathway output NOTHING — not a card, not a
+  // withheld line. Per plan section B its whole posture is capture-and-escalate
+  // with no categorisation, and a "we withheld a routing suggestion" line in the
+  // pasted text would itself be a categorisation.
+  if (isSensitivePathway(p) || ids.indexOf('mental-health') !== -1) {
+    return out('none', { reason: 'sensitive pathway — no disposition output' });
+  }
+  if (frozenId || frozenDomain) {
+    return out('withheld', { reason: 'clinician-only pathway' });
+  }
+
+  // ── a3. Custom / edited packs are clinician-only until signed off ───────────
+  if (origin !== 'bundled' && !isValidRoutingAttestation(c.routingAttestation)) {
+    return out('withheld', { reason: 'custom pathway — routing not signed off' });
+  }
+
+  // ── b. Red-flag gate ───────────────────────────────────────────────────────
+  if (positives.length > 0) return out('withheld', { reason: 'red flag positive' });
+  if (unanswered.length > 0) return out('withheld', { reason: 'red flags not all answered' });
+
+  // ── c. No routing declared for this pathway ────────────────────────────────
+  if (!disp || typeof disp !== 'object' || Array.isArray(disp)) {
+    return out('none', { reason: 'no disposition block' });
+  }
+
+  const age = c.confirmedAge;
+  const ageOk = typeof age === 'number' && Number.isFinite(age) && age >= 0 && age <= 120;
+  const title = p.title || p.id || 'this problem';
+
+  // ── d. Confirmed age is the only age. No age → fail closed. ────────────────
+  if (!ageOk) {
+    return out('suggest', {
+      destination: 'gp_routine',
+      reason: 'age unconfirmed — failed closed',
+      basis: `${title}, age not confirmed, no red flags`,
+    });
+  }
+
+  const basis = `${title}, age ${age} confirmed, no red flags`;
+
+  // ── e1. Age floor: under 1 is clinician-only, always. ──────────────────────
+  if (age < 1) {
+    return out('suggest', {
+      destination: 'gp_routine',
+      reason: 'age under 1 — clinician only',
+      basis,
+    });
+  }
+
+  // ── e2. Under 5: no ANP, no paramedic. ─────────────────────────────────────
+  const blocked = age < 5 ? NO_UNDER_FIVE : [];
+  const allowed = (Array.isArray(disp.allowed) ? disp.allowed : []).filter((d) => blocked.indexOf(d) === -1);
+
+  // ── f. Rules in order, first match wins. ───────────────────────────────────
+  const pfEligible = pharmacyFirstAgeStatus(p, age) === 'eligible';
+  for (const rule of Array.isArray(disp.rules) ? disp.rules : []) {
+    if (!rule || typeof rule !== 'object') continue;
+    const suggest = rule.suggest;
+    // A suggestion stripped by the age floor is skipped, not downgraded in
+    // place — the next rule (or the default) decides instead.
+    if (blocked.indexOf(suggest) !== -1) continue;
+    if (suggest !== 'gp_routine' && allowed.indexOf(suggest) === -1) continue;
+    if (!matchesWhen(rule.when, { pfEligible, age })) continue;
+    return out('suggest', {
+      destination: suggest,
+      reason: `rule matched: ${describeWhen(rule.when)}`,
+      basis,
+    });
+  }
+
+  const fallback = disp.default === 'duty' ? 'duty' : 'gp_routine';
+  return out('suggest', { destination: fallback, reason: 'no rule matched — pathway default', basis });
+}
+
+// ---------------------------------------------------------------------------
+// overrideDestinations(pathway, confirmedAge) → string[]
+// The destinations the OVERRIDE control may offer: the pathway's own allowed
+// list plus gp_routine (a clinician is always offerable), minus anything the
+// age floor blocks. The floor is applied here too — a control that offers a
+// paramedic for a two-year-old would undo in the UI what the engine refuses to
+// do in code. It fails closed on an unconfirmed age for the same reason the
+// suggestion does: unknown age is not evidence the patient is over 5.
+// ---------------------------------------------------------------------------
+function overrideDestinations(pathway, confirmedAge) {
+  const disp = pathway && pathway.disposition;
+  const allowed = disp && Array.isArray(disp.allowed) ? disp.allowed.slice() : [];
+  const age = confirmedAge;
+  const ageKnown = typeof age === 'number' && Number.isFinite(age);
+  const blocked = !ageKnown || age < 5 ? NO_UNDER_FIVE : [];
+  const out = allowed.filter((d) => blocked.indexOf(d) === -1);
+  if (out.indexOf('gp_routine') === -1) out.push('gp_routine');
+  return out;
+}
+
+// matchesWhen(when, facts) — ALL conditions must hold (AND). The vocabulary is
+// closed and validated upstream; an unknown key here means the pathway skipped
+// validation, so it fails the rule rather than being ignored.
+function matchesWhen(when, facts) {
+  if (!when || typeof when !== 'object') return false;
+  const keys = Object.keys(when);
+  if (keys.length === 0) return false;
+  for (const k of keys) {
+    if (k === 'pharmacyFirstEligible') {
+      if (when[k] !== facts.pfEligible) return false;
+    } else if (k === 'ageUnder') {
+      if (!(facts.age < when[k])) return false;
+    } else if (k === 'ageAtLeast') {
+      if (!(facts.age >= when[k])) return false;
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
+function describeWhen(when) {
+  return Object.keys(when || {})
+    .map((k) => `${k}=${when[k]}`)
+    .join(', ');
+}
+
+// ---------------------------------------------------------------------------
+// dispositionCaptureLines(record) → string[]
+//
+// The disposition lines written into the pasted capture text. The NHSE
+// record-the-navigation requirement lands here: what was suggested, what the
+// receptionist did with it, and — when nothing was suggested — why not, so a
+// significant-event review can reconstruct what the tool did and did not say.
+//
+// record = evaluateDisposition() result plus the receptionist's decision:
+//   { status, destination, reason, basis, fallbackLine,
+//     decision: 'confirmed'|'overridden'|undefined,
+//     overrideTo, overrideNote }
+// ---------------------------------------------------------------------------
+function dispositionCaptureLines(record) {
+  const r = record || {};
+  if (r.status === 'withheld') return [`Disposition withheld: ${r.reason || 'guardrail'}`];
+  if (r.status !== 'suggest') return [];
+  const basis = r.basis ? ` (${r.basis})` : '';
+  let tail;
+  if (r.decision === 'overridden') {
+    const note = String(r.overrideNote || '').trim();
+    tail = `receptionist overrode to: ${destinationLabel(r.overrideTo)}${note ? ` — ${note}` : ''}`;
+  } else if (r.decision === 'confirmed') {
+    tail = 'receptionist confirmed';
+  } else {
+    tail = 'receptionist decision not recorded';
+  }
+  return [
+    `Suggested route: ${destinationLabel(r.destination)}${basis} — ${tail}`,
+    r.fallbackLine || DISPOSITION_FALLBACK_LINE,
+  ];
 }
 
 export {
@@ -286,6 +579,16 @@ export {
   isSensitivePathway,
   safeguardingActionLine,
   crisisLineText,
+  pharmacyFirstAgeStatus,
+  evaluateDisposition,
+  dispositionCaptureLines,
+  destinationLabel,
+  overrideDestinations,
+  isValidRoutingAttestation,
   DEFAULT_CRISIS_LINE,
+  DISPOSITION_FALLBACK_LINE,
+  DESTINATION_LABELS,
+  CLINICIAN_ONLY_IDS,
+  CLINICIAN_ONLY_DOMAINS,
   STATUS_COLOUR
 };

@@ -2667,11 +2667,13 @@ lfSaveBtn?.addEventListener('click', async () => {
       'reception.config',
       'reception.customPathways',
       'reception.pathwayOverrides',
+      'reception.routingAttestation',
     ]);
     return {
       config: r['reception.config'] || {},
       custom: r['reception.customPathways'] || [],
       overrides: r['reception.pathwayOverrides'] || {},
+      routingAttestation: r['reception.routingAttestation'] || null,
     };
   }
 
@@ -2922,6 +2924,95 @@ lfSaveBtn?.addEventListener('click', async () => {
       </div>`;
   }
 
+  // ── Disposition editor rows (plan E) ────────────────────────────────────────
+  // Labels only — every vocabulary below comes from ReceptionPathwayUtils, so
+  // the editor cannot offer a destination, domain or condition the validator
+  // would reject.
+  const RCPO_DEST_LABELS = {
+    pharmacy_first: 'Pharmacy First',
+    anp: 'ANP / minor-illness nurse',
+    paramedic: 'Paramedic practitioner',
+    gp_routine: 'GP appointment',
+  };
+  const RCPO_DOMAIN_LABELS = {
+    minor_infection: 'Minor infection',
+    msk: 'Musculoskeletal',
+    gu_male: 'Genitourinary (male)',
+    gyn_female: 'Gynaecology (female)',
+    mental_health: 'Mental health',
+    other: 'Other',
+  };
+  const RCPO_WHEN_LABELS = {
+    pharmacyFirstEligible: 'Pharmacy First eligible',
+    ageUnder: 'Age under',
+    ageAtLeast: 'Age at least',
+  };
+
+  function dispRuleRowHtml(rule) {
+    const when = (rule && rule.when) || {};
+    const key = Object.keys(when).find((k) => PU.DISPOSITION_WHEN_KEYS.indexOf(k) !== -1) || 'pharmacyFirstEligible';
+    const isBool = key === 'pharmacyFirstEligible';
+    const boolVal = when.pharmacyFirstEligible === false ? 'false' : 'true';
+    const ageVal = isBool ? '' : when[key];
+    return `
+      <div class="rcpo-disp-row" style="display:flex; gap:6px; align-items:center; margin-bottom:5px; flex-wrap:wrap;">
+        <span style="font-size:11px; color:var(--text-3);">If</span>
+        <select class="rcpo-disp-when" style="font-size:12px; padding:4px;">
+          ${PU.DISPOSITION_WHEN_KEYS.map((k) => `<option value="${k}" ${k === key ? 'selected' : ''}>${escHtml(RCPO_WHEN_LABELS[k] || k)}</option>`).join('')}
+        </select>
+        <select class="rcpo-disp-bool" style="font-size:12px; padding:4px; ${isBool ? '' : 'display:none;'}">
+          <option value="true" ${boolVal === 'true' ? 'selected' : ''}>yes</option>
+          <option value="false" ${boolVal === 'false' ? 'selected' : ''}>no</option>
+        </select>
+        <input type="number" class="rcpo-disp-age" min="0" max="120" step="1" value="${escAttr(ageVal == null ? '' : String(ageVal))}" style="width:70px; font-size:12px; padding:4px 6px; ${isBool ? 'display:none;' : ''}">
+        <span style="font-size:11px; color:var(--text-3);">suggest</span>
+        <select class="rcpo-disp-suggest" style="font-size:12px; padding:4px;">
+          ${PU.DISPOSITION_DESTINATIONS.map((d) => `<option value="${d}" ${rule && rule.suggest === d ? 'selected' : ''}>${escHtml(RCPO_DEST_LABELS[d] || d)}</option>`).join('')}
+        </select>
+        <button type="button" class="ghost rcpo-disp-del" style="font-size:10px; padding:3px 8px;">✕</button>
+      </div>`;
+  }
+
+  function dispositionSectionHtml(pathway) {
+    const d = pathway && pathway.disposition;
+    const domain = d ? d.domain : '';
+    const allowed = (d && Array.isArray(d.allowed) ? d.allowed : []).slice();
+    const rules = d && Array.isArray(d.rules) ? d.rules : [];
+    return `
+      <div style="font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-3); margin:14px 0 5px;">Disposition &mdash; where this patient could safely go</div>
+      <div style="font-size:11px; color:var(--text-3); line-height:1.6; margin-bottom:7px;">
+        Optional. A <strong>suggestion</strong> shown only after every red flag has been answered and none is positive
+        &mdash; nothing is ever booked, and the receptionist always also offers a clinician callback. Leave the domain
+        as &ldquo;No routing&rdquo; for anything that should always go to a clinician. Age under 1 is always
+        clinician-only, and under 5 never reaches a nurse or paramedic, whatever is set here.
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:7px; flex-wrap:wrap;">
+        <label style="font-size:11px; color:var(--text-3); display:flex; gap:5px; align-items:center;">Domain
+          <select id="rcpoEdDispDomain" style="font-size:12px; padding:4px;">
+            <option value="" ${domain ? '' : 'selected'}>No routing (clinician only)</option>
+            ${PU.DISPOSITION_DOMAINS.map((dm) => `<option value="${dm}" ${dm === domain ? 'selected' : ''}>${escHtml(RCPO_DOMAIN_LABELS[dm] || dm)}</option>`).join('')}
+          </select>
+        </label>
+        <label style="font-size:11px; color:var(--text-3); display:flex; gap:5px; align-items:center;">If no rule matches
+          <select id="rcpoEdDispDefault" style="font-size:12px; padding:4px;">
+            ${PU.DISPOSITION_DEFAULTS.map((v) => `<option value="${v}" ${d && d.default === v ? 'selected' : ''}>${v === 'duty' ? 'Duty clinician' : 'GP appointment'}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+      <div id="rcpoEdDispAllowed" style="display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--text-2); margin-bottom:4px;">
+        ${PU.DISPOSITION_DESTINATIONS.map(
+          (dest) => `
+          <label style="display:flex; gap:5px; align-items:center;" data-dest="${dest}">
+            <input type="checkbox" class="rcpo-disp-allowed" value="${dest}" ${allowed.indexOf(dest) !== -1 ? 'checked' : ''}>
+            <span>${escHtml(RCPO_DEST_LABELS[dest] || dest)}</span>
+          </label>`
+        ).join('')}
+      </div>
+      <div id="rcpoEdDispNote" style="font-size:11px; color:var(--amber, #b45309); margin-bottom:6px; display:none;"></div>
+      <div id="rcpoEdDispRules">${rules.map(dispRuleRowHtml).join('')}</div>
+      <button type="button" class="ghost" id="rcpoEdAddDispRule" style="font-size:10px; padding:3px 9px;">+ Add routing rule</button>`;
+  }
+
   function openEditor(idOrNull, resolved) {
     const host = $('rcpoEditorHost');
     if (!host) return;
@@ -2958,6 +3049,7 @@ lfSaveBtn?.addEventListener('click', async () => {
         <div style="font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-3); margin:14px 0 5px;">History questions</div>
         <div id="rcpoEdQ">${qRows}</div>
         <button type="button" class="ghost" id="rcpoEdAddQ" style="font-size:10px; padding:3px 9px;">+ Add question</button>
+        ${dispositionSectionHtml(pathway)}
         <div id="rcpoEdErrors" style="color:var(--red, #b91c1c); font-size:11px; margin-top:8px; white-space:pre-line;"></div>
         <div style="display:flex; gap:8px; margin-top:10px;">
           <button class="primary" id="rcpoEdSave" style="font-size:11px; padding:5px 14px;">Save pathway</button>
@@ -2977,8 +3069,61 @@ lfSaveBtn?.addEventListener('click', async () => {
           opts.style.display = sel.value === 'choice' || sel.value === 'multi' ? '' : 'none';
         };
       });
+    // Disposition rows: the condition control switches between the yes/no
+    // selector and the age box, and clinician-only domains (or a sensitive
+    // pathway) grey out every non-clinician destination with a note — the
+    // engine refuses them anyway, so the editor must not pretend otherwise.
+    const wireDispRows = () => {
+      host.querySelectorAll('.rcpo-disp-del').forEach((b) => {
+        b.onclick = () => b.closest('.rcpo-disp-row')?.remove();
+      });
+      host.querySelectorAll('.rcpo-disp-when').forEach((sel) => {
+        sel.onchange = () => {
+          const row = sel.closest('.rcpo-disp-row');
+          const isBool = sel.value === 'pharmacyFirstEligible';
+          row.querySelector('.rcpo-disp-bool').style.display = isBool ? '' : 'none';
+          row.querySelector('.rcpo-disp-age').style.display = isBool ? 'none' : '';
+        };
+      });
+    };
+    const syncDispClinicianOnly = () => {
+      const domainSel = $('rcpoEdDispDomain');
+      const note = $('rcpoEdDispNote');
+      if (!domainSel || !note) return;
+      const clinicianOnly =
+        PU.CLINICIAN_ONLY_DOMAINS.indexOf(domainSel.value) !== -1 || !!$('rcpoEdSensitive')?.checked;
+      const frozenId =
+        !!(pathway && PU.CLINICIAN_ONLY_IDS.indexOf(pathway.id) !== -1);
+      host.querySelectorAll('.rcpo-disp-allowed').forEach((cb) => {
+        const block = (clinicianOnly || frozenId) && cb.value !== 'gp_routine';
+        cb.disabled = block;
+        if (block) cb.checked = false;
+        const lbl = cb.closest('label');
+        if (lbl) lbl.style.opacity = block ? '0.45' : '';
+      });
+      if (frozenId) {
+        note.style.display = '';
+        note.textContent =
+          'This pathway is clinician-only in engine code — it can never suggest a non-clinician route, however it is edited here.';
+      } else if (clinicianOnly) {
+        note.style.display = '';
+        note.textContent =
+          'Clinician-only: sensitive pathways and the mental-health / male-GU / gynaecology domains never suggest a non-clinician route.';
+      } else {
+        note.style.display = 'none';
+        note.textContent = '';
+      }
+    };
     wireRowDeletes();
     wireTypeToggles();
+    wireDispRows();
+    syncDispClinicianOnly();
+    $('rcpoEdDispDomain')?.addEventListener('change', syncDispClinicianOnly);
+    $('rcpoEdSensitive')?.addEventListener('change', syncDispClinicianOnly);
+    $('rcpoEdAddDispRule')?.addEventListener('click', () => {
+      $('rcpoEdDispRules').insertAdjacentHTML('beforeend', dispRuleRowHtml(null));
+      wireDispRows();
+    });
     $('rcpoEdAddRf')?.addEventListener('click', () => {
       $('rcpoEdRf').insertAdjacentHTML('beforeend', rfRowHtml(null));
       wireRowDeletes();
@@ -3063,6 +3208,40 @@ lfSaveBtn?.addEventListener('click', async () => {
       pharmacyFirst: original?.pharmacyFirst, // not editable in v1; preserved on bundled edits
     };
     if ($('rcpoEdSensitive')?.checked) candidate.sensitive = true;
+
+    // Disposition block. Domain "" means no routing at all — the safe default.
+    // The four frozen clinician-only pathways never get a block written for
+    // them: the engine ignores routing on those ids anyway, and a block in the
+    // stored edit would (correctly) be rejected as a downgrade by
+    // resolveEffectivePathways, leaving the practice with a silently-ignored
+    // edit. Matching the shipped file — those four carry no block — is honest.
+    const domain = PU.CLINICIAN_ONLY_IDS.indexOf(id) !== -1 ? '' : $('rcpoEdDispDomain')?.value || '';
+    if (domain) {
+      const clinicianOnly =
+        PU.CLINICIAN_ONLY_DOMAINS.indexOf(domain) !== -1 ||
+        candidate.sensitive === true ||
+        PU.CLINICIAN_ONLY_IDS.indexOf(id) !== -1;
+      const allowed = clinicianOnly
+        ? ['gp_routine']
+        : Array.from(host.querySelectorAll('.rcpo-disp-allowed'))
+            .filter((cb) => cb.checked)
+            .map((cb) => cb.value);
+      const rules = Array.from(host.querySelectorAll('.rcpo-disp-row')).map((row) => {
+        const key = row.querySelector('.rcpo-disp-when')?.value || 'pharmacyFirstEligible';
+        const when = {};
+        if (key === 'pharmacyFirstEligible') {
+          when[key] = row.querySelector('.rcpo-disp-bool')?.value !== 'false';
+        } else {
+          const raw = (row.querySelector('.rcpo-disp-age')?.value || '').trim();
+          // Left blank / non-numeric stays as NaN so validatePathway rejects it
+          // rather than the editor guessing an age band.
+          when[key] = raw === '' ? null : Number(raw);
+        }
+        const suggest = row.querySelector('.rcpo-disp-suggest')?.value || 'gp_routine';
+        return { when, suggest: clinicianOnly ? 'gp_routine' : suggest };
+      });
+      candidate.disposition = { domain, allowed, rules, default: $('rcpoEdDispDefault')?.value || 'gp_routine' };
+    }
     if (!candidate.pharmacyFirst) delete candidate.pharmacyFirst;
     if (!candidate.appliesTo) delete candidate.appliesTo;
 
@@ -3119,6 +3298,72 @@ lfSaveBtn?.addEventListener('click', async () => {
     };
     sg.addEventListener('change', save);
     cl.addEventListener('change', save);
+  }
+
+  // ── Custom routing sign-off (plan E guardrail 6) ────────────────────────────
+  // reception.routingAttestation = { attestedBy, role: 'cso'|'partner',
+  //                                  attestedAt (ISO), scope: 'custom-routing' }
+  // Without a valid record, evaluateDisposition treats every custom and
+  // practice-edited pathway as clinician-only. The attester is the CSO or a
+  // partner and nobody else — the role list is closed here and in the validator.
+
+  let _routingWired = false;
+
+  async function renderRouting(attestation) {
+    const state = $('rcpoRoutingState');
+    const nameEl = $('rcpoRoutingName');
+    const roleEl = $('rcpoRoutingRole');
+    if (!state || !nameEl || !roleEl) return;
+
+    const valid = PU.isValidRoutingAttestation(attestation);
+    if (valid) {
+      const roleLabel = attestation.role === 'cso' ? 'clinical safety officer' : 'partner';
+      state.innerHTML = `
+        <div style="border:1px solid rgba(22,163,74,0.4); background:rgba(22,163,74,0.06); border-radius:8px; padding:10px 14px; font-size:12px; color:var(--text-2); display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <span><strong>Routing signed off</strong> by ${escHtml(attestation.attestedBy)} (${escHtml(roleLabel)}) on ${escHtml(String(attestation.attestedAt).slice(0, 10))}. Custom and edited pathways may suggest non-clinician routes.</span>
+          <button class="ghost" id="rcpoRoutingRevoke" style="font-size:11px; padding:4px 10px;">Revoke</button>
+        </div>`;
+      $('rcpoRoutingRevoke')?.addEventListener('click', async () => {
+        if (!confirm('Revoke the custom routing sign-off? Custom and edited pathways go back to suggesting a clinician only.')) return;
+        await chrome.storage.local.remove('reception.routingAttestation');
+        refresh();
+      });
+    } else {
+      state.innerHTML = `
+        <div style="border:1px solid var(--border); border-radius:8px; padding:10px 14px; font-size:12px; color:var(--text-3);">
+          <strong>No routing sign-off recorded.</strong> Custom and practice-edited pathways suggest a clinician only.
+          Bundled pathways are unaffected.
+        </div>`;
+    }
+    if (_routingWired) return;
+    _routingWired = true;
+
+    $('rcpoRoutingAttest')?.addEventListener('click', async () => {
+      const status = $('rcpoRoutingStatus');
+      const record = {
+        attestedBy: (nameEl.value || '').trim().slice(0, 120),
+        role: roleEl.value,
+        attestedAt: new Date().toISOString(),
+        scope: 'custom-routing',
+      };
+      // sanitiseRoutingAttestation returns null for anything that is not a
+      // complete, well-formed sign-off — a partial one must never be stored.
+      const clean = PU.sanitiseRoutingAttestation(record);
+      if (!clean) {
+        if (status) {
+          status.style.color = 'var(--red, #b91c1c)';
+          status.textContent = 'Enter the name of the CSO or partner signing off.';
+        }
+        return;
+      }
+      await chrome.storage.local.set({ 'reception.routingAttestation': clean });
+      if (status) {
+        status.style.color = 'var(--text-3)';
+        status.textContent = 'Sign-off recorded.';
+      }
+      nameEl.value = '';
+      refresh();
+    });
   }
 
   // ── Quick-wins chip filter ──────────────────────────────────────────────────
@@ -3181,7 +3426,10 @@ lfSaveBtn?.addEventListener('click', async () => {
 
   async function refresh() {
     try {
-      const [{ config, custom, overrides }, bundled] = await Promise.all([getState(), loadBundled()]);
+      const [{ config, custom, overrides, routingAttestation }, bundled] = await Promise.all([
+        getState(),
+        loadBundled(),
+      ]);
       const resolved = PU.resolveEffectivePathways({
         bundled: bundled.pathways || [],
         overrides,
@@ -3198,6 +3446,7 @@ lfSaveBtn?.addEventListener('click', async () => {
       renderDisclaimerArea(config, resolved, centralProv);
       renderPathwayList(resolved, config);
       renderContacts(config);
+      renderRouting(routingAttestation);
       renderChipList(config);
     } catch (e) {
       const host = $('rcpoPathwayList');

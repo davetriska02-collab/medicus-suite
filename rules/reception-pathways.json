@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "lastUpdated": "2026-07-28",
-  "specVersion": "Reception capture pathways v1.6 — 2026-07-28 (DRAFT — PENDING CSO SIGN-OFF, do not enable until signed off): added three new capture pathways from the reception-feedback build plan section B — gu-male (Urinary / genital problems, male), gyn-female (Gynae / urinary problems, female), and mental-health (Mental health / emotional distress). Neither GU pathway carries a pharmacyFirst block: male UTI is excluded from the NHS Pharmacy First service spec, and the gynae pathway is clinician-only by design. mental-health carries the new pathway-level flag \"sensitive\": true (capture drafts are never auto-saved and the taker's initials are mandatory) and, per NICE NG225 — which explicitly advises against risk-stratification tools and scales — is deliberately a minimal, non-stratifying capture-and-escalate script: binary red-flag triggers only, few questions, no scoring, no category or disposition output. Its first two red flags are the two mental-health flags that also remain in the \"general\" pathway, kept in BOTH because callers do not announce the right pathway. Also added: the new red-flag-level flag \"safeguarding\": true (escalate immediately to the duty clinician AND the practice safeguarding lead; bypasses all routing), and a new shared closing question \"caller\" capturing whether reception is speaking to the patient or to someone calling on their behalf. All conditional escalation drafts were split into separate single-level flags — \"escalate\" remains strictly \"999\" or \"duty\". The three new pathways ship DISABLED like every bundled pathway (enabledPathways defaults to off) and must not be enabled until the CSO has signed off the wording; the CKS phrasing still needs verifying against the primary NICE pages. Base v1.5 from 2026-07-25 preserved. Reception capture pathways v1.5 — 2026-07-25 (The Keeper): added 5 new red flags across headache, sinusitis, rash, and general pathways: rf-morning-vomit (headache, 999 — raised ICP, NICE CKS Headache); rf-nasal-unilateral (sinusitis, duty — unilateral nasal obstruction, NICE NG12 2WW); rf-skin-lesion (rash, duty — new/changing mole, NICE NG12 2WW); rf-haematuria (general, duty — visible haematuria 45+, NICE NG12 2WW); rf-hoarseness (general, duty — persistent 3+ weeks, NICE NG12 ENT 2WW). Base v1.4 from 2026-07-11 preserved.",
+  "specVersion": "Reception capture pathways v1.7 — 2026-07-28 (DRAFT — PENDING CSO SIGN-OFF, do not rely on the routing suggestions until signed off): added the optional per-pathway \"disposition\" block from the reception-feedback build plan section E — an if-this-then-that routing SUGGESTION shown only after a completed, all-negative red-flag screen. Conservative shipped content: the five Pharmacy First conditions (sore-throat, earache, sinusitis, urinary, rash) may suggest \"pharmacy_first\" ONLY via the pathway's own Pharmacy First age gate, defaulting to a GP appointment; cough and feverish-child allow anp/gp_routine; backpain allows anp/paramedic/gp_routine; headache is gp_routine only; and general, gu-male, gyn-female and mental-health carry NO disposition block at all — they are clinician-only, frozen by id in engine code (CLINICIAN_ONLY_IDS) rather than by anything editable here, and mental-health renders no routing output whatsoever. Every shipped block has an empty or single-rule \"rules\" list and a \"gp_routine\" default: the engine guardrails (red-flag gate, age floor under 1 / under 5, confirmed-age-only fail-closed, custom-pack attestation) do the safety work, not the data. All disposition blocks are CSO-review clinical content and must not be relied on until signed off. Base v1.6 from 2026-07-28 preserved. Reception capture pathways v1.6 — 2026-07-28 (DRAFT — PENDING CSO SIGN-OFF, do not enable until signed off): added three new capture pathways from the reception-feedback build plan section B — gu-male (Urinary / genital problems, male), gyn-female (Gynae / urinary problems, female), and mental-health (Mental health / emotional distress). Neither GU pathway carries a pharmacyFirst block: male UTI is excluded from the NHS Pharmacy First service spec, and the gynae pathway is clinician-only by design. mental-health carries the new pathway-level flag \"sensitive\": true (capture drafts are never auto-saved and the taker's initials are mandatory) and, per NICE NG225 — which explicitly advises against risk-stratification tools and scales — is deliberately a minimal, non-stratifying capture-and-escalate script: binary red-flag triggers only, few questions, no scoring, no category or disposition output. Its first two red flags are the two mental-health flags that also remain in the \"general\" pathway, kept in BOTH because callers do not announce the right pathway. Also added: the new red-flag-level flag \"safeguarding\": true (escalate immediately to the duty clinician AND the practice safeguarding lead; bypasses all routing), and a new shared closing question \"caller\" capturing whether reception is speaking to the patient or to someone calling on their behalf. All conditional escalation drafts were split into separate single-level flags — \"escalate\" remains strictly \"999\" or \"duty\". The three new pathways ship DISABLED like every bundled pathway (enabledPathways defaults to off) and must not be enabled until the CSO has signed off the wording; the CKS phrasing still needs verifying against the primary NICE pages. Base v1.5 from 2026-07-25 preserved. Reception capture pathways v1.5 — 2026-07-25 (The Keeper): added 5 new red flags across headache, sinusitis, rash, and general pathways: rf-morning-vomit (headache, 999 — raised ICP, NICE CKS Headache); rf-nasal-unilateral (sinusitis, duty — unilateral nasal obstruction, NICE NG12 2WW); rf-skin-lesion (rash, duty — new/changing mole, NICE NG12 2WW); rf-haematuria (general, duty — visible haematuria 45+, NICE NG12 2WW); rf-hoarseness (general, duty — persistent 3+ weeks, NICE NG12 ENT 2WW). Base v1.4 from 2026-07-11 preserved.",
   "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes), the NICE NG143 feverish-child traffic-light features, the NHS Pharmacy First clinical pathways, and NICE NG253/NG254/NG255 (suspected sepsis, replacing NG51) for urosepsis / sepsis escalation, re-phrased in lay language for telephone use by non-clinical staff. 2026-06-10: escalation re-tiering pass — several time-critical presentations (urosepsis, cauda equina, PE, large haemoptysis, sepsis, self-harm with means) promoted to 999 level. 2026-06-14: CSO signed off the reception tiers and red-flag escalation levels for live use (DRAFT blocker lifted), and promoted five red flags from urgent-duty to 999 on clinical review — suspected SJS/TEN (rash), sepsis with rigors (UTI), possible cauda equina / bilateral leg weakness or numbness (back pain), mastoiditis (earache), and red painful eye with halos / suspected acute angle-closure glaucoma (headache). This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files.",
   "escalations": {
     "999": "Possible emergency: follow practice emergency policy NOW — advise calling 999 / transfer to the duty clinician immediately. Do not put the caller in a queue.",
@@ -39,7 +39,15 @@
         { "id": "glands", "ask": "Any swollen or tender glands in the neck?", "type": "yesno", "label": "Neck glands" },
         { "id": "earache", "ask": "Any earache as well?", "type": "yesno", "label": "Earache" },
         { "id": "history", "ask": "Any history of repeated tonsillitis or a previous throat abscess (quinsy)?", "type": "text", "label": "Previous throat problems" }
-      ]
+      ],
+      "disposition": {
+        "domain": "minor_infection",
+        "allowed": ["pharmacy_first", "gp_routine"],
+        "rules": [
+          { "when": { "pharmacyFirstEligible": true }, "suggest": "pharmacy_first" }
+        ],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "earache",
@@ -63,7 +71,15 @@
         { "id": "hearing", "ask": "Any change in hearing?", "type": "yesno", "label": "Hearing change" },
         { "id": "grommets", "ask": "Any grommets or previous ear operations?", "type": "text", "label": "Ear history" },
         { "id": "analgesia", "ask": "Has pain relief (paracetamol / ibuprofen) been tried, and did it help?", "type": "text", "label": "Pain relief tried" }
-      ]
+      ],
+      "disposition": {
+        "domain": "minor_infection",
+        "allowed": ["pharmacy_first", "gp_routine"],
+        "rules": [
+          { "when": { "pharmacyFirstEligible": true }, "suggest": "pharmacy_first" }
+        ],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "cough",
@@ -90,7 +106,13 @@
         { "id": "smoker", "ask": "Do they smoke (or vape)?", "type": "choice", "options": ["Smoker", "Ex-smoker", "Never smoked", "Vapes"], "label": "Smoking" },
         { "id": "weightloss", "ask": "If the cough has lasted over 3 weeks: any weight loss, night sweats, or feeling generally run down?", "type": "text", "label": ">3wk / weight loss / sweats" },
         { "id": "lungdx", "ask": "Any known lung problems (asthma, COPD) or regular inhalers?", "type": "text", "label": "Lung history" }
-      ]
+      ],
+      "disposition": {
+        "domain": "minor_infection",
+        "allowed": ["anp", "gp_routine"],
+        "rules": [],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "urinary",
@@ -113,7 +135,15 @@
         { "id": "discharge", "ask": "Any unusual vaginal discharge or irritation? (suggests a different cause)", "type": "yesno", "label": "Discharge/irritation" },
         { "id": "previous", "ask": "Had urine infections before? How many in the last year?", "type": "text", "label": "Previous UTIs" },
         { "id": "abxallergy", "ask": "Any antibiotic allergies?", "type": "text", "label": "Antibiotic allergies" }
-      ]
+      ],
+      "disposition": {
+        "domain": "minor_infection",
+        "allowed": ["pharmacy_first", "gp_routine"],
+        "rules": [
+          { "when": { "pharmacyFirstEligible": true }, "suggest": "pharmacy_first" }
+        ],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "headache",
@@ -140,7 +170,13 @@
         { "id": "vomiting", "ask": "Any vomiting?", "type": "yesno", "label": "Vomiting" },
         { "id": "photophobia", "ask": "Bothered by bright light?", "type": "yesno", "label": "Light sensitivity" },
         { "id": "painkillers", "ask": "How often are they taking painkillers for headaches — most days?", "type": "text", "label": "Painkiller use" }
-      ]
+      ],
+      "disposition": {
+        "domain": "other",
+        "allowed": ["gp_routine"],
+        "rules": [],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "backpain",
@@ -162,7 +198,13 @@
         { "id": "pinsneedles", "ask": "Any pins and needles or numbness in the legs or feet?", "type": "text", "label": "Pins/needles" },
         { "id": "function", "ask": "How is it affecting them — can they work / walk / sleep?", "type": "text", "label": "Function" },
         { "id": "previous", "ask": "Have they had this before? What helped?", "type": "text", "label": "Previous episodes" }
-      ]
+      ],
+      "disposition": {
+        "domain": "msk",
+        "allowed": ["anp", "paramedic", "gp_routine"],
+        "rules": [],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "sinusitis",
@@ -186,7 +228,15 @@
         { "id": "fever", "ask": "Any fever?", "type": "yesno", "label": "Fever" },
         { "id": "toothache", "ask": "Any toothache or pain in the upper teeth on the same side?", "type": "yesno", "label": "Dental pain" },
         { "id": "previous", "ask": "Have they had sinusitis before?", "type": "text", "label": "Previous sinusitis" }
-      ]
+      ],
+      "disposition": {
+        "domain": "minor_infection",
+        "allowed": ["pharmacy_first", "gp_routine"],
+        "rules": [
+          { "when": { "pharmacyFirstEligible": true }, "suggest": "pharmacy_first" }
+        ],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "feverish-child",
@@ -214,7 +264,13 @@
         { "id": "symptoms", "ask": "Any of these as well?", "type": "multi", "options": ["Cough or cold", "Pulling at ears", "Sore throat", "Vomiting", "Diarrhoea", "Rash (fades when pressed)"], "label": "Other symptoms" },
         { "id": "antipyretics", "ask": "Has paracetamol or ibuprofen been given? Did the child perk up?", "type": "text", "label": "Calpol/ibuprofen" },
         { "id": "imms", "ask": "Are their immunisations up to date?", "type": "yesno", "label": "Imms up to date" }
-      ]
+      ],
+      "disposition": {
+        "domain": "other",
+        "allowed": ["anp", "gp_routine"],
+        "rules": [],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "rash",
@@ -240,7 +296,15 @@
         { "id": "fever", "ask": "Any fever or feeling unwell with it?", "type": "yesno", "label": "Fever/unwell" },
         { "id": "exposures", "ask": "Anything new — products, medicines, plants, insect bites? Anyone else in the house affected?", "type": "text", "label": "Exposures/contacts" },
         { "id": "tried", "ask": "Any creams or treatments tried?", "type": "text", "label": "Creams tried" }
-      ]
+      ],
+      "disposition": {
+        "domain": "minor_infection",
+        "allowed": ["pharmacy_first", "gp_routine"],
+        "rules": [
+          { "when": { "pharmacyFirstEligible": true }, "suggest": "pharmacy_first" }
+        ],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "general",

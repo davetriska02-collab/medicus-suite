@@ -779,3 +779,113 @@
 .rcp-output-head {
   margin-top: 2px;
 }
+
+/* ── Disposition suggestion card (plan E) ────────────────────────────────────
+   Sits between the escalation banner and "Generate summary", and ONLY when the
+   engine says 'suggest' (all red flags answered, none positive, pathway not
+   clinician-only). Deliberately quieter than the red/amber escalation banner:
+   this is a suggestion a human decides on, not an instruction. */
+.rcp-disposition {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--bg-mid);
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.rcp-disposition-hidden {
+  display: none;
+}
+.rcp-disp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.rcp-disp-title {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.rcp-disp-age {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.rcp-disp-age input {
+  width: 58px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  color: var(--text-1);
+}
+.rcp-disp-age input:focus-visible {
+  border-color: var(--accent);
+}
+.rcp-disp-suggest {
+  font-size: 13px;
+  color: var(--text-1);
+  line-height: 1.5;
+}
+/* The offer-a-clinician fallback. Always rendered with the suggestion — it also
+   goes into the pasted capture text (guardrail 7); never style it as optional. */
+.rcp-disp-fallback {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+  margin-top: 2px;
+}
+.rcp-disp-decided {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--green);
+  margin-top: 5px;
+}
+.rcp-disp-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 7px;
+}
+.rcp-btn-small {
+  font-size: 12px;
+  padding: 3px 10px;
+}
+.rcp-disp-override {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px dashed var(--border);
+}
+.rcp-disp-override-lbl {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.rcp-disp-override select,
+.rcp-disp-override input[type='text'] {
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  color: var(--text-1);
+}
+.rcp-disp-override input[type='text'] {
+  flex: 1;
+  min-width: 140px;
+}

@@ -229,5 +229,45 @@ for (const [hi, lo] of [['rf-selfharm-injury-urgent', 'rf-selfharm-not-urgent'],
 check(/v1\.6/.test(doc.specVersion || ''), 'specVersion records the v1.6 additions');
 check(/DRAFT/i.test(doc.specVersion || ''), 'specVersion flags the new content as DRAFT pending CSO sign-off');
 
+// ── 2026-07-28 (plan section E): disposition routing blocks ──────────────────
+// Structural locks only — the guardrail truth table lives in
+// test-reception-disposition.js. What matters here is that the four
+// clinician-only pathways never acquire a routing block by a content edit: the
+// engine would still refuse them (CLINICIAN_ONLY_IDS is frozen in code), but a
+// block sitting in the file would misrepresent the shipped clinical intent.
+console.log('\n--- 2026-07-28 (plan E): disposition blocks ---');
+const CLINICIAN_ONLY = ['mental-health', 'gu-male', 'gyn-female', 'general'];
+for (const id of CLINICIAN_ONLY) {
+  const p = doc.pathways.find(x => x.id === id);
+  check(!!p && p.disposition === undefined, `[${id}] has NO disposition block (clinician-only pathway)`);
+}
+const DISPOSITION_DOMAINS = ['minor_infection', 'msk', 'gu_male', 'gyn_female', 'mental_health', 'other'];
+const DESTINATIONS = ['pharmacy_first', 'anp', 'paramedic', 'gp_routine'];
+for (const p of doc.pathways || []) {
+  if (!p.disposition) continue;
+  const d = p.disposition;
+  check(DISPOSITION_DOMAINS.indexOf(d.domain) !== -1, `[${p.id}] disposition.domain is a known domain (${d.domain})`);
+  check(Array.isArray(d.allowed) && d.allowed.length >= 1, `[${p.id}] disposition.allowed non-empty`);
+  check((d.allowed || []).every(x => DESTINATIONS.indexOf(x) !== -1), `[${p.id}] disposition.allowed entries are known destinations`);
+  check(d.default === 'gp_routine' || d.default === 'duty', `[${p.id}] disposition.default is gp_routine|duty`);
+  check(Array.isArray(d.rules), `[${p.id}] disposition.rules is a list`);
+  // A shipped rule suggesting pharmacy_first must be gated on the eligibility
+  // check, never on a bare age — the age band lives in the pharmacyFirst block
+  // and must not be restated (and drift) in the routing rules.
+  for (const r of d.rules || []) {
+    check(DESTINATIONS.indexOf(r.suggest) !== -1, `[${p.id}] rule suggests a known destination (${r.suggest})`);
+    if (r.suggest === 'pharmacy_first') {
+      check(r.when && r.when.pharmacyFirstEligible === true, `[${p.id}] pharmacy_first rule is gated on pharmacyFirstEligible`);
+      check(!!p.pharmacyFirst, `[${p.id}] pharmacy_first rule has a pharmacyFirst block to read`);
+    }
+  }
+  // Clinician-only domains must not carry non-clinician destinations even in
+  // shipped content (the engine refuses them; the file should not claim them).
+  if (['mental_health', 'gu_male', 'gyn_female'].indexOf(d.domain) !== -1) {
+    check((d.allowed || []).every(x => x === 'gp_routine'), `[${p.id}] clinician-only domain allows gp_routine only`);
+  }
+}
+check(/v1\.7/.test(doc.specVersion || ''), 'specVersion records the v1.7 disposition additions');
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

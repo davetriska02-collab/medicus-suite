@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.201.0] — 2026-07-28
+
+### Reception: if-this-then-that disposition engine — DRAFT, suggestion-only (reception feedback, Phase E, hazard H-050)
+
+- **`evaluateDisposition`** (pure, truth-table-tested): after a fully
+  answered, red-flag-clear capture, suggests a route (Pharmacy First /
+  ANP / paramedic / GP routine) from the pathway's `disposition` block.
+  Suggestion-only — a human confirms or overrides, and every suggestion
+  carries "Or a clinician callback if the patient prefers — always offer
+  it." on screen and in the pasted capture text.
+- **Guardrails frozen in engine code, applied after override resolution**
+  (a practice fork cannot edit them away — adversarial fixture tested):
+  mental-health/sensitive pathways render no disposition output at all;
+  gu-male, gyn-female and general are clinician-only; positive OR
+  unanswered red flags withhold; hard age floor (<1 clinician-only, <5
+  strips ANP/paramedic incl. from the override control); age must be
+  explicitly confirmed on the call (never the open record's) and fails
+  closed to GP routine; Pharmacy First suggestions re-use the existing
+  age gates, failing closed. Downgrading overrides are rejected as
+  invalid at resolve time.
+- **Custom routing sign-off: CSO or partner only.** Custom/edited
+  pathways stay clinician-only until a `reception.routingAttestation`
+  (name + role + timestamp, revocable) is recorded in options; backups
+  import it validate-or-drop and the restore preview warns when one is
+  present.
+- **Audit trail in the capture text**: suggested/confirmed/overridden
+  routes AND withheld dispositions (with reason) are recorded, so an SEA
+  can reconstruct what the tool did and didn't say.
+- Nine conservative shipped disposition blocks (DRAFT pending CSO;
+  pathways remain disabled by default); pathway editor gains a
+  Disposition section with clinician-only greying; hazard entry
+  **H-050** (initial 4×2 → residual 4×1, ALARP, PENDING CSO REVIEW).
+- New `test-reception-disposition.js` (214 checks); suite total 340.
+
 ## [v3.200.0] — 2026-07-28
 
 ### Reception: three new capture pathways — DRAFT, disabled pending CSO sign-off (reception feedback, Phase B)

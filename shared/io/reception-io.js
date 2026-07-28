@@ -36,6 +36,7 @@ const RECEPTION_KEYS = [
   'reception.customPathways',
   'reception.pathwayOverrides',
   'reception.tilePrefs',
+  'reception.routingAttestation',
 ];
 
 async function receptionExport() {
@@ -45,6 +46,13 @@ async function receptionExport() {
     customPathways:   r['reception.customPathways']   ?? [],
     pathwayOverrides: r['reception.pathwayOverrides'] ?? {},
     tilePrefs:        r['reception.tilePrefs']        ?? {},
+    // The CSO/partner custom-routing sign-off. Unlike disclaimerAcceptedAt this
+    // one DOES travel: it is a practice-level clinical sign-off on the practice's
+    // own pathway content (which travels in the same envelope), not a per-install
+    // "I have read this screen" acknowledgement. It is re-validated on import and
+    // dropped whole if its shape is wrong — a half-recognised attestation must
+    // never read as a sign-off.
+    routingAttestation: r['reception.routingAttestation'] ?? null,
   };
 }
 
@@ -185,6 +193,21 @@ async function receptionImport(data) {
     // builds a fresh object — dropping unknown sort modes, non-id-shaped keys
     // (prototype-pollution defence), and invalid colour keys.
     toSet['reception.tilePrefs'] = PU.sanitiseTilePrefs(tp || {});
+  }
+
+  // reception.routingAttestation — the CSO/partner sign-off that lets CUSTOM and
+  // practice-EDITED pathways suggest a non-clinician destination (plan E
+  // guardrail 6). Validated strictly and dropped (not thrown on, and never
+  // partially stored) when the shape is wrong: the fail-safe direction is
+  // "custom packs stay clinician-only", so a malformed record must simply not
+  // arrive. An explicit null clears any local attestation.
+  if (data.routingAttestation !== undefined) {
+    if (data.routingAttestation === null) {
+      toSet['reception.routingAttestation'] = null;
+    } else {
+      const clean = PU.sanitiseRoutingAttestation(data.routingAttestation);
+      if (clean) toSet['reception.routingAttestation'] = clean;
+    }
   }
 
   if (Object.keys(toSet).length) await chrome.storage.local.set(toSet);
