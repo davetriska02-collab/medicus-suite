@@ -101,6 +101,70 @@ console.log('4: invertRelationship');
 }
 
 // ============================================================
+// 4b — composeViaHub
+// ============================================================
+console.log('4b: composeViaHub');
+{
+  // X is hub's mother, B is hub's daughter -> X is B's grandmother.
+  const gm = CR.composeViaHub({ baseId: 'mother' }, { baseId: 'daughter' });
+  check(gm && gm.baseId === 'grandmother' && gm.modifierId === null, 'parent-of-hub + child-of-hub -> grandmother');
+  const gf = CR.composeViaHub({ baseId: 'father' }, { baseId: 'son' });
+  check(gf && gf.baseId === 'grandfather', 'father-of-hub + son-of-hub -> grandfather');
+
+  // Reversed direction — X is hub's child, B is hub's parent -> X is B's grandchild.
+  const gs = CR.composeViaHub({ baseId: 'son' }, { baseId: 'mother' });
+  check(gs && gs.baseId === 'grandson', 'child-of-hub + parent-of-hub -> grandson (reversed direction)');
+  const gd = CR.composeViaHub({ baseId: 'daughter' }, { baseId: 'father' });
+  check(gd && gd.baseId === 'granddaughter', 'child-of-hub + parent-of-hub -> granddaughter (reversed direction)');
+
+  // In-law — X is hub's parent, B is hub's partner -> X is B's parent-in-law.
+  const mil = CR.composeViaHub({ baseId: 'mother' }, { baseId: 'husband' });
+  check(mil && mil.baseId === 'mother-in-law', 'parent-of-hub + partner-of-hub -> mother-in-law');
+  const fil = CR.composeViaHub({ baseId: 'father' }, { baseId: 'wife' });
+  check(fil && fil.baseId === 'father-in-law', 'parent-of-hub + partner-of-hub -> father-in-law');
+
+  // In-law reversed — X is hub's partner, B is hub's parent -> X is B's child-in-law.
+  const sil = CR.composeViaHub({ baseId: 'husband' }, { baseId: 'mother' });
+  check(sil && sil.baseId === 'son-in-law', 'husband-of-hub (word resolves gender on its own) -> son-in-law');
+  const dil = CR.composeViaHub({ baseId: 'wife' }, { baseId: 'father' });
+  check(dil && dil.baseId === 'daughter-in-law', 'wife-of-hub (word resolves gender on its own) -> daughter-in-law');
+
+  // Gender-neutral partner word needs the soft gender hint for the reversed in-law case.
+  const partnerNoGender = CR.composeViaHub({ baseId: 'partner' }, { baseId: 'mother' });
+  check(partnerNoGender === null, 'gender-neutral partner-of-hub with no gender hint -> null, never guessed');
+  const partnerMale = CR.composeViaHub({ baseId: 'partner' }, { baseId: 'mother' }, 'Male');
+  check(partnerMale && partnerMale.baseId === 'son-in-law', 'gender-neutral partner-of-hub + male hint -> son-in-law');
+  const partnerFemale = CR.composeViaHub({ baseId: 'civil-partner' }, { baseId: 'father' }, 'Female');
+  check(
+    partnerFemale && partnerFemale.baseId === 'daughter-in-law',
+    'gender-neutral civil-partner-of-hub + female hint -> daughter-in-law'
+  );
+
+  // Explicitly unsafe combinations — must return null, never a guess.
+  check(
+    CR.composeViaHub({ baseId: 'daughter' }, { baseId: 'daughter' }) === null,
+    'child-of-hub + child-of-hub (sibling) -> null, half/full ambiguity not resolvable from one hop'
+  );
+  check(
+    CR.composeViaHub({ baseId: 'husband' }, { baseId: 'daughter' }) === null,
+    'partner-of-hub + child-of-hub (step-parent) -> null, partner could independently already be the parent'
+  );
+  check(
+    CR.composeViaHub({ baseId: 'mother' }, { baseId: 'mother' }) === null,
+    'parent-of-hub + parent-of-hub -> null, not even a meaningful relationship'
+  );
+  check(
+    CR.composeViaHub({ baseId: 'mother', modifierId: 'step' }, { baseId: 'daughter' }) === null,
+    'a Step- modified hop never composes — checked on X'
+  );
+  check(
+    CR.composeViaHub({ baseId: 'mother' }, { baseId: 'daughter', modifierId: 'half' }) === null,
+    'a Half- modified hop never composes — checked on B'
+  );
+  check(CR.composeViaHub(null, { baseId: 'daughter' }) === null, 'a missing edge is a safe no-op, not a throw');
+}
+
+// ============================================================
 // 5 — normaliseFreeText
 // ============================================================
 console.log('5: normaliseFreeText');
@@ -194,8 +258,13 @@ console.log('7: extractPreferredEmail / extractPreferredPhone');
         { emailAddress: 'preferred@example.com', preferredEmailAddress: true },
       ],
       patientTelephoneNumbers: [
-        { telephoneNumber: '01234567890', preferredTelephoneNumberForSms: false },
-        { telephoneNumber: '07911111111', preferredTelephoneNumberForSms: true },
+        { telephoneNumberId: 'phone-old-id', telephoneNumber: '01234567890', preferredTelephoneNumberForSms: false },
+        {
+          telephoneNumberId: 'phone-preferred-id',
+          telephoneNumber: '07911111111',
+          preferredTelephoneNumberForSms: true,
+          notes: "mum's mobile",
+        },
       ],
     },
   };
@@ -207,11 +276,19 @@ console.log('7: extractPreferredEmail / extractPreferredPhone');
     CR.extractPreferredPhone(withPreferred) === '07911111111',
     'extractPreferredPhone picks the entry flagged preferred for SMS over the first one'
   );
+  check(
+    CR.extractPreferredPhoneNote(withPreferred) === "mum's mobile",
+    "extractPreferredPhoneNote surfaces the free-text note on the same preferred entry — confirmed live 2026-07-25: this is exactly how a number that actually belongs to someone else (e.g. a parent's mobile left on a child's own record) gets flagged"
+  );
+  check(
+    CR.extractPreferredPhoneId(withPreferred) === 'phone-preferred-id',
+    'extractPreferredPhoneId identifies the SAME entry extractPreferredPhone/extractPreferredPhoneNote read from — a caller editing the flagged number must target the number the warning is actually about'
+  );
 
   const noPreferredFlag = {
     patientContactInformationSection: {
       patientEmailAddresses: [{ emailAddress: 'only@example.com', preferredEmailAddress: false }],
-      patientTelephoneNumbers: [],
+      patientTelephoneNumbers: [{ telephoneNumber: '01234567890', preferredTelephoneNumberForSms: false }],
     },
   };
   check(
@@ -219,14 +296,76 @@ console.log('7: extractPreferredEmail / extractPreferredPhone');
     'extractPreferredEmail falls back to the first entry when none is flagged preferred'
   );
   check(
-    CR.extractPreferredPhone(noPreferredFlag) === null,
-    'extractPreferredPhone returns null when the list is empty'
+    CR.extractPreferredPhoneNote(noPreferredFlag) === null,
+    'extractPreferredPhoneNote returns null when the (only) entry has no notes field'
+  );
+
+  const emptyPhones = {
+    patientContactInformationSection: { patientEmailAddresses: [], patientTelephoneNumbers: [] },
+  };
+  check(CR.extractPreferredPhone(emptyPhones) === null, 'extractPreferredPhone returns null when the list is empty');
+  check(
+    CR.extractPreferredPhoneNote(emptyPhones) === null,
+    'extractPreferredPhoneNote returns null when the list is empty'
+  );
+  check(
+    CR.extractPreferredPhoneId(emptyPhones) === null,
+    'extractPreferredPhoneId returns null when the list is empty'
   );
   check(
     CR.extractPreferredEmail(null) === null,
     'extractPreferredEmail is defensive against a missing patient-details object'
   );
   check(CR.extractPreferredEmail({}) === null, 'extractPreferredEmail is defensive against a missing section');
+  check(
+    CR.extractPreferredPhoneId(null) === null,
+    'extractPreferredPhoneId is defensive against a missing patient-details object'
+  );
+  check(
+    CR.extractPreferredPhoneNote(null) === null,
+    'extractPreferredPhoneNote is defensive against a missing patient-details object'
+  );
+}
+
+// ============================================================
+// 8 — isDeceasedRelationshipText
+// ============================================================
+console.log('8: isDeceasedRelationshipText');
+{
+  check(CR.isDeceasedRelationshipText('Mother (RIP)') === true, '"Mother (RIP)" is recognised as deceased');
+  check(CR.isDeceasedRelationshipText('Mother (rip)') === true, 'match is case-insensitive');
+  check(CR.isDeceasedRelationshipText('Father - deceased') === true, '"deceased" is also recognised');
+  check(CR.isDeceasedRelationshipText("Father (dec'd)") === true, '"dec\'d" is also recognised');
+  check(CR.isDeceasedRelationshipText('Sadly passed away last year') === true, '"passed away" is also recognised');
+  check(CR.isDeceasedRelationshipText('Mother') === false, 'a plain relationship is not flagged');
+  check(
+    CR.isDeceasedRelationshipText('Ripley') === false,
+    'word-bounded — does not fire on an unrelated word containing "rip"'
+  );
+  check(CR.isDeceasedRelationshipText('') === false, 'empty text is not flagged');
+  check(CR.isDeceasedRelationshipText(null) === false, 'is defensive against null');
+  check(CR.isDeceasedRelationshipText(undefined) === false, 'is defensive against undefined');
+}
+
+// ============================================================
+// 9 — isUkMobileNumber
+// ============================================================
+console.log('9: isUkMobileNumber');
+{
+  check(CR.isUkMobileNumber('07911 123456') === true, 'plain 07 mobile with a space is recognised');
+  check(CR.isUkMobileNumber('07911123456') === true, 'plain 07 mobile with no spaces is recognised');
+  check(CR.isUkMobileNumber('+44 7911 123456') === true, '+44 international format is recognised');
+  check(CR.isUkMobileNumber('0044 7911 123456') === true, '0044 international format is recognised');
+  check(CR.isUkMobileNumber('44 7911 123456') === true, 'bare 44 country code (no +) is recognised');
+  check(CR.isUkMobileNumber('020 8943 3013') === false, 'a London landline is not recognised as mobile');
+  check(CR.isUkMobileNumber('0121 496 0000') === false, 'a Birmingham landline is not recognised as mobile');
+  check(CR.isUkMobileNumber('01632 960000') === false, 'an 01 landline is not recognised as mobile');
+  check(CR.isUkMobileNumber('0800 123 4567') === false, 'a freephone number is not recognised as mobile');
+  check(CR.isUkMobileNumber('0791112345') === false, 'one digit short of a valid mobile is rejected');
+  check(CR.isUkMobileNumber('079111234567') === false, 'one digit too many is rejected');
+  check(CR.isUkMobileNumber('') === false, 'empty string is not a mobile');
+  check(CR.isUkMobileNumber(null) === false, 'is defensive against null');
+  check(CR.isUkMobileNumber(undefined) === false, 'is defensive against undefined');
 }
 
 // ============================================================

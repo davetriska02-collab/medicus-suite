@@ -2,9 +2,9 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 //
 // Pure engine for the Contacts linking tool. Represents ONE patient's own family-tree canvas
-// state (slots, committed edges, pending suggestions, needs-review holding area) plus, for the
-// multi-member "cycling" flow, a family-session that tracks which family members have been
-// visited and what's already been committed for each — all purely in-memory (nothing persisted
+// state (slots, committed edges, pending suggestions) plus, for the multi-member "cycling" flow,
+// a family-session that tracks which family members have been visited and what's already been
+// committed for each — all purely in-memory (nothing persisted
 // to chrome.storage.local by this module; the caller owns that decision entirely, per this
 // codebase's "pure core, caller owns storage" doctrine — see shared/contact-ledger.js).
 //
@@ -47,7 +47,6 @@
       },
       edges: [],
       pendingSuggestions: [],
-      needsReview: [],
     };
   }
 
@@ -66,6 +65,10 @@
       copyCorrespondence: !!relationshipChoice.copyCorrespondence,
       notes: relationshipChoice.notes || null,
       reciprocalCommitted: !!relationshipChoice.reciprocalCommitted,
+      // locked: true means this edge is already real in Medicus (pre-placed from an existing
+      // linked contact when the tree is first built) — a caller renders it read-only rather than
+      // as a pending decision. False/absent means it's a fresh decision made this session.
+      locked: !!relationshipChoice.locked,
     };
   }
 
@@ -86,8 +89,6 @@
       next.slots[slotPath].push(edge);
     }
     next.edges.push(edge);
-    // A card just assigned to a real slot no longer belongs in the "needs review" holding area.
-    next.needsReview = next.needsReview.filter((c) => c.id !== card.id);
     return next;
   }
 
@@ -152,16 +153,6 @@
     return { tree: next, edge };
   }
 
-  // addNeedsReview(tree, card) -> tree' — a manual/linked contact whose free-text relationship
-  // didn't map to a canonical id. Held separately rather than guessed into a slot.
-  function addNeedsReview(tree, card) {
-    if (!tree || !card || !card.id) return tree;
-    const next = clone(tree);
-    if (next.needsReview.some((c) => c.id === card.id)) return tree;
-    next.needsReview.push(card);
-    return next;
-  }
-
   function toRenderModel(tree) {
     if (!tree) return null;
     const t = clone(tree);
@@ -175,7 +166,6 @@
       auntsUncles: t.slots.auntsUncles,
       other: t.slots.other,
       pendingSuggestions: t.pendingSuggestions,
-      needsReview: t.needsReview,
       hasGrandparents: t.slots.grandparents.length > 0,
       hasAuntsUncles: t.slots.auntsUncles.length > 0,
       hasOther: t.slots.other.length > 0,
@@ -185,22 +175,54 @@
   // ── Family session (cycling through multiple family members, no navigation required) ─────────
   // Plain objects (not Map) throughout, matching this codebase's pure-store convention (e.g.
   // shared/contact-ledger.js) and keeping the whole session trivially JSON-serialisable/testable.
+  //
+  // Shape: { current, visited, pending, byPatient, committedEdgesByPatient }.
+  //   - `current` is whichever patientId's canvas is on screen right now (null once cycling ends).
+  //   - `visited` is every patientId ever shown (never re-added, however many times a later
+  //     confirmed edge rediscovers them — e.g. two siblings both pointing back at the same parent).
+  //   - `pending` is the not-yet-visited pool, kept sorted oldest-to-youngest by dob as members are
+  //     discovered, so advance() always has a deterministic "who's next" without re-sorting.
+  // Deliberately NOT a fixed queue + moving cursor: the pool grows mid-session as edges get
+  // committed, and a newly-discovered member can sort older than someone already visited — a
+  // cursor-in-a-fixed-array model can't express "insert behind where we already walked past".
+  // Excluding inactive patients is NOT this module's job: whether a patientId is even openable is
+  // only knowable by trying (Medicus 403s with inactive-patient-access on the fetch, there is no
+  // upfront boolean) — the caller tries the fetch after advance() and calls advance() again on
+  // failure, this module just tracks who's been visited vs who's still waiting.
 
   function createFamilySession(indexPatientId) {
     return {
-      queue: indexPatientId ? [indexPatientId] : [],
-      cursor: 0,
+      current: indexPatientId || null,
+      visited: indexPatientId ? { [indexPatientId]: true } : {},
+      pending: [], // [{ patientId, dob }], sorted ascending by dob (unknown dob sorts last)
       byPatient: {}, // patientId -> tree
       committedEdgesByPatient: {}, // patientId -> edge[]
     };
   }
 
-  // enqueueFamilyMember(session, patientId) -> session' — adds a newly-discovered family member
-  // to the review queue if not already present (dedup by patientId).
-  function enqueueFamilyMember(session, patientId) {
-    if (!session || !patientId || session.queue.includes(patientId)) return session;
+  function dobSortValue(dob) {
+    const t = dob ? new Date(dob).getTime() : NaN;
+    return Number.isFinite(t) ? t : Infinity;
+  }
+
+  // enqueueFamilyMember(session, patientId, dob) -> session' — adds a newly-discovered family
+  // member to the pending pool if not already visited or already pending (dedup by patientId).
+  // Inserted in dob order, not appended, so the pool stays sorted oldest-to-youngest as it grows.
+  function enqueueFamilyMember(session, patientId, dob) {
+    if (
+      !session ||
+      !patientId ||
+      session.visited[patientId] ||
+      session.pending.some((p) => p.patientId === patientId)
+    ) {
+      return session;
+    }
     const next = clone(session);
-    next.queue.push(patientId);
+    const entry = { patientId, dob: dob || null };
+    const value = dobSortValue(dob);
+    const insertAt = next.pending.findIndex((p) => dobSortValue(p.dob) > value);
+    if (insertAt === -1) next.pending.push(entry);
+    else next.pending.splice(insertAt, 0, entry);
     return next;
   }
 
@@ -216,17 +238,20 @@
   }
 
   // advance(session) -> { session: session', patientId: string|null } — patientId is null once
-  // the queue is exhausted (cycling stops; the caller decides whether to end or let the user quit
-  // early — this function never forces completion of every member).
+  // the pending pool is exhausted (cycling stops; the caller decides whether to end or let the
+  // user quit early — this function never forces completion of every member).
   function advance(session) {
     if (!session) return { session, patientId: null };
-    const nextCursor = session.cursor + 1;
-    if (nextCursor >= session.queue.length) {
-      return { session: Object.assign(clone(session), { cursor: nextCursor }), patientId: null };
+    if (!session.pending.length) {
+      const next = clone(session);
+      next.current = null;
+      return { session: next, patientId: null };
     }
     const next = clone(session);
-    next.cursor = nextCursor;
-    return { session: next, patientId: next.queue[nextCursor] };
+    const head = next.pending.shift();
+    next.visited[head.patientId] = true;
+    next.current = head.patientId;
+    return { session: next, patientId: head.patientId };
   }
 
   // recordCommittedEdge(session, patientId, edge) -> session' — called immediately after a
@@ -249,7 +274,6 @@
     addPendingSuggestion,
     dismissSuggestion,
     commitSuggestion,
-    addNeedsReview,
     toRenderModel,
     createFamilySession,
     enqueueFamilyMember,

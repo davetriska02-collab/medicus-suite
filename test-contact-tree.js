@@ -49,6 +49,13 @@ console.log('1: createTree / assignToSlot');
   const before = tree;
   const rejected = CT.assignToSlot(tree, 'not-a-real-slot', P2, { baseId: 'father' });
   check(rejected === before, 'assignToSlot no-ops (same reference) on an invalid slotPath');
+
+  check(tree.edges[0].locked === false, 'an edge defaults to unlocked (a fresh decision) when not specified');
+  const lockedTree = CT.assignToSlot(CT.createTree(IDX), 'parents', P2, { baseId: 'father', locked: true });
+  check(
+    lockedTree.edges[0].locked === true,
+    'locked:true marks an edge as already-real-in-Medicus, pre-placed rather than a pending decision'
+  );
 }
 
 // ============================================================
@@ -120,7 +127,6 @@ console.log('4: toRenderModel');
   check(model.indexPatientId === IDX, 'render model carries indexPatientId');
   check(model.hasGrandparents === true, 'hasGrandparents flag reflects populated slot');
   check(model.hasAuntsUncles === false, 'hasAuntsUncles flag reflects empty slot');
-  check(Array.isArray(model.needsReview) && model.needsReview.length === 0, 'needsReview present and empty by default');
 }
 
 // ============================================================
@@ -129,14 +135,38 @@ console.log('4: toRenderModel');
 console.log('5: family session cycling');
 {
   let session = CT.createFamilySession(IDX);
-  check(session.queue.length === 1 && session.queue[0] === IDX, 'session starts with just the index patient queued');
+  check(
+    session.current === IDX && session.visited[IDX] === true && session.pending.length === 0,
+    'session starts current on the index patient, already visited, nothing pending'
+  );
 
-  session = CT.enqueueFamilyMember(session, P1.patientId);
-  session = CT.enqueueFamilyMember(session, P1.patientId); // dedupe check
-  check(session.queue.length === 2, 'enqueueFamilyMember adds a new member once, deduping repeats');
+  session = CT.enqueueFamilyMember(session, P1.patientId, '1970-01-01');
+  session = CT.enqueueFamilyMember(session, P1.patientId, '1970-01-01'); // dedupe check
+  check(session.pending.length === 1, 'enqueueFamilyMember adds a new member once, deduping repeats');
+
+  // P2 is younger than P1 but enqueued after — should still sort ahead of anyone older added later,
+  // and behind P1 (oldest-to-youngest), proving insertion isn't just append order.
+  session = CT.enqueueFamilyMember(session, P2.patientId, '1995-06-15');
+  const grandad = { id: 'gp1-card', patientId: 'gp1-patient-id', name: 'Great Grandad' };
+  session = CT.enqueueFamilyMember(session, grandad.patientId, '1940-03-02');
+  check(
+    session.pending.map((p) => p.patientId).join(',') === [grandad.patientId, P1.patientId, P2.patientId].join(','),
+    'pending pool stays sorted oldest-to-youngest as members are discovered, not insertion order'
+  );
+
+  const step0 = CT.advance(session);
+  check(step0.patientId === grandad.patientId, 'advance moves to the oldest pending member first');
+  session = step0.session;
+  check(session.current === grandad.patientId, 'advance updates current to the newly visited member');
+
+  session = CT.enqueueFamilyMember(session, grandad.patientId, '1940-03-02'); // already visited
+  check(
+    session.pending.length === 2,
+    'enqueueFamilyMember no-ops for a patientId already visited, even if not currently pending'
+  );
 
   const step1 = CT.advance(session);
-  check(step1.patientId === P1.patientId, 'advance moves to the next queued member');
+  check(step1.patientId === P1.patientId, 'advance continues in dob order after the first member');
 
   const edge = {
     slotPath: 'children',
@@ -152,7 +182,12 @@ console.log('5: family session cycling');
   );
 
   const step2 = CT.advance(session);
-  check(step2.patientId === null, 'advance returns null once the queue is exhausted');
+  check(step2.patientId === P2.patientId, 'advance reaches the last pending member');
+  session = step2.session;
+
+  const step3 = CT.advance(session);
+  check(step3.patientId === null, 'advance returns null once the pending pool is exhausted');
+  check(step3.session.current === null, 'current clears to null once cycling ends');
 }
 
 // ============================================================

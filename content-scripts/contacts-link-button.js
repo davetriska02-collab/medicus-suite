@@ -1,15 +1,25 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
-// Medicus Suite — Contacts linking: injected "Convert to linked contact" widget
+// Medicus Suite — Contacts linking: "import from another patient" widget
 //
-// Phase 1 of the Contacts Management build: a single-contact manual→linked conversion flow,
-// injected onto the patient admin-record page next to the manual-contacts card. Validates the
-// full write path (search, link both directions, delete the old manual entry) before the bigger
-// drag-and-drop family-tree canvas (later phases) is built on top of it.
+// Originally Phase 1's single-contact manual→linked conversion flow (pick a manual contact,
+// search, confirm) plus Phase 2's bulk import from another patient's record, injected onto the
+// patient admin-record page next to the manual-contacts card. The single-contact flow was
+// retired 2026-07-28 once the family-tree canvas (content-scripts/contacts-canvas.js) had fully
+// superseded it — the canvas does the same job and more (drag-and-drop, transitive pool,
+// disambiguation, phone/email management) — see the build plan's status addendum and CHANGELOG
+// v3.189.0 for the decision record. What's left here is the bulk-import flow specifically,
+// because it does something the canvas genuinely can't: search ANY other patient (not just ones
+// already reciprocally connected via "Listed as Contact For") and bulk-select several of their
+// contacts to import in one action. This widget's own header toggle ("Manage this patient's
+// contacts") is the canvas's sole entry point (window.ContactsCanvas.open() — the canvas has no
+// injected button of its own) — the import flow rendered by THIS file is only ever reached from
+// inside the canvas, via its "Import from another patient" header link
+// (window.ContactsWidget.openImport), never by the toggle directly.
 //
 // Structural template: content-scripts/task-inline.js (state object replaced wholesale on SPA
 // navigation, dom-observer-hub subscription, own-mutation filtering, wrong-patient guard
 // immediately before every write). Business logic (API calls, relationship vocabulary, matching)
-// comes from window.ContactsApi / window.ContactRelationships / window.ContactMatch.
+// comes from window.ContactsApi / window.ContactRelationships.
 //
 // PROVISIONAL DOM ANCHOR: findContactsHeading() below guesses the contacts card's heading text
 // (/contacts?/i). This has NOT been verified against the live Medicus admin-record page — unlike
@@ -40,38 +50,8 @@
       indexPatientDetails: null, // full patient-details response for the page's own patient
       loading: false,
       error: null,
-      mode: 'convert', // 'convert' | 'import' — Phase 1's single-contact flow, or Phase 2's bulk import
-      step: 'pick', // convert: 'pick'|'search'|'confirm'|'working'|'done'; import: 'import-search'|'import-pick'|'import-working'|'import-done'
+      step: 'import-search', // 'import-search' | 'import-pick' | 'import-working' | 'import-done'
 
-      manualContacts: [], // [{ patientContactId, patientContactName, patientContactRelationship }]
-      selectedManualContact: null,
-      selectedManualDetail: null, // full view-patient-contact response
-      relationshipGuess: null, // { baseId, modifierId, confidence } | null
-
-      searchQuery: '',
-      searchResults: [], // ranked: [{ candidate, score, tier, signals }]
-      selectedCandidate: null,
-      candidatePreview: null, // link-patient preview response
-      existingReciprocal: null, // entry from indexPatientDetails.patientLinkedContactsSection matching the candidate, if any
-      existingForwardLink: null, // entry from indexPatientDetails.patientContactsSection matching the candidate, if any
-      baseIdSuggestedFromReciprocal: false,
-
-      baseId: null,
-      modifierId: null,
-      forwardIsNextOfKin: false,
-      forwardCopyCorrespondence: false,
-      notes: '',
-      reverseBaseId: null, // editable — pre-filled from invertRelationship when unambiguous
-      reverseAmbiguous: false,
-      reverseIsNextOfKin: false,
-      reverseCopyCorrespondence: false,
-
-      workingError: null,
-      doneSummary: null,
-      reverseManualMatch: null, // a likely-matching manual contact found on the candidate's OWN record, offered for removal
-      reverseManualMatchError: null,
-
-      // ── Phase 2: bulk import of already-linked contacts from another patient's record ──────────
       importSearchQuery: '',
       importSearchResults: [], // raw patient-finder results — no fuzzy scoring needed, this is picking a KNOWN patient
       importSourcePatient: null,
@@ -139,16 +119,6 @@
         body = `<div class="ms-ct-body"><div class="ms-ct-loading">Loading…</div></div>`;
       } else if (s.error) {
         body = `<div class="ms-ct-body"><div class="ms-ct-error">${esc(s.error)}</div></div>`;
-      } else if (s.step === 'pick') {
-        body = renderPick();
-      } else if (s.step === 'search') {
-        body = renderSearch();
-      } else if (s.step === 'confirm') {
-        body = renderConfirm();
-      } else if (s.step === 'working') {
-        body = `<div class="ms-ct-body"><div class="ms-ct-loading">Linking contact…</div></div>`;
-      } else if (s.step === 'done') {
-        body = renderDone();
       } else if (s.step === 'import-search') {
         body = renderImportSearch();
       } else if (s.step === 'import-pick') {
@@ -165,175 +135,6 @@
         <span>Manage this patient's contacts</span>
       </div>
       ${body}
-    `;
-  }
-
-  function renderPick() {
-    const empty = !s.manualContacts.length
-      ? `<div class="ms-ct-empty">No manual (unlinked) contacts found on this record.</div>`
-      : '';
-    const rows = s.manualContacts
-      .map(
-        (c) => `
-        <div class="ms-ct-row ms-ct-pick-row" data-contact-id="${esc(c.patientContactId)}">
-          <div>
-            <div class="ms-ct-pick-name">${esc(c.patientContactName)}</div>
-            <div class="ms-ct-pick-rel">${esc(c.patientContactRelationship || 'No relationship recorded')}</div>
-          </div>
-          <button class="ms-ct-btn-ghost ms-ct-pick-btn" data-contact-id="${esc(c.patientContactId)}">Convert</button>
-        </div>`
-      )
-      .join('');
-    return `<div class="ms-ct-body">${empty}${rows}
-      <button class="ms-ct-btn-ghost" id="ms-ct-switch-import">Or import contacts already linked on another patient's record</button>
-      <button class="ms-ct-btn-ghost" id="ms-ct-open-canvas">Or manage contacts as a family tree</button>
-    </div>`;
-  }
-
-  function renderSearch() {
-    const results = s.searchResults
-      .map(
-        (r) => `
-        <div class="ms-ct-row ms-ct-result-row" data-patient-id="${esc(r.candidate.patientId)}">
-          <div>
-            <div class="ms-ct-pick-name">${esc(r.candidate.displayName)}</div>
-            <div class="ms-ct-pick-rel">${esc(r.candidate.dateOfBirth || '')} ${r.candidate.atSameAddress ? '· same address' : ''}</div>
-          </div>
-          <span class="ms-ct-tier ms-ct-tier-${r.tier}">${r.tier} · ${r.score}</span>
-        </div>`
-      )
-      .join('');
-    return `
-      <div class="ms-ct-body">
-        <div class="ms-ct-row">
-          <label class="ms-ct-label" for="ms-ct-search">Searching for</label>
-          <input class="ms-ct-input" id="ms-ct-search" type="text" value="${esc(s.searchQuery)}" placeholder="Patient name" />
-        </div>
-        ${results || '<div class="ms-ct-empty">No matches yet — refine the search.</div>'}
-      </div>
-    `;
-  }
-
-  function renderConfirm() {
-    const rel = window.ContactRelationships;
-    const validMods = rel.validModifiersForBase(s.baseId);
-    const allRelIds = Object.keys(rel.ALIAS_TERMS).concat(['other']);
-    const baseSelect = allRelIds
-      .map((id) => {
-        const r = rel.getRelationship(id);
-        if (!r) return '';
-        return `<option value="${esc(id)}"${s.baseId === id ? ' selected' : ''}>${esc(r.label)}</option>`;
-      })
-      .join('');
-    const modRadios = validMods.length
-      ? `<div class="ms-ct-row"><span class="ms-ct-label">Modifier</span>
-          <label><input type="radio" name="ms-ct-mod" value="" ${!s.modifierId ? 'checked' : ''}/> None</label>
-          ${validMods
-            .map(
-              (m) =>
-                `<label><input type="radio" name="ms-ct-mod" value="${esc(m)}" ${s.modifierId === m ? 'checked' : ''}/> ${esc(rel.getModifiers().find((mm) => mm.id === m).label)}</label>`
-            )
-            .join(' ')}
-        </div>`
-      : '';
-    const reverseLine = s.existingReciprocal
-      ? `<div class="ms-ct-warn">${esc(s.selectedCandidate.displayName)} already lists this patient as their own contact
-           (recorded as "${esc(s.existingReciprocal.patientContactRelationship)}") — no new reverse link will be created,
-           to avoid duplicating it. Review or update that existing relationship directly on their own record if needed.</div>`
-      : s.reverseAmbiguous
-        ? `<div class="ms-ct-warn">Could not work out the reverse relationship automatically (patient's gender not recorded) — choose it or leave the reverse link unset.</div>
-         <select class="ms-ct-select" id="ms-ct-reverse-base"><option value="">— leave reverse unset —</option>${allRelIds
-           .map((id) => {
-             const r = rel.getRelationship(id);
-             return r ? `<option value="${esc(id)}">${esc(r.label)}</option>` : '';
-           })
-           .join('')}</select>`
-        : `<div class="ms-ct-row"><span class="ms-ct-label">On their own record, this will record</span>
-           <strong>${esc(rel.formatLabel(s.reverseBaseId, s.modifierId))}</strong></div>`;
-
-    // When the index patient already has a real link to this candidate (found the hard way — see
-    // findExistingForwardLink's comment), there's nothing to pick: show what's already recorded
-    // instead of a relationship form, and skip the forward write entirely in doConfirm().
-    const forwardSection = s.existingForwardLink
-      ? `<div class="ms-ct-warn">This patient already has a real link to ${esc(s.selectedCandidate.displayName)}
-           (recorded as "${esc(s.existingForwardLink.patientContactRelationship)}") — no new link will be created here.
-           This manual contact looks like a stale duplicate, safe to remove.</div>`
-      : `<div class="ms-ct-row">
-          <label class="ms-ct-label" for="ms-ct-base">Relationship</label>
-          <select class="ms-ct-select" id="ms-ct-base">${baseSelect}</select>
-          ${s.baseIdSuggestedFromReciprocal ? `<span class="ms-ct-note">Suggested from ${esc(s.selectedCandidate.displayName)}'s own record.</span>` : ''}
-        </div>
-        ${modRadios}
-        <div class="ms-ct-row"><span class="ms-ct-label">On this patient's record</span>
-          <label><input type="checkbox" id="ms-ct-fwd-nok" ${s.forwardIsNextOfKin ? 'checked' : ''}/> Next of kin</label>
-          <label><input type="checkbox" id="ms-ct-fwd-copy" ${s.forwardCopyCorrespondence ? 'checked' : ''}/> Copy correspondence</label>
-        </div>`;
-
-    const nothingToLink = s.existingForwardLink && s.existingReciprocal;
-
-    return `
-      <div class="ms-ct-body">
-        <div class="ms-ct-row"><span class="ms-ct-label">Linking to</span><strong>${esc(s.selectedCandidate.displayName)}</strong></div>
-        ${forwardSection}
-        ${reverseLine}
-        ${
-          !s.existingReciprocal
-            ? `<div class="ms-ct-row"><span class="ms-ct-label">On their record${s.reverseAmbiguous ? ' (if a reverse relationship is chosen above)' : ''}</span>
-                <label><input type="checkbox" id="ms-ct-rev-nok" ${s.reverseIsNextOfKin ? 'checked' : ''}/> Next of kin</label>
-                <label><input type="checkbox" id="ms-ct-rev-copy" ${s.reverseCopyCorrespondence ? 'checked' : ''}/> Copy correspondence</label>
-              </div>`
-            : ''
-        }
-        <div class="ms-ct-row">
-          <label class="ms-ct-label" for="ms-ct-notes">Notes (optional)</label>
-          <textarea class="ms-ct-textarea" id="ms-ct-notes" rows="2">${esc(s.notes)}</textarea>
-        </div>
-        ${s.workingError ? `<div class="ms-ct-error">${esc(s.workingError)}</div>` : ''}
-        <button class="ms-ct-btn" id="ms-ct-confirm">${nothingToLink ? 'Remove the stale manual contact' : 'Link and remove the old manual contact'}</button>
-      </div>
-    `;
-  }
-
-  // reverseManualMatchComparisonHtml(match, indexPatientDetails) -> a couple of plain evidence
-  // lines (not a full interactive table like the merge panel — this decision is just binary
-  // remove-or-not) so the user isn't asked to trust a name-similarity score blind, same spirit as
-  // the merge panel's comparison but lighter weight for a lighter-weight decision.
-  function reverseManualMatchComparisonHtml(match, indexPatientDetails) {
-    if (!match.detail) return '';
-    const CR = window.ContactRelationships;
-    const theirPhone =
-      (match.detail.patientContactMobileTelephoneNumber && match.detail.patientContactMobileTelephoneNumber.value) ||
-      (match.detail.patientContactHomeTelephoneNumber && match.detail.patientContactHomeTelephoneNumber.value) ||
-      '(none recorded)';
-    const theirEmail =
-      (match.detail.patientContactEmailAddress && match.detail.patientContactEmailAddress.value) || '(none recorded)';
-    const indexPhone = CR.extractPreferredPhone(indexPatientDetails) || '(none recorded)';
-    const indexEmail = CR.extractPreferredEmail(indexPatientDetails) || '(none recorded)';
-    return `
-      <div class="ms-ct-note">Their manual entry: phone ${esc(theirPhone)}, email ${esc(theirEmail)}</div>
-      <div class="ms-ct-note">This patient's own record: phone ${esc(indexPhone)}, email ${esc(indexEmail)}</div>
-    `;
-  }
-
-  function renderDone() {
-    return `
-      <div class="ms-ct-body ms-ct-success">
-        <div class="ms-ct-success-icon">✓</div>
-        <div>${esc(s.doneSummary || 'Contact linked.')}</div>
-        <div class="ms-ct-note">Medicus's own contacts card won't show this change until the page is refreshed.</div>
-        <button class="ms-ct-btn" id="ms-ct-reload">Refresh now</button>
-        ${
-          s.reverseManualMatch
-            ? `<div class="ms-ct-warn">${esc(s.selectedCandidate.displayName)} also has a manual contact named
-                 "${esc(s.reverseManualMatch.patientContactName)}" that may represent this patient — it was NOT
-                 removed automatically since no one has confirmed the match. Remove it too?</div>
-               ${reverseManualMatchComparisonHtml(s.reverseManualMatch, s.indexPatientDetails)}
-               <button class="ms-ct-btn-ghost" id="ms-ct-remove-reverse-manual">Remove it</button>`
-            : ''
-        }
-        ${s.reverseManualMatchError ? `<div class="ms-ct-error">${esc(s.reverseManualMatchError)}</div>` : ''}
-        <button class="ms-ct-btn-ghost" id="ms-ct-again">Convert another</button>
-      </div>
     `;
   }
 
@@ -370,7 +171,7 @@
       .join('');
     return `
       <div class="ms-ct-body">
-        <button class="ms-ct-btn-ghost" id="ms-ct-import-back">← Back</button>
+        <button class="ms-ct-btn-ghost" id="ms-ct-import-back">Close</button>
         ${
           quickPicks
             ? `<div class="ms-ct-row"><span class="ms-ct-label">Already listed as a contact for</span></div>${quickPicks}`
@@ -401,7 +202,7 @@
     }
     if (!s.importEligibleContacts.length) {
       return `<div class="ms-ct-body">
-        <button class="ms-ct-btn-ghost" id="ms-ct-import-back">← Back</button>
+        <button class="ms-ct-btn-ghost" id="ms-ct-import-back">Close</button>
         <div class="ms-ct-empty">Nothing eligible to import from ${esc(s.importSourcePatient.displayName)}'s record.${notes.length ? ' ' + esc(notes.join(' ')) : ''}</div>
       </div>`;
     }
@@ -438,7 +239,7 @@
       .join('');
     return `
       <div class="ms-ct-body">
-        <button class="ms-ct-btn-ghost" id="ms-ct-import-back">← Back</button>
+        <button class="ms-ct-btn-ghost" id="ms-ct-import-back">Close</button>
         <div class="ms-ct-row"><span class="ms-ct-label">Importing from</span><strong>${esc(s.importSourcePatient.displayName)}</strong></div>
         ${notes.length ? `<div class="ms-ct-note">${esc(notes.join(' '))}</div>` : ''}
         ${rows}
@@ -475,7 +276,7 @@
     s.loading = true;
     s.error = null;
     rerender();
-    const st = s; // WRONG-PATIENT GUARD pin — see doConfirm() for the hard re-verify before writes
+    const st = s; // WRONG-PATIENT GUARD pin — see doImportConfirm() for the hard re-verify before writes
     try {
       // Safety net for contacts-api.js's fire-and-forget fetch of rules/contact-relationships.json
       // — normally already resolved by the time a user opens the widget, but await it explicitly
@@ -485,9 +286,11 @@
       const details = await window.ContactsApi.getPatientDetails(st.apiBase, st.patientId);
       if (st !== s) return;
       st.indexPatientDetails = details;
-      const contacts = (details.patientContactsSection && details.patientContactsSection.patientContacts) || [];
-      st.manualContacts = contacts.filter((c) => !c.patientContactPatientId);
-      st.step = 'pick';
+      st.step = 'import-search';
+      st.importSearchQuery = '';
+      st.importSearchResults = [];
+      st.importSourcePatient = null;
+      st.importEligibleContacts = [];
     } catch (err) {
       st.error = err.message || 'Failed to load this patient’s contacts.';
     } finally {
@@ -496,192 +299,8 @@
     }
   }
 
-  function pickManualContact(contactId) {
-    const contact = s.manualContacts.find((c) => c.patientContactId === contactId);
-    if (!contact) return;
-    s.selectedManualContact = contact;
-    s.relationshipGuess = window.ContactRelationships.normaliseFreeText(contact.patientContactRelationship);
-    s.searchQuery = contact.patientContactName || '';
-    s.step = 'search';
-    rerender();
-    runSearch();
-    // Full detail (phone/email/notes/flags) fetched in the background for scoring/pre-fill;
-    // not blocking the search UI since it's supplementary, not required to proceed.
-    window.ContactsApi.viewPatientContact(s.apiBase, contact.patientContactId).then(
-      (detail) => {
-        if (s.selectedManualContact !== contact) return; // user moved on — discard
-        s.selectedManualDetail = detail;
-      },
-      () => {
-        /* best-effort only — search/matching still works without it */
-      }
-    );
-  }
-
-  function candidateAgeFromDob(dateOfBirth) {
-    if (!dateOfBirth) return null;
-    const d = new Date(dateOfBirth);
-    if (isNaN(d.getTime())) return null;
-    const diffMs = Date.now() - d.getTime();
-    return Math.floor(diffMs / (365.25 * 86400000));
-  }
-
-  function sameAddress(a, b) {
-    if (!a || !b) return false;
-    const norm = (addr) =>
-      [addr.line1, addr.postalCode]
-        .map((x) =>
-          String(x || '')
-            .trim()
-            .toLowerCase()
-        )
-        .join('|');
-    return !!(a.postalCode && b.postalCode) && norm(a) === norm(b);
-  }
-
-  async function runSearch() {
-    const query = s.searchQuery.trim();
-    if (query.length < 2) {
-      s.searchResults = [];
-      rerender();
-      return;
-    }
-    const indexAddress =
-      s.indexPatientDetails &&
-      s.indexPatientDetails.patientAddressSection &&
-      s.indexPatientDetails.patientAddressSection.patientAddresses[0] &&
-      s.indexPatientDetails.patientAddressSection.patientAddresses[0].address;
-    try {
-      const results = await window.ContactsApi.searchPatients(s.apiBase, query);
-      const candidates = results.map((r) => ({
-        patientId: r.patientId,
-        displayName: r.displayName,
-        dateOfBirth: r.dateOfBirth,
-        age: candidateAgeFromDob(r.dateOfBirth),
-        genderIdentity: r.genderIdentity,
-        atSameAddress: sameAddress(indexAddress, r.address),
-      }));
-      const manualContact = {
-        name: (s.selectedManualContact && s.selectedManualContact.patientContactName) || '',
-      };
-      const indexAge = candidateAgeFromDob(
-        s.indexPatientDetails &&
-          s.indexPatientDetails.patientDetailsSection &&
-          s.indexPatientDetails.patientDetailsSection.dateOfBirth
-      );
-      s.searchResults = window.ContactMatch.rankCandidates(manualContact, candidates, {
-        manualRelationshipGuess: s.relationshipGuess,
-        indexPatientAge: indexAge,
-      });
-    } catch (err) {
-      s.error = err.message || 'Search failed.';
-    }
-    rerender();
-  }
-
-  async function pickCandidate(patientId) {
-    const result = s.searchResults.find((r) => r.candidate.patientId === patientId);
-    if (!result) return;
-    const CR = window.ContactRelationships;
-    s.selectedCandidate = result.candidate;
-    s.existingReciprocal = CR.findExistingReciprocal(s.indexPatientDetails, patientId);
-    s.existingForwardLink = CR.findExistingForwardLink(s.indexPatientDetails, patientId);
-    s.step = 'confirm';
-    const reciprocalSuggestion = CR.suggestForwardFromReciprocal(s.existingReciprocal, result.candidate.genderIdentity);
-    s.baseIdSuggestedFromReciprocal = !!reciprocalSuggestion;
-    s.baseId =
-      (reciprocalSuggestion && reciprocalSuggestion.baseId) ||
-      (s.relationshipGuess && s.relationshipGuess.baseId) ||
-      'other';
-    s.modifierId =
-      (reciprocalSuggestion && reciprocalSuggestion.modifierId) ||
-      (s.relationshipGuess && s.relationshipGuess.modifierId) ||
-      null;
-    s.forwardIsNextOfKin = !!(s.selectedManualDetail && s.selectedManualDetail.patientContactRelationshipIsNextOfKin);
-    s.forwardCopyCorrespondence = !!(
-      s.selectedManualDetail && s.selectedManualDetail.patientContactRelationshipCopyCorrespondence
-    );
-    s.notes = (s.selectedManualDetail && s.selectedManualDetail.patientContactRelationshipNotes) || '';
-    s.reverseIsNextOfKin = false;
-    s.reverseCopyCorrespondence = false;
-    recomputeReverse();
-    rerender();
-  }
-
-  function recomputeReverse() {
-    if (s.existingReciprocal) {
-      // Already listed as a contact for this candidate — never offer a second reverse link.
-      s.reverseAmbiguous = false;
-      s.reverseBaseId = null;
-      return;
-    }
-    const rel = window.ContactRelationships;
-    const indexGender =
-      s.indexPatientDetails &&
-      s.indexPatientDetails.patientDetailsSection &&
-      s.indexPatientDetails.patientDetailsSection.genderIdentity;
-    const inv = rel.invertRelationship({ baseId: s.baseId, modifierId: s.modifierId, indexGender });
-    s.reverseAmbiguous = inv.ambiguous;
-    s.reverseBaseId = inv.ambiguous ? null : inv.baseId;
-  }
-
-  async function doConfirm() {
-    if (s.step !== 'confirm' || !s.selectedCandidate || !s.baseId) return;
-    s.step = 'working';
-    s.workingError = null;
-    rerender();
-    // WRONG-PATIENT GUARD lives inside performLinkAndCleanup() now (shared with the canvas) — it
-    // re-verifies the live page's patient identity immediately before any write.
-    const st = s;
-    try {
-      const result = await window.ContactsApi.performLinkAndCleanup({
-        apiBase: st.apiBase,
-        patientId: st.patientId,
-        candidatePatientId: st.selectedCandidate.patientId,
-        candidateDisplayName: st.selectedCandidate.displayName,
-        indexPatientFullName:
-          st.indexPatientDetails &&
-          st.indexPatientDetails.patientDetailsSection &&
-          st.indexPatientDetails.patientDetailsSection.fullOfficialName,
-        baseId: st.baseId,
-        modifierId: st.modifierId,
-        forwardIsNextOfKin: st.forwardIsNextOfKin,
-        forwardCopyCorrespondence: st.forwardCopyCorrespondence,
-        notes: st.notes,
-        existingForwardLink: st.existingForwardLink,
-        reverseBaseId: st.reverseBaseId,
-        reverseIsNextOfKin: st.reverseIsNextOfKin,
-        reverseCopyCorrespondence: st.reverseCopyCorrespondence,
-        existingReciprocal: st.existingReciprocal,
-        manualContactIdToDelete: st.selectedManualContact.patientContactId,
-      });
-      if (st !== s) return;
-      st.doneSummary = result.summary;
-      st.reverseManualMatch = result.reverseManualMatch;
-      st.step = 'done';
-    } catch (err) {
-      st.step = 'confirm';
-      st.workingError = err.message || 'Failed to complete the link — nothing further was changed.';
-    } finally {
-      if (st === s) rerender();
-    }
-  }
-
-  // ── Phase 2: bulk import of already-linked contacts from another patient's record ──────────────
-
-  function switchToImportMode() {
-    s.mode = 'import';
-    s.step = 'import-search';
-    s.importSearchQuery = '';
-    s.importSearchResults = [];
-    s.importSourcePatient = null;
-    s.importEligibleContacts = [];
-    rerender();
-  }
-
-  function backToConvertMode() {
-    s.mode = 'convert';
-    s.step = 'pick';
+  function closeWidget() {
+    s = blankState();
     rerender();
   }
 
@@ -796,7 +415,7 @@
     s.step = 'import-working';
     s.importWorkingError = null;
     rerender();
-    // WRONG-PATIENT GUARD: same discipline as doConfirm() — re-verify immediately before the write.
+    // WRONG-PATIENT GUARD: re-verify immediately before the write.
     const st = s;
     try {
       const ctx = window.ContactsApi.resolveContext();
@@ -839,14 +458,14 @@
   function bindEvents(el) {
     const toggle = el.querySelector('#ms-ct-toggle');
     if (toggle) {
-      toggle.addEventListener('click', () => {
-        if (s.open) {
-          s = blankState();
-          rerender();
-        } else {
-          doOpen();
-        }
-      });
+      // The canvas (content-scripts/contacts-canvas.js) is the main tool and has no entry point of
+      // its own — this toggle IS that entry point (see this file's header comment). It used to
+      // instead call doOpen() directly, opening this widget's own import-search view in place —
+      // lost the canvas entirely as a reachable destination once the convert-flow retirement's
+      // full-file rewrite pointed it at the wrong target. This widget's own inline body is now only
+      // ever opened FROM the canvas (window.ContactsWidget.openImport, its "Import from another
+      // patient" header link) — the toggle here always opens the canvas, never itself.
+      toggle.addEventListener('click', () => window.ContactsCanvas.open());
       toggle.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -855,89 +474,11 @@
       });
     }
 
-    el.querySelectorAll('.ms-ct-pick-btn').forEach((btn) => {
-      btn.addEventListener('click', () => pickManualContact(btn.getAttribute('data-contact-id')));
-    });
-
-    let searchTimer = null;
-    el.querySelector('#ms-ct-search')?.addEventListener('input', (e) => {
-      s.searchQuery = e.target.value;
-      if (searchTimer) clearTimeout(searchTimer);
-      searchTimer = setTimeout(runSearch, 300);
-    });
-
-    el.querySelectorAll('.ms-ct-result-row').forEach((row) => {
-      row.addEventListener('click', () => pickCandidate(row.getAttribute('data-patient-id')));
-    });
-
-    el.querySelector('#ms-ct-base')?.addEventListener('change', (e) => {
-      s.baseId = e.target.value;
-      s.modifierId = null; // a new base may not support the previously-chosen modifier
-      recomputeReverse();
-      rerender();
-    });
-
-    el.querySelectorAll('input[name="ms-ct-mod"]').forEach((r) => {
-      r.addEventListener('change', (e) => {
-        if (!e.target.checked) return;
-        s.modifierId = e.target.value || null;
-        recomputeReverse();
-        rerender();
-      });
-    });
-
-    el.querySelector('#ms-ct-reverse-base')?.addEventListener('change', (e) => {
-      s.reverseBaseId = e.target.value || null;
-    });
-
-    el.querySelector('#ms-ct-fwd-nok')?.addEventListener('change', (e) => {
-      s.forwardIsNextOfKin = e.target.checked;
-    });
-    el.querySelector('#ms-ct-fwd-copy')?.addEventListener('change', (e) => {
-      s.forwardCopyCorrespondence = e.target.checked;
-    });
-    el.querySelector('#ms-ct-rev-nok')?.addEventListener('change', (e) => {
-      s.reverseIsNextOfKin = e.target.checked;
-    });
-    el.querySelector('#ms-ct-rev-copy')?.addEventListener('change', (e) => {
-      s.reverseCopyCorrespondence = e.target.checked;
-    });
-    el.querySelector('#ms-ct-notes')?.addEventListener('input', (e) => {
-      s.notes = e.target.value;
-    });
-
-    el.querySelector('#ms-ct-confirm')?.addEventListener('click', () => doConfirm());
-    el.querySelector('#ms-ct-again')?.addEventListener('click', () => {
-      s = blankState();
-      doOpen();
-    });
-
     el.querySelector('#ms-ct-reload')?.addEventListener('click', () => location.reload());
 
-    el.querySelector('#ms-ct-remove-reverse-manual')?.addEventListener('click', async (e) => {
-      const match = s.reverseManualMatch;
-      if (!match) return;
-      e.target.disabled = true;
-      try {
-        await window.ContactsApi.deletePatientContactRelationship(s.apiBase, match.patientContactId);
-        s.reverseManualMatch = null;
-        s.reverseManualMatchError = null;
-        rerender();
-      } catch (err) {
-        s.reverseManualMatchError =
-          err.message || 'Failed to remove that manual contact — try again or remove it in Medicus directly.';
-        rerender();
-      }
-    });
-
-    // ── Phase 3: full canvas ──────────────────────────────────────────────────────────────────
-
-    el.querySelector('#ms-ct-open-canvas')?.addEventListener('click', () => window.ContactsCanvas.open());
-
-    // ── Phase 2: bulk import ──────────────────────────────────────────────────────────────────
-
-    el.querySelector('#ms-ct-switch-import')?.addEventListener('click', () => switchToImportMode());
-    el.querySelector('#ms-ct-import-back')?.addEventListener('click', () => backToConvertMode());
+    // "Close" (was "← Back" — retired the screen it used to go back to, see file header) closes
+    // the widget entirely rather than navigating to a step that no longer exists.
+    el.querySelector('#ms-ct-import-back')?.addEventListener('click', () => closeWidget());
 
     let importSearchTimer = null;
     el.querySelector('#ms-ct-import-search')?.addEventListener('input', (e) => {
@@ -986,7 +527,7 @@
     });
 
     el.querySelector('#ms-ct-import-confirm')?.addEventListener('click', () => doImportConfirm());
-    el.querySelector('#ms-ct-import-again')?.addEventListener('click', () => switchToImportMode());
+    el.querySelector('#ms-ct-import-again')?.addEventListener('click', () => doOpen());
   }
 
   // ── SPA navigation & re-injection ─────────────────────────────────────────────────────────────
@@ -1063,6 +604,13 @@
       injectWidget();
     });
   }
+
+  // Called from contacts-canvas.js's own "Import from another patient" link, so this flow's
+  // arbitrary-patient search/bulk-select stays reachable even though the header opens the canvas
+  // directly rather than this widget. Opens this widget in place at its own position on the page,
+  // exactly as if the user had expanded it via the header themselves — the canvas is expected to
+  // close itself first.
+  window.ContactsWidget = { openImport: () => doOpen() };
 
   const _hub = window.__chObserverHub;
   if (_hub && _hub.subscribe) {

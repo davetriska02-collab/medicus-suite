@@ -136,6 +136,70 @@
     return { baseId: reverseBaseId, modifierId: modifierId || null, ambiguous: false };
   }
 
+  // ── Composition via a shared hub ─────────────────────────────────────────────────────────────
+  // composeViaHub(xEdge, bEdge, xGenderIdentity) -> { baseId, modifierId: null } | null
+  // Given X's relationship to a shared hub patient H (xEdge, e.g. baseId "mother" — X is H's
+  // mother) and a SECOND person B's relationship to that SAME hub H (bEdge, e.g. baseId "daughter"
+  // — B is H's daughter), compose X's relationship to B (e.g. "grandmother" — X is B's
+  // grandmother). Used by the Contacts canvas's family-cycling composition step: when cycling
+  // lands on B's own canvas, B's hub A's OTHER already-confirmed relatives can be pre-filled with a
+  // relationship computed relative to B, not just copied from A's own labels for them.
+  //
+  // Deliberately narrow: only the two cases that are structurally UNCONDITIONAL given unmodified
+  // parent/child/partner hops — no modifier ambiguity, no risk of the hop already independently
+  // meaning something else. Returns null for everything outside that set, INCLUDING:
+  //   - either hop carrying a Step-/Half-/Ex- modifier at all (checked here, not left to the
+  //     caller — composing through an already-uncertain relationship compounds the uncertainty
+  //     rather than resolving it)
+  //   - sibling via one shared parent (can't tell full- vs half- from a single hop — this
+  //     vocabulary's Half- modifier makes that a real distinction, not cosmetic)
+  //   - step-parent/step-child via a partner hop (the partner could already independently BE that
+  //     child's own biological/legal parent — an ordinary intact family — with nothing in the edges
+  //     to rule that out)
+  // See the parked composition memory (project_contacts_relationship_composition_future_phase, this
+  // repo's Claude Code memory store) for the full reasoning and what's scoped for later — sibling
+  // and step-parent composition are meant to follow, surfaced with an explicit full/half or
+  // step/bio prompt rather than a silent guess, once this narrower set is live and proven.
+  //
+  // xGenderIdentity is a soft hint (same status as everywhere else in this file — never a hard
+  // filter) only needed for the partner-hop-through-X case, where the composed word depends on X's
+  // own gender rather than being determined by xEdge.baseId itself (husband/wife resolve on their
+  // own; partner/civil-partner don't carry gender in the word).
+  const HUB_PARENT_BASE_IDS = ['mother', 'father'];
+  const HUB_CHILD_BASE_IDS = ['son', 'daughter'];
+  const HUB_PARTNER_BASE_IDS = ['husband', 'wife', 'partner', 'civil-partner'];
+
+  function composeViaHub(xEdge, bEdge, xGenderIdentity) {
+    if (!xEdge || !bEdge || xEdge.modifierId || bEdge.modifierId) return null;
+    const xToHub = xEdge.baseId;
+    const bToHub = bEdge.baseId;
+
+    // X is H's parent, B is H's child -> X is B's grandparent.
+    if (HUB_PARENT_BASE_IDS.includes(xToHub) && HUB_CHILD_BASE_IDS.includes(bToHub)) {
+      return { baseId: xToHub === 'mother' ? 'grandmother' : 'grandfather', modifierId: null };
+    }
+    // X is H's child, B is H's parent -> X is B's grandchild.
+    if (HUB_CHILD_BASE_IDS.includes(xToHub) && HUB_PARENT_BASE_IDS.includes(bToHub)) {
+      return { baseId: xToHub === 'son' ? 'grandson' : 'granddaughter', modifierId: null };
+    }
+    // X is H's parent, B is H's (unmodified) partner -> X is B's parent-in-law.
+    if (HUB_PARENT_BASE_IDS.includes(xToHub) && HUB_PARTNER_BASE_IDS.includes(bToHub)) {
+      return { baseId: xToHub === 'mother' ? 'mother-in-law' : 'father-in-law', modifierId: null };
+    }
+    // X is H's (unmodified) partner, B is H's parent -> X is B's child-in-law. husband/wife resolve
+    // on their own; partner/civil-partner need the gender hint, and fall through to null (never
+    // guessed) when it's unavailable or unrecognised.
+    if (HUB_PARTNER_BASE_IDS.includes(xToHub) && HUB_PARENT_BASE_IDS.includes(bToHub)) {
+      if (xToHub === 'husband') return { baseId: 'son-in-law', modifierId: null };
+      if (xToHub === 'wife') return { baseId: 'daughter-in-law', modifierId: null };
+      const bucket = genderBucket(xGenderIdentity);
+      if (bucket === 'm') return { baseId: 'son-in-law', modifierId: null };
+      if (bucket === 'f') return { baseId: 'daughter-in-law', modifierId: null };
+      return null;
+    }
+    return null;
+  }
+
   // ── Free-text normalisation (colours column-1 manual-contact cards) ──────────────────────────
   // ALIAS_TERMS — CSO review NOT required (relationship semantics, not clinical content) but
   // still coverage-tested: every relationship id except 'other' must have a non-empty entry
@@ -258,6 +322,38 @@
     return null;
   }
 
+  // isDeceasedRelationshipText(text) -> boolean
+  // Display-only signal, deliberately NOT part of normaliseFreeText's baseId/modifierId parsing —
+  // "deceased" isn't a variant of a relationship the way Step-/Half-/Ex- are (it applies equally
+  // to any relationship, so treating it as a same-kind modifier would be a category error), and
+  // Medicus's own canonical vocabulary has no such concept to write back to. It's also NOT sourced
+  // from Medicus's own `isDeceased` flag on the candidate's record (confirmed via HAR 2026-07-27:
+  // a deceased patient is deducted the same way any inactive-after-grace-period patient is, so
+  // `patient-details` 403s before that flag is ever reachable) — free text is the only reliable
+  // signal available here. Matches the GP's own stated convention ("(RIP)") plus common variants,
+  // word-bounded so it can't fire on an unrelated word that happens to contain the letters.
+  const DECEASED_TEXT_RE = /\b(rip|deceased|dec'd|passed away)\b/i;
+  function isDeceasedRelationshipText(text) {
+    return DECEASED_TEXT_RE.test(String(text || ''));
+  }
+
+  // isUkMobileNumber(phoneNumber) -> boolean — a UK mobile number by format, regardless of how
+  // it's punctuated/spaced or whether it's written with a leading 0 or the +44/44/0044 country
+  // code. UK-specific: Ofcom's own numbering plan reserves the 07 range exclusively for mobile
+  // (and pager) numbers, so a number matching this shape is never legitimately a landline —
+  // unlike isDeceasedRelationshipText, this isn't inferring from free text a human wrote, it's a
+  // structural fact about the number itself. Used to flag a number stored under the WRONG type
+  // (e.g. a mobile-shaped number filed as "Home") — confirmed live as a real, recurring data-entry
+  // pattern in GP2GP-imported records, same family of issue as the phone-note mismatch
+  // extractPreferredPhoneNote already surfaces.
+  function isUkMobileNumber(phoneNumber) {
+    let digits = String(phoneNumber || '').replace(/[^0-9]/g, '');
+    if (!digits) return false;
+    if (digits.startsWith('00')) digits = digits.slice(2); // 00 international prefix
+    if (digits.startsWith('44')) digits = '0' + digits.slice(2); // +44/44 country code -> leading 0
+    return /^07\d{9}$/.test(digits);
+  }
+
   // ── Contact-info extraction (shared between the wizard widget and the canvas) ────────────────
   // Pure extractors over a patient-details response's OWN registered phone/email (not a manual
   // contact's — the patient's own patientContactInformationSection) — used to show comparison
@@ -275,15 +371,42 @@
     return (preferred || emails[0]).emailAddress || null;
   }
 
-  function extractPreferredPhone(patientDetails) {
+  function findPreferredPhoneEntry(patientDetails) {
     const phones =
       (patientDetails &&
         patientDetails.patientContactInformationSection &&
         patientDetails.patientContactInformationSection.patientTelephoneNumbers) ||
       [];
     if (!phones.length) return null;
-    const preferred = phones.find((p) => p.preferredTelephoneNumberForSms);
-    return (preferred || phones[0]).telephoneNumber || null;
+    return phones.find((p) => p.preferredTelephoneNumberForSms) || phones[0];
+  }
+
+  function extractPreferredPhone(patientDetails) {
+    const entry = findPreferredPhoneEntry(patientDetails);
+    return (entry && entry.telephoneNumber) || null;
+  }
+
+  // extractPreferredPhoneNote(patientDetails) -> string | null
+  // Confirmed live (HAR capture, 2026-07-25): patient-details' own patientTelephoneNumbers[]
+  // entries carry a free-text `notes` field (the same one editable via Medicus's own "Add/Edit
+  // Phone Number" form) — e.g. "practice phone number", or in the GP2GP-import cases this was
+  // built to catch, "mum's mobile" on what would otherwise look like the patient's own number.
+  // Surfaced as a prominent warning wherever a candidate's phone is shown before merging/linking,
+  // since a note here is exactly the kind of signal that a number doesn't really belong to the
+  // patient it's recorded against. No equivalent field exists on email addresses in this API.
+  function extractPreferredPhoneNote(patientDetails) {
+    const entry = findPreferredPhoneEntry(patientDetails);
+    return (entry && entry.notes) || null;
+  }
+
+  // extractPreferredPhoneId(patientDetails) -> string | null
+  // The SAME preferred entry as extractPreferredPhone/extractPreferredPhoneNote (never a
+  // different one — a caller that shows the note as a warning and then offers to edit it must be
+  // editing the number the warning is actually about). Used by the canvas to know which
+  // telephoneNumberId to send to ContactsApi.getEditTelephoneNumber/changeTelephoneNumber.
+  function extractPreferredPhoneId(patientDetails) {
+    const entry = findPreferredPhoneEntry(patientDetails);
+    return (entry && entry.telephoneNumberId) || null;
   }
 
   // ── Existing-link detection (shared between the wizard widget and the canvas) ────────────────
@@ -402,13 +525,18 @@
     formatLabel,
     genderBucket,
     invertRelationship,
+    composeViaHub,
     normaliseFreeText,
+    isDeceasedRelationshipText,
+    isUkMobileNumber,
     ALIAS_TERMS,
     findExistingReciprocal,
     findExistingForwardLink,
     suggestForwardFromReciprocal,
     extractPreferredEmail,
     extractPreferredPhone,
+    extractPreferredPhoneNote,
+    extractPreferredPhoneId,
     buildLinkPatientBody,
     buildManualContactBody,
   };

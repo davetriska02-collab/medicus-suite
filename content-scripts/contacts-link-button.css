@@ -60,8 +60,8 @@
 
 #ms-contacts-widget .ms-ct-input,
 #ms-contacts-widget .ms-ct-select,
-#ms-contacts-widget .ms-ct-textarea,
-#ms-contacts-canvas-overlay .ms-ct-select {
+#ms-contacts-canvas-overlay .ms-ct-select,
+#ms-contacts-canvas-overlay .ms-ct-input {
   padding: 7px 10px;
   border: 1px solid #c8cdd6;
   border-radius: 5px;
@@ -73,14 +73,6 @@
   font-family: inherit;
 }
 
-#ms-contacts-widget .ms-ct-textarea {
-  resize: vertical;
-  min-height: 50px;
-  line-height: 1.4;
-}
-
-#ms-contacts-widget .ms-ct-pick-row,
-#ms-contacts-widget .ms-ct-result-row,
 #ms-contacts-widget .ms-ct-import-result-row {
   display: flex;
   align-items: center;
@@ -92,8 +84,6 @@
   cursor: pointer;
 }
 
-#ms-contacts-widget .ms-ct-pick-row:hover,
-#ms-contacts-widget .ms-ct-result-row:hover,
 #ms-contacts-widget .ms-ct-import-result-row:hover {
   background: #f7f9ff;
   border-color: #c3cef5;
@@ -122,31 +112,6 @@
 #ms-contacts-widget .ms-ct-pick-rel {
   font-size: 12px;
   color: #666;
-}
-
-#ms-contacts-widget .ms-ct-tier {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 3px 8px;
-  border-radius: 10px;
-  white-space: nowrap;
-}
-
-#ms-contacts-widget .ms-ct-tier-strong {
-  background: #dcfce7;
-  color: #166534;
-}
-
-#ms-contacts-widget .ms-ct-tier-possible {
-  background: #fef9c3;
-  color: #854d0e;
-}
-
-#ms-contacts-widget .ms-ct-tier-weak {
-  background: #f1f5f9;
-  color: #475569;
 }
 
 #ms-contacts-widget .ms-ct-btn,

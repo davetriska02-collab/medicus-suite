@@ -2,6 +2,926 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.190.0] — 2026-07-29
+
+### Contacts Management — family-member cycling + safe relationship composition
+
+- Retired flow's replacement fully in place; this is Phase 5's cycling mechanism, the second half
+  of the work `engine/contact-tree.js`'s family-session functions were originally built for but
+  never wired up (`createFamilySession`/`advance`/`recordCommittedEdge` etc.).
+- **Reshaped the family-session engine.** The original `queue`/`cursor` shape couldn't express a
+  pool that grows mid-session (a newly-discovered relative can sort older than someone already
+  visited) — replaced with `current`/`visited`/`pending`, where `pending` is kept sorted
+  oldest-to-youngest by dob as members are discovered (`enqueueFamilyMember`), and `advance()` pops
+  the front. Unit tests rewritten (`test-contact-tree.js` section 5) to match, plus new coverage for
+  out-of-order insertion and re-enqueue-after-visited no-ops.
+- **"Next family member" header button**, shown whenever the pool has candidates. Discovered live
+  while designing this that the canvas can't just swap to another patient's data in place —
+  `loadCanvas()` reads its patient from `location.href`, and Medicus is one-patient-per-page — so
+  cycling is a real browser navigation, not an in-page state swap. The family session is persisted
+  to `chrome.storage.local` (bounded to 4h — a session left idle longer is more likely abandoned
+  than paused) immediately before navigating, and a small dismissible "Resume family contacts
+  review" banner (NOT an auto-reopened overlay — deliberately, so nothing pops up before the GP has
+  got their bearings on whoever's record just loaded) offers to continue on the other side, only
+  when that page's own patient is exactly who cycling sent us to.
+- **Inactive-patient skip is silent and pre-navigation.** Whether a candidate is even openable is
+  only knowable by trying (Medicus 403s `inactive-patient-access`, no upfront boolean) — probed via
+  a plain fetch on the CURRENT page before ever navigating, so a run of inactive candidates costs
+  API calls, not dead page loads. No "N skipped" messaging — these patients were already confirmed
+  edges before cycling touched them, so nothing actionable is being hidden. `contacts-api.js`'s
+  `apiFetch` now attaches a stable `err.errorCode` to a thrown error (alongside the existing
+  translated message text) so this branch doesn't rely on substring-matching prose.
+- **Pool population.** Every already-linked contact placed in the tree feeds the pool
+  (`loadCanvas` Step 1.8), and every edge committed this session does too (`doCanvasConfirm`) —
+  both via a bounded dob fetch, reusing whatever's already cached from earlier steps.
+- **Relationship composition via a cycling hub**, the first slice of the previously-parked general
+  composition problem. New `ContactRelationships.composeViaHub(xEdge, bEdge, xGenderIdentity)`
+  (unit-tested, 17 cases, `test-contact-relationships.js` section 4b) composes X's relationship to B
+  given both their relationships to a shared hub patient — restricted to the two cases that are
+  structurally unconditional (grandparent/grandchild and in-law via one unmodified parent/partner
+  hop each). Deliberately excludes sibling-via-shared-parent (can't tell full- vs half- from one
+  hop) and step-parent-via-partner (the partner could already independently be that child's own
+  parent) — both real risks worked through with the user, not just the obviously-unsafe cases.
+  Wired into `loadCanvas` (Step 1.6b): when a patient's canvas was reached by cycling, the hub's
+  other already-confirmed relatives are offered as composed suggestions relative to the new
+  patient, not just copied from the hub's own labels for them.
+- Scope check: nothing about this touches or depends on the retired convert flow (v3.189.0) — the
+  header button lives on the same canvas that flow's replacement (`ms-cv-open-import`) already
+  uses.
+- **Fixed a live-caught regression from the v3.189.0 convert-flow retirement, found while live-
+  testing this work**: `contacts-link-button.js`'s "Manage this patient's contacts" toggle had been
+  wired to call the widget's own `doOpen()` (its import-search view) instead of
+  `window.ContactsCanvas.open()` — the canvas has no injected entry point of its own (see its file
+  header) and relies entirely on this toggle, so it had been completely unreachable since the
+  retirement's full-file rewrite. Toggle now opens the canvas; the widget's own inline import view
+  is only ever reached from the canvas's own "Import from another patient" link, as originally
+  intended.
+
+## [v3.189.0] — 2026-07-28
+
+### Contacts Management — flag a mobile-shaped number filed under the wrong type
+
+- Asked for, live: flag when a phone number is stored under a type other than Mobile despite
+  looking like one (e.g. a mobile-shaped number filed as "Home"), and offer to fix it, within the
+  canvas — a real, recurring GP2GP-import data-entry pattern already anticipated by a comment on
+  the existing phone-edit feature, but never actually detected until now. Built on top of
+  infrastructure that already existed (phone-type editing, `buildPhoneRows`), so this is mostly
+  detection plus a shortcut into the flow already there.
+- New `ContactRelationships.isUkMobileNumber(phoneNumber)` (`engine/contact-relationships.js`,
+  unit-tested — `test-contact-relationships.js` section 9) — a structural check, not an inference:
+  Ofcom's own UK numbering plan reserves the `07` range exclusively for mobile/pager, so a number
+  matching that shape (after normalising +44/44/0044 international prefixes to a leading 0) is
+  never legitimately a landline. Applied in `buildPhoneRows` per row: any Medicus phone entry NOT
+  already typed Mobile, whose number matches the mobile shape, gets a new `wrongType` flag.
+- Surfaced in the merge-compare panel's Phone rows: a plain-language warning ("This looks like a
+  mobile number, but is filed as 'Home'") plus a new "Fix type" button alongside the existing
+  Edit/Delete.
+- Changed same day, per the user's own framing: clicking "Fix type" is itself the confirmation —
+  the warning right next to it already states plainly what's wrong, so a further review/Save step
+  would just be asking the user to confirm the same thing twice. New `fixPhoneType` fires the
+  change immediately on click (fetches the entry's current full record first — telephoneNumber/
+  preferredForSms/notes — since `changeTelephoneNumber` is a full replace, not a partial patch, so
+  every other field must be sent back exactly as recorded or they'd be silently wiped; only
+  `telephoneNumberType` is actually changed), rather than opening the manual Edit form first
+  (dropped the `suggestedType` param added for that from `startPhoneEdit` — no longer used).
+  Race-guarded the same way `deletePhoneNumber` already is: a new `cs.phoneFixingType` Set (not a
+  single value) tracks in-flight fixes, so two overlapping "Fix type" clicks can't clobber each
+  other's busy state.
+- Addressed live: does a patient with several Home numbers risk having the wrong one "overwritten"
+  by this? No — every phone action in this panel (Edit/Delete/Fix type alike) is scoped to one
+  specific `telephoneNumberId`, never to "the Home number" generically, and `wrongType` itself is
+  computed per-entry from that entry's OWN number — so a correctly-filed Home number is never even
+  offered a "Fix type" button in the first place, regardless of how many other Home/Mobile entries
+  the same candidate has on file.
+- Found live, immediately on trying the one-click version above: `API 400 on POST
+  .../change-telephone-number: {"errors":{"telephoneNumberType":["The value you selected is not a
+  valid choice."]}}`. Root cause: `fixPhoneType` hardcoded the literal string `'Mobile'` — but the
+  value this WRITE endpoint expects for `telephoneNumberType` isn't necessarily the same string
+  shown on the READ side (`patientTelephoneNumbers[].telephoneNumberType`, where `'Mobile'` had
+  been wrongly copied from). Fixed properly rather than guessing at another hardcoded string:
+  `getEditTelephoneNumber`'s own response already carries `telephoneNumberTypes` — the
+  authoritative list of valid write values, and the exact same list that already populates the
+  regular Edit form's dropdown (which has always worked correctly) — so `fixPhoneType` now resolves
+  the entry whose `label` is "Mobile" from that list and sends ITS `value`, rather than assuming.
+
+### Contacts Management — re-tested the tree-line fixes from v3.188.0, found and fixed the real cause
+
+- Asked to re-test the previous session's tree-connector work live (children/siblings nesting,
+  grandparent-to-parent nesting, the index/partner "couple" line) — screenshots showed grandparents
+  overlapping with parents and lines "not in any real order", specifically: a parent WITH nested
+  grandparents above them (e.g. Mother) had her own card pushed down BELOW the row her grandparents
+  and the OTHER parent (e.g. Father, no grandparents nested) were still sitting in — visually
+  stranding the grandparents next to the wrong parent and orphaning her card into its own row.
+- Root cause: `.ms-cv-tree-branch { align-items: flex-start }`, added in v3.188.0 specifically to
+  stop a tall index/parent item from stretching shorter siblings, was applied to BOTH branch
+  variants — but they need OPPOSITE alignment, not the same one. `--above` branches (siblings+
+  index, children) have their shared bus at the TOP with extra content growing downward, so
+  flex-start (top-aligning every item) is correct there. `--below` branches (parents, and the
+  newly-nested grandparent pairs, both introduced in v3.188.0) have their shared bus at the
+  BOTTOM, with extra content (nested grandparents) growing UPWARD — flex-start there top-aligned
+  every item instead, meaning a parent with nothing extra above them (Father) sat flush with the
+  TOP of a taller neighbour (Mother, with grandparents stacked above her card) rather than lining
+  up with her actual CARD — exactly the overlap/disorder reported live. Split into
+  `.ms-cv-tree-branch--above { align-items: flex-start }` /
+  `.ms-cv-tree-branch--below { align-items: flex-end }` — bottom-aligning the --below variant
+  keeps every item's own card (and the joining line below it) level regardless of how much extra
+  content sits above any individual one, so grandparents correctly hang only above the specific
+  parent they belong to. CSS-only change, no JS touched.
+- Two follow-up refinements from the same live re-test, once the alignment above was confirmed
+  fixed. (1) `--below` branches (Parents, and the nested grandparent pairs) had no visible stem
+  connecting each card down to the shared joining line below it — only `--above` branches
+  (siblings+index, children) ever drew one, per the ORIGINAL "peers being joined to each other, not
+  individually fed from below" reasoning for that variant. Asked for it anyway, for clarity: a card
+  visibly connecting to the line it's part of reads better than the line floating disconnected
+  below it, regardless of which direction feeds which. Added the same per-item stub `--above`
+  already has. (2) Existing per-item stubs were found to vary slightly in apparent thickness from
+  one card to the next — traced to HOW the stub was built: two separate 2px borders (one from each
+  of the item's `::before`/`::after` half-elements) that have to land exactly on each other's edge
+  at the item's 50% mark: on an odd-width item those two edges round to slightly different
+  sub-pixel positions, visibly widening or thinning the combined line depending on the item.
+  Replaced with a single `background: linear-gradient(...) no-repeat center top/bottom / 2px 16px`
+  bar per item — one paint operation, no second edge to misalign against, always exactly 2px and
+  exactly centred regardless of the item's own width. Applied unconditionally (not gated by
+  first/last/only-child like the horizontal half-borders still are) — a lone only-child item (e.g.
+  a single grandparent with no sibling grandparent to join to) still gets its own stub down to
+  whatever's below it, even though it has no horizontal line to draw.
+- Labelled the Parents branch's third "Drop here" slot (only once both parents are already
+  placed — "Step-parent", rather than leaving it unexplained as it was in v3.188.0. Discussed
+  first whether step-parents genuinely belong in this dedicated tree slot at all, rather than
+  "Other family / contacts" (where cousins/in-laws/carers/friends all land): concluded yes — a
+  step-parent is the same generation and household role as a biological parent, and the
+  vocabulary's own `Step-` modifier already treats it as a generationally-equivalent variant of the
+  relationship it modifies (step-siblings already stay in the Siblings row, never routed to
+  Other) — the confusion was purely that Parents is the one row people expect to be capped at
+  exactly two, unlike every other row's unremarkable, ever-present "add another" placeholder. New
+  optional `hint` param on `branchPlaceholderHtml` (only used by `parentsBranchHtml`, and only once
+  `cardsInSlot('parents').length >= 2` — with 0 or 1 parents placed, the slot is just the normal
+  "add a parent" affordance and needs no label at all).
+
+### Contacts Management — retired the old single-contact "convert" flow
+
+- Decision made on the open item recorded in the build plan since the canvas's header started
+  opening it directly instead of this widget's own pick-list: user hadn't found much use for the
+  original pick → search → confirm flow once the canvas covered the same ground, so retired it
+  entirely rather than continuing to carry it as a quiet header link pending a decision.
+- Removed from `content-scripts/contacts-link-button.js`: `renderPick`/`renderSearch`/
+  `renderConfirm`/`renderDone`, `pickManualContact`/`runSearch`/`pickCandidate`/
+  `recomputeReverse`/`doConfirm`, `reverseManualMatchComparisonHtml`, the convert-only state
+  fields (`mode`, `manualContacts`, `selectedManualContact`, `selectedManualDetail`,
+  `relationshipGuess`, `searchQuery`, `searchResults`, `selectedCandidate`, `candidatePreview` —
+  unused dead state even before this — `existingReciprocal`, `existingForwardLink`,
+  `baseIdSuggestedFromReciprocal`, `baseId`, `modifierId`, `forwardIsNextOfKin`,
+  `forwardCopyCorrespondence`, `notes`, `reverseBaseId`, `reverseAmbiguous`, `reverseIsNextOfKin`,
+  `reverseCopyCorrespondence`, `workingError`, `doneSummary`, `reverseManualMatch`,
+  `reverseManualMatchError`), and their event bindings. `doOpen()` no longer takes a `mode` param
+  — it always sets up the import flow now, since that's the only flow left. `window.ContactsWidget`
+  no longer exports `openConvert`; the canvas's own "Convert a single contact" header link was
+  removed (`#ms-cv-open-convert` and its binding) since it had nothing left to open. The now
+  bare-import-flow widget's `mode`/`backToConvertMode` distinction was removed too (nothing to
+  distinguish from any more) — the shared "← Back" button (present on both import-search and
+  import-pick, previously routed to the retired convert pick-list either way) now closes the
+  widget entirely instead, relabelled "Close" rather than "← Back" to match. File header comment
+  rewritten to describe the file's new, narrower purpose. Also removed now-orphaned CSS from
+  `contacts-link-button.css` (`.ms-ct-pick-row`, `.ms-ct-result-row`, `.ms-ct-pick-grid` and its
+  nested rule, `.ms-ct-tier`/`-strong`/`-possible`/`-weak`, `.ms-ct-textarea`) — kept
+  `.ms-ct-pick-name`/`.ms-ct-pick-rel`, still used by the import flow's own result rows. Kept
+  `content-scripts/contacts-link-button.js` itself, and everything the "Import from another
+  patient" flow needs — that flow has a genuine capability gap of its own (arbitrary-patient
+  search + true bulk-select) the canvas doesn't cover, and was never part of this decision. Full
+  regression check after the removal: syntax, lint, and the full `node --test` suite all clean
+  (only the two known pre-existing CRLF-environment failures, unrelated to this change) — nothing
+  else in the codebase referenced any of the removed functions/exports/CSS.
+
+## [v3.187.0] — 2026-07-26
+
+### Contacts Management — delete a defunct phone number from the merge screen; flag and delete blank contacts
+
+- Confirmed via a fresh HAR capture (`22-change-contact-type-then-delete.har`) walking through
+  exactly the scenario that prompted this: a mobile number wrongly filed as "Home", fixed via
+  Edit, then deleted outright once confirmed to be a leftover from before direct patient-linking
+  existed (e.g. a partner's own number kept on a patient's record as a workaround — now defunct
+  and technically wrong, since that partner can just be linked directly instead).
+  `POST /patient/telephone/delete-telephone-number/{id}` — no body, id in the URL only, same shape
+  as `deletePatientContactRelationship`. New `ContactsApi.deleteTelephoneNumber`, and a "Delete"
+  button next to each phone row's Edit button in the merge-compare panel (`deletePhoneNumber`,
+  same wrong-patient guard and re-fetch-rather-than-patch convention as `savePhoneEdit`). No native
+  `confirm()` dialog — matches this codebase's existing delete-button convention (e.g.
+  `#ms-cv-remove-reverse-manual`): a clearly labelled, deliberately-placed button IS the
+  confirmation here.
+- Confirmed via a second HAR capture (`21-blank-contact.har`) exactly what a "blank" manual
+  contact looks like: `patientContactName` and `patientContactRelationship` both empty strings, no
+  phone/email/address — matching the user's own description of these as "an artifact of a
+  now-fixed bug in the import process". Manual contacts are now flagged `isBlank` at load
+  (`loadCanvas`) when both fields are empty, excluded entirely from the matching pipeline (nothing
+  to search or match a blank name against), and shown in the sources list with a placeholder name,
+  a plain explanatory sub-label, and a dedicated Delete button (`deleteBlankManualContact`) — again
+  reusing `deletePatientContactRelationship`, no new write logic needed for this one.
+- Found live: deleting a SECOND phone number while a first delete was still in flight (e.g. two
+  numbers on the same family member, or across two different ones) could leave "Deleting…" stuck
+  showing after the number was actually already gone. Root cause: `cs.phoneDeleting` tracked a
+  single telephoneNumberId — a second delete starting before the first finished overwrote it, so
+  the first delete's own cleanup (`if (cs.phoneDeleting === telephoneNumberId) …`) could fail to
+  match and never clear. Converted to a `Set` — each delete tracks its own id independently, so
+  concurrent deletes can no longer clobber each other's state.
+- Found live, separately: "Link another" turned out to be load-bearing in a way that contradicted
+  this file's own comment claiming the next card could just be dragged onto a slot "without
+  clicking anything". Traced it: `cs.doneSummary` (the success message) is only ever cleared by
+  that button, and `renderConfirmPanel` checks it BEFORE checking whether a fresh drag has set up
+  a new pending decision — so dragging a new card without clicking "Link another" first set the
+  new state correctly but left it invisible, stuck behind the stale success message.
+  `tryAssign` now clears `doneSummary` (and the related reverse-manual-match state) itself, so a
+  new drag actually does just work without clicking anything first, making the button's own
+  comment true rather than aspirational. **The "Link another" button itself has been removed** —
+  no longer load-bearing, and dismissing a bare success message without dragging anything else
+  isn't worth a dedicated button. One case this trades away: an unresolved `reverseManualMatch`
+  offer ("remove this duplicate too?") can now be silently skipped by dragging quickly, rather
+  than being a forced checkpoint — accepted as consistent with this tool's own "never force a
+  decision" doctrine, since that offer is already explicitly best-effort and the duplicate can
+  still be cleaned up later.
+- Found live, a further gender-defaulting case beyond the Mother/Father one already fixed: a
+  transitive-pool candidate found via direction 1 (a hub's own added contact — "via X's own
+  contacts, recorded there as Y") still had no gender data, so dropping one directly onto a slot
+  with no manual pairing fell back to the slot's first-listed option regardless of actual gender
+  (e.g. a father defaulting to "Mother"). Fixed at zero extra cost, per the user's own observation:
+  the relationship LABEL itself already implies a gender in the overwhelming case ("Father" means
+  male) via that relationship's own `subjectGender` in `rules/contact-relationships.json` — no
+  need to fetch a coded gender field when the user-generated relationship text already carries
+  one. New `genderFromRelationshipLabel(text)` derives it from the SAME hint text already shown,
+  same soft-hint status as `genderIdentity` everywhere else (never authoritative, always
+  overridable). Deliberately NOT applied to direction 2 or the hub-self entry, whose own label
+  text describes a DIFFERENT person's role (the hub's, or the index patient's) rather than the
+  candidate's own — using it there would derive the wrong person's gender, not a weaker guess.
+- Found live: the merge-compare panel's per-phone Edit/Delete buttons sat as plain inline text
+  after the phone value with no wrapper, so a narrow "kept" column would wrap them onto separate
+  lines, stacking Edit above Delete instead of side by side. Both buttons now sit together in a
+  dedicated `.ms-cv-phone-actions` row (flex, horizontal) below the value, so they always stay
+  adjacent to each other regardless of column width.
+- Found live: a hub patient linked to two genuinely different real patients who happen to share
+  the exact same name (e.g. two "John Smith"s) made those two people visually indistinguishable
+  as candidate cards — nothing on screen but the name to tell them apart. Fixed with a targeted,
+  non-routine check: every candidate card (suggested matches, transitive-pool matches, and
+  already-linked "review" matches) is grouped by exact name after `loadCanvas` finishes building
+  them; only a name shared by more than one distinct real patient id is flagged. Tried showing a
+  date of birth for those specific candidates first, but the user correctly pointed out it's
+  useless here: manual contacts never carry a DOB at all, so there's nothing on the manual side
+  to recognise or compare it against. Replaced with address/phone/email instead (whichever the
+  candidate actually has on record) — a GP who knows the family can often recognise the right
+  household or number on sight, unlike an arbitrary date. Reused for free where already known (a
+  transitive-pool candidate sourced directly from a hub's own already-fetched patient-details
+  carries all three at no extra cost) and fetched via one extra `getPatientDetails` call per
+  colliding candidate otherwise, never for the ordinary single-match case. New `formatAddressLine`
+  formats the address the same way `sameAddress`/the wizard's `buildManualContactBody` already
+  read it (line1/line2/locality/postalCode); phone/email reuse the existing
+  `extractPreferredPhone`/`extractPreferredEmail` helpers. Appended to the card's existing
+  sub-label, e.g. " · 12 High St, Springfield, SP1 2AB · 07700 900123". Found live, immediately
+  after: this only helps once the user knows which manual contact the disambiguated candidates
+  are even competing for — the same detail is now ALSO shown on the affected manual contact's own
+  card, so both sides of a prospective drag-and-drop can be compared directly rather than one side
+  showing detail with nothing to check it against. Scoped to manual contacts with at least one
+  flagged candidate in `suggestedCards` (every entry there already carries `forManualId`) — an
+  already-linked "review" match's manual pairing is computed lazily per-render instead of stored,
+  so extending this to that path too wasn't worth the complexity for the same rare case. Fetched
+  via `viewPatientContact` — the identical endpoint/shape the merge panel itself already uses for
+  phone/email (confirmed live there already, not a new guess) — for only the small, bounded set of
+  manual contacts actually affected. New `manualPhoneSummary` reads the manual side's three flat
+  phone fields (Home/Mobile/Work, never a list — see `buildPhoneRows`) into one labelled string
+  for comparison against a candidate's single preferred number.
+- Found live (screenshots), following on from a layout discussion this same feature had earlier:
+  candidate cards for a manual contact with several options (e.g. three possible real-patient
+  matches for one manual entry) weren't lining up into clean rows — each manual contact's own
+  matches sat beside its manual card, but since that manual card's width sized to its own content,
+  one group's matches could start well to the right of the next group's, so nothing actually
+  aligned down the page even though each individual row was internally tidy. Fixed with a
+  three-column grid for match cards (`grid-template-columns: repeat(3, 150px)`, replacing
+  flex-wrap) plus a FIXED width on every manual card (190px, not just a minimum) — every group's
+  matches now start at the same x position and land in the same three columns, row after row.
+  Separately, and driven by the same screenshots: an already-decided manual contact (one whose
+  only candidate is an already-linked real duplicate with nothing else outstanding, or one already
+  merged this session) sat visually mixed in among contacts that still need an actual decision,
+  making it hard to tell at a glance which cards were live options for which contact. These now
+  move below a new "Matched and linked" divider within the same column, leaving the working area
+  above showing only manual contacts that still need attention.
+- Follow-up question from the user on the above: should an already-linked contact with a
+  recognised relationship and NO likely manual match also default to "Matched and linked", or
+  would that risk hiding a genuine miss (e.g. a manual contact recorded under a maiden name, with
+  a different surname to the real linked patient, that the name-similarity matcher never scored as
+  a candidate)? Answer: it doesn't, provided the unmatched manual contact stays visible in the
+  active list either way (it does — "No suggestions yet" is untouched by this) and the newly-shown
+  card stays a genuine drop target rather than a dead end. Previously an already-linked, tree-
+  placed contact with no manual match appeared NOWHERE in this list at all (locked/non-draggable
+  in the tree, invisible everywhere else) — there was literally no way to fix a missed match like
+  that via drag-and-drop. Now shown in "Matched and linked" too, still draggable: the existing
+  generic `tryMerge`/`findCard` mechanism (already shared across suggested/transitive/review
+  matches) works unchanged for any 'medicus'-kind card regardless of which list rendered it, so
+  dropping the manual contact onto it still triggers the normal compare-and-merge flow. Net effect
+  is a previously-impossible rescue path for a missed match, not a new blind spot.
+- Found live, two related problems with when a group actually counts as "settled": (1) a manual
+  contact moved to "Matched and linked" as soon as it was MATCHED (`manual.mergedWith` set via the
+  merge-compare panel, or an already-linked "review match" surfaced), even though the candidate
+  hadn't actually been dragged onto a family-tree slot yet — matched and linked are not the same
+  thing; the relationship still needs a slot to sit in. (2) Following on from that: dragging the
+  candidate up to actually define its relationship made it (correctly, now that it's genuinely
+  placed) reappear as "already linked" in Matched and linked — but landed there via a path
+  (dropping a review match straight onto a slot, bypassing the merge-compare panel entirely) that
+  had never asked the user to confirm "same person", so the manual duplicate itself is untouched —
+  still sitting active, still findable, but not auto-removed on that basis alone. Fixed the
+  premature-settling half of this: `settled` now additionally requires the matched candidate to
+  actually be `isPlacedInTree`, not merely matched — `mergedWith` alone (step one, before slot
+  placement) never settles a group anymore; only a genuinely defined, placed relationship does. A
+  manual duplicate whose review match gets placed this way still has a clean path to full cleanup
+  without touching this fix: dragging the manual card itself onto that (now placed) candidate opens
+  the merge-compare panel, and `confirmMerge`'s existing "already placed" branch deletes it
+  immediately — no new deletion logic added, since silently auto-deleting a manual contact on the
+  strength of a same-name score alone, with no explicit compare step, isn't a call to make
+  unilaterally. Asked the user whether that path should auto-delete, prompt inline, or stay manual
+  — answer: stay manual (recommended option), confirming no further change was needed there.
+- Found live, worked through with a three-person-family example (two parents and a child, all
+  correctly linked, plus one manual duplicate of the mother on the father's own record): the
+  duplicate's group was STILL moving to "Matched and linked" once its review match (the real
+  mother, already placed) satisfied the settled check added two entries above — but the user's own
+  framing cut through it: nobody had actually confirmed these two records were the same person,
+  and the manual record was still sitting there, untouched. A plausible, unconfirmed pairing is not
+  the same thing as a resolved one. Fixed by removing the "settled" concept from manual-contact
+  groups ENTIRELY — a manual contact now always stays in the active "Manual contacts to convert"
+  area for as long as it exists, whatever candidates are sitting next to it; the only way it ever
+  leaves that list is by actually being resolved (deleted, via the existing merge-confirm or
+  blank-contact-delete paths), never by being judged "close enough" to settle in place. "Matched
+  and linked" is now purely the already-linked-with-no-manual-duplicate list from the entry above
+  (kept, since the user explicitly said they like it as a visual "this part of the family is
+  done" signal, unrelated to the manual-conversion work above it) — a manual contact can no longer
+  appear there under any circumstance. Added a persistent hint above the manual-contacts column
+  whenever any exist: "Drag a manual contact onto its matching Medicus card to match them and
+  delete the duplicate" — the drag-a-card-onto-another-card gesture isn't obvious from the cards
+  alone, especially once a manual duplicate already has a clearly-matching "already linked" card
+  sitting right next to it with nothing else visually prompting the next step.
+- Found live, immediately after: with the fix above deployed, "Matched and linked" stopped showing
+  at all for the three-person-family example — traced to a real, pre-existing bug in
+  `bestManualMatchFor` (used both for that section's "unmatched" list AND the existing "review
+  match" badges), not something introduced by the fix above; it just made the bug visible for the
+  first time. `bestManualMatchFor` calls `ContactMatch.scoreCandidate` without a relationship guess
+  (there's no slot context yet — that's the point of the function), so `baseId` is always
+  `undefined` inside it, which makes age/gender each default to a neutral 1 rather than an actual
+  signal (`agePlausibility`/`genderConsistency`'s own `baseId ? … : 1` fallback) — a guaranteed
+  15-point baseline (8+7) for literally every pairing, regardless of name. With the old `score > 0`
+  bar, that baseline alone was enough to "match" — so with only one manual contact on the record,
+  it matched against every already-linked contact compared to it, not just the real duplicate (the
+  family's child was wrongly swept into the same manual duplicate's review-matches purely on this
+  baseline, leaving nothing left over for "Matched and linked" to show). Raised the bar to `>= 40`
+  — the same "possible tier or better" threshold already used for `bestTransitiveMatchFor` — so the
+  baseline alone can no longer clear it; real name similarity has to do the work. This also fixes a
+  more concerning, silent version of the same bug: an unrelated family member could previously have
+  been shown with a misleading "already linked" review-match badge next to a manual duplicate that
+  wasn't actually theirs.
+
+### Contacts Management — the header button opens the family-tree canvas directly
+
+- The "Manage this patient's contacts" header used to expand an inline widget first — a
+  manual-contacts pick-list plus two alternate-flow buttons ("Manage contacts as a family tree" /
+  "Or import contacts already linked on another patient's record") — requiring a second click to
+  reach the canvas, which now does everything that pick-list flow did, and does it more
+  thoroughly (drag-and-drop, the transitive pool, name-collision disambiguation, phone/email
+  management, blank-contact cleanup). The header now opens the canvas directly.
+- Checked first whether either alternate-flow button covered anything the canvas doesn't: "Manage
+  contacts as a family tree" is already a literal alias for the canvas, so nothing lost there. "Or
+  import contacts already linked on another patient's record" is genuinely different — it lets you
+  search or quick-pick ANY other patient (not just ones already reciprocally connected via "Listed
+  as Contact For", which is all the canvas's own transitive pool ever surfaces) and bulk-select
+  several of their contacts to import in one action, rather than one drag per card. Worth noting
+  for later: that flow has a known correctness gap of its own — `linkContactsBulk` only ever writes
+  the forward link, never the reciprocal, unlike every canvas-driven link — so it's arguably lower
+  quality even where it has more reach; not fixed here, out of scope for this change.
+- Kept the import flow reachable rather than dropping it: new "Import from another patient" link
+  in the canvas header (`#ms-cv-open-import`) closes the canvas and calls the inline widget's
+  import mode directly (`window.ContactsWidget.openImport()`, backed by a new `mode` param on
+  `doOpen()` in `contacts-link-button.js` — the same data-loading path as opening the widget
+  normally, just landing on `import-search` instead of `pick`). The widget still renders in place
+  at its own position on the page, not as an overlay on top of the canvas.
+- Follow-up, same day: with the header no longer opening the pick-list, the widget's own
+  single-contact "convert" mode (pick → search → confirm → done) was left reachable only via its
+  own internal `#ms-ct-again` button — itself unreachable from the header, so effectively orphaned.
+  Rather than leave it silently stranded or rip it out unilaterally (a materially bigger,
+  unrequested change), added a second header link, "Convert a single contact"
+  (`#ms-cv-open-convert` → `window.ContactsWidget.openConvert()`, `doOpen()` with no mode — the
+  same path as before, just called externally now), alongside "Import from another patient". A
+  decision on whether to keep or retire this flow entirely is still outstanding — noted in the
+  build plan's status addendum as a decision to make before the next phase, not resolved here.
+- Both header links (and Close) now share one confirmation check (`confirmDiscardUnfinishedMerge`,
+  extracted from `close()`'s own pre-existing logic) — a merged-but-not-yet-placed pairing is
+  equally lost whichever way the canvas is left, not just via Close.
+
+### Contacts Management — labelled the matches column, auto-refresh on close, grandparents
+
+- Labelled the previously-unlabelled column of candidate cards next to each manual contact:
+  "Possible Medicus contact matches", with "Manual contact" over the cards to its left — found
+  live it wasn't obvious at a glance that the right-hand cards were candidates, not already real.
+- Closing the canvas now reloads the page (`close()`, not the two header links above — those are
+  switching to a different in-page flow, not leaving, so reloading there would just discard the
+  widget being opened). Every write this canvas makes only ever updates local state; Medicus's own
+  contacts card never reflects any of it until the page is reloaded — previously left to whichever
+  "Refresh now" button happened to be showing, or the user remembering to do it manually. Closing
+  is by far the most common way anyone actually leaves the canvas, so this removes that manual step
+  for the common case.
+- Grandparents didn't benefit from any of the family-tree linkage already built for parents — found
+  live, and worth building given the side (maternal/paternal) IS knowable in the specific case
+  where a parent is already correctly placed: "if patient A's mother has two linked people in her
+  records as her parents, they are maternal grandparents for A" (the user's own framing). Traced
+  why this wasn't already happening even for a correctly-placed parent: the existing transitive
+  pool's Direction 1 (a hub's own added contacts) only ever reaches a hub's record when the hub is
+  a "related patient" — i.e. when the RECIPROCAL "Listed as Contact For" link exists on the
+  parent's own record too. Plenty of real parent links predate this tool (native Medicus UI, or the
+  older bulk-import wizard, which historically only wrote the forward direction) and never got a
+  reciprocal written, so a correctly-placed parent's own record was never reached at all. New
+  loadCanvas step ("1.6"): for each placed parent (`st.tree.slots.parents`, at most two, always
+  `mother`/`father`), fetches their own patient-details explicitly — reusing the fetch already done
+  above if they're ALSO a related patient, a genuinely new one otherwise — and, from THEIR OWN
+  recognised mother/father, composes grandmother/grandfather deterministically (not a guess: the
+  innermost relationship is already recognised, so there's nothing fuzzy left to resolve). Tagged
+  maternal/paternal by which parent slot the composition came through — informational only (a
+  `hint`, e.g. "Maternal grandparent — Mother's own Father"), since neither Medicus's own free-text
+  relationship field nor this tool's canonical vocabulary has a maternal/paternal concept to write
+  back; the relationship actually written is still just "Grandmother"/"Grandfather". Also new:
+  `guessedBaseId`, carried through the pool into `suggestedCards`/`transitiveCards` — the one case
+  in the whole transitive-pool mechanism confident enough to PRE-FILL the confirm panel's
+  relationship picker (via `buildConfirmForCard`) rather than leaving it as an informational hint
+  the user has to translate themselves; still fully editable, never force-applied. Deliberately
+  scoped to only this one deterministic case — composing a relationship any other way (no placed
+  parent to hang the derivation off) remains real, separate, scoped-for-later work, per the user's
+  own framing ("come back to how we intuit it from other relationships later").
+
+## [v3.188.0] — 2026-07-27
+
+### Contacts Management — tree connector fix, grandparents mirror the parent/child join style, children's ages
+
+- Found live (screenshot: adding a sibling to the hub patient left the line down to their children
+  "orphaned in the middle of the screen"): the connector feeding the children branch was centred on
+  the WHOLE siblings+index row's width, not on the index card specifically. That's only the same
+  thing when the index item happens to sit at the row's own geometric centre — true for an only
+  child, false as soon as any sibling (or the "drop new sibling" placeholder) exists, since all
+  siblings render before the index item, pushing it off-centre. Fixed by nesting the children
+  branch as a normal-flow child of the index item's own list item (`siblingsAndIndexBranchHtml`)
+  instead of a separate row independently centred on the group — its horizontal centre is then
+  trivially the index card's own centre, no alignment maths needed. `.ms-cv-tree-branch` switched
+  from the flex default `align-items: stretch` to `flex-start` so the now much-taller index item
+  doesn't force blank space under every shorter sibling card.
+- Grandparents now mirror the same joining style asked for: "a line joining the grandparents, then
+  going down to join the line connecting their children [the parents]." Applied the identical
+  nest-inside-the-specific-item technique used for the children fix above: each parent's own
+  composed grandparents (loadCanvas step 1.6, `cs.grandparentViaParent`) now render as a joined
+  pair directly ABOVE that parent's own card, nested inside their list item in `parentsBranchHtml`
+  (new `grandparentsPairHtml`) — the line joins the pair, then drops straight into their specific
+  child (the correct parent), never smeared across an unrelated midpoint. A grandparent with no
+  known parent association (dragged in directly rather than composed) still shows in the general
+  collapsible slot as before (`unassignedGrandparentsHtml`, filtered to exclude anyone now shown
+  nested, so nothing renders twice).
+- Children's ages, in brackets after the name once placed (e.g. "Jamie (8)") — `cs.linkedCards`
+  never carries a DOB at all (built from patient-CONTACT records, which don't include one), so a
+  new loadCanvas step ("1.7") fetches it specifically for children actually placed in the tree (a
+  handful at most — reuses `patientDetailsCache` for free if a child happens to already be fetched
+  for another reason, e.g. also being a related patient).
+- Noted but not investigated further: the user's own curiosity that converting a manual contact
+  for an INACTIVE patient via the older "convert" flow goes through cleanly with no visible block,
+  unlike the known inactive-patient write inconsistency documented separately — hypothesis (theirs)
+  is that the block is triggered by reading the inactive record, not by writing to it, so scoping a
+  match/link action to reads on the HUB patient's own record only might sidestep it. Recorded as a
+  testable idea for later, not acted on this pass.
+- Live-tested the above (two screenshots) same evening — found two real bugs in the grandparents
+  work, fixed both. (1) `st.grandparentViaParent` (the map that lets a grandparent's card render
+  nested under its correct parent instead of the plain unlabelled fallback slot) was only ever
+  being set for a grandparent the composition step was ALSO offering as a fresh suggestion —
+  `continue`d past entirely for one already directly linked before this feature existed, which
+  never needed "discovering" as a suggestion in the first place. That's exactly the common real
+  case (a family whose grandparents were already linked via Medicus's native UI, or before this
+  session's work even started) — those grandparents were falling straight through to the generic
+  collapsible slot with no nesting and no lines at all. Fixed by recording the association BEFORE
+  the already-known/already-seen checks, unconditionally on them, rather than after. (2) Separately
+  — misdiagnosed live at first as "just the normal per-item stem, feeding an empty placeholder" —
+  the actual cause of a stray-looking line reported near the boundary between two sibling cards:
+  `.ms-cv-tree-children-attach`/`.ms-cv-tree-grandparents-attach` (the wrapper divs introduced for
+  the nested children/grandparents branches) are plain block elements, which left-align their own
+  children by default — the 2px connector bar was sitting at the wrapper's own left edge rather
+  than centred under it, visibly offset from the card it was meant to hang off. Fixed with
+  `display:flex; flex-direction:column; align-items:center` on both, the same centring technique
+  already used everywhere else in this tree.
+- Noted for later, not fixed this pass (deliberately parked by the user): the extra "Drop here"
+  the Parents branch always shows beyond the two placed parents (for a step-parent — the
+  vocabulary supports `mother`/`father` + a `step` modifier onto the same slot, but nothing in the
+  UI currently explains that, hence "who should be dropped here?" live). Worth another look once
+  the tree's structure is generally more robust, per the user's own framing.
+- The index patient's connection to their partner was found live to be "all over the place" —
+  traced to the SAME `position:absolute` side-attachment already flagged (but parked) as pushing
+  the Partner box off-screen: it draws a single line straight across from the index card's own
+  right edge to wherever Partner ends up, which stretches into a long, visually disconnected-
+  looking line as soon as siblings push the index card away from the row's own left-hand start.
+  Restructured properly rather than patched: index+partner are now joined the same way the two
+  Parents are — a shared line below them (reusing `.ms-cv-tree-branch--below`, the exact CSS
+  parentsBranchHtml already uses, rather than duplicating it) — with the children branch then
+  hanging from that PAIRING's own midpoint (nested inside the whole couple, not the index card
+  alone), reflecting that the children below belong to both of them, not the index patient by
+  themselves. This also resolves the parked "Partner off-screen" item from the entry above as a
+  side effect — Partner is no longer positioned relative to anything that could push it outside
+  the panel's width, since it's a normal flex sibling of the index card now, not an absolutely-
+  positioned attachment reaching out from it.
+
+### Contacts Management — deceased indicator, sourced from free text (confirmed via HAR why Medicus's own flag can't be used here)
+
+- The user manually marks a deceased contact's relationship with "(RIP)" so it's clear on a
+  child's own record that a parent has died — asked whether there's a cleaner way to show this, or
+  whether it needs a formal modifier alongside Step-/Half-/Ex-. Talked through it before touching
+  any code: a modifier is the wrong shape for this — Step-/Half-/Ex- describe a genuinely different
+  KIND of relationship, whereas "deceased" is an orthogonal fact about the person that applies
+  equally to any relationship, and Medicus's own free-text relationship field has no such concept
+  either. The better-sounding alternative — surface Medicus's own `isDeceased` flag (confirmed
+  already in use elsewhere in this suite, `side-panel/modules/record/record.js`, described there as
+  a "load-bearing safety control") — turned out not to be viable, confirmed via a fresh HAR
+  (`28-matching-deceased-pt.har`) BEFORE writing anything: `GET .../patient-details/{candidateId}`
+  (the endpoint this canvas already relies on for that flag, plus DOB/gender/address) returned
+  `403 {"errorCode":"inactive-patient-access","errorReason":"inactive-after-grace-period"}` for a
+  genuinely deceased candidate — reasoned out ahead of the capture, from this tool's own prior
+  inactive-patient findings: death results in the same practice-deduction process as any other
+  reason a patient stops being actively registered, so a deceased patient is just one more case of
+  "inactive after grace period" at the access-control level, not a distinct status. Confirms free
+  text is the only reliable signal available for this — not a workaround for a gap, the correct
+  approach given what's actually reachable.
+- New `ContactRelationships.isDeceasedRelationshipText(text)` (`engine/contact-relationships.js`,
+  unit-tested in `test-contact-relationships.js`) — a word-bounded, case-insensitive match against
+  "rip" / "deceased" / "dec'd" / "passed away", deliberately separate from `normaliseFreeText`'s
+  own baseId/modifierId parsing rather than folded into it, for the category-error reason above.
+  Applied at load time wherever relationship free text is already available and cost-free to check
+  — manual contacts, already-linked contacts, and the transitive/grandparent pools' own Direction-1
+  and composed-grandparent entries (each specifically where the label genuinely describes the
+  CANDIDATE's own role, mirroring the same distinction already drawn for `genderFromRelationshipLabel`
+  — Direction 2's label describes the hub, not the candidate, so it's excluded). Rendered via
+  `cardHtml`'s existing badge mechanism (checked once, centrally, rather than at every individual
+  call site) — a plain "· Deceased" tag appended after whatever badge a card already has, reusing
+  the existing `.ms-cv-badge` styling, no new CSS needed. Never affects the relationship actually
+  written back to Medicus, which stays exactly what the user picks in the confirm panel — this is
+  display-only throughout.
+
+## [v3.186.1] — 2026-07-26
+
+### Contacts Management — stop guessing a transitive contact's relationship, log silent pool failures
+
+- Found live: v3.186.0's transitive-pool feature offered a pulled contact's `sourceRelationship`
+  as a baseId guess when dropped with no manual pairing — but that's the HUB patient's own label
+  for them (e.g. "Daughter" on the hub's record), not the index patient's relationship to them.
+  Confirmed actively wrong in a real case: pulling a hub's daughter into the index patient's own
+  sister's tree defaulted to "Mother" being wrong is one thing, but the underlying guess itself
+  ("Daughter") would have been equally wrong applied to the index patient, who is that same
+  contact's SISTER, not her mother. `buildConfirmForCard` no longer uses this guess at all — falls
+  through to `'other'`, same as a genuinely unknown candidate. The source relationship is still
+  shown as an informational hint (the sub-label already added in v3.186.0), so the user has the
+  context to pick correctly themselves. Composing the CORRECT relationship (using the
+  already-known index-to-hub and hub-to-contact relationships) is real, separate work, scoped for
+  a later phase — this is only "stop offering a confidently wrong default" in the meantime.
+- The per-related-patient `getPatientDetails` fetch in the pool step was silently swallowing
+  failures (`.catch(() => null)`), making a related patient who contributes nothing to the pool
+  indistinguishable from one whose record genuinely has nothing useful on it. Now logs a
+  `console.warn` (patient name + error message — safe to show real values here, this only ever
+  runs in the clinician's own browser on a patient they already have full access to) so a pattern
+  (e.g. every failure being a different-practice patient) is diagnosable rather than guessed at.
+- Corrected, on the user's own clarification, before that logging was ever needed: the pool wasn't
+  missing patients due to a silent fetch failure at all — it was only ever reading ONE direction of
+  each hub's own `patient-details` response (`patientContactsSection`, contacts the hub added
+  themselves). The OTHER direction — other real patients who list the HUB as their own contact
+  (`patientLinkedContactsSection`, the identical "Listed as Contact For" relationship that found
+  the hub via the index patient in the first place, just one hop further out) — was never read at
+  all, even though it's already present in the same response, no extra fetch needed. Those patients
+  were only ever surfacing via the much weaker same-address coincidence, if at all. Both directions
+  are now pooled. Each pool entry's informational hint (never an auto-guess, per the fix above) is
+  now direction-aware: "via X's own contacts (recorded there as Y)" for the first direction, "also
+  lists X as their own Y" for the second — the two describe different relationships (the hub's
+  label for the contact, vs. the contact's own label for the hub) and reusing one phrasing for both
+  would have been misleading.
+- Found live, same conversation, a further gap in the two directions above: a related patient
+  found via "Listed as Contact For" was only ever used as a jumping-off point to explore THEIR
+  contacts — never surfaced as a candidate themselves. That's backwards for the single strongest
+  case there is: a patient who directly lists the index patient as their own contact needs no
+  matching or guessing at all. Each related patient is now ALSO pushed into the pool directly, in
+  its own pass BEFORE either direction above runs (ordering matters — otherwise a patient found
+  first via a relative's sub-list, a weaker path, would wrongly win over their own direct entry
+  purely by array order). Unlike every other pool entry, this one gets a real, CORRECT relationship
+  guess rather than just an informational hint — `buildConfirmForCard`'s existing
+  `findExistingReciprocal`/`suggestForwardFromReciprocal` (used for every candidate already, no new
+  logic) finds this exact entry and correctly inverts it (e.g. "Father" → "Son", not "Daughter",
+  gender-dependent) once dropped onto a slot — this needed the related patient's own
+  `genderIdentity`, threaded through from the same already-fetched `patient-details` (no extra
+  fetch). This is NOT relationship composition (still parked) — it's a single, already-known,
+  already-real relationship, exactly the inversion this codebase already does safely everywhere
+  else.
+- Fixed a duplicate-card bug this surfaced: the "Also at this address" list was only excluding
+  patients already in `suggestedCards`, never `transitiveCards` — so an unmatched pool entry (e.g.
+  the son above, once correctly pooled) could show up twice, once via the pool and once again via
+  the weaker same-address coincidence. Both are now excluded.
+
+### Contacts Management — pull in a related patient's own contacts automatically
+
+- Folds the wizard's Phase 2 bulk-import idea (recovered from
+  `docs/plans/CONTACTS-MANAGEMENT-BUILD-PLAN-2026-07-23.md` — the wizard's `contacts-link-button.js`
+  already does something very similar as an explicit user action) into the canvas as an automatic
+  step, with no separate button or picker: opening the canvas now also looks at every patient who
+  already lists this one as their own contact ("Listed as Contact For" —
+  `patientLinkedContactsSection`, already fetched, no extra call for the list itself), pulls each
+  one's own real (already-linked) contacts, and uses that pool as a candidate source — no
+  relationship-composition logic needed at all, since (matching the wizard's own approach) a pulled
+  contact is only ever offered with the RELATED patient's own relationship label as an editable
+  starting guess, never a composed one.
+- New `bestTransitiveMatchFor` (`content-scripts/contacts-canvas.js`, same lightweight
+  name-similarity scoring as `bestManualMatchFor`) checks this pool against every manual contact
+  BEFORE the existing patient-finder search runs. A confident match (score ≥ 40 — not just "weak")
+  skips the generic search for that manual contact entirely, rather than making a redundant API
+  call and offering a lower-confidence suggestion alongside a better one already found via an
+  established real relationship. A pooled contact matched to no manual contact at all — a relative
+  this patient has no record of yet, not even a manual one — still gets surfaced, in a new "Also
+  found via a related patient's own contacts" section, draggable straight onto a tree slot.
+- Dropping one of these to place it in the tree runs through the SAME single-link
+  `buildConfirmForCard`/`performLinkAndCleanup` path every other candidate already uses — no new
+  write logic. That gets a real gap in the wizard's own bulk-import fixed for free: `linkContactsBulk`
+  only ever writes the forward link, never the reverse — this path always inverts and writes both
+  directions, like every other new-link path in the canvas.
+- `buildConfirmForCard` falls back to a transitively-sourced card's own `sourceRelationship` (via
+  `normaliseFreeText`) as a relationship guess, below a manual pairing's own guess but above the
+  blind `'other'` default, when dragged straight onto a slot with no manual contact involved.
+
+### Contacts Management — surface every phone number in the merge-compare panel, not one guessed value
+
+- Root-caused and fixed, via a fresh HAR capture (20-editmerge-contacts-within-canvas.har) of the
+  actual merge/link-compare screen for a candidate with two phone numbers on file: the compare
+  table's phone value (`linkPatientMobilePhoneNumber || linkPatientHomePhoneNumber`, from the
+  link-preview endpoint) and the "Edit" button's target (whichever `patientTelephoneNumbers[]`
+  entry was flagged `preferredTelephoneNumberForSms`) are NOT always the same entry — confirmed
+  live in this exact capture (Home flagged preferred, Mobile shown in the table) and caught in the
+  act via the capture's own note: *"I clicked here on the mobile in the live medicus record, but
+  it's editing the home phone."* This was the "known simplification" flagged back in v3.181.4/
+  v3.182.0.
+- Fixed at the root rather than by improving the guess: the compare panel now shows EVERY entry
+  from the candidate's `patientTelephoneNumbers[]` (already fetched via `getPatientDetails` in
+  `startMerge`, previously collapsed down to a single derived value) as its own row — type
+  (Home/Mobile/Work/Temporary — the real four-value enum, confirmed via the same capture's
+  `edit-telephone-number` response), value, any note, and its own Edit button wired to its own
+  `telephoneNumberId`. No more guessing which one to show or which one Edit means.
+- New `buildPhoneRows(manualPhones, medicusPhones)` (pure, in `contacts-canvas.js`) pairs each type
+  against the manual contact's own Home/Mobile/Work fields (a manual contact never has more than
+  one of each, and never a Temporary) for differs-highlighting; a second entry of the same type, or
+  any type the manual side has nothing for, still gets its own row but renders plain (nothing to
+  compare it against) rather than being hidden. The manual side is shown broken out by type too,
+  not the old single "first non-empty of mobile-then-home" value.
+- Fixed along the way: the single "Edit" button's DOM id (`#ms-cv-phone-edit-start`) was reused
+  across what are now multiple buttons — invalid HTML, and `querySelector` would only ever have
+  bound the first one, silently doing nothing on any other row's Edit click. Now a class
+  (`.ms-cv-merge-edit-btn`) with `querySelectorAll`, one listener per button.
+- `savePhoneEdit` now re-fetches `patient-details` after a successful edit instead of patching a
+  single cached value in place — simpler and more correct than hand-translating the edit form's
+  lowercase type values (`home`) against patient-details' title-case ones (`Home`), and correctly
+  reshuffles which row an entry appears under if its type was changed.
+- The "keep manual phone in the new link's notes" checkbox now carries forward every type that
+  actually differs, not just one.
+
+### Contacts Management — write a fixed relationship back to Medicus; finalise a pre-placed match immediately
+
+- Corrects the previous entry's stated limitation: confirmed via a fresh HAR capture
+  (19-editing-medicus-contact-relationship.har) that editing an EXISTING patient-contact's
+  relationship is possible — `GET /patient/data/patient-contact/edit-patient-contact/{id}` for the
+  pre-fill data, `POST /patient/patient-contact/change-patient-contact/{id}` for the write. The
+  `{id}` is the same `patientContactId` already used by `viewPatientContact`/
+  `deletePatientContactRelationship` (this response just calls it `patientContactRelationshipId` —
+  an API naming inconsistency, not a different id). Confirmed live: Medicus itself has no canonical
+  relationship vocabulary at all — even for a real patient-to-patient link,
+  `patientContactRelationship` is plain free text on their side, same as a manual contact's. Both
+  added to `contacts-api.js` as `getEditPatientContact`/`changePatientContact`.
+- When a linked contact's relationship didn't map to a canonical category (`relationshipKnown`
+  false — see the confirm panel's now-visible picker for this case, v3.183.0), confirming a slot
+  now writes the picked relationship back to Medicus via this endpoint, preserving the existing
+  isNextOfKin/notes/copyCorrespondence flags (fetched fresh immediately before the write — this
+  call is a full replace, not a partial update). `performLinkAndCleanup` runs this alongside its
+  existing existingForwardLink skip-the-redundant-link-write / delete-the-manual-duplicate logic —
+  shared between the wizard and the canvas, though only the canvas currently has a path that
+  produces an unrecognised-but-real link to fix.
+- Fixed: a manual contact matched (via drag-to-merge) against a Medicus contact ALREADY placed in
+  the family tree had nowhere to finalise — the actual deletion of the manual duplicate normally
+  happens when the (still pending) merge is dropped onto a tree slot, but an already-placed
+  contact has no further slot to drop it onto. The match was silently discarded on close (or, at
+  best, blocked close behind a generic "you'll lose this" warning with no way to actually proceed).
+  `confirmMerge()` now checks `isPlacedInTree` and, when true, deletes the manual duplicate
+  immediately on "Confirm — same person" rather than deferring to a slot-drop that will never come.
+  The merge panel's phone/email/notes "carry forward" checkboxes (which only ever fed a NEW link's
+  notes field) are hidden for this case and replaced with a plain heads-up, since there's no new
+  link for them to carry into.
+
+### Contacts Management — one mechanism for matching ANY already-linked contact to a manual duplicate
+
+- The real problem, found live: pre-filling a linked contact into its family-tree slot (whether its
+  relationship text mapped to a canonical category or not) blocked it from ever being matched
+  against a manual contact for a duplicate check — a locked, in-slot card was disconnected from the
+  sources list entirely. An earlier pass at this only fixed the unrecognised-category case with a
+  separate "Edit relationship, then compare" mechanism; that turned out to be the wrong shape,
+  since a RECOGNISED, already-placed contact has exactly the same duplicate-matching need. Replaced
+  with one general mechanism covering both.
+- `loadCanvas` now runs every already-linked contact's own recorded relationship text through
+  `normaliseFreeText` ONCE, up front, storing `baseId`/`modifierId` (null if it doesn't map to a
+  canonical id) directly on its `cs.linkedCards` entry — the authoritative source for that link's
+  relationship from here on, in `buildConfirmForCard` and everywhere else. `buildLockedTree` only
+  pre-fills a contact into a tree slot when that baseId is set; an unrecognised one is no longer
+  "locked" anywhere at load time — it's just a plain entry in `cs.linkedCards`, exactly like any
+  other candidate, with no separate categorisation step of its own. There's no needs-review holding
+  area or picker any more (`ContactTree.needsReview`/`addNeedsReview` removed from the engine —
+  dead code once nothing populated or consumed it).
+- New `bestManualMatchFor` (`engine/contact-match.js`'s existing name-similarity scorer, called in
+  reverse — one known person against several manual contacts, rather than the usual several
+  candidates against one manual contact) is now run for EVERY linked contact, placed or not. A
+  plausible match renders — draggable, in both directions (manual↔medicus; `tryMerge`'s pairing
+  check already allows either) — in that manual contact's own row in the sources list, badged
+  "already linked", independent of whether the SAME contact is also shown locked in its tree slot.
+  A linked contact with no plausible match and no tree slot yet (unrecognised text) shows in a new
+  "Not yet placed in the family tree" strip below the tree instead — plain and draggable, with no
+  "categorise it first" step: dropping it onto a slot captures its relationship there and then,
+  exactly like a brand-new link would, via the SAME merge/confirm path every other candidate uses.
+  That path already special-cased an already-real link (`existingForwardLink` skipping the
+  redundant `POST link-patient`, deleting the manual duplicate instead) — this is simply the first
+  way to reach it via a link that was ALWAYS already real, not one merged moments earlier.
+- `buildConfirmForCard` prefers a linked card's own known `baseId` over any guess derived from the
+  paired manual contact's free text (which, for an unrecognised card, is exactly the text that
+  failed to categorise automatically). The confirm panel's relationship picker is now shown
+  whenever that baseId ISN'T known — including an unrecognised already-linked card — rather than
+  being hidden for every already-linked card as before; nothing gets written to Medicus for it
+  either way (`performLinkAndCleanup` never rewrites an existing link's relationship), but the
+  canvas no longer silently defaults its local category without asking.
+- Note for anyone who used the short-lived "Edit relationship" picker from the previous pass: it
+  never wrote anything back to Medicus (confirmed live) — that was by design, and remains true of
+  this design too. This tool has no capability to rename an EXISTING real contact's relationship on
+  Medicus's own record; only a brand-new link's relationship is ever actually written.
+
+## [v3.182.0] — 2026-07-25
+
+### Contacts Management — edit a candidate's own phone number from the merge screen
+
+- New capability in the canvas's merge-compare panel: an "Edit" button on the Phone row (shown
+  whenever the candidate's own phone number is known) opens an inline form — number, type,
+  preferred-for-SMS, notes — and saves directly to their live Medicus record via
+  `POST /patient/telephone/change-telephone-number`. Lets a clinician fix a wrongly-attributed
+  number (e.g. a parent's mobile left on a child's own record, the scenario that motivated this)
+  without leaving the canvas.
+- Confirmed via a second HAR capture (18-phone-number-adding-and-editing.har, covering the edit
+  flow the first capture didn't): `GET /patient/data/telephone/edit-telephone-number/{id}` for
+  the pre-fill data, `POST /patient/telephone/change-telephone-number` (body:
+  `{id, telephoneNumber, telephoneNumberType, preferredTelephoneNumberForSms, notes}`, no
+  `patientId` — the `id` alone identifies the number) for the write. Both added to
+  `contacts-api.js`.
+- This is a materially different write from everything else in the Contacts feature: it mutates
+  the CANDIDATE's own registered demographic data, not a "contact" relationship record. Scoped
+  tightly — editing an EXISTING number only (no add/delete; delete isn't even confirmed yet), and
+  guarded against acting on stale state: if the merge this edit was opened from has moved on to a
+  different candidate by the time Save is clicked, the write is refused rather than silently
+  landing on the wrong patient (mirrors the wrong-patient guard used elsewhere in this feature,
+  adapted to this write's own target).
+- New `extractPreferredPhoneId` in `engine/contact-relationships.js` (3 new assertions, 110/110
+  passing) identifies the SAME phone entry as the existing `extractPreferredPhoneNote` — the
+  "Edit" button always targets the exact number a note-warning is actually about.
+- Known simplification, unchanged from v3.181.4: the phone VALUE shown in the compare table
+  comes from a different endpoint (the link-preview's mobile/home fields) than the note/edit
+  target (the patient-details "preferred" entry) — for a candidate with more than one number on
+  file, these could in principle be different entries. Not fixed in this pass.
+
+## [v3.181.4] — 2026-07-25
+
+### Contacts Management — surface a candidate's own phone-number notes before merging
+
+- Investigated the "mum's mobile on the child's own record" problem flagged in v3.181.3 via a
+  fresh HAR capture of editing a patient's own phone number in Medicus. Confirmed:
+  `patient-details`'s `patientContactInformationSection.patientTelephoneNumbers[]` entries
+  already carry a free-text `notes` field (the same one editable via Medicus's own "Add/Edit
+  Phone Number" form, e.g. "practice phone number") — data we already fetch on every merge and
+  link but weren't reading. No equivalent field exists on email addresses. Editing an existing
+  number wasn't captured in this HAR (only creating a new one) — the likely edit/delete
+  endpoints, inferred from the parallel email pattern, remain unconfirmed and out of scope for
+  now.
+- New `extractPreferredPhoneNote` in `engine/contact-relationships.js` (unit-tested, 6 new
+  assertions, 107/107 passing) surfaces that note. Wired into the canvas's merge-compare panel
+  (a prominent warning when the candidate's own phone has a note attached, shown before
+  confirming) and into `reverseManualMatchComparisonHtml` (shared between the wizard and the
+  canvas) so it also appears when deciding whether to remove a stale manual duplicate.
+- This is a read-only, low-risk step using data already fetched — genuinely editing a
+  candidate's own phone/email from the merge screen remains a separate, bigger piece of work
+  blocked on confirming the edit-endpoint shape.
+
+## [v3.181.3] — 2026-07-25
+
+### Contacts Management — wizard picker grid, done-panel button priority, friendlier inactive-patient error
+
+- The wizard widget's manual-contacts picker: "Manage contacts as a family tree" and "Or import
+  contacts already linked..." now appear ABOVE the manual-contacts list instead of below it — a
+  patient with many manual contacts was pushing both buttons out of view, "family tree"
+  especially. The list itself now wraps into a grid of narrower cards instead of one full-width
+  row per contact, making better use of the widget's width for long lists.
+- Canvas done-panel: "Link another" is now the primary (solid blue) button, directly below
+  "Refresh now" (now secondary/ghost) rather than at the very bottom past an optional
+  reverse-manual-match block. In practice the tree/sources stay live under this panel, so
+  dragging the next card straight onto a slot already works without clicking anything —
+  "Refresh now" reloads the whole page and ends the session, so it shouldn't visually compete
+  with the button people reach for far more often.
+- Fixed: merging/linking a candidate whose Medicus record is inactive (past the access grace
+  period — normally gated behind an "are you sure" popup in Medicus's own UI that a credentialed
+  fetch can't click through) surfaced a raw `{"errorCode":"inactive-patient-access",...}` JSON
+  blob as the error message. `readErrorDetail` (`contacts-api.js`) now translates this specific
+  error code to plain English. Deliberately NOT worked around — an inactive record is also the
+  least likely to have current contact info worth converting.
+- Not yet actioned, needs more investigation before it can be built: losing useful phone/email
+  context during a merge — e.g. a manual record's own phone field can carry a note like "mum"
+  identifying whose number it actually is, so it shouldn't land on the linked record as if it
+  were the patient's own mobile. Editing a candidate's own registered phone/email from the merge
+  screen (rather than just the manual "contact" entries this feature already writes) would be a
+  new, materially bigger write capability — needs confirming whether Medicus's patient-details
+  response actually carries a note/label per phone number at all (no existing code in this repo
+  reads or writes that), which needs a fresh HAR capture.
+
+## [v3.181.2] — 2026-07-25
+
+### Contacts Management — canvas: real joining lines, narrower stepped source cards
+
+- Parents now sit side by side joined by a horizontal line, and siblings + the index patient
+  each branch individually off a shared horizontal line — but the connecting vertical line
+  between parents and that line, and between it and the children row, previously had blank
+  dead space on both sides (from the outer tree layout's row gap) so it never actually touched
+  either horizontal line. Fixed by grouping parents/connector/siblings-index/connector/children
+  into their own zero-gap column (`.ms-cv-tree-lineage`), which also gives all three rows the
+  same shared width and therefore the same horizontal centre.
+- The partner slot no longer sits as a plain flex sibling of the siblings+index row (which
+  skewed that row off-centre by however wide the partner card happened to be, and needed a
+  workaround to compensate). It's now attached directly to the index card itself
+  (`position:absolute`, fixed-length connecting line) — index and any confirmed partner are
+  now visually joined, and the siblings+index row's centring is unaffected by whether a partner
+  is present at all.
+- Children are now laid out the same way as siblings — each on their own individual branch off
+  a shared line — instead of one undifferentiated box, fed by the connector below the
+  siblings+index row (`childrenBranchHtml`, mirrors `siblingsAndIndexBranchHtml`).
+- In the sources list, a manual contact and its own ranked matches now sit in one horizontal
+  row (wrapping if needed) instead of stacked vertically, with cards narrowed to a fixed 150px
+  so more fit side by side — fixes several manual contacts each with a different number of
+  matches making the whole "Manual contacts to convert" column look stepped/staggered rather
+  than aligned.
+
+## [v3.181.1] — 2026-07-25
+
+### Contacts Management — canvas: proper joining lines, gender-aware slot default
+
+- Live-testing feedback on Phase 4 (v3.181.0): parents are now drawn as a real family-tree
+  pair — side by side, joined to each other by a horizontal line, with the existing single
+  connector continuing down from the joining point. Siblings and the index patient now each
+  branch individually off a shared horizontal line fed by that same connector, instead of
+  every sibling being lumped inside one undifferentiated box. Implemented with the standard
+  pure-CSS "org chart" technique (each item contributes half a border; adjacent items' halves
+  meet at the gap between them) — no JS measurement, no SVG, so it stays correct for any
+  number of parents/siblings. Two new branch variants in `contacts-canvas.css`
+  (`.ms-cv-tree-branch--above`/`--below`) cover the two mirrored cases (line above with a stub
+  into each child vs. line below with one shared stub down).
+- Fixed: dropping a candidate onto a slot with no better guess available (no manual free-text
+  match, no existing reciprocal to invert) picked the first relationship id for that slot
+  regardless of the candidate's own recorded gender — e.g. always defaulting to "Brother" on
+  the Siblings slot even for a female candidate. `buildConfirmForCard` now calls a new
+  `pickBaseIdForSlot(slotPath, candidateGenderIdentity)` that prefers the slot option whose
+  `subjectGender` matches the candidate's own gender identity, still fully editable in the
+  confirm panel. Known gap: a candidate dragged from "Also at this address" has no gender data
+  available from that endpoint, so still falls back to the slot's first option in that case.
+- Noted for later, not addressed this round: canvas load time — currently one patient-finder
+  search per manual contact plus a home-address lookup, all before first render; the user
+  flagged it as noticeably slow and asked to look at it later rather than now.
+
+## [v3.181.0] — 2026-07-25
+
+### Contacts Management — Phase 4: visual family tree replaces flat columns
+
+- The canvas now shows the family-tree slots (parents / partner / siblings / children, plus
+  collapsible grandparents / aunts-uncles / other) laid out and populated from the moment it
+  opens, rather than only appearing once a card is dropped into a single generic "drag here"
+  zone. Already-linked contacts are pre-placed into their slot as `locked` edges — immutable
+  facts for the session, read-only — using their own recorded relationship text, run through
+  the existing free-text normaliser plus a new `SLOT_FOR_BASE_ID` map (the 32-entry canonical
+  vocabulary collapses into the tree's coarser slot set — grandchildren/niece/nephew/cousin/
+  every in-law/every care relationship/friend/neighbour all land in "Other family / contacts").
+  A linked contact whose relationship text doesn't normalise at all goes into a "Needs review"
+  strip instead of being guessed into a slot.
+- `engine/contact-tree.js` gained a `locked` field on edges (defaulting to `false`) to
+  distinguish an already-real-in-Medicus pre-placed edge from a fresh in-session decision —
+  additive, unit-tested (2 new assertions, 27/27 passing).
+- Dropping a card on a specific slot (rather than one generic zone) now filters the
+  relationship dropdown to only the relationships valid for that slot, and defaults away from
+  a guessed/reciprocal-suggested relationship that doesn't actually belong there (e.g. a
+  manual contact guessed as "Friend" dragged onto the Parents slot defaults to Mother instead).
+  After a successful link, the new edge is pre-placed into the slot immediately (and dropped
+  from the suggestion/address source lists) so the canvas reflects it without waiting for
+  Medicus's own page refresh.
+- This retires Phase 3's row-alignment workaround (`buildAlignedRows`/`renderColumns`, a CSS
+  grid keeping two independently-sized columns visually paired) — the real family-tree slots
+  now do that job directly. The source lists (manual contacts to convert / also at this
+  address) remain, simplified: each manual contact's own ranked candidates are nested directly
+  beneath it instead of a separate aligned column.
+- Known simplifications, flagged rather than silently shipped: connector lines between tree
+  rows are a plain CSS rule, not dynamic SVG geometry (a half-sibling's line doesn't visually
+  distinguish which one specific parent it connects to); there's no "add a brand-new person
+  directly into an empty slot" search flow yet (a slot can only be filled by dragging an
+  existing manual/suggested/address card onto it); "give a manual contact a proper relationship
+  label without converting it to a real link" is still out of scope, blocked on no confirmed
+  Medicus API for updating a manual contact in place.
+
 ## [v3.180.4] — 2026-07-25
 
 ### Contacts Management — row-aligned columns, locked merges, comparison on removal

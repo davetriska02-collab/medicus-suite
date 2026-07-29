@@ -69,15 +69,33 @@
   async function readErrorDetail(resp) {
     try {
       const text = await resp.text();
-      if (!text) return '';
+      if (!text) return { text: '', errorCode: null };
       try {
         const json = JSON.parse(text);
-        return json.message || json.error || json.title || json.detail || text.slice(0, 300);
+        // Confirmed live: Medicus 403s with { errorCode: "inactive-patient-access" } for a patient
+        // past the access grace period — normally gated behind an "are you sure" popup in the
+        // Medicus UI that this credentialed fetch can't click through. Translated to plain English
+        // rather than surfacing the raw error-code JSON; deliberately NOT worked around (an
+        // inactive record is also the least likely to have current contact info worth converting).
+        // errorCode is also returned alongside the translated text (not just baked into it) so a
+        // caller that needs to BRANCH on this specific case (e.g. the family-cycling skip-loop in
+        // contacts-canvas.js) can check a stable code rather than substring-matching prose that's
+        // free to reword later.
+        if (json.errorCode === 'inactive-patient-access') {
+          return {
+            text: "this patient's record is inactive (past the access grace period) and can't be opened here.",
+            errorCode: 'inactive-patient-access',
+          };
+        }
+        return {
+          text: json.message || json.error || json.title || json.detail || text.slice(0, 300),
+          errorCode: json.errorCode || null,
+        };
       } catch (_) {
-        return text.slice(0, 300);
+        return { text: text.slice(0, 300), errorCode: null };
       }
     } catch (_) {
-      return '';
+      return { text: '', errorCode: null };
     }
   }
 
@@ -91,7 +109,12 @@
     });
     if (!resp.ok) {
       const detail = await readErrorDetail(resp);
-      throw new Error(`API ${resp.status} on ${opts.method || 'GET'} ${path}${detail ? ': ' + detail : ''}`);
+      const err = new Error(
+        `API ${resp.status} on ${opts.method || 'GET'} ${path}${detail.text ? ': ' + detail.text : ''}`
+      );
+      err.status = resp.status;
+      err.errorCode = detail.errorCode;
+      throw err;
     }
     const text = await resp.text();
     if (!text) return {};
@@ -176,6 +199,71 @@
     return apiFetch(apiBase, `/patient/data/home-address/overview/${encodeURIComponent(addressId)}`);
   }
 
+  // Confirmed via HAR capture 2026-07-25 (editing an existing phone number, not creating one —
+  // the earlier capture only covered create-telephone-number). Used to let the contacts canvas
+  // correct a candidate's own wrongly-attributed phone number (e.g. a parent's mobile left on a
+  // child's own record, flagged via patientTelephoneNumbers[].notes) directly from the
+  // merge-compare panel, without leaving the canvas. This edits the PATIENT's own registered
+  // number, not a "contact" relationship record — a different, materially bigger write than
+  // everything else in contacts-api.js, so it gets its own pair of functions rather than reusing
+  // the patient-contact naming/shape.
+  function getEditTelephoneNumber(apiBase, telephoneNumberId) {
+    return apiFetch(apiBase, `/patient/data/telephone/edit-telephone-number/${encodeURIComponent(telephoneNumberId)}`);
+  }
+
+  // body: { id, telephoneNumber, telephoneNumberType, preferredTelephoneNumberForSms, notes }
+  // Note: no patientId in the body — confirmed live that `id` (the telephoneNumberId) alone
+  // identifies which patient's number this updates.
+  function changeTelephoneNumber(apiBase, body) {
+    return postJson(apiBase, '/patient/telephone/change-telephone-number', body);
+  }
+
+  // Confirmed via HAR capture 2026-07-26 (changing a phone number's type, then deleting it — the
+  // same capture that confirmed the four-type enum used elsewhere). No request body, id in the
+  // URL only, same shape as deletePatientContactRelationship.
+  function deleteTelephoneNumber(apiBase, telephoneNumberId) {
+    return postJson(
+      apiBase,
+      `/patient/telephone/delete-telephone-number/${encodeURIComponent(telephoneNumberId)}`,
+      undefined
+    );
+  }
+
+  // Confirmed via HAR capture 2026-07-26 (editing an EXISTING patient-contact's relationship —
+  // creating a new one is buildLinkPatientBody/linkPatient, an entirely different endpoint). Lets
+  // the canvas write a corrected relationship label back to Medicus for an already-real link whose
+  // recorded free text didn't map to a canonical category, once the user picks one via the confirm
+  // panel. The id used here is the SAME patientContactId already used by viewPatientContact /
+  // deletePatientContactRelationship (findExistingForwardLink's own patientContactId field) — this
+  // response just calls it patientContactRelationshipId, an API naming inconsistency, not a
+  // different id (Medicus itself has no canonical relationship vocabulary at all: even for a real
+  // patient-to-patient link, patientContactRelationship is plain free text on their side, exactly
+  // like a manual contact's).
+  function getEditPatientContact(apiBase, relationshipId) {
+    return apiFetch(
+      apiBase,
+      `/patient/data/patient-contact/edit-patient-contact/${encodeURIComponent(relationshipId)}`
+    );
+  }
+
+  // body: { patientContactTitle, patientContactFirstName, patientContactMiddleNames, patientContactLastName,
+  //   patientContactHomeTelephoneNumber, patientContactMobileTelephoneNumber, patientContactWorkTelephoneNumber,
+  //   patientContactEmailAddress, patientContactAddress, patientContactRelationship,
+  //   patientContactRelationshipIsNextOfKin, patientContactRelationshipNotes,
+  //   patientContactRelationshipCopyCorrespondence }
+  // Confirmed live: for a REAL linked contact (getEditPatientContact returns contactEditable:false)
+  // every manual-contact-only field above (name/phone/email/address) was sent null in the capture
+  // and had no effect — only the patientContactRelationship* fields actually apply to a real link.
+  // Full replace, not a partial update — callers preserve isNextOfKin/notes/copyCorrespondence from
+  // the GET response unless deliberately changing them too.
+  function changePatientContact(apiBase, relationshipId, body) {
+    return postJson(
+      apiBase,
+      `/patient/patient-contact/change-patient-contact/${encodeURIComponent(relationshipId)}`,
+      body
+    );
+  }
+
   // ── Shared write orchestration (used by both the wizard widget and the canvas) ─────────────────
   // Safety-critical logic — the wrong-patient guard and duplicate-link avoidance — lives here ONCE
   // so the two UI surfaces that both create real Medicus links can't drift out of sync on it.
@@ -242,6 +330,30 @@
         notes: params.notes,
       });
       await linkPatient(params.apiBase, forwardBody);
+    } else if (params.relationshipUpdateId) {
+      // The link already exists, but its relationship text didn't map to a canonical category
+      // (relationshipKnown was false) — the user has just picked one via the confirm panel's
+      // picker, so write it back rather than only reclassifying it locally for this canvas
+      // session. Fetch first rather than reusing anything cached: isNextOfKin/notes/
+      // copyCorrespondence must be preserved exactly as currently recorded (this is a full
+      // replace, not a partial update), and this is a fresh enough action that a stale local copy
+      // isn't worth the risk of clobbering a value someone else changed since page load.
+      const current = await getEditPatientContact(params.apiBase, params.relationshipUpdateId);
+      await changePatientContact(params.apiBase, params.relationshipUpdateId, {
+        patientContactTitle: null,
+        patientContactFirstName: null,
+        patientContactMiddleNames: null,
+        patientContactLastName: null,
+        patientContactHomeTelephoneNumber: null,
+        patientContactMobileTelephoneNumber: null,
+        patientContactWorkTelephoneNumber: null,
+        patientContactEmailAddress: null,
+        patientContactAddress: null,
+        patientContactRelationship: CR.formatLabel(params.baseId, params.modifierId),
+        patientContactRelationshipIsNextOfKin: current.patientContactRelationshipIsNextOfKin,
+        patientContactRelationshipNotes: current.patientContactRelationshipNotes,
+        patientContactRelationshipCopyCorrespondence: current.patientContactRelationshipCopyCorrespondence,
+      });
     }
 
     let reverseManualMatch = null;
@@ -276,6 +388,7 @@
         ? `${params.candidateDisplayName} was already linked — no new forward link created`
         : `Linked to ${params.candidateDisplayName}`
     );
+    if (params.relationshipUpdateId) parts.push('updated their recorded relationship');
     if (params.manualContactIdToDelete) parts.push('removed the old manual contact');
     if (params.reverseBaseId) parts.push('created the reverse link on their record');
     else if (params.existingReciprocal) parts.push('left their existing reverse link untouched');
@@ -298,6 +411,11 @@
     viewPatientContact,
     deletePatientContactRelationship,
     getAddressOverview,
+    getEditTelephoneNumber,
+    changeTelephoneNumber,
+    deleteTelephoneNumber,
+    getEditPatientContact,
+    changePatientContact,
     findReverseManualMatch,
     performLinkAndCleanup,
   };
