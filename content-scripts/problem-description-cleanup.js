@@ -2821,10 +2821,22 @@
     }
     if (!_problemsCache && !_scanInFlight) {
       _scanInFlight = true;
+      // Mirrors the stale-response discipline from the PR #227 audit fixes
+      // (_evalGen/_runToken in sentinel.js/record.js): the clinician can open
+      // a DIFFERENT patient while this fetch is in flight. That second
+      // scan() sees _scanInFlight already true and skips fetching, so when
+      // patient A's response lands here it must not be cached against
+      // whatever patient is now on screen — captured BEFORE the await so it
+      // reflects who this specific fetch was actually for, not whoever
+      // _lastPatientId points to by the time it resolves.
+      var requestedPatientId = info.patientId;
       try {
-        _problemsCache = await fetchClinicalSummaryProblems(info.patientId);
+        var fetched = await fetchClinicalSummaryProblems(info.patientId);
+        if (_lastPatientId === requestedPatientId) _problemsCache = fetched;
+        // else: patient changed mid-fetch — discard silently, the next
+        // mutation tick's scan() will refetch for whoever is on screen now.
       } catch (_) {
-        _problemsCache = [];
+        if (_lastPatientId === requestedPatientId) _problemsCache = [];
       } finally {
         _scanInFlight = false;
       }

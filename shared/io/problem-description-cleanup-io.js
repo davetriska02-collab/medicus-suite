@@ -32,6 +32,19 @@
 
 const PDC_KEYS = ['pdc.preferredDescriptions', 'pdc.conceptRemap'];
 
+// Legitimate key shapes only — everything here is a SNOMED terminology
+// identifier, never free text. Top-level keys are conceptIds (all-digit).
+// Tally keys and override.key are either a bare descriptionId (axis 1,
+// all-digit) or a `targetConceptId|targetDescriptionId` pair (axis 2). A
+// backup is untrusted input (it can be hand-edited or come from another
+// machine) and these keys/values round-trip straight into
+// `data-pdc-*` HTML attributes in options.js — an unvalidated key here is an
+// attribute-injection vector (confirmed exploitable pre-fix: a key like
+// `" onmouseover="alert(1)" x="` broke out of the attribute). Reject
+// anything that doesn't match, same style as the other shape checks below.
+const TOP_KEY_RE = /^\d+$/;
+const TALLY_KEY_RE = /^\d+(\|\d+)?$/;
+
 const pdcShared =
   typeof module !== 'undefined' && module.exports
     ? require('../preferred-descriptions.js')
@@ -53,6 +66,9 @@ async function problemDescriptionCleanupExport() {
 }
 
 function validateEntryShape(fieldName, topKey, entry) {
+  if (!TOP_KEY_RE.test(topKey)) {
+    throw new Error(`${fieldName}[${topKey}]: key must be a SNOMED conceptId (digits only).`);
+  }
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
     throw new Error(`${fieldName}[${topKey}] must be an object.`);
   }
@@ -61,6 +77,11 @@ function validateEntryShape(fieldName, topKey, entry) {
       throw new Error(`${fieldName}[${topKey}].tally must be an object.`);
     }
     Object.keys(entry.tally).forEach((tallyKey) => {
+      if (!TALLY_KEY_RE.test(tallyKey)) {
+        throw new Error(
+          `${fieldName}[${topKey}].tally[${tallyKey}]: key must be a descriptionId or conceptId|descriptionId (digits only).`
+        );
+      }
       const row = entry.tally[tallyKey];
       if (!row || typeof row !== 'object') {
         throw new Error(`${fieldName}[${topKey}].tally[${tallyKey}] must be an object.`);
@@ -86,6 +107,11 @@ function validateEntryShape(fieldName, topKey, entry) {
     }
     if (typeof entry.override.key !== 'string' || !entry.override.key) {
       throw new Error(`${fieldName}[${topKey}].override.key is required.`);
+    }
+    if (!TALLY_KEY_RE.test(entry.override.key)) {
+      throw new Error(
+        `${fieldName}[${topKey}].override.key must be a descriptionId or conceptId|descriptionId (digits only).`
+      );
     }
   }
 }

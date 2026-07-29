@@ -2,6 +2,47 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.203.0] — 2026-07-29
+
+### PR #228 remediation: merged main, escAttr + import key validation, deterministic REPLACED BY, scan patient-change guard
+
+Merged `origin/main` into PR #228 (`fix/oir-native-checkbox`) and applied review-remediation
+fixes ahead of merge.
+
+- **Security fix — attribute-position escaping for Clean-up-code preference keys
+  (confirmed exploitable pre-fix).** `options/options.js`'s PDC (preferred-descriptions)
+  tally-row rendering interpolated `topKey`/`row.key` into `data-pdc-clear` /
+  `data-pdc-setoverride` / `data-pdc-row-key` attributes using `escHtml()`, which does not
+  escape quotes — a key containing `"` could break out of the attribute and inject markup
+  into the options page. Switched to `escAttr()` (already defined, escapes quotes on top of
+  `escHtml`). Paired with a source-side fix: `shared/io/problem-description-cleanup-io.js`'s
+  import validator now rejects any top-level key not shaped like a SNOMED conceptId
+  (`/^\d+$/`) and any tally key / `override.key` not shaped like a descriptionId or
+  `conceptId|descriptionId` (`/^\d+(\|\d+)?$/`) — so an imported backup can no longer carry
+  a crafted key through to the attribute sink at all. New cases in
+  `test-problem-description-cleanup-io.js` pin both the rejection and that legitimate
+  axis-2 keys (`123|456`) still pass.
+- **REPLACED BY now deterministically preferred over SAME AS.** `shared/snomed-retirement.js`
+  could carry both associations on one retired concept; which one ended up in `replacement`
+  used to depend on the termbrowser API's `memberships[]` array order. `REPLACEMENT_REFSET_IDS`'
+  own array order is now used as an explicit priority list (REPLACED BY beats SAME AS
+  regardless of which membership the API lists first), while "first wins" is preserved within
+  a single refset. Two new fixtures in `test-snomed-retirement.js` (both associations present,
+  opposite array order) pin that REPLACED BY wins either way.
+- **Clinical-summary scan discards a wrong-patient response.** `content-scripts/
+  problem-description-cleanup.js`'s `scan()` could cache patient A's in-flight
+  `fetchClinicalSummaryProblems` response after the clinician had already switched to
+  patient B — `_scanInFlight` gating meant B's own scan skipped fetching, so A's response
+  landed and got matched against B's DOM. `scan()` now captures the requested patient ID
+  before the `await` and only assigns `_problemsCache` if the current patient still matches
+  when the response lands, discarding silently otherwise (same stale-response discipline as
+  the PR #227 audit fixes' `_evalGen`/`_runToken`). DOM-bound, not exported — no unit test;
+  this entry plus the code comment are the record.
+- **CI patient-data guard allowlist.** `test-snomed-retirement.js` added to
+  `NHS_ADD_ALLOWLIST` in `scripts/check-no-patient-data.js` — it carries SNOMED
+  conceptId/descriptionId values, some of which coincidentally pass the NHS Modulus-11
+  check, same rationale as the existing `test-problem-description-cleanup.js` entry.
+
 ## [v3.202.1] — 2026-07-28
 
 ### CSO review pass (delegated virtual-Dave review at Dave's instruction) — sign-offs + clinical corrections

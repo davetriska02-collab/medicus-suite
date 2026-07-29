@@ -1153,15 +1153,15 @@ console.log(
 {
   check(
     descendantSearchTargetConceptId({ replacement: { conceptId: '307815000' } }, '179304004') === '307815000',
-    'a confirmed replacement is preferred over the problem\'s own (retired) conceptId'
+    "a confirmed replacement is preferred over the problem's own (retired) conceptId"
   );
   check(
     descendantSearchTargetConceptId(null, '179304004') === '179304004',
-    'no retiredInfo at all (active concept, or never scanned) -> falls back to the problem\'s own conceptId'
+    "no retiredInfo at all (active concept, or never scanned) -> falls back to the problem's own conceptId"
   );
   check(
     descendantSearchTargetConceptId({ replacement: null }, '179304004') === '179304004',
-    'retired with NO confirmed replacement -> falls back to the problem\'s own conceptId, same as before this fix'
+    "retired with NO confirmed replacement -> falls back to the problem's own conceptId, same as before this fix"
   );
   check(
     descendantSearchTargetConceptId({}, '179304004') === '179304004',
@@ -1171,10 +1171,7 @@ console.log(
     descendantSearchTargetConceptId({ replacement: { conceptId: '307815000' } }, null) === '307815000',
     'a confirmed replacement is used even if currentConceptId is somehow missing'
   );
-  check(
-    descendantSearchTargetConceptId(null, null) === null,
-    'nothing at all to fall back to -> null, never throws'
-  );
+  check(descendantSearchTargetConceptId(null, null) === null, 'nothing at all to fall back to -> null, never throws');
 }
 
 console.log('--- rules/generic-additional-info-text.json: the imported list itself ---');
@@ -1382,8 +1379,14 @@ console.log('--- removeMatchedSpan ---');
 
 console.log('--- severityCorrectionNeeded ---');
 {
-  check(severityCorrectionNeeded('major', 'minor') === 'major', 'stated severity differs from current -> returns the corrected value');
-  check(severityCorrectionNeeded('minor', 'minor') === null, 'stated severity matches current -> null, nothing to correct');
+  check(
+    severityCorrectionNeeded('major', 'minor') === 'major',
+    'stated severity differs from current -> returns the corrected value'
+  );
+  check(
+    severityCorrectionNeeded('minor', 'minor') === null,
+    'stated severity matches current -> null, nothing to correct'
+  );
   check(
     severityCorrectionNeeded('major', 'Minor') === 'major',
     "comparison is case-insensitive (edit-problem's own casing vs slideover/overview's capitalised casing)"
@@ -1435,17 +1438,28 @@ console.log(
   '--- computeAdditionalInfoFindings: NO PREFIX variant (2026-07-29, real patient — previously not flagging at all) ---'
 );
 {
-  const findings = computeAdditionalInfoFindings('Defaulted to Minor\nProblem severity: Minor', 'minor', genericAdditionalInfoText.entries);
-  check(findings.severityContradiction === null, 'values agree -> no severity contradiction, same as the prefixed sibling');
+  const findings = computeAdditionalInfoFindings(
+    'Defaulted to Minor\nProblem severity: Minor',
+    'minor',
+    genericAdditionalInfoText.entries
+  );
+  check(
+    findings.severityContradiction === null,
+    'values agree -> no severity contradiction, same as the prefixed sibling'
+  );
   check(
     findings.genericAdditionalInfo && findings.genericAdditionalInfo.cleaned === '',
-    'the no-prefix layout is now recognised and fully stripped, where it previously wasn\'t flagged at all (got ' +
+    "the no-prefix layout is now recognised and fully stripped, where it previously wasn't flagged at all (got " +
       JSON.stringify(findings) +
       ')'
   );
 }
 {
-  const findings = computeAdditionalInfoFindings('Defaulted to Minor\nProblem severity: Major', 'minor', genericAdditionalInfoText.entries);
+  const findings = computeAdditionalInfoFindings(
+    'Defaulted to Minor\nProblem severity: Major',
+    'minor',
+    genericAdditionalInfoText.entries
+  );
   check(
     findings.severityContradiction &&
       findings.severityContradiction.stated === 'major' &&
@@ -1508,7 +1522,10 @@ console.log(
     (p) => p.id === 'sourceSystemPriorityValue'
   );
   const single = findPatternMatch('PRIORITY=7', patternEntry);
-  check(single && single.groups[0] === '7', 'a single-digit priority value is captured (got ' + JSON.stringify(single) + ')');
+  check(
+    single && single.groups[0] === '7',
+    'a single-digit priority value is captured (got ' + JSON.stringify(single) + ')'
+  );
   const spaced = findPatternMatch('PRIORITY = 3', patternEntry);
   check(spaced && spaced.groups[0] === '3', 'whitespace around "=" is tolerated');
   const multiDigit = findPatternMatch('PRIORITY=12', patternEntry);
@@ -1627,15 +1644,24 @@ console.log(
     'a plain, current, non-retired description with no legacy-code signal -> no code-quality concern (the real motivating case: a problem flagged only for junk import text)'
   );
   check(
-    codeQualityConcernExists({ currentDescription: '[X]Depression NOS', retiredInfo: null, legacyReadCode: null }) === true,
+    codeQualityConcernExists({ currentDescription: '[X]Depression NOS', retiredInfo: null, legacyReadCode: null }) ===
+      true,
     'a looksOutdated()-flagged description ("[X]...NOS") -> genuine code-quality concern, even with no retirement/legacy-code signal'
   );
   check(
-    codeQualityConcernExists({ currentDescription: 'Oesophagitis', retiredInfo: { inactivationReason: null }, legacyReadCode: null }) === true,
+    codeQualityConcernExists({
+      currentDescription: 'Oesophagitis',
+      retiredInfo: { inactivationReason: null },
+      legacyReadCode: null,
+    }) === true,
     'retiredInfo present -> genuine code-quality concern, regardless of description text'
   );
   check(
-    codeQualityConcernExists({ currentDescription: 'Oesophagitis', retiredInfo: null, legacyReadCode: { code: 'X', description: 'Y' } }) === true,
+    codeQualityConcernExists({
+      currentDescription: 'Oesophagitis',
+      retiredInfo: null,
+      legacyReadCode: { code: 'X', description: 'Y' },
+    }) === true,
     'legacyReadCode present -> genuine code-quality concern, regardless of description text'
   );
   check(codeQualityConcernExists({}) === false, 'an empty state object -> no concern, never throws');

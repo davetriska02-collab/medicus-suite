@@ -65,8 +65,8 @@ async function throws(fn) {
   store['pdc.preferredDescriptions'] = {
     35253001: {
       tally: {
-        d1: {
-          candidate: { description: 'Attention deficit disorder', descriptionId: 'd1' },
+        111111: {
+          candidate: { description: 'Attention deficit disorder', descriptionId: '111111' },
           count: 2,
           lastUsed: '2026-07-28T10:00:00Z',
         },
@@ -75,7 +75,7 @@ async function throws(fn) {
     },
   };
   const exported = await problemDescriptionCleanupExport();
-  check(exported.preferredDescriptions['35253001'].tally.d1.count === 2, 'export captures the tally');
+  check(exported.preferredDescriptions['35253001'].tally['111111'].count === 2, 'export captures the tally');
   check(
     exported.conceptRemap && typeof exported.conceptRemap === 'object',
     'export always includes a conceptRemap field, even if empty'
@@ -84,7 +84,7 @@ async function throws(fn) {
   reset();
   await problemDescriptionCleanupImport(exported);
   check(
-    store['pdc.preferredDescriptions']['35253001'].tally.d1.count === 2,
+    store['pdc.preferredDescriptions']['35253001'].tally['111111'].count === 2,
     'a fresh-install import restores the exported tally'
   );
 
@@ -93,10 +93,10 @@ async function throws(fn) {
   store['pdc.conceptRemap'] = {
     449705007: {
       tally: {
-        '449708009|td1': {
+        '449708009|222222': {
           candidate: {
             conceptId: '449708009',
-            descriptionId: 'td1',
+            descriptionId: '222222',
             description: 'Injection of varicose vein of lower limb',
           },
           count: 1,
@@ -108,13 +108,13 @@ async function throws(fn) {
   };
   const exportedRemap = await problemDescriptionCleanupExport();
   check(
-    exportedRemap.conceptRemap['449705007'].tally['449708009|td1'].candidate.conceptId === '449708009',
+    exportedRemap.conceptRemap['449705007'].tally['449708009|222222'].candidate.conceptId === '449708009',
     'export captures the full remap candidate object'
   );
   reset();
   await problemDescriptionCleanupImport(exportedRemap);
   check(
-    store['pdc.conceptRemap']['449705007'].tally['449708009|td1'].count === 1,
+    store['pdc.conceptRemap']['449705007'].tally['449708009|222222'].count === 1,
     'a fresh-install import restores the exported remap tally'
   );
 
@@ -122,82 +122,90 @@ async function throws(fn) {
   reset();
   store['pdc.preferredDescriptions'] = {
     90823000: {
-      tally: { d1: { candidate: { description: 'Infantile eczema' }, count: 3, lastUsed: '2026-07-28T09:00:00Z' } },
+      tally: {
+        111111: { candidate: { description: 'Infantile eczema' }, count: 3, lastUsed: '2026-07-28T09:00:00Z' },
+      },
       override: null,
     },
   };
   store['pdc.conceptRemap'] = {
     449705007: {
-      tally: { '449708009|td1': { candidate: { conceptId: '449708009' }, count: 2, lastUsed: '2026-07-29T08:00:00Z' } },
+      tally: {
+        '449708009|222222': { candidate: { conceptId: '449708009' }, count: 2, lastUsed: '2026-07-29T08:00:00Z' },
+      },
       override: null,
     },
   };
   await problemDescriptionCleanupImport({
     preferredDescriptions: {
       90823000: {
-        tally: { d1: { candidate: { description: 'Infantile eczema' }, count: 5, lastUsed: '2026-07-28T11:00:00Z' } },
+        tally: {
+          111111: { candidate: { description: 'Infantile eczema' }, count: 5, lastUsed: '2026-07-28T11:00:00Z' },
+        },
         override: null,
       },
     },
     conceptRemap: {
       449705007: {
         tally: {
-          '449708009|td1': { candidate: { conceptId: '449708009' }, count: 4, lastUsed: '2026-07-29T10:00:00Z' },
+          '449708009|222222': { candidate: { conceptId: '449708009' }, count: 4, lastUsed: '2026-07-29T10:00:00Z' },
         },
         override: null,
       },
     },
   });
   check(
-    store['pdc.preferredDescriptions']['90823000'].tally.d1.count === 8,
+    store['pdc.preferredDescriptions']['90823000'].tally['111111'].count === 8,
     'preferredDescriptions counts are SUMMED (3 + 5 = 8)'
   );
   check(
-    store['pdc.conceptRemap']['449705007'].tally['449708009|td1'].count === 6,
+    store['pdc.conceptRemap']['449705007'].tally['449708009|222222'].count === 6,
     'conceptRemap counts are SUMMED independently (2 + 4 = 6)'
   );
   check(
-    store['pdc.conceptRemap']['449705007'].tally['449708009|td1'].lastUsed === '2026-07-29T10:00:00Z',
+    store['pdc.conceptRemap']['449705007'].tally['449708009|222222'].lastUsed === '2026-07-29T10:00:00Z',
     'lastUsed takes the more recent of the two timestamps'
   );
 
   console.log('\n--- import: only the field present in the backup is touched ---');
   reset();
   store['pdc.preferredDescriptions'] = {
-    1: { tally: { d1: { candidate: {}, count: 1, lastUsed: 'x' } }, override: null },
+    1: { tally: { 111111: { candidate: {}, count: 1, lastUsed: 'x' } }, override: null },
   };
-  store['pdc.conceptRemap'] = { 2: { tally: { 'c|d': { candidate: {}, count: 1, lastUsed: 'y' } }, override: null } };
+  store['pdc.conceptRemap'] = {
+    2: { tally: { '333|444': { candidate: {}, count: 1, lastUsed: 'y' } }, override: null },
+  };
   await problemDescriptionCleanupImport({
-    preferredDescriptions: { 1: { tally: { d2: { candidate: {}, count: 1, lastUsed: 'z' } }, override: null } },
+    preferredDescriptions: { 1: { tally: { 555555: { candidate: {}, count: 1, lastUsed: 'z' } }, override: null } },
   });
-  check(store['pdc.preferredDescriptions']['1'].tally.d2.count === 1, 'preferredDescriptions updated as given');
+  check(store['pdc.preferredDescriptions']['1'].tally['555555'].count === 1, 'preferredDescriptions updated as given');
   check(
-    store['pdc.conceptRemap']['2'].tally['c|d'].count === 1,
+    store['pdc.conceptRemap']['2'].tally['333|444'].count === 1,
     'conceptRemap left completely untouched when absent from the imported data'
   );
 
   console.log('\n--- override conflict: LOCAL override wins over an incoming one (load-bearing), both fields ---');
   reset();
   store['pdc.preferredDescriptions'] = {
-    300: { tally: {}, override: { key: 'local-choice', candidate: { description: 'Local admin decision' } } },
+    300: { tally: {}, override: { key: '111000', candidate: { description: 'Local admin decision' } } },
   };
   store['pdc.conceptRemap'] = {
-    400: { tally: {}, override: { key: 'local|remap', candidate: { description: 'Local remap decision' } } },
+    400: { tally: {}, override: { key: '111|222', candidate: { description: 'Local remap decision' } } },
   };
   await problemDescriptionCleanupImport({
     preferredDescriptions: {
-      300: { tally: {}, override: { key: 'backup-choice', candidate: { description: 'Different backup decision' } } },
+      300: { tally: {}, override: { key: '333000', candidate: { description: 'Different backup decision' } } },
     },
     conceptRemap: {
-      400: { tally: {}, override: { key: 'backup|remap', candidate: { description: 'Different backup remap' } } },
+      400: { tally: {}, override: { key: '333|444', candidate: { description: 'Different backup remap' } } },
     },
   });
   check(
-    store['pdc.preferredDescriptions']['300'].override.key === 'local-choice',
+    store['pdc.preferredDescriptions']['300'].override.key === '111000',
     'preferredDescriptions: local override survives a conflicting import'
   );
   check(
-    store['pdc.conceptRemap']['400'].override.key === 'local|remap',
+    store['pdc.conceptRemap']['400'].override.key === '111|222',
     'conceptRemap: local override survives a conflicting import'
   );
 
@@ -209,7 +217,7 @@ async function throws(fn) {
   );
   check(await throws(() => problemDescriptionCleanupImport({ conceptRemap: [] })), 'array conceptRemap rejected');
   check(
-    await throws(() => problemDescriptionCleanupImport({ conceptRemap: { 1: { tally: { k: { count: -1 } } } } })),
+    await throws(() => problemDescriptionCleanupImport({ conceptRemap: { 1: { tally: { 999999: { count: -1 } } } } })),
     'a negative count in conceptRemap is rejected'
   );
   check(
@@ -220,11 +228,57 @@ async function throws(fn) {
   );
   check(
     await throws(() =>
-      problemDescriptionCleanupImport({ conceptRemap: { 1: { tally: { k: { count: 1, candidate: [] } } } } })
+      problemDescriptionCleanupImport({ conceptRemap: { 1: { tally: { 999999: { count: 1, candidate: [] } } } } })
     ),
     'an array candidate is rejected (structurally impossible)'
   );
   check(Object.keys(store).length === 0, 'no partial writes after any rejected import');
+
+  console.log('\n--- key-format validation (attribute-injection guard: keys round-trip into HTML attributes) ---');
+  reset();
+  check(
+    await throws(() =>
+      problemDescriptionCleanupImport({
+        preferredDescriptions: {
+          ['" onmouseover="alert(1)" x="']: { tally: {}, override: null },
+        },
+      })
+    ),
+    'a top-level key containing quotes/non-digits is rejected'
+  );
+  check(
+    await throws(() =>
+      problemDescriptionCleanupImport({
+        conceptRemap: {
+          1: { tally: { ['"><script>alert(1)</script>']: { candidate: {}, count: 1 } }, override: null },
+        },
+      })
+    ),
+    'a hostile (non-digit) tally key is rejected'
+  );
+  check(
+    await throws(() =>
+      problemDescriptionCleanupImport({
+        preferredDescriptions: { 1: { tally: {}, override: { key: '" x="y', candidate: {} } } },
+      })
+    ),
+    'a hostile override.key is rejected'
+  );
+  check(Object.keys(store).length === 0, 'no partial writes after any of the key-format rejections');
+
+  reset();
+  await problemDescriptionCleanupImport({
+    conceptRemap: {
+      449705007: {
+        tally: { '123|456': { candidate: { conceptId: '123', descriptionId: '456' }, count: 1, lastUsed: 'x' } },
+        override: null,
+      },
+    },
+  });
+  check(
+    store['pdc.conceptRemap']['449705007'].tally['123|456'].count === 1,
+    'a legitimate axis-2 tally key (conceptId|descriptionId, digits only) still passes'
+  );
 
   console.log('\n--- malformed / empty imports are no-ops ---');
   reset();

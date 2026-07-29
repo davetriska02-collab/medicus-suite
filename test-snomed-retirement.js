@@ -325,6 +325,67 @@ console.log(
   check(result.partiallyEquivalentTo.length === 0, 'a SAME AS-only concept has an empty partiallyEquivalentTo array');
 }
 
+// Synthetic (both real memberships combined — a concept carrying BOTH a
+// REPLACED BY and a SAME AS association at once) — PR #228 remediation:
+// REPLACED BY must win regardless of which membership the API lists first,
+// since array order is not a confidence signal. Two fixtures, opposite
+// array order, to prove the result doesn't depend on order.
+const RETIRED_BOTH_REPLACED_BY_FIRST = {
+  conceptId: '900000001',
+  active: false,
+  fsn: 'Synthetic: both REPLACED BY and SAME AS, REPLACED BY listed first',
+  memberships: [
+    {
+      type: 'ASSOCIATION',
+      refset: { conceptId: '900000000000526001', defaultTerm: 'REPLACED BY association reference set' },
+      cidValue: { conceptId: '788180009', defaultTerm: 'Lower uterine segment cesarean section (procedure)' },
+    },
+    {
+      type: 'ASSOCIATION',
+      refset: { conceptId: '900000000000527005', defaultTerm: 'SAME AS association reference set' },
+      cidValue: { conceptId: '301301002', defaultTerm: 'Flexible cystoscopy (procedure)' },
+    },
+  ],
+};
+const RETIRED_BOTH_SAME_AS_FIRST = {
+  conceptId: '900000002',
+  active: false,
+  fsn: 'Synthetic: both REPLACED BY and SAME AS, SAME AS listed first',
+  memberships: [
+    {
+      type: 'ASSOCIATION',
+      refset: { conceptId: '900000000000527005', defaultTerm: 'SAME AS association reference set' },
+      cidValue: { conceptId: '301301002', defaultTerm: 'Flexible cystoscopy (procedure)' },
+    },
+    {
+      type: 'ASSOCIATION',
+      refset: { conceptId: '900000000000526001', defaultTerm: 'REPLACED BY association reference set' },
+      cidValue: { conceptId: '788180009', defaultTerm: 'Lower uterine segment cesarean section (procedure)' },
+    },
+  ],
+};
+
+console.log(
+  '--- parseConceptRetirement: a concept carrying BOTH REPLACED BY and SAME AS -> REPLACED BY deterministically wins, regardless of membership order ---'
+);
+{
+  const resultReplacedByFirst = parseConceptRetirement(RETIRED_BOTH_REPLACED_BY_FIRST);
+  check(
+    !!resultReplacedByFirst.replacement && resultReplacedByFirst.replacement.conceptId === '788180009',
+    'REPLACED BY listed first: replacement resolves to the REPLACED BY target, not SAME AS (got ' +
+      JSON.stringify(resultReplacedByFirst.replacement) +
+      ')'
+  );
+
+  const resultSameAsFirst = parseConceptRetirement(RETIRED_BOTH_SAME_AS_FIRST);
+  check(
+    !!resultSameAsFirst.replacement && resultSameAsFirst.replacement.conceptId === '788180009',
+    'SAME AS listed first: replacement STILL resolves to the REPLACED BY target, not the earlier-seen SAME AS (got ' +
+      JSON.stringify(resultSameAsFirst.replacement) +
+      ')'
+  );
+}
+
 console.log(
   '--- parseConceptRetirement: retired, AMBIGUOUS with two POSSIBLY EQUIVALENT TO candidates (69878008, Polycystic ovaries) ---'
 );

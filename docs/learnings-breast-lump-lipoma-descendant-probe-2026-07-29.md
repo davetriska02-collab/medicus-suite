@@ -63,7 +63,7 @@ Open the patient's Clinical Summary tab first.
   const RECORD_URL_RE = /\/([0-9a-f]{4,})\/(?:patient\/patient\/care-record|care-record)\/([0-9a-f-]{36})/i;
   const m = location.pathname.match(RECORD_URL_RE);
   if (!m) {
-    console.error('[probe] Not on a patient care-record page — open the patient\'s Clinical Summary tab first.');
+    console.error("[probe] Not on a patient care-record page — open the patient's Clinical Summary tab first.");
     return;
   }
   const siteId = m[1];
@@ -78,14 +78,15 @@ Open the patient's Clinical Summary tab first.
 
   // Step 1: find the breast-lump problem on this patient.
   const summary = await apiFetch('/clinical/data/clinical-summary/summary/' + encodeURIComponent(patientId));
-  const candidates = (summary.problems || []).filter((p) =>
-    /breast|lump/i.test(p.problemCodeDescription || '')
-  );
+  const candidates = (summary.problems || []).filter((p) => /breast|lump/i.test(p.problemCodeDescription || ''));
   if (!candidates.length) {
     console.error('[probe] No problem with "breast" or "lump" in its description found on this patient.');
     return;
   }
-  console.log(`[probe] Found ${candidates.length} candidate problem(s):`, candidates.map((p) => p.problemCodeDescription));
+  console.log(
+    `[probe] Found ${candidates.length} candidate problem(s):`,
+    candidates.map((p) => p.problemCodeDescription)
+  );
 
   const REPLACEMENT_CONCEPT_ID = '89164003'; // confirmed live via the public termbrowser API, see the accompanying learnings doc
   const TARGET_CONCEPT_ID = '276891009'; // "Lipoma of breast" — confirmed live to be a genuine descendant
@@ -109,7 +110,9 @@ Open the patient's Clinical Summary tab first.
     '&outputParentConceptIds=1&query=';
 
   const blank = await apiFetch(SEARCH_BASE);
-  console.log(`[probe] Blank-query enumeration under ${REPLACEMENT_CONCEPT_ID}: ${(blank.results || []).length} result(s) (cap is ~20, no pagination).`);
+  console.log(
+    `[probe] Blank-query enumeration under ${REPLACEMENT_CONCEPT_ID}: ${(blank.results || []).length} result(s) (cap is ~20, no pagination).`
+  );
   const blankHasTarget = (blank.results || []).some((r) => r.value && r.value.conceptId === TARGET_CONCEPT_ID);
   console.log(`[probe]   Contains ${TARGET_CONCEPT_ID} "Lipoma of breast"? ${blankHasTarget}`);
 
@@ -120,7 +123,9 @@ Open the patient's Clinical Summary tab first.
     console.log(
       `[probe] Narrowed query "${word}" under ${REPLACEMENT_CONCEPT_ID}: ${results.length} result(s). ` +
         `Contains ${TARGET_CONCEPT_ID}? ${!!match}` +
-        (match ? ` — its own parentConceptIds includes ${REPLACEMENT_CONCEPT_ID}? ${(match.value.parentConceptIds || []).includes(REPLACEMENT_CONCEPT_ID)}` : '')
+        (match
+          ? ` — its own parentConceptIds includes ${REPLACEMENT_CONCEPT_ID}? ${(match.value.parentConceptIds || []).includes(REPLACEMENT_CONCEPT_ID)}`
+          : '')
     );
     if (match) {
       console.log('[probe]   Full matched value:', match.value);
@@ -151,6 +156,7 @@ Open the patient's Clinical Summary tab first.
 ```
 
 **What to look for in the output:**
+
 - If the narrowed `"lipoma"` query DOES return 276891009 with `89164003` in its
   `parentConceptIds` — the retrieval works, and the real bug is elsewhere (e.g. the
   retirement pivot not actually engaging for this row, point 4 above — check whether
@@ -186,6 +192,7 @@ retirement-detection path entirely, so it could confirm the search WOULD work, b
 the widget WAS actually calling it that way.
 
 Two live candidate explanations, in order of likelihood:
+
 1. **The retired-concept-pivot fix (`descendantSearchTargetConceptId`,
    `content-scripts/problem-description-cleanup.js`) hasn't reached the loaded/reloaded
    extension yet** — that fix has never been confirmed live before this investigation (it

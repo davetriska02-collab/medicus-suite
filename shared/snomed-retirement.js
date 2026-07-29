@@ -81,6 +81,20 @@
 // already fit this exactly, which is why REPLACEMENT_REFSET_IDS was kept as
 // an array from the start (see 398307005's own history).
 //
+// PRIORITY WHEN A CONCEPT CARRIES BOTH (added 2026-07-29, PR #228
+// remediation): a real retired concept can have BOTH a REPLACED BY and a
+// SAME AS membership at once, and the termbrowser API gives no guarantee
+// about `memberships[]` array order — "first confirmed successor wins" then
+// meant "whichever the API happened to list first", which is not a
+// meaningful signal. REPLACED BY is SNOMED's more specific/authoritative
+// successor pointer, so it is now DETERMINISTICALLY preferred over SAME AS
+// regardless of which appears first in the response: REPLACEMENT_REFSET_IDS'
+// own array order ([REPLACED BY, SAME AS]) is used as an explicit priority
+// list (lower index wins), not just a membership lookup. "First wins" is
+// still the rule WITHIN one refset (e.g. two SAME AS memberships on the same
+// concept, however unlikely) — only cross-refset ties are now resolved by
+// priority instead of array position.
+//
 // POSSIBLY EQUIVALENT TO is DELIBERATELY kept separate from REPLACED BY, not
 // folded into the same `replacement` field, for two reasons confirmed by the
 // 69878008 example itself: (1) SNOMED's own wording is a genuine hedge, not
@@ -144,6 +158,13 @@
     var memberships = Array.isArray(conceptResponse.memberships) ? conceptResponse.memberships : [];
     var inactivationReason = null;
     var replacement = null;
+    // Index into REPLACEMENT_REFSET_IDS of the membership currently recorded
+    // in `replacement` — lower index = higher priority (REPLACED BY, index 0,
+    // beats SAME AS, index 1). See header comment ("REPLACED BY preferred
+    // over SAME AS" paragraph) for why: the API's memberships[] array order
+    // is not a confidence ordering, so picking "whichever came first" made
+    // the result depend on array order rather than SNOMED semantics.
+    var replacementPriority = null;
     var possiblyEquivalentTo = [];
     var partiallyEquivalentTo = [];
     memberships.forEach(function (m) {
@@ -152,8 +173,17 @@
       if (m.type === 'ATTRIBUTE_VALUE' && refsetId === INACTIVATION_REASON_REFSET_ID && !inactivationReason) {
         inactivationReason = { conceptId: m.cidValue.conceptId, description: m.cidValue.defaultTerm };
       }
-      if (m.type === 'ASSOCIATION' && REPLACEMENT_REFSET_IDS.indexOf(refsetId) !== -1 && !replacement) {
-        replacement = { conceptId: m.cidValue.conceptId, description: m.cidValue.defaultTerm };
+      if (m.type === 'ASSOCIATION') {
+        var replacementIdx = REPLACEMENT_REFSET_IDS.indexOf(refsetId);
+        // Record on first sight of a refset (replacement === null) OR when a
+        // HIGHER-priority (lower-index) refset is found — never on a second
+        // membership of the SAME refset (replacementIdx === replacementPriority
+        // is deliberately excluded, so "first wins" is preserved within one
+        // refset, e.g. two SAME AS memberships).
+        if (replacementIdx !== -1 && (replacement === null || replacementIdx < replacementPriority)) {
+          replacement = { conceptId: m.cidValue.conceptId, description: m.cidValue.defaultTerm };
+          replacementPriority = replacementIdx;
+        }
       }
       // Multiple candidates are expected and kept, unlike `replacement`
       // above — see header comment. Deduped by conceptId in case the same

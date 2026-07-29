@@ -36,11 +36,12 @@ const NHS_ADD_ALLOWLIST = new Set([
   // This guard's own regression test deliberately embeds synthetic Modulus-11
   // numbers to prove detection works — they are not patient data.
   'test-no-patient-data-guard.js',
-  // SNOMED descriptionId values are 10-digit terminology identifiers, and
-  // some coincidentally pass the NHS Modulus-11 check. These files carry
-  // descriptionIds only — no patient identifiers.
+  // SNOMED descriptionId/conceptId values are 10-digit terminology
+  // identifiers, and some coincidentally pass the NHS Modulus-11 check.
+  // These files carry terminology IDs only — no patient identifiers.
   'rules/document-types.json',
   'test-problem-description-cleanup.js',
+  'test-snomed-retirement.js',
 ]);
 
 // Never NHS-scan these (binaries / vendored bundles / lockfiles).

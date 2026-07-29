@@ -3,22 +3,22 @@
 This document consolidates everything `medicus-suite` has learned, by live capture against
 a real Medicus instance and a real public terminology service, about working with SNOMED CT
 codes in Medicus. It is written to be portable: hand it to a Claude (or any developer)
-working on a *different* Medicus-integrated project, and they should be able to build a
+working on a _different_ Medicus-integrated project, and they should be able to build a
 SNOMED search/hierarchy/retirement feature without re-deriving any of this by trial and
 error.
 
 It covers **two entirely separate systems** — keep them distinct, they are not
 interchangeable and answer different questions:
 
-| | Medicus's own internal API | Public NHS SNOMED CT termbrowser API |
-|---|---|---|
-| Auth | Requires an authenticated Medicus session (`credentials: 'include'`) | None — public, no-auth |
+|         | Medicus's own internal API                                                                                           | Public NHS SNOMED CT termbrowser API                               |
+| ------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Auth    | Requires an authenticated Medicus session (`credentials: 'include'`)                                                 | None — public, no-auth                                             |
 | Answers | "What SNOMED concepts/descriptions does Medicus's own index know about, and how are they related by IS-A hierarchy?" | "Is this concept active or retired? If retired, what replaced it?" |
-| Scope | Whatever Medicus's own index carries for coded entries (problems confirmed; other entity types not yet checked) | The full published SNOMED CT UK edition |
+| Scope   | Whatever Medicus's own index carries for coded entries (problems confirmed; other entity types not yet checked)      | The full published SNOMED CT UK edition                            |
 
 Everything below was confirmed by live capture (HAR files, direct browser-console `fetch`
 probes credentialed as a real clinician, or public no-auth requests) — never guessed. Where
-something is *not yet* confirmed, it's flagged as such; don't silently upgrade an unconfirmed
+something is _not yet_ confirmed, it's flagged as such; don't silently upgrade an unconfirmed
 assumption to a fact when reusing this elsewhere.
 
 ---
@@ -67,7 +67,7 @@ Response shape:
         "description": "Attention deficit disorder",
         "conceptId": "35253001",
         "descriptionId": "486108019",
-        "parentConceptIds": ["…"]   // only present when outputParentConceptIds=1 was passed
+        "parentConceptIds": ["…"] // only present when outputParentConceptIds=1 was passed
       }
     }
   ]
@@ -95,7 +95,7 @@ constrainingParentConcepts=404684003,71388002,243796009,48176007,272379006
 - `307824009` ("Administrative statuses (finding)") is explicitly EXCLUDED here as "not a
   real clinical finding" — a properly-scoped subtree of Clinical finding that's
   administrative noise, not a real diagnosis/finding. (Interestingly, this same conceptId is
-  used as an *inclusion* root elsewhere in this codebase for a completely different
+  used as an _inclusion_ root elsewhere in this codebase for a completely different
   purpose — flagging non-problem administrative noise on a problem list. Same concept,
   opposite use depending on what you're trying to do with it.)
 
@@ -150,7 +150,7 @@ description (order-independent, but not partial/fuzzy matching). A legacy/migrat
 description can contain a word the modern SNOMED wording has dropped entirely — e.g. a
 Read-code-migrated "Primary total knee replacement" query returns **zero** results, because
 the real modern descendants are worded "Total replacement of left/right knee joint" (no
-"Primary" anywhere). One mismatched word zeroes the *entire* query, silently — no error,
+"Primary" anywhere). One mismatched word zeroes the _entire_ query, silently — no error,
 just nothing found. This has bitten this codebase more than once and is worth designing
 around from the start:
 
@@ -173,7 +173,7 @@ confirmed examples:
   `constrainingParentConcepts` to `123037004` (or a suitable subtree of it) directly.
 - **Morphologic abnormality** — same story; concepts like "Benign tubular adenoma
   (morphologic abnormality)" sit on yet another axis, connected to the disorder axis (if at
-  all) only via an "Associated morphology" *attribute* relationship — never an IS-A path.
+  all) only via an "Associated morphology" _attribute_ relationship — never an IS-A path.
   `outputParentConceptIds`'s ancestry check can **never** bridge two different axes; don't
   expect it to, and don't build a feature that assumes it can. If a target concept isn't
   found on the axis you're used to searching, that's the signal to try a different
@@ -183,7 +183,7 @@ confirmed examples:
 
 Checked directly (multiple response shapes probed for a confirmed-retired concept): no field
 here exposes SNOMED active/inactive status. `descriptionId: null` on a coded entry
-correlates with a *historic display string* needing a cosmetic relabel, but that is a
+correlates with a _historic display string_ needing a cosmetic relabel, but that is a
 completely different question from "has this SNOMED concept itself been retired" — don't
 conflate the two. For retirement, use the external termbrowser API (§2).
 
@@ -200,9 +200,15 @@ before assuming this transfers).
   "problemCode": { "conceptId": "35253001", "description": "[X]Attention deficit disorder", "descriptionId": null },
   "significance": "major",
   "recordedAtAnotherOrganisation": true,
-  "recordedByOrganisation": { "organisationName": "…", "organisationIdentifierType": null, "organisationIdentifierValue": null },
+  "recordedByOrganisation": {
+    "organisationName": "…",
+    "organisationIdentifierType": null,
+    "organisationIdentifierValue": null
+  },
   "recordedByPractitioner": "…",
-  "staff": [ /* {value, label} — only relevant when recordedAtAnotherOrganisation=false */ ],
+  "staff": [
+    /* {value, label} — only relevant when recordedAtAnotherOrganisation=false */
+  ],
   "additionalInformation": "…"
   /* … every other field the edit form needs */
 }
@@ -223,7 +229,14 @@ Two gotchas worth carrying into any similar integration:
 2. **`recordedByOrganisation` can come back from the GET wrapped in a UI-select shape**
    instead of the plain object the POST validates against:
    ```json
-   { "label": "Park Road Surgery", "value": { "organisationName": "Park Road Surgery", "organisationIdentifierType": "nhs-england-ods-code", "organisationIdentifierValue": "H84002" } }
+   {
+     "label": "Park Road Surgery",
+     "value": {
+       "organisationName": "Park Road Surgery",
+       "organisationIdentifierType": "nhs-england-ods-code",
+       "organisationIdentifierValue": "H84002"
+     }
+   }
    ```
    Round-tripping this wrapper verbatim into the POST 400s: `{"recordedByOrganisation.organisationName": ["This field is missing."], ".label"/".value": ["This field was not expected."]}`.
    Confirmed real cause: a GP2GP-imported record with no defined original author/org. **Both
@@ -233,7 +246,7 @@ Two gotchas worth carrying into any similar integration:
    universally.
 
 **Safety rule, confirmed and load-bearing across every feature built on this API in this
-codebase:** when offering an alternative *description* for a code, only ever offer another
+codebase:** when offering an alternative _description_ for a code, only ever offer another
 description whose `conceptId` matches the current one — never silently re-code to a
 different concept. When offering a genuinely different/more specific concept (a real
 re-code), it must be justified by hard evidence: either a confirmed `parentConceptIds`
@@ -283,12 +296,10 @@ GET /concepts/{conceptId}
 ```js
 if (response.active === false) {
   // retired — look through response.memberships[] for:
-
   // the INACTIVATION REASON:
   //   type === 'ATTRIBUTE_VALUE'
   //   && refset.conceptId === '900000000000489007'  // "Concept inactivation indicator attribute value reference set"
   //   -> membership.cidValue = { conceptId, defaultTerm }  is the reason (e.g. "Outdated component")
-
   // the REPLACEMENT concept, if one exists:
   //   type === 'ASSOCIATION'
   //   && refset.conceptId === '900000000000526001'  // "REPLACED BY association reference set"
@@ -296,7 +307,7 @@ if (response.active === false) {
 }
 ```
 
-**Confusable, explicitly exclude**: retired concepts commonly *also* carry an
+**Confusable, explicitly exclude**: retired concepts commonly _also_ carry an
 `ASSOCIATION`-type membership with `refset.conceptId === '1322291000000109'` ("National
 Health Service Care Record Element association reference set") — this is an NHS
 classification tag, completely unrelated to retirement/replacement. Only
@@ -309,7 +320,7 @@ guessed ID for them. Extend only after confirming a real example the same way
 `900000000000526001` was confirmed (a real retired concept, checked against the termbrowser
 UI's own red "inactive" highlighting as ground truth, before trusting the API response).
 
-**A retired concept is not "junk"** — retirement means the *code* needs attention, not that
+**A retired concept is not "junk"** — retirement means the _code_ needs attention, not that
 the underlying clinical data/record is invalid. Don't route a retirement finding into any
 kind of "delete/end this" workflow; route it to a "here's a better code" workflow instead.
 
@@ -343,7 +354,7 @@ hard way (real near-misses) in this codebase:
 - **Never silently re-code to a different SNOMED concept.** Every suggestion category needs
   one of: (a) exact `conceptId` match [safest — a relabel, not a recode], (b) a confirmed
   `parentConceptIds` ancestry proof [a genuine specialisation], (c) SNOMED's own `REPLACED
-  BY` pointer [a confirmed successor], or (d) as an explicitly lower-confidence, always
+BY` pointer [a confirmed successor], or (d) as an explicitly lower-confidence, always
   visually-distinguished-and-clinician-reviewed last resort, an exact text match to a
   different concept. Never a guessed synonym pairing (e.g. hand-mapping "treatment" ~
   "care") — a wrong pairing produces a wrong-but-confident suggestion, which is worse than

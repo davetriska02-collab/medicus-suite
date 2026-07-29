@@ -2167,8 +2167,8 @@ function initPdcTallySection(cfg) {
           ? `<span style="color: var(--green, #16a34a); font-size: 10px; font-weight: 600">★ ${isOverride ? 'PRACTICE DEFAULT (MANUAL)' : 'PRACTICE DEFAULT (MOST USED)'}</span>`
           : '';
         const actionHtml = isOverride
-          ? `<button class="ghost" style="font-size: 10px; padding: 3px 8px" data-pdc-clear="${escHtml(topKey)}">Clear override</button>`
-          : `<button class="ghost" style="font-size: 10px; padding: 3px 8px" data-pdc-setoverride="${escHtml(topKey)}" data-pdc-row-key="${escHtml(row.key)}">Set as practice default</button>`;
+          ? `<button class="ghost" style="font-size: 10px; padding: 3px 8px" data-pdc-clear="${escAttr(topKey)}">Clear override</button>`
+          : `<button class="ghost" style="font-size: 10px; padding: 3px 8px" data-pdc-setoverride="${escAttr(topKey)}" data-pdc-row-key="${escAttr(row.key)}">Set as practice default</button>`;
         return `
           <tr style="border-bottom: 1px solid var(--border)">
             <td style="padding: 6px 8px 6px 0; color: var(--text-2)">${cfg.renderCandidate(row.candidate)}${badge ? '<br>' + badge : ''}</td>
