@@ -102,6 +102,46 @@ input[class*='ms-pdc-']:focus-visible {
   cursor: not-allowed;
 }
 
+/* Severity-defaulting contradiction (2026-07-29) — this DOES change a
+   structured clinical field (significance), not just tidy free text, so it
+   gets the same amber warning treatment as the retirement note below rather
+   than the plain genericinfo styling above. */
+.ms-pdc-severity-section {
+  margin-bottom: 6px;
+}
+
+.ms-pdc-severity-note {
+  display: block;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: #fffbeb;
+  border-left: 2px solid #fbbf24;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #92400e;
+}
+
+.ms-pdc-severity-correct-btn {
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #fbbf24;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #92400e;
+  cursor: pointer;
+}
+
+.ms-pdc-severity-correct-btn:hover:not(:disabled) {
+  background: #fffbeb;
+}
+
+.ms-pdc-severity-correct-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .ms-pdc-panel {
   display: flex;
   flex-wrap: wrap;
@@ -338,7 +378,8 @@ input[class*='ms-pdc-']:focus-visible {
 
 .ms-pdc-retired-replacement-unmatched,
 .ms-pdc-retired-no-replacement,
-.ms-pdc-legacy-readcode-note {
+.ms-pdc-legacy-readcode-note,
+.ms-pdc-priority-review-note {
   display: block;
   margin-bottom: 6px;
   padding: 4px 8px;
@@ -347,6 +388,21 @@ input[class*='ms-pdc-']:focus-visible {
   font-size: 11px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #4b5563;
+}
+
+/* Reassurance note (2026-07-29) — deliberately a soft GREEN, not the neutral
+   grey used above: this is good news ("the code itself is fine"), not just
+   an FYI, and should read as visually distinct from the suggestion buttons
+   it's explaining sit below it. */
+.ms-pdc-code-ok-note {
+  display: block;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: #f0fdf4;
+  border-left: 2px solid #86efac;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #15803d;
 }
 
 /* SNOMED-confirmed replacement — the MOST TRUSTED category of all (a real
@@ -387,6 +443,48 @@ input[class*='ms-pdc-']:focus-visible {
 }
 
 .ms-pdc-retired-replacement-btn:hover {
+  background: #dcfce7;
+}
+
+/* PRACTICE CONCEPT-REMAP — a real precedent this practice has already
+   applied before (recorded locally, pdc.conceptRemap), not a text
+   coincidence like the cross-concept/hint-expanded sections below. Reuses
+   the same "confirmed correct" green palette as the SNOMED-confirmed
+   replacement above — both are verified signals rather than guesses, even
+   though one comes from SNOMED itself and the other from this practice's
+   own history. */
+.ms-pdc-practice-remap-section {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.ms-pdc-practice-remap-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #15803d;
+}
+
+.ms-pdc-practice-remap-section .ms-pdc-panel {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.ms-pdc-practice-remap-btn {
+  padding: 5px 10px;
+  background: #fff;
+  border: 1px solid #86efac;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #15803d;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ms-pdc-practice-remap-btn:hover {
   background: #dcfce7;
 }
 

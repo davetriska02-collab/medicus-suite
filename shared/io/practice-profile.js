@@ -278,6 +278,29 @@ const PracticeProfile = (() => {
     }
 
     // ── Triage Lens ────────────────────────────────────────────────────────────
+    // FIELD-LEVEL MERGE for oirTests (2026-07-29 — fixed a real bug, confirmed
+    // live: a practice published custom Outstanding Investigation Requests
+    // test-dictionary entries via the shared profile, confirmed the publish
+    // itself worked, but NONE of them ever reached ANY install, fresh or not).
+    // Root cause: the OLD merge logic below only ever applied the whole
+    // triagelens.config blob when the local copy was COMPLETELY EMPTY — but
+    // it never actually is, on any machine: service-worker.js's
+    // initialiseTriage() seeds triagelens.config from the bundled
+    // defaults.json on EVERY chrome.runtime.onInstalled, and that local write
+    // always wins the race against this profile check's own network fetch of
+    // practice-profile.json. So the whole-config "only if empty" gate could
+    // never actually fire for practice-authored profile content, on any
+    // install. oirTests is now merged by its own `key`, appending only
+    // entries not already present locally — same by-id merge discipline as
+    // sentinel.customRules/knowledge.items/triageAlerts.rules elsewhere in
+    // this file. rules/thresholds/systemChips/resultRules are deliberately
+    // NOT merged here — those are the suite's own shipped clinical logic
+    // (updated via defaults.json releases, not practice-authored), so pushing
+    // them wholesale even once local config exists would risk silently
+    // clobbering a clinician's own local rule tweaks; left exactly as before
+    // (local values always win, untouched) until there's a real reported need
+    // to push those fields too, same "don't fix what isn't broken yet"
+    // discipline as everywhere else in this file.
     if (modMap.has('triage') && mods.triage && typeof mods.triage.config === 'object') {
       try {
         const merge = modMap.get('triage') === 'merge';
@@ -285,9 +308,28 @@ const PracticeProfile = (() => {
         if (Object.keys(config).length > 0) {
           if (merge) {
             const ex = await chrome.storage.local.get('triagelens.config');
-            if (!ex['triagelens.config'] || Object.keys(ex['triagelens.config']).length === 0) {
+            const local =
+              ex['triagelens.config'] && typeof ex['triagelens.config'] === 'object' ? ex['triagelens.config'] : {};
+            if (Object.keys(local).length === 0) {
+              // Genuinely no local config at all yet — apply the whole
+              // thing, same as before this fix.
               await chrome.storage.local.set({ 'triagelens.config': config });
               applied.push('triage');
+            } else if (Array.isArray(config.oirTests) && config.oirTests.length > 0) {
+              const localTests = Array.isArray(local.oirTests) ? local.oirTests : [];
+              const localKeys = new Set(localTests.map((t) => t && t.key));
+              // Strip dangerous keys from each untrusted incoming test entry
+              // before merging, same defence as every other untrusted-object
+              // merge in this file.
+              const incoming = config.oirTests
+                .filter((t) => t && t.key && !localKeys.has(t.key))
+                .map((t) => _stripDangerousKeys(t));
+              if (incoming.length > 0) {
+                await chrome.storage.local.set({
+                  'triagelens.config': Object.assign({}, local, { oirTests: [...localTests, ...incoming] }),
+                });
+                applied.push('triage');
+              }
             }
           } else {
             await chrome.storage.local.set({ 'triagelens.config': config });

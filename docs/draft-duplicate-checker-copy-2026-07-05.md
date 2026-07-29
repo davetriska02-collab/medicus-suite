@@ -1,6 +1,9 @@
 # Draft copy — "Record duplicate cleanup tool" (was "Duplicate Problem Checker")
 
-Draft for review only — not yet applied to duplicate-checker.html.
+**Applied 2026-07-29.** All of this copy is now live in `duplicate-checker.html`
+(title, both intro paragraphs, the "How duplicates are identified" section including
+the GP2GP wrapper-text bullet, and the GP2GP background section). Kept here as the
+copy-review record, not as an outstanding task.
 
 ## Title
 

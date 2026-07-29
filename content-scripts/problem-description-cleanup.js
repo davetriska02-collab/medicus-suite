@@ -126,6 +126,39 @@
 // whole-record bulk-correction feature is built later, unlike same-concept
 // and cross-concept-exact matches which could eventually be "easy" bulk
 // cases.
+//
+// SEVERITY-DEFAULTING CONTRADICTION EXTENSION (2026-07-29, real example: HAR
+// capture, SCTID 433144002 "Chronic kidney disease stage 3"): a different
+// class of GP2GP import defect from everything above — this one is about
+// additionalInformation containing a self-contradicting pair of boilerplate
+// lines, not an outdated description or a retired code. Medicus's own "Edit
+// Problem" UI only has a plain Major/Minor significance dropdown; when a
+// GP2GP-transferred source record carries no machine-readable significance
+// value (or one from a scheme the importer has no mapping for), the importer
+// defaults the structured field to Minor and writes what it did, PLUS what
+// the source record's own free text actually said the severity was, into
+// additionalInformation as plain text — e.g. "Unspecified Significance:
+// Defaulted to Minor\nProblem severity: Major". The structured field is never
+// corrected afterwards even when the source-supplied value is sitting right
+// there in the same field disagreeing with the default — the real example
+// above was stored as significance:"minor" while its own import text says the
+// source severity was Major. CONSOLIDATED 2026-07-29 into ONE rules file,
+// rules/generic-additional-info-text.json — a `kind:"pattern"` entry there
+// holds the regex source (as data, not hardcoded, so a differently-worded
+// sibling needs only a data-file edit) plus an `action` flag saying this one
+// isn't just noise, it needs a mismatch check. The pattern is matched against
+// the WHOLE additionalInformation text (not per-line), so it recognises the
+// boilerplate whether the two fragments land on separate lines OR are run
+// together on one line separated by whitespace — BOTH confirmed live
+// (2026-07-29: the second, no-mismatch variant was "...Defaulted to Minor
+// Problem severity: Minor" on a single line, no newline at all). See
+// findPatternMatch/severityCorrectionNeeded/computeAdditionalInfoFindings
+// below. When the two values agree (no contradiction), this reduces to
+// ordinary boilerplate removal — the same two fragments are ALSO listed as
+// plain `kind:"literal"` entries in the same file, so a solo/unpaired
+// occurrence of either is still recognised; only a genuine mismatch offers
+// the combined "correct severity + remove junk text" action
+// (applyCorrectSeverityAndRemoveJunk), never a silent auto-fix.
 'use strict';
 
 (function () {
@@ -159,6 +192,17 @@
       : window.MSSnomedRetirement;
   var parseConceptRetirement = snomedRetirement.parseConceptRetirement;
   var buildConceptUrl = snomedRetirement.buildConceptUrl;
+
+  // ── Shared generic "what does this practice prefer" tally/override —
+  // serves BOTH the wording-preference axis (pdc.preferredDescriptions) and
+  // the concept-remap axis (pdc.conceptRemap); see the shared module's own
+  // header for the full story ─────────────────────────────────────────────
+  var preferredDescriptions =
+    typeof module !== 'undefined' && module.exports
+      ? require('../shared/preferred-descriptions.js')
+      : window.MSPreferredDescriptions;
+  var recordPreference = preferredDescriptions.recordChoice;
+  var resolvePreference = preferredDescriptions.resolvePreferred;
 
   // ── Pure helpers, problem-specific (no window/document/fetch — unit-
   // testable via require()) ───────────────────────────────────────────────────
@@ -411,6 +455,22 @@
     return { code: match.code, description: match.description };
   }
 
+  // Which conceptId the descendant/laterality search should target (2026-07-29
+  // — see openPanel's own comment on the RETIRED-CONCEPT PIVOT for the full
+  // story and motivating example, 179304004). A retired problem's own
+  // conceptId is frequently a dead-end for this search (SNOMED stops growing
+  // a retired concept's subtree once it's retired — the motivating example,
+  // 179304004, has zero descendants), while its confirmed replacement is the
+  // live, current concept that could genuinely have laterality-specific
+  // children. Prefers retiredInfo.replacement.conceptId when present
+  // (already resolved by the opt-in retirement scan, no extra fetch needed),
+  // falls back to the problem's own currentConceptId otherwise — covers both
+  // an active concept (no retiredInfo at all) and a retired concept with no
+  // confirmed replacement.
+  function descendantSearchTargetConceptId(retiredInfo, currentConceptId) {
+    return (retiredInfo && retiredInfo.replacement && retiredInfo.replacement.conceptId) || currentConceptId || null;
+  }
+
   // Generic GP2GP-import additionalInformation text (2026-07-25, explicit
   // user request, real example: additionalInformation "ear\nActive Problem,
   // Significant" — "ear" is a genuine free-text note, the second line is
@@ -447,6 +507,178 @@
     return { cleaned: kept.join('\n').trim(), removed: removed };
   }
 
+  // ── Unified rules/generic-additional-info-text.json entries (2026-07-29
+  // consolidation — ALL known GP2GP boilerplate lives in this ONE file now,
+  // literal strings and value-capturing patterns alike; see the file's own
+  // header note for the full schema). `kind:"pattern"` entries carry a
+  // captured VALUE worth checking against the record, unlike a bare literal
+  // string — an entry with no explicit kind defaults to "literal" for
+  // forward compatibility. ──────────────────────────────────────────────────
+  function literalTextsFromEntries(entries) {
+    return (Array.isArray(entries) ? entries : [])
+      .filter(function (e) {
+        return e && e.kind !== 'pattern';
+      })
+      .map(function (e) {
+        return e && e.text;
+      })
+      .filter(Boolean);
+  }
+
+  function patternEntriesFromEntries(entries) {
+    return (Array.isArray(entries) ? entries : []).filter(function (e) {
+      return e && e.kind === 'pattern' && e.pattern;
+    });
+  }
+
+  // Matches ONE pattern-kind entry against the WHOLE additionalInformation
+  // text — deliberately never split by line first, unlike literal matching,
+  // so the boilerplate is recognised regardless of whether it lands on
+  // separate lines or is run together on a single line separated by
+  // whitespace (both confirmed live for severityDefaultingContradiction —
+  // see that entry's own rationale in the rules file: a `\s+` between the
+  // two fragments in the stored regex source matches a newline OR a plain
+  // space, so a differently-joined variant needs only a data-file edit, not
+  // a new code path). Returns {raw, groups} (raw = the exact matched
+  // substring, needed to remove just that span; groups = captured values,
+  // index 0 = capture group 1) or null if the pattern doesn't match, or the
+  // regex source is malformed (never throws).
+  function findPatternMatch(text, entry) {
+    if (!entry || !entry.pattern) return null;
+    var re;
+    try {
+      re = new RegExp(entry.pattern, entry.flags || '');
+    } catch (e) {
+      return null;
+    }
+    var m = (text == null ? '' : String(text)).match(re);
+    if (!m) return null;
+    return { raw: m[0], groups: m.slice(1) };
+  }
+
+  // Removes ONE matched substring (found by findPatternMatch) from the text,
+  // then collapses any now-blank line left behind — same "split by line,
+  // trim, filter, rejoin" discipline as stripGenericAdditionalInfoLines, so
+  // genuine free text elsewhere in the field survives untouched regardless
+  // of whether the removed span occupied whole line(s) or shared a line with
+  // other text.
+  function removeMatchedSpan(text, raw) {
+    var str = text == null ? '' : String(text);
+    if (!raw) return str;
+    var idx = str.indexOf(raw);
+    if (idx === -1) return str;
+    var joined = str.slice(0, idx) + str.slice(idx + raw.length);
+    return joined
+      .split('\n')
+      .map(function (l) {
+        return l.trim();
+      })
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+  }
+
+  // Returns the significance value to correct TO ('major'/'minor'), or null
+  // when there's nothing to act on — either no stated value was captured, or
+  // it already matches what's currently stored (the ordinary no-mismatch
+  // case, left to plain boilerplate removal like every other entry).
+  function severityCorrectionNeeded(statedSeverity, currentSignificance) {
+    if (!statedSeverity) return null;
+    var stated = String(statedSeverity).toLowerCase();
+    var current = (currentSignificance == null ? '' : String(currentSignificance)).toLowerCase();
+    if (stated === current) return null;
+    return stated;
+  }
+
+  // Single source of truth for every additionalInformation-derived finding —
+  // used identically by the opt-in code-health scan and by openPanel, so a
+  // row's flagged state and its re-computed panel state can never disagree
+  // (see openPanel's own comment on why it recomputes rather than trusting
+  // the scan's cache). Two passes: PATTERN entries first (matched and
+  // stripped against the whole text, regardless of whether their `action` —
+  // if any — actually fires, so the boilerplate is always removed once
+  // recognised, whichever action type matched or none at all), THEN literal
+  // entries (stripGenericAdditionalInfoLines) mop up whatever's left — any
+  // unrelated generic line, or a solo/unpaired occurrence of one half of a
+  // pattern entry's own fragments. Two action types are handled: a
+  // `severityCorrection` SUPERSEDES the plain generic-strip offer for the
+  // same field (a confident auto-fix, never shown alongside a redundant
+  // plain-strip button); a `reviewSeverity` (2026-07-29 — source-system
+  // "PRIORITY=n" values) does NOT supersede anything by default — it's an
+  // informational prompt that coexists with the ordinary generic-strip
+  // removal offer, since most captured values have no confirmed Major/Minor
+  // mapping, only a suggestion to check manually. A `reviewSeverity` entry
+  // CAN still drive a confident correction for specific captured values via
+  // its own `valueSeverityMap` (2026-07-29 — e.g. this practice's own
+  // confirmed "PRIORITY=1 always means Major" convention, holding across
+  // every example seen from that source system) — when the captured value
+  // has a mapped entry, it's treated exactly like severityCorrection
+  // (mismatch-checked and offered as a correction, superseding the plain
+  // strip); only an UNMAPPED value falls through to the plain review note.
+  // `cleaned` always has every matched line/pattern removed regardless of
+  // action type, so whichever combination of actions/offers ends up shown,
+  // none of them is ever less thorough about what gets removed than a plain
+  // strip would have been.
+  function computeAdditionalInfoFindings(additionalInformation, currentSignificance, entries) {
+    var workingText = additionalInformation == null ? '' : String(additionalInformation);
+    var patternRemoved = [];
+    var severityContradiction = null;
+    var severityReviewNote = null;
+    patternEntriesFromEntries(entries).forEach(function (entry) {
+      var match = findPatternMatch(workingText, entry);
+      if (!match) return;
+      patternRemoved.push(match.raw);
+      workingText = removeMatchedSpan(workingText, match.raw);
+      if (!entry.action) return;
+      if (entry.action.type === 'severityCorrection') {
+        var statedIdx = entry.action.capturesStatedSeverity;
+        var stated = statedIdx ? match.groups[statedIdx - 1] : null;
+        var corrected = severityCorrectionNeeded(stated, currentSignificance);
+        if (corrected) severityContradiction = { stated: corrected, source: entry.id || null };
+      } else if (entry.action.type === 'reviewSeverity') {
+        var priorityIdx = entry.action.capturesPriorityValue;
+        var priorityValue = priorityIdx ? match.groups[priorityIdx - 1] : null;
+        if (!priorityValue) return;
+        var mappedSeverity = entry.action.valueSeverityMap && entry.action.valueSeverityMap[priorityValue];
+        if (mappedSeverity) {
+          var mappedCorrection = severityCorrectionNeeded(mappedSeverity, currentSignificance);
+          if (mappedCorrection) severityContradiction = { stated: mappedCorrection, source: entry.id || null };
+        } else {
+          severityReviewNote = { priorityValue: priorityValue };
+        }
+      }
+    });
+    var literalStrip = stripGenericAdditionalInfoLines(workingText, literalTextsFromEntries(entries));
+    var removed = patternRemoved.concat(literalStrip.removed);
+    var current = (currentSignificance == null ? '' : String(currentSignificance)).toLowerCase();
+    if (severityReviewNote) severityReviewNote.current = current;
+    if (severityContradiction) {
+      severityContradiction.current = current;
+      severityContradiction.cleaned = literalStrip.cleaned;
+      return { genericAdditionalInfo: null, severityContradiction: severityContradiction, severityReviewNote: severityReviewNote };
+    }
+    return {
+      genericAdditionalInfo: removed.length ? { cleaned: literalStrip.cleaned, removed: removed } : null,
+      severityContradiction: null,
+      severityReviewNote: severityReviewNote,
+    };
+  }
+
+  // Whether there's an actual reason to believe THIS problem's own SNOMED
+  // code needs review — as opposed to the problem row merely having a
+  // "Clean up code" button because of import-text housekeeping (junk
+  // generic text, a severity contradiction/review note) with the code
+  // itself otherwise unremarkable. Reuses looksOutdated() (the SAME cheap,
+  // no-fetch text-pattern check the automatic per-load scan already runs)
+  // plus the two signals only the opt-in retirement scan can set
+  // (retiredInfo/legacyReadCode) — never a new heuristic, purely surfacing
+  // signals the tool already computes elsewhere. `st` is
+  // {currentDescription, retiredInfo, legacyReadCode} — a subset of a row's
+  // full state, so this is easy to call with a plain object in tests.
+  function codeQualityConcernExists(st) {
+    return !!((st && looksOutdated(st.currentDescription)) || (st && st.retiredInfo) || (st && st.legacyReadCode));
+  }
+
   // ── Node test hook ────────────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -473,6 +705,10 @@
       // Re-exported from shared/snomed-retirement.js, same reasoning.
       parseConceptRetirement: snomedRetirement.parseConceptRetirement,
       buildConceptUrl: snomedRetirement.buildConceptUrl,
+      // Re-exported from shared/preferred-descriptions.js, same reasoning —
+      // full coverage lives in test-preferred-descriptions.js.
+      recordPreference: preferredDescriptions.recordChoice,
+      resolvePreference: preferredDescriptions.resolvePreferred,
       // Problem-specific.
       buildEditProblemPayload,
       findOutdatedProblems,
@@ -481,7 +717,15 @@
       groupCandidatesByConcept,
       normalizedSearchResults,
       findLegacyReadCodeOrigin,
+      descendantSearchTargetConceptId,
       stripGenericAdditionalInfoLines,
+      literalTextsFromEntries,
+      patternEntriesFromEntries,
+      findPatternMatch,
+      removeMatchedSpan,
+      severityCorrectionNeeded,
+      computeAdditionalInfoFindings,
+      codeQualityConcernExists,
     };
     return;
   }
@@ -651,10 +895,14 @@
   }
 
   // Loads rules/generic-additional-info-text.json ONCE per page load — a
-  // local extension resource, not a Medicus call. Falls back to an empty
-  // list (never throws) if the resource is unavailable, same "fail open to
-  // inert, not to a crash" discipline as ensureNonProblemRootsLoaded in
-  // content-scripts/problem-junk-code-cleanup.js.
+  // local extension resource, not a Medicus call. Returns the RAW `entries`
+  // array (literal AND pattern entries alike — see the file's own header
+  // note and literalTextsFromEntries/patternEntriesFromEntries above for how
+  // callers split them apart) so ONE loader/one file serves every
+  // additionalInformation-boilerplate check in this widget. Falls back to an
+  // empty list (never throws) if the resource is unavailable, same "fail
+  // open to inert, not to a crash" discipline as ensureNonProblemRootsLoaded
+  // in content-scripts/problem-junk-code-cleanup.js.
   var _genericAdditionalInfoPromise = null;
   function ensureGenericAdditionalInfoTextLoaded() {
     if (_genericAdditionalInfoPromise) return _genericAdditionalInfoPromise;
@@ -664,13 +912,7 @@
         var doc = await fetch(url).then(function (r) {
           return r.json();
         });
-        return Array.isArray(doc && doc.entries)
-          ? doc.entries
-              .map(function (e) {
-                return e && e.text;
-              })
-              .filter(Boolean)
-          : [];
+        return Array.isArray(doc && doc.entries) ? doc.entries : [];
       } catch (e) {
         return [];
       }
@@ -707,17 +949,28 @@
   // check itself didn't cleanly succeed. Callers must treat active:null as
   // "skip", the same discipline as every other fail-open-to-inert pattern
   // in this codebase.
+  // RELAYED THROUGH THE BACKGROUND SERVICE WORKER (2026-07-29) — a direct
+  // `fetch()` to termbrowser.nhs.uk from THIS content script (injected into
+  // the Medicus page) was found live to be blocked by the browser's own CORS
+  // check, with the request's origin reported as the MEDICUS PAGE's origin,
+  // not the extension's — despite termbrowser.nhs.uk being correctly
+  // declared in manifest.json's host_permissions. Content-script-issued
+  // fetches to a cross-origin host don't reliably get that CORS bypass in
+  // practice; a service-worker-issued fetch has no such ambiguity. See
+  // service-worker.js's own comment on the 'termbrowser:fetchConcept' relay
+  // for the full story. Fails closed to parseConceptRetirement(null) on ANY
+  // failure — relay error, non-2xx, malformed JSON — same discipline as
+  // before this change, never guesses active/inactive.
   async function fetchRetirementStatus(conceptId) {
     try {
       var config = await ensureTermServerConfigLoaded();
       var url = buildConceptUrl(config, conceptId);
       if (!url) return parseConceptRetirement(null);
-      var resp = await fetch(url, { headers: { Accept: 'application/json, text/plain, */*' } });
-      if (!resp.ok) return parseConceptRetirement(null);
-      var text = await resp.text();
+      var relayed = await chrome.runtime.sendMessage({ action: 'termbrowser:fetchConcept', url: url });
+      if (!relayed || !relayed.ok || !relayed.httpOk) return parseConceptRetirement(null);
       var data;
       try {
-        data = JSON.parse(text);
+        data = JSON.parse(relayed.text);
       } catch (e) {
         return parseConceptRetirement(null);
       }
@@ -864,9 +1117,13 @@
         confirmedReplacement: null, // [{description, conceptId, descriptionId}, …] — EVERY synonym Medicus's own search has for the REPLACED BY target concept (may be several — see confirmedReplacementAlternatives), or null
         confirmedPossibleEquivalents: null, // [{description, conceptId, descriptionId}, …] — every synonym of every POSSIBLY EQUIVALENT TO candidate concept resolved from Medicus's own search (multiple candidates AND multiple synonyms per candidate can both contribute)
         confirmedPartiallyEquivalents: null, // [{description, conceptId, descriptionId}, …] — same shape as confirmedPossibleEquivalents but for PARTIALLY EQUIVALENT TO, a distinct SNOMED association (see partiallyEquivalentHtml)
+        practiceRemap: null, // {conceptId, descriptionId, description} — resolved from pdc.conceptRemap, keyed by this problem's OWN current conceptId (the source), or null. See openPanel's own comment.
         legacyReadCode: null, // {code, description} — set by the opt-in scan when originalCodes shows a read-v2 origin
         genericAdditionalInfo: null, // {cleaned, removed} — computed in openPanel from prefill.additionalInformation, ANY row
         genericAdditionalInfoSaving: false,
+        severityContradiction: null, // {stated, current, cleaned} — set when the GP2GP severity-defaulting text contradicts the stored significance (see computeAdditionalInfoFindings)
+        severityContradictionSaving: false,
+        severityReviewNote: null, // {priorityValue, current} — set when a source-system "PRIORITY=n" value with no confirmed Major/Minor mapping was found (see computeAdditionalInfoFindings) — informational only, no correction offered
         manualSearchQuery: '',
         manualSearchResults: null,
         manualSearchLoading: false,
@@ -1097,6 +1354,90 @@
     );
   }
 
+  function capitalize(s) {
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  }
+
+  // Severity-defaulting contradiction (2026-07-29) — see this file's own
+  // header comment for the full GP2GP mechanism. Deliberately its own
+  // section, not folded into genericAdditionalInfoHtml above: this is a
+  // genuine clinical-data correction (the structured significance field
+  // itself changes), not just a cosmetic text tidy-up, so it gets an
+  // explanatory note plus its own explicit action — never silently applied
+  // alongside the code-description fix.
+  // Explanation text branches on sc.source (the pattern entry's own `id` —
+  // see computeAdditionalInfoFindings) since the two configured sources have
+  // genuinely different evidence behind the suggested value: the GP2GP
+  // defaulting text (severityDefaultingContradiction) directly STATES the
+  // value in the import text itself; the source-system priority mapping
+  // (sourceSystemPriorityValue, 2026-07-29 — "PRIORITY=1" -> Major) is a
+  // locally-configured convention this practice has confirmed from its own
+  // experience of that source system, not something the import text asserts
+  // in plain English — worth being explicit about the provenance so the
+  // clinician isn't misled into thinking the source record spelled out
+  // "Major" itself.
+  function severityContradictionExplanation(sc) {
+    if (sc.source === 'sourceSystemPriorityValue') {
+      return (
+        'the source record’s own "PRIORITY=1" value maps to <strong>Major</strong> under this practice’s ' +
+        'own confirmed convention for that source system — Medicus stored it as <strong>' +
+        esc(capitalize(sc.current)) +
+        '</strong> without applying that mapping.'
+      );
+    }
+    return (
+      'its own import text says the source record’s severity was <strong>' +
+      esc(capitalize(sc.stated)) +
+      '</strong> — Medicus couldn’t map that value automatically on import, so it defaulted the structured ' +
+      'field to Minor and left the real value as plain text instead of correcting it.'
+    );
+  }
+
+  function severityContradictionHtml(problemId, st) {
+    if (!st.severityContradiction) return '';
+    var sc = st.severityContradiction;
+    return (
+      '<div class="ms-pdc-severity-section">' +
+      '<div class="ms-pdc-severity-note">⚠ Import text contradicts the stored severity: this problem is recorded as <strong>' +
+      esc(capitalize(sc.current)) +
+      '</strong>, but ' +
+      severityContradictionExplanation(sc) +
+      '</div>' +
+      '<button type="button" class="ms-pdc-severity-correct-btn" data-problem-id="' +
+      esc(problemId) +
+      '"' +
+      (st.severityContradictionSaving ? ' disabled' : '') +
+      '>' +
+      (st.severityContradictionSaving
+        ? 'Correcting…'
+        : 'Correct severity to ' + esc(capitalize(sc.stated)) + ' and remove junk text') +
+      '</button>' +
+      '</div>'
+    );
+  }
+
+  // Source-system priority value, no confirmed severity mapping (2026-07-29)
+  // — see rules/generic-additional-info-text.json's sourceSystemPriorityValue
+  // entry for the full story. Deliberately informational-only, no button:
+  // unlike severityContradictionHtml above, there is no reliable mapping
+  // from this source system's own priority scale to Major/Minor, so the
+  // honest response is a prompt to check manually, never a guessed
+  // correction. The raw "PRIORITY=n" text itself is still offered for
+  // removal via the ordinary genericAdditionalInfoHtml button below (this
+  // note and that button coexist, unlike the contradiction case which
+  // supersedes it).
+  function severityReviewNoteHtml(st) {
+    if (!st.severityReviewNote) return '';
+    var note = st.severityReviewNote;
+    return (
+      '<div class="ms-pdc-priority-review-note">ℹ Import text included a source-system priority value ("PRIORITY=' +
+      esc(note.priorityValue) +
+      '") with no confirmed mapping to Major/Minor — this problem is currently recorded as <strong>' +
+      esc(capitalize(note.current)) +
+      '</strong>; please check that\'s clinically correct.</div>'
+    );
+  }
+
   // Manual search box (2026-07-25) — the ONE section always rendered
   // regardless of whether any automated category above found anything (see
   // panelHtml's call sites: it's appended in BOTH the early "nothing found"
@@ -1151,6 +1492,53 @@
     return html;
   }
 
+  // PRACTICE CONCEPT-REMAP banner — see openPanel's own comment (where
+  // st.practiceRemap is resolved) for the full story. A materially
+  // higher-confidence signal than the crossConcept text-match section below
+  // (a REAL precedent this practice has already applied, not a text
+  // coincidence), so it gets its own clearly-labelled section — still
+  // requires the explicit click, same discipline as everywhere else here.
+  function practiceRemapHtml(problemId, st) {
+    if (!st.practiceRemap) return '';
+    var r = st.practiceRemap;
+    return (
+      '<div class="ms-pdc-practice-remap-section">' +
+      '<span class="ms-pdc-practice-remap-label">✓ This practice has previously replaced this code with:</span>' +
+      '<div class="ms-pdc-panel">' +
+      '<button type="button" class="ms-pdc-practice-remap-btn" data-problem-id="' +
+      esc(problemId) +
+      '" data-concept-id="' +
+      esc(r.conceptId) +
+      '" data-description-id="' +
+      esc(r.descriptionId || '') +
+      '">' +
+      esc(r.description) +
+      '</button>' +
+      '</div></div>'
+    );
+  }
+
+  // Reassurance note (2026-07-29, real user concern raised from a
+  // screenshot): a problem flagged ONLY for import-text housekeeping (junk
+  // generic text, a severity contradiction/review note) but with NO actual
+  // code-quality signal (not retired, not Read-code-derived, not
+  // looksOutdated()-flagged) still surfaces the SAME wall of
+  // alternative-code suggestion buttons as a genuinely outdated code —
+  // purely because additionalInformation happens to contain wording that
+  // matches a hint word for the (unrelated) descendant/cross-concept
+  // search. Visually indistinguishable from "this code is wrong, pick a
+  // replacement", which misleads when the code itself was never actually
+  // in question. codeQualityConcernExists (pure logic, testable) lives with
+  // the other pure helpers above; this just renders it.
+  function codeLooksOkNoteHtml(st, hasAnySuggestion) {
+    if (!hasAnySuggestion || codeQualityConcernExists(st)) return '';
+    return (
+      '<div class="ms-pdc-code-ok-note">ℹ This problem’s own SNOMED code hasn’t been flagged as outdated or ' +
+      'retired — it was only flagged here for import-text housekeeping. Any suggestions below come from wording ' +
+      'in “Additional info” and are optional, not a sign the current code is wrong.</div>'
+    );
+  }
+
   function panelHtml(problemId) {
     var st = rowState(problemId);
     if (st.loading) {
@@ -1172,17 +1560,21 @@
           esc(st.additionalInformation) +
           '</div>'
         : '') +
+      severityContradictionHtml(problemId, st) +
+      severityReviewNoteHtml(st) +
       genericAdditionalInfoHtml(problemId, st) +
       retiredInfoHtml(problemId, st) +
       legacyReadCodeHtml(st);
-    if (!alts.length && !descendants.length && !crossConcept.length && !hintExpanded.length) {
+    var remapHtml = practiceRemapHtml(problemId, st);
+    if (!alts.length && !descendants.length && !crossConcept.length && !hintExpanded.length && !remapHtml) {
       return (
         infoHtml +
         '<div class="ms-pdc-panel"><span class="ms-pdc-empty">No alternative description found for this code.</span></div>' +
         manualSearchHtml(problemId, st)
       );
     }
-    var html = infoHtml;
+    var hasAnySuggestion = !!(alts.length || descendants.length || crossConcept.length || hintExpanded.length || remapHtml);
+    var html = infoHtml + codeLooksOkNoteHtml(st, hasAnySuggestion) + remapHtml;
     if (alts.length) {
       html +=
         '<div class="ms-pdc-panel">' + candidateGroupsHtml(problemId, alts, 'alt', 'ms-pdc-alt', false) + '</div>';
@@ -1299,6 +1691,11 @@
         );
       });
     });
+    root.querySelectorAll('.ms-pdc-practice-remap-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyPracticeRemap(problemId);
+      });
+    });
     root.querySelectorAll('.ms-pdc-manualsearch-result').forEach(function (btn) {
       btn.addEventListener('click', function () {
         applyManualSearchResult(
@@ -1329,6 +1726,11 @@
     root.querySelectorAll('.ms-pdc-genericinfo-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         applyRemoveGenericAdditionalInfo(problemId);
+      });
+    });
+    root.querySelectorAll('.ms-pdc-severity-correct-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyCorrectSeverityAndRemoveJunk(problemId);
       });
     });
     // Grouped multi-synonym "Use" button (see candidateGroupsHtml) — reads
@@ -1375,9 +1777,15 @@
       // fetch above just ran or was reused from the retirement/legacy-code
       // scan's own cache, so this costs nothing extra (one local extension
       // resource load, cached after the first panel opens).
-      var genericTexts = await ensureGenericAdditionalInfoTextLoaded();
-      var stripped = stripGenericAdditionalInfoLines(prefill.additionalInformation, genericTexts);
-      st.genericAdditionalInfo = stripped.removed.length ? stripped : null;
+      var genericInfoEntries = await ensureGenericAdditionalInfoTextLoaded();
+      var findings = computeAdditionalInfoFindings(
+        prefill.additionalInformation,
+        prefill.significance,
+        genericInfoEntries
+      );
+      st.genericAdditionalInfo = findings.genericAdditionalInfo;
+      st.severityContradiction = findings.severityContradiction;
+      st.severityReviewNote = findings.severityReviewNote;
       var queryText = stripLegacyMarkers(code.description);
       var results = await searchDescriptions(queryText);
       // Supplement with an SCTID-keyed search for the current concept's own
@@ -1403,6 +1811,66 @@
       }
       var combinedResults = results.concat(byConceptId);
       st.alternatives = sameConceptAlternatives(combinedResults, code.conceptId, code.description);
+      // PRACTICE-PREFERENCE SUPPLEMENT (2026-07-29, real gap reported live):
+      // a clinician had to fall back to manual search because NONE of the
+      // search-based candidates above found anything for this concept —
+      // Medicus's own index can legitimately have nothing to offer. But if
+      // this practice has already resolved this exact conceptId before
+      // (recorded in pdc.preferredDescriptions, written by applyCode on
+      // every successful save — including manual-search applies, since they
+      // go through the same applyCode path), that choice needs no re-search
+      // at all: it's a pure local lookup, so it can supply a candidate even
+      // when the search-based sources above are completely empty. Same
+      // safety tier as sameConceptAlternatives — resolvePreference is looked
+      // up BY this concept's own conceptId, so it can never surface a
+      // different concept. Deduped against the search-based candidates
+      // (harmless overlap if Medicus's own index also had it); never offered
+      // if it's already the current description (nothing to suggest).
+      try {
+        var pdcStore = await chrome.storage.local.get('pdc.preferredDescriptions');
+        var pdcEntry = pdcStore['pdc.preferredDescriptions'] && pdcStore['pdc.preferredDescriptions'][code.conceptId];
+        var preferred = resolvePreference(pdcEntry);
+        if (
+          preferred &&
+          preferred.candidate &&
+          preferred.candidate.description !== code.description &&
+          !st.alternatives.some(function (a) {
+            return (a.descriptionId || '') === preferred.key;
+          })
+        ) {
+          st.alternatives.push({
+            description: preferred.candidate.description,
+            conceptId: code.conceptId,
+            descriptionId: preferred.key,
+          });
+        }
+      } catch (_) {
+        // Never let a preference-store hiccup block the panel opening.
+      }
+      // PRACTICE CONCEPT-REMAP (2026-07-29 — a materially different, higher-
+      // confidence signal than crossConceptAlternatives below: this is a
+      // REAL PRECEDENT this practice has actually applied before (recorded
+      // in pdc.conceptRemap, keyed by the SOURCE conceptId — see applyCode's
+      // own comment for where it's written), not a text coincidence. Real
+      // motivating case: "Injection into varicose vein of leg" (449705007)
+      // manually replaced with "Injection of varicose vein of lower limb"
+      // (449708009) — crossConceptAlternatives' text-match could never catch
+      // this (the wordings don't match), but this practice has now done it
+      // for real, so the NEXT problem still coded 449705007 should offer it
+      // directly. Rendered in its own distinctly-labelled section (see
+      // practiceRemapHtml) — still requires the explicit click, same
+      // discipline as everywhere else in this file.
+      st.practiceRemap = null;
+      try {
+        var remapStore = await chrome.storage.local.get('pdc.conceptRemap');
+        var remapEntry = remapStore['pdc.conceptRemap'] && remapStore['pdc.conceptRemap'][code.conceptId];
+        var remapPreferred = resolvePreference(remapEntry);
+        if (remapPreferred && remapPreferred.candidate && remapPreferred.candidate.conceptId) {
+          st.practiceRemap = remapPreferred.candidate;
+        }
+      } catch (_) {
+        // Never let a preference-store hiccup block the panel opening.
+      }
       // Descendant search words: laterality (rt/lt/bilateral) PLUS generic
       // significant words from the WHOLE additionalInformation field (e.g.
       // "resection of uterine fibroid" -> "resection"/"uterine"/"fibroid") —
@@ -1447,6 +1915,48 @@
       // descendantAlternatives already dedupes by descriptionId/description
       // and computes matchScore from each result's own text, so candidates
       // found by more than one word are never offered twice.
+      //
+      // RETIRED-CONCEPT PIVOT (2026-07-29 — real question, not yet a bug: a
+      // clinician asked why 179304004 "Primary uncemented total hip
+      // replacement" — retired, additionalInformation contains "right" —
+      // didn't offer a right-specific descendant. Investigation found
+      // 430694001 "Prosthetic arthroplasty of right hip" genuinely ISN'T a
+      // descendant of anything relevant here — its own relationships carry
+      // no "uncemented"/"total" facet at all, and SNOMED has no
+      // precoordinated concept combining all three, so nothing was actually
+      // missed for THAT case. But a REAL latent gap surfaced during the
+      // investigation: this search was narrowing under `code.conceptId` —
+      // the problem's OWN current conceptId — which for a retired problem is
+      // the OLD, often-childless retired concept (179304004 itself has ZERO
+      // descendants, confirmed live), not the confirmed REPLACEMENT concept
+      // that's actually live in SNOMED and could genuinely have laterality-
+      // specific children. Now prefers the confirmed replacement's conceptId
+      // (st.retiredInfo.replacement, already resolved by the opt-in
+      // retirement scan before this row ever got a button — no extra fetch)
+      // when this row was flagged as retired WITH a confirmed replacement,
+      // falling back to code.conceptId exactly as before otherwise (an
+      // active concept, or a retired one with no confirmed replacement).
+      // Passed as the ancestry-check conceptId to descendantAlternatives too
+      // — not just the search target — since a candidate must be a genuine
+      // descendant of WHICHEVER concept was actually searched, or the
+      // hierarchy-safety filter would reject every real result.
+      var descendantSearchConceptId = descendantSearchTargetConceptId(st.retiredInfo, code.conceptId);
+      // Diagnostic log, retired rows only (low frequency, not noise on the
+      // common active-concept path) — content-script console output appears
+      // directly in the page's own DevTools console, no page-console bridge
+      // needed, so this is the fastest way to confirm live which conceptId
+      // this search actually targeted, without guessing from the outside.
+      if (st.retiredInfo) {
+        console.log(
+          '[Clean up code] descendant/laterality search for retired concept',
+          code.conceptId,
+          '-> targeting',
+          descendantSearchConceptId,
+          st.retiredInfo.replacement
+            ? '(confirmed replacement: ' + st.retiredInfo.replacement.description + ')'
+            : '(no confirmed replacement — falling back to the retired concept itself)'
+        );
+      }
       var laterality = detectLateralityHint(prefill.additionalInformation);
       var hintWords = [];
       if (laterality && !descriptionAlreadySpecifiesLaterality(code.description, laterality)) {
@@ -1461,13 +1971,13 @@
       if (hintWords.length) {
         var narrowedResultSets = await Promise.all(
           [''].concat(hintWords).map(function (word) {
-            return searchDescendantsNarrowed(code.conceptId, word);
+            return searchDescendantsNarrowed(descendantSearchConceptId, word);
           })
         );
         var allDescendants = [].concat.apply([], narrowedResultSets);
         st.descendantAlternatives = descendantAlternatives(
           combinedResults.concat(allDescendants),
-          code.conceptId,
+          descendantSearchConceptId,
           hintWords
         );
       } else {
@@ -1598,6 +2108,56 @@
   // the safety difference between the two is entirely in HOW `chosen` was
   // selected upstream (sameConceptAlternatives vs descendantAlternatives),
   // not in how it's applied here.
+  // ── Preference tally (pdc.preferredDescriptions + pdc.conceptRemap) ────────
+  // Fire-and-forget from applyCode below — a storage hiccup here must never
+  // affect the already-successful clinical save, so failures are swallowed
+  // (logged), never surfaced to the clinician. Every apply* path (same-
+  // concept, descendant, cross-concept, hint-expanded, confirmed-replacement,
+  // possibly/partially-equivalent, manual search) funnels through here
+  // identically via applyCode, regardless of which category the choice came
+  // from — see shared/preferred-descriptions.js's own header for why that's
+  // uniform rather than special-cased per category.
+  //   - WORDING axis (pdc.preferredDescriptions[chosen.conceptId]): always
+  //     recorded when chosen has a descriptionId — "which synonym does this
+  //     practice prefer for this code."
+  //   - CONCEPT-REMAP axis (pdc.conceptRemap[sourceConceptId]): additionally
+  //     recorded whenever the applied concept genuinely differs from the
+  //     concept the problem was coded as BEFORE this save (sourceConceptId,
+  //     i.e. st.conceptId captured at panel-open time) — "which code has
+  //     this practice actually replaced this one with." Real motivating
+  //     case (2026-07-29): "Injection into varicose vein of leg" (449705007)
+  //     manually replaced with "Injection of varicose vein of lower limb"
+  //     (449708009) — see openPanel's own comment on st.practiceRemap for
+  //     how this then surfaces on the NEXT problem coded 449705007.
+  async function recordPreferenceChoices(sourceConceptId, chosen) {
+    if (!chosen || !chosen.conceptId) return;
+    if (chosen.descriptionId) {
+      var wordingR = await chrome.storage.local.get('pdc.preferredDescriptions');
+      var wordingAll =
+        wordingR['pdc.preferredDescriptions'] && typeof wordingR['pdc.preferredDescriptions'] === 'object'
+          ? wordingR['pdc.preferredDescriptions']
+          : {};
+      wordingAll[chosen.conceptId] = recordPreference(wordingAll[chosen.conceptId], chosen.descriptionId, {
+        description: chosen.description,
+        descriptionId: chosen.descriptionId,
+      });
+      await chrome.storage.local.set({ 'pdc.preferredDescriptions': wordingAll });
+    }
+
+    if (sourceConceptId && sourceConceptId !== chosen.conceptId) {
+      var remapR = await chrome.storage.local.get('pdc.conceptRemap');
+      var remapAll =
+        remapR['pdc.conceptRemap'] && typeof remapR['pdc.conceptRemap'] === 'object' ? remapR['pdc.conceptRemap'] : {};
+      var remapKey = chosen.conceptId + '|' + (chosen.descriptionId || '');
+      remapAll[sourceConceptId] = recordPreference(remapAll[sourceConceptId], remapKey, {
+        conceptId: chosen.conceptId,
+        descriptionId: chosen.descriptionId,
+        description: chosen.description,
+      });
+      await chrome.storage.local.set({ 'pdc.conceptRemap': remapAll });
+    }
+  }
+
   async function applyCode(problemId, chosen) {
     var st = rowState(problemId);
     if (!chosen || st.saving) return;
@@ -1612,6 +2172,11 @@
       var payload = buildEditProblemPayload(st.prefill, newCode);
       await postEditProblem(problemId, payload);
       st.saved = true;
+      // Learn from this choice — see recordPreferenceChoices' own comment
+      // for why this is fire-and-forget and never awaited/surfaced.
+      recordPreferenceChoices(st.conceptId, newCode).catch(function (e) {
+        console.warn('[Clean up code] failed to record description preference:', e && e.message);
+      });
       // Optimistic in-place update — the save is confirmed correct
       // server-side; this just keeps the on-screen text in sync without
       // depending on Medicus's own Vue re-render (which this content script
@@ -1710,6 +2275,15 @@
       return c.conceptId === conceptId && (c.descriptionId || '') === (descriptionId || '');
     });
     return applyCode(problemId, chosen);
+  }
+
+  // st.practiceRemap is already resolved to a single {description,
+  // conceptId, descriptionId} candidate (or null) by openPanel — no lookup
+  // needed here, unlike every apply* above which searches its own state
+  // array by id.
+  function applyPracticeRemap(problemId) {
+    var st = rowState(problemId);
+    return applyCode(problemId, st.practiceRemap);
   }
 
   // Routes a click on the grouped multi-synonym "Use" button (see
@@ -1820,6 +2394,55 @@
     }
   }
 
+  // Corrects the structured significance field to match what the GP2GP
+  // import text actually said (st.severityContradiction.stated) AND removes
+  // the now-resolved boilerplate lines from additionalInformation, in ONE
+  // save — see this file's header comment for why these two changes are
+  // bundled rather than offered separately (the boilerplate lines only
+  // become safe to discard once the value they were disagreeing with has
+  // actually been corrected). problemCode itself is resent completely
+  // unchanged, same discipline as applyRemoveGenericAdditionalInfo. Unlike
+  // buildEditProblemPayload's additionalInformation override, there's no
+  // dedicated significance-override param — the prefill is cloned with the
+  // corrected value instead, since that's a one-line change and adding a
+  // second override param for a single caller isn't worth the extra surface.
+  async function applyCorrectSeverityAndRemoveJunk(problemId) {
+    var st = rowState(problemId);
+    if (!st.severityContradiction || st.severityContradictionSaving || !st.prefill) return;
+    var codeValue = st.prefill.problemCode && st.prefill.problemCode.value;
+    if (!codeValue) return;
+    var code = {
+      description: codeValue.description,
+      conceptId: codeValue.conceptId,
+      descriptionId: codeValue.descriptionId,
+    };
+    var correctedSignificance = st.severityContradiction.stated;
+    var cleanedAdditionalInformation = st.severityContradiction.cleaned;
+    st.severityContradictionSaving = true;
+    renderPanel(problemId);
+    try {
+      var prefillForPayload = Object.assign({}, st.prefill, { significance: correctedSignificance });
+      var payload = buildEditProblemPayload(prefillForPayload, code, cleanedAdditionalInformation);
+      await postEditProblem(problemId, payload);
+      st.additionalInformation = cleanedAdditionalInformation;
+      st.prefill = Object.assign({}, st.prefill, {
+        additionalInformation: cleanedAdditionalInformation,
+        significance: correctedSignificance,
+      });
+      st.severityContradiction = null;
+      // The plain generic-strip offer was suppressed while the contradiction
+      // was live (see computeAdditionalInfoFindings) — cleared here too since
+      // this save already removed every matched generic line, same `cleaned`
+      // value either action would have produced.
+      st.genericAdditionalInfo = null;
+    } catch (err) {
+      st.error = (err && err.message) || 'Failed to correct the severity — please try again.';
+    } finally {
+      st.severityContradictionSaving = false;
+      renderPanel(problemId);
+    }
+  }
+
   // ── Injection: one "Fix description" button per flagged row ─────────────────
 
   function injectFixButton(problemId, anchorEl) {
@@ -1867,7 +2490,11 @@
   // de-dupes against a row already flagged by the text scan) with
   // st.retiredInfo and/or st.legacyReadCode pre-populated — see
   // retiredInfoHtml/legacyReadCodeHtml/openPanel above for how those render
-  // and reuse the cached prefill.
+  // and reuse the cached prefill. Generic-import-text and severity-
+  // defaulting-contradiction detection (a fourth/fifth signal, added
+  // 2026-07-25/2026-07-29) piggyback on the SAME edit-problem prefill
+  // already fetched for the checks above — zero extra per-problem fetches,
+  // see computeAdditionalInfoFindings.
 
   var _retiredScanState = 'idle'; // 'idle' | 'scanning' | 'done' | 'error'
   var _retiredScanError = null;
@@ -1928,9 +2555,10 @@
       );
       // Zero extra fetches — prefillsById[p.id].additionalInformation is
       // already in hand from the edit-problem fetch above, so this THIRD
-      // flagging reason costs only one local resource load (cached after
-      // the first call), same as it does inside openPanel.
-      var genericTexts = await ensureGenericAdditionalInfoTextLoaded();
+      // (and FOURTH — severity contradiction, same source data) flagging
+      // reason costs only one local resource load (cached after the first
+      // call), same as it does inside openPanel.
+      var genericInfoEntries = await ensureGenericAdditionalInfoTextLoaded();
 
       // Compute the Read-v2-origin signal for every problem up front (no
       // fetch — reads overview data already in hand) so we know which
@@ -1961,8 +2589,8 @@
       // heuristic — if that search finds no OTHER synonym for this exact
       // conceptId beyond what's already recorded, there is genuinely
       // nothing to offer, so the Read-v2 signal alone is suppressed
-      // (isRetired/hasGenericInfo below are independent reasons and are
-      // unaffected). One extra search per DISTINCT conceptId among
+      // (isRetired/hasGenericInfo/hasSeverityContradiction below are
+      // independent reasons and are unaffected). One extra search per DISTINCT conceptId among
       // Read-v2-flagged problems only — never per problem, never for a
       // conceptId with no Read-v2 signal at all — same "distinct concept,
       // not distinct problem" cost discipline as the retirement check above.
@@ -2010,9 +2638,17 @@
           var hasBetterWording = sameConceptAlternatives(sameConceptResults, conceptId, currentDescription).length > 0;
           if (!hasBetterWording) legacyReadCode = null;
         }
-        var genericInfo = stripGenericAdditionalInfoLines(prefill && prefill.additionalInformation, genericTexts);
-        var hasGenericInfo = genericInfo.removed.length > 0;
-        if (!isRetired && !legacyReadCode && !hasGenericInfo) return;
+        var findings = computeAdditionalInfoFindings(
+          prefill && prefill.additionalInformation,
+          prefill && prefill.significance,
+          genericInfoEntries
+        );
+        var hasGenericInfo = !!findings.genericAdditionalInfo;
+        var hasSeverityContradiction = !!findings.severityContradiction;
+        var hasSeverityReviewNote = !!findings.severityReviewNote;
+        if (!isRetired && !legacyReadCode && !hasGenericInfo && !hasSeverityContradiction && !hasSeverityReviewNote) {
+          return;
+        }
         flaggedCount++;
         var st = rowState(p.id);
         st.prefill = prefill;
@@ -2025,7 +2661,9 @@
           };
         }
         if (legacyReadCode) st.legacyReadCode = legacyReadCode;
-        if (hasGenericInfo) st.genericAdditionalInfo = genericInfo;
+        if (hasGenericInfo) st.genericAdditionalInfo = findings.genericAdditionalInfo;
+        if (hasSeverityContradiction) st.severityContradiction = findings.severityContradiction;
+        if (hasSeverityReviewNote) st.severityReviewNote = findings.severityReviewNote;
         var row = anchorsByProblemId[p.id];
         if (row) injectFixButton(p.id, row);
       });
@@ -2057,7 +2695,7 @@
           ? _retiredFlaggedCount +
             ' problem' +
             (_retiredFlaggedCount === 1 ? '' : 's') +
-            ' flagged (retired code, Read-code-derived description, and/or generic import text) — see "Clean up code" on the flagged problem(s) above.'
+            ' flagged (retired code, Read-code-derived description, generic import text, a GP2GP severity-defaulting contradiction, and/or an unmapped source-system priority value) — see "Clean up code" on the flagged problem(s) above.'
           : 'Nothing flagged.') +
         '</span>'
       );
@@ -2139,9 +2777,32 @@
     // See buildAnchorMap's comment: computed from the FULL problem list so a
     // duplicate-text problem not in 'outdated' still claims its own row.
     var anchorsByProblemId = buildAnchorMap(_problemsCache);
-    outdated.forEach(function (p) {
-      var row = anchorsByProblemId[p.id];
-      if (row) injectFixButton(p.id, row);
+    // Union with any problem already flagged by the opt-in retirement scan
+    // (runRetiredCodesScan sets these once, as a side effect of the scan
+    // completing, and never repeats the injection itself). Without this,
+    // a problem flagged ONLY by that scan (not the cheap text heuristic
+    // above) loses its "Clean up code" button for good the moment Vue
+    // wipes it on same-patient tab navigation, since nothing in this
+    // recurring loop otherwise knows it was ever flagged — the opt-in
+    // widget itself reappears fine (injectRetiredWidgetTrigger runs
+    // unconditionally below), but the per-row button did not. Found live
+    // 2026-07-28 via a timed peak/final DOM-count capture spanning a
+    // navigate-away-and-back: widget count recovered, button count did not.
+    var flaggedIds = outdated.map(function (p) {
+      return String(p.id);
+    });
+    Object.keys(_rows).forEach(function (id) {
+      if (flaggedIds.indexOf(id) !== -1) return;
+      var st = _rows[id];
+      var flaggedByRetiredScan =
+        st.retiredInfo ||
+        st.legacyReadCode ||
+        (st.genericAdditionalInfo && st.genericAdditionalInfo.removed.length > 0);
+      if (flaggedByRetiredScan) flaggedIds.push(id);
+    });
+    flaggedIds.forEach(function (id) {
+      var row = anchorsByProblemId[id];
+      if (row) injectFixButton(id, row);
     });
     if (_problemsCache.length) injectRetiredWidgetTrigger();
   }

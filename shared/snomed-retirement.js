@@ -54,12 +54,32 @@
 // POSSIBLY EQUIVALENT TO memberships — 237055002 "Polycystic ovary syndrome"
 // (the disease) and 781067001 "Polycystic ovary" (a structural/anatomical
 // finding). SNOMED's historical-association family also includes SAME AS,
-// MOVED TO, WAS A, and others, each with their own refset conceptId — none
-// of those have been seen in a live capture yet, so their IDs are NOT
-// hardcoded here rather than guessed (this codebase's standing rule: never
-// hardcode a SNOMED metadata ID without live confirmation — see
-// rules/non-problem-root-codes.json's own history for why). Extend either
-// list only after confirming a real example the same way these were.
+// MOVED TO, WAS A, and others, each with their own refset conceptId —
+// undiscovered ones are NOT hardcoded here rather than guessed (this
+// codebase's standing rule: never hardcode a SNOMED metadata ID without live
+// confirmation — see rules/non-problem-root-codes.json's own history for
+// why). Extend either list only after confirming a real example the same
+// way these were.
+//
+// "SAME AS" folded into REPLACEMENT_REFSET_IDS 2026-07-29 (confirmed live via
+// the public termbrowser API — real example: 176187002 "Flexible check
+// cystoscopy (procedure)", inactivation reason "Duplicate component"
+// (900000000000482003), a genuine ASSOCIATION membership on refset
+// "900000000000527005" ("SAME AS association reference set") pointing to
+// 301301002 "Flexible cystoscopy (procedure)" — the same real gap this
+// comment predicted above, motivated by a clinician's "Clean up code" widget
+// showing nothing for this problem at all: `176187002` looksOutdated()-fails
+// (no bracket/NOS/NEC/H-O marker), so it only ever reaches the retirement
+// check, which used to find isRetired:true but replacement:null since SAME
+// AS wasn't in REPLACEMENT_REFSET_IDS — landing on the "no automatic
+// replacement is recorded" copy despite SNOMED actually naming one. Treated
+// as equal-confidence to REPLACED BY, not folded into possiblyEquivalentTo/
+// partiallyEquivalentTo: "duplicate component" + "SAME AS" together assert
+// these are literally the same clinical concept filed twice, not a hedge
+// between several candidates or a meaning split across them — the single-
+// `replacement` field's existing "first confirmed successor wins" semantics
+// already fit this exactly, which is why REPLACEMENT_REFSET_IDS was kept as
+// an array from the start (see 398307005's own history).
 //
 // POSSIBLY EQUIVALENT TO is DELIBERATELY kept separate from REPLACED BY, not
 // folded into the same `replacement` field, for two reasons confirmed by the
@@ -89,7 +109,7 @@
 
 (function (global) {
   var INACTIVATION_REASON_REFSET_ID = '900000000000489007';
-  var REPLACEMENT_REFSET_IDS = ['900000000000526001']; // REPLACED BY only — see header comment
+  var REPLACEMENT_REFSET_IDS = ['900000000000526001', '900000000000527005']; // REPLACED BY, SAME AS — see header comment
   var POSSIBLY_EQUIVALENT_REFSET_IDS = ['900000000000523009']; // POSSIBLY EQUIVALENT TO only — see header comment
   var PARTIALLY_EQUIVALENT_REFSET_IDS = ['1186924009']; // PARTIALLY EQUIVALENT TO only — see header comment
 

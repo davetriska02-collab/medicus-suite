@@ -1027,6 +1027,7 @@
         <button class="nav-item" data-section="reception">Reception</button>
         <button class="nav-item" data-section="knowledge">Knowledge</button>
         <button class="nav-item" data-section="leaflets">Leaflets</button>
+        <button class="nav-item" data-section="pdc-prefs">Cleanup code preferences</button>
         <button class="nav-item" data-section="safety">Clinical Safety</button>
         <button class="nav-item" data-section="cqc">CQC Readiness</button>
         <button class="nav-item" data-section="ledger">Event Ledger</button>
@@ -2112,6 +2113,83 @@
           </div>
         </section>
 
+        <!-- Cleanup code preferences section -->
+        <section class="opt-section" id="sect-pdc-prefs">
+          <h1>Cleanup code preferences</h1>
+          <p class="section-desc">
+            Two things the "Clean up code" panel on Clinical Summary learns locally as clinicians use it &mdash;
+            <strong>local to this device</strong>, travelling between machines only via a manual export/import below
+            (or the full suite backup); there is no live sync. A manual override, once set, always wins over the
+            tally, but the tally keeps counting underneath it so you can check whether it's actually being used.
+          </p>
+
+          <h2 style="font-size: 13px; margin: 22px 0 6px">Preferred wording</h2>
+          <p class="field-help" style="margin: 0 0 12px">
+            Which WORDING this practice prefers for a given SNOMED code (a cosmetic relabel &mdash; same code
+            throughout, e.g. picking between two synonyms Medicus offers for one concept).
+          </p>
+
+          <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+            <input
+              type="text"
+              id="pdcPrefsFilter"
+              placeholder="Filter by description or SNOMED code&hellip;"
+              style="
+                flex: 1 1 260px;
+                max-width: 360px;
+                box-sizing: border-box;
+                background: var(--bg-mid);
+                border: 1px solid var(--border-hi);
+                color: var(--text-1);
+                font-size: 12px;
+                border-radius: var(--r-md);
+                padding: 7px 10px;
+              "
+            />
+            <button class="ghost" id="pdcPrefsShowAll" style="font-size: 11px; padding: 6px 12px; display: none">
+              Show all
+            </button>
+          </div>
+
+          <div id="pdcPrefsSummary" style="font-size: 11px; color: var(--text-4); margin-bottom: 10px"></div>
+
+          <div id="pdcPrefsList" style="font-size: 12px; color: var(--text-3)">Loading&hellip;</div>
+
+          <h2 style="font-size: 13px; margin: 28px 0 6px">Code remapping</h2>
+          <p class="field-help" style="margin: 0 0 12px">
+            Which OTHER SNOMED code this practice has actually replaced a given code with &mdash; a genuine recode
+            (e.g. an inactive/retired code manually replaced with an active one), not a wording tweak. Real precedent
+            from this practice's own history, not a guess &mdash; still only ever offered as a one-click suggestion in
+            the panel, never applied automatically.
+          </p>
+
+          <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+            <input
+              type="text"
+              id="pdcRemapFilter"
+              placeholder="Filter by description or SNOMED code&hellip;"
+              style="
+                flex: 1 1 260px;
+                max-width: 360px;
+                box-sizing: border-box;
+                background: var(--bg-mid);
+                border: 1px solid var(--border-hi);
+                color: var(--text-1);
+                font-size: 12px;
+                border-radius: var(--r-md);
+                padding: 7px 10px;
+              "
+            />
+            <button class="ghost" id="pdcRemapShowAll" style="font-size: 11px; padding: 6px 12px; display: none">
+              Show all
+            </button>
+          </div>
+
+          <div id="pdcRemapSummary" style="font-size: 11px; color: var(--text-4); margin-bottom: 10px"></div>
+
+          <div id="pdcRemapList" style="font-size: 12px; color: var(--text-3)">Loading&hellip;</div>
+        </section>
+
         <!-- Clinical Safety section -->
         <section class="opt-section" id="sect-safety">
           <h1>Clinical Safety</h1>
@@ -2879,6 +2957,24 @@
                 </div>
               </div>
               <div class="module-export-card">
+                <div class="mec-name">Cleanup Code Preferences</div>
+                <div class="mec-note" style="font-size: 10px; color: var(--text-muted, #94a3b8); margin-bottom: 4px">
+                  Import MERGES tally counts onto this machine's own rather than replacing them; a local manual
+                  override always wins over a conflicting one in the imported file.
+                </div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="problemDescriptionCleanup">Export</button>
+                  <button class="ghost" data-mod-import="problemDescriptionCleanup">Import</button>
+                  <input
+                    type="file"
+                    class="mod-file-input"
+                    data-mod="problemDescriptionCleanup"
+                    accept=".json"
+                    style="display: none"
+                  />
+                </div>
+              </div>
+              <div class="module-export-card">
                 <div class="mec-name">Patient Alerts</div>
                 <div class="mec-note" style="font-size: 10px; color: var(--text-muted, #94a3b8); margin-bottom: 4px">
                   Contains patient-identifiable data (names, NHS numbers, alert text) — handle the file accordingly.
@@ -2986,6 +3082,8 @@
     <script src="../shared/leaflets-utils.js"></script>
     <script src="../shared/io/leaflets-io.js"></script>
     <script src="../shared/io/patient-alerts-io.js"></script>
+    <script src="../shared/preferred-descriptions.js"></script>
+    <script src="../shared/io/problem-description-cleanup-io.js"></script>
     <script src="../shared/quiet-mode.js"></script>
     <script src="../shared/practice-code.js"></script>
     <script src="../shared/api-diag.js"></script>

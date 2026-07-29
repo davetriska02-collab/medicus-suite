@@ -699,6 +699,7 @@ async function doFullExport() {
     notifications,
     leaflets,
     patientAlerts,
+    problemDescriptionCleanup,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -716,28 +717,30 @@ async function doFullExport() {
     notificationsExport(),
     leafletsExport(),
     patientAlertsExport(),
+    problemDescriptionCleanupExport(),
   ]);
   const suite = await suiteExport();
   return window.SuiteEnvelope.wrap(
     'suite',
     {
-    sentinel,
-    capacity,
-    triage,
-    triageAlerts,
-    slots,
-    submissions,
-    popout,
-    referrals,
-    requestMonitor,
-    condor,
-    reception,
-    knowledge,
-    labfiling,
-    notifications,
-    leaflets,
-    patientAlerts,
-    suite,
+      sentinel,
+      capacity,
+      triage,
+      triageAlerts,
+      slots,
+      submissions,
+      popout,
+      referrals,
+      requestMonitor,
+      condor,
+      reception,
+      knowledge,
+      labfiling,
+      notifications,
+      leaflets,
+      patientAlerts,
+      problemDescriptionCleanup,
+      suite,
     },
     chrome.runtime.getManifest().version
   );
@@ -761,6 +764,7 @@ async function doModuleExport(scope) {
     notifications: () => notificationsExport(),
     leaflets: () => leafletsExport(),
     patientAlerts: () => patientAlertsExport(),
+    problemDescriptionCleanup: () => problemDescriptionCleanupExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -799,6 +803,7 @@ async function applyEnvelope(envelope) {
     mods.notifications && (() => notificationsImport(mods.notifications)),
     mods.leaflets && (() => leafletsImport(mods.leaflets)),
     mods.patientAlerts && (() => patientAlertsImport(mods.patientAlerts)),
+    mods.problemDescriptionCleanup && (() => problemDescriptionCleanupImport(mods.problemDescriptionCleanup)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
@@ -2055,6 +2060,260 @@ lfSaveBtn?.addEventListener('click', async () => {
     lfSavedTag.classList.add('show');
     setTimeout(() => lfSavedTag.classList.remove('show'), 2000);
   }
+});
+
+// ── Cleanup code preferences (pdc.preferredDescriptions + pdc.conceptRemap) ──
+// Reads/writes chrome.storage.local directly, same rationale as the Leaflets
+// section above — this is the settings-page load/save path, not the backup
+// boundary (shared/io/problem-description-cleanup-io.js is that boundary,
+// used only by the Export/Import buttons under Backup & Restore). Business
+// logic (resolving the effective default, tallying, override set/clear) all
+// lives in shared/preferred-descriptions.js (window.MSPreferredDescriptions,
+// loaded before this script) so it's identical to what the content script
+// uses — this panel never re-implements the resolution rule.
+//
+// ONE generic factory, instantiated twice below — the "Preferred wording"
+// and "Code remapping" blocks are structurally identical (tally + override,
+// same cap/sort/filter rules) and differ only in storage key, DOM ids, and
+// how a candidate renders/sorts/matches a filter. Building this once avoids
+// two near-duplicate 200-line blocks silently drifting apart over time.
+function initPdcTallySection(cfg) {
+  const listEl = document.getElementById(cfg.listElId);
+  const filterEl = document.getElementById(cfg.filterElId);
+  const summaryEl = document.getElementById(cfg.summaryElId);
+  const showAllBtn = document.getElementById(cfg.showAllBtnId);
+  const PD = window.MSPreferredDescriptions;
+  if (!listEl || !PD) return;
+
+  // Rendering every tracked key unconditionally doesn't scale — a practice's
+  // tally can grow to hundreds/thousands of entries over time. Default view
+  // is a small capped "most recently used" list (cheap regardless of total
+  // size); the filter box and the explicit "Show all" toggle are the two
+  // ways to see more, both sorted ALPHABETICALLY rather than by recency —
+  // once you're searching or auditing everything, alphabetical is what's
+  // scannable, "recent" only makes sense for the default at-a-glance view.
+  const RECENT_CAP = 20;
+  const FILTER_CAP = 100;
+
+  let _all = {}; // topKey -> entry
+  let _filter = '';
+  let _showAll = false;
+
+  function sortKey(topKey) {
+    const resolved = PD.resolvePreferred(_all[topKey]);
+    if (resolved) return cfg.sortText(resolved.candidate).toLowerCase();
+    const norm = PD.normaliseEntry(_all[topKey]);
+    const firstKey = Object.keys(norm.tally)[0];
+    return firstKey ? cfg.sortText(norm.tally[firstKey].candidate).toLowerCase() : '';
+  }
+
+  async function load() {
+    const r = await chrome.storage.local.get(cfg.storageKey);
+    _all = r[cfg.storageKey] && typeof r[cfg.storageKey] === 'object' ? r[cfg.storageKey] : {};
+    render();
+  }
+
+  async function persist() {
+    await chrome.storage.local.set({ [cfg.storageKey]: _all });
+  }
+
+  function mostRecentTimestamp(entry) {
+    const norm = PD.normaliseEntry(entry);
+    let latest = '';
+    Object.keys(norm.tally).forEach((k) => {
+      const t = norm.tally[k].lastUsed || '';
+      if (t > latest) latest = t;
+    });
+    return latest;
+  }
+
+  function matchesFilter(topKey, entry) {
+    if (!_filter) return true;
+    const needle = _filter.toLowerCase();
+    if (topKey.toLowerCase().includes(needle)) return true;
+    const norm = PD.normaliseEntry(entry);
+    if (norm.override && cfg.filterText(norm.override.candidate).toLowerCase().includes(needle)) return true;
+    return Object.keys(norm.tally).some((k) => cfg.filterText(norm.tally[k].candidate).toLowerCase().includes(needle));
+  }
+
+  function formatWhen(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? escHtml(iso) : d.toLocaleDateString();
+  }
+
+  function renderBlock(topKey) {
+    const norm = PD.normaliseEntry(_all[topKey]);
+    const resolved = PD.resolvePreferred(_all[topKey]);
+    // Rows come from the tally, plus a synthetic row for an override whose
+    // key was never actually tallied on this device (e.g. arrived via an
+    // imported backup) — kept visible/clearable rather than hidden.
+    const rows = Object.keys(norm.tally).map((key) => ({
+      key,
+      candidate: norm.tally[key].candidate,
+      count: norm.tally[key].count,
+      lastUsed: norm.tally[key].lastUsed,
+    }));
+    if (norm.override && !norm.tally[norm.override.key]) {
+      rows.push({ key: norm.override.key, candidate: norm.override.candidate, count: 0, lastUsed: null });
+    }
+    rows.sort((a, b) => b.count - a.count);
+
+    const rowsHtml = rows
+      .map((row) => {
+        const isOverride = norm.override && norm.override.key === row.key;
+        const isEffective = resolved && resolved.key === row.key;
+        const badge = isEffective
+          ? `<span style="color: var(--green, #16a34a); font-size: 10px; font-weight: 600">★ ${isOverride ? 'PRACTICE DEFAULT (MANUAL)' : 'PRACTICE DEFAULT (MOST USED)'}</span>`
+          : '';
+        const actionHtml = isOverride
+          ? `<button class="ghost" style="font-size: 10px; padding: 3px 8px" data-pdc-clear="${escHtml(topKey)}">Clear override</button>`
+          : `<button class="ghost" style="font-size: 10px; padding: 3px 8px" data-pdc-setoverride="${escHtml(topKey)}" data-pdc-row-key="${escHtml(row.key)}">Set as practice default</button>`;
+        return `
+          <tr style="border-bottom: 1px solid var(--border)">
+            <td style="padding: 6px 8px 6px 0; color: var(--text-2)">${cfg.renderCandidate(row.candidate)}${badge ? '<br>' + badge : ''}</td>
+            <td style="padding: 6px 8px; text-align: right; color: var(--text-3); font-family: var(--mono)">${row.count}</td>
+            <td style="padding: 6px 8px; color: var(--text-4); font-size: 11px">${formatWhen(row.lastUsed)}</td>
+            <td style="padding: 6px 0 6px 8px; text-align: right">${actionHtml}</td>
+          </tr>`;
+      })
+      .join('');
+
+    return `
+      <div style="border: 1px solid var(--border); border-radius: var(--r-md); margin-bottom: 12px; overflow: hidden">
+        <div style="padding: 8px 12px; background: var(--bg-mid); font-family: var(--mono); font-size: 11px; color: var(--text-3)">
+          ${cfg.blockLabel(topKey)}
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px">
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function render() {
+    const allKeys = Object.keys(_all);
+    const total = allKeys.length;
+
+    if (!total) {
+      if (summaryEl) summaryEl.textContent = '';
+      if (showAllBtn) showAllBtn.style.display = 'none';
+      listEl.innerHTML = cfg.emptyMessage;
+      return;
+    }
+
+    const overrideCount = allKeys.filter((k) => PD.normaliseEntry(_all[k]).override).length;
+    if (summaryEl) {
+      summaryEl.textContent = `${total} ${cfg.unitLabel(total)} tracked, ${overrideCount} with a manual override.`;
+    }
+    if (showAllBtn) {
+      showAllBtn.style.display = _filter ? 'none' : '';
+      showAllBtn.textContent = _showAll ? 'Show recent only' : `Show all ${total}`;
+    }
+
+    let keys;
+    let capNote = '';
+    if (_filter) {
+      const matched = allKeys
+        .filter((k) => matchesFilter(k, _all[k]))
+        .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+      if (!matched.length) {
+        listEl.innerHTML = 'No matches for that filter.';
+        return;
+      }
+      keys = matched.slice(0, FILTER_CAP);
+      if (matched.length > FILTER_CAP) {
+        capNote = `Showing first ${FILTER_CAP} of ${matched.length} matches — narrow your search to see the rest.`;
+      }
+    } else if (_showAll) {
+      keys = allKeys.slice().sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+    } else {
+      keys = allKeys
+        .slice()
+        .sort((a, b) => mostRecentTimestamp(_all[b]).localeCompare(mostRecentTimestamp(_all[a])))
+        .slice(0, RECENT_CAP);
+      if (total > RECENT_CAP) {
+        capNote = `Showing ${RECENT_CAP} most recently used of ${total} total — search or "Show all" to see the rest.`;
+      }
+    }
+
+    const capNoteHtml = capNote
+      ? `<div style="margin-bottom: 10px; color: var(--text-4); font-size: 11px">${escHtml(capNote)}</div>`
+      : '';
+    listEl.innerHTML = capNoteHtml + keys.map(renderBlock).join('');
+  }
+
+  listEl.addEventListener('click', async (e) => {
+    const clearBtn = e.target.closest('[data-pdc-clear]');
+    if (clearBtn) {
+      const topKey = clearBtn.getAttribute('data-pdc-clear');
+      _all[topKey] = PD.clearOverride(_all[topKey]);
+      await persist();
+      render();
+      return;
+    }
+    const setBtn = e.target.closest('[data-pdc-setoverride]');
+    if (setBtn) {
+      const topKey = setBtn.getAttribute('data-pdc-setoverride');
+      const rowKey = setBtn.getAttribute('data-pdc-row-key');
+      const norm = PD.normaliseEntry(_all[topKey]);
+      const row = norm.tally[rowKey];
+      if (!row) return;
+      _all[topKey] = PD.setOverride(_all[topKey], rowKey, row.candidate);
+      await persist();
+      render();
+    }
+  });
+
+  filterEl?.addEventListener('input', () => {
+    _filter = filterEl.value.trim();
+    render();
+  });
+
+  showAllBtn?.addEventListener('click', () => {
+    _showAll = !_showAll;
+    render();
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', load);
+  } else {
+    load();
+  }
+  document
+    .querySelectorAll(`.nav-item[data-section="${cfg.navSection}"]`)
+    .forEach((btn) => btn.addEventListener('click', load));
+}
+
+initPdcTallySection({
+  storageKey: 'pdc.preferredDescriptions',
+  listElId: 'pdcPrefsList',
+  filterElId: 'pdcPrefsFilter',
+  summaryElId: 'pdcPrefsSummary',
+  showAllBtnId: 'pdcPrefsShowAll',
+  navSection: 'pdc-prefs',
+  emptyMessage: `No description choices recorded yet — they'll appear here once someone uses "Clean up code" on Clinical Summary.`,
+  unitLabel: (n) => (n === 1 ? 'concept' : 'concepts'),
+  blockLabel: (conceptId) => `SNOMED ${escHtml(conceptId)}`,
+  sortText: (candidate) => (candidate && candidate.description) || '',
+  filterText: (candidate) => (candidate && candidate.description) || '',
+  renderCandidate: (candidate) => escHtml((candidate && candidate.description) || ''),
+});
+
+initPdcTallySection({
+  storageKey: 'pdc.conceptRemap',
+  listElId: 'pdcRemapList',
+  filterElId: 'pdcRemapFilter',
+  summaryElId: 'pdcRemapSummary',
+  showAllBtnId: 'pdcRemapShowAll',
+  navSection: 'pdc-prefs',
+  emptyMessage: `No code remaps recorded yet — they'll appear here once someone manually replaces a code from "Clean up code" on Clinical Summary.`,
+  unitLabel: (n) => (n === 1 ? 'code' : 'codes'),
+  blockLabel: (sourceConceptId) => `SNOMED ${escHtml(sourceConceptId)} replaced with:`,
+  sortText: (candidate) => (candidate && candidate.description) || '',
+  filterText: (candidate) =>
+    `${(candidate && candidate.description) || ''} ${(candidate && candidate.conceptId) || ''}`,
+  renderCandidate: (candidate) =>
+    `${escHtml((candidate && candidate.description) || '')} <span style="color: var(--text-4); font-family: var(--mono); font-size: 10px">(${escHtml((candidate && candidate.conceptId) || '')})</span>`,
 });
 
 // ── Triage capacity alerts ────────────────────────────────────────────────────
@@ -3409,7 +3668,13 @@ lfSaveBtn?.addEventListener('click', async () => {
     const d = new Date(ts);
     return isNaN(d.getTime())
       ? String(ts || '')
-      : d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      : d.toLocaleString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
   }
 
   function renderTable() {
@@ -3430,8 +3695,7 @@ lfSaveBtn?.addEventListener('click', async () => {
       .slice(0, RENDER_CAP)
       .map((e) => {
         const sevCls = e.severity === 'red' ? 'ledger-sev-red' : e.severity === 'amber' ? 'ledger-sev-amber' : '';
-        const detail =
-          escHtml(e.ruleId || '') + (e.ruleId && e.label ? ' · ' : '') + escHtml(e.label || '');
+        const detail = escHtml(e.ruleId || '') + (e.ruleId && e.label ? ' · ' : '') + escHtml(e.label || '');
         return `<tr>
           <td>${escHtml(fmtTs(e.ts))}</td>
           <td>${escHtml(e.source || '')}</td>
@@ -3521,7 +3785,13 @@ lfSaveBtn?.addEventListener('click', async () => {
   function fmtTs(iso) {
     const d = new Date(iso);
     if (!iso || isNaN(d.getTime())) return '—';
-    return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 
   function statusInfo(row, contract) {

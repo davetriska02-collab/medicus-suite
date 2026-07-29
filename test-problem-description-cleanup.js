@@ -33,12 +33,22 @@ const {
   significantWords,
   parseConceptRetirement,
   buildConceptUrl,
+  recordPreference,
+  resolvePreference,
   confirmedReplacementAlternative,
   confirmedReplacementAlternatives,
   groupCandidatesByConcept,
   normalizedSearchResults,
   findLegacyReadCodeOrigin,
+  descendantSearchTargetConceptId,
   stripGenericAdditionalInfoLines,
+  literalTextsFromEntries,
+  patternEntriesFromEntries,
+  findPatternMatch,
+  removeMatchedSpan,
+  severityCorrectionNeeded,
+  computeAdditionalInfoFindings,
+  codeQualityConcernExists,
 } = require('./content-scripts/problem-description-cleanup.js');
 const genericAdditionalInfoText = require('./rules/generic-additional-info-text.json');
 
@@ -1057,6 +1067,22 @@ console.log('--- re-exported shared/snomed-retirement.js functions work through 
   );
 }
 
+console.log('--- re-exported shared/preferred-descriptions.js functions work through this file too ---');
+{
+  const entry = recordPreference(
+    null,
+    'd1',
+    { description: 'Fracture of radius', descriptionId: 'd1' },
+    '2026-07-28T10:00:00Z'
+  );
+  check(entry.tally.d1.count === 1, 'recordPreference is re-exported and callable');
+  const resolved = resolvePreference(entry);
+  check(
+    resolved && resolved.key === 'd1',
+    'resolvePreference is re-exported and callable (full coverage in test-preferred-descriptions.js)'
+  );
+}
+
 console.log('--- normalizedSearchResults: unfiltered manual-search results, deduped ---');
 {
   const results = [
@@ -1119,6 +1145,36 @@ console.log('--- findLegacyReadCodeOrigin: structural Read-code-origin detection
   );
 }
 
+console.log(
+  '--- descendantSearchTargetConceptId: retired-concept pivot to the confirmed replacement (2026-07-29, 179304004 investigation) ---'
+);
+{
+  check(
+    descendantSearchTargetConceptId({ replacement: { conceptId: '307815000' } }, '179304004') === '307815000',
+    'a confirmed replacement is preferred over the problem\'s own (retired) conceptId'
+  );
+  check(
+    descendantSearchTargetConceptId(null, '179304004') === '179304004',
+    'no retiredInfo at all (active concept, or never scanned) -> falls back to the problem\'s own conceptId'
+  );
+  check(
+    descendantSearchTargetConceptId({ replacement: null }, '179304004') === '179304004',
+    'retired with NO confirmed replacement -> falls back to the problem\'s own conceptId, same as before this fix'
+  );
+  check(
+    descendantSearchTargetConceptId({}, '179304004') === '179304004',
+    'retiredInfo present but no `replacement` key at all -> falls back, never throws'
+  );
+  check(
+    descendantSearchTargetConceptId({ replacement: { conceptId: '307815000' } }, null) === '307815000',
+    'a confirmed replacement is used even if currentConceptId is somehow missing'
+  );
+  check(
+    descendantSearchTargetConceptId(null, null) === null,
+    'nothing at all to fall back to -> null, never throws'
+  );
+}
+
 console.log('--- rules/generic-additional-info-text.json: the imported list itself ---');
 {
   check(Array.isArray(genericAdditionalInfoText.entries), 'entries is an array');
@@ -1126,6 +1182,10 @@ console.log('--- rules/generic-additional-info-text.json: the imported list itse
   check(
     genericAdditionalInfoText.entries.some((e) => e.text === 'Active Problem, Significant'),
     '"Active Problem, Significant" is present (added 2026-07-25)'
+  );
+  check(
+    genericAdditionalInfoText.entries.some((e) => e.text === 'Active Problem, Not Significant (Minor)'),
+    '"Active Problem, Not Significant (Minor)" is present (added 2026-07-29)'
   );
   check(
     genericAdditionalInfoText.entries.some((e) => e.text === 'Unspecified Significance: Defaulted to Minor'),
@@ -1139,7 +1199,7 @@ console.log('--- rules/generic-additional-info-text.json: the imported list itse
 
 console.log('--- stripGenericAdditionalInfoLines: real 2026-07-26 example (Read-v2 "Infantile eczema" problem) ---');
 {
-  const genericTexts = genericAdditionalInfoText.entries.map((e) => e.text);
+  const genericTexts = literalTextsFromEntries(genericAdditionalInfoText.entries);
   const result = stripGenericAdditionalInfoLines(
     'Unspecified Significance: Defaulted to Minor\nProblem severity: Minor',
     genericTexts
@@ -1155,7 +1215,7 @@ console.log('--- stripGenericAdditionalInfoLines: real 2026-07-26 example (Read-
 
 console.log('--- stripGenericAdditionalInfoLines: real 2026-07-25 example ("ear\\nActive Problem, Significant") ---');
 {
-  const genericTexts = genericAdditionalInfoText.entries.map((e) => e.text);
+  const genericTexts = literalTextsFromEntries(genericAdditionalInfoText.entries);
   const result = stripGenericAdditionalInfoLines('ear\nActive Problem, Significant', genericTexts);
   check(result.cleaned === 'ear', 'the genuine free-text line survives, the generic line is stripped');
   check(
@@ -1192,6 +1252,392 @@ console.log('--- stripGenericAdditionalInfoLines: real 2026-07-25 example ("ear\
       .removed.length === 2,
     'multiple matching lines are all reported, not just the first'
   );
+}
+
+console.log(
+  '--- rules/generic-additional-info-text.json: "Problem severity: Major" and the consolidated pattern entry (2026-07-29) ---'
+);
+{
+  check(
+    genericAdditionalInfoText.entries.some((e) => e.kind !== 'pattern' && e.text === 'Problem severity: Major'),
+    '"Problem severity: Major" is present as a literal entry (added 2026-07-29)'
+  );
+  const patternEntry = genericAdditionalInfoText.entries.find((e) => e.kind === 'pattern');
+  check(!!patternEntry, 'a kind:"pattern" entry is present — ALL junk-detection text lives in this one file now');
+  check(
+    !!(patternEntry && patternEntry.action && patternEntry.action.type === 'severityCorrection'),
+    'the pattern entry carries an action flag identifying it as more than plain noise'
+  );
+  check(
+    typeof (patternEntry && patternEntry.pattern) === 'string',
+    'the pattern entry stores its regex source as data, not hardcoded'
+  );
+}
+
+console.log('--- literalTextsFromEntries / patternEntriesFromEntries: splitting the unified entries list ---');
+{
+  const literals = literalTextsFromEntries(genericAdditionalInfoText.entries);
+  const patterns = patternEntriesFromEntries(genericAdditionalInfoText.entries);
+  check(
+    literals.includes('Active Problem, Significant') && literals.includes('Problem severity: Major'),
+    'literalTextsFromEntries returns every literal-kind text, unaffected by the pattern entry mixed in'
+  );
+  check(
+    !literals.some((t) => t === undefined),
+    'the pattern entry (no `.text` field) never leaks an undefined into the literal list'
+  );
+  check(
+    patterns.length === 2 &&
+      patterns.some((p) => p.id === 'severityDefaultingContradiction') &&
+      patterns.some((p) => p.id === 'sourceSystemPriorityValue'),
+    'both configured pattern entries are returned (got ' + patterns.map((p) => p.id).join(', ') + ')'
+  );
+  check(literalTextsFromEntries(null).length === 0, 'null entries -> empty literal list, never throws');
+  check(patternEntriesFromEntries(null).length === 0, 'null entries -> empty pattern list, never throws');
+}
+
+console.log(
+  '--- findPatternMatch: real 2026-07-29 example (HAR capture, "Chronic kidney disease stage 3") — BOTH confirmed layouts ---'
+);
+{
+  const patternEntry = patternEntriesFromEntries(genericAdditionalInfoText.entries)[0];
+  const newlineJoined = findPatternMatch(
+    'Unspecified Significance: Defaulted to Minor\nProblem severity: Major',
+    patternEntry
+  );
+  check(
+    newlineJoined && newlineJoined.groups[0] === 'Minor' && newlineJoined.groups[1] === 'Major',
+    'newline-joined layout matches, both values captured (got ' + JSON.stringify(newlineJoined) + ')'
+  );
+  const spaceJoined = findPatternMatch(
+    'Unspecified Significance: Defaulted to Minor Problem severity: Minor',
+    patternEntry
+  );
+  check(
+    spaceJoined && spaceJoined.groups[0] === 'Minor' && spaceJoined.groups[1] === 'Minor',
+    'space-joined, single-line layout ALSO matches (2026-07-29 variant, no newline at all) — got ' +
+      JSON.stringify(spaceJoined)
+  );
+  const noPrefix = findPatternMatch('Defaulted to Minor\nProblem severity: Minor', patternEntry);
+  check(
+    noPrefix &&
+      noPrefix.groups[0] === 'Minor' &&
+      noPrefix.groups[1] === 'Minor' &&
+      noPrefix.raw === 'Defaulted to Minor\nProblem severity: Minor',
+    'the leading "Unspecified Significance: " prefix is OPTIONAL (2026-07-29, real patient, previously not flagging) — got ' +
+      JSON.stringify(noPrefix)
+  );
+  const prefixedRaw = findPatternMatch(
+    'Unspecified Significance: Defaulted to Minor\nProblem severity: Major',
+    patternEntry
+  );
+  check(
+    prefixedRaw.raw === 'Unspecified Significance: Defaulted to Minor\nProblem severity: Major',
+    'when the prefix IS present, the matched span still includes it (greedy optional group) — no dangling prefix left in `cleaned`'
+  );
+  check(
+    findPatternMatch('Problem severity: Major', patternEntry) === null,
+    'the severity fragment ALONE (no defaulting fragment) never fires — only the confirmed combination'
+  );
+  check(
+    findPatternMatch('Unspecified Significance: Defaulted to Minor', patternEntry) === null,
+    'the defaulting fragment ALONE (no severity fragment) never fires either'
+  );
+  check(findPatternMatch(null, patternEntry) === null, 'null text -> null, never throws');
+  check(findPatternMatch('anything', null) === null, 'null entry -> null, never throws');
+  check(
+    findPatternMatch('Unspecified Significance: Defaulted to Minor\nProblem severity: Major', {
+      pattern: '(',
+    }) === null,
+    'a malformed regex source -> null, never throws'
+  );
+}
+
+console.log('--- removeMatchedSpan ---');
+{
+  check(
+    removeMatchedSpan('Unspecified Significance: Defaulted to Minor\nProblem severity: Major', 'x') ===
+      'Unspecified Significance: Defaulted to Minor\nProblem severity: Major',
+    'a substring not present in the text is left completely untouched'
+  );
+  check(
+    removeMatchedSpan(
+      'ear\nUnspecified Significance: Defaulted to Minor\nProblem severity: Major\nfollow up needed',
+      'Unspecified Significance: Defaulted to Minor\nProblem severity: Major'
+    ) === 'ear\nfollow up needed',
+    'genuine free-text lines before AND after the matched span both survive, no stray blank line left behind'
+  );
+  check(
+    removeMatchedSpan(
+      'Unspecified Significance: Defaulted to Minor Problem severity: Minor',
+      'Unspecified Significance: Defaulted to Minor Problem severity: Minor'
+    ) === '',
+    'removing a span that is the ENTIRE field -> empty, not left dangling'
+  );
+  check(removeMatchedSpan(null, 'x') === '', 'null text -> empty string, never throws');
+  check(removeMatchedSpan('ear', null) === 'ear', 'null/empty raw -> text returned unchanged');
+}
+
+console.log('--- severityCorrectionNeeded ---');
+{
+  check(severityCorrectionNeeded('major', 'minor') === 'major', 'stated severity differs from current -> returns the corrected value');
+  check(severityCorrectionNeeded('minor', 'minor') === null, 'stated severity matches current -> null, nothing to correct');
+  check(
+    severityCorrectionNeeded('major', 'Minor') === 'major',
+    "comparison is case-insensitive (edit-problem's own casing vs slideover/overview's capitalised casing)"
+  );
+  check(severityCorrectionNeeded(null, 'minor') === null, 'null stated severity -> null, never throws');
+}
+
+console.log(
+  '--- computeAdditionalInfoFindings: mismatch (newline-joined, real 2026-07-29 example) supersedes the plain strip ---'
+);
+{
+  const findings = computeAdditionalInfoFindings(
+    'Unspecified Significance: Defaulted to Minor\nProblem severity: Major',
+    'minor',
+    genericAdditionalInfoText.entries
+  );
+  check(
+    findings.severityContradiction &&
+      findings.severityContradiction.stated === 'major' &&
+      findings.severityContradiction.current === 'minor' &&
+      findings.severityContradiction.cleaned === '',
+    'mismatch found, both boilerplate fragments already removed from `cleaned` (got ' + JSON.stringify(findings) + ')'
+  );
+  check(
+    findings.genericAdditionalInfo === null,
+    'the plain generic-strip offer is suppressed when a mismatch supersedes it'
+  );
+}
+
+console.log(
+  '--- computeAdditionalInfoFindings: no mismatch, SPACE-JOINED single-line variant (2026-07-29) still gets stripped ---'
+);
+{
+  const findings = computeAdditionalInfoFindings(
+    'Unspecified Significance: Defaulted to Minor Problem severity: Minor',
+    'minor',
+    genericAdditionalInfoText.entries
+  );
+  check(findings.severityContradiction === null, 'no mismatch -> no severity contradiction offered');
+  check(
+    findings.genericAdditionalInfo && findings.genericAdditionalInfo.cleaned === '',
+    'the space-joined layout is still recognised and stripped as boilerplate, not left untouched just because it is one line (got ' +
+      JSON.stringify(findings) +
+      ')'
+  );
+}
+
+console.log(
+  '--- computeAdditionalInfoFindings: NO PREFIX variant (2026-07-29, real patient — previously not flagging at all) ---'
+);
+{
+  const findings = computeAdditionalInfoFindings('Defaulted to Minor\nProblem severity: Minor', 'minor', genericAdditionalInfoText.entries);
+  check(findings.severityContradiction === null, 'values agree -> no severity contradiction, same as the prefixed sibling');
+  check(
+    findings.genericAdditionalInfo && findings.genericAdditionalInfo.cleaned === '',
+    'the no-prefix layout is now recognised and fully stripped, where it previously wasn\'t flagged at all (got ' +
+      JSON.stringify(findings) +
+      ')'
+  );
+}
+{
+  const findings = computeAdditionalInfoFindings('Defaulted to Minor\nProblem severity: Major', 'minor', genericAdditionalInfoText.entries);
+  check(
+    findings.severityContradiction &&
+      findings.severityContradiction.stated === 'major' &&
+      findings.severityContradiction.source === 'severityDefaultingContradiction' &&
+      findings.severityContradiction.cleaned === '',
+    'the no-prefix layout ALSO drives the severity-correction action on a genuine mismatch, same as the prefixed sibling (got ' +
+      JSON.stringify(findings.severityContradiction) +
+      ')'
+  );
+}
+{
+  const findings = computeAdditionalInfoFindings('Defaulted to Minor', 'minor', genericAdditionalInfoText.entries);
+  check(
+    findings.severityContradiction === null &&
+      findings.genericAdditionalInfo &&
+      findings.genericAdditionalInfo.cleaned === '',
+    'a solo, unpaired "Defaulted to Minor" line (no "Problem severity:" sibling) is still caught by its own standalone literal entry'
+  );
+}
+
+console.log(
+  '--- computeAdditionalInfoFindings: real 2026-07-29 example — TWO boilerplate layers plus genuine clinical text mixed onto one line ---'
+);
+{
+  // Real motivating example: a record apparently passed through more than
+  // one GP EPR/GP2GP transfer, layering the severity-defaulting boilerplate
+  // AND a separate "Active Problem, Not Significant (Minor)" line onto the
+  // same field — with genuine clinical free text ("grade 1 with small
+  // erosion at GOJ") sharing a line with the "Problem severity: Minor"
+  // boilerplate prefix.
+  const findings = computeAdditionalInfoFindings(
+    'Defaulted to Minor\nProblem severity: Minor grade 1 with small erosion at GOJ\nActive Problem, Not Significant (Minor)',
+    'minor',
+    genericAdditionalInfoText.entries
+  );
+  check(
+    findings.severityContradiction === null,
+    'both severity values agree (Minor/Minor) -> no contradiction, same as any other agreeing pair'
+  );
+  check(
+    findings.genericAdditionalInfo && findings.genericAdditionalInfo.cleaned === 'grade 1 with small erosion at GOJ',
+    'BOTH boilerplate lines are stripped, and the genuine clinical text sharing a line with one of them survives intact (got ' +
+      JSON.stringify(findings.genericAdditionalInfo) +
+      ')'
+  );
+  check(
+    findings.genericAdditionalInfo.removed.some((r) => r.indexOf('Defaulted to Minor') !== -1) &&
+      findings.genericAdditionalInfo.removed.includes('Active Problem, Not Significant (Minor)'),
+    'both distinct boilerplate fragments are individually reported as removed (got ' +
+      JSON.stringify(findings.genericAdditionalInfo.removed) +
+      ')'
+  );
+}
+
+console.log(
+  '--- findPatternMatch: sourceSystemPriorityValue ("PRIORITY=n" with no confirmed severity mapping, 2026-07-29) ---'
+);
+{
+  const patternEntry = patternEntriesFromEntries(genericAdditionalInfoText.entries).find(
+    (p) => p.id === 'sourceSystemPriorityValue'
+  );
+  const single = findPatternMatch('PRIORITY=7', patternEntry);
+  check(single && single.groups[0] === '7', 'a single-digit priority value is captured (got ' + JSON.stringify(single) + ')');
+  const spaced = findPatternMatch('PRIORITY = 3', patternEntry);
+  check(spaced && spaced.groups[0] === '3', 'whitespace around "=" is tolerated');
+  const multiDigit = findPatternMatch('PRIORITY=12', patternEntry);
+  check(
+    multiDigit && multiDigit.groups[0] === '12',
+    'a multi-digit value is captured too — the pattern is not restricted to the single 1-9 digit observed so far'
+  );
+  check(findPatternMatch('no priority here', patternEntry) === null, 'text with no PRIORITY=n at all -> null');
+}
+
+console.log(
+  '--- computeAdditionalInfoFindings: "PRIORITY=1" IS a confirmed mapping (practice-confirmed convention, 2026-07-29) — auto-suggests Major ---'
+);
+{
+  const findings = computeAdditionalInfoFindings('PRIORITY=1', 'minor', genericAdditionalInfoText.entries);
+  check(
+    findings.severityContradiction &&
+      findings.severityContradiction.stated === 'major' &&
+      findings.severityContradiction.current === 'minor' &&
+      findings.severityContradiction.source === 'sourceSystemPriorityValue' &&
+      findings.severityContradiction.cleaned === '',
+    'PRIORITY=1 with stored significance "minor" -> a correction to Major is offered, tagged with its source (got ' +
+      JSON.stringify(findings.severityContradiction) +
+      ')'
+  );
+  check(
+    findings.genericAdditionalInfo === null,
+    'the plain generic-strip offer is suppressed when the mapped correction supersedes it, same as severityDefaultingContradiction'
+  );
+  check(
+    findings.severityReviewNote === null,
+    'no separate review note when the value IS mapped — the correction action covers it entirely'
+  );
+}
+{
+  const findings = computeAdditionalInfoFindings('PRIORITY=1', 'major', genericAdditionalInfoText.entries);
+  check(
+    findings.severityContradiction === null,
+    'PRIORITY=1 already agreeing with stored significance "major" -> no correction needed, nothing to contradict'
+  );
+  check(
+    findings.genericAdditionalInfo && findings.genericAdditionalInfo.cleaned === '',
+    'falls through to the ordinary plain strip when the mapped value already matches — same as any other agreeing boilerplate'
+  );
+}
+
+console.log(
+  '--- computeAdditionalInfoFindings: source-system PRIORITY=n coexists with the plain strip, never a guessed correction (any OTHER, unmapped value) ---'
+);
+{
+  const findings = computeAdditionalInfoFindings('PRIORITY=7', 'minor', genericAdditionalInfoText.entries);
+  check(
+    findings.severityContradiction === null,
+    'NO automatic correction is ever attempted for an unmapped priority value, unlike severityDefaultingContradiction'
+  );
+  check(
+    findings.severityReviewNote &&
+      findings.severityReviewNote.priorityValue === '7' &&
+      findings.severityReviewNote.current === 'minor',
+    'an informational review note is offered instead, carrying the captured value and the current significance (got ' +
+      JSON.stringify(findings.severityReviewNote) +
+      ')'
+  );
+  check(
+    findings.genericAdditionalInfo && findings.genericAdditionalInfo.cleaned === '',
+    'the raw "PRIORITY=n" text is STILL offered for removal via the ordinary plain-strip path, coexisting with the review note (got ' +
+      JSON.stringify(findings.genericAdditionalInfo) +
+      ')'
+  );
+}
+{
+  const findings = computeAdditionalInfoFindings('ear\nPRIORITY=4', 'major', genericAdditionalInfoText.entries);
+  check(
+    findings.severityReviewNote && findings.severityReviewNote.priorityValue === '4',
+    'the review note fires even when genuine free text shares the field'
+  );
+  check(
+    findings.genericAdditionalInfo && findings.genericAdditionalInfo.cleaned === 'ear',
+    'the genuine free-text line survives, only the PRIORITY=n fragment is offered for removal'
+  );
+}
+{
+  const findings = computeAdditionalInfoFindings('ear', 'minor', genericAdditionalInfoText.entries);
+  check(
+    findings.severityReviewNote === null,
+    'no PRIORITY=n text at all -> no review note, same "nothing flagged" result as before this entry existed'
+  );
+}
+
+console.log('--- computeAdditionalInfoFindings: genuine free text, other edge cases ---');
+{
+  const findings = computeAdditionalInfoFindings('ear', 'minor', genericAdditionalInfoText.entries);
+  check(
+    findings.severityContradiction === null && findings.genericAdditionalInfo === null,
+    'genuine free text with no boilerplate and no contradiction -> nothing flagged'
+  );
+}
+{
+  // A solo/unpaired fragment (no matching sibling) is still caught by the
+  // literal entries even though the pattern entry requires both fragments.
+  const findings = computeAdditionalInfoFindings('Problem severity: Major', 'major', genericAdditionalInfoText.entries);
+  check(
+    findings.severityContradiction === null &&
+      findings.genericAdditionalInfo &&
+      findings.genericAdditionalInfo.cleaned === '',
+    'a solo "Problem severity: Major" line with no paired defaulting line -> plain literal strip, no correction attempted'
+  );
+}
+
+console.log(
+  '--- codeQualityConcernExists: distinguishes "code itself needs review" from "flagged only for text housekeeping" (2026-07-29) ---'
+);
+{
+  check(
+    codeQualityConcernExists({ currentDescription: 'Oesophagitis', retiredInfo: null, legacyReadCode: null }) === false,
+    'a plain, current, non-retired description with no legacy-code signal -> no code-quality concern (the real motivating case: a problem flagged only for junk import text)'
+  );
+  check(
+    codeQualityConcernExists({ currentDescription: '[X]Depression NOS', retiredInfo: null, legacyReadCode: null }) === true,
+    'a looksOutdated()-flagged description ("[X]...NOS") -> genuine code-quality concern, even with no retirement/legacy-code signal'
+  );
+  check(
+    codeQualityConcernExists({ currentDescription: 'Oesophagitis', retiredInfo: { inactivationReason: null }, legacyReadCode: null }) === true,
+    'retiredInfo present -> genuine code-quality concern, regardless of description text'
+  );
+  check(
+    codeQualityConcernExists({ currentDescription: 'Oesophagitis', retiredInfo: null, legacyReadCode: { code: 'X', description: 'Y' } }) === true,
+    'legacyReadCode present -> genuine code-quality concern, regardless of description text'
+  );
+  check(codeQualityConcernExists({}) === false, 'an empty state object -> no concern, never throws');
+  check(codeQualityConcernExists(null) === false, 'null -> no concern, never throws');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

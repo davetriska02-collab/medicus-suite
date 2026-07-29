@@ -99,6 +99,48 @@ const RETIRED_WITH_REPLACEMENT = {
   ],
 };
 
+// Real capture, 2026-07-29, 176187002 "Flexible check cystoscopy
+// (procedure)" — retired ("Duplicate component"), with a SAME AS association
+// (NOT REPLACED BY) to 301301002 "Flexible cystoscopy" — the first live
+// confirmation of the SAME AS refset ID (900000000000527005), previously
+// undiscovered per this file's own header comment. Motivating real case:
+// this problem got NO "Clean up code" suggestion at all before this fix,
+// since looksOutdated() doesn't flag it (no bracket/NOS/NEC/H-O marker) and
+// the retirement check found isRetired:true but replacement:null.
+const RETIRED_SAME_AS = {
+  conceptId: '176187002',
+  active: false,
+  fsn: 'Flexible check cystoscopy (procedure)',
+  memberships: [
+    {
+      type: 'SIMPLEMAP',
+      refset: { conceptId: '900000000000497000', defaultTerm: 'CTV3 to SNOMED CT simple map reference set' },
+      otherValue: '7B2A8',
+    },
+    {
+      type: 'ASSOCIATION',
+      refset: { conceptId: '900000000000527005', defaultTerm: 'SAME AS association reference set' },
+      cidValue: { conceptId: '301301002', defaultTerm: 'Flexible cystoscopy (procedure)' },
+    },
+    {
+      type: 'ASSOCIATION',
+      refset: {
+        conceptId: '1322291000000109',
+        defaultTerm: 'National Health Service Care Record Element association reference set',
+      },
+      cidValue: { conceptId: '163071000000106', defaultTerm: 'Treatments - care record element' },
+    },
+    {
+      type: 'ATTRIBUTE_VALUE',
+      refset: {
+        conceptId: '900000000000489007',
+        defaultTerm: 'Concept inactivation indicator attribute value reference set',
+      },
+      cidValue: { conceptId: '900000000000482003', defaultTerm: 'Duplicate component' },
+    },
+  ],
+};
+
 const ACTIVE_CONCEPT = {
   conceptId: '38341003',
   active: true,
@@ -257,6 +299,30 @@ console.log('--- parseConceptRetirement: retired WITH replacement (398307005, LS
     result.partiallyEquivalentTo.length === 0,
     'a REPLACED BY-only concept has an empty partiallyEquivalentTo array'
   );
+}
+
+console.log(
+  '--- parseConceptRetirement: retired WITH a SAME AS (not REPLACED BY) replacement (176187002, Flexible check cystoscopy) ---'
+);
+{
+  const result = parseConceptRetirement(RETIRED_SAME_AS);
+  check(result.active === false, 'active:false concept -> active false');
+  check(
+    !!result.inactivationReason && result.inactivationReason.conceptId === '900000000000482003',
+    'inactivation reason ("Duplicate component") resolved (got ' + JSON.stringify(result.inactivationReason) + ')'
+  );
+  check(
+    !!result.replacement && result.replacement.conceptId === '301301002',
+    'SAME AS membership resolves into the SAME `replacement` field as REPLACED BY (got ' +
+      JSON.stringify(result.replacement) +
+      ')'
+  );
+  check(
+    result.replacement.description === 'Flexible cystoscopy (procedure)',
+    'replacement description resolved from cidValue.defaultTerm'
+  );
+  check(result.possiblyEquivalentTo.length === 0, 'a SAME AS-only concept has an empty possiblyEquivalentTo array');
+  check(result.partiallyEquivalentTo.length === 0, 'a SAME AS-only concept has an empty partiallyEquivalentTo array');
 }
 
 console.log(
@@ -452,6 +518,10 @@ console.log('--- exported constants match the confirmed-live refset IDs ---');
   check(
     Array.isArray(REPLACEMENT_REFSET_IDS) && REPLACEMENT_REFSET_IDS.indexOf('900000000000526001') !== -1,
     'REPLACED BY refset ID is in the (deliberately short) replacement refset list'
+  );
+  check(
+    REPLACEMENT_REFSET_IDS.indexOf('900000000000527005') !== -1,
+    'SAME AS refset ID is ALSO in the replacement refset list (added 2026-07-29, 176187002)'
   );
   check(
     Array.isArray(POSSIBLY_EQUIVALENT_REFSET_IDS) &&

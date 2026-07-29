@@ -274,6 +274,53 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true; // async sendResponse
 });
 
+// ── Public SNOMED CT termbrowser API relay (2026-07-29) ──────────────────────
+// A plain `fetch()` from content-scripts/problem-description-cleanup.js (the
+// "Clean up code" widget's retirement/REPLACED BY/SAME AS check, injected
+// into the Medicus page) to termbrowser.nhs.uk was found live — reported by
+// the user, real browser console capture — to be blocked by the browser's own
+// CORS check, with the request's origin reported as the MEDICUS PAGE's origin
+// (https://england.medicus.health), NOT the extension's, despite
+// termbrowser.nhs.uk being correctly declared in manifest.json's
+// host_permissions. Content-script-issued fetches to a cross-origin host do
+// not reliably get the extension's host_permissions CORS bypass in practice —
+// a service-worker-issued fetch doesn't have that page/extension origin
+// ambiguity at all, so this relays the exact same request through here
+// instead. Restricted to the termbrowser.nhs.uk host specifically (checked
+// against the PARSED URL's hostname, not a substring/prefix match) — this
+// must never become a general-purpose cross-origin fetch relay for arbitrary
+// URLs, even though only intra-extension senders can reach it at all (see the
+// sender.id guard below, same discipline as every other handler in this file).
+const TERMBROWSER_HOST = 'termbrowser.nhs.uk';
+
+async function fetchTermbrowserConcept(url) {
+  let parsed;
+  try {
+    parsed = new URL(String(url || ''));
+  } catch (e) {
+    return { ok: false, error: 'Invalid URL' };
+  }
+  if (parsed.protocol !== 'https:' || parsed.hostname !== TERMBROWSER_HOST) {
+    return { ok: false, error: 'URL not permitted' };
+  }
+  try {
+    const resp = await fetch(parsed.toString(), { headers: { Accept: 'application/json, text/plain, */*' } });
+    const text = await resp.text();
+    return { ok: true, httpOk: resp.ok, status: resp.status, text };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return; // F5: intra-extension only
+  if (!msg || msg.action !== 'termbrowser:fetchConcept') return;
+  fetchTermbrowserConcept(msg.url)
+    .then(sendResponse)
+    .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+  return true; // async sendResponse
+});
+
 // ── Message router ────────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

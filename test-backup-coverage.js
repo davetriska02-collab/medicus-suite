@@ -107,6 +107,7 @@ const KEY_PREFIXES = [
   'patientAlerts',
   'followups',
   'practice',
+  'pdc',
 ];
 
 function hasKeyPrefix(k) {

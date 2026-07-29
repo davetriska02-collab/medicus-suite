@@ -102,6 +102,7 @@ const VALID_SCOPES = [
   'notifications',
   'leaflets',
   'patientAlerts',
+  'problemDescriptionCleanup',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -444,6 +445,21 @@ function previewEnvelope(envelope) {
     }
   } else {
     const m = missing('Patient Alerts');
+    if (m) lines.push(m);
+  }
+
+  if (mods.problemDescriptionCleanup) {
+    const prefs = mods.problemDescriptionCleanup.preferredDescriptions || {};
+    const conceptIds = Object.keys(prefs);
+    const overrideCount = conceptIds.filter((id) => prefs[id] && prefs[id].override).length;
+    const remap = mods.problemDescriptionCleanup.conceptRemap || {};
+    const remapIds = Object.keys(remap);
+    const remapOverrideCount = remapIds.filter((id) => remap[id] && remap[id].override).length;
+    lines.push(
+      `Clean up code preferences: ${conceptIds.length} preferred-wording concept(s) (${overrideCount} with a manual override), ${remapIds.length} code-remap concept(s) (${remapOverrideCount} with a manual override). Importing MERGES tally counts onto this install's own (never replaces them); a local override always wins over a conflicting one from the backup.`
+    );
+  } else {
+    const m = missing('Cleanup Code Preferences');
     if (m) lines.push(m);
   }
 
