@@ -17,8 +17,35 @@
   const VALID_ESCALATE = ['999', 'duty'];
   const ID_RE = /^[a-z0-9][a-z0-9-]{0,49}$/i;
 
+  // ── Disposition routing (plan section E) — CLOSED vocabularies ───────────────
+  // Every list below is a closed enum. Anything outside it makes the whole
+  // pathway INVALID (never "silently ignored"): a routing block that half-parses
+  // is how an editable data file quietly sends a patient somewhere a clinician
+  // never agreed to.
+  const DISPOSITION_DOMAINS = Object.freeze([
+    'minor_infection', 'msk', 'gu_male', 'gyn_female', 'mental_health', 'other',
+  ]);
+  const DISPOSITION_DESTINATIONS = Object.freeze(['pharmacy_first', 'anp', 'paramedic', 'gp_routine']);
+  const DISPOSITION_DEFAULTS = Object.freeze(['gp_routine', 'duty']);
+  // `when` vocabulary — deliberately TINY and closed. Adding a key here is a
+  // clinical-safety change: it widens what editable data can express about
+  // routing. Unknown keys invalidate the pathway.
+  const DISPOSITION_WHEN_KEYS = Object.freeze(['pharmacyFirstEligible', 'ageUnder', 'ageAtLeast']);
+  const DISPOSITION_BLOCK_KEYS = Object.freeze(['domain', 'allowed', 'rules', 'default']);
+
+  // ── Frozen clinician-only sets — SINGLE SOURCE OF TRUTH ─────────────────────
+  // These are constants in code, not data, and they are keyed on the BUNDLED
+  // pathway id / domain and applied AFTER override resolution. A practice fork
+  // of `mental-health` that relabels itself `domain: "other"` therefore cannot
+  // reach a non-clinician destination: the id is still `mental-health`.
+  // reception-core.js's evaluateDisposition imports these (kept in lock-step by
+  // test-reception-disposition.js, which compares the two exports).
+  const CLINICIAN_ONLY_IDS = Object.freeze(['mental-health', 'gu-male', 'gyn-female', 'general']);
+  const CLINICIAN_ONLY_DOMAINS = Object.freeze(['mental_health', 'gu_male', 'gyn_female']);
+
   function isStr(v) { return typeof v === 'string'; }
   function nonEmpty(v) { return isStr(v) && v.trim().length > 0; }
+  function isInt(v) { return typeof v === 'number' && Number.isInteger(v); }
 
   // ---------------------------------------------------------------------------
   // validatePathway(p) → string[]   (empty array = valid)
@@ -35,6 +62,12 @@
     if (p.sources != null && (!Array.isArray(p.sources) || p.sources.some(s => !isStr(s)))) {
       errs.push('sources: must be a list of text entries.');
     }
+    // sensitive (optional, v1.6) — a pathway whose free text is too sensitive to
+    // persist. Capture drafts are NEVER auto-saved for it and taker initials are
+    // mandatory. Boolean only: an unrecognised value must not read as "true".
+    if (p.sensitive != null && typeof p.sensitive !== 'boolean') {
+      errs.push('sensitive: must be true or false.');
+    }
 
     if (!Array.isArray(p.redFlags) || p.redFlags.length < 1) {
       errs.push('redFlags: at least one red-flag question is required.');
@@ -48,6 +81,12 @@
         else seen.add(rf.id);
         if (!nonEmpty(rf.ask) || rf.ask.trim().length < 10) errs.push(`${tag}.ask: required, at least 10 characters.`);
         if (VALID_ESCALATE.indexOf(rf.escalate) === -1) errs.push(`${tag}.escalate: must be "999" or "duty".`);
+        // safeguarding (optional, v1.6) — marks a safeguarding concern: escalate
+        // immediately to the duty clinician AND the practice safeguarding lead,
+        // bypassing all routing. Boolean only, for the same reason as `sensitive`.
+        if (rf.safeguarding != null && typeof rf.safeguarding !== 'boolean') {
+          errs.push(`${tag}.safeguarding: must be true or false.`);
+        }
       });
     }
 
@@ -80,7 +119,165 @@
         if (pf.ageMax != null && typeof pf.ageMax !== 'number') errs.push('pharmacyFirst.ageMax: must be a number.');
       }
     }
+
+    if (p.disposition != null) validateDisposition(p.disposition, errs);
     return errs;
+  }
+
+  // ---------------------------------------------------------------------------
+  // validateDisposition(d, errs) — pushes errors for a malformed disposition
+  // block. A malformed block makes the PATHWAY invalid; it is never partially
+  // honoured. Closed vocabularies throughout, unknown keys rejected.
+  // ---------------------------------------------------------------------------
+  function validateDisposition(d, errs) {
+    if (typeof d !== 'object' || Array.isArray(d)) { errs.push('disposition: must be an object.'); return; }
+    for (const k of Object.keys(d)) {
+      if (DISPOSITION_BLOCK_KEYS.indexOf(k) === -1) errs.push(`disposition: unknown field "${k}".`);
+    }
+    if (DISPOSITION_DOMAINS.indexOf(d.domain) === -1) {
+      errs.push(`disposition.domain: must be one of ${DISPOSITION_DOMAINS.join('/')}.`);
+    }
+    let allowed = [];
+    if (!Array.isArray(d.allowed) || d.allowed.length < 1) {
+      errs.push('disposition.allowed: at least one destination is required.');
+    } else {
+      const seen = new Set();
+      for (const a of d.allowed) {
+        if (DISPOSITION_DESTINATIONS.indexOf(a) === -1) {
+          errs.push(`disposition.allowed: "${a}" is not a known destination (${DISPOSITION_DESTINATIONS.join('/')}).`);
+        } else if (seen.has(a)) errs.push(`disposition.allowed: duplicate "${a}".`);
+        else { seen.add(a); allowed.push(a); }
+      }
+    }
+    if (d.rules != null) {
+      if (!Array.isArray(d.rules)) errs.push('disposition.rules: must be a list.');
+      else {
+        d.rules.forEach((r, i) => {
+          const tag = `disposition.rules[${i}]`;
+          if (!r || typeof r !== 'object' || Array.isArray(r)) { errs.push(`${tag}: must be an object.`); return; }
+          for (const k of Object.keys(r)) {
+            if (k !== 'when' && k !== 'suggest') errs.push(`${tag}: unknown field "${k}".`);
+          }
+          // suggest ∈ allowed ∪ [gp_routine] — a rule can always fall back to a
+          // GP appointment, but it can never name a destination the pathway's
+          // own `allowed` list does not carry.
+          if (allowed.indexOf(r.suggest) === -1 && r.suggest !== 'gp_routine') {
+            errs.push(`${tag}.suggest: must be one of the pathway's allowed destinations, or "gp_routine".`);
+          }
+          const w = r.when;
+          if (!w || typeof w !== 'object' || Array.isArray(w)) { errs.push(`${tag}.when: must be an object.`); return; }
+          const keys = Object.keys(w);
+          if (keys.length < 1) errs.push(`${tag}.when: at least one condition is required.`);
+          for (const k of keys) {
+            if (DISPOSITION_WHEN_KEYS.indexOf(k) === -1) {
+              errs.push(`${tag}.when: unknown condition "${k}" (allowed: ${DISPOSITION_WHEN_KEYS.join('/')}).`);
+              continue;
+            }
+            if (k === 'pharmacyFirstEligible') {
+              if (typeof w[k] !== 'boolean') errs.push(`${tag}.when.${k}: must be true or false.`);
+            } else if (!isInt(w[k]) || w[k] < 0 || w[k] > 120) {
+              errs.push(`${tag}.when.${k}: must be a whole number of years, 0-120.`);
+            }
+          }
+        });
+      }
+    }
+    if (DISPOSITION_DEFAULTS.indexOf(d.default) === -1) {
+      errs.push(`disposition.default: must be one of ${DISPOSITION_DEFAULTS.join('/')}.`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // sanitiseDisposition(d) → clean block (assumes validation has passed; still
+  // whitelist-copies, so an unvalidated block cannot smuggle extra fields).
+  // ---------------------------------------------------------------------------
+  function sanitiseDisposition(d) {
+    const out = {
+      domain: d.domain,
+      allowed: (Array.isArray(d.allowed) ? d.allowed : []).filter(a => DISPOSITION_DESTINATIONS.indexOf(a) !== -1),
+      default: DISPOSITION_DEFAULTS.indexOf(d.default) !== -1 ? d.default : 'gp_routine',
+    };
+    out.rules = (Array.isArray(d.rules) ? d.rules : []).map(r => {
+      const when = {};
+      for (const k of DISPOSITION_WHEN_KEYS) {
+        if (r && r.when && Object.prototype.hasOwnProperty.call(r.when, k)) when[k] = r.when[k];
+      }
+      return { when, suggest: r.suggest };
+    });
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------
+  // overrideDowngradesDisposition(bundled, override) → boolean
+  //
+  // The corrected guardrail design (plan E, guardrail 2). `domain` lives in the
+  // pathway object and reception.pathwayOverrides accepts any valid whole-object
+  // fork — so without this check a fork of `mental-health` declaring
+  // `domain: "other", allowed: ["pharmacy_first"]` would be a structurally valid
+  // pathway. It still could not route anywhere (evaluateDisposition keys the
+  // frozen sets on the BUNDLED id), but the edit would be accepted silently.
+  // This rejects it at resolve time instead, where the bundled id is known, and
+  // the caller flags it as overrideInvalid so the practice sees it.
+  //
+  // Clinician-only bundled pathway = frozen id, or sensitive:true, or a bundled
+  // domain in CLINICIAN_ONLY_DOMAINS. A downgrade = an override that gives such
+  // a pathway a non-clinician-only domain, or any destination/suggestion other
+  // than gp_routine. An override with NO disposition block is not a downgrade.
+  // ---------------------------------------------------------------------------
+  function overrideDowngradesDisposition(bundled, override) {
+    if (!bundled || !override || typeof override !== 'object') return false;
+    const clinicianOnly =
+      CLINICIAN_ONLY_IDS.indexOf(bundled.id) !== -1 ||
+      bundled.sensitive === true ||
+      !!(bundled.disposition && CLINICIAN_ONLY_DOMAINS.indexOf(bundled.disposition.domain) !== -1);
+    if (!clinicianOnly) return false;
+    const d = override.disposition;
+    if (!d || typeof d !== 'object' || Array.isArray(d)) return false;
+    if (CLINICIAN_ONLY_DOMAINS.indexOf(d.domain) === -1) return true;
+    if (Array.isArray(d.allowed) && d.allowed.some(a => a !== 'gp_routine')) return true;
+    if (Array.isArray(d.rules) && d.rules.some(r => r && r.suggest !== 'gp_routine')) return true;
+    return false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Routing attestation (plan E, guardrail 6) — reception.routingAttestation.
+  //
+  //   { attestedBy: string, role: 'cso'|'partner',
+  //     attestedAt: ISO datetime string, scope: 'custom-routing' }
+  //
+  // Custom / practice-edited pathways are clinician-only for routing purposes
+  // until this record exists. The attester is the CSO or a partner (Dave,
+  // 2026-07-28) — no other role unlocks it.
+  //
+  // KEEP IN SYNC with isValidRoutingAttestation() in
+  // side-panel/modules/reception/reception-core.js (ES module — cannot be
+  // required from this classic script). test-reception-disposition.js compares
+  // the two implementations across a shared fixture table.
+  // ---------------------------------------------------------------------------
+  const ROUTING_ATTESTATION_ROLES = Object.freeze(['cso', 'partner']);
+  const ROUTING_ATTESTATION_SCOPE = 'custom-routing';
+  const _ATTEST_ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+
+  function isValidRoutingAttestation(a) {
+    if (!a || typeof a !== 'object' || Array.isArray(a)) return false;
+    if (!nonEmpty(a.attestedBy)) return false;
+    if (ROUTING_ATTESTATION_ROLES.indexOf(a.role) === -1) return false;
+    if (!isStr(a.attestedAt) || !_ATTEST_ISO_RE.test(a.attestedAt)) return false;
+    if (a.scope !== ROUTING_ATTESTATION_SCOPE) return false;
+    return true;
+  }
+
+  // sanitiseRoutingAttestation(a) → clean record, or null when invalid. Used by
+  // the options page and by the backup importer (invalid → dropped, never
+  // half-stored: a partial attestation must not read as a sign-off).
+  function sanitiseRoutingAttestation(a) {
+    if (!isValidRoutingAttestation(a)) return null;
+    return {
+      attestedBy: String(a.attestedBy).trim().slice(0, 120),
+      role: a.role,
+      attestedAt: a.attestedAt,
+      scope: ROUTING_ATTESTATION_SCOPE,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -95,7 +292,13 @@
       title: t(p.title),
       appliesTo: nonEmpty(p.appliesTo) ? t(p.appliesTo) : undefined,
       sources: Array.isArray(p.sources) ? p.sources.filter(nonEmpty).map(t) : undefined,
-      redFlags: (p.redFlags || []).map(rf => ({ id: t(rf.id), ask: t(rf.ask), escalate: rf.escalate })),
+      redFlags: (p.redFlags || []).map(rf => {
+        const crf = { id: t(rf.id), ask: t(rf.ask), escalate: rf.escalate };
+        // Only the literal boolean true survives — "true", 1, {} etc. are dropped,
+        // so a crafted import cannot smuggle a truthy safeguarding marker through.
+        if (rf.safeguarding === true) crf.safeguarding = true;
+        return crf;
+      }),
       questions: (p.questions || []).map(q => {
         const cq = { id: t(q.id), ask: t(q.ask), type: q.type };
         if (q.type === 'choice' || q.type === 'multi') cq.options = (q.options || []).filter(nonEmpty).map(t);
@@ -110,6 +313,14 @@
         ageMax: typeof p.pharmacyFirst.ageMax === 'number' ? p.pharmacyFirst.ageMax : undefined,
       };
     }
+    // Disposition routing block (optional). Whitelist-copied through
+    // sanitiseDisposition so an unknown destination, condition key or extra
+    // field cannot survive an import or an editor save.
+    if (p.disposition && typeof p.disposition === 'object' && !Array.isArray(p.disposition)) {
+      out.disposition = sanitiseDisposition(p.disposition);
+    }
+    // Same strict-true rule as redFlags[].safeguarding above.
+    if (p.sensitive === true) out.sensitive = true;
     if (out.appliesTo === undefined) delete out.appliesTo;
     if (out.sources === undefined) delete out.sources;
     return out;
@@ -157,8 +368,13 @@
       let pathway = b, origin = 'bundled', overrideInvalid = false;
       if (ov) {
         const errs = validatePathway(ov);
-        if (errs.length === 0 && ov.id === b.id) { pathway = ov; origin = 'edited'; }
-        else { overrideInvalid = true; } // ignore the bad edit; bundled original stays active
+        // A structurally valid edit is still rejected when it would DOWNGRADE a
+        // clinician-only bundled pathway's routing (plan E guardrail 2). The
+        // bundled id is only known here, which is why the check lives at resolve
+        // time rather than inside validatePathway.
+        if (errs.length === 0 && ov.id === b.id && !overrideDowngradesDisposition(b, ov)) {
+          pathway = ov; origin = 'edited';
+        } else { overrideInvalid = true; } // ignore the bad edit; bundled original stays active
       }
       all.push({ pathway, origin, enabled: enabledMap[b.id] === true, invalid: false, overrideInvalid });
     }
@@ -216,6 +432,15 @@ Top-level fields:
   appliesTo   (string, optional)
               Audience note, e.g. "Adults". Omit if not needed.
 
+  sensitive   (boolean, optional — set to true, or omit entirely)
+              Marks the pathway as carrying especially sensitive free text (e.g. mental
+              health / emotional distress). When true:
+                - capture drafts are NEVER auto-saved to local storage (nothing the
+                  caller says is left sitting on a shared front-desk machine), and
+                - the receptionist's initials become MANDATORY before a summary can be
+                  generated.
+              Use it sparingly and only where the content genuinely warrants it.
+
   sources     (array of strings, optional)
               List the NICE CKS topic, NICE guideline number, or other guidance you based
               each part of the pathway on. Always include at least one source so the practice
@@ -232,6 +457,15 @@ Top-level fields:
                            "999" = immediate life-threatening emergency (call 999 / emergency
                                    ambulance; do not put in a queue)
                            "duty" = same-day clinician review required (alert the duty GP now)
+                           There is NO conditional level. Never write a flag whose answer means
+                           "999 in one case, duty in another" — split it into two separate flags
+                           with unambiguous lay wording, one per level.
+                safeguarding (boolean, optional — set to true, or omit entirely)
+                           Marks this flag as a SAFEGUARDING concern (a child or vulnerable
+                           adult at risk of harm, neglect, or abuse). A positive answer must be
+                           escalated immediately to the duty clinician AND the practice
+                           safeguarding lead, and bypasses all other routing. Set "escalate"
+                           as well — safeguarding is in addition to, not instead of, a level.
 
   questions   (array, required — minimum 1 item)
               History questions asked after all red flags are clear. Each item:
@@ -253,6 +487,59 @@ Top-level fields:
                          "Pharmacy First covers impetigo from age 1 — confirm suitability."
                 ageMin  (number, optional) — minimum patient age in years for Pharmacy First
                 ageMax  (number, optional) — maximum patient age in years for Pharmacy First
+
+  disposition (object, optional)
+              An if-this-then-that block that lets the tool SUGGEST where the patient could
+              safely be seen once every red flag has been answered "no". It suggests; a human
+              decides; the receptionist always also offers a clinician callback. Omit the
+              block entirely for anything that should always go to a clinician.
+                domain  (string, required) — one of:
+                         "minor_infection", "msk", "gu_male", "gyn_female",
+                         "mental_health", "other"
+                allowed (array, required) — the destinations this pathway may ever suggest.
+                         Each entry one of: "pharmacy_first", "anp", "paramedic", "gp_routine"
+                rules   (array, optional) — evaluated IN ORDER, first match wins. Each item:
+                           when    (object) — one or more conditions, ALL of which must hold.
+                                    The condition vocabulary is CLOSED — only these three keys
+                                    exist, anything else makes the pathway invalid:
+                                      pharmacyFirstEligible (boolean) — the patient's confirmed
+                                        age falls inside this pathway's own pharmacyFirst
+                                        ageMin/ageMax band (false/unknown if there is no
+                                        pharmacyFirst block or no confirmed age)
+                                      ageUnder   (whole number 0-120) — confirmed age < this
+                                      ageAtLeast (whole number 0-120) — confirmed age >= this
+                           suggest (string) — one of this pathway's "allowed" destinations,
+                                    or "gp_routine"
+                default (string, required) — "gp_routine" or "duty". Used when no rule matches.
+
+              GUARDRAILS ENFORCED IN CODE — you cannot override these from JSON, and
+              writing a block that tries to is a wasted instruction:
+                1. RED-FLAG GATE. Any red flag answered "yes", and any red flag not yet
+                   answered, suppresses the suggestion entirely. A suggestion only ever
+                   appears on a completed, all-negative red-flag screen.
+                2. CLINICIAN-ONLY DOMAINS. The domains "mental_health", "gu_male" and
+                   "gyn_female" NEVER produce a non-clinician destination, whatever
+                   "allowed" or "rules" say. Nor do the bundled pathways mental-health,
+                   gu-male, gyn-female and general — those are frozen in engine code by id,
+                   so relabelling a copy of one with a different domain changes nothing.
+                   A pathway marked "sensitive": true produces no suggestion at all.
+                3. SAFEGUARDING. A positive safeguarding red flag routes to the duty
+                   clinician and the practice safeguarding lead and bypasses all of this.
+                4. AGE FLOOR. Confirmed age under 1 is always clinician-only. Under 5 never
+                   reaches "anp" or "paramedic". Pharmacy First suggestions re-check the
+                   pathway's own pharmacyFirst age band.
+                5. CONFIRMED AGE ONLY. The age used is one the receptionist explicitly
+                   confirmed on the call — never an age read from an open record. With no
+                   confirmed age the suggestion fails closed to a GP appointment.
+                6. CUSTOM PACKS ARE CLINICIAN-ONLY BY DEFAULT. A pathway you author will
+                   suggest nothing but a clinician until the practice's CSO or a partner
+                   records a routing sign-off in the suite's options page.
+                7. Every suggestion the receptionist sees, and every suggestion written into
+                   the pasted summary, carries: "Or a clinician callback if the patient
+                   prefers — always offer it."
+
+              Be conservative. A disposition block is clinical content and the practice's CSO
+              must review it before it is used, exactly like the red flags.
 
 === CLINICAL SAFETY INSTRUCTIONS ===
 
@@ -408,6 +695,11 @@ be reviewed clinically and then toggled on explicitly in the Reception settings.
   const api = {
     validatePathway, sanitisePathway, resolveEffectivePathways, pathwaySchemaPrompt,
     orderTiles, tileColourFor, sanitiseTilePrefs, TILE_COLOUR_KEYS,
+    // Disposition routing (plan E)
+    sanitiseDisposition, overrideDowngradesDisposition,
+    isValidRoutingAttestation, sanitiseRoutingAttestation,
+    DISPOSITION_DOMAINS, DISPOSITION_DESTINATIONS, DISPOSITION_DEFAULTS, DISPOSITION_WHEN_KEYS,
+    CLINICIAN_ONLY_IDS, CLINICIAN_ONLY_DOMAINS, ROUTING_ATTESTATION_ROLES, ROUTING_ATTESTATION_SCOPE,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

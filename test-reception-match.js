@@ -384,6 +384,43 @@ console.log('\n--- buildAskBackText: shape ---');
   assert(typeof text === 'string', 'buildAskBackText with a null pathway still returns a string, no throw');
 }
 
+// ── Hyphen normalisation (CSO review 2026-07-28) ──────────────────────────────
+// The terms lists carry SPACED forms ('self harm', 'post coital bleeding',
+// 'shoulder tip pain'). Before this review, normalise() stripped apostrophes but
+// not hyphens, and `\b` anchoring meant the STANDARD written spellings
+// ("self-harm", "post-coital", "shoulder-tip") matched nothing at all — the
+// silent failure class this engine's header warns about, live on the three new
+// pathways. Fixed in normalise(); pinned here so it cannot regress.
+console.log('\n--- hyphen normalisation ---');
+{
+  const hyphenated = [
+    ['patient rang about self-harm last night', 'mental-health'],
+    ['she reports post-coital bleeding', 'gyn-female'],
+    ['worsening low-mood for weeks', 'mental-health'],
+  ];
+  for (const [text, wantId] of hyphenated) {
+    const ids = matchPathways(text, PATHWAYS).map((p) => p.id);
+    assert(ids.includes(wantId), `hyphenated wording "${text}" still offers ${wantId}`);
+  }
+  // The spaced spelling must keep working too — this is an addition, not a swap.
+  assert(
+    matchPathways('patient rang about self harm last night', PATHWAYS)
+      .map((p) => p.id)
+      .includes('mental-health'),
+    'the spaced spelling "self harm" still offers mental-health'
+  );
+  // And a hyphenated red-flag topic is recognised as ALREADY covered rather than
+  // being re-asked as a gap.
+  {
+    const gyn = byId('gyn-female');
+    const { gaps } = redFlagGaps(gyn, 'Possible pregnancy, describes shoulder-tip pain.');
+    assert(
+      !gaps.some((g) => g.id === 'rf-ectopic-shoulder'),
+      'a hyphenated topic word ("shoulder-tip") marks its red flag as covered, not as an un-asked gap'
+    );
+  }
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

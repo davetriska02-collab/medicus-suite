@@ -42,9 +42,15 @@ performing the actual intended edit end-to-end.
   "patientId": "{patientId}",
   "recordDate": "2019-06-27",
   "recordedAtAnotherOrganisation": true,
-  "recordedByOrganisation": { "organisationName": "…", "organisationIdentifierType": null, "organisationIdentifierValue": null },
+  "recordedByOrganisation": {
+    "organisationName": "…",
+    "organisationIdentifierType": null,
+    "organisationIdentifierValue": null
+  },
   "recordedByPractitioner": "…",
-  "staff": [ /* {value, label} for recordedByStaff, only relevant when recordedAtAnotherOrganisation=false */ ]
+  "staff": [
+    /* {value, label} for recordedByStaff, only relevant when recordedAtAnotherOrganisation=false */
+  ]
 }
 ```
 
@@ -53,7 +59,7 @@ performing the actual intended edit end-to-end.
   description link at all, only a free-text `description` string plus the
   `conceptId`. TWO other problems on this same real patient showed the exact
   same pattern (`"[X]Depression NOS"` conceptId `35489007`, `"Fracture of
-  radius NOS"` conceptId `12676007`, both `descriptionId: null`) — consistent,
+radius NOS"` conceptId `12676007`, both `descriptionId: null`) — consistent,
   not a one-off.
 - `existingProblems` is a full list of the patient's OTHER current problems in
   the identical `{description, descriptionId, conceptId}` shape — a
@@ -61,6 +67,7 @@ performing the actual intended edit end-to-end.
   representation across the record, not something special to this one field.
 
 ### 2. Search for alternate descriptions of the SAME concept —
+
 `GET clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=404684003,71388002,243796009,48176007,272379006&excludeConstrainingConcepts=307824009&query={text}`
 
 This is Medicus's own generic problem/diagnosis-code search (parent concepts:
@@ -71,11 +78,42 @@ clinical finding / procedure / situation-with-explicit-context / (unconfirmed)
 ```json
 {
   "results": [
-    { "label": "Attention deficit disorder", "value": { "description": "Attention deficit disorder", "conceptId": "35253001", "descriptionId": "486108019" } },
-    { "label": "ADD - Attention deficit disorder", "value": { "description": "ADD - Attention deficit disorder", "conceptId": "35253001", "descriptionId": "486104017" } },
-    { "label": "Attention deficit disorder without hyperactivity", "value": { "description": "Attention deficit disorder without hyperactivity", "conceptId": "35253001", "descriptionId": "486107012" } },
-    { "label": "ADD - Attention deficit disorder without hyperactivity", "value": { "description": "ADD - Attention deficit disorder without hyperactivity", "conceptId": "35253001", "descriptionId": "486105016" } },
-    { "label": "Child attention deficit disorder", "value": { "description": "Child attention deficit disorder", "conceptId": "192127007", "descriptionId": "295618015" } }
+    {
+      "label": "Attention deficit disorder",
+      "value": { "description": "Attention deficit disorder", "conceptId": "35253001", "descriptionId": "486108019" }
+    },
+    {
+      "label": "ADD - Attention deficit disorder",
+      "value": {
+        "description": "ADD - Attention deficit disorder",
+        "conceptId": "35253001",
+        "descriptionId": "486104017"
+      }
+    },
+    {
+      "label": "Attention deficit disorder without hyperactivity",
+      "value": {
+        "description": "Attention deficit disorder without hyperactivity",
+        "conceptId": "35253001",
+        "descriptionId": "486107012"
+      }
+    },
+    {
+      "label": "ADD - Attention deficit disorder without hyperactivity",
+      "value": {
+        "description": "ADD - Attention deficit disorder without hyperactivity",
+        "conceptId": "35253001",
+        "descriptionId": "486105016"
+      }
+    },
+    {
+      "label": "Child attention deficit disorder",
+      "value": {
+        "description": "Child attention deficit disorder",
+        "conceptId": "192127007",
+        "descriptionId": "295618015"
+      }
+    }
     /* … 15 more results, mostly DIFFERENT conceptIds (ADHD, adult ADHD, etc.) */
   ]
 }
@@ -110,7 +148,11 @@ just the changed one):
   "endDate": null,
   "reasonEnded": null,
   "recordDate": "2019-06-27",
-  "recordedByOrganisation": { "organisationName": "The Park Road Surgery", "organisationIdentifierType": null, "organisationIdentifierValue": null },
+  "recordedByOrganisation": {
+    "organisationName": "The Park Road Surgery",
+    "organisationIdentifierType": null,
+    "organisationIdentifierValue": null
+  },
   "recordedByPractitioner": "Mrs Sarah Elliott"
 }
 ```
@@ -133,6 +175,47 @@ is about**, confirmed end-to-end on a real patient record, not a test one.
   `recordedByStaff` is required depends on `recordedAtAnotherOrganisation`
   (from the GET prefill) — mirror whichever branch the prefill indicates,
   don't assume one.
+
+### 3b. OPTION-OBJECT ROUND-TRIP TRAP (live 400, captured 2026-07-27)
+
+First-ever apply failure in the wild: an EMIS-imported "[M]"-prefixed problem
+rejected the edit-problem POST with a bare 400. A read-only page-console
+capture (pseudonymised) showed the prefill was the first ever seen with a
+**non-null `episode`** — and the GET returns it as the **selected option
+object**, not the bare value:
+
+```json
+{
+  "onsetDate": "2015-03-10",
+  "significance": "major",
+  "episode": { "value": "subsequent", "label": "Subsequent" },
+  "recordDate": "2015-03-10",
+  "recordedAtAnotherOrganisation": true,
+  "recordedByOrganisation": null,
+  "recordedByPractitioner": "Dr A— S—"
+}
+```
+
+- **The GET prefill returns select-backed fields as `{value, label}` option
+  objects; the POST takes the bare value.** `significance` is a plain string
+  in both directions of the §3 capture, and `staff[]`'s `{value, label}`
+  entries exist precisely so the form can submit `.value` — `episode` follows
+  the same pattern, but every §3-era confirmed apply happened to be on an
+  `episode: null` problem, so round-tripping the whole object never surfaced
+  until this record. `buildEditProblemPayload` now flattens option-shaped
+  values (strictly: an object with BOTH `value` and `label` keys) for
+  `significance`/`episode`/`reasonEnded`/`recordedByStaff` via
+  `unwrapOptionValue()`; real object fields (`recordedByOrganisation`'s
+  `{organisationName, …}` shape) don't match the strict shape and pass
+  through untouched.
+- Same capture, worth knowing: `recordedByOrganisation` can legitimately be
+  **null** even when `recordedAtAnotherOrganisation` is `true` (imported
+  record carrying only a practitioner name) — round-trip the null, don't
+  invent an organisation.
+- The flatten fix is **pending live confirmation** on the motivating record;
+  since v3.193.2 a failed apply surfaces the server's response body in the
+  panel, so if anything else in this payload is the real offender the next
+  click will name it.
 
 ## What this means for a cleanup tool
 
@@ -239,7 +322,10 @@ convention.
   const HO_RE = /^h\/o(?:\s+|:\s*)/i;
 
   async function apiFetch(path) {
-    const res = await fetch(apiBase + path, { credentials: 'include', headers: { Accept: 'application/json, text/plain, */*' } });
+    const res = await fetch(apiBase + path, {
+      credentials: 'include',
+      headers: { Accept: 'application/json, text/plain, */*' },
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
     return res.json();
   }
@@ -356,7 +442,10 @@ Paste into the Medicus **page console** on this patient's care-record page:
     '/clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=404684003,71388002,243796009,48176007,272379006&excludeConstrainingConcepts=307824009&outputParentConceptIds=1&query=';
 
   async function apiFetch(path) {
-    const res = await fetch(apiBase + path, { credentials: 'include', headers: { Accept: 'application/json, text/plain, */*' } });
+    const res = await fetch(apiBase + path, {
+      credentials: 'include',
+      headers: { Accept: 'application/json, text/plain, */*' },
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
     return res.json();
   }
@@ -403,10 +492,16 @@ Paste into the Medicus **page console** on this patient's care-record page:
   const prefill = await apiFetch(`/clinical/data/problem/edit-problem/${encodeURIComponent(target.id)}`);
   const code = prefill.problemCode && prefill.problemCode.value;
   if (!code || !code.conceptId) {
-    console.error('[probe] No conceptId on this problem\'s prefill.');
+    console.error("[probe] No conceptId on this problem's prefill.");
     return;
   }
-  console.log('[probe] Current code:', code.conceptId, code.description, '| additionalInformation:', prefill.additionalInformation);
+  console.log(
+    '[probe] Current code:',
+    code.conceptId,
+    code.description,
+    '| additionalInformation:',
+    prefill.additionalInformation
+  );
 
   const hintWords = significantWords(prefill.additionalInformation);
   console.log('[probe] Extracted hint words:', hintWords);
@@ -416,11 +511,21 @@ Paste into the Medicus **page console** on this patient's care-record page:
 
   const targetResult = allDescendants.find((r) => r.value && r.value.conceptId === TARGET_CODE);
   if (targetResult) {
-    const isTrueDescendant = Array.isArray(targetResult.value.parentConceptIds) && targetResult.value.parentConceptIds.includes(code.conceptId);
-    const matchedWords = hintWords.filter((w) => new RegExp(`\\b${w}\\b`, 'i').test(targetResult.value.description || ''));
+    const isTrueDescendant =
+      Array.isArray(targetResult.value.parentConceptIds) &&
+      targetResult.value.parentConceptIds.includes(code.conceptId);
+    const matchedWords = hintWords.filter((w) =>
+      new RegExp(`\\b${w}\\b`, 'i').test(targetResult.value.description || '')
+    );
     console.log(`[probe] ${TARGET_CODE} FOUND in the descendant fetch:`, targetResult.value.description);
     console.log('[probe]   true descendant of current concept (parentConceptIds contains it)?', isTrueDescendant);
-    console.log('[probe]   hint words that literally match its description:', matchedWords, matchedWords.length ? '-> WOULD be offered today' : '-> word-literalism miss, would NOT be offered despite being a true descendant');
+    console.log(
+      '[probe]   hint words that literally match its description:',
+      matchedWords,
+      matchedWords.length
+        ? '-> WOULD be offered today'
+        : '-> word-literalism miss, would NOT be offered despite being a true descendant'
+    );
   } else {
     console.warn(`[probe] ${TARGET_CODE} NOT present in the blank-query descendant fetch at all.`);
     // Independent check: search for it directly by its own conceptId, to see what
@@ -430,9 +535,16 @@ Paste into the Medicus **page console** on this patient's care-record page:
     const direct = await searchDescriptions(TARGET_CODE);
     const match = direct.find((r) => r.value && r.value.conceptId === TARGET_CODE);
     if (match) {
-      const isTrueDescendant = Array.isArray(match.value.parentConceptIds) && match.value.parentConceptIds.includes(code.conceptId);
+      const isTrueDescendant =
+        Array.isArray(match.value.parentConceptIds) && match.value.parentConceptIds.includes(code.conceptId);
       console.log(`[probe] ${TARGET_CODE} DOES exist as a concept:`, match.value.description);
-      console.log('[probe]   true descendant of the CURRENT coded concept?', isTrueDescendant, isTrueDescendant ? '(genuinely missed by the descendant fetch — a real gap)' : '(NOT a descendant of what\'s currently coded — would be unsafe to offer via this mechanism regardless)');
+      console.log(
+        '[probe]   true descendant of the CURRENT coded concept?',
+        isTrueDescendant,
+        isTrueDescendant
+          ? '(genuinely missed by the descendant fetch — a real gap)'
+          : "(NOT a descendant of what's currently coded — would be unsafe to offer via this mechanism regardless)"
+      );
     } else {
       console.error(`[probe] ${TARGET_CODE} not found via direct search either — double-check the code.`);
     }
@@ -442,6 +554,7 @@ Paste into the Medicus **page console** on this patient's care-record page:
 ```
 
 **What the output tells us:**
+
 - `444898006` found, true descendant, hint words matched → **already works today, no code change**, just confirms live.
 - `444898006` found, true descendant, but zero hint-word matches → the word-literalism gap, same class of bug as the earlier myomectomy case — a real, scoped fix (broaden matching, e.g. stem/synonym awareness for anatomical terms).
 - `444898006` missing from the blank-query fetch but confirmed a true descendant via direct search → the "not provably complete" pagination caveat already flagged in this file's own comments has a real instance — worth a targeted fix to the retrieval, not the matching.

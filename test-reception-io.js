@@ -116,6 +116,44 @@ async function expectReject(data, msgPart, label) {
 
   check(suiteEnv.VALID_SCOPES.includes('reception'), "'reception' registered in VALID_SCOPES");
 
+  // ── routingAttestation (plan E guardrail 6) ────────────────────────────────
+  // The CSO/partner sign-off that lets CUSTOM/EDITED pathways suggest a
+  // non-clinician destination. A malformed record must be DROPPED, never
+  // half-stored: the fail-safe direction is "custom packs stay clinician-only".
+  console.log('\n--- receptionImport: custom-routing attestation ---');
+  const goodAtt = { attestedBy: 'Dr A Patel', role: 'cso', attestedAt: '2026-07-28T09:00:00.000Z', scope: 'custom-routing' };
+  await receptionImport({ routingAttestation: goodAtt });
+  check(_store['reception.routingAttestation'] &&
+        _store['reception.routingAttestation'].attestedBy === 'Dr A Patel', 'valid attestation imported');
+  check(Object.keys(_store['reception.routingAttestation']).join(',') === 'attestedBy,role,attestedAt,scope',
+        'attestation whitelist-copied (no extra fields survive)');
+
+  for (const [bad, label] of [
+    [{ ...goodAtt, role: 'manager' }, 'role outside cso/partner'],
+    [{ ...goodAtt, attestedBy: '' }, 'empty name'],
+    [{ ...goodAtt, attestedAt: 'yesterday' }, 'non-ISO timestamp'],
+    [{ ...goodAtt, scope: 'everything' }, 'wrong scope'],
+    ['signed', 'string instead of an object'],
+  ]) {
+    await chrome.storage.local.set({ 'reception.routingAttestation': null });
+    await receptionImport({ routingAttestation: bad });
+    check(_store['reception.routingAttestation'] === null, `attestation with ${label} is DROPPED, not stored`);
+  }
+  await chrome.storage.local.set({ 'reception.routingAttestation': goodAtt });
+  await receptionImport({ routingAttestation: null });
+  check(_store['reception.routingAttestation'] === null, 'explicit null clears the local attestation (fails safe)');
+
+  await chrome.storage.local.set({ 'reception.routingAttestation': goodAtt });
+  const exportedAtt = await receptionExport();
+  check(exportedAtt.routingAttestation && exportedAtt.routingAttestation.role === 'cso', 'attestation is exported');
+  const envAtt = suiteEnv.wrap('reception', {
+    reception: { config: {}, customPathways: [], pathwayOverrides: {}, routingAttestation: goodAtt },
+  });
+  check(
+    suiteEnv.previewEnvelope(envAtt).some(l => l.startsWith('WARNING') && /custom-routing sign-off/.test(l)),
+    'preview WARNS that a backup carries a custom-routing sign-off'
+  );
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
 })().catch(e => {

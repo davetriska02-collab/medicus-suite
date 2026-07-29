@@ -338,6 +338,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       chrome.runtime.openOptionsPage();
       break;
 
+    // Quick-actions composer (content-scripts/reception-quick-actions.js): its ⚙
+    // button opens the options page straight onto the requested section. The
+    // section name is validated against the same shape options.js's
+    // activateSectionFromHash() accepts (#sect-<a-z->) before it is interpolated
+    // into the URL — a content script must never be able to steer this anywhere
+    // other than a section of our own options page.
+    case 'ms-open-options': {
+      const section = String((msg && msg.section) || '');
+      const suffix = /^[a-z-]+$/.test(section) ? `#sect-${section}` : '';
+      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html') + suffix });
+      break;
+    }
+
     // Pusher relay: scheduling channel fired appointments-updated
     case 'pusher:scheduling:appointments-updated':
       broadcastToSidePanel({ type: 'slots:refresh' });

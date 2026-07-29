@@ -11,7 +11,11 @@
 // Evidence-based design constraints:
 //   • Max 4 signals shown + "+N more" — GP reading time is ~30 seconds.
 //   • Red-first, drug-first ordering — highest clinical risk surfaces first.
-//   • No green/neutral chips — brief is for action, not reassurance.
+//   • Signal lines are action-only, but the brief itself is ALSO the
+//     safe-to-prescribe glance: per-group RAG (meds / QOF / general) plus an
+//     explicit allClear state, so "nothing to do" is a loud green, not an
+//     absent card. A green meds group with amber QOF means "prescribing
+//     checks clear; recall work outstanding".
 //   • Trend notes only when delta exceeds documented clinical thresholds.
 
 'use strict';
@@ -55,6 +59,40 @@ const TYPE_RANK = {
 
 function typeRank(type) {
   return TYPE_RANK[type] ?? 4;
+}
+
+// ── Chip type → brief group ───────────────────────────────────────────────────
+// The brief splits into three at-a-glance groups so a prescriber can see
+// "is this patient safe to prescribe for" separately from QOF/admin work:
+//   meds    — everything that bears on prescribing safety: drug-monitoring
+//             bloods/checks, interaction combos, allergy flags, and composite
+//             rules (which combine drug rules).
+//   qof     — QOF indicators and registers (payment/recall work, not
+//             prescribing safety).
+//   general — vaccines, event-count clinical reviews (falls, recurrent UTI)
+//             and anything else.
+// Unknown/future types deliberately fall through to 'general' — a new chip
+// type must never silently inflate the "safe to prescribe" meds group.
+const GROUP_BY_TYPE = {
+  'drug-monitoring': 'meds',
+  'drug-combo': 'meds',
+  'drug-allergy': 'meds',
+  'drug-no-monitoring': 'meds',
+  composite: 'meds',
+  'qof-indicator': 'qof',
+  'qof-process-indicator': 'qof',
+  'qof-register': 'qof',
+  vaccine: 'general',
+  'event-count': 'general',
+};
+
+export function chipGroup(chip) {
+  // Clinical-safety observation alerts (falling eGFR trend, potassium bands…)
+  // are emitted with type 'qof-indicator' but category 'safety-monitoring' —
+  // the sentinel list already buckets them as "not QOF payment items". They
+  // bear directly on prescribing safety, so the brief counts them as meds.
+  if (chip?.category === 'safety-monitoring') return 'meds';
+  return GROUP_BY_TYPE[chip?.type] ?? 'general';
 }
 
 // ── Signal text builders ───────────────────────────────────────────────────────
@@ -239,11 +277,20 @@ function buildTrendNotes(trendData) {
  *
  * @param {object|null} snapshot  — Sentinel snapshot ({chips, patientContext, …})
  * @param {object|null} trendData — Trends payload ({observationHistory, …}) or null
- * @returns null if snapshot is absent/chipless, else a BriefObject:
+ * @returns null if snapshot is absent or has no chips key (no patient open),
+ * else a BriefObject. When nothing is action-needed the brief is still
+ * returned with allClear=true so the card can render an explicit green
+ * "nothing to do" state instead of silently disappearing:
  * {
  *   patientLine,            // "Margaret Smith · 73 · F"  (null if no patient)
  *   counts: { red, amber }, // chips at rank 0 and rank 1–2
- *   signals: [ { severity, text } ],  // max 4, worst-first
+ *   groups: {               // per-group RAG state (all chips, not just shown)
+ *     meds:    { red, amber, status },  // status: 'red' | 'amber' | 'clear'
+ *     qof:     { red, amber, status },
+ *     general: { red, amber, status },
+ *   },
+ *   allClear,               // true when zero action-needed chips
+ *   signals: [ { severity, text, group } ],  // max 4, worst-first
  *   moreCount,              // additional action-needed chips beyond the 4 shown
  *   moreRed,                // how many of those hidden chips are RED (rank 0)
  *   trendNotes: [ { text, direction } ] // 0–3 notable trends
@@ -259,13 +306,28 @@ export function buildBrief(snapshot, trendData) {
   // Action-needed chips only (rank ≤ 2).
   const actionChips = chips.filter((c) => c && isChipActionNeeded(c.status));
 
-  // Build counts: red = rank 0, amber = rank 1–2.
+  // Build counts: red = rank 0, amber = rank 1–2. Also split per brief group
+  // so the card can show meds/QOF/general RAG independently.
   let red = 0;
   let amber = 0;
+  const groups = {
+    meds: { red: 0, amber: 0 },
+    qof: { red: 0, amber: 0 },
+    general: { red: 0, amber: 0 },
+  };
   for (const c of chips) {
+    if (!c) continue;
     const rank = STATUS_RANK[c.status] ?? 99;
-    if (rank === 0) red++;
-    else if (rank <= 2) amber++;
+    if (rank === 0) {
+      red++;
+      groups[chipGroup(c)].red++;
+    } else if (rank <= 2) {
+      amber++;
+      groups[chipGroup(c)].amber++;
+    }
+  }
+  for (const g of Object.values(groups)) {
+    g.status = g.red > 0 ? 'red' : g.amber > 0 ? 'amber' : 'clear';
   }
 
   // Sort action chips: rank 0 first, then by STATUS_RANK, then by type rank.
@@ -286,16 +348,16 @@ export function buildBrief(snapshot, trendData) {
   const signals = shown.map((chip) => ({
     severity: chipSeverity(chip),
     text: chipSignalText(chip),
+    group: chipGroup(chip),
   }));
 
   const trendNotes = buildTrendNotes(trendData);
 
-  // Nothing to show: no signals and no trend notes → suppress the card entirely.
-  if (signals.length === 0 && trendNotes.length === 0) return null;
-
   return {
     patientLine: buildPatientLine(patient),
     counts: { red, amber },
+    groups,
+    allClear: actionChips.length === 0,
     signals,
     moreCount,
     moreRed,

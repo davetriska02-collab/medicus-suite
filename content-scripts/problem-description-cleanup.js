@@ -223,6 +223,26 @@
   // GP2GP boilerplate lines), keeping problemCode itself untouched. Omitted
   // (undefined) preserves the original behaviour exactly for every existing
   // caller, which all change problemCode and never additionalInformation.
+  //
+  // OPTION-OBJECT ROUND-TRIP (found live 2026-07-27, the first "API 400"
+  // apply failure — an EMIS-imported problem, the first ever seen with a
+  // non-null episode): the GET prefill returns select-backed fields as the
+  // SELECTED OPTION OBJECT (`episode: {value:"subsequent",label:"Subsequent"}`),
+  // but the POST contract takes the bare enum value — compare `significance`,
+  // a plain "major" string in BOTH directions of the confirmed capture, and
+  // the staff[] options list, whose {value,label} entries exist precisely so
+  // the form can submit `.value`. Every previously-confirmed apply happened
+  // to be on an episode:null problem, so round-tripping the whole object
+  // never surfaced until now. unwrapOptionValue() takes `.value` from
+  // anything shaped exactly like an option ({value,label}) and passes every
+  // other shape through untouched — deliberately strict, so a REAL object
+  // field (recordedByOrganisation's {organisationName,...}) can never be
+  // mangled by it.
+  function unwrapOptionValue(field) {
+    if (field && typeof field === 'object' && 'value' in field && 'label' in field) return field.value;
+    return field;
+  }
+
   function buildEditProblemPayload(prefill, newProblemCode, overrideAdditionalInformation) {
     var p = prefill || {};
     var additionalInformation =
@@ -235,21 +255,21 @@
       onsetDate: p.onsetDate != null ? p.onsetDate : null,
       contextId: p.contextId != null ? p.contextId : null,
       contextType: p.contextType != null ? p.contextType : null,
-      significance: p.significance != null ? p.significance : null,
-      episode: p.episode != null ? p.episode : null,
+      significance: p.significance != null ? unwrapOptionValue(p.significance) : null,
+      episode: p.episode != null ? unwrapOptionValue(p.episode) : null,
       problemCode: newProblemCode,
       additionalInformation: additionalInformation,
       hiddenFromPatientFacingServices: !!p.hiddenFromPatientFacingServices,
       confidentialFromThirdParties: !!p.confidentialFromThirdParties,
       endDate: p.endDate != null ? p.endDate : null,
-      reasonEnded: p.reasonEnded != null ? p.reasonEnded : null,
+      reasonEnded: p.reasonEnded != null ? unwrapOptionValue(p.reasonEnded) : null,
       recordDate: p.recordDate != null ? p.recordDate : null,
     };
     if (p.recordedAtAnotherOrganisation) {
       payload.recordedByOrganisation = unwrapRecordedByOrganisation(p.recordedByOrganisation);
       payload.recordedByPractitioner = p.recordedByPractitioner != null ? p.recordedByPractitioner : null;
     } else {
-      payload.recordedByStaff = p.recordedByStaff != null ? p.recordedByStaff : null;
+      payload.recordedByStaff = p.recordedByStaff != null ? unwrapOptionValue(p.recordedByStaff) : null;
     }
     return payload;
   }
@@ -277,6 +297,37 @@
       return org.value;
     }
     return org != null ? org : null;
+  }
+
+  // Turns a non-2xx API response into an error message that actually says
+  // WHY the server refused. A bare "API 400" cost a live round (2026-07-27,
+  // an edit-problem apply rejected on a real patient with nothing to act
+  // on): Medicus validation failures carry a response body naming the
+  // offending field, and apiFetch was discarding it. Best-effort extraction:
+  // prefer the common message fields of a JSON body, fall back to the raw
+  // body text, truncate hard (the UI renders this inline in a small panel),
+  // and never throw — a diagnostic that crashes is worse than none. The
+  // caller renders the result through esc(), so raw server text is safe to
+  // include here.
+  function apiErrorMessage(status, bodyText) {
+    var base = 'API ' + status;
+    var detail = typeof bodyText === 'string' ? bodyText.trim() : '';
+    if (detail) {
+      try {
+        var data = JSON.parse(detail);
+        if (data && typeof data === 'object') {
+          if (typeof data.message === 'string' && data.message) detail = data.message;
+          else if (typeof data.error === 'string' && data.error) detail = data.error;
+          else if (data.errors && typeof data.errors === 'object') detail = JSON.stringify(data.errors);
+          else detail = JSON.stringify(data);
+        }
+      } catch (_) {
+        /* not JSON — use the raw text as-is */
+      }
+    }
+    detail = detail.replace(/\s+/g, ' ').trim();
+    if (detail.length > 220) detail = detail.slice(0, 220) + '…';
+    return detail ? base + ' — ' + detail : base;
   }
 
   // Narrows clinical-summary/summary's `problems[]` list down to candidates
@@ -711,6 +762,8 @@
       resolvePreference: preferredDescriptions.resolvePreferred,
       // Problem-specific.
       buildEditProblemPayload,
+      unwrapOptionValue,
+      apiErrorMessage,
       findOutdatedProblems,
       confirmedReplacementAlternative,
       confirmedReplacementAlternatives,
@@ -783,12 +836,16 @@
       // rejected) instead of a bare status code — found live 2026-07-26
       // debugging applyRemoveGenericAdditionalInfo's 400, where "API 400"
       // alone gave no way to confirm which field was wrong without a
-      // separate Network-tab capture. Truncated (errors are for display in
-      // st.error, not a payload to parse further).
-      var errorBody = await resp.text().catch(function () {
-        return '';
-      });
-      throw new Error('API ' + resp.status + (errorBody ? ': ' + errorBody.slice(0, 300) : ''));
+      // separate Network-tab capture. apiErrorMessage() (above) does the
+      // best-effort JSON-field extraction + truncation; here we just need to
+      // read the body without letting an unreadable one crash the error path.
+      var errBody = '';
+      try {
+        errBody = await resp.text();
+      } catch (_) {
+        /* unreadable body — the status alone will have to do */
+      }
+      throw new Error(apiErrorMessage(resp.status, errBody));
     }
     var text = await resp.text();
     if (!text) return {};
@@ -809,7 +866,7 @@
     return apiFetch('/clinical/data/problem/edit-problem/' + encodeURIComponent(problemId));
   }
 
-  // Same endpoint content-scripts/problem-junk-code-cleanup.js already uses
+  // Same endpoint content-scripts/problem-bulk-end.js already uses
   // (GET clinical/data/problem/slideover/overview/{problemId}) — used HERE
   // only to read problemCode.originalCodes for the legacy-Read-code check
   // (findLegacyReadCodeOrigin's own comment has the full story on why this
@@ -902,7 +959,7 @@
   // additionalInformation-boilerplate check in this widget. Falls back to an
   // empty list (never throws) if the resource is unavailable, same "fail
   // open to inert, not to a crash" discipline as ensureNonProblemRootsLoaded
-  // in content-scripts/problem-junk-code-cleanup.js.
+  // in content-scripts/problem-bulk-end.js.
   var _genericAdditionalInfoPromise = null;
   function ensureGenericAdditionalInfoTextLoaded() {
     if (_genericAdditionalInfoPromise) return _genericAdditionalInfoPromise;
@@ -2480,7 +2537,7 @@
   // edit-problem, the SAME endpoint "Fix description" already uses when
   // clicked) PLUS one external NHS termbrowser fetch per DISTINCT conceptId;
   // the Read-code check needs slideover/overview's problemCode.originalCodes
-  // — real per-patient cost, same class as problem-junk-code-cleanup.js's
+  // — real per-patient cost, same class as problem-bulk-end.js's
   // "Bulk remove?" scan, so this is its own opt-in click, never automatic.
   // Internal names below still say "retired" (kept as-is rather than a
   // mechanical rename across every identifier) even though the scan and its
@@ -2534,7 +2591,7 @@
         })
       );
       // One retirement-status fetch per DISTINCT conceptId, never one per
-      // problem — same discipline as problem-junk-code-cleanup.js.
+      // problem — same discipline as problem-bulk-end.js's badge scan.
       var conceptIdByProblemId = Object.create(null);
       var distinctConceptIds = [];
       _problemsCache.forEach(function (p) {
@@ -2717,7 +2774,7 @@
     bindRetiredWidgetEvents(el);
   }
 
-  // Placement mirrors content-scripts/problem-junk-code-cleanup.js's own
+  // Placement mirrors content-scripts/problem-bulk-end.js's own
   // "Major" heading anchor (duplicated rather than shared — see
   // findProblemRow's comment above for the precedent of small DOM-finding
   // helpers being kept local to each content script rather than factored

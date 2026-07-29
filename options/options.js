@@ -2926,17 +2926,45 @@ initPdcTallySection({
       'reception.config',
       'reception.customPathways',
       'reception.pathwayOverrides',
+      'reception.routingAttestation',
     ]);
     return {
       config: r['reception.config'] || {},
       custom: r['reception.customPathways'] || [],
       overrides: r['reception.pathwayOverrides'] || {},
+      routingAttestation: r['reception.routingAttestation'] || null,
     };
   }
 
   async function setConfig(patch) {
     const { config } = await getState();
     await chrome.storage.local.set({ 'reception.config': Object.assign({}, config, patch) });
+  }
+
+  // Practice-editable free-text config (safeguarding lead, crisis line). Clamped
+  // to the same 200 chars the backup importer enforces, so a value that survives
+  // a save/export/restore round-trip is always the value the practice typed.
+  const RCPO_TEXT_MAX = 200;
+
+  // ── "NEW" badge on freshly-bundled pathways ─────────────────────────────────
+  // New bundled pathways ship DISABLED (correct for CSO-gated clinical content),
+  // which means a practice would otherwise never learn they arrived. seenBundledIds
+  // records the bundled ids this practice has already been shown; anything bundled,
+  // still off, and not in that list gets a NEW badge. Marked seen when the practice
+  // toggles it, edits it, or dismisses the badge — never automatically on render,
+  // or the badge would vanish before anyone read it.
+  async function markBundledSeen(ids) {
+    const { config } = await getState();
+    const seen = Array.isArray(config.seenBundledIds) ? config.seenBundledIds.slice() : [];
+    let changed = false;
+    for (const id of ids || []) {
+      if (id && seen.indexOf(id) === -1) {
+        seen.push(id);
+        changed = true;
+      }
+    }
+    if (changed) await setConfig({ seenBundledIds: seen });
+    return changed;
   }
 
   async function loadBundled() {
@@ -3021,10 +3049,20 @@ initPdcTallySection({
   function renderPathwayList(resolved, config) {
     const host = $('rcpoPathwayList');
     if (!host) return;
+    const seenBundled = new Set(Array.isArray(config.seenBundledIds) ? config.seenBundledIds : []);
     host.innerHTML =
       resolved.all
         .map((e) => {
           const p = e.pathway;
+          // Bundled (or practice-edited bundled) pathway the practice has not been
+          // shown yet and has not enabled — flag it as newly arrived.
+          const isNew = e.origin !== 'custom' && !e.enabled && !seenBundled.has(p.id);
+          const newBadge = isNew
+            ? `<span style="font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px; background:rgba(22,163,74,0.15); color:var(--green, #16a34a);">NEW</span>`
+            : '';
+          const newDismiss = isNew
+            ? `<button class="ghost" data-rcpo-seen="${escAttr(p.id)}" title="Stop showing the NEW badge for this pathway" style="font-size:10px; padding:3px 9px;">Dismiss</button>`
+            : '';
           const [label, bg, fg] = ORIGIN_BADGE[e.origin] || ORIGIN_BADGE.bundled;
           const invalid = e.invalid
             ? `<span style="font-size:10px; font-weight:700; color:var(--red, #b91c1c);">INVALID — not shown to reception</span>`
@@ -3032,6 +3070,7 @@ initPdcTallySection({
               ? `<span style="font-size:10px; font-weight:700; color:var(--amber, #b45309);">EDIT INVALID — bundled version active</span>`
               : '';
           const actions = [
+            newDismiss,
             `<button class="ghost" data-rcpo-edit="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Edit</button>`,
             e.origin === 'edited'
               ? `<button class="ghost" data-rcpo-reset="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Reset to bundled</button>`
@@ -3046,6 +3085,8 @@ initPdcTallySection({
             <input type="checkbox" data-rcpo-toggle="${escAttr(p.id)}" ${e.enabled ? 'checked' : ''} ${e.invalid ? 'disabled' : ''}>
             <span style="font-weight:600; font-size:12px;">${escHtml(p.title)}</span>
             <span style="font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px; background:${bg}; color:${fg};">${label}</span>
+            ${newBadge}
+            ${p.sensitive === true ? `<span style="font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px; background:rgba(180,83,9,0.15); color:var(--amber, #b45309);" title="Capture drafts are never auto-saved; taker initials required">SENSITIVE</span>` : ''}
             ${invalid}
           </label>
           <div style="display:flex; gap:6px;">${actions}</div>
@@ -3066,11 +3107,22 @@ initPdcTallySection({
         if (cb.checked) map[id] = true;
         else delete map[id];
         await setConfig({ enabledPathways: map });
+        // Touching a pathway counts as having seen it — clear its NEW badge.
+        await markBundledSeen([id]);
+        refresh();
+      });
+    });
+    host.querySelectorAll('[data-rcpo-seen]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await markBundledSeen([btn.dataset.rcpoSeen]);
         refresh();
       });
     });
     host.querySelectorAll('[data-rcpo-edit]').forEach((btn) => {
-      btn.addEventListener('click', () => openEditor(btn.dataset.rcpoEdit, resolved));
+      btn.addEventListener('click', async () => {
+        await markBundledSeen([btn.dataset.rcpoEdit]);
+        openEditor(btn.dataset.rcpoEdit, resolved);
+      });
     });
     host.querySelectorAll('[data-rcpo-reset]').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -3107,6 +3159,9 @@ initPdcTallySection({
           <option value="999" ${rf?.escalate === '999' ? 'selected' : ''}>999-level</option>
           <option value="duty" ${rf?.escalate !== '999' ? 'selected' : ''}>Duty clinician</option>
         </select>
+        <label style="display:flex; align-items:center; gap:4px; font-size:11px; color:var(--text-3); white-space:nowrap;" title="A YES also escalates to the practice safeguarding lead and bypasses all routing">
+          <input type="checkbox" class="rcpo-rf-sg" ${rf?.safeguarding === true ? 'checked' : ''}> Safeguarding
+        </label>
         <button type="button" class="ghost rcpo-row-del" style="font-size:10px; padding:3px 8px;">✕</button>
       </div>`;
   }
@@ -3126,6 +3181,95 @@ initPdcTallySection({
         <input type="text" class="rcpo-q-ask" value="${escAttr(q?.ask || '')}" placeholder="Question as asked on the phone" style="width:100%; box-sizing:border-box; font-size:12px; padding:4px 7px; margin-bottom:5px;">
         <input type="text" class="rcpo-q-opts" value="${escAttr(opts)}" placeholder="Options, comma-separated (choice/multi only)" style="width:100%; box-sizing:border-box; font-size:12px; padding:4px 7px; ${type === 'choice' || type === 'multi' ? '' : 'display:none;'}">
       </div>`;
+  }
+
+  // ── Disposition editor rows (plan E) ────────────────────────────────────────
+  // Labels only — every vocabulary below comes from ReceptionPathwayUtils, so
+  // the editor cannot offer a destination, domain or condition the validator
+  // would reject.
+  const RCPO_DEST_LABELS = {
+    pharmacy_first: 'Pharmacy First',
+    anp: 'ANP / minor-illness nurse',
+    paramedic: 'Paramedic practitioner',
+    gp_routine: 'GP appointment',
+  };
+  const RCPO_DOMAIN_LABELS = {
+    minor_infection: 'Minor infection',
+    msk: 'Musculoskeletal',
+    gu_male: 'Genitourinary (male)',
+    gyn_female: 'Gynaecology (female)',
+    mental_health: 'Mental health',
+    other: 'Other',
+  };
+  const RCPO_WHEN_LABELS = {
+    pharmacyFirstEligible: 'Pharmacy First eligible',
+    ageUnder: 'Age under',
+    ageAtLeast: 'Age at least',
+  };
+
+  function dispRuleRowHtml(rule) {
+    const when = (rule && rule.when) || {};
+    const key = Object.keys(when).find((k) => PU.DISPOSITION_WHEN_KEYS.indexOf(k) !== -1) || 'pharmacyFirstEligible';
+    const isBool = key === 'pharmacyFirstEligible';
+    const boolVal = when.pharmacyFirstEligible === false ? 'false' : 'true';
+    const ageVal = isBool ? '' : when[key];
+    return `
+      <div class="rcpo-disp-row" style="display:flex; gap:6px; align-items:center; margin-bottom:5px; flex-wrap:wrap;">
+        <span style="font-size:11px; color:var(--text-3);">If</span>
+        <select class="rcpo-disp-when" style="font-size:12px; padding:4px;">
+          ${PU.DISPOSITION_WHEN_KEYS.map((k) => `<option value="${k}" ${k === key ? 'selected' : ''}>${escHtml(RCPO_WHEN_LABELS[k] || k)}</option>`).join('')}
+        </select>
+        <select class="rcpo-disp-bool" style="font-size:12px; padding:4px; ${isBool ? '' : 'display:none;'}">
+          <option value="true" ${boolVal === 'true' ? 'selected' : ''}>yes</option>
+          <option value="false" ${boolVal === 'false' ? 'selected' : ''}>no</option>
+        </select>
+        <input type="number" class="rcpo-disp-age" min="0" max="120" step="1" value="${escAttr(ageVal == null ? '' : String(ageVal))}" style="width:70px; font-size:12px; padding:4px 6px; ${isBool ? 'display:none;' : ''}">
+        <span style="font-size:11px; color:var(--text-3);">suggest</span>
+        <select class="rcpo-disp-suggest" style="font-size:12px; padding:4px;">
+          ${PU.DISPOSITION_DESTINATIONS.map((d) => `<option value="${d}" ${rule && rule.suggest === d ? 'selected' : ''}>${escHtml(RCPO_DEST_LABELS[d] || d)}</option>`).join('')}
+        </select>
+        <button type="button" class="ghost rcpo-disp-del" style="font-size:10px; padding:3px 8px;">✕</button>
+      </div>`;
+  }
+
+  function dispositionSectionHtml(pathway) {
+    const d = pathway && pathway.disposition;
+    const domain = d ? d.domain : '';
+    const allowed = (d && Array.isArray(d.allowed) ? d.allowed : []).slice();
+    const rules = d && Array.isArray(d.rules) ? d.rules : [];
+    return `
+      <div style="font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-3); margin:14px 0 5px;">Disposition &mdash; where this patient could safely go</div>
+      <div style="font-size:11px; color:var(--text-3); line-height:1.6; margin-bottom:7px;">
+        Optional. A <strong>suggestion</strong> shown only after every red flag has been answered and none is positive
+        &mdash; nothing is ever booked, and the receptionist always also offers a clinician callback. Leave the domain
+        as &ldquo;No routing&rdquo; for anything that should always go to a clinician. Age under 1 is always
+        clinician-only, and under 5 never reaches a nurse or paramedic, whatever is set here.
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:7px; flex-wrap:wrap;">
+        <label style="font-size:11px; color:var(--text-3); display:flex; gap:5px; align-items:center;">Domain
+          <select id="rcpoEdDispDomain" style="font-size:12px; padding:4px;">
+            <option value="" ${domain ? '' : 'selected'}>No routing (clinician only)</option>
+            ${PU.DISPOSITION_DOMAINS.map((dm) => `<option value="${dm}" ${dm === domain ? 'selected' : ''}>${escHtml(RCPO_DOMAIN_LABELS[dm] || dm)}</option>`).join('')}
+          </select>
+        </label>
+        <label style="font-size:11px; color:var(--text-3); display:flex; gap:5px; align-items:center;">If no rule matches
+          <select id="rcpoEdDispDefault" style="font-size:12px; padding:4px;">
+            ${PU.DISPOSITION_DEFAULTS.map((v) => `<option value="${v}" ${d && d.default === v ? 'selected' : ''}>${v === 'duty' ? 'Duty clinician' : 'GP appointment'}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+      <div id="rcpoEdDispAllowed" style="display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--text-2); margin-bottom:4px;">
+        ${PU.DISPOSITION_DESTINATIONS.map(
+          (dest) => `
+          <label style="display:flex; gap:5px; align-items:center;" data-dest="${dest}">
+            <input type="checkbox" class="rcpo-disp-allowed" value="${dest}" ${allowed.indexOf(dest) !== -1 ? 'checked' : ''}>
+            <span>${escHtml(RCPO_DEST_LABELS[dest] || dest)}</span>
+          </label>`
+        ).join('')}
+      </div>
+      <div id="rcpoEdDispNote" style="font-size:11px; color:var(--amber, #b45309); margin-bottom:6px; display:none;"></div>
+      <div id="rcpoEdDispRules">${rules.map(dispRuleRowHtml).join('')}</div>
+      <button type="button" class="ghost" id="rcpoEdAddDispRule" style="font-size:10px; padding:3px 9px;">+ Add routing rule</button>`;
   }
 
   function openEditor(idOrNull, resolved) {
@@ -3154,12 +3298,17 @@ initPdcTallySection({
           <input type="text" id="rcpoEdTitle" value="${escAttr(pathway?.title || '')}" placeholder="Pathway title" style="flex:1; font-size:12px; padding:5px 8px;">
           <input type="text" id="rcpoEdApplies" value="${escAttr(pathway?.appliesTo || '')}" placeholder="Applies to (e.g. Adults)" style="flex:1; font-size:12px; padding:5px 8px;">
         </div>
+        <label style="display:flex; align-items:flex-start; gap:7px; font-size:12px; color:var(--text-2); margin-bottom:8px; cursor:pointer;">
+          <input type="checkbox" id="rcpoEdSensitive" ${pathway?.sensitive === true ? 'checked' : ''} style="margin-top:2px;">
+          <span>Sensitive pathway &mdash; capture drafts are <strong>never</strong> auto-saved, and the receptionist's initials are required before a summary can be generated. Use for content that must not sit on a shared front-desk machine (e.g. mental health).</span>
+        </label>
         <div style="font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-3); margin:10px 0 5px;">Red flags — asked first, every one must be answered</div>
         <div id="rcpoEdRf">${rfRows}</div>
         <button type="button" class="ghost" id="rcpoEdAddRf" style="font-size:10px; padding:3px 9px;">+ Add red flag</button>
         <div style="font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-3); margin:14px 0 5px;">History questions</div>
         <div id="rcpoEdQ">${qRows}</div>
         <button type="button" class="ghost" id="rcpoEdAddQ" style="font-size:10px; padding:3px 9px;">+ Add question</button>
+        ${dispositionSectionHtml(pathway)}
         <div id="rcpoEdErrors" style="color:var(--red, #b91c1c); font-size:11px; margin-top:8px; white-space:pre-line;"></div>
         <div style="display:flex; gap:8px; margin-top:10px;">
           <button class="primary" id="rcpoEdSave" style="font-size:11px; padding:5px 14px;">Save pathway</button>
@@ -3179,8 +3328,61 @@ initPdcTallySection({
           opts.style.display = sel.value === 'choice' || sel.value === 'multi' ? '' : 'none';
         };
       });
+    // Disposition rows: the condition control switches between the yes/no
+    // selector and the age box, and clinician-only domains (or a sensitive
+    // pathway) grey out every non-clinician destination with a note — the
+    // engine refuses them anyway, so the editor must not pretend otherwise.
+    const wireDispRows = () => {
+      host.querySelectorAll('.rcpo-disp-del').forEach((b) => {
+        b.onclick = () => b.closest('.rcpo-disp-row')?.remove();
+      });
+      host.querySelectorAll('.rcpo-disp-when').forEach((sel) => {
+        sel.onchange = () => {
+          const row = sel.closest('.rcpo-disp-row');
+          const isBool = sel.value === 'pharmacyFirstEligible';
+          row.querySelector('.rcpo-disp-bool').style.display = isBool ? '' : 'none';
+          row.querySelector('.rcpo-disp-age').style.display = isBool ? 'none' : '';
+        };
+      });
+    };
+    const syncDispClinicianOnly = () => {
+      const domainSel = $('rcpoEdDispDomain');
+      const note = $('rcpoEdDispNote');
+      if (!domainSel || !note) return;
+      const clinicianOnly =
+        PU.CLINICIAN_ONLY_DOMAINS.indexOf(domainSel.value) !== -1 || !!$('rcpoEdSensitive')?.checked;
+      const frozenId =
+        !!(pathway && PU.CLINICIAN_ONLY_IDS.indexOf(pathway.id) !== -1);
+      host.querySelectorAll('.rcpo-disp-allowed').forEach((cb) => {
+        const block = (clinicianOnly || frozenId) && cb.value !== 'gp_routine';
+        cb.disabled = block;
+        if (block) cb.checked = false;
+        const lbl = cb.closest('label');
+        if (lbl) lbl.style.opacity = block ? '0.45' : '';
+      });
+      if (frozenId) {
+        note.style.display = '';
+        note.textContent =
+          'This pathway is clinician-only in engine code — it can never suggest a non-clinician route, however it is edited here.';
+      } else if (clinicianOnly) {
+        note.style.display = '';
+        note.textContent =
+          'Clinician-only: sensitive pathways and the mental-health / male-GU / gynaecology domains never suggest a non-clinician route.';
+      } else {
+        note.style.display = 'none';
+        note.textContent = '';
+      }
+    };
     wireRowDeletes();
     wireTypeToggles();
+    wireDispRows();
+    syncDispClinicianOnly();
+    $('rcpoEdDispDomain')?.addEventListener('change', syncDispClinicianOnly);
+    $('rcpoEdSensitive')?.addEventListener('change', syncDispClinicianOnly);
+    $('rcpoEdAddDispRule')?.addEventListener('click', () => {
+      $('rcpoEdDispRules').insertAdjacentHTML('beforeend', dispRuleRowHtml(null));
+      wireDispRows();
+    });
     $('rcpoEdAddRf')?.addEventListener('click', () => {
       $('rcpoEdRf').insertAdjacentHTML('beforeend', rfRowHtml(null));
       wireRowDeletes();
@@ -3214,11 +3416,17 @@ initPdcTallySection({
     const title = $('rcpoEdTitle')?.value.trim() || '';
     const appliesTo = $('rcpoEdApplies')?.value.trim() || '';
 
-    const redFlags = Array.from(host.querySelectorAll('.rcpo-rf-row')).map((row) => ({
-      id: row.dataset.rfid,
-      ask: row.querySelector('.rcpo-rf-ask')?.value.trim() || '',
-      escalate: row.querySelector('.rcpo-rf-esc')?.value || 'duty',
-    }));
+    const redFlags = Array.from(host.querySelectorAll('.rcpo-rf-row')).map((row) => {
+      const rf = {
+        id: row.dataset.rfid,
+        ask: row.querySelector('.rcpo-rf-ask')?.value.trim() || '',
+        escalate: row.querySelector('.rcpo-rf-esc')?.value || 'duty',
+      };
+      // Omitted rather than written false — absence is the schema's "not a
+      // safeguarding flag", and sanitisePathway only keeps a literal true.
+      if (row.querySelector('.rcpo-rf-sg')?.checked) rf.safeguarding = true;
+      return rf;
+    });
     const questions = Array.from(host.querySelectorAll('.rcpo-q-row')).map((row) => {
       const type = row.querySelector('.rcpo-q-type')?.value || 'text';
       const q = {
@@ -3258,6 +3466,41 @@ initPdcTallySection({
       questions,
       pharmacyFirst: original?.pharmacyFirst, // not editable in v1; preserved on bundled edits
     };
+    if ($('rcpoEdSensitive')?.checked) candidate.sensitive = true;
+
+    // Disposition block. Domain "" means no routing at all — the safe default.
+    // The four frozen clinician-only pathways never get a block written for
+    // them: the engine ignores routing on those ids anyway, and a block in the
+    // stored edit would (correctly) be rejected as a downgrade by
+    // resolveEffectivePathways, leaving the practice with a silently-ignored
+    // edit. Matching the shipped file — those four carry no block — is honest.
+    const domain = PU.CLINICIAN_ONLY_IDS.indexOf(id) !== -1 ? '' : $('rcpoEdDispDomain')?.value || '';
+    if (domain) {
+      const clinicianOnly =
+        PU.CLINICIAN_ONLY_DOMAINS.indexOf(domain) !== -1 ||
+        candidate.sensitive === true ||
+        PU.CLINICIAN_ONLY_IDS.indexOf(id) !== -1;
+      const allowed = clinicianOnly
+        ? ['gp_routine']
+        : Array.from(host.querySelectorAll('.rcpo-disp-allowed'))
+            .filter((cb) => cb.checked)
+            .map((cb) => cb.value);
+      const rules = Array.from(host.querySelectorAll('.rcpo-disp-row')).map((row) => {
+        const key = row.querySelector('.rcpo-disp-when')?.value || 'pharmacyFirstEligible';
+        const when = {};
+        if (key === 'pharmacyFirstEligible') {
+          when[key] = row.querySelector('.rcpo-disp-bool')?.value !== 'false';
+        } else {
+          const raw = (row.querySelector('.rcpo-disp-age')?.value || '').trim();
+          // Left blank / non-numeric stays as NaN so validatePathway rejects it
+          // rather than the editor guessing an age band.
+          when[key] = raw === '' ? null : Number(raw);
+        }
+        const suggest = row.querySelector('.rcpo-disp-suggest')?.value || 'gp_routine';
+        return { when, suggest: clinicianOnly ? 'gp_routine' : suggest };
+      });
+      candidate.disposition = { domain, allowed, rules, default: $('rcpoEdDispDefault')?.value || 'gp_routine' };
+    }
     if (!candidate.pharmacyFirst) delete candidate.pharmacyFirst;
     if (!candidate.appliesTo) delete candidate.appliesTo;
 
@@ -3280,6 +3523,106 @@ initPdcTallySection({
     if (host) host.innerHTML = '';
     _editing = null;
     refresh();
+  }
+
+  // ── Escalation contacts (safeguarding lead / crisis line) ───────────────────
+  // Free practice text rendered verbatim to reception staff. Stored trimmed and
+  // clamped to RCPO_TEXT_MAX — the same clamp shared/io/reception-io.js applies on
+  // import, so a value cannot change shape by travelling through a backup.
+
+  let _contactsWired = false;
+
+  function renderContacts(config) {
+    const sg = $('rcpoSafeguardingContact');
+    const cl = $('rcpoCrisisLine');
+    if (!sg || !cl) return;
+    // Don't stomp what the admin is mid-way through typing.
+    if (document.activeElement !== sg) sg.value = config.safeguardingContact || '';
+    if (document.activeElement !== cl) cl.value = config.crisisLineText || '';
+    if (_contactsWired) return;
+    _contactsWired = true;
+
+    const status = $('rcpoContactsStatus');
+    const save = async () => {
+      await setConfig({
+        safeguardingContact: (sg.value || '').trim().slice(0, RCPO_TEXT_MAX),
+        crisisLineText: (cl.value || '').trim().slice(0, RCPO_TEXT_MAX),
+      });
+      if (status) {
+        status.textContent = 'Saved.';
+        setTimeout(() => {
+          if (status.textContent === 'Saved.') status.textContent = '';
+        }, 2000);
+      }
+    };
+    sg.addEventListener('change', save);
+    cl.addEventListener('change', save);
+  }
+
+  // ── Custom routing sign-off (plan E guardrail 6) ────────────────────────────
+  // reception.routingAttestation = { attestedBy, role: 'cso'|'partner',
+  //                                  attestedAt (ISO), scope: 'custom-routing' }
+  // Without a valid record, evaluateDisposition treats every custom and
+  // practice-edited pathway as clinician-only. The attester is the CSO or a
+  // partner and nobody else — the role list is closed here and in the validator.
+
+  let _routingWired = false;
+
+  async function renderRouting(attestation) {
+    const state = $('rcpoRoutingState');
+    const nameEl = $('rcpoRoutingName');
+    const roleEl = $('rcpoRoutingRole');
+    if (!state || !nameEl || !roleEl) return;
+
+    const valid = PU.isValidRoutingAttestation(attestation);
+    if (valid) {
+      const roleLabel = attestation.role === 'cso' ? 'clinical safety officer' : 'partner';
+      state.innerHTML = `
+        <div style="border:1px solid rgba(22,163,74,0.4); background:rgba(22,163,74,0.06); border-radius:8px; padding:10px 14px; font-size:12px; color:var(--text-2); display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <span><strong>Routing signed off</strong> by ${escHtml(attestation.attestedBy)} (${escHtml(roleLabel)}) on ${escHtml(String(attestation.attestedAt).slice(0, 10))}. Custom and edited pathways may suggest non-clinician routes.</span>
+          <button class="ghost" id="rcpoRoutingRevoke" style="font-size:11px; padding:4px 10px;">Revoke</button>
+        </div>`;
+      $('rcpoRoutingRevoke')?.addEventListener('click', async () => {
+        if (!confirm('Revoke the custom routing sign-off? Custom and edited pathways go back to suggesting a clinician only.')) return;
+        await chrome.storage.local.remove('reception.routingAttestation');
+        refresh();
+      });
+    } else {
+      state.innerHTML = `
+        <div style="border:1px solid var(--border); border-radius:8px; padding:10px 14px; font-size:12px; color:var(--text-3);">
+          <strong>No routing sign-off recorded.</strong> Custom and practice-edited pathways suggest a clinician only.
+          Bundled pathways are unaffected.
+        </div>`;
+    }
+    if (_routingWired) return;
+    _routingWired = true;
+
+    $('rcpoRoutingAttest')?.addEventListener('click', async () => {
+      const status = $('rcpoRoutingStatus');
+      const record = {
+        attestedBy: (nameEl.value || '').trim().slice(0, 120),
+        role: roleEl.value,
+        attestedAt: new Date().toISOString(),
+        scope: 'custom-routing',
+      };
+      // sanitiseRoutingAttestation returns null for anything that is not a
+      // complete, well-formed sign-off — a partial one must never be stored.
+      const clean = PU.sanitiseRoutingAttestation(record);
+      if (!clean) {
+        if (status) {
+          status.style.color = 'var(--red, #b91c1c)';
+          status.textContent = 'Enter the name of the CSO or partner signing off.';
+        }
+        return;
+      }
+      await chrome.storage.local.set({ 'reception.routingAttestation': clean });
+      if (status) {
+        status.style.color = 'var(--text-3)';
+        status.textContent = 'Sign-off recorded.';
+      }
+      nameEl.value = '';
+      refresh();
+    });
   }
 
   // ── Quick-wins chip filter ──────────────────────────────────────────────────
@@ -3342,7 +3685,10 @@ initPdcTallySection({
 
   async function refresh() {
     try {
-      const [{ config, custom, overrides }, bundled] = await Promise.all([getState(), loadBundled()]);
+      const [{ config, custom, overrides, routingAttestation }, bundled] = await Promise.all([
+        getState(),
+        loadBundled(),
+      ]);
       const resolved = PU.resolveEffectivePathways({
         bundled: bundled.pathways || [],
         overrides,
@@ -3358,6 +3704,8 @@ initPdcTallySection({
       } catch (_) {}
       renderDisclaimerArea(config, resolved, centralProv);
       renderPathwayList(resolved, config);
+      renderContacts(config);
+      renderRouting(routingAttestation);
       renderChipList(config);
     } catch (e) {
       const host = $('rcpoPathwayList');
@@ -3851,4 +4199,183 @@ initPdcTallySection({
   chrome.storage.onChanged?.addListener((changes) => {
     if (changes['health.contracts']) refreshHealth();
   });
+})();
+
+// ── Quick Actions — GP → reception composer lists ──────────────────────────────
+//
+// Practice-wide editor for the four chip lists the injected composer
+// (content-scripts/reception-quick-actions.js) renders above a task's Internal
+// comment box. Same doctrine as the slot-alert-rules editor above: plain rows,
+// save-on-change, no drag. Nothing here is patient data — the GP's free-text
+// note is transient state in the widget and never reaches storage.
+//
+// The live example line is deliberately rendered through the SAME composeLine()
+// the widget uses, so a label that reads badly mid-sentence ("Book F2F appt with
+// Usual GP") is visible while it is being typed, not after it reaches reception.
+
+(async function initQuickActions() {
+  try {
+    const QA = window.QuickActionsCore;
+    const STORE_KEY = 'triagelens.quickActions';
+    const savedTag = document.getElementById('qaSaved');
+    const exampleEl = document.getElementById('qaExample');
+    const LISTS = [
+      { key: 'actions', host: 'qaActionsList', add: 'qaAddActions', max: 28, placeholder: 'e.g. Book F2F appt' },
+      { key: 'who', host: 'qaWhoList', add: 'qaAddWho', max: 28, placeholder: 'e.g. Duty doctor, or a name' },
+      { key: 'when', host: 'qaWhenList', add: 'qaAddWhen', max: 28, placeholder: 'e.g. Within 48h' },
+      {
+        key: 'fallbacks',
+        host: 'qaFallbacksList',
+        add: 'qaAddFallbacks',
+        max: 140,
+        placeholder: 'e.g. if no answer, text booking link',
+      },
+    ];
+    if (!QA || !exampleEl) return;
+
+    // Version-gated shipped-preset migration (mergeShippedPresets sanitises for us).
+    // Kept in LOCK-STEP with the widget's load path in
+    // content-scripts/reception-quick-actions.js: if only the widget migrated, this
+    // editor would save a stale-version config back and un-migrate the practice.
+    function migrate(stored) {
+      const merged = QA.mergeShippedPresets(stored);
+      if (merged.changed) chrome.storage.local.set({ [STORE_KEY]: merged.cfg });
+      return merged.cfg;
+    }
+
+    const r = await chrome.storage.local.get(STORE_KEY);
+    let cfg = migrate(r[STORE_KEY]);
+
+    function activeSet() {
+      return cfg.sets[cfg.activeSet] || cfg.sets.default;
+    }
+
+    // Deleting a SHIPPED entry records a tombstone so mergeShippedPresets never
+    // resurrects it on the next version bump; typing it back in clears the mark.
+    function tombstone(key, label) {
+      if (!QA.isShippedLabel(key, label)) return;
+      const n = QA.normaliseLabel(label);
+      if (n && !cfg.removedShipped.includes(n)) cfg.removedShipped.push(n);
+    }
+
+    function untombstone(label) {
+      const n = QA.normaliseLabel(label);
+      if (!n) return;
+      cfg.removedShipped = cfg.removedShipped.filter((t) => t !== n);
+    }
+
+    function save() {
+      cfg = QA.sanitiseConfig(cfg);
+      chrome.storage.local.set({ [STORE_KEY]: cfg });
+      if (savedTag) {
+        savedTag.classList.add('show');
+        setTimeout(() => savedTag.classList.remove('show'), 2000);
+      }
+    }
+
+    // The example uses the first entry of each list — the composer's own output
+    // for the simplest possible pick.
+    function renderExample() {
+      const set = activeSet();
+      const line = QA.composeLine({
+        action: set.actions[0] || '',
+        who: set.who[0] || '',
+        when: set.when[0] || '',
+        note: set.fallbacks[0] || '',
+      });
+      exampleEl.textContent = line || 'Add at least one action to see the composed sentence.';
+    }
+
+    function renderList(spec) {
+      const host = document.getElementById(spec.host);
+      if (!host) return;
+      const items = activeSet()[spec.key] || [];
+      host.innerHTML = '';
+      items.forEach((value, i) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:6px;';
+        row.innerHTML = `
+          <input type="text" class="qa-item" value="${escAttr(value)}" maxlength="${spec.max}"
+            placeholder="${escAttr(spec.placeholder)}"
+            style="flex:1; min-width:140px; background:var(--bg-elev); border:1px solid var(--border-hi);
+                   color:var(--text-2); font-family:var(--mono); font-size:11px; border-radius:5px; padding:4px 8px;" />
+          <button class="qa-up ghost" style="padding:2px 8px; font-size:11px;" title="Move up"${i === 0 ? ' disabled' : ''}>▲</button>
+          <button class="qa-down ghost" style="padding:2px 8px; font-size:11px;" title="Move down"${i === items.length - 1 ? ' disabled' : ''}>▼</button>
+          <button class="qa-del ghost" style="padding:2px 8px; font-size:11px;" title="Remove">✕</button>
+        `;
+        row.querySelector('.qa-item').addEventListener('change', (e) => {
+          const v = e.target.value.trim().slice(0, spec.max);
+          if (!v) {
+            tombstone(spec.key, value); // emptying the box is a removal
+            items.splice(i, 1);
+          } else {
+            if (v !== value) {
+              tombstone(spec.key, value); // edited away from a shipped label
+              untombstone(v);
+            }
+            items[i] = v;
+          }
+          save();
+          renderAll();
+        });
+        row.querySelector('.qa-up').addEventListener('click', () => {
+          if (i === 0) return;
+          [items[i - 1], items[i]] = [items[i], items[i - 1]];
+          save();
+          renderAll();
+        });
+        row.querySelector('.qa-down').addEventListener('click', () => {
+          if (i >= items.length - 1) return;
+          [items[i + 1], items[i]] = [items[i], items[i + 1]];
+          save();
+          renderAll();
+        });
+        row.querySelector('.qa-del').addEventListener('click', () => {
+          tombstone(spec.key, value);
+          items.splice(i, 1);
+          save();
+          renderAll();
+        });
+        host.appendChild(row);
+      });
+    }
+
+    function renderAll() {
+      LISTS.forEach(renderList);
+      renderExample();
+    }
+
+    LISTS.forEach((spec) => {
+      document.getElementById(spec.add)?.addEventListener('click', () => {
+        const items = activeSet()[spec.key];
+        if (items.length >= 24) return; // QA_LIMITS.list — sanitiseConfig would drop the overflow anyway
+        items.push('');
+        renderAll();
+        const host = document.getElementById(spec.host);
+        host?.querySelector('div:last-child .qa-item')?.focus();
+      });
+    });
+
+    document.getElementById('qaRestoreDefaults')?.addEventListener('click', () => {
+      if (!confirm('Replace all four Quick Actions lists with the shipped defaults? Your edits will be lost.')) return;
+      cfg = QA.sanitiseConfig(JSON.parse(JSON.stringify(QA.DEFAULT_CONFIG)));
+      save();
+      renderAll();
+    });
+
+    renderAll();
+
+    // Render lazily on nav click too, so a change made in another tab (or by a
+    // GP's "+ name" chip on the live page) is reflected when the section opens.
+    document.querySelectorAll('.nav-item').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (btn.dataset.section !== 'quickactions') return;
+        const fresh = await chrome.storage.local.get(STORE_KEY);
+        cfg = migrate(fresh[STORE_KEY]);
+        renderAll();
+      });
+    });
+  } catch (e) {
+    console.warn('[Quick Actions init]', e.message);
+  }
 })();

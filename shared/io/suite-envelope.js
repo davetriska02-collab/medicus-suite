@@ -364,6 +364,15 @@ function previewEnvelope(envelope) {
       const more = enabledIds.length > 5 ? ` … +${enabledIds.length - 5} more` : '';
       lines.push(`WARNING: Enables ${enabledIds.length} reception capture pathway(s): ${shown}${more}`);
     }
+    // A custom-routing sign-off unlocks non-clinician disposition suggestions on
+    // custom/edited pathways (plan E guardrail 6) — same concern class as the
+    // enable flags above, so it is surfaced before the import, not after.
+    const att = mods.reception.routingAttestation;
+    if (att && typeof att === 'object' && att.scope === 'custom-routing') {
+      lines.push(
+        `WARNING: Carries a custom-routing sign-off (${att.role || 'unknown role'}) — enables routing suggestions on custom/edited pathways.`
+      );
+    }
   } else {
     const m = missing('Reception');
     if (m) lines.push(m);

@@ -606,16 +606,17 @@ input[class*='ms-pdc-']:focus-visible {
 }
 
 /* Placement (2026-07-26): sit the collapsed trigger on the same row as the
-   "Major" heading instead of stacked below it, mirroring
-   problem-junk-code-cleanup.css's own #ms-pjc-widget treatment for the
-   "Bulk remove?" trigger (both scripts anchor to the same
-   ul[aria-labelledby="problems-major-label"] spot, independently). Scoped
-   via :has() to ONLY the .m-card-v2__content that actually contains
-   #ms-pdc-retired-widget, same reasoning as the other file's copy of this
-   rule -- .m-card-v2__content is Medicus's own generic card-body class,
-   reused by unrelated cards. #ms-pjc-widget is also excluded from the
-   full-width catch-all here so the two triggers share the row when both are
-   present -- keep both files' exclusion lists in lock-step. */
+   "Major" heading instead of stacked below it, sharing the row with
+   #ms-pbe-widget ("Bulk remove?", problem-bulk-end.css -- both scripts
+   anchor to the same ul[aria-labelledby="problems-major-label"] spot,
+   independently). Scoped via :has() to ONLY the .m-card-v2__content that
+   actually contains #ms-pdc-retired-widget --
+   .m-card-v2__content is Medicus's own generic card-body class, reused by
+   unrelated cards. #ms-pbe-widget is also excluded from the full-width
+   catch-all here so the triggers share the row when both are present --
+   keep BOTH files' exclusion lists in lock-step. (#ms-pjc-widget was the
+   third sharer until the 2026-07-27 merge retired
+   problem-junk-code-cleanup.js into problem-bulk-end.js.) */
 .m-card-v2__content:has(> #ms-pdc-retired-widget) {
   display: flex;
   flex-wrap: wrap;
@@ -624,7 +625,7 @@ input[class*='ms-pdc-']:focus-visible {
 }
 
 .m-card-v2__content:has(> #ms-pdc-retired-widget)
-  > *:not(#problems-major-label):not(#ms-pdc-retired-widget):not(#ms-pjc-widget) {
+  > *:not(#problems-major-label):not(#ms-pdc-retired-widget):not(#ms-pbe-widget) {
   flex-basis: 100%;
 }
 
@@ -636,7 +637,7 @@ input[class*='ms-pdc-']:focus-visible {
    heading's row. Any clicked state (scanning/error/done) renders a
    .ms-pdc-retired-scan-status span instead of the button -- that's the
    point the widget drops to its own full-width row, same trigger-vs-content
-   split as #ms-pjc-widget:has(.ms-pjc-body) in the other file. */
+   split as #ms-pbe-widget:has(.ms-pbe-body) in problem-bulk-end.css. */
 #ms-pdc-retired-widget:has(.ms-pdc-retired-scan-status) {
   flex-basis: 100%;
   margin-top: 6px;

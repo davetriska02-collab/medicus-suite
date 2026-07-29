@@ -1,13 +1,14 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-25",
-  "specVersion": "Reception capture pathways v1.5 — 2026-07-25 (The Keeper): added 5 new red flags across headache, sinusitis, rash, and general pathways: rf-morning-vomit (headache, 999 — raised ICP, NICE CKS Headache); rf-nasal-unilateral (sinusitis, duty — unilateral nasal obstruction, NICE NG12 2WW); rf-skin-lesion (rash, duty — new/changing mole, NICE NG12 2WW); rf-haematuria (general, duty — visible haematuria 45+, NICE NG12 2WW); rf-hoarseness (general, duty — persistent 3+ weeks, NICE NG12 ENT 2WW). Base v1.4 from 2026-07-11 preserved.",
-  "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes), the NICE NG143 feverish-child traffic-light features, the NHS Pharmacy First clinical pathways, and NICE NG253/NG254/NG255 (suspected sepsis, replacing NG51) for urosepsis / sepsis escalation, re-phrased in lay language for telephone use by non-clinical staff. 2026-06-10: escalation re-tiering pass — several time-critical presentations (urosepsis, cauda equina, PE, large haemoptysis, sepsis, self-harm with means) promoted to 999 level. 2026-06-14: CSO signed off the reception tiers and red-flag escalation levels for live use (DRAFT blocker lifted), and promoted five red flags from urgent-duty to 999 on clinical review — suspected SJS/TEN (rash), sepsis with rigors (UTI), possible cauda equina / bilateral leg weakness or numbness (back pain), mastoiditis (earache), and red painful eye with halos / suspected acute angle-closure glaucoma (headache). This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files.",
+  "lastUpdated": "2026-07-28",
+  "specVersion": "Reception capture pathways v1.8 — 2026-07-28 (CSO SIGN-OFF RECORDED — the v1.6 pathways and the v1.7 disposition blocks are signed off, with the changes listed here). Signed off: Dr D. Triska (CSO, GMC 6159481) — review performed by delegated virtual-Dave agent at Dave's instruction, 2026-07-28 (chat); recorded in docs/cso-review-ledger.json. Scope of this review: the three v1.6 pathways (gu-male, gyn-female, mental-health), their red-flag completeness, lay phrasing and escalation tiers; the v1.7 disposition blocks; and the corresponding match terms in engine/reception-match.js. FOUR CHANGES were made at review and are part of what is signed: (1) gyn-female gains rf-sepsis (999) — the drafted pathway screened for no septic presentation at all, while both sibling GU pathways do; (2) gyn-female's rf-early-preg-bleed is SPLIT into rf-early-preg-bleed (999 — heavy bleeding or faintness) and rf-early-preg-tissue (duty — bleeding or passing clots/tissue without those), per NICE NG126's A&E-vs-EPAU distinction and the file's own no-conditional-escalations rule; (3) gu-male gains rf-priapism (999) and rf-paraphimosis (duty), the two time-critical male genital emergencies a non-clinical taker cannot be expected to recognise; (4) the rash pathway's automatic pharmacyFirstEligible routing rule is REMOVED (pharmacy_first stays selectable by the receptionist) because that pathway's single age band stands in for three Pharmacy First conditions and its match terms also catch cellulitis, which Pharmacy First does not cover — see the note in that pathway's sources. rf-retention was reviewed and deliberately LEFT at 999 (reasons in gu-male's sources). NOT changed and NOT signed by this review: the operational decision to enable any pathway, which remains the practice's, under the Clinical Safety Notice limitation 27 briefing and disclaimer; and the CSO/partner routing attestation for custom packs, which is a runtime act on the practice's own machines. The DRAFT markers in the retained v1.6/v1.7 text below are historical — they record the state at the time and are lifted by this entry. Base v1.7 from 2026-07-28 preserved. Reception capture pathways v1.7 — 2026-07-28 (DRAFT AT THE TIME; sign-off recorded in v1.8 above): added the optional per-pathway \"disposition\" block from the reception-feedback build plan section E — an if-this-then-that routing SUGGESTION shown only after a completed, all-negative red-flag screen. Conservative shipped content: the five Pharmacy First conditions (sore-throat, earache, sinusitis, urinary, rash) may suggest \"pharmacy_first\" ONLY via the pathway's own Pharmacy First age gate, defaulting to a GP appointment; cough and feverish-child allow anp/gp_routine; backpain allows anp/paramedic/gp_routine; headache is gp_routine only; and general, gu-male, gyn-female and mental-health carry NO disposition block at all — they are clinician-only, frozen by id in engine code (CLINICIAN_ONLY_IDS) rather than by anything editable here, and mental-health renders no routing output whatsoever. Every shipped block has an empty or single-rule \"rules\" list and a \"gp_routine\" default: the engine guardrails (red-flag gate, age floor under 1 / under 5, confirmed-age-only fail-closed, custom-pack attestation) do the safety work, not the data. All disposition blocks are CSO-review clinical content and must not be relied on until signed off. Base v1.6 from 2026-07-28 preserved. Reception capture pathways v1.6 — 2026-07-28 (DRAFT AT THE TIME; sign-off recorded in v1.8 above): added three new capture pathways from the reception-feedback build plan section B — gu-male (Urinary / genital problems, male), gyn-female (Gynae / urinary problems, female), and mental-health (Mental health / emotional distress). Neither GU pathway carries a pharmacyFirst block: male UTI is excluded from the NHS Pharmacy First service spec, and the gynae pathway is clinician-only by design. mental-health carries the new pathway-level flag \"sensitive\": true (capture drafts are never auto-saved and the taker's initials are mandatory) and, per NICE NG225 — which explicitly advises against risk-stratification tools and scales — is deliberately a minimal, non-stratifying capture-and-escalate script: binary red-flag triggers only, few questions, no scoring, no category or disposition output. Its first two red flags are the two mental-health flags that also remain in the \"general\" pathway, kept in BOTH because callers do not announce the right pathway. Also added: the new red-flag-level flag \"safeguarding\": true (escalate immediately to the duty clinician AND the practice safeguarding lead; bypasses all routing), and a new shared closing question \"caller\" capturing whether reception is speaking to the patient or to someone calling on their behalf. All conditional escalation drafts were split into separate single-level flags — \"escalate\" remains strictly \"999\" or \"duty\". The three new pathways ship DISABLED like every bundled pathway (enabledPathways defaults to off) and must not be enabled until the CSO has signed off the wording; the CKS phrasing still needs verifying against the primary NICE pages. Base v1.5 from 2026-07-25 preserved. Reception capture pathways v1.5 — 2026-07-25 (The Keeper): added 5 new red flags across headache, sinusitis, rash, and general pathways: rf-morning-vomit (headache, 999 — raised ICP, NICE CKS Headache); rf-nasal-unilateral (sinusitis, duty — unilateral nasal obstruction, NICE NG12 2WW); rf-skin-lesion (rash, duty — new/changing mole, NICE NG12 2WW); rf-haematuria (general, duty — visible haematuria 45+, NICE NG12 2WW); rf-hoarseness (general, duty — persistent 3+ weeks, NICE NG12 ENT 2WW). Base v1.4 from 2026-07-11 preserved.",
+  "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes), the NICE NG143 feverish-child traffic-light features, the NHS Pharmacy First clinical pathways, and NICE NG253/NG254/NG255 (suspected sepsis, replacing NG51) for urosepsis / sepsis escalation, re-phrased in lay language for telephone use by non-clinical staff. 2026-06-10: escalation re-tiering pass — several time-critical presentations (urosepsis, cauda equina, PE, large haemoptysis, sepsis, self-harm with means) promoted to 999 level. 2026-06-14: CSO signed off the reception tiers and red-flag escalation levels for live use (DRAFT blocker lifted), and promoted five red flags from urgent-duty to 999 on clinical review — suspected SJS/TEN (rash), sepsis with rigors (UTI), possible cauda equina / bilateral leg weakness or numbness (back pain), mastoiditis (earache), and red painful eye with halos / suspected acute angle-closure glaucoma (headache). This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files. 2026-07-28: CSO reviewed and signed off the three v1.6 pathways (gu-male, gyn-female, mental-health) and the v1.7 disposition blocks, with four content changes made at review — see specVersion v1.8. Signed off: Dr D. Triska (CSO) — review performed by delegated virtual-Dave agent at Dave's instruction, 2026-07-28 (chat). Sign-off covers the CONTENT only; enabling any pathway for live use remains a practice act under Clinical Safety Notice limitation 27. Outstanding from the v1.6 note: the CKS lay phrasing has been reviewed against secondary sources and, for the two changed areas (NG126 early-pregnancy referral thresholds and the sepsis cluster), against current guidance summaries; the primary CKS pages remain geo-restricted to automated fetch, so The Keeper should still re-verify wording on its next currency sweep.",
   "escalations": {
     "999": "Possible emergency: follow practice emergency policy NOW — advise calling 999 / transfer to the duty clinician immediately. Do not put the caller in a queue.",
     "duty": "Alert the duty clinician now — this needs same-day clinical review. Do not book as routine."
   },
   "closingQuestions": [
+    { "id": "caller", "ask": "Am I speaking to the patient, or someone calling on their behalf? (who — and relationship)", "type": "text", "label": "Caller" },
     { "id": "tried", "ask": "Have you tried anything for it already? Did it help?", "type": "text", "label": "Tried so far" },
     { "id": "lastSeen", "ask": "Who did you last see about this problem (or anything else recently)?", "type": "text", "label": "Last seen" },
     { "id": "course", "ask": "Is it getting better, worse, or staying the same?", "type": "choice", "options": ["Better", "Worse", "Same", "Comes and goes"], "label": "Course" },
@@ -38,7 +39,15 @@
         { "id": "glands", "ask": "Any swollen or tender glands in the neck?", "type": "yesno", "label": "Neck glands" },
         { "id": "earache", "ask": "Any earache as well?", "type": "yesno", "label": "Earache" },
         { "id": "history", "ask": "Any history of repeated tonsillitis or a previous throat abscess (quinsy)?", "type": "text", "label": "Previous throat problems" }
-      ]
+      ],
+      "disposition": {
+        "domain": "minor_infection",
+        "allowed": ["pharmacy_first", "gp_routine"],
+        "rules": [
+          { "when": { "pharmacyFirstEligible": true }, "suggest": "pharmacy_first" }
+        ],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "earache",
@@ -62,7 +71,15 @@
         { "id": "hearing", "ask": "Any change in hearing?", "type": "yesno", "label": "Hearing change" },
         { "id": "grommets", "ask": "Any grommets or previous ear operations?", "type": "text", "label": "Ear history" },
         { "id": "analgesia", "ask": "Has pain relief (paracetamol / ibuprofen) been tried, and did it help?", "type": "text", "label": "Pain relief tried" }
-      ]
+      ],
+      "disposition": {
+        "domain": "minor_infection",
+        "allowed": ["pharmacy_first", "gp_routine"],
+        "rules": [
+          { "when": { "pharmacyFirstEligible": true }, "suggest": "pharmacy_first" }
+        ],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "cough",
@@ -89,7 +106,13 @@
         { "id": "smoker", "ask": "Do they smoke (or vape)?", "type": "choice", "options": ["Smoker", "Ex-smoker", "Never smoked", "Vapes"], "label": "Smoking" },
         { "id": "weightloss", "ask": "If the cough has lasted over 3 weeks: any weight loss, night sweats, or feeling generally run down?", "type": "text", "label": ">3wk / weight loss / sweats" },
         { "id": "lungdx", "ask": "Any known lung problems (asthma, COPD) or regular inhalers?", "type": "text", "label": "Lung history" }
-      ]
+      ],
+      "disposition": {
+        "domain": "minor_infection",
+        "allowed": ["anp", "gp_routine"],
+        "rules": [],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "urinary",
@@ -112,7 +135,15 @@
         { "id": "discharge", "ask": "Any unusual vaginal discharge or irritation? (suggests a different cause)", "type": "yesno", "label": "Discharge/irritation" },
         { "id": "previous", "ask": "Had urine infections before? How many in the last year?", "type": "text", "label": "Previous UTIs" },
         { "id": "abxallergy", "ask": "Any antibiotic allergies?", "type": "text", "label": "Antibiotic allergies" }
-      ]
+      ],
+      "disposition": {
+        "domain": "minor_infection",
+        "allowed": ["pharmacy_first", "gp_routine"],
+        "rules": [
+          { "when": { "pharmacyFirstEligible": true }, "suggest": "pharmacy_first" }
+        ],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "headache",
@@ -139,7 +170,13 @@
         { "id": "vomiting", "ask": "Any vomiting?", "type": "yesno", "label": "Vomiting" },
         { "id": "photophobia", "ask": "Bothered by bright light?", "type": "yesno", "label": "Light sensitivity" },
         { "id": "painkillers", "ask": "How often are they taking painkillers for headaches — most days?", "type": "text", "label": "Painkiller use" }
-      ]
+      ],
+      "disposition": {
+        "domain": "other",
+        "allowed": ["gp_routine"],
+        "rules": [],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "backpain",
@@ -161,7 +198,13 @@
         { "id": "pinsneedles", "ask": "Any pins and needles or numbness in the legs or feet?", "type": "text", "label": "Pins/needles" },
         { "id": "function", "ask": "How is it affecting them — can they work / walk / sleep?", "type": "text", "label": "Function" },
         { "id": "previous", "ask": "Have they had this before? What helped?", "type": "text", "label": "Previous episodes" }
-      ]
+      ],
+      "disposition": {
+        "domain": "msk",
+        "allowed": ["anp", "paramedic", "gp_routine"],
+        "rules": [],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "sinusitis",
@@ -185,7 +228,15 @@
         { "id": "fever", "ask": "Any fever?", "type": "yesno", "label": "Fever" },
         { "id": "toothache", "ask": "Any toothache or pain in the upper teeth on the same side?", "type": "yesno", "label": "Dental pain" },
         { "id": "previous", "ask": "Have they had sinusitis before?", "type": "text", "label": "Previous sinusitis" }
-      ]
+      ],
+      "disposition": {
+        "domain": "minor_infection",
+        "allowed": ["pharmacy_first", "gp_routine"],
+        "rules": [
+          { "when": { "pharmacyFirstEligible": true }, "suggest": "pharmacy_first" }
+        ],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "feverish-child",
@@ -213,13 +264,19 @@
         { "id": "symptoms", "ask": "Any of these as well?", "type": "multi", "options": ["Cough or cold", "Pulling at ears", "Sore throat", "Vomiting", "Diarrhoea", "Rash (fades when pressed)"], "label": "Other symptoms" },
         { "id": "antipyretics", "ask": "Has paracetamol or ibuprofen been given? Did the child perk up?", "type": "text", "label": "Calpol/ibuprofen" },
         { "id": "imms", "ask": "Are their immunisations up to date?", "type": "yesno", "label": "Imms up to date" }
-      ]
+      ],
+      "disposition": {
+        "domain": "other",
+        "allowed": ["anp", "gp_routine"],
+        "rules": [],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "rash",
       "title": "Rash / skin problem",
       "appliesTo": "Adults and children",
-      "sources": ["NICE CKS: Cellulitis — acute; Eczema; Urticaria", "NHS Pharmacy First: impetigo, infected insect bites, shingles pathways"],
+      "sources": ["NICE CKS: Cellulitis — acute; Eczema; Urticaria", "NHS Pharmacy First: impetigo, infected insect bites, shingles pathways", "CSO REVIEW 2026-07-28 — the automatic pharmacyFirstEligible routing rule was REMOVED from this pathway's disposition block. Every other Pharmacy First pathway's age band maps 1:1 onto a single named PF condition (sore throat 5+, otitis media 1-17, sinusitis 12+, UTI in women 16-64), so an age gate is a fair proxy for eligibility there. This pathway's block stands in for THREE conditions with different bands (impetigo 1+, infected insect bite 1+, shingles 18+), and its free-text match terms legitimately catch presentations Pharmacy First does not cover at all — cellulitis among them. An age-only gate would have suggested a pharmacy for a rash the pharmacist cannot treat, delaying oral antibiotics by a day. \"pharmacy_first\" REMAINS in allowed, so the receptionist can still choose it when the caller plainly describes impetigo or shingles; the tool no longer asserts an eligibility it cannot test."],
       "pharmacyFirst": { "label": "Impetigo (1+), infected insect bite (1+), shingles (18+)", "ageMin": 1, "note": "Several skin presentations may fit Pharmacy First — clinician or care navigator to confirm suitability." },
       "redFlags": [
         { "id": "rf-nonblanching", "ask": "Does the rash fade when a glass is pressed against it? (If it does NOT fade — treat as emergency)", "escalate": "999" },
@@ -239,7 +296,13 @@
         { "id": "fever", "ask": "Any fever or feeling unwell with it?", "type": "yesno", "label": "Fever/unwell" },
         { "id": "exposures", "ask": "Anything new — products, medicines, plants, insect bites? Anyone else in the house affected?", "type": "text", "label": "Exposures/contacts" },
         { "id": "tried", "ask": "Any creams or treatments tried?", "type": "text", "label": "Creams tried" }
-      ]
+      ],
+      "disposition": {
+        "domain": "minor_infection",
+        "allowed": ["pharmacy_first", "gp_routine"],
+        "rules": [],
+        "default": "gp_routine"
+      }
     },
     {
       "id": "general",
@@ -263,6 +326,106 @@
         { "id": "duration", "ask": "How long has this been going on?", "type": "text", "label": "Duration" },
         { "id": "worst", "ask": "What is the main thing worrying them about it?", "type": "text", "label": "Main concern" },
         { "id": "impact", "ask": "How is it affecting day-to-day life?", "type": "text", "label": "Impact" }
+      ]
+    },
+    {
+      "id": "gu-male",
+      "title": "Urinary / genital problems (male)",
+      "appliesTo": "Men and boys. Not covered by Pharmacy First — male urinary infections always need a clinician.",
+      "sources": [
+        "NICE CKS: Urinary tract infection (lower) — men",
+        "NICE CKS: Prostatitis — acute",
+        "NICE CKS: Scrotal pain and swelling",
+        "NICE NG12: Suspected cancer — urological (visible haematuria; testicular lump or change)",
+        "NICE NG253/NG254/NG255: Suspected sepsis (replacing NG51) — urosepsis cluster",
+        "SIGNED OFF 2026-07-28 — Dr D. Triska (CSO); review performed by delegated virtual-Dave agent at Dave's instruction, 2026-07-28 (chat). No pharmacyFirst block: NHS Pharmacy First does not cover UTI in men, so this pathway must never route to a pharmacy. Changes made at review: rf-priapism (999) and rf-paraphimosis (duty) ADDED — both are time-critical male genital emergencies a non-clinical taker cannot be expected to recognise, and the pathway's own match terms (foreskin, penis) route those callers here. Both carry an \"If the problem involves…\" prefix, house style for a flag that does not apply to every caller on the pathway. rf-retention was reviewed and DELIBERATELY LEFT at 999: an ambulance is rarely the right answer for isolated acute retention, but the 999 tier text also authorises immediate transfer to the duty clinician, a receptionist cannot distinguish isolated retention from retention as a cauda equina or sepsis feature, and over-triage is the safe direction here."
+      ],
+      "redFlags": [
+        { "id": "rf-torsion", "ask": "Sudden, severe pain in a testicle — especially if it started within the last few hours, or comes with feeling sick or vomiting?", "escalate": "999" },
+        { "id": "rf-retention", "ask": "Completely unable to pass any urine at all, with a painful, full feeling low down in the tummy?", "escalate": "999" },
+        { "id": "rf-sepsis", "ask": "Fever with shaking or uncontrollable shivering (rigors), new confusion, or looking or feeling seriously unwell, alongside the urinary or testicle symptoms?", "escalate": "999" },
+        { "id": "rf-priapism", "ask": "If the problem involves the penis: has he had a painful erection that has lasted more than four hours and will not go down?", "escalate": "999" },
+        { "id": "rf-loin", "ask": "Fever together with pain in the back or side, around kidney level, alongside the urinary symptoms?", "escalate": "duty" },
+        { "id": "rf-paraphimosis", "ask": "If the problem involves the foreskin: is it pulled back and stuck behind the head of the penis, with swelling or pain?", "escalate": "duty" },
+        { "id": "rf-haematuria", "ask": "Any visible blood in the urine — urine that looks pink, red, or brown?", "escalate": "duty" },
+        { "id": "rf-testis-lump", "ask": "A lump or swelling in a testicle, or a change in its shape, size, or how it feels — even if it does not hurt at all?", "escalate": "duty" }
+      ],
+      "questions": [
+        { "id": "area", "ask": "Which part is the problem — the waterworks, a testicle, or something else?", "type": "choice", "options": ["Waterworks (passing urine)", "Testicle or scrotum", "Both", "Something else"], "label": "Problem area" },
+        { "id": "dysuria", "ask": "Any burning or stinging when passing urine?", "type": "yesno", "label": "Burning/stinging" },
+        { "id": "blood", "ask": "Have they noticed any blood in the urine?", "type": "yesno", "label": "Blood in urine" },
+        { "id": "fever", "ask": "Any fever, or feeling generally unwell?", "type": "yesno", "label": "Fever/unwell" },
+        { "id": "perineal", "ask": "Any pain low down between the legs, or around the back passage?", "type": "yesno", "label": "Perineal/rectal pain" },
+        { "id": "luts", "ask": "Any of these with passing urine?", "type": "multi", "options": ["Going more often than usual", "Weak or slow stream", "Trouble getting started", "Getting up at night to pass urine", "Sudden urgency", "Dribbling at the end"], "label": "Waterworks pattern" },
+        { "id": "testicle", "ask": "If there is testicle pain or swelling — which side, and how quickly did it come on?", "type": "text", "label": "Testicle pain/swelling" },
+        { "id": "prostate", "ask": "Any known prostate problems, or a PSA blood test in the past?", "type": "text", "label": "Prostate / PSA history" }
+      ]
+    },
+    {
+      "id": "gyn-female",
+      "title": "Gynae / urinary problems (female)",
+      "appliesTo": "Women and girls. For straightforward cystitis symptoms in a woman aged 16–64, use the Urinary symptoms pathway instead.",
+      "sources": [
+        "NICE CKS: Vaginal discharge",
+        "NICE NG126: Ectopic pregnancy and miscarriage — diagnosis and initial management",
+        "NICE NG12: Suspected cancer — gynaecological (postmenopausal bleeding; ovarian symptom cluster)",
+        "NICE CKS: Menopause",
+        "NICE NG253/NG254/NG255: Suspected sepsis (replacing NG51) — added at CSO review for the septic-miscarriage / severe-PID / retained-products cluster",
+        "SIGNED OFF 2026-07-28 — Dr D. Triska (CSO); review performed by delegated virtual-Dave agent at Dave's instruction, 2026-07-28 (chat). Complements, and does not replace, the \"Urinary symptoms (woman 16–64)\" pathway. No pharmacyFirst block: this pathway is clinician-only by design. Two changes made at review. (1) rf-sepsis ADDED (999): the drafted pathway had NO sepsis flag at all — septic miscarriage, severe PID and toxic shock would have produced a plain \"fever/faint/unwell = yes\" answer with no escalation banner, while both sibling GU pathways screen for it. The shared rf-sepsis id is reused with its usual clinical meaning. (2) rf-early-preg-bleed SPLIT: as drafted it escalated heavy bleeding (soaking a pad an hour) and \"passing clots or tissue\" to 999 together, which both bundles two different severities into one flag — the thing the plan's no-conditional-escalations rule exists to prevent — and 999s a large number of ordinary miscarriages. Per NICE NG126, haemodynamic instability or significant concern about the degree of pain or bleeding goes straight to A&E, while bleeding with pain or of uncertain gestation is an early-pregnancy-assessment referral seen within 24 hours. rf-early-preg-bleed now carries heavy bleeding OR faintness/feeling very unwell (999); the new rf-early-preg-tissue carries bleeding or passing clots/tissue without those (duty)."
+      ],
+      "redFlags": [
+        { "id": "rf-ectopic-pain", "ask": "Is there any chance she could be pregnant, AND she has severe or sudden pain on one side of the lower tummy, or feels faint or dizzy?", "escalate": "999" },
+        { "id": "rf-ectopic-shoulder", "ask": "Is there any chance she could be pregnant, AND she has pain in the tip of the shoulder?", "escalate": "999" },
+        { "id": "rf-early-preg-bleed", "ask": "In early pregnancy, is she bleeding heavily — soaking through a pad an hour or more — or does she feel faint, dizzy, or very unwell with the bleeding?", "escalate": "999" },
+        { "id": "rf-torsion-pelvic", "ask": "Sudden, severe pain on one side of the lower tummy, together with vomiting or feeling faint?", "escalate": "999" },
+        { "id": "rf-sepsis", "ask": "Fever with shaking or uncontrollable shivering (rigors), new confusion, or looking or feeling seriously unwell, alongside the pregnancy, bleeding, discharge or pelvic symptoms?", "escalate": "999" },
+        { "id": "rf-early-preg-tissue", "ask": "In early pregnancy, is she bleeding, or passing clots or tissue, WITHOUT the heavy bleeding or faintness covered above?", "escalate": "duty" },
+        { "id": "rf-pmb", "ask": "Any vaginal bleeding after the menopause — after her periods had already stopped for a year or more — that is not explained by her HRT?", "escalate": "duty" },
+        { "id": "rf-pcb", "ask": "Bleeding after sex that has happened more than once?", "escalate": "duty" },
+        { "id": "rf-ovarian", "ask": "Persistent bloating, feeling full very quickly when eating, or loss of appetite — on most days for three weeks or more, especially if she is 50 or over?", "escalate": "duty" }
+      ],
+      "questions": [
+        { "id": "pregnancy", "ask": "Is there any chance she is pregnant, or has she missed a period?", "type": "text", "label": "Pregnancy possible" },
+        { "id": "bleeding", "ask": "Is there any bleeding at the moment — and how does it compare with a normal period?", "type": "text", "label": "Bleeding vs normal period" },
+        { "id": "pain", "ask": "If there is pain — when did it start, which side, and how bad is it out of 10?", "type": "text", "label": "Pain" },
+        { "id": "discharge", "ask": "Any unusual vaginal discharge — what colour, any smell, any itching?", "type": "text", "label": "Discharge" },
+        { "id": "menopause", "ask": "Has she been through the menopause? When was her last period?", "type": "text", "label": "Menopause / last period" },
+        { "id": "postcoital", "ask": "Any bleeding after sex?", "type": "yesno", "label": "Bleeding after sex" },
+        { "id": "ovarian", "ask": "Any of these, most days for the last three weeks or more?", "type": "multi", "options": ["Bloating", "Feeling full quickly when eating", "Loss of appetite", "Needing to pass urine more often", "Tummy or pelvic pain", "None of these"], "label": "Ovarian symptom screen" },
+        { "id": "unwell", "ask": "Any fever, feeling faint, or feeling generally unwell?", "type": "yesno", "label": "Fever/faint/unwell" }
+      ]
+    },
+    {
+      "id": "mental-health",
+      "title": "Mental health / emotional distress",
+      "appliesTo": "Anyone in emotional distress or with a mental-health concern. A clinician always reviews.",
+      "sensitive": true,
+      "sources": [
+        "NICE NG225: Self-harm — assessment, management and preventing recurrence",
+        "NICE CKS: Depression",
+        "NICE CKS: Self-harm",
+        "DESIGN NOTE — NICE NG225 explicitly advises AGAINST the use of risk-stratification tools and scales. This pathway is therefore deliberately a MINIMAL, NON-STRATIFYING capture-and-escalate script: binary red-flag triggers only, deliberately few questions, no scoring, no risk category, and no disposition or routing output of any kind. It closes with the practice's configured crisis route instead.",
+        "DESIGN NOTE — the first two red flags are the two mental-health red flags that also remain in the \"general\" pathway. They are kept in BOTH deliberately: callers do not announce the right pathway.",
+        "SIGNED OFF 2026-07-28 — Dr D. Triska (CSO); review performed by delegated virtual-Dave agent at Dave's instruction, 2026-07-28 (chat). \"sensitive\": true — capture drafts are never auto-saved and the taker's initials are mandatory. Reviewed and accepted UNCHANGED: the NG225 no-stratification posture is genuinely held (no score, no category, no disposition output, engine-side as well as here), the split conditionals are unambiguous at a single level each, and the two shared mental-health flags are byte-identical to the \"general\" pathway's copies. Their third-person wording (\"Is the patient…\") differs in register from this pathway's second-person questions; that is accepted deliberately, because the identical-text property across both pathways is load-bearing and is now pinned by test-reception-pathways.js. Red flags are for the taker to judge, not to read verbatim to the caller."
+      ],
+      "redFlags": [
+        { "id": "rf-mentalhealth-attempt", "ask": "Is the patient actively attempting to harm themselves right now, or do they have a plan and the means to carry it out immediately?", "escalate": "999" },
+        { "id": "rf-mentalhealth", "ask": "Is the patient saying they have thoughts of harming themselves or someone else, but no immediate plan or means?", "escalate": "duty" },
+        { "id": "rf-danger-now", "ask": "Is anyone in danger right now — have they taken an overdose, seriously injured themselves, or is someone else at risk?", "escalate": "999" },
+        { "id": "rf-selfharm-injury-urgent", "ask": "Have they harmed themselves today, AND does the injury itself need emergency treatment — for example heavy bleeding, a deep wound, or a burn?", "escalate": "999" },
+        { "id": "rf-selfharm-not-urgent", "ask": "Have they harmed themselves today, where the injury itself does NOT need emergency treatment?", "escalate": "duty" },
+        { "id": "rf-psychosis-acute", "ask": "Are they hearing, seeing, or believing things that other people say are not real, which are getting rapidly worse right now and they cannot cope?", "escalate": "999" },
+        { "id": "rf-psychosis-present", "ask": "Are they hearing, seeing, or believing things that other people say are not real, which are there but are NOT getting rapidly worse?", "escalate": "duty" },
+        { "id": "rf-safeguarding", "ask": "Is a child or a vulnerable adult at risk of harm, neglect, or abuse in this situation?", "escalate": "duty", "safeguarding": true },
+        { "id": "rf-no-safe-place", "ask": "Do they have nowhere safe to be, or is there nobody with them while they are in distress?", "escalate": "duty" }
+      ],
+      "questions": [
+        { "id": "safe-now", "ask": "Are you safe right now?", "type": "yesno", "label": "Safe right now" },
+        { "id": "today", "ask": "Can you tell me what's happening today? (write down their own words — do not interpret or summarise)", "type": "text", "label": "What's happening today" },
+        { "id": "harm-thoughts", "ask": "Are you having any thoughts of harming yourself?", "type": "yesno", "label": "Thoughts of self-harm" },
+        { "id": "who-with", "ask": "Is there anyone with you at the moment?", "type": "text", "label": "Anyone with them" },
+        { "id": "known-team", "ask": "Are you already known to a mental health team or a crisis service?", "type": "text", "label": "Known to MH team / crisis service" },
+        { "id": "hoping", "ask": "What were you hoping for today?", "type": "text", "label": "Hoping for" }
       ]
     }
   ]

@@ -20,6 +20,8 @@ const {
   stripLegacyMarkers,
   sameConceptAlternatives,
   buildEditProblemPayload,
+  unwrapOptionValue,
+  apiErrorMessage,
   findOutdatedProblems,
   detectLateralityHint,
   descriptionAlreadySpecifiesLaterality,
@@ -1638,6 +1640,121 @@ console.log(
   );
   check(codeQualityConcernExists({}) === false, 'an empty state object -> no concern, never throws');
   check(codeQualityConcernExists(null) === false, 'null -> no concern, never throws');
+}
+
+console.log('--- unwrapOptionValue + episode round-trip: the real 2026-07-27 "API 400" case ---');
+{
+  // The GET prefill returns select-backed fields as the SELECTED OPTION
+  // OBJECT; the POST contract takes the bare value. First seen live
+  // 2026-07-27 on an EMIS-imported problem with episode
+  // {value:"subsequent",label:"Subsequent"} — the first non-null episode
+  // ever captured — where round-tripping the whole object was rejected
+  // with a 400.
+  check(
+    unwrapOptionValue({ value: 'subsequent', label: 'Subsequent' }) === 'subsequent',
+    'an option object {value,label} unwraps to its value'
+  );
+  check(unwrapOptionValue('major') === 'major', 'a plain string passes through untouched');
+  check(unwrapOptionValue(null) === null, 'null passes through untouched');
+  check(
+    unwrapOptionValue({ value: 'x' }) !== 'x' && typeof unwrapOptionValue({ value: 'x' }) === 'object',
+    'an object with value but NO label is NOT unwrapped (strict option shape only)'
+  );
+  {
+    const org = { organisationName: 'The Park Road Surgery', organisationIdentifierType: null };
+    check(unwrapOptionValue(org) === org, 'a real object field (recordedByOrganisation shape) is never mangled');
+  }
+
+  // The full payload, built from the pseudonymised real prefill that 400'd.
+  const prefill = {
+    onsetDate: '2015-03-10',
+    contextId: null,
+    contextType: null,
+    significance: 'major',
+    episode: { value: 'subsequent', label: 'Subsequent' },
+    additionalInformation: 'monitoring\nLast review: 20 Oct 2021',
+    hiddenFromPatientFacingServices: false,
+    confidentialFromThirdParties: false,
+    endDate: null,
+    reasonEnded: null,
+    recordDate: '2015-03-10',
+    recordedAtAnotherOrganisation: true,
+    recordedByOrganisation: null,
+    recordedByPractitioner: 'Dr A Smith',
+  };
+  const newCode = { description: 'Angiomyolipoma', conceptId: '999999999', descriptionId: '111111111' };
+  const payload = buildEditProblemPayload(prefill, newCode);
+  check(payload.episode === 'subsequent', 'episode option object is flattened to its bare value in the POST body');
+  check(payload.significance === 'major', 'significance (already a plain string) is unchanged');
+  check(payload.recordedByOrganisation === null, 'a null recordedByOrganisation round-trips as null, not dropped');
+  check(payload.recordedByPractitioner === 'Dr A Smith', 'recordedByPractitioner round-trips untouched');
+  check(payload.problemCode === newCode, 'problemCode is the chosen suggestion');
+  check(
+    payload.additionalInformation === 'monitoring\nLast review: 20 Oct 2021',
+    'multi-line additionalInformation round-trips untouched'
+  );
+
+  // recordedByStaff branch: staff options are {value,label}, so a prefill
+  // that returns the selected one as an option object must flatten too.
+  const localPrefill = {
+    recordedAtAnotherOrganisation: false,
+    recordedByStaff: { value: 'staff-uuid-1', label: 'Dr B Jones' },
+  };
+  const localPayload = buildEditProblemPayload(localPrefill, newCode);
+  check(
+    localPayload.recordedByStaff === 'staff-uuid-1',
+    'recordedByStaff option object is flattened to its bare value'
+  );
+  const localPlain = buildEditProblemPayload(
+    { recordedAtAnotherOrganisation: false, recordedByStaff: 'plain' },
+    newCode
+  );
+  check(localPlain.recordedByStaff === 'plain', 'a plain recordedByStaff value is unchanged');
+}
+
+console.log('--- apiErrorMessage: non-2xx responses surface the server reason, never just the status ---');
+{
+  // The live "API 400" round (2026-07-27): an edit-problem apply was
+  // rejected and the discarded response body was the only thing that could
+  // have said why. These pin the extraction rules.
+  check(apiErrorMessage(400, '') === 'API 400', 'no body -> bare status, unchanged from the old behaviour');
+  check(apiErrorMessage(400, null) === 'API 400', 'null body -> bare status, never throws');
+  check(
+    apiErrorMessage(400, '{"message":"onsetDate must not be in the future"}') ===
+      'API 400 — onsetDate must not be in the future',
+    'a JSON body with .message surfaces the message'
+  );
+  check(
+    apiErrorMessage(400, '{"error":"Bad Request"}') === 'API 400 — Bad Request',
+    'a JSON body with .error surfaces the error string'
+  );
+  check(
+    apiErrorMessage(422, '{"errors":{"recordedByStaff":"is required"}}') ===
+      'API 422 — {"recordedByStaff":"is required"}',
+    'a JSON body with an .errors object surfaces the per-field errors'
+  );
+  check(
+    apiErrorMessage(400, '{"unexpected":"shape"}') === 'API 400 — {"unexpected":"shape"}',
+    'an unrecognised JSON shape falls back to the whole (stringified) object'
+  );
+  check(
+    apiErrorMessage(500, 'Internal Server Error') === 'API 500 — Internal Server Error',
+    'a non-JSON body is used as-is'
+  );
+  check(
+    apiErrorMessage(400, '  {"message":"x"}  ') === 'API 400 — x',
+    'surrounding whitespace is trimmed before parsing'
+  );
+  {
+    const long = 'a'.repeat(500);
+    const msg = apiErrorMessage(400, long);
+    check(msg.length <= 'API 400 — '.length + 221, `a long body is truncated (got length ${msg.length})`);
+    check(msg.endsWith('…'), 'truncation is marked with an ellipsis');
+  }
+  check(
+    apiErrorMessage(400, 'line1\n   line2\t\tline3') === 'API 400 — line1 line2 line3',
+    'internal whitespace/newlines are collapsed for the inline panel'
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
