@@ -18,7 +18,14 @@ function check(cond, msg) {
   if (cond) { console.log(`  OK  ${msg}`); passed++; }
   else { console.error(`  FAIL  ${msg}`); failed++; }
 }
-function isoDaysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
+// Pinned reference clock. isoDaysAgo() must offset from the SAME instant the
+// engine is given as `now` below (NOW), not the real wall clock — otherwise
+// every date-relative assertion silently drifts as real time moves away from
+// NOW, eventually crossing a due_soon/overdue band boundary (the 144d-overdue
+// case rotted this way once real-today passed ~2026-07). Both derive from
+// NOW_ISO so the whole file is deterministic regardless of when it runs.
+const NOW_ISO = '2026-05-30T12:00:00.000Z';
+function isoDaysAgo(n) { const d = new Date(NOW_ISO); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
 
 // Replicate readMockPatient()'s row parsing (the documented "a | b | c" format)
 // so the test asserts the exact shape the builder feeds the engine.
@@ -60,7 +67,7 @@ try { validateCustomRule({ ...formRule, tests: [] }); } catch (e) { threw = e.me
 check(/tests must be a non-empty array/.test(threw || ''), 'validator rejects a rule with no tests (live-preview ⚠ message)');
 
 console.log('\n--- engine preview parity (overdue) ---');
-const NOW = '2026-05-30T12:00:00.000Z';
+const NOW = NOW_ISO;
 let mock = parseMock({ meds: ['Methotrexate 10mg tablets'], obs: [`FBC | normal | ${isoDaysAgo(84 + 60)}`], age: 60, now: NOW });
 let chips = run(formRule, mock);
 let fired = chips.find(c => c.ruleId === formRule.id);
