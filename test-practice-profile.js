@@ -382,6 +382,85 @@ function makeProfile(over = {}) {
   check(!('disclaimerAcceptedAt' in (store['reception.config'] || {})),
     'reception replace: disclaimerAcceptedAt never written');
 
+  // ── Triage Lens merge: oirTests field-level merge (2026-07-29 regression) ──
+  // Real bug: the OLD code only ever applied triagelens.config when the local
+  // copy was completely empty — but service-worker.js's initialiseTriage()
+  // ALWAYS seeds it from defaults.json on install, so it's never actually
+  // empty, on any machine. This confirms the fix: oirTests now merges by
+  // `key` even when local triagelens.config is already populated (simulating
+  // the real-world always-populated case).
+  console.log('\n--- triage merge: oirTests field-level merge (2026-07-29 regression fix) ---');
+  reset();
+  store['triagelens.config'] = {
+    version: 7,
+    rules: { existingRule: true },
+    oirTests: [{ key: 'local-test-1', label: 'Local custom test', pattern: 'foo' }],
+  };
+  const triageMergeProfile = makeProfile({
+    profileVersion: 'tr-1',
+    apply: { modules: { triage: 'merge' } },
+    envelope: {
+      modules: {
+        triage: {
+          config: {
+            version: 99, // must NOT overwrite local version — rules/version untouched
+            rules: { profileRule: true },
+            oirTests: [
+              { key: 'local-test-1', label: 'Should not overwrite', pattern: 'COLLISION' }, // key collision
+              { key: 'profile-test-1', label: 'New from profile', pattern: 'bar' }, // new
+            ],
+          },
+        },
+      },
+    },
+  });
+  const rTriage = await PP.applyProfile(triageMergeProfile);
+  check(rTriage.modulesApplied.includes('triage'), 'triage merge applied (local config was NOT empty)');
+  check(store['triagelens.config'].oirTests.length === 2,
+    'triage merge: appended the new oirTests entry, kept the local one (not 3, not 1)');
+  check(store['triagelens.config'].oirTests.find(t => t.key === 'local-test-1')?.label === 'Local custom test',
+    'triage merge: existing oirTests entry NOT overwritten (key collision)');
+  check(store['triagelens.config'].oirTests.find(t => t.key === 'profile-test-1') !== undefined,
+    'triage merge: new-key oirTests entry appended');
+  check(store['triagelens.config'].version === 7, 'triage merge: local version untouched (only oirTests merges)');
+  check(store['triagelens.config'].rules?.existingRule === true && !store['triagelens.config'].rules?.profileRule,
+    'triage merge: local rules untouched — rules/thresholds/systemChips/resultRules are NOT merged, by design');
+
+  // ── Triage Lens merge: genuinely empty local config still applies wholesale ─
+  console.log('\n--- triage merge: genuinely empty local config -> whole config applied ---');
+  reset();
+  const triageEmptyProfile = makeProfile({
+    profileVersion: 'tr-2',
+    apply: { modules: { triage: 'merge' } },
+    envelope: {
+      modules: {
+        triage: {
+          config: { version: 1, oirTests: [{ key: 'first-test', label: 'First', pattern: 'x' }] },
+        },
+      },
+    },
+  });
+  await PP.applyProfile(triageEmptyProfile);
+  check(store['triagelens.config']?.version === 1, 'triage merge: whole config applied when local was truly empty');
+  check(store['triagelens.config']?.oirTests?.[0]?.key === 'first-test',
+    'triage merge: oirTests present via whole-config path when local was empty');
+
+  // ── Triage Lens replace: still applies unconditionally, unchanged ──────────
+  console.log('\n--- triage replace: applies unconditionally ---');
+  reset();
+  store['triagelens.config'] = { version: 5, oirTests: [{ key: 'old', label: 'Old', pattern: 'x' }] };
+  const triageReplaceProfile = makeProfile({
+    profileVersion: 'tr-3',
+    apply: { modules: { triage: 'replace' } },
+    envelope: {
+      modules: { triage: { config: { version: 6, oirTests: [{ key: 'new', label: 'New', pattern: 'y' }] } } },
+    },
+  });
+  await PP.applyProfile(triageReplaceProfile);
+  check(store['triagelens.config'].version === 6, 'triage replace: whole config overwritten, unchanged behaviour');
+  check(store['triagelens.config'].oirTests.length === 1 && store['triagelens.config'].oirTests[0].key === 'new',
+    'triage replace: old oirTests entries wiped, replaced wholesale (unchanged behaviour)');
+
   // ── Sentinel: alertLibraryAcknowledged stripped in both modes ─────────────
   console.log('\n--- sentinel: alertLibraryAcknowledged stripped ---');
   reset();

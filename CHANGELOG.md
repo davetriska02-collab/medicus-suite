@@ -2,6 +2,47 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.203.0] — 2026-07-29
+
+### PR #228 remediation: merged main, escAttr + import key validation, deterministic REPLACED BY, scan patient-change guard
+
+Merged `origin/main` into PR #228 (`fix/oir-native-checkbox`) and applied review-remediation
+fixes ahead of merge.
+
+- **Security fix — attribute-position escaping for Clean-up-code preference keys
+  (confirmed exploitable pre-fix).** `options/options.js`'s PDC (preferred-descriptions)
+  tally-row rendering interpolated `topKey`/`row.key` into `data-pdc-clear` /
+  `data-pdc-setoverride` / `data-pdc-row-key` attributes using `escHtml()`, which does not
+  escape quotes — a key containing `"` could break out of the attribute and inject markup
+  into the options page. Switched to `escAttr()` (already defined, escapes quotes on top of
+  `escHtml`). Paired with a source-side fix: `shared/io/problem-description-cleanup-io.js`'s
+  import validator now rejects any top-level key not shaped like a SNOMED conceptId
+  (`/^\d+$/`) and any tally key / `override.key` not shaped like a descriptionId or
+  `conceptId|descriptionId` (`/^\d+(\|\d+)?$/`) — so an imported backup can no longer carry
+  a crafted key through to the attribute sink at all. New cases in
+  `test-problem-description-cleanup-io.js` pin both the rejection and that legitimate
+  axis-2 keys (`123|456`) still pass.
+- **REPLACED BY now deterministically preferred over SAME AS.** `shared/snomed-retirement.js`
+  could carry both associations on one retired concept; which one ended up in `replacement`
+  used to depend on the termbrowser API's `memberships[]` array order. `REPLACEMENT_REFSET_IDS`'
+  own array order is now used as an explicit priority list (REPLACED BY beats SAME AS
+  regardless of which membership the API lists first), while "first wins" is preserved within
+  a single refset. Two new fixtures in `test-snomed-retirement.js` (both associations present,
+  opposite array order) pin that REPLACED BY wins either way.
+- **Clinical-summary scan discards a wrong-patient response.** `content-scripts/
+  problem-description-cleanup.js`'s `scan()` could cache patient A's in-flight
+  `fetchClinicalSummaryProblems` response after the clinician had already switched to
+  patient B — `_scanInFlight` gating meant B's own scan skipped fetching, so A's response
+  landed and got matched against B's DOM. `scan()` now captures the requested patient ID
+  before the `await` and only assigns `_problemsCache` if the current patient still matches
+  when the response lands, discarding silently otherwise (same stale-response discipline as
+  the PR #227 audit fixes' `_evalGen`/`_runToken`). DOM-bound, not exported — no unit test;
+  this entry plus the code comment are the record.
+- **CI patient-data guard allowlist.** `test-snomed-retirement.js` added to
+  `NHS_ADD_ALLOWLIST` in `scripts/check-no-patient-data.js` — it carries SNOMED
+  conceptId/descriptionId values, some of which coincidentally pass the NHS Modulus-11
+  check, same rationale as the existing `test-problem-description-cleanup.js` entry.
+
 ## [v3.202.1] — 2026-07-28
 
 ### CSO review pass (delegated virtual-Dave review at Dave's instruction) — sign-offs + clinical corrections
@@ -305,6 +346,407 @@ text thing because we won't add all the members of staff."
   review), with `test-quick-actions-core.js` pinning every canonical sentence
   verbatim.
 
+## [v3.196.0] — 2026-07-29
+
+### Fixed: practice-profile push of custom Outstanding Investigation Requests (OIR) test entries never actually reached ANY install
+
+Real bug, confirmed live: a practice published custom OIR test-dictionary entries via the
+shared practice profile, confirmed the publish itself worked, but none of them ever reached
+any install — including a genuinely fresh one. Root cause in `shared/io/practice-profile.js`'s
+Triage Lens section: the "merge" path only ever applied the whole `triagelens.config` blob
+when the local copy was **completely empty** — but it never actually is, on any machine.
+`service-worker.js`'s `initialiseTriage()` seeds `triagelens.config` from the bundled
+`defaults.json` on every `chrome.runtime.onInstalled`, and that local write always wins the
+race against this profile check's own network fetch of `practice-profile.json` — so the
+whole-config "only if empty" gate could never actually fire for practice-authored profile
+content, on any install, fresh or not.
+
+`oirTests` is now merged at the field level — appending only entries whose `key` isn't
+already present locally, the same by-id merge discipline already used elsewhere in this file
+for `sentinel.customRules`/`knowledge.items`/`triageAlerts.rules` — instead of gating the
+whole config on an empty-check that could never be true. `rules`/`thresholds`/`systemChips`/
+`resultRules` are deliberately NOT merged (those are the suite's own shipped clinical logic,
+not practice-authored) — pushing those wholesale even once local config exists would risk
+silently clobbering a clinician's own local rule tweaks; left exactly as before until there's
+a real reported need. `"replace"` mode is unchanged (still applies unconditionally). 10 new
+tests in `test-practice-profile.js` — this module had no existing coverage at all, which is
+presumably why the bug went unnoticed.
+
+### Hardened: SNOMED retirement check's termbrowser.nhs.uk fetch now goes through the service worker, not the content script
+
+A live browser console capture showed a plain `fetch()` from
+`content-scripts/problem-description-cleanup.js` (injected into the Medicus page) to the
+public termbrowser.nhs.uk API blocked by the browser's own CORS check — `Access to fetch at
+'https://termbrowser.nhs.uk/...' from origin 'https://england.medicus.health' has been
+blocked by CORS policy` — despite termbrowser.nhs.uk being correctly declared in
+`manifest.json`'s `host_permissions`. **Not confirmed as a persistent bug** — the same check
+was seen working again shortly after, without the extension even being reloaded, so the
+original block may have been transient (a one-off preflight/network blip) rather than
+content scripts categorically being unable to get the host_permissions CORS bypass. Since
+`fetchRetirementStatus` already fails closed on any error (by design, never guesses
+active/inactive), this was never a crash either way — at worst a silent "skip" on whichever
+requests happened to hit it.
+
+Hardened regardless, since there's no downside: the fetch now relays through the background
+service worker, which has no page/extension origin ambiguity at all — a new
+`termbrowser:fetchConcept` message handler in `service-worker.js` performs the actual
+`fetch()`, restricted to the `termbrowser.nhs.uk` host specifically via a parsed-URL hostname
+check (deliberately NOT a general-purpose cross-origin proxy, even though only
+intra-extension senders can reach it at all — same `sender.id !== chrome.runtime.id` guard as
+every other handler in this file). `fetchRetirementStatus` now calls
+`chrome.runtime.sendMessage(...)` instead of `fetch()` directly. Unit-tested in
+`test-service-worker.js` (the relay itself, host/protocol restriction, malformed-input
+handling, and a check that `fetchRetirementStatus` no longer calls `fetch()` directly at
+all).
+
+### Fixed: "Clean up code" buttons vanished for good after navigating away from Clinical Summary and back
+
+Real bug, reported after running "Check for retired/legacy codes?" then navigating to
+another care-record tab and back to Clinical Summary (same patient): the retirement-scan
+trigger widget reappeared correctly, but any "Clean up code" button it had flagged did not
+— only a hard page refresh restored it. Diagnosed via a timed peak/final DOM-count capture
+spanning the navigate-away-and-back action (not guessed): the widget recovers because
+`scan()`'s recurring rescan loop calls `injectRetiredWidgetTrigger()` unconditionally on
+every tick, but that same loop only re-injects per-row buttons for problems matched by the
+cheap text heuristic (`findOutdatedProblems`) — it never looked at `_rows[problemId]` state
+already set by the opt-in retirement scan (`retiredInfo`/`legacyReadCode`/
+`genericAdditionalInfo`), so a problem flagged ONLY by that scan lost its button for good
+the moment Vue's re-render wiped it. `scan()` now unions the text-heuristic list with every
+problem already flagged by the retirement scan before re-injecting — `injectFixButton`
+itself was already idempotent/de-duping, so this closes the gap.
+
+### Added: "Cleanup code preferences" — per-practice learning for "Clean up code", two axes
+
+Every "Clean up code" apply path (same-concept relabel, descendant, cross-concept,
+hint-expanded, confirmed-replacement, possibly/partially-equivalent, manual search — anywhere
+a clinician confirms a description via `applyCode`) now feeds two local, per-practice learning
+signals, both reviewable and manually overridable on a new **Cleanup code preferences** page
+in Options:
+
+- **Preferred wording** (`pdc.preferredDescriptions`, keyed by conceptId): which WORDING this
+  practice picks among several synonyms Medicus offers for the SAME code. Closes a gap
+  `confirmedReplacementAlternatives`' own comment already flagged (v3.195.0): there is no
+  preferred-term signal in Medicus's own search response to rank synonyms by, so the
+  practice's own actual usage becomes that signal instead of a guess. When none of the
+  automated categories find anything for a concept (a clinician would otherwise have to fall
+  back to manual search every time), this practice's own prior choice is now offered directly
+  — a pure local lookup, no re-search dependency.
+- **Code remapping** (`pdc.conceptRemap`, keyed by the SOURCE conceptId) — new, added after
+  live feedback: which OTHER SNOMED code this practice has actually replaced a given code
+  with (a genuine recode, not a wording tweak). Real motivating case: "Injection into
+  varicose vein of leg" (449705007) manually replaced with "Injection of varicose vein of
+  lower limb" (449708009) — the wording tally above couldn't help here (different concept
+  entirely), and the existing `crossConceptAlternatives` text-match couldn't catch it either
+  (the wordings don't match). This is a materially higher-confidence signal than that
+  text-match category — a real precedent this practice has already applied, not a
+  coincidence — so it renders in its own clearly-labelled, high-confidence green section in
+  the panel, distinct from the cautious orange cross-concept/hint-expanded ones. Still only
+  ever offered as a one-click suggestion; never auto-applied, same discipline as every other
+  category in this file.
+
+Both axes share one generalised mechanism, `shared/preferred-descriptions.js` (pure
+tally/resolve/override logic over an arbitrary key+candidate shape, unit-tested in
+`test-preferred-descriptions.js`) and one IO file,
+`shared/io/problem-description-cleanup-io.js` (both storage keys, wired into the suite
+backup/export system — `test-problem-description-cleanup-io.js`). Deliberately different from
+most IO files in this repo: import **merges** tally counts onto the existing local ones rather
+than replacing them (this data is meant to accumulate across a practice's machines via the
+existing manual export/import mechanism, not be overwritten by whichever backup was imported
+last), and a local manual override always survives an import carrying a conflicting one — both
+rules apply independently to each axis.
+
+A manual override can be set/cleared per concept on the Options page for either axis — the
+override always wins over the tally when both exist, but tallying continues underneath it
+regardless, so a practice can check whether the pinned choice is actually the one being used.
+The page also caps its default view to the 20 most-recently-used entries per axis (with a
+"Show all" toggle and a filter box, both sorted alphabetically) rather than rendering
+everything unconditionally, since a practice's tally can grow large over time.
+
+No change yet to which description is *pre-selected* in the wording pulldowns themselves —
+that remains a deliberately deferred follow-up now that there's a live-verified data-collection
+and review/override layer to build it on.
+
+### Added: "Clean up code" flags GP2GP severity-defaulting contradictions, offers a one-click correction
+
+Real bug found via a HAR capture (SCTID 433144002, "Chronic kidney disease stage 3"):
+Medicus's edit-problem UI only has a plain Major/Minor significance dropdown, so when a
+GP2GP-transferred source record carries no machine-readable significance value, the importer
+defaults the structured field to Minor and writes what it did, plus what the source record's
+own free text actually said, into `additionalInformation` as plain text — e.g. "Unspecified
+Significance: Defaulted to Minor\nProblem severity: Major". The structured field is never
+corrected afterwards even when the source-supplied value disagrees with the default, right
+there in the same field — the motivating patient was stored as `significance:"minor"` when
+their own import text said Major.
+
+"Clean up code"'s opt-in scan now parses this two-fragment template and compares the stated
+value against the problem's own current significance. **ALL known GP2GP-import boilerplate
+now lives in one place**, `rules/generic-additional-info-text.json` — consolidated the
+same day from a second file, `rules/severity-defaulting-pattern.json`, that briefly existed
+alongside it. Each entry carries a `kind`: plain `"literal"` strings (the original schema,
+matched per line) for pure noise with nothing further to check, or `"pattern"` (a regex
+source, matched against the WHOLE field rather than per line) for boilerplate that also
+encodes a captured value — an `action` flag on the entry says what further step to offer
+when that value disagrees with the record. `Problem severity: Major` was also added as a
+literal entry now that it's been observed standalone on a real patient.
+
+Also fixed the same day: a second real layout of the boilerplate turned up —
+"Unspecified Significance: Defaulted to Minor Problem severity: Minor", the two fragments
+run together on **one line, joined by a space, no newline at all** (values agreeing this
+time, so no correction needed, just plain noise) — where the original implementation,
+which required each fragment to be its own whole line, would have missed it entirely and
+left it untouched. The pattern-matching regex now spans whitespace generically (`\s+`
+between the two fragments), so it recognises the boilerplate whichever way GP2GP happens to
+have joined it, without needing a separate literal entry per layout.
+
+`findPatternMatch`/`removeMatchedSpan`/`severityCorrectionNeeded`/`computeAdditionalInfoFindings`
+(the last now the single source of truth used by both the opt-in scan and the panel's own
+re-fetch, so the two can never disagree) are unit-tested in `test-problem-description-cleanup.js`.
+
+### Fixed: "Clean up code" missed a retired concept's SNOMED-confirmed replacement when the association was "SAME AS" rather than "REPLACED BY"
+
+Real gap, reported after a clinician found no suggestion at all for a "Check cystoscopy using
+flexible instrument" problem (176187002). It never reached the automatic text scan
+(`looksOutdated()` has no bracket/NOS/NEC/H-O marker to match here), so it depended entirely
+on the opt-in "Check for retired/legacy codes?" scan — which correctly found the concept
+retired (inactivation reason "Duplicate component") but landed on "no automatic replacement
+is recorded", even though SNOMED does name one: a genuine `ASSOCIATION` membership on refset
+`900000000000527005` ("SAME AS association reference set"), pointing to `301301002` "Flexible
+cystoscopy" — confirmed live via the public NHS termbrowser API. `shared/snomed-retirement.js`
+only ever checked `REPLACEMENT_REFSET_IDS` against the single `900000000000526001` ("REPLACED
+BY") refset; SAME AS was a documented-but-unconfirmed gap in that file's own header comment
+since 2026-07-26, now closed with a real example. Folded into the SAME `replacement` field
+REPLACED BY already populates (not a new hedge-style multi-candidate list like
+possiblyEquivalentTo/partiallyEquivalentTo) — "duplicate component" + "SAME AS" together
+assert these are literally the same clinical concept filed twice, the same one-confirmed-
+successor confidence tier REPLACED BY already has. `REPLACEMENT_REFSET_IDS` was deliberately
+kept as an array from the start for exactly this kind of extension — closing this gap needed
+one line, `test-snomed-retirement.js` gets a new fixture (176187002).
+
+### Fixed: descendant/laterality search on a retired problem targeted the wrong (dead) concept
+
+Real gap, found while investigating why 179304004 "Primary uncemented total hip replacement"
+(retired, additionalInformation containing "right") offered no laterality-specific
+suggestion. The investigation concluded no suggestion SHOULD have been offered for that
+specific case — the candidate a clinician proposed, 430694001 "Prosthetic arthroplasty of
+right hip", genuinely carries no "uncemented"/"total" facet on any of its relationships, and
+no SNOMED concept combines all three (confirmed via two text searches against the public
+terminology API) — so keeping the correct procedure-type code with "right" as free text is
+the clinically correct SNOMED modelling, not a gap.
+
+But a real, separate bug surfaced during that investigation: the descendant/laterality search
+in `openPanel` narrowed under `code.conceptId` — the problem's OWN current conceptId — which
+for a retired problem is the old, retired concept. SNOMED stops growing a retired concept's
+subtree once it's retired (179304004 itself has zero descendants, confirmed live), so this
+search was structurally guaranteed to find nothing for ANY retired-with-replacement problem,
+regardless of whether the live replacement concept actually has laterality-specific children.
+New `descendantSearchTargetConceptId` (`content-scripts/problem-description-cleanup.js`)
+prefers the confirmed replacement's conceptId (`st.retiredInfo.replacement`, already resolved
+by the opt-in retirement scan — no extra fetch) when one exists, falling back to the
+problem's own conceptId otherwise (an active concept, or a retired one with no confirmed
+replacement) — unit-tested in `test-problem-description-cleanup.js`.
+
+### Added: "Clean up code" flags source-system "PRIORITY=n" import text, prompts a manual severity check
+
+Some GP source systems export a problem's severity as a raw `PRIORITY=n` field (n observed
+1-9, exact bounds unconfirmed) instead of anything Medicus can map onto Major/Minor.
+Unlike the severity-defaulting contradiction above, there's **no confirmed, consistent
+mapping** from this scale to Medicus's significance field — different source systems
+plausibly use different scales, and none has been reverse-engineered — so this is
+deliberately **not** an auto-correction. New `sourceSystemPriorityValue` pattern entry in
+`rules/generic-additional-info-text.json` (a new `reviewSeverity` action type, alongside
+the existing `severityCorrection` one) flags the raw `PRIORITY=n` text as junk and shows an
+informational note — *"Import text included a source-system priority value ('PRIORITY=n')
+with no confirmed mapping to Major/Minor — this problem is currently recorded as X; please
+check that's clinically correct"* — with no button attached, since there's nothing safe to
+guess. The raw text is still offered for removal via the ordinary "Remove generic import
+text" strip, coexisting with the note rather than being superseded by it (unlike a genuine
+contradiction, which supersedes the plain strip with the correction action instead).
+`computeAdditionalInfoFindings` now returns a third field, `severityReviewNote`, alongside
+`genericAdditionalInfo`/`severityContradiction` — unit-tested in
+`test-problem-description-cleanup.js`.
+
+**Same day, follow-up:** one value on this scale turned out to be confidently mappable
+after all — `PRIORITY=1` reliably means Major, per this practice's own direct experience of
+the source system this convention came from, holding across every example seen in imported
+data since. Added `valueSeverityMap: {"1": "major"}` to the `reviewSeverity` action (the
+mechanism now supports either style: a plain informational prompt for most values, or a
+confident correction for specific mapped ones) — `PRIORITY=1` now drives the SAME "Correct
+severity + remove junk text" one-click action as the GP2GP defaulting contradiction, with
+its own explanation text (`severityContradictionExplanation`) making clear the value comes
+from a locally-confirmed convention, not the source record spelling out "Major" in plain
+English. Every other value keeps the informational-only behaviour exactly as before.
+
+### Fixed: another severity-defaulting boilerplate layout wasn't being flagged at all
+
+Real gap, reported live: "Defaulted to Minor\nProblem severity: Minor" — the SAME GP2GP
+template as severityDefaultingContradiction above, but missing the leading "Unspecified
+Significance: " prefix — wasn't recognised at all. The pattern's leading fragment is now
+`(?:Unspecified Significance: )?Defaulted to (Major|Minor)` (the prefix is optional), so
+all three confirmed real-world layouts — full prefix + newline, full prefix + single space,
+and no prefix at all — are handled by the one regex, no code change needed, just the data
+file. Added a standalone `"Defaulted to Minor"` literal entry too, mirroring its longer
+sibling, so a solo/unpaired occurrence with no "Problem severity:" line is still recognised.
+
+### Added: "Active Problem, Not Significant (Minor)" boilerplate — and confirmed the span-based strip handles boilerplate mixed with genuine text on one line
+
+Real example (per the user, plausibly a record that's passed through more than one GP
+EPR/GP2GP transfer, each layering its own boilerplate onto the same field): "Defaulted to
+Minor\nProblem severity: Minor grade 1 with small erosion at GOJ\nActive Problem, Not
+Significant (Minor)". Two distinct pieces of noise here — the already-handled
+severityDefaultingContradiction fragment, and a NEW sibling to "Active Problem, Significant":
+`"Active Problem, Not Significant (Minor)"`, the same boilerplate template for the opposite
+significance value, added as its own literal entry.
+
+Worth noting explicitly since it wasn't obvious it would just work: the middle line mixes the
+"Problem severity: Minor" boilerplate prefix with genuine clinical free text ("grade 1 with
+small erosion at GOJ") on the SAME line. Because pattern-entry removal is span-based
+(`removeMatchedSpan`) rather than whole-line, it strips only the exact matched boilerplate
+substring and correctly leaves the genuine clinical text as its own surviving line — no new
+code needed for this case, confirmed via `test-problem-description-cleanup.js` against the
+exact real string.
+
+### Added: "Clean up code" reassures when a problem's SNOMED code itself is fine, flagged only for import-text housekeeping
+
+Real user concern, raised from a screenshot: a problem flagged ONLY because of junk import
+text (or a severity contradiction/review note) — with the code itself perfectly current, not
+retired, not Read-code-derived — still surfaced the SAME wall of alternative-code suggestion
+buttons as a genuinely outdated code, purely because `additionalInformation` happened to
+contain wording (e.g. "grade 1 with small erosion at GOJ") that matched a hint word for the
+unrelated descendant search. Visually indistinguishable from "this code is wrong, pick a
+replacement" — misleading when the code was never actually in question.
+
+The panel now shows a green reassurance note — *"This problem's own SNOMED code hasn't been
+flagged as outdated or retired — it was only flagged here for import-text housekeeping. Any
+suggestions below come from wording in 'Additional info' and are optional, not a sign the
+current code is wrong."* — whenever there's at least one suggestion to show but no genuine
+code-quality signal. New `codeQualityConcernExists` (pure logic, unit-tested) reuses
+`looksOutdated()` (the same cheap check the automatic per-load scan already runs) plus the
+two opt-in-scan-only signals (`retiredInfo`/`legacyReadCode`) already in state — never a new
+heuristic, just surfacing what the tool already knows but wasn't saying out loud.
+
+## [v3.195.0] — 2026-07-28
+
+### Added: "PARTIALLY EQUIVALENT TO" retirement association support
+
+Real case: 199317008 "Twin pregnancy - delivered" is retired ("Classification derived
+component") with a `PARTIALLY EQUIVALENT TO` association (refset `1186924009`) to TWO
+concepts — 65147003 "Twin pregnancy" and 289256000 "Mother delivered" — but
+`shared/snomed-retirement.js` only recognised `REPLACED BY` and `POSSIBLY EQUIVALENT TO`,
+so this association was silently skipped and no replacement was ever offered.
+
+`parseConceptRetirement` now also parses `partiallyEquivalentTo` (same multi-candidate,
+deduped shape as `possiblyEquivalentTo`, kept as its own field — SNOMED's own semantics
+differ: "partially equivalent" means the retired concept's meaning is SPLIT across the
+candidates, not a hedge between alternatives). The "Clean up code" panel renders it as its
+own violet-styled banner with distinct copy ("this record may need reviewing as more than
+one problem"), resolved against Medicus's own search index the same way as
+`possiblyEquivalentTo`.
+
+### Fixed: same-concept alternatives search invisible to codes on the Body structure axis
+
+Real case: "[M]Tubulovillous adenoma" (conceptId 61722000, an ACTIVE concept — not a
+retirement case) never got a same-concept relabel suggestion. `61722000` is a
+`(morphologic abnormality)` concept, and the ordinary same-concept-alternatives search
+scopes to Clinical finding/Procedure/Situation/Social context/Event only — the same root
+cause as v3.193.0's retirement-replacement fix, this time hit on the everyday "Clean up
+code" path that every `[M]`/`[X]`/NOS-flagged problem goes through. `openPanel` now retries
+the current concept's own bare-SCTID search against the Body structure hierarchy when the
+broad-scope search comes back empty, same two-step fallback already proven for retirement
+replacements.
+
+### Fixed: a SNOMED code's own eponymous/technical synonym could silently win over its plain-English one
+
+Real case: 402222007 "Pompholyx of hand" also carries the synonym "Chiropompholyx", and
+201201000 "Pompholyx of foot" also carries "Podopompholyx". `confirmedReplacementAlternative`
+picked whichever synonym happened to sort first in Medicus's own bare-SCTID search response
+— an accident of array order, not a deliberate choice (Medicus's search response carries no
+preferred-term/acceptability flag to rank by). `confirmedReplacementAlternatives` (plural)
+now returns every synonym for a candidate concept instead of just the first, used by
+`resolveSnomedNamedCandidate` for the confirmed-replacement / possibly-equivalent /
+partially-equivalent categories.
+
+### Changed: one lozenge per SNOMED code, not one per synonym
+
+Follow-up to the fix above: showing every synonym as its own button made one real SNOMED
+code look like several different codes when it had multiple wordings. `groupCandidatesByConcept`
+now groups every candidate-list category (same-concept alternatives, descendants,
+cross-concept, hint-expanded, confirmed replacement, possibly/partially equivalent) by
+`conceptId`: a code with one offered synonym keeps its existing single-button lozenge
+unchanged; a code with several renders a `<select>` of the wordings plus one shared "Use"
+button, routed through `applyGroupedCandidate` to whichever category's own apply function
+owns that state.
+
+276/276 tests passing across `test-snomed-retirement.js` (59) and
+`test-problem-description-cleanup.js` (217), lint/format clean.
+
+## [v3.194.0] — 2026-07-26
+
+### Renamed "Fix description" to "Clean up code"
+
+The widget grew well beyond same-concept relabelling — it now also suggests better/more
+specific codes, detects retired and Read-code-derived codes, and removes generic GP2GP
+import noise from `additionalInformation`. Button text and the retirement-scan status
+message updated to match; internal identifiers (`ms-pdc-*` CSS classes, file names) are
+unchanged — display text only.
+
+### Fixed: duplicate-description problems could get the wrong row's "Clean up code" button
+
+Real case: two "Infantile eczema" (90823000) problems on one patient, one Major
+significance, one Minor. `clinical-summary/summary`'s `problems` array groups by
+significance (all Minor entries, then all Major), but the page renders a Major `<ul
+aria-labelledby="problems-major-label">` BEFORE the Minor list — so a flat, whole-document
+duplicate-text row search claimed the wrong list's row for whichever problem was flagged.
+
+Confirmed live (within one significance group, the API's relative order DOES match that
+group's own `<ul>`'s DOM order — the invariant just needed the narrower scope). Fixed:
+`buildAnchorMap` now partitions problems by `significance.value` and resolves each
+partition's own `problems-<value>-label` list before claiming rows, instead of one flat
+whole-page search. (A first attempt — computing one shared anchor map from the full problem
+list regardless of flag status — fixed a related but different collision and was necessary,
+but insufficient on its own for this cross-section case.)
+
+### Fixed: a Read-v2-derived problem flagged for cleanup when there was nothing to fix
+
+A GP2GP import origin (`originalCodes` showing a `read-v2` code) only means the record is
+old — it says nothing about whether the CURRENT description is already the best available
+wording. A patient can have two problems on the same concept, one genuinely needing a
+relabel, one already correctly worded; flagging both read as broken when the already-correct
+one offered no alternatives on click.
+
+Fixed: before flagging the Read-v2 signal, the scan now runs the same same-concept SNOMED
+search "Clean up code" already runs on open (once per distinct conceptId among Read-v2-
+flagged problems, not per problem) and suppresses the flag if there's genuinely no better
+wording to offer. Retirement and generic-import-text flags are independent and unaffected.
+
+### Fixed: removing generic import text 400'd on a GP2GP-imported problem recorded with no defined author
+
+`edit-problem`'s GET can return `recordedByOrganisation` wrapped in a UI-select shape
+(`{label, value:{organisationName, ...}}`) instead of the plain `{organisationName, ...}`
+object the POST validates against — confirmed via a real author-less import, where
+round-tripping the wrapper verbatim 400'd (`recordedByOrganisation.organisationName`
+missing, `.label`/`.value` not expected). `buildEditProblemPayload` now unwraps this shape
+when detected, passing the original already-unwrapped shape through unchanged otherwise
+(both are confirmed real). The generic-text-removal apply path also now rebuilds
+`problemCode` from the same narrow `{description, conceptId, descriptionId}` shape every
+other apply path already uses, instead of round-tripping the raw GET value. `apiFetch`
+now surfaces the API's actual error body (truncated) instead of a bare status code, so a
+future rejection is self-diagnosing without a separate Network-tab capture.
+
+### `rules/generic-additional-info-text.json`: two more confirmed GP2GP boilerplate lines
+
+"Unspecified Significance: Defaulted to Minor" and "Problem severity: Minor" — real example,
+a Read-v2-derived "Infantile eczema" problem whose `additionalInformation` carried both as
+pure import boilerplate restating the `significance` field already captured structurally.
+
+### `rules/non-problem-root-codes.json`: the 18 roots added in v3.191.0 re-confirmed against Medicus's own live API
+
+Previously researched via the public NHS termbrowser API only. Every cited descendant for
+all 18 roots — including the two broad ones, `3457005` Patient referral and `307824009`
+Administrative statuses — now additionally confirmed live against Medicus's own
+`constrainingParentConcepts` search, matching the confidence level of the original 3 roots.
+No code change; end-to-end behaviour on a real patient's coded problem is still unobserved.
+
+193/193 tests passing (7 new), lint/format clean.
 ## [v3.196.0] — 2026-07-28
 
 ### Monitoring Brief: per-group RAG (Meds / QOF / General) + loud green all-clear
@@ -485,7 +927,6 @@ diagnosability; the root cause gets fixed once the server's reason is visible).
 The same discard-the-body pattern exists in `problem-junk-code-cleanup.js` and
 `document-file-inline.js` — deliberately not touched here (one focused change);
 worth the same treatment in a follow-up.
-
 ## [v3.193.1] — 2026-07-26
 
 ### PR #223 review fixes (CSO review): bulk-remove safety gates + housekeeping
