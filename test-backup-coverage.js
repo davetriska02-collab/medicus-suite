@@ -107,6 +107,12 @@ const KEY_PREFIXES = [
   'patientAlerts',
   'followups',
   'practice',
+  // Contacts Management family-cycling session (content-scripts/contacts-canvas.js) — found
+  // MISSING here entirely (not even in the USED set, since hasKeyPrefix silently filtered it out)
+  // while addressing a live-testing review finding that this key needed a documented backup
+  // exclusion; without this prefix the scanner was blind to it, same class of gap Audit M18 found
+  // for labfiling/patientAlerts/followups/practice above.
+  'contactsCanvas',
 ];
 
 function hasKeyPrefix(k) {
@@ -379,6 +385,16 @@ const ALLOWLIST = new Set([
   // DESIGN, never backed up:
   'ledger.contactLog',
   'ledger.taskAge',
+
+  // Contacts Management cycling session (content-scripts/contacts-canvas.js "Family cycling"
+  // section) — a short-lived, single-key snapshot written right before the browser navigates to
+  // the next linked family member's own record, and consumed/cleared on the other side. Carries
+  // real patient UUIDs and a family-relationship graph for whichever family the GP is mid-review
+  // on — a device-local working record, not user configuration, and restoring it onto another
+  // machine days later would resurrect a stale, possibly-wrong mid-review state pointing at
+  // patients that machine's user may have no business seeing. Self-pruning (4h TTL, enforced
+  // eagerly on every Medicus page load — see checkResumableFamilySession), never backed up:
+  'contactsCanvas.familySession',
 
   // Horizon-1 H2 — DOM-contract runtime canary state (shared/contract-canary.js):
   // per-contract { lastProbe, status, sinceTs, probeCount, failStreak, lastFailTs }

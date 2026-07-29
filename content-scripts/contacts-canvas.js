@@ -637,15 +637,19 @@
           if (candidateEdges.length) {
             const candidateDetailsList = await Promise.all(
               candidateEdges.map((xEdge) => {
-                if (patientDetailsCache.has(xEdge.cardId))
-                  return Promise.resolve(patientDetailsCache.get(xEdge.cardId));
-                return window.ContactsApi.getPatientDetails(st.apiBase, xEdge.cardId).catch(() => null);
+                if (patientDetailsCache.has(xEdge.cardId)) {
+                  return Promise.resolve({ rd: patientDetailsCache.get(xEdge.cardId), inactive: false });
+                }
+                return window.ContactsApi.getPatientDetails(st.apiBase, xEdge.cardId).then(
+                  (rd) => ({ rd, inactive: false }),
+                  (err) => ({ rd: null, inactive: !!(err && err.errorCode === 'inactive-patient-access') })
+                );
               })
             );
             if (st !== cs) return;
             candidateEdges.forEach((xEdge, i) => {
               if (seenPatientIds.has(xEdge.cardId)) return; // could have been added by an earlier source above
-              const rd = candidateDetailsList[i];
+              const { rd, inactive } = candidateDetailsList[i];
               const xGenderIdentity = rd && rd.patientDetailsSection && rd.patientDetailsSection.genderIdentity;
               const composed = window.ContactRelationships.composeViaHub(xEdge, bEdge, xGenderIdentity);
               if (!composed) return;
@@ -655,7 +659,14 @@
                 name: (rd && rd.patientDetailsSection && rd.patientDetailsSection.fullOfficialName) || xEdge.cardId,
                 genderIdentity: xGenderIdentity,
                 guessedBaseId: composed.baseId,
-                deceased: false, // composed, not free-text sourced — nothing to read a "(RIP)" marker from here
+                // Composed, not free-text sourced — there's no "(RIP)" marker to read here the way
+                // the other pool sources do (isDeceasedRelationshipText), so this can never be
+                // TRUE. inactive IS a real, if narrower, signal though: the fetch above 403ing as
+                // inactive-patient-access means this candidate's own record can't currently be
+                // opened at all (see cardHtml's recordInactive badge) — worth surfacing even though
+                // it isn't the same thing as confirmed-deceased.
+                deceased: false,
+                recordInactive: inactive,
                 hint: `Composed via ${(hubCard && hubCard.name) || 'the previous family member'}'s own ${window.ContactRelationships.formatLabel(xEdge.baseId, xEdge.modifierId)}`,
               });
             });
@@ -669,23 +680,36 @@
       // narrower-first scoping as the composition work, see the parked memory note) is a candidate
       // for "Next family member". Reuses patientDetailsCache for free wherever a parent/child/
       // related-patient fetch above already covered them, a fresh bounded fetch otherwise, purely to
-      // get a dob for the oldest-to-youngest ordering (enqueueFamilyMember). Whether a candidate is
-      // actually openable (not past its inactive-access grace period) is deliberately NOT checked
-      // here — only knowable by trying, and only matters once cycling actually reaches them
-      // (advanceToNextFamilyMember's own skip loop), not up front for everyone in the pool.
+      // get a dob for the oldest-to-youngest ordering (enqueueFamilyMember) — still enqueued even
+      // when the fetch fails, so a candidate isn't silently dropped from the pool just for having an
+      // unknown dob (it sorts last instead, per enqueueFamilyMember). Whether a candidate is
+      // actually openable is a SEPARATE question, only really consequential once cycling reaches
+      // them (advanceToNextFamilyMember's own skip loop) — but an inactive-access 403 discovered
+      // here, for free, is still worth badging immediately rather than thrown away (see cardHtml's
+      // recordInactive handling) — no reason to wait for a cycling attempt to surface something
+      // already visible on this canvas right now.
       const poolEdges = st.tree.edges || [];
       if (poolEdges.length) {
         const poolDetailsList = await Promise.all(
           poolEdges.map((edge) => {
-            if (patientDetailsCache.has(edge.cardId)) return Promise.resolve(patientDetailsCache.get(edge.cardId));
-            return window.ContactsApi.getPatientDetails(st.apiBase, edge.cardId).catch(() => null);
+            if (patientDetailsCache.has(edge.cardId)) {
+              return Promise.resolve({ rd: patientDetailsCache.get(edge.cardId), inactive: false });
+            }
+            return window.ContactsApi.getPatientDetails(st.apiBase, edge.cardId).then(
+              (rd) => ({ rd, inactive: false }),
+              (err) => ({ rd: null, inactive: !!(err && err.errorCode === 'inactive-patient-access') })
+            );
           })
         );
         if (st !== cs) return;
         poolEdges.forEach((edge, i) => {
-          const rd = poolDetailsList[i];
+          const { rd, inactive } = poolDetailsList[i];
           const dob = rd && rd.patientDetailsSection && rd.patientDetailsSection.dateOfBirth;
           st.familySession = window.ContactTree.enqueueFamilyMember(st.familySession, edge.cardId, dob || null);
+          if (inactive) {
+            const lc = st.linkedCards.find((c) => c.id === edge.cardId);
+            if (lc) lc.recordInactive = true;
+          }
         });
       }
 
@@ -764,6 +788,7 @@
           hint: match.hint,
           guessedBaseId: match.guessedBaseId || null,
           deceased: !!match.deceased,
+          recordInactive: !!match.recordInactive,
         });
       }
       st.suggestedCards = Array.from(bestByPatientId.values()).sort((a, b) => b.score - a.score);
@@ -784,6 +809,7 @@
           hint: t.hint,
           guessedBaseId: t.guessedBaseId || null,
           deceased: !!t.deceased,
+          recordInactive: !!t.recordInactive,
         }));
 
       // Same-name collision check — e.g. two genuinely different real patients both named "John
@@ -921,8 +947,14 @@
     // set at load time wherever relationship free text is available (manual/linked cards, and the
     // transitive/grandparent pools — see ContactRelationships.isDeceasedRelationshipText) and
     // simply absent everywhere else (address cards, a plain search result with no relationship
-    // text at all), so this is safe to check unconditionally on every card.
-    const badgeText = (opts.badge || '') + (card.deceased ? ' · Deceased' : '');
+    // text at all), so this is safe to check unconditionally on every card. `card.recordInactive`
+    // is the same idea for a different signal: set when a fetch for this linked contact 403s as
+    // inactive-patient-access (loadCanvas' Step 1.8, advanceToNextFamilyMember's cycling skip loop)
+    // — surfaced rather than silently discarded, since a dead next-of-kin still listed as an
+    // emergency contact is something a GP should be able to see, not just something cycling quietly
+    // skips past.
+    const badgeText =
+      (opts.badge || '') + (card.deceased ? ' · Deceased' : '') + (card.recordInactive ? ' · Inactive record' : '');
     const badge = badgeText ? `<span class="ms-cv-badge">${esc(badgeText)}</span>` : '';
     const sub = opts.sub ? `<div class="ms-cv-card-sub">${esc(opts.sub)}</div>` : '';
     const stateClass = opts.faded ? ' ms-cv-card-faded' : opts.outlined ? ' ms-cv-card-outlined' : '';
@@ -1733,7 +1765,7 @@
           <span class="ms-cv-header-actions">
             ${
               cs.familySession && cs.familySession.pending.length
-                ? `<button class="ms-ct-btn-ghost ms-cv-header-link" id="ms-cv-next-family" title="Move on to the next already-linked family member without leaving this record via Medicus's own navigation — carries the review pool with you">Next family member (${cs.familySession.pending.length})</button>`
+                ? `<button class="ms-ct-btn-ghost ms-cv-header-link" id="ms-cv-next-family" title="Leaves this patient's record and opens the next already-linked family member's own record, carrying your review pool with you — asks for confirmation first">Next family member (${cs.familySession.pending.length})</button>`
                 : ''
             }
             <button class="ms-ct-btn-ghost ms-cv-header-link" id="ms-cv-open-import" title="Search any other patient's record and bulk-copy several of their contacts onto this one in one go — this canvas only ever surfaces patients already listed as a contact for this one">Import from another patient</button>
@@ -2685,8 +2717,14 @@
   // pruning, just for one short-lived record instead of a long-running log.
   const FAMILY_SESSION_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
 
-  async function persistFamilySession(session) {
-    await chrome.storage.local.set({ [FAMILY_SESSION_STORAGE_KEY]: { session, savedAt: Date.now() } });
+  // targetName travels alongside the session purely for display (the resume banner, so it can say
+  // WHOSE record you've landed on) — deliberately kept in this wrapper object, not inside the pure
+  // engine session shape itself (window.ContactTree's structure stays name-free, same as every
+  // tree edge — see contact-tree.js's own makeEdge comment).
+  async function persistFamilySession(session, targetName) {
+    await chrome.storage.local.set({
+      [FAMILY_SESSION_STORAGE_KEY]: { session, savedAt: Date.now(), targetName: targetName || null },
+    });
   }
 
   async function loadPersistedFamilySession() {
@@ -2717,11 +2755,14 @@
   // page, before ever navigating: getPatientDetails is a plain credentialed fetch scoped by
   // apiBase, not a "must be on that patient's own page" action (the same pattern loadCanvas already
   // relies on for related-patient/grandparent fetches), so an inactive-access 403 can be discovered
-  // and silently skipped without leaving this page at all. Only once a genuinely openable target is
-  // found does this navigate — at most once, never a bounce through several dead pages. Any OTHER
-  // failure (network, unexpected API shape) is NOT silently skipped — that's not the "nothing
-  // actionable here anyway" case the inactive filter covers, so it stops cycling and surfaces the
-  // real error rather than quietly losing candidates to it.
+  // without leaving this page at all. NOT silent, though — an inactive/deceased record is exactly
+  // the "Inactive record" badge case (see cardHtml), so a skipped candidate's own card in THIS
+  // patient's tree gets flagged rather than the signal just being thrown away; a dead next-of-kin
+  // still listed as an emergency contact is a real thing a GP should be able to see. Only once a
+  // genuinely openable target is found does this navigate — at most once, never a bounce through
+  // several dead pages. Any OTHER failure (network, unexpected API shape) is NOT silently skipped —
+  // that's not the "nothing actionable here anyway" case the inactive filter covers, so it stops
+  // cycling and surfaces the real error rather than quietly losing candidates to it.
   async function advanceToNextFamilyMember() {
     if (!confirmDiscardUnfinishedMerge()) return;
     const fromPatientId = cs.patientId;
@@ -2736,7 +2777,11 @@
         targetId = result.patientId;
         break;
       } catch (err) {
-        if (err.errorCode === 'inactive-patient-access') continue; // expected, silent — see loadCanvas' Step 1.8
+        if (err.errorCode === 'inactive-patient-access') {
+          const lc = cs.linkedCards.find((c) => c.id === result.patientId);
+          if (lc) lc.recordInactive = true;
+          continue;
+        }
         cs.familySession = session;
         cs.workingError = `Could not check the next family member — ${err.message || 'unknown error'}. Stopped cycling.`;
         render();
@@ -2745,22 +2790,40 @@
     }
     if (!targetId) {
       // Pool exhausted — nothing left to cycle to. The header button disappears on its own now
-      // cs.familySession.pending is empty; no separate message needed.
+      // cs.familySession.pending is empty; still worth a render so any recordInactive badges set
+      // during the skip loop above actually show up.
       cs.familySession = session;
       render();
       return;
     }
-    await persistFamilySession(session);
+    // Navigating away from a patient's record mid-consultation needs an explicit, named
+    // confirmation — a control that just quietly moves you to someone else's record, with only the
+    // small print in a tooltip saying so, is a wrong-patient-documentation risk in a clinical tool.
+    const targetCard = cs.linkedCards.find((c) => c.id === targetId);
+    const targetName = (targetCard && targetCard.name) || 'the next family member';
+    const fromName = (cs.indexPatientDetails && cs.indexPatientDetails.displayName) || 'this patient';
+    if (
+      !window.confirm(
+        `This will leave ${fromName}'s record and open ${targetName}'s own record to continue the family contacts review.\n\n` +
+          'Click OK to continue, or CANCEL to stay on this record.'
+      )
+    ) {
+      cs.familySession = session;
+      render();
+      return;
+    }
+    await persistFamilySession(session, targetName);
     location.href = buildNavigationUrl(fromPatientId, targetId);
   }
 
-  function renderResumeBanner(session) {
+  function renderResumeBanner(session, targetName) {
     if (document.getElementById('ms-cv-resume-banner')) return;
     const el = document.createElement('div');
     el.id = 'ms-cv-resume-banner';
     const count = session.pending.length;
+    const who = targetName ? esc(targetName) : "this patient's";
     el.innerHTML = `
-      <span>Resume family contacts review${count ? ` — ${count} more to check` : ''}</span>
+      <span>Resume family contacts review for ${who}${count ? ` — ${count} more to check` : ''}</span>
       <button id="ms-cv-resume-open">Resume</button>
       <button id="ms-cv-resume-dismiss">Dismiss</button>
     `;
@@ -2776,17 +2839,20 @@
   }
 
   // checkResumableFamilySession — bootstrap, called once at the bottom of this file (fire-and-
-  // forget, same eager-init pattern as contacts-api.js's relationships-data fetch). Only shows the
-  // banner when this page's own patient is EXACTLY the one cycling sent us to (session.current) —
-  // if the GP navigated somewhere else instead, the persisted session is left inert in storage
-  // rather than surfacing a confusing banner on an unrelated patient's record; it'll still be found
-  // if they later land on the right page within FAMILY_SESSION_MAX_AGE_MS.
+  // forget, same eager-init pattern as contacts-api.js's relationships-data fetch). Calls
+  // loadPersistedFamilySession() FIRST, unconditionally — that's what enforces the
+  // FAMILY_SESSION_MAX_AGE_MS prune as a side effect, so a session gets cleaned up on the very next
+  // Medicus page load of ANY kind, not only if the GP happens to land back on the exact page
+  // cycling was heading to. Only shows the banner when this page's own patient is EXACTLY the one
+  // cycling sent us to (session.current) — if the GP navigated somewhere else instead, the
+  // (already-pruned-if-stale) persisted session is left inert in storage rather than surfacing a
+  // confusing banner on an unrelated patient's record.
   async function checkResumableFamilySession() {
-    const ctx = window.ContactsApi.resolveContext();
-    if (!ctx) return;
     const persisted = await loadPersistedFamilySession();
-    if (!persisted || persisted.session.current !== ctx.patientId) return;
-    renderResumeBanner(persisted.session);
+    if (!persisted) return;
+    const ctx = window.ContactsApi.resolveContext();
+    if (!ctx || persisted.session.current !== ctx.patientId) return;
+    renderResumeBanner(persisted.session, persisted.targetName);
   }
 
   // ── Open / close ──────────────────────────────────────────────────────────────────────────────

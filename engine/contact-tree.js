@@ -172,7 +172,12 @@
     };
   }
 
-  // ── Family session (cycling through multiple family members, no navigation required) ─────────
+  // ── Family session (cycling through multiple family members, no CANVAS RE-OPEN required) ──────
+  // NOTE: this does still involve a real browser navigation — the canvas itself cannot swap to
+  // another patient's data in place (Medicus is one-patient-per-page). "No navigation required"
+  // was this section's original framing before that was discovered; corrected here so this
+  // comment doesn't contradict what the caller (contacts-canvas.js) actually does. See that file's
+  // own "Family cycling" section for the full mechanism.
   // Plain objects (not Map) throughout, matching this codebase's pure-store convention (e.g.
   // shared/contact-ledger.js) and keeping the whole session trivially JSON-serialisable/testable.
   //
@@ -194,12 +199,16 @@
     return {
       current: indexPatientId || null,
       visited: indexPatientId ? { [indexPatientId]: true } : {},
-      pending: [], // [{ patientId, dob }], sorted ascending by dob (unknown dob sorts last)
+      pending: [], // [{ patientId, sortValue }], sorted ascending (unknown dob sorts last) — see dobSortValue
       byPatient: {}, // patientId -> tree
       committedEdgesByPatient: {}, // patientId -> edge[]
     };
   }
 
+  // dobSortValue(dob) -> a plain number, never the dob itself. The pending pool only ever needs an
+  // ORDERING, not the calendar date — storing the raw dob would mean a persisted session (see
+  // contacts-canvas.js's cross-page "Family cycling" section) carries actual dates-of-birth on
+  // disk for longer than strictly necessary; a precomputed sort value carries none of that.
   function dobSortValue(dob) {
     const t = dob ? new Date(dob).getTime() : NaN;
     return Number.isFinite(t) ? t : Infinity;
@@ -207,7 +216,9 @@
 
   // enqueueFamilyMember(session, patientId, dob) -> session' — adds a newly-discovered family
   // member to the pending pool if not already visited or already pending (dedup by patientId).
-  // Inserted in dob order, not appended, so the pool stays sorted oldest-to-youngest as it grows.
+  // Inserted in sortValue order, not appended, so the pool stays sorted oldest-to-youngest as it
+  // grows. `dob` itself is converted to a plain sortValue immediately and never stored — see
+  // dobSortValue's own comment.
   function enqueueFamilyMember(session, patientId, dob) {
     if (
       !session ||
@@ -218,9 +229,9 @@
       return session;
     }
     const next = clone(session);
-    const entry = { patientId, dob: dob || null };
     const value = dobSortValue(dob);
-    const insertAt = next.pending.findIndex((p) => dobSortValue(p.dob) > value);
+    const entry = { patientId, sortValue: value };
+    const insertAt = next.pending.findIndex((p) => p.sortValue > value);
     if (insertAt === -1) next.pending.push(entry);
     else next.pending.splice(insertAt, 0, entry);
     return next;

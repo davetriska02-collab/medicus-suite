@@ -56,6 +56,42 @@ All notable changes to Medicus Suite are documented here.
   retirement's full-file rewrite. Toggle now opens the canvas; the widget's own inline import view
   is only ever reached from the canvas's own "Import from another patient" link, as originally
   intended.
+- **Five fixes from a virtual-Dave review of this commit**, all confirmed against the live code
+  before fixing:
+  - The "Next family member" tooltip claimed "without leaving this record" — it navigates the
+    browser away. Fixed the tooltip, and added an explicit `confirm()` naming both patients before
+    navigating ("This will leave X's record and open Y's own record..."), plus a matching
+    correction to `engine/contact-tree.js`'s own stale "no navigation required" section comment.
+  - The resume banner now names whose record cycling landed on (`targetName`, carried in the
+    `chrome.storage.local` wrapper alongside the session, not inside the pure engine session shape
+    itself).
+  - Inactive-patient skip during cycling no longer silently discards the signal: a linked contact
+    whose fetch 403s as `inactive-patient-access` (in `loadCanvas`'s Step 1.8 pool-population fetch,
+    Step 1.6b's composition fetch, and `advanceToNextFamilyMember`'s skip loop) now sets a new
+    `recordInactive` flag, surfaced via a new "· Inactive record" badge in `cardHtml` (same pattern
+    as the existing deceased badge) — a dead next-of-kin still listed as an emergency contact is
+    something a GP should be able to see, not just something cycling quietly skips past.
+  - `checkResumableFamilySession` now calls `loadPersistedFamilySession()` (which enforces the 4h
+    TTL as a side effect) unconditionally first, on every Medicus page load, rather than only when
+    the page happens to resolve to a patient context — an abandoned session is now pruned eagerly
+    rather than only when someone happens to land back on the exact right page.
+  - `enqueueFamilyMember` now stores a precomputed `sortValue` instead of the raw dob string — the
+    pending pool only ever needs an ordering, not an actual date-of-birth sitting in
+    `chrome.storage.local`.
+  - **Found while addressing the storage-hygiene ask, not something Dave flagged directly**: the new
+    `contactsCanvas.familySession` key was entirely invisible to `test-backup-coverage.js`'s
+    USED-key scanner (`hasKeyPrefix` silently filters out any key whose first segment isn't in an
+    explicit `KEY_PREFIXES` list — `contactsCanvas` wasn't in it) — the same class of blind spot
+    Audit M18 found for `labfiling`/`patientAlerts`/`followups`/`practice`. Added the prefix and a
+    documented `ALLOWLIST` entry; the test now genuinely covers this key (103 used, up from 102)
+    rather than passing by omission.
+  - Two smaller nits: documented that composing "mother-in-law"/"father-in-law" from an unmarried
+    "partner"/"civil-partner" hop is colloquial, not legally accurate (no vocabulary id exists for
+    the legally-precise case, and every composed suggestion is human-reviewed before anything is
+    written, so this is an accepted tradeoff, not an oversight). And a composed candidate's
+    hardcoded `deceased: false` now also carries a `recordInactive` flag when its own record fetch
+    403s — not the same thing as confirmed-deceased, but a real, honestly-labelled signal instead of
+    silence.
 
 ## [v3.189.0] — 2026-07-28
 

@@ -182,11 +182,18 @@
     if (HUB_CHILD_BASE_IDS.includes(xToHub) && HUB_PARENT_BASE_IDS.includes(bToHub)) {
       return { baseId: xToHub === 'son' ? 'grandson' : 'granddaughter', modifierId: null };
     }
-    // X is H's parent, B is H's (unmodified) partner -> X is B's parent-in-law.
+    // X is H's parent, B is H's (unmodified) partner -> X is B's parent-in-law. Note: when bToHub
+    // is the gender-neutral 'partner'/'civil-partner' (not 'husband'/'wife'), "-in-law" is being
+    // used colloquially here, not in its strict UK-legal sense (an in-law relationship in law
+    // requires marriage/civil partnership) — deliberately accepted rather than inventing a
+    // "partner-in-law" id that doesn't exist anywhere in rules/contact-relationships.json's
+    // vocabulary; the canvas confirm panel always shows this as an editable, human-reviewed
+    // suggestion, never a silent write, so the imprecision is caught there if it matters to the GP.
     if (HUB_PARENT_BASE_IDS.includes(xToHub) && HUB_PARTNER_BASE_IDS.includes(bToHub)) {
       return { baseId: xToHub === 'mother' ? 'mother-in-law' : 'father-in-law', modifierId: null };
     }
-    // X is H's (unmodified) partner, B is H's parent -> X is B's child-in-law. husband/wife resolve
+    // X is H's (unmodified) partner, B is H's parent -> X is B's child-in-law (same colloquial-vs-
+    // legal caveat as above for the gender-neutral partner/civil-partner case). husband/wife resolve
     // on their own; partner/civil-partner need the gender hint, and fall through to null (never
     // guessed) when it's unavailable or unrecognised.
     if (HUB_PARTNER_BASE_IDS.includes(xToHub) && HUB_PARENT_BASE_IDS.includes(bToHub)) {
