@@ -777,6 +777,48 @@ const PracticeProfile = (() => {
       }
     }
 
+    // ── Cleanup Code Preferences (v2 new) ──────────────────────────────────────
+    // Tally counts ALWAYS reconcile via max(), never add — unlike this module's
+    // existing manual one-off export/import card (problem-description-cleanup-io.js's
+    // default 'add' semantics, correct there because a manual restore happens once,
+    // deliberately), a practice-profile publish gets re-checked and potentially
+    // re-applied on every version bump. Adding the same published snapshot on every
+    // cycle would double/triple-count it; max() adopts the larger of "what this
+    // machine already has" vs "what's published" without ever inflating, and without
+    // discarding growth this machine made locally since the last sync.
+    // Override resolution DOES follow the module's merge/replace mode: merge keeps
+    // today's "local pin always wins" behaviour; replace treats the published
+    // override as the practice's authoritative decision — same trust model as
+    // Knowledge's replace mode (a deliberately curated push, not a passive learned
+    // signal).
+    if (
+      modMap.has('problemDescriptionCleanup') &&
+      mods.problemDescriptionCleanup &&
+      typeof mods.problemDescriptionCleanup === 'object'
+    ) {
+      try {
+        const merge = modMap.get('problemDescriptionCleanup') === 'merge';
+        const pdc = mods.problemDescriptionCleanup;
+        const hasContent =
+          (pdc.preferredDescriptions && Object.keys(pdc.preferredDescriptions).length > 0) ||
+          (pdc.conceptRemap && Object.keys(pdc.conceptRemap).length > 0);
+
+        if (hasContent) {
+          const problemDescriptionCleanupImport = _io('problemDescriptionCleanupImport');
+          if (!problemDescriptionCleanupImport) {
+            throw new Error('problemDescriptionCleanupImport not available in this context.');
+          }
+          await problemDescriptionCleanupImport(pdc, {
+            overrideWins: merge ? 'local' : 'incoming',
+            tallyMode: 'max',
+          });
+          applied.push('problemDescriptionCleanup');
+        }
+      } catch (e) {
+        errors.push(`problemDescriptionCleanup: ${e.message}`);
+      }
+    }
+
     // ── Suite: practiceCode + feedbackEmail only (v2 new) ─────────────────────
     // NEVER push display, tabOrder, hiddenTabs (the user's tab choice is
     // theirs alone — see side-panel/tab-catalog.js), or any other suite.* key — those are

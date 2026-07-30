@@ -2,6 +2,57 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.204.0] — 2026-07-31
+
+### Cleanup Code Preferences joins the shared-folder practice-profile sync, with a daily auto-publish
+
+Previously `problemDescriptionCleanup` (the "Clean up code" preference-learning module —
+`pdc.preferredDescriptions` / `pdc.conceptRemap`) had no path into the shared-folder
+practice-profile sync at all: no case in `applyProfile()`, not selectable in the publish
+module picker. Getting a practice-wide collective view of replacement-code choices required
+manual per-PC file hand-offs via the existing per-module export/import card. This release
+wires it into the live sync properly, with correctness properties specific to a module that
+(unlike every other module here) accumulates from multiple machines' independent local usage
+rather than being curated by one admin from one machine.
+
+- **New `applyProfile()` case for `problemDescriptionCleanup`** (`shared/io/practice-profile.js`).
+  Tally counts reconcile via `max()`, never `add()` — the shared-folder sync re-checks and
+  potentially re-applies on every published version bump, and naive addition would
+  double/triple-count the same published snapshot on every cycle. `max()` adopts the larger
+  of "what this machine already has" vs "what's published," never inflating and never
+  discarding local growth made since the last sync. Override resolution follows the module's
+  merge/replace picker mode (added to `MODULE_DEFS` in `options.js`, unchecked by default):
+  merge preserves "local pin always wins"; replace treats a published override as the
+  practice's authoritative decision, same trust model as Knowledge's replace mode.
+- **Publish no longer blindly overwrites the shared file.** `doPublish()` previously wrote
+  the publishing machine's raw local snapshot straight to `practice-profile.json`, which for
+  a multi-machine-accumulated module risked one machine's publish regressing another
+  machine's not-yet-pulled-back contribution. New `problemDescriptionCleanupMergeForPublish()`
+  (`shared/io/problem-description-cleanup-io.js`) reads what's currently shared and merges
+  this machine's local data into it before writing (same `max()` tally reconciliation).
+- **Daily auto-publish.** `maybeAutoPublish()` fires when the Options page happens to be open
+  and a day has passed since this machine last published. Never activates on a machine that
+  hasn't manually published at least once before (no established `MODULE_DEFS` picker config
+  = no-op). Can never prompt for file-system permission — `showSaveFilePicker()` and
+  `FileSystemFileHandle.requestPermission()` both require a genuine user gesture a background
+  trigger doesn't have — so it only writes via an already-remembered handle with
+  already-granted permission (`queryPermission()` only), silently doing nothing otherwise and
+  retrying next time Options is open. New local-only bookkeeping key
+  `suite.practiceProfile.lastAutoPublishAt` (allowlisted in `test-backup-coverage.js`, not
+  part of user backups).
+- **The enforced override can only ever change via a conscious, attended publish.** The
+  publish-side merge takes an `includeOverride` option (default true); the daily auto-publish
+  passes `includeOverride: false`, so an unattended run only ever refreshes tallies — the
+  practice-wide "preferred" choice is never silently changed by a machine's own incidental
+  local pick riding along on a background sync. Declaring what's enforced for the whole
+  practice stays a deliberate action, gated by the same shared-folder write permissions that
+  already restrict who can publish at all.
+
+New tests in `test-problem-description-cleanup-io.js` and `test-practice-profile.js` cover
+the `max()` reconciliation (including a same-snapshot-applied-twice non-inflation regression
+test), merge-vs-replace override resolution, the publish-merge helper, and the
+`includeOverride:false` protection.
+
 ## [v3.203.0] — 2026-07-29
 
 ### PR #228 remediation: merged main, escAttr + import key validation, deterministic REPLACED BY, scan patient-change guard

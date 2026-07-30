@@ -48,6 +48,7 @@ const { referralsImport }      = require('./shared/io/referrals-io.js');
 const { requestMonitorImport } = require('./shared/io/request-monitor-io.js');
 const TriageAlertIO            = require('./shared/io/triage-alert-io.js');
 const KnowledgeUtils           = require('./shared/knowledge-utils.js');
+const { problemDescriptionCleanupImport } = require('./shared/io/problem-description-cleanup-io.js');
 
 // Inject as globals so practice-profile.js's _io() resolver can find them
 global.knowledgeImport      = knowledgeImport;
@@ -60,6 +61,7 @@ global.referralsImport      = referralsImport;
 global.requestMonitorImport = requestMonitorImport;
 global.TriageAlertIO        = TriageAlertIO;
 global.KnowledgeUtils       = KnowledgeUtils;
+global.problemDescriptionCleanupImport = problemDescriptionCleanupImport;
 
 const PP = require('./shared/io/practice-profile.js');
 
@@ -542,6 +544,102 @@ function makeProfile(over = {}) {
   await PP.applyProfile(suiteProfile3);
   check(store['suite.practiceCode'] === 'REPLACED',
     'suite replace: practiceCode overwritten');
+
+  // ── Cleanup Code Preferences: tallies always max(), override follows mode ──
+  console.log('\n--- problemDescriptionCleanup merge: tally reconciles via max(), never adds ---');
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    35253001: {
+      tally: { 111111: { candidate: { description: 'Local pick' }, count: 20, lastUsed: '2026-07-28T09:00:00Z' } },
+      override: null,
+    },
+  };
+  const pdcMergeProfile = makeProfile({
+    profileVersion: 'pdc-1',
+    apply: { modules: { problemDescriptionCleanup: 'merge' } },
+    envelope: {
+      modules: {
+        problemDescriptionCleanup: {
+          preferredDescriptions: {
+            35253001: {
+              tally: { 111111: { candidate: { description: 'Published pick' }, count: 8, lastUsed: '2026-07-29T09:00:00Z' } },
+              override: null,
+            },
+          },
+        },
+      },
+    },
+  });
+  const rPdc1 = await PP.applyProfile(pdcMergeProfile);
+  check(store['pdc.preferredDescriptions']['35253001'].tally['111111'].count === 20,
+    'tally takes the LARGER of local (20) vs published (8), not the sum (28)');
+  check(rPdc1.modulesApplied.includes('problemDescriptionCleanup'), 'problemDescriptionCleanup recorded as applied');
+
+  // Re-applying the SAME published snapshot again (simulating a later re-check
+  // cycle) must not inflate the count further.
+  const pdcMergeProfile2 = makeProfile({
+    profileVersion: 'pdc-2',
+    apply: { modules: { problemDescriptionCleanup: 'merge' } },
+    envelope: { modules: { problemDescriptionCleanup: pdcMergeProfile.envelope.modules.problemDescriptionCleanup } },
+  });
+  await PP.applyProfile(pdcMergeProfile2);
+  check(store['pdc.preferredDescriptions']['35253001'].tally['111111'].count === 20,
+    'repeated sync of the same published snapshot does not inflate the count (still 20, not 28 or 36)');
+
+  console.log('\n--- problemDescriptionCleanup merge: local override always wins ---');
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    35253001: { tally: {}, override: { key: '111111', candidate: { description: 'Local admin decision' } } },
+  };
+  const pdcMergeOverrideProfile = makeProfile({
+    profileVersion: 'pdc-3',
+    apply: { modules: { problemDescriptionCleanup: 'merge' } },
+    envelope: {
+      modules: {
+        problemDescriptionCleanup: {
+          preferredDescriptions: {
+            35253001: { tally: {}, override: { key: '222222', candidate: { description: 'Published decision' } } },
+          },
+        },
+      },
+    },
+  });
+  await PP.applyProfile(pdcMergeOverrideProfile);
+  check(store['pdc.preferredDescriptions']['35253001'].override.key === '111111',
+    'merge mode: local override survives a conflicting published one');
+
+  console.log('\n--- problemDescriptionCleanup replace: published override is authoritative ---');
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    35253001: { tally: {}, override: { key: '111111', candidate: { description: 'Local admin decision' } } },
+  };
+  const pdcReplaceProfile = makeProfile({
+    profileVersion: 'pdc-4',
+    apply: { modules: { problemDescriptionCleanup: 'replace' } },
+    envelope: {
+      modules: {
+        problemDescriptionCleanup: {
+          preferredDescriptions: {
+            35253001: { tally: {}, override: { key: '222222', candidate: { description: 'Practice-agreed decision' } } },
+          },
+        },
+      },
+    },
+  });
+  await PP.applyProfile(pdcReplaceProfile);
+  check(store['pdc.preferredDescriptions']['35253001'].override.key === '222222',
+    'replace mode: published override replaces the local one (curated practice decision wins)');
+
+  console.log('\n--- problemDescriptionCleanup: empty payload is not applied ---');
+  reset();
+  const pdcEmptyProfile = makeProfile({
+    profileVersion: 'pdc-5',
+    apply: { modules: { problemDescriptionCleanup: 'merge' } },
+    envelope: { modules: { problemDescriptionCleanup: { preferredDescriptions: {}, conceptRemap: {} } } },
+  });
+  const rPdcEmpty = await PP.applyProfile(pdcEmptyProfile);
+  check(!rPdcEmpty.modulesApplied.includes('problemDescriptionCleanup'),
+    'an empty preferredDescriptions/conceptRemap payload is not recorded as applied');
 
   // ── Malformed module section: records error, other modules still apply ─────
   console.log('\n--- malformed module section: per-module error isolation ---');

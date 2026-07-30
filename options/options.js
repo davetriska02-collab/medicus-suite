@@ -1089,6 +1089,13 @@ async function isPracticeAccepted() {
         desc: 'Capacity forecast presets',
       },
       {
+        id: 'problemDescriptionCleanup',
+        label: 'Cleanup Code Preferences',
+        defaultChecked: false,
+        defaultMode: 'merge',
+        desc: 'Learned SNOMED replacement-code preferences — tallies always combine; "enforce" makes a pinned override the practice-wide default',
+      },
+      {
         id: 'referrals',
         label: 'Referrals',
         defaultChecked: false,
@@ -1431,11 +1438,23 @@ async function isPracticeAccepted() {
     }
 
     // ── Publish handler ───────────────────────────────────────────────────────
+    // opts.auto: true when triggered by maybeAutoPublish() (the once-daily,
+    // no-human-involved trigger) rather than a real click. In auto mode we can
+    // NEVER prompt — showSaveFilePicker() and FileSystemFileHandle.requestPermission()
+    // both require a genuine user gesture, which a background/timer trigger
+    // doesn't have. So auto mode only ever uses an ALREADY-remembered handle
+    // whose permission is ALREADY granted (queryPermission only, never
+    // requestPermission), and silently does nothing this cycle otherwise —
+    // same fail-quiet discipline as _checkForCodeUpdate's mid-copy skip in
+    // service-worker.js. It will simply try again next time Options is open.
 
-    async function doPublish() {
+    async function doPublish(opts) {
+      const auto = !!(opts && opts.auto);
       if (!publishBtn) return;
-      publishBtn.disabled = true;
-      publishBtn.textContent = 'Publishing…';
+      if (!auto) {
+        publishBtn.disabled = true;
+        publishBtn.textContent = 'Publishing…';
+      }
 
       try {
         await savePickerState();
@@ -1500,6 +1519,35 @@ async function isPracticeAccepted() {
 
         const envelope = await doFullExport();
 
+        // Cleanup Code Preferences: merge with what's CURRENTLY shared rather
+        // than blindly overwriting it — see problem-description-cleanup-io.js's
+        // problemDescriptionCleanupMergeForPublish for why. Unlike every other
+        // module here (admin-curated from one machine, so overwrite-with-local
+        // is correct), this one accumulates from multiple machines' local
+        // usage — a raw overwrite could regress another machine's growth that
+        // hasn't made it back to THIS machine via a pull yet.
+        // includeOverride: false in auto mode — the override (what becomes
+        // "enforced for everyone") must only ever change as a result of a
+        // conscious, attended publish. An unattended daily run only ever
+        // refreshes tallies (every machine's genuine picks should count
+        // toward the pool), never the enforced choice — that stays whatever
+        // it was until someone deliberately clicks Publish again.
+        if (applyModules.problemDescriptionCleanup) {
+          try {
+            const existingProfile = await window.PracticeProfile.fetchProfile();
+            const existingPdc = existingProfile?.envelope?.modules?.problemDescriptionCleanup;
+            if (existingPdc) {
+              envelope.modules.problemDescriptionCleanup = problemDescriptionCleanupMergeForPublish(
+                existingPdc,
+                envelope.modules.problemDescriptionCleanup,
+                { includeOverride: !auto }
+              );
+            }
+          } catch (_) {
+            // Shared file missing/unreadable — fall back to this machine's own snapshot
+          }
+        }
+
         const profileJson = {
           format: 'medicus-suite-practice-profile',
           formatVersion: 2,
@@ -1522,27 +1570,32 @@ async function isPracticeAccepted() {
 
         // Try remembered handle first
         let usedHandle = null;
+        let published = false;
         if (typeof showSaveFilePicker === 'function') {
           const remembered = await loadFileHandle();
           if (remembered) {
             try {
               let perm = await remembered.queryPermission({ mode: 'readwrite' });
-              if (perm !== 'granted') {
+              // requestPermission() needs a real user gesture — never call it
+              // in auto mode. queryPermission alone reflects a grant already
+              // made during an earlier manual publish.
+              if (perm !== 'granted' && !auto) {
                 perm = await remembered.requestPermission({ mode: 'readwrite' });
               }
               if (perm === 'granted') {
                 await writeProfileToHandle(remembered, jsonStr);
                 usedHandle = remembered;
+                published = true;
                 setPublishStatus(
                   `Published v${version} to ${remembered.name}. Other PCs will pick it up within about 15 minutes, or on their next browser start.`
                 );
               }
             } catch (_) {
-              // Permission denied or stale handle — fall through to picker
+              // Permission denied or stale handle — fall through to picker (manual only)
             }
           }
 
-          if (!usedHandle) {
+          if (!usedHandle && !auto) {
             // Show save picker
             let handle;
             try {
@@ -1560,16 +1613,28 @@ async function isPracticeAccepted() {
             await writeProfileToHandle(handle, jsonStr);
             await saveFileHandle(handle);
             usedHandle = handle;
+            published = true;
             setPublishStatus(
               `Published v${version}. Other PCs will pick it up within about 15 minutes, or on their next browser start.`
             );
           }
-        } else {
+          // auto mode + no usable remembered handle: silently do nothing this
+          // cycle (no picker, no prompt) — retried next time Options is open.
+        } else if (!auto) {
           // Fallback: download via blob
           downloadJson(profileJson, 'practice-profile.json');
           setPublishStatus(
             `Profile downloaded as practice-profile.json (v${version}). Move it into the shared extension folder, replacing the old file, and the update will reach everyone within 15 minutes.`
           );
+          published = true;
+        }
+
+        if (published) {
+          // Gates maybeAutoPublish() — a manual publish today also counts, so
+          // the daily auto-trigger doesn't immediately fire again right after.
+          await chrome.storage.local.set({
+            'suite.practiceProfile.lastAutoPublishAt': new Date().toISOString().slice(0, 10),
+          });
         }
 
         await render();
@@ -1581,11 +1646,36 @@ async function isPracticeAccepted() {
       }
     }
 
+    // ── Once-daily auto-publish ────────────────────────────────────────────────
+    // Fires when the Options page happens to be open and a day has passed
+    // since this machine last published (manually or automatically). Never
+    // starts publishing on a machine that hasn't manually published at least
+    // once before (savedModules empty = no established publish config) —
+    // auto-publish only continues an already-established habit, it never
+    // silently turns a random PC into a publisher. See doPublish's own auto
+    // comment for why it can never prompt.
+    async function maybeAutoPublish() {
+      try {
+        const r = await chrome.storage.local.get(['suite.practiceProfile.lastAutoPublishAt', PUBLISHER_KEY]);
+        const today = new Date().toISOString().slice(0, 10);
+        if (r['suite.practiceProfile.lastAutoPublishAt'] === today) return;
+
+        const saved = r[PUBLISHER_KEY] || {};
+        const hasEstablishedConfig = Object.values(saved.modules || {}).some((m) => m && m.checked);
+        if (!hasEstablishedConfig) return;
+
+        await doPublish({ auto: true });
+      } catch (e) {
+        console.warn('[Practice Profile] auto-publish failed:', e.message);
+      }
+    }
+
     // ── Init ──────────────────────────────────────────────────────────────────
 
     await render();
     await buildModulePicker();
     await buildAttestationRows();
+    maybeAutoPublish(); // fire-and-forget — never blocks page init
 
     // Inline "Accept all for this practice" (so a greyed gate isn't a dead end).
     const ppAcceptTick = document.getElementById('ppAcceptTick');
@@ -1639,7 +1729,7 @@ async function isPracticeAccepted() {
       applyBtn.textContent = 'Apply now';
     });
 
-    publishBtn?.addEventListener('click', doPublish);
+    publishBtn?.addEventListener('click', () => doPublish());
   } catch (e) {
     console.warn('[Practice Profile section]', e.message);
   }
