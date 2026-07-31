@@ -108,6 +108,7 @@ const KEY_PREFIXES = [
   'followups',
   'practice',
   'pdc',
+  'phrases',
 ];
 
 function hasKeyPrefix(k) {

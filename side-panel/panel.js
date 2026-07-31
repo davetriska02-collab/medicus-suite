@@ -143,6 +143,7 @@ const MODULES = {
     js: () => import('./modules/patient-alerts/patient-alerts.js'),
     css: './modules/patient-alerts/patient-alerts.css',
   },
+  phrases: { js: () => import('./modules/phrases/phrases.js'), css: './modules/phrases/phrases.css' },
   about: null,
 };
 
