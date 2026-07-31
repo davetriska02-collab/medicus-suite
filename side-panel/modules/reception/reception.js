@@ -66,6 +66,15 @@ let _pillExpanded = false;
 let _onActivated = null;
 let _storageListener = null;
 let _patientCardGen = 0; // request-token guard against stale fetchSnapshot() resolution races
+let _snapshotListener = null; // sentinel:snapshot-updated runtime listener (SPA patient change)
+let _snapshotDebounce = null; // coalesces the ping bursts a patient switch produces
+let _pollTimer = null; // visibility-gated backstop poll (net for a lost ping)
+let _snapshotRefreshing = false; // true while Sentinel has invalidated mid-navigation
+let _patientCardHtml = null; // last-rendered card body — skip no-op re-renders (focus/layout)
+let _cardPatientUuid = null; // uuid behind the last render — collapses the pill on patient change
+let _capturePatient = null; // patient identity PINNED when the capture form opened (see generateSummary)
+
+const SNAPSHOT_POLL_MS = 10 * 1000;
 
 // ── Draft autosave ────────────────────────────────────────────────────────────
 // reception.captureDraft — transient working state, PHI-bearing, TTL 4 h.
@@ -274,6 +283,10 @@ export async function init(el) {
   container = el;
   _organising = false;
   _openColourFor = null;
+  _snapshotRefreshing = false;
+  _patientCardHtml = null; // the card body was just re-created — never skip its first render
+  _cardPatientUuid = null;
+  _capturePatient = null;
 
   container.innerHTML = `
     <div class="rcp-module">
@@ -299,8 +312,27 @@ export async function init(el) {
   renderPathwayPicker(initDraft);
   refreshPatientCard();
 
-  _onActivated = () => refreshPatientCard();
+  _onActivated = () => schedulePatientCardRefresh();
   chrome.tabs.onActivated.addListener(_onActivated);
+
+  // The content script broadcasts sentinel:snapshot-updated on every SPA
+  // patient change (invalidate + publish — see content-scripts/sentinel.js
+  // notifySnapshotUpdated). Without this listener the Patient card is a
+  // one-shot render pinned to whoever was open when the tab was entered — the
+  // stale name/NHS-number bug (H-001 field evidence, v3.206.0). Same idiom as
+  // patient-alerts.js / record.js / sentinel.js; the pop-out shell delivers
+  // the same message (pop-out.js registers no relay for it by design).
+  _snapshotListener = (msg, sender) => {
+    if (!sender || sender.id !== chrome.runtime.id) return;
+    if (msg?.type === 'sentinel:snapshot-updated') schedulePatientCardRefresh();
+  };
+  chrome.runtime.onMessage.addListener(_snapshotListener);
+
+  // Backstop only — the ping above is the real trigger. Visibility-gated: each
+  // tick costs tabs.query + executeScript + IPC, pointless while hidden.
+  _pollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') refreshPatientCard();
+  }, SNAPSHOT_POLL_MS);
 
   // Live-update when the admin changes reception config/pathways in Options, or
   // when tile prefs change in another context (pop-out ↔ panel).
@@ -350,10 +382,26 @@ function cleanup() {
     chrome.storage.onChanged.removeListener(_storageListener);
     _storageListener = null;
   }
+  if (_snapshotListener) {
+    chrome.runtime.onMessage.removeListener(_snapshotListener);
+    _snapshotListener = null;
+  }
+  if (_pollTimer) {
+    clearInterval(_pollTimer);
+    _pollTimer = null;
+  }
+  if (_snapshotDebounce) {
+    clearTimeout(_snapshotDebounce);
+    _snapshotDebounce = null;
+  }
   if (_draftDebounceTimer !== null) {
     clearTimeout(_draftDebounceTimer);
     _draftDebounceTimer = null;
   }
+  _snapshotRefreshing = false;
+  _patientCardHtml = null;
+  _cardPatientUuid = null;
+  _capturePatient = null;
   // Panel teardown must release a held slot reservation (plan D3.6). The
   // component's own `pagehide` listener covers a window/panel close; this
   // covers a module switch, where pagehide never fires.
@@ -400,17 +448,49 @@ async function loadConfigAndResolve() {
 
 // ── Card 1: patient status pill ───────────────────────────────────────────────
 
+// Coalesces the snapshot-updated ping bursts (a patient switch fires at least
+// two: invalidate, then publish) into one fetch. Same 400 ms shape as
+// patient-alerts.js scheduleSnapshotRefresh.
+function schedulePatientCardRefresh() {
+  if (_snapshotDebounce) return;
+  _snapshotDebounce = setTimeout(() => {
+    _snapshotDebounce = null;
+    refreshPatientCard();
+  }, 400);
+}
+
+// Sentinel value: the content script answered, but its snapshot is invalidated
+// mid SPA-navigation — the new patient's data is a re-evaluation away.
+const SNAPSHOT_UNAVAILABLE = { unavailable: true };
+
+async function findMedicusTab() {
+  const active = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (active[0]?.url && /medicus\.health/.test(active[0].url)) return active[0];
+  // Pop-out only: currentWindow is the pop-out popup itself, so the active-tab
+  // query can never see Medicus there — fall back to any open Medicus tab so
+  // the Patient card works at all in the pop-out. The DOCKED panel deliberately
+  // has no fallback: the active-tab snapshot is the documented booking identity
+  // source (H-051 control (b)), and booking is hard-gated off in the pop-out,
+  // so this fallback can never feed a booking.
+  if (isPopOutContext()) {
+    const any = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
+    return any[0] || null;
+  }
+  return null;
+}
+
 async function fetchSnapshot() {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  const tab = tabs[0];
-  if (!tab?.id || !tab?.url || !/medicus\.health/.test(tab.url)) return null;
+  const tab = await findMedicusTab();
+  if (!tab?.id) return null;
   const mountCheck = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     func: () => !!window.__sentinelMounted,
   });
   if (!mountCheck?.[0]?.result) return null;
   const snapshot = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
-  if (!snapshot || snapshot.unavailable || !snapshot.chips) return null;
+  if (!snapshot) return null;
+  if (snapshot.unavailable) return SNAPSHOT_UNAVAILABLE;
+  if (!snapshot.chips) return null;
   return snapshot;
 }
 
@@ -427,7 +507,30 @@ async function refreshPatientCard() {
   }
   if (gen !== _patientCardGen) return; // a newer refresh superseded this one — discard stale result
   if (!container) return; // cleaned up mid-fetch
+  if (snapshot === SNAPSHOT_UNAVAILABLE) {
+    // Mid-navigation transient: blank the identity NOW (the previous patient's
+    // name must never sit under a new record — H-001) but do NOT push the null
+    // into the booking gate — the publish ping that always follows a
+    // re-evaluation lands the real answer within ~a second, and tearing down a
+    // held reservation on every same-patient sub-navigation blip would push
+    // reception back to booking in Medicus (H-051 review q4). A genuinely dead
+    // content script fails the mount check instead and takes the null path
+    // below, which DOES re-gate the booking card.
+    _snapshot = null;
+    _snapshotRefreshing = true;
+    renderPatientCard();
+    return;
+  }
+  _snapshotRefreshing = false;
   _snapshot = snapshot;
+  // A different patient (or none) behind the card: the expanded pill detail
+  // would otherwise swap its rows silently under the reader.
+  const pc = snapshot?.patientContext;
+  const uuid = (pc && (pc.patientUuid || pc.patientId)) || null;
+  if (uuid !== _cardPatientUuid) {
+    _cardPatientUuid = uuid;
+    _pillExpanded = false;
+  }
   renderPatientCard();
   // The open record IS the booking identity source, so a snapshot refresh that
   // changes (or loses) the patient must reach the booking card: it re-gates and,
@@ -440,8 +543,17 @@ function renderPatientCard() {
   if (!card) return;
 
   if (!_snapshot) {
-    card.innerHTML = `<span class="rcp-muted">This panel mirrors the patient open in Medicus. Open a record and their details appear here.</span>
+    // Two distinct empty states: "no record open" (idle) vs "the record is
+    // changing right now" (Sentinel invalidated mid-navigation; the publish
+    // ping repopulates this in under a second). Rendering the transient as the
+    // idle copy made every patient switch read as "it lost the patient".
+    const html = _snapshotRefreshing
+      ? `<span class="rcp-muted">Record changing in Medicus — refreshing…</span>`
+      : `<span class="rcp-muted">This panel mirrors the patient open in Medicus. Open a record and their details appear here.</span>
       <button class="rcp-link-btn" id="rcpPatientRefresh">Refresh</button>`;
+    if (html === _patientCardHtml) return;
+    _patientCardHtml = html;
+    card.innerHTML = html;
     card.querySelector('#rcpPatientRefresh')?.addEventListener('click', refreshPatientCard);
     return;
   }
@@ -480,7 +592,7 @@ function renderPatientCard() {
       </div>`;
   }
 
-  card.innerHTML = `
+  const html = `
     <div class="rcp-patient-line"><strong>${esc(who || 'Patient')}</strong>${pc.nhsNumber ? ` <span class="rcp-nhs">NHS ${esc(pc.nhsNumber)}</span>` : ''}
       <button class="rcp-link-btn" id="rcpPatientRefresh">Refresh</button>
     </div>
@@ -490,6 +602,12 @@ function renderPatientCard() {
       <span class="rcp-pill-caret" aria-hidden="true">${_pillExpanded ? '▴' : '▾'}</span>
     </button>
     ${detailHtml}`;
+  // With the card auto-refreshing, an unchanged render must be a no-op: an
+  // innerHTML replace drops keyboard focus and shifts the red-flag radios
+  // below the card mid-click. The markup itself is the change key.
+  if (html === _patientCardHtml) return;
+  _patientCardHtml = html;
+  card.innerHTML = html;
 
   card.querySelector('#rcpPatientRefresh')?.addEventListener('click', refreshPatientCard);
   card.querySelector('#rcpPill')?.addEventListener('click', () => {
@@ -769,6 +887,25 @@ async function renderCaptureForm(pathway) {
   // before this one's is built.
   destroyBookingCard();
   _bookedLines = [];
+
+  // PIN the patient identity to this capture, now. The Patient card
+  // auto-refreshes (v3.206.0), so `_snapshot` tracks whatever record is open in
+  // Medicus — which can change mid-call on a shared front-desk profile. The
+  // summary header must name the patient this capture STARTED on, never
+  // whoever happens to be open when Generate is pressed (H-001/H-029 class);
+  // generateSummary compares this pin against the live snapshot and warns on
+  // divergence. No record open when the form opens → nothing pinned, no
+  // patient line in the text (as before).
+  const pinPc = _snapshot?.patientContext || null;
+  _capturePatient = pinPc
+    ? {
+        patientId: pinPc.patientUuid || pinPc.patientId || null,
+        patientName: pinPc.patientName || '',
+        dateOfBirth: pinPc.dateOfBirth || '',
+        nhsNumber: pinPc.nhsNumber || '',
+        ageYears: pinPc.ageYears ?? null,
+      }
+    : null;
 
   const rfRows = (pathway.redFlags || [])
     .map(
@@ -1144,7 +1281,9 @@ function isPopOutContext() {
 
 // THE BOOKING IDENTITY SOURCE — deliberately singular and documented here.
 // It is the Sentinel snapshot taken from the ACTIVE Medicus tab
-// (fetchSnapshot() queries { active: true, currentWindow: true }), i.e. the
+// (fetchSnapshot() queries { active: true, currentWindow: true }; the
+// any-Medicus-tab fallback in findMedicusTab runs ONLY in the pop-out, where
+// booking is hard-gated off, so it can never feed this), i.e. the
 // same record whose name/DOB the patient card is showing the receptionist. The
 // booking shim's own detectMedicusTab() resolves the FIRST matching Medicus
 // tab instead, which can be a different one; the booking panel therefore
@@ -1278,12 +1417,19 @@ function generateSummary(form, pathway) {
   }
   if (msg) msg.textContent = '';
 
-  const pc = _snapshot?.patientContext || null;
+  // Identity comes from the PIN taken when this capture form opened
+  // (renderCaptureForm), NOT the live snapshot: with the Patient card
+  // auto-refreshing, reading `_snapshot` here would stamp whichever record a
+  // colleague has open at generate time onto THIS caller's answers.
+  const pc = _capturePatient;
   const patientLine = pc?.patientName
     ? [pc.patientName, pc.dateOfBirth ? `DOB ${pc.dateOfBirth}` : null, pc.nhsNumber ? `NHS ${pc.nhsNumber}` : null]
         .filter(Boolean)
         .join(', ')
     : null;
+  const livePc = _snapshot?.patientContext || null;
+  const liveId = livePc ? livePc.patientUuid || livePc.patientId || null : null;
+  const identityChanged = !!(pc?.patientId && liveId && liveId !== pc.patientId);
 
   const text = buildCaptureText({
     pathway,
@@ -1316,10 +1462,10 @@ function generateSummary(form, pathway) {
   // Draft completed — clear it before rendering the output screen.
   clearDraft();
 
-  renderOutput(text, pathway);
+  renderOutput(text, pathway, { identityChanged });
 }
 
-function renderOutput(text, pathway) {
+function renderOutput(text, pathway, opts) {
   const body = container?.querySelector('#rcpCaptureBody');
   if (!body) return;
   // The capture is finished: the booking card belongs to the form, not the
@@ -1336,6 +1482,11 @@ function renderOutput(text, pathway) {
         <button class="rcp-btn" id="rcpNewCapture">New capture</button>
         <span class="rcp-form-msg" id="rcpCopyMsg"></span>
       </div>
+      ${
+        opts?.identityChanged
+          ? `<div class="rcp-error">The record open in Medicus has changed since this capture started. The summary above is headed with the patient the capture began on — if you paste it into the record now open, it goes in the wrong patient's notes.</div>`
+          : ''
+      }
       <div class="rcp-fineprint">Paste into the Medicus triage entry / task for this patient. Double-check you're on the right patient before pasting.</div>
     </div>`;
   const ta = body.querySelector('#rcpOutputText');

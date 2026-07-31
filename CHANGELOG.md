@@ -2,6 +2,46 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.206.0] — 2026-07-31
+
+### Reception: the Patient card now follows the record open in Medicus
+
+Field report: the Reception tab's Patient card (name + NHS number + status pill) kept
+showing the previous patient after switching records in Medicus, "only updating when you
+start typing". Root cause: the card was a one-shot render — its only triggers were module
+entry, a browser-tab switch, a config change and the manual Refresh link. Nothing listened
+for the SPA patient change, so sitting on the Reception tab across a record switch left
+the old identity on screen (H-001 field evidence — hazard log doc v3.19, pending CSO
+review). The "typing fixed it" observation was a red herring: leaving and re-entering the
+tab is what refreshed it, and typing just tends to happen right after.
+
+- **`side-panel/modules/reception/reception.js`** — subscribes to the content script's
+  `sentinel:snapshot-updated` broadcast (the same signal the Monitoring, Record, Trends
+  and Patient Alerts surfaces already use), debounced 400 ms, with a 10 s
+  visibility-gated backstop poll. All listeners/timers torn down in `cleanup()`.
+- **Mid-switch state** — while Sentinel re-evaluates a navigation the card now shows
+  "Record changing in Medicus — refreshing…" instead of flashing the idle "open a
+  record" copy; the previous patient's name is blanked immediately, never held. The
+  transient deliberately does NOT re-gate the booking card, so a same-patient
+  sub-navigation blip can no longer release a held slot reservation (H-051 review q4);
+  a genuinely dead content script still fails the mount check and re-gates.
+- **Pinned capture identity** — with the card now live, the generated summary's
+  name/DOB/NHS header is pinned to the patient open when the capture form OPENED, not
+  whoever is open when Generate is pressed. If the open record changes mid-capture, the
+  output view says so: "if you paste it into the record now open, it goes in the wrong
+  patient's notes."
+- **No-op renders skipped** — the card body only re-renders when its markup actually
+  changed, so the auto-refresh can't drop focus or shift the red-flag questions under a
+  click; the expanded status-pill detail collapses on a genuine patient change instead of
+  silently swapping its rows.
+- **Pop-out** — the Patient card there was permanently blank (the active-tab query can
+  only see the pop-out's own window); it now falls back to any open Medicus tab for
+  display only. Booking identity is untouched: it stays active-tab sourced, and booking
+  remains hard-gated off in the pop-out.
+- **Tests** — new `test-reception-patient-card.js` pins the wiring (listener + sender
+  guard, cleanup symmetry, debounce, visibility gate), the transient-invalidate
+  discipline, the display-only pop-out fallback and the pinned capture identity.
+
 ## [v3.205.0] — 2026-07-31
 
 ### New tab: Phrases — reusable message blocks (copy-only)
