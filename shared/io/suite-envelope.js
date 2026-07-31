@@ -103,6 +103,7 @@ const VALID_SCOPES = [
   'leaflets',
   'patientAlerts',
   'problemDescriptionCleanup',
+  'phrases',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -469,6 +470,19 @@ function previewEnvelope(envelope) {
     );
   } else {
     const m = missing('Cleanup Code Preferences');
+    if (m) lines.push(m);
+  }
+
+  if (mods.phrases) {
+    const personal = Array.isArray(mods.phrases.items) ? mods.phrases.items.length : 0;
+    const practice = Array.isArray((mods.phrases.config || {}).practiceBlocks)
+      ? mods.phrases.config.practiceBlocks.length
+      : 0;
+    lines.push(
+      `Phrases: ${personal} personal block${personal === 1 ? '' : 's'}, ${practice} practice block${practice === 1 ? '' : 's'}`
+    );
+  } else {
+    const m = missing('Phrases');
     if (m) lines.push(m);
   }
 
