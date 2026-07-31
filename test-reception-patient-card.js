@@ -1,8 +1,8 @@
-// Medicus Suite — reception Patient-card freshness guards (v3.205.0)
+// Medicus Suite — reception Patient-card freshness guards (v3.206.0)
 // Run with: node test-reception-patient-card.js
 //
 // The Reception module's Patient card (name + NHS number) mirrors the record
-// open in Medicus. Until v3.205.0 it was a one-shot render: nothing listened
+// open in Medicus. Until v3.206.0 it was a one-shot render: nothing listened
 // for the SPA patient change, so switching records left the PREVIOUS patient's
 // name and NHS number on screen (H-001 field evidence — the exact wrong-patient
 // display H-001 exists to prevent, on a surface its controls were assumed to

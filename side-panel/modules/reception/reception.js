@@ -319,7 +319,7 @@ export async function init(el) {
   // patient change (invalidate + publish — see content-scripts/sentinel.js
   // notifySnapshotUpdated). Without this listener the Patient card is a
   // one-shot render pinned to whoever was open when the tab was entered — the
-  // stale name/NHS-number bug (H-001 field evidence, v3.205.0). Same idiom as
+  // stale name/NHS-number bug (H-001 field evidence, v3.206.0). Same idiom as
   // patient-alerts.js / record.js / sentinel.js; the pop-out shell delivers
   // the same message (pop-out.js registers no relay for it by design).
   _snapshotListener = (msg, sender) => {
@@ -889,7 +889,7 @@ async function renderCaptureForm(pathway) {
   _bookedLines = [];
 
   // PIN the patient identity to this capture, now. The Patient card
-  // auto-refreshes (v3.205.0), so `_snapshot` tracks whatever record is open in
+  // auto-refreshes (v3.206.0), so `_snapshot` tracks whatever record is open in
   // Medicus — which can change mid-call on a shared front-desk profile. The
   // summary header must name the patient this capture STARTED on, never
   // whoever happens to be open when Generate is pressed (H-001/H-029 class);

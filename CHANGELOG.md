@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.205.0] — 2026-07-31
+## [v3.206.0] — 2026-07-31
 
 ### Reception: the Patient card now follows the record open in Medicus
 
