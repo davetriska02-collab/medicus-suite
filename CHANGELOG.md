@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.204.1] — 2026-07-31
+
+### Reception-instruction composer: widget hoisted above the field container instead of sharing its row (follow-up to v3.204.0)
+
+v3.204.0 fixed the extreme case of the comment-box crush (flex-row field containers
+squeezing the Internal-comment textarea to a few px, one character per line) by
+detecting flex-row parents and forcing them to wrap. Further practice feedback showed a
+milder version of the same problem on layouts that fix didn't catch (e.g. grid field
+containers): the widget still shared a row with the textarea, this time losing it
+roughly half its width — cramped and harder to type in, rather than unreadable, but the
+same direction of harm to H-049 controls (b)/(e).
+
+- **`content-scripts/reception-quick-actions.js` `injectWidget`/`removeWidget`
+  simplified.** Rather than detect and counter each layout mode the field container
+  might use, the widget is now always inserted as a plain block-level sibling *above*
+  the whole field container, never as a child inside it. The container's own internal
+  layout (label + textarea) is then exactly what Medicus renders without us — full
+  width, undisturbed — with the widget on its own full-width row on top. This replaces
+  the flex-row detection, the `flex-wrap`/`flex-basis` overrides, and the
+  measure-and-rehoist self-heal from v3.204.0 with a single unconditional strategy that
+  isn't layout-mode-specific.
+- `fixtures/medicus/quick-actions-internal-comment.html` comment updated to describe the
+  generalised fix; `docs/HAZARD-LOG.md` H-049 field-evidence note extended.
+
 ## [v3.204.0] — 2026-07-31
 
 ### Reception-instruction composer: comment-box crush fix + two-step flow made unmissable (practice feedback)

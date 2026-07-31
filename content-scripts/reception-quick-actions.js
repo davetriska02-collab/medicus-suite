@@ -663,37 +663,26 @@
     w.id = 'ms-qa-widget';
     renderInto(w);
     withObserverPaused(function () {
-      // Medicus renders some field containers as flex-row (no wrap). Inserted as
-      // a plain sibling there, the widget and the textarea fight over the row and
-      // the textarea loses — crushed to a few px, rendering the comment one
-      // character per line (unreadable = H-049 controls (b)/(e) degraded). Force
-      // the parent to wrap and take the full row, remembering the previous value
-      // so removeWidget can put it back. Attribute mutations don't retrigger the
-      // observers (childList-only), so this cannot loop.
+      // Medicus renders some field containers as flex-row / grid (no wrap).
+      // Inserted AS A CHILD of that container, the widget and the textarea
+      // fight over the row: the textarea shrinks — anywhere from crushed to a
+      // few px (one character per line) to merely losing half its width to
+      // the widget sitting beside it (unreadable/cramped either way = H-049
+      // controls (b)/(e) degraded). Rather than detect and counter every
+      // layout mode the field container might use, sidestep the fight
+      // entirely: insert the widget as a plain block-level sibling ABOVE the
+      // whole field container, never inside it. The container's own internal
+      // layout (label + textarea) is then exactly what Medicus renders
+      // without us — full width, undisturbed — with our widget on its own
+      // full-width row on top.
       var parent = ta.parentElement;
-      var cs;
-      try {
-        cs = getComputedStyle(parent);
-      } catch (e) {
-        cs = null;
-      }
-      if (cs && cs.display.indexOf('flex') !== -1 && cs.flexDirection.indexOf('row') === 0) {
-        w.dataset.msQaPrevWrap = parent.style.flexWrap || '';
-        parent.style.flexWrap = 'wrap';
-        w.style.flex = '0 0 100%';
-      }
-      parent.insertBefore(w, ta);
-      // Self-heal: if the textarea is still crushed (a layout this fix didn't
-      // predict), hoist the widget above the whole field container instead —
-      // an unreadable clinical free-text box is never acceptable.
-      var rect = ta.getBoundingClientRect();
-      if (rect.width > 0 && rect.width < 120 && parent.parentElement) {
-        if ('msQaPrevWrap' in w.dataset) {
-          parent.style.flexWrap = w.dataset.msQaPrevWrap;
-          delete w.dataset.msQaPrevWrap;
-          w.style.flex = '';
-        }
+      if (parent.parentElement) {
         parent.parentElement.insertBefore(w, parent);
+      } else {
+        // No grandparent to hoist into (field container is a root node) —
+        // fall back to inserting beside the textarea; still full-width via
+        // the widget's own CSS (#ms-qa-widget { width: 100% }).
+        parent.insertBefore(w, ta);
       }
     });
   }
@@ -702,11 +691,6 @@
     var w = document.getElementById('ms-qa-widget');
     if (!w) return;
     withObserverPaused(function () {
-      // Undo the flex-wrap we set on Medicus's field container — no permanent
-      // mutations left behind after we've gone.
-      if ('msQaPrevWrap' in w.dataset && w.parentElement) {
-        w.parentElement.style.flexWrap = w.dataset.msQaPrevWrap;
-      }
       w.remove();
     });
   }

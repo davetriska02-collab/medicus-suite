@@ -9,9 +9,11 @@
   happen at runtime beyond what a selector-only probe encodes, so this is
   fixture-regression only.
   The flex-row style on the field container reproduces the live layout that
-  crushed the textarea to a few px beside the injected widget (fixed v3.204.0 —
-  injectWidget now wraps the parent and claims the full row); keep it so the
-  wrap fix stays regression-guarded against the real DOM shape.
+  crushed the textarea to a few px beside the injected widget (v3.204.0) and,
+  more generally, any layout where the widget shares a row with the textarea
+  at all (fixed v3.204.1 — injectWidget now hoists above the whole field
+  container instead of inserting inside it); keep it so the fix stays
+  regression-guarded against the real DOM shape.
 -->
 <div class="task-overview">
   <h3>Codes &amp; actions</h3>
