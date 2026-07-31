@@ -2,6 +2,37 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.204.1] — 2026-07-31
+
+### Reception-instruction composer: comment-box crush fix made continuous (v3.204.0's didn't hold)
+
+Field evidence (screenshot, same day): the v3.204.0 layout fix did **not** hold on the live
+Medicus task page — the Internal-comment textarea was still crushed into a vertical
+one-character-per-line sliver beside the widget. Root-cause assumptions that failed: the
+crushing flex container is not always the textarea's **direct** parent (the v3.204.0 fix
+only wrapped that one level), and the one-shot measure at inject time is stale by the time
+Vue re-applies its layout. Replaced with three layers, none of them one-shot:
+
+- **CSS backstop** — `#ms-qa-widget ~ textarea { min-width: 220px !important; flex: 1 1
+  100% !important; }`. `min-width` beats `flex-shrink` regardless of *which* ancestor is
+  doing the crushing, and `!important` holds across Vue re-renders that rewrite the
+  textarea's inline style between JS re-checks. This rule alone makes the
+  one-character-per-line failure impossible.
+- **Escalating JS self-heal** — `fixCrushedLayout()` runs measured, idempotent steps only
+  while the textarea still measures crushed: un-`nowrap` every flex-row ancestor within 5
+  levels (not just the parent), patch the textarea itself to claim a full row, then hoist
+  the widget out of the fighting container one level at a time (max 3), re-measuring after
+  each lift.
+- **Continuous re-check** — `runInject`'s connected-widget path no longer early-returns:
+  every observed DOM churn now ends in `ensureReadableLayout()` (one
+  `getBoundingClientRect` when healthy), so a host re-render that restores the crush is
+  re-fixed within one 350ms throttle tick rather than never.
+
+All styles set on Medicus's own nodes go through a recorded patch registry and are
+restored on widget removal — no permanent host-DOM mutations. `test-reception-quick-actions-ui.js`
+gains a section pinning all three layers (the CSS min-width rule, the continuous re-check
+in `runInject`, and the patch-restore in `removeWidget`).
+
 ## [v3.204.0] — 2026-07-31
 
 ### Reception-instruction composer: comment-box crush fix + two-step flow made unmissable (practice feedback)
