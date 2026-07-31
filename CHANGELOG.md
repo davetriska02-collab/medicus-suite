@@ -2,6 +2,56 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.206.1] — 2026-07-31
+
+### Phrases: compose-first redesign (multi-critic design review + simulated practice panel)
+
+Full design-crit pass on the day-old Phrases tab, driven by Dave's feedback that the
+59-block list was "VERY long" and his ask to restructure toward the reception-composer
+pattern (labelled rows of clickable chips). Reviewed by four design critics (art director,
+token surveyor, fresh-eyes persona, product/adoption lens) plus a six-clinician simulated
+practice panel (senior partner, salaried duty doctor, registrar, portfolio GP, locum, ANP);
+convergent findings ruled on by the orchestrator and implemented in one pass.
+
+- **Two modes.** *Compose* (default): six labelled slot rows in message order — Opener /
+  Complete message / Message / Safety-net / Next step / Sign-off — each showing the
+  clinician's most-used chips (usage data already collected) with a dashed "+N more"
+  expanding in place; chip labels strip their slot prefix at render (`chipLabel()` in
+  phrases-core, unit-tested) so "Opener — worried about a result" becomes a chip reading
+  "worried about a result". The whole library now fits one panel screen with no scrolling.
+  *Library*: the previous card surface, intact — search, category filters, add/edit,
+  promote, LLM import, remove — re-homed one tap away; nothing deleted.
+- **The compose tray pins** (sticky, preview clamped with "Show all") so the message being
+  built and the rows stay on screen together — previously the composer scrolled away by
+  the third pick.
+- **The preview is now editable** (the panel's most-converged user demand): fill `***`
+  placeholders and tweak wording in-panel before Copy; the amber confirm gate now fires
+  only if `***` genuinely remains in the live text. Manual edits are transient and never
+  persisted; changing the selection recomposes.
+- **Confirm-gate hierarchy fixed:** while the gate shows, "Copy message" is removed from
+  the DOM entirely — the safe exit (Back) carries the primary weight inside the gate;
+  "Copy anyway" stays the amber ghost. Gate salience raised, not reduced.
+- **Colour discipline restored:** red leaves the resting list (Remove/Delete are neutral
+  ghosts that arm red on hover/focus); the constant green PRACTICE badge is replaced by a
+  violet "yours" badge on the minority (personal blocks) plus a "Practice pack vN" mono
+  provenance line on practice cards; audience badges are now differential — 'patient' (the
+  constant default) unbadged, 'note' neutral, 'task' amber — while the tray's For:/mixed-
+  audience control keeps full strength (H-052 control (b) note updated; flagged for the
+  pending CSO review).
+- **Accessibility floor met:** chips and cards are real buttons (the primary pick action
+  previously had no keyboard path at all), `aria-pressed` everywhere, live-regions on the
+  copy status and the `***` gate (which also takes focus), 20px close targets, `:active`
+  states, green status text contrast fixed (✓ glyph carries the colour).
+- **Voice recast per doctrine:** mono-caps leave all human phrases (category pills,
+  slot/category tags) for sans sentence case; mono stays on data (triggers, counts,
+  char/SMS, order indices). Dark theme mapped, not inherited (card borders, preview well,
+  the previously-white LLM details block).
+- **Pack v3:** the four sign-off bodies no longer hard-code "Dr ***" — an ANP or other
+  non-doctor pasting that would mislead patients about who is treating them (practice-
+  panel finding); placeholder now takes the clinician's own name/role. CI pins the ban.
+- Empty states to canon (centred, actionable "Clear search"); one-line safety subtitle;
+  6px/16px spacing rhythm. Full run: 346 tests green.
+
 ## [v3.206.0] — 2026-07-31
 
 ### Reception: the Patient card now follows the record open in Medicus

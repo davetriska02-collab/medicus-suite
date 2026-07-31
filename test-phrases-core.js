@@ -237,6 +237,35 @@ check(PC.charCount('a'.repeat(160)).smsSegments === 1, '160 chars = 1 SMS segmen
 check(PC.charCount('a'.repeat(161)).smsSegments === 2, '161 chars = 2 SMS segments');
 
 // ============================================================
+// 5b. chipLabel — design-crit decision D (render-time-only slot-prefix strip)
+// ============================================================
+console.log('\n5b. chipLabel');
+
+check(PC.chipLabel('Opener — ongoing pain') === 'ongoing pain', 'a short slot prefix is stripped');
+check(
+  PC.chipLabel('Condition explainer — tennis elbow') === 'tennis elbow',
+  'a 20-char prefix (<=24) is still stripped'
+);
+check(
+  PC.chipLabel('This is a genuinely long descriptive title — with a note') ===
+    'This is a genuinely long descriptive title — with a note',
+  'a prefix over 24 chars is left untouched (real title, not mangled)'
+);
+check(PC.chipLabel('No separator here at all') === 'No separator here at all', 'a title with no em-dash is untouched');
+check(PC.chipLabel('') === '', 'empty title returns empty string');
+check(PC.chipLabel(null) === '', 'nullish title returns empty string, never throws');
+{
+  // Exactly-24-char prefix boundary: stripped (<=24, not <24).
+  const p24 = 'x'.repeat(24);
+  check(PC.chipLabel(`${p24} — rest`) === 'rest', 'a prefix of exactly 24 chars is stripped (boundary inclusive)');
+  const p25 = 'x'.repeat(25);
+  check(
+    PC.chipLabel(`${p25} — rest`) === `${p25} — rest`,
+    'a prefix of 25 chars is left untouched (just over the limit)'
+  );
+}
+
+// ============================================================
 // 6. THE SHIPPED-PACK CONTRACT (curated content drop-in is tested here)
 // ============================================================
 console.log('\n6. shipped pack (shared/phrases-presets.js) validates wholesale');
@@ -301,6 +330,16 @@ console.log('\n6. shipped pack (shared/phrases-presets.js) validates wholesale')
   check(
     !!childFever && childFever.body.includes('under 3 months old'),
     'sn-child-fever hard-codes the under-3-months threshold (never a ***)'
+  );
+
+  // Design-crit decision R: a sign-off body ending "Dr ***" misleads a
+  // patient about who is treating them when a non-doctor (e.g. an ANP)
+  // pastes it — the placeholder must carry the clinician's own name/role,
+  // never a hard-coded title. Guards every future drop-in, not just today's.
+  const drStarClaimers = SHIPPED_PACK.blocks.filter((b) => /Dr\s*\*\*\*/.test(String(b.body)));
+  check(
+    drStarClaimers.length === 0,
+    `no shipped body contains "Dr ***"${drStarClaimers.length ? ': ' + drStarClaimers.map((b) => b.id).join(', ') : ''}`
   );
 }
 
@@ -449,9 +488,27 @@ check(
 );
 check(!/setTimeout[\s\S]{0,200}?_copyStatus\s*=\s*''/.test(modSrc), 'no timer ever clears the post-copy reminder');
 
-// (d) Audience tag renders on cards and in the compose pane (H-052 control b).
-check(/ph-aud-\$\{esc\(b\.audience\)\}/.test(modSrc), 'audience tag rendered on every block card');
+// (d) Audience marking is DIFFERENTIAL (design-crit decision F, H-052 control
+// b): the tray's own For:/mixed-audience control stays unconditional and full
+// strength; cards/chips now OMIT the badge for the expected default
+// ('patient') and only render it for 'note'/'task'. The "badge on every
+// card" pin is retired in favour of asserting the tray control's presence
+// and that the amber task-audience triad is still a real, defined class.
+check(modSrc.includes('ph-compose-aud'), "the tray's unconditional For: control markup is present");
 check(modSrc.includes('Mixed audiences'), 'mixed-audience compose warning present');
+check(
+  /function renderAudBadge/.test(modSrc) && /ph-aud-\$\{esc\(audience\)\}/.test(modSrc),
+  'a shared renderAudBadge() helper renders the note/task audience triad (patient stays unbadged)'
+);
+{
+  const cssSrc = fs.readFileSync(path.join(__dirname, 'side-panel', 'modules', 'phrases', 'phrases.css'), 'utf8');
+  check(
+    /\.ph-aud-task\s*\{[^}]*var\(--amber-dim\)[^}]*\}/.test(cssSrc) &&
+      /\.ph-aud-task\s*\{[^}]*var\(--amber\)[^}]*\}/.test(cssSrc),
+    'the ph-aud-task amber triad class is still defined (the differential omits patient, not task)'
+  );
+  check(!modSrc.includes('ph-badge-practice'), 'the old always-on green PRACTICE badge is gone (decision G)');
+}
 
 // (e) Copy-only: no fetch, no Medicus DOM write — the module talks to
 //     chrome.storage and the clipboard, nothing else.
