@@ -699,6 +699,37 @@
     _stylePatches = [];
   }
 
+  // ch-debug convention (same flag as the triage-lens pipeline logging): when the
+  // guard exhausts every step and the box is STILL crushed, dump the evidence the
+  // next fix needs — the textarea's ancestor chain with computed layout modes and
+  // widths — instead of failing silently again.
+  function debugDumpChain(w, ta) {
+    try {
+      if (localStorage.getItem('ch-debug') !== '1') return;
+      var chain = [];
+      var node = ta;
+      var hops = 0;
+      while (node && node !== document.body && hops < 8) {
+        var cs = getComputedStyle(node);
+        chain.push({
+          tag: node.tagName,
+          cls: String(node.className || '').slice(0, 60),
+          display: cs.display,
+          flexFlow: cs.flexFlow,
+          gridCols: cs.gridTemplateColumns,
+          width: Math.round(node.getBoundingClientRect().width),
+          containsWidget: node.contains(w),
+        });
+        node = node.parentElement;
+        hops++;
+      }
+      // eslint-disable-next-line no-console
+      console.warn('[MSQA] comment box still crushed after all layout fixes — ancestor chain:', chain);
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
   // Escalating, idempotent, measured: each step only runs while the textarea
   // still measures crushed, and the whole thing is a no-op once it is readable.
   // Callers must hold the observer paused (the hoist moves the widget node).
@@ -722,14 +753,41 @@
       hops++;
     }
     if (!taCrushed(ta)) return;
-    // 2. Patch the textarea itself so it claims (or wraps to) a full row. Vue may
-    //    rewrite the style attribute on a re-render — the continuous re-check
-    //    below reapplies it, and the CSS min-width rule holds in the meantime.
+    // 2. Patch the textarea itself so it claims (or wraps to) a full row. The
+    //    minWidth is inline (not just the stylesheet's sibling rule) because the
+    //    hoist below can move the widget out of sibling position, where the CSS
+    //    rule stops matching. Vue may rewrite the style attribute on a re-render —
+    //    the continuous re-check reapplies all of these.
     patchStyle(ta, 'flex', '1 1 100%');
     patchStyle(ta, 'width', '100%');
+    patchStyle(ta, 'minWidth', '220px');
     patchStyle(ta, 'boxSizing', 'border-box');
     if (!taCrushed(ta)) return;
-    // 3. Last resort: hoist the widget out of the fighting container, one level
+    // 3. Grid containers (the second field report's shape — a flex-only walk sees
+    //    nothing to fix): a sibling inserted into a grid shifts every auto-placed
+    //    item over by one cell, so the textarea lands in a narrow track and even
+    //    min-width just overflows the track instead of widening it. The widget's
+    //    own grid-column: 1 / -1 (stylesheet) keeps it on a full row; if the box
+    //    is still crushed, collapse the fighting grid's column template so its
+    //    children stack full-width.
+    node = ta.parentElement;
+    hops = 0;
+    while (node && node !== document.body && hops < 5) {
+      var gcs;
+      try {
+        gcs = getComputedStyle(node);
+      } catch (e) {
+        break;
+      }
+      if (gcs.display.indexOf('grid') !== -1 && node.contains(w) && gcs.gridTemplateColumns !== 'none') {
+        patchStyle(node, 'gridTemplateColumns', 'none');
+        if (!taCrushed(ta)) return;
+      }
+      node = node.parentElement;
+      hops++;
+    }
+    if (!taCrushed(ta)) return;
+    // 4. Last resort: hoist the widget out of the fighting container, one level
     //    at a time, re-measuring after each lift.
     var lifts = 0;
     while (taCrushed(ta) && lifts < 3) {
@@ -738,6 +796,7 @@
       parent.parentElement.insertBefore(w, parent);
       lifts++;
     }
+    if (taCrushed(ta)) debugDumpChain(w, ta);
   }
 
   function ensureReadableLayout() {
@@ -750,6 +809,27 @@
     });
   }
 
+  // Where to insert. Placing the widget directly before the textarea makes it
+  // compete with the textarea inside whatever layout algorithm its container
+  // uses — flex tracks (first field report) or grid auto-placement (second field
+  // report: every auto-placed item shifts one cell, the textarea lands in a
+  // narrow track). So climb out of pure wrapper shells first: while the current
+  // node is its parent's ONLY element child, inserting above that parent cannot
+  // displace anything else, and the page's own block flow stacks the widget above
+  // the field the way its label already stacks. Bounded to 3 hops.
+  function insertionAnchor(ta) {
+    var anchor = ta;
+    var hops = 0;
+    while (hops < 3) {
+      var parent = anchor.parentElement;
+      if (!parent || parent === document.body) break;
+      if (parent.childElementCount !== 1) break;
+      anchor = parent;
+      hops++;
+    }
+    return anchor;
+  }
+
   function injectWidget() {
     if (!getTaskInfo()) return;
     var existing = document.getElementById('ms-qa-widget');
@@ -760,11 +840,13 @@
     var w = document.createElement('div');
     w.id = 'ms-qa-widget';
     // Full-row up front — harmless in block layouts, and in a flex row it stops
-    // the widget itself competing for the textarea's axis space.
+    // the widget itself competing for the textarea's axis space. (The grid
+    // equivalent, grid-column: 1 / -1, lives in the stylesheet.)
     w.style.flex = '0 0 100%';
     renderInto(w);
     withObserverPaused(function () {
-      ta.parentElement.insertBefore(w, ta);
+      var anchor = insertionAnchor(ta);
+      anchor.parentElement.insertBefore(w, anchor);
       fixCrushedLayout(w, ta);
     });
   }
