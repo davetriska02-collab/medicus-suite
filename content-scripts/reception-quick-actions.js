@@ -85,17 +85,37 @@
     }
   }
 
-  // Copied from routine-rx-button.js:558-569 (its `highlight`) — scroll the
-  // control into view and ring it for a couple of seconds. Deliberately NOT a
-  // click: pressing Submit is the clinician's decision, always.
+  // Copied from routine-rx-button.js:558-569 (its `highlight`) — ring the
+  // control for a couple of seconds, scrolling to it only when it is off-screen
+  // (scrolling while the GP's eye is on the freshly-inserted text yanks that text
+  // away and reads as "it vanished"). Deliberately NOT a click: pressing Submit
+  // is the clinician's decision, always.
   function highlight(el) {
     try {
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      var r = el.getBoundingClientRect();
+      var viewH = window.innerHeight || document.documentElement.clientHeight;
+      if (r.top < 0 || r.bottom > viewH) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
       var prev = el.style.boxShadow;
       el.style.boxShadow = '0 0 0 3px #d97706';
       setTimeout(function () {
         el.style.boxShadow = prev;
       }, 2600);
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  // Green ring on the comment box right after an insert, so the eye lands on the
+  // inserted text itself before moving to Submit.
+  function flashBox(el) {
+    try {
+      var prev = el.style.boxShadow;
+      el.style.boxShadow = '0 0 0 3px #16a34a';
+      setTimeout(function () {
+        el.style.boxShadow = prev;
+      }, 2000);
     } catch (e) {
       /* ignore */
     }
@@ -155,6 +175,16 @@
       who: '',
       when: '',
       note: '',
+      // The sentence the last Insert appended — echoed back in the preview block
+      // ("Added to the comment below: …") so the visible response to pressing
+      // Insert is the inserted text itself, not a form that empties itself.
+      // Cleared on the next chip pick.
+      lastInserted: '',
+      // True from a successful insert until the GP presses the card's Submit,
+      // the SPA navigates away, or the comment box is emptied. Drives the
+      // persistent "not yet submitted" reminder (H-049: an interruption must not
+      // silently outlive the warning, so this has NO timer).
+      pending: false,
       // Pinned when the composer is opened or the first chip is picked, and
       // re-verified before every insert (H-043 discipline).
       taskUuid: null,
@@ -245,6 +275,21 @@
     return null;
   }
 
+  // The card's Submit label as the GP sees it ("Submit", "Submit as new", …) —
+  // read live off the control findSubmitControl matched (already guarded by its
+  // /^submit\b/i test), clamped, and escaped wherever it is rendered. Falls back
+  // to plain "Submit" when the control isn't findable yet.
+  function submitLabelText() {
+    var ta = findCommentBox();
+    var c = ta ? findSubmitControl(ta) : null;
+    var t = c
+      ? String(c.value || c.textContent || '')
+          .trim()
+          .slice(0, 40)
+      : '';
+    return t || 'Submit';
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────────
 
   var ROWS = [
@@ -314,6 +359,8 @@
     }).join('');
 
     var preview = previewText();
+    var added = !preview && s.lastInserted;
+    var submitName = submitLabelText();
     return (
       '<div class="ms-qa-body">' +
       rows +
@@ -327,17 +374,37 @@
       suggestionsHtml() +
       '</div>' +
       '</div>' +
+      '<div class="ms-qa-preview-block' +
+      (added ? ' ms-qa-preview-added' : '') +
+      '" id="ms-qa-preview-block">' +
+      '<div class="ms-qa-preview-label" id="ms-qa-preview-label">' +
+      (added ? 'Added to the comment below:' : 'Will add:') +
+      '</div>' +
+      '<div class="ms-qa-preview" id="ms-qa-preview">' +
+      esc(preview || s.lastInserted || 'Pick an action to build the sentence.') +
+      '</div>' +
+      '</div>' +
       '<div class="ms-qa-footer">' +
-      '<button type="button" class="ms-qa-btn" id="ms-qa-insert"' +
+      '<button type="button" class="ms-qa-btn' +
+      (preview ? ' ms-qa-btn-armed' : '') +
+      '" id="ms-qa-insert"' +
       (preview ? '' : ' disabled') +
-      '>Insert into comment</button>' +
+      '>1.&nbsp;Insert into comment&nbsp;↓</button>' +
       '<button type="button" class="ms-qa-gear" id="ms-qa-gear" title="Edit lists (whole practice)" ' +
       'aria-label="Edit lists (whole practice)">⚙</button>' +
-      '<div class="ms-qa-preview" id="ms-qa-preview">' +
-      esc(preview || 'Pick an action to build the sentence.') +
+      '<span class="ms-qa-btn-hint" id="ms-qa-btn-hint"' +
+      (preview || s.lastInserted ? ' style="display:none"' : '') +
+      '>Pick an action first</span>' +
       '</div>' +
-      '</div>' +
+      '<div class="ms-qa-step2">2.&nbsp;Then press “' +
+      esc(submitName) +
+      '” below.</div>' +
       '<div class="ms-qa-notice" id="ms-qa-notice" role="status" aria-live="polite"></div>' +
+      (s.pending
+        ? '<div class="ms-qa-pending" role="status">Not yet submitted — press “' +
+          esc(submitName) +
+          '” below. Until you do, reception sees nothing.</div>'
+        : '') +
       '</div>'
     );
   }
@@ -352,6 +419,7 @@
       '</span>' +
       '<span class="ms-qa-title">Reception instruction</span>' +
       '<span class="ms-qa-muted">writes text only — books nothing</span>' +
+      (s.pending ? '<span class="ms-qa-pill">not yet submitted</span>' : '') +
       '</div>' +
       (s.open ? bodyHtml() : '')
     );
@@ -372,10 +440,20 @@
   // input handler.
   function refreshPreview() {
     var line = previewText();
+    var added = !line && !!s.lastInserted;
+    var block = document.getElementById('ms-qa-preview-block');
+    if (block) block.className = 'ms-qa-preview-block' + (added ? ' ms-qa-preview-added' : '');
+    var label = document.getElementById('ms-qa-preview-label');
+    if (label) label.textContent = added ? 'Added to the comment below:' : 'Will add:';
     var prev = document.getElementById('ms-qa-preview');
-    if (prev) prev.textContent = line || 'Pick an action to build the sentence.';
+    if (prev) prev.textContent = line || s.lastInserted || 'Pick an action to build the sentence.';
     var btn = document.getElementById('ms-qa-insert');
-    if (btn) btn.disabled = !line;
+    if (btn) {
+      btn.disabled = !line;
+      btn.className = 'ms-qa-btn' + (line ? ' ms-qa-btn-armed' : '');
+    }
+    var hint = document.getElementById('ms-qa-btn-hint');
+    if (hint) hint.style.display = line || s.lastInserted ? 'none' : '';
   }
 
   var _noticeTimer = null;
@@ -392,7 +470,7 @@
         live.textContent = '';
         live.className = 'ms-qa-notice';
       }
-    }, 4000);
+    }, 6000);
   }
 
   // ── Actions ───────────────────────────────────────────────────────────────────
@@ -406,6 +484,7 @@
   function pickChip(rowKey, value) {
     pinTask();
     s[rowKey] = s[rowKey] === value ? '' : value; // tap again to deselect
+    s.lastInserted = ''; // a new composition replaces the "added" echo
     rerender();
   }
 
@@ -430,6 +509,7 @@
     }
     pinTask();
     s.who = name;
+    s.lastInserted = '';
     rerender();
   }
 
@@ -445,6 +525,8 @@
       // The note can carry task-specific clinical detail — never let it survive
       // into a different task's composer.
       s.note = '';
+      s.lastInserted = '';
+      s.pending = false;
       s.taskUuid = info ? info.taskUuid : null;
       rerender();
       showNotice('Task changed — reopen and re-pick.', 'err');
@@ -464,26 +546,41 @@
     if (!line) return;
     setNativeValue(ta, QA.appendToComment(ta.value, line));
 
-    // 4. Clear the picks so the next instruction starts clean, and hand focus to
-    //    the comment box with the caret at the end for the GP to edit.
+    // 4. Clear the picks so the next instruction starts clean — but ECHO the
+    //    inserted sentence back in the preview block and raise the persistent
+    //    "not yet submitted" state, so the visible response to pressing Insert is
+    //    the inserted text, never a form that just emptied itself. Hand focus to
+    //    the comment box (without scrolling — the flash ring marks it) with the
+    //    caret at the end for the GP to edit.
     s.action = '';
     s.who = '';
     s.when = '';
     s.note = '';
+    s.lastInserted = line;
+    s.pending = true;
     rerender();
     try {
-      ta.focus();
+      ta.focus({ preventScroll: true });
       var end = ta.value.length;
       ta.setSelectionRange(end, end);
     } catch (e) {
       /* ignore */
     }
+    flashBox(ta);
 
     // 5. Point at Medicus's own Submit — highlight, never click.
     var submit = findSubmitControl(ta);
     if (submit) highlight(submit);
+    var submitName = submit
+      ? String(submit.value || submit.textContent || '')
+          .trim()
+          .slice(0, 40)
+      : '';
 
-    showNotice('Text added to internal comment — not yet submitted', 'ok');
+    showNotice(
+      'Text added to the internal comment below. Read it, then press “' + (submitName || 'Submit') + '”.',
+      'ok'
+    );
   }
 
   function openOptions() {
@@ -566,7 +663,38 @@
     w.id = 'ms-qa-widget';
     renderInto(w);
     withObserverPaused(function () {
-      ta.parentElement.insertBefore(w, ta);
+      // Medicus renders some field containers as flex-row (no wrap). Inserted as
+      // a plain sibling there, the widget and the textarea fight over the row and
+      // the textarea loses — crushed to a few px, rendering the comment one
+      // character per line (unreadable = H-049 controls (b)/(e) degraded). Force
+      // the parent to wrap and take the full row, remembering the previous value
+      // so removeWidget can put it back. Attribute mutations don't retrigger the
+      // observers (childList-only), so this cannot loop.
+      var parent = ta.parentElement;
+      var cs;
+      try {
+        cs = getComputedStyle(parent);
+      } catch (e) {
+        cs = null;
+      }
+      if (cs && cs.display.indexOf('flex') !== -1 && cs.flexDirection.indexOf('row') === 0) {
+        w.dataset.msQaPrevWrap = parent.style.flexWrap || '';
+        parent.style.flexWrap = 'wrap';
+        w.style.flex = '0 0 100%';
+      }
+      parent.insertBefore(w, ta);
+      // Self-heal: if the textarea is still crushed (a layout this fix didn't
+      // predict), hoist the widget above the whole field container instead —
+      // an unreadable clinical free-text box is never acceptable.
+      var rect = ta.getBoundingClientRect();
+      if (rect.width > 0 && rect.width < 120 && parent.parentElement) {
+        if ('msQaPrevWrap' in w.dataset) {
+          parent.style.flexWrap = w.dataset.msQaPrevWrap;
+          delete w.dataset.msQaPrevWrap;
+          w.style.flex = '';
+        }
+        parent.parentElement.insertBefore(w, parent);
+      }
     });
   }
 
@@ -574,6 +702,11 @@
     var w = document.getElementById('ms-qa-widget');
     if (!w) return;
     withObserverPaused(function () {
+      // Undo the flex-wrap we set on Medicus's field container — no permanent
+      // mutations left behind after we've gone.
+      if ('msQaPrevWrap' in w.dataset && w.parentElement) {
+        w.parentElement.style.flexWrap = w.dataset.msQaPrevWrap;
+      }
       w.remove();
     });
   }
@@ -662,10 +795,43 @@
     });
   }
 
+  // ── Pending-state teardown ────────────────────────────────────────────────────
+  // The persistent "not yet submitted" reminder has NO timer (an interruption must
+  // not outlive the warning) — it clears only when the un-submitted state stops
+  // being real: the GP clicks the card's own Submit control, the SPA navigates
+  // away (runInject → blankState), or the comment box has been emptied. Observed
+  // with a capture-phase listener that never calls preventDefault and never
+  // synthesises a click — pressing Submit stays entirely the clinician's act.
+
+  function clearPending() {
+    if (!s.pending) return;
+    s.pending = false;
+    s.lastInserted = '';
+    rerender();
+  }
+
+  function onDocClick(e) {
+    if (!s.pending) return;
+    var t = e.target;
+    if (t && t.nodeType !== 1) t = t.parentElement;
+    if (!t || !t.closest || t.closest('#ms-qa-widget')) return;
+    var btn = t.closest(SUBMIT_BTN_SEL);
+    if (btn && /^submit\b/i.test(String(btn.value || btn.textContent || '').trim())) {
+      // A click is not a successful submit — so clear the reminder, claim nothing.
+      clearPending();
+      return;
+    }
+    // The GP deleted the inserted text by hand — the reminder no longer applies.
+    var ta = findCommentBox();
+    if (ta && !ta.value.trim()) clearPending();
+  }
+
   // ── Boot (routine-rx-button.js:929-961 pattern) ───────────────────────────────
 
   loadCfg().then(function () {
     scheduleInject();
+
+    document.addEventListener('click', onDocClick, true);
 
     var hub = window.__chObserverHub;
     if (hub && hub.subscribe) {
