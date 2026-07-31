@@ -281,6 +281,78 @@ console.log('\n6. shipped pack (shared/phrases-presets.js) validates wholesale')
   // Sanitisation must be a no-op on shipped content — the pack ships clean.
   const roundTrip = SHIPPED_PACK.blocks.every((b) => JSON.stringify(PC.sanitiseBlock(b)) === JSON.stringify({ ...b }));
   check(roundTrip, 'sanitiseBlock is a no-op on every shipped block (pack ships pre-clean)');
+
+  // BODY-TEXT contract (Opus review finding 7): the bodies are the patient-
+  // facing surface and this file is the designated recurring drop-in point —
+  // no shipped body may claim an action was completed. "what you've sent"
+  // (the PATIENT sent it) is the one legitimate use, stripped before the test.
+  const BODY_CLAIM = /\b(sent|booked|done|submitted|arranged|referred|prescribed|issued|completed)\b/i;
+  const BODY_ALLOWED = /\bwhat you've sent\b/gi;
+  const claimers = SHIPPED_PACK.blocks.filter((b) => BODY_CLAIM.test(String(b.body).replace(BODY_ALLOWED, '')));
+  check(
+    claimers.length === 0,
+    `no shipped body claims a completed action${claimers.length ? ': ' + claimers.map((b) => b.id).join(', ') : ''}`
+  );
+
+  // The infant-fever red-flag threshold is a NATIONAL constant (NICE NG143:
+  // under 3 months with temperature >= 38°C), not a fill-in — a *** here
+  // invites a materially wrong escalation trigger (Opus review finding 8).
+  const childFever = SHIPPED_PACK.blocks.find((b) => b.id === 'sn-child-fever');
+  check(
+    !!childFever && childFever.body.includes('under 3 months old'),
+    'sn-child-fever hard-codes the under-3-months threshold (never a ***)'
+  );
+}
+
+// ============================================================
+// 6b. generateBlockId — must terminate at the id-length limit
+// ============================================================
+// `${base}-${n}`.slice(0, limit) truncates the suffix back off when base is
+// already at the limit → identical candidate every iteration → unbounded busy-
+// loop freezing the panel/Options page (Opus review finding 1, BLOCKER). Pin
+// termination and distinctness; this class of bug is invisible to CI unless
+// something asserts it.
+console.log('\n6b. generateBlockId termination at the length limit');
+
+{
+  const longTitle = 'x'.repeat(120);
+  const firstId = PC.generateBlockId(longTitle, new Set());
+  check(firstId.length <= PC.PH_LIMITS.id, 'long-title id respects the length limit');
+  const secondId = PC.generateBlockId(longTitle, new Set([firstId]));
+  check(secondId !== firstId, 'colliding long-title id gets a REAL suffix (returns, distinct)');
+  const many = new Set([firstId, secondId]);
+  const thirdId = PC.generateBlockId(longTitle, many);
+  check(!many.has(thirdId), 'third collision still distinct');
+  // Two same-long-titled blocks through the list sanitiser — the exact repro
+  // that froze: must return, with distinct ids.
+  const pair = PC.sanitiseBlockList([
+    {
+      id: '',
+      title: longTitle,
+      body: 'a',
+      trigger: 'ta',
+      keywords: '',
+      category: 'admin',
+      audience: 'note',
+      leafletUrl: '',
+      slot: 'whole',
+    },
+    {
+      id: '',
+      title: longTitle,
+      body: 'b',
+      trigger: 'tb',
+      keywords: '',
+      category: 'admin',
+      audience: 'note',
+      leafletUrl: '',
+      slot: 'whole',
+    },
+  ]);
+  check(
+    pair.length === 2 && pair[0].id !== pair[1].id,
+    'sanitiseBlockList of two identical long titles returns two distinct ids'
+  );
 }
 
 // ============================================================
@@ -328,30 +400,53 @@ console.log('\n8. module wording controls (source grep)');
 
 const modSrc = fs.readFileSync(path.join(__dirname, 'side-panel', 'modules', 'phrases', 'phrases.js'), 'utf8');
 
-// Extract single-quoted strings AND template literals — UI copy lives in both.
+// Extract single-quoted strings, DOUBLE-quoted strings AND template literals —
+// UI copy lives in all three. Double quotes matter precisely because Prettier
+// (singleQuote: true) emits them for strings containing an apostrophe — i.e.
+// exactly the natural-English copy most likely to carry a claim (Opus review
+// finding 6).
 const singleQuoted = modSrc.match(/'(?:[^'\\\n]|\\.)*'/g) || [];
+const doubleQuoted = modSrc.match(/"(?:[^"\\\n]|\\.)*"/g) || [];
 const templates = modSrc.match(/`(?:[^`\\]|\\.)*`/g) || [];
-const literals = [...singleQuoted, ...templates];
+const literals = [...singleQuoted, ...doubleQuoted, ...templates];
 check(literals.length > 40, `extracted a plausible number of string/template literals (got ${literals.length})`);
 
-// (a) No completion claim — the H-049 banned words, capitalised claim form.
-const BANNED = /\b(Done|Sent|Booked|Submitted)\b/;
-const offenders = literals.filter((l) => BANNED.test(l));
+// (a) No completion claim — the H-049 banned words, CASE-INSENSITIVE ("has been
+// sent" claims completion as surely as "Sent"). Legitimate negations are
+// stripped before the test rather than allowlisting whole literals.
+const BANNED = /\b(done|sent|booked|submitted)\b/i;
+const BANNED_NEGATIONS = /\b(not(?:hing is)?(?: yet)? (?:done|sent|booked|submitted)|sends nothing)\b/gi;
+const offenders = literals.filter((l) => BANNED.test(l.replace(BANNED_NEGATIONS, '')));
 check(
   offenders.length === 0,
-  `no UI literal claims completion (Done/Sent/Booked/Submitted)${offenders.length ? ': ' + offenders.slice(0, 3).join(' | ') : ''}`
+  `no UI literal claims completion (done/sent/booked/submitted, any case)${offenders.length ? ': ' + offenders.slice(0, 3).join(' | ') : ''}`
 );
 
-// (b) The ***-unfilled copy gate exists and states the consequence.
+// (b) The ***-unfilled copy gate exists and states the consequence — audience-
+// aware, so it is never false for a note/task composition (a false consequence
+// teaches click-through-blindness; Opus review finding 3).
+check(/carriesGaps\s*&&\s*!confirmed/.test(modSrc), 'Copy is gated on unfilled placeholders + explicit confirmation');
+check(modSrc.includes('the patient'), 'the *** confirmation names the patient-facing consequence');
+check(modSrc.includes('whoever reads this'), 'the *** confirmation has a true consequence for note/task audiences');
+
+// (b2) A confirmed ***-copy keeps its obligation visible after the click
+// (Opus review finding 4) and the post-copy line names the clipboard-outlives-
+// context risk (finding 5 — H-052 cites this line as the accepted control).
 check(
-  /hasUnfilledPlaceholders\(text\)\s*&&\s*!confirmed/.test(modSrc),
-  'Copy is gated on hasUnfilledPlaceholders + explicit confirmation'
+  modSrc.includes('This copy still contains *** — type over every one before you send.'),
+  'the *** obligation survives the confirmed copy'
 );
-check(modSrc.includes('the patient will see'), 'the *** confirmation states the consequence, not the mechanism');
+check(
+  /stays on the clipboard until you copy something else/.test(modSrc),
+  'post-copy line names clipboard persistence (H-052 clipboard-outlives-context control)'
+);
 check(modSrc.includes('Copy anyway'), 'the gate demands an explicit "Copy anyway" second click');
 
 // (c) The post-copy line claims the clipboard only, and persists (no timer).
-check(modSrc.includes('nothing goes anywhere until you do'), 'post-copy line states the outstanding manual step');
+check(
+  modSrc.includes('Nothing goes anywhere until you paste and send'),
+  'post-copy line states the outstanding manual step'
+);
 check(!/setTimeout[\s\S]{0,200}?_copyStatus\s*=\s*''/.test(modSrc), 'no timer ever clears the post-copy reminder');
 
 // (d) Audience tag renders on cards and in the compose pane (H-052 control b).

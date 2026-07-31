@@ -118,12 +118,19 @@
       .slice(0, PH_LIMITS.id);
   }
 
-  // Deterministic-ish id from a title, avoiding the taken set.
+  // Deterministic-ish id from a title, avoiding the taken set. The suffix must
+  // get RESERVED room: slicing `${base}-${n}` to the id limit truncates the
+  // suffix straight back off when the base is already at the limit, making the
+  // candidate identical every iteration — an unbounded busy-loop that froze the
+  // panel on two same-titled long blocks (Opus review finding 1). Bounded too:
+  // past 999 collisions something upstream is broken, so stop generating.
   function generateBlockId(title, takenSet) {
     const base = slugify(title) || 'block';
     let id = base;
-    let n = 2;
-    while (takenSet && takenSet.has(id)) id = `${base}-${n++}`.slice(0, PH_LIMITS.id);
+    for (let n = 2; takenSet && takenSet.has(id) && n < 1000; n++) {
+      const suffix = `-${n}`;
+      id = base.slice(0, PH_LIMITS.id - suffix.length) + suffix;
+    }
     return id;
   }
 

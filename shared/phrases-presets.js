@@ -470,7 +470,7 @@
       {
         id: 'sn-child-fever',
         title: 'Safety-net — child with fever',
-        body: "Most fevers in children settle by themselves. Please take your child to A&E, or call 999, if they: have a stiff neck, have a rash that doesn't fade when you press a glass on it, are hard to wake, are struggling to breathe, or are under *** months old with a temperature above 38°C. If you're worried but it's none of these, call NHS 111 — or if you just feel something isn't right.",
+        body: "Most fevers in children settle by themselves. Please take your child to A&E, or call 999, if they: have a stiff neck, have a rash that doesn't fade when you press a glass on it, are hard to wake, are struggling to breathe, or are under 3 months old with a temperature above 38°C. If you're worried but it's none of these, call NHS 111 — or if you just feel something isn't right.",
         trigger: 'snchildfever',
         keywords: 'child fever safety net paediatric rash stiff neck 999',
         category: 'safety-netting',

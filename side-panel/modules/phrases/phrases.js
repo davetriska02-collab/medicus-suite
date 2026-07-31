@@ -165,10 +165,16 @@ function saveUi() {
   }, 400);
 }
 
-// Practice tier first (shipped + promoted), then personal. Ids are unique
-// across both tiers (enforced at save/promote/import time).
+// Practice tier first (shipped + promoted), then personal. Save/promote/import
+// enforce cross-tier id uniqueness, but a future pack bump or a restored backup
+// can still collide an id across tiers — so this assembly DE-DUPLICATES (first
+// occurrence wins, i.e. practice) and every consumer (findBlock, composeMessage,
+// search) reads the same de-duplicated list. Without this, findBlock showed one
+// tier's audience tag while composeMessage copied the other tier's body (Opus
+// review finding 2).
 function allBlocks() {
-  return [..._config.practiceBlocks, ..._personal];
+  const seen = new Set();
+  return [..._config.practiceBlocks, ..._personal].filter((b) => !seen.has(b.id) && seen.add(b.id));
 }
 
 function isPractice(id) {
@@ -233,9 +239,14 @@ function renderCompose() {
     ? `<div class="ph-compose-gaps">Contains <mark class="ph-fill">***</mark> — type the missing details over each one after pasting. They are never filled in for you.</div>`
     : '';
 
+  // The consequence must be TRUE for the composed audience: "the patient will
+  // see" is only right for patient-facing text; a false consequence on a note/
+  // task composition teaches users the gate doesn't apply to them (the click-
+  // through-blind failure H-052 flags).
+  const gapReader = audiences.includes('patient') ? 'the patient' : 'whoever reads this';
   const confirmBlock = _confirmCopy
     ? `<div class="ph-copy-confirm">
-        <div class="ph-copy-confirm-text">This message still contains <mark class="ph-fill">***</mark>. If you paste it and press send in Medicus as-is, the patient will see <strong>***</strong> where their details should be.</div>
+        <div class="ph-copy-confirm-text">This message still contains <mark class="ph-fill">***</mark>. If you paste it and press send in Medicus as-is, ${esc(gapReader)} will see <strong>***</strong> where the details should be.</div>
         <div class="ph-copy-confirm-actions">
           <button class="ph-btn ph-btn-warn" data-act="copy-confirm">Copy anyway — I will fill in *** after pasting</button>
           <button class="ph-btn" data-act="copy-cancel">Back</button>
@@ -520,7 +531,8 @@ async function doCopy(confirmed) {
 
   // The ***-unfilled gate (H-052 control): a message still carrying manual-
   // fill markers needs an explicit second click that states the consequence.
-  if (PC.hasUnfilledPlaceholders(text) && !confirmed) {
+  const carriesGaps = PC.hasUnfilledPlaceholders(text);
+  if (carriesGaps && !confirmed) {
     _confirmCopy = true;
     render();
     return;
@@ -540,9 +552,15 @@ async function doCopy(confirmed) {
 
   // Deliberately NOT a claim of completion: the clipboard write happened, the
   // paste-and-send in Medicus has not. The line persists (no timer) until the
-  // next composition change — H-049 discipline.
+  // next composition change — H-049 discipline. It also names the clipboard-
+  // outlives-context risk at the moment it becomes real (H-052: the clipboard
+  // is OS-level; the suite cannot scope or clear it, so the accepted control is
+  // stating the consequence here, where it is read). And a ***-confirmed copy
+  // keeps its obligation VISIBLE after the click — the warning must not vanish
+  // at the moment it becomes outstanding.
   _copyStatus =
-    'Copied to clipboard. Now paste it into the right Medicus box yourself — nothing goes anywhere until you do.';
+    'Copied to clipboard. Paste it into the right Medicus box now — it stays on the clipboard until you copy something else, so it can land in the wrong patient’s box later. Nothing goes anywhere until you paste and send.' +
+    (carriesGaps ? ' This copy still contains *** — type over every one before you send.' : '');
   render();
 }
 

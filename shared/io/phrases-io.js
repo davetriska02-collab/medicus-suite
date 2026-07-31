@@ -38,7 +38,14 @@ async function phrasesImport(data) {
   if (data.items !== undefined) {
     if (!Array.isArray(data.items)) throw new Error('phrases.items must be an array.');
     const cleaned = [];
-    const taken = new Set();
+    // Seed the taken set from the incoming practice tier so a restored backup
+    // cannot land the same id in both tiers — a cross-tier collision makes the
+    // audience tag and the copied body disagree (Opus review finding 2).
+    const taken = new Set(
+      data.config && Array.isArray(data.config.practiceBlocks)
+        ? data.config.practiceBlocks.map((b) => b && b.id).filter(Boolean)
+        : []
+    );
     for (const b of data.items) {
       const errs = PC.validateBlock(b);
       if (errs.length > 0) throw new Error(`phrases.items["${(b && b.title) || '?'}"]: ${errs[0]}`);
