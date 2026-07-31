@@ -105,6 +105,21 @@ check(
   'the sibling textarea min-width is ≥100px and !important'
 );
 
+// (a2) Grid backstops (v3.204.2 — the second field report was a grid, which the
+//      flex-only walk could not see): the widget must span all grid columns so
+//      auto-placed items are not shifted into narrow tracks, injection must climb
+//      out of single-child wrapper shells, and the textarea min-width must also
+//      be patched INLINE (the stylesheet sibling rule stops matching if the
+//      widget is hoisted or anchored higher).
+const baseRule = css.match(/#ms-qa-widget\s*\{[^}]*\}/);
+check(
+  !!baseRule && /grid-column:\s*1\s*\/\s*-1/.test(baseRule[0]),
+  'the widget spans all grid columns (grid-column: 1 / -1)'
+);
+check(/function insertionAnchor\(/.test(src), 'injection climbs out of single-child wrapper shells (insertionAnchor)');
+check(/patchStyle\(ta, 'minWidth'/.test(src), 'the textarea min-width is also patched inline');
+check(/gridTemplateColumns/.test(src), 'fixCrushedLayout has a grid-container escalation step');
+
 // (b) JS self-heal is continuous, not inject-time-only: the connected-widget
 //     path of runInject must re-verify the layout on DOM churn.
 check(/function fixCrushedLayout\(/.test(src), 'fixCrushedLayout() exists');

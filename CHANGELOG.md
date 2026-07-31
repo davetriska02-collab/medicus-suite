@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.204.2] — 2026-07-31
+
+### Reception-instruction composer: crush fix round 3 — the container is a grid, not a flex row
+
+Third field screenshot, same day: still crushed. The evidence now points at a **CSS grid**
+field container — which explains why both prior fixes missed: a sibling inserted into a
+grid shifts every auto-placed item over by one cell (the textarea lands in a narrow
+track), a flex-wrap walk sees nothing to fix, and `min-width` on a grid item overflows a
+fixed track instead of widening it. Strategy change — stop competing in the container's
+layout algorithm at all:
+
+- **Insertion anchor** — `insertionAnchor()` climbs out of pure single-child wrapper
+  shells (≤3 hops) before inserting, so the widget lands where the page's own block flow
+  stacks it above the field (like its label) instead of inside a flex/grid track fight.
+- **Grid-agnostic CSS** — `#ms-qa-widget { grid-column: 1 / -1 }` keeps the widget on a
+  full row of its own in any grid parent, leaving auto-placed siblings in their original
+  tracks. Harmless elsewhere.
+- **Grid escalation step** in `fixCrushedLayout()` — if the box still measures crushed,
+  collapse the fighting grid's `grid-template-columns` (recorded + restored like every
+  host patch) so its children stack full-width.
+- **Inline `min-width` on the textarea** — the stylesheet's sibling rule stops matching
+  once the widget is anchored higher or hoisted; the inline patch travels with the box.
+- **`ch-debug` capture** — if every step is exhausted and the box is *still* crushed,
+  `localStorage.setItem('ch-debug','1')` + reload now logs `[MSQA]` with the textarea's
+  full ancestor chain (tag, class, computed display/flex/grid, widths) so the next fix is
+  evidence-driven, per the repo's capture-first debugging doctrine.
+
 ## [v3.204.1] — 2026-07-31
 
 ### Reception-instruction composer: comment-box crush fix made continuous (v3.204.0's didn't hold)
