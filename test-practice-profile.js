@@ -463,6 +463,83 @@ function makeProfile(over = {}) {
   check(store['triagelens.config'].oirTests.length === 1 && store['triagelens.config'].oirTests[0].key === 'new',
     'triage replace: old oirTests entries wiped, replaced wholesale (unchanged behaviour)');
 
+  // ── Triage Lens merge: retiredOirKeys removes a superseded key ─────────────
+  // 2026-07-31 fix: an edited test republishes under a NEW key (rotated at
+  // publish time) plus lists the old key in retiredOirKeys, so the apply side
+  // must explicitly drop the old key rather than leaving stale duplicate
+  // content forever.
+  console.log('\n--- triage merge: retiredOirKeys removes the superseded key ---');
+  reset();
+  store['triagelens.config'] = {
+    version: 7,
+    oirTests: [
+      { key: 'crp', label: 'CRP', pattern: 'stale' },
+      { key: 'untouched', label: 'Untouched', pattern: 'keep-me' },
+    ],
+  };
+  const retireProfile = makeProfile({
+    profileVersion: 'tr-4',
+    apply: { modules: { triage: 'merge' } },
+    envelope: {
+      modules: {
+        triage: {
+          config: {
+            oirTests: [{ key: 'crp-2', label: 'CRP', pattern: 'fresh' }],
+            retiredOirKeys: ['crp'],
+          },
+        },
+      },
+    },
+  });
+  const rRetire = await PP.applyProfile(retireProfile);
+  check(rRetire.modulesApplied.includes('triage'), 'triage merge: retirement + append counts as applied');
+  check(store['triagelens.config'].oirTests.find(t => t.key === 'crp') === undefined,
+    'triage merge: retired key removed from local oirTests');
+  check(store['triagelens.config'].oirTests.find(t => t.key === 'crp-2')?.pattern === 'fresh',
+    'triage merge: rotated replacement key appended');
+  check(store['triagelens.config'].oirTests.find(t => t.key === 'untouched') !== undefined,
+    'triage merge: unrelated local entry survives retirement');
+  check(store['triagelens.config'].oirTests.length === 2,
+    'triage merge: net count reflects one retired + one added (2, not 3)');
+
+  // ── Triage Lens merge: retiredOirKeys alone (no new oirTests) still applies ─
+  console.log('\n--- triage merge: retiredOirKeys with no accompanying oirTests still removes the key ---');
+  reset();
+  store['triagelens.config'] = {
+    version: 7,
+    oirTests: [{ key: 'obsolete', label: 'Obsolete', pattern: 'gone' }],
+  };
+  const retireOnlyProfile = makeProfile({
+    profileVersion: 'tr-5',
+    apply: { modules: { triage: 'merge' } },
+    envelope: {
+      modules: {
+        triage: { config: { retiredOirKeys: ['obsolete'] } },
+      },
+    },
+  });
+  const rRetireOnly = await PP.applyProfile(retireOnlyProfile);
+  check(rRetireOnly.modulesApplied.includes('triage'), 'triage merge: pure retirement counts as applied');
+  check(store['triagelens.config'].oirTests.length === 0, 'triage merge: pure retirement empties the retired key out');
+
+  // ── Triage Lens merge: no retiredOirKeys, no new oirTests -> no-op, unapplied
+  console.log('\n--- triage merge: neither retirement nor new tests -> not marked applied ---');
+  reset();
+  store['triagelens.config'] = {
+    version: 7,
+    oirTests: [{ key: 'stable', label: 'Stable', pattern: 'x' }],
+  };
+  const noopProfile = makeProfile({
+    profileVersion: 'tr-6',
+    apply: { modules: { triage: 'merge' } },
+    envelope: {
+      modules: { triage: { config: { someOtherField: true } } },
+    },
+  });
+  const rNoop = await PP.applyProfile(noopProfile);
+  check(!rNoop.modulesApplied.includes('triage'), 'triage merge: genuinely nothing to do -> not marked applied');
+  check(store['triagelens.config'].oirTests.length === 1, 'triage merge: local oirTests untouched by true no-op');
+
   // ── Sentinel: alertLibraryAcknowledged stripped in both modes ─────────────
   console.log('\n--- sentinel: alertLibraryAcknowledged stripped ---');
   reset();

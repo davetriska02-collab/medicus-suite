@@ -1437,6 +1437,64 @@ async function isPracticeAccepted() {
       await writable.close();
     }
 
+    // ── OIR test-dictionary key rotation ──────────────────────────────────────
+    // The receiving merge (practice-profile.js) only ever APPENDS an oirTests
+    // entry whose key it doesn't already have locally — it never overwrites an
+    // existing key's content, because that key might be a clinician's own local
+    // edit, not a stale copy of what's published (OIR tests are editable
+    // per-machine via the same options-page test editor). So an edit to an
+    // already-published test must publish under a NEW key to ever actually
+    // reach other machines; the superseded key is listed in retiredOirKeys so
+    // the merge can explicitly drop it there too, rather than it lingering as
+    // stale duplicate content forever.
+    function _oirTestContentEqual(a, b) {
+      const { key: _ak, ...aRest } = a || {};
+      const { key: _bk, ...bRest } = b || {};
+      return _stableStringify(aRest) === _stableStringify(bRest);
+    }
+    function _stableStringify(value) {
+      if (Array.isArray(value)) return `[${value.map(_stableStringify).join(',')}]`;
+      if (value && typeof value === 'object') {
+        return `{${Object.keys(value)
+          .sort()
+          .map((k) => `${JSON.stringify(k)}:${_stableStringify(value[k])}`)
+          .join(',')}}`;
+      }
+      return JSON.stringify(value);
+    }
+    // Mutates envelope.modules.triage.config in place: rotates the key of any
+    // local OIR test that shares a key with a currently-published test but has
+    // different content, and collects the superseded keys into retiredOirKeys.
+    function _rotateEditedOirTestKeys(envelope, publishedTests) {
+      const localTests = envelope?.modules?.triage?.config?.oirTests;
+      if (!Array.isArray(publishedTests) || !Array.isArray(localTests)) return;
+
+      const publishedByKey = new Map(publishedTests.filter((t) => t && t.key).map((t) => [t.key, t]));
+      const usedKeys = new Set(publishedByKey.keys());
+      localTests.forEach((t) => t && t.key && usedKeys.add(t.key));
+
+      const retiredOirKeys = [];
+      const rotatedTests = localTests.map((t) => {
+        if (!t || !t.key) return t;
+        const publishedMatch = publishedByKey.get(t.key);
+        if (!publishedMatch || _oirTestContentEqual(publishedMatch, t)) return t;
+        let n = 2;
+        let newKey = `${t.key}-${n}`;
+        while (usedKeys.has(newKey)) {
+          n += 1;
+          newKey = `${t.key}-${n}`;
+        }
+        usedKeys.add(newKey);
+        retiredOirKeys.push(t.key);
+        return Object.assign({}, t, { key: newKey });
+      });
+
+      if (retiredOirKeys.length > 0) {
+        envelope.modules.triage.config.oirTests = rotatedTests;
+        envelope.modules.triage.config.retiredOirKeys = retiredOirKeys;
+      }
+    }
+
     // ── Publish handler ───────────────────────────────────────────────────────
     // opts.auto: true when triggered by maybeAutoPublish() (the once-daily,
     // no-human-involved trigger) rather than a real click. In auto mode we can
@@ -1545,6 +1603,17 @@ async function isPracticeAccepted() {
             }
           } catch (_) {
             // Shared file missing/unreadable — fall back to this machine's own snapshot
+          }
+        }
+
+        if (applyModules.triage) {
+          try {
+            const existingTriageProfile = await window.PracticeProfile.fetchProfile();
+            const publishedTests = existingTriageProfile?.envelope?.modules?.triage?.config?.oirTests;
+            _rotateEditedOirTestKeys(envelope, publishedTests);
+          } catch (_) {
+            // Shared file missing/unreadable — publish local content unrotated,
+            // same fallback discipline as the problemDescriptionCleanup block above.
           }
         }
 

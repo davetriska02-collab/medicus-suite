@@ -315,18 +315,39 @@ const PracticeProfile = (() => {
               // thing, same as before this fix.
               await chrome.storage.local.set({ 'triagelens.config': config });
               applied.push('triage');
-            } else if (Array.isArray(config.oirTests) && config.oirTests.length > 0) {
+            } else {
               const localTests = Array.isArray(local.oirTests) ? local.oirTests : [];
-              const localKeys = new Set(localTests.map((t) => t && t.key));
-              // Strip dangerous keys from each untrusted incoming test entry
-              // before merging, same defence as every other untrusted-object
-              // merge in this file.
-              const incoming = config.oirTests
-                .filter((t) => t && t.key && !localKeys.has(t.key))
-                .map((t) => _stripDangerousKeys(t));
-              if (incoming.length > 0) {
+              // Explicit admin-initiated removal only — an edited test is
+              // never merged in-place over an existing key (that would risk
+              // silently clobbering a clinician's own local edit made under
+              // that same key via the options-page test editor). Instead a
+              // republished edit always arrives under a NEW key (see
+              // doPublish's key rotation), and the superseded key is only
+              // ever dropped here, when the admin has explicitly listed it.
+              const retiredKeys = new Set(Array.isArray(config.retiredOirKeys) ? config.retiredOirKeys : []);
+              const survivingTests =
+                retiredKeys.size > 0 ? localTests.filter((t) => !(t && retiredKeys.has(t.key))) : localTests;
+              const retiredSomething = survivingTests.length !== localTests.length;
+
+              let nextTests = survivingTests;
+              let addedSomething = false;
+              if (Array.isArray(config.oirTests) && config.oirTests.length > 0) {
+                const localKeys = new Set(survivingTests.map((t) => t && t.key));
+                // Strip dangerous keys from each untrusted incoming test entry
+                // before merging, same defence as every other untrusted-object
+                // merge in this file.
+                const incoming = config.oirTests
+                  .filter((t) => t && t.key && !localKeys.has(t.key))
+                  .map((t) => _stripDangerousKeys(t));
+                if (incoming.length > 0) {
+                  nextTests = [...survivingTests, ...incoming];
+                  addedSomething = true;
+                }
+              }
+
+              if (retiredSomething || addedSomething) {
                 await chrome.storage.local.set({
-                  'triagelens.config': Object.assign({}, local, { oirTests: [...localTests, ...incoming] }),
+                  'triagelens.config': Object.assign({}, local, { oirTests: nextTests }),
                 });
                 applied.push('triage');
               }

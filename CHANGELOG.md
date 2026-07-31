@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.204.1] — 2026-07-31
+
+### Two OIR practice-profile sync bugs fixed: fresh-install race, stale edited-test merge
+
+Both diagnosed live on two work PCs against the real shared-folder deployment (a
+completely fresh install, and an existing install missing recently-edited OIR test
+content), and both confirmed fixed live afterwards.
+
+- **Fresh-install startup race** (`service-worker.js`). `initialiseTriage()` and
+  `applyPracticeProfile()` both fired unawaited from the same `onInstalled` listener.
+  On a truly fresh install, `initialiseTriage()`'s unconditional seed-from-
+  `defaults.json` write could land *after* `applyPracticeProfile()`'s correct
+  practice-profile merge, silently stomping a freshly-applied `oirTests` list back
+  to the shipped-empty default. Fixed by awaiting `migrateTriageLensConfig()` +
+  `initialiseTriage()` to full completion before `applyPracticeProfile()` runs.
+- **Stale edited OIR test never propagating** (`shared/io/practice-profile.js`,
+  `options/options.js`). The practice-profile merge only ever appends an `oirTests`
+  entry whose key isn't already known locally — so editing an existing published
+  test and republishing was a silent no-op everywhere that key already existed.
+  Fixed with publish-time key rotation: `doPublish()` now diffs local tests against
+  what's currently shared, rotates the key of anything whose content changed, and
+  lists the superseded key in a new `retiredOirKeys` field; the apply-side merge
+  explicitly drops retired keys before appending. Deliberately does NOT do an
+  update-in-place merge — OIR tests are editable per-machine via the same
+  options-page test editor, so blindly overwriting an existing key on republish
+  could silently clobber a clinician's own local edit.
+
 ## [v3.204.0] — 2026-07-31
 
 ### Cleanup Code Preferences joins the shared-folder practice-profile sync, with a daily auto-publish
