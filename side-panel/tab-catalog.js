@@ -48,6 +48,11 @@ export const TAB_CATALOG = [
     name: 'Pt Alerts',
     blurb: 'Your own per-patient flags — interpreter, safeguarding, behaviour — shown when that patient is open.',
   },
+  {
+    id: 'phrases',
+    name: 'Phrases',
+    blurb: 'Reusable message blocks you compose, copy and paste into Medicus yourself.',
+  },
   { id: 'visualiser', name: 'Visualiser', blurb: 'Analyse an exported record PDF in a full browser tab.' },
   {
     id: 'duplicate-checker',
@@ -75,6 +80,7 @@ export const ROLE_PRESETS = [
       'slots',
       'knowledge',
       'leaflets',
+      'phrases',
       'visualiser',
       'about',
     ],

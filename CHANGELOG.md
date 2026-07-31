@@ -42,6 +42,52 @@ tab is what refreshed it, and typing just tends to happen right after.
   guard, cleanup symmetry, debounce, visibility gate), the transient-invalidate
   discipline, the display-only pop-out fallback and the pinned capture identity.
 
+## [v3.205.0] — 2026-07-31
+
+### New tab: Phrases — reusable message blocks (copy-only)
+
+A personal/practice snippet library for the text GPs type twenty times a day: openers,
+results wording, safety-netting, next steps and sign-offs, composed into one message and
+**copied** — pasting into the right Medicus box and pressing send remain the clinician's
+own acts, in Medicus. v1 deliberately performs **no DOM insertion** into Medicus (that is
+a later phase under the reception-quick-actions doctrine); the module's only output is
+the clipboard, on an explicit click. New hazard **H-052** (docs/HAZARD-LOG.md) records
+the canned-text failure modes and controls; the H-049 no-completion-claim doctrine is
+inherited verbatim and CI-pinned.
+
+- **Blocks, not templates** — the atom is a small reusable block with a fixed schema
+  (`id, title, body, trigger, keywords, category, audience, leafletUrl, slot`); blocks
+  compose in fixed slot order (opener → whole → substance → safety-net → next-step →
+  sign-off) regardless of click order, joined with blank lines.
+- **Audience on everything** (H-052 wrong-context-paste control) — every block carries
+  `patient` / `note` / `task`, shown as a word+colour tag on every card and in the
+  compose preview; a mixed-audience selection warns before you paste; an unknown
+  audience fails closed to `note`.
+- **`***` manual-fill placeholders, never auto-filled** — Epic-style wildcards the GP
+  types over every time (hard rule in `shared/phrases-core.js`; Accurx refuses
+  auto-merge for the same reason). They render highlighted, and **Copy refuses a casual
+  copy while `***` remains**: an explicit second click states the consequence ("the
+  patient will see \*\*\* where their details should be").
+- **Two tiers** — personal blocks (freely editable) and practice blocks (shipped pack +
+  promoted personal blocks, removable with tombstones so pack updates never resurrect a
+  deleted block). Shipped pack lives in `shared/phrases-presets.js` with its own integer
+  version gating `mergeShippedPack` (the quick-actions-core migration pattern); the
+  curated content pack is authored separately and drops into that one file — CI
+  (`test-phrases-core.js`) validates the whole pack, so a malformed drop-in fails the
+  build.
+- **Search** — palette-grade ranking plus a `/trigger` fast path (exact trigger beats
+  prefix beats fuzzy); empty search sorts most-used-by-me. Live character count and an
+  approximate SMS-segment figure at compose time.
+- **LLM-assisted authoring on the tab** — a copyable prompt (exact JSON schema, NHS
+  reading-age 9–11 rules for patient-audience blocks, no patient details) and a
+  paste-JSON import with strict per-block validation and visible rejection reasons;
+  imports land personal-tier until deliberately promoted.
+- **Backup wired day one** — `phrases.items` / `phrases.config` ride the suite envelope
+  via `shared/io/phrases-io.js` (whitelist-sanitised on import), with a preview summary
+  line and a per-module export card in Options.
+- Plumbing: nav tab in both shells, `MODULES` entries in panel + pop-out, tab-catalog,
+  tab-help, tour-coverage and backup-coverage guards all updated.
+
 ## [v3.204.2] — 2026-07-31
 
 ### Reception-instruction composer: crush fix round 3 — the container is a grid, not a flex row
