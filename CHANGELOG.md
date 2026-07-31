@@ -2,6 +2,65 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.204.0] — 2026-07-31
+
+### Reception-instruction composer: comment-box crush fix + two-step flow made unmissable (practice feedback)
+
+Practice feedback on the GP → reception quick-actions composer
+(`content-scripts/reception-quick-actions.js`): the "Insert into comment" button was being
+missed, users didn't realise the insert had worked, it wasn't obvious Medicus's own Submit
+still had to be pressed — and on some task layouts the inserted text rendered vertically,
+one character per line, completely illegible.
+
+- **Layout fix (the illegible vertical text) — this was a safety-control failure, not
+  cosmetics.** Medicus renders some field containers as flex-row with no wrap; injected as
+  a plain sibling there, the widget and the Internal-comment textarea fought over the row
+  and the textarea lost — crushed to a few px wide. With the comment box unreadable,
+  hazard **H-049's controls (b)/(e)** ("the clinician still reads the comment before
+  submitting") were materially degraded in live use. `injectWidget` now detects a flex-row
+  parent, sets `flex-wrap: wrap` on it (previous value remembered and restored by
+  `removeWidget`) and claims the full row so the textarea drops to a full-width line below;
+  a self-heal re-hoists the widget above the whole field container if the textarea still
+  measures crushed after injection. The DOM-contract fixture
+  (`fixtures/medicus/quick-actions-internal-comment.html`) now carries the flex-row layout
+  so the fix stays regression-guarded against the real DOM shape.
+- **Pressing Insert no longer looks like an abort.** The insert clears the chip picks for
+  the next instruction — which meant the visible response to pressing the button was the
+  form emptying itself. The preview block now does double duty: "WILL ADD: <sentence>"
+  while composing, and after the insert it holds "ADDED TO THE COMMENT BELOW: <the exact
+  sentence>" in green until the next chip pick. Echoing the sentence back is the primary
+  "it worked" signal.
+- **The two-step flow is now numbered and taught in place.** The insert button is large,
+  full-row and labelled "1. Insert into comment ↓" (with a finite 3-cycle attention pulse
+  when armed, box-shadow only, disabled under `prefers-reduced-motion`); a persistent line
+  beneath reads "2. Then press “Submit as new” below." — the submit label read live off
+  the card's own control (escaped, clamped, `/^submit\b/i`-guarded, falling back to
+  "Submit"). While disabled the button now says why ("Pick an action first").
+- **The un-submitted state no longer times out.** The old single 11.5px notice faded after
+  4s — exactly wrong for the interruption case H-049(i) describes. Now split: a transient
+  green flash banner confirms the write ("Text added to the internal comment below. Read
+  it, then press “Submit as new”."), while a persistent amber reminder — "Not yet
+  submitted — press “Submit as new” below. Until you do, reception sees nothing." — plus a
+  "not yet submitted" pill in the always-visible header strip stay up with **no timer**,
+  clearing only when the clinician clicks the card's own Submit control (observed
+  capture-phase, never prevented, never synthesised — pressing Submit remains entirely the
+  clinician's act, and a click is deliberately not treated as a success claim), the SPA
+  navigates away, or the comment box is emptied by hand.
+- **No more scroll tug-of-war after insert.** `ta.focus()` no longer scrolls
+  (`preventScroll: true`), a brief green ring marks the comment box where the text landed,
+  and the amber ring on Medicus's Submit only scrolls to it when it is off-screen.
+- **New CI guard for the H-049 wording controls.** `test-reception-quick-actions-ui.js`
+  source-greps the widget (nothing in CI loaded this file before) and pins the safety
+  strings ("Insert into comment" contiguous, "writes text only — books nothing", "not yet
+  submitted", "reception sees nothing"), that no UI string literal claims completion
+  (Done/Sent/Booked/Submitted), that no `.click()` ever reaches a submit control, the
+  append-only write path, the `preventScroll` focus, and that no timer clears the pending
+  reminder.
+- Hazard log: H-049 updated — field evidence of the layout defect degrading controls
+  (b)/(e) recorded with this remediation; wording controls updated to the new strings;
+  mechanism otherwise unchanged (text-only append, gated Insert, Submit highlighted never
+  clicked, task UUID re-verified).
+
 ## [v3.203.0] — 2026-07-29
 
 ### PR #228 remediation: merged main, escAttr + import key validation, deterministic REPLACED BY, scan patient-change guard

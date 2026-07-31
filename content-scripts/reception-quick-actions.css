@@ -8,6 +8,12 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 13px;
   color: #1a2030;
+  /* Belt-and-braces for flex-row field containers: always claim the full row so
+     the Internal-comment textarea drops below instead of being crushed beside us
+     (the JS also sets flex-wrap:wrap on the parent + flex-basis 100% inline). */
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
 }
 
 /* ── Collapsed strip ─────────────────────────────────────────────────────── */
@@ -51,6 +57,21 @@
   font-size: 11px;
   font-weight: 400;
   color: #6b7280;
+}
+
+/* Header pill while inserted text awaits the card's own Submit — lives in the
+   always-visible strip so it survives scrolling and collapse. No timer: it is
+   cleared only when the un-submitted state stops being real. */
+#ms-qa-widget .ms-qa-pill {
+  margin-left: auto;
+  padding: 1px 8px;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 999px;
+  color: #92400e;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 /* ── Expanded body ───────────────────────────────────────────────────────── */
@@ -159,7 +180,46 @@
   border-color: #2563eb;
 }
 
-/* ── Footer: insert + settings + live preview ────────────────────────────── */
+/* ── Preview block: the exact sentence, before AND after the insert ──────── */
+/* Before: "Will add: <sentence>". After: "Added to the comment below:
+   <sentence>" (green) — echoing the inserted sentence back is the primary
+   "it worked" signal; clearing the form alone reads as an abort. */
+
+#ms-qa-widget .ms-qa-preview-block {
+  border: 1px solid #c3cef5;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 7px 10px;
+  margin-top: 2px;
+}
+
+#ms-qa-widget .ms-qa-preview-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+#ms-qa-widget .ms-qa-preview {
+  font-size: 13px;
+  font-weight: 500;
+  color: #111827;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+#ms-qa-widget .ms-qa-preview-added {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+#ms-qa-widget .ms-qa-preview-added .ms-qa-preview-label {
+  color: #166534;
+}
+
+/* ── Footer: step-1 insert button + settings ─────────────────────────────── */
 
 #ms-qa-widget .ms-qa-footer {
   display: flex;
@@ -170,14 +230,15 @@
 }
 
 #ms-qa-widget .ms-qa-btn {
-  padding: 5px 12px;
+  flex: 1 1 auto;
+  padding: 10px 16px;
   background: #2563eb;
   color: #fff;
   border: none;
-  border-radius: 5px;
+  border-radius: 6px;
   font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -190,7 +251,37 @@
   cursor: not-allowed;
 }
 
+/* Finite attention pulse while armed (an Action picked, nothing inserted yet):
+   3 iterations then stop, box-shadow only — no reflow pressure on the host SPA,
+   and never applied to Medicus's own controls. */
+#ms-qa-widget .ms-qa-btn-armed {
+  animation: ms-qa-pulse 0.7s ease-in-out 3;
+}
+
+@keyframes ms-qa-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(37, 99, 235, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #ms-qa-widget .ms-qa-btn-armed {
+    animation: none;
+  }
+}
+
+/* Why the button is dead — shown only while it is. */
+#ms-qa-widget .ms-qa-btn-hint {
+  font-size: 11.5px;
+  color: #6b7280;
+}
+
 #ms-qa-widget .ms-qa-gear {
+  flex: 0 0 auto;
   padding: 4px 8px;
   background: transparent;
   border: 1px solid #c3cef5;
@@ -206,20 +297,20 @@
   background: #f0f4ff;
 }
 
-/* The exact sentence that will be appended — shown before the GP commits to it. */
-#ms-qa-widget .ms-qa-preview {
-  flex: 1 1 220px;
-  min-width: 160px;
+/* Step 2 of the two-step flow — always visible so the un-submitted half of the
+   job is taught before it is needed. */
+#ms-qa-widget .ms-qa-step2 {
   font-size: 12px;
-  font-style: italic;
+  font-weight: 600;
   color: #374151;
-  line-height: 1.4;
 }
 
-/* ── Transient notices ───────────────────────────────────────────────────── */
+/* ── Notices ─────────────────────────────────────────────────────────────── */
+/* The flash notice confirms the write and fades; the pending strip below has NO
+   timer and clears only on submit-click / navigation / emptied box. */
 
 #ms-qa-widget .ms-qa-notice {
-  font-size: 11.5px;
+  font-size: 12.5px;
   line-height: 1.4;
   opacity: 0;
   transition: opacity 0.4s ease;
@@ -227,14 +318,34 @@
 
 #ms-qa-widget .ms-qa-notice-on {
   opacity: 1;
+  padding: 7px 10px;
+  border: 1px solid;
+  border-radius: 6px;
+  font-weight: 600;
 }
 
 #ms-qa-widget .ms-qa-notice-ok {
+  background: #f0fdf4;
+  border-color: #86efac;
   color: #166534;
 }
 
 #ms-qa-widget .ms-qa-notice-err {
+  background: #fffbeb;
+  border-color: #fcd34d;
   color: #92400e;
+}
+
+/* Persistent while the inserted text has not been submitted. */
+#ms-qa-widget .ms-qa-pending {
+  padding: 7px 10px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  color: #92400e;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 /* Fallback ring for the card's own Submit control if the inline highlight

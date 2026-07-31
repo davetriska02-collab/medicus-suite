@@ -8,10 +8,14 @@
   the "Internal comment" label-proximity and aria-label/placeholder discovery
   happen at runtime beyond what a selector-only probe encodes, so this is
   fixture-regression only.
+  The flex-row style on the field container reproduces the live layout that
+  crushed the textarea to a few px beside the injected widget (fixed v3.204.0 —
+  injectWidget now wraps the parent and claims the full row); keep it so the
+  wrap fix stays regression-guarded against the real DOM shape.
 -->
 <div class="task-overview">
   <h3>Codes &amp; actions</h3>
-  <div class="m-form-field">
+  <div class="m-form-field" style="display: flex; flex-direction: row; flex-wrap: nowrap">
     <strong>Internal comment</strong>
     <textarea rows="3" aria-label="Internal comment" placeholder="Add an internal comment"></textarea>
   </div>
