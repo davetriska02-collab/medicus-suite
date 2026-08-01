@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.210.1] — 2026-08-01
+
+### Document Coder: interactive live-engine demo (dev tool)
+
+`docs/plans/document-coder-demo.html` — paste a (synthetic/anonymised) letter
+and a coded problem list, and the page runs the REAL shipped engines
+(letter-extract + letter-delta, inlined verbatim by
+`scripts/build-coder-demo.js`) and renders the honest card: four-state
+banner, coverage line, action flags with triggers, offered candidates with
+delta verdicts (possibly-new / qualifier-conflict / status-conflict /
+probable-match, nearest-miss shown), the mentioned-not-offered group, and
+med lines. Built as the capture-day corpus tester: the Q7 letter tally can
+be run interactively against the actual pipeline. `test-coder-demo-fresh.js`
+fails CI if either engine changes without regenerating the demo, so the
+page can never silently demo stale behaviour. Dev/demo tool only — nothing
+ships in the extension.
+
 ## [v3.210.0] — 2026-08-01
 
 ### Document Coder: delta engine (candidate vs coded record) + VISION.md truth fix
