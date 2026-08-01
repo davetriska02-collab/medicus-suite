@@ -2,6 +2,43 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.207.0] — 2026-08-01
+
+### Contacts Management: visual family tree, family cycling, address/contact hygiene (PR #243)
+
+Merges Nick's Contacts Management feature branch (developed 2026-07-23 – 2026-08-01 under
+internal version numbers v3.178.0–v3.191.0, renumbered here because that range was
+released on main by other work). Full development history is in the commits of PR #243.
+All live-tested against real Medicus data; every write path was built against a
+HAR-confirmed endpoint.
+
+- **Visual family tree** (`content-scripts/contacts-canvas.js` + `engine/contact-tree.js`):
+  drag-and-drop canvas converting a patient's manual (free-text) contacts into real
+  patient-to-patient links — parents/partner/siblings/children plus grandparents,
+  aunts/uncles and other branches, transitive suggestion pooling via related patients'
+  own records, grandparent composition, wrong-type-phone detection, deceased badge,
+  step-parent hints. Retires the old single-contact convert flow.
+- **Family-member cycling** — a "Next family member" control that navigates to the next
+  linked contact's own record, persisting session state (`contactsCanvas.familySession`,
+  4h TTL, documented backup exclusion) across the navigation; first slice of relationship
+  composition (grandparent/in-law) restricted to structurally-unambiguous cases
+  (`engine/contact-relationships.js` + `rules/contact-relationships.json`).
+- **Duplicate-address detection and merge** on the hub patient (PDS re-sends the same
+  address differently formatted), including correspondence-address handling confirmed via HAR.
+- **Name-search expansion** (`engine/contact-match.js`) so a manual contact with a middle
+  name or compound surname still matches a real Medicus patient.
+- **Shared-contact-info flagging** — warns when a patient shares a non-Home phone/email
+  with a linked contact (confidentiality risk, often a child's record carrying a parent's
+  own number).
+- **NOK / copy-correspondence gaps and reciprocal flags** — flags missing
+  next-of-kin/copy-correspondence and lets the confirm panel set these on the reciprocal
+  relationship too.
+- **Manifest description updated** — no longer claims "read-only"; the suite has shipped
+  user-confirmed record-editing tools (problem cleanup, bulk-end, and now contacts writes).
+
+Review fixes applied on merge (pre-merge code review, all verified against the branch):
+_(populated below in this entry by the fix commits)_
+
 ## [v3.206.1] — 2026-07-31
 
 ### Phrases: compose-first redesign (multi-critic design review + simulated practice panel)
