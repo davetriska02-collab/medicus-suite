@@ -105,6 +105,89 @@ console.log('3: isGenderedSurnameMatch');
 }
 
 // ============================================================
+// 3a — the British-surname false-positive set (the whole point of the collision guards)
+// ============================================================
+// Every pair below is two ORDINARY, UNRELATED British/English names that the first cut of this
+// module reported as the same family surname in different gendered forms. A false "same family"
+// here is not cosmetic: it feeds contact-match.js's name signal, which is 55 of the 100 available
+// points, so it is what turns "someone else at this address" into a "strong" badge pointing a GP
+// at the WRONG patient. Both argument orders are checked — the function must be symmetric.
+console.log('3a: common British name pairs never match as gendered surname variants');
+{
+  const britishFalsePairs = [
+    ['martin', 'martina'],
+    ['martin', 'martinez'],
+    ['martin', 'martindale'],
+    ['colin', 'collins'],
+    ['robin', 'roberts'],
+    ['austin', 'austen'],
+    ['jenkin', 'jenkins'],
+    ['griffin', 'griffiths'],
+    ['georgina', 'george'],
+    ['christina', 'christopher'],
+    ['carolina', 'caroline'],
+    ['justin', 'justina'],
+  ];
+  for (const [a, b] of britishFalsePairs) {
+    check(!ND.isGenderedSurnameMatch(a, b), `"${a}" vs "${b}" is not a gendered-surname pair`);
+    check(!ND.isGenderedSurnameMatch(b, a), `"${b}" vs "${a}" — same abstention in the other argument order`);
+  }
+}
+
+// ============================================================
+// 3b — the genuine pairs the feature exists for, both directions
+// ============================================================
+console.log('3b: genuine gendered pairs still match in both directions');
+{
+  const genuinePairs = [
+    ['kowalski', 'kowalska', 'Polish -ski/-ska'],
+    ['nowicki', 'nowicka', 'Polish -cki/-cka'],
+    ['ivanov', 'ivanova', 'East Slavic -ov/-ova'],
+    ['medvedev', 'medvedeva', 'East Slavic -ev/-eva'],
+    ['karenin', 'karenina', 'East Slavic -in/-ina with a long enough stem'],
+    ['gagarin', 'gagarina', 'another genuine -in/-ina pair'],
+    ['novak', 'novakova', 'Czech -ová appended to the male base (ASCII-typed)'],
+    ['Novák', 'Nováková', 'the same Czech pair with the real diacritics'],
+    ['novotný', 'novotná', 'Czech adjectival pair, both accented'],
+    ['kazlauskas', 'kazlauskienė', 'Lithuanian -as male vs married-woman -ienė'],
+    ['kazlauskas', 'kazlauskaitė', 'Lithuanian -as male vs unmarried-daughter -aitė'],
+    ['petraitis', 'petraitytė', 'Lithuanian -is male vs -ytė daughter'],
+    ['vaitkus', 'vaitkiūtė', 'Lithuanian -us male vs -iūtė daughter'],
+  ];
+  for (const [a, b, label] of genuinePairs) {
+    check(ND.isGenderedSurnameMatch(a, b), `${label}: "${a}" vs "${b}" matches`);
+    check(ND.isGenderedSurnameMatch(b, a), `${label}: matches in the reverse argument order too`);
+  }
+}
+
+// ============================================================
+// 3c — the one-side-strips fallback must not accept ANY continuation of the stem
+// ============================================================
+// When exactly one side carries a recognised suffix, the other side is compared against the
+// stripped stem. A bare `startsWith` accepted literally any continuation, which is what let
+// "colin"/"collins" and "martin"/"martinez" through. The unstripped side now has to be the stem
+// plus a recognised counterpart ending from the SAME language family.
+console.log('3c: the prefix fallback requires a recognised counterpart ending');
+{
+  check(
+    !ND.isGenderedSurnameMatch('kazlauskienė', 'kazlauskevicius'),
+    'a Lithuanian female form does not match an arbitrary longer surname sharing its stem'
+  );
+  check(
+    !ND.isGenderedSurnameMatch('novakova', 'novakovic'),
+    '"Novakova" does not match the unrelated "Novakovic" just because the stem is a prefix'
+  );
+  check(
+    !ND.isGenderedSurnameMatch('ivanova', 'ivanovsky'),
+    'nor does a stem-prefix relationship alone pair "Ivanova" with "Ivanovsky"'
+  );
+  check(
+    ND.isGenderedSurnameMatch('kazlauskienė', 'kazlausk'),
+    'a bare stem (no male ending typed at all) is still an accepted counterpart'
+  );
+}
+
+// ============================================================
 // 4 — extractPatronymicFather
 // ============================================================
 console.log('4: extractPatronymicFather');
@@ -143,6 +226,39 @@ console.log('4: extractPatronymicFather');
   );
   check(ND.extractPatronymicFather('') === null, 'empty name returns null');
   check(ND.extractPatronymicFather(null) === null, 'is defensive against null');
+}
+
+// ============================================================
+// 4a — patronymic stem guards (a 3-char stem is not evidence of anything)
+// ============================================================
+// "-sson" is a full recognised patronymic suffix, so suffix recognition alone does NOT make a
+// derivation safe: ordinary surnames end that way too ("Crosson" -> "cro", "Classon" -> "cla") and
+// a 3-letter stem prefix-matches a huge slice of real first names — which is how "Cronan Byrne"
+// scored 70/"strong" as the father of a "Crosson". The stem itself has to look like a name root.
+console.log('4a: patronymic derivation needs a stem with real discriminating power');
+{
+  check(
+    ND.extractPatronymicFather('Cronan Crosson') === null,
+    '"Crosson" does not derive a father — "cro" is not a name'
+  );
+  check(ND.extractPatronymicFather('Mary Classon') === null, 'same for "Classon" -> "cla"');
+  check(ND.extractPatronymicFather('Tom Casson') === null, 'and for "Casson" -> "ca"');
+  check(
+    ND.extractPatronymicFather('Sarah Harrison') === null,
+    'ordinary English "-son": Harrison never derives a father'
+  );
+  check(ND.extractPatronymicFather('Kate Jackson') === null, 'nor does Jackson');
+
+  // ...while the genuine short-stem Nordic patronymics still derive.
+  const jon = ND.extractPatronymicFather('Ólafur Jónsson');
+  check(jon && jon.fatherFirstName === 'jon', '"Jónsson" still derives the father "Jón" despite the 3-letter stem');
+  const per = ND.extractPatronymicFather('Erik Persson');
+  check(per && per.fatherFirstName === 'per', 'Swedish "Persson" still derives "Per"');
+  const ivanovich = ND.extractPatronymicFather('Boris Ivanovich Petrov');
+  check(
+    ivanovich && ivanovich.fatherFirstName === 'ivan',
+    '"Ivanovich" still derives "Ivan" — a 4-character stem is unaffected'
+  );
 }
 
 // ============================================================

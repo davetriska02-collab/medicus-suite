@@ -44,6 +44,24 @@
   // no real discriminating power and would make coincidental collisions likely.
   const MIN_STEM_LENGTH = 3;
 
+  // The bare East-Slavic -in/-ina pair needs a LONGER stem than everything else here. At the
+  // general 3-character minimum it matched a long list of ordinary British name pairs that merely
+  // share a prefix and happen to end that way — martin/martina, justin/justina — and the cost of a
+  // false pairing is a wrong-patient "strong" badge, not a missed suggestion. At 5 the genuine
+  // article still works (Karenin/Karenina, Gagarin/Gagarina, Nikitin/Nikitina, Yesenin/Yesenina);
+  // the trade is that SHORT genuine -in surnames (Putin/Putina, Lenin/Lenina, Kuzmin/Kuzmina) now
+  // abstain rather than pair. That is the deliberate direction: abstaining costs a sort/badge hint
+  // the GP can still resolve by eye, whereas a false pair actively points them at the wrong record.
+  // -ov/-ova and -ev/-eva are audited and left at 3: both sides of those pairs always carry the
+  // suffix (so both must strip to the SAME stem, not merely share a prefix), and English surnames
+  // ending -ov/-ev are vanishingly rare, so the same collision has no route in.
+  const EAST_SLAVIC_IN_MIN_STEM_LENGTH = 5;
+
+  // The one-side-strips fallback (see isGenderedSurnameMatch) additionally requires this much stem
+  // before it will consider a counterpart at all — it is the weakest of the three routes to a
+  // match, since only ONE side ever showed a recognised suffix.
+  const PREFIX_FALLBACK_MIN_STEM_LENGTH = 4;
+
   // foldDiacritics(s) -> s with Unicode combining diacritical marks stripped (NFD decompose, then
   // remove the marks) — ö/á/č/š/ž/ę/ė/ū etc. all fold to their plain-Latin base letter. Doesn't
   // touch true separate letters that aren't diacritic marks (Polish ł, Icelandic ð/þ) — accepted
@@ -60,59 +78,93 @@
   // the RAW (unfolded) token only — see the file header for why.
   const GENDERED_SURNAME_SUFFIXES = [
     // Polish adjectival surnames, and the Russian/Bulgarian transliteration of the same pattern.
-    { suffix: 'dzki', gender: 'm' },
-    { suffix: 'dzka', gender: 'f' },
-    { suffix: 'cki', gender: 'm' },
-    { suffix: 'cka', gender: 'f' },
-    { suffix: 'tsky', gender: 'm' },
-    { suffix: 'tskaya', gender: 'f' },
-    { suffix: 'ski', gender: 'm' },
-    { suffix: 'ska', gender: 'f' },
-    { suffix: 'skaya', gender: 'f' },
-    { suffix: 'sky', gender: 'm' },
+    { suffix: 'dzki', gender: 'm', family: 'polish' },
+    { suffix: 'dzka', gender: 'f', family: 'polish' },
+    { suffix: 'cki', gender: 'm', family: 'polish' },
+    { suffix: 'cka', gender: 'f', family: 'polish' },
+    { suffix: 'tsky', gender: 'm', family: 'polish' },
+    { suffix: 'tskaya', gender: 'f', family: 'polish' },
+    { suffix: 'ski', gender: 'm', family: 'polish' },
+    { suffix: 'ska', gender: 'f', family: 'polish' },
+    { suffix: 'skaya', gender: 'f', family: 'polish' },
+    { suffix: 'sky', gender: 'm', family: 'polish' },
     // Czech/Slovak: -ová is APPENDED to the male base (Novák -> Nováková), not swapped — the male
     // form is left to match via isGenderedSurnameMatch's prefix fallback, same as Lithuanian
     // below. Novotný/Novotná-style adjectival surnames swap a bare accented vowel instead — see
-    // the file header for why these two stay accent-strict.
-    { suffix: 'ová', gender: 'f' },
-    { suffix: 'ý', gender: 'm', strictAccent: true },
-    { suffix: 'á', gender: 'f', strictAccent: true },
-    // East Slavic (Russian/Ukrainian/Belarusian/Bulgarian) — a genuine suffix swap.
-    { suffix: 'ova', gender: 'f' },
-    { suffix: 'ov', gender: 'm' },
-    { suffix: 'eva', gender: 'f' },
-    { suffix: 'ev', gender: 'm' },
-    { suffix: 'ina', gender: 'f' },
-    { suffix: 'in', gender: 'm' },
+    // the file header for why these two stay accent-strict. This single entry also serves East
+    // Slavic -ova (Ivanova): folded, "ová" and "ova" are the same string with the same gender, so
+    // a second entry for it would only be an ordering ambiguity — the East Slavic block below
+    // deliberately lists only its male -ov.
+    { suffix: 'ová', gender: 'f', family: 'czech' },
+    { suffix: 'ý', gender: 'm', strictAccent: true, family: 'czech' },
+    { suffix: 'á', gender: 'f', strictAccent: true, family: 'czech' },
+    // East Slavic (Russian/Ukrainian/Belarusian/Bulgarian) — a genuine suffix swap. (Female -ova
+    // is the folded "ová" entry above.)
+    { suffix: 'ov', gender: 'm', family: 'eastslavic' },
+    { suffix: 'eva', gender: 'f', family: 'eastslavic' },
+    { suffix: 'ev', gender: 'm', family: 'eastslavic' },
+    { suffix: 'ina', gender: 'f', family: 'eastslavic', minStem: EAST_SLAVIC_IN_MIN_STEM_LENGTH },
+    { suffix: 'in', gender: 'm', family: 'eastslavic', minStem: EAST_SLAVIC_IN_MIN_STEM_LENGTH },
     // Lithuanian female suffixes only. Deliberately no entry for the bare male endings
     // (-as/-is/-ys) as strippable suffixes in their own right — far too short and far too likely
     // to coincide with ordinary English surnames (Lewis, Douglas, Curtis, Rhys...) to strip
     // safely on their own. They're only ever reached as the unstripped remainder compared against
     // a stripped female form (isGenderedSurnameMatch's prefix fallback) — never stripped
     // themselves.
-    { suffix: 'ienė', gender: 'f' }, // married woman/widow, regardless of her father's/husband's own ending
-    { suffix: 'aitė', gender: 'f' }, // unmarried daughter, father's name ends -as
-    { suffix: 'iūtė', gender: 'f' }, // unmarried daughter, father's name ends -us
-    { suffix: 'ytė', gender: 'f' }, // unmarried daughter, father's name ends -is/-ys
+    { suffix: 'ienė', gender: 'f', family: 'lithuanian' }, // married woman/widow, regardless of her father's/husband's own ending
+    { suffix: 'aitė', gender: 'f', family: 'lithuanian' }, // unmarried daughter, father's name ends -as
+    { suffix: 'iūtė', gender: 'f', family: 'lithuanian' }, // unmarried daughter, father's name ends -us
+    { suffix: 'ytė', gender: 'f', family: 'lithuanian' }, // unmarried daughter, father's name ends -is/-ys
   ].sort((a, b) => b.suffix.length - a.suffix.length);
 
-  // stripGenderedSurnameSuffix(token) -> { stem, gender, suffix } | null. `stem` is always
-  // returned folded+lowercased, regardless of whether the matched suffix itself was strict.
+  // Endings the UNSTRIPPED side of a one-sided match is allowed to carry, per language family —
+  // see isGenderedSurnameMatch's prefix fallback. Keyed by the family of the suffix that DID
+  // strip, because the counterpart form is a fact about that language, not about the other token.
+  const COUNTERPART_ENDINGS = {
+    // Lithuanian male surname endings. The female forms are built from the father's/husband's own
+    // name, whose ending is one of these — plus '' for a record where only the bare stem got typed.
+    lithuanian: ['', 'as', 'is', 'ys', 'us', 'ius'],
+    // Czech/Slovak -ová is appended to the WHOLE male base (Novák -> Nováková), so the counterpart
+    // is the bare stem. 'y'/'a' cover the adjectival pair (Novotný/Novotná) when only one of the
+    // two sides was typed with its accent — the accented side still has to strip for us to be here
+    // at all, so the "y"/"a" collision risk the strictAccent rule exists to avoid does not apply.
+    czech: ['', 'y', 'a'],
+    // Polish and East Slavic pairs ALWAYS carry a suffix on BOTH sides (-ski/-ska, -ov/-ova,
+    // -in/-ina), so a genuine pair always takes the both-sides-strip route and this fallback is
+    // never legitimately needed. Leaving it open bought nothing and cost a long list of ordinary
+    // British false pairs — Colin/Collins, Martin/Martinez, Martin/Martindale, Robin/Roberts,
+    // Austin/Austen, Jenkin/Jenkins, Griffin/Griffiths, Georgina/George, Christina/Christopher,
+    // Carolina/Caroline — all of which reached the top non-exact name tier on nothing more than a
+    // shared prefix. An empty list disables the fallback for these families entirely.
+    polish: [],
+    eastslavic: [],
+  };
+
+  // stripGenderedSurnameSuffix(token) -> { stem, gender, suffix, family } | null. `stem` is always
+  // returned folded+lowercased, regardless of whether the matched suffix itself was strict. An
+  // entry may raise its own minimum stem length (`minStem`) above the shared MIN_STEM_LENGTH when
+  // its suffix is short enough to collide with ordinary English spellings — see
+  // EAST_SLAVIC_IN_MIN_STEM_LENGTH.
   function stripGenderedSurnameSuffix(token) {
     const raw = String(token || '');
     const rawLower = raw.toLowerCase();
     const folded = foldDiacritics(rawLower);
     for (const entry of GENDERED_SURNAME_SUFFIXES) {
+      const minStem = entry.minStem || MIN_STEM_LENGTH;
       if (entry.strictAccent) {
         if (rawLower.length > entry.suffix.length && rawLower.endsWith(entry.suffix)) {
           const stem = foldDiacritics(rawLower.slice(0, rawLower.length - entry.suffix.length));
-          if (stem.length >= MIN_STEM_LENGTH) return { stem, gender: entry.gender, suffix: entry.suffix };
+          if (stem.length >= minStem) {
+            return { stem, gender: entry.gender, suffix: entry.suffix, family: entry.family };
+          }
         }
       } else {
         const suffix = foldDiacritics(entry.suffix);
         if (folded.length > suffix.length && folded.endsWith(suffix)) {
           const stem = folded.slice(0, folded.length - suffix.length);
-          if (stem.length >= MIN_STEM_LENGTH) return { stem, gender: entry.gender, suffix: entry.suffix };
+          if (stem.length >= minStem) {
+            return { stem, gender: entry.gender, suffix: entry.suffix, family: entry.family };
+          }
         }
       }
     }
@@ -125,9 +177,12 @@
   //     Czech Novotný/Novotná) -> match.
   //   - Both sides strip but to DIFFERENT stems -> genuinely different families, not a match.
   //   - Exactly one side strips (the Lithuanian asymmetric case, and Czech -ová's appended-not-
-  //     swapped form: Novák vs Nováková) -> match only if the stripped stem is a genuine PREFIX of
-  //     the other, folded, unprocessed token (not just any substring) — "kazlausk" is a prefix of
-  //     "kazlauskas", so Kazlauskienė/Kazlauskaitė correctly match Kazlauskas.
+  //     swapped form: Novák vs Nováková) -> match only if the other, folded, unprocessed token is
+  //     EXACTLY the stripped stem plus one of the counterpart endings its own language family
+  //     actually uses (COUNTERPART_ENDINGS) — "kazlausk" + "as" IS "kazlauskas", so
+  //     Kazlauskienė/Kazlauskaitė correctly match Kazlauskas. A bare `startsWith` here — accepting
+  //     ANY continuation of the stem — is what paired "Colin"/"Collins", "Martin"/"Martinez" and
+  //     "Georgina"/"George"; a shared prefix is not evidence of a shared family.
   //   - NEITHER side shows any recognised suffix -> this function abstains (false), deliberately,
   //     rather than falling back to a bare prefix check on two untouched strings — that would
   //     wrongly treat unrelated English surnames sharing a prefix (e.g. "Smith" vs "Smithson") as
@@ -143,7 +198,9 @@
     if (stripA && stripB) return stripA.stem === stripB.stem;
     const stripped = stripA || stripB;
     const raw = stripA ? b : a;
-    return raw.startsWith(stripped.stem);
+    if (stripped.stem.length < PREFIX_FALLBACK_MIN_STEM_LENGTH) return false;
+    const endings = COUNTERPART_ENDINGS[stripped.family] || [];
+    return endings.some((ending) => raw === stripped.stem + ending);
   }
 
   // ── Patronymic extraction (Nordic, East Slavic) ──────────────────────────────────────────────
@@ -177,13 +234,31 @@
     { suffix: 'ichna', childGender: 'f' }, // irregular but real, e.g. Ilyinichna
   ].sort((a, b) => b.suffix.length - a.suffix.length);
 
+  // A patronymic stem is a claim about a real first name, and it is then prefix-matched against a
+  // candidate's forename — so a 3-letter stem matches an enormous slice of the population. Matching
+  // a full recognised suffix is NOT enough on its own: "-sson" is a genuine suffix, and ordinary
+  // surnames end that way too ("Crosson" -> "cro", "Classon" -> "cla", "Casson" -> "ca"), which is
+  // how a "Cronan Byrne" was scored as the father of a "Crosson". Four characters is the floor; a
+  // 3-character stem is accepted only when it ends in a CONSONANT, which is also the linguistically
+  // correct shape for the doubled-s form — the extra s IS the genitive of a consonant-final name
+  // (Jón -> Jóns -> Jónsson, Per -> Pers -> Persson), whereas a vowel-final Nordic name takes the
+  // single-s form we deliberately never strip at all (Sturla -> Sturluson, Tryggvi -> Tryggvason).
+  const PATRONYMIC_MIN_STEM_LENGTH = 4;
+  const VOWELS = new Set(['a', 'e', 'i', 'o', 'u', 'y']);
+
+  function patronymicStemIsUsable(stem) {
+    if (stem.length >= PATRONYMIC_MIN_STEM_LENGTH) return true;
+    if (stem.length < MIN_STEM_LENGTH) return false;
+    return !VOWELS.has(stem[stem.length - 1]);
+  }
+
   function stripSuffixFromList(token, list) {
     const folded = foldDiacritics(String(token || '').toLowerCase());
     for (const entry of list) {
       const suffix = foldDiacritics(entry.suffix);
       if (folded.length > suffix.length && folded.endsWith(suffix)) {
         const stem = folded.slice(0, folded.length - suffix.length);
-        if (stem.length >= MIN_STEM_LENGTH) return { stem, childGender: entry.childGender };
+        if (patronymicStemIsUsable(stem)) return { stem, childGender: entry.childGender };
       }
     }
     return null;
