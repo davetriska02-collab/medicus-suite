@@ -2,6 +2,80 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.208.0] — 2026-08-01
+
+### Contacts Management: visual family tree, family cycling, address/contact hygiene (PR #243)
+
+Merges Nick's Contacts Management feature branch (developed 2026-07-23 – 2026-08-01 under
+internal version numbers v3.178.0–v3.191.0, renumbered here because that range was
+released on main by other work). Full development history is in the commits of PR #243.
+All live-tested against real Medicus data; every write path was built against a
+HAR-confirmed endpoint.
+
+- **Visual family tree** (`content-scripts/contacts-canvas.js` + `engine/contact-tree.js`):
+  drag-and-drop canvas converting a patient's manual (free-text) contacts into real
+  patient-to-patient links — parents/partner/siblings/children plus grandparents,
+  aunts/uncles and other branches, transitive suggestion pooling via related patients'
+  own records, grandparent composition, wrong-type-phone detection, deceased badge,
+  step-parent hints. Retires the old single-contact convert flow.
+- **Family-member cycling** — a "Next family member" control that navigates to the next
+  linked contact's own record, persisting session state (`contactsCanvas.familySession`,
+  4h TTL, documented backup exclusion) across the navigation; first slice of relationship
+  composition (grandparent/in-law) restricted to structurally-unambiguous cases
+  (`engine/contact-relationships.js` + `rules/contact-relationships.json`).
+- **Duplicate-address detection and merge** on the hub patient (PDS re-sends the same
+  address differently formatted), including correspondence-address handling confirmed via HAR.
+- **Name-search expansion** (`engine/contact-match.js`) so a manual contact with a middle
+  name or compound surname still matches a real Medicus patient.
+- **Shared-contact-info flagging** — warns when a patient shares a non-Home phone/email
+  with a linked contact (confidentiality risk, often a child's record carrying a parent's
+  own number).
+- **NOK / copy-correspondence gaps and reciprocal flags** — flags missing
+  next-of-kin/copy-correspondence and lets the confirm panel set these on the reciprocal
+  relationship too.
+- **Manifest description updated** — no longer claims "read-only"; the suite has shipped
+  user-confirmed record-editing tools (problem cleanup, bulk-end, and now contacts writes).
+
+Review fixes applied on merge (pre-merge code review; every code fix landed with
+red-first regression tests):
+
+- **Address merge ordering** — the correspondence-address flag is now transferred to the
+  kept address *before* any duplicate is deleted, so a mid-merge failure can no longer
+  leave the patient with no correspondence address; and when an address's correspondence
+  status can't be verified (`getEditAddress` failure) the group's merge is disabled
+  (fail closed) instead of silently treated as not-correspondence.
+- **Write concurrency guards** — in-flight busy guards on "Confirm link", blank-contact
+  delete, reverse-manual "Remove it", merge finalise and address merge; a double-click
+  can no longer fire the non-idempotent reverse `link-patient` twice (duplicate
+  relationship on the other patient's record).
+- **Resumable multi-step link writes** — `performLinkAndCleanup` tracks per-step
+  progress (forward link → re-categorise → reverse link → manual-contact cleanup);
+  after a partial failure, retry skips completed steps instead of being permanently
+  blocked by the server's duplicate rejection, a 400 "already exists" on the forward
+  link is treated as done, and the reciprocal is re-read live before the reverse write.
+- **Family cycling no longer drops members** — new `peekNext`/`commitAdvance` engine API
+  (`engine/contact-tree.js`); a member is consumed from the pool only when the user
+  actually navigates, so Cancel or a transient probe error keeps them queued.
+- **`removeFromSlot` reference-identity bug** — edges are removed by (slotPath, cardId)
+  value identity; a removed relationship's edge no longer lingers in `tree.edges`
+  feeding placement checks and composed suggestions.
+- **Stale resume banner** — the Resume handler re-verifies the live patient before
+  reopening, and the banner removes itself when the SPA navigates to a different patient.
+- **Name matching** — token-granular containment (Ann/Annette and surname-only contacts
+  no longer reach the 0.9 tier / "strong" badge; middle-name and hyphenated-surname
+  matches now do), plus `tied`/`margin` ambiguity signals on the top-ranked candidate.
+- **Address dedup guards** — digit-bearing tokens ("1a"/"1b"), transposed numbers and
+  lone-letter unit designators ("Flat A"/"Flat B") now compare as ordered exact
+  sequences instead of falling into the fuzzy word Jaccard.
+- **Free-text relationships fail closed** — possessive constructions ("Son's wife",
+  "Mother's carer", "Foster mother") drop to needs-review instead of a confident wrong
+  category; the "Other half" partner alias is now reachable.
+- **Write-surface hygiene** — dead `createManualContact` wrapper removed; defensive
+  assertion in `changePatientContact` (refuses a manual contact whose nulled fields
+  would be wiped); wrong-patient guard scope documented and aligned.
+- **Clinical safety** — hazard log gains H-055 (wrong-person link), H-056 (demographic
+  data loss via hygiene writes) and H-057 (confidentiality: cross-patient contact info
+  + persisted family graph), all Proposed pending CSO sign-off (doc v3.20).
 ## [v3.207.0] — 2026-08-01
 
 ### The Keeper: vaccine eligibility engine fix + mRESVIA false-GIVEN guard + digoxin monitoring scaffold

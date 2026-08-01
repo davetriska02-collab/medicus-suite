@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 1,
+  "lastUpdated": "2026-07-24",
+  "sourceNotes": "Canonical family-relationship vocabulary for the Contacts linking tool, replacing GP2GP free-text relationship fields on Medicus patient contacts. Reviewed by the practice's GP product owner — this is relationship semantics, not clinical content, so no CSO sign-off is required. subjectGender is a soft, non-blocking hint used only for scoring/inversion defaults — it must never be used as a hard filter against a patient's recorded genderIdentity, since gender identity may legitimately differ from the relationship word's typical implied gender.",
+  "tiers": [
+    { "id": "partner", "label": "Partner" },
+    { "id": "parent-child", "label": "Parent / child" },
+    { "id": "sibling", "label": "Sibling" },
+    { "id": "grandparent-grandchild", "label": "Grandparent / grandchild" },
+    { "id": "extended", "label": "Extended family" },
+    { "id": "in-law", "label": "In-law" },
+    { "id": "care", "label": "Care" },
+    { "id": "other", "label": "Other" }
+  ],
+  "modifiers": [
+    { "id": "ex", "label": "Ex-", "appliesToTiers": ["partner"] },
+    { "id": "step", "label": "Step-", "appliesToTiers": ["parent-child", "sibling"] },
+    { "id": "half", "label": "Half-", "appliesToTiers": ["sibling"] }
+  ],
+  "relationships": [
+    {
+      "id": "husband",
+      "label": "Husband",
+      "tier": "partner",
+      "subjectGender": "m",
+      "reciprocal": { "m": "husband", "f": "wife" }
+    },
+    {
+      "id": "wife",
+      "label": "Wife",
+      "tier": "partner",
+      "subjectGender": "f",
+      "reciprocal": { "m": "husband", "f": "wife" }
+    },
+    { "id": "partner", "label": "Partner", "tier": "partner", "subjectGender": "n", "reciprocal": "partner" },
+    {
+      "id": "civil-partner",
+      "label": "Civil Partner",
+      "tier": "partner",
+      "subjectGender": "n",
+      "reciprocal": "civil-partner"
+    },
+
+    {
+      "id": "mother",
+      "label": "Mother",
+      "tier": "parent-child",
+      "subjectGender": "f",
+      "reciprocal": { "m": "son", "f": "daughter" }
+    },
+    {
+      "id": "father",
+      "label": "Father",
+      "tier": "parent-child",
+      "subjectGender": "m",
+      "reciprocal": { "m": "son", "f": "daughter" }
+    },
+    {
+      "id": "son",
+      "label": "Son",
+      "tier": "parent-child",
+      "subjectGender": "m",
+      "reciprocal": { "m": "father", "f": "mother" }
+    },
+    {
+      "id": "daughter",
+      "label": "Daughter",
+      "tier": "parent-child",
+      "subjectGender": "f",
+      "reciprocal": { "m": "father", "f": "mother" }
+    },
+
+    {
+      "id": "brother",
+      "label": "Brother",
+      "tier": "sibling",
+      "subjectGender": "m",
+      "reciprocal": { "m": "brother", "f": "sister" }
+    },
+    {
+      "id": "sister",
+      "label": "Sister",
+      "tier": "sibling",
+      "subjectGender": "f",
+      "reciprocal": { "m": "brother", "f": "sister" }
+    },
+
+    {
+      "id": "grandmother",
+      "label": "Grandmother",
+      "tier": "grandparent-grandchild",
+      "subjectGender": "f",
+      "reciprocal": { "m": "grandson", "f": "granddaughter" }
+    },
+    {
+      "id": "grandfather",
+      "label": "Grandfather",
+      "tier": "grandparent-grandchild",
+      "subjectGender": "m",
+      "reciprocal": { "m": "grandson", "f": "granddaughter" }
+    },
+    {
+      "id": "grandson",
+      "label": "Grandson",
+      "tier": "grandparent-grandchild",
+      "subjectGender": "m",
+      "reciprocal": { "m": "grandfather", "f": "grandmother" }
+    },
+    {
+      "id": "granddaughter",
+      "label": "Granddaughter",
+      "tier": "grandparent-grandchild",
+      "subjectGender": "f",
+      "reciprocal": { "m": "grandfather", "f": "grandmother" }
+    },
+
+    {
+      "id": "aunt",
+      "label": "Aunt",
+      "tier": "extended",
+      "subjectGender": "f",
+      "reciprocal": { "m": "nephew", "f": "niece" }
+    },
+    {
+      "id": "uncle",
+      "label": "Uncle",
+      "tier": "extended",
+      "subjectGender": "m",
+      "reciprocal": { "m": "nephew", "f": "niece" }
+    },
+    {
+      "id": "niece",
+      "label": "Niece",
+      "tier": "extended",
+      "subjectGender": "f",
+      "reciprocal": { "m": "uncle", "f": "aunt" }
+    },
+    {
+      "id": "nephew",
+      "label": "Nephew",
+      "tier": "extended",
+      "subjectGender": "m",
+      "reciprocal": { "m": "uncle", "f": "aunt" }
+    },
+    { "id": "cousin", "label": "Cousin", "tier": "extended", "subjectGender": "n", "reciprocal": "cousin" },
+
+    {
+      "id": "mother-in-law",
+      "label": "Mother-in-law",
+      "tier": "in-law",
+      "subjectGender": "f",
+      "reciprocal": { "m": "son-in-law", "f": "daughter-in-law" }
+    },
+    {
+      "id": "father-in-law",
+      "label": "Father-in-law",
+      "tier": "in-law",
+      "subjectGender": "m",
+      "reciprocal": { "m": "son-in-law", "f": "daughter-in-law" }
+    },
+    {
+      "id": "son-in-law",
+      "label": "Son-in-law",
+      "tier": "in-law",
+      "subjectGender": "m",
+      "reciprocal": { "m": "father-in-law", "f": "mother-in-law" }
+    },
+    {
+      "id": "daughter-in-law",
+      "label": "Daughter-in-law",
+      "tier": "in-law",
+      "subjectGender": "f",
+      "reciprocal": { "m": "father-in-law", "f": "mother-in-law" }
+    },
+    {
+      "id": "brother-in-law",
+      "label": "Brother-in-law",
+      "tier": "in-law",
+      "subjectGender": "m",
+      "reciprocal": { "m": "brother-in-law", "f": "sister-in-law" }
+    },
+    {
+      "id": "sister-in-law",
+      "label": "Sister-in-law",
+      "tier": "in-law",
+      "subjectGender": "f",
+      "reciprocal": { "m": "brother-in-law", "f": "sister-in-law" }
+    },
+
+    { "id": "legal-guardian", "label": "Legal Guardian", "tier": "care", "subjectGender": "n", "reciprocal": null },
+    { "id": "foster-carer", "label": "Foster Carer", "tier": "care", "subjectGender": "n", "reciprocal": null },
+    { "id": "carer", "label": "Carer", "tier": "care", "subjectGender": "n", "reciprocal": null },
+    { "id": "care-home-staff", "label": "Care Home Staff", "tier": "care", "subjectGender": "n", "reciprocal": null },
+
+    { "id": "friend", "label": "Friend", "tier": "other", "subjectGender": "n", "reciprocal": "friend" },
+    { "id": "neighbour", "label": "Neighbour", "tier": "other", "subjectGender": "n", "reciprocal": "neighbour" },
+    { "id": "other", "label": "Other", "tier": "other", "subjectGender": "n", "reciprocal": "other", "freeText": true }
+  ]
+}

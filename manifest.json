@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.207.0",
-  "description": "The clinical intelligence layer for Medicus: read-only safety monitoring, triage red-flags, QOF tracking and operational dashboards.",
+  "version": "3.208.0",
+  "description": "Clinical intelligence for Medicus: safety monitoring, triage red-flags, QOF tracking, dashboards, confirmed record tidy-up tools.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
     "https://*.medicus.health/*",
@@ -110,6 +110,19 @@
         "content-scripts/problem-bulk-end.css"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.medicus.health/*"],
+      "js": [
+        "engine/contact-relationships.js",
+        "engine/contact-match.js",
+        "engine/contact-tree.js",
+        "content-scripts/contacts-api.js",
+        "content-scripts/contacts-canvas.js",
+        "content-scripts/contacts-link-button.js"
+      ],
+      "css": ["content-scripts/contacts-canvas.css", "content-scripts/contacts-link-button.css"],
+      "run_at": "document_idle"
     }
   ],
   "options_page": "options/options.html",
@@ -126,6 +139,7 @@
         "rules/non-problem-root-codes.json",
         "rules/snomed-terminology-server.json",
         "rules/generic-additional-info-text.json",
+        "rules/contact-relationships.json",
         "side-panel/modules/sentinel/passport.html"
       ],
       "matches": ["https://*.medicus.health/*"]
