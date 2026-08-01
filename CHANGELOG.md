@@ -2,29 +2,325 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.208.1] — 2026-08-01
+
+### Hazard log: CSO sign-off of H-055–H-057 (Contacts Management)
+
+Dr Dave Triska (CSO) reviewed and signed off the three Contacts Management hazards
+added at v3.208.0 ("Read and signed", recorded 2026-08-01). H-055 (wrong-person link,
+residual 5), H-056 (demographic data loss via hygiene writes, residual 4) and H-057
+(confidentiality, residual 3) move from Proposed to **Accepted (ALARP)** at their
+proposed scores; the per-hazard review questions recorded at proposal are carried
+forward as open review items, not conditions. `docs/HAZARD-LOG.md` document version
+3.21. No code changes.
+
+## [v3.208.0] — 2026-08-01
+
+### Contacts Management: visual family tree, family cycling, address/contact hygiene (PR #243)
+
+Merges Nick's Contacts Management feature branch (developed 2026-07-23 – 2026-08-01 under
+internal version numbers v3.178.0–v3.191.0, renumbered here because that range was
+released on main by other work). Full development history is in the commits of PR #243.
+All live-tested against real Medicus data; every write path was built against a
+HAR-confirmed endpoint.
+
+- **Visual family tree** (`content-scripts/contacts-canvas.js` + `engine/contact-tree.js`):
+  drag-and-drop canvas converting a patient's manual (free-text) contacts into real
+  patient-to-patient links — parents/partner/siblings/children plus grandparents,
+  aunts/uncles and other branches, transitive suggestion pooling via related patients'
+  own records, grandparent composition, wrong-type-phone detection, deceased badge,
+  step-parent hints. Retires the old single-contact convert flow.
+- **Family-member cycling** — a "Next family member" control that navigates to the next
+  linked contact's own record, persisting session state (`contactsCanvas.familySession`,
+  4h TTL, documented backup exclusion) across the navigation; first slice of relationship
+  composition (grandparent/in-law) restricted to structurally-unambiguous cases
+  (`engine/contact-relationships.js` + `rules/contact-relationships.json`).
+- **Duplicate-address detection and merge** on the hub patient (PDS re-sends the same
+  address differently formatted), including correspondence-address handling confirmed via HAR.
+- **Name-search expansion** (`engine/contact-match.js`) so a manual contact with a middle
+  name or compound surname still matches a real Medicus patient.
+- **Shared-contact-info flagging** — warns when a patient shares a non-Home phone/email
+  with a linked contact (confidentiality risk, often a child's record carrying a parent's
+  own number).
+- **NOK / copy-correspondence gaps and reciprocal flags** — flags missing
+  next-of-kin/copy-correspondence and lets the confirm panel set these on the reciprocal
+  relationship too.
+- **Manifest description updated** — no longer claims "read-only"; the suite has shipped
+  user-confirmed record-editing tools (problem cleanup, bulk-end, and now contacts writes).
+
+Review fixes applied on merge (pre-merge code review; every code fix landed with
+red-first regression tests):
+
+- **Address merge ordering** — the correspondence-address flag is now transferred to the
+  kept address *before* any duplicate is deleted, so a mid-merge failure can no longer
+  leave the patient with no correspondence address; and when an address's correspondence
+  status can't be verified (`getEditAddress` failure) the group's merge is disabled
+  (fail closed) instead of silently treated as not-correspondence.
+- **Write concurrency guards** — in-flight busy guards on "Confirm link", blank-contact
+  delete, reverse-manual "Remove it", merge finalise and address merge; a double-click
+  can no longer fire the non-idempotent reverse `link-patient` twice (duplicate
+  relationship on the other patient's record).
+- **Resumable multi-step link writes** — `performLinkAndCleanup` tracks per-step
+  progress (forward link → re-categorise → reverse link → manual-contact cleanup);
+  after a partial failure, retry skips completed steps instead of being permanently
+  blocked by the server's duplicate rejection, a 400 "already exists" on the forward
+  link is treated as done, and the reciprocal is re-read live before the reverse write.
+- **Family cycling no longer drops members** — new `peekNext`/`commitAdvance` engine API
+  (`engine/contact-tree.js`); a member is consumed from the pool only when the user
+  actually navigates, so Cancel or a transient probe error keeps them queued.
+- **`removeFromSlot` reference-identity bug** — edges are removed by (slotPath, cardId)
+  value identity; a removed relationship's edge no longer lingers in `tree.edges`
+  feeding placement checks and composed suggestions.
+- **Stale resume banner** — the Resume handler re-verifies the live patient before
+  reopening, and the banner removes itself when the SPA navigates to a different patient.
+- **Name matching** — token-granular containment (Ann/Annette and surname-only contacts
+  no longer reach the 0.9 tier / "strong" badge; middle-name and hyphenated-surname
+  matches now do), plus `tied`/`margin` ambiguity signals on the top-ranked candidate.
+- **Address dedup guards** — digit-bearing tokens ("1a"/"1b"), transposed numbers and
+  lone-letter unit designators ("Flat A"/"Flat B") now compare as ordered exact
+  sequences instead of falling into the fuzzy word Jaccard.
+- **Free-text relationships fail closed** — possessive constructions ("Son's wife",
+  "Mother's carer", "Foster mother") drop to needs-review instead of a confident wrong
+  category; the "Other half" partner alias is now reachable.
+- **Write-surface hygiene** — dead `createManualContact` wrapper removed; defensive
+  assertion in `changePatientContact` (refuses a manual contact whose nulled fields
+  would be wiped); wrong-patient guard scope documented and aligned.
+- **Clinical safety** — hazard log gains H-055 (wrong-person link), H-056 (demographic
+  data loss via hygiene writes) and H-057 (confidentiality: cross-patient contact info
+  + persisted family graph), all Proposed pending CSO sign-off (doc v3.20).
+## [v3.207.0] — 2026-08-01
+
+### The Keeper: vaccine eligibility engine fix + mRESVIA false-GIVEN guard + digoxin monitoring scaffold
+
+Automated safety rule maintenance run (The Keeper, 2026-08-01). All changes sourced from
+internal code inspection (external clinical reference hosts returned HTTP 403 this run).
+Three Red findings applied; one Red finding (vax-001 RSV 65-74 expansion) requires an engine
+sprint before it can be encoded.
+
+**vax-002 🔴 (C2-class false-GIVEN risk — applied):** `rules/vaccine-rules.json` — 5 mRESVIA
+declined terms added to vax-rsv statusTerms.declined (`mresvia refused`, `mresvia
+contraindicated`, `mresvia not given`, `mresvia not indicated`, `mresvia declined`). Without
+these, a patient with a "mresvia refused" problem code was classified as `vax_given` because
+the given term `mresvia` substring-matched the negative phrasing. Regression guard extended in
+`test-vaccine-status-terms.js`.
+
+**vax-003 🔴 (eligibility engine bug — applied):** `engine/rules-engine.js` —
+`matchVaccineEligibility()` now enforces `ageMin`/`ageMax` on `problem` and `medication` kind
+eligibility clauses, mirroring the existing check on `age` kind clauses. Previously, the
+`ageMin: 16` on the flu and pneumococcal homelessness cohort clauses was silently ignored —
+a patient under 16 with a homelessness code could be incorrectly flagged as vaccine-eligible.
+
+**alert-C005 🔴 (monitoring gap — applied, disabled pending CSO activation):** `rules/drug-rules.json`
+— disabled digoxin monitoring rule added (`enabled: false`, id `digoxin-renal-monitoring`).
+Digoxin is a high-risk narrow-therapeutic-index drug; annual U&E/eGFR monitoring is required
+but no Sentinel chip existed. Lanoxin is the only UK-licensed brand (dm+d confirmed). Rule
+ships disabled for the CSO to review the interval and activate. Regression guard added in
+`test-drug-brand-coverage.js`. Sources: BNF Digoxin monograph (corroborated; primary 403
+this run) + STOPP v3 B1.
+
+**vax-001 🔴 (open — engine change required):** RSV 65-74 clinical-risk expansion effective
+1 Sept 2026 (NHSE operational letter 2 July 2026). Engine cannot encode combined age-band +
+clinical-risk eligibility. Notes field in vax-rsv documents the gap and instructs manual
+assessment for 65-74 clinical-risk patients from 1 Sept 2026. Engine sprint needed before
+this clause can fire automatically.
+
+**Source gap noted:** All UK clinical reference hosts (gov.uk, nice.org.uk, england.nhs.uk,
+bnf.nice.org.uk, medicines.org.uk, sps.nhs.uk) returned HTTP 403 from the outbound proxy for
+the second consecutive run. Only code-review findings were verifiable this run.
+
+## [v3.206.1] — 2026-07-31
+
+### Phrases: compose-first redesign (multi-critic design review + simulated practice panel)
+
+Full design-crit pass on the day-old Phrases tab, driven by Dave's feedback that the
+59-block list was "VERY long" and his ask to restructure toward the reception-composer
+pattern (labelled rows of clickable chips). Reviewed by four design critics (art director,
+token surveyor, fresh-eyes persona, product/adoption lens) plus a six-clinician simulated
+practice panel (senior partner, salaried duty doctor, registrar, portfolio GP, locum, ANP);
+convergent findings ruled on by the orchestrator and implemented in one pass.
+
+- **Two modes.** *Compose* (default): six labelled slot rows in message order — Opener /
+  Complete message / Message / Safety-net / Next step / Sign-off — each showing the
+  clinician's most-used chips (usage data already collected) with a dashed "+N more"
+  expanding in place; chip labels strip their slot prefix at render (`chipLabel()` in
+  phrases-core, unit-tested) so "Opener — worried about a result" becomes a chip reading
+  "worried about a result". The whole library now fits one panel screen with no scrolling.
+  *Library*: the previous card surface, intact — search, category filters, add/edit,
+  promote, LLM import, remove — re-homed one tap away; nothing deleted.
+- **The compose tray pins** (sticky, preview clamped with "Show all") so the message being
+  built and the rows stay on screen together — previously the composer scrolled away by
+  the third pick.
+- **The preview is now editable** (the panel's most-converged user demand): fill `***`
+  placeholders and tweak wording in-panel before Copy; the amber confirm gate now fires
+  only if `***` genuinely remains in the live text. Manual edits are transient and never
+  persisted; changing the selection recomposes.
+- **Confirm-gate hierarchy fixed:** while the gate shows, "Copy message" is removed from
+  the DOM entirely — the safe exit (Back) carries the primary weight inside the gate;
+  "Copy anyway" stays the amber ghost. Gate salience raised, not reduced.
+- **Colour discipline restored:** red leaves the resting list (Remove/Delete are neutral
+  ghosts that arm red on hover/focus); the constant green PRACTICE badge is replaced by a
+  violet "yours" badge on the minority (personal blocks) plus a "Practice pack vN" mono
+  provenance line on practice cards; audience badges are now differential — 'patient' (the
+  constant default) unbadged, 'note' neutral, 'task' amber — while the tray's For:/mixed-
+  audience control keeps full strength (H-052 control (b) note updated; flagged for the
+  pending CSO review).
+- **Accessibility floor met:** chips and cards are real buttons (the primary pick action
+  previously had no keyboard path at all), `aria-pressed` everywhere, live-regions on the
+  copy status and the `***` gate (which also takes focus), 20px close targets, `:active`
+  states, green status text contrast fixed (✓ glyph carries the colour).
+- **Voice recast per doctrine:** mono-caps leave all human phrases (category pills,
+  slot/category tags) for sans sentence case; mono stays on data (triggers, counts,
+  char/SMS, order indices). Dark theme mapped, not inherited (card borders, preview well,
+  the previously-white LLM details block).
+- **Pack v3:** the four sign-off bodies no longer hard-code "Dr ***" — an ANP or other
+  non-doctor pasting that would mislead patients about who is treating them (practice-
+  panel finding); placeholder now takes the clinician's own name/role. CI pins the ban.
+- Empty states to canon (centred, actionable "Clear search"); one-line safety subtitle;
+  6px/16px spacing rhythm. Full run: 346 tests green.
+
+## [v3.206.0] — 2026-07-31
+
+### Reception: the Patient card now follows the record open in Medicus
+
+Field report: the Reception tab's Patient card (name + NHS number + status pill) kept
+showing the previous patient after switching records in Medicus, "only updating when you
+start typing". Root cause: the card was a one-shot render — its only triggers were module
+entry, a browser-tab switch, a config change and the manual Refresh link. Nothing listened
+for the SPA patient change, so sitting on the Reception tab across a record switch left
+the old identity on screen (H-001 field evidence — hazard log doc v3.19, pending CSO
+review). The "typing fixed it" observation was a red herring: leaving and re-entering the
+tab is what refreshed it, and typing just tends to happen right after.
+
+- **`side-panel/modules/reception/reception.js`** — subscribes to the content script's
+  `sentinel:snapshot-updated` broadcast (the same signal the Monitoring, Record, Trends
+  and Patient Alerts surfaces already use), debounced 400 ms, with a 10 s
+  visibility-gated backstop poll. All listeners/timers torn down in `cleanup()`.
+- **Mid-switch state** — while Sentinel re-evaluates a navigation the card now shows
+  "Record changing in Medicus — refreshing…" instead of flashing the idle "open a
+  record" copy; the previous patient's name is blanked immediately, never held. The
+  transient deliberately does NOT re-gate the booking card, so a same-patient
+  sub-navigation blip can no longer release a held slot reservation (H-051 review q4);
+  a genuinely dead content script still fails the mount check and re-gates.
+- **Pinned capture identity** — with the card now live, the generated summary's
+  name/DOB/NHS header is pinned to the patient open when the capture form OPENED, not
+  whoever is open when Generate is pressed. If the open record changes mid-capture, the
+  output view says so: "if you paste it into the record now open, it goes in the wrong
+  patient's notes."
+- **No-op renders skipped** — the card body only re-renders when its markup actually
+  changed, so the auto-refresh can't drop focus or shift the red-flag questions under a
+  click; the expanded status-pill detail collapses on a genuine patient change instead of
+  silently swapping its rows.
+- **Pop-out** — the Patient card there was permanently blank (the active-tab query can
+  only see the pop-out's own window); it now falls back to any open Medicus tab for
+  display only. Booking identity is untouched: it stays active-tab sourced, and booking
+  remains hard-gated off in the pop-out.
+- **Tests** — new `test-reception-patient-card.js` pins the wiring (listener + sender
+  guard, cleanup symmetry, debounce, visibility gate), the transient-invalidate
+  discipline, the display-only pop-out fallback and the pinned capture identity.
+
+## [v3.205.0] — 2026-07-31
+
+### New tab: Phrases — reusable message blocks (copy-only)
+
+A personal/practice snippet library for the text GPs type twenty times a day: openers,
+results wording, safety-netting, next steps and sign-offs, composed into one message and
+**copied** — pasting into the right Medicus box and pressing send remain the clinician's
+own acts, in Medicus. v1 deliberately performs **no DOM insertion** into Medicus (that is
+a later phase under the reception-quick-actions doctrine); the module's only output is
+the clipboard, on an explicit click. New hazard **H-052** (docs/HAZARD-LOG.md) records
+the canned-text failure modes and controls; the H-049 no-completion-claim doctrine is
+inherited verbatim and CI-pinned.
+
+- **Blocks, not templates** — the atom is a small reusable block with a fixed schema
+  (`id, title, body, trigger, keywords, category, audience, leafletUrl, slot`); blocks
+  compose in fixed slot order (opener → whole → substance → safety-net → next-step →
+  sign-off) regardless of click order, joined with blank lines.
+- **Audience on everything** (H-052 wrong-context-paste control) — every block carries
+  `patient` / `note` / `task`, shown as a word+colour tag on every card and in the
+  compose preview; a mixed-audience selection warns before you paste; an unknown
+  audience fails closed to `note`.
+- **`***` manual-fill placeholders, never auto-filled** — Epic-style wildcards the GP
+  types over every time (hard rule in `shared/phrases-core.js`; Accurx refuses
+  auto-merge for the same reason). They render highlighted, and **Copy refuses a casual
+  copy while `***` remains**: an explicit second click states the consequence ("the
+  patient will see \*\*\* where their details should be").
+- **Two tiers** — personal blocks (freely editable) and practice blocks (shipped pack +
+  promoted personal blocks, removable with tombstones so pack updates never resurrect a
+  deleted block). Shipped pack lives in `shared/phrases-presets.js` with its own integer
+  version gating `mergeShippedPack` (the quick-actions-core migration pattern); the
+  curated content pack is authored separately and drops into that one file — CI
+  (`test-phrases-core.js`) validates the whole pack, so a malformed drop-in fails the
+  build.
+- **Search** — palette-grade ranking plus a `/trigger` fast path (exact trigger beats
+  prefix beats fuzzy); empty search sorts most-used-by-me. Live character count and an
+  approximate SMS-segment figure at compose time.
+- **LLM-assisted authoring on the tab** — a copyable prompt (exact JSON schema, NHS
+  reading-age 9–11 rules for patient-audience blocks, no patient details) and a
+  paste-JSON import with strict per-block validation and visible rejection reasons;
+  imports land personal-tier until deliberately promoted.
+- **Backup wired day one** — `phrases.items` / `phrases.config` ride the suite envelope
+  via `shared/io/phrases-io.js` (whitelist-sanitised on import), with a preview summary
+  line and a per-module export card in Options.
+- Plumbing: nav tab in both shells, `MODULES` entries in panel + pop-out, tab-catalog,
+  tab-help, tour-coverage and backup-coverage guards all updated.
+
+## [v3.204.2] — 2026-07-31
+
+### Reception-instruction composer: crush fix round 3 — the container is a grid, not a flex row
+
+Third field screenshot, same day: still crushed. The evidence now points at a **CSS grid**
+field container — which explains why both prior fixes missed: a sibling inserted into a
+grid shifts every auto-placed item over by one cell (the textarea lands in a narrow
+track), a flex-wrap walk sees nothing to fix, and `min-width` on a grid item overflows a
+fixed track instead of widening it. Strategy change — stop competing in the container's
+layout algorithm at all:
+
+- **Insertion anchor** — `insertionAnchor()` climbs out of pure single-child wrapper
+  shells (≤3 hops) before inserting, so the widget lands where the page's own block flow
+  stacks it above the field (like its label) instead of inside a flex/grid track fight.
+- **Grid-agnostic CSS** — `#ms-qa-widget { grid-column: 1 / -1 }` keeps the widget on a
+  full row of its own in any grid parent, leaving auto-placed siblings in their original
+  tracks. Harmless elsewhere.
+- **Grid escalation step** in `fixCrushedLayout()` — if the box still measures crushed,
+  collapse the fighting grid's `grid-template-columns` (recorded + restored like every
+  host patch) so its children stack full-width.
+- **Inline `min-width` on the textarea** — the stylesheet's sibling rule stops matching
+  once the widget is anchored higher or hoisted; the inline patch travels with the box.
+- **`ch-debug` capture** — if every step is exhausted and the box is *still* crushed,
+  `localStorage.setItem('ch-debug','1')` + reload now logs `[MSQA]` with the textarea's
+  full ancestor chain (tag, class, computed display/flex/grid, widths) so the next fix is
+  evidence-driven, per the repo's capture-first debugging doctrine.
+
 ## [v3.204.1] — 2026-07-31
 
-### Reception-instruction composer: widget hoisted above the field container instead of sharing its row (follow-up to v3.204.0)
+### Reception-instruction composer: comment-box crush fix made continuous (v3.204.0's didn't hold)
 
-v3.204.0 fixed the extreme case of the comment-box crush (flex-row field containers
-squeezing the Internal-comment textarea to a few px, one character per line) by
-detecting flex-row parents and forcing them to wrap. Further practice feedback showed a
-milder version of the same problem on layouts that fix didn't catch (e.g. grid field
-containers): the widget still shared a row with the textarea, this time losing it
-roughly half its width — cramped and harder to type in, rather than unreadable, but the
-same direction of harm to H-049 controls (b)/(e).
+Field evidence (screenshot, same day): the v3.204.0 layout fix did **not** hold on the live
+Medicus task page — the Internal-comment textarea was still crushed into a vertical
+one-character-per-line sliver beside the widget. Root-cause assumptions that failed: the
+crushing flex container is not always the textarea's **direct** parent (the v3.204.0 fix
+only wrapped that one level), and the one-shot measure at inject time is stale by the time
+Vue re-applies its layout. Replaced with three layers, none of them one-shot:
 
-- **`content-scripts/reception-quick-actions.js` `injectWidget`/`removeWidget`
-  simplified.** Rather than detect and counter each layout mode the field container
-  might use, the widget is now always inserted as a plain block-level sibling *above*
-  the whole field container, never as a child inside it. The container's own internal
-  layout (label + textarea) is then exactly what Medicus renders without us — full
-  width, undisturbed — with the widget on its own full-width row on top. This replaces
-  the flex-row detection, the `flex-wrap`/`flex-basis` overrides, and the
-  measure-and-rehoist self-heal from v3.204.0 with a single unconditional strategy that
-  isn't layout-mode-specific.
-- `fixtures/medicus/quick-actions-internal-comment.html` comment updated to describe the
-  generalised fix; `docs/HAZARD-LOG.md` H-049 field-evidence note extended.
+- **CSS backstop** — `#ms-qa-widget ~ textarea { min-width: 220px !important; flex: 1 1
+  100% !important; }`. `min-width` beats `flex-shrink` regardless of *which* ancestor is
+  doing the crushing, and `!important` holds across Vue re-renders that rewrite the
+  textarea's inline style between JS re-checks. This rule alone makes the
+  one-character-per-line failure impossible.
+- **Escalating JS self-heal** — `fixCrushedLayout()` runs measured, idempotent steps only
+  while the textarea still measures crushed: un-`nowrap` every flex-row ancestor within 5
+  levels (not just the parent), patch the textarea itself to claim a full row, then hoist
+  the widget out of the fighting container one level at a time (max 3), re-measuring after
+  each lift.
+- **Continuous re-check** — `runInject`'s connected-widget path no longer early-returns:
+  every observed DOM churn now ends in `ensureReadableLayout()` (one
+  `getBoundingClientRect` when healthy), so a host re-render that restores the crush is
+  re-fixed within one 350ms throttle tick rather than never.
+
+All styles set on Medicus's own nodes go through a recorded patch registry and are
+restored on widget removal — no permanent host-DOM mutations. `test-reception-quick-actions-ui.js`
+gains a section pinning all three layers (the CSS min-width rule, the continuous re-check
+in `runInject`, and the patch-restore in `removeWidget`).
 
 ## [v3.204.0] — 2026-07-31
 

@@ -650,7 +650,185 @@
     });
   }
 
-  // ── DOM injection ─────────────────────────────────────────────────────────────
+  // ── DOM injection + crushed-layout self-heal ──────────────────────────────────
+  // Medicus lays the comment field out with flex, and inserted as a sibling the
+  // widget can leave the textarea crushed to a few px — the comment then renders
+  // one character per line (unreadable = H-049 controls (b)/(e) degraded). The
+  // v3.204.0 inject-time-only fix (wrap the direct parent, measure once) did NOT
+  // hold on the live layout: the crushing container isn't always the direct
+  // parent, and Vue re-applies its layout after we've measured. So the guard is
+  // now (a) CSS: a hard min-width on any textarea following the widget — min-width
+  // beats flex-shrink whichever ancestor is doing the crushing; (b) JS: a
+  // re-entrant fixCrushedLayout() that walks several ancestor levels un-nowrap-ing
+  // flex rows, then patches the textarea itself, then hoists the widget — and is
+  // RE-RUN on every observed DOM churn while the widget is connected, not just at
+  // inject time, so a Vue re-render that restores the crush gets re-fixed within
+  // one throttle tick.
+
+  var MIN_TA_WIDTH = 120;
+
+  function taCrushed(ta) {
+    var r = ta.getBoundingClientRect();
+    return r.width > 0 && r.width < MIN_TA_WIDTH;
+  }
+
+  // Every style we set on Medicus's own nodes is recorded here and restored by
+  // removeWidget — no permanent mutations left behind after we've gone.
+  var _stylePatches = [];
+
+  function patchStyle(el, prop, val) {
+    for (var i = 0; i < _stylePatches.length; i++) {
+      if (_stylePatches[i].el === el && _stylePatches[i].prop === prop) {
+        el.style[prop] = val;
+        return;
+      }
+    }
+    _stylePatches.push({ el: el, prop: prop, prev: el.style[prop] || '' });
+    el.style[prop] = val;
+  }
+
+  function restoreStylePatches() {
+    for (var i = 0; i < _stylePatches.length; i++) {
+      var p = _stylePatches[i];
+      try {
+        if (p.el.isConnected) p.el.style[p.prop] = p.prev;
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    _stylePatches = [];
+  }
+
+  // ch-debug convention (same flag as the triage-lens pipeline logging): when the
+  // guard exhausts every step and the box is STILL crushed, dump the evidence the
+  // next fix needs — the textarea's ancestor chain with computed layout modes and
+  // widths — instead of failing silently again.
+  function debugDumpChain(w, ta) {
+    try {
+      if (localStorage.getItem('ch-debug') !== '1') return;
+      var chain = [];
+      var node = ta;
+      var hops = 0;
+      while (node && node !== document.body && hops < 8) {
+        var cs = getComputedStyle(node);
+        chain.push({
+          tag: node.tagName,
+          cls: String(node.className || '').slice(0, 60),
+          display: cs.display,
+          flexFlow: cs.flexFlow,
+          gridCols: cs.gridTemplateColumns,
+          width: Math.round(node.getBoundingClientRect().width),
+          containsWidget: node.contains(w),
+        });
+        node = node.parentElement;
+        hops++;
+      }
+      // eslint-disable-next-line no-console
+      console.warn('[MSQA] comment box still crushed after all layout fixes — ancestor chain:', chain);
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  // Escalating, idempotent, measured: each step only runs while the textarea
+  // still measures crushed, and the whole thing is a no-op once it is readable.
+  // Callers must hold the observer paused (the hoist moves the widget node).
+  function fixCrushedLayout(w, ta) {
+    if (!ta.isConnected || !taCrushed(ta)) return;
+    // 1. Un-nowrap every flex-row ancestor within 5 levels of the textarea — the
+    //    crushing container is not always the direct parent.
+    var node = ta.parentElement;
+    var hops = 0;
+    while (node && node !== document.body && hops < 5) {
+      var cs;
+      try {
+        cs = getComputedStyle(node);
+      } catch (e) {
+        break;
+      }
+      if (cs.display.indexOf('flex') !== -1 && cs.flexDirection.indexOf('row') === 0 && cs.flexWrap === 'nowrap') {
+        patchStyle(node, 'flexWrap', 'wrap');
+      }
+      node = node.parentElement;
+      hops++;
+    }
+    if (!taCrushed(ta)) return;
+    // 2. Patch the textarea itself so it claims (or wraps to) a full row. The
+    //    minWidth is inline (not just the stylesheet's sibling rule) because the
+    //    hoist below can move the widget out of sibling position, where the CSS
+    //    rule stops matching. Vue may rewrite the style attribute on a re-render —
+    //    the continuous re-check reapplies all of these.
+    patchStyle(ta, 'flex', '1 1 100%');
+    patchStyle(ta, 'width', '100%');
+    patchStyle(ta, 'minWidth', '220px');
+    patchStyle(ta, 'boxSizing', 'border-box');
+    if (!taCrushed(ta)) return;
+    // 3. Grid containers (the second field report's shape — a flex-only walk sees
+    //    nothing to fix): a sibling inserted into a grid shifts every auto-placed
+    //    item over by one cell, so the textarea lands in a narrow track and even
+    //    min-width just overflows the track instead of widening it. The widget's
+    //    own grid-column: 1 / -1 (stylesheet) keeps it on a full row; if the box
+    //    is still crushed, collapse the fighting grid's column template so its
+    //    children stack full-width.
+    node = ta.parentElement;
+    hops = 0;
+    while (node && node !== document.body && hops < 5) {
+      var gcs;
+      try {
+        gcs = getComputedStyle(node);
+      } catch (e) {
+        break;
+      }
+      if (gcs.display.indexOf('grid') !== -1 && node.contains(w) && gcs.gridTemplateColumns !== 'none') {
+        patchStyle(node, 'gridTemplateColumns', 'none');
+        if (!taCrushed(ta)) return;
+      }
+      node = node.parentElement;
+      hops++;
+    }
+    if (!taCrushed(ta)) return;
+    // 4. Last resort: hoist the widget out of the fighting container, one level
+    //    at a time, re-measuring after each lift.
+    var lifts = 0;
+    while (taCrushed(ta) && lifts < 3) {
+      var parent = w.parentElement;
+      if (!parent || parent === document.body || !parent.parentElement) break;
+      parent.parentElement.insertBefore(w, parent);
+      lifts++;
+    }
+    if (taCrushed(ta)) debugDumpChain(w, ta);
+  }
+
+  function ensureReadableLayout() {
+    var w = document.getElementById('ms-qa-widget');
+    if (!w || !w.isConnected) return;
+    var ta = findCommentBox();
+    if (!ta) return;
+    withObserverPaused(function () {
+      fixCrushedLayout(w, ta);
+    });
+  }
+
+  // Where to insert. Placing the widget directly before the textarea makes it
+  // compete with the textarea inside whatever layout algorithm its container
+  // uses — flex tracks (first field report) or grid auto-placement (second field
+  // report: every auto-placed item shifts one cell, the textarea lands in a
+  // narrow track). So climb out of pure wrapper shells first: while the current
+  // node is its parent's ONLY element child, inserting above that parent cannot
+  // displace anything else, and the page's own block flow stacks the widget above
+  // the field the way its label already stacks. Bounded to 3 hops.
+  function insertionAnchor(ta) {
+    var anchor = ta;
+    var hops = 0;
+    while (hops < 3) {
+      var parent = anchor.parentElement;
+      if (!parent || parent === document.body) break;
+      if (parent.childElementCount !== 1) break;
+      anchor = parent;
+      hops++;
+    }
+    return anchor;
+  }
 
   function injectWidget() {
     if (!getTaskInfo()) return;
@@ -661,29 +839,15 @@
     if (!ta || !ta.parentElement) return; // presence-gated: no box, no widget
     var w = document.createElement('div');
     w.id = 'ms-qa-widget';
+    // Full-row up front — harmless in block layouts, and in a flex row it stops
+    // the widget itself competing for the textarea's axis space. (The grid
+    // equivalent, grid-column: 1 / -1, lives in the stylesheet.)
+    w.style.flex = '0 0 100%';
     renderInto(w);
     withObserverPaused(function () {
-      // Medicus renders some field containers as flex-row / grid (no wrap).
-      // Inserted AS A CHILD of that container, the widget and the textarea
-      // fight over the row: the textarea shrinks — anywhere from crushed to a
-      // few px (one character per line) to merely losing half its width to
-      // the widget sitting beside it (unreadable/cramped either way = H-049
-      // controls (b)/(e) degraded). Rather than detect and counter every
-      // layout mode the field container might use, sidestep the fight
-      // entirely: insert the widget as a plain block-level sibling ABOVE the
-      // whole field container, never inside it. The container's own internal
-      // layout (label + textarea) is then exactly what Medicus renders
-      // without us — full width, undisturbed — with our widget on its own
-      // full-width row on top.
-      var parent = ta.parentElement;
-      if (parent.parentElement) {
-        parent.parentElement.insertBefore(w, parent);
-      } else {
-        // No grandparent to hoist into (field container is a root node) —
-        // fall back to inserting beside the textarea; still full-width via
-        // the widget's own CSS (#ms-qa-widget { width: 100% }).
-        parent.insertBefore(w, ta);
-      }
+      var anchor = insertionAnchor(ta);
+      anchor.parentElement.insertBefore(w, anchor);
+      fixCrushedLayout(w, ta);
     });
   }
 
@@ -691,6 +855,7 @@
     var w = document.getElementById('ms-qa-widget');
     if (!w) return;
     withObserverPaused(function () {
+      restoreStylePatches();
       w.remove();
     });
   }
@@ -747,10 +912,10 @@
     var onTaskPage = !!getTaskInfo();
     var pathChanged = location.pathname !== _lastPath;
     if (!onTaskPage && !pathChanged) return;
-    if (onTaskPage && !pathChanged) {
-      var existing = document.getElementById('ms-qa-widget');
-      if (existing && existing.isConnected) return;
-    }
+    // Widget already in place: still take the throttled tick — runInject uses it
+    // to re-verify the textarea hasn't been re-crushed by a host re-render (the
+    // check is one getBoundingClientRect when healthy; it must run continuously,
+    // not just at inject time).
     _throttle = setTimeout(runInject, 350);
   }
 
@@ -770,11 +935,17 @@
       return;
     }
     var existing = document.getElementById('ms-qa-widget');
-    if (existing && existing.isConnected) return;
+    if (existing && existing.isConnected) {
+      ensureReadableLayout();
+      return;
+    }
     requestAnimationFrame(function () {
       if (document.hidden) return;
       var w = document.getElementById('ms-qa-widget');
-      if (w && w.isConnected) return;
+      if (w && w.isConnected) {
+        ensureReadableLayout();
+        return;
+      }
       injectWidget();
     });
   }

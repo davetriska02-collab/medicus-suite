@@ -1,0 +1,770 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Phrases module
+   v3.206.0 design-crit rework: Compose (default) / Library modes, slot chip
+   rows (the reception-composer .ms-qa-row/.ms-qa-chips idiom ported to a
+   token-driven surface), editable preview, differential audience badges.
+   Tokens only — see .claude/skills/ui-design/TOKENS.md + DOCTRINE.md. */
+
+.ph-module {
+  padding: 14px 14px 24px;
+}
+
+.ph-head {
+  margin-bottom: 12px;
+}
+.ph-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.ph-subtitle {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+/* ── Mode toggle (Compose | Library) ── */
+.ph-mode-toggle {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 2px;
+}
+.ph-mode-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-3);
+  border-radius: var(--r-pill);
+  padding: 4px 12px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+.ph-mode-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+.ph-mode-btn[aria-pressed='true'] {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--text-1);
+}
+.ph-mode-btn:active {
+  transform: scale(0.97);
+}
+
+/* ── Compose mode ── */
+.ph-mode-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ph-compose-searchrow {
+  display: flex;
+}
+
+/* ── Sticky compose tray ── */
+.ph-compose {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 10px 12px;
+}
+.ph-compose-populated {
+  box-shadow: var(--shadow-2);
+}
+.ph-compose-empty {
+  border-color: var(--border);
+  border-style: dashed;
+  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 4px 12px;
+}
+.ph-kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 0 4px;
+  color: var(--text-3);
+}
+.ph-compose-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.ph-sel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 2px 4px 2px 8px;
+  max-width: 100%;
+  overflow: hidden;
+}
+.ph-sel-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  min-height: 20px;
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  color: var(--text-4);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.ph-sel-x:hover {
+  color: var(--red);
+  background: var(--red-dim);
+}
+.ph-sel-x:active {
+  transform: scale(0.9);
+}
+.ph-compose-aud {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.ph-compose-warn {
+  font-size: 11px;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-md);
+  padding: 5px 8px;
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+/* Editable preview (decision L) — a real textarea so *** can be filled in
+   before Copy. Auto-grown by JS (autoGrowPreview), clamped by max-height. */
+.ph-compose-preview {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--text-1);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  resize: none;
+  max-height: 132px;
+  overflow-y: auto;
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+.ph-compose-preview:focus-visible {
+  border-color: var(--accent);
+}
+.ph-compose-preview.ph-preview-expanded {
+  max-height: 340px;
+}
+.ph-preview-toggle {
+  display: inline-flex;
+  margin-top: 4px;
+}
+.ph-fill {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border-radius: var(--r-sm);
+  padding: 0 2px;
+  font-weight: 700;
+}
+.ph-compose-gaps {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.ph-copy-confirm {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  margin-top: 8px;
+}
+.ph-copy-confirm-text {
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.ph-copy-confirm-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ph-btn-warn {
+  border-color: var(--amber-line);
+  color: var(--amber);
+}
+.ph-btn-warn:hover {
+  background: var(--amber-dim);
+  border-color: var(--amber);
+}
+.ph-compose-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ph-charcount {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+.ph-compose-btns {
+  display: flex;
+  gap: 6px;
+}
+.ph-copy-status {
+  font-size: 11px;
+  color: var(--text-2);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.ph-ok-glyph {
+  color: var(--green);
+  font-weight: 700;
+  margin-right: 3px;
+}
+
+/* ── Slot chip rows (decision C — the reception-composer .ms-qa-row idiom) ── */
+.ph-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ph-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ph-row-label {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.ph-row-catfilter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ph-row-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.ph-row-none {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+}
+
+.ph-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  border-radius: var(--r-pill);
+  padding: 4px 10px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+.ph-chip:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hi);
+}
+.ph-chip:active {
+  transform: scale(0.97);
+}
+.ph-chip-match {
+  border-color: var(--accent-line);
+}
+.ph-chip-fade {
+  opacity: 0.4;
+}
+.ph-chip-on {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--text-1);
+}
+.ph-chip-on:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+}
+.ph-chip-idx {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.ph-chip .ph-aud {
+  font-size: 8px;
+  padding: 0 4px;
+}
+.ph-chip-more {
+  border-style: dashed;
+  color: var(--text-3);
+}
+
+/* ── Library mode ── */
+.ph-mode-library {
+  display: flex;
+  flex-direction: column;
+}
+.ph-lib-hint {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-4);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+/* ── Toolbar ── */
+.ph-toolbar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.ph-search {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  border-radius: var(--r-md);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: var(--sans);
+  transition: border-color var(--fast) var(--ease);
+}
+.ph-search:focus {
+  border-color: var(--accent);
+}
+.ph-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.ph-pill {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  border-radius: var(--r-pill);
+  padding: 3px 10px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+.ph-pill:hover {
+  background: var(--bg-hover);
+  color: var(--text-2);
+  border-color: var(--border-hi);
+}
+.ph-pill-on {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--text-1);
+  font-weight: 600;
+}
+.ph-pill:active {
+  transform: scale(0.97);
+}
+
+/* ── Buttons ── */
+.ph-btn {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  border-radius: var(--r-md);
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: var(--sans);
+  white-space: nowrap;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.ph-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hi);
+}
+.ph-btn:active {
+  transform: scale(0.97);
+}
+.ph-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.ph-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-deep);
+}
+.ph-btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.ph-btn-sm {
+  padding: 3px 9px;
+  font-size: 11px;
+}
+.ph-btn-ghost {
+  background: transparent;
+  border-color: var(--border-hi);
+  color: var(--text-3);
+}
+.ph-btn-ghost:hover {
+  border-color: var(--accent);
+  color: var(--text-2);
+  background: var(--accent-dim);
+}
+
+/* Red de-escalation (decision I) — neutral ghost at rest; red is a HOVER/
+   FOCUS-ONLY state, never resting. Management buttons only exist in Library. */
+.ph-btn-danger {
+  background: transparent;
+  color: var(--text-3);
+  border-color: var(--border-hi);
+}
+.ph-btn-danger:hover,
+.ph-btn-danger:focus-visible {
+  color: var(--red);
+  border-color: var(--red-line);
+  background: var(--red-dim);
+}
+
+/* ── Block cards (Library) ── */
+.ph-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ph-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
+}
+.ph-card:hover {
+  border-color: var(--border-hi);
+  box-shadow: var(--shadow-2);
+}
+/* Selected-card recipe (decision J) — wash + line, matching .ph-chip-on. */
+.ph-card-selected {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+}
+html[data-theme='dark'] .ph-card {
+  border-color: var(--border-hi);
+}
+.ph-card-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.ph-card-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.ph-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+  align-items: center;
+}
+.ph-card-preview {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ph-card-provenance {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  margin-top: 4px;
+}
+.ph-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* Audience tag — the wrong-context-paste control (H-052): differential
+   (decision F) — 'patient' (the expected default) renders NO badge on chips/
+   cards; 'note'/'task' keep this markup. The tray's own For:/mixed-audience
+   control (below) stays full strength and unconditional, unchanged. */
+.ph-aud {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+.ph-aud-patient {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+}
+.ph-aud-note {
+  background: var(--bg-mid);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+.ph-aud-task {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid var(--amber-line);
+}
+
+/* Personal/practice provenance (decision G — inverted from the old green
+   PRACTICE badge): personal blocks get the violet user-authored badge;
+   practice blocks are the unbadged default plus a muted pack-version line. */
+.ph-badge-yours {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--violet);
+  background: var(--violet-dim);
+  border: 1px solid var(--violet-line);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+}
+.ph-slot,
+.ph-cat-chip {
+  font-family: var(--sans);
+  font-size: 10px;
+  color: var(--text-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+.ph-trigger {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+}
+.ph-uses {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+.ph-leaflet {
+  font-size: 10px;
+  color: var(--accent);
+  text-decoration: none;
+}
+.ph-leaflet:hover {
+  text-decoration: underline;
+}
+
+/* ── Empty states (decision O — canon recipe) ── */
+.ph-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 24px 12px;
+}
+.ph-empty-icon {
+  display: inline-flex;
+  color: var(--text-5);
+}
+.ph-empty-msg {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  line-height: 1.6;
+  max-width: 280px;
+}
+
+/* ── Add/edit form ── */
+.ph-form {
+  background: var(--bg-elev);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-lg);
+  padding: 12px;
+  margin-bottom: 16px;
+}
+.ph-form-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: 10px;
+}
+.ph-label {
+  display: block;
+  font-family: var(--sans);
+  font-size: 10px;
+  color: var(--text-3);
+  font-weight: 600;
+  margin: 8px 0 3px;
+}
+.ph-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  border-radius: var(--r-md);
+  padding: 6px 9px;
+  font-size: 12px;
+  font-family: var(--sans);
+  resize: vertical;
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+.ph-input:focus {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+.ph-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ph-form-error {
+  color: var(--red);
+  font-size: 11px;
+  min-height: 14px;
+  margin-top: 6px;
+}
+.ph-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* ── LLM authoring block ── */
+.ph-llm-block {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.ph-llm-block summary {
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+}
+.ph-llm-block summary:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+.ph-llm-inner {
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+.ph-llm-help {
+  font-size: 11px;
+  color: var(--text-4);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.ph-llm-inner > .ph-btn {
+  margin-bottom: 8px;
+}
+.ph-llm-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.ph-llm-status {
+  font-size: 11px;
+  line-height: 1.4;
+}
+.ph-llm-status-ok {
+  color: var(--text-2);
+}
+.ph-llm-status-err {
+  color: var(--red);
+}
+.ph-llm-errors {
+  margin-top: 6px;
+}
+.ph-llm-error-row {
+  font-size: 11px;
+  color: var(--red);
+  line-height: 1.5;
+}
+
+/* ── Dark theme repicks (decision N) ── */
+html[data-theme='dark'] .ph-compose-preview {
+  background: var(--bg-mid);
+}

@@ -85,5 +85,60 @@ check(/ta\.focus\(\{ preventScroll: true \}\)/.test(src), 'post-insert focus() u
 check(!/setTimeout[\s\S]{0,200}?s\.pending\s*=\s*false/.test(src), 'no timer ever clears the pending reminder');
 
 // ============================================================
+// 4. Comment-box crush guard (v3.204.1) — the textarea must stay readable
+// ============================================================
+// The v3.204.0 inject-time-only layout fix did not hold on the live Medicus
+// layout (field evidence in H-049): the crushing flex container is not always
+// the textarea's direct parent, and Vue re-applies its layout after a one-shot
+// measure. Pin the three layers of the replacement guard.
+console.log('\n4. comment-box crush guard');
+
+const css = fs.readFileSync(path.join(__dirname, 'content-scripts', 'reception-quick-actions.css'), 'utf8');
+
+// (a) CSS backstop: a hard min-width on the following-sibling textarea —
+//     min-width beats flex-shrink whichever ancestor does the crushing, and
+//     !important survives Vue rewriting the textarea's inline style.
+const sibRule = css.match(/#ms-qa-widget\s*~\s*textarea\s*\{[^}]*\}/);
+check(!!sibRule, 'CSS has a #ms-qa-widget ~ textarea rule');
+check(
+  !!sibRule && /min-width:\s*\d{3,}px\s*!important/.test(sibRule[0]),
+  'the sibling textarea min-width is ≥100px and !important'
+);
+
+// (a2) Grid backstops (v3.204.2 — the second field report was a grid, which the
+//      flex-only walk could not see): the widget must span all grid columns so
+//      auto-placed items are not shifted into narrow tracks, injection must climb
+//      out of single-child wrapper shells, and the textarea min-width must also
+//      be patched INLINE (the stylesheet sibling rule stops matching if the
+//      widget is hoisted or anchored higher).
+const baseRule = css.match(/#ms-qa-widget\s*\{[^}]*\}/);
+check(
+  !!baseRule && /grid-column:\s*1\s*\/\s*-1/.test(baseRule[0]),
+  'the widget spans all grid columns (grid-column: 1 / -1)'
+);
+check(/function insertionAnchor\(/.test(src), 'injection climbs out of single-child wrapper shells (insertionAnchor)');
+check(/patchStyle\(ta, 'minWidth'/.test(src), 'the textarea min-width is also patched inline');
+check(/gridTemplateColumns/.test(src), 'fixCrushedLayout has a grid-container escalation step');
+
+// (b) JS self-heal is continuous, not inject-time-only: the connected-widget
+//     path of runInject must re-verify the layout on DOM churn.
+check(/function fixCrushedLayout\(/.test(src), 'fixCrushedLayout() exists');
+check(/function ensureReadableLayout\(/.test(src), 'ensureReadableLayout() exists');
+const runInjectBody = src.match(/function runInject\(\) \{[\s\S]*?\n {2}\}/);
+check(
+  !!runInjectBody && /ensureReadableLayout\(\)/.test(runInjectBody[0]),
+  'runInject re-checks the layout while the widget is connected'
+);
+
+// (c) No permanent mutations of Medicus DOM: every style patch is recorded and
+//     restored when the widget is removed.
+check(/patchStyle\(/.test(src) && /restoreStylePatches\(\)/.test(src), 'host style patches are recorded and restored');
+const removeWidgetBody = src.match(/function removeWidget\(\) \{[\s\S]*?\n {2}\}/);
+check(
+  !!removeWidgetBody && /restoreStylePatches\(\)/.test(removeWidgetBody[0]),
+  'removeWidget restores all host style patches'
+);
+
+// ============================================================
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

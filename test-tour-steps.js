@@ -59,6 +59,10 @@ const NAV_COVERED_BY_OVERVIEW = new Set([
   'reception',
   'sweep',
   'knowledge',
+  // phrases (v3.205.0): 20-step cap still reached, so no dedicated step — the
+  // tab is a search + compose + copy surface with tab-help first-step guidance
+  // and an in-tab empty-state explainer. Revisit at the next cap re-balance.
+  'phrases',
   'visualiser', // opens a full tab, not a panel module — overview mention only
   'duplicate-checker', // opens a full tab, not a panel module — overview mention only
   'about',

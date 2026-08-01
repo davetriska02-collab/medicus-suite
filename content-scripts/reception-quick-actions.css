@@ -14,6 +14,25 @@
   width: 100%;
   box-sizing: border-box;
   min-width: 0;
+  /* Grid parents (v3.204.2): a sibling inserted into a grid shifts every
+     auto-placed item over by one cell — spanning all columns keeps the widget on
+     a row of its own so the textarea stays in its original track. Harmless
+     outside grid layouts. */
+  grid-column: 1 / -1;
+}
+
+/* THE crush guard (v3.204.1). Any textarea following the widget among its
+   siblings is the Internal-comment box the widget was injected above. Whatever
+   ancestor is doing the flex-shrinking, min-width wins against flex-shrink — so
+   the comment box can never again be crushed into an unreadable one-character-
+   per-line sliver (H-049 controls (b)/(e): the clinician must be able to READ
+   the comment). !important deliberately: this must also hold across Vue
+   re-renders that rewrite the textarea's inline style between the JS layout
+   re-checks. */
+#ms-qa-widget ~ textarea {
+  min-width: 220px !important;
+  flex: 1 1 100% !important;
+  box-sizing: border-box !important;
 }
 
 /* ── Collapsed strip ─────────────────────────────────────────────────────── */

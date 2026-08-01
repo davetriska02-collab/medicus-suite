@@ -87,7 +87,14 @@ console.log('--- renderDrugChip attribute escaping ---');
 //       quote-escaping helper (escAttr). ─────────────────────────────────────────
 console.log('--- source guard: no quote-unsafe escHtml in attribute context ---');
 {
-  const files = ['shared/chip-renderer.js', 'side-panel/modules/sentinel/sentinel.js', 'sentinel-options/options.js'];
+  const files = [
+    'shared/chip-renderer.js',
+    'side-panel/modules/sentinel/sentinel.js',
+    'sentinel-options/options.js',
+    // New privileged renderer of user/practice/LLM-imported strings (v3.205.0)
+    // — in the guard so the v3.203.0 escHtml-in-attribute class can't re-enter.
+    'side-panel/modules/phrases/phrases.js',
+  ];
   for (const f of files) {
     const src = fs.readFileSync(path.join(__dirname, f), 'utf8');
     // `="${escHtml(` is an attribute value (`name="...`) produced by escHtml.

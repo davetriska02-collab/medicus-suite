@@ -131,6 +131,68 @@ Hard rules learned the slow way:
 - **Host-app noise is not us:** `MInput.vue` warnings and `sentry.io` `429`s in the
   console are Medicus's own Vue app + telemetry, not the extension.
 
+## Injecting a WIDGET next to a Medicus form field (not a chip — the composer pattern)
+
+Different problem from queue chips: a chip decorates a cell, a widget (e.g.
+`content-scripts/reception-quick-actions.js`) sits *beside a form control the clinician
+still has to use*. Inserting it as a sibling makes it **compete with that control inside
+whatever layout algorithm the container uses**, and the control loses. It took three
+releases (v3.204.0 → .1 → .2) to stop rediscovering this. Copy the settled pattern:
+
+1. **Never insert as a bare sibling of the field.** Climb out of pure single-child wrapper
+   shells first (`insertionAnchor()`: while the node is its parent's only element child,
+   go up, max 3 hops) and insert *there*, so the page's own block flow stacks the widget
+   above the field the way its label already is. Not competing beats winning the fight.
+2. **Be inert in both layout algorithms**, because you cannot tell which one you are in
+   from a screenshot: `flex: 0 0 100%` inline **and** `grid-column: 1 / -1` in CSS. In a
+   grid, a foreign sibling shifts every auto-placed item over by one cell — that is what
+   dropped the textarea into a narrow track, and no amount of flex-wrap patching touches
+   it.
+3. **`min-width` on the host control is the backstop, and it must be INLINE too.** It
+   beats `flex-shrink` whichever ancestor is shrinking — but a stylesheet
+   `#widget ~ textarea` rule stops matching the moment rule 1 or the hoist moves the
+   widget out of sibling position. Patch the element, not just the selector.
+4. **Measure, don't assume — and keep measuring.** `fixCrushedLayout()` re-checks
+   `getBoundingClientRect().width` after *every* escalation (un-nowrap flex ancestors →
+   patch the control → collapse the grid template → hoist the widget), and
+   `ensureReadableLayout()` re-runs the whole thing on every observed DOM churn. A
+   one-shot fix at inject time is stale the moment Vue re-renders (that was v3.204.0).
+5. **Record and restore every style you set on a host node** (`patchStyle` /
+   `restoreStylePatches`) — never leave permanent mutations in Medicus's DOM after the
+   widget is removed.
+6. **Dead-end diagnostic, not a silent give-up.** If every escalation is exhausted and the
+   control is *still* crushed, dump the evidence the next fix needs behind the
+   `ch-debug` flag: `console.warn('[MSQA] …', chain)` with each ancestor's tag, class,
+   computed `display`/`flexFlow`/`gridTemplateColumns` and width. Three blind fixes were
+   two too many — a widget that cannot self-heal must at least self-diagnose.
+
+**Why this is a safety rule, not styling:** the crushed textarea rendered the internal
+comment one character per line. H-049's control is "the clinician still reads the comment
+before submitting" — which is false if they physically cannot read it. A layout defect on
+a clinical free-text control is a degraded hazard control; log it as field evidence in
+`docs/HAZARD-LOG.md`, don't file it as polish.
+
+### Making a two-step manual flow obvious (the same widget's UX lessons)
+
+The widget writes text; the clinician still presses Medicus's own Submit. Practice
+feedback said nobody realised either step. What actually fixed it — reuse this shape:
+
+- **Echo the result back.** Clearing the form on success reads as an *abort*. Hold the
+  inserted sentence on screen ("Added to the comment below: …") until the next
+  composition starts; that echo is the "it worked" signal, not a small green line.
+- **Number the steps in the UI** ("1. Insert into comment ↓" / "2. Then press
+  "Submit as new" below.") and read the host button's label live off the DOM so it names
+  the real control. Numbering teaches the two-step nature more cheaply than colour.
+- **A warning about an incomplete action must not time out.** The transient flash confirms
+  the write; the *pending* reminder ("Not yet submitted … until you do, reception sees
+  nothing") persists — no timer — until the state stops being real. A GP interrupted for
+  90 seconds is exactly the case the warning exists for.
+- **State the consequence, not the mechanism.** "not yet submitted" describes the system;
+  "reception sees nothing" changes behaviour.
+- **Never claim completion.** No "Done" / "Sent" / "Booked" / "Submitted" — observing a
+  click on Submit is not a successful submit. `test-reception-quick-actions-ui.js`
+  source-greps these strings; extend it rather than trusting review.
+
 ## Editing drug-monitoring rules (`rules/drug-rules.json`)
 
 Drug matching in `engine/rules-engine.js` (`drugMatchesRule`) is **case-insensitive substring** matching against the `drug.match` list. Two consequences you must keep in mind, because the failure mode is **silent** — a med that doesn't match simply never fires its alert; there is no error, just a missing chip (a patient-safety risk, not a cosmetic one):
