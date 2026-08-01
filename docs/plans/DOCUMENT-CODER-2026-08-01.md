@@ -1,6 +1,7 @@
 # Document Coder — build plan (2026-08-01)
 
-**Status:** plan, pre-build. Nothing here is shipped; roadmap = absent per Gauntlet rules.
+**Status:** plan, pre-build, **ready for the Phase 0 capture session** (protocol at §14).
+Nothing here is shipped; roadmap = absent per Gauntlet rules.
 **Inputs:** [GAUNTLET-2026-08-01](../benchmark/GAUNTLET-2026-08-01.md) (market case, L1),
 [PANEL-document-coder-2026-08-01](../appraisal/PANEL-document-coder-2026-08-01.md)
 (20-persona synthetic panel), and a code-level substrate audit of Nick's coding/merge
@@ -250,3 +251,60 @@ assessment stands: ~12 months of clear water, build it cheap and composable (it 
 nine shipped components; §2), and let the durable value accrue to the doctrine pieces
 (four-state honesty, qualifier diffs, audit exports) that a platform vendor moving fast
 will not replicate soon.
+
+## 14 · Capture protocol — Phase 0, run live at the practice (~60–90 min)
+
+**Instrument:** `scripts/document-create-capture.js` unchanged — its fetch/XHR wrapper is
+generic (observation-only, never replays, key-based PHI redactor on by default,
+file bytes never read). Paste into the page console, `chDocCap.mark('…')` between steps,
+`chDocCap.summary()` / `.dump()` / `.copy()` at the end. **Use a test patient throughout
+and a dummy inbound document** (blank PDF with typed dummy headings — seed it via
+Medicus's own Add-document upload first if the inbound queue has no safe item).
+
+**Write-up:** a new `docs/learnings-document-processing-2026-08-XX.md` in the house
+learnings doctrine — confirmed vs unconfirmed clearly separated, endpoint shapes quoted,
+DOM snippets saved to `fixtures/medicus/` (redacted). The session is done when Q1–Q6
+below are each either answered or explicitly recorded as unanswerable.
+
+**The questions, in capture order:**
+
+1. **Where does document processing live?** Record the URL/route of the inbound-document
+   queue and of a single document opened for processing. Does the queue go through the
+   same `/tasks/data/{slug}/task-list` shape as every other task queue (which the
+   Triage Lens router already handles)? Capture the slug, a row's JSON shape, and its
+   `overviewURL`.
+2. **How is the open document's content served?** With a document open on the processing
+   screen, capture the request that delivers its content — endpoint, content-type,
+   whether it is a direct PDF/image GET (fileURI-like), a blob in an iframe, or something
+   else. Note whether the dummy PDF's text layer survives to the network response. This
+   single answer decides whether the primary surface is viable.
+3. **What coding controls does the screen expose, and what do they fire?** Using
+   Medicus's own controls on the test document, one at a time with a `mark()` before
+   each: set document type; add/edit a coded entry (does a problem-add exist here, or
+   only document-type coding?); set the document/clinical date; complete/file the
+   document; any action/task control. Capture each endpoint + payload shape. This
+   answers whether Phase 3's accept can drive an on-screen control (macro class) and
+   where the event date lives.
+4. **Where can a widget anchor?** Save redacted `outerHTML` of the container around the
+   coding controls and around the document viewer (two or three ancestor levels — enough
+   to apply the composer rules: single-child wrapper climb, grid-vs-flex identification).
+   These become the injection fixtures.
+5. **The queue row, for the worklist line** (Phase 4): what does a queue row show, and is
+   there a preview-row/master-detail structure like the results queue that a per-row
+   verdict line can prepend into?
+6. **Backlog read contract:** from the test patient's document history, open an
+   already-filed document and capture how its *content* is fetched (metadata contract is
+   already known from the duplicate parser; content is not). Gates Phase 5.
+7. **Reality stats (no capture tooling needed):** flick through the last 20–30 real
+   inbound letters *without opening a capture* and tally text-layer vs scanned-image and
+   the section-heading formats each trust uses (`Diagnosis:` vs `Impression:` vs
+   numbered `Problems`). Record heading/layout shapes only — never patient content. This
+   sizes the COULD-NOT-READ share (the Band-3 veto: "if 'not assessed' appears on more
+   than a small minority of letters, I lose all the time savings") and seeds the anchor
+   list and fixture corpus.
+
+**Decision point at write-up:** if Q2/Q3 confirm a workable contract, Phase 1 targets the
+processing screen as planned; if not, Phase 1 falls back to the confirmed task-attachment
+surface and the processing screen becomes a later phase behind further discovery. Either
+way the extractor, four-state model and delta work are unaffected — they consume text,
+not a particular screen.
