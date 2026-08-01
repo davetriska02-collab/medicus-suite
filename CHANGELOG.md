@@ -2,6 +2,182 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.210.1] — 2026-08-01
+
+### Document Coder: interactive live-engine demo (dev tool)
+
+`docs/plans/document-coder-demo.html` — paste a (synthetic/anonymised) letter
+and a coded problem list, and the page runs the REAL shipped engines
+(letter-extract + letter-delta, inlined verbatim by
+`scripts/build-coder-demo.js`) and renders the honest card: four-state
+banner, coverage line, action flags with triggers, offered candidates with
+delta verdicts (possibly-new / qualifier-conflict / status-conflict /
+probable-match, nearest-miss shown), the mentioned-not-offered group, and
+med lines. Built as the capture-day corpus tester: the Q7 letter tally can
+be run interactively against the actual pipeline. `test-coder-demo-fresh.js`
+fails CI if either engine changes without regenerating the demo, so the
+page can never silently demo stale behaviour. Dev/demo tool only — nothing
+ships in the extension.
+
+## [v3.210.0] — 2026-08-01
+
+### Document Coder: delta engine (candidate vs coded record) + VISION.md truth fix
+
+`engine/letter-delta.js` — the "is this already coded?" half of the Document
+Coder, pure and unwired like the extractor. Per candidate it returns
+probable-match (always WITH the matched problem shown, never a silent
+"nothing to do"), qualifier-conflict (same condition, different stage or
+laterality — the CKD 3a→3b war story gets its own flag class that outranks a
+match), status-conflict (letter says resolved vs record active, and the
+reverse recurrence direction), or possibly-new with the nearest miss shown.
+Matching is deliberately high-precision text logic (fail direction:
+uncertain → possibly-new): normalised/token-set equality, a 19-entry curated
+acronym list (AF, T2DM, CKD…), and subset matching gated by a
+qualifier-word lexicon — its own red-team probe found and killed the
+dangerous direction first ("Hypertension" matching "PULMONARY hypertension",
+"Diabetes" matching "Diabetes INSIPIDUS", "Anaemia" matching "IRON
+DEFICIENCY anaemia" — all now possibly-new, while "Asthma - mild" and "HF
+with preserved ejection fraction" still match). GP2GP token-order variants
+match; laterality right-vs-left conflicts; conceptId/ancestor hierarchy
+proof composes at the caller when wired. 21 checks in
+`test-letter-delta.js` including the completion-language source guard.
+
+`docs/VISION.md` — corrected the stale "writes nothing back / read-only"
+claims (flagged by the Gauntlet and the delegated review as the same class
+of error the v3.202.0 re-freeze exists to kill) to the display-first +
+enumerated-user-initiated-writes reality of INTENDED-PURPOSE v3.202.0, and
+re-grounded the status line at v3.209.x.
+
+## [v3.209.3] — 2026-08-01
+
+### Document Coder engine: action-flag scanner red-teamed (21 probes, 17 failed, all fixed)
+
+The GP-action / follow-up / 2WW scanner got its own dedicated adversarial
+pass (the v3.209.1 round covered only the diagnosis classifier). For an
+escalate-only layer misses are the costly failure, and the probe battery
+found plenty: "I/We would be grateful if you could…", "Please could you
+arrange…", "Kindly organise…", "The practice is asked to…", "We have asked
+the practice…", "Suggest GP checks…", "requires GP follow-up", "FAO GP" all
+silently missed; NHS interval shorthand ("repeat U&E in 2/52", "F/U 6/52")
+and plain "Review bloods in 6 weeks" raised no follow-up flag; "two week
+rule", "USC pathway" and "62-day pathway" raised no 2WW flag. Two
+false-positive classes fixed the other way: "No (further) action required"
+fired a GP-action flag (alarm-fatigue fuel), and "please refer to the
+enclosed leaflet" read as a referral request ("refer to" now excluded).
+Structural fix: the scanner stopped at the first matching kind per line, so
+"Discharged from the two week wait pathway; please arrange routine recall"
+lost its 2WW flag behind the GP action — a line now raises one flag per
+kind, which the reception triage view depends on. All 21 probes are
+permanent fixtures (test suite 67 → 88 checks). Engine remains unwired.
+
+## [v3.209.2] — 2026-08-01
+
+### Document Coder: SNOMED verification harness (dev tool)
+
+`scripts/verify-letter-terms.js` closes the loop Dave asked about ("have you
+matched these against verified SNOMED codes?"): it runs the letter-extraction
+engine over its synthetic corpus, harvests every OFFERED term, and checks each
+against the public no-auth NHS SNOMED CT termbrowser API (same config and
+fail-closed doctrine as `shared/snomed-retirement.js`), plus re-verifies the
+concept IDs pinned in the UI mockup (49436004 Atrial fibrillation, 700379002
+CKD stage 3B — both externally corroborated 2026-08-01). The dev sandbox proxy
+blocks termbrowser.nhs.uk, so the harness exits 2 with an explicit "COULD NOT
+VERIFY — nothing is verified" message rather than ever claiming a check it did
+not perform; first networked run (capture day) completes the verification and
+should also confirm the descriptions-search endpoint shape, which is expected
+but not yet live-confirmed (noted in the script header). At runtime the
+product never sends letter-derived text to any public service — resolution is
+against Medicus's own index under the user's session; this harness is
+synthetic-corpus-only by design.
+
+## [v3.209.1] — 2026-08-01
+
+### Document Coder engine: red-team hardening (10 findings, all fixed; still unwired)
+
+An adversarial pass over `engine/letter-extract.js` with multi-specialty
+clinical scenarios (cardiology, diabetes, geriatrics, paediatrics, genetics,
+psychiatry, surgery, med titration) found ten gaps; every scenario is now a
+regression fixture (43 → 67 checks).
+
+The one that mattered most: **PDF line-wrap fabricated an offered candidate**
+— "New atrial fibrillation, rate ⏎ controlled on ward" extracted per-line
+produced "controlled on ward" as an offerable suggestion (the exact
+wrongly-offered failure the design forbids). Items are now buffered per
+section and wrapped continuations merged (lowercase-start = continuation;
+uppercase-start non-marker line = the list has ended and prose resumed, so
+trailing prose can neither merge into the last item nor become candidates).
+
+Also fixed, each in the fail-closed direction that preserves trust rather
+than over-suppressing:
+
+- Bare "no"/"not" now negate only at clause start — "Falls — no injury
+  sustained" and "T2DM, not well controlled" are active diagnoses again
+  (strong phrases like "no evidence of"/"denies" still negate anywhere), plus
+  a pseudo-negation guard for "not (well) controlled/tolerated/compliant".
+- "78 year old" no longer triggers historical ("old stroke" still does).
+- Paediatric/obstetric "mother reports…" no longer triggers family-history:
+  a bare relative word needs a disease-attribution verb (had/diagnosed/died…)
+  — "Mother diagnosed with ovarian cancer" is still family, the child's
+  otitis media is not.
+- Past-medical-history sections are now anchored and extracted (visible to
+  the future delta) with every item forced historical — previously invisible.
+- Two-letter acronyms (AF, MI, HF) are no longer silently dropped.
+- Word-export "o" bullets stripped; "Increased ramipril to 5 mg" parses the
+  name as "ramipril"; inline "Primary diagnosis: X" anchors; unmarked
+  Impression sections end at a blank line so following prose is never
+  fabricated into candidates; candidate terms trim their comma qualifier
+  ("Gout, first presentation" → searchable term "Gout", full sentence kept
+  for provenance).
+
+One deliberate test correction: the left-breast "benign cyst" line is a true
+codeable diagnosis — the original fixture blessed its over-suppression (via
+the sentence-wide "no") as if correct. The safety property is now stated
+properly: no offered candidate may carry malignancy language.
+
+Engine remains pure and unwired; nothing user-visible changes.
+
+## [v3.209.0] — 2026-08-01
+
+### Document Coder: deterministic letter-extraction engine (unwired groundwork)
+
+The extraction core of the planned Document Coder
+(`docs/plans/DOCUMENT-CODER-2026-08-01.md`), built engine-first so the Phase 0
+capture session wires up an already-tested core. **Not connected to any UI or
+surface yet — nothing user-visible changes in this release.**
+
+`engine/letter-extract.js` (pure: text in, structure out; no DOM/network/writes):
+
+- **Four-state honesty model** — `assessLetterText()` returns exactly one of
+  `could-not-read` (empty/garbled/non-prose input, conservative heuristics),
+  `nothing-anchored` (text read, no recognised section structure), or
+  `assessed` — plus a coverage account (content lines vs assessed lines) so a
+  caller can never render silence as clearance. No API field can express
+  "fully coded"; the test suite source-greps for banned completion language.
+- **Anchored extraction only** — PRSB eDischarge-family section headings
+  (Diagnoses/Problems/Impression; Medications on discharge; Plan and requested
+  actions) plus informal variants; prose is never mined for diagnoses.
+- **Fail-closed candidate classification** (NegEx/ConText lineage, sentence-
+  scoped): every candidate is `active | suspected | negated | historical |
+  resolved | family | unclassifiable`, with pseudo-negation guards ("cannot be
+  excluded" is a suspicion, not a negation) and an experiencer check (family
+  history is never the patient's diagnosis). Only `active` is ever offered;
+  everything else returns as "mentioned, not offered" with its trigger
+  evidence and source sentence (provenance).
+- **Medication-change lines** — started/stopped/changed/listed, with an
+  explicit `unparsed` state when a drug name cannot be extracted (never
+  guessed).
+- **Action flags are the one whole-text scan** (escalate-only, so false
+  positives are cheap): GP-action phrases ("for GP to arrange…"), follow-up
+  intervals, and 2WW/fast-track mentions fire from unanchored prose too —
+  the buried-sub-paragraph war story from the panel review.
+
+`test-letter-extract.js` — 43 checks: the panel's war-story register as
+fixtures (nine-diagnosis discharge with new-AF mid-list, ?PE-excluded,
+right-?malignant/left-benign laterality binding, family-history breast cancer,
+pseudo-negation, prose-buried 2WW outcome, garbled OCR) plus property tests
+(offered ⇒ active; every candidate carries a source sentence) and the
+completion-language source guard.
+
 ## [v3.208.1] — 2026-08-01
 
 ### Hazard log: CSO sign-off of H-055–H-057 (Contacts Management)

@@ -1,9 +1,9 @@
 # Why Medicus Suite Exists — A First-of-Type Augmentation Layer
 
-**Status:** positioning statement · grounded in the shipped codebase at v3.77.x
+**Status:** positioning statement · re-grounded in the shipped codebase at v3.209.x (2026-08-01; write-capability language aligned with INTENDED-PURPOSE v3.202.0)
 **Companion docs:** [`INTENDED-PURPOSE.md`](INTENDED-PURPOSE.md) (regulatory scope),
 [`feature-list.md`](feature-list.md) (full feature inventory),
-[`benchmark/GAUNTLET-2026-06-11.md`](benchmark/GAUNTLET-2026-06-11.md) (competitive analysis)
+[`benchmark/GAUNTLET-2026-08-01.md`](benchmark/GAUNTLET-2026-08-01.md) (competitive analysis)
 
 This document explains *why* the suite is built the way it is and what makes its
 delivery model distinctive. It is a positioning statement, not marketing copy:
@@ -31,22 +31,29 @@ one column of the problem.
 
 ## The approach: an augmentation layer, not another system
 
-Medicus Suite takes a different path. It is a **read-only Chrome extension that sits
-lightly on top of the live Medicus session** — a thin "intelligence layer" rather
-than a replacement system. It reads what is already on the clinician's screen and in
-the data they are already authorised to see, reorganises and threshold-checks it, and
-surfaces the result in a side panel and in-record overlays. It writes nothing back,
-sends no patient data anywhere, and performs no AI inference at runtime. (See
-[`INTENDED-PURPOSE.md`](INTENDED-PURPOSE.md) for the frozen scope statement and the
-"what this is not" list.)
+Medicus Suite takes a different path. It is a **display-first Chrome extension that
+sits lightly on top of the live Medicus session** — a thin "intelligence layer"
+rather than a replacement system. It reads what is already on the clinician's screen
+and in the data they are already authorised to see, reorganises and threshold-checks
+it, and surfaces the result in a side panel and in-record overlays. Its writes are a
+small, enumerated set of **user-initiated actions carried out through Medicus's own
+controls and endpoints** (booking, task creation, document filing, all-normal lab
+filing, routine-Rx re-assignment, problem-list tidy-up — the complete list with
+controls lives in `CLINICAL-SAFETY-NOTICE.md` §6.1); nothing is ever written
+automatically, and Medicus remains the system of record for everything. In its
+default configuration it sends no patient data anywhere and performs no AI inference
+at runtime. (See [`INTENDED-PURPOSE.md`](INTENDED-PURPOSE.md) for the frozen scope
+statement, including the one optional, off-by-default Transactional-API read path.)
 
 This model deliberately sidesteps the usual barriers:
 
 - **No vendor dependency for delivery.** It runs client-side on the clinician's own
   authenticated session, so it ships and updates on its own cadence rather than the
   EPR's.
-- **Safety by construction.** Read-only and local-only by design — the architecture,
-  not a policy, is what guarantees it cannot alter a record or leak data.
+- **Safety by construction.** Display-first and local-only by design, with every
+  write path explicit, human-confirmed and executed under the user's own Medicus
+  session so Medicus's validation and audit trail always fire — the architecture,
+  not a policy, is what bounds what the software can do.
 - **Stays in the record.** The clinician never leaves Medicus to use it; the panel
   and chips appear alongside the live patient and queue.
 - **Instantly updatable.** New built-in rules and chips propagate to existing
@@ -101,7 +108,7 @@ code-verified capability.
 
 | Capability | Medicus (native EPR) | Medicus Suite (augmentation layer) |
 |---|---|---|
-| Patient record, scheduling, prescribing, messaging | ✅ Core function | — (reads from it; writes nothing) |
+| Patient record, scheduling, prescribing, messaging | ✅ Core function | — (reads from it; user-initiated actions drive Medicus's own controls) |
 | Per-patient drug-monitoring alerts in the record, real time | General prescribing safety | ✅ Sentinel — 25 drug-monitoring rules with interval + source citation, overdue/due-soon chips |
 | QOF register & indicator tracking, current year | General reporting | ✅ 13 registers, 48+ indicators (2025/26), per-patient chips |
 | PINCER / STOPP-START / ACB prompts at point of care | — | ✅ In-record combination chips + importable prescribing-safety library |
@@ -113,19 +120,23 @@ code-verified capability.
 | Longitudinal observation trends with clinical context | Values in record | ✅ Trends — sparklines, KDIGO grid, age/register-derived BP targets |
 | Offline EPR-export record visualiser | — | ✅ Local PDF analysis: continuity indices, eFI, PINCER flags, trends, swim-lane timeline |
 | Practice knowledge base / reference | General docs | ✅ Searchable, practice-owned, categorised reference base |
-| Recall loop management (invite → book → re-test) | Recall tooling | ⚠️ Not yet — stops at chip + Action Pack |
-| Writes back to the record | ✅ | ❌ By design — read-only |
+| Recall loop management (invite → book → re-test) | Recall tooling | ⚠️ Partial — Sweep books a recall task in one click; batch messaging stays Medicus's |
+| Writes back to the record | ✅ | ⚠️ Enumerated user-initiated actions only, via Medicus's own controls (CSN §6.1) — never automatic |
 
 ## Safety posture in one line
 
-Medicus Suite is a **passive display tool**: it reads data already present in Medicus,
-threshold-checks and reorganises it locally, and shows the result. It writes to no
-record, performs no runtime AI inference, transmits no patient data to any external
-service (the only outbound call is a GitHub version check that carries no patient
-data), and makes no clinical decision. Every displayed value must be verified against
-the source record, and all clinical judgement remains the clinician's. The full scope,
-contraindications, and limitations are in
-[`INTENDED-PURPOSE.md`](INTENDED-PURPOSE.md) and [`HAZARD-LOG.md`](HAZARD-LOG.md).
+Medicus Suite is **display-first**: it reads data already present in Medicus,
+threshold-checks and reorganises it locally, and shows the result. Its only writes
+are the enumerated user-initiated actions above, each explicitly confirmed and
+executed under the user's own Medicus session; it performs no runtime AI inference,
+makes no clinical decision, and in its default configuration transmits no patient
+data to any external service (the outbound calls are a GitHub version check and a
+conceptId-only SNOMED retirement lookup, neither carrying patient data; the optional
+Transactional-API read path is off by default and documented in the intended-purpose
+statement). Every displayed value must be verified against the source record, and
+all clinical judgement remains the clinician's. The full scope, contraindications,
+and limitations are in [`INTENDED-PURPOSE.md`](INTENDED-PURPOSE.md) and
+[`HAZARD-LOG.md`](HAZARD-LOG.md).
 
 ## Why it matters
 
@@ -134,5 +145,5 @@ working clinician, with AI as a genuine co-pilot, can ship an agile, end-user-co
 augmentation layer that makes an EPR materially smarter without waiting for the vendor,
 without touching the record, and without moving any patient data. That is a faster,
 safer, less disruptive path to better primary-care tooling than monolithic EPR upgrades —
-and the architecture keeps the safety case simple precisely because it stays read-only,
-local, and transparent.
+and the architecture keeps the safety case simple precisely because it stays
+display-first, local, transparent, and honest about the few write paths it has.
