@@ -212,7 +212,12 @@
   // still coverage-tested: every relationship id except 'other' must have a non-empty entry
   // (test-contact-relationships.js), and every alias key must correspond to a real shipped id.
   // A missing alias means a manual contact's free text simply doesn't get coloured/categorised —
-  // the failure mode is "falls back to 'needs review'", never a wrong category.
+  // the failure mode is "falls back to 'needs review'", never a wrong category. That invariant is
+  // ENFORCED, not just asserted: normaliseFreeText below fails closed on possessive constructions
+  // (isPossessiveConstruction) and only ever matches an alias against the WHOLE remaining text
+  // (matchWholeText). Both guards exist because the earlier any-word scan broke the invariant in
+  // practice — "Son's wife" came back as a confident {baseId:'wife', confidence:0.85}, which is a
+  // WRONG category on a field that gets pre-filled into a real record write, not a missing one.
   const ALIAS_TERMS = {
     husband: ['husband', 'hubby'],
     wife: ['wife'],
@@ -269,14 +274,68 @@
       .trim();
   }
 
-  function escapeRegExp(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Every word that names a relationship — canonical labels plus every shipped alias. Built from
+  // the LIVE data on each call rather than frozen at module load, since the browser path swaps the
+  // real data in asynchronously (see dataOf). 'other' is skipped deliberately: it's the free-text
+  // escape hatch, not a relationship word, so "Other" must never make a phrase look possessive.
+  function relationshipTerms(d) {
+    const terms = new Set();
+    for (const rel of d.relationships) {
+      if (rel.id === 'other') continue;
+      terms.add(normaliseText(rel.label));
+      for (const a of ALIAS_TERMS[rel.id] || []) terms.add(normaliseText(a));
+    }
+    return terms;
   }
 
-  function containsTerm(normalisedText, term) {
-    if (!term) return false;
-    const re = new RegExp('\\b' + escapeRegExp(normaliseText(term)) + '\\b', 'i');
-    return re.test(normalisedText);
+  // isPossessiveConstruction("sons wife") -> true. A possessive names a THIRD party's relative
+  // ("Son's wife", "Mother's carer", "Daughter's friend"), so the relationship word sitting in the
+  // text is the WRONG answer for this contact, not a partial one — the old any-word alias scan
+  // returned {baseId:'wife', confidence:0.85} for "Son's wife" and would have pre-filled that onto
+  // a real record write. Composition is deliberately NOT attempted here: it would need the hub's
+  // identity and gender, and composeViaHub above only composes the hops that are structurally
+  // unconditional and refuses everything else — so this just fails closed to needs-review.
+  // normaliseText has already stripped the apostrophe by the time this runs, so "Son's wife" and
+  // "Sons wife" both arrive as "sons wife"; the shape detected is therefore a relationship-term-
+  // plus-s token FOLLOWED BY at least one more token. A trailing "…s" with nothing after it (a
+  // bare "Sons") is not a possessive and falls through to the ordinary no-match path.
+  function isPossessiveConstruction(raw, d) {
+    const tokens = raw.split(' ').filter(Boolean);
+    if (tokens.length < 2) return false;
+    const terms = relationshipTerms(d);
+    for (let i = 0; i < tokens.length - 1; i++) {
+      const t = tokens[i];
+      if (t.length > 1 && t.charAt(t.length - 1) === 's' && terms.has(t.slice(0, -1))) return true;
+    }
+    return false;
+  }
+
+  // matchWholeText(remainder, modifierId, d) -> a result for an exact WHOLE-STRING match of
+  // `remainder` against a canonical label (confidence 1) or a shipped alias (0.85), else null.
+  // Whole-string, never a per-word scan: an alias that merely APPEARS somewhere inside a longer
+  // phrase says nothing reliable about what that phrase means as a whole ("Carer for his mother"
+  // is not a mother), and a confidently wrong category here lands on a real record write.
+  function matchWholeText(remainder, modifierId, d) {
+    if (!remainder) return null;
+    const build = (relId, confidence) => {
+      const validModIds = validModifiersForBase(relId, d);
+      return {
+        baseId: relId,
+        modifierId: modifierId && validModIds.includes(modifierId) ? modifierId : null,
+        confidence,
+      };
+    };
+    // Exact canonical label match first (highest confidence).
+    for (const rel of d.relationships) {
+      if (normaliseText(rel.label) === remainder) return build(rel.id, 1);
+    }
+    // Alias match.
+    for (const rel of d.relationships) {
+      const aliases = ALIAS_TERMS[rel.id];
+      if (!aliases) continue;
+      if (aliases.some((a) => normaliseText(a) === remainder)) return build(rel.id, 0.85);
+    }
+    return null;
   }
 
   // normaliseFreeText(text) -> { baseId, modifierId, confidence } | null
@@ -287,43 +346,26 @@
     const raw = normaliseText(text);
     if (!raw) return null;
 
-    // Strip a leading modifier word/prefix, if present, and remember which one.
-    let modifierId = null;
-    let remainder = raw;
+    // Fail closed on someone else's relative before attempting any match at all.
+    if (isPossessiveConstruction(raw, d)) return null;
+
+    // Match the WHOLE text first, BEFORE any modifier stripping. Order matters: several shipped
+    // aliases are multi-word phrases that contain a modifier word, and stripping first destroys
+    // them — "other half" (a partner alias) lost its "half" to the Half- stripper, leaving "other",
+    // which then exact-matched the unrelated "Other" label at confidence 1. Matching intact first
+    // is what makes those aliases reachable at all.
+    const direct = matchWholeText(raw, null, d);
+    if (direct) return direct;
+
+    // No whole-text match — strip a modifier word/prefix and re-match the remainder. EVERY
+    // applicable modifier is tried rather than breaking on the first whose word merely appears, so
+    // a phrase containing a modifier word without being modified by it can still resolve. Only one
+    // modifier is ever applied to the result — Step/Half are mutually exclusive by tier design.
     for (const [modId, re] of Object.entries(MODIFIER_WORD_RE)) {
-      const validTiers = getModifiers(d).find((m) => m.id === modId);
-      if (!validTiers) continue;
-      if (re.test(remainder)) {
-        modifierId = modId;
-        remainder = remainder.replace(re, '').trim();
-        break; // only one modifier can apply — Step/Half are mutually exclusive by tier design
-      }
-    }
-
-    // Exact canonical label match first (highest confidence).
-    for (const rel of d.relationships) {
-      if (normaliseText(rel.label) === remainder) {
-        const validModIds = validModifiersForBase(rel.id, d);
-        return {
-          baseId: rel.id,
-          modifierId: modifierId && validModIds.includes(modifierId) ? modifierId : null,
-          confidence: 1,
-        };
-      }
-    }
-
-    // Alias match.
-    for (const rel of d.relationships) {
-      const aliases = ALIAS_TERMS[rel.id];
-      if (!aliases) continue;
-      if (aliases.some((a) => containsTerm(remainder, a) || normaliseText(a) === remainder)) {
-        const validModIds = validModifiersForBase(rel.id, d);
-        return {
-          baseId: rel.id,
-          modifierId: modifierId && validModIds.includes(modifierId) ? modifierId : null,
-          confidence: 0.85,
-        };
-      }
+      if (!getModifiers(d).some((m) => m.id === modId)) continue;
+      if (!re.test(raw)) continue;
+      const match = matchWholeText(raw.replace(re, '').trim(), modId, d);
+      if (match) return match;
     }
 
     return null;
@@ -445,24 +487,33 @@
 
   // addressTokens(address) — flattens every address-LINE-ish field (line1/2/3, locality,
   // administrativeArea — postalCode and country are handled separately, see
-  // isLikelyDuplicateAddress) into a bag of words, SPLIT into numeric and alphabetic tokens.
+  // isLikelyDuplicateAddress) into a bag of words, SPLIT into three token classes.
   // Flattening is what makes a field-boundary difference stop mattering: "Flat 1, 26 High Street"
   // as a single line1, vs "Flat 1" / "26 High Street" as two separate lines, produce the IDENTICAL
-  // token sets either way. The numeric/alphabetic split matters for a different reason — see
-  // isLikelyDuplicateAddress's own comment on why a differing NUMBER can never be treated the same
-  // as a differing WORD.
+  // tokens either way. The class split matters for a different reason — see
+  // isLikelyDuplicateAddress's own comment on why a differing NUMBER or UNIT LETTER can never be
+  // treated the same as a differing WORD.
+  //   - numbers: any token CONTAINING a digit (not merely /^\d+$/) — "26", "1a", "3b" are all
+  //     house/flat designators, and an alphanumeric one distinguishes two real addresses exactly as
+  //     strongly as a bare numeric one does. Kept as an ORDERED sequence, not a set.
+  //   - units: a lone letter token — "Flat A" / "Flat B", the other way a unit inside a single
+  //     building gets written. Also an ordered sequence.
+  //   - words: everything else, as a Set — the only class scored fuzzily.
   function addressTokens(address) {
     const text = ADDRESS_LINE_FIELDS.map((f) => (address && address[f]) || '').join(' ');
     const all = normaliseAddressText(text).split(' ').filter(Boolean);
+    const isNumberish = (t) => /\d/.test(t);
+    const isUnitLetter = (t) => /^[a-z]$/.test(t);
     return {
-      numbers: new Set(all.filter((t) => /^\d+$/.test(t))),
-      words: new Set(all.filter((t) => !/^\d+$/.test(t))),
+      numbers: all.filter(isNumberish),
+      units: all.filter(isUnitLetter),
+      words: new Set(all.filter((t) => !isNumberish(t) && !isUnitLetter(t))),
     };
   }
 
-  function setsEqual(a, b) {
-    if (a.size !== b.size) return false;
-    for (const x of a) if (!b.has(x)) return false;
+  function sequencesEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
     return true;
   }
 
@@ -488,15 +539,30 @@
   //     only) — never grouped on text similarity alone, since a genuinely different address a few
   //     doors down could otherwise share most of its words with this one.
   //   - Either postcode missing/blank -> never a duplicate (too uncertain to risk it).
-  //   - The two addresses' NUMERIC tokens (house/flat numbers) must match EXACTLY, not just
-  //     overlap — found live while testing this: with a short address (5-7 words total), a single
+  //   - The two addresses' NUMBER-class tokens (house/flat designators) must match EXACTLY — the
+  //     same tokens in the same ORDER, not merely the same set — and so must their UNIT-letter
+  //     tokens. Found live while testing this: with a short address (5-7 words total), a single
   //     differing word barely moves a pure Jaccard score, so "Flat 1" vs "Flat 2" at the same
   //     postcode was scoring high enough to falsely match. A number is what actually distinguishes
   //     one real address from its next-door neighbour or a different flat in the same building —
   //     unlike a stray extra WORD (e.g. "London"), a differing NUMBER is never safe to treat as
   //     noise, so it's checked separately and strictly rather than folded into the same fuzzy score.
-  //   - Only once numbers match exactly does the rest of the address text (word tokens) need to
-  //     overlap heavily.
+  //     Three further false-positive classes, each verified by execution, are why that check is now
+  //     as WIDE (what counts as a designator) and as STRICT (how they're compared) as it is:
+  //       * an ALPHANUMERIC designator is still a designator — under the old /^\d+$/ test "Flat 1a"
+  //         vs "Flat 1b" put "1a"/"1b" into the fuzzy word bag, where they diluted away to a match.
+  //         Any token containing a digit is number-class now.
+  //       * a SET comparison ignores WHICH number went where — "12 High Street, Flat 3" vs
+  //         "3 High Street, Flat 12" both reduce to {3, 12} and matched. The ordered sequence is
+  //         compared instead. The cost is deliberate and fail-closed: two copies of one address
+  //         that genuinely reorder their lines so the numbers swap positions are now missed rather
+  //         than risked, and a missed duplicate is the far smaller problem here.
+  //       * a lone LETTER is the other way a unit inside one building is written — "Flat A" vs
+  //         "Flat B" in a long address diluted to 0.75, over the 0.7 threshold, and matched. Unit
+  //         letters are their own class and must agree exactly; agreeing on both sides is of course
+  //         not a difference and never blocks a match.
+  //   - Only once numbers and unit letters match exactly does the rest of the address text (word
+  //     tokens) need to overlap heavily.
   function isLikelyDuplicateAddress(a, b) {
     if (!a || !b) return false;
     const pcA = normalisePostcode(a.postalCode);
@@ -504,7 +570,8 @@
     if (!pcA || !pcB || pcA !== pcB) return false;
     const ta = addressTokens(a);
     const tb = addressTokens(b);
-    if (!setsEqual(ta.numbers, tb.numbers)) return false;
+    if (!sequencesEqual(ta.numbers, tb.numbers)) return false;
+    if (!sequencesEqual(ta.units, tb.units)) return false;
     return tokenOverlap(ta.words, tb.words) >= DUPLICATE_TOKEN_THRESHOLD;
   }
 

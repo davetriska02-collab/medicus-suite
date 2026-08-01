@@ -190,6 +190,56 @@ console.log('5: normaliseFreeText');
     'unmatched free text returns null (routes to needs-review, never guessed)'
   );
   check(CR.normaliseFreeText('') === null, 'empty text returns null');
+
+  // ── Adversarial: the stated invariant is "falls back to needs review, never a WRONG category" ──
+  // A possessive names a THIRD party's relative, so the relationship word present in the text is
+  // the wrong answer for this contact, not a partial one. These all used to return a confident
+  // (0.85) category that would be pre-filled onto a real record write.
+  check(
+    CR.normaliseFreeText("Son's wife") === null,
+    '"Son\'s wife" -> null (needs review), never a confident "wife" — a possessive names someone else\'s relative'
+  );
+  check(
+    CR.normaliseFreeText("Mother's carer") === null,
+    '"Mother\'s carer" -> null (needs review), never a confident "carer"'
+  );
+  check(
+    CR.normaliseFreeText("Daughter's friend") === null,
+    '"Daughter\'s friend" -> null (needs review), never a confident "friend"'
+  );
+  check(
+    CR.normaliseFreeText('Sons wife') === null,
+    'the apostrophe-less possessive ("Sons wife") is caught too — normaliseText strips the apostrophe before matching'
+  );
+  check(
+    CR.normaliseFreeText('Carer for his mother') === null,
+    'an alias merely APPEARING inside a longer phrase is not a match — the alias must be the whole remainder'
+  );
+
+  // "Other half" is a shipped partner alias (rules/contact-relationships.json). It was unreachable:
+  // the Half- modifier stripper ran first, ate "half", and left "other" — which then exact-matched
+  // the unrelated "Other" label at confidence 1.
+  const otherHalf = CR.normaliseFreeText('Other half');
+  check(otherHalf && otherHalf.baseId === 'partner', '"Other half" resolves to partner, as the shipped alias intends');
+  check(
+    otherHalf && otherHalf.modifierId === null,
+    '"Other half" carries no Half- modifier — the word is part of the alias'
+  );
+  check(CR.normaliseFreeText('Other').baseId === 'other', 'plain "Other" still exact-matches the Other label');
+
+  // Same root cause as "Other half": the any-word scan let an EARLIER-indexed relationship win on a
+  // substring of a longer shipped alias — "Foster mother" matched mother's alias before ever
+  // reaching foster-carer's own "foster mother" entry.
+  check(
+    CR.normaliseFreeText('Foster mother').baseId === 'foster-carer',
+    '"Foster mother" resolves to foster-carer, not mother — the whole-remainder rule stops a substring winning'
+  );
+
+  // Single tokens that merely look possessive must not be over-caught.
+  check(
+    CR.normaliseFreeText('Wife').baseId === 'wife',
+    'a plain "Wife" still matches — possessive detection needs a following word'
+  );
 }
 
 // ============================================================
@@ -428,6 +478,90 @@ console.log('10: isLikelyDuplicateAddress / findDuplicateAddressGroups');
   );
 
   check(CR.isLikelyDuplicateAddress(null, exact1) === false, 'a missing address is a safe no-op, not a throw');
+
+  // ── Three further false-positive classes, each verified by execution before being fixed ────────
+  // A deleted address is a real loss, so every one of these must fail closed.
+
+  // 1. An ALPHANUMERIC flat designator is still a designator. Under the old /^\d+$/ numeric test,
+  //    "1a"/"1b" fell into the fuzzy WORD bag and diluted away to a match.
+  const flat1a = {
+    line1: 'Flat 1a',
+    line2: 'Rosewood Court',
+    line3: 'Camden',
+    locality: 'London',
+    postalCode: 'NW1 1AA',
+  };
+  const flat1b = {
+    line1: 'Flat 1b',
+    line2: 'Rosewood Court',
+    line3: 'Camden',
+    locality: 'London',
+    postalCode: 'NW1 1AA',
+  };
+  check(
+    CR.isLikelyDuplicateAddress(flat1a, flat1b) === false,
+    'an alphanumeric flat designator ("Flat 1a" vs "Flat 1b") is a real difference, not fuzzy word noise'
+  );
+
+  // 2. A SET comparison of numbers ignores WHICH number went where — both of these reduce to
+  //    {3, 12}, two genuinely different addresses at the same postcode.
+  const numbersSwapped1 = { line1: '12 High Street', line2: 'Flat 3', postalCode: 'AB1 2CD' };
+  const numbersSwapped2 = { line1: '3 High Street', line2: 'Flat 12', postalCode: 'AB1 2CD' };
+  check(
+    CR.isLikelyDuplicateAddress(numbersSwapped1, numbersSwapped2) === false,
+    'the same numbers in different positions ("12 High Street, Flat 3" vs "3 High Street, Flat 12") are not a duplicate'
+  );
+
+  // 3. A lone LETTER is the other way a unit inside one building is written — in a long address it
+  //    diluted to 0.75 in the Jaccard, over the 0.7 threshold.
+  const unitLetterA = {
+    line1: 'Flat A',
+    line2: 'Riverside Court',
+    line3: '12 High Street',
+    locality: 'London',
+    postalCode: 'NW1 1AA',
+  };
+  const unitLetterB = {
+    line1: 'Flat B',
+    line2: 'Riverside Court',
+    line3: '12 High Street',
+    locality: 'London',
+    postalCode: 'NW1 1AA',
+  };
+  check(
+    CR.isLikelyDuplicateAddress(unitLetterA, unitLetterB) === false,
+    'a single-letter unit designator ("Flat A" vs "Flat B") must match exactly — it cannot dilute in the Jaccard'
+  );
+
+  // ── …and the fix must not overtighten: genuine duplicates still match ─────────────────────────
+  // The SAME address, reformatted — different punctuation, different case, split across a different
+  // number of lines, and its two locality-ish lines recorded in the opposite order.
+  const reformatted1 = { line1: 'Flat 1, 26 High Street,', line2: 'Teddington, London', postalCode: 'TW11 0AU' };
+  const reformatted2 = {
+    line1: 'FLAT 1',
+    line2: '26 HIGH STREET',
+    line3: 'London',
+    locality: 'Teddington',
+    postalCode: 'tw11 0au',
+  };
+  check(
+    CR.isLikelyDuplicateAddress(reformatted1, reformatted2) === true,
+    'the same address reformatted (punctuation, case, line splits, reordered locality lines) is still a duplicate'
+  );
+
+  // A unit designator that AGREES on both sides is not a difference — it must not block a match.
+  const unitLetterSameA = unitLetterA;
+  const unitLetterSameB = {
+    line1: 'Flat A, Riverside Court',
+    line2: '12 High Street',
+    line3: 'London',
+    administrativeArea: 'Camden',
+    postalCode: 'NW1 1AA',
+  };
+  check(
+    CR.isLikelyDuplicateAddress(unitLetterSameA, unitLetterSameB) === true,
+    'a matching unit designator plus one extra locality token is still recognised as the same address'
+  );
 
   // findDuplicateAddressGroups over a whole patientAddresses-shaped array.
   const patientAddresses = [
