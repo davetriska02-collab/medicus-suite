@@ -37,14 +37,82 @@
 
   const ContactRelationships = loadContactRelationships();
 
+  function loadNameDerivations() {
+    if (typeof require === 'function') {
+      try {
+        // eslint-disable-next-line global-require
+        return require('./name-derivations.js');
+      } catch (e) {
+        /* not resolvable under this module system/path — fall through to browser hook */
+      }
+    }
+    if (typeof global !== 'undefined' && global.NameDerivations) {
+      return global.NameDerivations;
+    }
+    return null;
+  }
+
+  const NameDerivations = loadNameDerivations();
+
+  // foldForCompare(s) -> s with Unicode combining marks stripped, for EQUALITY comparisons only.
+  // GP2GP imports and hand-typed manual contacts routinely drop diacritics (no accented-input
+  // keyboard, straight ASCII transliteration), so "Nováková" and "Novakova" — the exact scenario
+  // this module's name handling exists for — are the same person and must compare equal rather
+  // than as two unrelated tokens. Kept local (a two-line NFD strip) rather than reaching into
+  // NameDerivations, so token equality still folds when that module isn't loaded.
+  function foldForCompare(s) {
+    return String(s == null ? '' : s)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  // tokensEqual(a, b) -> the same token modulo diacritics. This is EQUALITY, not derivation: it is
+  // safe for every token position, including given names.
+  function tokensEqual(a, b) {
+    if (a === b) return true;
+    const fa = foldForCompare(a);
+    return !!fa && fa === foldForCompare(b);
+  }
+
+  // surnameTokensMatch(a, b) -> tokensEqual OR a recognised Balto-Slavic gendered-surname pairing
+  // (NameDerivations.isGenderedSurnameMatch), so a spelling difference caused only by grammatical
+  // gender marking (Kowalski/Kowalska, Novák/Nováková...) doesn't register as a mismatch.
+  //
+  // SURNAME POSITION ONLY — this is applied solely to the last token of each name, never to given
+  // names. Gendered marking is a property of surnames; running it over every token meant a given
+  // name was tested against the same morphology and "Martina Brown" vs "Martin Brown" scored 0.9
+  // on the name signal, which with a shared address badged a SIBLING as a "strong" match for the
+  // manual contact. Given names are compared by fold-equality alone. Falls back to plain equality
+  // when NameDerivations isn't loaded. See engine/name-derivations.js's own header.
+  function surnameTokensMatch(a, b) {
+    if (tokensEqual(a, b)) return true;
+    return !!(NameDerivations && NameDerivations.isGenderedSurnameMatch(a, b));
+  }
+
   // ── Name similarity — token-Jaccard, same technique as shared/knowledge-utils.js's findSimilar ──
 
   const NAME_STOPWORDS = new Set(['mr', 'mrs', 'miss', 'ms', 'mx', 'dr', 'prof']);
 
+  // Unicode-letter-aware (\p{L}), not just a-z: the previous ASCII-only regex silently shredded
+  // any accented name into meaningless fragments before comparison ever ran — e.g. "Björn
+  // Nováková" became "bj rn nov kov", every accented character treated as a token separator.
+  // Found while building non-British name-derivation matching (gendered Balto-Slavic surnames,
+  // Nordic/Slavic patronymics — see engine/name-derivations.js) — those features are pointless if
+  // the names they're meant to help match never survive this step intact. `.toLowerCase()` is
+  // already Unicode-correct in JS (handles diacritics properly); only the character class needed
+  // widening. Punctuation/apostrophes ("O'Brien") still fold to a space exactly as before.
+  //
+  // `.normalize('NFC')` FIRST, because \p{L} does not match \p{M}: an accented name in DECOMPOSED
+  // form (base letter + separate combining mark — what some GP2GP payloads and macOS-originated
+  // text actually carry) has its combining marks punched out to spaces here, shredding the token
+  // exactly the way the ASCII-only regex used to. The same name in NFD vs NFC scored 0.25 against
+  // itself. Composing first makes every input form tokenise identically; it is a no-op for the
+  // already-composed and pure-ASCII cases.
   function normaliseName(s) {
     const text = String(s || '')
+      .normalize('NFC')
       .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, ' ')
+      .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
       .replace(/\s+/g, ' ')
       .trim();
     let tokens = text.split(' ').filter((t) => t && !NAME_STOPWORDS.has(t));
@@ -80,14 +148,19 @@
   // point: the previous raw-substring test ('john smith'.includes('smith')) also fired for 'Ann'
   // inside 'Annette' and 'Rose' inside 'Ambrose', scoring unrelated people at the top non-exact
   // tier.
+  // Gendered-surname derivation is allowed ONLY where the last token of one name meets the last
+  // token of the other — see surnameTokensMatch. Everywhere else it is fold-equality.
   function tokenContainment(tokensA, tokensB) {
     const a = containmentTokens(tokensA);
     const b = containmentTokens(tokensB);
     const shorter = a.length <= b.length ? a : b;
     const longer = a.length <= b.length ? b : a;
     if (shorter.length < MIN_CONTAINMENT_TOKENS) return false;
-    const longerSet = new Set(longer);
-    return shorter.every((t) => longerSet.has(t));
+    return shorter.every((t, i) =>
+      longer.some((lt, j) =>
+        i === shorter.length - 1 && j === longer.length - 1 ? surnameTokensMatch(t, lt) : tokensEqual(t, lt)
+      )
+    );
   }
 
   // nameSimilarity(a, b) -> 0..1 (exact -> 1, whole-token containment -> 0.9, else Jaccard token
@@ -97,12 +170,33 @@
     const nb = normaliseName(b);
     if (!na.text || !nb.text) return 0;
     if (na.text === nb.text) return 1;
+    // Fold-equal is EXACT: "Anna Nováková" and "Anna Novakova" are one person whose accents one
+    // system dropped, and this is the headline case the module's name handling exists for. (The
+    // accent-STRICT rule in name-derivations.js is about *derivation* — inferring a family link
+    // between two DIFFERENT strings from a single accented character, where folding "ý"/"á" to
+    // "y"/"a" would misfire on Kennedy/Murphy. Folding two otherwise-identical strings together
+    // carries no such risk.)
+    if (foldForCompare(na.text) === foldForCompare(nb.text)) return 1;
     if (tokenContainment(na.tokens, nb.tokens)) return CONTAINMENT_SCORE;
-    const setA = new Set(na.tokens);
-    const setB = new Set(nb.tokens);
+    const setA = Array.from(new Set(na.tokens));
+    const setB = Array.from(new Set(nb.tokens));
+    const lastA = na.tokens[na.tokens.length - 1];
+    const lastB = nb.tokens[nb.tokens.length - 1];
     let inter = 0;
-    for (const t of setA) if (setB.has(t)) inter++;
-    const union = setA.size + setB.size - inter;
+    const usedB = new Set();
+    for (const t of setA) {
+      // findIndex, not setB.has(t): fold-equality and a surname-position gendered pairing both
+      // need an actual comparison against each candidate token, not just a Set lookup — usedB
+      // stops the same B token being consumed by two different A tokens.
+      const matchIdx = setB.findIndex(
+        (bt, i) => !usedB.has(i) && (t === lastA && bt === lastB ? surnameTokensMatch(t, bt) : tokensEqual(t, bt))
+      );
+      if (matchIdx !== -1) {
+        inter++;
+        usedB.add(matchIdx);
+      }
+    }
+    const union = setA.length + setB.length - inter;
     return union > 0 ? inter / union : 0;
   }
 
@@ -245,6 +339,39 @@
     return String(manualEmail).trim().toLowerCase() === String(candidateEmail).trim().toLowerCase() ? 1 : 0;
   }
 
+  // patronymicFatherBonus(indexPatientName, candidate) -> 0 | PATRONYMIC_NAME_SIGNAL. In a patronymic naming system
+  // (Nordic, East Slavic) a father shares NO surname with his own child at all — Björn's son is
+  // "Björnsson", not "Björn" — so bestNameSignal above has nothing to go on for these families no
+  // matter what the manual contact's free text says. This derives the implied father's first name
+  // directly from the INDEX PATIENT's own name (their surname, or a Russian-style patronymic
+  // middle name) and checks it against the CANDIDATE's own first name instead — independent of
+  // the manual contact entirely. Only ever called when the relationship being guessed is
+  // specifically 'father' (see scoreCandidate) — patronymics encode the father's name, never the
+  // mother's, in both naming systems this covers.
+  // ...and never the mother's, which is also why a candidate RECORDED as female is never given it:
+  // the derivation's whole claim is "this person is the father named inside the child's own name".
+  // A recorded gender that contradicts that isn't the soft shrug genderConsistency applies to a
+  // free-text relationship word — it contradicts the derivation itself, so the derivation simply
+  // has nothing to say and abstains. (An UNRECORDED gender still passes: absence of evidence is not
+  // evidence of absence, and the cap below keeps what it can earn bounded either way.)
+  //
+  // The value it returns is capped at CONTAINMENT_SCORE — a derivation is an inference about a
+  // naming system, and must never outrank the hard evidence of an actual whole-token name match.
+  // At a flat 1.0 it sat ABOVE exact containment and reached "strong" (70) on its own, with the
+  // three neutral-by-default signals (age 8 + gender 7) doing the rest and nothing corroborating it.
+  const PATRONYMIC_NAME_SIGNAL = CONTAINMENT_SCORE;
+
+  function patronymicFatherBonus(indexPatientName, candidate) {
+    if (!NameDerivations || !indexPatientName || !candidate || !candidate.displayName) return 0;
+    if (ContactRelationships && ContactRelationships.genderBucket(candidate.genderIdentity) === 'f') return 0;
+    const patronymic = NameDerivations.extractPatronymicFather(indexPatientName);
+    if (!patronymic) return 0;
+    const candidateFirstToken = String(candidate.displayName).trim().split(/\s+/)[0];
+    return NameDerivations.parentNameLikelyMatches(patronymic.fatherFirstName, candidateFirstToken)
+      ? PATRONYMIC_NAME_SIGNAL
+      : 0;
+  }
+
   // ── Scoring ───────────────────────────────────────────────────────────────────────────────────
 
   const WEIGHTS = {
@@ -256,24 +383,64 @@
     email: 5,
   };
 
+  const STRONG_SCORE = 70;
+  const POSSIBLE_SCORE = 40;
+
+  // A patronymic-derived name signal is the only "name match" in the model that isn't actually a
+  // comparison of the two names in front of us — it's an inference from the INDEX patient's name
+  // about a naming system, against a candidate whose recorded name may share nothing with the
+  // manual contact at all. On its own that must not be enough for a "strong" badge, whatever the
+  // neutral defaults add up to: something else has to agree. Any of address / phone / email / a
+  // real textual name similarity counts as corroboration; without one, the final score is held
+  // just below the strong threshold, so the candidate is still surfaced and still ranked — at
+  // "possible", which is what a single unconfirmed inference is worth.
+  const PATRONYMIC_UNCORROBORATED_MAX_SCORE = STRONG_SCORE - 1;
+  const PATRONYMIC_CORROBORATING_NAME_SIGNAL = 0.5;
+
   // scoreCandidate(manualContact, candidate, opts?) -> { score, tier, signals }
   //   manualContact: { name: {title?,first,middle?,last} | string, relationshipText?, phones?: {home?,mobile?,work?}, email? }
   //   candidate:     { patientId, displayName, formerNames?: string[], age?: number, genderIdentity?: string,
   //                    atSameAddress?: boolean, phones?: {home?,mobile?,work?}, email?: string }
-  //   opts:          { manualRelationshipGuess?: { baseId, modifierId }, indexPatientAge?: number }
+  //   opts:          { manualRelationshipGuess?: { baseId, modifierId }, indexPatientAge?: number, indexPatientName?: string }
   function scoreCandidate(manualContact, candidate, opts = {}) {
     const manualName = fullName(manualContact && manualContact.name);
     const baseId = opts.manualRelationshipGuess && opts.manualRelationshipGuess.baseId;
 
-    const nameSignal = bestNameSignal(manualName, candidate);
+    const textualNameSignal = bestNameSignal(manualName, candidate);
+    let nameSignal = textualNameSignal;
+    let patronymicDerived = false;
+    if (baseId === 'father') {
+      const bonus = patronymicFatherBonus(opts.indexPatientName, candidate);
+      if (bonus > nameSignal) {
+        nameSignal = bonus;
+        patronymicDerived = true;
+      }
+    }
     const addressSignal = candidate && candidate.atSameAddress ? 1 : 0;
     const ageSignal = baseId ? agePlausibility(baseId, candidate && candidate.age, opts.indexPatientAge) : 1;
     const genderSignal = baseId ? genderConsistency(baseId, candidate && candidate.genderIdentity) : 1;
     const phoneSignal = phoneOverlap(manualContact && manualContact.phones, candidate && candidate.phones);
     const emailSignal = emailMatch(manualContact && manualContact.email, candidate && candidate.email);
 
+    const corroborated =
+      addressSignal === 1 ||
+      phoneSignal === 1 ||
+      emailSignal === 1 ||
+      textualNameSignal >= PATRONYMIC_CORROBORATING_NAME_SIGNAL;
+
+    // The name entry gains two ADDITIVE fields when (and only when) its value came from the
+    // patronymic derivation rather than from comparing the two names — so a UI can caveat it
+    // ("derived from the patient's own name, nothing else agrees") instead of presenting it as an
+    // ordinary name match. Existing consumers read id/weight/value and are untouched; the fields
+    // are simply absent on every other signal and on an ordinary name match.
+    const nameEntry = { id: 'name', weight: WEIGHTS.name, value: nameSignal };
+    if (patronymicDerived) {
+      nameEntry.derivation = 'patronymic';
+      nameEntry.corroborated = corroborated;
+    }
+
     const signals = [
-      { id: 'name', weight: WEIGHTS.name, value: nameSignal },
+      nameEntry,
       { id: 'address', weight: WEIGHTS.address, value: addressSignal },
       { id: 'age', weight: WEIGHTS.age, value: ageSignal },
       { id: 'gender', weight: WEIGHTS.gender, value: genderSignal },
@@ -281,8 +448,11 @@
       { id: 'email', weight: WEIGHTS.email, value: emailSignal },
     ];
 
-    const score = Math.round(signals.reduce((sum, s) => sum + s.weight * s.value, 0));
-    const tier = score >= 70 ? 'strong' : score >= 40 ? 'possible' : 'weak';
+    let score = Math.round(signals.reduce((sum, s) => sum + s.weight * s.value, 0));
+    if (patronymicDerived && !corroborated) {
+      score = Math.min(score, PATRONYMIC_UNCORROBORATED_MAX_SCORE);
+    }
+    const tier = score >= STRONG_SCORE ? 'strong' : score >= POSSIBLE_SCORE ? 'possible' : 'weak';
 
     return { score, tier, signals };
   }

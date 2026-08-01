@@ -2,6 +2,324 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.210.0] — 2026-08-01
+
+### Contacts Management follow-ups: NOK/CC drag-flagging, name derivations, remove-from-tree (PR #250)
+
+Merges Nick's follow-up branch (developed as internal v3.208.2–v3.208.7; renumbered — that
+range was passed on main). All live-tested against real data. Original per-session entries
+below, followed by the pre-merge review fixes applied on merge.
+
+Review fixes applied on merge (two independent pre-merge reviews, engine findings
+verified by execution; 111 new red-first regression assertions — `test-name-derivations.js`
+48→110, `test-contact-match.js` 62→111):
+
+- **Wrong-record flag write via event bubbling** — the NOK/copy-correspondence drop
+  handlers now stop propagation and the slot-zone fallback yields to cards, so a token
+  dropped on a grandparent card no longer *also* writes the flag to the enclosing
+  parent's relationship (a different patient's record, silently). Nearest zone wins.
+- **Remove-from-tree is now confirmed and repairable** — the drag no longer silently
+  overwrites both relationship records to "Family member": an explicit confirm states
+  the two-record consequence first, and the re-drop repair path actually reaches the
+  reciprocal for pre-existing links (downgrade marker + placeholder-text detection
+  drive `reciprocalUpdateId`, with a bounded id re-resolve and an honest summary when
+  the reverse half can't be repaired). The partial-failure message now says which side
+  landed.
+- **Resumable-retry regression fixed** — after a successful reciprocal *update* plus a
+  failed cleanup step, retry re-entered the reverse-*create* branch (duplicate
+  relationship on the off-screen record, or a wedged retry). Branching now follows the
+  operation's shape (`reciprocalUpdateId` presence).
+- **Stale drag payload** — a cancelled token drag no longer leaves a live payload that
+  a later foreign drop could turn into a flag write (`dragend` reset + drops validate
+  the event's own `dataTransfer` payload).
+- **Cross-write interleave guard** (`anyWriteInFlight()`) — a flag write and a confirm
+  on the same record can no longer interleave their read-modify-write sequences; the
+  refresh control now honours the unfinished-merge guard; a no-op flag drop no longer
+  dismisses an unrelated success panel.
+- **Name-derivation false positives closed** — the gendered-surname prefix fallback
+  requires a recognised counterpart ending per language family (disabled for
+  Polish/East-Slavic where both forms always carry a suffix), `-in`/`-ina` needs a
+  5+ character stem, and derivations apply only to the surname-position token:
+  Martin/Martina Brown drops from 85 "strong" to 38 "weak", Colin/Collins,
+  Griffin/Griffiths, George/Georgina etc. all abstain, while Kowalski/Kowalska,
+  Nováková/Novák, Ivanov/Ivanova and the Lithuanian forms still match.
+- **Patronymic father bonus hardened** — capped at 0.9 (never above an exact match),
+  clamped below "strong" without corroboration (address/phone/email/textual name),
+  never fires for a recorded-female candidate, 3-character stems only when
+  consonant-final (Crosson/Classon abstain; Jónsson/Persson/Ivanovich still derive),
+  and the signal carries `derivation`/`corroborated` labels for the UI.
+- **Accent handling actually works now** — fold-equality in token comparison
+  (Nováková vs Novakova and Müller vs Muller score 1.0 instead of 0.33 — the module's
+  own headline GP2GP case) and `normaliseName` normalises to NFC first (decomposed
+  input was still being shredded).
+
+### (internal v3.208.7) — 2026-08-01
+
+#### Contacts Management — a write error could go completely invisible
+
+Live-test report: after v3.208.6's fix, a removed relative still showed the old relationship text
+("Brother") with no visible sign anything had gone wrong. Root cause, found by tracing
+`renderConfirmPanel`'s own render order rather than guessing: that function checks `cs.doneSummary`
+FIRST, unconditionally, before ever looking at `cs.workingError` — so if an earlier confirm this
+session left `doneSummary` set (the normal "done" success panel), a completely unrelated LATER
+action's error would be set correctly in `workingError` but never actually rendered, silently
+masked behind the stale success panel. `tryAssign` (drag-to-a-slot) already knew to clear
+`doneSummary`/`reverseManualMatch`/`reverseManualMatchError` at its own start for exactly this
+reason — `setContactFlag` and `removeCardFromTree` never got the same treatment, so any Medicus
+write failure in either was invisible whenever a prior confirm this session had left a done panel
+showing. Both now clear the same three fields at their own start, matching `tryAssign`'s
+established pattern.
+
+### (internal v3.208.6) — 2026-08-01
+
+#### Contacts Management — remove-from-tree downgrade wasn't actually firing
+
+Live-test bug report: v3.208.5's "downgrade the reciprocal to Family member on removal" didn't
+change either the hub patient's or the relative's own record. Root cause: the previous build only
+downgraded the RECIPROCAL side, and only when `reciprocalRelationshipId` had already been cached
+from a same-session fresh link creation — the far more common real case (an already-linked contact
+dropped in the wrong slot) never created a fresh reverse link this session at all, so nothing was
+ever cached and the whole block was skipped silently.
+
+- `removeCardFromTree` now downgrades BOTH sides. Forward (`lc.relationshipId`, known for
+  essentially any placed card — set at page-load for a pre-existing link, or resolved by a bounded
+  follow-up fetch for one created this session) and reciprocal (resolved ON DEMAND at removal time
+  if not already cached, rather than only ever being learned from a same-session write) both get
+  their relationship text overwritten to "Family member" via the same full-replace
+  `changePatientContact` pattern used everywhere else in this canvas.
+- New shared `updateRelationshipText(apiBase, relationshipId, targetLink, relationshipText)` —
+  extracted rather than tripling the GET-then-full-replace-POST body construction inline a third
+  time (setContactFlag's own copy is left alone — different semantics, changes NOK/CC not text).
+- The forward downgrade also updates the card's own local `baseId`/`modifierId`/`relationshipText`/
+  `colour` in place — since "Family member" doesn't parse to any recognised relationship,
+  `relationshipKnown` correctly becomes false afterward, so a later re-drop shows the picker again
+  rather than silently reapplying the old (removed) classification.
+
+### (internal v3.208.5) — 2026-08-01
+
+#### Contacts Management — remove-from-tree follow-up: styling, reciprocal cleanup, refresh
+
+Live-test follow-up to v3.208.4's remove-from-tree feature, three asks.
+
+- **Styling**: `.ms-cv-remove-zone` restyled to match the tree's own "Drop here" boxes — sized like
+  a single tree-branch-item (150-240px) rather than a full-width bar, dashed border, centred
+  italic text — kept red-tinted as agreed. Label shortened to fit the smaller box ("Drop here to
+  remove from tree"), fuller reassurance ("their link isn't deleted...") moved to a hover tooltip.
+- **Reciprocal relationship handling on removal**: clarified with the user that "remove the
+  reciprocal relationship we just wrote back" meant overwriting its relationship TEXT with a
+  generic placeholder ("Family member") — NOT deleting the relationship record, and NOT
+  unmerging back to a manual contact. `removeCardFromTree` is now async: when a reverse link was
+  created THIS session as part of confirming the card into its (wrong) slot, dragging it to the
+  remove zone also does a real Medicus write, overwriting the reciprocal's relationship text via
+  `changePatientContact` (same full-replace discipline as every other write here — every
+  manual-contact-only field null, `isNextOfKin`/`notes`/`copyCorrespondence` preserved from a fresh
+  GET). Deliberately scoped to only a reciprocal written THIS session
+  (`linkedCards[].reciprocalRelationshipId`, resolved via a bounded follow-up fetch of the
+  candidate's own record after `performLinkAndCleanup` reports a fresh reverse link) — an older,
+  pre-existing reciprocal that predates this canvas session is never touched by a plain removal.
+  New busy-state `cs.reciprocalDowngrading` (Set, same pattern as `phoneDeleting`/`flagUpdating`);
+  a failure here surfaces a clear error but still completes the local unplace.
+- **Redrop correction now also fixes the reciprocal, not just the forward relationship**: without
+  this, a corrected re-drop after a removal would have tried a fresh `linkPatient` create for the
+  reverse direction — which Medicus rejects as a duplicate, since the relationship record still
+  exists (just retitled), not deleted. New `reciprocalUpdateId` param on
+  `performLinkAndCleanup`/`changePatientContact`, mirroring the existing forward-side
+  `relationshipUpdateId` mechanism exactly: when this canvas already knows the reciprocal's own id,
+  route the correction through an update-in-place instead of a doomed-to-collide create.
+  `describeLinkProgress`'s resumable-retry step list updated to match (also fixes a smaller,
+  separately-introduced bug: its `relationshipUpdate` step's `applies` condition had gone stale
+  after v3.208.4's `relationshipUpdateId` fix and no longer matched the real trigger condition).
+- **Explicit "Refresh page" header button**, next to Close — every write this canvas makes only
+  ever updates local state; Close already reloads too, but only once you're done and have gone
+  through the unfinished-merge check, so this gives an always-reachable way to check Medicus's own
+  contacts card reflects a change without leaving the canvas.
+
+### (internal v3.208.4) — 2026-08-01
+
+#### Contacts Management — remove a card dropped in the wrong slot
+
+Asked for, live: no way to undo a card dragged into the wrong tree slot by mistake. Confirmed with
+the user first that the common case is "wrong slot, right person" (re-classify, keep the link),
+not "wrong person entirely" (undo the link) — scoped accordingly.
+
+- New dedicated "drag here to remove" drop zone (`renderRemoveZone`) above the tree. Dragging any
+  locked/tree-placed card onto it calls `removeCardFromTree`, which reuses `engine/contact-tree.js`'s
+  existing `removeFromSlot` primitive (already built, already tested, just never wired to any UI) —
+  LOCAL ONLY, no Medicus write, no confirmation dialog needed for the same reason. The card
+  disappears from its slot and reappears in "Not yet placed in the family tree", draggable again
+  through the normal path.
+- `cardHtml`: a locked card is now draggable again, but only for this purpose — a NEW payload
+  shape (`{removeCardId}`), distinct from the existing card-to-card merge (`{id, kind}`) and
+  flag-token (`{flagKind}`) shapes, gated specifically on `kind === 'linked'` so a merged/blank
+  manual card (nothing to "remove from the tree" — it was never placed there) never becomes a
+  spurious drag source. Every existing merge/slot/flag drop handler now explicitly ignores this
+  new shape rather than falling through to `tryMerge`/`tryAssign` with undefined arguments.
+- **Two real correctness bugs found and fixed while making this actually work**, both specifically
+  about re-classifying an ALREADY-recognised relationship (as opposed to setting one for the first
+  time), which this remove-and-redrop flow is the first thing to ever exercise live:
+  - `doCanvasConfirm`'s `relationshipUpdateId` (the flag that tells `performLinkAndCleanup` to
+    write a corrected relationship label back to Medicus) only ever fired when the ORIGINAL text
+    was unrecognised. A slot-drop correcting an already-recognised-but-wrong classification (e.g.
+    dropped on Siblings by mistake, corrected to Children) silently updated the local tree display
+    only — Medicus's own record kept the wrong label indefinitely. Fixed: `buildConfirmForCard` now
+    also returns `originalBaseId`/`originalModifierId` (what's actually on record, captured before
+    any slot-override), and the write fires whenever the final baseId/modifierId differs from
+    those, not just when nothing was known to begin with.
+  - Separately, the locked tree label was being re-derived from `existingForwardLink`'s own
+    `patientContactRelationship` text — a load-time snapshot, never refreshed after a write made
+    THIS session — which would silently revert a just-written correction back to the stale
+    pre-write text on screen. Removed; the locked label now always trusts `st.confirm.baseId`/
+    `modifierId` directly, which already reflects whatever was correct and whatever was just
+    written.
+  - Also: an already-linked card being re-classified previously never updated its own
+    `cs.linkedCards` entry at all (only a brand-new link got pushed) — badges and future
+    `isPlacedInTree`/`bestManualMatchFor` checks would have kept showing the stale relationship.
+    Now updates `baseId`/`modifierId`/`relationshipText`/`colour` in place.
+  - `buildConfirmForCard`'s `existingForwardLink` lookup also only ever checked the load-time
+    snapshot — missing a card linked earlier THIS session (the exact card most likely to get
+    removed-and-redropped moments after the original mis-drop). Now falls back to constructing an
+    equivalent object from `cs.linkedCards`' own resolved `relationshipId` when the snapshot
+    doesn't have it, so the correction write-back works for a same-session mistake too, not only a
+    pre-existing one.
+- New CSS `.ms-cv-remove-zone`, red-tinted to read as distinct from the purple flag-tokens strip
+  immediately above it.
+
+### (internal v3.208.3) — 2026-08-01
+
+#### Contacts Management — non-British name-derivation matching
+
+`engine/contact-match.js`'s candidate scoring assumed a British same-surname family model
+throughout — this adds two things it was getting wrong for non-British naming systems, plus a
+prerequisite bug fix those systems exposed.
+
+- **Prerequisite fix**: `normaliseName`'s token regex was ASCII-only (`[^a-z0-9\s-]`), silently
+  treating every accented character as a token separator — "Björn Nováková" became "bj rn nov
+  kov" before any comparison ever ran. Widened to Unicode-letter-aware (`\p{L}\p{N}`, `u` flag);
+  `.toLowerCase()` was already Unicode-correct. No change for plain-ASCII names or existing
+  punctuation-folding behaviour (apostrophes, etc.).
+- **New `engine/name-derivations.js`** (dual Node/browser, own test file
+  `test-name-derivations.js`, 48 checks):
+  - **Gendered Balto-Slavic surnames** — `isGenderedSurnameMatch` recognises Polish Kowalski/
+    Kowalska, Czech/Slovak Novák/Nováková and Novotný/Novotná, Russian/Bulgarian Ivanov/Ivanova,
+    and Lithuanian's genuinely three-way system (a married woman always takes -ienė regardless of
+    her own name's ending; an unmarried daughter's suffix depends on her father's own ending) as
+    the same family surname, not a mismatch. Wired into `contact-match.js`'s `nameSimilarity`
+    (both the Jaccard token-overlap and whole-token-containment paths) via a `tokensMatch` helper
+    used everywhere two name tokens are compared.
+  - **Patronymic extraction** — `extractPatronymicFather` derives a father's own first name
+    directly from a name that structurally encodes it: Icelandic surnames (Björnsson/
+    Björnsdóttir — "Björn's son/daughter") and Russian-style patronymic middle names (Ivanovich/
+    Ivanovna — "son/daughter of Ivan"). Wired into `scoreCandidate` as a new opt
+    `indexPatientName`: when the relationship being guessed is specifically `'father'` (patronymics
+    encode the father's name, never the mother's, in either system), the index patient's own name
+    is checked for a patronymic pattern and, if found, the derived first name is compared against
+    the candidate's own first name — a positive-only bonus folded into the existing `nameSignal`
+    via `Math.max`, never lowering a score. Threaded through from `contacts-canvas.js`'s main
+    `rankCandidates` call site as `st.indexPatientDetails.displayName`.
+  - **Collision safety was the dominant design constraint throughout**, since this UK GP tool
+    matches overwhelmingly-British names by default: bare single-s Nordic "-son" is deliberately
+    NEVER stripped (Wilson/Johnson/Jackson/Robinson/Anderson are ordinary inherited English
+    surnames, not fresh per-generation patronymics) — only the doubled-s "-sson" genitive form,
+    which is the REGULAR Icelandic pattern and essentially never occurs in English surnames. Bare
+    Lithuanian male endings (-as/-is/-ys) are never stripped as standalone suffixes for the same
+    reason (Lewis, Douglas, Curtis, Rhys...) — only reached as the unstripped remainder in a
+    prefix-fallback check against an already-stripped female form. The two single-character Czech
+    adjectival markers (ý/á) are accent-strict — folded to ASCII they'd become the extremely common
+    English letters "y"/"a" — while every other suffix folds diacritics before matching, since
+    GP2GP imports and hand-typed manual contacts routinely drop them.
+  - Extended `test-contact-match.js` (new section 8) with integration coverage: a gendered pair
+    scoring as a match, a patronymic bonus raising a father candidate's score, confirmation the
+    bonus never fires for `'mother'`, and the key negative case — an ordinary English family's
+    inherited "-son" surname never triggering a spurious bonus even when a first name would
+    coincidentally line up.
+- Registered `engine/name-derivations.js` in `manifest.json`'s contacts `content_scripts` block,
+  before `contact-match.js` (browser-global load order, same pattern as
+  `contact-relationships.js`).
+
+### (internal v3.208.2) — 2026-08-01
+
+#### Contacts Management — drag-and-drop NOK / copy-correspondence flagging
+
+Rebuilt on `contacts-followups-2026-08-01` (branched from current `main`) after discovering this
+feature had been built in an earlier session on the old `worktree-contacts-management` branch but
+never committed — that branch's committed work (through v3.191.0) had already merged into `main`
+as v3.208.0 via a separate review PR (#246) in the meantime, without this feature, so it needed
+rebuilding against the current, substantially-evolved `contacts-canvas.js` rather than a simple
+reapply.
+
+- Asked for, live: (1) drag an "NOK" or "Copy correspondence" token onto an already-linked
+  contact's card to set that flag directly, without going through the confirm panel (which only
+  ever applies at the moment a NEW link is created); (2) show which contacts already have these
+  flags, labelled "NOK"/"cc"; (3) keep the existing gap warnings ("No next of kin is set for this
+  patient", the under-13 copy-correspondence one) in sync with the new capability.
+- No new endpoint needed — `changePatientContact`/`getEditPatientContact` (already confirmed,
+  already used for the existing relationship-label write-back) already accept
+  `patientContactRelationshipIsNextOfKin`/`patientContactRelationshipCopyCorrespondence` directly.
+  New `setContactFlag(cardId, flagKind, value)`: fetches the current full relationship record,
+  sends it back full-replace with only the one flag changed (every manual-contact-only field sent
+  `null`, confirmed live to have no effect on a real link), and updates the card locally on
+  success. Wrong-patient guard re-verified immediately before the write, same discipline as every
+  other write in this canvas.
+- Interaction: dropping a token always SETS the flag (never toggles) — unsetting is a separate
+  gesture, clicking the badge the flag produces on the card. Multiple contacts can be flagged NOK
+  simultaneously with no side effects on others — deliberately not a single-NOK-at-a-time model
+  (most children genuinely have both parents as NOK, older adults often have several children as
+  NOK; Medicus itself doesn't enforce a single NOK either).
+- New always-visible "Drag onto a contact to flag them (click the flag on a contact card to remove
+  it):" tokens above the tree (`renderFlagTokens`) — not gated behind a gap being detected, so a GP
+  can flag any contact at any time. `cardHtml` now always emits `data-card-id`/`data-card-kind`
+  (previously only when draggable, which a locked/already-placed card never is) so any card —
+  draggable or not — is a valid drop target; the existing card-to-card merge drop and the new
+  flag-token drop share one unified handler, branching on the drag payload's shape. Every occupied
+  tree-branch `<li>` wrapper (grandparents, parents, siblings, partner, children) also carries
+  `data-card-id`, so a flag token can be dropped on a card actually placed in the tree, not only on
+  one in the "below the line" manual/suggested columns — the shared slot/tree-item drop handler
+  routes a flag-shaped payload via that attribute as a fallback, regardless of which of the two
+  nested elements (inner card vs. outer wrapper) the browser's drop event resolves onto.
+- `cardHtml`'s NOK/cc badges are clickable `<button>`s wired to `setContactFlag(..., false)` once a
+  card has a `relationshipId` (needed to write to it). A freshly-created link now resolves its
+  `relationshipId` immediately rather than waiting for a reload: right after a brand-new forward
+  link is created (`doCanvasConfirm`), one bounded follow-up `getPatientDetails` call finds the
+  matching `patientContactsSection` entry (reusing `findExistingForwardLink`'s already-confirmed
+  `patientContactPatientId`/`patientContactId` fields, no new endpoint) and fills it in on the card
+  object in place. Best-effort — if that fetch fails, the card just stays a non-interactive pill
+  until reload, same as the fallback behaviour always was.
+- Step 1.10's copy-correspondence fetch (`viewPatientContact`, one per linked card) now runs
+  unconditionally for every linked card, not only when the patient is under 13 — the per-card
+  badges need `copyCorrespondence` regardless of age, not just the U13 gap check. Also now the
+  single source of truth for BOTH `isNextOfKin`/`copyCorrespondence` per card once it succeeds
+  (overwriting the bulk-list `isNextOfKin` default), rather than reading NOK from one endpoint and
+  CC from another.
+- Gap flags recompute as a cheap local clear/set the moment a flag is set or unset via drag or
+  click — same pattern already used for the confirm-panel-driven case, no re-fetch needed since the
+  write result is already known.
+- **Found live, immediately after the rebuild**: clicking a flag badge to unset it always failed —
+  briefly appeared to work then reverted on a just-matched card, and threw "Refusing to update this
+  contact: it is not a confirmed patient-linked contact…" outright on a fresh canvas reload, even
+  against a genuinely linked contact. Root cause: `changePatientContact` gained a fourth `targetLink`
+  parameter on `main` (v3.208.0's own review pass) — a defensive guard requiring proof the id
+  belongs to a real link before a full-replace write, since the same write against a manual
+  contact's id would wipe its name/phone/email/address. `setContactFlag`'s call predated that
+  guard and never passed it, so the assertion fired unconditionally on every call, regardless of
+  whether the link was real. Fixed by passing `{ patientContactPatientId: lc.id }` — constructed
+  rather than re-fetched, since `lc.relationshipId` is only ever set from a genuine
+  `patientContactPatientId`-bearing entry in the first place (loadCanvas' `findExistingForwardLink`
+  fetch, or the new relationshipId-resolution follow-up above), so `lc.id` already IS that same
+  `patientContactPatientId`. The "briefly appears to work" symptom was the flagUpdating "…" state
+  showing then reverting once the write threw, not an actual optimistic-UI bug.
+
+#### Contacts Management — duplicate-address merge didn't visibly save
+
+`mergeDuplicateAddressGroup` deleted the surplus address(es) then immediately re-fetched via
+`getPatientDetails` to refresh the list — but Medicus's own read-after-write isn't instant, so that
+immediate re-fetch could still show the just-deleted address as present, making the merge look like
+it silently did nothing until some later, unrelated action's own re-fetch happened to catch up.
+Fixed by dropping the re-fetch for this purpose entirely: the delete loop now tracks which address
+IDs it actually deleted, and `st.indexAddresses` is filtered locally against that set instead of
+trusting a fresh GET to already reflect writes that just happened. Applied on top of v3.208.0's own
+separate address-merge fix (correspondence-flag transfer before delete, fail-closed verification),
+which addressed a different failure mode and is unaffected by this change.
+
 ## [v3.209.0] — 2026-08-01
 
 ### OIR sync fixes + Cleanup Code Preferences shared-folder sync (PR #241)

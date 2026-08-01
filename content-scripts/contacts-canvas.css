@@ -616,6 +616,90 @@
   font-weight: 600;
 }
 
+/* Always-visible drag source above the tree for setting NOK/copy-correspondence on an
+   already-linked card — see renderFlagTokens/setContactFlag. */
+#ms-contacts-canvas-overlay .ms-cv-flag-tokens {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-flag-token {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5b21b6;
+  background: #f5f3ff;
+  border: 1px dashed #a78bfa;
+  border-radius: 12px;
+  padding: 3px 10px;
+  cursor: grab;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-flag-token:active {
+  cursor: grabbing;
+}
+
+/* Dedicated drop target for unplacing a card dropped in the wrong slot by mistake — see
+   renderRemoveZone/removeCardFromTree. Sized and shaped like the tree's own "Drop here" boxes
+   (.ms-cv-tree-branch-placeholder .ms-cv-slot-placeholder — same min/max width as a single
+   tree-branch-item) rather than a full-width bar, so it reads as one more family-tree-style drop
+   target, just red-tinted to mark it as distinct from an ordinary slot. */
+#ms-contacts-canvas-overlay .ms-cv-remove-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 150px;
+  max-width: 240px;
+  border: 1px dashed #fca5a5;
+  border-radius: 6px;
+  background: #fef2f2;
+  padding: 8px;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-remove-zone .ms-ct-note {
+  font-size: 12px;
+  color: #991b1b;
+  font-style: italic;
+  text-align: center;
+}
+
+/* Badge produced on a card once a flag is set — clickable button (relationshipId known) or a
+   plain non-interactive pill (a card linked earlier THIS session, no relationshipId yet). */
+#ms-contacts-canvas-overlay .ms-cv-flag-pill {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #5b21b6;
+  background: #ede9fe;
+  border: 1px solid #c4b5fd;
+  border-radius: 10px;
+  padding: 1px 7px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+#ms-contacts-canvas-overlay button.ms-cv-flag-pill {
+  cursor: pointer;
+}
+
+#ms-contacts-canvas-overlay button.ms-cv-flag-pill:hover:not(:disabled) {
+  background: #ddd6fe;
+}
+
+#ms-contacts-canvas-overlay button.ms-cv-flag-pill:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-flag-pill-static {
+  cursor: default;
+  border-style: dashed;
+}
+
 #ms-contacts-canvas-overlay .ms-cv-shared-info {
   color: #92400e;
   background: #fffbeb;
