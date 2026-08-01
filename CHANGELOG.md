@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.209.2] — 2026-08-01
+
+### Document Coder: SNOMED verification harness (dev tool)
+
+`scripts/verify-letter-terms.js` closes the loop Dave asked about ("have you
+matched these against verified SNOMED codes?"): it runs the letter-extraction
+engine over its synthetic corpus, harvests every OFFERED term, and checks each
+against the public no-auth NHS SNOMED CT termbrowser API (same config and
+fail-closed doctrine as `shared/snomed-retirement.js`), plus re-verifies the
+concept IDs pinned in the UI mockup (49436004 Atrial fibrillation, 700379002
+CKD stage 3B — both externally corroborated 2026-08-01). The dev sandbox proxy
+blocks termbrowser.nhs.uk, so the harness exits 2 with an explicit "COULD NOT
+VERIFY — nothing is verified" message rather than ever claiming a check it did
+not perform; first networked run (capture day) completes the verification and
+should also confirm the descriptions-search endpoint shape, which is expected
+but not yet live-confirmed (noted in the script header). At runtime the
+product never sends letter-derived text to any public service — resolution is
+against Medicus's own index under the user's session; this harness is
+synthetic-corpus-only by design.
+
 ## [v3.209.1] — 2026-08-01
 
 ### Document Coder engine: red-team hardening (10 findings, all fixed; still unwired)
