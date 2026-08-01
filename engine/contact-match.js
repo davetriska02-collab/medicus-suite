@@ -52,13 +52,52 @@
     return { text: tokens.join(' '), tokens };
   }
 
-  // nameSimilarity(a, b) -> 0..1 (exact -> 1, containment -> 0.9, else Jaccard token overlap)
+  const CONTAINMENT_SCORE = 0.9;
+  // Containment needs at least this many tokens on the shorter side. A ONE-token containment
+  // ('Smith' inside 'John Smith', 'John' inside 'John Smith') is deliberately denied the 0.9 tier
+  // and left to fall through to Jaccard (0.5 against a two-token name). Manual contacts are free
+  // text and surname-only entries are common, so at 0.9 every same-surname person at the address
+  // scored 0.9*55 + 20 = 85 → a "strong" badge for what is really just "someone in that household"
+  // — the whole family, ranked as confidently as a genuine match. At the Jaccard band it lands ~62
+  // → "possible": still surfaced and still rankable, but visibly a weaker claim.
+  const MIN_CONTAINMENT_TOKENS = 2;
+
+  // Hyphenated tokens are split for the containment test ONLY (normaliseName keeps the hyphen, so
+  // 'smith-jones' stays one token everywhere else). Medicus and a hand-typed manual contact
+  // disagree constantly about whether a double-barrelled surname carries its hyphen, and
+  // 'Mary Smith-Jones' vs 'Mary Smith Jones' is the same person by any reading.
+  function containmentTokens(tokens) {
+    const out = [];
+    for (const t of tokens) {
+      for (const part of t.split('-')) if (part) out.push(part);
+    }
+    return out;
+  }
+
+  // tokenContainment(tokensA, tokensB) -> boolean. True when EVERY token of the shorter name is
+  // present as a WHOLE token of the longer one — i.e. the shorter name is the longer one with
+  // middle/extra name parts dropped ('John Smith' ⊂ 'John Michael Smith'). Whole-token is the
+  // point: the previous raw-substring test ('john smith'.includes('smith')) also fired for 'Ann'
+  // inside 'Annette' and 'Rose' inside 'Ambrose', scoring unrelated people at the top non-exact
+  // tier.
+  function tokenContainment(tokensA, tokensB) {
+    const a = containmentTokens(tokensA);
+    const b = containmentTokens(tokensB);
+    const shorter = a.length <= b.length ? a : b;
+    const longer = a.length <= b.length ? b : a;
+    if (shorter.length < MIN_CONTAINMENT_TOKENS) return false;
+    const longerSet = new Set(longer);
+    return shorter.every((t) => longerSet.has(t));
+  }
+
+  // nameSimilarity(a, b) -> 0..1 (exact -> 1, whole-token containment -> 0.9, else Jaccard token
+  // overlap). See tokenContainment/MIN_CONTAINMENT_TOKENS for what does and does not earn 0.9.
   function nameSimilarity(a, b) {
     const na = normaliseName(a);
     const nb = normaliseName(b);
     if (!na.text || !nb.text) return 0;
     if (na.text === nb.text) return 1;
-    if (na.text.includes(nb.text) || nb.text.includes(na.text)) return 0.9;
+    if (tokenContainment(na.tokens, nb.tokens)) return CONTAINMENT_SCORE;
     const setA = new Set(na.tokens);
     const setB = new Set(nb.tokens);
     let inter = 0;
@@ -248,11 +287,30 @@
     return { score, tier, signals };
   }
 
+  // Two candidates whose scores differ by no more than this are treated as indistinguishable. 5 is
+  // the weight of the single weakest signal in the model (phone, email) — a gap that small means
+  // the ranking was decided by exactly one of the two signals the GP explicitly said must never be
+  // decisive, so the order between them carries no real information.
+  const TIE_MARGIN = 5;
+
   // rankCandidates(manualContact, candidates, opts?) -> [{ candidate, score, tier, signals }, ...] desc by score
+  // The top result additionally carries:
+  //   margin — top score minus the runner-up's (0 on an exact tie), or null when there IS no
+  //            runner-up. Callers must treat null as "not measurable", not as a small gap.
+  //   tied   — true when the runner-up is within TIE_MARGIN. This is the authoritative ambiguity
+  //            flag; prefer it over comparing `margin` yourself.
+  // Both are purely additive: every existing key on every result (candidate/score/tier/signals) and
+  // the sort order are unchanged, and only the top result gains the two fields.
   function rankCandidates(manualContact, candidates, opts) {
-    return (candidates || [])
+    const ranked = (candidates || [])
       .map((candidate) => Object.assign({ candidate }, scoreCandidate(manualContact, candidate, opts)))
       .sort((a, b) => b.score - a.score);
+    if (ranked.length) {
+      const margin = ranked.length > 1 ? ranked[0].score - ranked[1].score : null;
+      ranked[0].margin = margin;
+      ranked[0].tied = margin !== null && margin <= TIE_MARGIN;
+    }
+    return ranked;
   }
 
   const api = {
