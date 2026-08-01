@@ -1094,6 +1094,13 @@ async function isPracticeAccepted() {
         desc: 'Capacity forecast presets',
       },
       {
+        id: 'problemDescriptionCleanup',
+        label: 'Cleanup Code Preferences',
+        defaultChecked: false,
+        defaultMode: 'merge',
+        desc: 'Learned SNOMED replacement-code preferences — tallies always combine; "enforce" makes a pinned override the practice-wide default',
+      },
+      {
         id: 'referrals',
         label: 'Referrals',
         defaultChecked: false,
@@ -1435,12 +1442,99 @@ async function isPracticeAccepted() {
       await writable.close();
     }
 
-    // ── Publish handler ───────────────────────────────────────────────────────
+    // ── OIR test-dictionary key rotation ──────────────────────────────────────
+    // The mechanics (and the three rules that make them safe — built-in keys
+    // are never rotated, the retired ledger is cumulative, rotation never runs
+    // unattended) live in shared/io/oir-key-rotation.js, where they are
+    // directly testable; this file only wires them into the publish. Applies
+    // the rotation result to the envelope AND back to this machine's own
+    // triagelens.config — see applyOirRotation below.
+    async function applyOirRotation(envelope, publishedTriageConfig) {
+      const triageConfig = envelope?.modules?.triage?.config;
+      if (!triageConfig || !window.OirKeyRotation) return null;
+      const published = publishedTriageConfig || {};
+      const builtinKeys = (window.SentinelOutstandingMatch?.TEST_DEFS || []).map((d) => d && d.key).filter(Boolean);
 
-    async function doPublish() {
+      // The ledgers are CUMULATIVE and must be republished on EVERY publish,
+      // rotation or not — a machine that was offline for the one cycle in which
+      // a retirement was published would otherwise never see it. Carry the
+      // currently-published ledgers forward first, so they survive even when
+      // rotation itself doesn't run (nothing published yet, no local
+      // dictionary, no built-in key set); the rotation result then supersedes
+      // them below with its own union.
+      if (Array.isArray(published.retiredOirTests)) triageConfig.retiredOirTests = published.retiredOirTests;
+      if (Array.isArray(published.retiredOirKeys)) triageConfig.retiredOirKeys = published.retiredOirKeys;
+      if (Array.isArray(published.supersededOirTests)) triageConfig.supersededOirTests = published.supersededOirTests;
+
+      const result = window.OirKeyRotation.rotateEditedOirTestKeys(triageConfig.oirTests, published.oirTests, {
+        attended: true, // never reached in auto mode — the helper refuses too
+        builtinKeys,
+        previousRetiredOirTests: published.retiredOirTests,
+        previousRetiredOirKeys: published.retiredOirKeys,
+        previousSupersededOirTests: published.supersededOirTests,
+      });
+      if (!result) return null;
+
+      triageConfig.oirTests = result.oirTests;
+      if (result.retiredOirTests.length > 0) triageConfig.retiredOirTests = result.retiredOirTests;
+      if (result.retiredOirKeys.length > 0) triageConfig.retiredOirKeys = result.retiredOirKeys;
+      if (result.supersededOirTests.length > 0) triageConfig.supersededOirTests = result.supersededOirTests;
+
+      // Publisher self-race: rotation used to mutate only the envelope, so this
+      // machine's own triagelens.config kept the OLD keys. A second edit before
+      // the alarm's self-apply then diffed the (already-rotated) published copy
+      // against unrotated local keys, found no key collision, and published with
+      // no rotation at all — resurrecting the duplicate. Adopt the rotated keys
+      // locally straight away so the next diff is honest.
+      if (result.rotated) {
+        try {
+          const r = await chrome.storage.local.get('triagelens.config');
+          const localCfg = r['triagelens.config'];
+          if (localCfg && typeof localCfg === 'object') {
+            await chrome.storage.local.set({
+              'triagelens.config': Object.assign({}, localCfg, { oirTests: result.oirTests }),
+            });
+          }
+        } catch (_) {}
+      }
+      return result;
+    }
+
+    // ── Publish handler ───────────────────────────────────────────────────────
+    // opts.auto: true when triggered by maybeAutoPublish() (the once-daily,
+    // no-human-involved trigger) rather than a real click. In auto mode we can
+    // NEVER prompt — showSaveFilePicker() and FileSystemFileHandle.requestPermission()
+    // both require a genuine user gesture, which a background/timer trigger
+    // doesn't have. So auto mode only ever uses an ALREADY-remembered handle
+    // whose permission is ALREADY granted (queryPermission only, never
+    // requestPermission), and silently does nothing this cycle otherwise —
+    // same fail-quiet discipline as _checkForCodeUpdate's mid-copy skip in
+    // service-worker.js. It will simply try again next time Options is open.
+    //
+    // AUTO MODE PUBLISHES A DIFFERENT PAYLOAD, and that is the point. A manual
+    // publish is an attended, deliberate act: it says "this machine's settings
+    // are what the practice should have", so a full-profile overwrite is
+    // correct. An unattended daily one says nothing of the sort — it exists
+    // ONLY to circulate Cleanup Code Preferences, the one module that
+    // accumulates independently on every machine and is union-merged rather
+    // than overwritten. Publishing the full profile unattended meant any PC
+    // with a granted handle rewrote sentinel/knowledge/capacity/leaflets/… with
+    // ITS local snapshot every day: two such machines ping-pong the shared
+    // file, and one stale machine silently reverts the curated copy daily. So
+    // in auto mode every OTHER module's section is carried forward VERBATIM
+    // from the fetched shared profile (as are apply.modules and
+    // practiceAttestation — an attestation must never be re-stamped
+    // unattended), and if the shared profile can't be read the publish is
+    // ABORTED rather than falling back to a raw local snapshot, which is
+    // precisely the clobber being avoided.
+
+    async function doPublish(opts) {
+      const auto = !!(opts && opts.auto);
       if (!publishBtn) return;
-      publishBtn.disabled = true;
-      publishBtn.textContent = 'Publishing…';
+      if (!auto) {
+        publishBtn.disabled = true;
+        publishBtn.textContent = 'Publishing…';
+      }
 
       try {
         await savePickerState();
@@ -1448,6 +1542,15 @@ async function isPracticeAccepted() {
         const label = labelInput?.value?.trim() || 'Practice defaults';
         const publishedBy = publishedByInput?.value?.trim() || '';
         const version = await nextProfileVersion();
+
+        // What's currently in the shared folder — read ONCE and reused by every
+        // merge below (pdc union, OIR rotation, auto-mode carry-forward).
+        let sharedProfile = null;
+        try {
+          sharedProfile = await window.PracticeProfile.fetchProfile();
+        } catch (_) {
+          sharedProfile = null;
+        }
 
         // Build apply.modules map
         const applyModules = {};
@@ -1459,13 +1562,70 @@ async function isPracticeAccepted() {
           }
         }
 
+        let profileJson = null;
+        let envelope = null;
+
+        if (auto) {
+          // ── Unattended daily refresh: the merge-safe payload ONLY ──────────
+          // See doPublish's header. Nothing here may reflect a decision this
+          // machine hasn't been told to make on the practice's behalf.
+          const sharedEnvelope = sharedProfile?.envelope;
+          const sharedModules = sharedEnvelope?.modules;
+          const sharedApplyModules =
+            sharedProfile?.apply?.modules && !Array.isArray(sharedProfile.apply.modules)
+              ? sharedProfile.apply.modules
+              : null;
+
+          if (!sharedEnvelope || !sharedModules || !sharedApplyModules) {
+            // Auto-publish aborted: with no readable shared profile there is
+            // nothing to carry forward, and publishing this machine's raw
+            // snapshot instead is exactly the wholesale overwrite this mode
+            // exists to avoid. Try again next time Options is open.
+            console.warn('[Practice Profile] Auto-publish aborted — the shared profile could not be read.');
+            return;
+          }
+          if (!sharedApplyModules.problemDescriptionCleanup) {
+            // Cleanup Code Preferences isn't part of what this practice
+            // publishes, so an unattended run has nothing merge-safe to
+            // refresh. Adding it here would be this machine deciding to
+            // publish a module nobody chose to publish.
+            console.log('[Practice Profile] Auto-publish skipped — Cleanup Code Preferences is not published.');
+            return;
+          }
+
+          // Note what is NOT called here: doFullExport(). Auto mode reads ONLY
+          // this module's local state, so there is no local snapshot of
+          // anything else in scope to publish by accident.
+          const mergedPdc = problemDescriptionCleanupMergeForPublish(
+            sharedModules.problemDescriptionCleanup,
+            await problemDescriptionCleanupExport(),
+            // includeOverride: false — the override (what becomes "enforced for
+            // everyone", and equally its removal) must only ever change as a
+            // result of a conscious, attended publish. An unattended run only
+            // refreshes tallies.
+            { includeOverride: false }
+          );
+
+          // Every other module's section is carried forward VERBATIM from the
+          // shared profile — this machine's own snapshot of them is never
+          // published. apply/practiceAttestation/profileLabel/publishedBy ride
+          // along untouched for the same reason (F10: an attestation must never
+          // be re-stamped unattended).
+          const carriedModules = Object.assign({}, sharedModules, { problemDescriptionCleanup: mergedPdc });
+          profileJson = Object.assign({}, sharedProfile, {
+            profileVersion: version,
+            publishedAt: new Date().toISOString(),
+            envelope: Object.assign({}, sharedEnvelope, { modules: carriedModules }),
+          });
+        }
+
         // ── Request Monitor ↔ practice-code coupling ──────────────────────────
         // Request Monitor needs suite.practiceCode to make API calls on managed
         // installs. If the admin published Request Monitor, ensure the suite
         // module is ALSO included (so suite.practiceCode is applied) and the
         // envelope carries the code. The code lives in ONE place (the suite
         // module) — never duplicated into the requestMonitor section.
-        if (applyModules.requestMonitor) {
+        if (!auto && applyModules.requestMonitor) {
           let localCode = '';
           try {
             const r = await chrome.storage.local.get('suite.practiceCode');
@@ -1483,71 +1643,128 @@ async function isPracticeAccepted() {
           if (!applyModules.suite) applyModules.suite = 'merge';
         }
 
-        // ── Central practice attestation (SAFETY-CRITICAL) ────────────────────
-        // Only gates the admin has accepted locally AND not opted out of are
-        // attested. Only emit the block if at least one gate is true.
-        const gates = {};
-        for (const g of GATE_DEFS) {
-          const accepted = await g.accepted();
-          const chk = document.getElementById(`ppAtt_${g.id}`);
-          // opted-in = checkbox present, checked, and the gate is genuinely
-          // accepted locally (defensive — never attest a gate not locally held).
-          if (accepted && chk && chk.checked) gates[g.id] = true;
-        }
-        let practiceAttestation = null;
-        if (Object.keys(gates).length > 0) {
-          practiceAttestation = {
-            attestedBy: publishedBy,
-            attestedAt: new Date().toISOString(),
-            gates,
+        if (!auto) {
+          envelope = await doFullExport();
+
+          // ── Central practice attestation (SAFETY-CRITICAL) ──────────────────
+          // Only gates the admin has accepted locally AND not opted out of are
+          // attested. Only emit the block if at least one gate is true. This
+          // whole block is attended-only: an attestation is a human act, so an
+          // unattended publish carries the shared file's existing one forward
+          // verbatim instead (see the auto branch above).
+          const gates = {};
+          for (const g of GATE_DEFS) {
+            const accepted = await g.accepted();
+            const chk = document.getElementById(`ppAtt_${g.id}`);
+            // opted-in = checkbox present, checked, and the gate is genuinely
+            // accepted locally (defensive — never attest a gate not locally held).
+            if (accepted && chk && chk.checked) gates[g.id] = true;
+          }
+          let practiceAttestation = null;
+          if (Object.keys(gates).length > 0) {
+            practiceAttestation = {
+              attestedBy: publishedBy,
+              attestedAt: new Date().toISOString(),
+              gates,
+            };
+          }
+
+          // Cleanup Code Preferences: merge with what's CURRENTLY shared rather
+          // than blindly overwriting it — see problem-description-cleanup-io.js's
+          // problemDescriptionCleanupMergeForPublish for why. Unlike every other
+          // module here (admin-curated from one machine, so overwrite-with-local
+          // is correct), this one accumulates from multiple machines' local
+          // usage — a raw overwrite could regress another machine's growth that
+          // hasn't made it back to THIS machine via a pull yet.
+          if (applyModules.problemDescriptionCleanup) {
+            const existingPdc = sharedProfile?.envelope?.modules?.problemDescriptionCleanup;
+            if (existingPdc) {
+              envelope.modules.problemDescriptionCleanup = problemDescriptionCleanupMergeForPublish(
+                existingPdc,
+                envelope.modules.problemDescriptionCleanup,
+                { includeOverride: true }
+              );
+            }
+            // Shared file missing/unreadable — publish this machine's own
+            // snapshot. Safe here (and only here): a manual publish IS the
+            // attended decision that this machine's state is the practice's.
+          }
+
+          // OIR test-dictionary key rotation — attended publishes only (the
+          // helper refuses without attended:true as well, so a future call site
+          // can't reintroduce unattended rotation by omission).
+          if (!auto && applyModules.triage) {
+            try {
+              await applyOirRotation(envelope, sharedProfile?.envelope?.modules?.triage?.config);
+            } catch (e) {
+              console.warn('[Practice Profile] OIR key rotation skipped:', e && e.message);
+            }
+          }
+
+          profileJson = {
+            format: 'medicus-suite-practice-profile',
+            formatVersion: 2,
+            profileVersion: version,
+            profileLabel: label,
+            publishedAt: new Date().toISOString(),
+            publishedBy: publishedBy,
+            apply: {
+              modules: applyModules,
+              autoApplyOnStartup: true,
+              checkEveryMinutes: 15,
+              autoReloadOnNewVersion: true,
+              notifyUserOnApply: false,
+            },
+            ...(practiceAttestation ? { practiceAttestation } : {}),
+            envelope,
           };
         }
 
-        const envelope = await doFullExport();
-
-        const profileJson = {
-          format: 'medicus-suite-practice-profile',
-          formatVersion: 2,
-          profileVersion: version,
-          profileLabel: label,
-          publishedAt: new Date().toISOString(),
-          publishedBy: publishedBy,
-          apply: {
-            modules: applyModules,
-            autoApplyOnStartup: true,
-            checkEveryMinutes: 15,
-            autoReloadOnNewVersion: true,
-            notifyUserOnApply: false,
-          },
-          ...(practiceAttestation ? { practiceAttestation } : {}),
-          envelope,
-        };
+        if (!profileJson) return; // auto mode aborted above
 
         const jsonStr = JSON.stringify(profileJson, null, 2);
 
-        // Try remembered handle first
+        // ACCEPTED LIMITATION — concurrent publishes are last-writer-wins.
+        // There is no lock on a shared network file: two admins publishing
+        // within the same window each read, merge and write, and the later
+        // write silently supersedes the earlier one. Mitigations, deliberately
+        // chosen over a locking scheme nobody would maintain: the one module
+        // that genuinely accumulates per-machine (Cleanup Code Preferences) is
+        // UNION-merged against the fetched shared copy rather than overwritten,
+        // so its content survives either ordering; everything else is
+        // admin-curated from one machine, and the losing publish is recovered
+        // simply by publishing again.
+        //
+        // Try remembered handle first.
         let usedHandle = null;
+        // Only a real write into the shared folder counts as "published today"
+        // for the daily auto-publish gate — see the stamp below.
+        let wroteToSharedFile = false;
         if (typeof showSaveFilePicker === 'function') {
           const remembered = await loadFileHandle();
           if (remembered) {
             try {
               let perm = await remembered.queryPermission({ mode: 'readwrite' });
-              if (perm !== 'granted') {
+              // requestPermission() needs a real user gesture — never call it
+              // in auto mode. queryPermission alone reflects a grant already
+              // made during an earlier manual publish.
+              if (perm !== 'granted' && !auto) {
                 perm = await remembered.requestPermission({ mode: 'readwrite' });
               }
               if (perm === 'granted') {
                 await writeProfileToHandle(remembered, jsonStr);
                 usedHandle = remembered;
+                wroteToSharedFile = true;
                 setPublishStatus(
                   `Published v${version} to ${remembered.name}. Other PCs will pick it up within about 15 minutes, or on their next browser start.`
                 );
               }
             } catch (_) {
-              // Permission denied or stale handle — fall through to picker
+              // Permission denied or stale handle — fall through to picker (manual only)
             }
           }
 
-          if (!usedHandle) {
+          if (!usedHandle && !auto) {
             // Show save picker
             let handle;
             try {
@@ -1565,16 +1782,32 @@ async function isPracticeAccepted() {
             await writeProfileToHandle(handle, jsonStr);
             await saveFileHandle(handle);
             usedHandle = handle;
+            wroteToSharedFile = true;
             setPublishStatus(
               `Published v${version}. Other PCs will pick it up within about 15 minutes, or on their next browser start.`
             );
           }
-        } else {
+          // auto mode + no usable remembered handle: silently do nothing this
+          // cycle (no picker, no prompt) — retried next time Options is open.
+        } else if (!auto) {
           // Fallback: download via blob
+          // Blob fallback: the file lands in the user's Downloads folder and
+          // they still have to move it into the shared folder themselves — which
+          // they may never do. Deliberately does NOT set wroteToSharedFile:
+          // stamping the daily date here would suppress that day's retry and
+          // overstate what actually happened.
           downloadJson(profileJson, 'practice-profile.json');
           setPublishStatus(
             `Profile downloaded as practice-profile.json (v${version}). Move it into the shared extension folder, replacing the old file, and the update will reach everyone within 15 minutes.`
           );
+        }
+
+        if (wroteToSharedFile) {
+          // Gates maybeAutoPublish() — a manual publish today also counts, so
+          // the daily auto-trigger doesn't immediately fire again right after.
+          await chrome.storage.local.set({
+            'suite.practiceProfile.lastAutoPublishAt': new Date().toISOString().slice(0, 10),
+          });
         }
 
         await render();
@@ -1586,11 +1819,36 @@ async function isPracticeAccepted() {
       }
     }
 
+    // ── Once-daily auto-publish ────────────────────────────────────────────────
+    // Fires when the Options page happens to be open and a day has passed
+    // since this machine last published (manually or automatically). Never
+    // starts publishing on a machine that hasn't manually published at least
+    // once before (savedModules empty = no established publish config) —
+    // auto-publish only continues an already-established habit, it never
+    // silently turns a random PC into a publisher. See doPublish's own auto
+    // comment for why it can never prompt.
+    async function maybeAutoPublish() {
+      try {
+        const r = await chrome.storage.local.get(['suite.practiceProfile.lastAutoPublishAt', PUBLISHER_KEY]);
+        const today = new Date().toISOString().slice(0, 10);
+        if (r['suite.practiceProfile.lastAutoPublishAt'] === today) return;
+
+        const saved = r[PUBLISHER_KEY] || {};
+        const hasEstablishedConfig = Object.values(saved.modules || {}).some((m) => m && m.checked);
+        if (!hasEstablishedConfig) return;
+
+        await doPublish({ auto: true });
+      } catch (e) {
+        console.warn('[Practice Profile] auto-publish failed:', e.message);
+      }
+    }
+
     // ── Init ──────────────────────────────────────────────────────────────────
 
     await render();
     await buildModulePicker();
     await buildAttestationRows();
+    maybeAutoPublish(); // fire-and-forget — never blocks page init
 
     // Inline "Accept all for this practice" (so a greyed gate isn't a dead end).
     const ppAcceptTick = document.getElementById('ppAcceptTick');
@@ -1644,7 +1902,7 @@ async function isPracticeAccepted() {
       applyBtn.textContent = 'Apply now';
     });
 
-    publishBtn?.addEventListener('click', doPublish);
+    publishBtn?.addEventListener('click', () => doPublish());
   } catch (e) {
     console.warn('[Practice Profile section]', e.message);
   }
@@ -2247,11 +2505,31 @@ function initPdcTallySection(cfg) {
     listEl.innerHTML = capNoteHtml + keys.map(renderBlock).join('');
   }
 
+  // Clearing an override is a DECISION, not an absence — so it is timestamped
+  // and stored as a tombstone (`overrideCleared`), and pinning one records
+  // `overrideSetAt`. Without them the practice-profile merge in
+  // shared/io/problem-description-cleanup-io.js has no way to tell "this
+  // machine never had an override" from "someone deliberately removed it", so
+  // the next daily sync simply put the cleared override back and a
+  // practice-wide override could never be removed at all. PD.setOverride /
+  // PD.clearOverride return a fresh {tally, override} entry, which is exactly
+  // what we want: the new decision replaces any previous marker.
+  function withOverrideSet(entry, rowKey, candidate) {
+    const next = PD.setOverride(entry, rowKey, candidate);
+    next.overrideSetAt = new Date().toISOString();
+    return next;
+  }
+  function withOverrideCleared(entry) {
+    const next = PD.clearOverride(entry);
+    next.overrideCleared = new Date().toISOString();
+    return next;
+  }
+
   listEl.addEventListener('click', async (e) => {
     const clearBtn = e.target.closest('[data-pdc-clear]');
     if (clearBtn) {
       const topKey = clearBtn.getAttribute('data-pdc-clear');
-      _all[topKey] = PD.clearOverride(_all[topKey]);
+      _all[topKey] = withOverrideCleared(_all[topKey]);
       await persist();
       render();
       return;
@@ -2263,7 +2541,7 @@ function initPdcTallySection(cfg) {
       const norm = PD.normaliseEntry(_all[topKey]);
       const row = norm.tally[rowKey];
       if (!row) return;
-      _all[topKey] = PD.setOverride(_all[topKey], rowKey, row.candidate);
+      _all[topKey] = withOverrideSet(_all[topKey], rowKey, row.candidate);
       await persist();
       render();
     }

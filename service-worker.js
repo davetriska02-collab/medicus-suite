@@ -409,11 +409,14 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 // Run a startup task without letting a rejection bubble up as an unhandled
 // rejection (which would silently swallow e.g. storage-quota failures).
+// Returns the (error-swallowed) promise so callers that need ordering can
+// `await` it; fire-and-forget callers can ignore the return value as before.
 function runStartupTask(label, fn) {
   try {
-    Promise.resolve(fn()).catch((e) => console.warn(`[Suite] ${label} failed:`, e && e.message));
+    return Promise.resolve(fn()).catch((e) => console.warn(`[Suite] ${label} failed:`, e && e.message));
   } catch (e) {
     console.warn(`[Suite] ${label} threw:`, e && e.message);
+    return Promise.resolve();
   }
 }
 
@@ -552,11 +555,20 @@ async function _maybeShowUpdateNotification(version) {
 const META_KEY = 'suite.practiceProfile';
 
 // Start polling on install/startup
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
   runStartupTask('startPolling', startPolling);
   runStartupTask('runMigration', runMigration);
-  runStartupTask('migrateTriageLensConfig', migrateTriageLensConfig);
-  runStartupTask('initialiseTriage', initialiseTriage);
+  // migrateTriageLensConfig + initialiseTriage must fully settle before
+  // applyPracticeProfile runs: both eventually write 'triagelens.config', and on
+  // a fresh install (nothing in that key yet) initialiseTriage does an
+  // unconditional overwrite from bundled defaults.json once its own fetch
+  // resolves, with no re-check for a concurrent writer. Unawaited, whichever of
+  // it and the practice-profile merge finished last silently won — confirmed
+  // live 2026-07-31: a freshly-applied practice profile's oirTests got stomped
+  // back to the shipped-empty default because initialiseTriage's write landed
+  // after it.
+  await runStartupTask('migrateTriageLensConfig', migrateTriageLensConfig);
+  await runStartupTask('initialiseTriage', initialiseTriage);
   runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
   runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);
   runStartupTask('schedulePpAlarm', _schedulePpAlarm);
