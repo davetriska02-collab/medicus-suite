@@ -412,6 +412,61 @@ console.log('--- Red-team: unmarked Impression followed by prose paragraph ---')
   check(r.candidates[0].status === 'suspected', '"Likely viral illness" is suspected, not offered');
 }
 
+// ── Red-team battery 2 (2026-08-01): the action-flag scanner ────────────────
+// Action flags are escalate-only, so MISSES are the costly failure — but the
+// pre-hardening scanner missed the most common UK letter phrasings AND fired
+// on "No action required". 21 probes; every one failed or passed exactly as
+// documented in the engine's ACTION_DEFS comment before/after the fix.
+console.log('--- Red-team: action-flag phrasings (misses) ---');
+{
+  const mustFire = [
+    ['We would be grateful if you could arrange a medication review.', 'gp-action'],
+    ['I would be grateful if you would monitor renal function.', 'gp-action'],
+    ['Please could you arrange repeat thyroid function tests.', 'gp-action'],
+    ['Kindly organise repeat bloods in primary care.', 'gp-action'],
+    ['The practice is asked to arrange annual review.', 'gp-action'],
+    ['We have asked the practice to repeat the ECG.', 'gp-action'],
+    ['Suggest GP checks blood pressure at next attendance.', 'gp-action'],
+    ['This requires GP follow-up.', 'gp-action'],
+    ['FAO GP: medication change needs monitoring.', 'gp-action'],
+    ['Repeat U&E in 2/52.', 'follow-up'],
+    ['Review bloods in 6 weeks.', 'follow-up'],
+    ['F/U 6/52 with repeat imaging.', 'follow-up'],
+    ['Bloods in 3 months to check HbA1c.', 'follow-up'],
+    ['Discharged from the two week rule pathway.', '2ww-mention'],
+    ['Remains on the 62-day pathway pending MDT.', '2ww-mention'],
+    ['Referred on the urgent suspected cancer (USC) pathway.', '2ww-mention'],
+  ];
+  for (const [line, kind] of mustFire) {
+    const kinds = L.scanActions([line]).map((f) => f.kind);
+    check(kinds.includes(kind), `fires ${kind}: "${line}"`);
+  }
+}
+
+console.log('--- Red-team: action-flag false positives ---');
+{
+  const mustNotFire = [
+    'No action required.',
+    'No further action required from the practice.',
+    'Please refer to the enclosed patient information leaflet.',
+    'Please do not hesitate to contact us.',
+  ];
+  for (const line of mustNotFire) {
+    check(L.scanActions([line]).length === 0, `silent on: "${line}"`);
+  }
+}
+
+console.log('--- Red-team: multi-kind line keeps the 2WW flag visible ---');
+{
+  const kinds = L.scanActions(['Discharged from the two week wait pathway; please arrange routine recall.']).map(
+    (f) => f.kind
+  );
+  check(
+    kinds.includes('2ww-mention') && kinds.includes('gp-action'),
+    'a line carrying both a 2WW mention and a GP action raises BOTH flags'
+  );
+}
+
 // ── Property: nothing in the engine can claim completion ────────────────────
 console.log('--- Source guard: no completion language ---');
 {

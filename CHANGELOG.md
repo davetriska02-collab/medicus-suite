@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.209.3] — 2026-08-01
+
+### Document Coder engine: action-flag scanner red-teamed (21 probes, 17 failed, all fixed)
+
+The GP-action / follow-up / 2WW scanner got its own dedicated adversarial
+pass (the v3.209.1 round covered only the diagnosis classifier). For an
+escalate-only layer misses are the costly failure, and the probe battery
+found plenty: "I/We would be grateful if you could…", "Please could you
+arrange…", "Kindly organise…", "The practice is asked to…", "We have asked
+the practice…", "Suggest GP checks…", "requires GP follow-up", "FAO GP" all
+silently missed; NHS interval shorthand ("repeat U&E in 2/52", "F/U 6/52")
+and plain "Review bloods in 6 weeks" raised no follow-up flag; "two week
+rule", "USC pathway" and "62-day pathway" raised no 2WW flag. Two
+false-positive classes fixed the other way: "No (further) action required"
+fired a GP-action flag (alarm-fatigue fuel), and "please refer to the
+enclosed leaflet" read as a referral request ("refer to" now excluded).
+Structural fix: the scanner stopped at the first matching kind per line, so
+"Discharged from the two week wait pathway; please arrange routine recall"
+lost its 2WW flag behind the GP action — a line now raises one flag per
+kind, which the reception triage view depends on. All 21 probes are
+permanent fixtures (test suite 67 → 88 checks). Engine remains unwired.
+
 ## [v3.209.2] — 2026-08-01
 
 ### Document Coder: SNOMED verification harness (dev tool)

@@ -396,16 +396,31 @@
 
   // ── action flags: the ONE whole-text scan (escalate-only) ────────────────
 
+  // Trigger lists hardened by a dedicated red-team pass (2026-08-01): the
+  // original set missed the most common UK letter phrasings ("I would be
+  // grateful if…", "Please could you…", NHS "2/52" shorthand, "two week
+  // rule", "62-day pathway"), fired on "No action required" and "please
+  // refer to the enclosed leaflet", and dropped the 2WW flag when a line
+  // also carried a GP action. Every probe lives in test-letter-extract.js.
   const ACTION_DEFS = [
     {
       kind: 'gp-action',
       res: [
         /\bfor (?:the )?gp to\b/i,
-        /\bgp to (?:arrange|review|monitor|follow|check|repeat|refer|consider|action|chase)\b/i,
-        /\bplease (?:arrange|review|monitor|repeat|check|refer|consider|chase|follow)/i,
-        /\bwe would be grateful if (?:you|the gp)\b/i,
-        /\bkindly (?:arrange|review|monitor|repeat|refer)\b/i,
-        /\baction(?:s)? required\b/i,
+        /\bgp to (?:arrange|review|monitor|follow|check|repeat|refer|consider|action|chase|organis)/i,
+        // "refer to" = consult a document, not a referral request
+        /\bplease (?:could you )?(?:arrange|review|monitor|repeat|check|consider|chase|organis|follow|refer(?!\s+to\b))/i,
+        /\bcould you (?:please )?(?:arrange|review|monitor|repeat|check|consider|chase|organis|refer(?!\s+to\b))/i,
+        /\b(?:i|we) would be grateful if (?:you|the gp|the practice)\b/i,
+        /\bkindly (?:arrange|review|monitor|repeat|check|chase|organis|refer(?!\s+to\b))/i,
+        /\bwe have asked (?:you|the (?:gp|practice|surgery))\b/i,
+        /\b(?:the )?(?:practice|surgery|gp) (?:is|are) asked to\b/i,
+        /\bsuggest (?:the )?gp\b/i,
+        /\brequires? gp (?:follow[- ]?up|review|action)\b/i,
+        /\bfao:? (?:the )?gp\b/i,
+        /\bfor gp attention\b/i,
+        // "No (further) action required" must never fire the flag
+        /(?<!no )(?<!no further )\bactions? required\b/i,
         /\bfor (?:your|gp) action\b/i,
       ],
     },
@@ -413,7 +428,10 @@
       kind: 'follow-up',
       res: [
         /\bfollow[- ]?up (?:in|within|at)\s+\d+\s*(?:day|week|month|yr|year)s?\b/i,
-        /\brepeat\b[^.\n]{0,60}\b(?:in|within)\s+\d+\s*(?:day|week|month)s?\b/i,
+        /\b(?:repeat|review|recheck|re-?test|bloods?|imaging|scan)\b[^.\n]{0,60}\b(?:in|within)\s+\d+\s*(?:day|week|month|yr|year)s?\b/i,
+        // NHS shorthand: 2/52 (weeks), 3/12 (months), 5/7 (days)
+        /\b(?:repeat|review|recheck|f\/?u|bloods?|imaging|scan)\b[^.\n]{0,40}\b\d+\s*\/\s*(?:7|52|12)\b/i,
+        /\bf\/?u\s+\d+\s*\/\s*(?:7|52|12)\b/i,
         /\bsafety[- ]?net/i,
         /\brefer (?:back|again) if\b/i,
       ],
@@ -421,11 +439,13 @@
     {
       kind: '2ww-mention',
       res: [
-        /\btwo[- ]week[- ]wait\b/i,
+        /\btwo[- ]week[- ](?:wait|rule)\b/i,
         /\b2\s?ww\b/i,
         /\bfast[- ]?track\b/i,
         /\burgent suspected cancer\b/i,
+        /\busc pathway\b/i,
         /\bcancer pathway\b/i,
+        /\b62[- ]day pathway\b/i,
         /\bfds\b/i,
       ],
     },
@@ -436,12 +456,13 @@
     lines.forEach((raw, i) => {
       const line = normSpace(raw);
       if (!line) return;
+      // One flag per KIND per line — never break after the first kind: a
+      // line like "Discharged from the two week wait pathway; please arrange
+      // routine recall" carries BOTH a 2WW mention and a GP action, and the
+      // reception-triage view needs the 2WW one visible (red-team fix).
       for (const def of ACTION_DEFS) {
         const hit = firstMatch(def.res, line);
-        if (hit) {
-          flags.push({ kind: def.kind, phrase: hit, sourceLine: line, lineNo: i });
-          break; // one flag per line, highest-priority kind first
-        }
+        if (hit) flags.push({ kind: def.kind, phrase: hit, sourceLine: line, lineNo: i });
       }
     });
     return flags;
