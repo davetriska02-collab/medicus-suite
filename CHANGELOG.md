@@ -2,6 +2,48 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.209.0] — 2026-08-01
+
+### Document Coder: deterministic letter-extraction engine (unwired groundwork)
+
+The extraction core of the planned Document Coder
+(`docs/plans/DOCUMENT-CODER-2026-08-01.md`), built engine-first so the Phase 0
+capture session wires up an already-tested core. **Not connected to any UI or
+surface yet — nothing user-visible changes in this release.**
+
+`engine/letter-extract.js` (pure: text in, structure out; no DOM/network/writes):
+
+- **Four-state honesty model** — `assessLetterText()` returns exactly one of
+  `could-not-read` (empty/garbled/non-prose input, conservative heuristics),
+  `nothing-anchored` (text read, no recognised section structure), or
+  `assessed` — plus a coverage account (content lines vs assessed lines) so a
+  caller can never render silence as clearance. No API field can express
+  "fully coded"; the test suite source-greps for banned completion language.
+- **Anchored extraction only** — PRSB eDischarge-family section headings
+  (Diagnoses/Problems/Impression; Medications on discharge; Plan and requested
+  actions) plus informal variants; prose is never mined for diagnoses.
+- **Fail-closed candidate classification** (NegEx/ConText lineage, sentence-
+  scoped): every candidate is `active | suspected | negated | historical |
+  resolved | family | unclassifiable`, with pseudo-negation guards ("cannot be
+  excluded" is a suspicion, not a negation) and an experiencer check (family
+  history is never the patient's diagnosis). Only `active` is ever offered;
+  everything else returns as "mentioned, not offered" with its trigger
+  evidence and source sentence (provenance).
+- **Medication-change lines** — started/stopped/changed/listed, with an
+  explicit `unparsed` state when a drug name cannot be extracted (never
+  guessed).
+- **Action flags are the one whole-text scan** (escalate-only, so false
+  positives are cheap): GP-action phrases ("for GP to arrange…"), follow-up
+  intervals, and 2WW/fast-track mentions fire from unanchored prose too —
+  the buried-sub-paragraph war story from the panel review.
+
+`test-letter-extract.js` — 43 checks: the panel's war-story register as
+fixtures (nine-diagnosis discharge with new-AF mid-list, ?PE-excluded,
+right-?malignant/left-benign laterality binding, family-history breast cancer,
+pseudo-negation, prose-buried 2WW outcome, garbled OCR) plus property tests
+(offered ⇒ active; every candidate carries a source sentence) and the
+completion-language source guard.
+
 ## [v3.208.1] — 2026-08-01
 
 ### Hazard log: CSO sign-off of H-055–H-057 (Contacts Management)
