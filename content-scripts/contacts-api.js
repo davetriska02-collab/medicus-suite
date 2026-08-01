@@ -377,6 +377,9 @@
   //   existingForwardLink (entry|null — skips the forward write if set),
   //   reverseBaseId (string|null — fires the reverse write only if set), reverseIsNextOfKin, reverseCopyCorrespondence,
   //   existingReciprocal (entry|null — informational only, for the summary text),
+  //   reciprocalUpdateId (string|null — the reciprocal relationship record already exists on the
+  //     candidate's own record, e.g. downgraded to a generic placeholder by removeCardFromTree;
+  //     update its text in place instead of attempting a fresh, doomed-to-collide create),
   //   manualContactIdToDelete (string|null),
   //   progress (object|null — see RESUMABLE below)
   //
@@ -427,6 +430,7 @@
         relationshipUpdate: false,
         reverseLink: false,
         reverseAlreadyPresent: false,
+        reciprocalUpdate: false,
         manualDelete: false,
         reverseManualMatch: null,
       },
@@ -494,7 +498,43 @@
       }
 
       let reverseManualMatch = progress.reverseManualMatch;
-      if (params.reverseBaseId && !progress.reverseLink && !progress.reverseAlreadyPresent) {
+      if (params.reciprocalUpdateId && params.reverseBaseId && !progress.reciprocalUpdate) {
+        // The reciprocal relationship record already exists — either downgraded to a generic
+        // placeholder by this canvas's own "remove from tree" flow (see removeCardFromTree), or
+        // otherwise already known — so update its relationship text in place rather than
+        // attempting a fresh linkPatient create, which would be rejected: POST link-patient has
+        // no idempotency guard of its own (see findExistingReciprocal's comment) but Medicus DOES
+        // still reject an outright duplicate relationship between the same two patients regardless
+        // of what text it currently holds. Mirrors the forward relationshipUpdateId step above —
+        // same full-replace discipline, same "preserve whatever's currently recorded" for
+        // isNextOfKin/copyCorrespondence rather than applying the confirm panel's own reverse
+        // checkboxes, since this step's only job is fixing the relationship text.
+        const current = await getEditPatientContact(params.apiBase, params.reciprocalUpdateId);
+        await changePatientContact(
+          params.apiBase,
+          params.reciprocalUpdateId,
+          {
+            patientContactTitle: null,
+            patientContactFirstName: null,
+            patientContactMiddleNames: null,
+            patientContactLastName: null,
+            patientContactHomeTelephoneNumber: null,
+            patientContactMobileTelephoneNumber: null,
+            patientContactWorkTelephoneNumber: null,
+            patientContactEmailAddress: null,
+            patientContactAddress: null,
+            patientContactRelationship: CR.formatLabel(params.reverseBaseId, params.modifierId),
+            patientContactRelationshipIsNextOfKin: current.patientContactRelationshipIsNextOfKin,
+            patientContactRelationshipNotes: current.patientContactRelationshipNotes,
+            patientContactRelationshipCopyCorrespondence: current.patientContactRelationshipCopyCorrespondence,
+          },
+          // The proof this id belongs to a real patient link — same discipline as
+          // relationshipUpdateId above, just naming the INDEX patient as "the other side" since
+          // this record lives on the CANDIDATE's own patientContactsSection.
+          { patientContactPatientId: params.patientId }
+        );
+        progress.reciprocalUpdate = true;
+      } else if (params.reverseBaseId && !progress.reverseLink && !progress.reverseAlreadyPresent) {
         // Stale-snapshot re-derive — see this function's own comment. Only fires in the narrow
         // case that actually proved staleness (the forward link already existed), so the normal
         // path pays nothing for it. No .catch(): a failure here must abort rather than fall
@@ -544,10 +584,12 @@
       );
       if (params.relationshipUpdateId) parts.push('updated their recorded relationship');
       if (params.manualContactIdToDelete) parts.push('removed the old manual contact');
-      // reverseAlreadyPresent: the reverse link was found already on record by the staleness
-      // re-derive above, so nothing was created — say that rather than claiming a write that
-      // deliberately didn't happen.
-      if (params.reverseBaseId && !progress.reverseAlreadyPresent) {
+      if (params.reciprocalUpdateId) {
+        parts.push("corrected the reciprocal relationship on the other patient's record");
+      } else if (params.reverseBaseId && !progress.reverseAlreadyPresent) {
+        // reverseAlreadyPresent: the reverse link was found already on record by the staleness
+        // re-derive above, so nothing was created — say that rather than claiming a write that
+        // deliberately didn't happen.
         parts.push('created the reverse link on their record');
       } else if (params.existingReciprocal || progress.reverseAlreadyPresent) {
         parts.push('left their existing reverse link untouched');

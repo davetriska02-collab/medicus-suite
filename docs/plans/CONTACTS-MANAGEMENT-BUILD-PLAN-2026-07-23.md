@@ -1,4 +1,4 @@
-> **Recovered 2026-07-26** from a session transcript on Dave's old laptop (`ExitPlanMode` call,
+> **Recovered 2026-07-26** from a session transcript on Nick's old laptop (`ExitPlanMode` call,
 > session `7cead2f2-9902-47ce-b6eb-4219d44ffef2`, dated 2026-07-23) after that machine's Windows
 > profile was corrupted and this repo was moved to a new machine without it. Never previously
 > committed to this repo — the `engine/contact-relationships.js` header comment referencing "the
@@ -13,7 +13,7 @@
 > - **Phase 4 (Visual family tree)** — done, plus substantial rework beyond the original scope: needs-review/unrecognised-relationship handling, a unified "any linked contact can match a manual duplicate" mechanism, writing a corrected relationship back to Medicus for an unrecognised-but-real link, immediate manual-duplicate deletion for an already-placed match, and full per-number phone rows in the merge-compare panel (replacing the single guessed value described in the matching section below).
 > - **Phase 5 (Cycling + transitive suggestions)** — **done, as of 2026-07-29**. Cycling (`createFamilySession`/`advance`/`recordCommittedEdge` in `engine/contact-tree.js`) is now wired into the canvas via a "Next family member" header button — see CHANGELOG v3.190.0 for the full mechanism (turned out to require a real browser navigation + `chrome.storage.local` persistence + a resume banner, not an in-page state swap, since Medicus is one-patient-per-page). Transitive suggestions shipped in v3.186.0 (see below) plus a first slice of relationship COMPOSITION landed alongside cycling in v3.190.0: `ContactRelationships.composeViaHub` auto-fills a hub's other relatives relative to a newly-cycled-to patient, restricted to the two structurally-safe cases (grandparent/grandchild, in-law) — see the composition memory note two lines down for what's still deliberately excluded (sibling, step-parent) and why.
 > - v3.186.0 also fixed a real gap in Phase 2 itself while folding it in: the wizard's `linkContactsBulk` bulk-import only ever wrote the forward link, never the reverse — the canvas version always writes both, via the same path every other new link uses.
-> - **Phase 6 (Side-panel review module + backup/IO wiring)** — not started. No `side-panel/modules/contacts/`, no `contacts.relationshipOverrides` in `shared/io/`, no `contacts`/`conversionLog` entries in `test-backup-coverage.js`'s allowlist.
+> - **Phase 6 (Side-panel review module + backup/IO wiring)** — **RETIRED 2026-08-01, superseded rather than built.** Discussed directly with the user before starting: both halves of this phase were designed back on 2026-07-23, before Phases 1-5 existed, and the actual implementation that followed made both unnecessary. `contacts.relationshipOverrides` (a local-only relationship classification store) has nothing left to override — classification now writes straight back to Medicus via `changePatientContact` once a picker choice is made, so Medicus's own record is always the live source, not a local shadow copy. `contacts.conversionLog` (envisioned as: convert 4 contacts on patient A, remember them, reuse on patients B-E) is superseded by three mechanisms that together already solve it at the source rather than via a local cache: `performLinkAndCleanup` always fires a REAL reverse write onto the other patient's own Medicus record (not just a forward one), so opening patient B natively shows the link back to A already, no replay needed; the transitive pool (v3.186.0) auto-surfaces a hub's own already-linked contacts; and cycling (Phase 5, "Next family member") carries committed-edge state directly from one patient's canvas to the next via `chrome.storage.local`. The side-panel review module is likewise superseded — the canvas itself (opened from the specific patient's own admin page) already shows every linked contact, its NOK/cc flags, shared-contact-info warnings, duplicate-address detection and gap warnings, all in the one place a GP would actually be looking; a separate read-only side-panel browser would only duplicate that with less context. No code written for this phase — decision recorded here so it doesn't resurface as an open item.
 > - Two further ideas from 2026-07-26 aren't in this original plan at all: flagging when a patient shares a non-Home phone/email with one of their own linked contacts (a natural extension of the matching section's own stated caution below about shared family contact details) — **built 2026-07-30, see CHANGELOG v3.191.0** (`ContactRelationships.findSharedContactInfo`/`emailOwnerHint`, badge + expandable detail on the linked contact's card) — and flagging a number stored under the wrong type (e.g. a mobile-format number filed as "Home") — **built 2026-07-28, see CHANGELOG v3.189.0** ("Fix type" in the merge-compare panel's Phone rows).
 > - **NOK / copy-correspondence gaps and reciprocal flags, added 2026-07-30, see CHANGELOG v3.191.0**: a read-only warning when a patient has no next-of-kin contact set (any age), or when an under-13 patient has no contact set to receive copy correspondence. Separately, the confirm panel now offers NOK/copy-correspondence checkboxes for the RECIPROCAL relationship too (previously forward-only) — the write path had supported this since the canvas was built, it just had no UI.
 > - **General relationship composition — narrower slice done, rest still deliberately parked, as of 2026-07-29.** `ContactRelationships.composeViaHub` (CHANGELOG v3.190.0) covers grandparent/grandchild and in-law composition via one unmodified parent/partner hop each — both structurally unconditional, no way to be wrong. Sibling-via-shared-parent (can't tell full- vs half- from one hop) and step-parent-via-partner (the partner could already independently be that child's own parent) remain unbuilt — the plan discussed with the user is to surface those later WITH an explicit prompt asking the user to resolve the full/half or step/bio ambiguity, rather than composing silently. Also parked: what happens when a composable relationship becomes knowable only AFTER the relevant tree(s) were already built/visited earlier in the same cycling session (retroactively adding a composed edge to an already-defined tree) — flagged by the user as a real gap, not yet scoped.
@@ -29,7 +29,15 @@
 
 Medicus imports family/contact data from GP2GP as flat, disconnected records — name/phone/email/relationship typed as free text, not linked to any real Medicus patient record. Medicus separately supports linking a contact directly to another real patient record (dynamic, shows that patient's own current details, carries `isNextOfKin` and `copyCorrespondence` flags that drive the Medicus header and message-destination lists). Converting a family from the former to the latter today is entirely manual and repetitive: search, link, define relationship+flags, then repeat in reverse on the other patient's own record, then delete the original. For a family of five this is a lot of tedious, error-prone clicking.
 
-This plan builds a tool, injected directly onto Medicus's own patient admin-record page, that automates this end-to-end: matching existing manual contacts against real Medicus patients, letting the user confirm relationships via a drag-and-drop family tree, and firing the correct linking/deletion calls on both sides of each relationship — without ever navigating away from the page the user started on (every relevant Medicus endpoint takes an explicit `patientId`, so "the other patient's side" can be written directly via a background credentialed fetch).
+This plan builds a tool, injected directly onto Medicus's own patient admin-record page, that automates this end-to-end: matching existing manual contacts against real Medicus patients, letting the user confirm relationships via a drag-and-drop family tree, and firing the correct linking/deletion calls on both sides of each relationship. Every relevant Medicus endpoint takes an explicit `patientId`, so **writing** "the other patient's side" of a relationship never requires navigating anywhere — it's always a background credentialed fetch from wherever the user already is, regardless of which patient's own page happens to be open.
+
+> Note (2026-07-29): the sentence above originally also claimed the whole TOOL never navigates away
+> from the page the user started on. That held for every write, and for Phases 0-4, but Phase 5
+> (cycling) broke it deliberately: moving to the next family member turned out to require a REAL
+> browser navigation to that patient's own admin-record page, not an in-canvas state swap, because
+> Medicus is one-patient-per-page (see the correction at "Key architectural decision" below, and the
+> Family-session note further down). Writes still never navigate; the cycling UI now does, for
+> viewing purposes only.
 
 The full Medicus API surface below was reverse-engineered via live HAR capture (redacted test-patient traffic) across several rounds with the GP building this; every endpoint/payload shape listed here is a confirmed, observed call, not a guess.
 
@@ -45,7 +53,18 @@ Three layers, following this repo's existing `engine/` (pure logic) vs `content-
 - **`content-scripts/`** — the injected button, the family-tree canvas, and all the actual credentialed writes to Medicus.
 - **`side-panel/modules/contacts/`** — deliberately deferred to the last phase: a read-only review/config surface, never where writing happens.
 
-**Key architectural decision**: the canvas never navigates the browser to another family member's own Medicus page. Every endpoint we need (`link-patient`, `create-patient-contact`, etc.) takes an explicit `patientId`/`linkPatientId` argument, so "moving to the next family member" is an in-memory re-render of the same canvas, still parked on the index patient's admin page — both directions of a relationship get written as two background fetches from wherever the user already is.
+**Key architectural decision, as originally planned (superseded for cycling — see the note immediately below)**: the canvas never navigates the browser to another family member's own Medicus page. Every endpoint we need (`link-patient`, `create-patient-contact`, etc.) takes an explicit `patientId`/`linkPatientId` argument, so "moving to the next family member" is an in-memory re-render of the same canvas, still parked on the index patient's admin page — both directions of a relationship get written as two background fetches from wherever the user already is.
+
+> Note (2026-07-29): this held through Phase 4, but Phase 5 (cycling) found it technically
+> unworkable and deliberately did the opposite. Medicus is one-patient-per-page — there is no way
+> to re-render the canvas against a different patient's live data without the browser actually being
+> on that patient's own admin-record page. So "moving to the next family member" via the "Next
+> family member" button means: persist the in-progress family session to `chrome.storage.local`,
+> then perform a REAL browser navigation to the next patient's own record, where a resume banner
+> picks the session back up. The WRITE side of the architecture is unaffected by this — both
+> directions of a relationship still get written as background credentialed fetches, never
+> requiring navigation — only the cycling UI's own act of moving between patients to VIEW them
+> navigates. See CHANGELOG v3.190.0 for the full mechanism.
 
 ### Credentialed fetch to Medicus's own API
 Do the fetch directly from the isolated-world content script: `fetch(url, { credentials: 'include', headers: {...} })` — confirmed working pattern in `content-scripts/task-inline.js:84-118` (`apiFetch`/`apiBaseUrl`). The MAIN-world bridge (`content-scripts/triage-lens/page-world.js`) is not needed for our own outbound writes — it exists only because Medicus's CSP blocks *inline-script* interception of the page's *own* traffic; content scripts already share the page's cookie jar regardless of world.
@@ -192,13 +211,24 @@ toRenderModel(tree) -> render-ready plain object
 > (an already-linked contact whose relationship text doesn't map to a canonical id) is now handled
 > without a separate holding structure at all.
 
-**Family-session (enables cycling without navigation, Phase 5)**:
+**Family-session, as originally planned (superseded — see the note below)**:
 ```
 createFamilySession(indexPatientId) -> { queue: [indexPatientId], cursor: 0, byPatient: Map, committedEdgesByPatient: Map }
 advance(session) -> nextPatientId | null
 recordCommittedEdge(session, patientId, edge)   // called right after a successful dual link-patient write, before the next screen renders, so pre-placed locked boxes stay in sync with what's actually in Medicus
 ```
 Lives entirely in the canvas's JS closure — a closed tab loses in-progress-but-unconfirmed work in v1. Worth calling out as a known limitation rather than solving speculatively; persisting to `chrome.storage.local` is a natural later enhancement if it turns out to matter in practice.
+
+> Note (2026-07-29): both paragraphs above turned out to be wrong once Phase 5 was actually built.
+> "Enables cycling without navigation" didn't hold — see the note on the "Key architectural
+> decision" above; cycling requires a real browser navigation per family member, since Medicus is
+> one-patient-per-page. And `chrome.storage.local` persistence wasn't an optional nice-to-have that
+> "might matter in practice" — it became load-bearing and mandatory from the start: without it, the
+> in-progress session would be destroyed by the very navigation cycling depends on, before the next
+> screen could even render. The shape also grew beyond this sketch (`queue`/`cursor` became
+> `current`/`visited`/`pending`, since a newly-discovered relative can sort older than someone
+> already visited — a cursor-in-array model can't express that) and gained a `recordInactive`/
+> deceased-aware skip loop and a resume banner. See CHANGELOG v3.190.0 for what actually shipped.
 
 ---
 

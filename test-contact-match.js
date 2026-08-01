@@ -323,5 +323,77 @@ console.log('7: rankCandidates exposes tie/margin on the top result');
 }
 
 // ============================================================
+// 8 — non-British name-derivation matching (engine/name-derivations.js integration)
+// ============================================================
+// Unit coverage for the derivation logic itself lives in test-name-derivations.js — this section
+// only pins that contact-match.js actually WIRES it in correctly (nameSimilarity treating
+// gendered pairs as equivalent tokens; scoreCandidate's patronymic-father bonus), plus the
+// negative case that matters most: an ordinary English family sharing an inherited "-son"
+// surname must never get a spurious patronymic boost.
+console.log('8: non-British name-derivation matching');
+{
+  check(
+    CM.nameSimilarity('Anna Kowalska', 'Anna Kowalski') >= 0.9,
+    'a Balto-Slavic gendered-surname pair scores as the same person, not a mismatch'
+  );
+  check(
+    CM.nameSimilarity('Jan Novak', 'Jan Novakova') >= 0.9,
+    'Czech unstripped male vs -ová appended female form also reaches the containment tier'
+  );
+  check(
+    CM.nameSimilarity('Anna Kowalska', 'Anna Nowicka') < 0.9,
+    'two DIFFERENT Polish families sharing only the female suffix shape do not falsely match'
+  );
+
+  // Patronymic father bonus — the manual contact's own free text has nothing to go on (no shared
+  // surname exists in this naming system at all), so the signal has to come from the index
+  // patient's own name instead.
+  const fatherCandidate = { patientId: 'p20', displayName: 'Björn Einarsson', atSameAddress: false };
+  const withoutIndexName = CM.scoreCandidate(
+    { name: 'Unknown Father' },
+    fatherCandidate,
+    { manualRelationshipGuess: { baseId: 'father' } } // no indexPatientName supplied
+  );
+  const withIndexName = CM.scoreCandidate({ name: 'Unknown Father' }, fatherCandidate, {
+    manualRelationshipGuess: { baseId: 'father' },
+    indexPatientName: 'Karl Björnsson',
+  });
+  check(
+    withIndexName.score > withoutIndexName.score,
+    `the patronymic bonus raises the score once indexPatientName is supplied (${withoutIndexName.score} -> ${withIndexName.score})`
+  );
+  check(
+    withIndexName.tier === 'strong' || withIndexName.tier === 'possible',
+    `a correctly patronymic-matched father candidate is at least "possible" (got ${withIndexName.tier} @ ${withIndexName.score})`
+  );
+
+  // Only fires for 'father' — patronymics never encode the mother's name in either naming system
+  // this covers.
+  const motherGuess = CM.scoreCandidate({ name: 'Unknown Mother' }, fatherCandidate, {
+    manualRelationshipGuess: { baseId: 'mother' },
+    indexPatientName: 'Karl Björnsson',
+  });
+  check(
+    motherGuess.score === withoutIndexName.score,
+    'the same indexPatientName produces no bonus at all when the relationship being guessed is "mother", not "father"'
+  );
+
+  // The core false-positive risk: an ordinary English family's shared, INHERITED "-son" surname
+  // must never be treated as a fresh per-generation patronymic.
+  const englishFather = { patientId: 'p21', displayName: 'James Wilson', atSameAddress: false };
+  const englishBonus = CM.scoreCandidate({ name: 'Unknown Father' }, englishFather, {
+    manualRelationshipGuess: { baseId: 'father' },
+    indexPatientName: 'Anna Wilson',
+  });
+  const englishNoBonus = CM.scoreCandidate({ name: 'Unknown Father' }, englishFather, {
+    manualRelationshipGuess: { baseId: 'father' },
+  });
+  check(
+    englishBonus.score === englishNoBonus.score,
+    'an ordinary English "-son" family surname never triggers the patronymic bonus, even when a first name would coincidentally line up'
+  );
+}
+
+// ============================================================
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
