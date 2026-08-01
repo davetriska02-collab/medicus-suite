@@ -315,18 +315,39 @@ const PracticeProfile = (() => {
               // thing, same as before this fix.
               await chrome.storage.local.set({ 'triagelens.config': config });
               applied.push('triage');
-            } else if (Array.isArray(config.oirTests) && config.oirTests.length > 0) {
+            } else {
               const localTests = Array.isArray(local.oirTests) ? local.oirTests : [];
-              const localKeys = new Set(localTests.map((t) => t && t.key));
-              // Strip dangerous keys from each untrusted incoming test entry
-              // before merging, same defence as every other untrusted-object
-              // merge in this file.
-              const incoming = config.oirTests
-                .filter((t) => t && t.key && !localKeys.has(t.key))
-                .map((t) => _stripDangerousKeys(t));
-              if (incoming.length > 0) {
+              // Explicit admin-initiated removal only — an edited test is
+              // never merged in-place over an existing key (that would risk
+              // silently clobbering a clinician's own local edit made under
+              // that same key via the options-page test editor). Instead a
+              // republished edit always arrives under a NEW key (see
+              // doPublish's key rotation), and the superseded key is only
+              // ever dropped here, when the admin has explicitly listed it.
+              const retiredKeys = new Set(Array.isArray(config.retiredOirKeys) ? config.retiredOirKeys : []);
+              const survivingTests =
+                retiredKeys.size > 0 ? localTests.filter((t) => !(t && retiredKeys.has(t.key))) : localTests;
+              const retiredSomething = survivingTests.length !== localTests.length;
+
+              let nextTests = survivingTests;
+              let addedSomething = false;
+              if (Array.isArray(config.oirTests) && config.oirTests.length > 0) {
+                const localKeys = new Set(survivingTests.map((t) => t && t.key));
+                // Strip dangerous keys from each untrusted incoming test entry
+                // before merging, same defence as every other untrusted-object
+                // merge in this file.
+                const incoming = config.oirTests
+                  .filter((t) => t && t.key && !localKeys.has(t.key))
+                  .map((t) => _stripDangerousKeys(t));
+                if (incoming.length > 0) {
+                  nextTests = [...survivingTests, ...incoming];
+                  addedSomething = true;
+                }
+              }
+
+              if (retiredSomething || addedSomething) {
                 await chrome.storage.local.set({
-                  'triagelens.config': Object.assign({}, local, { oirTests: [...localTests, ...incoming] }),
+                  'triagelens.config': Object.assign({}, local, { oirTests: nextTests }),
                 });
                 applied.push('triage');
               }
@@ -774,6 +795,48 @@ const PracticeProfile = (() => {
         }
       } catch (e) {
         errors.push(`requestMonitor: ${e.message}`);
+      }
+    }
+
+    // ── Cleanup Code Preferences (v2 new) ──────────────────────────────────────
+    // Tally counts ALWAYS reconcile via max(), never add — unlike this module's
+    // existing manual one-off export/import card (problem-description-cleanup-io.js's
+    // default 'add' semantics, correct there because a manual restore happens once,
+    // deliberately), a practice-profile publish gets re-checked and potentially
+    // re-applied on every version bump. Adding the same published snapshot on every
+    // cycle would double/triple-count it; max() adopts the larger of "what this
+    // machine already has" vs "what's published" without ever inflating, and without
+    // discarding growth this machine made locally since the last sync.
+    // Override resolution DOES follow the module's merge/replace mode: merge keeps
+    // today's "local pin always wins" behaviour; replace treats the published
+    // override as the practice's authoritative decision — same trust model as
+    // Knowledge's replace mode (a deliberately curated push, not a passive learned
+    // signal).
+    if (
+      modMap.has('problemDescriptionCleanup') &&
+      mods.problemDescriptionCleanup &&
+      typeof mods.problemDescriptionCleanup === 'object'
+    ) {
+      try {
+        const merge = modMap.get('problemDescriptionCleanup') === 'merge';
+        const pdc = mods.problemDescriptionCleanup;
+        const hasContent =
+          (pdc.preferredDescriptions && Object.keys(pdc.preferredDescriptions).length > 0) ||
+          (pdc.conceptRemap && Object.keys(pdc.conceptRemap).length > 0);
+
+        if (hasContent) {
+          const problemDescriptionCleanupImport = _io('problemDescriptionCleanupImport');
+          if (!problemDescriptionCleanupImport) {
+            throw new Error('problemDescriptionCleanupImport not available in this context.');
+          }
+          await problemDescriptionCleanupImport(pdc, {
+            overrideWins: merge ? 'local' : 'incoming',
+            tallyMode: 'max',
+          });
+          applied.push('problemDescriptionCleanup');
+        }
+      } catch (e) {
+        errors.push(`problemDescriptionCleanup: ${e.message}`);
       }
     }
 

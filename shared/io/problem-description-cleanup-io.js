@@ -118,7 +118,30 @@ function validateEntryShape(fieldName, topKey, entry) {
 
 // Shared merge algorithm for one top-level field (preferredDescriptions or
 // conceptRemap) — see file header for the "merge not replace" rationale.
-function mergeField(existing, incoming) {
+//
+// opts.tallyMode:
+//   'add' (default) — sum the two counts. Correct for a genuine one-off
+//     combine of two DISTINCT histories (the manual backup restore this file
+//     was designed for — each import happens once, deliberately).
+//   'max' — take the larger of the two counts instead of summing. Required
+//     when the SAME incoming snapshot may be applied more than once, e.g.
+//     the practice-profile shared-folder sync (shared/io/practice-profile.js),
+//     which re-checks and re-applies on every published version bump. 'add'
+//     there would double/triple-count the same published total on every
+//     cycle it re-syncs; 'max' adopts the larger of "what this machine
+//     already has" vs "what's published" without ever inflating, and without
+//     discarding local growth the machine has made since the last sync.
+// opts.overrideWins:
+//   'local' (default) — an existing local override is never silently
+//     replaced by an import (see file header).
+//   'incoming' — the imported override is authoritative, replacing any local
+//     one. Used when a practice-profile publish is explicitly marked
+//     "enforce for everyone" (replace mode) — the published override
+//     represents a deliberate, curated practice decision, same trust model
+//     as how the Knowledge module's replace mode already works.
+function mergeField(existing, incoming, opts) {
+  const tallyMode = (opts && opts.tallyMode) === 'max' ? 'max' : 'add';
+  const overrideWins = (opts && opts.overrideWins) === 'incoming' ? 'incoming' : 'local';
   const merged = {};
   Object.keys(existing).forEach((topKey) => {
     merged[topKey] = pdcShared.normaliseEntry(existing[topKey]);
@@ -133,22 +156,25 @@ function mergeField(existing, incoming) {
     Object.keys(incomingEntry.tally).forEach((tallyKey) => {
       const inc = incomingEntry.tally[tallyKey];
       const loc = mergedTally[tallyKey];
+      const locCount = loc ? loc.count : 0;
       mergedTally[tallyKey] = {
         candidate: inc.candidate !== undefined && inc.candidate !== null ? inc.candidate : loc && loc.candidate,
-        count: (loc ? loc.count : 0) + inc.count,
+        count: tallyMode === 'max' ? Math.max(locCount, inc.count) : locCount + inc.count,
         lastUsed: loc && loc.lastUsed > inc.lastUsed ? loc.lastUsed : inc.lastUsed,
       };
     });
     merged[topKey] = {
       tally: mergedTally,
-      // Local override wins on conflict — see file header.
-      override: localEntry.override || incomingEntry.override,
+      override:
+        overrideWins === 'incoming'
+          ? incomingEntry.override || localEntry.override
+          : localEntry.override || incomingEntry.override,
     };
   });
   return merged;
 }
 
-async function problemDescriptionCleanupImport(data) {
+async function problemDescriptionCleanupImport(data, opts) {
   if (!data || typeof data !== 'object') return;
   const hasPreferredDescriptions = data.preferredDescriptions !== undefined;
   const hasConceptRemap = data.conceptRemap !== undefined;
@@ -178,16 +204,61 @@ async function problemDescriptionCleanupImport(data) {
     const existingR = await chrome.storage.local.get('pdc.preferredDescriptions');
     toSet['pdc.preferredDescriptions'] = mergeField(
       existingR['pdc.preferredDescriptions'] || {},
-      data.preferredDescriptions
+      data.preferredDescriptions,
+      opts
     );
   }
   if (hasConceptRemap) {
     const existingR = await chrome.storage.local.get('pdc.conceptRemap');
-    toSet['pdc.conceptRemap'] = mergeField(existingR['pdc.conceptRemap'] || {}, data.conceptRemap);
+    toSet['pdc.conceptRemap'] = mergeField(existingR['pdc.conceptRemap'] || {}, data.conceptRemap, opts);
   }
   await chrome.storage.local.set(toSet);
 }
 
+// Combine what's CURRENTLY published in the shared practice-profile.json for
+// this module with this machine's own local snapshot, producing the payload
+// to actually publish. Used by the "Publish to shared folder" flow
+// (options.js doPublish) — unlike every other module, which is meant to be
+// curated by one admin from one machine (so overwriting the shared file with
+// the publishing machine's current state is correct), this module
+// accumulates from MULTIPLE machines' independent local usage. Publishing a
+// raw local snapshot would risk regressing another machine's growth that
+// hasn't made it back to THIS machine via a pull yet. Same tallyMode: 'max'
+// as the sync-apply path (never inflate on repeated publishes).
+//
+// opts.includeOverride (default true): whether this machine's local override
+// is allowed to become the newly-published one. TALLIES always merge in
+// regardless — every machine's genuine picks should count toward the
+// collective pool, including ones a reviewer might disagree with. The
+// OVERRIDE is different: it's what becomes "enforced for everyone" once
+// published, and that should only ever change as a result of a conscious,
+// attended publish — never an unattended one (options.js's daily
+// maybeAutoPublish passes includeOverride:false). Without this, a machine's
+// own incidental local pin (set just from someone using "Clean up code"
+// clinically, not as a deliberate practice-wide decision) could silently
+// become the enforced choice the next time an unattended sync happens to
+// run — nobody decided that, it just rode along.
+function problemDescriptionCleanupMergeForPublish(existingModuleData, localModuleData, opts) {
+  const existing = existingModuleData && typeof existingModuleData === 'object' ? existingModuleData : {};
+  const local = localModuleData && typeof localModuleData === 'object' ? localModuleData : {};
+  const includeOverride = !(opts && opts.includeOverride === false);
+  // 'incoming' here = local (2nd arg to mergeField) wins; 'local' = existing/published survives untouched.
+  const mergeOpts = { tallyMode: 'max', overrideWins: includeOverride ? 'incoming' : 'local' };
+  return {
+    preferredDescriptions: mergeField(
+      existing.preferredDescriptions || {},
+      local.preferredDescriptions || {},
+      mergeOpts
+    ),
+    conceptRemap: mergeField(existing.conceptRemap || {}, local.conceptRemap || {}, mergeOpts),
+  };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { problemDescriptionCleanupExport, problemDescriptionCleanupImport, PDC_KEYS };
+  module.exports = {
+    problemDescriptionCleanupExport,
+    problemDescriptionCleanupImport,
+    problemDescriptionCleanupMergeForPublish,
+    PDC_KEYS,
+  };
 }

@@ -48,6 +48,7 @@ const { referralsImport }      = require('./shared/io/referrals-io.js');
 const { requestMonitorImport } = require('./shared/io/request-monitor-io.js');
 const TriageAlertIO            = require('./shared/io/triage-alert-io.js');
 const KnowledgeUtils           = require('./shared/knowledge-utils.js');
+const { problemDescriptionCleanupImport } = require('./shared/io/problem-description-cleanup-io.js');
 
 // Inject as globals so practice-profile.js's _io() resolver can find them
 global.knowledgeImport      = knowledgeImport;
@@ -60,6 +61,7 @@ global.referralsImport      = referralsImport;
 global.requestMonitorImport = requestMonitorImport;
 global.TriageAlertIO        = TriageAlertIO;
 global.KnowledgeUtils       = KnowledgeUtils;
+global.problemDescriptionCleanupImport = problemDescriptionCleanupImport;
 
 const PP = require('./shared/io/practice-profile.js');
 
@@ -461,6 +463,83 @@ function makeProfile(over = {}) {
   check(store['triagelens.config'].oirTests.length === 1 && store['triagelens.config'].oirTests[0].key === 'new',
     'triage replace: old oirTests entries wiped, replaced wholesale (unchanged behaviour)');
 
+  // ── Triage Lens merge: retiredOirKeys removes a superseded key ─────────────
+  // 2026-07-31 fix: an edited test republishes under a NEW key (rotated at
+  // publish time) plus lists the old key in retiredOirKeys, so the apply side
+  // must explicitly drop the old key rather than leaving stale duplicate
+  // content forever.
+  console.log('\n--- triage merge: retiredOirKeys removes the superseded key ---');
+  reset();
+  store['triagelens.config'] = {
+    version: 7,
+    oirTests: [
+      { key: 'crp', label: 'CRP', pattern: 'stale' },
+      { key: 'untouched', label: 'Untouched', pattern: 'keep-me' },
+    ],
+  };
+  const retireProfile = makeProfile({
+    profileVersion: 'tr-4',
+    apply: { modules: { triage: 'merge' } },
+    envelope: {
+      modules: {
+        triage: {
+          config: {
+            oirTests: [{ key: 'crp-2', label: 'CRP', pattern: 'fresh' }],
+            retiredOirKeys: ['crp'],
+          },
+        },
+      },
+    },
+  });
+  const rRetire = await PP.applyProfile(retireProfile);
+  check(rRetire.modulesApplied.includes('triage'), 'triage merge: retirement + append counts as applied');
+  check(store['triagelens.config'].oirTests.find(t => t.key === 'crp') === undefined,
+    'triage merge: retired key removed from local oirTests');
+  check(store['triagelens.config'].oirTests.find(t => t.key === 'crp-2')?.pattern === 'fresh',
+    'triage merge: rotated replacement key appended');
+  check(store['triagelens.config'].oirTests.find(t => t.key === 'untouched') !== undefined,
+    'triage merge: unrelated local entry survives retirement');
+  check(store['triagelens.config'].oirTests.length === 2,
+    'triage merge: net count reflects one retired + one added (2, not 3)');
+
+  // ── Triage Lens merge: retiredOirKeys alone (no new oirTests) still applies ─
+  console.log('\n--- triage merge: retiredOirKeys with no accompanying oirTests still removes the key ---');
+  reset();
+  store['triagelens.config'] = {
+    version: 7,
+    oirTests: [{ key: 'obsolete', label: 'Obsolete', pattern: 'gone' }],
+  };
+  const retireOnlyProfile = makeProfile({
+    profileVersion: 'tr-5',
+    apply: { modules: { triage: 'merge' } },
+    envelope: {
+      modules: {
+        triage: { config: { retiredOirKeys: ['obsolete'] } },
+      },
+    },
+  });
+  const rRetireOnly = await PP.applyProfile(retireOnlyProfile);
+  check(rRetireOnly.modulesApplied.includes('triage'), 'triage merge: pure retirement counts as applied');
+  check(store['triagelens.config'].oirTests.length === 0, 'triage merge: pure retirement empties the retired key out');
+
+  // ── Triage Lens merge: no retiredOirKeys, no new oirTests -> no-op, unapplied
+  console.log('\n--- triage merge: neither retirement nor new tests -> not marked applied ---');
+  reset();
+  store['triagelens.config'] = {
+    version: 7,
+    oirTests: [{ key: 'stable', label: 'Stable', pattern: 'x' }],
+  };
+  const noopProfile = makeProfile({
+    profileVersion: 'tr-6',
+    apply: { modules: { triage: 'merge' } },
+    envelope: {
+      modules: { triage: { config: { someOtherField: true } } },
+    },
+  });
+  const rNoop = await PP.applyProfile(noopProfile);
+  check(!rNoop.modulesApplied.includes('triage'), 'triage merge: genuinely nothing to do -> not marked applied');
+  check(store['triagelens.config'].oirTests.length === 1, 'triage merge: local oirTests untouched by true no-op');
+
   // ── Sentinel: alertLibraryAcknowledged stripped in both modes ─────────────
   console.log('\n--- sentinel: alertLibraryAcknowledged stripped ---');
   reset();
@@ -542,6 +621,102 @@ function makeProfile(over = {}) {
   await PP.applyProfile(suiteProfile3);
   check(store['suite.practiceCode'] === 'REPLACED',
     'suite replace: practiceCode overwritten');
+
+  // ── Cleanup Code Preferences: tallies always max(), override follows mode ──
+  console.log('\n--- problemDescriptionCleanup merge: tally reconciles via max(), never adds ---');
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    35253001: {
+      tally: { 111111: { candidate: { description: 'Local pick' }, count: 20, lastUsed: '2026-07-28T09:00:00Z' } },
+      override: null,
+    },
+  };
+  const pdcMergeProfile = makeProfile({
+    profileVersion: 'pdc-1',
+    apply: { modules: { problemDescriptionCleanup: 'merge' } },
+    envelope: {
+      modules: {
+        problemDescriptionCleanup: {
+          preferredDescriptions: {
+            35253001: {
+              tally: { 111111: { candidate: { description: 'Published pick' }, count: 8, lastUsed: '2026-07-29T09:00:00Z' } },
+              override: null,
+            },
+          },
+        },
+      },
+    },
+  });
+  const rPdc1 = await PP.applyProfile(pdcMergeProfile);
+  check(store['pdc.preferredDescriptions']['35253001'].tally['111111'].count === 20,
+    'tally takes the LARGER of local (20) vs published (8), not the sum (28)');
+  check(rPdc1.modulesApplied.includes('problemDescriptionCleanup'), 'problemDescriptionCleanup recorded as applied');
+
+  // Re-applying the SAME published snapshot again (simulating a later re-check
+  // cycle) must not inflate the count further.
+  const pdcMergeProfile2 = makeProfile({
+    profileVersion: 'pdc-2',
+    apply: { modules: { problemDescriptionCleanup: 'merge' } },
+    envelope: { modules: { problemDescriptionCleanup: pdcMergeProfile.envelope.modules.problemDescriptionCleanup } },
+  });
+  await PP.applyProfile(pdcMergeProfile2);
+  check(store['pdc.preferredDescriptions']['35253001'].tally['111111'].count === 20,
+    'repeated sync of the same published snapshot does not inflate the count (still 20, not 28 or 36)');
+
+  console.log('\n--- problemDescriptionCleanup merge: local override always wins ---');
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    35253001: { tally: {}, override: { key: '111111', candidate: { description: 'Local admin decision' } } },
+  };
+  const pdcMergeOverrideProfile = makeProfile({
+    profileVersion: 'pdc-3',
+    apply: { modules: { problemDescriptionCleanup: 'merge' } },
+    envelope: {
+      modules: {
+        problemDescriptionCleanup: {
+          preferredDescriptions: {
+            35253001: { tally: {}, override: { key: '222222', candidate: { description: 'Published decision' } } },
+          },
+        },
+      },
+    },
+  });
+  await PP.applyProfile(pdcMergeOverrideProfile);
+  check(store['pdc.preferredDescriptions']['35253001'].override.key === '111111',
+    'merge mode: local override survives a conflicting published one');
+
+  console.log('\n--- problemDescriptionCleanup replace: published override is authoritative ---');
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    35253001: { tally: {}, override: { key: '111111', candidate: { description: 'Local admin decision' } } },
+  };
+  const pdcReplaceProfile = makeProfile({
+    profileVersion: 'pdc-4',
+    apply: { modules: { problemDescriptionCleanup: 'replace' } },
+    envelope: {
+      modules: {
+        problemDescriptionCleanup: {
+          preferredDescriptions: {
+            35253001: { tally: {}, override: { key: '222222', candidate: { description: 'Practice-agreed decision' } } },
+          },
+        },
+      },
+    },
+  });
+  await PP.applyProfile(pdcReplaceProfile);
+  check(store['pdc.preferredDescriptions']['35253001'].override.key === '222222',
+    'replace mode: published override replaces the local one (curated practice decision wins)');
+
+  console.log('\n--- problemDescriptionCleanup: empty payload is not applied ---');
+  reset();
+  const pdcEmptyProfile = makeProfile({
+    profileVersion: 'pdc-5',
+    apply: { modules: { problemDescriptionCleanup: 'merge' } },
+    envelope: { modules: { problemDescriptionCleanup: { preferredDescriptions: {}, conceptRemap: {} } } },
+  });
+  const rPdcEmpty = await PP.applyProfile(pdcEmptyProfile);
+  check(!rPdcEmpty.modulesApplied.includes('problemDescriptionCleanup'),
+    'an empty preferredDescriptions/conceptRemap payload is not recorded as applied');
 
   // ── Malformed module section: records error, other modules still apply ─────
   console.log('\n--- malformed module section: per-module error isolation ---');

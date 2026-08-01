@@ -34,6 +34,7 @@ global.chrome = {
 const {
   problemDescriptionCleanupExport,
   problemDescriptionCleanupImport,
+  problemDescriptionCleanupMergeForPublish,
 } = require('./shared/io/problem-description-cleanup-io.js');
 
 let passed = 0,
@@ -207,6 +208,238 @@ async function throws(fn) {
   check(
     store['pdc.conceptRemap']['400'].override.key === '111|222',
     'conceptRemap: local override survives a conflicting import'
+  );
+
+  console.log("\n--- opts.tallyMode: 'max' takes the larger count instead of summing ---");
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    90823000: {
+      tally: { 111111: { candidate: { description: 'Local' }, count: 20, lastUsed: '2026-07-28T09:00:00Z' } },
+      override: null,
+    },
+  };
+  await problemDescriptionCleanupImport(
+    {
+      preferredDescriptions: {
+        90823000: {
+          tally: { 111111: { candidate: { description: 'Incoming' }, count: 8, lastUsed: '2026-07-29T09:00:00Z' } },
+          override: null,
+        },
+      },
+    },
+    { tallyMode: 'max' }
+  );
+  check(
+    store['pdc.preferredDescriptions']['90823000'].tally['111111'].count === 20,
+    "tallyMode 'max': local (20) beats incoming (8) — not summed to 28"
+  );
+
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    90823000: {
+      tally: { 111111: { candidate: { description: 'Local' }, count: 3, lastUsed: '2026-07-28T09:00:00Z' } },
+      override: null,
+    },
+  };
+  await problemDescriptionCleanupImport(
+    {
+      preferredDescriptions: {
+        90823000: {
+          tally: { 111111: { candidate: { description: 'Incoming' }, count: 30, lastUsed: '2026-07-29T09:00:00Z' } },
+          override: null,
+        },
+      },
+    },
+    { tallyMode: 'max' }
+  );
+  check(
+    store['pdc.preferredDescriptions']['90823000'].tally['111111'].count === 30,
+    "tallyMode 'max': incoming (30) beats local (3) when incoming is larger"
+  );
+
+  console.log('\n--- omitting opts (or passing none) keeps the default add/local-wins behaviour ---');
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    90823000: {
+      tally: { 111111: { candidate: {}, count: 3, lastUsed: '2026-07-28T09:00:00Z' } },
+      override: null,
+    },
+  };
+  await problemDescriptionCleanupImport({
+    preferredDescriptions: {
+      90823000: { tally: { 111111: { candidate: {}, count: 5, lastUsed: '2026-07-29T09:00:00Z' } }, override: null },
+    },
+  });
+  check(
+    store['pdc.preferredDescriptions']['90823000'].tally['111111'].count === 8,
+    'no opts passed: tallies still SUM by default (3 + 5 = 8), unchanged behaviour'
+  );
+
+  console.log("\n--- opts.overrideWins: 'incoming' makes the imported override authoritative ---");
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    300: { tally: {}, override: { key: '111000', candidate: { description: 'Local admin decision' } } },
+  };
+  await problemDescriptionCleanupImport(
+    {
+      preferredDescriptions: {
+        300: { tally: {}, override: { key: '333000', candidate: { description: 'Practice-agreed decision' } } },
+      },
+    },
+    { overrideWins: 'incoming' }
+  );
+  check(
+    store['pdc.preferredDescriptions']['300'].override.key === '333000',
+    "overrideWins 'incoming': the imported override replaces the local one"
+  );
+
+  console.log("\n--- opts.overrideWins: 'incoming' still falls back to local when nothing incoming ---");
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    300: { tally: {}, override: { key: '111000', candidate: { description: 'Local admin decision' } } },
+  };
+  await problemDescriptionCleanupImport(
+    { preferredDescriptions: { 300: { tally: {}, override: null } } },
+    { overrideWins: 'incoming' }
+  );
+  check(
+    store['pdc.preferredDescriptions']['300'].override.key === '111000',
+    "overrideWins 'incoming': local override survives when the incoming entry carries no override at all"
+  );
+
+  console.log('\n--- problemDescriptionCleanupMergeForPublish: tally reconciles via max(), never adds ---');
+  {
+    const existingShared = {
+      preferredDescriptions: {
+        90823000: {
+          tally: { 111111: { candidate: { description: 'Shared' }, count: 20, lastUsed: '2026-07-28T09:00:00Z' } },
+          override: null,
+        },
+      },
+      conceptRemap: {},
+    };
+    const localSnapshot = {
+      preferredDescriptions: {
+        90823000: {
+          tally: { 111111: { candidate: { description: 'Local' }, count: 8, lastUsed: '2026-07-29T09:00:00Z' } },
+          override: null,
+        },
+      },
+      conceptRemap: {},
+    };
+    const merged = problemDescriptionCleanupMergeForPublish(existingShared, localSnapshot);
+    check(
+      merged.preferredDescriptions['90823000'].tally['111111'].count === 20,
+      'publish merge: takes the larger of shared (20) vs local (8), not the sum (28)'
+    );
+  }
+
+  console.log('\n--- problemDescriptionCleanupMergeForPublish: local machine override wins over previously-shared ---');
+  {
+    const existingShared = {
+      preferredDescriptions: {
+        300: { tally: {}, override: { key: '111000', candidate: { description: 'Previously-shared decision' } } },
+      },
+      conceptRemap: {},
+    };
+    const localSnapshot = {
+      preferredDescriptions: {
+        300: { tally: {}, override: { key: '222000', candidate: { description: "This machine's fresh decision" } } },
+      },
+      conceptRemap: {},
+    };
+    const merged = problemDescriptionCleanupMergeForPublish(existingShared, localSnapshot);
+    check(
+      merged.preferredDescriptions['300'].override.key === '222000',
+      "publish merge: this machine's own override supersedes the previously-published one"
+    );
+  }
+
+  console.log(
+    '\n--- problemDescriptionCleanupMergeForPublish: previously-shared override survives when local has none ---'
+  );
+  {
+    const existingShared = {
+      preferredDescriptions: {
+        300: { tally: {}, override: { key: '111000', candidate: { description: 'Previously-shared decision' } } },
+      },
+      conceptRemap: {},
+    };
+    const localSnapshot = { preferredDescriptions: { 300: { tally: {}, override: null } }, conceptRemap: {} };
+    const merged = problemDescriptionCleanupMergeForPublish(existingShared, localSnapshot);
+    check(
+      merged.preferredDescriptions['300'].override.key === '111000',
+      'publish merge: previously-shared override is kept when this machine has none of its own'
+    );
+  }
+
+  console.log(
+    '\n--- problemDescriptionCleanupMergeForPublish: opts.includeOverride:false (auto-publish) never touches the override, even when local has one ---'
+  );
+  {
+    const existingShared = {
+      preferredDescriptions: {
+        300: { tally: {}, override: { key: '111000', candidate: { description: 'Previously-enforced decision' } } },
+      },
+      conceptRemap: {},
+    };
+    const localSnapshot = {
+      preferredDescriptions: {
+        300: {
+          tally: {},
+          override: { key: '999999', candidate: { description: "Admin's own incidental local pick" } },
+        },
+      },
+      conceptRemap: {},
+    };
+    const merged = problemDescriptionCleanupMergeForPublish(existingShared, localSnapshot, { includeOverride: false });
+    check(
+      merged.preferredDescriptions['300'].override.key === '111000',
+      "includeOverride:false: the previously-enforced override survives even though local has a DIFFERENT one set — an unattended publish never silently changes what's enforced"
+    );
+  }
+  {
+    // Tallies still merge (via max()) even when includeOverride is false —
+    // only the override field is protected, not the whole entry.
+    const existingShared = {
+      preferredDescriptions: {
+        90823000: {
+          tally: { 111111: { candidate: { description: 'Shared' }, count: 5, lastUsed: '2026-07-28T09:00:00Z' } },
+          override: null,
+        },
+      },
+      conceptRemap: {},
+    };
+    const localSnapshot = {
+      preferredDescriptions: {
+        90823000: {
+          tally: { 111111: { candidate: { description: 'Local' }, count: 30, lastUsed: '2026-07-29T09:00:00Z' } },
+          override: null,
+        },
+      },
+      conceptRemap: {},
+    };
+    const merged = problemDescriptionCleanupMergeForPublish(existingShared, localSnapshot, { includeOverride: false });
+    check(
+      merged.preferredDescriptions['90823000'].tally['111111'].count === 30,
+      'includeOverride:false: tallies still reconcile via max() (30) — only the override field is protected'
+    );
+  }
+
+  console.log('\n--- problemDescriptionCleanupMergeForPublish: null/malformed inputs never throw ---');
+  check(
+    (() => {
+      const r = problemDescriptionCleanupMergeForPublish(null, null);
+      return r && typeof r.preferredDescriptions === 'object' && typeof r.conceptRemap === 'object';
+    })(),
+    'both args null -> empty-but-valid merged shape, no throw'
+  );
+  check(
+    (() => {
+      const r = problemDescriptionCleanupMergeForPublish(undefined, undefined);
+      return r && typeof r.preferredDescriptions === 'object' && typeof r.conceptRemap === 'object';
+    })(),
+    'both args undefined -> empty-but-valid merged shape, no throw'
   );
 
   console.log('\n--- validation ---');
