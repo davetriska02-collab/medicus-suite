@@ -11,16 +11,20 @@ for Nick are marked **[N]**.
 
 ## 1 · What this is, in one paragraph
 
-When a letter or discharge summary arrives as an attachment on a Medicus task, the suite
-reads its text locally, extracts diagnosis/medication/action candidates from **anchored,
-semi-structured patterns only** (never prose-wide NLP), resolves them against Medicus's
-own SNOMED index with hierarchy proof and retirement checking, diffs them against the
-patient's actual coded record (including resolved entries and retired-code chains), and
-presents a card whose *first* job is honesty about what it could and could not assess —
-then lets a human accept suggestions through Medicus's own controls, one deliberate
-confirmation at a time, with every shown/clicked event auditable. It is the letters-modality
-answer to the results queue: same doctrine (escalate-only, fail-loud, absence asserts
-nothing), new modality.
+An **assistant inside the document coding/processing workflow**. When a coder or GP has
+an inbound document open in Medicus — the moment they are deciding its type, its codes
+and its actions — the suite reads the document text locally, extracts
+diagnosis/medication/observation/action candidates from **anchored, semi-structured
+patterns only** (never prose-wide NLP), resolves them against Medicus's own SNOMED index
+with hierarchy proof and retirement checking, diffs them against the patient's actual
+coded record (including resolved entries and retired-code chains), and presents its
+suggestions **beside Medicus's own coding controls**, whose *first* job is honesty about
+what it could and could not assess. The human accepts suggestions through Medicus's own
+controls, one deliberate confirmation at a time, with every shown/clicked event
+auditable. It is the letters-modality answer to the results queue: same doctrine
+(escalate-only, fail-loud, absence asserts nothing), applied at the exact moment the
+coding decision is being made — not a separate review surface the coder must remember to
+visit.
 
 **Why now:** letter/inbox coding is ranked GP pain #3 nationally (Gauntlet run 3); Docman
 AI and Anima own it on EMIS/S1 and nobody ships it on Medicus; MHRA (29-07-2026)
@@ -97,6 +101,14 @@ Rules that fall out of the panel and the house doctrine:
 - **Anchors v1:** `Diagnosis:` / `Diagnoses:` / `Impression:` / `Problems:` /
   `Primary diagnosis:` headed blocks; numbered/bulleted lists under them; medication
   sections (`Medications on discharge:` etc.) routed to `record-delta`.
+- **Coded-data lane (suggestion-only):** clearly-unitised numeric observations stated in
+  the letter — BP (`nnn/nn`), weight/BMI, HbA1c (mmol/mol), eGFR — extracted with their
+  units and the letter's clinical date, offered as *copy-ready coded-entry suggestions*
+  ("BP 152/94, 12-Jun-2026 — copy for coding"), never entered automatically. Unit or
+  date ambiguity → the candidate is not offered (fail-closed, same rule as everything
+  else). No observation write path exists or is proposed; this lane is display +
+  copy-assist in every phase, and each analyte pattern needs CSO review before it ships
+  (a mis-extracted potassium is a clinical harm, not a typo — start with BP/weight only).
 - **Negation/temporality/status classifiers run per candidate line before any search**:
   ruled-out (`?`, "excluded", "no evidence of"), historical ("previous", "PMH", year-only
   dates, "known"), resolved ("resolved", "treated"), suspected ("query", "awaiting
@@ -171,8 +183,8 @@ the rest:
 
 | Phase | Contents | Write surface | Effort | Gate |
 |---|---|---|---|---|
-| **0 · Truth + discovery** | Fix `docs/VISION.md` stale read-only claims; INTENDED-PURPOSE addendum (code suggestion = display + assisted use of Medicus's own controls); hazard workshop (draft entries §10); capture session on the documents/filed-letters read contract (`scripts/document-create-capture.js` doctrine) to size the backlog surface; corpus collection: 20–30 real letter formats from our trusts, anonymised, as fixtures | none | M (CSO-heavy) | Blocks everything |
-| **1 · Document Lens, display-only** | Four-state model; PDF.js text extraction (attachments only); anchored extractor + negation/qualifier classifier; delta-with-qualifiers; med diff; action flags (whole-text); patient banner + pre-flight; coverage meter; sensitive gate; ledger stamps. No accept button. Ships **disabled**, per-practice enable | none | XL (the extractor + four-state model are the bulk) | CSO sign-off on hazard entries |
+| **0 · Truth + discovery** | Fix `docs/VISION.md` stale read-only claims; INTENDED-PURPOSE addendum (code suggestion = display + assisted use of Medicus's own controls); hazard workshop (draft entries §10); **capture session on the document coding/processing workflow screen itself** — how the open document's content is served there, what coding controls the screen exposes (document type, coded entries, actions), where a widget can anchor (composer-pattern rules from CLAUDE.md apply: insertion anchor climbing, layout-inert, style-patch-and-restore) — plus the filed-letters/backlog read contract; corpus collection: 20–30 real letter formats from our trusts, anonymised, as fixtures. The task-attachment `fileURI` path is already confirmed and serves as the fallback surface if the processing-screen contract disappoints | none | M (CSO-heavy) | Blocks everything |
+| **1 · Document Lens, display-only** | Four-state model; PDF.js text extraction; anchored extractor + negation/qualifier classifier; coded-data lane (BP/weight only, copy-assist); delta-with-qualifiers; med diff; action flags (whole-text); patient banner + pre-flight; coverage meter; sensitive gate; ledger stamps. Injected **beside Medicus's own coding controls on the processing screen** (primary surface per Phase 0 capture; task-attachment card as fallback). No accept button. Ships **disabled**, per-practice enable | none | XL (the extractor + four-state model are the bulk) | CSO sign-off on hazard entries |
 | **2 · Assisted coding** | Per-suggestion "copy + open Medicus coding screen" (Action-Pack class assist: copies term/concept, navigates, human does everything in Medicus); read-back step; event-date extraction + display; escalate-to-reviewer | none (assist only) | M | CSO review |
 | **3 · One-click accept (tiers a/b only)** | Drive Medicus's own add/edit-problem control macro-style with click-time re-verify; CSN §6.1 new row; tier (c) permanently excluded from one-click | new macro write path | L | Full CSO sign-off + CSN update |
 | **4 · Worklist + governance surfaces** | Inbox triage view: one collapsed line per document (nothing new / N unmatched / not assessed / could not read), keyboard-first, action-flags visible at list level; persistent 2WW/action task banner until actioned; QOF register-impact badge on unmatched candidates (reuse register rules + `summariseQofPointsAtRisk` pattern, cohort-honest framing); audit exports (§8) | none | L–XL | CSO review of banner semantics |
