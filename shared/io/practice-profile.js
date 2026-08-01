@@ -49,6 +49,43 @@ function _stripDangerousKeys(obj) {
   return out;
 }
 
+// OIR test-dictionary content comparison. Deliberately a PRIVATE copy of
+// shared/io/oir-key-rotation.js's testContentEqual: this file is importScripts'd
+// into the service worker, which does not (and must not have to) load the
+// publish-side rotation module. test-practice-profile.js pins the two
+// implementations in step so they can't silently diverge.
+function _ppStableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(_ppStableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${_ppStableStringify(value[k])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+function _oirTestContentEqual(a, b) {
+  const { key: _ak, ...aRest } = a || {};
+  const { key: _bk, ...bRest } = b || {};
+  return _ppStableStringify(aRest) === _ppStableStringify(bRest);
+}
+
+// profileVersion is 'YYYY-MM-DD.N' (see nextProfileVersion in options.js).
+// Returns null for anything else — an unorderable version must never be
+// treated as older, or a legacy/hand-written profile would stop applying.
+function _parseProfileVersion(v) {
+  const m = /^(\d{4}-\d{2}-\d{2})\.(\d+)$/.exec(String(v || ''));
+  if (!m) return null;
+  return { date: m[1], seq: parseInt(m[2], 10) };
+}
+function _isOlderProfileVersion(incoming, lastApplied) {
+  const a = _parseProfileVersion(incoming);
+  const b = _parseProfileVersion(lastApplied);
+  if (!a || !b) return false; // not comparable — behave exactly as before
+  if (a.date !== b.date) return a.date < b.date;
+  return a.seq < b.seq;
+}
+
 const PracticeProfile = (() => {
   const META_KEY = 'suite.practiceProfile';
   const NOTIFIED_KEY = 'suite.practiceProfile.notifiedVersions';
@@ -164,6 +201,18 @@ const PracticeProfile = (() => {
       }
       if (mode !== 'forceOverride' && status?.lastAppliedVersion === profile.profileVersion) {
         return { skipped: true, reason: 'already on this version' };
+      }
+      // ORDERING, not just equality (2026-08-01). The old gate skipped only an
+      // EQUAL version, so any DIFFERENT version applied — including an OLDER
+      // one, which is exactly what a restored/rolled-back copy of the shared
+      // file looks like. That was tolerable when apply only ever added things;
+      // it is not now that retirement can remove a test dictionary entry. An
+      // explicit re-apply (the Apply-now button's { force: true }, or a
+      // forceOverride profile) still bypasses this, unchanged.
+      if (mode !== 'forceOverride' && _isOlderProfileVersion(profile.profileVersion, status?.lastAppliedVersion)) {
+        const reason = `older than the applied version (${profile.profileVersion} < ${status.lastAppliedVersion}) — not re-applying a rolled-back shared file`;
+        console.warn('[Practice Profile] Skipping:', reason);
+        return { skipped: true, reason };
       }
     }
 
@@ -315,18 +364,104 @@ const PracticeProfile = (() => {
               // thing, same as before this fix.
               await chrome.storage.local.set({ 'triagelens.config': config });
               applied.push('triage');
-            } else if (Array.isArray(config.oirTests) && config.oirTests.length > 0) {
+            } else {
               const localTests = Array.isArray(local.oirTests) ? local.oirTests : [];
-              const localKeys = new Set(localTests.map((t) => t && t.key));
-              // Strip dangerous keys from each untrusted incoming test entry
-              // before merging, same defence as every other untrusted-object
-              // merge in this file.
-              const incoming = config.oirTests
-                .filter((t) => t && t.key && !localKeys.has(t.key))
-                .map((t) => _stripDangerousKeys(t));
-              if (incoming.length > 0) {
+              // ── Retirement: CONTENT-AWARE, never a blind key filter ───────
+              // An edited test is never merged in-place over an existing key
+              // (that would risk silently clobbering a clinician's own local
+              // edit made under that same key via the options-page test
+              // editor). Instead a republished edit arrives under a NEW key
+              // (shared/io/oir-key-rotation.js) and the SUPERSEDED PUBLISHED
+              // content travels with it in `retiredOirTests: [{key, test}]`.
+              // A local test under a retired key is dropped ONLY if its
+              // content still equals that superseded copy — i.e. it is
+              // provably a stale copy of what was published, not somebody's
+              // own edit. Anything else survives; the rotated replacement
+              // still appends below, so both stay visible for a human to
+              // reconcile. (A blind key filter deleted the edit outright, and
+              // could destroy the publisher's own newest edit via its
+              // self-apply.)
+              //
+              // `retiredOirKeys` (the bare key list) is still READ for
+              // backwards compatibility, but on its own it carries no
+              // superseded content, so nothing can be proven stale and
+              // nothing is removed — fail toward preserving local clinical
+              // intent. It is still PUBLISHED (see oir-key-rotation.js) so
+              // installs running the older apply side keep working.
+              const retiredByKey = new Map();
+              (Array.isArray(config.retiredOirTests) ? config.retiredOirTests : []).forEach((rec) => {
+                if (!rec || typeof rec !== 'object' || !rec.key) return;
+                const list = retiredByKey.get(rec.key) || [];
+                list.push(rec.test);
+                retiredByKey.set(rec.key, list);
+              });
+              const survivingTests =
+                retiredByKey.size > 0
+                  ? localTests.filter((t) => {
+                      if (!t || !t.key) return true;
+                      const supersededCopies = retiredByKey.get(t.key);
+                      if (!supersededCopies) return true;
+                      return !supersededCopies.some((copy) => _oirTestContentEqual(copy, t));
+                    })
+                  : localTests;
+              const retiredSomething = survivingTests.length !== localTests.length;
+
+              // ── Built-in-key overrides: update IN PLACE, never rotated ────
+              // An entry keyed by a built-in test key (engine/outstanding-match.js
+              // TEST_DEFS) is a disable/extend OVERRIDE — mergeTestDefs applies
+              // it by key, so the key IS the semantics and rotating it would
+              // silently re-enable the built-in everywhere. Such an entry can
+              // only propagate as an in-place update, and only when the local
+              // copy is provably the PREVIOUSLY PUBLISHED one (shipped as
+              // `supersededOirTests: [{key, test}]`). A local copy that differs
+              // from the previously published one was edited on this machine:
+              // keep it and skip, failing toward local clinical intent. This
+              // side does not need the built-in key list itself — only the
+              // publisher emits these records, and the content check is what
+              // makes them safe.
+              const supersededByKey = new Map();
+              (Array.isArray(config.supersededOirTests) ? config.supersededOirTests : []).forEach((rec) => {
+                if (!rec || typeof rec !== 'object' || !rec.key) return;
+                const list = supersededByKey.get(rec.key) || [];
+                list.push(rec.test);
+                supersededByKey.set(rec.key, list);
+              });
+              const incomingByKey = new Map(
+                (Array.isArray(config.oirTests) ? config.oirTests : []).filter((t) => t && t.key).map((t) => [t.key, t])
+              );
+              let updatedSomething = false;
+              let nextTests = survivingTests;
+              if (supersededByKey.size > 0) {
+                nextTests = survivingTests.map((t) => {
+                  if (!t || !t.key) return t;
+                  const previousCopies = supersededByKey.get(t.key);
+                  const incoming = incomingByKey.get(t.key);
+                  if (!previousCopies || !incoming) return t;
+                  if (_oirTestContentEqual(incoming, t)) return t; // already up to date
+                  if (!previousCopies.some((copy) => _oirTestContentEqual(copy, t))) return t; // local edit — keep
+                  updatedSomething = true;
+                  return _stripDangerousKeys(incoming);
+                });
+              }
+
+              let addedSomething = false;
+              if (Array.isArray(config.oirTests) && config.oirTests.length > 0) {
+                const localKeys = new Set(nextTests.map((t) => t && t.key));
+                // Strip dangerous keys from each untrusted incoming test entry
+                // before merging, same defence as every other untrusted-object
+                // merge in this file.
+                const incoming = config.oirTests
+                  .filter((t) => t && t.key && !localKeys.has(t.key))
+                  .map((t) => _stripDangerousKeys(t));
+                if (incoming.length > 0) {
+                  nextTests = [...nextTests, ...incoming];
+                  addedSomething = true;
+                }
+              }
+
+              if (retiredSomething || addedSomething || updatedSomething) {
                 await chrome.storage.local.set({
-                  'triagelens.config': Object.assign({}, local, { oirTests: [...localTests, ...incoming] }),
+                  'triagelens.config': Object.assign({}, local, { oirTests: nextTests }),
                 });
                 applied.push('triage');
               }
@@ -777,6 +912,48 @@ const PracticeProfile = (() => {
       }
     }
 
+    // ── Cleanup Code Preferences (v2 new) ──────────────────────────────────────
+    // Tally counts ALWAYS reconcile via max(), never add — unlike this module's
+    // existing manual one-off export/import card (problem-description-cleanup-io.js's
+    // default 'add' semantics, correct there because a manual restore happens once,
+    // deliberately), a practice-profile publish gets re-checked and potentially
+    // re-applied on every version bump. Adding the same published snapshot on every
+    // cycle would double/triple-count it; max() adopts the larger of "what this
+    // machine already has" vs "what's published" without ever inflating, and without
+    // discarding growth this machine made locally since the last sync.
+    // Override resolution DOES follow the module's merge/replace mode: merge keeps
+    // today's "local pin always wins" behaviour; replace treats the published
+    // override as the practice's authoritative decision — same trust model as
+    // Knowledge's replace mode (a deliberately curated push, not a passive learned
+    // signal).
+    if (
+      modMap.has('problemDescriptionCleanup') &&
+      mods.problemDescriptionCleanup &&
+      typeof mods.problemDescriptionCleanup === 'object'
+    ) {
+      try {
+        const merge = modMap.get('problemDescriptionCleanup') === 'merge';
+        const pdc = mods.problemDescriptionCleanup;
+        const hasContent =
+          (pdc.preferredDescriptions && Object.keys(pdc.preferredDescriptions).length > 0) ||
+          (pdc.conceptRemap && Object.keys(pdc.conceptRemap).length > 0);
+
+        if (hasContent) {
+          const problemDescriptionCleanupImport = _io('problemDescriptionCleanupImport');
+          if (!problemDescriptionCleanupImport) {
+            throw new Error('problemDescriptionCleanupImport not available in this context.');
+          }
+          await problemDescriptionCleanupImport(pdc, {
+            overrideWins: merge ? 'local' : 'incoming',
+            tallyMode: 'max',
+          });
+          applied.push('problemDescriptionCleanup');
+        }
+      } catch (e) {
+        errors.push(`problemDescriptionCleanup: ${e.message}`);
+      }
+    }
+
     // ── Suite: practiceCode + feedbackEmail only (v2 new) ─────────────────────
     // NEVER push display, tabOrder, hiddenTabs (the user's tab choice is
     // theirs alone — see side-panel/tab-catalog.js), or any other suite.* key — those are
@@ -967,6 +1144,12 @@ const PracticeProfile = (() => {
       const autoApply = profile.apply?.autoApplyOnStartup !== false;
 
       if (current === incoming) return { present: true, current: true };
+      // Ordering guard, mirrored from applyProfile so the reason is logged
+      // once at the check (rather than looking like a silent no-op).
+      if (_isOlderProfileVersion(incoming, current)) {
+        console.log('[Practice Profile] Shared file is OLDER than the applied version —', incoming, '<', current);
+        return { present: true, current: false, older: true };
+      }
       if (!autoApply) return { present: true, current: false, pendingVersion: incoming };
 
       const result = await applyProfile(profile);
@@ -987,7 +1170,9 @@ const PracticeProfile = (() => {
     }
   }
 
-  const api = { fetchProfile, getStatus, applyProfile, checkAndApply };
+  // oirTestContentEqual is exported for the cross-implementation parity test in
+  // test-practice-profile.js (see its definition above for why it is private).
+  const api = { fetchProfile, getStatus, applyProfile, checkAndApply, oirTestContentEqual: _oirTestContentEqual };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
