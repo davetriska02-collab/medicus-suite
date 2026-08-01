@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.205.0] — 2026-08-01
+
+### Allergy cleanup suite: junk-code bulk-remove + duplicate merge
+
+Two new widgets on the allergy list, confirmed live against real patients
+2026-07-29/30. Deliberately split into two separate content scripts with two
+different safety models, not one generic "clean up allergies" tool:
+
+- **`content-scripts/allergy-junk-code-cleanup.js`** — "Bulk remove?" widget
+  for known import-artefact/too-generic allergy codes (`rules/allergy-junk-codes.json`:
+  716186003 "No known allergies", 161611007 "H/O: non-drug allergy",
+  115665000 "Atopy", 419076005 "Allergic reaction"). Import-artefact codes are
+  offered as a plain bulk-select-and-remove checklist (never a genuine
+  allergy). Too-generic codes get the same treatment UNLESS
+  `buildCautionMessage` detects real clinical detail recorded under the code
+  (a coded reaction, severity, certainty, or free-text additional info) — the
+  direct motivating case was a real patient's peanut allergy coded only as
+  "Allergic reaction" with the allergen named in free text — those entries are
+  flagged amber and excluded from "Select all", forcing individual review.
+- **`content-scripts/allergy-duplicate-merge.js`** — "Review duplicates?"
+  widget, no bulk action anywhere: merging genuine duplicate allergy records
+  "warrants a conscious clinical decision" per group. Two detection passes —
+  exact-text grouping (cheap, synchronous) and same-SNOMED-concept grouping
+  via termbrowser ancestor lookups (catches e.g. 6× "Peanut allergy" + 1×
+  "Peanut-induced anaphylaxis" as one group, while correctly excluding "Allergy
+  to Arachis oil" — same substance in casual terms, but a genuinely distinct
+  SNOMED hierarchy). Each merge walks the clinician through picking a keeper
+  entry and per-field values before saving; earliest `recordDate` is
+  preselected as the default keeper.
+
 ## [v3.204.1] — 2026-07-31
 
 ### Two OIR practice-profile sync bugs fixed: fresh-install race, stale edited-test merge

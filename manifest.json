@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.204.1",
+  "version": "3.205.0",
   "description": "The clinical intelligence layer for Medicus: read-only safety monitoring, triage red-flags, QOF tracking and operational dashboards.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -99,7 +99,9 @@
         "shared/snomed-retirement.js",
         "shared/preferred-descriptions.js",
         "content-scripts/problem-description-cleanup.js",
-        "content-scripts/problem-bulk-end.js"
+        "content-scripts/problem-bulk-end.js",
+        "content-scripts/allergy-junk-code-cleanup.js",
+        "content-scripts/allergy-duplicate-merge.js"
       ],
       "css": [
         "content-scripts/booking-inline.css",
@@ -107,7 +109,9 @@
         "content-scripts/reception-quick-actions.css",
         "content-scripts/document-file-inline.css",
         "content-scripts/problem-description-cleanup.css",
-        "content-scripts/problem-bulk-end.css"
+        "content-scripts/problem-bulk-end.css",
+        "content-scripts/allergy-junk-code-cleanup.css",
+        "content-scripts/allergy-duplicate-merge.css"
       ],
       "run_at": "document_idle"
     }
@@ -126,6 +130,7 @@
         "rules/non-problem-root-codes.json",
         "rules/snomed-terminology-server.json",
         "rules/generic-additional-info-text.json",
+        "rules/allergy-junk-codes.json",
         "side-panel/modules/sentinel/passport.html"
       ],
       "matches": ["https://*.medicus.health/*"]

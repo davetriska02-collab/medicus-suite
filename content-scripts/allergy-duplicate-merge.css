@@ -1,0 +1,395 @@
+/* Medicus Suite — "Review duplicates?" widget for merging duplicate allergy entries */
+/* All selectors scoped to ms-adm-* classes to avoid Medicus style conflicts */
+
+.ms-adm-widget {
+  display: block;
+  margin: 6px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Keyboard focus ring — same reasoning as every other widget in this file
+   family (Medicus's page never loads panel.css). */
+button[class*='ms-adm-']:focus-visible,
+input[class*='ms-adm-']:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.ms-adm-toggle {
+  padding: 4px 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #1e40af;
+  cursor: pointer;
+}
+
+.ms-adm-toggle:hover {
+  background: #dbeafe;
+}
+
+/* ── Modal (2026-07-29 redesign) ──────────────────────────────────────────
+   The review UI was previously an inline panel squeezed into the Allergies
+   card's own narrow column — unworkable once a group has more than a
+   couple of copies (a real case had 6). Kept deliberately ON the clinical
+   summary page (not popped into a separate extension tab — user's own
+   words: "we may fold this into a single, multi-step process", for which a
+   modal is a natural container) but given the full viewport to work with. */
+.ms-adm-modal-root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.ms-adm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 999998;
+}
+
+.ms-adm-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(960px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  z-index: 999999;
+  color: #1a2030;
+}
+
+.ms-adm-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  border-radius: 10px 10px 0 0;
+}
+
+.ms-adm-modal-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a2030;
+}
+
+.ms-adm-modal-subtitle {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.ms-adm-modal-close {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ms-adm-modal-close:hover {
+  background: #f3f4f6;
+}
+
+.ms-adm-modal-body {
+  padding: 14px 16px 16px;
+  font-size: 12px;
+}
+
+.ms-adm-loading,
+.ms-adm-empty {
+  font-size: 12px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.ms-adm-error {
+  font-size: 12px;
+  color: #b91c1c;
+  margin-bottom: 6px;
+}
+
+.ms-adm-done {
+  font-size: 13px;
+  color: #166534;
+  font-weight: 600;
+}
+
+.ms-adm-retry {
+  margin-left: 6px;
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+/* Deliberately amber-toned, not neutral grey — this widget's whole point is
+   that it warrants a conscious clinical decision, never a bulk one (see the
+   content script's own header comment). */
+.ms-adm-note {
+  font-size: 11px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fbbf24;
+  border-radius: 5px;
+  padding: 6px 8px;
+  margin-bottom: 10px;
+}
+
+/* ── Per-copy cards ────────────────────────────────────────────────────── */
+.ms-adm-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ms-adm-card {
+  position: relative;
+  flex: 1 1 200px;
+  min-width: 180px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  background: #f9fafb;
+  display: block;
+}
+
+.ms-adm-card:hover {
+  border-color: #bfdbfe;
+}
+
+.ms-adm-card-keeper {
+  border-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.ms-adm-card-radio {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.ms-adm-card-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #166534;
+  margin-bottom: 4px;
+}
+
+.ms-adm-card-badge-other {
+  color: #6b7280;
+}
+
+.ms-adm-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a2030;
+  margin-bottom: 2px;
+}
+
+.ms-adm-card-concept-note {
+  font-size: 10px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fbbf24;
+  border-radius: 4px;
+  padding: 2px 5px;
+  margin-bottom: 4px;
+  display: inline-block;
+}
+
+.ms-adm-card-date {
+  font-size: 11px;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.ms-adm-card-line {
+  font-size: 11px;
+  color: #1a2030;
+  margin-top: 2px;
+}
+
+.ms-adm-card-line-label {
+  font-weight: 700;
+  color: #374151;
+}
+
+.ms-adm-card-muted {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.ms-adm-hint {
+  font-size: 11px;
+  color: #6b7280;
+  margin: 4px 0 10px;
+}
+
+/* ── Field-comparison table ───────────────────────────────────────────── */
+.ms-adm-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 10px;
+  font-size: 11px;
+}
+
+.ms-adm-th {
+  text-align: left;
+  padding: 4px 8px;
+  color: #6b7280;
+  font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ms-adm-th-keep {
+  color: #166534;
+}
+
+.ms-adm-row-label {
+  padding: 5px 8px;
+  color: #374151;
+  font-weight: 700;
+  white-space: nowrap;
+  border-top: 1px solid #f3f4f6;
+  vertical-align: top;
+}
+
+.ms-adm-td {
+  padding: 5px 8px;
+  vertical-align: top;
+  border-top: 1px solid #f3f4f6;
+  color: #1a2030;
+}
+
+.ms-adm-td-keep {
+  border-left: 2px solid #22c55e;
+}
+
+.ms-adm-td-locked {
+  color: #6b7280;
+}
+
+.ms-adm-td-none {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.ms-adm-td-radio {
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.ms-adm-mergeable-mark {
+  color: #2563eb;
+}
+
+.ms-adm-locked-mark {
+  color: #9ca3af;
+}
+
+.ms-adm-ai-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1a2030;
+  background: #fff;
+  border: 1px solid #c8cdd6;
+  border-radius: 5px;
+  resize: vertical;
+}
+
+.ms-adm-end-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.ms-adm-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+}
+
+.ms-adm-date-input {
+  padding: 4px 8px;
+  border: 1px solid #c8cdd6;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1a2030;
+  background: #fff;
+}
+
+.ms-adm-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ms-adm-confirm-btn {
+  padding: 7px 14px;
+  background: #1e40af;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-adm-confirm-btn:hover:not(:disabled) {
+  background: #1e3a8a;
+}
+
+.ms-adm-confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ms-adm-cancel-btn {
+  padding: 7px 14px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-adm-cancel-btn:hover {
+  background: #f3f4f6;
+}

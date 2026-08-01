@@ -1,0 +1,229 @@
+/* Medicus Suite — "Bulk remove?" widget for junk/import-artefact allergy codes */
+/* All selectors scoped to ms-ajc-* classes to avoid Medicus style conflicts */
+
+#ms-ajc-widget {
+  display: block;
+  margin: 6px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Keyboard focus ring — this file has no :focus-visible rule otherwise
+   (Medicus's page never loads panel.css, so the suite's global ring doesn't
+   reach here). #2563eb matches the suite's --accent light-theme value (this
+   file can't consume the var(), same reasoning as
+   problem-junk-code-cleanup.css's own copy of this rule). */
+button[class*='ms-ajc-']:focus-visible,
+input[class*='ms-ajc-']:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+/* Placement is NOT YET LIVE-CONFIRMED for the allergy section (see the
+   content script's own header comment) — deliberately NOT attempting the
+   heading-sharing :has() layout trick problem-junk-code-cleanup.css uses
+   for "Major"/"Minor" (that relies on a confirmed #problems-major-label
+   anchor this widget doesn't have an allergy equivalent for yet). Renders
+   as its own self-contained block above the allergy list instead; revisit
+   once the real DOM structure is confirmed. */
+
+.ms-ajc-toggle {
+  padding: 4px 10px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-ajc-toggle:hover {
+  background: #e5e7eb;
+}
+
+.ms-ajc-body {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #1a2030;
+}
+
+.ms-ajc-loading,
+.ms-ajc-empty {
+  font-size: 12px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.ms-ajc-error {
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.ms-ajc-retry {
+  margin-left: 6px;
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-ajc-summary {
+  margin-bottom: 8px;
+  color: #374151;
+}
+
+.ms-ajc-select-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.ms-ajc-select-all,
+.ms-ajc-select-none {
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 11px;
+  font-family: inherit;
+  color: #0d6e5e;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ms-ajc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.ms-ajc-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 8px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.ms-ajc-row-ended {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* A row carrying real clinical detail (severity/certainty/additional info)
+   under a code that's normally structurally meaningless to carry any —
+   "Select all" skips these, they need individual review (2026-07-29). */
+.ms-ajc-row-caution {
+  background: #fffbeb;
+  border-color: #fbbf24;
+}
+
+.ms-ajc-row-desc {
+  color: #1a2030;
+}
+
+.ms-ajc-row-detail {
+  display: block;
+  flex-basis: 100%;
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.ms-ajc-row-warn {
+  display: block;
+  flex-basis: 100%;
+  font-size: 11px;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.ms-ajc-row-tag {
+  padding: 1px 6px;
+  background: #dcfce7;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #166534;
+}
+
+.ms-ajc-row-reason {
+  font-size: 11px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.ms-ajc-row-error {
+  font-size: 11px;
+  color: #b91c1c;
+}
+
+.ms-ajc-end-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ms-ajc-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ms-ajc-date-input {
+  padding: 4px 8px;
+  border: 1px solid #c8cdd6;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1a2030;
+  background: #fff;
+}
+
+.ms-ajc-end-btn {
+  padding: 7px 14px;
+  background: #b91c1c;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-ajc-end-btn:hover:not(:disabled) {
+  background: #991b1b;
+}
+
+.ms-ajc-end-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Optimistic strike-through on the real allergy-list row once its "end
+   allergy" POST succeeds — same residual-risk caveat as
+   problem-junk-code-cleanup.css's own copy: a later Medicus Vue re-render
+   from stale state could revert this visually, though the actual saved
+   record is correct either way. */
+.ms-ajc-anchor-ended {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
