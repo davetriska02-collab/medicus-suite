@@ -2,6 +2,46 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.207.0] — 2026-08-01
+
+### The Keeper: vaccine eligibility engine fix + mRESVIA false-GIVEN guard + digoxin monitoring scaffold
+
+Automated safety rule maintenance run (The Keeper, 2026-08-01). All changes sourced from
+internal code inspection (external clinical reference hosts returned HTTP 403 this run).
+Three Red findings applied; one Red finding (vax-001 RSV 65-74 expansion) requires an engine
+sprint before it can be encoded.
+
+**vax-002 🔴 (C2-class false-GIVEN risk — applied):** `rules/vaccine-rules.json` — 5 mRESVIA
+declined terms added to vax-rsv statusTerms.declined (`mresvia refused`, `mresvia
+contraindicated`, `mresvia not given`, `mresvia not indicated`, `mresvia declined`). Without
+these, a patient with a "mresvia refused" problem code was classified as `vax_given` because
+the given term `mresvia` substring-matched the negative phrasing. Regression guard extended in
+`test-vaccine-status-terms.js`.
+
+**vax-003 🔴 (eligibility engine bug — applied):** `engine/rules-engine.js` —
+`matchVaccineEligibility()` now enforces `ageMin`/`ageMax` on `problem` and `medication` kind
+eligibility clauses, mirroring the existing check on `age` kind clauses. Previously, the
+`ageMin: 16` on the flu and pneumococcal homelessness cohort clauses was silently ignored —
+a patient under 16 with a homelessness code could be incorrectly flagged as vaccine-eligible.
+
+**alert-C005 🔴 (monitoring gap — applied, disabled pending CSO activation):** `rules/drug-rules.json`
+— disabled digoxin monitoring rule added (`enabled: false`, id `digoxin-renal-monitoring`).
+Digoxin is a high-risk narrow-therapeutic-index drug; annual U&E/eGFR monitoring is required
+but no Sentinel chip existed. Lanoxin is the only UK-licensed brand (dm+d confirmed). Rule
+ships disabled for the CSO to review the interval and activate. Regression guard added in
+`test-drug-brand-coverage.js`. Sources: BNF Digoxin monograph (corroborated; primary 403
+this run) + STOPP v3 B1.
+
+**vax-001 🔴 (open — engine change required):** RSV 65-74 clinical-risk expansion effective
+1 Sept 2026 (NHSE operational letter 2 July 2026). Engine cannot encode combined age-band +
+clinical-risk eligibility. Notes field in vax-rsv documents the gap and instructs manual
+assessment for 65-74 clinical-risk patients from 1 Sept 2026. Engine sprint needed before
+this clause can fire automatically.
+
+**Source gap noted:** All UK clinical reference hosts (gov.uk, nice.org.uk, england.nhs.uk,
+bnf.nice.org.uk, medicines.org.uk, sps.nhs.uk) returned HTTP 403 from the outbound proxy for
+the second consecutive run. Only code-review findings were verifiable this run.
+
 ## [v3.206.1] — 2026-07-31
 
 ### Phrases: compose-first redesign (multi-critic design review + simulated practice panel)
