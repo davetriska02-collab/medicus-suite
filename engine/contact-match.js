@@ -37,14 +37,50 @@
 
   const ContactRelationships = loadContactRelationships();
 
+  function loadNameDerivations() {
+    if (typeof require === 'function') {
+      try {
+        // eslint-disable-next-line global-require
+        return require('./name-derivations.js');
+      } catch (e) {
+        /* not resolvable under this module system/path — fall through to browser hook */
+      }
+    }
+    if (typeof global !== 'undefined' && global.NameDerivations) {
+      return global.NameDerivations;
+    }
+    return null;
+  }
+
+  const NameDerivations = loadNameDerivations();
+
+  // tokensMatch(a, b) -> exact equality OR a recognised Balto-Slavic gendered-surname pairing
+  // (NameDerivations.isGenderedSurnameMatch) — used everywhere two name TOKENS are compared, so a
+  // spelling difference caused only by grammatical gender marking (Kowalski/Kowalska, Novák/
+  // Nováková...) doesn't register as a mismatch. Falls back to plain equality when
+  // NameDerivations isn't loaded or neither token shows any recognised suffix — no behaviour
+  // change for ordinary English names either way. See engine/name-derivations.js's own header.
+  function tokensMatch(a, b) {
+    if (a === b) return true;
+    return !!(NameDerivations && NameDerivations.isGenderedSurnameMatch(a, b));
+  }
+
   // ── Name similarity — token-Jaccard, same technique as shared/knowledge-utils.js's findSimilar ──
 
   const NAME_STOPWORDS = new Set(['mr', 'mrs', 'miss', 'ms', 'mx', 'dr', 'prof']);
 
+  // Unicode-letter-aware (\p{L}), not just a-z: the previous ASCII-only regex silently shredded
+  // any accented name into meaningless fragments before comparison ever ran — e.g. "Björn
+  // Nováková" became "bj rn nov kov", every accented character treated as a token separator.
+  // Found while building non-British name-derivation matching (gendered Balto-Slavic surnames,
+  // Nordic/Slavic patronymics — see engine/name-derivations.js) — those features are pointless if
+  // the names they're meant to help match never survive this step intact. `.toLowerCase()` is
+  // already Unicode-correct in JS (handles diacritics properly); only the character class needed
+  // widening. Punctuation/apostrophes ("O'Brien") still fold to a space exactly as before.
   function normaliseName(s) {
     const text = String(s || '')
       .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, ' ')
+      .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
       .replace(/\s+/g, ' ')
       .trim();
     let tokens = text.split(' ').filter((t) => t && !NAME_STOPWORDS.has(t));
@@ -86,8 +122,7 @@
     const shorter = a.length <= b.length ? a : b;
     const longer = a.length <= b.length ? b : a;
     if (shorter.length < MIN_CONTAINMENT_TOKENS) return false;
-    const longerSet = new Set(longer);
-    return shorter.every((t) => longerSet.has(t));
+    return shorter.every((t) => longer.some((lt) => tokensMatch(t, lt)));
   }
 
   // nameSimilarity(a, b) -> 0..1 (exact -> 1, whole-token containment -> 0.9, else Jaccard token
@@ -98,11 +133,21 @@
     if (!na.text || !nb.text) return 0;
     if (na.text === nb.text) return 1;
     if (tokenContainment(na.tokens, nb.tokens)) return CONTAINMENT_SCORE;
-    const setA = new Set(na.tokens);
-    const setB = new Set(nb.tokens);
+    const setA = Array.from(new Set(na.tokens));
+    const setB = Array.from(new Set(nb.tokens));
     let inter = 0;
-    for (const t of setA) if (setB.has(t)) inter++;
-    const union = setA.size + setB.size - inter;
+    const usedB = new Set();
+    for (const t of setA) {
+      // findIndex, not setB.has(t): a gendered-surname pairing (tokensMatch) needs an actual
+      // comparison against each candidate token, not just a Set lookup — usedB stops the same B
+      // token being consumed by two different A tokens.
+      const matchIdx = setB.findIndex((bt, i) => !usedB.has(i) && tokensMatch(t, bt));
+      if (matchIdx !== -1) {
+        inter++;
+        usedB.add(matchIdx);
+      }
+    }
+    const union = setA.length + setB.length - inter;
     return union > 0 ? inter / union : 0;
   }
 
@@ -245,6 +290,23 @@
     return String(manualEmail).trim().toLowerCase() === String(candidateEmail).trim().toLowerCase() ? 1 : 0;
   }
 
+  // patronymicFatherBonus(indexPatientName, candidate) -> 0 | 1. In a patronymic naming system
+  // (Nordic, East Slavic) a father shares NO surname with his own child at all — Björn's son is
+  // "Björnsson", not "Björn" — so bestNameSignal above has nothing to go on for these families no
+  // matter what the manual contact's free text says. This derives the implied father's first name
+  // directly from the INDEX PATIENT's own name (their surname, or a Russian-style patronymic
+  // middle name) and checks it against the CANDIDATE's own first name instead — independent of
+  // the manual contact entirely. Only ever called when the relationship being guessed is
+  // specifically 'father' (see scoreCandidate) — patronymics encode the father's name, never the
+  // mother's, in both naming systems this covers.
+  function patronymicFatherBonus(indexPatientName, candidate) {
+    if (!NameDerivations || !indexPatientName || !candidate || !candidate.displayName) return 0;
+    const patronymic = NameDerivations.extractPatronymicFather(indexPatientName);
+    if (!patronymic) return 0;
+    const candidateFirstToken = String(candidate.displayName).trim().split(/\s+/)[0];
+    return NameDerivations.parentNameLikelyMatches(patronymic.fatherFirstName, candidateFirstToken) ? 1 : 0;
+  }
+
   // ── Scoring ───────────────────────────────────────────────────────────────────────────────────
 
   const WEIGHTS = {
@@ -260,12 +322,16 @@
   //   manualContact: { name: {title?,first,middle?,last} | string, relationshipText?, phones?: {home?,mobile?,work?}, email? }
   //   candidate:     { patientId, displayName, formerNames?: string[], age?: number, genderIdentity?: string,
   //                    atSameAddress?: boolean, phones?: {home?,mobile?,work?}, email?: string }
-  //   opts:          { manualRelationshipGuess?: { baseId, modifierId }, indexPatientAge?: number }
+  //   opts:          { manualRelationshipGuess?: { baseId, modifierId }, indexPatientAge?: number, indexPatientName?: string }
   function scoreCandidate(manualContact, candidate, opts = {}) {
     const manualName = fullName(manualContact && manualContact.name);
     const baseId = opts.manualRelationshipGuess && opts.manualRelationshipGuess.baseId;
 
-    const nameSignal = bestNameSignal(manualName, candidate);
+    let nameSignal = bestNameSignal(manualName, candidate);
+    if (baseId === 'father') {
+      const bonus = patronymicFatherBonus(opts.indexPatientName, candidate);
+      if (bonus > nameSignal) nameSignal = bonus;
+    }
     const addressSignal = candidate && candidate.atSameAddress ? 1 : 0;
     const ageSignal = baseId ? agePlausibility(baseId, candidate && candidate.age, opts.indexPatientAge) : 1;
     const genderSignal = baseId ? genderConsistency(baseId, candidate && candidate.genderIdentity) : 1;

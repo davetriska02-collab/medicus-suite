@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.209.0",
+  "version": "3.209.1",
   "description": "Clinical intelligence for Medicus: safety monitoring, triage red-flags, QOF tracking, dashboards, confirmed record tidy-up tools.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -115,6 +115,7 @@
       "matches": ["https://*.medicus.health/*"],
       "js": [
         "engine/contact-relationships.js",
+        "engine/name-derivations.js",
         "engine/contact-match.js",
         "engine/contact-tree.js",
         "content-scripts/contacts-api.js",
