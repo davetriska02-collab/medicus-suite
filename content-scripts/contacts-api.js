@@ -175,10 +175,14 @@
     return postJson(apiBase, '/patient/patient-contact/link-contacts', body);
   }
 
-  // body: exact shape from engine/contact-relationships.js's buildManualContactBody()
-  function createManualContact(apiBase, body) {
-    return postJson(apiBase, '/patient/patient-contact/create-patient-contact', body);
-  }
+  // NOTE: there is deliberately NO create-patient-contact wrapper here. One existed
+  // (createManualContact, POST /patient/patient-contact/create-patient-contact, built from
+  // ContactRelationships.buildManualContactBody) but never had a caller: both UI surfaces only
+  // ever CONVERT a manual contact into a real patient link or clean one up, never author a new
+  // manual entry — that's Medicus's own screen's job. Removed rather than kept "in case", since
+  // every exported write here is reachable from the page's own console and this one's whole
+  // purpose was to write free-text contact data nothing in this suite asks for. Re-add it only
+  // alongside a real caller.
 
   function viewPatientContact(apiBase, relationshipId) {
     return apiFetch(
@@ -282,7 +286,22 @@
   // and had no effect — only the patientContactRelationship* fields actually apply to a real link.
   // Full replace, not a partial update — callers preserve isNextOfKin/notes/copyCorrespondence from
   // the GET response unless deliberately changing them too.
-  function changePatientContact(apiBase, relationshipId, body) {
+  //
+  // `targetLink` is REQUIRED and is the caller's own proof that this really is a patient-linked
+  // contact: the entry it took the relationshipId from, i.e. a findExistingForwardLink() result
+  // (engine/contact-relationships.js) — that function selects on `patientContactPatientId` being
+  // set, which is exactly what distinguishes a real link from a manual entry, so the assertion
+  // below is checking the field the call site genuinely has rather than a re-derived one. It
+  // matters because "every manual-only field sent null has no effect" is true ONLY for a real
+  // link: aimed at a MANUAL contact, this same full-replace body would wipe that contact's name,
+  // phone numbers, email and address outright. Fails closed, before any network call, rather than
+  // trusting that no future caller ever passes the wrong id.
+  function changePatientContact(apiBase, relationshipId, body, targetLink) {
+    if (!targetLink || !targetLink.patientContactPatientId) {
+      throw new Error(
+        'Refusing to update this contact: it is not a confirmed patient-linked contact, and this write would erase a manual contact’s own details.'
+      );
+    }
     return postJson(
       apiBase,
       `/patient/patient-contact/change-patient-contact/${encodeURIComponent(relationshipId)}`,
@@ -293,6 +312,23 @@
   // ── Shared write orchestration (used by both the wizard widget and the canvas) ─────────────────
   // Safety-critical logic — the wrong-patient guard and duplicate-link avoidance — lives here ONCE
   // so the two UI surfaces that both create real Medicus links can't drift out of sync on it.
+  //
+  // SCOPE OF THE WRONG-PATIENT GUARD, precisely (the earlier "before every write" framing read as
+  // a blanket claim over everything in this file, which it never was — this is what's actually
+  // true, checked against every caller):
+  //   - Every write whose TARGET is derived from the index patient's identity re-verifies that
+  //     identity via resolveContext() immediately before writing: performLinkAndCleanup below
+  //     (both link-patient writes, the relationship update and the manual-contact delete),
+  //     contacts-link-button.js's doImportConfirm (linkContactsBulk), and contacts-canvas.js's
+  //     mergeDuplicateAddressGroup, deleteBlankManualContact and confirmMerge's already-placed
+  //     delete.
+  //   - The single exemption is contacts-canvas.js's "Remove it" for a reverse manual match: its
+  //     target is a manual contact on the CANDIDATE's own record, pinned to that record's server
+  //     UUID and found by findReverseManualMatch. The index patient's identity is not part of what
+  //     that delete means, and the id cannot retarget, so a guard there would only ever refuse a
+  //     correct write. It carries an in-flight guard instead.
+  //   - The bare endpoint wrappers above are just fetch shapes; they intentionally guard nothing,
+  //     and any new write built on them must add the guard at its own call site.
 
   // findReverseManualMatch(apiBase, candidatePatientId, indexPatientFullName) -> best-guess manual
   // contact on the CANDIDATE's own record that might represent the index patient (e.g. the
@@ -325,102 +361,206 @@
     }
   }
 
-  // performLinkAndCleanup(params) -> { summary, reverseManualMatch }
+  // isAlreadyExistsError(err) — Medicus rejects a duplicate POST link-patient with a 400 whose
+  // body says "Patient Contact already exists." (confirmed live; see findExistingForwardLink's own
+  // comment in engine/contact-relationships.js). apiFetch already folds that body text into the
+  // Error's message and keeps the status on `err.status`, so both halves are checked here rather
+  // than substring-matching alone — a 500 that happened to contain the phrase is not this case.
+  function isAlreadyExistsError(err) {
+    return !!(err && err.status === 400 && /already exists/i.test(err.message || ''));
+  }
+
+  // performLinkAndCleanup(params) -> { summary, reverseManualMatch, progress }
   //   apiBase, patientId (index patient, the identity the WRONG-PATIENT GUARD re-verifies),
   //   candidatePatientId, candidateDisplayName, indexPatientFullName,
   //   baseId, modifierId, forwardIsNextOfKin, forwardCopyCorrespondence, notes,
   //   existingForwardLink (entry|null — skips the forward write if set),
   //   reverseBaseId (string|null — fires the reverse write only if set), reverseIsNextOfKin, reverseCopyCorrespondence,
   //   existingReciprocal (entry|null — informational only, for the summary text),
-  //   manualContactIdToDelete (string|null)
+  //   manualContactIdToDelete (string|null),
+  //   progress (object|null — see RESUMABLE below)
   //
   // WRONG-PATIENT GUARD lives HERE (not in each caller) so it can never be forgotten or
   // implemented slightly differently by a second UI surface: re-derives the live page's current
   // patient identity via resolveContext() and aborts before any write if it no longer matches the
   // patientId the caller pinned when the user opened this confirm action.
+  //
+  // RESUMABLE — this is FOUR separate POSTs (forward link → optional relationship update →
+  // reverse link → manual-contact delete), none of them transactional, so a failure at step 3
+  // leaves steps 1-2 permanently done on Medicus. Retrying used to be structurally impossible:
+  // pressing Confirm again re-ran the forward link, which 400s ("Patient Contact already exists")
+  // and aborted before the steps that had NOT yet run — so the half-finished write could never be
+  // finished from the UI at all. Now every step records itself in a plain `progress` object:
+  //   { forwardLink, relationshipUpdate, reverseLink, manualDelete }  — booleans, false until done
+  //   { forwardAlreadyExisted, reverseAlreadyPresent }  — the step's goal was already met on
+  //                             Medicus without this call doing it (see the staleness note below)
+  //   { reverseManualMatch }  — the best-effort lookup that follows the reverse link, carried so a
+  //                             retry keeps the offer it already found instead of redoing it
+  // On failure that object is attached to the thrown error (`err.progress`) and on success it's
+  // returned alongside the summary; the caller holds it (contacts-canvas.js keeps it on
+  // cs.confirm.linkProgress) and passes it straight back in as `params.progress` when the user
+  // retries, so completed steps are skipped. Belt and braces on top of that: a 400 "already
+  // exists" on the FORWARD link is treated as "that step is already done" and the sequence
+  // continues — the one duplicate this endpoint reliably refuses is also the one there's nothing
+  // to fix about, and it also covers a retry that arrived without its progress object (the user
+  // cancelled the panel and dragged the card again).
+  //
+  // …but that tolerance has a sharp edge, so it's paired with a re-derive: a forward link that
+  // already exists PROVES the caller's snapshot of this record is stale, and `reverseBaseId` was
+  // computed from that same snapshot (it's only non-null when the snapshot showed no reciprocal).
+  // The reverse write has NO idempotency guard of its own — a repeat creates a genuine duplicate
+  // relationship on the OTHER patient's record rather than erroring (see findExistingReciprocal's
+  // comment) — so in that specific case the reciprocal is re-read from live data before firing.
+  // If that re-read fails the whole thing aborts rather than guessing: a missing reverse link is
+  // retryable from this same panel, a duplicate one on someone else's record needs a manual
+  // tidy-up on a record the GP isn't even looking at.
   async function performLinkAndCleanup(params) {
     const ctx = resolveContext();
     if (!ctx || ctx.patientId !== params.patientId) {
       throw new Error('The page has moved to a different patient — reopen the panel and try again.');
     }
     const CR = window.ContactRelationships;
-
-    if (!params.existingForwardLink) {
-      const forwardBody = CR.buildLinkPatientBody({
-        patientId: params.patientId,
-        linkPatientId: params.candidatePatientId,
-        baseId: params.baseId,
-        modifierId: params.modifierId,
-        isNextOfKin: params.forwardIsNextOfKin,
-        copyCorrespondence: params.forwardCopyCorrespondence,
-        notes: params.notes,
-      });
-      await linkPatient(params.apiBase, forwardBody);
-    } else if (params.relationshipUpdateId) {
-      // The link already exists, but its relationship text didn't map to a canonical category
-      // (relationshipKnown was false) — the user has just picked one via the confirm panel's
-      // picker, so write it back rather than only reclassifying it locally for this canvas
-      // session. Fetch first rather than reusing anything cached: isNextOfKin/notes/
-      // copyCorrespondence must be preserved exactly as currently recorded (this is a full
-      // replace, not a partial update), and this is a fresh enough action that a stale local copy
-      // isn't worth the risk of clobbering a value someone else changed since page load.
-      const current = await getEditPatientContact(params.apiBase, params.relationshipUpdateId);
-      await changePatientContact(params.apiBase, params.relationshipUpdateId, {
-        patientContactTitle: null,
-        patientContactFirstName: null,
-        patientContactMiddleNames: null,
-        patientContactLastName: null,
-        patientContactHomeTelephoneNumber: null,
-        patientContactMobileTelephoneNumber: null,
-        patientContactWorkTelephoneNumber: null,
-        patientContactEmailAddress: null,
-        patientContactAddress: null,
-        patientContactRelationship: CR.formatLabel(params.baseId, params.modifierId),
-        patientContactRelationshipIsNextOfKin: current.patientContactRelationshipIsNextOfKin,
-        patientContactRelationshipNotes: current.patientContactRelationshipNotes,
-        patientContactRelationshipCopyCorrespondence: current.patientContactRelationshipCopyCorrespondence,
-      });
-    }
-
-    let reverseManualMatch = null;
-    if (params.reverseBaseId) {
-      const reverseBody = CR.buildLinkPatientBody({
-        patientId: params.candidatePatientId,
-        linkPatientId: params.patientId,
-        baseId: params.reverseBaseId,
-        modifierId: params.modifierId,
-        isNextOfKin: params.reverseIsNextOfKin,
-        copyCorrespondence: params.reverseCopyCorrespondence,
-        notes: null,
-      });
-      await linkPatient(params.apiBase, reverseBody);
-      reverseManualMatch = await findReverseManualMatch(
-        params.apiBase,
-        params.candidatePatientId,
-        params.indexPatientFullName
-      );
-    }
-
-    if (params.manualContactIdToDelete) {
-      await deletePatientContactRelationship(params.apiBase, params.manualContactIdToDelete);
-    }
-
-    // Built from what actually happened rather than assumed, since callers differ: the wizard
-    // widget always has a manual contact to delete, but the canvas can also link a fresh
-    // Medicus-only candidate with no manual precedent at all.
-    const parts = [];
-    parts.push(
-      params.existingForwardLink
-        ? `${params.candidateDisplayName} was already linked — no new forward link created`
-        : `Linked to ${params.candidateDisplayName}`
+    const progress = Object.assign(
+      {
+        forwardLink: false,
+        forwardAlreadyExisted: false,
+        relationshipUpdate: false,
+        reverseLink: false,
+        reverseAlreadyPresent: false,
+        manualDelete: false,
+        reverseManualMatch: null,
+      },
+      params.progress || {}
     );
-    if (params.relationshipUpdateId) parts.push('updated their recorded relationship');
-    if (params.manualContactIdToDelete) parts.push('removed the old manual contact');
-    if (params.reverseBaseId) parts.push('created the reverse link on their record');
-    else if (params.existingReciprocal) parts.push('left their existing reverse link untouched');
-    const summary = parts.join('; ') + '.';
 
-    return { summary, reverseManualMatch };
+    try {
+      if (!params.existingForwardLink) {
+        if (!progress.forwardLink) {
+          const forwardBody = CR.buildLinkPatientBody({
+            patientId: params.patientId,
+            linkPatientId: params.candidatePatientId,
+            baseId: params.baseId,
+            modifierId: params.modifierId,
+            isNextOfKin: params.forwardIsNextOfKin,
+            copyCorrespondence: params.forwardCopyCorrespondence,
+            notes: params.notes,
+          });
+          try {
+            await linkPatient(params.apiBase, forwardBody);
+          } catch (err) {
+            // Already there — from an earlier attempt of this very action, or created elsewhere
+            // since the canvas loaded. Either way the step's goal is met, so carry on to the
+            // steps that still haven't run rather than failing the whole sequence again. Recorded
+            // (not just swallowed) because it also tells the reverse step below that the caller's
+            // view of this record is stale.
+            if (!isAlreadyExistsError(err)) throw err;
+            progress.forwardAlreadyExisted = true;
+          }
+          progress.forwardLink = true;
+        }
+      } else if (params.relationshipUpdateId && !progress.relationshipUpdate) {
+        // The link already exists, but its relationship text didn't map to a canonical category
+        // (relationshipKnown was false) — the user has just picked one via the confirm panel's
+        // picker, so write it back rather than only reclassifying it locally for this canvas
+        // session. Fetch first rather than reusing anything cached: isNextOfKin/notes/
+        // copyCorrespondence must be preserved exactly as currently recorded (this is a full
+        // replace, not a partial update), and this is a fresh enough action that a stale local copy
+        // isn't worth the risk of clobbering a value someone else changed since page load.
+        const current = await getEditPatientContact(params.apiBase, params.relationshipUpdateId);
+        await changePatientContact(
+          params.apiBase,
+          params.relationshipUpdateId,
+          {
+            patientContactTitle: null,
+            patientContactFirstName: null,
+            patientContactMiddleNames: null,
+            patientContactLastName: null,
+            patientContactHomeTelephoneNumber: null,
+            patientContactMobileTelephoneNumber: null,
+            patientContactWorkTelephoneNumber: null,
+            patientContactEmailAddress: null,
+            patientContactAddress: null,
+            patientContactRelationship: CR.formatLabel(params.baseId, params.modifierId),
+            patientContactRelationshipIsNextOfKin: current.patientContactRelationshipIsNextOfKin,
+            patientContactRelationshipNotes: current.patientContactRelationshipNotes,
+            patientContactRelationshipCopyCorrespondence: current.patientContactRelationshipCopyCorrespondence,
+          },
+          // The proof this id belongs to a REAL patient link, not a manual entry — see
+          // changePatientContact's own comment. It's the same entry relationshipUpdateId was taken
+          // from (findExistingForwardLink's result), so nothing extra is fetched for it.
+          params.existingForwardLink
+        );
+        progress.relationshipUpdate = true;
+      }
+
+      let reverseManualMatch = progress.reverseManualMatch;
+      if (params.reverseBaseId && !progress.reverseLink && !progress.reverseAlreadyPresent) {
+        // Stale-snapshot re-derive — see this function's own comment. Only fires in the narrow
+        // case that actually proved staleness (the forward link already existed), so the normal
+        // path pays nothing for it. No .catch(): a failure here must abort rather than fall
+        // through to a non-idempotent write on the other patient's record.
+        if (progress.forwardAlreadyExisted) {
+          const freshDetails = await getPatientDetails(params.apiBase, params.patientId);
+          if (CR.findExistingReciprocal(freshDetails, params.candidatePatientId)) {
+            progress.reverseAlreadyPresent = true;
+          }
+        }
+        if (!progress.reverseAlreadyPresent) {
+          const reverseBody = CR.buildLinkPatientBody({
+            patientId: params.candidatePatientId,
+            linkPatientId: params.patientId,
+            baseId: params.reverseBaseId,
+            modifierId: params.modifierId,
+            isNextOfKin: params.reverseIsNextOfKin,
+            copyCorrespondence: params.reverseCopyCorrespondence,
+            notes: null,
+          });
+          await linkPatient(params.apiBase, reverseBody);
+          progress.reverseLink = true;
+          reverseManualMatch = await findReverseManualMatch(
+            params.apiBase,
+            params.candidatePatientId,
+            params.indexPatientFullName
+          );
+          progress.reverseManualMatch = reverseManualMatch;
+        }
+      }
+
+      if (params.manualContactIdToDelete && !progress.manualDelete) {
+        await deletePatientContactRelationship(params.apiBase, params.manualContactIdToDelete);
+        progress.manualDelete = true;
+      }
+
+      // Built from what actually happened rather than assumed, since callers differ: the wizard
+      // widget always has a manual contact to delete, but the canvas can also link a fresh
+      // Medicus-only candidate with no manual precedent at all.
+      const parts = [];
+      parts.push(
+        // forwardAlreadyExisted: the POST came back "already exists", so this run created nothing
+        // — never claim a write that didn't happen, even when the end state is the same.
+        params.existingForwardLink || progress.forwardAlreadyExisted
+          ? `${params.candidateDisplayName} was already linked — no new forward link created`
+          : `Linked to ${params.candidateDisplayName}`
+      );
+      if (params.relationshipUpdateId) parts.push('updated their recorded relationship');
+      if (params.manualContactIdToDelete) parts.push('removed the old manual contact');
+      // reverseAlreadyPresent: the reverse link was found already on record by the staleness
+      // re-derive above, so nothing was created — say that rather than claiming a write that
+      // deliberately didn't happen.
+      if (params.reverseBaseId && !progress.reverseAlreadyPresent) {
+        parts.push('created the reverse link on their record');
+      } else if (params.existingReciprocal || progress.reverseAlreadyPresent) {
+        parts.push('left their existing reverse link untouched');
+      }
+      const summary = parts.join('; ') + '.';
+
+      return { summary, reverseManualMatch, progress };
+    } catch (err) {
+      // Hand the partial state back to the caller ON the error — the only way a retry can know
+      // what not to repeat, and what the UI needs to tell the user actually landed.
+      err.progress = progress;
+      throw err;
+    }
   }
 
   window.ContactsApi = {
@@ -433,7 +573,6 @@
     linkPatient,
     lookupPatientContacts,
     linkContactsBulk,
-    createManualContact,
     viewPatientContact,
     deletePatientContactRelationship,
     getAddressOverview,

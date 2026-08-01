@@ -36,8 +36,46 @@ HAR-confirmed endpoint.
 - **Manifest description updated** — no longer claims "read-only"; the suite has shipped
   user-confirmed record-editing tools (problem cleanup, bulk-end, and now contacts writes).
 
-Review fixes applied on merge (pre-merge code review, all verified against the branch):
-_(populated below in this entry by the fix commits)_
+Review fixes applied on merge (pre-merge code review; every code fix landed with
+red-first regression tests):
+
+- **Address merge ordering** — the correspondence-address flag is now transferred to the
+  kept address *before* any duplicate is deleted, so a mid-merge failure can no longer
+  leave the patient with no correspondence address; and when an address's correspondence
+  status can't be verified (`getEditAddress` failure) the group's merge is disabled
+  (fail closed) instead of silently treated as not-correspondence.
+- **Write concurrency guards** — in-flight busy guards on "Confirm link", blank-contact
+  delete, reverse-manual "Remove it", merge finalise and address merge; a double-click
+  can no longer fire the non-idempotent reverse `link-patient` twice (duplicate
+  relationship on the other patient's record).
+- **Resumable multi-step link writes** — `performLinkAndCleanup` tracks per-step
+  progress (forward link → re-categorise → reverse link → manual-contact cleanup);
+  after a partial failure, retry skips completed steps instead of being permanently
+  blocked by the server's duplicate rejection, a 400 "already exists" on the forward
+  link is treated as done, and the reciprocal is re-read live before the reverse write.
+- **Family cycling no longer drops members** — new `peekNext`/`commitAdvance` engine API
+  (`engine/contact-tree.js`); a member is consumed from the pool only when the user
+  actually navigates, so Cancel or a transient probe error keeps them queued.
+- **`removeFromSlot` reference-identity bug** — edges are removed by (slotPath, cardId)
+  value identity; a removed relationship's edge no longer lingers in `tree.edges`
+  feeding placement checks and composed suggestions.
+- **Stale resume banner** — the Resume handler re-verifies the live patient before
+  reopening, and the banner removes itself when the SPA navigates to a different patient.
+- **Name matching** — token-granular containment (Ann/Annette and surname-only contacts
+  no longer reach the 0.9 tier / "strong" badge; middle-name and hyphenated-surname
+  matches now do), plus `tied`/`margin` ambiguity signals on the top-ranked candidate.
+- **Address dedup guards** — digit-bearing tokens ("1a"/"1b"), transposed numbers and
+  lone-letter unit designators ("Flat A"/"Flat B") now compare as ordered exact
+  sequences instead of falling into the fuzzy word Jaccard.
+- **Free-text relationships fail closed** — possessive constructions ("Son's wife",
+  "Mother's carer", "Foster mother") drop to needs-review instead of a confident wrong
+  category; the "Other half" partner alias is now reachable.
+- **Write-surface hygiene** — dead `createManualContact` wrapper removed; defensive
+  assertion in `changePatientContact` (refuses a manual contact whose nulled fields
+  would be wiped); wrong-patient guard scope documented and aligned.
+- **Clinical safety** — hazard log gains H-055 (wrong-person link), H-056 (demographic
+  data loss via hygiene writes) and H-057 (confidentiality: cross-patient contact info
+  + persisted family graph), all Proposed pending CSO sign-off (doc v3.20).
 
 ## [v3.206.1] — 2026-07-31
 

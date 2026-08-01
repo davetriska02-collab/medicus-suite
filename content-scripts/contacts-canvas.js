@@ -206,6 +206,15 @@
       confirmCardId: null, // id of whichever card is currently staged for linking
       confirmCardKind: null, // 'manual' | 'medicus' — which array confirmCardId is drawn from
       confirm: null, // built when a card is dropped on a slot — same shape as the wizard's confirm fields, plus slotPath
+      // In-flight guard for the confirm panel's "Confirm link" button. Set SYNCHRONOUSLY at the top
+      // of doCanvasConfirm, before the first await, and the button is rendered disabled while it's
+      // true: performLinkAndCleanup is a multi-second sequence of up to four POSTs, and the reverse
+      // link-patient POST has no idempotency guard of its own (see
+      // ContactRelationships.findExistingReciprocal's own comment) — a double-click would create a
+      // genuine DUPLICATE relationship on the OTHER patient's record, not a harmless repeat.
+      confirming: false,
+      manualDeleting: new Set(), // manual patientContactIds currently being deleted (blank-contact Delete) — same Set-not-single-value reasoning as phoneDeleting
+      reverseManualRemoving: false, // the "Remove it" offer for a manual contact on the CANDIDATE's record is mid-delete
       workingError: null,
       doneSummary: null,
       reverseManualMatch: null, // a likely-matching manual contact found on the candidate's OWN record, offered for removal
@@ -284,7 +293,7 @@
   }
 
   // buildAddressMergeGroups(apiBase, indexAddresses, duplicateGroups) ->
-  //   Promise<[{indexes, keepIndex, correspondenceIndex, details}]>
+  //   Promise<[{indexes, keepIndex, correspondenceIndex, details, unverifiedIndexes}]>
   // For each duplicate group (ContactRelationships.findDuplicateAddressGroups), fetches
   // getEditAddress per member — the ONLY place isCorrespondenceAddress/description/accessNotes are
   // reachable (confirmed via HAR capture 2026-07-30); none of them are present on
@@ -295,20 +304,35 @@
   // regardless of which one ends up selected. `details` is kept parallel to `indexes` (details[i]
   // is the getEditAddress response for indexes[i]) so mergeDuplicateAddressGroup can reuse
   // description/accessNotes when moving the correspondence flag onto whichever address the GP
-  // actually kept, without a second fetch. Best-effort per address: a failed check falls back to an
-  // empty detail object rather than aborting the whole merge over one flaky fetch.
+  // actually kept, without a second fetch.
+  //
+  // FAILS CLOSED on an unverifiable member (`unverifiedIndexes`, previously a swallowed
+  // `catch (_) { …set(idx, {}) }`): an empty detail object is indistinguishable from a verified
+  // "not the correspondence address", so a single flaky getEditAddress could let the merge delete
+  // the patient's REAL correspondence address with no flag transfer at all — a silent, clinically
+  // consequential loss (correspondence goes to the wrong place afterwards, with nothing on screen
+  // to say so). An address with no addressId at all is treated the same way: there is nothing to
+  // ask about, so it cannot be cleared. The group is still SHOWN when this happens — the duplicate
+  // is real and worth the GP seeing — but its Merge control is disabled with an explicit note
+  // (renderDuplicateAddressWarning), and mergeDuplicateAddressGroup re-checks the same flag itself
+  // so the refusal never depends on the button's disabled attribute alone.
   async function buildAddressMergeGroups(apiBase, indexAddresses, duplicateGroups) {
     if (!duplicateGroups.length) return [];
     const allIndexes = Array.from(new Set(duplicateGroups.flat()));
     const detailByIndex = new Map();
+    const unverified = new Set();
     await Promise.all(
       allIndexes.map(async (idx) => {
         const entry = indexAddresses[idx];
-        if (!entry || !entry.addressId) return;
+        if (!entry || !entry.addressId) {
+          unverified.add(idx);
+          return;
+        }
         try {
           const detail = await window.ContactsApi.getEditAddress(apiBase, entry.addressId);
           detailByIndex.set(idx, detail || {});
         } catch (_) {
+          unverified.add(idx);
           detailByIndex.set(idx, {});
         }
       })
@@ -326,6 +350,7 @@
         keepIndex: indexes[keepPos],
         correspondenceIndex: correspondencePos === -1 ? -1 : indexes[correspondencePos],
         details,
+        unverifiedIndexes: indexes.filter((idx) => unverified.has(idx)),
       };
     });
   }
@@ -1489,8 +1514,11 @@
           faded: true,
           locked: true,
         });
+        // Disabled while its own delete is in flight (cs.manualDeleting) — same convention as the
+        // merge panel's per-row phone buttons, so a slow POST can't be fired twice by a second click.
+        const deleting = cs.manualDeleting.has(manual.id);
         return `<div class="ms-cv-source-group">${manualHtml}<div class="ms-cv-source-matches">
-                <button class="ms-ct-btn-ghost ms-cv-delete-manual-btn" data-manual-id="${esc(manual.id)}">Delete</button>
+                <button class="ms-ct-btn-ghost ms-cv-delete-manual-btn" data-manual-id="${esc(manual.id)}" ${deleting ? 'disabled' : ''}>${deleting ? 'Deleting…' : 'Delete'}</button>
               </div></div>`;
       }
       const matches = cs.suggestedCards.filter((c) => c.forManualId === manual.id);
@@ -1664,7 +1692,7 @@
                    "${esc(cs.reverseManualMatch.patientContactName)}" that may represent this patient — it was NOT
                    removed automatically since no one has confirmed the match. Remove it too?</div>
                  ${reverseManualMatchComparisonHtml(cs.reverseManualMatch, cs.indexPatientDetails)}
-                 <button class="ms-ct-btn-ghost" id="ms-cv-remove-reverse-manual">Remove it</button>`
+                 <button class="ms-ct-btn-ghost" id="ms-cv-remove-reverse-manual" ${cs.reverseManualRemoving ? 'disabled' : ''}>${cs.reverseManualRemoving ? 'Removing…' : 'Remove it'}</button>`
               : ''
           }
           ${cs.reverseManualMatchError ? `<div class="ms-ct-error">${esc(cs.reverseManualMatchError)}</div>` : ''}
@@ -1769,8 +1797,10 @@
         </div>
         ${cs.workingError ? `<div class="ms-ct-error">${esc(cs.workingError)}</div>` : ''}
         <div class="ms-cv-confirm-panel-actions">
-          <button class="ms-ct-btn" id="ms-cv-confirm">Confirm link</button>
-          <button class="ms-ct-btn-ghost" id="ms-cv-drop-clear">Cancel</button>
+          <button class="ms-ct-btn" id="ms-cv-confirm" ${cs.confirming ? 'disabled' : ''}>${
+            cs.confirming ? 'Linking…' : cs.confirm.linkProgress ? 'Retry the remaining steps' : 'Confirm link'
+          }</button>
+          <button class="ms-ct-btn-ghost" id="ms-cv-drop-clear" ${cs.confirming ? 'disabled' : ''}>Cancel</button>
         </div>
       </div>
     `;
@@ -2002,17 +2032,24 @@
       .map((plan) => {
         const groupKey = plan.indexes.join(',');
         const merging = cs.addressMerging.has(groupKey);
+        // Fail-closed (see buildAddressMergeGroups): at least one member's correspondence status
+        // couldn't be read, so nothing here may be deleted — the flag transfer can't be planned.
+        const unverifiedCount = (plan.unverifiedIndexes || []).length;
+        const blocked = unverifiedCount > 0;
         const rows = plan.indexes
           .map((idx) => {
             const entry = cs.indexAddresses[idx];
             const text = (entry && formatAddressLine(entry.address)) || '(no address text)';
             const isCorrespondence = idx === plan.correspondenceIndex;
+            const unverifiedHere = (plan.unverifiedIndexes || []).includes(idx);
             return `
               <label class="ms-cv-dupaddr-line">
                 <input type="radio" name="ms-cv-dupaddr-keep-${esc(groupKey)}" class="ms-cv-dupaddr-keep-radio"
                        data-address-group="${esc(groupKey)}" data-address-index="${idx}"
-                       ${idx === plan.keepIndex ? 'checked' : ''} ${merging ? 'disabled' : ''}/>
-                ${esc(text)}${isCorrespondence ? ' <span class="ms-ct-note">(currently correspondence address)</span>' : ''}
+                       ${idx === plan.keepIndex ? 'checked' : ''} ${merging || blocked ? 'disabled' : ''}/>
+                ${esc(text)}${isCorrespondence ? ' <span class="ms-ct-note">(currently correspondence address)</span>' : ''}${
+                  unverifiedHere ? ' <span class="ms-ct-note">(couldn’t be checked)</span>' : ''
+                }
               </label>
             `;
           })
@@ -2026,11 +2063,13 @@
           <div class="ms-cv-dupaddr-group">
             ${rows}
             ${
-              movesCorrespondence
-                ? `<div class="ms-ct-note">This deletes the current correspondence address — the correspondence-address flag will be set on the kept address automatically.</div>`
-                : ''
+              blocked
+                ? `<div class="ms-ct-warn">Couldn’t verify correspondence status for ${unverifiedCount === 1 ? 'one of these addresses' : `${unverifiedCount} of these addresses`} — merge disabled, so this can’t delete the correspondence address without moving the flag first. Reopen the canvas to retry, or merge them in Medicus directly.</div>`
+                : movesCorrespondence
+                  ? `<div class="ms-ct-note">This deletes the current correspondence address — the correspondence-address flag is set on the kept address FIRST, before anything is deleted.</div>`
+                  : ''
             }
-            <button class="ms-ct-btn-ghost ms-cv-dupaddr-merge" data-address-group="${esc(groupKey)}" ${merging ? 'disabled' : ''}>${merging ? 'Merging…' : 'Merge — keep the selected address, delete the rest'}</button>
+            <button class="ms-ct-btn-ghost ms-cv-dupaddr-merge" data-address-group="${esc(groupKey)}" ${merging || blocked ? 'disabled' : ''}>${merging ? 'Merging…' : 'Merge — keep the selected address, delete the rest'}</button>
           </div>
         `;
       })
@@ -2246,18 +2285,38 @@
   // deleteBlankManualContact — the dedicated Delete button for an isBlank manual card (see
   // loadCanvas). Reuses deletePatientContactRelationship, the same endpoint already used
   // elsewhere in this file for removing a manual duplicate — no new write logic needed.
+  //
+  // Two guards, both cheap, both added after review: an in-flight guard (cs.manualDeleting, set
+  // synchronously before the first await and rendered as a disabled button — the delete is a real
+  // POST and a double-click otherwise fires it twice), and the same WRONG-PATIENT re-verify
+  // mergeDuplicateAddressGroup uses. The delete is pinned to a server UUID so it could never
+  // retarget another patient's record on its own, but the ACTION's meaning is "clean up an import
+  // artifact on the patient in front of me" — if the page has moved on, the GP is no longer
+  // looking at the record they decided about, so it stops rather than writing.
   async function deleteBlankManualContact(manualId) {
     const manual = cs.manualCards.find((c) => c.id === manualId);
     if (!manual) return;
-    cs.workingError = null;
+    if (cs.manualDeleting.has(manualId)) return; // already in flight — never fire the delete twice
+    const st = cs;
+    st.workingError = null;
+    st.manualDeleting.add(manualId);
     render();
     try {
-      await window.ContactsApi.deletePatientContactRelationship(cs.apiBase, manualId);
-      cs.manualCards = cs.manualCards.filter((c) => c.id !== manualId);
-      render();
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      }
+      await window.ContactsApi.deletePatientContactRelationship(st.apiBase, manualId);
+      if (st !== cs) return;
+      st.manualCards = st.manualCards.filter((c) => c.id !== manualId);
     } catch (err) {
-      cs.workingError = err.message || 'Failed to delete this blank contact.';
-      render();
+      if (st !== cs) return;
+      st.workingError = err.message || 'Failed to delete this blank contact.';
+    } finally {
+      if (st === cs) {
+        st.manualDeleting.delete(manualId);
+        render();
+      }
     }
   }
 
@@ -2278,10 +2337,19 @@
     // with nowhere left to go (previously silently discarded on close, since there is no "drop
     // onto a slot it's already correctly sitting in" action for the user to take).
     if (isPlacedInTree(pm.medicusId)) {
+      if (pm.finalizing) return; // already in flight — checked-and-set synchronously, before any await
       pm.finalizing = true;
       cs.mergeError = null;
       render();
       try {
+        // WRONG-PATIENT GUARD — same cheap re-verify as mergeDuplicateAddressGroup/
+        // deleteBlankManualContact. The delete is UUID-pinned so it can't retarget, but this
+        // removes a record from the patient the GP was looking at when they confirmed the match;
+        // if the page has moved on, that decision no longer refers to what's on screen.
+        const ctx = window.ContactsApi.resolveContext();
+        if (!ctx || ctx.patientId !== cs.patientId) {
+          throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+        }
         await window.ContactsApi.deletePatientContactRelationship(cs.apiBase, manual.id);
         if (cs.pendingMerge !== pm) return; // cancelled or superseded mid-request
         cs.manualCards = cs.manualCards.filter((c) => c.id !== manual.id);
@@ -2515,10 +2583,31 @@
   // the panel already shows exactly what will be kept vs deleted before this button is reachable
   // at all, same "the visible context IS the confirmation" convention as fixPhoneType/
   // deletePhoneNumber elsewhere in this file, not a separate popup on top of that.
+  //
+  // ORDER IS SAFETY-CRITICAL: the correspondence-address flag is transferred to the SURVIVOR
+  // FIRST, and only then are the duplicates deleted. The original order (delete everything, then
+  // move the flag) meant a failure of that final POST — the exact moment the flag-holding address
+  // had just been deleted — left the patient with NO correspondence address at all, silently:
+  // letters then go nowhere, and nothing on screen says so. Reversed, the worst case is a failure
+  // part-way through the deletes, which leaves EXTRA duplicate addresses behind — visible,
+  // harmless, and re-mergeable on the next canvas open. Either ordering ends in the same place on
+  // the happy path (whether Medicus enforces one-correspondence-address-per-patient server-side or
+  // tolerates two transiently, the survivor holds the flag and the duplicates are gone), so there
+  // is nothing to trade off here — only the failure mode differs.
   async function mergeDuplicateAddressGroup(groupKey) {
     const plan = cs.addressMergeGroups.find((g) => g.indexes.join(',') === groupKey);
     if (!plan) return;
     const st = cs;
+    // Fail closed, independently of the button's disabled attribute (see buildAddressMergeGroups):
+    // if any member's correspondence status couldn't be read, the flag transfer can't be planned,
+    // so nothing may be deleted.
+    if (plan.unverifiedIndexes && plan.unverifiedIndexes.length) {
+      st.addressMergeError =
+        'Could not verify which of these addresses is the correspondence address, so nothing was deleted — reopen the canvas to retry, or merge them in Medicus directly.';
+      render();
+      return;
+    }
+    if (st.addressMerging.has(groupKey)) return; // already mid-merge — never fire the deletes twice
     st.addressMergeError = null;
     st.addressMerging.add(groupKey);
     render();
@@ -2529,36 +2618,43 @@
       if (!ctx || ctx.patientId !== st.patientId) {
         throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
       }
+      // STEP 1 — if the GP kept a DIFFERENT address than the one that held the correspondence-
+      // address flag, carry that designation over to the survivor BEFORE any delete (see this
+      // function's own comment above for why the order matters). A full-replace write
+      // (ContactRelationships.buildChangeAddressBody), built entirely from data already on hand
+      // (the kept address's own fields, plus its getEditAddress detail already fetched into
+      // plan.details) — no OS Places re-search needed, see that function's own comment for why
+      // Medicus's own UI for this makes a GP do that even though the endpoint doesn't require it.
+      // A failure here throws before anything has been deleted, so the patient's record is left
+      // exactly as it was.
+      if (plan.correspondenceIndex !== -1 && plan.correspondenceIndex !== plan.keepIndex) {
+        const keepPos = plan.indexes.indexOf(plan.keepIndex);
+        const keepEntry = st.indexAddresses[plan.keepIndex];
+        const keepDetail = plan.details[keepPos] || {};
+        if (!keepEntry || !keepEntry.addressId) {
+          throw new Error(
+            'Could not identify the address to keep, so the correspondence address could not be moved — nothing was deleted.'
+          );
+        }
+        await window.ContactsApi.changeAddress(
+          st.apiBase,
+          window.ContactRelationships.buildChangeAddressBody({
+            addressId: keepEntry.addressId,
+            address: keepEntry.address,
+            description: keepDetail.description,
+            accessNotes: keepDetail.accessNotes,
+            isCorrespondenceAddress: true,
+          })
+        );
+        if (st !== cs) return;
+      }
+      // STEP 2 — now, and only now, delete the duplicates.
       const toDelete = plan.indexes.filter((idx) => idx !== plan.keepIndex);
       for (const idx of toDelete) {
         const entry = st.indexAddresses[idx];
         if (!entry || !entry.addressId) continue;
         await window.ContactsApi.deleteAddress(st.apiBase, entry.addressId);
         if (st !== cs) return;
-      }
-      // If the GP kept a DIFFERENT address than the one that held the correspondence-address flag,
-      // carry that designation over to the survivor — a full-replace write
-      // (ContactRelationships.buildChangeAddressBody), built entirely from data already on hand
-      // (the kept address's own fields, plus its getEditAddress detail already fetched into
-      // plan.details) — no OS Places re-search needed, see that function's own comment for why
-      // Medicus's own UI for this makes a GP do that even though the endpoint doesn't require it.
-      if (plan.correspondenceIndex !== -1 && plan.correspondenceIndex !== plan.keepIndex) {
-        const keepPos = plan.indexes.indexOf(plan.keepIndex);
-        const keepEntry = st.indexAddresses[plan.keepIndex];
-        const keepDetail = plan.details[keepPos] || {};
-        if (keepEntry && keepEntry.addressId) {
-          await window.ContactsApi.changeAddress(
-            st.apiBase,
-            window.ContactRelationships.buildChangeAddressBody({
-              addressId: keepEntry.addressId,
-              address: keepEntry.address,
-              description: keepDetail.description,
-              accessNotes: keepDetail.accessNotes,
-              isCorrespondenceAddress: true,
-            })
-          );
-          if (st !== cs) return;
-        }
       }
       // Re-fetch rather than patching indexes locally — deleting shifts array positions in ways
       // that would be fragile to track by hand; simpler and safer to just ask Medicus what's left.
@@ -2570,8 +2666,11 @@
       st.addressMergeGroups = await buildAddressMergeGroups(st.apiBase, st.indexAddresses, st.duplicateAddressGroups);
       if (st !== cs) return;
     } catch (err) {
-      st.addressMergeError =
-        err.message || 'Failed to merge these addresses — some may already have been deleted, refresh to check.';
+      // Copy matches the write order above: because the correspondence-address flag is moved
+      // BEFORE anything is deleted, a failure here can only ever leave extra duplicates behind —
+      // it can never have left this patient without a correspondence address. Say so explicitly,
+      // so a GP seeing this doesn't have to go and check that themselves.
+      st.addressMergeError = `${err.message || 'Failed to merge these addresses.'} Some duplicates may still be there — refresh to check what remains. The correspondence address is always set on the address you kept before anything is deleted, so it cannot have been lost.`;
     } finally {
       if (st === cs) {
         st.addressMerging.delete(groupKey);
@@ -2769,9 +2868,48 @@
     render();
   }
 
+  // describeLinkProgress(confirm, progress) -> { done: [label], remaining: [label] }
+  // Turns performLinkAndCleanup's per-step progress object (see that function — it's the same
+  // object handed back on the thrown error and passed straight back in on retry) into plain
+  // English for the failure message. Only the steps that ACTUALLY apply to this particular confirm
+  // are listed: the applies() conditions here mirror, one-for-one, the params doCanvasConfirm
+  // passes below, so a step the user was never going to need can't turn up as "still to do".
+  function describeLinkProgress(confirm, progress) {
+    const p = progress || {};
+    const steps = [
+      { done: !!p.forwardLink, applies: !confirm.existingForwardLink, label: "the link on this patient's record" },
+      {
+        done: !!p.relationshipUpdate,
+        applies: !!(confirm.existingForwardLink && !confirm.relationshipKnown),
+        label: 'the corrected relationship on the existing link',
+      },
+      {
+        // reverseAlreadyPresent counts as done: the reverse link is on record, this attempt just
+        // (correctly) didn't create it — see performLinkAndCleanup's staleness re-derive.
+        done: !!(p.reverseLink || p.reverseAlreadyPresent),
+        applies: !!confirm.reverseBaseId,
+        label: `the reverse link on ${confirm.candidateDisplayName}'s own record`,
+      },
+      {
+        done: !!p.manualDelete,
+        applies: !!confirm.manualContactIdToDelete,
+        label: 'removing the old manual contact',
+      },
+    ].filter((s) => s.applies);
+    return {
+      done: steps.filter((s) => s.done).map((s) => s.label),
+      remaining: steps.filter((s) => !s.done).map((s) => s.label),
+    };
+  }
+
   async function doCanvasConfirm() {
     if (!cs.confirm) return;
+    // In-flight guard, checked-and-set synchronously before anything async: the button is also
+    // rendered disabled below, but the flag is what actually makes a second call impossible — see
+    // cs.confirming's own comment for why a duplicate reverse link is the specific hazard.
+    if (cs.confirming) return;
     const st = cs;
+    st.confirming = true;
     cs.workingError = null;
     render();
     try {
@@ -2800,8 +2938,16 @@
         reverseCopyCorrespondence: st.confirm.reverseCopyCorrespondence,
         existingReciprocal: st.confirm.existingReciprocal,
         manualContactIdToDelete: st.confirm.manualContactIdToDelete,
+        // RESUMABLE RETRY (see performLinkAndCleanup): whatever the previous attempt got through
+        // before it failed, carried back in so this attempt skips it. Without this, a failure
+        // after the forward link had already succeeded left the retry structurally impossible —
+        // clicking Confirm again re-POSTed the forward link, which 400s ("Patient Contact already
+        // exists") before the remaining steps ever ran, so the half-finished write could never be
+        // completed from this panel at all.
+        progress: st.confirm.linkProgress || null,
       });
       if (st !== cs) return;
+      st.confirm.linkProgress = null; // fully completed — a later, unrelated confirm must start clean
       st.doneSummary = result.summary;
       st.reverseManualMatch = result.reverseManualMatch;
       // Remove the linked manual card from column 1 so the canvas reflects the change immediately
@@ -2888,9 +3034,28 @@
         st.addressCards = st.addressCards.filter((c) => c.id !== st.confirm.candidatePatientId);
       }
     } catch (err) {
-      st.workingError = err.message || 'Failed to complete the link — nothing further was changed.';
+      if (st === cs) {
+        // The old copy here ("nothing further was changed") was actively misleading: this is a
+        // sequence of up to four separate POSTs, so a failure part-way means some of them DID
+        // land. Report which, keep the progress object on the confirm state so pressing Confirm
+        // again resumes rather than restarting, and say that plainly — a GP who can't tell what
+        // landed has no way to decide whether to retry here or finish up in Medicus directly.
+        if (st.confirm) st.confirm.linkProgress = (err && err.progress) || st.confirm.linkProgress || null;
+        const { done, remaining } = st.confirm
+          ? describeLinkProgress(st.confirm, st.confirm.linkProgress)
+          : { done: [], remaining: [] };
+        const parts = [err.message || 'Failed to complete the link.'];
+        parts.push(done.length ? `Already done: ${done.join('; ')}.` : 'Nothing was written.');
+        if (remaining.length) {
+          parts.push(`Still to do: ${remaining.join('; ')}. Confirm again to retry just those steps.`);
+        }
+        st.workingError = parts.join(' ');
+      }
     } finally {
-      if (st === cs) render();
+      if (st === cs) {
+        st.confirming = false;
+        render();
+      }
     }
   }
 
@@ -3012,19 +3177,37 @@
     });
     overlay.querySelector('#ms-cv-reload')?.addEventListener('click', () => location.reload());
 
-    overlay.querySelector('#ms-cv-remove-reverse-manual')?.addEventListener('click', async (e) => {
+    // The one write in this file with NO wrong-patient guard, deliberately: its target is a manual
+    // contact on the CANDIDATE's own record (found by findReverseManualMatch, pinned to that
+    // record's own server UUID), so the index patient's identity is not part of what it means — a
+    // page that has since moved to another patient doesn't make this delete point anywhere else.
+    // See contacts-api.js's "Shared write orchestration" header, which records the same exemption.
+    // It DOES get an in-flight guard (cs.reverseManualRemoving, checked-and-set synchronously
+    // before the first await, plus the rendered button disabled): the old `e.target.disabled =
+    // true` alone was defeated by any render() in between, which rebuilds the whole overlay's
+    // innerHTML and hands back a fresh, enabled button.
+    overlay.querySelector('#ms-cv-remove-reverse-manual')?.addEventListener('click', async () => {
       const match = cs.reverseManualMatch;
       if (!match) return;
-      e.target.disabled = true;
+      if (cs.reverseManualRemoving) return;
+      const st = cs;
+      st.reverseManualRemoving = true;
+      st.reverseManualMatchError = null;
+      render();
       try {
-        await window.ContactsApi.deletePatientContactRelationship(cs.apiBase, match.patientContactId);
-        cs.reverseManualMatch = null;
-        cs.reverseManualMatchError = null;
-        render();
+        await window.ContactsApi.deletePatientContactRelationship(st.apiBase, match.patientContactId);
+        if (st !== cs) return;
+        st.reverseManualMatch = null;
+        st.reverseManualMatchError = null;
       } catch (err) {
-        cs.reverseManualMatchError =
+        if (st !== cs) return;
+        st.reverseManualMatchError =
           err.message || 'Failed to remove that manual contact — try again or remove it in Medicus directly.';
-        render();
+      } finally {
+        if (st === cs) {
+          st.reverseManualRemoving = false;
+          render();
+        }
       }
     });
 
@@ -3158,60 +3341,122 @@
   // patient's tree gets flagged rather than the signal just being thrown away; a dead next-of-kin
   // still listed as an emergency contact is a real thing a GP should be able to see. Only once a
   // genuinely openable target is found does this navigate — at most once, never a bounce through
-  // several dead pages. Any OTHER failure (network, unexpected API shape) is NOT silently skipped —
-  // that's not the "nothing actionable here anyway" case the inactive filter covers, so it stops
-  // cycling and surfaces the real error rather than quietly losing candidates to it.
+  // several dead pages.
+  //
+  // PEEK, PROBE, THEN COMMIT — the ordering is the whole point. This used to call
+  // ContactTree.advance() first, which CONSUMES the head of the pending pool (marks it visited,
+  // sets it current) before anything had been decided: a transient network blip on the probe, or
+  // the GP clicking CANCEL on the navigation confirm, permanently dropped that family member from
+  // the review with nothing on screen to say a name had just been silently skipped. Reworked
+  // against the engine's peekNext/commitAdvance pair (engine/contact-tree.js) so the pool is only
+  // ever consumed for a reason:
+  //   - inactive/ineligible candidate → commitAdvance (a genuine, correct "visited": there is
+  //     nothing actionable on a record that can't be opened), badge it, and keep looping;
+  //   - any OTHER failure (network, unexpected API shape) → stop and surface the real error with
+  //     the session UNTOUCHED, so the next click retries the very same member rather than the
+  //     one after them;
+  //   - CANCEL on the confirm → session untouched too (bar any inactive skips already made above,
+  //     which stay correctly consumed);
+  //   - OK → commitAdvance, persist, navigate.
+  // Peeking before probing also means the confirm dialog can ALWAYS name the target: the candidate
+  // is known before the user is asked, not chosen by the same call that consumed it.
   async function advanceToNextFamilyMember() {
     if (!confirmDiscardUnfinishedMerge()) return;
-    const fromPatientId = cs.patientId;
-    let session = window.ContactTree.setTreeFor(cs.familySession, fromPatientId, cs.tree);
-    let targetId = null;
+    const st = cs;
+    const fromPatientId = st.patientId;
+    let session = window.ContactTree.setTreeFor(st.familySession, fromPatientId, st.tree);
     for (;;) {
-      const result = window.ContactTree.advance(session);
-      session = result.session;
-      if (!result.patientId) break;
-      try {
-        await window.ContactsApi.getPatientDetails(cs.apiBase, result.patientId);
-        targetId = result.patientId;
-        break;
-      } catch (err) {
-        if (err.errorCode === 'inactive-patient-access') {
-          const lc = cs.linkedCards.find((c) => c.id === result.patientId);
-          if (lc) lc.recordInactive = true;
-          continue;
-        }
-        cs.familySession = session;
-        cs.workingError = `Could not check the next family member — ${err.message || 'unknown error'}. Stopped cycling.`;
+      const peeked = window.ContactTree.peekNext(session);
+      const candidateId = peeked && peeked.patientId;
+      if (!candidateId) {
+        // Pool exhausted — nothing left to cycle to. The header button disappears on its own now
+        // cs.familySession.pending is empty; still worth a render so any recordInactive badges set
+        // during the skip loop above actually show up.
+        st.familySession = session;
         render();
         return;
       }
-    }
-    if (!targetId) {
-      // Pool exhausted — nothing left to cycle to. The header button disappears on its own now
-      // cs.familySession.pending is empty; still worth a render so any recordInactive badges set
-      // during the skip loop above actually show up.
-      cs.familySession = session;
-      render();
+      let candidateDetails = null;
+      try {
+        candidateDetails = await window.ContactsApi.getPatientDetails(st.apiBase, candidateId);
+        if (st !== cs) return;
+      } catch (err) {
+        if (st !== cs) return;
+        if (err.errorCode === 'inactive-patient-access') {
+          const lc = st.linkedCards.find((c) => c.id === candidateId);
+          if (lc) lc.recordInactive = true;
+          const skipped = window.ContactTree.commitAdvance(session, candidateId);
+          // commitAdvance is a documented safe no-op for a patientId that isn't in the pool. That
+          // can't happen for one we just peeked out of it — but if it ever did, continuing would
+          // spin this loop on the same candidate forever, so bail out rather than hang the page.
+          if (!skipped.patientId) {
+            st.familySession = session;
+            st.workingError = 'Could not skip past an inactive family member — stopped cycling.';
+            render();
+            return;
+          }
+          session = skipped.session;
+          continue;
+        }
+        // Transient/unknown failure — consume NOTHING. The pending pool is exactly as it was, so
+        // clicking again retries this same person; say so, rather than leaving the GP to wonder
+        // whether they've just lost someone from the review.
+        st.familySession = session;
+        st.workingError = `Could not check the next family member — ${err.message || 'unknown error'}. Stopped cycling; nobody has been skipped, so try again to retry the same person.`;
+        render();
+        return;
+      }
+      // Navigating away from a patient's record mid-consultation needs an explicit, named
+      // confirmation — a control that just quietly moves you to someone else's record, with only
+      // the small print in a tooltip saying so, is a wrong-patient-documentation risk in a clinical
+      // tool. The name comes from the record just fetched wherever possible (authoritative for
+      // whose page is about to open), falling back to this canvas's own card for them.
+      const targetCard = st.linkedCards.find((c) => c.id === candidateId);
+      const targetName =
+        (candidateDetails && candidateDetails.displayName) ||
+        (targetCard && targetCard.name) ||
+        'the next family member';
+      const fromName = (st.indexPatientDetails && st.indexPatientDetails.displayName) || 'this patient';
+      if (
+        !window.confirm(
+          `This will leave ${fromName}'s record and open ${targetName}'s own record to continue the family contacts review.\n\n` +
+            'Click OK to continue, or CANCEL to stay on this record.'
+        )
+      ) {
+        st.familySession = session; // untouched pool — this member is still next time round
+        render();
+        return;
+      }
+      session = window.ContactTree.commitAdvance(session, candidateId).session;
+      st.familySession = session;
+      await persistFamilySession(session, targetName);
+      if (st !== cs) return;
+      location.href = buildNavigationUrl(fromPatientId, candidateId);
       return;
     }
-    // Navigating away from a patient's record mid-consultation needs an explicit, named
-    // confirmation — a control that just quietly moves you to someone else's record, with only the
-    // small print in a tooltip saying so, is a wrong-patient-documentation risk in a clinical tool.
-    const targetCard = cs.linkedCards.find((c) => c.id === targetId);
-    const targetName = (targetCard && targetCard.name) || 'the next family member';
-    const fromName = (cs.indexPatientDetails && cs.indexPatientDetails.displayName) || 'this patient';
-    if (
-      !window.confirm(
-        `This will leave ${fromName}'s record and open ${targetName}'s own record to continue the family contacts review.\n\n` +
-          'Click OK to continue, or CANCEL to stay on this record.'
-      )
-    ) {
-      cs.familySession = session;
-      render();
-      return;
-    }
-    await persistFamilySession(session, targetName);
-    location.href = buildNavigationUrl(fromPatientId, targetId);
+  }
+
+  // renderResumeBanner — the banner outlives the moment it was created, which is the whole
+  // problem it now guards against. checkResumableFamilySession validates session.current against
+  // the live patient ONCE, at content-script load; Medicus is an SPA, so the GP can switch patient
+  // (URL changes, no page load, no new content script) with this banner still sitting there
+  // offering to resume a review of someone who is no longer on screen — and clicking Resume would
+  // have opened the canvas on the WRONG patient's record. Two cheap guards, in order of how much
+  // they'd cost if the other were missed:
+  //   1. the Resume click re-derives the live context (the same resolveContext() every write guard
+  //      in this feature uses) and refuses if the page's patient is no longer session.current;
+  //   2. a lightweight URL poll that exists ONLY while the banner is in the DOM (cleared the
+  //      moment it isn't, whichever way it went — Resume, Dismiss, or removal by this poll), so
+  //      the stale offer disappears on a patient switch instead of waiting to be clicked. Polling
+  //      is used rather than an SPA-navigation observer because this file has no navigation
+  //      machinery of its own to hook (unlike task-inline.js's dom-observer-hub subscription), and
+  //      a 1.5s interval that only lives while a banner is on screen is far cheaper than adding
+  //      one.
+  const RESUME_BANNER_URL_POLL_MS = 1500;
+
+  function removeResumeBanner(el, timer) {
+    clearInterval(timer);
+    el.remove();
   }
 
   function renderResumeBanner(session, targetName) {
@@ -3226,12 +3471,36 @@
       <button id="ms-cv-resume-dismiss">Dismiss</button>
     `;
     document.body.appendChild(el);
+    let bannerHref = location.href;
+    const timer = setInterval(() => {
+      if (!document.getElementById('ms-cv-resume-banner')) {
+        clearInterval(timer); // gone by some other route — never leave the interval running
+        return;
+      }
+      if (location.href === bannerHref) return;
+      bannerHref = location.href;
+      // Re-derive rather than assuming any URL change is a patient change — Medicus moves between
+      // tabs/sections of the SAME record constantly, and pulling the banner for those would be a
+      // pointless loss of a still-valid offer. The persisted session is deliberately left in
+      // storage (checkResumableFamilySession will offer it again if the GP navigates back, and
+      // prunes it by age either way).
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== session.current) removeResumeBanner(el, timer);
+    }, RESUME_BANNER_URL_POLL_MS);
     el.querySelector('#ms-cv-resume-open').addEventListener('click', () => {
-      el.remove();
+      // Same check again at the moment of the click: the poll runs on an interval, so a switch in
+      // the last second-and-a-half may not have been noticed yet, and this is the one path that
+      // would actually act on the stale session.
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== session.current) {
+        removeResumeBanner(el, timer);
+        return;
+      }
+      removeResumeBanner(el, timer);
       open({ resumeSession: session });
     });
     el.querySelector('#ms-cv-resume-dismiss').addEventListener('click', () => {
-      el.remove();
+      removeResumeBanner(el, timer);
       clearPersistedFamilySession();
     });
   }
