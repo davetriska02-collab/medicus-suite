@@ -1,43 +1,58 @@
 {
-  "runDate": "2026-07-25",
-  "previousRunDate": "2026-07-11",
-  "manifestVersion": "3.178.0",
+  "runDate": "2026-08-01",
+  "previousRunDate": "2026-07-25",
+  "manifestVersion": "3.207.0",
   "ruleFileLastUpdated": {
     "rules/drug-rules.json": "2026-07-25",
     "rules/qof-rules.json": "2026-07-25",
-    "rules/vaccine-rules.json": "2026-07-25",
+    "rules/vaccine-rules.json": "2026-08-01",
     "rules/alert-library.json": "2026-07-25",
     "rules/reception-pathways.json": "2026-07-25",
-    "engine/acb-scores.js": "2026-07-25 (Keeper edit)",
-    "engine/stopp-start.js": "2026-07-25 (Keeper edit)",
-    "visualiser-core.js": "2026-07-25 (Keeper edit)"
+    "engine/acb-scores.js": "2026-07-25",
+    "engine/stopp-start.js": "2026-07-25",
+    "engine/rules-engine.js": "2026-08-01"
   },
   "sourcesChecked": [
-    "MHRA Drug Safety Update (gov.uk/drug-safety-update)",
-    "BNF (bnf.nice.org.uk)",
-    "NHS England QOF 2026/27 PRN02356",
-    "NICE NG12 (Suspected cancer: recognition and referral)",
-    "NICE CKS Headache assessment",
-    "NICE NG97 (Dementia)",
-    "NHS England RSV operational letter (2 July 2026)",
-    "GOV.UK Pneumococcal vaccination extension (June 2026)",
-    "ACBcalc / Boustani ACB scale",
-    "BSR shared-care guidelines (leflunomide)",
-    "NICE TA877 (finerenone)",
-    "MHRA Valproate Pregnancy Prevention Programme"
+    "internal://rules/vaccine-rules.json",
+    "internal://engine/rules-engine.js",
+    "internal://rules/drug-rules.json",
+    "internal://engine/stopp-start.js"
   ],
   "heldForNextRun": [
     {
-      "id": "alert-C005",
-      "description": "Digoxin + CKD alert — STOPP criterion is E1 (not B5); CKD stage 3 RED threshold over-fires. CSO review required."
+      "id": "ob004-qof",
+      "description": "OB004 indicator values — PRN02356 July 2026 amendment inaccessible (HTTP 403, second consecutive run). Held pending egress restoration.",
+      "heldSince": "2026-07-25"
     },
     {
-      "id": "ob004-qof",
-      "description": "OB004 indicator (weight management referral within 90 days, 5pts, 10-30%) — correct values for future Keeper run to implement."
+      "id": "vax-001",
+      "description": "RSV 65-74 clinical-risk expansion (effective 1 Sept 2026, NHSE letter 2 July 2026). Engine cannot encode conditional-age eligibility — matchVaccineEligibility() has no combined age-band + clinical-risk handler. Engine sprint required. Assess manually from 1 Sept 2026.",
+      "heldSince": "2026-07-25",
+      "effectiveDate": "2026-09-01"
     }
   ],
   "sourceGaps": [
-    "PRN02356 July 2026 amendment PDF: primary URL returned 403 this run",
-    "BNF primary pages: some endpoints returned 403; corroborated via emc/ICB formularies"
+    "All UK clinical reference pages (gov.uk, nice.org.uk, england.nhs.uk, bnf.nice.org.uk, medicines.org.uk, sps.nhs.uk) — HTTP 403 from outbound proxy; widened since 2026-07-25 (was PDF-specific; now all pages). Second consecutive run with egress blocked.",
+    "PRN02356 July 2026 QOF amendment (NHSE) — HTTP 403, second consecutive run."
+  ],
+  "changesAppliedThisRun": [
+    {
+      "id": "vax-002",
+      "rag": "Red",
+      "description": "mRESVIA declined variants (5 terms) added to vax-rsv statusTerms.declined — fixes C2-class false-GIVEN risk",
+      "appliedDate": "2026-08-01"
+    },
+    {
+      "id": "vax-003",
+      "rag": "Red",
+      "description": "engine/rules-engine.js matchVaccineEligibility() — ageMin/ageMax check added to problem and medication clause handlers",
+      "appliedDate": "2026-08-01"
+    },
+    {
+      "id": "alert-C005",
+      "rag": "Red",
+      "description": "Disabled digoxin-renal-monitoring rule added to drug-rules.json (enabled:false, pending CSO activation)",
+      "appliedDate": "2026-08-01"
+    }
   ]
 }

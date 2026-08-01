@@ -1416,6 +1416,28 @@
       "sharedCare": false
     },
     {
+      "id": "digoxin-renal-monitoring",
+      "type": "drug-monitoring",
+      "enabled": false,
+      "drug": {
+        "match": ["digoxin", "lanoxin"],
+        "exclude": []
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "U&E / eGFR",
+          "match": ["urea", "electrolytes", "egfr", "creatinine", "renal function", "u&e"],
+          "snomed": ["166717003", "80274001"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "BNF Digoxin monograph (monitoring: U&E/eGFR at least annually; dose reduction required if eGFR <30 per STOPP v3 B1). 2026-08-01 (The Keeper, alert-C005 RED): gap identified by direct code inspection — no digoxin monitoring rule existed in drug-rules.json; stopp-start.js encodes the STOPP v3 B1 eGFR<30 dose-criterion (fail-closed when eGFR unknown) but provides no proactive annual monitoring chip. Lanoxin confirmed only UK-licensed brand (dm+d/BNF).",
+      "notes": "DISABLED PENDING CSO ACTIVATION (enabled:false). The Keeper identified this gap on 2026-08-01 (alert-C005, RED): digoxin is a high-risk drug with a narrow therapeutic index and renal-dose sensitivity but had no entry in Sentinel drug-monitoring rules. Lanoxin (GlaxoSmithKline/Aspen) is the only UK-licensed brand (Lanoxin-PG is the 25 mcg/5 ml paediatric liquid, same brand family). Annual U&E/eGFR monitoring is required to detect toxicity risk from renal impairment. CSO must review the monitoring interval and confirm this rule is appropriate for this practice before enabling. STOPP v3 B1 separately flags digoxin use when eGFR<30 — that criterion is in engine/stopp-start.js and fires independently of this rule.",
+      "sharedCare": false
+    },
+    {
       "id": "allergy-penicillin",
       "type": "drug-allergy",
       "enabled": true,
