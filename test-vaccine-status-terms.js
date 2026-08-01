@@ -97,5 +97,15 @@ console.log('\n--- sanity: real given/declined records still classify correctly 
   );
 }
 
+console.log('\n--- vax-rsv mRESVIA: negative phrasings must not be vax_given (vax-002) ---');
+{
+  const rsv = vaxRules.rules.find((r) => r.id === 'vax-rsv');
+  const mresviaNeg = ['mresvia refused', 'mresvia contraindicated', 'mresvia not given', 'mresvia not indicated', 'mresvia declined'];
+  for (const label of mresviaNeg) {
+    const status = statusOf(rsv, dataWithProblem(label, NOW));
+    assert(status !== 'vax_given', `vax-rsv: "${label}" → ${status} (must not be vax_given)`);
+  }
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
 if (failed > 0) process.exit(1);

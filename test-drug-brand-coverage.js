@@ -164,6 +164,11 @@ const EXPECTED = {
   ],
   'finerenone': [
     'Finerenone 10mg tablets', 'Kerendia 10mg tablets', 'Kerendia 20mg tablets'
+  ],
+  // 2026-08-01 Keeper alert-C005: digoxin monitoring rule (disabled pending CSO activation — brands still regression-locked)
+  'digoxin-renal-monitoring': [
+    'Digoxin 62.5mcg tablets', 'Digoxin 125mcg tablets', 'Digoxin 250mcg tablets',
+    'Lanoxin 125mcg tablets', 'Lanoxin-PG 62.5mcg/5ml oral solution'
   ]
 };
 

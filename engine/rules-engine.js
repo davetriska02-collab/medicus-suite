@@ -2335,6 +2335,8 @@
 
       if (k === 'problem') {
         if (clause.sex && sex && clause.sex !== sex[0]) continue;
+        if (age != null && clause.ageMin != null && age < clause.ageMin) continue;
+        if (age != null && clause.ageMax != null && age > clause.ageMax) continue;
         const terms = clause.match || [];
         const hit = (data.problems || []).find((p) => p.status !== 'inactive' && matchesAnyTerm(p.label, terms));
         if (hit) return { ...clause, matchedEvidence: `${clause.label}: ${hit.label}` };
@@ -2363,6 +2365,8 @@
       }
 
       if (k === 'medication') {
+        if (age != null && clause.ageMin != null && age < clause.ageMin) continue;
+        if (age != null && clause.ageMax != null && age > clause.ageMax) continue;
         const terms = clause.match || [];
         const hit = (data.medications || []).find((m) => matchesAnyTerm(m.name, terms));
         if (hit) return { ...clause, matchedEvidence: `${clause.label}: ${hit.name}` };
