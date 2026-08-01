@@ -160,6 +160,10 @@
       apiBase: null,
       patientId: null,
       indexPatientDetails: null,
+      indexAge: null, // stashed for cardHtml's shared-contact-info hint ("this patient is X, [contact] is Y")
+      hasNoNok: false, // no linked contact has isNextOfKin true — flagged for every patient, any age
+      isUnder13: false,
+      hasNoCopyCorrespondenceU13: false, // only ever meaningful when isUnder13 is also true
       loading: true,
       error: null,
 
@@ -169,6 +173,11 @@
       addressCards: [], // [{ id, name }]
       transitiveCards: [], // [{ id, name, genderIdentity?, hint }] — real contacts pulled from a related patient's own record (either direction, or the related patient themselves — see loadCanvas step 1.5), matched to no manual contact of this patient's own. genderIdentity only ever set for the related patient themselves (already fetched for that one; the other two directions would need a further per-contact fetch, not done)
 
+      indexAddresses: [], // the hub/index patient's OWN patientAddressSection.patientAddresses, full array (not just [0]) — feeds duplicateAddressGroups below
+      duplicateAddressGroups: [], // [[i, j, ...], ...] — ContactRelationships.findDuplicateAddressGroups(indexAddresses)
+      addressMergeGroups: [], // [{ indexes: [i, j, ...], keepIndex }] — duplicateAddressGroups augmented with which member to keep (buildAddressMergeGroups), drives renderDuplicateAddressWarning + mergeDuplicateAddressGroup
+      addressMerging: new Set(), // group keys (indexes.join(',')) currently mid-merge — same Set-not-single-value reasoning as phoneDeleting
+      addressMergeError: null,
       tree: null, // window.ContactTree instance — LOCKED edges only, pre-placed from linkedCards; see file header
       // window.ContactTree family session — the cross-patient "Next family member" cycling pool.
       // Created fresh in open() unless resuming a session persisted before a navigation (see the
@@ -274,6 +283,53 @@
     return !!(a.postalCode && b.postalCode) && norm(a) === norm(b);
   }
 
+  // buildAddressMergeGroups(apiBase, indexAddresses, duplicateGroups) ->
+  //   Promise<[{indexes, keepIndex, correspondenceIndex, details}]>
+  // For each duplicate group (ContactRelationships.findDuplicateAddressGroups), fetches
+  // getEditAddress per member — the ONLY place isCorrespondenceAddress/description/accessNotes are
+  // reachable (confirmed via HAR capture 2026-07-30); none of them are present on
+  // patientAddressSection.patientAddresses[] itself. `keepIndex` is only ever the DEFAULT selection
+  // (ContactRelationships.chooseAddressToKeep) — the GP can override it in the panel before merging
+  // (see renderDuplicateAddressWarning's radio buttons). `correspondenceIndex` is surfaced
+  // separately (which member CURRENTLY holds the flag, -1 if none) so the panel can note it
+  // regardless of which one ends up selected. `details` is kept parallel to `indexes` (details[i]
+  // is the getEditAddress response for indexes[i]) so mergeDuplicateAddressGroup can reuse
+  // description/accessNotes when moving the correspondence flag onto whichever address the GP
+  // actually kept, without a second fetch. Best-effort per address: a failed check falls back to an
+  // empty detail object rather than aborting the whole merge over one flaky fetch.
+  async function buildAddressMergeGroups(apiBase, indexAddresses, duplicateGroups) {
+    if (!duplicateGroups.length) return [];
+    const allIndexes = Array.from(new Set(duplicateGroups.flat()));
+    const detailByIndex = new Map();
+    await Promise.all(
+      allIndexes.map(async (idx) => {
+        const entry = indexAddresses[idx];
+        if (!entry || !entry.addressId) return;
+        try {
+          const detail = await window.ContactsApi.getEditAddress(apiBase, entry.addressId);
+          detailByIndex.set(idx, detail || {});
+        } catch (_) {
+          detailByIndex.set(idx, {});
+        }
+      })
+    );
+    return duplicateGroups.map((indexes) => {
+      const details = indexes.map((idx) => detailByIndex.get(idx) || {});
+      const entries = indexes.map((idx, i) => ({
+        address: indexAddresses[idx] && indexAddresses[idx].address,
+        isCorrespondenceAddress: !!details[i].isCorrespondenceAddress,
+      }));
+      const keepPos = window.ContactRelationships.chooseAddressToKeep(entries);
+      const correspondencePos = entries.findIndex((e) => e.isCorrespondenceAddress);
+      return {
+        indexes,
+        keepIndex: indexes[keepPos],
+        correspondenceIndex: correspondencePos === -1 ? -1 : indexes[correspondencePos],
+        details,
+      };
+    });
+  }
+
   // buildLockedTree — pre-places every already-linked contact whose relationship maps to a
   // canonical id (lc.baseId, computed once in loadCanvas via normaliseFreeText) into its slot as a
   // `locked:true` edge — an immutable fact for this session, not a pending decision. A linked
@@ -357,6 +413,13 @@
             baseId: guess ? guess.baseId : null,
             modifierId: guess ? guess.modifierId : null,
             deceased: window.ContactRelationships.isDeceasedRelationshipText(c.patientContactRelationship),
+            // Confirmed via HAR capture: patientContactsSection's own list entries carry a bare
+            // `isNextOfKin` (a THIRD field-naming variant alongside the write-side
+            // patientContactIsNextOfKin and view-patient-contact's own
+            // patientContactRelationshipIsNextOfKin — see Step 1.10 below) — reliable enough to
+            // read straight off here, no extra fetch needed for the NOK gap check.
+            isNextOfKin: !!c.isNextOfKin,
+            relationshipId: c.patientContactId || null, // needed for viewPatientContact — see Step 1.10
           };
         });
 
@@ -370,7 +433,45 @@
         details.patientAddressSection &&
         details.patientAddressSection.patientAddresses[0] &&
         details.patientAddressSection.patientAddresses[0].address;
+      // Duplicate-address detection — ONLY within the hub/index patient's own record (never a
+      // linked contact's), per the user's own scoping. A known PDS data-quality pattern: the same
+      // real address recorded more than once, differently formatted each time — see
+      // ContactRelationships.findDuplicateAddressGroups' own comment for the full reasoning.
+      // buildAddressMergeGroups' getEditAddress calls are a small, bounded fetch (only for
+      // addresses actually flagged as duplicates, typically 0-2 per canvas open) — same "small
+      // bounded fetch for correctness" pattern already used throughout this function.
+      st.indexAddresses = (details.patientAddressSection && details.patientAddressSection.patientAddresses) || [];
+      st.duplicateAddressGroups = window.ContactRelationships.findDuplicateAddressGroups(st.indexAddresses);
+      st.addressMergeGroups = await buildAddressMergeGroups(st.apiBase, st.indexAddresses, st.duplicateAddressGroups);
+      if (st !== cs) return;
       const indexAge = candidateAgeFromDob(details.patientDetailsSection && details.patientDetailsSection.dateOfBirth);
+      st.indexAge = indexAge; // stashed on state too — cardHtml's sharedContactInfoDetailHtml needs it for the "ages side by side" hint
+
+      // Step 1.10 — NOK / copy-correspondence gaps (hub patient only, per the user's own scoping).
+      // isNextOfKin is read straight off linkedCards (bare `isNextOfKin`, no extra fetch — see that
+      // field's own comment above). Copy-correspondence ISN'T reliably observable on that same list
+      // (two independent HAR captures of patient-details never showed it at all, even when false)
+      // so it needs its own per-contact fetch — confirmed via HAR capture 2026-07-30 that
+      // viewPatientContact returns patientContactRelationshipCopyCorrespondence (a THIRD
+      // field-naming variant: write-side is patientContactCopyCorrespondence, this read is
+      // patientContactRelationshipCopyCorrespondence). Only bothered with at all when the patient
+      // is actually under 13 — the one case the user asked to flag — so a typical adult patient's
+      // canvas open pays zero extra fetch cost for this half of the check.
+      st.hasNoNok = !st.linkedCards.some((lc) => lc.isNextOfKin);
+      st.isUnder13 = typeof indexAge === 'number' && indexAge < 13;
+      st.hasNoCopyCorrespondenceU13 = false;
+      if (st.isUnder13 && st.linkedCards.length) {
+        const ccResults = await Promise.all(
+          st.linkedCards.map((lc) =>
+            lc.relationshipId
+              ? window.ContactsApi.viewPatientContact(st.apiBase, lc.relationshipId).catch(() => null)
+              : Promise.resolve(null)
+          )
+        );
+        if (st !== cs) return;
+        const hasAnyCopyCorrespondence = ccResults.some((r) => r && r.patientContactRelationshipCopyCorrespondence);
+        st.hasNoCopyCorrespondenceU13 = !hasAnyCopyCorrespondence;
+      }
 
       // Step 1.5 — transitive candidates from patients who list THIS patient as their own contact
       // ("Listed as Contact For" — patientLinkedContactsSection, already fetched above as part of
@@ -584,30 +685,6 @@
         });
       }
 
-      // Step 1.7 — children's ages. cs.linkedCards never carries a DOB at all (it's built from
-      // patient-CONTACT records, which don't include one) — fetched explicitly here instead,
-      // bounded to only the children actually placed in the tree (a handful at most), since age is
-      // meaningful context specifically once a child is showing on the family tree. Reuses
-      // patientDetailsCache for free where a child happens to also be a related/placed-parent
-      // patient already fetched above; a fresh, bounded fetch otherwise.
-      const childEdgesForAge = st.tree.slots.children || [];
-      if (childEdgesForAge.length) {
-        const childDetailsList = await Promise.all(
-          childEdgesForAge.map((edge) => {
-            if (patientDetailsCache.has(edge.cardId)) return Promise.resolve(patientDetailsCache.get(edge.cardId));
-            return window.ContactsApi.getPatientDetails(st.apiBase, edge.cardId).catch(() => null);
-          })
-        );
-        if (st !== cs) return;
-        childEdgesForAge.forEach((edge, i) => {
-          const rd = childDetailsList[i];
-          const age = candidateAgeFromDob(rd && rd.patientDetailsSection && rd.patientDetailsSection.dateOfBirth);
-          if (age === null) return;
-          const lc = st.linkedCards.find((c) => c.id === edge.cardId);
-          if (lc) lc.age = age;
-        });
-      }
-
       // Step 1.6b — composition via a cycling hub. When this patient was reached BY cycling (see
       // the "Family cycling" section near close()), the hub patient A who led us here already has a
       // fully-built tree sitting in st.familySession.byPatient (setTreeFor, called right before the
@@ -674,20 +751,22 @@
         }
       }
 
-      // Step 1.8 — family-cycling pool. Every already-linked contact placed in the tree (st.tree.edges
-      // — locked edges only, see buildLockedTree; a linked-but-unclassified contact with no
-      // canonical baseId never gets a tree slot at all, so isn't offered for cycling yet — same
-      // narrower-first scoping as the composition work, see the parked memory note) is a candidate
-      // for "Next family member". Reuses patientDetailsCache for free wherever a parent/child/
-      // related-patient fetch above already covered them, a fresh bounded fetch otherwise, purely to
-      // get a dob for the oldest-to-youngest ordering (enqueueFamilyMember) — still enqueued even
-      // when the fetch fails, so a candidate isn't silently dropped from the pool just for having an
-      // unknown dob (it sorts last instead, per enqueueFamilyMember). Whether a candidate is
-      // actually openable is a SEPARATE question, only really consequential once cycling reaches
-      // them (advanceToNextFamilyMember's own skip loop) — but an inactive-access 403 discovered
-      // here, for free, is still worth badging immediately rather than thrown away (see cardHtml's
-      // recordInactive handling) — no reason to wait for a cycling attempt to surface something
-      // already visible on this canvas right now.
+      // Step 1.8 — family-cycling pool + every placed card's age. Every already-linked contact
+      // placed in the tree (st.tree.edges — locked edges only, see buildLockedTree; a linked-but-
+      // unclassified contact with no canonical baseId never gets a tree slot at all, so isn't
+      // covered here — same narrower-first scoping as the composition work, see the parked memory
+      // note) is a candidate for "Next family member", AND gets its dob resolved to an age for
+      // cardHtml's own bracket-after-name display (originally only fetched for the Children slot,
+      // extended here to every placed card once this same fetch already covers all of them — see
+      // cardHtml's own comment on why only under-18). Reuses patientDetailsCache for free wherever a
+      // parent/child/related-patient fetch above already covered them, a fresh bounded fetch
+      // otherwise — still enqueued/aged even when the fetch fails, so a candidate isn't silently
+      // dropped from the pool just for having an unknown dob (it sorts last instead, per
+      // enqueueFamilyMember). Whether a candidate is actually openable is a SEPARATE question, only
+      // really consequential once cycling reaches them (advanceToNextFamilyMember's own skip loop)
+      // — but an inactive-access 403 discovered here, for free, is still worth badging immediately
+      // rather than thrown away (see cardHtml's recordInactive handling) — no reason to wait for a
+      // cycling attempt to surface something already visible on this canvas right now.
       const poolEdges = st.tree.edges || [];
       if (poolEdges.length) {
         const poolDetailsList = await Promise.all(
@@ -696,7 +775,10 @@
               return Promise.resolve({ rd: patientDetailsCache.get(edge.cardId), inactive: false });
             }
             return window.ContactsApi.getPatientDetails(st.apiBase, edge.cardId).then(
-              (rd) => ({ rd, inactive: false }),
+              (rd) => {
+                patientDetailsCache.set(edge.cardId, rd); // wasn't cached before — save it so Step 1.9 below (and anything later) reuses it for free
+                return { rd, inactive: false };
+              },
               (err) => ({ rd: null, inactive: !!(err && err.errorCode === 'inactive-patient-access') })
             );
           })
@@ -706,10 +788,63 @@
           const { rd, inactive } = poolDetailsList[i];
           const dob = rd && rd.patientDetailsSection && rd.patientDetailsSection.dateOfBirth;
           st.familySession = window.ContactTree.enqueueFamilyMember(st.familySession, edge.cardId, dob || null);
-          if (inactive) {
-            const lc = st.linkedCards.find((c) => c.id === edge.cardId);
-            if (lc) lc.recordInactive = true;
+          const lc = st.linkedCards.find((c) => c.id === edge.cardId);
+          if (lc) {
+            if (inactive) lc.recordInactive = true;
+            const age = candidateAgeFromDob(dob);
+            if (age !== null) lc.age = age;
           }
+        });
+      }
+
+      // Step 1.8b — age for every OTHER linked contact, not just tree-placed ones. Step 1.8 above
+      // only covers st.tree.edges — a linked contact whose relationship text didn't parse to a
+      // recognised baseId never gets a tree slot at all, so was never touched there, even though
+      // it can still appear as an "already linked" review-match candidate in renderSources
+      // (linkedMatchesByManualId) — found live: age-in-brackets wasn't showing on those "pre-
+      // matched" cards. Reuses patientDetailsCache for anyone an earlier step already fetched; a
+      // fresh bounded fetch for the rest.
+      const unagedLinkedCards = st.linkedCards.filter((lc) => lc.age == null);
+      if (unagedLinkedCards.length) {
+        const unagedDetailsList = await Promise.all(
+          unagedLinkedCards.map((lc) => {
+            if (patientDetailsCache.has(lc.id)) return Promise.resolve(patientDetailsCache.get(lc.id));
+            return window.ContactsApi.getPatientDetails(st.apiBase, lc.id).catch(() => null);
+          })
+        );
+        if (st !== cs) return;
+        unagedLinkedCards.forEach((lc, i) => {
+          const rd = unagedDetailsList[i];
+          const age = candidateAgeFromDob(rd && rd.patientDetailsSection && rd.patientDetailsSection.dateOfBirth);
+          if (age !== null) lc.age = age;
+        });
+      }
+
+      // Step 1.9 — shared contact info (hub patient vs each linked contact placed in the tree,
+      // same scope as Step 1.8). A patient sharing a non-Home phone or an email with one of their
+      // own linked contacts is a known data-quality/confidentiality risk in this population — see
+      // ContactRelationships.findSharedContactInfo's own comment for the full reasoning. Reuses
+      // patientDetailsCache (now populated by Step 1.8 above, whether from a fresh fetch or an
+      // earlier step) — no extra fetch needed here at all.
+      if (poolEdges.length) {
+        const cis = details.patientContactInformationSection;
+        const indexPatientForShare = {
+          name: details.displayName,
+          phones: (cis && cis.patientTelephoneNumbers) || [],
+          emails: (cis && cis.patientEmailAddresses) || [], // raw entries — findSharedContactInfo needs emailAddressType to exclude Home, not just the address string
+        };
+        poolEdges.forEach((edge) => {
+          const rd = patientDetailsCache.get(edge.cardId);
+          if (!rd) return; // fetch failed (inactive or otherwise) — nothing to compare against
+          const rcis = rd.patientContactInformationSection;
+          const shared = window.ContactRelationships.findSharedContactInfo(indexPatientForShare, {
+            name: rd.displayName,
+            phones: (rcis && rcis.patientTelephoneNumbers) || [],
+            emails: (rcis && rcis.patientEmailAddresses) || [],
+          });
+          if (!shared) return;
+          const lc = st.linkedCards.find((c) => c.id === edge.cardId);
+          if (lc) lc.sharedContactInfo = shared; // lc.age is already set by Step 1.8 above — no need for a second age field
         });
       }
 
@@ -722,15 +857,29 @@
         else manualCardsNeedingSearch.push(mc);
       }
 
-      // One patient-finder search per manual contact THAT HAS NO TRANSITIVE MATCH, run in
-      // parallel, ranked against THAT specific manual contact and tagged with which one suggested
-      // it (drives the colour match).
+      // One-or-more patient-finder searches per manual contact THAT HAS NO TRANSITIVE MATCH, run
+      // in parallel, ranked against THAT specific manual contact and tagged with which one
+      // suggested it (drives the colour match). ContactMatch.nameSearchQueries fires MULTIPLE query
+      // variants when the name has 3+ tokens — live-tested finding: a manual contact with a middle
+      // name (e.g. "John Bates Smith") searched as one raw string was missing real matches, since
+      // it's genuinely ambiguous whether "Bates" is a true middle name (Medicus's own search
+      // wouldn't contain it at all) or part of a compound surname "Bates Smith" (a plain 3-word
+      // query doesn't reliably find that either). Results from every variant for a manual contact
+      // are merged by patientId before scoring, so a candidate found via any one of them is
+      // included exactly once — nothing here auto-applies anything, every candidate still goes
+      // through the same ranking/scoring below and is only ever a human-confirmed-by-drag
+      // suggestion, so casting a wider net has no downside beyond a couple of extra fetches.
       const searchResults = await Promise.all(
-        manualCardsNeedingSearch.map((mc) =>
-          window.ContactsApi.searchPatients(st.apiBase, mc.name)
-            .then((results) => ({ mc, results }))
-            .catch(() => ({ mc, results: [] }))
-        )
+        manualCardsNeedingSearch.map((mc) => {
+          const queries = window.ContactMatch.nameSearchQueries(mc.name);
+          return Promise.all(queries.map((q) => window.ContactsApi.searchPatients(st.apiBase, q).catch(() => []))).then(
+            (resultLists) => {
+              const merged = new Map();
+              for (const list of resultLists) for (const r of list) merged.set(r.patientId, r);
+              return { mc, results: Array.from(merged.values()) };
+            }
+          );
+        })
       );
       if (st !== cs) return;
 
@@ -759,6 +908,7 @@
               id: r.candidate.patientId,
               name: r.candidate.displayName,
               dateOfBirth: r.candidate.dateOfBirth,
+              age: r.candidate.age, // was computed above (candidateAgeFromDob) but never actually copied onto this object — cardHtml's age-in-brackets display silently had nothing to read for every search-sourced suggestion
               genderIdentity: r.candidate.genderIdentity,
               atSameAddress: r.candidate.atSameAddress,
               score: r.score,
@@ -936,6 +1086,38 @@
 
   // ── Render ────────────────────────────────────────────────────────────────────────────────────
 
+  // sharedContactInfoDetailHtml(card) — the expanded detail shown under a linked contact's card
+  // when ContactRelationships.findSharedContactInfo flagged something (loadCanvas' Step 1.9).
+  // Detection only, never resolves whose number/email it "really" is — surfaces the same two
+  // hints the user asked for directly ("it is often clear from the email itself who it belongs
+  // to, or from the patient's age that they don't have their own mobile phone"), then leaves the
+  // judgement call to the GP. No "fix" shortcut wired up here: the phone-edit machinery
+  // (startPhoneEdit/savePhoneEdit) is tightly coupled to an active merge-compare session
+  // (cs.pendingMerge) elsewhere in this file, and this badge shows on an already-linked tree card
+  // outside that flow — a real gap if a one-click fix turns out to matter in practice, worth
+  // revisiting once this has been live-tested.
+  function sharedContactInfoDetailHtml(card) {
+    const shared = card.sharedContactInfo;
+    if (!shared) return '';
+    const lines = [];
+    for (const p of shared.phones) {
+      lines.push(`Shares phone ${p} with this patient`);
+    }
+    for (const e of shared.emails) {
+      const owner =
+        e.ownerHint === 'a'
+          ? " — looks like it may be this patient's own"
+          : e.ownerHint === 'b'
+            ? ` — looks like it may be ${card.name}'s own`
+            : '';
+      lines.push(`Shares email ${e.email} with this patient${owner}`);
+    }
+    // No separate "ages" line here any more — cardHtml itself now shows an under-18 card's age in
+    // brackets after their name (see that function), so it's already visible on the card without
+    // needing to expand this detail block at all.
+    return `<div class="ms-cv-card-sub ms-cv-shared-info">${lines.map((l) => `<div>${esc(l)}</div>`).join('')}</div>`;
+  }
+
   function cardHtml(card, kind, opts) {
     opts = opts || {};
     // locked: true forces non-draggable regardless of the `draggable` opt — used both for a manual
@@ -952,17 +1134,30 @@
     // inactive-patient-access (loadCanvas' Step 1.8, advanceToNextFamilyMember's cycling skip loop)
     // — surfaced rather than silently discarded, since a dead next-of-kin still listed as an
     // emergency contact is something a GP should be able to see, not just something cycling quietly
-    // skips past.
+    // skips past. `card.sharedContactInfo` (Step 1.9) is the same idea for a third signal — see
+    // sharedContactInfoDetailHtml for the expanded detail shown underneath the card.
     const badgeText =
-      (opts.badge || '') + (card.deceased ? ' · Deceased' : '') + (card.recordInactive ? ' · Inactive record' : '');
+      (opts.badge || '') +
+      (card.deceased ? ' · Deceased' : '') +
+      (card.recordInactive ? ' · Inactive record' : '') +
+      (card.sharedContactInfo ? ' · Shares contact info' : '');
     const badge = badgeText ? `<span class="ms-cv-badge">${esc(badgeText)}</span>` : '';
     const sub = opts.sub ? `<div class="ms-cv-card-sub">${esc(opts.sub)}</div>` : '';
     const stateClass = opts.faded ? ' ms-cv-card-faded' : opts.outlined ? ' ms-cv-card-outlined' : '';
+    // Age in brackets after the name, e.g. "Jamie (8)" — originally only shown for the Children
+    // slot (loadCanvas Step 1.7), extended to every card once Step 1.8 started fetching a dob for
+    // every placed card anyway (family-cycling needed it regardless). NOT capped to under-18s —
+    // an earlier under-18 restriction here was live-caught as the actual reason ages had stopped
+    // showing at all: every real test patient available happened to be an adult, so the cap hid
+    // every single one, on every card type, uniformly — exactly the symptom reported. Shown for
+    // any age, same as the original Children-slot behaviour before this was generalised.
+    const ageSuffix = card.age != null ? ` (${card.age})` : '';
     return `
       <div class="ms-cv-card${stateClass}" ${draggable ? `draggable="true" data-card-id="${esc(card.id)}" data-card-kind="${esc(kind)}"` : ''}
            style="border-left-color:${esc(card.colour || NEEDS_REVIEW_COLOUR)}">
-        <div class="ms-cv-card-name">${esc(card.name)}${badge}</div>
+        <div class="ms-cv-card-name">${esc(card.name)}${esc(ageSuffix)}${badge}</div>
         ${sub}
+        ${sharedContactInfoDetailHtml(card)}
       </div>`;
   }
 
@@ -1172,20 +1367,19 @@
 
   // childrenBranchHtml — mirrors siblingsAndIndexBranchHtml's layout (shared bus above, one stem
   // per card) but for the index patient's own children, fed by the connector below the
-  // siblings+index row rather than the one above it. Age (loadCanvas step 1.7 — cs.linkedCards
-  // doesn't carry a DOB at all normally, fetched specifically for placed children) shown in
-  // brackets after the name when known, e.g. "Jamie (8)".
+  // siblings+index row rather than the one above it. Age-in-brackets (e.g. "Jamie (8)") is
+  // cardHtml's own doing now, not special-cased here — see that function's comment.
   function childrenBranchHtml() {
     const entries = cardsInSlot('children');
     const items = entries
-      .map(({ edge, card }) => {
-        const displayCard = card.age != null ? { ...card, name: `${card.name} (${card.age})` } : card;
-        return `<li class="ms-cv-tree-branch-item" data-slot-path="children">${cardHtml(displayCard, 'linked', {
-          draggable: false,
-          locked: true,
-          sub: window.ContactRelationships.formatLabel(edge.baseId, edge.modifierId),
-        })}</li>`;
-      })
+      .map(
+        ({ edge, card }) =>
+          `<li class="ms-cv-tree-branch-item" data-slot-path="children">${cardHtml(card, 'linked', {
+            draggable: false,
+            locked: true,
+            sub: window.ContactRelationships.formatLabel(edge.baseId, edge.modifierId),
+          })}</li>`
+      )
       .join('');
     return `<ul class="ms-cv-tree-branch ms-cv-tree-branch--above">${items}${branchPlaceholderHtml('children')}</ul>`;
   }
@@ -1510,11 +1704,45 @@
             .join(' ')}
         </span>`
       : '';
-    const reverseLine = cs.confirm.existingReciprocal
-      ? `<div class="ms-ct-warn">${esc(card.name)} already lists this patient as their own contact (recorded as "${esc(cs.confirm.existingReciprocal.patientContactRelationship)}") — no reverse link will be created.</div>`
+    const indexName = (cs.indexPatientDetails && cs.indexPatientDetails.displayName) || 'this patient';
+    const candidateName = card.name;
+
+    // LEFT column — Jane's (the candidate's) relationship to John (the index patient), written
+    // onto John's own record. Unchanged logic from before this redesign, just relocated: the
+    // picker + forward NOK/copy only apply when the relationship isn't already known (a brand-new
+    // candidate, or an already-linked one whose free text didn't parse) and isn't just cleaning up
+    // an existing link.
+    const forwardColumnBody = !cs.confirm.relationshipKnown
+      ? `<select class="ms-ct-select" id="ms-cv-base">${baseSelect}</select>
+         ${modRadios}
+         ${
+           cs.confirm.existingForwardLink
+             ? ''
+             : `<label><input type="checkbox" id="ms-cv-fwd-nok" ${cs.confirm.forwardIsNextOfKin ? 'checked' : ''}/> Next of kin</label>
+                <div class="ms-ct-note">This will record ${esc(candidateName)} as ${esc(indexName)}'s next of kin.</div>
+                <label><input type="checkbox" id="ms-cv-fwd-copy" ${cs.confirm.forwardCopyCorrespondence ? 'checked' : ''}/> Copy correspondence</label>
+                <div class="ms-ct-note">This will allow messages to be sent to ${esc(candidateName)} about ${esc(indexName)}.</div>`
+         }`
+      : `<div class="ms-ct-note">Already recorded on ${esc(indexName)}'s own record.</div>`;
+
+    // RIGHT column — John's reciprocal relationship to Jane, written onto JANE's own record (a
+    // SEPARATE write, performLinkAndCleanup's reverse link). The relationship label itself is
+    // never independently chosen here — always the gender-aware inversion of the left column's
+    // pick (ContactRelationships.invertRelationship) — but reverseIsNextOfKin/
+    // reverseCopyCorrespondence are genuinely interactive: the write path has supported them since
+    // this canvas was built, they just had no UI to set them until now (previously hardcoded
+    // false in buildConfirmForCard). Shown whenever a reverse write will actually fire — i.e.
+    // independent of whether the LEFT column's picker is showing, since confirming a NEW reverse
+    // link for an ALREADY-recognised forward relationship is a real, valid case.
+    const reverseColumnBody = cs.confirm.existingReciprocal
+      ? `<div class="ms-ct-warn">${esc(candidateName)} already lists this patient as their own contact (recorded as "${esc(cs.confirm.existingReciprocal.patientContactRelationship)}") — no reverse link will be created.</div>`
       : cs.confirm.reverseAmbiguous
-        ? `<div class="ms-ct-note">Reverse relationship not auto-suggested (gender not recorded) — leave unset or pick one isn't offered here yet in the canvas; use the wizard for this case.</div>`
-        : `<div class="ms-ct-note">On their record this will record: <strong>${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}</strong></div>`;
+        ? `<div class="ms-ct-note">Reverse relationship not auto-suggested (gender not recorded) — use the wizard for this case.</div>`
+        : `<div class="ms-cv-confirm-reverse-label">${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}</div>
+           <label><input type="checkbox" id="ms-cv-rev-nok" ${cs.confirm.reverseIsNextOfKin ? 'checked' : ''}/> Next of kin</label>
+           <div class="ms-ct-note">This will record ${esc(indexName)} as ${esc(candidateName)}'s next of kin.</div>
+           <label><input type="checkbox" id="ms-cv-rev-copy" ${cs.confirm.reverseCopyCorrespondence ? 'checked' : ''}/> Copy correspondence</label>
+           <div class="ms-ct-note">This will allow messages to be sent to ${esc(indexName)} about ${esc(candidateName)}.</div>`;
 
     return `
       <div class="ms-cv-confirm-panel">
@@ -1529,24 +1757,16 @@
               }</div>`
             : ''
         }
-        ${
-          // Shown whenever the relationship isn't already known (a brand-new candidate, or an
-          // already-linked one whose free text didn't parse) — an already-recognised, already-real
-          // link has nothing to ask, so no picker for it. Next of kin / copy correspondence only
-          // apply to a NEW forward-link write, so they're hidden for an existing link even while
-          // the relationship picker itself is shown.
-          !cs.confirm.relationshipKnown
-            ? `<select class="ms-ct-select" id="ms-cv-base">${baseSelect}</select>
-               ${modRadios}
-               ${
-                 cs.confirm.existingForwardLink
-                   ? ''
-                   : `<label><input type="checkbox" id="ms-cv-fwd-nok" ${cs.confirm.forwardIsNextOfKin ? 'checked' : ''}/> Next of kin</label>
-                      <label><input type="checkbox" id="ms-cv-fwd-copy" ${cs.confirm.forwardCopyCorrespondence ? 'checked' : ''}/> Copy correspondence</label>`
-               }`
-            : ''
-        }
-        ${reverseLine}
+        <div class="ms-cv-confirm-columns">
+          <div class="ms-cv-confirm-col">
+            <div class="ms-cv-confirm-col-title">Record ${esc(candidateName)}'s relationship to ${esc(indexName)} here:</div>
+            ${forwardColumnBody}
+          </div>
+          <div class="ms-cv-confirm-col">
+            <div class="ms-cv-confirm-col-title">Record ${esc(indexName)}'s reciprocal relationship to ${esc(candidateName)}:</div>
+            ${reverseColumnBody}
+          </div>
+        </div>
         ${cs.workingError ? `<div class="ms-ct-error">${esc(cs.workingError)}</div>` : ''}
         <div class="ms-cv-confirm-panel-actions">
           <button class="ms-ct-btn" id="ms-cv-confirm">Confirm link</button>
@@ -1751,6 +1971,83 @@
     `;
   }
 
+  // renderDuplicateAddressWarning — surfaces cs.addressMergeGroups (loadCanvas, ONLY ever computed
+  // from the hub/index patient's own addresses, never a linked contact's — see
+  // ContactRelationships.findDuplicateAddressGroups/chooseAddressToKeep and this file's own
+  // buildAddressMergeGroups). `keepIndex` is only ever a DEFAULT selection (correspondence address
+  // first, then most complete) — the GP can override it with the radio buttons here before
+  // merging; every address in the group is shown, not just a fixed "keep"/"delete" split, and
+  // whichever one currently holds the correspondence-address flag is noted regardless of which one
+  // ends up selected. No separate confirm() popup — the panel already shows exactly what's
+  // selected before the Merge button is reachable, that visible context IS the confirmation, same
+  // convention as the existing fixPhoneType/deletePhoneNumber actions.
+  // renderNokCopyCorrespondenceWarning — surfaces cs.hasNoNok/cs.hasNoCopyCorrespondenceU13
+  // (loadCanvas Step 1.10, hub patient only). Read-only awareness, same as every other flag in
+  // this canvas — fixing a gap means dragging a candidate onto a slot and ticking the relevant
+  // checkbox in the confirm panel (see the "reverse" NOK/copy-correspondence checkboxes added
+  // alongside this), not a dedicated action here.
+  function renderNokCopyCorrespondenceWarning() {
+    const lines = [];
+    if (cs.hasNoNok) lines.push('No next of kin is set for this patient.');
+    if (cs.hasNoCopyCorrespondenceU13) {
+      lines.push('This patient is under 13 and has no contact set to receive copy correspondence.');
+    }
+    if (!lines.length) return '';
+    return `<div class="ms-ct-warn ms-cv-nok-cc-warn">${lines.map((l) => `<div>${esc(l)}</div>`).join('')}</div>`;
+  }
+
+  function renderDuplicateAddressWarning() {
+    if (!cs.addressMergeGroups.length) return '';
+    const groups = cs.addressMergeGroups
+      .map((plan) => {
+        const groupKey = plan.indexes.join(',');
+        const merging = cs.addressMerging.has(groupKey);
+        const rows = plan.indexes
+          .map((idx) => {
+            const entry = cs.indexAddresses[idx];
+            const text = (entry && formatAddressLine(entry.address)) || '(no address text)';
+            const isCorrespondence = idx === plan.correspondenceIndex;
+            return `
+              <label class="ms-cv-dupaddr-line">
+                <input type="radio" name="ms-cv-dupaddr-keep-${esc(groupKey)}" class="ms-cv-dupaddr-keep-radio"
+                       data-address-group="${esc(groupKey)}" data-address-index="${idx}"
+                       ${idx === plan.keepIndex ? 'checked' : ''} ${merging ? 'disabled' : ''}/>
+                ${esc(text)}${isCorrespondence ? ' <span class="ms-ct-note">(currently correspondence address)</span>' : ''}
+              </label>
+            `;
+          })
+          .join('');
+        // Only relevant when the GP has picked something OTHER than the current correspondence
+        // address to keep — mergeDuplicateAddressGroup carries the flag over to whichever address
+        // the GP actually kept (ContactRelationships.buildChangeAddressBody), so this is purely
+        // informational, not a "you'll need to fix this yourself" warning.
+        const movesCorrespondence = plan.correspondenceIndex !== -1 && plan.keepIndex !== plan.correspondenceIndex;
+        return `
+          <div class="ms-cv-dupaddr-group">
+            ${rows}
+            ${
+              movesCorrespondence
+                ? `<div class="ms-ct-note">This deletes the current correspondence address — the correspondence-address flag will be set on the kept address automatically.</div>`
+                : ''
+            }
+            <button class="ms-ct-btn-ghost ms-cv-dupaddr-merge" data-address-group="${esc(groupKey)}" ${merging ? 'disabled' : ''}>${merging ? 'Merging…' : 'Merge — keep the selected address, delete the rest'}</button>
+          </div>
+        `;
+      })
+      .join('');
+    const n = cs.addressMergeGroups.length;
+    return `
+      <div class="ms-ct-warn ms-cv-dupaddr-warn">
+        <strong>${n} possible duplicate address${n === 1 ? '' : 'es'} on this patient's own record</strong> —
+        looks like a PDS update recorded the same address more than once, just formatted
+        differently each time. Pick which one to keep for each group (defaults to the
+        correspondence address, or the most complete copy if none is marked).
+        ${groups}
+        ${cs.addressMergeError ? `<div class="ms-ct-error">${esc(cs.addressMergeError)}</div>` : ''}
+      </div>
+    `;
+  }
+
   function render() {
     const overlay = document.getElementById('ms-contacts-canvas-overlay');
     if (!overlay) return;
@@ -1778,6 +2075,8 @@
             : cs.error
               ? `<div class="ms-ct-error">${esc(cs.error)}</div>`
               : `<div class="ms-cv-body">
+                   ${renderNokCopyCorrespondenceWarning()}
+                   ${renderDuplicateAddressWarning()}
                    ${renderTree()}
                    ${cs.pendingMerge ? renderMergePanel() : renderConfirmPanel()}
                    ${renderSources()}
@@ -2209,6 +2508,78 @@
     }
   }
 
+  // mergeDuplicateAddressGroup(groupKey) — deletes every duplicate in the group EXCEPT the one
+  // buildAddressMergeGroups already chose to keep (correspondence-address first, then most
+  // complete). groupKey is plan.indexes.join(',') — cheap, stable enough to identify a group for
+  // the lifetime of one render (indexes only change on a fresh loadCanvas). No confirm() dialog —
+  // the panel already shows exactly what will be kept vs deleted before this button is reachable
+  // at all, same "the visible context IS the confirmation" convention as fixPhoneType/
+  // deletePhoneNumber elsewhere in this file, not a separate popup on top of that.
+  async function mergeDuplicateAddressGroup(groupKey) {
+    const plan = cs.addressMergeGroups.find((g) => g.indexes.join(',') === groupKey);
+    if (!plan) return;
+    const st = cs;
+    st.addressMergeError = null;
+    st.addressMerging.add(groupKey);
+    render();
+    try {
+      // WRONG-PATIENT GUARD: re-verify immediately before the writes — same discipline as
+      // doCanvasConfirm/doImportConfirm, since this deletes real address records.
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      }
+      const toDelete = plan.indexes.filter((idx) => idx !== plan.keepIndex);
+      for (const idx of toDelete) {
+        const entry = st.indexAddresses[idx];
+        if (!entry || !entry.addressId) continue;
+        await window.ContactsApi.deleteAddress(st.apiBase, entry.addressId);
+        if (st !== cs) return;
+      }
+      // If the GP kept a DIFFERENT address than the one that held the correspondence-address flag,
+      // carry that designation over to the survivor — a full-replace write
+      // (ContactRelationships.buildChangeAddressBody), built entirely from data already on hand
+      // (the kept address's own fields, plus its getEditAddress detail already fetched into
+      // plan.details) — no OS Places re-search needed, see that function's own comment for why
+      // Medicus's own UI for this makes a GP do that even though the endpoint doesn't require it.
+      if (plan.correspondenceIndex !== -1 && plan.correspondenceIndex !== plan.keepIndex) {
+        const keepPos = plan.indexes.indexOf(plan.keepIndex);
+        const keepEntry = st.indexAddresses[plan.keepIndex];
+        const keepDetail = plan.details[keepPos] || {};
+        if (keepEntry && keepEntry.addressId) {
+          await window.ContactsApi.changeAddress(
+            st.apiBase,
+            window.ContactRelationships.buildChangeAddressBody({
+              addressId: keepEntry.addressId,
+              address: keepEntry.address,
+              description: keepDetail.description,
+              accessNotes: keepDetail.accessNotes,
+              isCorrespondenceAddress: true,
+            })
+          );
+          if (st !== cs) return;
+        }
+      }
+      // Re-fetch rather than patching indexes locally — deleting shifts array positions in ways
+      // that would be fragile to track by hand; simpler and safer to just ask Medicus what's left.
+      const refreshedDetails = await window.ContactsApi.getPatientDetails(st.apiBase, st.patientId);
+      if (st !== cs) return;
+      st.indexAddresses =
+        (refreshedDetails.patientAddressSection && refreshedDetails.patientAddressSection.patientAddresses) || [];
+      st.duplicateAddressGroups = window.ContactRelationships.findDuplicateAddressGroups(st.indexAddresses);
+      st.addressMergeGroups = await buildAddressMergeGroups(st.apiBase, st.indexAddresses, st.duplicateAddressGroups);
+      if (st !== cs) return;
+    } catch (err) {
+      st.addressMergeError =
+        err.message || 'Failed to merge these addresses — some may already have been deleted, refresh to check.';
+    } finally {
+      if (st === cs) {
+        st.addressMerging.delete(groupKey);
+        render();
+      }
+    }
+  }
+
   function tryMerge(sourceId, sourceKind, targetId, targetKind) {
     // Only manual<->medicus pairs can merge (declaring "these are the same person").
     const isManualMedicus =
@@ -2481,8 +2852,16 @@
             relationshipText: lockedLabel,
             colour: colourForRelationshipText(lockedLabel),
             isLinked: true,
+            isNextOfKin: !!st.confirm.forwardIsNextOfKin,
           });
         }
+        // Recompute the NOK/copy-correspondence gap flags (Step 1.10) right now, rather than only
+        // on the next full canvas reload — the user's own ask: "it only flags if you reopen a
+        // canvas after matching, could we run the check on matching". Cheap and safe as a pure
+        // clear-only update: this write can only ever REMOVE a gap (a fresh NOK/copy-correspondence
+        // tick just confirmed), never wrongly introduce one, so no re-fetch is needed.
+        if (st.confirm.forwardIsNextOfKin) st.hasNoNok = false;
+        if (st.isUnder13 && st.confirm.forwardCopyCorrespondence) st.hasNoCopyCorrespondenceU13 = false;
         // Feed the family-cycling pool (engine/contact-tree.js) with this newly-committed edge —
         // recordCommittedEdge is what lets a later "Next family member" screen's composition step
         // know what's already confirmed for THIS patient, and enqueueFamilyMember makes the
@@ -2613,6 +2992,12 @@
     overlay.querySelector('#ms-cv-fwd-copy')?.addEventListener('change', (e) => {
       cs.confirm.forwardCopyCorrespondence = e.target.checked;
     });
+    overlay.querySelector('#ms-cv-rev-nok')?.addEventListener('change', (e) => {
+      cs.confirm.reverseIsNextOfKin = e.target.checked;
+    });
+    overlay.querySelector('#ms-cv-rev-copy')?.addEventListener('change', (e) => {
+      cs.confirm.reverseCopyCorrespondence = e.target.checked;
+    });
 
     overlay.querySelector('#ms-cv-confirm')?.addEventListener('click', () => doCanvasConfirm());
     overlay.querySelector('#ms-cv-drop-clear')?.addEventListener('click', () => {
@@ -2678,6 +3063,19 @@
     });
     overlay.querySelectorAll('.ms-cv-delete-manual-btn').forEach((btn) => {
       btn.addEventListener('click', () => deleteBlankManualContact(btn.getAttribute('data-manual-id')));
+    });
+    overlay.querySelectorAll('.ms-cv-dupaddr-keep-radio').forEach((r) => {
+      r.addEventListener('change', (e) => {
+        if (!e.target.checked) return;
+        const groupKey = r.getAttribute('data-address-group');
+        const idx = Number(r.getAttribute('data-address-index'));
+        const plan = cs.addressMergeGroups.find((g) => g.indexes.join(',') === groupKey);
+        if (plan) plan.keepIndex = idx;
+        render();
+      });
+    });
+    overlay.querySelectorAll('.ms-cv-dupaddr-merge').forEach((btn) => {
+      btn.addEventListener('click', () => mergeDuplicateAddressGroup(btn.getAttribute('data-address-group')));
     });
     overlay.querySelector('#ms-cv-phone-edit-cancel')?.addEventListener('click', () => cancelPhoneEdit());
     overlay.querySelector('#ms-cv-phone-edit-save')?.addEventListener('click', () => savePhoneEdit());

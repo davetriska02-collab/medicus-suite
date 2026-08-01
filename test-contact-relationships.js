@@ -369,5 +369,300 @@ console.log('9: isUkMobileNumber');
 }
 
 // ============================================================
+// 10 — isLikelyDuplicateAddress / findDuplicateAddressGroups
+// ============================================================
+console.log('10: isLikelyDuplicateAddress / findDuplicateAddressGroups');
+{
+  const exact1 = { line1: 'Flat 1', line2: '26 High Street', locality: 'Teddington', postalCode: 'TW11 0AU' };
+  const exact2 = { line1: 'Flat 1', line2: '26 High Street', locality: 'Teddington', postalCode: 'TW11 0AU' };
+  check(CR.isLikelyDuplicateAddress(exact1, exact2) === true, 'byte-for-byte identical addresses are duplicates');
+
+  // The user's own worked examples.
+  const extraLocality1 = { line1: 'Flat 1', line2: '26 High Street', locality: 'Teddington', postalCode: 'TW11 0AU' };
+  const extraLocality2 = {
+    line1: 'Flat 1',
+    line2: '26 High Street',
+    locality: 'London',
+    administrativeArea: 'Teddington',
+    postalCode: 'TW11 0AU',
+  };
+  check(
+    CR.isLikelyDuplicateAddress(extraLocality1, extraLocality2) === true,
+    'one copy gaining an extra locality token ("London") is still recognised as the same address'
+  );
+
+  const splitLines1 = { line1: 'Flat 1, 26 High Street', line2: 'Teddington', postalCode: 'TW11 0AU' };
+  const splitLines2 = { line1: 'Flat 1', line2: '26 High Street', line3: 'Teddington', postalCode: 'TW11 0AU' };
+  check(
+    CR.isLikelyDuplicateAddress(splitLines1, splitLines2) === true,
+    'the same text split across a different number of address lines is still recognised as the same address'
+  );
+
+  const differentPostcode = {
+    line1: 'Flat 1',
+    line2: '26 High Street',
+    locality: 'Teddington',
+    postalCode: 'TW11 0AZ',
+  };
+  check(
+    CR.isLikelyDuplicateAddress(exact1, differentPostcode) === false,
+    'a different postcode is NEVER a duplicate, however similar the rest of the text looks'
+  );
+
+  const genuinelyDifferent = {
+    line1: 'Flat 2',
+    line2: '26 High Street',
+    locality: 'Teddington',
+    postalCode: 'TW11 0AU',
+  };
+  check(
+    CR.isLikelyDuplicateAddress(exact1, genuinelyDifferent) === false,
+    'a different flat number at the same postcode is not flagged — text overlap alone is not enough'
+  );
+
+  const noPostcodeA = { line1: 'Flat 1', line2: '26 High Street', locality: 'Teddington', postalCode: '' };
+  const noPostcodeB = { line1: 'Flat 1', line2: '26 High Street', locality: 'Teddington', postalCode: '' };
+  check(
+    CR.isLikelyDuplicateAddress(noPostcodeA, noPostcodeB) === false,
+    'a missing postcode on either side is never flagged, however similar the text — too uncertain to risk it'
+  );
+
+  check(CR.isLikelyDuplicateAddress(null, exact1) === false, 'a missing address is a safe no-op, not a throw');
+
+  // findDuplicateAddressGroups over a whole patientAddresses-shaped array.
+  const patientAddresses = [
+    { addressId: 'a1', address: exact1 },
+    { addressId: 'a2', address: extraLocality2 },
+    { addressId: 'a3', address: genuinelyDifferent },
+  ];
+  const groups = CR.findDuplicateAddressGroups(patientAddresses);
+  check(groups.length === 1, 'exactly one duplicate group found among three addresses, two of which match');
+  check(
+    groups[0].length === 2 && groups[0].includes(0) && groups[0].includes(1),
+    'the duplicate group contains the two matching indexes (0 and 1), not the genuinely different third address'
+  );
+  check(CR.findDuplicateAddressGroups([]).length === 0, 'an empty address list produces no groups');
+  check(
+    CR.findDuplicateAddressGroups([{ addressId: 'a1', address: exact1 }]).length === 0,
+    'a single address can never be a duplicate of itself'
+  );
+}
+
+// ============================================================
+// 11 — chooseAddressToKeep
+// ============================================================
+console.log('11: chooseAddressToKeep');
+{
+  const sparse = { line1: 'Flat 1', line2: '26 High Street', postalCode: 'TW11 0AU' };
+  const complete = {
+    line1: 'Flat 1',
+    line2: '26 High Street',
+    locality: 'Teddington',
+    administrativeArea: 'Middlesex',
+    postalCode: 'TW11 0AU',
+  };
+
+  check(
+    CR.chooseAddressToKeep([
+      { address: sparse, isCorrespondenceAddress: false },
+      { address: complete, isCorrespondenceAddress: true },
+    ]) === 1,
+    'the correspondence address is always kept, even over a more complete non-correspondence duplicate'
+  );
+  check(
+    CR.chooseAddressToKeep([
+      { address: complete, isCorrespondenceAddress: true },
+      { address: sparse, isCorrespondenceAddress: false },
+    ]) === 0,
+    'correspondence-address preference holds regardless of which position it appears in'
+  );
+
+  check(
+    CR.chooseAddressToKeep([
+      { address: sparse, isCorrespondenceAddress: false },
+      { address: complete, isCorrespondenceAddress: false },
+    ]) === 1,
+    'with neither flagged as correspondence, the more complete address (more filled-in fields) is kept'
+  );
+
+  check(
+    CR.chooseAddressToKeep([
+      { address: sparse, isCorrespondenceAddress: false },
+      { address: sparse, isCorrespondenceAddress: false },
+    ]) === 0,
+    'a genuine tie (identical completeness, neither correspondence) deterministically keeps the first'
+  );
+
+  check(CR.chooseAddressToKeep([]) === -1, 'an empty list returns -1 (nothing to keep)');
+  check(CR.chooseAddressToKeep(null) === -1, 'is defensive against null');
+}
+
+// ============================================================
+// 12 — buildChangeAddressBody
+// ============================================================
+console.log('12: buildChangeAddressBody');
+{
+  const body = CR.buildChangeAddressBody({
+    addressId: 'addr-1',
+    address: {
+      line1: 'The Park Road Surgery',
+      line2: '37 Park Road',
+      line3: null,
+      locality: 'Teddington',
+      administrativeArea: null,
+      postalCode: 'TW11 0AU',
+      country: null,
+    },
+    description: null,
+    accessNotes: null,
+    isCorrespondenceAddress: true,
+  });
+  // Exact shape confirmed via HAR capture 2026-07-30.
+  check(
+    JSON.stringify(body) ===
+      JSON.stringify({
+        address: {
+          line1: 'The Park Road Surgery',
+          line2: '37 Park Road',
+          line3: null,
+          locality: 'Teddington',
+          administrativeArea: null,
+          postalCode: 'TW11 0AU',
+          country: 'GBR',
+          pafAddressKey: null,
+        },
+        description: null,
+        accessNotes: null,
+        id: 'addr-1',
+        isCorrespondenceAddress: true,
+      }),
+    'produces the exact HAR-confirmed body shape, defaulting a missing country to GBR'
+  );
+
+  const preserved = CR.buildChangeAddressBody({
+    addressId: 'addr-2',
+    address: { line1: '1 High St', postalCode: 'AB1 2CD', country: 'GBR' },
+    description: 'Gate code 1234',
+    accessNotes: 'Ring twice',
+    isCorrespondenceAddress: false,
+  });
+  check(
+    preserved.description === 'Gate code 1234' && preserved.accessNotes === 'Ring twice',
+    'an existing description/accessNotes is carried through unchanged, not dropped by the full-replace'
+  );
+  check(
+    preserved.isCorrespondenceAddress === false,
+    'isCorrespondenceAddress can be explicitly set false, not just true'
+  );
+  check(
+    preserved.address.country === 'GBR',
+    'an already-present country is kept as-is, not overwritten by the GBR default'
+  );
+
+  const empty = CR.buildChangeAddressBody();
+  check(empty.address.line1 === null && empty.id === null, 'a missing input is a safe no-op, not a throw');
+}
+
+// ============================================================
+// 13 — emailOwnerHint / findSharedContactInfo
+// ============================================================
+console.log('13: emailOwnerHint / findSharedContactInfo');
+{
+  check(
+    CR.emailOwnerHint('sarah.jones82@gmail.com', 'Sarah Jones', 'Ethan Jones') === 'a',
+    'email local-part matching only the first name (with trailing digits stripped) hints "a"'
+  );
+  check(
+    CR.emailOwnerHint('sarah.jones82@gmail.com', 'Ethan Jones', 'Sarah Jones') === 'b',
+    'same check, names swapped -> hints "b"'
+  );
+  check(
+    CR.emailOwnerHint('sarah.jones82@gmail.com', 'Sarah Smith', 'Sarah Jones') === 'b',
+    'both names share "sarah", but "Sarah Jones" also matches the surname token — the fuller match wins, not a naive any-token check'
+  );
+  check(
+    CR.emailOwnerHint('sarah@gmail.com', 'Sarah Smith', 'Sarah Jones') === null,
+    'an equally partial match on both sides (first name only, no surname in the local part) -> no hint, a genuine tie'
+  );
+  check(
+    CR.emailOwnerHint('info@surgery.example', 'Sarah Jones', 'Ethan Jones') === null,
+    'a generic local part matching neither name -> no hint'
+  );
+  check(CR.emailOwnerHint('', 'Sarah Jones', 'Ethan Jones') === null, 'empty email -> no hint, not a throw');
+
+  const mother = {
+    name: 'Sarah Jones',
+    phones: [{ telephoneNumber: '07911 111111', telephoneNumberType: 'Mobile' }],
+    emails: [{ emailAddress: 'sarah.jones82@gmail.com', emailAddressType: 'Personal' }],
+  };
+  const child = {
+    name: 'Ethan Jones',
+    phones: [{ telephoneNumber: '07911 111111', telephoneNumberType: 'Mobile' }],
+    emails: [{ emailAddress: 'sarah.jones82@gmail.com', emailAddressType: 'Personal' }],
+  };
+  const shared = CR.findSharedContactInfo(mother, child);
+  check(shared && shared.phones.length === 1, 'a shared Mobile number is detected');
+  check(
+    shared && shared.emails.length === 1 && shared.emails[0].ownerHint === 'a',
+    'a shared non-Home email is detected, with an ownership hint pointing at the mother'
+  );
+
+  const homeSharedOnly = {
+    name: 'A',
+    phones: [{ telephoneNumber: '020 8943 3013', telephoneNumberType: 'Home' }],
+    emails: [],
+  };
+  const homeSharedOnly2 = {
+    name: 'B',
+    phones: [{ telephoneNumber: '020 8943 3013', telephoneNumberType: 'Home' }],
+    emails: [],
+  };
+  check(
+    CR.findSharedContactInfo(homeSharedOnly, homeSharedOnly2) === null,
+    'a shared Home number is never flagged — a household landline is normal, not suspicious'
+  );
+
+  // Live-caught bug: email DOES carry a type field in this API (emailAddressType), contrary to an
+  // earlier assumption in this file — the same "Home" carve-out that already applied to phones now
+  // applies to email too. The user's own real-world example: the same address stored as Home on
+  // one record and Work on the other.
+  check(
+    CR.findSharedContactInfo(
+      { name: 'A', phones: [], emails: [{ emailAddress: 'family@example.com', emailAddressType: 'Home' }] },
+      { name: 'B', phones: [], emails: [{ emailAddress: 'family@example.com', emailAddressType: 'Home' }] }
+    ) === null,
+    'a shared Home-typed email is never flagged, same carve-out as Home phones'
+  );
+  check(
+    CR.findSharedContactInfo(
+      { name: 'A', phones: [], emails: [{ emailAddress: 'family@example.com', emailAddressType: 'Home' }] },
+      { name: 'B', phones: [], emails: [{ emailAddress: 'family@example.com', emailAddressType: 'Work' }] }
+    ) === null,
+    'the SAME email stored as Home on one record and Work on the other is still excluded — either side being Home is enough to rule it out'
+  );
+  check(
+    CR.findSharedContactInfo(
+      { name: 'A', phones: [], emails: [{ emailAddress: 'family@example.com', emailAddressType: 'Work' }] },
+      { name: 'B', phones: [], emails: [{ emailAddress: 'family@example.com', emailAddressType: 'Personal' }] }
+    ) !== null,
+    'a genuinely non-Home email shared on both sides IS still flagged'
+  );
+
+  check(
+    CR.findSharedContactInfo(
+      { name: 'A', phones: [{ telephoneNumber: '07911 111111', telephoneNumberType: 'Mobile' }], emails: [] },
+      { name: 'B', phones: [{ telephoneNumber: '07922 222222', telephoneNumberType: 'Mobile' }], emails: [] }
+    ) === null,
+    'genuinely different numbers -> null, not flagged'
+  );
+
+  check(CR.findSharedContactInfo(null, child) === null, 'a missing patient/contact is a safe no-op, not a throw');
+  check(
+    CR.findSharedContactInfo({ name: 'A', phones: [], emails: [] }, { name: 'B', phones: [], emails: [] }) === null,
+    'nobody with any phone/email at all -> null'
+  );
+}
+
+// ============================================================
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

@@ -37,6 +37,57 @@ console.log('1: nameSimilarity');
 }
 
 // ============================================================
+// 1b — nameSearchQueries
+// ============================================================
+console.log('1b: nameSearchQueries');
+{
+  check(
+    CM.nameSearchQueries('Jane Smith').length === 1 && CM.nameSearchQueries('Jane Smith')[0] === 'Jane Smith',
+    'an already-unambiguous 2-token name returns just itself, no extra variants'
+  );
+
+  const q = CM.nameSearchQueries('John Bates Smith');
+  check(q.includes('John Bates Smith'), 'always keeps the original full name as a baseline');
+  check(q.includes('John Smith'), '"first + last only" variant drops the middle token — covers a real middle name');
+  check(
+    q.includes('John Bates Smith') && q.length === 2,
+    '"first + everything else combined" variant coincides with the full name here (one middle token) — deduped to 2 total, not 3'
+  );
+
+  const q4 = CM.nameSearchQueries('John Michael Bates Smith');
+  check(q4.includes('John Smith'), 'first + last only still drops ALL middle tokens with two middle names');
+  check(
+    q4.includes('John Michael Bates Smith'),
+    'first + everything-else-combined keeps every middle token joined as one surname'
+  );
+  check(
+    q4.length === 2,
+    'with no title to strip, "first + everything else" is textually identical to the original — dedupes to 2, not 3'
+  );
+
+  // A leading title DOES make "first + everything else" diverge from the untouched original (the
+  // title-stripped reconstruction vs. the raw string that still has "Mrs" in it) — the one case
+  // where all three variants are genuinely distinct.
+  const titled = CM.nameSearchQueries('Mrs John Bates Smith');
+  check(
+    titled.includes('Mrs John Bates Smith'),
+    'the untouched original (including any title) is always kept as a baseline variant'
+  );
+  check(
+    titled.includes('John Smith'),
+    'a leading title is stripped before the first/last split, so it never gets treated as the first name'
+  );
+  check(
+    titled.includes('John Bates Smith') && titled.length === 3,
+    'title-stripped "first + everything else" differs from the untouched original here, so all 3 variants survive dedup'
+  );
+
+  check(CM.nameSearchQueries('').length === 0, 'empty name returns no queries');
+  check(CM.nameSearchQueries(null).length === 0, 'is defensive against null');
+  check(CM.nameSearchQueries('   ').length === 0, 'whitespace-only name returns no queries');
+}
+
+// ============================================================
 // 2 — scoreCandidate: name + address dominate
 // ============================================================
 console.log('2: exact name + same address scores strong');

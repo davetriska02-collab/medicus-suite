@@ -2,6 +2,182 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.191.0] — 2026-07-29 – 2026-07-30
+
+### Contacts Management — search past a manual contact's middle name
+
+- Asked for, live: a manual contact with a middle name (e.g. "John Bates Smith") wasn't matching
+  to a real Medicus patient — searching the raw 3-word string is genuinely ambiguous about where
+  the surname starts. It could be firstName "John" + a real middle name "Bates" + surname "Smith"
+  (Medicus's own name fields wouldn't contain "Bates" anywhere), or firstName "John" + a compound/
+  double-barrelled surname "Bates Smith" with no middle-name concept at all — and a plain 3-word
+  query doesn't reliably surface either shape.
+- New `ContactMatch.nameSearchQueries(name)` (`engine/contact-match.js`, unit-tested —
+  `test-contact-match.js` section 1b) — given a name, returns the original string plus, for a
+  3+-token name (after stripping a leading title like "Mr"/"Dr", reusing `normaliseName`'s existing
+  stopword set so a title never gets treated as the first name), two structural guesses: "first +
+  last only" (drops the middle token(s) entirely) and "first + everything else combined" (treats
+  every token after the first as one compound surname) — deduped, so an already-unambiguous 2-token
+  name just returns itself once.
+- `loadCanvas`'s per-manual-contact patient-finder search (`content-scripts/contacts-canvas.js`)
+  now fires every variant `nameSearchQueries` returns in parallel and merges the results by
+  patientId before scoring — a candidate found via any one variant is included exactly once. Still
+  just the existing single `query` param on the existing endpoint, called more than once; no new
+  API shape assumed. Every result remains a human-confirmed-by-drag suggestion, same as always —
+  nothing about this auto-applies anything, so casting a wider net has no downside beyond a couple
+  of extra search calls.
+
+### Contacts Management — flag duplicate addresses on the hub patient
+
+- Asked for, live: PDS (Patient Demographic Service) updates repeatedly recording the same
+  real-world address on a patient's own record more than once, formatted slightly differently each
+  time — an exact re-send, one copy gaining an extra locality-ish token the other lacks (e.g.
+  "London" present on one but not the other), or the same text simply split across a different
+  number of address lines (one system's "Flat 1, 26 High Street" as a single line vs another's
+  "Flat 1" / "26 High Street" as two). Scoped, per the user's own instruction, to ONLY the hub/index
+  patient's own addresses — never a linked contact's.
+- New `ContactRelationships.isLikelyDuplicateAddress`/`findDuplicateAddressGroups`
+  (`engine/contact-relationships.js`, unit-tested — `test-contact-relationships.js` section 10,
+  using the user's own worked examples as test cases). Deliberately conservative, given a merge
+  built on this eventually deletes a real address record: both addresses must have a postcode and
+  it must match exactly once normalised (a genuinely different address must never be grouped on
+  text similarity alone); missing postcode on either side is never flagged; and — caught by the
+  test suite itself while writing it — the two addresses' NUMERIC tokens (house/flat numbers) must
+  match EXACTLY, not just overlap, because a plain word-level Jaccard score let "Flat 1" vs "Flat 2"
+  at the same postcode through (one differing word out of six barely moves the score) before this
+  was tightened; the rest of the address text only needs to overlap heavily once numbers agree.
+- Surfaced in the canvas as a new warning panel (`renderDuplicateAddressWarning`) at the top of the
+  tree view when `loadCanvas` finds any duplicate groups, showing exactly which address will be
+  KEPT and which will be deleted before the Merge button is reachable at all.
+- **Merge action, built on a same-day HAR capture** (`37-address-deletion.har`) confirming
+  `POST /patient/address/delete-address/{addressId}` (no body, `{}` response) — the endpoint a
+  repo-wide search had confirmed didn't exist anywhere in this codebase yet. The same capture also
+  revealed `GET /patient/data/address/edit-address/{addressId}`, carrying an
+  `isCorrespondenceAddress` flag not present anywhere on `patientAddressSection.patientAddresses[]`
+  itself — used to make sure a merge never silently loses a patient's correspondence-address
+  designation by deleting the wrong duplicate. New `ContactRelationships.chooseAddressToKeep`
+  (unit-tested, `test-contact-relationships.js` section 11) picks which duplicate to keep:
+  correspondence address first, then the most complete copy (fewest empty fields), a deterministic
+  first-in-order tiebreak last. `contacts-canvas.js`'s `buildAddressMergeGroups`/
+  `mergeDuplicateAddressGroup` wire it up — bounded per-group `getEditAddress` checks, a
+  wrong-patient guard re-verified immediately before the deletes (same discipline as every other
+  write in this canvas), and a re-fetch-rather-than-patch-locally refresh afterward. No separate
+  confirm() popup — the panel already shows exactly what's kept vs deleted before the button is
+  reachable, same convention as the existing `fixPhoneType`/`deletePhoneNumber` actions.
+- **Changed same day**: `chooseAddressToKeep`'s pick is now only ever the DEFAULT selection —
+  every address in a duplicate group is shown with a radio button so the GP can choose which one to
+  keep, not just accept an automatic decision. Whichever member currently holds
+  `isCorrespondenceAddress` is noted next to it regardless of which one ends up selected.
+- **Correspondence-flag carry-over, built on a second same-day HAR capture**
+  (`38-set-correspondence-flag.har`): confirmed `POST /patient/address/change-address` — a
+  full-replace write, `{ address: {...}, description, accessNotes, id, isCorrespondenceAddress }`.
+  Live-tested finding straight from the user: Medicus's OWN UI for setting a correspondence address
+  makes the GP re-search and re-select the WHOLE address from scratch via an OS Places lookup, even
+  when nothing about the address itself is changing — confirmed via the same capture that this is
+  purely a quirk of that one screen, not a requirement of the endpoint (the OS Places search results
+  carry exactly the same field shape the write body needs, and the endpoint doesn't care where that
+  shape came from). New `ContactRelationships.buildChangeAddressBody` (unit-tested,
+  `test-contact-relationships.js` section 12) builds the write directly from data already on
+  hand — the address's own fields plus its `getEditAddress` detail (already fetched by
+  `buildAddressMergeGroups` for the correspondence check) — no search needed at all. When the GP
+  keeps an address OTHER than the one that held the correspondence flag, `mergeDuplicateAddressGroup`
+  now carries that designation over to the survivor automatically as part of the same merge action.
+
+### Contacts Management — flag a patient sharing contact info with a linked contact
+
+- Asked for, live: a patient sharing a non-Home phone or an email with one of their own linked
+  contacts is a known data-quality/confidentiality risk in this population — most often a child's
+  record wrongly carrying a parent's own mobile/email. New
+  `ContactRelationships.findSharedContactInfo`/`emailOwnerHint` (unit-tested,
+  `test-contact-relationships.js` section 13). "Home" is excluded from the phone check (a shared
+  household landline is normal); email has no type field anywhere in this API, so every email is
+  in scope, per the user's own explicit call.
+- `emailOwnerHint` went through a real design fix caught by its own test: a naive "does either
+  name's tokens appear in the local part" check fails for the single most common real case — a
+  parent and child sharing a surname both "match" on the surname alone, neutralising the hint
+  exactly when it matters most. Replaced with a coverage-ratio comparison (what fraction of EACH
+  name's own tokens appear in the local part) so "sarah.jones82@..." correctly favours "Sarah
+  Jones" (matches both tokens) over "Ethan Jones" (matches only the shared surname) rather than
+  returning no hint at all.
+- Wired into `loadCanvas` (new Step 1.9), reusing Step 1.8's already-fetched patient-details per
+  linked contact (fixed Step 1.8 to actually populate `patientDetailsCache` on a fresh fetch,
+  which it wasn't doing before — a missed reuse opportunity, not just for this feature). Surfaced
+  as a new "· Shares contact info" badge (`cardHtml`, same pattern as the deceased/inactive-record
+  badges) with an expandable detail block showing which number/email is shared, the email-ownership
+  hint. Detection only, same as every other flag in this canvas — no "fix" shortcut wired up (the
+  existing phone-edit machinery is tightly coupled to an active merge-compare session, not a plain
+  tree card; worth revisiting once this has been live-tested).
+- **Changed same day**: ages are no longer a separate sentence in the expandable detail — the
+  user's own call, "extend the functionality for children and just display it in brackets on the
+  cards". `cardHtml` itself now shows a card's age in brackets after their name (e.g. "Jamie (8)"),
+  generalised from what was previously only computed for the Children tree slot (`loadCanvas`'s old
+  Step 1.7, now folded into Step 1.8 since that fetch already covers every placed card, not just
+  children).
+- **Fixed, live-caught**: the age bracket wasn't showing on two card types. (1) "Possible Medicus
+  contact matches" (search-ranked suggestions) — `age` was computed (`candidateAgeFromDob`) but
+  never actually copied onto the final `suggestedCards` object, only `dateOfBirth` was; a plain
+  missing-field bug. (2) The "· already linked" review-match ("pre-matched") cards in
+  `renderSources` — these come from `linkedCards` regardless of whether they're placed in a tree
+  slot, but Step 1.8's age fetch only ever covered `st.tree.edges` (a linked contact whose
+  relationship text didn't parse to a recognised baseId never gets a tree slot at all). New Step
+  1.8b fetches age for every remaining linked card, reusing `patientDetailsCache` for anyone an
+  earlier step already covered.
+- **Fixed, live-caught**: even after both fixes above, ages still weren't showing anywhere — an
+  under-18 cap added the same day this was built (`card.age < 18`) was hiding every single one,
+  since every real test patient available is an adult. Removed — age is now shown whenever known,
+  any age, matching the original Children-slot behaviour before this was generalised.
+- **Fixed, live-caught**: email was never excluded on a Home type the way phone already was —
+  because an earlier assumption in this file ("email has no type field anywhere in this API") was
+  simply wrong. Confirmed via live HAR data that `patientEmailAddresses[]` entries carry
+  `emailAddressType` (e.g. "Personal", and — per the user's own real example — "Home"/"Work" too).
+  `findSharedContactInfo` now takes full email entry objects (`{emailAddress, emailAddressType}`),
+  not bare address strings, and excludes a Home-typed email exactly like a Home-typed phone —
+  including the user's own specific case: the SAME address stored as Home on one record and Work
+  on the other is still correctly excluded, since either side being Home is enough to rule it out.
+  `isHomePhoneType` renamed to `isHomeType` since it's now shared by both checks. Unit-tested
+  (`test-contact-relationships.js` section 13, 3 new checks including the exact Home/Work case).
+
+### Contacts Management — flag missing NOK / copy-correspondence
+
+- Asked for, live: flag when a patient has no next-of-kin contact set (any age), and separately
+  flag when a patient under 13 has no contact set to receive copy correspondence.
+- Confirmed via two live HAR captures that `isNextOfKin` is read straight off
+  `patientContactsSection`'s own list entries (patient-details) — no extra fetch needed for the NOK
+  half. Copy-correspondence ISN'T reliably present on that same list; confirmed via a third HAR
+  capture that `GET .../view-patient-contact/{relationshipId}` (already an existing, wired
+  function — `viewPatientContact`) returns `patientContactRelationshipCopyCorrespondence` — a THIRD
+  field-naming variant alongside the write-side `patientContactCopyCorrespondence` and this same
+  read's own `patientContactRelationshipIsNextOfKin`. Only fetched at all when the patient is
+  actually under 13 (the one case asked for), so a typical adult patient's canvas open pays zero
+  extra cost for this half of the check.
+- Surfaced as a new read-only warning panel (`renderNokCopyCorrespondenceWarning`) at the top of
+  the canvas, hub patient only.
+- **Changed same day**: the flags previously only refreshed on a full canvas reload — the user's
+  own ask, "it only flags if you reopen a canvas after matching, could we run the check on
+  matching". `doCanvasConfirm` now clears a gap immediately the moment a qualifying NOK/copy-
+  correspondence checkbox is confirmed on a fresh forward link, no extra fetch or reload needed (a
+  pure clear-only update — it can only ever remove a gap just confirmed, never wrongly introduce
+  one, so no re-fetch is needed for correctness).
+
+### Contacts Management — set NOK / copy-correspondence on the reciprocal link too
+
+- Asked for, live: when linking a candidate onto the family tree, offer NOK/copy-correspondence
+  checkboxes for the RECIPROCAL relationship too, not just the forward one — previously only
+  settable on the hub patient's own side. Turned out the write path (`performLinkAndCleanup`) has
+  supported `reverseIsNextOfKin`/`reverseCopyCorrespondence` since this canvas was built; they were
+  just hardcoded `false` in `buildConfirmForCard` with no UI to change them.
+- Confirm panel redesigned into two columns, per the user's own mockup: left records the
+  candidate's relationship to the hub patient (unchanged picker/modifier/NOK/copy, now with
+  explanatory sub-text under each checkbox matching the user's own wording), right records the
+  hub patient's reciprocal relationship to the candidate (the label itself stays a computed
+  inversion, not independently editable, but NOK/copy-correspondence are now live checkboxes wired
+  to the already-existing reverse write fields). The right column is shown whenever a reverse write
+  will actually fire — independent of whether the left column's picker is showing, since confirming
+  a new reverse link for an already-recognised forward relationship is a real, valid case.
+- **Changed same day**: shortened the explanatory sub-text per the user's own correction — was "This
+  will display X's contact details as Y's NOK", now "This will record X as Y's next of kin" (both
+  forward and reverse columns).
+
 ## [v3.190.0] — 2026-07-29
 
 ### Contacts Management — family-member cycling + safe relationship composition

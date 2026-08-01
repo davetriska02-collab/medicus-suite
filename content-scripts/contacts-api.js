@@ -199,6 +199,32 @@
     return apiFetch(apiBase, `/patient/data/home-address/overview/${encodeURIComponent(addressId)}`);
   }
 
+  // Confirmed via HAR capture 2026-07-30 (deleting a duplicate address): { id, patientId,
+  // displayName, description, accessNotes, addressType, isCorrespondenceAddress } — the "edit
+  // address" pre-dialog fetch, same pattern as getEditTelephoneNumber before changeTelephoneNumber.
+  // Used by the duplicate-address merge to check isCorrespondenceAddress BEFORE deciding which
+  // duplicate to keep — that flag isn't present on patientAddressSection.patientAddresses[] itself
+  // (patient-details), only reachable per-address here, and losing it by deleting the wrong
+  // duplicate would be a real, avoidable mistake.
+  function getEditAddress(apiBase, addressId) {
+    return apiFetch(apiBase, `/patient/data/address/edit-address/${encodeURIComponent(addressId)}`);
+  }
+
+  // Confirmed via HAR capture 2026-07-30: POST, no request body, id in the URL only — same shape
+  // as deletePatientContactRelationship/deleteTelephoneNumber. Response body is just `{}`.
+  function deleteAddress(apiBase, addressId) {
+    return postJson(apiBase, `/patient/address/delete-address/${encodeURIComponent(addressId)}`, undefined);
+  }
+
+  // Confirmed via HAR capture 2026-07-30 (setting the correspondence-address flag): a full-replace
+  // write, body built by ContactRelationships.buildChangeAddressBody — see that function's own
+  // comment for the field shape and why Medicus's own UI for this screen (making a GP re-search the
+  // whole address via OS Places even when nothing about the address is changing) is a quirk of that
+  // screen, not a requirement of this endpoint. Response body is just `{}`.
+  function changeAddress(apiBase, body) {
+    return postJson(apiBase, '/patient/address/change-address', body);
+  }
+
   // Confirmed via HAR capture 2026-07-25 (editing an existing phone number, not creating one —
   // the earlier capture only covered create-telephone-number). Used to let the contacts canvas
   // correct a candidate's own wrongly-attributed phone number (e.g. a parent's mobile left on a
@@ -411,6 +437,9 @@
     viewPatientContact,
     deletePatientContactRelationship,
     getAddressOverview,
+    getEditAddress,
+    deleteAddress,
+    changeAddress,
     getEditTelephoneNumber,
     changeTelephoneNumber,
     deleteTelephoneNumber,

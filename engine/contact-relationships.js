@@ -416,6 +416,305 @@
     return (entry && entry.telephoneNumberId) || null;
   }
 
+  // ── Duplicate-address detection (hub patient only) ───────────────────────────────────────────
+  // A known PDS (Patient Demographic Service) data-quality pattern: the same real-world address
+  // gets recorded on a patient's own record more than once, formatted slightly differently each
+  // time — an exact re-send, one copy gaining an extra locality-ish token the other lacks (e.g.
+  // "London" present on one but not the other), or the same text simply split across a different
+  // number of address lines (one system's "Flat 1, 26 High Street" as a single line vs another's
+  // "Flat 1" / "26 High Street" as two separate lines). DETECTION ONLY — no write/merge action is
+  // built on this yet, pending a HAR capture of Medicus's own address-edit/delete endpoint (this
+  // codebase never codes a write endpoint from a guess, see e.g. extractPreferredPhoneId's own
+  // history — HAR-before-writes is a hard rule here, not just a preference).
+
+  const ADDRESS_LINE_FIELDS = ['line1', 'line2', 'line3', 'locality', 'administrativeArea'];
+
+  function normaliseAddressText(s) {
+    return String(s || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function normalisePostcode(s) {
+    return String(s || '')
+      .toUpperCase()
+      .replace(/\s+/g, '');
+  }
+
+  // addressTokens(address) — flattens every address-LINE-ish field (line1/2/3, locality,
+  // administrativeArea — postalCode and country are handled separately, see
+  // isLikelyDuplicateAddress) into a bag of words, SPLIT into numeric and alphabetic tokens.
+  // Flattening is what makes a field-boundary difference stop mattering: "Flat 1, 26 High Street"
+  // as a single line1, vs "Flat 1" / "26 High Street" as two separate lines, produce the IDENTICAL
+  // token sets either way. The numeric/alphabetic split matters for a different reason — see
+  // isLikelyDuplicateAddress's own comment on why a differing NUMBER can never be treated the same
+  // as a differing WORD.
+  function addressTokens(address) {
+    const text = ADDRESS_LINE_FIELDS.map((f) => (address && address[f]) || '').join(' ');
+    const all = normaliseAddressText(text).split(' ').filter(Boolean);
+    return {
+      numbers: new Set(all.filter((t) => /^\d+$/.test(t))),
+      words: new Set(all.filter((t) => !/^\d+$/.test(t))),
+    };
+  }
+
+  function setsEqual(a, b) {
+    if (a.size !== b.size) return false;
+    for (const x of a) if (!b.has(x)) return false;
+    return true;
+  }
+
+  function tokenOverlap(setA, setB) {
+    if (!setA.size || !setB.size) return 0;
+    let inter = 0;
+    for (const t of setA) if (setB.has(t)) inter++;
+    const union = setA.size + setB.size - inter;
+    return union > 0 ? inter / union : 0;
+  }
+
+  // How much of the WORD-token overlap (Jaccard) two addresses need, once their postcodes already
+  // agree and their numeric tokens match exactly, to be treated as the same place recorded twice —
+  // tuned to comfortably catch "one extra locality token" (e.g. 4 shared words + 1 extra = 4/5 =
+  // 0.8) while still requiring most of the text to genuinely overlap, not just a couple of common
+  // words like "high street".
+  const DUPLICATE_TOKEN_THRESHOLD = 0.7;
+
+  // isLikelyDuplicateAddress(a, b) -> boolean. Deliberately conservative — a merge eventually built
+  // on this deletes a real address record, so a missed duplicate is a far smaller problem than a
+  // false one:
+  //   - BOTH addresses must have a postcode, and it must match once normalised (whitespace/case
+  //     only) — never grouped on text similarity alone, since a genuinely different address a few
+  //     doors down could otherwise share most of its words with this one.
+  //   - Either postcode missing/blank -> never a duplicate (too uncertain to risk it).
+  //   - The two addresses' NUMERIC tokens (house/flat numbers) must match EXACTLY, not just
+  //     overlap — found live while testing this: with a short address (5-7 words total), a single
+  //     differing word barely moves a pure Jaccard score, so "Flat 1" vs "Flat 2" at the same
+  //     postcode was scoring high enough to falsely match. A number is what actually distinguishes
+  //     one real address from its next-door neighbour or a different flat in the same building —
+  //     unlike a stray extra WORD (e.g. "London"), a differing NUMBER is never safe to treat as
+  //     noise, so it's checked separately and strictly rather than folded into the same fuzzy score.
+  //   - Only once numbers match exactly does the rest of the address text (word tokens) need to
+  //     overlap heavily.
+  function isLikelyDuplicateAddress(a, b) {
+    if (!a || !b) return false;
+    const pcA = normalisePostcode(a.postalCode);
+    const pcB = normalisePostcode(b.postalCode);
+    if (!pcA || !pcB || pcA !== pcB) return false;
+    const ta = addressTokens(a);
+    const tb = addressTokens(b);
+    if (!setsEqual(ta.numbers, tb.numbers)) return false;
+    return tokenOverlap(ta.words, tb.words) >= DUPLICATE_TOKEN_THRESHOLD;
+  }
+
+  // findDuplicateAddressGroups(patientAddresses) -> [[i, j, ...], ...]
+  //   patientAddresses: [{ addressId, address: {...} }] — a SINGLE patient's own
+  //   patientAddressSection.patientAddresses array, exactly the shape already read elsewhere in
+  //   this codebase (see contacts-canvas.js's indexAddress/formatAddressLine). "Only within the hub
+  //   patient" is a CALLER decision, not this function's — it just groups whatever list it's given,
+  //   so the canvas only ever calls it with the index patient's own addresses, never a linked
+  //   contact's.
+  // Groups by ARRAY INDEX (never assumes an addressId is present, though a real merge action would
+  // need one). Each group is anchored to its first (lowest-index) member — every other member is
+  // pairwise-likely-duplicate of that anchor, not necessarily of each other. That's a deliberate
+  // simplification: a merge action only ever needs "these look like the same place", not a formal
+  // transitive-equivalence guarantee across a 3+-address group.
+  function findDuplicateAddressGroups(patientAddresses) {
+    const list = Array.isArray(patientAddresses) ? patientAddresses : [];
+    const groups = [];
+    const grouped = new Set();
+    for (let i = 0; i < list.length; i++) {
+      if (grouped.has(i)) continue;
+      const group = [i];
+      for (let j = i + 1; j < list.length; j++) {
+        if (grouped.has(j)) continue;
+        if (isLikelyDuplicateAddress(list[i] && list[i].address, list[j] && list[j].address)) {
+          group.push(j);
+        }
+      }
+      if (group.length > 1) {
+        group.forEach((idx) => grouped.add(idx));
+        groups.push(group);
+      }
+    }
+    return groups;
+  }
+
+  // chooseAddressToKeep(entries) -> index into `entries` to KEEP once a duplicate group is
+  // confirmed for merging — every OTHER entry is a delete candidate. entries:
+  // [{ address, isCorrespondenceAddress }], same order as the caller's own duplicate-group
+  // indexes; this only ever returns a POSITION within this array — the caller maps it back to
+  // whichever addressId that corresponds to. Confirmed via HAR capture 2026-07-30 that
+  // isCorrespondenceAddress exists (only reachable per-address via getEditAddress, not present on
+  // patientAddressSection.patientAddresses[] itself) and is worth protecting: deleting the wrong
+  // duplicate would lose that designation, a real mistake, not a cosmetic one.
+  // Tie-break order, each a genuine reason to prefer one duplicate over another, never an arbitrary
+  // pick:
+  //   1. Whichever IS the patient's correspondence address — protected above all else.
+  //   2. Whichever has the MOST complete address data (fewest empty fields) — keeps the record
+  //      carrying more information, not less.
+  //   3. The first one in the given order — a final deterministic tiebreak, never random/unstable.
+  function chooseAddressToKeep(entries) {
+    if (!Array.isArray(entries) || !entries.length) return -1;
+    const correspondenceIdx = entries.findIndex((e) => e && e.isCorrespondenceAddress);
+    if (correspondenceIdx !== -1) return correspondenceIdx;
+    const completenessFields = ADDRESS_LINE_FIELDS.concat(['postalCode']);
+    let bestIdx = 0;
+    let bestCompleteness = -1;
+    entries.forEach((e, i) => {
+      const addr = (e && e.address) || {};
+      const completeness = completenessFields.filter((f) => String(addr[f] || '').trim()).length;
+      if (completeness > bestCompleteness) {
+        bestCompleteness = completeness;
+        bestIdx = i;
+      }
+    });
+    return bestIdx;
+  }
+
+  // buildChangeAddressBody({addressId, address, description, accessNotes, isCorrespondenceAddress})
+  // -> the exact POST /patient/address/change-address body (confirmed via HAR capture 2026-07-30:
+  // setting an existing address as the patient's correspondence address). A full-replace write,
+  // not a patch — every field must be sent back, not just the one actually changing.
+  //
+  // Live-tested finding, straight from the user: Medicus's OWN UI for this action makes the GP
+  // re-search and re-select the whole address from scratch via an OS Places lookup, even when
+  // nothing about the address itself is changing — purely a quirk of that particular screen, not a
+  // requirement of this endpoint. The captured search results carry EXACTLY the same
+  // line1/line2/line3/locality/administrativeArea/postalCode/country/pafAddressKey shape this body
+  // needs, and the endpoint doesn't care whether that shape came from a fresh OS Places lookup or
+  // from an address already on file — so a caller that already knows the address (every caller in
+  // this codebase does, from patientAddressSection) can build this directly, no search needed.
+  // pafAddressKey stayed null in the captured flow despite going through OS Places, so it's always
+  // sent null here too, never guessed at.
+  function buildChangeAddressBody({ addressId, address, description, accessNotes, isCorrespondenceAddress } = {}) {
+    const a = address || {};
+    return {
+      address: {
+        line1: a.line1 || null,
+        line2: a.line2 || null,
+        line3: a.line3 || null,
+        locality: a.locality || null,
+        administrativeArea: a.administrativeArea || null,
+        postalCode: a.postalCode || null,
+        country: a.country || 'GBR',
+        pafAddressKey: null,
+      },
+      description: description || null,
+      accessNotes: accessNotes || null,
+      id: addressId || null,
+      isCorrespondenceAddress: !!isCorrespondenceAddress,
+    };
+  }
+
+  // ── Shared contact-info detection (patient vs a linked contact) ─────────────────────────────
+  // A patient sharing a non-Home phone or a non-Home email with one of their own linked contacts
+  // is a known data-quality/confidentiality signal in this GP population — most often a child's
+  // record wrongly carrying a parent's own mobile/email (see this file's own sourceNotes on why
+  // phone/email are capped low in scoreCandidate: "children's records sometimes wrongly carry a
+  // parent's own contact details"). This surfaces that same underlying problem directly rather
+  // than just discounting it during matching: a message meant privately for the patient (results,
+  // an appointment reminder, safeguarding-sensitive contact) could otherwise silently reach the
+  // linked contact instead. "Home" is excluded from BOTH the phone and email checks (a shared
+  // household landline or a shared household inbox is normal, not suspicious) — confirmed live
+  // that email DOES carry a type field here (`patientEmailAddresses[].emailAddressType`, e.g.
+  // "Personal"/"Home"/"Work"), correcting an earlier assumption in this file that email had no
+  // type at all; a same-record example the user found (one record's copy filed as Home, the
+  // other's as Work) wasn't being excluded before this fix even though the phone side already had
+  // the equivalent carve-out.
+  //
+  // Detection only — never resolves whose number/email it "really" is. Two hints travel alongside
+  // a match instead, so the GP can judge that themselves, straight from the user's own framing:
+  // "it is often clear from the email itself who it belongs to, or from the patient's age that
+  // they don't have their own mobile phone." Ages are the caller's job to show (this module has no
+  // access to a "now" — see candidateAgeFromDob in contacts-canvas.js); emailOwnerHint is the
+  // email-address half of that same idea, offered here since it's pure text comparison.
+
+  function normalisePhoneDigits(p) {
+    return String(p || '').replace(/[^0-9]/g, '');
+  }
+
+  function isHomeType(type) {
+    return (
+      String(type || '')
+        .trim()
+        .toLowerCase() === 'home'
+    );
+  }
+
+  // emailOwnerHint(email, nameA, nameB) -> 'a' | 'b' | null — which of two names the email's local
+  // part (before @) looks more like it belongs to. NOT a simple "does any token match" check —
+  // found live while testing this: a parent and child sharing a surname (the ordinary case) both
+  // "match" on the surname token alone, which would neutralise the hint in exactly the situation
+  // it exists for. Instead scores each name by what FRACTION of its own tokens appear in the
+  // local part (e.g. "sarah.jones82" -> {sarah, jones} matches ALL of "Sarah Jones"'s tokens but
+  // only HALF of "Ethan Jones"'s, correctly favouring the fuller match) and hints whichever score
+  // is strictly higher — a tie (including 0 vs 0, or an equally partial match on both sides, e.g.
+  // "sarah@..." against two different Sarahs) returns null rather than guessing. Trailing digits
+  // are stripped from each local-part token first (e.g. "jones82" -> "jones"), the single most
+  // common real-world email pattern, without trying to be cleverer than that.
+  function emailOwnerHint(email, nameA, nameB) {
+    const local = String(email || '').split('@')[0];
+    const localTokens = new Set(
+      normaliseText(local)
+        .split(' ')
+        .map((t) => t.replace(/\d+$/, ''))
+        .filter((t) => t.length > 1)
+    );
+    if (!localTokens.size) return null;
+    const coverage = (name) => {
+      const tokens = normaliseText(name)
+        .split(' ')
+        .filter((t) => t.length > 1);
+      if (!tokens.length) return 0;
+      return tokens.filter((t) => localTokens.has(t)).length / tokens.length;
+    };
+    const aScore = coverage(nameA);
+    const bScore = coverage(nameB);
+    if (aScore === bScore) return null;
+    return aScore > bScore ? 'a' : 'b';
+  }
+
+  // findSharedContactInfo(patient, contact) -> { phones: [string], emails: [{email, ownerHint}] } | null
+  //   patient/contact: { name, phones: [{telephoneNumber, telephoneNumberType}],
+  //                       emails: [{emailAddress, emailAddressType}] }
+  //   — the same shapes already read elsewhere in this codebase (patientContactInformationSection's
+  //   patientTelephoneNumbers[]/patientEmailAddresses[]) — emails are full entry objects, not bare
+  //   strings, specifically so the Home-type exclusion below has something to check.
+  // Returns null when nothing is shared (the common case), not an empty-arrays object, so a caller
+  // can just check truthiness.
+  function findSharedContactInfo(patient, contact) {
+    if (!patient || !contact) return null;
+    const patientPhones = (patient.phones || []).filter((p) => p && !isHomeType(p.telephoneNumberType));
+    const contactPhones = (contact.phones || []).filter((p) => p && !isHomeType(p.telephoneNumberType));
+    const sharedPhones = [];
+    for (const pp of patientPhones) {
+      const ppDigits = normalisePhoneDigits(pp.telephoneNumber);
+      if (!ppDigits) continue;
+      if (sharedPhones.includes(pp.telephoneNumber)) continue;
+      if (contactPhones.some((cp) => normalisePhoneDigits(cp.telephoneNumber) === ppDigits)) {
+        sharedPhones.push(pp.telephoneNumber);
+      }
+    }
+    const patientEmails = (patient.emails || []).filter((e) => e && e.emailAddress && !isHomeType(e.emailAddressType));
+    const contactEmails = (contact.emails || []).filter((e) => e && e.emailAddress && !isHomeType(e.emailAddressType));
+    const sharedEmails = [];
+    for (const pe of patientEmails) {
+      const peNorm = String(pe.emailAddress).trim().toLowerCase();
+      if (!peNorm) continue;
+      if (sharedEmails.some((s) => s.email === pe.emailAddress)) continue;
+      if (contactEmails.some((ce) => String(ce.emailAddress).trim().toLowerCase() === peNorm)) {
+        sharedEmails.push({
+          email: pe.emailAddress,
+          ownerHint: emailOwnerHint(pe.emailAddress, patient.name, contact.name),
+        });
+      }
+    }
+    if (!sharedPhones.length && !sharedEmails.length) return null;
+    return { phones: sharedPhones, emails: sharedEmails };
+  }
+
   // ── Existing-link detection (shared between the wizard widget and the canvas) ────────────────
   // Pure functions over a patient-details response — safety-critical duplicate-prevention logic
   // that must not drift between the two UI surfaces that both create real Medicus links, so it
@@ -536,6 +835,12 @@
     normaliseFreeText,
     isDeceasedRelationshipText,
     isUkMobileNumber,
+    isLikelyDuplicateAddress,
+    findDuplicateAddressGroups,
+    chooseAddressToKeep,
+    buildChangeAddressBody,
+    emailOwnerHint,
+    findSharedContactInfo,
     ALIAS_TERMS,
     findExistingReciprocal,
     findExistingForwardLink,

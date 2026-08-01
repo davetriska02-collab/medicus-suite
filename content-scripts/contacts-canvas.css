@@ -66,6 +66,39 @@
   flex: 1;
 }
 
+/* Duplicate-address warning (hub patient only — see renderDuplicateAddressWarning) */
+#ms-contacts-canvas-overlay .ms-cv-dupaddr-warn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-dupaddr-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 4px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-dupaddr-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-dupaddr-line input[type='radio'] {
+  flex-shrink: 0;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-dupaddr-merge {
+  margin-top: 4px;
+}
+
 /* ── Family tree (Phase 4) — parents row / siblings-index-partner row / children row, with
    collapsible grandparents/aunts-uncles/other rows and a "not yet placed" holding strip
    underneath for any already-linked contact with nowhere else to go (no tree slot, no plausible
@@ -583,6 +616,15 @@
   font-weight: 600;
 }
 
+#ms-contacts-canvas-overlay .ms-cv-shared-info {
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 4px;
+  padding: 4px 6px;
+  margin-top: 4px;
+}
+
 #ms-contacts-canvas-overlay .ms-cv-empty {
   font-size: 13px;
   color: #666;
@@ -606,6 +648,35 @@
 #ms-contacts-canvas-overlay .ms-cv-confirm-panel-done {
   align-items: center;
   text-align: center;
+}
+
+/* Forward (Jane's relationship to John, written on John's record) / reverse (John's reciprocal
+   relationship to Jane, written on Jane's own record) side by side — two separate writes, so two
+   separate sets of controls, but shown together since confirming one link naturally means deciding
+   both at once. Stacks to one column on narrow viewports rather than a fixed two-up grid. */
+#ms-contacts-canvas-overlay .ms-cv-confirm-columns {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-confirm-col {
+  flex: 1 1 240px;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-confirm-col-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: #1e3a8a;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-confirm-reverse-label {
+  font-weight: 600;
+  padding: 6px 0;
 }
 
 #ms-contacts-canvas-overlay .ms-cv-confirm-panel select,

@@ -67,6 +67,36 @@
     return union > 0 ? inter / union : 0;
   }
 
+  // nameSearchQueries(name) -> string[] — 1-3 name variants worth searching Medicus's own
+  // patient-finder for, given a manual contact's raw free-text name. A 3+-word name (e.g. "John
+  // Bates Smith") is genuinely ambiguous about where the surname starts: it could be firstName
+  // "John" + a real middle name "Bates" + surname "Smith" (Medicus's own name fields wouldn't
+  // contain "Bates" anywhere at all), OR firstName "John" + a compound/double-barrelled surname
+  // "Bates Smith" with no middle-name concept in play at all. Live-tested finding: searching the
+  // raw 3(+)-word string alone was missing real matches for both shapes. Returns the original name
+  // as-is, PLUS, for a 3+-token name (after stripping a leading title, same recognised set as
+  // normaliseName's NAME_STOPWORDS, so "Mr"/"Dr"/etc. never gets treated as part of the first/last
+  // split): "first + last only" (drops the middle token(s) entirely) and "first + everything else
+  // combined" (treats every token after the first as one compound surname) — deduped, so a simple
+  // already-unambiguous 2-token name just returns itself once. Every result here still only ever
+  // feeds a suggestion the GP confirms by drag — nothing auto-links — so casting a wider net has no
+  // downside beyond a couple of extra search calls. Casing/punctuation are preserved from the
+  // original name (unlike normaliseName's own lowercased/stripped tokens) — this feeds a search
+  // query string, not a similarity comparison, so mangling a real name's spelling would only hurt.
+  function nameSearchQueries(name) {
+    const raw = String(name || '').trim();
+    if (!raw) return [];
+    const rawTokens = raw.split(/\s+/).filter(Boolean);
+    const stripped = rawTokens.filter((t) => !NAME_STOPWORDS.has(t.toLowerCase()));
+    const tokens = stripped.length ? stripped : rawTokens;
+    const queries = new Set([raw]);
+    if (tokens.length >= 3) {
+      queries.add(`${tokens[0]} ${tokens[tokens.length - 1]}`);
+      queries.add(`${tokens[0]} ${tokens.slice(1).join(' ')}`);
+    }
+    return Array.from(queries).filter(Boolean);
+  }
+
   function fullName(name) {
     if (!name) return '';
     if (typeof name === 'string') return name;
@@ -227,6 +257,7 @@
 
   const api = {
     nameSimilarity,
+    nameSearchQueries,
     bestNameSignal,
     scoreCandidate,
     rankCandidates,
