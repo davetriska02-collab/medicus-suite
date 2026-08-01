@@ -112,8 +112,26 @@ console.log('3: NOK/copy-correspondence are per-edge, never inherited across a s
   );
 
   // Structural check: no field anywhere on a tree/edge is shared BETWEEN two edges, so there is
-  // no mechanism by which editing one edge's flags could affect another.
-  check(tree.edges[0] !== tree.edges[1], 'the two parent edges are distinct objects with no shared flag storage');
+  // no mechanism by which editing one edge's flags could affect another. Asserting the two edges
+  // are merely `!==` is near-vacuous (any two object literals are), so pin the actual property:
+  // push the tree through a real clone round-trip (every write in this module does one), mutate
+  // ONE edge's flags on the result, and assert neither the sibling edge nor the pre-clone tree
+  // moves. That is the only thing standing between "per-edge NOK" and one parent's tick leaking
+  // onto the other.
+  const roundTripped = CT.assignToSlot(tree, 'other', { id: 'unrelated-card' }, { baseId: 'other' });
+  roundTripped.slots.parents[0].isNextOfKin = false;
+  roundTripped.slots.parents[0].copyCorrespondence = false;
+  roundTripped.slots.parents[0].notes = 'mutated';
+  check(
+    roundTripped.slots.parents[1].isNextOfKin === true &&
+      roundTripped.slots.parents[1].copyCorrespondence === true &&
+      roundTripped.slots.parents[1].notes === null,
+    'mutating one parent edge leaves the sibling edge untouched — no shared flag storage between edges'
+  );
+  check(
+    tree.slots.parents[0].isNextOfKin === true && tree.slots.parents[0].notes === null,
+    'and the mutation cannot reach back through the clone into the tree it came from'
+  );
 }
 
 // ============================================================
@@ -188,6 +206,135 @@ console.log('5: family session cycling');
   const step3 = CT.advance(session);
   check(step3.patientId === null, 'advance returns null once the pending pool is exhausted');
   check(step3.session.current === null, 'current clears to null once cycling ends');
+}
+
+// ============================================================
+// 6 — tree.edges stays in sync with the slots (removal + partner displacement)
+// ============================================================
+// Every edge lives in TWO places: the slot that renders it, and `tree.edges` — which is what a
+// caller iterates when it writes the links into Medicus. If a removal empties the slot but leaves
+// the edge in `tree.edges`, the canvas shows nothing while the commit still writes the link: a
+// relationship the user explicitly deleted gets created anyway. These assertions pin the two
+// halves staying in step.
+console.log('6: removeFromSlot / partner displacement keep tree.edges in sync');
+{
+  let tree = CT.createTree(IDX);
+  tree = CT.assignToSlot(tree, 'parents', P1, { baseId: 'mother' });
+  check(tree.edges.length === 1, 'baseline: assigning into a list slot records one edge');
+  tree = CT.removeFromSlot(tree, 'parents', P1.id);
+  check(tree.slots.parents.length === 0, 'removeFromSlot empties the list slot');
+  check(tree.edges.length === 0, 'removeFromSlot also drops the edge from tree.edges (list slot)');
+
+  let pt = CT.createTree(IDX);
+  pt = CT.assignToSlot(pt, 'partner', P2, { baseId: 'partner' });
+  pt = CT.removeFromSlot(pt, 'partner', P2.id);
+  check(pt.slots.partner === null, 'removeFromSlot clears the partner slot');
+  check(pt.edges.length === 0, 'removeFromSlot also drops the edge from tree.edges (partner slot)');
+
+  // Same again for an edge that arrived via commitSuggestion — that path clones twice, so an
+  // edge removal that relied on object identity is doubly broken there.
+  let ct = CT.createTree(IDX);
+  ct = CT.addPendingSuggestion(ct, { slotPath: 'siblings', card: P1, baseGuess: 'brother', source: 'address' });
+  const committed = CT.commitSuggestion(ct, ct.pendingSuggestions[0].id, { baseId: 'brother' });
+  ct = CT.removeFromSlot(committed.tree, 'siblings', P1.id);
+  check(
+    ct.slots.siblings.length === 0 && ct.edges.length === 0,
+    'an edge created via commitSuggestion is removed from tree.edges too'
+  );
+
+  let all = CT.createTree(IDX);
+  all = CT.assignToSlot(all, 'children', P1, { baseId: 'son' });
+  all = CT.assignToSlot(all, 'children', P2, { baseId: 'daughter' });
+  all = CT.removeFromSlot(all, 'children');
+  check(
+    all.slots.children.length === 0 && all.edges.length === 0,
+    'removeFromSlot with no cardId clears the whole list slot and all of its edges'
+  );
+
+  // Removal must be targeted, not a blunt "drop everything for this slot".
+  let two = CT.createTree(IDX);
+  two = CT.assignToSlot(two, 'children', P1, { baseId: 'son' });
+  two = CT.assignToSlot(two, 'children', P2, { baseId: 'daughter' });
+  two = CT.removeFromSlot(two, 'children', P1.id);
+  check(
+    two.slots.children.length === 1 && two.edges.length === 1 && two.edges[0].cardId === P2.id,
+    "removing one card from a list slot leaves the other cards' edges alone"
+  );
+
+  // The same person can legitimately sit in two slots; removing one must not take the other out.
+  let same = CT.createTree(IDX);
+  same = CT.assignToSlot(same, 'parents', P1, { baseId: 'mother' });
+  same = CT.assignToSlot(same, 'other', P1, { baseId: 'other' });
+  same = CT.removeFromSlot(same, 'parents', P1.id);
+  check(
+    same.edges.length === 1 && same.edges[0].slotPath === 'other',
+    'the same card in a different slot keeps its own edge when one slot is cleared'
+  );
+
+  // partner is a single slot: assigning over it displaces the sitting partner, whose edge must go.
+  let disp = CT.createTree(IDX);
+  disp = CT.assignToSlot(disp, 'partner', P1, { baseId: 'partner' });
+  disp = CT.assignToSlot(disp, 'partner', P2, { baseId: 'partner' });
+  check(disp.slots.partner.cardId === P2.id, 'assigning over an occupied partner slot replaces the sitting partner');
+  check(
+    disp.edges.length === 1 && disp.edges[0].cardId === P2.id,
+    "the displaced partner's edge is removed from tree.edges, not orphaned there"
+  );
+}
+
+// ============================================================
+// 7 — deferred-commit cycling: peekNext / commitAdvance
+// ============================================================
+// advance() consumes the head of the pool the moment it is called, but the caller has to call it
+// BEFORE the user has actually navigated (it needs to know who's next in order to ask). A Cancel,
+// or a transient probe failure, therefore burned a family member permanently. peekNext/
+// commitAdvance split that in two so nobody is consumed until navigation really happened.
+console.log('7: deferred-commit cycling (peekNext / commitAdvance)');
+{
+  const GP = 'gp1-patient-id';
+  check(CT.peekNext(null).patientId === null, 'peekNext on a missing session returns null rather than throwing');
+
+  let session = CT.createFamilySession(IDX);
+  check(CT.peekNext(session).patientId === null, 'peekNext returns null when the pending pool is empty');
+  check(CT.commitAdvance(session, 'anyone').patientId === null, 'commitAdvance against an empty pool is a safe no-op');
+
+  session = CT.enqueueFamilyMember(session, P1.patientId, '1970-01-01');
+  session = CT.enqueueFamilyMember(session, P2.patientId, '1995-06-15');
+  session = CT.enqueueFamilyMember(session, GP, '1940-03-02');
+
+  const snapshot = JSON.stringify(session);
+  check(CT.peekNext(session).patientId === GP, 'peekNext reports the head of the pending pool (oldest first)');
+  check(JSON.stringify(session) === snapshot, 'peekNext mutates nothing — a Cancel leaves the session identical');
+  check(CT.peekNext(session).patientId === GP, 'peekNext is repeatable — peeking does not consume the member');
+  check(session.visited[GP] === undefined, 'a peeked member is NOT marked visited');
+
+  const noop = CT.commitAdvance(session, null);
+  check(
+    noop.patientId === null && noop.session.current === IDX && noop.session.pending.length === 3,
+    'commitAdvance(session, null) is a safe no-op — current unchanged, nobody consumed'
+  );
+  const unknown = CT.commitAdvance(session, 'never-heard-of-them');
+  check(
+    unknown.patientId === null && unknown.session.current === IDX && unknown.session.pending.length === 3,
+    'commitAdvance with a patientId that is not pending is a safe no-op'
+  );
+
+  // The head (GP) 403s as an inactive patient, so the caller confirms a LATER member instead —
+  // commitAdvance must consume that one from the middle of the pool, not the head.
+  const done = CT.commitAdvance(session, P1.patientId);
+  check(done.patientId === P1.patientId, 'commitAdvance returns the patientId it actually consumed');
+  check(done.session.current === P1.patientId, 'commitAdvance sets current to the committed member');
+  check(done.session.visited[P1.patientId] === true, 'commitAdvance marks the committed member visited');
+  check(
+    done.session.pending.map((p) => p.patientId).join(',') === [GP, P2.patientId].join(','),
+    'commitAdvance consumes a NON-head member and preserves the order of everyone else'
+  );
+  check(done.session.visited[GP] === undefined, 'the skipped-over head stays pending and unvisited');
+  check(
+    session.pending.length === 3 && session.current === IDX,
+    'commitAdvance leaves the session it was handed untouched (immutable clone pattern)'
+  );
+  check(CT.peekNext(done.session).patientId === GP, 'after a commit, peekNext offers the still-pending head again');
 }
 
 // ============================================================

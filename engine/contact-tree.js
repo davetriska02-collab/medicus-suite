@@ -72,6 +72,26 @@
     };
   }
 
+  // Every edge is stored TWICE — once in the slot that renders it, once in `tree.edges` (what a
+  // caller iterates when it writes the links into Medicus). They are NOT the same object: clone()
+  // is a JSON round-trip, so every write forks the shared reference, and the two copies can only
+  // ever be matched BY VALUE. Reference-equality filtering (`e !== next.slots.partner`) matched
+  // nothing at all — the slot emptied while the edge stayed in `tree.edges`, i.e. a relationship
+  // the user deleted on screen still got written. Identity here is the (slotPath, cardId) pair:
+  // a given card occupies a given slot once, so that pair names an edge stably across a clone.
+  function isSameEdge(a, b) {
+    return !!a && !!b && a.slotPath === b.slotPath && a.cardId === b.cardId;
+  }
+
+  // dropEdges(edges, gone) -> edges' — removes from `edges` every entry matching (by the value
+  // identity above) any edge in `gone`. Used by both removal paths in removeFromSlot AND by the
+  // partner-displacement path in assignToSlot, so there is exactly one notion of "this edge is
+  // the same edge" in the module.
+  function dropEdges(edges, gone) {
+    if (!gone || !gone.length) return edges;
+    return edges.filter((e) => !gone.some((g) => isSameEdge(e, g)));
+  }
+
   // assignToSlot(tree, slotPath, card, relationshipChoice) -> tree'
   //   card: { id, patientId?: string|null, name?: string }
   //   relationshipChoice: { baseId, modifierId?, isNextOfKin?, copyCorrespondence?, notes?, reciprocalCommitted? }
@@ -84,6 +104,10 @@
     const next = clone(tree);
     const edge = makeEdge(slotPath, card, relationshipChoice);
     if (slotPath === 'partner') {
+      // partner is a SINGLE slot, so assigning into an occupied one displaces the sitting partner.
+      // Their edge has to leave `tree.edges` with them, or the replaced relationship silently
+      // survives in the commit list while nothing on the canvas shows it any more.
+      next.edges = dropEdges(next.edges, next.slots.partner ? [next.slots.partner] : []);
       next.slots.partner = edge;
     } else {
       next.slots[slotPath].push(edge);
@@ -93,18 +117,21 @@
   }
 
   // removeFromSlot(tree, slotPath, cardId) -> tree'
+  // Omitting cardId clears the whole slot (the single partner, or every card in a list slot).
+  // Removal always takes the slot entry AND its `tree.edges` twin — see dropEdges/isSameEdge for
+  // why that match is by value and never by object reference.
   function removeFromSlot(tree, slotPath, cardId) {
     if (!tree || !isValidSlotPath(slotPath)) return tree;
     const next = clone(tree);
     if (slotPath === 'partner') {
       if (next.slots.partner && (!cardId || next.slots.partner.cardId === cardId)) {
-        next.edges = next.edges.filter((e) => e !== next.slots.partner);
+        next.edges = dropEdges(next.edges, [next.slots.partner]);
         next.slots.partner = null;
       }
     } else {
       const removed = next.slots[slotPath].filter((e) => !cardId || e.cardId === cardId);
       next.slots[slotPath] = next.slots[slotPath].filter((e) => cardId && e.cardId !== cardId);
-      next.edges = next.edges.filter((e) => !removed.includes(e));
+      next.edges = dropEdges(next.edges, removed);
     }
     return next;
   }
@@ -265,6 +292,48 @@
     return { session: next, patientId: head.patientId };
   }
 
+  // ── Deferred commit: peekNext + commitAdvance ────────────────────────────────────────────────
+  // advance() consumes the head of the pool the instant it is called — but the caller has to know
+  // who's next BEFORE the user has agreed to go there (it can't put a name in the confirm dialog
+  // otherwise), and the patient's page may not even open (Medicus 403s inactive patients only on
+  // the fetch — see the pool notes above). So advance()'s single step conflated two different
+  // moments: "who is next?" and "we are now on their page". A Cancel, or one transient probe
+  // error, therefore marked a family member visited and dropped them from the pool for good —
+  // silently losing a person the user still needs to link.
+  //
+  // These two split that in half. The caller's flow is: peekNext -> probe/confirm -> commitAdvance
+  // ONLY on success. Every failure path simply returns without calling commitAdvance, and the
+  // session is byte-for-byte what it was, so the member comes round again on the next peek.
+  // advance() is kept exported and unchanged for existing callers.
+
+  // peekNext(session) -> { patientId: string|null } — the head of the pending pool, or null when
+  // the pool is exhausted. Side-effect free and cheap by contract: callers poll it freely, and it
+  // must stay safe to call on a session that is about to be discarded (a Cancel), so it neither
+  // clones nor writes. Returns the same {patientId} shape as advance()/commitAdvance so the three
+  // are interchangeable at the call site.
+  function peekNext(session) {
+    if (!session || !session.pending || !session.pending.length) return { patientId: null };
+    return { patientId: session.pending[0].patientId };
+  }
+
+  // commitAdvance(session, patientId) -> { session: session', patientId: string|null } — records
+  // that we have actually landed on `patientId`: consumes them from the pending pool, marks them
+  // visited, and makes them current. Takes the patientId explicitly rather than assuming the head,
+  // because the caller may legitimately have skipped past members whose page would not open, and
+  // whoever they DID reach must be the one consumed. An absent/null patientId, or one not in the
+  // pool, is a safe no-op: the session comes back unchanged (same reference, `current` untouched)
+  // with patientId null, never a throw — the Cancel and probe-failure paths rely on that.
+  function commitAdvance(session, patientId) {
+    if (!session || !patientId || !session.pending) return { session, patientId: null };
+    const idx = session.pending.findIndex((p) => p.patientId === patientId);
+    if (idx === -1) return { session, patientId: null };
+    const next = clone(session);
+    next.pending.splice(idx, 1);
+    next.visited[patientId] = true;
+    next.current = patientId;
+    return { session: next, patientId };
+  }
+
   // recordCommittedEdge(session, patientId, edge) -> session' — called immediately after a
   // successful dual link-patient write, BEFORE the canvas re-renders for that patient, so a later
   // screen's pre-placed locked boxes are always in sync with what's actually in Medicus.
@@ -291,6 +360,8 @@
     getTreeFor,
     setTreeFor,
     advance,
+    peekNext,
+    commitAdvance,
     recordCommittedEdge,
   };
 
