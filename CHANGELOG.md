@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.205.1] — 2026-08-01
+
+### Termbrowser retirement-scan hang fix + severity-correction refresh note
+
+- **`service-worker.js`**: `fetchTermbrowserConcept` had no timeout. Found
+  live 2026-08-01 — repeated direct curl calls to termbrowser.nhs.uk returned
+  a mix of instant 502s and requests that never responded at all, even past
+  20s. A stalled connection left the fetch neither resolving nor rejecting,
+  which left `runRetiredCodesScan`'s `Promise.all` over every distinct
+  conceptId (`content-scripts/problem-description-cleanup.js`) stuck on
+  "Checking…" forever. Bounded with a 15s `AbortController` timeout, failing
+  closed the same way every other failure here already does. The scan widget
+  now shows a distinct "could not be checked" note (not folded into the
+  ordinary flagged-count) when one or more codes time out, so the clinician
+  can tell "unknown status" apart from "confirmed not retired".
+- **`content-scripts/problem-description-cleanup.js`**: after
+  `applyCorrectSeverityAndRemoveJunk` saves successfully, the widget now shows
+  an explicit confirmation + "Refresh page" button (mirrors
+  `problem-bulk-end.js`'s own done-step pattern) — the structured significance
+  field has no on-page representation this content script can update in
+  place, so Medicus's own list kept showing the stale severity with no visible
+  change and no way to tell the save had worked. Never an auto-reload, so a
+  half-typed consultation elsewhere on the page is never binned without the
+  clinician asking for it.
+
 ## [v3.205.0] — 2026-08-01
 
 ### Allergy cleanup suite: junk-code bulk-remove + duplicate merge

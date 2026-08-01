@@ -642,11 +642,15 @@ if (fetchTermbrowserFn) {
   let lastFetchedUrl = null;
   const sandbox = {
     URL,
+    AbortController,
+    setTimeout,
+    clearTimeout,
     fetch: async (url) => {
       lastFetchedUrl = url;
       return { ok: true, status: 200, text: async () => '{"active":true}' };
     },
     TERMBROWSER_HOST: hostConstMatch ? hostConstMatch[1] : 'termbrowser.nhs.uk',
+    TERMBROWSER_FETCH_TIMEOUT_MS: 15000,
   };
   vm.runInNewContext(fetchTermbrowserFn[0] + '\nthis.fetchTermbrowserConcept = fetchTermbrowserConcept;', sandbox);
   const fn = sandbox.fetchTermbrowserConcept;
@@ -676,6 +680,41 @@ if (fetchTermbrowserFn) {
 
   check((await fn(null)).ok === false, 'null url -> ok:false, never throws');
   check((await fn(undefined)).ok === false, 'undefined url -> ok:false, never throws');
+
+  // 2026-08-01 live capture: termbrowser.nhs.uk sometimes leaves a connection
+  // open with no response and no error — fetch() neither resolves nor
+  // rejects. Prove the AbortController timeout actually fires and fails
+  // closed, using a stalled fetch + a short timeout override so the test
+  // doesn't take 15s.
+  const stalledSandbox = {
+    URL,
+    AbortController,
+    setTimeout,
+    clearTimeout,
+    fetch: (url, opts) =>
+      new Promise((_resolve, reject) => {
+        opts.signal.addEventListener('abort', () => {
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      }),
+    TERMBROWSER_HOST: hostConstMatch ? hostConstMatch[1] : 'termbrowser.nhs.uk',
+    TERMBROWSER_FETCH_TIMEOUT_MS: 50,
+  };
+  vm.runInNewContext(
+    fetchTermbrowserFn[0] + '\nthis.fetchTermbrowserConcept = fetchTermbrowserConcept;',
+    stalledSandbox
+  );
+  const stalledResult = await stalledSandbox.fetchTermbrowserConcept(
+    'https://termbrowser.nhs.uk/sct-browser-api/snomed/uk-edition/v20260603/concepts/184063008'
+  );
+  check(
+    stalledResult.ok === false && stalledResult.timedOut === true,
+    'a stalled fetch (never resolves/rejects) times out and fails closed, marked timedOut (got ' +
+      JSON.stringify(stalledResult) +
+      ')'
+  );
 }
 
 console.log(

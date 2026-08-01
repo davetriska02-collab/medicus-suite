@@ -142,6 +142,36 @@ input[class*='ms-pdc-']:focus-visible {
   cursor: not-allowed;
 }
 
+/* Post-save confirmation + "Refresh page" offer — green, matching
+   problem-bulk-end.css's .ms-pbe-refresh-btn/.ms-pbe-done (same "action
+   genuinely completed, but Medicus's own list is now stale" situation). */
+.ms-pdc-severity-corrected {
+  margin-bottom: 6px;
+}
+
+.ms-pdc-severity-corrected-note {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: #166534;
+}
+
+.ms-pdc-severity-refresh-btn {
+  padding: 4px 10px;
+  background: #0d6e5e;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-pdc-severity-refresh-btn:hover {
+  background: #0b5c4e;
+}
+
 .ms-pdc-panel {
   display: flex;
   flex-wrap: wrap;
@@ -662,6 +692,13 @@ input[class*='ms-pdc-']:focus-visible {
 .ms-pdc-retired-scan-status {
   font-size: 11px;
   color: #4b5563;
+}
+
+.ms-pdc-retired-scan-timeout-note {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: #92400e;
 }
 
 .ms-pdc-retired-scan-retry {

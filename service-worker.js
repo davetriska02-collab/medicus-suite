@@ -293,6 +293,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // sender.id guard below, same discipline as every other handler in this file).
 const TERMBROWSER_HOST = 'termbrowser.nhs.uk';
 
+// No timeout here previously (found live 2026-08-01, real capture: repeated
+// direct curl calls to this same API returned a MIX of instant 502s and
+// requests that never responded at all, even past 20s) — a stalled upstream
+// connection left this fetch() neither resolving nor rejecting, which in turn
+// left runRetiredCodesScan's Promise.all over every distinct conceptId
+// (problem-description-cleanup.js) stuck in "Checking…" forever, since
+// nothing ever settled that one promise. Bounded to fail closed the same way
+// every other failure here already does (parseConceptRetirement(null) ->
+// active: null -> "skip"), just on a clock instead of only on a clean
+// network error.
+const TERMBROWSER_FETCH_TIMEOUT_MS = 15000;
+
 async function fetchTermbrowserConcept(url) {
   let parsed;
   try {
@@ -303,12 +315,22 @@ async function fetchTermbrowserConcept(url) {
   if (parsed.protocol !== 'https:' || parsed.hostname !== TERMBROWSER_HOST) {
     return { ok: false, error: 'URL not permitted' };
   }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TERMBROWSER_FETCH_TIMEOUT_MS);
   try {
-    const resp = await fetch(parsed.toString(), { headers: { Accept: 'application/json, text/plain, */*' } });
+    const resp = await fetch(parsed.toString(), {
+      headers: { Accept: 'application/json, text/plain, */*' },
+      signal: controller.signal,
+    });
     const text = await resp.text();
     return { ok: true, httpOk: resp.ok, status: resp.status, text };
   } catch (e) {
+    if (e && e.name === 'AbortError') {
+      return { ok: false, timedOut: true, error: 'Timed out waiting for termbrowser.nhs.uk' };
+    }
     return { ok: false, error: String((e && e.message) || e) };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
