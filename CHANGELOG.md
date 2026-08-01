@@ -10,6 +10,45 @@ Merges Nick's `fix/oir-native-checkbox` branch (developed as internal v3.204.0�
 renumbered here because that range was released on main by other work). Two commits,
 both live-tested on two work PCs against the real shared-folder deployment.
 
+Review fixes applied on merge (two independent pre-merge reviews, every code fix landed
+with red-first regression tests — 86 new assertions across `test-oir-key-rotation.js`
+(new), `test-practice-profile.js` and `test-problem-description-cleanup-io.js`):
+
+- **Auto-publish scope** — the daily unattended publish no longer writes a full
+  `doFullExport()` profile (which wholesale-overwrote all 16 other modules with one
+  machine's local state); it now publishes only the union-merged Cleanup Code
+  Preferences section, carries every other section — including `practiceAttestation` —
+  forward verbatim from the fetched shared copy, and **aborts** (no write, retry next
+  day) if the shared profile can't be read, instead of falling back to a raw local
+  snapshot. Manual attended publish keeps full-profile semantics.
+- **Content-aware OIR retirement** (`shared/io/oir-key-rotation.js`, new) — the profile
+  now carries the superseded published content (`retiredOirTests`), and the apply side
+  removes a local test only when it content-matches that superseded copy: a clinician's
+  local edit under a retired key is preserved (both versions surface for human
+  reconciliation) instead of being silently deleted. A legacy bare `retiredOirKeys`
+  list deletes nothing (fail-safe: a lingering duplicate beats a destroyed edit).
+- **Builtin-key overrides never rotate** — disable/extend entries keyed to a builtin
+  test (where the key IS the semantics) are exempt from rotation; rotating them
+  silently re-enabled the builtin on every machine and landed a bogus standalone test.
+  They update in place only when the local copy matches the previously published copy.
+- **Cumulative retirement ledger** — `retiredOirTests`/`retiredOirKeys` union across
+  publishes (FIFO-capped at 200) instead of being replaced each publish, so a machine
+  that misses a version still retires the stale original; and a rotating publish now
+  updates the publisher's own local keys immediately, closing the double-edit
+  self-race that shipped un-rotated duplicates.
+- **No unattended rotation** — key rotation of clinical config requires an attended
+  publish (`attended: true`, double-guarded).
+- **Ordering-aware version gate** — an older profile version (rolled-back/restored
+  shared file) is now skipped with a logged reason instead of applied, which
+  retirement had made destructive.
+- **Override-clear tombstones** — clearing a Cleanup Code override now writes
+  `overrideCleared`; the merge resolves set-vs-clear by timestamp, so a cleared
+  practice-wide override no longer resurrects on the next daily sync.
+- Minor: `lastUsed` no longer dropped when one side lacks it; the blob-download
+  fallback no longer stamps `lastAutoPublishAt` (the file may never reach the shared
+  folder); the last-writer-wins concurrent-publish limitation is documented at the
+  write site.
+
 ### OIR practice-profile sync: fresh-install init race + stale edited-test merge
 
 #### Two OIR practice-profile sync bugs fixed: fresh-install race, stale edited-test merge

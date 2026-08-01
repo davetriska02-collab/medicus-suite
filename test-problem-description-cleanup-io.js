@@ -294,6 +294,10 @@ async function throws(fn) {
   );
 
   console.log("\n--- opts.overrideWins: 'incoming' still falls back to local when nothing incoming ---");
+  // NOTE the deliberate distinction exercised by the tombstone block below:
+  // an incoming entry that simply LACKS an override (this case) must never
+  // clobber a local one, whereas an incoming entry carrying an explicit
+  // `overrideCleared` tombstone must.
   reset();
   store['pdc.preferredDescriptions'] = {
     300: { tally: {}, override: { key: '111000', candidate: { description: 'Local admin decision' } } },
@@ -304,7 +308,166 @@ async function throws(fn) {
   );
   check(
     store['pdc.preferredDescriptions']['300'].override.key === '111000',
-    "overrideWins 'incoming': local override survives when the incoming entry carries no override at all"
+    "overrideWins 'incoming': local override survives when the incoming entry carries no override at all (absence is NOT a clear)"
+  );
+
+  // ── Cleared-override tombstones (a clear is a DECISION, not an absence) ─────
+  console.log('\n--- tombstone: an explicit incoming clear removes the local override (no resurrection) ---');
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    300: {
+      tally: {},
+      override: { key: '111000', candidate: { description: 'Old practice-wide decision' } },
+      overrideSetAt: '2026-07-01T09:00:00Z',
+    },
+  };
+  await problemDescriptionCleanupImport(
+    {
+      preferredDescriptions: {
+        300: { tally: {}, override: null, overrideCleared: '2026-07-30T09:00:00Z' },
+      },
+    },
+    { overrideWins: 'local' }
+  );
+  check(
+    store['pdc.preferredDescriptions']['300'].override === null,
+    'tombstone: an explicit clear published AFTER the override was set removes it, even in local-wins mode'
+  );
+  check(
+    store['pdc.preferredDescriptions']['300'].overrideCleared === '2026-07-30T09:00:00Z',
+    'tombstone: the clear timestamp is carried into the merged entry so it keeps propagating'
+  );
+
+  console.log('\n--- tombstone: an untimestamped legacy override loses to any explicit clear ---');
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    300: { tally: {}, override: { key: '111000', candidate: { description: 'Legacy pin, no timestamp' } } },
+  };
+  await problemDescriptionCleanupImport({
+    preferredDescriptions: { 300: { tally: {}, override: null, overrideCleared: '2026-07-30T09:00:00Z' } },
+  });
+  check(
+    store['pdc.preferredDescriptions']['300'].override === null,
+    'tombstone: set-without-timestamp is treated as older than any explicit clear'
+  );
+
+  console.log('\n--- tombstone: a LOCAL clear is not resurrected by the next sync of an older published override ---');
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    300: { tally: {}, override: null, overrideCleared: '2026-07-30T09:00:00Z' },
+  };
+  await problemDescriptionCleanupImport(
+    {
+      preferredDescriptions: {
+        300: {
+          tally: {},
+          override: { key: '111000', candidate: { description: 'Still-published old decision' } },
+          overrideSetAt: '2026-07-01T09:00:00Z',
+        },
+      },
+    },
+    { overrideWins: 'incoming' }
+  );
+  check(
+    store['pdc.preferredDescriptions']['300'].override === null,
+    'tombstone: the daily sync does NOT undo a local Clear-override made after the override was published'
+  );
+
+  console.log('\n--- tombstone: a re-pin made AFTER the clear wins again ---');
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    300: { tally: {}, override: null, overrideCleared: '2026-07-20T09:00:00Z' },
+  };
+  await problemDescriptionCleanupImport({
+    preferredDescriptions: {
+      300: {
+        tally: {},
+        override: { key: '222000', candidate: { description: 'Re-pinned later' } },
+        overrideSetAt: '2026-07-30T09:00:00Z',
+      },
+    },
+  });
+  check(
+    store['pdc.preferredDescriptions']['300'].override?.key === '222000',
+    'tombstone: an override set after the clear timestamp is adopted (the clear is not permanent)'
+  );
+  check(
+    store['pdc.preferredDescriptions']['300'].overrideCleared === undefined,
+    'tombstone: the superseded clear marker is dropped once a newer pin wins'
+  );
+
+  console.log('\n--- tombstone: export/import round-trips the markers ---');
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    300: { tally: {}, override: null, overrideCleared: '2026-07-30T09:00:00Z' },
+  };
+  const exportedTombstone = await problemDescriptionCleanupExport();
+  check(
+    exportedTombstone.preferredDescriptions['300'].overrideCleared === '2026-07-30T09:00:00Z',
+    'tombstone: export carries overrideCleared (it is a decision, not derived state)'
+  );
+  check(
+    await throws(() =>
+      problemDescriptionCleanupImport({ preferredDescriptions: { 1: { tally: {}, overrideCleared: 12345 } } })
+    ),
+    'tombstone: a non-string overrideCleared is rejected'
+  );
+
+  console.log('\n--- tombstone: publish merge propagates an attended clear, but never an unattended one ---');
+  {
+    const existingShared = {
+      preferredDescriptions: {
+        300: {
+          tally: {},
+          override: { key: '111000', candidate: { description: 'Practice-wide decision' } },
+          overrideSetAt: '2026-07-01T09:00:00Z',
+        },
+      },
+      conceptRemap: {},
+    };
+    const localCleared = {
+      preferredDescriptions: { 300: { tally: {}, override: null, overrideCleared: '2026-07-30T09:00:00Z' } },
+      conceptRemap: {},
+    };
+    const attended = problemDescriptionCleanupMergeForPublish(existingShared, localCleared);
+    check(
+      attended.preferredDescriptions['300'].override === null &&
+        attended.preferredDescriptions['300'].overrideCleared === '2026-07-30T09:00:00Z',
+      'publish merge (attended): a local Clear-override removes the practice-wide override and publishes the tombstone'
+    );
+    const unattended = problemDescriptionCleanupMergeForPublish(existingShared, localCleared, {
+      includeOverride: false,
+    });
+    check(
+      unattended.preferredDescriptions['300'].override?.key === '111000',
+      'publish merge (includeOverride:false): an unattended daily publish never un-enforces the practice-wide override'
+    );
+  }
+
+  console.log('\n--- lastUsed: the side that HAS a value wins when the other lacks one ---');
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    300: { tally: { 111111: { candidate: {}, count: 1, lastUsed: '2026-01-01T00:00:00Z' } } },
+  };
+  await problemDescriptionCleanupImport({
+    preferredDescriptions: { 300: { tally: { 111111: { candidate: {}, count: 1 } } } },
+  });
+  check(
+    store['pdc.preferredDescriptions']['300'].tally['111111'].lastUsed === '2026-01-01T00:00:00Z',
+    'lastUsed: a local timestamp is kept when the incoming row carries none (was dropped to undefined)'
+  );
+  reset();
+  store['pdc.preferredDescriptions'] = {
+    300: { tally: { 111111: { candidate: {}, count: 1 } } },
+  };
+  await problemDescriptionCleanupImport({
+    preferredDescriptions: {
+      300: { tally: { 111111: { candidate: {}, count: 1, lastUsed: '2026-02-02T00:00:00Z' } } },
+    },
+  });
+  check(
+    store['pdc.preferredDescriptions']['300'].tally['111111'].lastUsed === '2026-02-02T00:00:00Z',
+    'lastUsed: the incoming timestamp is adopted when the local row carries none'
   );
 
   console.log('\n--- problemDescriptionCleanupMergeForPublish: tally reconciles via max(), never adds ---');

@@ -463,12 +463,15 @@ function makeProfile(over = {}) {
   check(store['triagelens.config'].oirTests.length === 1 && store['triagelens.config'].oirTests[0].key === 'new',
     'triage replace: old oirTests entries wiped, replaced wholesale (unchanged behaviour)');
 
-  // ── Triage Lens merge: retiredOirKeys removes a superseded key ─────────────
-  // 2026-07-31 fix: an edited test republishes under a NEW key (rotated at
-  // publish time) plus lists the old key in retiredOirKeys, so the apply side
-  // must explicitly drop the old key rather than leaving stale duplicate
-  // content forever.
-  console.log('\n--- triage merge: retiredOirKeys removes the superseded key ---');
+  // ── Triage Lens merge: retirement is CONTENT-AWARE ────────────────────────
+  // An edited test republishes under a NEW key (rotated at publish time,
+  // shared/io/oir-key-rotation.js) and the superseded PUBLISHED content travels
+  // with it in retiredOirTests. The apply side may only drop a local test whose
+  // content still equals that superseded copy — a local test under the same key
+  // with DIFFERENT content is a clinician's own edit and must survive (a blind
+  // key filter destroyed it, including the publisher's own newest edit via its
+  // self-apply).
+  console.log('\n--- triage merge: retiredOirTests removes only an UNEDITED superseded copy ---');
   reset();
   store['triagelens.config'] = {
     version: 7,
@@ -485,6 +488,7 @@ function makeProfile(over = {}) {
         triage: {
           config: {
             oirTests: [{ key: 'crp-2', label: 'CRP', pattern: 'fresh' }],
+            retiredOirTests: [{ key: 'crp', test: { label: 'CRP', pattern: 'stale' } }],
             retiredOirKeys: ['crp'],
           },
         },
@@ -494,7 +498,7 @@ function makeProfile(over = {}) {
   const rRetire = await PP.applyProfile(retireProfile);
   check(rRetire.modulesApplied.includes('triage'), 'triage merge: retirement + append counts as applied');
   check(store['triagelens.config'].oirTests.find(t => t.key === 'crp') === undefined,
-    'triage merge: retired key removed from local oirTests');
+    'triage merge: an unedited copy of the superseded content is removed');
   check(store['triagelens.config'].oirTests.find(t => t.key === 'crp-2')?.pattern === 'fresh',
     'triage merge: rotated replacement key appended');
   check(store['triagelens.config'].oirTests.find(t => t.key === 'untouched') !== undefined,
@@ -502,19 +506,64 @@ function makeProfile(over = {}) {
   check(store['triagelens.config'].oirTests.length === 2,
     'triage merge: net count reflects one retired + one added (2, not 3)');
 
-  // ── Triage Lens merge: retiredOirKeys alone (no new oirTests) still applies ─
-  console.log('\n--- triage merge: retiredOirKeys with no accompanying oirTests still removes the key ---');
+  console.log('\n--- triage merge: a LOCALLY EDITED test under a retired key is NEVER deleted ---');
+  reset();
+  store['triagelens.config'] = {
+    version: 7,
+    oirTests: [{ key: 'crp', label: 'CRP', pattern: 'MY OWN LOCAL EDIT' }],
+  };
+  const retireEditedProfile = makeProfile({
+    profileVersion: 'tr-4b',
+    apply: { modules: { triage: 'merge' } },
+    envelope: {
+      modules: {
+        triage: {
+          config: {
+            oirTests: [{ key: 'crp-2', label: 'CRP', pattern: 'fresh' }],
+            retiredOirTests: [{ key: 'crp', test: { label: 'CRP', pattern: 'stale' } }],
+            retiredOirKeys: ['crp'],
+          },
+        },
+      },
+    },
+  });
+  await PP.applyProfile(retireEditedProfile);
+  check(store['triagelens.config'].oirTests.find(t => t.key === 'crp')?.pattern === 'MY OWN LOCAL EDIT',
+    "triage merge: the clinician's own edit under the retired key is preserved, not silently deleted");
+  check(store['triagelens.config'].oirTests.find(t => t.key === 'crp-2') !== undefined,
+    'triage merge: the rotated replacement still appends, so both are visible for human reconciliation');
+
+  console.log('\n--- triage merge: a legacy bare retiredOirKeys entry never deletes blindly ---');
+  reset();
+  store['triagelens.config'] = {
+    version: 7,
+    oirTests: [{ key: 'obsolete', label: 'Obsolete', pattern: 'gone' }],
+  };
+  const legacyRetireProfile = makeProfile({
+    profileVersion: 'tr-5',
+    apply: { modules: { triage: 'merge' } },
+    envelope: {
+      modules: { triage: { config: { retiredOirKeys: ['obsolete'] } } },
+    },
+  });
+  const rLegacy = await PP.applyProfile(legacyRetireProfile);
+  check(!rLegacy.modulesApplied.includes('triage'),
+    'triage merge: a bare key list carries no superseded content, so nothing can be proven stale -> no-op');
+  check(store['triagelens.config'].oirTests.length === 1,
+    'triage merge: legacy bare retiredOirKeys leaves local content alone (fail toward preserving local edits)');
+
+  console.log('\n--- triage merge: retiredOirTests alone (no accompanying oirTests) still retires ---');
   reset();
   store['triagelens.config'] = {
     version: 7,
     oirTests: [{ key: 'obsolete', label: 'Obsolete', pattern: 'gone' }],
   };
   const retireOnlyProfile = makeProfile({
-    profileVersion: 'tr-5',
+    profileVersion: 'tr-5b',
     apply: { modules: { triage: 'merge' } },
     envelope: {
       modules: {
-        triage: { config: { retiredOirKeys: ['obsolete'] } },
+        triage: { config: { retiredOirTests: [{ key: 'obsolete', test: { label: 'Obsolete', pattern: 'gone' } }] } },
       },
     },
   });
@@ -522,7 +571,65 @@ function makeProfile(over = {}) {
   check(rRetireOnly.modulesApplied.includes('triage'), 'triage merge: pure retirement counts as applied');
   check(store['triagelens.config'].oirTests.length === 0, 'triage merge: pure retirement empties the retired key out');
 
-  // ── Triage Lens merge: no retiredOirKeys, no new oirTests -> no-op, unapplied
+  // ── Triage Lens merge: built-in-key overrides update IN PLACE ─────────────
+  // A disable/extend entry keyed by a built-in test key is never rotated (the
+  // key IS the semantics — mergeTestDefs applies it by key). It can therefore
+  // only reach other machines as an in-place update, and only when the local
+  // copy is provably the previously published one.
+  console.log('\n--- triage merge: built-in-key override updates in place when the local copy is unedited ---');
+  reset();
+  store['triagelens.config'] = {
+    version: 7,
+    oirTests: [{ key: 'fbc', disabled: false, req: ['old lab name'] }],
+  };
+  const builtinUpdateProfile = makeProfile({
+    profileVersion: 'tr-7',
+    apply: { modules: { triage: 'merge' } },
+    envelope: {
+      modules: {
+        triage: {
+          config: {
+            oirTests: [{ key: 'fbc', disabled: true, req: [] }],
+            supersededOirTests: [{ key: 'fbc', test: { disabled: false, req: ['old lab name'] } }],
+          },
+        },
+      },
+    },
+  });
+  const rBuiltin = await PP.applyProfile(builtinUpdateProfile);
+  check(rBuiltin.modulesApplied.includes('triage'), 'triage merge: in-place built-in update counts as applied');
+  check(store['triagelens.config'].oirTests.length === 1,
+    'triage merge: the built-in override is updated in place, never duplicated under a rotated key');
+  check(store['triagelens.config'].oirTests[0].key === 'fbc' && store['triagelens.config'].oirTests[0].disabled === true,
+    'triage merge: the published built-in override replaces the previously published copy');
+
+  console.log('\n--- triage merge: a locally edited built-in-key override is kept, not overwritten ---');
+  reset();
+  store['triagelens.config'] = {
+    version: 7,
+    oirTests: [{ key: 'fbc', disabled: false, req: ['MY OWN LOCAL TERM'] }],
+  };
+  const builtinEditedProfile = makeProfile({
+    profileVersion: 'tr-7b',
+    apply: { modules: { triage: 'merge' } },
+    envelope: {
+      modules: {
+        triage: {
+          config: {
+            oirTests: [{ key: 'fbc', disabled: true, req: [] }],
+            supersededOirTests: [{ key: 'fbc', test: { disabled: false, req: ['old lab name'] } }],
+          },
+        },
+      },
+    },
+  });
+  const rBuiltinEdited = await PP.applyProfile(builtinEditedProfile);
+  check(store['triagelens.config'].oirTests[0].req[0] === 'MY OWN LOCAL TERM',
+    'triage merge: a local edit under a built-in key wins over the incoming in-place update');
+  check(!rBuiltinEdited.modulesApplied.includes('triage'),
+    'triage merge: nothing changed -> not marked applied');
+
+  // ── Triage Lens merge: no retirement, no new tests -> no-op, unapplied ─────
   console.log('\n--- triage merge: neither retirement nor new tests -> not marked applied ---');
   reset();
   store['triagelens.config'] = {
@@ -539,6 +646,70 @@ function makeProfile(over = {}) {
   const rNoop = await PP.applyProfile(noopProfile);
   check(!rNoop.modulesApplied.includes('triage'), 'triage merge: genuinely nothing to do -> not marked applied');
   check(store['triagelens.config'].oirTests.length === 1, 'triage merge: local oirTests untouched by true no-op');
+
+  // ── OIR content equality: the two implementations must stay in step ────────
+  // practice-profile.js keeps a private copy of the comparison because it is
+  // imported into the service worker, which cannot load oir-key-rotation.js.
+  console.log('\n--- OIR content equality: practice-profile and oir-key-rotation agree ---');
+  {
+    const ROT = require('./shared/io/oir-key-rotation.js');
+    const pairs = [
+      [{ key: 'a', label: 'X', req: ['1'] }, { key: 'b', label: 'X', req: ['1'] }],
+      [{ key: 'a', label: 'X', req: ['1'] }, { key: 'a', label: 'X', req: ['2'] }],
+      [{ key: 'a', label: 'X', req: ['1'] }, { req: ['1'], label: 'X', key: 'zzz' }],
+      [{ key: 'a', disabled: true }, { key: 'a', disabled: false }],
+      [null, null],
+      [{ key: 'a' }, null],
+    ];
+    const agree = pairs.every(([x, y]) => PP.oirTestContentEqual(x, y) === ROT.testContentEqual(x, y));
+    check(agree, 'both content-equality implementations return the same verdict on every shape tested');
+  }
+
+  // ── Version gate is ORDERING-AWARE, not just equality-aware ───────────────
+  // profileVersion is 'YYYY-MM-DD.N'. Applying an OLDER shared file (a restored
+  // or rolled-back copy on the network drive) would re-run retirement against
+  // stale content, so an older version is skipped with a logged reason.
+  console.log('\n--- version ordering: an OLDER shared profile is not applied ---');
+  reset();
+  store['suite.practiceProfile'] = { lastAppliedVersion: '2026-07-30.2' };
+  const olderProfile = makeProfile({
+    profileVersion: '2026-07-30.1',
+    apply: { modules: { sentinel: 'merge' } },
+    envelope: { modules: { sentinel: { config: { density: 'compact' } } } },
+  });
+  const rOlder = await PP.applyProfile(olderProfile);
+  check(rOlder.skipped, 'an older same-day sequence number is skipped');
+  check(/older/i.test(rOlder.reason || ''), 'skip reason names the ordering problem');
+  check(store['sentinel.config'] === undefined, 'nothing was written by the skipped older profile');
+
+  const olderDayProfile = makeProfile({
+    profileVersion: '2026-07-29.9',
+    apply: { modules: { sentinel: 'merge' } },
+    envelope: { modules: { sentinel: { config: { density: 'compact' } } } },
+  });
+  check((await PP.applyProfile(olderDayProfile)).skipped, 'an earlier DATE is skipped even with a higher sequence');
+
+  const newerProfile = makeProfile({
+    profileVersion: '2026-07-31.1',
+    apply: { modules: { sentinel: 'merge' } },
+    envelope: { modules: { sentinel: { config: { density: 'compact' } } } },
+  });
+  check(!(await PP.applyProfile(newerProfile)).skipped, 'a newer version still applies');
+
+  reset();
+  store['suite.practiceProfile'] = { lastAppliedVersion: '2026-07-30.2' };
+  check(!(await PP.applyProfile(olderProfile, { force: true })).skipped,
+    'force:true (the explicit Apply-now button) still re-applies an older profile');
+
+  reset();
+  store['suite.practiceProfile'] = { lastAppliedVersion: 'v1.9' };
+  const unorderableProfile = makeProfile({
+    profileVersion: 'v1.2',
+    apply: { modules: { sentinel: 'merge' } },
+    envelope: { modules: { sentinel: { config: { density: 'compact' } } } },
+  });
+  check(!(await PP.applyProfile(unorderableProfile)).skipped,
+    'versions that are not YYYY-MM-DD.N cannot be ordered -> unchanged behaviour, still applies');
 
   // ── Sentinel: alertLibraryAcknowledged stripped in both modes ─────────────
   console.log('\n--- sentinel: alertLibraryAcknowledged stripped ---');
