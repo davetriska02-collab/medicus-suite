@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.210.0] — 2026-08-01
+
+### Document Coder: delta engine (candidate vs coded record) + VISION.md truth fix
+
+`engine/letter-delta.js` — the "is this already coded?" half of the Document
+Coder, pure and unwired like the extractor. Per candidate it returns
+probable-match (always WITH the matched problem shown, never a silent
+"nothing to do"), qualifier-conflict (same condition, different stage or
+laterality — the CKD 3a→3b war story gets its own flag class that outranks a
+match), status-conflict (letter says resolved vs record active, and the
+reverse recurrence direction), or possibly-new with the nearest miss shown.
+Matching is deliberately high-precision text logic (fail direction:
+uncertain → possibly-new): normalised/token-set equality, a 19-entry curated
+acronym list (AF, T2DM, CKD…), and subset matching gated by a
+qualifier-word lexicon — its own red-team probe found and killed the
+dangerous direction first ("Hypertension" matching "PULMONARY hypertension",
+"Diabetes" matching "Diabetes INSIPIDUS", "Anaemia" matching "IRON
+DEFICIENCY anaemia" — all now possibly-new, while "Asthma - mild" and "HF
+with preserved ejection fraction" still match). GP2GP token-order variants
+match; laterality right-vs-left conflicts; conceptId/ancestor hierarchy
+proof composes at the caller when wired. 21 checks in
+`test-letter-delta.js` including the completion-language source guard.
+
+`docs/VISION.md` — corrected the stale "writes nothing back / read-only"
+claims (flagged by the Gauntlet and the delegated review as the same class
+of error the v3.202.0 re-freeze exists to kill) to the display-first +
+enumerated-user-initiated-writes reality of INTENDED-PURPOSE v3.202.0, and
+re-grounded the status line at v3.209.x.
+
 ## [v3.209.3] — 2026-08-01
 
 ### Document Coder engine: action-flag scanner red-teamed (21 probes, 17 failed, all fixed)
