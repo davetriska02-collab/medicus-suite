@@ -224,6 +224,39 @@
     };
   }
 
+  // The neutral label removeCardFromTree writes over BOTH sides of a relationship when a card is
+  // dragged off the tree. Named, rather than inlined at the two write sites, because it also has to
+  // be RECOGNISED later: buildConfirmForCard uses it to tell a reciprocal that's genuinely recorded
+  // from a reciprocal this canvas itself neutralised and hasn't repaired yet (see there). Matched
+  // case- and whitespace-insensitively on the way back in — the text makes a round trip through
+  // Medicus and a GP may well have tidied it by hand in between.
+  const PLACEHOLDER_RELATIONSHIP_TEXT = 'Family member';
+  function isPlaceholderRelationshipText(text) {
+    return (
+      String(text || '')
+        .trim()
+        .toLowerCase() === PLACEHOLDER_RELATIONSHIP_TEXT.toLowerCase()
+    );
+  }
+
+  // anyWriteInFlight() — true while ANY of this canvas's write paths is mid-flight. Every write
+  // here is a GET-current-state-then-POST-full-replace pair against a patient-contact record, and
+  // two of them overlapping on the same record silently reverts whichever fields the second one's
+  // GET read before the first one's POST landed (e.g. a flag drag and a confirm's relationship
+  // update on the same contact — the flag write's own GET predates the relationship write, so its
+  // full replace puts the old relationship text back). The write entry points reachable from a drag
+  // or a click therefore refuse to START while another is running, rather than trying to reason
+  // about which pairs are actually safe: the cost of being wrong is a silently reverted clinical
+  // field on someone's record, and the cost of over-blocking is one repeated drag. Deliberately
+  // coarse — two flag writes on DIFFERENT cards are blocked too, even though they touch different
+  // records — because "which record does this write actually land on" is exactly the thing the
+  // per-path guards each already answer differently, and a shared guard that has to be re-reasoned
+  // per caller is the one that eventually gets it wrong.
+  function anyWriteInFlight() {
+    if (!cs) return false;
+    return !!(cs.confirming || cs.flagUpdating.size || cs.reciprocalDowngrading.size || cs.addressMerging.size);
+  }
+
   // ── Data loading ──────────────────────────────────────────────────────────────────────────────
 
   function candidateAgeFromDob(dateOfBirth) {
@@ -1819,11 +1852,23 @@
     // false in buildConfirmForCard). Shown whenever a reverse write will actually fire — i.e.
     // independent of whether the LEFT column's picker is showing, since confirming a NEW reverse
     // link for an ALREADY-recognised forward relationship is a real, valid case.
-    const reverseColumnBody = cs.confirm.existingReciprocal
-      ? `<div class="ms-ct-warn">${esc(candidateName)} already lists this patient as their own contact (recorded as "${esc(cs.confirm.existingReciprocal.patientContactRelationship)}") — no reverse link will be created.</div>`
-      : cs.confirm.reverseAmbiguous
-        ? `<div class="ms-ct-note">Reverse relationship not auto-suggested (gender not recorded) — use the wizard for this case.</div>`
-        : `<div class="ms-cv-confirm-reverse-label">${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}</div>
+    //
+    // The reciprocal-repair case gets its own branch ahead of both: the reverse record EXISTS but
+    // this canvas neutralised it (buildConfirmForCard's reciprocalNeedsRepair), so neither "already
+    // lists this patient — no reverse link will be created" nor the normal new-link column with its
+    // NOK/copy checkboxes is true. The repair is an update of the relationship text only —
+    // performLinkAndCleanup deliberately preserves that record's existing next-of-kin and
+    // copy-correspondence values rather than applying this panel's reverse checkboxes — so offering
+    // those checkboxes here would promise a write that never happens.
+    const reverseColumnBody = cs.confirm.reciprocalNeedsRepair
+      ? cs.confirm.reverseBaseId
+        ? `<div class="ms-ct-warn">${esc(candidateName)}'s own record currently reads “${esc(PLACEHOLDER_RELATIONSHIP_TEXT)}” (it was reset when they were removed from the tree). Confirming corrects it to “${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}”. Their next-of-kin and copy-correspondence settings are left exactly as they are.</div>`
+        : `<div class="ms-ct-warn">${esc(candidateName)}'s own record currently reads “${esc(PLACEHOLDER_RELATIONSHIP_TEXT)}” (it was reset when they were removed from the tree), and the reverse relationship can't be worked out automatically (gender not recorded) — it will stay as it is. Correct it on their own record in Medicus.</div>`
+      : cs.confirm.existingReciprocal
+        ? `<div class="ms-ct-warn">${esc(candidateName)} already lists this patient as their own contact (recorded as "${esc(cs.confirm.existingReciprocal.patientContactRelationship)}") — no reverse link will be created.</div>`
+        : cs.confirm.reverseAmbiguous
+          ? `<div class="ms-ct-note">Reverse relationship not auto-suggested (gender not recorded) — use the wizard for this case.</div>`
+          : `<div class="ms-cv-confirm-reverse-label">${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}</div>
            <label><input type="checkbox" id="ms-cv-rev-nok" ${cs.confirm.reverseIsNextOfKin ? 'checked' : ''}/> Next of kin</label>
            <div class="ms-ct-note">This will record ${esc(indexName)} as ${esc(candidateName)}'s next of kin.</div>
            <label><input type="checkbox" id="ms-cv-rev-copy" ${cs.confirm.reverseCopyCorrespondence ? 'checked' : ''}/> Copy correspondence</label>
@@ -2104,11 +2149,17 @@
 
   // renderRemoveZone — dedicated drop target for unplacing a card dropped in the wrong slot by
   // mistake (removeCardFromTree). Only a locked/tree-placed card is a valid drag source for this
-  // (cardHtml's data-removable) — nothing about the link itself is affected, so no confirmation
-  // dialog, matching this canvas's own convention that a purely local action needs none.
+  // (cardHtml's data-removable).
+  //
+  // This is NOT the purely-local action the copy here used to claim ("nothing about the link itself
+  // is affected"). The link survives, but the recorded relationship is overwritten with the
+  // 'Family member' placeholder on BOTH patients' records — including one the GP isn't looking at
+  // and won't see the result of. A degrading write on two clinical records is exactly the kind of
+  // thing this canvas's "a purely local action needs no confirmation" convention does not cover, so
+  // removeCardFromTree asks first and the copy below states the consequence rather than reassuring.
   function renderRemoveZone() {
     return `
-      <div class="ms-cv-remove-zone" data-remove-zone="true" title="Their link isn't deleted — you can drag them back onto the right spot afterwards.">
+      <div class="ms-cv-remove-zone" data-remove-zone="true" title="Their link isn’t deleted, but the recorded relationship is reset to ‘Family member’ on both this patient’s record and theirs until you drop them onto the right spot and confirm it. You’ll be asked to confirm first.">
         <span class="ms-ct-note">Drop here to remove from tree</span>
       </div>
     `;
@@ -2699,6 +2750,13 @@
       return;
     }
     if (st.addressMerging.has(groupKey)) return; // already mid-merge — never fire the deletes twice
+    // Shared cross-write guard — see anyWriteInFlight(). A button, so it says why rather than
+    // going quiet; the group's own selection is untouched and Merge can simply be pressed again.
+    if (anyWriteInFlight()) {
+      st.addressMergeError = 'Another change is still saving — wait for it to finish, then merge again.';
+      render();
+      return;
+    }
     st.addressMergeError = null;
     st.addressMerging.add(groupKey);
     render();
@@ -2781,6 +2839,20 @@
   // new endpoint needed — this is the same write path used to correct an unrecognised relationship
   // label, just changing a different field.
   async function setContactFlag(cardId, flagKind, value) {
+    // Shared cross-write guard (anyWriteInFlight) — silently declined rather than errored: this is
+    // reached by dropping a token or clicking a badge, and the honest response to "not right now"
+    // is for the gesture simply not to take, the same as dropping a card on empty space. Checked
+    // before anything at all is mutated below.
+    if (anyWriteInFlight()) return;
+    const lc = cs.linkedCards.find((c) => c.id === cardId);
+    if (!lc) return;
+    const key = flagKind === 'nok' ? 'isNextOfKin' : 'copyCorrespondence';
+    // The no-op check runs BEFORE the clearing below, not after it: dropping NOK onto a contact
+    // who is already NOK changes nothing, so it must not also dismiss the success panel or the
+    // still-unanswered "remove their manual duplicate?" offer left by an earlier confirm. Found in
+    // review — the clearing used to run first, so a misdrop that did nothing at all silently threw
+    // away a pending decision.
+    if (lc[key] === value) return;
     // A stale "done" summary from a PREVIOUS confirm takes priority in renderConfirmPanel over
     // workingError — without clearing it here, a genuinely new error from THIS action would be
     // set correctly but invisible, hidden behind the old success panel. Same fix as tryAssign's
@@ -2788,15 +2860,11 @@
     cs.doneSummary = null;
     cs.reverseManualMatch = null;
     cs.reverseManualMatchError = null;
-    const lc = cs.linkedCards.find((c) => c.id === cardId);
-    if (!lc) return;
     if (!lc.relationshipId) {
       cs.workingError = 'This link was created earlier in this session — refresh the page before flagging it.';
       render();
       return;
     }
-    const key = flagKind === 'nok' ? 'isNextOfKin' : 'copyCorrespondence';
-    if (lc[key] === value) return;
     const st = cs;
     const flagKey = `${cardId}:${flagKind}`;
     if (st.flagUpdating.has(flagKey)) return;
@@ -2903,11 +2971,45 @@
   // (rather than only for a same-session write) — a pre-existing linked contact dragged into the
   // wrong slot is the MORE common case this feature is for, not a same-session mistake, and its
   // reciprocal long predates this canvas session with no id cached for it yet.
+  //
+  // CONFIRMED FIRST, and the confirm states the consequence rather than the mechanism (see
+  // renderRemoveZone): a bare drag used to degrade two clinical records with no prompt at all, one
+  // of them a patient the GP isn't looking at and gets no feedback about. The "purely local action
+  // needs no confirmation" convention this was originally filed under simply doesn't describe what
+  // it does.
+  //
+  // The downgrade is also RECORDED on the card (`downgradedToPlaceholder`, carrying both
+  // relationship ids as they land) — that marker is what lets a later re-drop actually repair the
+  // OTHER side. Without it, buildConfirmForCard sees the still-present (just retitled) reciprocal
+  // in its load-time snapshot, reads it as "there's already a reverse link, leave it alone", and
+  // the off-screen record keeps reading 'Family member' permanently while the summary claims it was
+  // left untouched. Recorded per side, only once that side's write has actually landed — a marker
+  // claiming a downgrade that never happened would route the re-drop into an update against a
+  // record that isn't in that state.
   async function removeCardFromTree(cardId) {
     if (!cs.tree) return;
     const edge = cs.tree.edges.find((e) => e.cardId === cardId);
     if (!edge) return;
     const lc = cs.linkedCards.find((c) => c.id === cardId);
+    // Shared cross-write guard — see anyWriteInFlight(). Silently declined, same as setContactFlag:
+    // this is a drag gesture, and it can simply not take.
+    if (anyWriteInFlight()) return;
+    const otherName = (lc && lc.name) || 'this contact';
+    // Asked BEFORE anything is cleared or written, so cancelling leaves the canvas exactly as it
+    // was — including any success panel or unanswered offer already on screen. Spells out which
+    // button does what, matching confirmDiscardUnfinishedMerge: window.confirm's OK/Cancel carry no
+    // inherent meaning of their own.
+    if (
+      lc &&
+      !window.confirm(
+        `Remove ${otherName} from the family tree?\n\n` +
+          `They stay linked, but the recorded relationship is overwritten on BOTH records: this patient's record and ${otherName}'s own record will both read "${PLACEHOLDER_RELATIONSHIP_TEXT}" instead. Anyone reading either record — including whoever opens ${otherName}'s record, who won't see any of this — sees "${PLACEHOLDER_RELATIONSHIP_TEXT}" until you drop them back onto the right spot and confirm it.\n\n` +
+          'Click CANCEL to leave both records as they are.\n' +
+          `Click OK to remove ${otherName} from the tree and set both records to "${PLACEHOLDER_RELATIONSHIP_TEXT}".`
+      )
+    ) {
+      return;
+    }
     const st = cs;
     // A stale "done" summary from a PREVIOUS confirm takes priority in renderConfirmPanel over
     // workingError — found live: this action's own write can fail with NO visible error at all if
@@ -2923,6 +3025,18 @@
       st.reciprocalDowngrading.add(cardId);
       st.workingError = null;
       render();
+      // Which side has actually been overwritten so far. Drives both the downgrade marker
+      // buildConfirmForCard keys the repair off, and the failure copy below — either POST can be
+      // the one that fails, and the old copy read identically whichever it was.
+      let forwardDowngraded = false;
+      let reciprocalDowngraded = false;
+      const markDowngraded = (patch) => {
+        lc.downgradedToPlaceholder = Object.assign(
+          { forwardRelationshipId: null, reciprocalRelationshipId: null },
+          lc.downgradedToPlaceholder,
+          patch
+        );
+      };
       try {
         const ctx = window.ContactsApi.resolveContext();
         if (!ctx || ctx.patientId !== st.patientId) {
@@ -2933,13 +3047,15 @@
             st.apiBase,
             lc.relationshipId,
             { patientContactPatientId: cardId },
-            'Family member'
+            PLACEHOLDER_RELATIONSHIP_TEXT
           );
           if (st !== cs) return;
           lc.baseId = null;
           lc.modifierId = null;
-          lc.relationshipText = 'Family member';
-          lc.colour = colourForRelationshipText('Family member');
+          lc.relationshipText = PLACEHOLDER_RELATIONSHIP_TEXT;
+          lc.colour = colourForRelationshipText(PLACEHOLDER_RELATIONSHIP_TEXT);
+          forwardDowngraded = true;
+          markDowngraded({ forwardRelationshipId: lc.relationshipId });
         }
         let reciprocalId = lc.reciprocalRelationshipId;
         if (!reciprocalId) {
@@ -2955,14 +3071,37 @@
             st.apiBase,
             reciprocalId,
             { patientContactPatientId: st.patientId },
-            'Family member'
+            PLACEHOLDER_RELATIONSHIP_TEXT
           );
           if (st !== cs) return;
           lc.reciprocalRelationshipId = reciprocalId;
+          reciprocalDowngraded = true;
+          // The id is captured HERE, at the moment the write lands, rather than re-derived at
+          // re-drop time — by then the only trace on the index patient's own snapshot is the
+          // placeholder text, and the record it belongs to lives on the other patient's file.
+          markDowngraded({ reciprocalRelationshipId: reciprocalId });
         }
       } catch (err) {
         if (st === cs) {
-          st.workingError = `Removed from the tree, but couldn't fully reset their relationship text on Medicus: ${err.message || 'unknown error'}. You may want to check it directly in Medicus before re-placing them.`;
+          const reason = err.message || 'unknown error';
+          // Say WHICH side landed. The old copy ("Removed from the tree, but couldn't fully reset
+          // their relationship text") printed identically whether the forward write had already
+          // succeeded or was itself the thing that failed — so a GP couldn't tell whether this
+          // patient's own record had already been overwritten, which is the one they can check.
+          const landed = [];
+          if (forwardDowngraded) landed.push("this patient's own record");
+          if (reciprocalDowngraded) landed.push(`${otherName}'s own record`);
+          const outstanding = [];
+          if (!forwardDowngraded) outstanding.push("this patient's own record");
+          if (!reciprocalDowngraded) outstanding.push(`${otherName}'s own record`);
+          st.workingError =
+            `Removed from the tree. ` +
+            (landed.length
+              ? `The relationship now reads "${PLACEHOLDER_RELATIONSHIP_TEXT}" on ${landed.join(' and ')}. `
+              : 'Nothing was changed on Medicus. ') +
+            `Resetting ${outstanding.join(' and ')} failed: ${reason}. Check ${
+              outstanding.length === 1 ? 'it' : 'them'
+            } in Medicus before re-placing them.`;
         }
       } finally {
         if (st === cs) st.reciprocalDowngrading.delete(cardId);
@@ -3079,9 +3218,36 @@
         modifierId = null;
       }
     }
+    // ── Does the reciprocal need REPAIRING rather than leaving alone? ────────────────────────────
+    // A reciprocal that removeCardFromTree downgraded to the placeholder is still PRESENT in
+    // cs.indexPatientDetails' load-time snapshot — that write retitles the record, it doesn't
+    // remove it — so `existingReciprocal` on its own reads as "there's already a reverse link, no
+    // reverse write needed", reverseBaseId stays null, and the re-drop this whole flow promises
+    // ("drag it off, drop it on the right spot, both sides get fixed") never touches the other
+    // side at all. The off-screen patient's record then reads 'Family member' permanently while
+    // the summary claims their existing reverse link was left untouched. Two independent signals,
+    // either is enough:
+    //   - the card's own downgrade marker, written by removeCardFromTree as each side landed —
+    //     the reliable one, and the only one that carries the reciprocal record's own id;
+    //   - the snapshot's own relationship text already reading as the placeholder — covers a
+    //     downgrade done in an EARLIER canvas session, whose card carries no marker at all.
+    // The id is what routes this through an update-in-place. Without one nothing may be written:
+    // the record still exists, so a fresh linkPatient create would duplicate the relationship on a
+    // record the GP isn't even looking at. doCanvasConfirm resolves a missing id with one bounded
+    // fetch immediately before writing (and drops the reverse half entirely if it can't), rather
+    // than this synchronous builder guessing.
+    const downgrade = (medicusCard && medicusCard.downgradedToPlaceholder) || null;
+    const reciprocalRelationshipId =
+      (downgrade && downgrade.reciprocalRelationshipId) ||
+      (medicusCard && medicusCard.reciprocalRelationshipId) ||
+      null;
+    const reciprocalNeedsRepair = !!(
+      existingReciprocal &&
+      (downgrade || isPlaceholderRelationshipText(existingReciprocal.patientContactRelationship))
+    );
     let reverseBaseId = null;
     let reverseAmbiguous = false;
-    if (!existingReciprocal) {
+    if (!existingReciprocal || reciprocalNeedsRepair) {
       const indexGender =
         cs.indexPatientDetails.patientDetailsSection && cs.indexPatientDetails.patientDetailsSection.genderIdentity;
       const inv = CR.invertRelationship({ baseId, modifierId, indexGender });
@@ -3107,11 +3273,17 @@
       reverseCopyCorrespondence: false,
       existingReciprocal,
       existingForwardLink,
-      // Set only when THIS canvas already knows the reciprocal relationship's own id — currently
-      // only ever learned by removeCardFromTree's downgrade-to-"Family member" step (see there).
-      // Tells doCanvasConfirm to correct it via an update-in-place instead of a fresh linkPatient
+      // Set when THIS canvas already knows the reciprocal relationship's own id — learned either
+      // by removeCardFromTree's downgrade step (which captures it as the write lands) or by
+      // doCanvasConfirm's own follow-up resolve after creating a reverse link. Tells
+      // doCanvasConfirm to correct it via an update-in-place instead of a fresh linkPatient
       // create, which would collide with the still-existing (just retitled) record.
-      reciprocalRelationshipId: (medicusCard && medicusCard.reciprocalRelationshipId) || null,
+      reciprocalRelationshipId,
+      // The reciprocal is present but neutralised (see the block above) — so it is a reverse write
+      // waiting to happen, not a reason to skip one. doCanvasConfirm resolves the id if it's
+      // missing; renderConfirmPanel uses this to say what confirming will actually do to the other
+      // patient's record rather than the old flat "no reverse link will be created".
+      reciprocalNeedsRepair,
     };
   }
 
@@ -3214,16 +3386,23 @@
         ),
         label: 'the corrected relationship on the existing link',
       },
+      // The two reverse steps below are mutually exclusive by the SHAPE of the operation, exactly
+      // as performLinkAndCleanup now branches: `reciprocalRelationshipId` present (it's what
+      // doCanvasConfirm passes as reciprocalUpdateId) means the reciprocal record already exists
+      // and gets updated in place; absent means a reverse link gets created. Both then need
+      // reverseBaseId — with none there is no reverse write of either kind, so neither step is
+      // listed. Keeping these conditions keyed on the same field the write path branches on is
+      // what stops the retry message offering a step that can't run.
       {
         done: !!p.reciprocalUpdate,
-        applies: !!(confirm.reverseBaseId && confirm.reciprocalRelationshipId),
+        applies: !!(confirm.reciprocalRelationshipId && confirm.reverseBaseId),
         label: `the corrected reciprocal relationship on ${confirm.candidateDisplayName}'s own record`,
       },
       {
         // reverseAlreadyPresent counts as done: the reverse link is on record, this attempt just
         // (correctly) didn't create it — see performLinkAndCleanup's staleness re-derive.
         done: !!(p.reverseLink || p.reverseAlreadyPresent),
-        applies: !!(confirm.reverseBaseId && !confirm.reciprocalRelationshipId),
+        applies: !!(!confirm.reciprocalRelationshipId && confirm.reverseBaseId),
         label: `the reverse link on ${confirm.candidateDisplayName}'s own record`,
       },
       {
@@ -3244,11 +3423,43 @@
     // rendered disabled below, but the flag is what actually makes a second call impossible — see
     // cs.confirming's own comment for why a duplicate reverse link is the specific hazard.
     if (cs.confirming) return;
+    // Shared cross-write guard — see anyWriteInFlight(). Unlike the drag-driven entry points this
+    // one is a BUTTON, and a button that silently does nothing reads as broken, so it says why. The
+    // pending confirm is left exactly as it is: pressing Confirm again once the other write settles
+    // is all that's needed.
+    if (anyWriteInFlight()) {
+      cs.workingError = 'Another change is still saving — wait for it to finish, then press Confirm again.';
+      render();
+      return;
+    }
     const st = cs;
     st.confirming = true;
     cs.workingError = null;
     render();
     try {
+      // The reciprocal repair (buildConfirmForCard's reciprocalNeedsRepair) can only be done as an
+      // UPDATE — the record still exists on the other patient's own file, just retitled — so it
+      // needs that record's own id. A downgrade done THIS session captured the id as it wrote; one
+      // done in an earlier session left only the placeholder text behind, so resolve it here with
+      // the same single bounded fetch removeCardFromTree uses. If it can't be resolved the reverse
+      // half is dropped from this write entirely rather than falling through to a create: the
+      // record is still there, so a create would either be rejected or duplicate the relationship
+      // on a record the GP isn't even looking at. Written back onto st.confirm so the retry
+      // message (describeLinkProgress) and the write path branch on the same values.
+      if (st.confirm.reciprocalNeedsRepair && !st.confirm.reciprocalRelationshipId) {
+        const candidateDetails = await window.ContactsApi.getPatientDetails(
+          st.apiBase,
+          st.confirm.candidatePatientId
+        ).catch(() => null);
+        if (st !== cs) return;
+        const entry =
+          candidateDetails && window.ContactRelationships.findExistingForwardLink(candidateDetails, st.patientId);
+        st.confirm.reciprocalRelationshipId = (entry && entry.patientContactId) || null;
+        if (!st.confirm.reciprocalRelationshipId) {
+          st.confirm.reverseBaseId = null;
+          st.confirm.reciprocalRepairUnresolved = true;
+        }
+      }
       const result = await window.ContactsApi.performLinkAndCleanup({
         apiBase: st.apiBase,
         patientId: st.patientId,
@@ -3280,12 +3491,16 @@
         reverseIsNextOfKin: st.confirm.reverseIsNextOfKin,
         reverseCopyCorrespondence: st.confirm.reverseCopyCorrespondence,
         existingReciprocal: st.confirm.existingReciprocal,
-        // Set only when this canvas already knows the reciprocal's own id (currently only ever
-        // learned via removeCardFromTree's "downgrade to Family member" step) — routes the reverse
-        // write through an update instead of a fresh create that would collide with the
-        // still-existing, just-retitled record. See performLinkAndCleanup's own comment.
-        reciprocalUpdateId:
-          st.confirm.reverseBaseId && st.confirm.reciprocalRelationshipId ? st.confirm.reciprocalRelationshipId : null,
+        // Set whenever this canvas knows the reciprocal record's own id — learned via
+        // removeCardFromTree's downgrade step, the resolve just above, or an earlier reverse link
+        // created this session. Its PRESENCE is what tells performLinkAndCleanup which reverse
+        // operation this is (update the existing record vs create one), so it is passed on its own
+        // merits and deliberately NOT also gated on reverseBaseId here: gating it made "which
+        // operation is this" depend on a second, independently-changing value, and a params object
+        // that says "create" for an operation that is really an update is exactly how a duplicate
+        // relationship lands on the other patient's record. performLinkAndCleanup checks
+        // reverseBaseId inside the branch instead.
+        reciprocalUpdateId: st.confirm.reciprocalRelationshipId || null,
         manualContactIdToDelete: st.confirm.manualContactIdToDelete,
         // RESUMABLE RETRY (see performLinkAndCleanup): whatever the previous attempt got through
         // before it failed, carried back in so this attempt skips it. Without this, a failure
@@ -3297,7 +3512,14 @@
       });
       if (st !== cs) return;
       st.confirm.linkProgress = null; // fully completed — a later, unrelated confirm must start clean
-      st.doneSummary = result.summary;
+      // performLinkAndCleanup's summary can only describe writes it was ASKED to make. When the
+      // reciprocal repair was dropped for want of an id (see the resolve above) its summary
+      // correctly says the reverse link was left untouched — true, and exactly the problem, since
+      // what it was left AS is the placeholder. Say so here rather than letting a success panel
+      // imply both records are now right.
+      st.doneSummary = st.confirm.reciprocalRepairUnresolved
+        ? `${result.summary} ${st.confirm.candidateDisplayName}'s own record still reads "${PLACEHOLDER_RELATIONSHIP_TEXT}" — that couldn't be corrected from here, so correct it on their record in Medicus.`
+        : result.summary;
       st.reverseManualMatch = result.reverseManualMatch;
       // Remove the linked manual card from column 1 so the canvas reflects the change immediately
       // (Medicus's own page still needs a refresh — same limitation as the wizard).
@@ -3384,6 +3606,13 @@
           existingCard.modifierId = lockedModifierId;
           existingCard.relationshipText = lockedLabel;
           existingCard.colour = colourForRelationshipText(lockedLabel);
+          // The downgrade this re-drop was repairing is now repaired on BOTH sides, so the marker
+          // must go — otherwise a later, unrelated re-drop of this same card would still be treated
+          // as repairing a placeholder that no longer exists, and route its reverse write into an
+          // update when a create is what's needed. Cleared ONLY on proof the reciprocal was
+          // actually rewritten: if that step didn't run, the other record is still sitting on the
+          // placeholder and the marker is still true.
+          if (result.progress && result.progress.reciprocalUpdate) existingCard.downgradedToPlaceholder = null;
         }
         if (st.confirm.reverseBaseId && result.progress && result.progress.reverseLink) {
           // A fresh reverse link was just created — resolve its own relationship id the same
@@ -3471,7 +3700,13 @@
     // ever updates local state, so a GP mid-way through several corrections may want to check
     // Medicus's own contacts card reflects them without leaving the canvas entirely (Close already
     // reloads too, but only once you're actually done and asked to discard any unfinished merge).
-    overlay.querySelector('#ms-cv-refresh-page')?.addEventListener('click', () => location.reload());
+    // Guarded exactly like Close: a reload discards `cs` just as completely as closing does, so an
+    // unfinished merge is just as lost. It was missing here purely because this button was added
+    // later than the guard.
+    overlay.querySelector('#ms-cv-refresh-page')?.addEventListener('click', () => {
+      if (!confirmDiscardUnfinishedMerge()) return;
+      location.reload();
+    });
     // Secondary path to the older inline widget (content-scripts/contacts-link-button.js), kept
     // reachable rather than dropped now the header opens this canvas directly — covers the one
     // thing this canvas doesn't: searching an ARBITRARY other patient (not just ones already
@@ -3494,6 +3729,14 @@
     // below branches on which shape is present, explicitly ignoring shapes it doesn't handle
     // rather than falling through to a merge/assign call with undefined arguments.
     let dragPayload = null;
+    // dragend fires on the SOURCE element after every drag, including one the user abandoned
+    // (Escape, or a drop on nothing) — the only event that does. Without it `dragPayload` stayed
+    // armed after an aborted drag, so a later FOREIGN drag (selected text, a file from the
+    // desktop) dropped on a card sailed past every `if (!dragPayload) return` check and wrote the
+    // abandoned drag's flag to whichever card it landed on.
+    const clearDragPayload = () => {
+      dragPayload = null;
+    };
     overlay.querySelectorAll('.ms-cv-card[draggable="true"]').forEach((el) => {
       el.addEventListener('dragstart', (e) => {
         dragPayload = el.hasAttribute('data-removable')
@@ -3502,6 +3745,7 @@
         e.dataTransfer.setData('text/plain', JSON.stringify(dragPayload));
         e.dataTransfer.effectAllowed = 'move';
       });
+      el.addEventListener('dragend', clearDragPayload);
     });
     overlay.querySelectorAll('.ms-cv-flag-token').forEach((el) => {
       el.addEventListener('dragstart', (e) => {
@@ -3509,63 +3753,125 @@
         e.dataTransfer.setData('text/plain', JSON.stringify(dragPayload));
         e.dataTransfer.effectAllowed = 'copy';
       });
+      el.addEventListener('dragend', clearDragPayload);
     });
+    // dropPayload(e) -> this canvas's OWN payload for a drop, or null. `dragPayload` alone is not
+    // proof of provenance — it's module-local state that says only "a drag started here at some
+    // point", not "THIS drop came from that drag". The copy stashed on the dataTransfer at
+    // dragstart is the proof, and it costs one getData to check, so every drop handler below reads
+    // the payload from the event rather than from the closure variable. Anything that isn't one of
+    // the three shapes this canvas sets is somebody else's drag and is ignored.
+    const dropPayload = (e) => {
+      let raw = '';
+      try {
+        raw = (e.dataTransfer && e.dataTransfer.getData('text/plain')) || '';
+      } catch (_) {
+        return null;
+      }
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        if (!parsed.flagKind && !parsed.removeCardId && !parsed.id) return null;
+        return parsed;
+      } catch (_) {
+        return null; // malformed, or plain dragged text that happens not to be JSON
+      }
+    };
     // Broadened from [draggable="true"] to [data-card-id] — cardHtml now ALWAYS emits data-card-id,
     // since a locked/already-placed card can't be dragged itself but still needs to be a valid drop
     // target for a flag token. Card-to-card merge and flag-token drop share this one handler,
     // branching on the drag payload's shape.
+    //
+    // NESTING, and why these handlers stop propagation. The tree is genuinely nested: a
+    // grandparent's own <li data-slot-path="grandparents" data-card-id="…"> is rendered INSIDE the
+    // parent's <li data-slot-path="parents" data-card-id="…"> (grandparentsPairHtml, called from
+    // parentsBranchHtml), and every occupied <li> wraps its own .ms-cv-card. A single flag drop on
+    // a grandparent card therefore bubbled through three handlers that each thought the drop was
+    // theirs: the card's (correct), the grandparent <li>'s (the same record again), and finally the
+    // PARENT <li>'s — which read its OWN data-card-id and wrote the flag to the parent's
+    // relationship. A different patient's record, silently, with nothing on screen naming them.
+    // Rule from here on: whichever handler acts, acts alone.
     overlay.querySelectorAll('.ms-cv-card[data-card-id]').forEach((el) => {
       el.addEventListener('dragover', (e) => {
         if (!dragPayload) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = dragPayload.flagKind ? 'copy' : dragPayload.removeCardId ? 'none' : 'move';
+        // Same nearest-target-wins rule as the drop below, so the enclosing <li> can't relabel a
+        // drop this card is going to handle (a remove-drag showed as an accepted 'move' over a card
+        // it would then be ignored on, purely because the outer zone overwrote dropEffect).
+        if (dragPayload.flagKind || dragPayload.removeCardId) e.stopPropagation();
       });
       el.addEventListener('drop', (e) => {
         e.preventDefault();
-        if (!dragPayload) return;
-        const targetId = el.getAttribute('data-card-id');
-        if (dragPayload.flagKind) {
-          setContactFlag(targetId, dragPayload.flagKind, true);
+        const payload = dropPayload(e);
+        if (!payload) {
           dragPayload = null;
           return;
         }
-        if (dragPayload.removeCardId) {
+        const targetId = el.getAttribute('data-card-id');
+        if (payload.flagKind) {
+          // THE wrong-record write — see the nesting note above. Stopped here so no enclosing
+          // slot/branch handler ever gets to re-resolve this same drop against its own card id.
+          e.stopPropagation();
+          setContactFlag(targetId, payload.flagKind, true);
+          dragPayload = null;
+          return;
+        }
+        if (payload.removeCardId) {
           // A card being dragged to remove it from the tree was dropped on a regular card, not
-          // the dedicated remove zone — not a valid target for this payload shape; ignore.
+          // the dedicated remove zone — not a valid target for this payload shape; ignore. Stopped
+          // too: "ignore" has to mean ignored, not "ignored here and then handled upstairs".
+          e.stopPropagation();
           dragPayload = null;
           return;
         }
         const targetKind = el.getAttribute('data-card-kind');
-        if (dragPayload.id === targetId && dragPayload.kind === targetKind) return;
-        tryMerge(dragPayload.id, dragPayload.kind, targetId, targetKind);
-        dragPayload = null;
+        if (payload.id === targetId && payload.kind === targetKind) return;
+        // Only a card-to-card merge is this handler's to own. When tryMerge declines the pairing
+        // (e.g. a Medicus card dropped onto an already-placed card) the drop deliberately keeps
+        // bubbling to the slot underneath, which assigns it — that fall-through is the existing,
+        // wanted behaviour, so propagation is stopped only when the merge is actually taken.
+        if (tryMerge(payload.id, payload.kind, targetId, targetKind)) {
+          e.stopPropagation();
+          dragPayload = null;
+        }
       });
     });
 
     overlay.querySelectorAll('.ms-cv-slot[data-slot-path], .ms-cv-tree-branch-item[data-slot-path]').forEach((zone) => {
       zone.addEventListener('dragover', (e) => {
+        // Deliberately NOT gated on `dragPayload` (unlike the card handler above): any render()
+        // rebinds these listeners into a fresh closure with dragPayload back to null, and a drag
+        // that was already in flight when that happened would then stop being accept-able mid-air.
+        // Nothing is written from dragover, and the drop handler below proves provenance from the
+        // event itself, so accepting broadly here costs nothing.
         e.preventDefault();
         e.dataTransfer.dropEffect = zone.getAttribute('data-card-id') ? 'copy' : 'move';
+        e.stopPropagation(); // innermost zone decides the effect — see the nesting note above
       });
       zone.addEventListener('drop', (e) => {
         e.preventDefault();
-        const raw = e.dataTransfer.getData('text/plain');
-        if (!raw) return;
-        try {
-          const payload = JSON.parse(raw);
-          if (payload.flagKind) {
-            // Fallback for whichever of the two nested elements (the inner .ms-cv-card, or this
-            // outer <li>/slot wrapper) the browser's drop event actually resolves onto — both are
-            // valid targets for an occupied tree-branch item (see the <li> data-card-id additions).
-            const cardId = zone.getAttribute('data-card-id');
-            if (cardId) setContactFlag(cardId, payload.flagKind, true);
-            return;
-          }
-          if (payload.removeCardId) return; // not handled here — only the dedicated remove zone
-          tryAssign(payload.id, payload.kind, zone.getAttribute('data-slot-path'));
-        } catch (_) {
-          /* ignore malformed drag payload */
+        const payload = dropPayload(e);
+        if (!payload) return;
+        if (payload.flagKind) {
+          // Fallback for whichever of the two nested elements (the inner .ms-cv-card, or this
+          // outer <li>/slot wrapper) the browser's drop event actually resolves onto — both are
+          // valid targets for an occupied tree-branch item (see the <li> data-card-id additions).
+          // Defence in depth for the nesting note above: the card handler already stops a drop it
+          // owns from reaching here, so if the drop originated inside a card at all, it is not
+          // this zone's to interpret — a zone's data-card-id may name an entirely different
+          // patient from the card that was actually dropped on.
+          const target = e.target;
+          if (target && typeof target.closest === 'function' && target.closest('.ms-cv-card[data-card-id]')) return;
+          e.stopPropagation(); // nearest zone wins — never let an enclosing slot flag its own card too
+          const cardId = zone.getAttribute('data-card-id');
+          if (cardId) setContactFlag(cardId, payload.flagKind, true);
+          return;
         }
+        if (payload.removeCardId) return; // not handled here — only the dedicated remove zone
+        e.stopPropagation(); // the slot the card was actually dropped in owns it, not its parent slot
+        tryAssign(payload.id, payload.kind, zone.getAttribute('data-slot-path'));
       });
     });
 
@@ -3578,9 +3884,13 @@
       });
       removeZone.addEventListener('drop', (e) => {
         e.preventDefault();
-        if (!dragPayload || !dragPayload.removeCardId) return;
-        removeCardFromTree(dragPayload.removeCardId);
+        // Read from the event, not the closure: this zone starts a two-record degrading write, so
+        // "the drop really carried this canvas's own remove payload" is worth proving rather than
+        // inferring from a variable an abandoned drag may have left behind.
+        const payload = dropPayload(e);
         dragPayload = null;
+        if (!payload || !payload.removeCardId) return;
+        removeCardFromTree(payload.removeCardId);
       });
     }
 

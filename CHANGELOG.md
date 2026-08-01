@@ -10,6 +10,49 @@ Merges Nick's follow-up branch (developed as internal v3.208.2–v3.208.7; renum
 range was passed on main). All live-tested against real data. Original per-session entries
 below, followed by the pre-merge review fixes applied on merge.
 
+Review fixes applied on merge (two independent pre-merge reviews, engine findings
+verified by execution; 111 new red-first regression assertions — `test-name-derivations.js`
+48→110, `test-contact-match.js` 62→111):
+
+- **Wrong-record flag write via event bubbling** — the NOK/copy-correspondence drop
+  handlers now stop propagation and the slot-zone fallback yields to cards, so a token
+  dropped on a grandparent card no longer *also* writes the flag to the enclosing
+  parent's relationship (a different patient's record, silently). Nearest zone wins.
+- **Remove-from-tree is now confirmed and repairable** — the drag no longer silently
+  overwrites both relationship records to "Family member": an explicit confirm states
+  the two-record consequence first, and the re-drop repair path actually reaches the
+  reciprocal for pre-existing links (downgrade marker + placeholder-text detection
+  drive `reciprocalUpdateId`, with a bounded id re-resolve and an honest summary when
+  the reverse half can't be repaired). The partial-failure message now says which side
+  landed.
+- **Resumable-retry regression fixed** — after a successful reciprocal *update* plus a
+  failed cleanup step, retry re-entered the reverse-*create* branch (duplicate
+  relationship on the off-screen record, or a wedged retry). Branching now follows the
+  operation's shape (`reciprocalUpdateId` presence).
+- **Stale drag payload** — a cancelled token drag no longer leaves a live payload that
+  a later foreign drop could turn into a flag write (`dragend` reset + drops validate
+  the event's own `dataTransfer` payload).
+- **Cross-write interleave guard** (`anyWriteInFlight()`) — a flag write and a confirm
+  on the same record can no longer interleave their read-modify-write sequences; the
+  refresh control now honours the unfinished-merge guard; a no-op flag drop no longer
+  dismisses an unrelated success panel.
+- **Name-derivation false positives closed** — the gendered-surname prefix fallback
+  requires a recognised counterpart ending per language family (disabled for
+  Polish/East-Slavic where both forms always carry a suffix), `-in`/`-ina` needs a
+  5+ character stem, and derivations apply only to the surname-position token:
+  Martin/Martina Brown drops from 85 "strong" to 38 "weak", Colin/Collins,
+  Griffin/Griffiths, George/Georgina etc. all abstain, while Kowalski/Kowalska,
+  Nováková/Novák, Ivanov/Ivanova and the Lithuanian forms still match.
+- **Patronymic father bonus hardened** — capped at 0.9 (never above an exact match),
+  clamped below "strong" without corroboration (address/phone/email/textual name),
+  never fires for a recorded-female candidate, 3-character stems only when
+  consonant-final (Crosson/Classon abstain; Jónsson/Persson/Ivanovich still derive),
+  and the signal carries `derivation`/`corroborated` labels for the UI.
+- **Accent handling actually works now** — fold-equality in token comparison
+  (Nováková vs Novakova and Müller vs Muller score 1.0 instead of 0.33 — the module's
+  own headline GP2GP case) and `normaliseName` normalises to NFC first (decomposed
+  input was still being shredded).
+
 ### (internal v3.208.7) — 2026-08-01
 
 #### Contacts Management — a write error could go completely invisible
