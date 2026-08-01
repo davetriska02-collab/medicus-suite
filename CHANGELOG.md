@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.208.1] — 2026-08-01
+
+### Hazard log: CSO sign-off of H-055–H-057 (Contacts Management)
+
+Dr Dave Triska (CSO) reviewed and signed off the three Contacts Management hazards
+added at v3.208.0 ("Read and signed", recorded 2026-08-01). H-055 (wrong-person link,
+residual 5), H-056 (demographic data loss via hygiene writes, residual 4) and H-057
+(confidentiality, residual 3) move from Proposed to **Accepted (ALARP)** at their
+proposed scores; the per-hazard review questions recorded at proposal are carried
+forward as open review items, not conditions. `docs/HAZARD-LOG.md` document version
+3.21. No code changes.
+
 ## [v3.208.0] — 2026-08-01
 
 ### Contacts Management: visual family tree, family cycling, address/contact hygiene (PR #243)
