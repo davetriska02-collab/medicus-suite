@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Document Coder — UI mockup (2026-08-01)</title>
+<style>
+/* ── Token canon (mirrors side-panel/panel.css — TOKENS.md is the spec) ── */
+:root{
+  --bg-deep:#f8fafc; --bg-mid:#f1f5f9; --bg-elev:#ffffff; --bg-hover:#e2eaf5;
+  --border:#cbd5e1; --border-hi:#94a3b8;
+  --text-1:#0f172a; --text-2:#1e3a5f; --text-3:#475569; --text-4:#556377; --text-5:#5f6f85;
+  --accent:#2563eb; --accent-dim:rgba(37,99,235,.09); --accent-line:rgba(37,99,235,.30); --accent-hover:#1d4ed8;
+  --green:#16a34a; --green-dim:rgba(22,163,74,.09); --green-line:rgba(22,163,74,.30);
+  --amber:#b45309; --amber-dim:rgba(180,83,9,.09); --amber-line:rgba(180,83,9,.32);
+  --red:#dc2626; --red-dim:rgba(220,38,38,.08); --red-line:rgba(220,38,38,.30);
+  --violet:#7c3aed; --violet-dim:rgba(124,58,237,.09); --violet-line:rgba(124,58,237,.30);
+  --r-sm:4px; --r-md:6px; --r-lg:8px; --r-pill:999px;
+  --shadow-1:0 1px 2px rgba(15,23,42,.05); --shadow-2:0 2px 8px rgba(15,23,42,.08); --shadow-3:0 8px 28px rgba(15,23,42,.14);
+  --ease:cubic-bezier(.2,0,0,1); --fast:120ms; --med:200ms;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"JetBrains Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --scrim:rgba(15,23,42,.55);
+}
+html[data-theme="dark"]{
+  --bg-deep:#050a14; --bg-mid:#0b1424; --bg-elev:#131e34; --bg-hover:#1a2a44;
+  --border:#1c2e4e; --border-hi:#2a4060;
+  --text-1:#f1f5f9; --text-2:#cfe1ff; --text-3:#93a8c5; --text-4:#7d97b5; --text-5:#6c89ac;
+  --accent:#5b8fc7; --accent-dim:rgba(91,143,199,.14); --accent-line:rgba(91,143,199,.35); --accent-hover:#7eaad6;
+  --green:#4ade80; --green-dim:rgba(74,222,128,.12); --green-line:rgba(74,222,128,.32);
+  --amber:#fbbf24; --amber-dim:rgba(251,191,36,.16); --amber-line:rgba(251,191,36,.32);
+  --red:#f87171; --red-dim:rgba(248,113,113,.17); --red-line:rgba(248,113,113,.34);
+  --violet:#a78bfa; --violet-dim:rgba(167,139,250,.14); --violet-line:rgba(167,139,250,.35);
+  --shadow-1:0 1px 2px rgba(0,0,0,.4); --shadow-2:0 4px 12px rgba(0,0,0,.45); --shadow-3:0 10px 32px rgba(0,0,0,.55);
+  --scrim:rgba(0,0,0,.66);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg-deep);color:var(--text-2);font:13px/1.45 var(--sans);padding:28px 24px 80px}
+
+/* ── mock-gallery chrome (not part of the product) ── */
+.gallery{max-width:1340px;margin:0 auto}
+.g-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+.g-head h1{font-size:16px;font-weight:600;color:var(--text-1)}
+.g-head .v{font:500 10px var(--mono);color:var(--text-4)}
+.g-sub{font-size:12px;color:var(--text-3);max-width:860px;margin-bottom:20px}
+.g-toggle{position:fixed;top:16px;right:20px;z-index:9;font:600 10px var(--mono);text-transform:uppercase;letter-spacing:.06em;
+  background:transparent;border:1px solid var(--border-hi);border-radius:var(--r-md);color:var(--text-3);padding:6px 12px;cursor:pointer;
+  transition:all var(--fast) var(--ease)}
+.g-toggle:hover{border-color:var(--accent);color:var(--text-2);background:var(--accent-dim)}
+.g-grid{display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start}
+.g-col{width:392px}
+.g-label{font:600 10px var(--mono);text-transform:uppercase;letter-spacing:.07em;color:var(--text-4);margin:0 0 8px 2px}
+.g-note{font-size:11px;color:var(--text-4);margin:8px 2px 0;line-height:1.5}
+.g-wide{width:100%;max-width:820px}
+
+/* ── the card (product) ─────────────────────────────────────────────── */
+.dc{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1);overflow:hidden;font-size:12px}
+
+/* patient banner */
+.dc-pt{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--bg-mid);border-bottom:1px solid var(--border)}
+.dc-pt-name{font-weight:600;color:var(--text-1);font-size:13px}
+.dc-pt-ids{font:500 10px var(--mono);color:var(--text-3);margin-left:auto;text-align:right;line-height:1.5}
+.dc-pt-check{padding:5px 12px;background:var(--bg-mid);border-bottom:1px solid var(--border);font-size:10px;color:var(--text-4)}
+.dc-pt-check b{color:var(--text-3);font-weight:600}
+
+/* header row: title + state */
+.dc-head{display:flex;align-items:center;gap:8px;padding:10px 12px 2px}
+.dc-title{font-size:12px;font-weight:600;color:var(--text-2)}
+.dc-src{font:500 9px var(--mono);color:var(--text-5);margin-left:auto}
+
+/* the four states */
+.st{display:inline-flex;align-items:center;gap:6px;font:600 10px var(--mono);border-radius:var(--r-sm);padding:2px 8px;border:1px solid}
+.st-ok{color:var(--accent);background:var(--accent-dim);border-color:var(--accent-line)}
+.st-none{color:var(--amber);background:var(--amber-dim);border-color:var(--amber-line)}
+.st-fail{color:var(--red);background:var(--red-dim);border-color:var(--red-line)}
+.st-off{color:var(--text-4);background:var(--bg-mid);border-color:var(--border)}
+
+/* coverage meter */
+.dc-cov{display:flex;align-items:center;gap:8px;padding:7px 12px 9px;border-bottom:1px solid var(--border)}
+.dc-cov-bar{flex:1;height:4px;border-radius:var(--r-pill);background:var(--bg-mid);overflow:hidden;display:flex}
+.dc-cov-bar i{display:block;height:100%;background:var(--accent);opacity:.55}
+.dc-cov-bar u{display:block;height:100%;background:var(--amber)}
+.dc-cov-txt{font:500 10px var(--mono);color:var(--text-3);white-space:nowrap}
+.dc-cov-txt b{color:var(--amber);font-weight:700}
+
+/* action-flag banner — persistent, dominant */
+.dc-act{display:flex;gap:9px;padding:10px 12px;background:var(--red-dim);border-bottom:1px solid var(--red-line)}
+.dc-act-ico{color:var(--red);flex:none;margin-top:1px}
+.dc-act-body{flex:1}
+.dc-act-t{font-weight:600;color:var(--red);font-size:12px}
+.dc-act-q{font-size:11px;color:var(--text-2);margin-top:2px;font-style:italic}
+.dc-act-meta{font:500 9px var(--mono);color:var(--text-4);margin-top:4px}
+.dc-act-btns{display:flex;gap:6px;margin-top:7px}
+
+/* sections */
+.dc-sec{padding:10px 12px 4px}
+.dc-sec-h{font-size:11px;font-weight:600;color:var(--text-2);margin-bottom:7px;display:flex;align-items:center;gap:7px}
+.dc-sec-h .n{font:700 10px var(--mono)}
+.dc-sec-h .n.red{color:var(--red)} .dc-sec-h .n.amb{color:var(--amber)}
+
+/* suggestion row */
+.sug{border:1px solid var(--border);border-radius:var(--r-md);padding:8px 10px;margin-bottom:8px;background:var(--bg-elev)}
+.sug-new{border-color:var(--red-line);background:var(--red-dim)}
+.sug-conflict{border-color:var(--amber-line);background:var(--amber-dim)}
+.sug-top{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.sug-term{font-weight:600;color:var(--text-1);font-size:12px}
+.sug-id{font:500 9px var(--mono);color:var(--text-4)}
+.tier{font:600 9px var(--mono);border-radius:var(--r-sm);padding:1px 6px;border:1px solid;margin-left:auto;white-space:nowrap}
+.tier-a{color:var(--green);background:var(--green-dim);border-color:var(--green-line)}
+.tier-b{color:var(--accent);background:var(--accent-dim);border-color:var(--accent-line)}
+.tier-c{color:var(--amber);background:var(--amber-dim);border-color:var(--amber-line);border-style:dashed}
+.sug-src{font-size:11px;color:var(--text-3);margin-top:4px;padding-left:9px;border-left:2px solid var(--border);font-style:italic}
+.sug-src mark{background:var(--amber-dim);color:var(--amber);font-style:normal;font-weight:600;padding:0 2px;border-radius:2px}
+.sug-why{font:500 9px var(--mono);color:var(--text-4);margin-top:4px}
+.sug-badges{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;align-items:center}
+.qof{font:600 9px var(--mono);color:var(--violet);background:var(--violet-dim);border:1px solid var(--violet-line);border-radius:var(--r-sm);padding:1px 6px}
+.sug-date{font:500 9px var(--mono);color:var(--text-3)}
+.sug-date.miss{color:var(--amber);font-weight:600}
+.sug-acts{display:flex;gap:6px;margin-top:7px}
+
+/* buttons */
+.btn{font:600 9px var(--mono);text-transform:uppercase;letter-spacing:.05em;border-radius:var(--r-md);padding:4px 10px;cursor:pointer;
+  transition:all var(--fast) var(--ease);border:1px solid var(--border-hi);background:transparent;color:var(--text-3)}
+.btn:hover{border-color:var(--accent);color:var(--text-2);background:var(--accent-dim)}
+.btn-pri{background:var(--accent);border-color:var(--accent);color:var(--bg-deep)}
+.btn-pri:hover{background:var(--accent-hover);border-color:var(--accent-hover);color:var(--bg-deep)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+/* mentioned-not-offered */
+.mno{display:flex;align-items:center;gap:7px;padding:5px 10px;border:1px dashed var(--border);border-radius:var(--r-md);margin-bottom:6px;background:var(--bg-mid)}
+.mno-term{color:var(--text-3);font-size:11px;text-decoration:line-through;text-decoration-color:var(--text-5);text-decoration-thickness:1px}
+.mno-why{font:600 9px var(--mono);color:var(--text-4);margin-left:auto;white-space:nowrap}
+
+/* matched collapse */
+.match-fold{display:flex;align-items:center;gap:8px;padding:8px 12px;color:var(--text-4);cursor:pointer;border-top:1px solid var(--border);font-size:11px}
+.match-fold:hover{background:var(--bg-hover)}
+.match-fold .n{font:600 10px var(--mono);color:var(--text-3)}
+.match-fold svg{margin-left:auto}
+
+/* meds delta */
+.med{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px}
+.med + .med{border-top:1px solid var(--border)}
+.med-chg{font:700 9px var(--mono);border-radius:var(--r-sm);padding:1px 6px;border:1px solid;flex:none}
+.med-start{color:var(--green);background:var(--green-dim);border-color:var(--green-line)}
+.med-stop{color:var(--red);background:var(--red-dim);border-color:var(--red-line)}
+.med-un{color:var(--red);background:var(--red-dim);border-color:var(--red-line)}
+.med-name{color:var(--text-1);font-weight:600}
+.med-dose{font:500 10px var(--mono);color:var(--text-3)}
+.med-vs{font-size:10px;color:var(--text-4);margin-left:auto;text-align:right}
+
+/* coded-data lane */
+.obs{display:flex;align-items:center;gap:8px;padding:6px 0}
+.obs-name{font-size:12px;color:var(--text-2);font-weight:600}
+.obs-val{font:600 12px var(--mono);color:var(--text-1)}
+.obs-date{font:500 9px var(--mono);color:var(--text-3)}
+.obs .btn{margin-left:auto}
+
+/* footer */
+.dc-foot{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--border);background:var(--bg-mid)}
+.dc-foot .fine{font-size:10px;color:var(--text-4)}
+.dc-foot .btn{margin-left:auto;flex:none}
+
+/* big negative states */
+.dc-big{padding:18px 14px;text-align:center}
+.dc-big .st{font-size:11px;padding:4px 12px}
+.dc-big h3{font-size:13px;font-weight:700;margin:10px 0 4px}
+.dc-big.fail h3{color:var(--red)}
+.dc-big.none h3{color:var(--amber)}
+.dc-big p{font-size:11px;color:var(--text-3);max-width:300px;margin:0 auto}
+.dc-big .fine{font:500 9px var(--mono);color:var(--text-4);margin-top:10px;display:block}
+
+/* worklist strip */
+.wl{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1);overflow:hidden}
+.wl-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px}
+.wl-row:last-child{border-bottom:none}
+.wl-row:hover{background:var(--bg-hover)}
+.wl-doc{color:var(--text-1);font-weight:600;width:220px;flex:none}
+.wl-from{font:500 10px var(--mono);color:var(--text-4);width:130px;flex:none}
+.wl-verdict{display:flex;align-items:center;gap:6px;flex:1}
+.wl-k{font:500 9px var(--mono);color:var(--text-5);margin-left:auto}
+
+/* read-back modal */
+.rb-wrap{position:relative;border-radius:var(--r-lg);overflow:hidden}
+.rb-scrim{position:absolute;inset:0;background:var(--scrim)}
+.rb{position:relative;margin:26px 18px;background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-3);padding:14px}
+.rb h3{font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:10px}
+.rb-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.rb-col{border:1px solid var(--border);border-radius:var(--r-md);padding:9px 10px;background:var(--bg-mid)}
+.rb-col h4{font-size:10px;font-weight:600;color:var(--text-3);margin-bottom:5px}
+.rb-col .txt{font-size:12px;color:var(--text-1);font-style:italic}
+.rb-col .txt mark{background:var(--amber-dim);color:var(--amber);font-style:normal;font-weight:700;padding:0 2px;border-radius:2px}
+.rb-col .code{font:600 12px var(--mono);color:var(--text-1)}
+.rb-col .cid{font:500 9px var(--mono);color:var(--text-4);display:block;margin-top:3px}
+.rb-date{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-2);border:1px solid var(--amber-line);background:var(--amber-dim);border-radius:var(--r-md);padding:7px 10px;margin-bottom:10px}
+.rb-date b{font:600 11px var(--mono);color:var(--amber)}
+.rb-confirm{display:flex;align-items:flex-start;gap:8px;font-size:11px;color:var(--text-2);margin-bottom:12px}
+.rb-confirm input{margin-top:2px;accent-color:var(--accent)}
+.rb-acts{display:flex;gap:8px;justify-content:flex-end}
+.rb .fine{font-size:10px;color:var(--text-4);margin-top:10px}
+
+svg{flex:none}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<button class="g-toggle" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark'">Theme</button>
+
+<div class="gallery">
+  <div class="g-head"><h1>Document Coder — UI mockup</h1><span class="v">docs/plans/DOCUMENT-CODER-2026-08-01.md · panel-injected widget, 392px</span></div>
+  <p class="g-sub">The card renders <b>beside Medicus's own coding controls</b> on the document-processing screen. Letter: the canonical nine-diagnosis discharge summary from the panel's war-story register. Every state shown; toggle the theme (top right) — both are first-class.</p>
+
+  <div class="g-grid">
+
+    <!-- ════ STATE 1: the main card ════ -->
+    <div class="g-col">
+      <p class="g-label">1 · Assessed — the working card</p>
+      <div class="dc">
+        <div class="dc-pt">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-3)"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>
+          <span class="dc-pt-name">SMITH, Brenda (F)</span>
+          <span class="dc-pt-ids">NHS 943 476 5919<br>12-Mar-1948 · 78y</span>
+        </div>
+        <div class="dc-pt-check"><b>Check this letter is about this patient.</b> The suite cannot detect a correctly-attached wrong-patient letter.</div>
+
+        <div class="dc-head">
+          <span class="dc-title">Document Coder</span>
+          <span class="st st-ok">ASSESSED · 4 CANDIDATES</span>
+          <span class="dc-src">discharge summary · PDF text</span>
+        </div>
+        <div class="dc-cov">
+          <div class="dc-cov-bar"><i style="width:72%"></i><u style="width:16%"></u></div>
+          <span class="dc-cov-txt">5 of 6 sections read · <b>1 not assessed</b></span>
+        </div>
+
+        <!-- action flag: persistent until actioned -->
+        <div class="dc-act">
+          <svg class="dc-act-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <div class="dc-act-body">
+            <div class="dc-act-t">GP action requested in this letter</div>
+            <div class="dc-act-q">"new AF noted on post-op ECG, <u>for GP to arrange anticoagulation review</u>"</div>
+            <div class="dc-act-meta">found in prose below the problem list · stays on this task until actioned · visible to any seat</div>
+            <div class="dc-act-btns"><button class="btn">Mark actioned…</button><button class="btn">Escalate to reviewer</button></div>
+          </div>
+        </div>
+
+        <!-- new / unmatched -->
+        <div class="dc-sec">
+          <div class="dc-sec-h"><span class="n red">2</span> In this letter, not on the problem list</div>
+
+          <div class="sug sug-new">
+            <div class="sug-top">
+              <span class="sug-term">Atrial fibrillation</span>
+              <span class="sug-id">49436004</span>
+              <span class="tier tier-a">PROVEN MATCH</span>
+            </div>
+            <div class="sug-src">"5. New atrial fibrillation, rate controlled on ward"</div>
+            <div class="sug-why">exact concept in Medicus index · active SNOMED · not on active or resolved list</div>
+            <div class="sug-badges">
+              <span class="qof">QOF · AF register</span>
+              <span class="sug-date">event date from letter: 04-Jul-2026</span>
+            </div>
+            <div class="sug-acts"><button class="btn btn-pri">Review &amp; code…</button><button class="btn">Dismiss</button></div>
+          </div>
+
+          <div class="sug sug-new">
+            <div class="sug-top">
+              <span class="sug-term">Polymyalgia rheumatica?</span>
+              <span class="tier tier-c">WEAK · SEARCH MANUALLY</span>
+            </div>
+            <div class="sug-src">"9. likely PMR — <mark>rheum to confirm</mark>"</div>
+            <div class="sug-why">combined-fragment match only — no one-click coding on this tier, ever</div>
+            <div class="sug-acts"><button class="btn">Open Medicus search: "polymyalgia rheumatica"</button></div>
+          </div>
+        </div>
+
+        <!-- conflicts -->
+        <div class="dc-sec">
+          <div class="dc-sec-h"><span class="n amb">1</span> Letter disagrees with the record</div>
+          <div class="sug sug-conflict">
+            <div class="sug-top">
+              <span class="sug-term">CKD stage 3b</span><span class="sug-id">700379002</span>
+              <span class="tier tier-b">STAGE CHANGE?</span>
+            </div>
+            <div class="sug-src">"3. CKD stage 3b (eGFR 42, <mark>deterioration from 3a</mark>)"</div>
+            <div class="sug-why">record has: CKD stage 3a (coded 11-Feb-2024) — same family, different stage</div>
+            <div class="sug-acts"><button class="btn btn-pri">Review &amp; code…</button><button class="btn">Dismiss</button></div>
+          </div>
+        </div>
+
+        <!-- mentioned, not offered -->
+        <div class="dc-sec">
+          <div class="dc-sec-h">Mentioned — not offered for coding</div>
+          <div class="mno"><span class="mno-term">Pulmonary embolism</span><span class="mno-why">RULED OUT — "excluded on CTPA"</span></div>
+          <div class="mno"><span class="mno-term">Myocardial infarction</span><span class="mno-why">HISTORICAL — "previous MI 2019"</span></div>
+        </div>
+
+        <!-- meds delta -->
+        <div class="dc-sec">
+          <div class="dc-sec-h">Medication changes per this letter</div>
+          <div class="med"><span class="med-chg med-start">START</span><span class="med-name">Apixaban</span><span class="med-dose">5 mg bd</span><span class="med-vs">not on repeat list</span></div>
+          <div class="med"><span class="med-chg med-stop">STOP</span><span class="med-name">Aspirin</span><span class="med-dose">75 mg od</span><span class="med-vs">on repeat list — still active</span></div>
+          <div class="med"><span class="med-chg med-un">UNMATCHED</span><span class="med-name">"cardiac med as per ward round"</span><span class="med-vs">could not resolve — check letter</span></div>
+        </div>
+
+        <!-- coded data lane -->
+        <div class="dc-sec">
+          <div class="dc-sec-h">Coded data stated in letter <span style="font:500 9px var(--mono);color:var(--text-4)">copy-assist only</span></div>
+          <div class="obs"><span class="obs-name">Blood pressure</span><span class="obs-val">152/94</span><span class="obs-date">04-Jul-2026</span><button class="btn">Copy for coding</button></div>
+          <div class="obs"><span class="obs-name">Weight</span><span class="obs-val">81.4 kg</span><span class="obs-date">02-Jul-2026</span><button class="btn">Copy for coding</button></div>
+        </div>
+
+        <!-- matched, collapsed -->
+        <div class="match-fold">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          <span><span class="n">6</span> already coded — nothing to do</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+
+        <div class="dc-foot">
+          <span class="fine">Suggestions only — coding happens in Medicus's own screen. This card never means the letter is fully coded.</span>
+          <button class="btn">History</button>
+        </div>
+      </div>
+      <p class="g-note">Delta-first: matches collapsed (senior partner's killer detail); ruled-out/historical items visibly struck and never codeable; tier C has no code button; the action flag found in prose survives at the top until someone acts.</p>
+    </div>
+
+    <!-- ════ column 2: negative states + read-back ════ -->
+    <div class="g-col">
+      <p class="g-label">2 · Could not read — the loudest state</p>
+      <div class="dc">
+        <div class="dc-pt">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-3)"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>
+          <span class="dc-pt-name">OKAFOR, James (M)</span>
+          <span class="dc-pt-ids">NHS 485 777 3456<br>30-Sep-1961 · 64y</span>
+        </div>
+        <div class="dc-big fail">
+          <span class="st st-fail">COULD NOT READ</span>
+          <h3>This document could not be read</h3>
+          <p>Scanned image — no text layer. <b>Nothing below has been checked.</b> Full manual review of the letter is required.</p>
+          <span class="fine">state recorded in audit ledger · reason: image-only PDF</span>
+        </div>
+        <div class="dc-foot"><span class="fine">Absence of suggestions never means nothing to code.</span></div>
+      </div>
+
+      <p class="g-label" style="margin-top:22px">3 · Assessed — nothing anchored (never green)</p>
+      <div class="dc">
+        <div class="dc-pt">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-3)"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>
+          <span class="dc-pt-name">PATEL, Anisha (F)</span>
+          <span class="dc-pt-ids">NHS 632 118 9034<br>07-Jan-1990 · 36y</span>
+        </div>
+        <div class="dc-big none">
+          <span class="st st-none">NOTHING ANCHORED</span>
+          <h3>No recognisable sections found</h3>
+          <p>Text was read, but no Diagnosis / Impression / Problems structure matched. The letter has <b>not been assessed</b> — read it in full.</p>
+        </div>
+        <div class="dc-cov" style="border-top:1px solid var(--border);border-bottom:none">
+          <div class="dc-cov-bar"><u style="width:100%"></u></div>
+          <span class="dc-cov-txt"><b>0 of 1 sections anchored</b></span>
+        </div>
+      </div>
+
+      <p class="g-label" style="margin-top:22px">4 · Read-back — the gate before any code</p>
+      <div class="rb-wrap">
+        <div class="dc" style="filter:blur(1.5px);opacity:.7">
+          <div class="dc-pt"><span class="dc-pt-name">SMITH, Brenda (F)</span><span class="dc-pt-ids">NHS 943 476 5919</span></div>
+          <div class="dc-sec" style="height:210px"></div>
+        </div>
+        <div class="rb-scrim" style="position:absolute;inset:0"></div>
+        <div class="rb" style="position:absolute;inset:auto 10px;top:24px">
+          <h3>Read back before coding</h3>
+          <div class="rb-cols">
+            <div class="rb-col"><h4>The letter says</h4><div class="txt">"5. New <mark>atrial fibrillation</mark>, rate controlled on ward"</div></div>
+            <div class="rb-col"><h4>You are about to code</h4><div class="code">Atrial fibrillation</div><span class="cid">SNOMED 49436004 · active · AF register</span></div>
+          </div>
+          <div class="rb-date">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Event date <b>04-Jul-2026</b> (from letter) — never today's date by default
+          </div>
+          <label class="rb-confirm"><input type="checkbox"> I have read the letter sentence and it describes <b>this patient's</b> active diagnosis</label>
+          <div class="rb-acts"><button class="btn">Cancel</button><button class="btn btn-pri">Open in Medicus coding…</button></div>
+          <p class="fine">Coding is completed in Medicus's own control under your login. This step is logged.</p>
+        </div>
+      </div>
+      <p class="g-note">The accept button never codes directly: read-back (source sentence beside the concept, certainty words highlighted) → Medicus's own coding screen. Tier C never reaches this dialog.</p>
+    </div>
+
+    <!-- ════ column 3: worklist + tier legend ════ -->
+    <div class="g-col">
+      <p class="g-label">5 · Inbox worklist line (phase 4) — one verdict per row</p>
+      <div class="wl">
+        <div class="wl-row">
+          <span class="wl-doc">Discharge summary — cardiology</span>
+          <span class="wl-verdict"><span class="st st-fail">GP ACTION</span><span class="st st-ok">2 NEW</span></span>
+          <span class="wl-k">04-Jul</span>
+        </div>
+        <div class="wl-row">
+          <span class="wl-doc">Clinic letter — dermatology</span>
+          <span class="wl-verdict"><span class="st st-fail">COULD NOT READ</span></span>
+          <span class="wl-k">03-Jul</span>
+        </div>
+        <div class="wl-row">
+          <span class="wl-doc">OPA letter — ENT follow-up</span>
+          <span class="wl-verdict"><span class="st st-ok" style="color:var(--text-3);background:var(--bg-mid);border-color:var(--border)">NOTHING NEW · 4 matched</span></span>
+          <span class="wl-k">03-Jul</span>
+        </div>
+        <div class="wl-row">
+          <span class="wl-doc">2WW outcome — breast clinic</span>
+          <span class="wl-verdict"><span class="st st-fail">2WW OUTCOME</span><span class="st st-none">1 CONFLICT</span></span>
+          <span class="wl-k">02-Jul</span>
+        </div>
+        <div class="wl-row">
+          <span class="wl-doc">Physio discharge note</span>
+          <span class="wl-verdict"><span class="st st-none">NOTHING ANCHORED</span></span>
+          <span class="wl-k">01-Jul</span>
+        </div>
+      </div>
+      <p class="g-note">The Band-3 admin's view: sortable worst-first, keyboard-driven (j/k like the results queue), the 140 boring letters cleared in a second each, the 10 that matter impossible to miss.</p>
+
+      <p class="g-label" style="margin-top:22px">6 · Confidence tiers — shape + wording, never colour alone</p>
+      <div class="dc" style="padding:12px">
+        <div class="sug" style="margin-bottom:8px">
+          <div class="sug-top"><span class="sug-term">Tier A</span><span class="tier tier-a">PROVEN MATCH</span></div>
+          <div class="sug-why">hierarchy-proofed via SNOMED ancestor closure, or exact concept in Medicus's own index · solid border · one-click Review &amp; code</div>
+        </div>
+        <div class="sug" style="margin-bottom:8px">
+          <div class="sug-top"><span class="sug-term">Tier B</span><span class="tier tier-b">TEXT MATCH</span></div>
+          <div class="sug-why">exact description text, no hierarchy proof · solid border · Review &amp; code with read-back</div>
+        </div>
+        <div class="sug" style="margin-bottom:2px">
+          <div class="sug-top"><span class="sug-term">Tier C</span><span class="tier tier-c">WEAK · SEARCH MANUALLY</span></div>
+          <div class="sug-why">combined fragments, riskiest · DASHED border, amber, positioned last · no code button exists on this tier — only "open Medicus search"</div>
+        </div>
+      </div>
+      <p class="g-note">Distinction rides on border style (solid vs dashed), wording, position and colour together — survives colourblind mode because the triads swap wholesale.</p>
+
+      <p class="g-label" style="margin-top:22px">7 · Sensitive-content gate (non-coding seats)</p>
+      <div class="dc">
+        <div class="dc-pt">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-3)"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span class="dc-pt-name" style="color:var(--text-3)">Clinical content withheld</span>
+        </div>
+        <div class="dc-big">
+          <span class="st st-off">NOT RUN · ROLE-GATED</span>
+          <p style="margin-top:10px">This letter contains clinical content. Coding suggestions are shown to coding-enabled staff only. File the document as usual.</p>
+        </div>
+      </div>
+      <p class="g-note">The Caldicott veto: a filing-only receptionist never sees a psychiatric diagnosis suggestion pop up on a letter she's filing.</p>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
