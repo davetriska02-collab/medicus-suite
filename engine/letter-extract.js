@@ -95,6 +95,14 @@
       kind: 'allergies',
       re: /^(?:\d+[.)]\s*)?(?:allergies(?: and adverse reactions?)?|drug allergies)\s*:?\s*$/i,
     },
+    {
+      // PMH sections list conditions the patient already carries — they are
+      // anchored and extracted so the delta can see them, but every candidate
+      // is forced 'historical' (never offered as new from this letter).
+      // Previously these sections were invisible (red-team #6).
+      kind: 'pmh',
+      re: /^(?:\d+[.)]\s*)?(?:past medical history|pmh|previous medical history|background(?: history)?|co-?morbidities)\s*:?\s*$/i,
+    },
   ];
 
   // A heading we don't recognise still TERMINATES the previous section (we
@@ -102,8 +110,10 @@
   // starts) — but its content is NOT assessed.
   const GENERIC_HEADING_RE = /^(?:[A-Z][A-Za-z /&-]{2,40})\s*:\s*$/;
 
-  // Inline single-line form: "Diagnosis: community acquired pneumonia"
-  const INLINE_SECTION_RE = /^(?:diagnosis|diagnoses|impression)\s*:\s*(\S.*)$/i;
+  // Inline single-line form: "Diagnosis: community acquired pneumonia",
+  // "Primary diagnosis: acute appendicitis"
+  const INLINE_SECTION_RE =
+    /^(?:principal |primary |secondary |main |discharge |clinical |working )?(?:diagnosis|diagnoses|impression)\s*:\s*(\S.*)$/i;
 
   // ── candidate status classification (NegEx/ConText lineage) ──────────────
 
@@ -115,21 +125,28 @@
     /\bnot exclude/i,
     /\bcannot be (?:excluded|ruled out)\b/i,
     /\bunable to (?:exclude|rule out)\b/i,
+    // "T2DM, not well controlled" describes an ACTIVE diagnosis — control
+    // adjectives after "not" must never negate the condition (red-team #2).
+    /\bnot (?:yet |well |very well |adequately |optimally |currently |fully )?(?:controlled|managed|compliant|concordant|tolerated|improving|responding|engaging)\b/i,
   ];
 
-  // Pre-negation triggers (proposition follows the trigger).
-  const PRE_NEG = [
+  // Pre-negation triggers. Two strengths:
+  //  - STRONG: unambiguous negating phrases — negate anywhere in the sentence.
+  //  - LEADING: bare "no"/"not", which negate ONLY when they open the clause
+  //    ("No evidence…"), never mid-sentence — "Falls - no injury sustained"
+  //    is an ACTIVE falls diagnosis with a negated complication, and the old
+  //    sentence-wide "no" wrongly suppressed the whole item (red-team #3).
+  const PRE_NEG_STRONG = [
     /\bno evidence (?:of|for)\b/i,
     /\bno signs? of\b/i,
     /\bno suggestion of\b/i,
     /\bnegative for\b/i,
     /\bwithout (?:any )?evidence of\b/i,
     /\bnot consistent with\b/i,
-    /\bno\b(?! change)/i,
-    /\bnot\b/i,
     /\bdenies\b/i,
     /\bfree of\b/i,
   ];
+  const PRE_NEG_LEADING = [/^no\b(?! change)/i, /^not\b/i];
 
   // Post-negation triggers (proposition precedes the trigger).
   const POST_NEG = [
@@ -141,12 +158,14 @@
 
   // Experiencer ≠ patient (ConText): family history must never be coded onto
   // the patient. Nobody on the panel raised this one — ConText did.
-  const FAMILY = [
-    /\bfamily history\b/i,
-    /\bfh\s*:/i,
-    /\bfhx\b/i,
-    /\b(?:mother|father|mum|dad|brother|sister|sibling|son|daughter|aunt|uncle|grandmother|grandfather|grandparent|maternal|paternal)\b/i,
-  ];
+  // Two strengths: STRONG phrases fire alone; a bare relative word fires
+  // ONLY alongside a disease-attribution verb — paediatric and obstetric
+  // letters say "mother reports fever" / "mother and baby well" constantly,
+  // and those are the PATIENT'S diagnoses, not the mother's (red-team #5).
+  const FAMILY_STRONG = [/\bfamily history\b/i, /\bfh\s*:/i, /\bfhx\b/i];
+  const FAMILY_RELATIVE =
+    /\b(?:mother|father|mum|dad|brother|sister|sibling|son|daughter|aunt|uncle|grandmother|grandfather|grandparent|maternal|paternal)(?:'s)?\b/i;
+  const FAMILY_ATTRIBUTION = /\b(?:had|has|history|diagnosed|died|passed away|suffered|suffers|carrier|affected by)\b/i;
 
   // Historical / pre-existing (not a NEW coding event from this letter).
   const HISTORICAL = [
@@ -161,7 +180,8 @@
     /\bsince (?:19|20)\d\d\b/i,
     /\bin (?:19|20)\d\d\b/i,
     /\(\s*(?:19|20)\d\d\s*\)/,
-    /\bold\b/i,
+    // "old stroke" is historical; "78 year old patient" is not (red-team #4).
+    /(?<!years? )\bold\b/i,
   ];
 
   const RESOLVED = [
@@ -213,11 +233,15 @@
     const s = normSpace(sentence);
     if (!s) return { status: 'unclassifiable', evidence: 'empty' };
 
-    const fam = firstMatch(FAMILY, s);
-    if (fam) return { status: 'family', evidence: fam };
+    const famStrong = firstMatch(FAMILY_STRONG, s);
+    if (famStrong) return { status: 'family', evidence: famStrong };
+    const famRel = s.match(FAMILY_RELATIVE);
+    if (famRel && FAMILY_ATTRIBUTION.test(s)) {
+      return { status: 'family', evidence: famRel[0] };
+    }
 
     if (!firstMatch(PSEUDO_NEG, s)) {
-      const neg = firstMatch(PRE_NEG, s) || firstMatch(POST_NEG, s);
+      const neg = firstMatch(PRE_NEG_STRONG, s) || firstMatch(PRE_NEG_LEADING, s) || firstMatch(POST_NEG, s);
       if (neg) return { status: 'negated', evidence: neg };
     }
 
@@ -235,7 +259,9 @@
 
   // ── candidate term extraction ─────────────────────────────────────────────
 
-  const LIST_MARKER_RE = /^\s*(?:\d+[.)]\s*|[-–•*]\s+)/;
+  // Numbered, dashed, bulleted — including Word's exported "o " bullets
+  // (red-team #10: an unstripped "o " prefix poisons the search term).
+  const LIST_MARKER_RE = /^\s*(?:\d+[.)]\s*|[-–•*·▪]\s+|o\s+)/;
 
   function splitSentences(item) {
     // Sentence scope: split on . ; only when followed by whitespace+letter,
@@ -256,6 +282,10 @@
     // the full sentence stays alongside as sourceSentence.
     t = t.replace(/\s*\((?![^)]*(?:19|20)\d\d)[^)]*\)\s*$/, '');
     t = t.split(/\s+[—–-]\s+|:\s+/)[0];
+    // The comma clause is qualifier/commentary ("…, rate controlled on ward",
+    // "…, first presentation") — the searchable concept is the head. The full
+    // clause survives as sourceSentence for the read-back.
+    t = t.split(/,\s+/)[0];
     t = t.replace(/[.,;:]+$/, '').trim();
     return t;
   }
@@ -273,11 +303,23 @@
     // action in them never leaks onto the head term, but they don't spawn
     // their own candidates (prose is not mined).
     const head = sentences[0];
-    const cls = classifyCandidate(head);
-    const term = cleanTerm(head);
+    let cls = classifyCandidate(head);
+    let term = cleanTerm(head);
     const latM = head.match(LATERALITY_RE);
-    if (!term || term.length < 3 || /^(nil|none|nad|n\/a)$/i.test(term)) {
+    if (!term || /^(nil|none|nad|n\/a|nkda)$/i.test(term)) {
       return out; // an empty/nil line is NOT a candidate and NOT an all-clear
+    }
+    // Short terms are kept: "AF", "MI", "HF" are real acronyms and the SNOMED
+    // search downstream decides their fate. Silently dropping them was a
+    // silent-miss bug (red-team #7) — nothing may vanish without a trace.
+    if (term.length < 2) {
+      cls = { status: 'unclassifiable', evidence: 'term-too-short' };
+      term = head;
+    }
+    // PMH/background sections list what the patient already carries: force
+    // historical so nothing there is ever offered as new from this letter.
+    if (sectionKind === 'pmh' && cls.status === 'active') {
+      cls = { status: 'historical', evidence: 'pmh-section' };
     }
     out.push({
       term,
@@ -326,6 +368,9 @@
       .replace(MED_CHANGE[0].re, '')
       .replace(MED_CHANGE[1].re, '')
       .replace(MED_CHANGE[2].re, '')
+      // dangling prepositions from "increased X to", "switched from Y" —
+      // they are change syntax, not part of the drug name (red-team #8)
+      .replace(/\b(?:to|from|at|by|of)\s*$/i, '')
       .replace(/[:\-–—,]+$/g, '')
       .trim();
     if (!name || name.length < 3) {
@@ -422,18 +467,51 @@
     const sections = [];
     const candidates = [];
     const meds = [];
-    let current = null; // { kind, heading, startLine, itemLines: [] }
+    let current = null; // { kind, heading, startLine, items: [{text, lineNo}], usesMarkers }
 
+    // PDF text extraction wraps list items across lines constantly:
+    //   "2. New atrial fibrillation, rate"
+    //   "controlled on ward"
+    // Extracting per-line turned that continuation into a fabricated OFFERED
+    // candidate ("controlled on ward") — the worst failure direction this
+    // engine has (red-team #1). So items are BUFFERED per section and merged
+    // before extraction: in a section that uses list markers, a marker-less
+    // line is a continuation of the previous item, never a new one.
     function closeSection(endLine) {
       if (!current) return;
       current.endLine = endLine;
-      sections.push(current);
+      for (const item of current.items) {
+        if (current.kind === 'diagnosis' || current.kind === 'pmh') {
+          candidates.push(...extractCandidatesFromItem(item.text, item.lineNo, current.kind));
+        } else if (current.kind === 'meds') {
+          const med = extractMedLine(item.text, item.lineNo);
+          if (med) meds.push(med);
+        }
+        // 'plan'/'allergies' content is covered by the action scan /
+        // deliberately not extracted (allergy reconciliation is not this module).
+      }
+      sections.push({
+        kind: current.kind,
+        heading: current.heading,
+        startLine: current.startLine,
+        endLine: current.endLine,
+        itemCount: current.items.length,
+      });
       current = null;
     }
 
     lines.forEach((raw, i) => {
       const line = normSpace(raw);
-      if (!line) return; // blank lines don't terminate a section (letters are gappy)
+      if (!line) {
+        // Blank lines are tolerated inside marker-based lists (PDF extraction
+        // is gappy) but END an unmarked section: otherwise the free prose
+        // paragraph after "Impression:\nLikely viral illness\n\nWe will…"
+        // would be fabricated into candidates line by line.
+        if (current && !current.usesMarkers && current.items.length > 0) {
+          closeSection(i - 1);
+        }
+        return;
+      }
 
       // Inline "Diagnosis: X" one-liner
       const inline = line.match(INLINE_SECTION_RE);
@@ -447,7 +525,14 @@
       const def = SECTION_DEFS.find((d) => d.re.test(line));
       if (def) {
         closeSection(i - 1);
-        current = { kind: def.kind, heading: line.replace(/:\s*$/, ''), startLine: i, endLine: i, itemCount: 0 };
+        current = {
+          kind: def.kind,
+          heading: line.replace(/:\s*$/, ''),
+          startLine: i,
+          endLine: i,
+          items: [],
+          usesMarkers: false,
+        };
         return;
       }
       if (GENERIC_HEADING_RE.test(line)) {
@@ -459,15 +544,25 @@
 
       if (!current) return; // unanchored prose: never mined for candidates
 
-      current.itemCount++;
-      if (current.kind === 'diagnosis') {
-        candidates.push(...extractCandidatesFromItem(line, i, 'diagnosis'));
-      } else if (current.kind === 'meds') {
-        const med = extractMedLine(line, i);
-        if (med) meds.push(med);
+      const hasMarker = LIST_MARKER_RE.test(line);
+      if (current.items.length === 0) {
+        current.usesMarkers = hasMarker;
+        current.items.push({ text: line, lineNo: i });
+      } else if (current.usesMarkers && !hasMarker) {
+        if (/^[a-z(]/.test(line)) {
+          // Lowercase start = a wrapped continuation of the previous item:
+          // merge, keep the first line's number.
+          const prev = current.items[current.items.length - 1];
+          prev.text = `${prev.text} ${line}`;
+        } else {
+          // Uppercase start without a marker after a marker-based list =
+          // the letter has returned to prose ("We noted…"). The section is
+          // over; this line is unanchored (the action scan still reads it).
+          closeSection(i - 1);
+        }
+      } else {
+        current.items.push({ text: line, lineNo: i });
       }
-      // 'plan' and 'allergies' content lines are covered by the action scan /
-      // deliberately not extracted (allergy reconciliation is not this module).
     });
     closeSection(lines.length - 1);
 

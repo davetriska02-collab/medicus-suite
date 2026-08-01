@@ -2,6 +2,52 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.209.1] — 2026-08-01
+
+### Document Coder engine: red-team hardening (10 findings, all fixed; still unwired)
+
+An adversarial pass over `engine/letter-extract.js` with multi-specialty
+clinical scenarios (cardiology, diabetes, geriatrics, paediatrics, genetics,
+psychiatry, surgery, med titration) found ten gaps; every scenario is now a
+regression fixture (43 → 67 checks).
+
+The one that mattered most: **PDF line-wrap fabricated an offered candidate**
+— "New atrial fibrillation, rate ⏎ controlled on ward" extracted per-line
+produced "controlled on ward" as an offerable suggestion (the exact
+wrongly-offered failure the design forbids). Items are now buffered per
+section and wrapped continuations merged (lowercase-start = continuation;
+uppercase-start non-marker line = the list has ended and prose resumed, so
+trailing prose can neither merge into the last item nor become candidates).
+
+Also fixed, each in the fail-closed direction that preserves trust rather
+than over-suppressing:
+
+- Bare "no"/"not" now negate only at clause start — "Falls — no injury
+  sustained" and "T2DM, not well controlled" are active diagnoses again
+  (strong phrases like "no evidence of"/"denies" still negate anywhere), plus
+  a pseudo-negation guard for "not (well) controlled/tolerated/compliant".
+- "78 year old" no longer triggers historical ("old stroke" still does).
+- Paediatric/obstetric "mother reports…" no longer triggers family-history:
+  a bare relative word needs a disease-attribution verb (had/diagnosed/died…)
+  — "Mother diagnosed with ovarian cancer" is still family, the child's
+  otitis media is not.
+- Past-medical-history sections are now anchored and extracted (visible to
+  the future delta) with every item forced historical — previously invisible.
+- Two-letter acronyms (AF, MI, HF) are no longer silently dropped.
+- Word-export "o" bullets stripped; "Increased ramipril to 5 mg" parses the
+  name as "ramipril"; inline "Primary diagnosis: X" anchors; unmarked
+  Impression sections end at a blank line so following prose is never
+  fabricated into candidates; candidate terms trim their comma qualifier
+  ("Gout, first presentation" → searchable term "Gout", full sentence kept
+  for provenance).
+
+One deliberate test correction: the left-breast "benign cyst" line is a true
+codeable diagnosis — the original fixture blessed its over-suppression (via
+the sentence-wide "no") as if correct. The safety property is now stated
+properly: no offered candidate may carry malignancy language.
+
+Engine remains pure and unwired; nothing user-visible changes.
+
 ## [v3.209.0] — 2026-08-01
 
 ### Document Coder: deterministic letter-extraction engine (unwired groundwork)
