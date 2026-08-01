@@ -45,8 +45,16 @@
   // timeframe + named route + catch-all), *** = manual-fill placeholder the
   // clinician must type over. Version 2 supersedes the v1 build placeholder
   // so the merge reaches installs that saved a config against it.
+  //
+  // v3 (design-crit, decision R): the four sign-off bodies ended "Dr ***" —
+  // an ANP or other non-doctor pasting that misleads the patient about who is
+  // treating them (scope/safety finding). Changed to "***" alone so the
+  // clinician's own name/role goes in the placeholder. mergeShippedPack only
+  // arrives new ids on a version bump — existing installs keep their stored
+  // "Dr ***" copies (the same doctrine as any other shipped-body edit) unless
+  // re-promoted, so this is a fix for FRESH installs and re-promotions.
   const SHIPPED_PACK = deepFreeze({
-    version: 2,
+    version: 3,
     categories: [
       {
         id: 'openers',
@@ -690,7 +698,7 @@
       {
         id: 'signoff-warm',
         title: 'Sign-off — warm and simple',
-        body: 'Best wishes, Dr ***',
+        body: 'Best wishes, ***',
         trigger: 'signoffwarm',
         keywords: 'sign off best wishes warm closing',
         category: 'sign-offs',
@@ -701,7 +709,7 @@
       {
         id: 'signoff-take-care',
         title: 'Sign-off — take care, get in touch',
-        body: "Take care, and don't hesitate to get back in touch if you need to. Dr ***",
+        body: "Take care, and don't hesitate to get back in touch if you need to. ***",
         trigger: 'signoffcare',
         keywords: 'sign off take care get in touch closing',
         category: 'sign-offs',
@@ -712,7 +720,7 @@
       {
         id: 'signoff-safety-net',
         title: 'Sign-off — with built-in safety-net catch-all',
-        body: "I hope this helps. Please do get back in touch if things change, don't improve as expected, or if you're ever worried — or if you just feel something isn't right. Best wishes, Dr ***",
+        body: "I hope this helps. Please do get back in touch if things change, don't improve as expected, or if you're ever worried — or if you just feel something isn't right. Best wishes, ***",
         trigger: 'signoffsn',
         keywords: "sign off safety net catch all closing something isn't right",
         category: 'sign-offs',
@@ -723,7 +731,7 @@
       {
         id: 'signoff-thanks',
         title: 'Sign-off — thank you, feel better soon',
-        body: 'Thank you for getting in touch, and I hope you feel better soon. Dr ***',
+        body: 'Thank you for getting in touch, and I hope you feel better soon. ***',
         trigger: 'signoffthanks',
         keywords: 'sign off thank you feel better closing',
         category: 'sign-offs',

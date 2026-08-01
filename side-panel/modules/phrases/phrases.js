@@ -17,6 +17,21 @@
 // casual copy while *** remains: it demands an explicit confirmation that
 // states the consequence ("the patient will see *** ...").
 //
+// v3.206.0 design-crit rework: two modes.
+//   COMPOSE (default) — a search row, six labelled SLOT CHIP ROWS (the
+//     reception-composer .ms-qa-row/.ms-qa-rowlabel/.ms-qa-chips idiom,
+//     content-scripts/reception-quick-actions.js) in PC.COMPOSE_ORDER, and a
+//     sticky compose tray with an EDITABLE preview (decision L — a clinician
+//     can fill *** in-panel before Copy). This is the whole compose surface;
+//     no + Add, no LLM import, no category-pill wall, no card list.
+//   LIBRARY — today's fuller surface, essentially unchanged: search,
+//     category pills, + Add, the LLM import <details>, and the full card
+//     list with Edit/Promote/Delete/Remove. Every capability from the old
+//     single-surface module is still one tap away — nothing is deleted, only
+//     re-homed.
+// Both modes share the same _selected/_config/_personal state — picking a
+// block from a Library card is the same action as picking a slot chip.
+//
 // Storage: phrases.items (personal blocks), phrases.config (usage counts,
 // merged practice pack, tombstones, pack version). Pure logic lives in
 // shared/phrases-core.js (window.PhrasesCore); the shipped pack in
@@ -42,12 +57,17 @@ let _uiStateTimer = null;
 let _personal = []; // phrases.items — personal, freely editable
 let _config = null; // phrases.config — sanitised, pack-merged
 
-let _query = '';
-let _activeCat = 'all';
+let _mode = 'compose'; // 'compose' | 'library' — persisted (decision A)
+let _query = ''; // shared between modes — persisted
+let _activeCat = 'all'; // Library category filter — persisted
+let _substanceCat = 'all'; // scoped filter for the expanded substance row — transient (NOT persisted)
+let _expandedRows = {}; // { [slot]: true } fold state per row — persisted
 let _selected = []; // block ids in the compose pane, in click order
 let _editingId = null; // null | 'new' | personal block id
 let _confirmCopy = false; // the ***-guard confirmation step is showing
 let _copyStatus = ''; // persistent post-copy line ('' = none)
+let _draft = null; // manual edits to the compose preview — TRANSIENT, never persisted (decision L)
+let _previewExpanded = false; // preview "Show all" toggle — transient
 
 const SLOT_LABEL = {
   opener: 'opener',
@@ -58,6 +78,26 @@ const SLOT_LABEL = {
   whole: 'whole message',
 };
 
+// Row labels for the compose slot-chip rows, in PC.COMPOSE_ORDER exactly
+// (decision C) — derived from the core's order so the two can never drift.
+const ROW_LABEL = {
+  opener: 'Opener',
+  whole: 'Complete message',
+  substance: 'Message',
+  safetynet: 'Safety-net',
+  nextstep: 'Next step',
+  signoff: 'Sign-off',
+};
+
+// Rows where more than one chip may be selected at once (decision C); every
+// other row is single-select — picking a chip there deselects any other
+// selected chip in that same row (one opener, one sign-off, etc.).
+const MULTI_SLOTS = new Set(['substance', 'whole', 'safetynet']);
+
+const FOLD_N = 6; // chips shown per row before the "+N more" fold (decision C)
+
+const ICON_SEARCH = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`;
+
 function esc(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -67,7 +107,9 @@ function esc(s) {
 }
 
 // Escape, then mark the *** manual-fill placeholders so they are visually
-// loud in previews and cards ("type over me" is the whole contract).
+// loud in previews and cards ("type over me" is the whole contract). Used for
+// read-only surfaces (Library card preview) — the compose tray's own preview
+// is an editable <textarea> and can't carry markup (decision L).
 function escWithPlaceholders(s) {
   return esc(s).replace(/\*\*\*/g, '<mark class="ph-fill">***</mark>');
 }
@@ -76,24 +118,32 @@ function escWithPlaceholders(s) {
 
 export async function init(el) {
   container = el;
+  _mode = 'compose';
   _query = '';
   _activeCat = 'all';
+  _substanceCat = 'all';
+  _expandedRows = {};
   _selected = [];
   _editingId = null;
   _confirmCopy = false;
   _copyStatus = '';
+  _draft = null;
+  _previewExpanded = false;
 
   const savedUi = await loadUiState('phrases');
   if (savedUi) {
+    if (savedUi._mode === 'compose' || savedUi._mode === 'library') _mode = savedUi._mode;
     if (typeof savedUi._activeCat === 'string') _activeCat = savedUi._activeCat;
     if (typeof savedUi._query === 'string') _query = savedUi._query;
+    if (savedUi._expandedRows && typeof savedUi._expandedRows === 'object')
+      _expandedRows = { ...savedUi._expandedRows };
   }
 
   container.innerHTML = `
     <div class="ph-module">
       <div class="ph-head">
         <h2 class="ph-title">Phrases</h2>
-        <span class="ph-subtitle">Reusable message blocks — compose, copy, then paste into Medicus yourself. This tab copies text only; it sends nothing and writes nothing to the record.</span>
+        <span class="ph-subtitle">Copies text only — nothing is sent or written to the record.</span>
       </div>
       <div id="phBody"></div>
     </div>`;
@@ -103,6 +153,7 @@ export async function init(el) {
 
   container.addEventListener('click', onClick);
   container.addEventListener('input', onInput);
+  container.addEventListener('keydown', onKeydown);
 
   _storageListener = (changes, area) => {
     if (area !== 'local') return;
@@ -132,6 +183,7 @@ function cleanup() {
   if (container) {
     container.removeEventListener('click', onClick);
     container.removeEventListener('input', onInput);
+    container.removeEventListener('keydown', onKeydown);
   }
   container = null;
 }
@@ -161,7 +213,7 @@ async function persistPersonal() {
 function saveUi() {
   if (_uiStateTimer) clearTimeout(_uiStateTimer);
   _uiStateTimer = setTimeout(() => {
-    saveUiState('phrases', { _activeCat, _query });
+    saveUiState('phrases', { _mode, _activeCat, _query, _expandedRows });
   }, 400);
 }
 
@@ -194,28 +246,99 @@ function catLabel(id) {
   return c ? c.label : id || 'other';
 }
 
+// Audience badge — differential (decision F / H-052 control b): the expected
+// default ('patient') renders NOTHING on chips/cards; 'note'/'task' keep the
+// full word+colour badge (colourblind-safe). The compose tray's OWN For:/
+// mixed-audience control (renderTray) is intentionally NOT built from this —
+// it stays unconditional and full-strength, exactly as before.
+function renderAudBadge(audience) {
+  if (audience === 'patient') return '';
+  return `<span class="ph-aud ph-aud-${esc(audience)}">${esc(PC.AUDIENCE_LABEL[audience] || audience)}</span>`;
+}
+
+// ── Selection (shared by slot chips AND Library cards — one selectBlock) ──────
+//
+// Multi-select rows (substance / whole / safetynet) toggle independently;
+// every other row is single-select — picking a new chip there drops any
+// other selection in that row (decision C). Any selection change discards a
+// manual preview edit and resets the "Show all" toggle (decision L).
+
+function selectBlock(id) {
+  const b = findBlock(id);
+  if (!b) return;
+  if (_selected.includes(id)) {
+    _selected = _selected.filter((x) => x !== id);
+  } else {
+    if (!MULTI_SLOTS.has(b.slot)) {
+      _selected = _selected.filter((x) => {
+        const other = findBlock(x);
+        return !other || other.slot !== b.slot;
+      });
+    }
+    _selected.push(id);
+  }
+  _confirmCopy = false;
+  _copyStatus = '';
+  _draft = null;
+  _previewExpanded = false;
+}
+
+// Selected blocks' position in the COMPOSED message (opener→whole→substance→
+// safetynet→nextstep→signoff, selection order breaks ties) — the non-colour
+// index cue on a selected chip (decision C). Mirrors composeMessage's own
+// ordering locally; the pure compose logic itself stays in phrases-core.
+function selectedOrderMap() {
+  const blocks = _selected.map(findBlock).filter(Boolean);
+  const slotRank = (b) => {
+    const i = PC.COMPOSE_ORDER.indexOf(b.slot);
+    return i === -1 ? PC.COMPOSE_ORDER.length : i;
+  };
+  const ordered = blocks
+    .map((b, i) => ({ b, i }))
+    .sort((x, y) => slotRank(x.b) - slotRank(y.b) || x.i - y.i)
+    .map((x) => x.b);
+  const map = new Map();
+  ordered.forEach((b, idx) => map.set(b.id, idx + 1));
+  return map;
+}
+
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
 function render() {
   const body = container?.querySelector('#phBody');
   if (!body) return;
-  const parts = [];
-  parts.push(renderCompose());
-  parts.push(renderToolbar());
-  if (_editingId !== null) parts.push(renderForm());
-  parts.push(renderList());
-  body.innerHTML = parts.join('');
+  const content = _mode === 'compose' ? renderComposeMode() : renderLibrary();
+  body.innerHTML = renderModeToggle() + content;
+  syncPreviewAutoGrow();
 }
 
-function renderCompose() {
+function renderModeToggle() {
+  return `<div class="ph-mode-toggle" role="group" aria-label="Phrases view">
+    <button type="button" class="ph-mode-btn" data-act="mode" data-mode="compose" aria-pressed="${_mode === 'compose' ? 'true' : 'false'}">Compose</button>
+    <button type="button" class="ph-mode-btn" data-act="mode" data-mode="library" aria-pressed="${_mode === 'library' ? 'true' : 'false'}">Library</button>
+  </div>`;
+}
+
+// ── Compose mode ──────────────────────────────────────────────────────────────
+
+function renderComposeMode() {
+  return `<div class="ph-mode-compose">
+    <div class="ph-compose-searchrow">
+      <input type="search" id="phSearch" class="ph-search" placeholder="Search, or /trigger…" value="${esc(_query)}" aria-label="Search phrases" />
+    </div>
+    ${renderTray()}
+    ${renderRows()}
+  </div>`;
+}
+
+function renderTray() {
   if (_selected.length === 0) {
-    return `<div class="ph-compose ph-compose-empty">
-      Tap blocks below to build a message here. Type <span class="ph-kbd">/trigger</span> in search for a fast match.
-    </div>`;
+    return `<div class="ph-compose ph-compose-empty">Tap a phrase from each row to build a message.</div>`;
   }
 
   const blocks = _selected.map(findBlock).filter(Boolean);
-  const text = PC.composeMessage(_selected, allBlocks());
+  const composedText = PC.composeMessage(_selected, allBlocks());
+  const text = _draft != null ? _draft : composedText;
   const { chars, smsSegments } = PC.charCount(text);
   const audiences = [...new Set(blocks.map((b) => b.audience))];
   const mixed = audiences.length > 1;
@@ -224,20 +347,20 @@ function renderCompose() {
   const chipRows = blocks
     .map(
       (b) => `<span class="ph-sel-chip" title="${esc(b.title)}">
-        <span class="ph-aud ph-aud-${esc(b.audience)}">${esc(PC.AUDIENCE_LABEL[b.audience] || b.audience)}</span>
+        ${renderAudBadge(b.audience)}
         ${esc(b.title)}
-        <button class="ph-sel-x" data-act="unselect" data-id="${esc(b.id)}" title="Remove from message" aria-label="Remove ${esc(b.title)}">&times;</button>
+        <button type="button" class="ph-sel-x" data-act="unselect" data-id="${esc(b.id)}" title="Remove from message" aria-label="Remove ${esc(b.title)}">&times;</button>
       </span>`
     )
     .join('');
 
+  // The tray's own audience control stays FULL STRENGTH — unconditional,
+  // every audience shown, exactly as before this crit (decision F).
   const audLine = mixed
     ? `<div class="ph-compose-warn">Mixed audiences (${audiences.map((a) => esc(PC.AUDIENCE_LABEL[a] || a)).join(' + ')}) — check every part belongs in the same Medicus box before you paste.</div>`
     : `<div class="ph-compose-aud">For: <span class="ph-aud ph-aud-${esc(audiences[0])}">${esc(PC.AUDIENCE_LABEL[audiences[0]] || audiences[0])}</span></div>`;
 
-  const gapNote = hasGaps
-    ? `<div class="ph-compose-gaps">Contains <mark class="ph-fill">***</mark> — type the missing details over each one after pasting. They are never filled in for you.</div>`
-    : '';
+  const gapNote = `<div class="ph-compose-gaps" id="phGapsNote"${hasGaps ? '' : ' hidden'}>Contains <mark class="ph-fill">***</mark> — type the details over each one here, or after pasting. They are never filled in for you.</div>`;
 
   // The consequence must be TRUE for the composed audience: "the patient will
   // see" is only right for patient-facing text; a false consequence on a note/
@@ -245,48 +368,185 @@ function renderCompose() {
   // through-blind failure H-052 flags).
   const gapReader = audiences.includes('patient') ? 'the patient' : 'whoever reads this';
   const confirmBlock = _confirmCopy
-    ? `<div class="ph-copy-confirm">
+    ? `<div class="ph-copy-confirm" role="alertdialog" aria-live="assertive">
         <div class="ph-copy-confirm-text">This message still contains <mark class="ph-fill">***</mark>. If you paste it and press send in Medicus as-is, ${esc(gapReader)} will see <strong>***</strong> where the details should be.</div>
         <div class="ph-copy-confirm-actions">
-          <button class="ph-btn ph-btn-warn" data-act="copy-confirm">Copy anyway — I will fill in *** after pasting</button>
-          <button class="ph-btn" data-act="copy-cancel">Back</button>
+          <button type="button" class="ph-btn ph-btn-warn" data-act="copy-confirm">Copy anyway — I will fill in *** after pasting</button>
+          <button type="button" class="ph-btn ph-btn-primary" id="phCopyBack" data-act="copy-cancel">Back</button>
         </div>
       </div>`
     : '';
 
-  const statusLine = _copyStatus ? `<div class="ph-copy-status">${esc(_copyStatus)}</div>` : '';
+  const statusLine = _copyStatus
+    ? `<div class="ph-copy-status" role="status" aria-live="polite"><span class="ph-ok-glyph" aria-hidden="true">&#10003;</span>${esc(_copyStatus)}</div>`
+    : '';
 
   const smsHint = audiences.includes('patient') && chars > 0 ? ` · ~${smsSegments} SMS` : '';
+  const lineCount = text.split('\n').length;
+  const showToggle = text.length > 260 || lineCount > 5;
 
-  return `<div class="ph-compose">
+  return `<div class="ph-compose ph-compose-populated">
     <div class="ph-compose-chips">${chipRows}</div>
     ${audLine}
-    <div class="ph-compose-preview">${escWithPlaceholders(text)}</div>
+    <textarea class="ph-compose-preview${_previewExpanded ? ' ph-preview-expanded' : ''}" id="phComposePreview" aria-label="Composed message — edit here to fill in *** before copying">${esc(text)}</textarea>
+    ${showToggle ? `<button type="button" class="ph-btn ph-btn-ghost ph-btn-sm ph-preview-toggle" data-act="toggle-preview">${_previewExpanded ? 'Show less' : 'Show all'}</button>` : ''}
     ${gapNote}
     ${confirmBlock}
     <div class="ph-compose-foot">
       <span class="ph-charcount">${chars} chars${smsHint}</span>
       <span class="ph-compose-btns">
-        <button class="ph-btn" data-act="clear">Clear</button>
-        <button class="ph-btn ph-btn-primary" data-act="copy">Copy message</button>
+        <button type="button" class="ph-btn" data-act="clear">Clear</button>
+        ${_confirmCopy ? '' : '<button type="button" class="ph-btn ph-btn-primary" data-act="copy">Copy message</button>'}
       </span>
     </div>
     ${statusLine}
   </div>`;
 }
 
-function renderToolbar() {
+function renderRows() {
+  return `<div class="ph-rows">${PC.COMPOSE_ORDER.map(renderRow).join('')}</div>`;
+}
+
+function rowMatchScore(query, b) {
+  if (query.startsWith('/')) {
+    const t = query.slice(1).toLowerCase();
+    if (!t) return 0;
+    if (b.trigger === t) return 2000;
+    if (b.trigger && b.trigger.startsWith(t)) return 1000;
+    return 0;
+  }
+  if (b.trigger && b.trigger === query.toLowerCase()) return 2000;
+  return PC.scoreMatch(query, `${b.title} ${b.trigger} ${b.keywords}`);
+}
+
+function renderRow(slot) {
+  let blocks = allBlocks().filter((b) => b.slot === slot);
+  const isSubstance = slot === 'substance';
+  const expanded = !!_expandedRows[slot];
+
+  if (isSubstance && expanded && _substanceCat !== 'all') {
+    blocks = blocks.filter((b) => b.category === _substanceCat);
+  }
+
+  const use = _config.usage;
+  const q = _query.trim();
+  let ordered;
+  let matchSet = null;
+
+  if (q) {
+    matchSet = new Set();
+    const scored = blocks.map((b) => ({ b, score: rowMatchScore(q, b) }));
+    for (const e of scored) if (e.score > 0) matchSet.add(e.b.id);
+    ordered = scored
+      .sort((x, y) => y.score - x.score || (Number(use[y.b.id]) || 0) - (Number(use[x.b.id]) || 0))
+      .map((e) => e.b);
+  } else {
+    ordered = [...blocks].sort((a, b) => (Number(use[b.id]) || 0) - (Number(use[a.id]) || 0));
+  }
+
+  // Search and an already-expanded row both show everything; only the
+  // untouched, unsearched fold state truncates to FOLD_N (decision C).
+  const showAll = !!q || expanded;
+  const visible = showAll ? ordered : ordered.slice(0, FOLD_N);
+  const hiddenCount = showAll ? 0 : Math.max(0, ordered.length - FOLD_N);
+  const orderMap = selectedOrderMap();
+
+  const chipsHtml =
+    blocks.length === 0
+      ? `<span class="ph-row-none">none</span>`
+      : visible.map((b) => renderChip(b, matchSet, orderMap)).join('') +
+        (hiddenCount > 0
+          ? `<button type="button" class="ph-chip ph-chip-more" data-act="row-more" data-slot="${esc(slot)}" aria-expanded="false" aria-label="Show ${hiddenCount} more ${esc(ROW_LABEL[slot] || slot)} phrases">+${hiddenCount} more</button>`
+          : '');
+
+  const catRow = isSubstance && expanded ? renderSubstanceCatFilter() : '';
+
+  return `<div class="ph-row">
+    <div class="ph-row-label">${esc(ROW_LABEL[slot] || slot)}</div>
+    ${catRow}
+    <div class="ph-row-chips">${chipsHtml}</div>
+  </div>`;
+}
+
+function renderChip(b, matchSet, orderMap) {
+  const selected = _selected.includes(b.id);
+  const idx = orderMap.get(b.id);
+  const label = PC.chipLabel(b.title);
+  const cls = ['ph-chip'];
+  if (selected) cls.push('ph-chip-on');
+  if (matchSet) cls.push(matchSet.has(b.id) ? 'ph-chip-match' : 'ph-chip-fade');
+  const idxHtml = selected && idx ? `<span class="ph-chip-idx">${idx}</span>` : '';
+  const audHtml = renderAudBadge(b.audience);
+  return `<button type="button" class="${cls.join(' ')}" data-act="pick" data-id="${esc(b.id)}" aria-pressed="${selected ? 'true' : 'false'}" title="${esc(b.title)}" aria-label="${esc(b.title)}">${idxHtml}${esc(label)}${audHtml}</button>`;
+}
+
+function renderSubstanceCatFilter() {
   const pills = [
-    `<button class="ph-pill ${_activeCat === 'all' ? 'ph-pill-on' : ''}" data-act="cat" data-cat="all">All</button>`,
+    `<button type="button" class="ph-pill ${_substanceCat === 'all' ? 'ph-pill-on' : ''}" data-act="subcat" data-cat="all" aria-pressed="${_substanceCat === 'all' ? 'true' : 'false'}">All</button>`,
     ...categories().map(
       (c) =>
-        `<button class="ph-pill ${_activeCat === c.id ? 'ph-pill-on' : ''}" data-act="cat" data-cat="${esc(c.id)}">${esc(c.label)}</button>`
+        `<button type="button" class="ph-pill ${_substanceCat === c.id ? 'ph-pill-on' : ''}" data-act="subcat" data-cat="${esc(c.id)}" aria-pressed="${_substanceCat === c.id ? 'true' : 'false'}">${esc(c.label)}</button>`
+    ),
+  ].join('');
+  return `<div class="ph-row-catfilter">${pills}</div>`;
+}
+
+// Live re-sync of the char count / gaps note as the clinician types in the
+// preview, WITHOUT a full render() — a full innerHTML replace would drop the
+// textarea's cursor/scroll position mid-edit. The *** copy gate itself is
+// evaluated only at Copy time (doCopy reads the textarea's live value).
+function onPreviewInput(ta) {
+  _draft = ta.value;
+  const text = ta.value;
+  const { chars, smsSegments } = PC.charCount(text);
+  const hasGaps = PC.hasUnfilledPlaceholders(text);
+  const blocks = _selected.map(findBlock).filter(Boolean);
+  const audiences = [...new Set(blocks.map((b) => b.audience))];
+  const smsHint = audiences.includes('patient') && chars > 0 ? ` · ~${smsSegments} SMS` : '';
+
+  const countEl = container.querySelector('.ph-charcount');
+  if (countEl) countEl.textContent = `${chars} chars${smsHint}`;
+
+  const gapsEl = container.querySelector('#phGapsNote');
+  if (gapsEl) gapsEl.hidden = !hasGaps;
+
+  autoGrowPreview(ta);
+}
+
+function autoGrowPreview(ta) {
+  if (!ta) return;
+  ta.style.height = 'auto';
+  ta.style.height = ta.scrollHeight + 'px';
+}
+
+function syncPreviewAutoGrow() {
+  autoGrowPreview(container?.querySelector('#phComposePreview'));
+}
+
+// ── Library mode ──────────────────────────────────────────────────────────────
+
+function renderLibrary() {
+  const parts = [renderToolbar()];
+  if (_editingId !== null) parts.push(renderForm());
+  parts.push(
+    `<div class="ph-lib-hint">Tap a card to add it to your message — switch to Compose to build and copy it.</div>`
+  );
+  parts.push(renderList());
+  return `<div class="ph-mode-library">${parts.join('')}</div>`;
+}
+
+function renderToolbar() {
+  const pills = [
+    `<button type="button" class="ph-pill ${_activeCat === 'all' ? 'ph-pill-on' : ''}" data-act="cat" data-cat="all" aria-pressed="${_activeCat === 'all' ? 'true' : 'false'}">All</button>`,
+    ...categories().map(
+      (c) =>
+        `<button type="button" class="ph-pill ${_activeCat === c.id ? 'ph-pill-on' : ''}" data-act="cat" data-cat="${esc(c.id)}" aria-pressed="${_activeCat === c.id ? 'true' : 'false'}">${esc(c.label)}</button>`
     ),
   ].join('');
   return `
     <div class="ph-toolbar">
-      <input type="search" id="phSearch" class="ph-search" placeholder="Search, or /trigger…" value="${esc(_query)}" />
-      <button class="ph-btn ph-btn-primary" data-act="add">+ Add</button>
+      <input type="search" id="phSearch" class="ph-search" placeholder="Search, or /trigger…" value="${esc(_query)}" aria-label="Search phrases" />
+      <button type="button" class="ph-btn ph-btn-primary" data-act="add">+ Add</button>
     </div>
     <div class="ph-pills">${pills}</div>
     ${renderLlmBlock()}`;
@@ -295,17 +555,18 @@ function renderToolbar() {
 // LLM-assisted authoring lives here on the tab (simpler than an Options
 // section for a personal library): copy the prompt, paste JSON back, strict
 // per-block validation with visible errors. Mirrors the Knowledge module's
-// starter-pack import discipline.
+// starter-pack import discipline. Library-only (decision S) — nothing on the
+// compose surface references it.
 function renderLlmBlock() {
   return `
     <details class="ph-llm-block">
       <summary>Write blocks with an LLM…</summary>
       <div class="ph-llm-inner">
         <p class="ph-llm-help">Copy the prompt into any LLM (ChatGPT, Claude, etc.), describe the blocks you want, then paste the JSON reply below. Every block is validated before it is saved; patient-facing blocks are written at NHS reading age 9&ndash;11 by the prompt's rules. Review each one before you rely on it.</p>
-        <button class="ph-btn ph-btn-sm" data-act="copy-llm-prompt">Copy prompt</button>
+        <button type="button" class="ph-btn ph-btn-sm" data-act="copy-llm-prompt">Copy prompt</button>
         <textarea id="phLlmJson" class="ph-input" rows="4" placeholder="Paste the JSON reply from the LLM here…"></textarea>
         <div class="ph-llm-row">
-          <button class="ph-btn ph-btn-sm" data-act="import-llm">Validate &amp; import</button>
+          <button type="button" class="ph-btn ph-btn-sm" data-act="import-llm">Validate &amp; import</button>
           <span id="phLlmStatus" class="ph-llm-status"></span>
         </div>
         <div id="phLlmErrors" class="ph-llm-errors"></div>
@@ -318,12 +579,28 @@ function visibleBlocks() {
   return PC.searchBlocks(_query, filtered, _config.usage);
 }
 
+function renderEmptyState({ message, showClear }) {
+  return `<div class="ph-empty">
+    <span class="ph-empty-icon">${ICON_SEARCH}</span>
+    <div class="ph-empty-msg">${esc(message)}</div>
+    ${showClear ? `<button type="button" class="ph-btn ph-btn-ghost ph-btn-sm" data-act="clear-search">Clear search</button>` : ''}
+  </div>`;
+}
+
 function renderList() {
-  const blocks = visibleBlocks();
   if (allBlocks().length === 0 && _editingId === null) {
-    return `<div class="ph-empty">No blocks yet. Use <strong>+ Add</strong> to write one, or the LLM helper above.</div>`;
+    return renderEmptyState({
+      message: 'No blocks yet. Use + Add to write one, or the LLM helper above.',
+      showClear: false,
+    });
   }
-  if (blocks.length === 0) return `<div class="ph-empty">No blocks match.</div>`;
+  const blocks = visibleBlocks();
+  if (blocks.length === 0) {
+    const q = _query.trim();
+    const catPart = _activeCat !== 'all' ? ` in ${catLabel(_activeCat)}` : '';
+    const qPart = q ? `'${q}'` : 'your filters';
+    return renderEmptyState({ message: `No matches for ${qPart}${catPart}.`, showClear: true });
+  }
   return `<div class="ph-list">${blocks.map(renderCard).join('')}</div>`;
 }
 
@@ -336,19 +613,27 @@ function renderCard(b) {
     ? `<a class="ph-leaflet" href="${esc(b.leafletUrl)}" target="_blank" rel="noopener noreferrer" data-act="leaflet" title="Open the linked patient leaflet">leaflet ↗</a>`
     : '';
   const actions = practice
-    ? `<button class="ph-btn ph-btn-sm ph-btn-danger" data-act="hide-practice" data-id="${esc(b.id)}" title="Remove this practice block (it will not come back on pack updates)">Remove</button>`
-    : `<button class="ph-btn ph-btn-sm" data-act="edit" data-id="${esc(b.id)}">Edit</button>
-       <button class="ph-btn ph-btn-sm" data-act="promote" data-id="${esc(b.id)}" title="Move to the practice tier (shared via Options backup)">Promote</button>
-       <button class="ph-btn ph-btn-sm ph-btn-danger" data-act="delete" data-id="${esc(b.id)}">Delete</button>`;
+    ? `<button type="button" class="ph-btn ph-btn-sm ph-btn-danger" data-act="hide-practice" data-id="${esc(b.id)}" title="Remove this practice block (it will not come back on pack updates)">Remove</button>`
+    : `<button type="button" class="ph-btn ph-btn-sm" data-act="edit" data-id="${esc(b.id)}">Edit</button>
+       <button type="button" class="ph-btn ph-btn-sm" data-act="promote" data-id="${esc(b.id)}" title="Move to the practice tier (shared via Options backup)">Promote</button>
+       <button type="button" class="ph-btn ph-btn-sm ph-btn-danger" data-act="delete" data-id="${esc(b.id)}">Delete</button>`;
+
+  // Provenance inverts (decision G): personal blocks get the violet "yours"
+  // badge; practice blocks are the unbadged default plus a muted pack-version
+  // meta line (cheap provenance until the reviewBy follow-up lands).
+  const ownerBadge = !practice ? `<span class="ph-badge ph-badge-yours">yours</span>` : '';
+  const provenance = practice
+    ? `<div class="ph-card-provenance">Practice pack v${esc(String(_config.version))}</div>`
+    : '';
 
   return `
-    <div class="ph-card ${selected ? 'ph-card-selected' : ''}" data-act="pick" data-id="${esc(b.id)}">
+    <div class="ph-card ${selected ? 'ph-card-selected' : ''}" data-act="pick" data-id="${esc(b.id)}" tabindex="0" role="button" aria-pressed="${selected ? 'true' : 'false'}">
       <div class="ph-card-top">
         <span class="ph-card-title">${esc(b.title)}</span>
-        <span class="ph-aud ph-aud-${esc(b.audience)}">${esc(PC.AUDIENCE_LABEL[b.audience] || b.audience)}</span>
+        ${renderAudBadge(b.audience)}
       </div>
       <div class="ph-card-meta">
-        ${practice ? '<span class="ph-badge ph-badge-practice">practice</span>' : ''}
+        ${ownerBadge}
         <span class="ph-slot">${esc(SLOT_LABEL[b.slot] || b.slot)}</span>
         <span class="ph-cat-chip">${esc(catLabel(b.category))}</span>
         ${b.trigger ? `<span class="ph-trigger">/${esc(b.trigger)}</span>` : ''}
@@ -356,6 +641,7 @@ function renderCard(b) {
         ${leaflet}
       </div>
       <div class="ph-card-preview">${escWithPlaceholders(firstLine)}</div>
+      ${provenance}
       <div class="ph-card-actions">${actions}</div>
     </div>`;
 }
@@ -420,8 +706,8 @@ function renderForm() {
       </div>
       <div id="phFmError" class="ph-form-error"></div>
       <div class="ph-form-actions">
-        <button class="ph-btn ph-btn-primary" data-act="save">Save</button>
-        <button class="ph-btn" data-act="cancel">Cancel</button>
+        <button type="button" class="ph-btn ph-btn-primary" data-act="save">Save</button>
+        <button type="button" class="ph-btn" data-act="cancel">Cancel</button>
       </div>
     </div>`;
 }
@@ -433,10 +719,51 @@ function onInput(ev) {
   if (t.id === 'phSearch') {
     _query = t.value;
     _copyStatus = '';
-    const body = container.querySelector('#phBody');
-    const listHost = body.querySelector('.ph-list, .ph-empty');
-    if (listHost) listHost.outerHTML = renderList();
+    if (_mode === 'library') {
+      const body = container.querySelector('#phBody');
+      const listHost = body.querySelector('.ph-list, .ph-empty');
+      if (listHost) listHost.outerHTML = renderList();
+    } else {
+      const rowsHost = container.querySelector('.ph-rows');
+      if (rowsHost) rowsHost.outerHTML = renderRows();
+    }
     saveUi();
+    return;
+  }
+  if (t.id === 'phComposePreview') {
+    onPreviewInput(t);
+  }
+}
+
+function onKeydown(ev) {
+  const t = ev.target;
+
+  // Exact /trigger match (or a bare trigger) + Enter selects that block
+  // immediately, compose mode only (decision E).
+  if (t.id === 'phSearch' && ev.key === 'Enter' && _mode === 'compose') {
+    const q = _query.trim();
+    if (!q) return;
+    const low = (q.startsWith('/') ? q.slice(1) : q).toLowerCase();
+    if (!low) return;
+    const match = allBlocks().find((b) => b.trigger && b.trigger === low);
+    if (match) {
+      ev.preventDefault();
+      selectBlock(match.id);
+      _query = '';
+      render();
+      container.querySelector('#phSearch')?.focus();
+      saveUi();
+    }
+    return;
+  }
+
+  // Cards are role="button" divs (real <button> can't nest the Edit/Delete
+  // buttons they carry) — Enter/Space activates them like any button
+  // (decision K). Real <button>/<a> targets handle their own key activation.
+  if ((ev.key === 'Enter' || ev.key === ' ') && t.closest && t.closest('.ph-card')) {
+    if (t.closest('button, a')) return;
+    ev.preventDefault();
+    t.closest('.ph-card').click();
   }
 }
 
@@ -447,31 +774,50 @@ function onClick(ev) {
 
   if (act === 'leaflet') return; // let the anchor navigate; don't treat as a pick
 
-  // Card body click = add to the compose pane. Inner buttons are their own
-  // nearest [data-act], so they never reach this branch.
+  // A chip or card body click = toggle it in/out of the compose selection.
+  // Shared by slot chips (compose mode) and cards (Library mode) — inner
+  // buttons are their own nearest [data-act], so they never reach here.
   if (act === 'pick') {
-    const id = actEl.dataset.id;
-    if (!_selected.includes(id)) {
-      _selected.push(id);
-      _confirmCopy = false;
-      _copyStatus = '';
-      render();
-    }
+    selectBlock(actEl.dataset.id);
+    render();
     return;
   }
   ev.stopPropagation();
 
   switch (act) {
+    case 'mode':
+      _mode = actEl.dataset.mode === 'library' ? 'library' : 'compose';
+      _editingId = null;
+      saveUi();
+      render();
+      break;
     case 'unselect':
       _selected = _selected.filter((x) => x !== actEl.dataset.id);
       _confirmCopy = false;
       _copyStatus = '';
+      _draft = null;
+      _previewExpanded = false;
       render();
       break;
     case 'clear':
       _selected = [];
       _confirmCopy = false;
       _copyStatus = '';
+      _draft = null;
+      _previewExpanded = false;
+      render();
+      break;
+    case 'toggle-preview':
+      _previewExpanded = !_previewExpanded;
+      render();
+      break;
+    case 'row-more':
+      _expandedRows = { ..._expandedRows, [actEl.dataset.slot]: true };
+      saveUi();
+      render();
+      break;
+    case 'subcat':
+      _substanceCat = actEl.dataset.cat;
       render();
       break;
     case 'copy':
@@ -482,6 +828,12 @@ function onClick(ev) {
       break;
     case 'copy-cancel':
       _confirmCopy = false;
+      render();
+      break;
+    case 'clear-search':
+      _query = '';
+      _activeCat = 'all';
+      saveUi();
       render();
       break;
     case 'cat':
@@ -526,7 +878,11 @@ function onClick(ev) {
 // ── Copy (the only output path — clipboard, explicitly clicked) ──────────────
 
 async function doCopy(confirmed) {
-  const text = PC.composeMessage(_selected, allBlocks());
+  const ta = container?.querySelector('#phComposePreview');
+  // Copy operates on the CURRENT textarea value (decision L) — a GP may have
+  // filled *** in-panel before clicking Copy, and the gate below must fire on
+  // what is actually about to be copied, not the original composed text.
+  const text = ta ? ta.value : PC.composeMessage(_selected, allBlocks());
   if (!text) return;
 
   // The ***-unfilled gate (H-052 control): a message still carrying manual-
@@ -535,6 +891,7 @@ async function doCopy(confirmed) {
   if (carriesGaps && !confirmed) {
     _confirmCopy = true;
     render();
+    container.querySelector('#phCopyBack')?.focus();
     return;
   }
   _confirmCopy = false;
@@ -709,10 +1066,16 @@ async function importLlmJson() {
       .join('');
   }
   if (freshStatus) {
-    freshStatus.className = accepted.length > 0 ? 'ph-llm-status ph-llm-status-ok' : 'ph-llm-status ph-llm-status-err';
-    freshStatus.textContent =
+    const summary =
       `${accepted.length} block(s) imported as personal blocks` +
       (rejected.length > 0 ? `; ${rejected.length} rejected (see below).` : '. Review each before using it.');
+    if (accepted.length > 0) {
+      freshStatus.className = 'ph-llm-status ph-llm-status-ok';
+      freshStatus.innerHTML = `<span class="ph-ok-glyph" aria-hidden="true">&#10003;</span>${esc(summary)}`;
+    } else {
+      freshStatus.className = 'ph-llm-status ph-llm-status-err';
+      freshStatus.textContent = summary;
+    }
   }
 }
 
