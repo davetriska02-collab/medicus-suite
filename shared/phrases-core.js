@@ -441,6 +441,26 @@
     return out;
   }
 
+  // ── chipLabel ─────────────────────────────────────────────────────────────
+  //
+  // RENDER-TIME-ONLY display helper (design-crit v3.206.0): compose-mode slot
+  // chips already show the block's SLOT via the row it sits in (Opener,
+  // Safety-net, …), so repeating "Opener — " on every chip label is noise.
+  // Strips everything up to and including the FIRST " — " em-dash separator,
+  // but ONLY when the prefix (the part before the separator) is <= 24 chars —
+  // long enough for every shipped slot-prefix ("Condition explainer", "Needs a
+  // call", …), short enough that a real title with an em-dash deeper in
+  // ("Safety-net — worse after 3 days — call back") is left alone rather than
+  // mangled. Pure and render-only: pack data / stored titles are never
+  // mutated, so Library (which shows the full title) is unaffected.
+
+  function chipLabel(title) {
+    const t = String(title ?? '');
+    const idx = t.indexOf(' — ');
+    if (idx === -1 || idx > 24) return t;
+    return t.slice(idx + 3).trim();
+  }
+
   // ── LLM authoring prompt ──────────────────────────────────────────────────
   // Same convention as knowledge-utils' kbSchemaPrompt(): one self-contained
   // prompt the user copies into any external LLM; the example JSON is
@@ -529,6 +549,7 @@ After this line, the practice describes the blocks it wants (topics, tone, any l
     charCount,
     generateBlockId,
     slugify,
+    chipLabel,
     phrasesAuthoringPrompt,
   });
   if (typeof module !== 'undefined' && module.exports) {
