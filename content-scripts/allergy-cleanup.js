@@ -151,6 +151,15 @@
       if (exclude.has(a.id)) return;
       var overview = (overviewsById && overviewsById[a.id]) || null;
       if (!hasBothCodeTypes(overview)) return;
+      // ONLY the live-observed direction (HAR46): substance is authoritative,
+      // legacy allergyCode is the stale field. The checklist UI promises the
+      // substance is never touched, so a dual-coded entry whose authoritative
+      // side is 'pre-defined-allergies' (or unknown) must NOT be offered
+      // here — clearing ITS stale field would delete the substance, the exact
+      // opposite of what the section says it does. A pre-defined-authoritative
+      // entry falls through to classifyConvertibleEntries instead, where the
+      // reviewed conversion flow handles it with a per-entry modal.
+      if (overview.allergyCodeType !== 'substances') return;
       flagged.push({
         id: a.id,
         description: a.allergyCodeDescription,
@@ -789,20 +798,30 @@
   // authoritative code field off a dual-coded entry (see
   // hasBothCodeTypes/classifyDualCodedEntries above) — confirmed live
   // (HAR46) the real, observed shape is allergyCodeType:"substances" with a
-  // stale allergyCode still populated, so that's what's cleared; the
-  // opposite (pre-defined-allergies authoritative, stale substance cleared)
-  // is handled symmetrically in case it's ever seen, though not yet
-  // observed live. Every clinical field (severity/certainty/
+  // stale allergyCode still populated, so that's what's cleared — the ONLY
+  // direction this builder will ever produce; anything else throws (see
+  // inside). Every clinical field (severity/certainty/
   // additionalInformation/allergyReactions/onsetDate) and the authoritative
   // code itself pass through UNCHANGED — this only ever nulls the one stale
   // field, nothing else about the record changes.
   function buildClearLegacyCodePayload(prefill) {
     var p = prefill || {};
-    var preferSubstance = p.allergyCodeType === 'substances';
+    // FAIL CLOSED on anything except the one live-observed direction. The
+    // checklist row was flagged from the OVERVIEW's allergyCodeType, but this
+    // payload is built from the EDIT-ALLERGY prefill's — if the prefill
+    // disagrees (or omits the field, the "older/thinner shape" case), a
+    // symmetric clear here would silently delete the dm+d SUBSTANCE while the
+    // UI told the clinician it never would. Refusing surfaces as a per-row
+    // tidyError instead, and the record stays untouched.
+    if (p.allergyCodeType !== 'substances') {
+      throw new Error(
+        'This entry no longer shows the substance as its current code — skipped to be safe. Please review it manually in Medicus.'
+      );
+    }
     return Object.assign(
       {
-        allergyCode: preferSubstance ? null : p.allergyCode ? unwrapSelectValue(p.allergyCode) : null,
-        substance: preferSubstance ? (p.substance ? unwrapSelectValue(p.substance) : null) : null,
+        allergyCode: null,
+        substance: p.substance ? unwrapSelectValue(p.substance) : null,
         additionalInformation: p.additionalInformation != null ? p.additionalInformation : null,
         severity: p.severity != null ? p.severity : null,
         certainty: p.certainty != null ? p.certainty : null,
@@ -874,6 +893,7 @@
       extractAllergenAndReactionHint: extractAllergenAndReactionHint,
       pickReactionSeed: pickReactionSeed,
       groupDuplicateAllergies: groupDuplicateAllergies,
+      remapReviewsByGroupIdentity: remapReviewsByGroupIdentity,
       isSameAllergenConcept: isSameAllergenConcept,
       groupRelatedAllergies: groupRelatedAllergies,
       pickDefaultKeeperId: pickDefaultKeeperId,
@@ -1138,6 +1158,13 @@
 
   // ── State ─────────────────────────────────────────────────────────────────────
   var _lastPatientId = null;
+  // Bumped on every patient change (resetForPatient). Every async flow that
+  // writes module state after an await captures this at its start and
+  // discards its result if the epoch has moved on — otherwise a fetch/scan
+  // started on patient A can resolve after SPA-navigation to patient B and
+  // repopulate B's freshly-reset state with A's allergy IDs, and the
+  // destructive actions would then target A's records from B's screen.
+  var _patientEpoch = 0;
   var _allergiesCache = null;
   var _hintGroups = []; // free, text-only groupDuplicateAllergies result — page-load only
   var _open = false;
@@ -1163,6 +1190,8 @@
   var _dualCodedTidying = false;
 
   function resetForPatient() {
+    _patientEpoch += 1;
+    hideModal(); // an open review modal belongs to the previous patient
     _allergiesCache = null;
     _hintGroups = [];
     _open = false;
@@ -1238,9 +1267,13 @@
     }
     if (!_allergiesCache && !_fetchInFlight) {
       _fetchInFlight = true;
+      var epoch = _patientEpoch;
       try {
-        _allergiesCache = await fetchClinicalSummaryAllergies(info.patientId);
+        var fetched = await fetchClinicalSummaryAllergies(info.patientId);
+        if (epoch !== _patientEpoch) return; // patient changed mid-fetch — this list is stale
+        _allergiesCache = fetched;
       } catch (_) {
+        if (epoch !== _patientEpoch) return;
         _allergiesCache = [];
       } finally {
         _fetchInFlight = false;
@@ -1254,6 +1287,7 @@
 
   // ── Full scan (opt-in — only ever runs from the "Clean up allergies?" click) ──
   async function runFullScan() {
+    var epoch = _patientEpoch;
     _scanState = 'scanning';
     _scanError = null;
     render();
@@ -1268,6 +1302,11 @@
           });
         })
       );
+      // Patient changed while the overviews were in flight — every id in
+      // `candidates` belongs to the PREVIOUS patient; writing them into the
+      // freshly-reset state would offer destructive actions against the
+      // wrong record. Discard everything.
+      if (epoch !== _patientEpoch) return;
       var overviewsById = {};
       candidates.forEach(function (a, i) {
         overviewsById[a.id] = overviewList[i];
@@ -1311,16 +1350,51 @@
 
       _scanState = 'done';
     } catch (err) {
+      if (epoch !== _patientEpoch) return;
       _scanState = 'error';
       _scanError = (err && err.message) || 'Failed to scan the allergy list.';
     } finally {
-      render();
+      if (epoch === _patientEpoch) render();
     }
     // Backgrounded pass-2 enrichment — never blocks the scan's own result.
     enrichGroupsWithConceptAncestry();
   }
 
+  // Order-independent identity of a duplicate group — its member entry ids.
+  function groupEntryIdKey(entries) {
+    return (entries || [])
+      .map(function (e) {
+        return e.id;
+      })
+      .sort()
+      .join('|');
+  }
+
+  // Per-group review state (_reviews) — and an open review modal — are keyed
+  // by group INDEX, but the background concept-ancestry enrichment can
+  // replace _duplicateGroups with a regrouped array (indices shift, text
+  // groups merge). Remap surviving state to each group's NEW index by
+  // entry-id identity; state for a group that no longer exists as-is (its
+  // members got regrouped into a bigger one) is dropped, so its review
+  // restarts from the fuller group rather than acting on a stale card set.
+  // Pure — exported for tests.
+  function remapReviewsByGroupIdentity(oldGroups, newGroups, oldReviews) {
+    var keyToNewIdx = {};
+    (newGroups || []).forEach(function (g, i) {
+      keyToNewIdx[groupEntryIdKey(g.entries)] = i;
+    });
+    var out = Object.create(null);
+    Object.keys(oldReviews || {}).forEach(function (oldIdx) {
+      var og = (oldGroups || [])[oldIdx];
+      if (!og) return;
+      var ni = keyToNewIdx[groupEntryIdKey(og.entries)];
+      if (ni !== undefined) out[ni] = oldReviews[oldIdx];
+    });
+    return out;
+  }
+
   function applyDuplicateGroups(rawGroups) {
+    var oldGroups = _duplicateGroups;
     _duplicateGroups = rawGroups.map(function (entries, i) {
       return {
         key: 'g' + i,
@@ -1335,10 +1409,26 @@
         }),
       };
     });
+    _reviews = remapReviewsByGroupIdentity(oldGroups, _duplicateGroups, _reviews);
+    // If a duplicate-review modal is open, follow its group to the new index
+    // (re-rendering rebinds the handlers to it); if the group was regrouped
+    // away, close the modal — its cards no longer match any group, and
+    // confirmMerge would otherwise act on a silently-stale index.
+    if (_modalRoot && _modalRoot.style.display !== 'none' && _modalRoot.dataset.kind === 'duplicate') {
+      var og = oldGroups[Number(_modalRoot.dataset.idx)];
+      var newIdx = og
+        ? _duplicateGroups.findIndex(function (g) {
+            return groupEntryIdKey(g.entries) === groupEntryIdKey(og.entries);
+          })
+        : -1;
+      if (newIdx === -1) hideModal();
+      else showModal('duplicate', newIdx);
+    }
   }
 
   async function enrichGroupsWithConceptAncestry() {
     if (_conceptEnrichmentDone || !_allergiesCache) return;
+    var epoch = _patientEpoch;
     var candidates = activeNonDraftAllergies(_allergiesCache);
     if (candidates.length < 2) {
       _conceptEnrichmentDone = true;
@@ -1361,7 +1451,7 @@
           _conceptInfoByEntryId[a.id] = { conceptId: conceptId, ancestorConceptIds: ancestors || [] };
         })
       );
-      if (!_allergiesCache) return; // patient may have changed while fetching
+      if (epoch !== _patientEpoch) return; // patient changed while fetching — results are stale
       var enriched = groupRelatedAllergies(_allergiesCache, _conceptInfoByEntryId);
       dbg('enrichGroupsWithConceptAncestry: done, groups now:', enriched.length);
       applyDuplicateGroups(enriched);
@@ -1378,6 +1468,20 @@
     });
     // No end date -> no POST, ever.
     if (!targets.length || _ending || !_endDate) return;
+    // Ending an allergy is effectively irreversible from this widget — same
+    // "Are you sure?" gate (cancel by default) the OIR select-all uses, per
+    // the clinical safety notice, naming the exact count being acted on.
+    if (
+      !window.confirm(
+        'End ' +
+          targets.length +
+          ' selected allerg' +
+          (targets.length === 1 ? 'y' : 'ies') +
+          ' as junk/low-relevance codes? This cannot be undone from here.'
+      )
+    ) {
+      return;
+    }
     _ending = true;
     render();
     var results = await Promise.allSettled(
@@ -1420,6 +1524,17 @@
       return f.checked && !f.tidied;
     });
     if (!targets.length || _dualCodedTidying) return;
+    if (
+      !window.confirm(
+        'Remove the stale legacy code from ' +
+          targets.length +
+          ' selected entr' +
+          (targets.length === 1 ? 'y' : 'ies') +
+          '? The current substance and all clinical detail are kept unchanged.'
+      )
+    ) {
+      return;
+    }
     _dualCodedTidying = true;
     render();
     var results = await Promise.allSettled(
@@ -1580,16 +1695,25 @@
     var group = _duplicateGroups[idx];
     var st = groupState(idx);
     if (!group || !st.entries || !st.keeperId || st.saving || !st.endDate) return;
+    // SNAPSHOT everything the merge acts on BEFORE the first await. The
+    // modal's radios/checkboxes stay live while the save is in flight, and
+    // their handlers mutate st directly — without this, a keeper click
+    // mid-save would POST the OLD keeper's prefill onto the NEW keeper's
+    // record and then end the old keeper as a duplicate.
+    var keeperId = st.keeperId;
+    var chosen = Object.assign({}, st.chosen);
+    var endDate = st.endDate;
+    var additionalInfoText = st.additionalInfoText;
+    var active = filterActiveEntries(st.entries, st.removedIds);
     st.saving = true;
     st.saveError = null;
     refreshModal('duplicate', idx);
     try {
-      var active = filterActiveEntries(st.entries, st.removedIds);
-      var prefill = await fetchEditAllergyForm(st.keeperId);
+      var prefill = await fetchEditAllergyForm(keeperId);
       var resolved = {};
       MERGEABLE_FIELDS.forEach(function (field) {
         if (field === 'additionalInformation') return;
-        var chosenEntryId = st.chosen[field];
+        var chosenEntryId = chosen[field];
         if (!chosenEntryId) return;
         var chosenEntry = active.find(function (e) {
           return e.id === chosenEntryId;
@@ -1598,17 +1722,17 @@
         if (value === undefined) return;
         resolved[field] = field === 'onsetDate' ? normalizeOnsetDateForSubmit(value) : value;
       });
-      resolved.additionalInformation = (st.additionalInfoText || '').trim() || null;
+      resolved.additionalInformation = (additionalInfoText || '').trim() || null;
       var payload = buildMergeChangeAllergyPayload(prefill, resolved);
-      await postChangeAllergy(st.keeperId, payload);
+      await postChangeAllergy(keeperId, payload);
       // Only ACTIVE entries are ever ended — anything removed from this
       // merge (filterActiveEntries above) must be left completely untouched.
       var others = active.filter(function (e) {
-        return e.id !== st.keeperId;
+        return e.id !== keeperId;
       });
       var results = await Promise.allSettled(
         others.map(function (e) {
-          return postEndAllergy(buildEndAllergyPayload(e.id, st.endDate, MERGE_REASON_ENDED));
+          return postEndAllergy(buildEndAllergyPayload(e.id, endDate, MERGE_REASON_ENDED));
         })
       );
       var failed = results

@@ -853,13 +853,10 @@
     {
       "conceptId": "609543001",
       "description": "Perindopril pseudoallergy",
-      "kind": "substance",
-      "substance": {
-        "conceptId": "22209011000001101",
-        "description": "Perindopril erbumine"
-      },
+      "kind": "not-convertible",
+      "substance": null,
       "reaction": null,
-      "notes": null
+      "notes": "Salt-ambiguous (2026-08-02 pre-merge review): dm+d splits perindopril into two salt VTMs (erbumine and arginine) with no salt-neutral parent, and an ACE-inhibitor pseudoallergy (cough/angioedema) is a CLASS effect -- pre-selecting erbumine (22209011000001101, the previous mapping) would not alert on a perindopril-arginine prescription. Search live for 'perindopril' and pick the salt the patient actually received (or record both salts if unknown -- the class signal matters more than the salt)."
     },
     {
       "conceptId": "956291000000100",
@@ -2251,13 +2248,10 @@
     {
       "conceptId": "292402008",
       "description": "Flupentixol decanoate adverse reaction",
-      "kind": "substance",
-      "substance": {
-        "conceptId": "13314611000001107",
-        "description": "Flupentixol dihydrochloride"
-      },
+      "kind": "not-convertible",
+      "substance": null,
       "reaction": null,
-      "notes": null
+      "notes": "Salt-specific (2026-08-02 pre-merge review): dm+d keeps flupentixol DECANOATE (the depot ester) as its own VTM, clinically distinct from the oral dihydrochloride -- the previous mapping to Flupentixol dihydrochloride (13314611000001107) would have recorded the reaction against the wrong product and missed future depot prescribing. Search live for 'flupentixol decanoate' and pick the decanoate-level substance from the results."
     },
     {
       "conceptId": "292392003",
@@ -2273,24 +2267,18 @@
     {
       "conceptId": "292389002",
       "description": "Fluphenazine decanoate adverse reaction",
-      "kind": "substance",
-      "substance": {
-        "conceptId": "13314711000001103",
-        "description": "Fluphenazine hydrochloride"
-      },
+      "kind": "not-convertible",
+      "substance": null,
       "reaction": null,
-      "notes": null
+      "notes": "Salt-specific (2026-08-02 pre-merge review): dm+d keeps fluphenazine DECANOATE (the depot ester) distinct from the oral hydrochloride -- the previous mapping to Fluphenazine hydrochloride (13314711000001103) would have recorded the reaction against the wrong product and missed future depot prescribing. Search live for 'fluphenazine decanoate' and pick the decanoate-level substance from the results."
     },
     {
       "conceptId": "292390006",
       "description": "Fluphenazine enanthate adverse reaction",
-      "kind": "substance",
-      "substance": {
-        "conceptId": "13314711000001103",
-        "description": "Fluphenazine hydrochloride"
-      },
+      "kind": "not-convertible",
+      "substance": null,
       "reaction": null,
-      "notes": null
+      "notes": "Salt-specific (2026-08-02 pre-merge review): the ENANTHATE is a depot ester distinct from the oral hydrochloride -- the previous mapping to Fluphenazine hydrochloride (13314711000001103) would have recorded the reaction against the wrong product. Search live for 'fluphenazine' and pick the matching ester-level substance from the results."
     },
     {
       "conceptId": "293164006",
@@ -2658,13 +2646,10 @@
     {
       "conceptId": "293509005",
       "description": "Perindopril adverse reaction",
-      "kind": "substance",
-      "substance": {
-        "conceptId": "22209011000001101",
-        "description": "Perindopril erbumine"
-      },
+      "kind": "not-convertible",
+      "substance": null,
       "reaction": null,
-      "notes": null
+      "notes": "Salt-ambiguous (2026-08-02 pre-merge review): dm+d splits perindopril into two salt VTMs (erbumine and arginine) with no salt-neutral parent -- pre-selecting erbumine (22209011000001101, the previous mapping) would not alert on a perindopril-arginine prescription. Search live for 'perindopril' and pick the salt the patient actually received (or record both salts if unknown)."
     },
     {
       "conceptId": "293248009",
