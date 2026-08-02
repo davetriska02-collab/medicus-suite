@@ -18,7 +18,10 @@ function check(cond, msg) {
   if (cond) { console.log(`  OK  ${msg}`); passed++; }
   else { console.error(`  FAIL  ${msg}`); failed++; }
 }
-function isoDaysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
+// Anchored to the pinned NOW below, not the wall clock — every parseMock() call
+// pins now: NOW, so fixture dates must be relative to the same clock or the
+// asserted ages drift as the calendar advances (this bit us from late June 2026).
+function isoDaysAgo(n) { const d = new Date(NOW); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
 
 // Replicate readMockPatient()'s row parsing (the documented "a | b | c" format)
 // so the test asserts the exact shape the builder feeds the engine.
