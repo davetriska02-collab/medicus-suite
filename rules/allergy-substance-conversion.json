@@ -1,0 +1,3374 @@
+{
+  "version": 1,
+  "lastUpdated": "2026-08-02",
+  "notes": "Legacy 'pre-defined-allergies'-coded SNOMED concepts (315 total, minus 416098002 'Medicine allergy' which belongs on rules/allergy-junk-codes.json instead, not here -- 314 entries) and their reviewed conversion target, used by content-scripts/allergy-cleanup.js's 'Clean up allergies?' widget to suggest a substance conversion for any active allergy with allergyCodeType 'pre-defined-allergies'. Hand-built from two spreadsheets Nick reviewed personally (true-allergy-conversion-candidates.csv, 128 rows under SNOMED's genuine allergy root; adverse-reaction-decomposition.csv, 187 rows under the separate adverse-reaction root -- confirmed distinct hierarchies, no conceptId overlap) -- see the project memory for the full sweep/review history. `kind` is one of: 'substance' (straight conversion, no reaction override), 'substance-plus-reaction' (decompose to substance + a reaction search seed -- `reaction.text` is a plain search hint, never a pre-resolved conceptId, the reaction picker always searches live), 'not-convertible' (no dm+d code exists for this class, or nothing nameable from the code text at all -- `notes` explains why, offered for manual search only, no pre-filled suggestion), 'not-an-allergy' (miscoded -- not offered for conversion at all, `notes` explains the real condition and recommends removal via the junk-removal flow instead). VTM-preference policy (prefer the plain generic/VTM-level substance over a specific salt/dose-form/branded one) already applied when these were resolved -- do not re-derive picks here, this file is the reviewed output, not raw search results. Matched by EXACT conceptId only, same discipline as every other list in this codebase.",
+  "entries": [
+    {
+      "conceptId": "294113002",
+      "description": "Acrivastine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774431006",
+        "description": "Acrivastine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293986006",
+      "description": "Alfuzosin allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774465007",
+        "description": "Alfuzosin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "1208355000",
+      "description": "Allergy to canagliflozin",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775025005",
+        "description": "Canagliflozin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "1373513002",
+      "description": "Allergy to clopidogrel",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775314005",
+        "description": "Clopidogrel"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "1208353007",
+      "description": "Allergy to dapagliflozin",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775447002",
+        "description": "dapagliflozin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "1208354001",
+      "description": "Allergy to ertugliflozin",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775821002",
+        "description": "Ertugliflozin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294793007",
+      "description": "Allergy to ethinyl estradiol",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775861001",
+        "description": "Ethinylestradiol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "782563005",
+      "description": "Allergy to lithium compound",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "767300005",
+        "description": "Lithium and/or lithium compound"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "11861000122107",
+      "description": "Allergy to pantoprazole",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777059008",
+        "description": "Pantoprazole"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294220003",
+      "description": "Allopurinol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774482009",
+        "description": "Allopurinol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294988000",
+      "description": "Amiodarone allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774551007",
+        "description": "Amiodarone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294002003",
+      "description": "Amlodipine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774557006",
+        "description": "Amlodipine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "985271000000102",
+      "description": "Apixaban allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774624002",
+        "description": "Apixaban"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293586001",
+      "description": "Aspirin allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774656009",
+        "description": "Aspirin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293965006",
+      "description": "Atenolol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774685003",
+        "description": "Atenolol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "1269396003",
+      "description": "Atenolol hypersensitivity",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774685003",
+        "description": "Atenolol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293799001",
+      "description": "Azathioprine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774718000",
+        "description": "Azathioprine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294115009",
+      "description": "Azelastine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774720002",
+        "description": "Azelastine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294692005",
+      "description": "Beclometasone allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774745004",
+        "description": "Beclometasone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293967003",
+      "description": "Bisoprolol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774880006",
+        "description": "Bisoprolol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294434000",
+      "description": "Boric acid allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777580006",
+        "description": "Boric acid"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294712001",
+      "description": "Budesonide allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774924004",
+        "description": "Budesonide"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "609538008",
+      "description": "Captopril pseudoallergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775039005",
+        "description": "Captopril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293867002",
+      "description": "Carbamazepine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775043009",
+        "description": "Carbamazepine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294674002",
+      "description": "Carbimazole allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775054004",
+        "description": "Carbimazole"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293974008",
+      "description": "Carvedilol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775077004",
+        "description": "Carvedilol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294116005",
+      "description": "Cetirizine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775140005",
+        "description": "Cetirizine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294394003",
+      "description": "Chloroquine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775187003",
+        "description": "Chloroquine only product"
+      },
+      "reaction": null,
+      "notes": "Originally mapped to the bare 'Chloroquine' substance concept (373468005), but that isn't a real product-level/VTM concept -- dm+d only models Chloroquine at the salt level (sulfate/phosphate), with no unsalted product. Corrected to 'Chloroquine only product' (775187003), the broadest product-level concept that doesn't commit to one specific salt. If the specific salt is known (sulfate vs phosphate), that's a genuine clinical distinction worth recording instead."
+    },
+    {
+      "conceptId": "294129005",
+      "description": "Chlorphenamine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775195004",
+        "description": "Chlorphenamine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293935001",
+      "description": "Chlorpromazine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775216005",
+        "description": "Chlorpromazine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "609539000",
+      "description": "Cilazapril pseudoallergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775246008",
+        "description": "Cilazapril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294795000",
+      "description": "Conjugated estrogen allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "126098001",
+        "description": "Conjugated estrogen"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293958003",
+      "description": "Dexamfetamine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775504000",
+        "description": "Dexamfetamine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294003008",
+      "description": "Diltiazem allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775603003",
+        "description": "Diltiazem"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "295077001",
+      "description": "Dipyridamole allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775646000",
+        "description": "Dipyridamole"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293987002",
+      "description": "Doxazosin allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "773245005",
+        "description": "Doxazosin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "609540003",
+      "description": "Enalapril pseudoallergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775758007",
+        "description": "Enalapril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294845009",
+      "description": "Epoetin beta allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775797004",
+        "description": "Epoetin beta"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294782005",
+      "description": "Estradiol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775839006",
+        "description": "Estradiol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294794001",
+      "description": "Estriol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775845003",
+        "description": "Estriol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294781003",
+      "description": "Estrogen allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "1052201004",
+        "description": "Estrogen"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293788003",
+      "description": "Estrogen antagonist allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "373336003",
+        "description": "Estrogen receptor antagonist"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293999009",
+      "description": "Felodipine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775923000",
+        "description": "Felodipine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294898007",
+      "description": "Ferrous fumarate allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775944000",
+        "description": "Ferrous fumarate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294899004",
+      "description": "Ferrous gluconate allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775946003",
+        "description": "Ferrous gluconate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294900009",
+      "description": "Ferrous glycine sulfate allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775948002",
+        "description": "Ferrous glycine sulfate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294902001",
+      "description": "Ferrous sulfate allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775951009",
+        "description": "Ferrous sulfate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294767000",
+      "description": "Finasteride allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775964005",
+        "description": "Finasteride"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293948002",
+      "description": "Flupentixol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "13314611000001107",
+        "description": "Flupentixol dihydrochloride"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293934002",
+      "description": "Fluphenazine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "13314711000001103",
+        "description": "Fluphenazine hydrochloride"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294700000",
+      "description": "Fluticasone allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776016008",
+        "description": "Fluticasone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294930001",
+      "description": "Folic acid allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776022004",
+        "description": "Folic acid"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "609541004",
+      "description": "Fosinopril pseudoallergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776042008",
+        "description": "Fosinopril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294080009",
+      "description": "Glycopyrronium allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "769097000",
+        "description": "Glycopyrronium"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293924006",
+      "description": "Haloperidol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776172004",
+        "description": "Haloperidol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294393009",
+      "description": "Hydroxychloroquine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776273003",
+        "description": "Hydroxychloroquine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "18401000122101",
+      "description": "Imidapril pseudoallergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776308009",
+        "description": "Imidapril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294082001",
+      "description": "Ipratropium allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776387001",
+        "description": "Ipratropium"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293656001",
+      "description": "Lansoprazole allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776475007",
+        "description": "Lansoprazole"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294803007",
+      "description": "Liothyronine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776546003",
+        "description": "Liothyronine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294327003",
+      "description": "Liquid paraffin allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776796004",
+        "description": "Liquid paraffin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "609542006",
+      "description": "Lisinopril pseudoallergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776550005",
+        "description": "Lisinopril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293818004",
+      "description": "Lithium carbonate allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776555000",
+        "description": "Lithium carbonate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293819007",
+      "description": "Lithium citrate allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776556004",
+        "description": "Lithium citrate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294114008",
+      "description": "Loratadine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776572007",
+        "description": "Loratadine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "609534005",
+      "description": "Losartan pseudoallergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776577001",
+        "description": "Losartan"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294755002",
+      "description": "Medroxyprogesterone allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776652008",
+        "description": "Medroxyprogesterone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293771005",
+      "description": "Methotrexate allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776732000",
+        "description": "Methotrexate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293955000",
+      "description": "Methylphenidate allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776752004",
+        "description": "Methylphenidate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293970004",
+      "description": "Metoprolol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776770001",
+        "description": "Metoprolol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294701001",
+      "description": "Mometasone allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776818008",
+        "description": "Mometasone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "772021008",
+      "description": "Nebivolol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776879005",
+        "description": "Nebivolol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293996002",
+      "description": "Nifedipine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776908002",
+        "description": "Nifedipine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294246004",
+      "description": "Non-ionic surfactant allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "418796001",
+        "description": "Nonionic surfactant"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294752004",
+      "description": "Norethisterone allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776941004",
+        "description": "Norethisterone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293655002",
+      "description": "Omeprazole allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776991000",
+        "description": "Omeprazole"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "830174000",
+      "description": "Oxedrine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "419339003",
+        "description": "Oxedrine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "609543001",
+      "description": "Perindopril pseudoallergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "22209011000001101",
+        "description": "Perindopril erbumine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "956291000000100",
+      "description": "Prasugrel allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777298009",
+        "description": "Prasugrel"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294126003",
+      "description": "Promethazine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "372871004",
+        "description": "Promethazine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293982008",
+      "description": "Propranolol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777344007",
+        "description": "Propranolol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294676000",
+      "description": "Propylthiouracil allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777349002",
+        "description": "Propylthiouracil"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "609545008",
+      "description": "Pseudoallergy to ramipril",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777395009",
+        "description": "Ramipril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293917005",
+      "description": "Risperidone allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777450003",
+        "description": "Risperidone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "985251000000106",
+      "description": "Rivaroxaban allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777455008",
+        "description": "Rivaroxaban"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294037000",
+      "description": "Salbutamol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777483005",
+        "description": "Salbutamol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294036009",
+      "description": "Salmeterol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777491001",
+        "description": "Salmeterol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "295009002",
+      "description": "Spironolactone allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777603002",
+        "description": "Spironolactone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293663001",
+      "description": "Sulfasalazine allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777645000",
+        "description": "Sulfasalazine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293914003",
+      "description": "Sulpiride allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777653008",
+        "description": "Sulpiride"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293992000",
+      "description": "Terazosin allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777709007",
+        "description": "Terazosin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294758000",
+      "description": "Tibolone allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777765003",
+        "description": "Tibolone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "609546009",
+      "description": "Trandolapril pseudoallergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777819006",
+        "description": "Trandolapril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "773485002",
+      "description": "Valproic acid allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777911005",
+        "description": "Valproic acid"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294005001",
+      "description": "Verapamil allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777927003",
+        "description": "Verapamil"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293946003",
+      "description": "Zuclopenthixol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777995002",
+        "description": "Zuclopenthixol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "870727009",
+      "description": "Allergy to folic acid and/or iron compound",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "327452001",
+        "description": "Folic acid- and iron-containing product"
+      },
+      "reaction": null,
+      "notes": "This code is ambiguous, and you are strongly recommended to identify which product the patient reacted to from the notes and update this accordingly."
+    },
+    {
+      "conceptId": "294033001",
+      "description": "Allergy to selective beta-2 agonist",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "373215002",
+        "description": "selective beta-2 agonist"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "91939003",
+      "description": "Allergy to sulpha drugs",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "No class-level DMD code available -- identify specific ingredient from notes, or remove"
+    },
+    {
+      "conceptId": "293957008",
+      "description": "Amphetamine group allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "703842006",
+        "description": "Amphetamine group"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "13221000122100",
+      "description": "Atorvastatin allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "773455007",
+        "description": "Atorvastatin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293962009",
+      "description": "Beta-adrenoceptor blocking drug allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "373254001",
+        "description": "Beta blocker"
+      },
+      "reaction": null,
+      "notes": "This code may have been added for ease rather than because the patient is allergic to all beta-blockers. May be worth checking and changing this to be more specific if possible."
+    },
+    {
+      "conceptId": "293963004",
+      "description": "Cardioselective beta-blocker allergy",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "No direct match to cardioselective"
+    },
+    {
+      "conceptId": "871500003",
+      "description": "Cyproterone and/or ethinylestradiol allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "768273006",
+        "description": "Cyproterone- and ethinyl estradiol-containing product"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294972000",
+      "description": "Fluvastatin allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776020007",
+        "description": "Fluvastatin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "718535005",
+      "description": "Pitavastatin allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "443586000",
+        "description": "pitavastatin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294973005",
+      "description": "Pravastatin allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777299001",
+        "description": "Pravastatin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293654003",
+      "description": "Proton pump inhibitor allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "372525000",
+        "description": "Proton pump inhibitor"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "718537002",
+      "description": "Rosuvastatin allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777471008",
+        "description": "Rosuvastatin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294971007",
+      "description": "Simvastatin allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777537002",
+        "description": "Simvastatin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294970008",
+      "description": "Statin allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "372912004",
+        "description": "Statin"
+      },
+      "reaction": null,
+      "notes": "This code is ambiguous, and you are strongly recommended to identify which product the patient reacted to from the notes and update this accordingly."
+    },
+    {
+      "conceptId": "294923007",
+      "description": "Vitamin A allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "438501000124103",
+        "description": "Vitamin A supplement"
+      },
+      "reaction": null,
+      "notes": "As for other vitamins, we should avoid using the codes for endogenous vitamins which are part of core human metabolism, so I've selected the \"supplement\" option here."
+    },
+    {
+      "conceptId": "767475000",
+      "description": "Vitamin B12 and/or vitamin B12 derivative allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "781584003",
+        "description": "Vitamin B12 and/or vitamin B12 derivative"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294924001",
+      "description": "Vitamin D and/or vitamin D derivative allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "438541000124101",
+        "description": "Vitamin D supplement"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294925000",
+      "description": "Vitamin K and/or vitamin K derivative allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "65183007",
+        "description": "Vitamin K and/or vitamin K derivative"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "91867008",
+      "description": "Adult gluten-induced enteropathy",
+      "kind": "not-an-allergy",
+      "substance": null,
+      "reaction": null,
+      "notes": "This is not an allergy. Coeliac disease is an autoimmune disease - removal of this code is recommended."
+    },
+    {
+      "conceptId": "714332003",
+      "description": "Allergy to banana",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "256307007",
+        "description": "banana"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294645006",
+      "description": "Allergy to component of vaccine product containing only Bordetella pertussis and Clostridium tetani and Corynebacterium diphtheriae antigens",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "871875004",
+        "description": "Bordetella pertussis and Clostridium tetani and Corynebacterium diphtheriae antigens only vaccine product"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294644005",
+      "description": "Allergy to component of vaccine product containing only Clostridium tetani and Corynebacterium diphtheriae antigens",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "871826000",
+        "description": "Clostridium tetani and Corynebacterium diphtheriae antigens only vaccine product"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "294662001",
+      "description": "Allergy to component of vaccine product containing only Measles morbillivirus and Mumps orthorubulavirus and Rubella virus antigens",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "871831003",
+        "description": "Measles morbillivirus and Mumps orthorubulavirus and Rubella virus antigens only vaccine product"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "1269425007",
+      "description": "Allergy to gluten",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "89811004",
+        "description": "Gluten"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "5611000122107",
+      "description": "Casein allergy",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "50593009",
+        "description": "Casein"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "396331005",
+      "description": "Gluten enteropathy",
+      "kind": "not-an-allergy",
+      "substance": null,
+      "reaction": null,
+      "notes": "This is not an allergy. Coeliac disease is an autoimmune disease - removal of this code is recommended."
+    },
+    {
+      "conceptId": "1269424006",
+      "description": "Gluten intolerance",
+      "kind": "substance-plus-reaction",
+      "substance": {
+        "conceptId": "89811004",
+        "description": "Gluten"
+      },
+      "reaction": {
+        "text": "Food intolerance"
+      },
+      "notes": "This is not an allergy, it's an intolerance. Removal of this code is recommended, although the relevant code is included if you wish to leave it in. (Consider whether removal is more appropriate than conversion -- this is an intolerance, not a true allergy.)"
+    },
+    {
+      "conceptId": "1145003007",
+      "description": "Hypersensitivity to COVID-19 mRNA vaccine",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "1119349007",
+        "description": "COVID-19 mRNA vaccine"
+      },
+      "reaction": null,
+      "notes": "This deliberately maps to the mRNA vaccine platform specifically, not the general 'COVID-19 vaccine' concept. A patient who reacted to an mRNA vaccine (the most commonly given type) may still be able to safely receive a viral-vector or protein-subunit COVID-19 vaccine -- recording the broader class code could wrongly rule those out too. Check the notes for the specific vaccine given if in doubt."
+    },
+    {
+      "conceptId": "442728009",
+      "description": "Non-celiac gluten sensitivity",
+      "kind": "substance-plus-reaction",
+      "substance": {
+        "conceptId": "89811004",
+        "description": "Gluten"
+      },
+      "reaction": {
+        "text": "Food intolerance"
+      },
+      "notes": "This is not an allergy, it's an intolerance. Removal of this code is recommended, although the relevant code is included if you wish to leave it in. (Consider whether removal is more appropriate than conversion -- this is an intolerance, not a true allergy.)"
+    },
+    {
+      "conceptId": "61712006",
+      "description": "Transient gluten intolerance",
+      "kind": "not-an-allergy",
+      "substance": null,
+      "reaction": null,
+      "notes": "This is not an allergy. Transient gluten intolerance is a temporary inability to break down gluten due to damage to the gut brush border in acute diarrhoea. Removal of this code is recommended."
+    },
+    {
+      "conceptId": "702810006",
+      "description": "Allopurinol-induced DRESS syndrome",
+      "kind": "substance-plus-reaction",
+      "substance": {
+        "conceptId": "774482009",
+        "description": "Allopurinol"
+      },
+      "reaction": {
+        "text": "DRESS syndrome"
+      },
+      "notes": null
+    },
+    {
+      "conceptId": "716374005",
+      "description": "Anaphylaxis due to sulphur dioxide",
+      "kind": "substance-plus-reaction",
+      "substance": {
+        "conceptId": "86233005",
+        "description": "sulphur dioxide"
+      },
+      "reaction": {
+        "text": "Anaphylaxis"
+      },
+      "notes": null
+    },
+    {
+      "conceptId": "235022008",
+      "description": "Aspirin burn of oral mucosa",
+      "kind": "substance-plus-reaction",
+      "substance": {
+        "conceptId": "774656009",
+        "description": "Aspirin"
+      },
+      "reaction": {
+        "text": "burn of oral mucosa"
+      },
+      "notes": null
+    },
+    {
+      "conceptId": "241949004",
+      "description": "Aspirin-induced anaphylactoid reaction",
+      "kind": "substance-plus-reaction",
+      "substance": {
+        "conceptId": "774656009",
+        "description": "Aspirin"
+      },
+      "reaction": {
+        "text": "anaphylactoid reaction"
+      },
+      "notes": null
+    },
+    {
+      "conceptId": "312958000",
+      "description": "Chloroquine retinopathy",
+      "kind": "substance-plus-reaction",
+      "substance": {
+        "conceptId": "775187003",
+        "description": "Chloroquine only product"
+      },
+      "reaction": {
+        "text": "retinopathy"
+      },
+      "notes": null
+    },
+    {
+      "conceptId": "424338005",
+      "description": "Hydroxychloroquine retinopathy",
+      "kind": "substance-plus-reaction",
+      "substance": {
+        "conceptId": "776273003",
+        "description": "Hydroxychloroquine"
+      },
+      "reaction": {
+        "text": "retinopathy"
+      },
+      "notes": null
+    },
+    {
+      "conceptId": "15921411000119106",
+      "description": "Retinopathy of both eyes caused by hydroxychloroquine",
+      "kind": "substance-plus-reaction",
+      "substance": {
+        "conceptId": "776273003",
+        "description": "Hydroxychloroquine"
+      },
+      "reaction": {
+        "text": "Retinopathy of both eyes"
+      },
+      "notes": null
+    },
+    {
+      "conceptId": "15735401000119100",
+      "description": "Retinopathy of left eye caused by hydroxychloroquine",
+      "kind": "substance-plus-reaction",
+      "substance": {
+        "conceptId": "776273003",
+        "description": "Hydroxychloroquine"
+      },
+      "reaction": {
+        "text": "Retinopathy of left eye"
+      },
+      "notes": null
+    },
+    {
+      "conceptId": "15735361000119109",
+      "description": "Retinopathy of right eye caused by hydroxychloroquine",
+      "kind": "substance-plus-reaction",
+      "substance": {
+        "conceptId": "776273003",
+        "description": "Hydroxychloroquine"
+      },
+      "reaction": {
+        "text": "Retinopathy of right eye"
+      },
+      "notes": null
+    },
+    {
+      "conceptId": "292571004",
+      "description": "Acrivastine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774431006",
+        "description": "Acrivastine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "720683004",
+      "description": "Adverse reaction caused by atorvastatin",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "773455007",
+        "description": "Atorvastatin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "720678007",
+      "description": "Adverse reaction caused by azilsartan",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774721003",
+        "description": "Azilsartan"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "720677002",
+      "description": "Adverse reaction caused by candesartan",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775028007",
+        "description": "Candesartan"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "720675005",
+      "description": "Adverse reaction caused by irbesartan",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776392004",
+        "description": "Irbesartan"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "720665007",
+      "description": "Adverse reaction caused by metoprolol succinate",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776770001",
+        "description": "Metoprolol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "720666008",
+      "description": "Adverse reaction caused by metoprolol tartrate",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776770001",
+        "description": "Metoprolol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "720674009",
+      "description": "Adverse reaction caused by olmesartan",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776982004",
+        "description": "Olmesartan"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "720680001",
+      "description": "Adverse reaction caused by pitavastatin",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "443586000",
+        "description": "pitavastatin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "720682009",
+      "description": "Adverse reaction caused by rosuvastatin",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777471008",
+        "description": "Rosuvastatin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "720672008",
+      "description": "Adverse reaction caused by telmisartan",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777696003",
+        "description": "Telmisartan"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "10847541000119100",
+      "description": "Adverse reaction caused by valproic acid",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777911005",
+        "description": "Valproic acid"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "720673003",
+      "description": "Adverse reaction caused by valsartan",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777913008",
+        "description": "Valsartan"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292419005",
+      "description": "Adverse reaction to beta-blockers",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "373254001",
+        "description": "Beta blocker"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "419253001",
+      "description": "Adverse reaction to clopidogrel",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775314005",
+        "description": "Clopidogrel"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292266007",
+      "description": "Adverse reaction to levodopa, L-dopa",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776515002",
+        "description": "Levodopa"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "218395001",
+      "description": "Adverse reaction to male fern oleoresin",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "417890004",
+        "description": "Oleoresin of male fern"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292444002",
+      "description": "Alfuzosin adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774465007",
+        "description": "Alfuzosin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292679006",
+      "description": "Allopurinol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774482009",
+        "description": "Allopurinol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293451000",
+      "description": "Amiodarone adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774551007",
+        "description": "Amiodarone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292460003",
+      "description": "Amlodipine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774557006",
+        "description": "Amlodipine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292414000",
+      "description": "Amphetamine group adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "703842006",
+        "description": "Amphetamine group"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "985211000000107",
+      "description": "Apixaban adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774624002",
+        "description": "Apixaban"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292044008",
+      "description": "Aspirin adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774656009",
+        "description": "Aspirin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "418370000",
+      "description": "Atenolol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774685003",
+        "description": "Atenolol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292257008",
+      "description": "Azathioprine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774718000",
+        "description": "Azathioprine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292573001",
+      "description": "Azelastine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774720002",
+        "description": "Azelastine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293156000",
+      "description": "Beclometasone adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774745004",
+        "description": "Beclometasone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "419885006",
+      "description": "Beta lactam adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "406778007",
+        "description": "Beta-lactam"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292491009",
+      "description": "Beta-adrenoceptor agonist adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "373227004",
+        "description": "Beta adrenergic receptor agonist"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292425009",
+      "description": "Bisoprolol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774880006",
+        "description": "Bisoprolol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292894008",
+      "description": "Boric acid adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777580006",
+        "description": "Boric acid"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293175005",
+      "description": "Budesonide adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774924004",
+        "description": "Budesonide"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "871516001",
+      "description": "Calcium carbonate and/or etidronic acid adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "770958000",
+        "description": "Calcium carbonate- and etidronic acid-containing product"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293501008",
+      "description": "Captopril adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775039005",
+        "description": "Captopril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292325005",
+      "description": "Carbamazepine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775043009",
+        "description": "Carbamazepine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293138000",
+      "description": "Carbimazole adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775054004",
+        "description": "Carbimazole"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292420004",
+      "description": "Cardioselective beta-blocker adverse reaction",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "No substance code available -- identify allergen from additionalInformation, or remove"
+    },
+    {
+      "conceptId": "292432000",
+      "description": "Carvedilol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775077004",
+        "description": "Carvedilol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292574007",
+      "description": "Cetirizine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775140005",
+        "description": "Cetirizine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292854006",
+      "description": "Chloroquine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775187003",
+        "description": "Chloroquine only product"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292587001",
+      "description": "Chlorphenamine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775195004",
+        "description": "Chlorphenamine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292393008",
+      "description": "Chlorpromazine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775216005",
+        "description": "Chlorpromazine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293505004",
+      "description": "Cilazapril adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775246008",
+        "description": "Cilazapril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293257003",
+      "description": "Conjugated estrogens adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "126098001",
+        "description": "Conjugated estrogen"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "871515002",
+      "description": "Cyproterone and/or ethinyl estradiol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "768273006",
+        "description": "Cyproterone- and ethinyl estradiol-containing product"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292415004",
+      "description": "Dexamfetamine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775504000",
+        "description": "Dexamfetamine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292461004",
+      "description": "Diltiazem adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775603003",
+        "description": "Diltiazem"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293539000",
+      "description": "Dipyridamole adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775646000",
+        "description": "Dipyridamole"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292445001",
+      "description": "Doxazosin adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "773245005",
+        "description": "Doxazosin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293507007",
+      "description": "Enalapril adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775758007",
+        "description": "Enalapril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293307008",
+      "description": "Epoetin beta adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775797004",
+        "description": "Epoetin beta"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293244006",
+      "description": "Estradiol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775839006",
+        "description": "Estradiol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293246008",
+      "description": "Estradiol implant adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775839006",
+        "description": "Estradiol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293256007",
+      "description": "Estriol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775845003",
+        "description": "Estriol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293243000",
+      "description": "Estrogen adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "1052201004",
+        "description": "Estrogen"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "871521003",
+      "description": "Estrogen and/or progesterone adverse reaction",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "No substance code available -- identify allergen from additionalInformation, or remove"
+    },
+    {
+      "conceptId": "292246003",
+      "description": "Estrogen antagonist adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "373336003",
+        "description": "Estrogen receptor antagonist"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293255006",
+      "description": "Ethinylestradiol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775861001",
+        "description": "Ethinylestradiol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293215009",
+      "description": "Etynodiol diacetate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "126105006",
+        "description": "Etynodiol diacetate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292457005",
+      "description": "Felodipine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775923000",
+        "description": "Felodipine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293361006",
+      "description": "Ferrous fumarate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775944000",
+        "description": "Ferrous fumarate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293362004",
+      "description": "Ferrous gluconate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775946003",
+        "description": "Ferrous gluconate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293363009",
+      "description": "Ferrous glycine sulfate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775948002",
+        "description": "Ferrous glycine sulfate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293365002",
+      "description": "Ferrous sulfate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775951009",
+        "description": "Ferrous sulfate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293228002",
+      "description": "Finasteride adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775964005",
+        "description": "Finasteride"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292774009",
+      "description": "Fixed oil adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "77014007",
+        "description": "Fixed oil"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292405005",
+      "description": "Flupentixol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "13314611000001107",
+        "description": "Flupentixol dihydrochloride"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292402008",
+      "description": "Flupentixol decanoate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "13314611000001107",
+        "description": "Flupentixol dihydrochloride"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292392003",
+      "description": "Fluphenazine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "13314711000001103",
+        "description": "Fluphenazine hydrochloride"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292389002",
+      "description": "Fluphenazine decanoate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "13314711000001103",
+        "description": "Fluphenazine hydrochloride"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292390006",
+      "description": "Fluphenazine enanthate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "13314711000001103",
+        "description": "Fluphenazine hydrochloride"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293164006",
+      "description": "Fluticasone adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776016008",
+        "description": "Fluticasone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293434007",
+      "description": "Fluvastatin adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776020007",
+        "description": "Fluvastatin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293393003",
+      "description": "Folic acid adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776022004",
+        "description": "Folic acid"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "871499007",
+      "description": "Folic acid and/or iron adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "327452001",
+        "description": "Folic acid- and iron-containing product"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293508002",
+      "description": "Fosinopril adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776042008",
+        "description": "Fosinopril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292538003",
+      "description": "Glycopyrronium adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "769097000",
+        "description": "Glycopyrronium"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292382006",
+      "description": "Haloperidol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776172004",
+        "description": "Haloperidol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292380003",
+      "description": "Haloperidol decanoate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776172004",
+        "description": "Haloperidol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292853000",
+      "description": "Hydroxychloroquine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776273003",
+        "description": "Hydroxychloroquine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292540008",
+      "description": "Ipratropium adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776387001",
+        "description": "Ipratropium"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292113001",
+      "description": "Lansoprazole adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776475007",
+        "description": "Lansoprazole"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "367141000000103",
+      "description": "Leflunomide adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776493008",
+        "description": "Leflunomide"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293265000",
+      "description": "Liothyronine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776546003",
+        "description": "Liothyronine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292786007",
+      "description": "Liquid paraffin adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776796004",
+        "description": "Liquid paraffin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "2386001000000104",
+      "description": "Liraglutide adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776548002",
+        "description": "Liraglutide"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293502001",
+      "description": "Lisinopril adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776550005",
+        "description": "Lisinopril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292276005",
+      "description": "Lithium adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "36378007",
+        "description": "Lithium compound"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292277001",
+      "description": "Lithium carbonate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776555000",
+        "description": "Lithium carbonate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292278006",
+      "description": "Lithium citrate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776556004",
+        "description": "Lithium citrate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292572006",
+      "description": "Loratadine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776572007",
+        "description": "Loratadine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293513003",
+      "description": "Losartan adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776577001",
+        "description": "Losartan"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293217001",
+      "description": "Medroxyprogesterone adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776652008",
+        "description": "Medroxyprogesterone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292229001",
+      "description": "Methotrexate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776732000",
+        "description": "Methotrexate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292412001",
+      "description": "Methylphenidate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776752004",
+        "description": "Methylphenidate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292428006",
+      "description": "Metoprolol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776770001",
+        "description": "Metoprolol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293165007",
+      "description": "Mometasone adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776818008",
+        "description": "Mometasone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "772020009",
+      "description": "Nebivolol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776879005",
+        "description": "Nebivolol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292454003",
+      "description": "Nifedipine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776908002",
+        "description": "Nifedipine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292705009",
+      "description": "Non-ionic surfactant adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "418796001",
+        "description": "Nonionic surfactant"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293214008",
+      "description": "Norethisterone adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776941004",
+        "description": "Norethisterone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292112006",
+      "description": "Omeprazole adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "776991000",
+        "description": "Omeprazole"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293245007",
+      "description": "Oral estradiol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775839006",
+        "description": "Estradiol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292484006",
+      "description": "Oxedrine tartrate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "419339003",
+        "description": "Oxedrine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293509005",
+      "description": "Perindopril adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "22209011000001101",
+        "description": "Perindopril erbumine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293248009",
+      "description": "Piperazine oestrone sulphate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "395829001",
+        "description": "Piperazine estrone sulphate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "956211000000109",
+      "description": "Prasugrel adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777298009",
+        "description": "Prasugrel"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293435008",
+      "description": "Pravastatin adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777299001",
+        "description": "Pravastatin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292584008",
+      "description": "Promethazine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "372871004",
+        "description": "Promethazine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292440006",
+      "description": "Propranolol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777344007",
+        "description": "Propranolol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293140005",
+      "description": "Propylthiouracil adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777349002",
+        "description": "Propylthiouracil"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292111004",
+      "description": "Proton pump inhibitor adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "372525000",
+        "description": "Proton pump inhibitor"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293504000",
+      "description": "Ramipril adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777395009",
+        "description": "Ramipril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292375007",
+      "description": "Risperidone adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777450003",
+        "description": "Risperidone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "985231000000104",
+      "description": "Rivaroxaban adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777455008",
+        "description": "Rivaroxaban"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "2795591000000105",
+      "description": "Sacubitril valsartan sodium salt complex adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777480008",
+        "description": "Sacubitril + Valsartan"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292495000",
+      "description": "Salbutamol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777483005",
+        "description": "Salbutamol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292494001",
+      "description": "Salmeterol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777491001",
+        "description": "Salmeterol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292504006",
+      "description": "Selective beta-1 adrenoceptor stimulants adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "395968009",
+        "description": "Selective beta-1 adrenoceptor stimulants"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292492002",
+      "description": "Selective beta-2 adrenoceptor stimulants adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "373215002",
+        "description": "Selective beta-2 adrenoceptor stimulants"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "2385991000000103",
+      "description": "Semaglutide adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777514008",
+        "description": "Semaglutide"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293433001",
+      "description": "Simvastatin adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777537002",
+        "description": "Simvastatin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292319006",
+      "description": "Sodium valproate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "10049011000001109",
+        "description": "Sodium valproate"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293472002",
+      "description": "Spironolactone adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777603002",
+        "description": "Spironolactone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293432006",
+      "description": "Statin adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "372912004",
+        "description": "Statin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292121007",
+      "description": "Sulfasalazine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777645000",
+        "description": "Sulfasalazine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292637000",
+      "description": "Sulfur adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777649006",
+        "description": "Sulfur"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292372005",
+      "description": "Sulpiride adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777653008",
+        "description": "Sulpiride"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292450007",
+      "description": "Terazosin adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777709007",
+        "description": "Terazosin"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293219003",
+      "description": "Tibolone adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777765003",
+        "description": "Tibolone"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "2385981000000100",
+      "description": "Tirzepatide adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "41145911000001106",
+        "description": "Tirzepatide"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293176006",
+      "description": "Topical budesonide adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "774924004",
+        "description": "Budesonide"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293247004",
+      "description": "Topical estradiol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "775839006",
+        "description": "Estradiol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293506003",
+      "description": "Trandolapril adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777819006",
+        "description": "Trandolapril"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292463001",
+      "description": "Verapamil adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777927003",
+        "description": "Verapamil"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293386002",
+      "description": "Vitamin A adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "438501000124103",
+        "description": "Vitamin A supplement"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "870414009",
+      "description": "Vitamin B and/or vitamin B derivative adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "103069003",
+        "description": "Vitamin B and/or vitamin B derivative"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293395005",
+      "description": "Vitamin B12 preparation adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "438511000124100",
+        "description": "Vitamin B12 supplement"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "870412008",
+      "description": "Vitamin D and/or vitamin D derivative adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "438541000124101",
+        "description": "Vitamin D supplement"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "870413003",
+      "description": "Vitamin K and/or vitamin K derivative adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "65183007",
+        "description": "Vitamin K and/or vitamin K derivative"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292404009",
+      "description": "Zuclopenthixol adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777995002",
+        "description": "Zuclopenthixol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "292403003",
+      "description": "Zuclopenthixol decanoate adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "777995002",
+        "description": "Zuclopenthixol"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "90806009",
+      "description": "Acute reaction to foreign substance accidentally left during a procedure",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "213292003",
+      "description": "Acute reaction to foreign substance left during procedure",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "403750002",
+      "description": "Adverse cutaneous reaction to herbal medicine",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "403752005",
+      "description": "Adverse cutaneous reaction to homeopathic medicine",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "391103005",
+      "description": "Adverse event following complementary therapy",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "1162639000",
+      "description": "Adverse reaction to component of vaccine product containing only acellular Bordetella pertussis, Clostridium tetani, Corynebacterium diphtheriae, Haemophilus influenzae type b, Hepatitis B virus and inactivated Human poliovirus antigens",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "vaccine antigen component named (acellular Bordetella pertussis, Clostridium tetani, Corynebacterium diphtheriae, Haemophilus influenzae type b, Hepatitis B virus and inactivated Human poliovirus) -- a possible allergen IS identified here, unlike the rest of tier 3, but mapping a vaccine antigen to the substances refset (30931000001101) is unconfirmed/separate research, not the same as a plain drug lookup"
+    },
+    {
+      "conceptId": "293105009",
+      "description": "Adverse reaction to component of vaccine product containing only Bacillus anthracis antigen",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "vaccine antigen component named (Bacillus anthracis) -- a possible allergen IS identified here, unlike the rest of tier 3, but mapping a vaccine antigen to the substances refset (30931000001101) is unconfirmed/separate research, not the same as a plain drug lookup"
+    },
+    {
+      "conceptId": "293109003",
+      "description": "Adverse reaction to component of vaccine product containing only Bordetella pertussis and Clostridium tetani and Corynebacterium diphtheriae antigens",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "871875004",
+        "description": "Bordetella pertussis and Clostridium tetani and Corynebacterium diphtheriae antigens only vaccine product"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "293108006",
+      "description": "Adverse reaction to component of vaccine product containing only Clostridium tetani and Corynebacterium diphtheriae antigens",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "871826000",
+        "description": "Clostridium tetani and Corynebacterium diphtheriae antigens only vaccine product"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "1157195001",
+      "description": "Adverse reaction to component of vaccine product containing only inactivated whole severe acute respiratory syndrome coronavirus 2 antigen",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "vaccine antigen component named (inactivated whole severe acute respiratory syndrome coronavirus 2) -- a possible allergen IS identified here, unlike the rest of tier 3, but mapping a vaccine antigen to the substances refset (30931000001101) is unconfirmed/separate research, not the same as a plain drug lookup"
+    },
+    {
+      "conceptId": "293125008",
+      "description": "Adverse reaction to component of vaccine product containing only Measles morbillivirus and Mumps orthorubulavirus and Rubella virus antigens",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "871831003",
+        "description": "Measles morbillivirus and Mumps orthorubulavirus and Rubella virus antigens only vaccine product"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "1157106007",
+      "description": "Adverse reaction to component of vaccine product containing only recombinant non-replicating viral vector encoding severe acute respiratory syndrome coronavirus 2 spike protein",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "vaccine antigen component named (recombinant non-replicating viral vector encoding severe acute respiratory syndrome coronavirus 2 spike protein) -- a possible allergen IS identified here, unlike the rest of tier 3, but mapping a vaccine antigen to the substances refset (30931000001101) is unconfirmed/separate research, not the same as a plain drug lookup"
+    },
+    {
+      "conceptId": "1142182006",
+      "description": "Adverse reaction to component of vaccine product containing only severe acute respiratory syndrome coronavirus 2 antigen",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "vaccine antigen component named (severe acute respiratory syndrome coronavirus 2) -- a possible allergen IS identified here, unlike the rest of tier 3, but mapping a vaccine antigen to the substances refset (30931000001101) is unconfirmed/separate research, not the same as a plain drug lookup"
+    },
+    {
+      "conceptId": "1193581003",
+      "description": "Adverse reaction to component of vaccine product containing only severe acute respiratory syndrome coronavirus 2 deoxyribonucleic acid plasmid encoding spike protein",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "vaccine antigen component named (severe acute respiratory syndrome coronavirus 2 deoxyribonucleic acid plasmid encoding spike protein) -- a possible allergen IS identified here, unlike the rest of tier 3, but mapping a vaccine antigen to the substances refset (30931000001101) is unconfirmed/separate research, not the same as a plain drug lookup"
+    },
+    {
+      "conceptId": "1162644007",
+      "description": "Adverse reaction to component of vaccine product containing only severe acute respiratory syndrome coronavirus 2 recombinant spike protein antigen",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "vaccine antigen component named (severe acute respiratory syndrome coronavirus 2 recombinant spike protein) -- a possible allergen IS identified here, unlike the rest of tier 3, but mapping a vaccine antigen to the substances refset (30931000001101) is unconfirmed/separate research, not the same as a plain drug lookup"
+    },
+    {
+      "conceptId": "1179495001",
+      "description": "Adverse reaction to component of vaccine product containing only severe acute respiratory syndrome coronavirus 2 virus-like particle antigen",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "vaccine antigen component named (severe acute respiratory syndrome coronavirus 2 virus-like particle) -- a possible allergen IS identified here, unlike the rest of tier 3, but mapping a vaccine antigen to the substances refset (30931000001101) is unconfirmed/separate research, not the same as a plain drug lookup"
+    },
+    {
+      "conceptId": "218727000",
+      "description": "Adverse reaction to spinal anesthetic",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "343231000119106",
+      "description": "Bilateral toxic maculopathy",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "1142181004",
+      "description": "COVID-19 mRNA vaccine adverse reaction",
+      "kind": "substance",
+      "substance": {
+        "conceptId": "1119349007",
+        "description": "COVID-19 mRNA vaccine"
+      },
+      "reaction": null,
+      "notes": null
+    },
+    {
+      "conceptId": "403606008",
+      "description": "Drug-induced toxic urticated erythema",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "293385003",
+      "description": "Fat soluble vitamin adverse reaction",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "698578005",
+      "description": "Fever caused by vaccine product containing only Bordetella pertussis and Clostridium tetani and Corynebacterium diphtheriae antigens",
+      "kind": "substance-plus-reaction",
+      "substance": {
+        "conceptId": "871875004",
+        "description": "Bordetella pertussis and Clostridium tetani and Corynebacterium diphtheriae antigens only vaccine product"
+      },
+      "reaction": {
+        "text": "Fever"
+      },
+      "notes": null
+    },
+    {
+      "conceptId": "73692007",
+      "description": "Fixed drug eruption",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "292756000",
+      "description": "Herbal medicine adverse reaction",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "292754002",
+      "description": "Homeopathic medicine adverse reaction",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "337441000119109",
+      "description": "Left toxic maculopathy",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "403610006",
+      "description": "Non-pigmenting fixed drug eruption",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "192724008",
+      "description": "Post mixed vaccination encephalitis",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "40287006",
+      "description": "Reaction to spinal puncture",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "331821000119106",
+      "description": "Right toxic maculopathy",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "44115007",
+      "description": "Toxic maculopathy",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "424909003",
+      "description": "Toxic retinopathy",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "733054008",
+      "description": "TRALI - Transfusion related acute lung injury",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "293383005",
+      "description": "Vitamin products adverse reaction",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    },
+    {
+      "conceptId": "293390000",
+      "description": "Water soluble vitamin adverse reaction",
+      "kind": "not-convertible",
+      "substance": null,
+      "reaction": null,
+      "notes": "no specific drug/substance nameable from code text -- see additionalInformation on the real entry"
+    }
+  ]
+}

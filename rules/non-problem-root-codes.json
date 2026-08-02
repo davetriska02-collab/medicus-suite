@@ -1,6 +1,6 @@
 {
-  "version": 3,
-  "lastUpdated": "2026-07-26",
+  "version": 5,
+  "lastUpdated": "2026-08-02",
   "notes": "Root SNOMED conceptIds used by the 'Bulk remove?' problem-list widget (content-scripts/problem-junk-code-cleanup.js) to flag problems that are likely administrative/data-import noise rather than genuine clinical problems (e.g. GP2GP-imported FP10/temporary-resident claim codes filed under 'Administrative procedure'). A patient's problem is flagged if its own conceptId EITHER exactly matches a root here OR is a DESCENDANT of one (any depth -- confirmed live 2026-07-23 reaching 5 hierarchy levels below 14734007 for the motivating FP10 case), checked via clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=<all roots, comma-joined>&query=<conceptId>. Add a new root entry to expand coverage -- no code change needed. The 'Bulk remove?' trigger button always renders whenever a patient has any active problems (no text-based visibility gate -- one was tried 2026-07-24 and reverted 2026-07-25 after live testing showed it could hide a genuine code-based match; see CHANGELOG for the full story). The code is the sole source of truth for what gets flagged here, never free text. The 18 roots added 2026-07-25 (LMP onward) were originally researched via the PUBLIC no-auth NHS termbrowser API (same one used by shared/snomed-retirement.js) -- ancestor chains confirmed that way. On 2026-07-26 every cited descendant for all 18 roots (incl. the two broad ones, 3457005 Patient referral and 307824009 Administrative statuses) was additionally confirmed live against Medicus's OWN constrained-search endpoint (constrainingParentConcepts=<root>&query=<descendant conceptId>, every case returned a nonzero result count) -- these roots now carry the same hierarchy-level confidence as the original 3. NOT yet separately observed end-to-end on a real patient's coded problem in the widget itself (checkbox rendering, active-child-problem gate, etc.) -- that remains the natural next check if a real example surfaces. A root MAY carry an optional 'caution' string (added 2026-07-26, PR #223 review fix): categories that are usually import noise but can be LIVE clinical flags (an in-flight 2WW referral, an active EDD marking a current pregnancy, a 'Follow-up arranged' status). The widget renders the caution on every flagged row attributed to that root and its 'Select all' button never ticks those rows -- they must be reviewed and ticked individually.",
   "roots": [
     {
@@ -131,6 +131,42 @@
       "description": "Primary care diary entry",
       "addedDate": "2026-07-25",
       "rationale": "Best available match for the user's 'Diary event recall' example -- a system-generated administrative diary/recall record artefact, not a clinical problem."
+    },
+    {
+      "conceptId": "261665006",
+      "description": "Unknown",
+      "addedDate": "2026-08-02",
+      "rationale": "A bare placeholder/non-informative finding, structurally the same category as the allergy list's own 'No known allergies' junk code (rules/allergy-junk-codes.json) -- carries no actual clinical content on its own, so filing it as a problem is import noise, not a real diagnosis."
+    },
+    {
+      "conceptId": "33879002",
+      "description": "Vaccination",
+      "addedDate": "2026-08-02",
+      "rationale": "Same over-counting logic as the existing 'Influenza vaccination' root (86198006) -- a vaccination event belongs in the record but is not itself a problem; a patient would otherwise accumulate a fresh problem-list entry per jab. Added as the broad parent so any vaccination filed as a problem is caught, not just influenza specifically."
+    },
+    {
+      "conceptId": "127785005",
+      "description": "Imported immunisations",
+      "addedDate": "2026-08-02",
+      "rationale": "GP2GP source-system administrative wrapper for imported immunisation history -- a record-keeping/import artefact, not a clinical problem in its own right."
+    },
+    {
+      "conceptId": "171302002",
+      "description": "Adult screening",
+      "addedDate": "2026-08-02",
+      "rationale": "A genuine clinical activity (a screening programme encounter) that GP2GP source systems sometimes file as a problem, even though the activity of screening a patient is not itself a diagnosis -- same category as 'Adult health examination' (268565007) and 'Review of medication' above."
+    },
+    {
+      "conceptId": "268481000",
+      "description": "Child health checks",
+      "addedDate": "2026-08-02",
+      "rationale": "Same category as 'Adult screening' (171302002) above -- a routine health-check activity, not a diagnosis."
+    },
+    {
+      "conceptId": "416608005",
+      "description": "Previously active medications imported via GP2GP",
+      "addedDate": "2026-08-02",
+      "rationale": "A GP2GP transfer administrative wrapper for historic medication data, not a clinical problem -- pure record-keeping/import artefact, same reasoning as the item-of-service claim-status and administrative-procedure roots."
     }
   ]
 }

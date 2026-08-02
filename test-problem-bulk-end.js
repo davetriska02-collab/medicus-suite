@@ -154,9 +154,22 @@ console.log('--- rules/non-problem-root-codes.json: the imported roots list itse
     const root = nonProblemRootCodes.roots.find((r) => r.conceptId === conceptId);
     check(!!root && root.description === description, `${conceptId} "${description}" is present (added 2026-07-25)`);
   }
+  const unknown = nonProblemRootCodes.roots.find((r) => r.conceptId === '261665006');
+  check(!!unknown && unknown.description === 'Unknown', '261665006 "Unknown" is present (added 2026-08-02)');
+  const expected20260802Roots = [
+    ['33879002', 'Vaccination'],
+    ['127785005', 'Imported immunisations'],
+    ['171302002', 'Adult screening'],
+    ['268481000', 'Child health checks'],
+    ['416608005', 'Previously active medications imported via GP2GP'],
+  ];
+  for (const [conceptId, description] of expected20260802Roots) {
+    const root = nonProblemRootCodes.roots.find((r) => r.conceptId === conceptId);
+    check(!!root && root.description === description, `${conceptId} "${description}" is present (added 2026-08-02)`);
+  }
   check(
-    nonProblemRootCodes.roots.length === 21,
-    'exactly 21 roots configured (got ' + nonProblemRootCodes.roots.length + ')'
+    nonProblemRootCodes.roots.length === 27,
+    'exactly 27 roots configured (got ' + nonProblemRootCodes.roots.length + ')'
   );
 }
 

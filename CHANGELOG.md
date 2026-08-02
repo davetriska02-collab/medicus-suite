@@ -2,6 +2,63 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.212.0] — 2026-08-02
+
+### Allergy cleanup suite: junk removal, duplicate merge, dual-coded cleanup, and pre-defined-allergy → substance conversion
+
+New "Clean up allergies?" trigger, one shared `overview-allergy` fetch per active allergy feeding four
+independent review sections in one summary panel, each with its own safety model:
+
+- **Junk / low-relevance codes** — bulk checklist (no clinical judgement needed to remove confirmed
+  import noise), reusing `rules/allergy-junk-codes.json`'s three categories: `import-artefact`,
+  `too-generic`, and a new `low-prescribing-relevance` category (e.g. 300910009 "Allergy to pollen" —
+  a genuine, correctly-coded allergy that's simply near-zero relevance to prescribing safety; carries a
+  static per-code caution, "This code indicates hay fever, so may be more appropriate as a problem code
+  rather than an allergy", shown instead of — never concatenated with — the generic per-instance caution
+  message).
+- **Possible duplicates** — mandatory per-group review modal (a merge always "warrants a conscious
+  clinical decision"); the button shows a free duplicate count from a zero-cost text-only pass before any
+  click, with the expensive part (junk-code matching, SNOMED concept-ancestry duplicate enrichment)
+  staying click-triggered. Every card in the review modal has a "Remove from merge" checkbox that
+  excludes it from the current review immediately — untouched, never ended or modified — with an undo
+  affordance ("N removed from this merge: ... (Restore)"); the keeper and any chosen field values are
+  re-derived from whatever remains. Removing the card backing the free-text "additional info" box
+  re-seeds it from the new default source, same as a manual radio click, but only while the box still
+  shows exactly what it was last loaded from — genuine typed edits are never overwritten.
+- **Legacy code alongside substance** — bulk checklist for dual-coded entries: a real GP2GP-imported
+  entry can carry BOTH `allergyCode` (a legacy pre-defined-allergy code) AND `substance` (an
+  already-authoritative dm+d code) simultaneously, with `allergyCodeType` saying which is actually
+  current (confirmed via a live HAR capture, not hypothetical). Clearing the non-authoritative field
+  never touches any clinical fact or the already-correct code, so it's the same safety class as junk
+  removal. This also exposed and fixed a latent bug in `resolveAllergyConceptId`, which always preferred
+  `allergyCode` whenever populated — silently returning the stale legacy code for a dual-coded entry
+  instead of its real current substance, which would have broken junk-matching and duplicate-grouping
+  against it.
+- **Pre-defined-allergy codes** ("Convert?") — the third stage of the suite: converting legacy
+  "pre-defined-allergies"-coded entries (e.g. "Amoxicillin allergy") to proper dm+d substance-coded
+  entries, the format genuine drug allergies need for reliable prescribing-safety checks. Each entry gets
+  a substance search (dm+d refset scope) pre-seeded with a suggestion from a new
+  `rules/allergy-substance-conversion.json` (314 reviewed legacy conceptIds: straight substance
+  conversions, substance-plus-reaction decompositions e.g. "Chloroquine retinopathy" → substance
+  Chloroquine + reaction hint "retinopathy", entries with no dm+d code available, and miscoded
+  non-allergies flagged for removal instead) when one exists, or from a pattern-recognition fallback
+  (`X-induced Y`, `Allergy/Hypersensitivity/Adverse reaction to X`, `X allergy/reaction/hypersensitivity`)
+  applied to the code's own description when it doesn't — search-seed only, never auto-selects a
+  concept. Live search results are reordered (never discarded) toward VTM-level, non-dose/brand-specific
+  candidates, since a live "iodine" search returns the correct candidate but not first, buried among
+  salt/dose-specific siblings. Reaction picking is multi-select (each pick its own removable chip),
+  seeded in priority order from a curated rule hint, a pattern-extracted hint, or the entry's own
+  `additionalInformation` as a last resort. Severity/certainty/additional info/existing reactions/onset/
+  record date are always carried through unchanged and shown in full before the search boxes — conversion
+  changes only code identity, never clinical fields, the deliberate opposite invariant to the merge
+  stage's own payload builder (which never changes code identity). Every conversion is an explicit
+  confirm, never apply-on-click.
+
+`rules/non-problem-root-codes.json` (now 27 roots): 6 new administrative/import-artefact roots —
+261665006 "Unknown", 33879002 "Vaccination", 127785005 "Imported immunisations", 171302002 "Adult
+screening", 268481000 "Child health checks", 416608005 "Previously active medications imported via
+GP2GP" — read by the existing `problem-bulk-end.js`, no code change needed.
+
 ## [v3.211.0] — 2026-08-02
 
 ### Rota Manager is now part of the suite
