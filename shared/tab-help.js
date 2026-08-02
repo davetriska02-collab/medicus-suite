@@ -115,6 +115,17 @@ export const TAB_HELP = {
     firstStep:
       'Tap blocks to build a message (or type /trigger in search), press Copy, then paste into Medicus. Type over every *** with the patient’s details — they are never filled in for you.',
   },
+  rota: {
+    title: 'Rota',
+    what: 'Today’s duty cover, who is on leave, sessions still needing cover and this week’s high-priority staffing warnings.',
+    firstStep: 'Glance at duty cover for AM and PM, then open the Rota manager (new tab) to fix any gap.',
+  },
+  'rota-app': {
+    title: 'Rota manager',
+    what: 'Opens the full rota application in a new browser tab: working patterns, leave (April–March, session-accounted), registrar supervision, duty fairness pro-rata to contracted sessions and a cover worklist.',
+    firstStep:
+      'Add your staff and their contracted sessions first — everything else (leave, duty fairness, safe-staffing warnings) is calculated from them.',
+  },
   visualiser: {
     title: 'Visualiser',
     what: 'Opens a full browser tab to analyse an exported patient-record PDF — a multi-year timeline view, separate from the panel.',

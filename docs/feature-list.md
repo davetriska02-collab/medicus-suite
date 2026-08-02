@@ -1,16 +1,16 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.210.0
+**Version:** v3.211.0
 **Generated:** 2026-08-02 (automated)
 
 ## What it is
 
-Medicus Suite is a Chrome extension that sits alongside the Medicus electronic patient record. It adds a side panel with 18 tabs plus a small number of full-tab tools, and a handful of in-page additions on top of Medicus's own screens (queue chips, monitoring context, inline booking, and similar). Everything it shows is drawn from data already in Medicus — it displays, checks, and reminds; it does not diagnose, does not recommend treatment, and does not use AI to interpret anything. A short, explicitly listed set of actions (appointment booking, task creation, document filing, and a few others) can write back to Medicus, and every one of those requires the user to review and confirm before anything happens.
+Medicus Suite is a Chrome extension that sits alongside the Medicus electronic patient record. It adds a side panel with 19 tabs plus a small number of full-tab tools, and a handful of in-page additions on top of Medicus's own screens (queue chips, monitoring context, inline booking, and similar). Everything it shows is drawn from data already in Medicus — it displays, checks, and reminds; it does not diagnose, does not recommend treatment, and does not use AI to interpret anything. A short, explicitly listed set of actions (appointment booking, task creation, document filing, and a few others) can write back to Medicus, and every one of those requires the user to review and confirm before anything happens.
 
 ## At a glance
 
-- 18 side-panel modules covering morning workflow, monitoring, capacity/demand, reception, referrals, reminders, and reference material
-- 5 full-tab-style tools: two opened from the panel (Patient Record Visualiser, Duplicate Problem Checker), one triggered from Medicus's own contacts page (Contacts Management), and two reached from Options/Condor (Practice Report, CQC Inspection Readiness)
+- 19 side-panel modules covering morning workflow, monitoring, capacity/demand, reception, referrals, reminders, staff rota and reference material
+- 6 full-tab-style tools: three opened from the panel (Patient Record Visualiser, Duplicate Problem Checker, Rota manager), one triggered from Medicus's own contacts page (Contacts Management), and two reached from Options/Condor (Practice Report, CQC Inspection Readiness)
 - roughly 15 in-page content-script features layered onto live Medicus screens (queue chips, inline booking/task/document widgets, code-cleanup tools)
 - 8 rule types in the clinical alert engine (drug-monitoring, drug-combo, drug/allergy conflict, qof-register, qof-indicator, event-count, vaccine, composite)
 - 34 drug-monitoring rules, 74 QOF rules (14 register + 60 indicator), 5 vaccine rules, 44 investigation-result rules, and 35 starter alerts in the practice alert library (32 prescribing-safety, 3 clinical-review)
@@ -119,6 +119,18 @@ A personal library of reusable message text blocks (opener, substance, safety-ne
 - Compose mode: quick slot-chip rows build one message fast; Library mode: full search/categories/edit
 - Placeholder text (***) must be manually filled before copying — the Copy button blocks a careless copy
 
+### Rota (Practice rota)
+
+The compact, glanceable half of the Rota Manager — available in both the side panel and the pop-out window. The full application opens in its own browser tab from the **Rota manager** tab (side panel) or Ctrl+K → "Open Rota manager".
+
+- Duty cover for today, AM and PM, with an OK/Gap state and the named duty doctors
+- Who is on approved leave today; upcoming sessions still flagged as vacancies needing cover
+- This week's high-priority safe-staffing warnings (duty cover, registrar supervision, HCA supervision)
+- Estimated GP appointments this week against the ~72-per-1,000-patients access benchmark
+- Reads only local extension storage; performs no network calls and persists no patient-identifiable data
+
+The **full Rota Manager** (its own browser tab) covers working patterns and multi-week templates, session-accounted leave on an April–March leave year, Bradford-factor and fit-note flags, the cover worklist and shift swaps, duty fairness pro-rata to contracted sessions, demand-led planning, and read-only reconciliation against the Medicus appointment book. Its safe-staffing rules encode BMA/CQC/NHSE guidance, not law — they warn, they never block, and every threshold is a practice setting.
+
 ## In-page features (content scripts)
 
 - **Triage Lens** — decoration chips on the request queue (age, flags) plus keyword-based red-flag detection with linked actions (Samaritans, risk-assessment snippets)
@@ -167,6 +179,7 @@ The shipped alert library carries 35 starter alerts a practice can enable (32 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.211.0 (2026-08-02)** — Rota Manager subsumed into the suite: a full rota application in its own browser tab (**Rota manager**) plus a compact **Rota** module in the panel and pop-out; all eight `rota.*` storage keys covered by the suite backup. The standalone Medicus Rota Manager extension is deprecated.
 - **v3.192.0–v3.210.0 (26 Jul – 1 Aug)** — Contacts Management: a new tool for managing a patient's next-of-kin and family contacts as a drag-and-drop family tree, with review-driven fixes for wrong-record flagging safety, a confirmable and repairable "remove from tree" action, and better name-matching for contacts carried over from a previous practice.
 - **v3.176.13–v3.196.0 (22–28 Jul)** — Clean up code (renamed from "Fix description"): flags outdated/retired SNOMED problem-list codes and suggests a cleaner replacement, extended to catch more patterns, plus a "bulk end problems" companion tool and per-practice learning of preferred replacements.
 - **v3.197.0–v3.206.0 (28–31 Jul)** — Reception's quick-actions composer went through three rounds of layout hardening after feedback that the comment box was being visually crushed, plus clearer two-step "insert, then submit" wording.

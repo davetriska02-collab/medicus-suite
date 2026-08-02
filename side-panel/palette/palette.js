@@ -20,6 +20,7 @@
 
 import { rankCommands, pushRecent, patientScopedCommands, PATIENT_COMMAND_IDS } from './palette-core.js';
 import { startTour } from '../tour/tour.js';
+import { openRotaTab } from '../modules/rota/rota-open.js';
 
 const RECENTS_KEY = 'suite.palette.recents';
 
@@ -139,6 +140,20 @@ function buildCommands(hasPatient) {
       keywords: 'sar pdf record',
       icon: GENERIC_ICONS.doc,
       run: () => chrome.tabs.create({ url: chrome.runtime.getURL('visualiser-core.html') }),
+    });
+  }
+
+  // Rota (full app) opens as a browser tab; the pop-out has no nav tab for it,
+  // so the palette is how the floating window reaches it. Same focus-or-create
+  // helper the panel's 'rota-app' tab uses.
+  if (!document.querySelector('.nav-tab[data-module="rota-app"]')) {
+    cmds.push({
+      id: 'open:rota',
+      label: 'Open Rota manager',
+      group: 'Open',
+      keywords: 'rota staff duty leave cover sessions template',
+      icon: GENERIC_ICONS.doc,
+      run: () => openRotaTab(),
     });
   }
 

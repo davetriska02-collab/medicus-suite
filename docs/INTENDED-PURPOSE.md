@@ -28,6 +28,7 @@ The extension comprises the following functional modules:
 | **Referrals Tracker** | Displays referral audit data drawn from Medicus, including specialty, priority, status, and clinician breakdowns. |
 | **Waiting Room / Request Monitor** | Displays live waiting-room patient counts and new-request demand counts with configurable amber/red thresholds. |
 | **Patient Record Visualiser** | Analyses a Medicus EPR export PDF locally in the browser to produce a multi-tab clinical dashboard. Outputs include: continuity-of-care indices, investigation trends with clinical zone bands, medication monitoring compliance against NICE/BNF intervals, electronic frailty index (eFI), PINCER-style prescribing safety flags, QOF register review status, and a D3 swim-lane event timeline. No patient data leaves the browser at any stage. |
+| **Rota (compact) and Rota manager (full application)** | Practice **staff rostering**, not clinical function: working patterns and multi-week templates, session-accounted leave on an April–March leave year, cover worklists and shift swaps, duty fairness pro-rata to contracted sessions, demand-led session planning, and safe-staffing checks (duty-doctor cover, registrar supervision, HCA supervision). Reconciles the planned rota against the Medicus appointment book **read-only**. Produces no clinical output about any patient. |
 
 ---
 
@@ -40,6 +41,8 @@ The extension comprises the following functional modules:
 > The software additionally provides a Patient Record Visualiser that processes a locally-held Medicus EPR export PDF to produce summary analytics including continuity indices, investigation trend charts, a computed electronic frailty index, PINCER-style prescribing safety prompts, and drug monitoring compliance indicators. These outputs are derived from the exported PDF and are supplementary aids to clinical review; they do not replace assessment of the live patient record.
 >
 > From v3.13.0–v3.14.0 the live side panel additionally surfaces, on the patient record view, deterministic prescribing-combination prompts (STOPP/START-style), a risk-tool signpost chip that hyperlinks to externally-hosted, independently-validated calculators (it computes no score), and NHS Pharmacy First pathway signposting reference snippets. These are supplementary prompts surfaced for the clinician to review and verify; the clinician makes any prescribing-review or signposting decision.
+>
+> From v3.126.0 the suite additionally provides a **rota** surface (a compact status module in the side panel and pop-out, and a full application that opens in its own browser tab) for **practice staff rostering**: working patterns, session-accounted leave, cover and swaps, duty fairness, demand-led session planning, and safe-staffing warnings drawn from BMA/CQC/NHSE guidance. Its safe-staffing checks are **guidance, not regulation: they warn and never block**, and every threshold is a practice-configurable setting rather than a constant. It reconciles the planned rota against the Medicus appointment book **read-only** and writes nothing back. Patient names present in appointment-book payloads are counted and displayed transiently to size the work; **no patient-identifiable data is persisted** by the rota. The rota makes no statement about any patient's care and is a workforce-administration aid, not clinical decision support. Staffing decisions remain the responsibility of the practice.
 >
 > The software does not generate clinical diagnoses, clinical recommendations, prescribing decisions, or triage decisions. It does not write to, modify, or submit any data to the patient record or to any external system. It does not transmit patient data outside the user's own browser session. It does not replace clinical judgement. All clinical decisions, including verification of displayed values against the source record, remain the sole responsibility of the clinician.
 
@@ -104,6 +107,7 @@ I confirm that the statement above fairly represents the intended purpose of Med
 - The live Triage Lens STOPP/START prescribing prompts are a small, name-based subset of prescribing-combination checks, supplementary to Medicus's own prescribing-safety systems; absence of a prompt does not indicate prescribing safety.
 - The risk-tool chip computes no risk score; it links to externally-hosted, independently-validated calculators.
 - The Pharmacy First signposting snippets are reference text and links for the clinician's consideration; eligibility and clinical suitability are confirmed by the clinician, not by the software.
+- The rota's safe-staffing checks are not a compliance determination and not a safe-staffing guarantee. They encode BMA/CQC/NHSE **guidance**, warn rather than block, and use practice-set thresholds; an absent warning does not mean a session is safely staffed. The rota is not an HR or payroll system and is not a record of employment.
 
 ---
 
@@ -127,6 +131,8 @@ I confirm that the statement above fairly represents the intended purpose of Med
    - Staff work within their own competence, their practice's policies, and its delegation/supervision arrangements; the practice remains accountable for the clinical safety of what it delegates.
 
    - The named delegation covers the **content** of the shipped pathways as signed off by the CSO (`rules/reception-pathways.json` specVersion v1.8). Enabling a pathway for live use remains a separate practice act, and a practice that **edits or authors** pathway content owns the clinical safety of what it wrote — non-clinician routing destinations on such a pack stay off until a CSO or partner records the routing attestation.
+
+The rota surface is additionally intended for **practice managers and rota administrators** at the same practice, who are authorised to see colleagues' working patterns and leave. Because the rota holds employee data — including absence and leave-type detail — access to it should follow the practice's own HR/employment-data access controls, not merely clinical-system access (see `docs/DPIA.md`).
 
 ---
 

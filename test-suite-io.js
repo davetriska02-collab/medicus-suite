@@ -13,6 +13,7 @@ const slotIo = require('./shared/io/slot-counter-io.js');
 const subIo = require('./shared/io/submissions-io.js');
 const suiteIo = require('./shared/io/suite-io.js');
 const referralsIo = require('./shared/io/referrals-io.js');
+const rotaIo = require('./shared/io/rota-io.js');
 
 let passed = 0;
 let failed = 0;
@@ -897,6 +898,90 @@ console.log('\n--- applyWithRollback rollback ---');
     );
 
     global.chrome = savedChrome2;
+  }
+
+  // ── Rota IO round-trip + validation ─────────────────────────────────────────
+  // The Rota module (ported rota/ subtree) owns eight rota.* keys. Guards that
+  // the io file round-trips all eight and rejects malformed shapes.
+
+  console.log('\n--- Rota IO ---');
+
+  {
+    const savedChrome3 = global.chrome;
+    const rotaStore = {};
+    global.chrome = {
+      storage: {
+        local: {
+          async get(keys) {
+            const ks = Array.isArray(keys) ? keys : typeof keys === 'string' ? [keys] : Object.keys(keys || {});
+            const out = {};
+            ks.forEach((k) => {
+              if (k in rotaStore) out[k] = rotaStore[k];
+            });
+            return out;
+          },
+          async set(obj) {
+            Object.assign(rotaStore, obj);
+          },
+        },
+      },
+    };
+
+    // Empty storage exports the documented empty shapes.
+    const empty = await rotaIo.rotaExport();
+    assert(Array.isArray(empty.staff) && empty.staff.length === 0, 'rotaExport: staff defaults to []');
+    assert(empty.demand && typeof empty.demand === 'object', 'rotaExport: demand defaults to an object');
+
+    // Round-trip: import then export returns what went in, for all eight keys.
+    const payload = {
+      staff: [{ id: 's1', name: 'Dr A' }],
+      entries: [{ id: 'e1', staffId: 's1', date: '2026-06-08', period: 'am', typeId: 'surgery' }],
+      leave: [{ id: 'l1', staffId: 's1', type: 'annual', status: 'approved' }],
+      rooms: [{ id: 'r1', name: 'Room 1' }],
+      swaps: [{ id: 'w1', status: 'requested' }],
+      audit: [{ at: '2026-06-08T09:00:00.000Z', by: 'PM', summary: 'Approved leave' }],
+      demand: { days: { '2026-06-08': { am: 40, pm: 30 } }, pulledAt: '2026-06-08T09:00:00.000Z' },
+      settings: { listSize: 9000, userRole: 'manager' },
+    };
+    await rotaIo.rotaImport(payload);
+    assert(
+      rotaIo.ROTA_KEYS.every((k) => Object.prototype.hasOwnProperty.call(rotaStore, k)),
+      'rotaImport: writes all eight rota.* keys'
+    );
+    const back = await rotaIo.rotaExport();
+    assert(back.staff[0].name === 'Dr A', 'rotaExport: round-trips staff');
+    assert(back.demand.days['2026-06-08'].am === 40, 'rotaExport: round-trips the demand day map');
+    assert(back.settings.listSize === 9000, 'rotaExport: round-trips settings');
+
+    async function tryRotaImport(data) {
+      try {
+        await rotaIo.rotaImport(data);
+        return null;
+      } catch (e) {
+        return e.message;
+      }
+    }
+    assert((await tryRotaImport(null))?.includes('object'), 'rotaImport: rejects null');
+    assert((await tryRotaImport({ staff: {} }))?.includes('array'), 'rotaImport: rejects non-array staff');
+    assert((await tryRotaImport({ entries: ['nope'] }))?.includes('not an object'), 'rotaImport: rejects scalar entry');
+    assert((await tryRotaImport({ settings: [] }))?.includes('object'), 'rotaImport: rejects array settings');
+    assert((await tryRotaImport({ demand: { days: [] } }))?.includes('days'), 'rotaImport: rejects array demand.days');
+
+    // Envelope wiring: 'rota' must be a valid scope and preview must summarise it.
+    assert(suiteEnv.VALID_SCOPES.includes('rota'), 'suite-envelope: rota is a valid scope');
+    const rotaEnv = suiteEnv.wrap('rota', { rota: payload });
+    const lines = suiteEnv.previewEnvelope(rotaEnv);
+    assert(
+      lines.some((l) => l.startsWith('Rota: 1 staff, 1 rostered session, 1 leave record')),
+      'previewEnvelope: summarises the rota module'
+    );
+    const suiteNoRota = suiteEnv.wrap('suite', { capacity: { presets: [] } });
+    assert(
+      suiteEnv.previewEnvelope(suiteNoRota).some((l) => l === 'Rota: — not in this backup'),
+      'previewEnvelope: reports Rota missing from a suite backup'
+    );
+
+    global.chrome = savedChrome3;
   }
 
   // ── Summary ───────────────────────────────────────────────────────────────────

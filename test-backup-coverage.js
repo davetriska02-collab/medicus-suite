@@ -51,7 +51,16 @@ function listFilesRecursive(dir, exts) {
 }
 
 // App source directories (per the task spec).
-const APP_DIRS = ['side-panel', 'pop-out', 'shared', 'options', 'engine', 'content-scripts', 'sentinel-options'];
+const APP_DIRS = [
+  'side-panel',
+  'pop-out',
+  'shared',
+  'options',
+  'engine',
+  'content-scripts',
+  'sentinel-options',
+  'rota',
+];
 const APP_FILES = [
   // Top-level JS
   path.join(ROOT, 'service-worker.js'),
@@ -115,6 +124,7 @@ const KEY_PREFIXES = [
   // exclusion; without this prefix the scanner was blind to it, same class of gap Audit M18 found
   // for labfiling/patientAlerts/followups/practice above.
   'contactsCanvas',
+  'rota',
 ];
 
 function hasKeyPrefix(k) {

@@ -15,6 +15,7 @@ import { initPalette } from './palette/palette.js';
 import { initQuickLeaflet } from './quick-leaflet/quick-leaflet.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
 import { initSetup } from './setup/setup.js';
+import { openRotaTab } from './modules/rota/rota-open.js';
 import { TAB_HELP } from '../shared/tab-help.js';
 import { STATUS_RANK } from './modules/sentinel/sentinel-core.js';
 import {
@@ -144,8 +145,13 @@ const MODULES = {
     css: './modules/patient-alerts/patient-alerts.css',
   },
   phrases: { js: () => import('./modules/phrases/phrases.js'), css: './modules/phrases/phrases.css' },
+  rota: { js: () => import('./modules/rota/rota.js'), css: './modules/rota/rota.css' },
   about: null,
 };
+// NOTE: 'rota-app' is deliberately absent. Like 'visualiser', it opens the full
+// application in a browser tab; the nav click handler returns before
+// switchModule is reached, and the boot guard (`m in MODULES`) then correctly
+// refuses to restore the panel into it.
 
 // ── Help popover (per-tab "what is this?" affordance) ──────────────────────────
 // TAB_HELP content lives in shared/tab-help.js — ONE source consumed by both
@@ -345,13 +351,17 @@ function isTypingTarget(el) {
 // full browser tab, not an in-panel switch) are excluded from all three.
 function jumpableTabs() {
   return Array.from(document.querySelectorAll('.nav-tab')).filter(
-    (t) => !t.classList.contains('nav-tab-hidden') && t.dataset.module !== 'visualiser'
+    (t) =>
+      !t.classList.contains('nav-tab-hidden') &&
+      t.dataset.module !== 'visualiser' &&
+      t.dataset.module !== 'rota-app'
   );
 }
 
 // Keyboard tab navigation (power-user finding R4): Ctrl/Cmd+Alt+Left/Right cycle
 // the visible in-panel tabs without the mouse. Skipped while typing in a field,
-// and skips Visualiser (it opens a full browser tab, not an in-panel switch).
+// and skips Visualiser and Rota manager (both open a full browser tab, not an
+// in-panel switch — the compact 'rota' module stays in the cycle).
 function wireTabNavShortcuts() {
   document.addEventListener(
     'keydown',
@@ -643,6 +653,10 @@ document.querySelectorAll('.nav-tab').forEach((tab) => {
       chrome.tabs.create({ url: chrome.runtime.getURL('duplicate-checker.html') });
       return;
     }
+    if (mod === 'rota-app') {
+      openRotaTab();
+      return;
+    }
     if (mod === activeModule) return;
     switchModule(mod);
   });
@@ -905,6 +919,20 @@ function renderAbout() {
           priority (Routine / Urgent / 2WW) and status breakdowns, plus horizontal bar charts
           by referring clinician, specialty, and hospital. Fetches from the Medicus
           clinical-audit-report endpoint. API-based.
+        </div>
+      </div>
+
+      <div class="module-card">
+        <div class="module-card-header">
+          <span class="module-card-name">Rota Manager</span>
+          <span class="module-card-version">v1.10</span>
+        </div>
+        <div class="module-card-desc">
+          Practice rota built in sessions: working patterns, leave (April–March, session-accounted),
+          registrar supervision, duty fairness pro-rata to contracted sessions and a cover worklist.
+          The Rota manager tab opens the full app in a new browser tab; the Rota tab is the compact
+          morning view. Formerly a standalone extension, now part of the suite. Local storage only;
+          read-only where it reads Medicus, and no patient data is ever persisted.
         </div>
       </div>
 
