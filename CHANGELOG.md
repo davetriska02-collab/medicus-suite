@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.211.1] — 2026-08-03
+
+### Fixed: Cleanup Code Preferences never actually applied from a published Practice Profile
+
+`applyProfile()`'s Cleanup Code Preferences branch (`shared/io/practice-profile.js`)
+calls `problemDescriptionCleanupImport()`, resolved dynamically via `self.*` — but
+`shared/io/problem-description-cleanup-io.js`, the file that defines it, was never
+in `service-worker.js`'s `importScripts()` list (every other module's IO file was:
+sentinel, triage, submissions, slots, capacity, knowledge, reception, triage-alert,
+referrals, request-monitor, suite — this one was missing).
+
+The failure was silent: the per-module try/catch in `applyProfile()` caught the
+resulting "not available in this context" error and recorded it in the returned
+`errors` array, but the overall apply still "succeeded" — `profileVersion` advanced,
+other modules applied normally, and the only trace was a `console.log` line
+(not a warning/error) that's easy to miss. A practice could tick "Cleanup Code
+Preferences" in the Practice Profile module picker, publish, and see every
+receiving machine "apply" the new version — while the actual tally data
+(`pdc.preferredDescriptions`, `pdc.conceptRemap`) never wrote to storage on any
+of them.
+
+Fix: added the missing `importScripts('shared/io/problem-description-cleanup-io.js')`
+call to `service-worker.js`, alongside the other per-module IO imports.
+
 ## [v3.211.0] — 2026-08-02
 
 ### Rota Manager is now part of the suite
