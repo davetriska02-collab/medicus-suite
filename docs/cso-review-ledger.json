@@ -37,9 +37,9 @@
     },
     {
       "file": "docs/feature-list.md",
-      "last_cso_review_version": "3.125.0",
-      "last_cso_review_date": "2026-06-20",
-      "notes": "Feature list refreshed at 3.125.0 on 2026-06-20: built-in investigation result rules updated to 35 (12 added from Dr Grundy's result-matching set — microbiology/imaging text classifiers plus FIB-4/ferritin/B12 thresholds)."
+      "last_cso_review_version": "3.126.0",
+      "last_cso_review_date": "2026-08-02",
+      "notes": "Feature list refreshed at 3.126.0 on 2026-08-02: Rota Manager subsumed into the suite — side-panel module count 13 → 14 (new 'Rota status' module in panel + pop-out) and full-tab pages 2 → 3 (Rota Manager joins Practice Report and CQC Inspection Readiness). The rota product handles staffing, not clinical decision support, and persists no patient-identifiable data; its safe-staffing rules are BMA/CQC/NHSE guidance that warn and never block."
     }
   ]
 }

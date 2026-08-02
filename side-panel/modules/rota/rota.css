@@ -1,0 +1,255 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Rota status module styles */
+/* Design tokens only (canon: .claude/skills/ui-design/TOKENS.md). The full rota
+   app has its own dark Atelier theme; this compact module must look like the
+   rest of the side panel, so nothing here is a raw hex value. */
+
+.rota-module {
+  font-family: var(--sans);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rota-loading {
+  font-family: var(--sans);
+  color: var(--text-3);
+  padding: 16px 12px;
+  font-size: 12px;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+.rota-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rota-head-day {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.rota-head-week {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-4);
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+
+.rota-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px;
+}
+
+.rota-card-alert {
+  border-color: var(--red-line);
+  background: var(--red-dim);
+}
+
+.rota-card-title {
+  margin: 0 0 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rota-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: var(--r-pill);
+  padding: 1px 7px;
+  line-height: 1.6;
+}
+
+.rota-count-red {
+  color: var(--red);
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+}
+
+/* ── Duty rows ──────────────────────────────────────────────────────────── */
+
+.rota-duty-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.rota-duty-row + .rota-duty-row {
+  border-top: 1px solid var(--border);
+}
+
+.rota-period {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  width: 24px;
+  flex: 0 0 auto;
+}
+
+/* Hue is never the only signal — every pill carries its own word. */
+.rota-pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  border-radius: var(--r-pill);
+  padding: 1px 8px;
+  flex: 0 0 auto;
+}
+
+.rota-pill-green {
+  color: var(--green);
+  background: var(--green-dim);
+  border: 1px solid var(--green-line);
+}
+
+.rota-pill-red {
+  color: var(--red);
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+}
+
+.rota-duty-names {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── Lines / lists ──────────────────────────────────────────────────────── */
+
+.rota-line {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.rota-line-good {
+  color: var(--green);
+}
+
+.rota-sub {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--text-4);
+}
+
+.rota-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.rota-list li {
+  overflow-wrap: anywhere;
+}
+
+.rota-list-warn li {
+  border-left: 2px solid var(--red-line);
+  padding-left: 7px;
+}
+
+.rota-when {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  margin-right: 4px;
+}
+
+.rota-more {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-4);
+}
+
+/* ── Capacity figure ────────────────────────────────────────────────────── */
+
+.rota-figure {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.rota-figure-green {
+  color: var(--green);
+}
+
+.rota-figure-amber {
+  color: var(--amber);
+}
+
+.rota-vs {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-left: 4px;
+}
+
+/* ── Actions / empty state ──────────────────────────────────────────────── */
+
+.rota-actions {
+  display: flex;
+}
+
+.rota-actions .rota-open-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.rota-foot {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-5);
+}
+
+.rota-empty {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 14px;
+}
+
+.rota-empty h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--text-1);
+}
+
+.rota-empty p {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+
+.rota-empty-note {
+  color: var(--text-4);
+  font-size: 11px;
+}

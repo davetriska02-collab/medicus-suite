@@ -44,6 +44,8 @@ const NAV_COVERED_BY_OVERVIEW = new Set([
   'reception',
   'sweep',
   'knowledge',
+  'rota', // compact rota status module (panel + pop-out) — overview mention only
+  'rota-app', // opens the full rota app in a browser tab — overview mention only
   'visualiser', // opens a full tab, not a panel module — overview mention only
   'about',
 ]);

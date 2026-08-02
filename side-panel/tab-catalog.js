@@ -32,6 +32,12 @@ export const TAB_CATALOG = [
     name: 'Record',
     blurb: 'Live snapshot of the open patient — problems, meds, results, safety prompts. No PDF needed.',
   },
+  {
+    id: 'rota',
+    name: 'Rota status',
+    blurb: 'Today’s duty cover, leave, uncovered sessions and staffing warnings.',
+  },
+  { id: 'rota-app', name: 'Rota', blurb: 'Full rota manager — patterns, leave, duty fairness and cover.' },
   { id: 'visualiser', name: 'Visualiser', blurb: 'Analyse an exported record PDF in a full browser tab.' },
   { id: 'about', name: 'About', blurb: 'Module info, version checks and feedback.' },
 ];
@@ -52,7 +58,19 @@ export const ROLE_PRESETS = [
   {
     id: 'manager',
     label: 'Practice manager',
-    show: ['today', 'slots', 'capacity', 'submissions', 'activity', 'referrals', 'condor', 'knowledge', 'about'],
+    show: [
+      'today',
+      'slots',
+      'capacity',
+      'submissions',
+      'activity',
+      'referrals',
+      'condor',
+      'rota',
+      'rota-app',
+      'knowledge',
+      'about',
+    ],
   },
   {
     id: 'all',

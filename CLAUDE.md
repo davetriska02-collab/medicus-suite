@@ -12,6 +12,7 @@
 | `engine/` | Business logic (rules engine, extractors, triage engine) |
 | `content-scripts/` | Injected into Medicus pages |
 | `options/` | Settings page |
+| `rota/` | Rota Manager subtree — self-contained ESM app with its own `package.json` (`"type": "module"`). `rota/engine/` is **pure** (no DOM/`chrome.*`/`fetch`), `rota/shared/` is storage + helpers, `rota/app/app.html` is the full app (opens as a full tab). Tests are the root-level `test-rota-*.js` files |
 | `visualiser.html` / `visualiser-core.html` | Patient record visualiser (opens as full tab) |
 
 ## Adding a new side-panel module
@@ -22,7 +23,7 @@
 4. Add `<name>: { js: () => import('./modules/<name>/<name>.js'), css: '...' }` to `MODULES` in `side-panel/panel.js` AND `pop-out/pop-out.js`
 5. Follow the backup convention below
 
-> **Panel-only tabs (intentional exceptions):** `visualiser` and `about` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. `visualiser` is special-cased in `panel.js` (opens a full browser tab, not a module) and `about` renders inline static text — neither makes sense in the floating pop-out, so they are deliberately omitted there. All *real* modules must still appear in both.
+> **Panel-only tabs (intentional exceptions):** `visualiser`, `rota-app` and `about` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. `visualiser` and `rota-app` are special-cased in `panel.js`'s nav click handler (each opens a full browser tab, not a module — `rota-app` via `openRotaTab()` in `side-panel/modules/rota/rota-open.js`, which focuses an existing tab rather than stacking duplicates), and `about` renders inline static text — none makes sense in the floating pop-out, so they are deliberately omitted there. Both full-tab openers are also excluded from `MODULES` (so the boot guard can't restore into them) and from the Ctrl/Cmd+Alt+Arrow tab cycle; the command palette carries an `open:*` fallback command so the pop-out can still reach them. All *real* modules must still appear in both shells — including `rota`, the compact Rota status companion module, which does.
 
 ## chrome.storage.local keys — backup convention
 

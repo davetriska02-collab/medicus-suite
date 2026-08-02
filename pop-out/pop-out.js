@@ -59,6 +59,10 @@ const MODULES = {
     js: () => import('../side-panel/modules/record/record.js'),
     css: '../side-panel/modules/record/record.css',
   },
+  rota: {
+    js: () => import('../side-panel/modules/rota/rota.js'),
+    css: '../side-panel/modules/rota/rota.css',
+  },
 };
 
 // ── Per-tab help registry (mirrors panel.js — keep in sync) ─────────────────────
@@ -124,6 +128,11 @@ const TAB_HELP = {
     title: 'Knowledge',
     what: 'A searchable store of the practice’s own notes, contacts and how-to information.',
     firstStep: 'Type a keyword to find the relevant practice note.',
+  },
+  rota: {
+    title: 'Rota status',
+    what: 'Today’s duty cover, who is on leave, sessions still needing cover and this week’s high-priority staffing warnings.',
+    firstStep: 'Glance at duty cover for AM and PM, then open the full rota to fix any gap.',
   },
 };
 

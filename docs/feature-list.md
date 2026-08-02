@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.125.0
-**Generated:** 2026-06-20
+**Version:** v3.126.0
+**Generated:** 2026-08-02
 
 ## What it is
 
@@ -9,9 +9,9 @@ Medicus Suite is a Chrome browser extension for UK GP practices that runs alongs
 
 ## At a glance
 
-- 13 side-panel modules covering monitoring, demand, capacity, workflow, knowledge, analytics, and the live patient record
+- 14 side-panel modules covering monitoring, demand, capacity, workflow, knowledge, analytics, the live patient record and the practice rota
 - 4 in-page content-script features (on-screen overlays and relays)
-- 2 full-tab generated reports (Practice Report; CQC Inspection Readiness)
+- 3 full-tab pages (Practice Report; CQC Inspection Readiness; Rota Manager)
 - 7 rule types in the alert engine
 - 25 drug-monitoring rules, 61 QOF rules, 35 bundled investigation result rules, and 22 starter alerts in the prescribing-safety library
 
@@ -137,6 +137,18 @@ A live-first snapshot of the patient currently open in Medicus, sourced from the
 - "Open full visualiser" footer link to the full multi-year Patient Record Visualiser (built from an exported record PDF) for the deep view
 - Available in both the side panel and the pop-out window
 
+### Rota status (Practice rota)
+
+The compact, glanceable half of the Rota Manager — available in both the side panel and the pop-out window. The full application opens in its own browser tab from the **Rota** tab (side panel) or Ctrl+K → "Open Rota manager".
+
+- Duty cover for today, AM and PM, with an OK/Gap state and the named duty doctors
+- Who is on approved leave today; upcoming sessions still flagged as vacancies needing cover
+- This week's high-priority safe-staffing warnings (duty cover, registrar supervision, HCA supervision)
+- Estimated GP appointments this week against the ~72-per-1,000-patients access benchmark
+- Reads only local extension storage; performs no network calls and persists no patient-identifiable data
+
+The **full Rota Manager** (its own browser tab) covers working patterns and multi-week templates, session-accounted leave on an April–March leave year, Bradford-factor and fit-note flags, the cover worklist and shift swaps, duty fairness pro-rata to contracted sessions, demand-led planning, and read-only reconciliation against the Medicus appointment book. Its safe-staffing rules encode BMA/CQC/NHSE guidance, not law — they warn, they never block, and every threshold is a practice setting.
+
 ## In-page features (content scripts)
 
 **Triage Lens — request queue** (all Medicus pages): overlays the patient request queue with semantic triage chips. Red = same-day or 999; amber = urgent; info = supplementary. 77+ built-in rules across chest pain, sepsis, stroke/TIA, anaphylaxis, obstetric emergencies, mental health crisis, paediatric red flags, 2WW cancer patterns, and common acute presentations. New built-in rules reach existing users automatically; rules deliberately deleted stay deleted.
@@ -175,6 +187,7 @@ Rules are practice-editable via a form-based editor in Options with a live engin
 
 ## Recent additions (last 4 weeks)
 
+- **v3.126.0 (2026-08-02)** — Rota Manager subsumed into the suite: a full rota application in its own browser tab plus a compact **Rota status** module in the panel and pop-out; all eight `rota.*` storage keys covered by the suite backup. The standalone Medicus Rota Manager extension is deprecated
 - **v3.111.0–v3.113.0 (2026-06-16)** — Whole-suite UX from a Practice appraisal: plain-language + legibility lift on load-bearing labels, an "All tabs" menu (every tab reachable by name in one click), keyboard tab navigation, and Condor CSV export
 - **v3.110.2 (2026-06-16)** — CQC Inspection Readiness is now a discoverable **Settings tab** (Options → CQC Readiness) with a launch button, not only the Ctrl+K command
 - **v3.110.0 (2026-06-16)** — CQC Inspection Readiness: a new page (Ctrl+K → "CQC inspection readiness…") turning the monitoring rule-set and its dated currency into Safe/Well-led evidence — internal readiness check plus a gated, sign-off-stamped Evidence export. Supporting evidence, not proof of compliance; built from shipped rule data only, no patient data

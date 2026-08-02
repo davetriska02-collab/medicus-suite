@@ -2,6 +2,69 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.126.0] — 2026-08-02
+
+### Rota Manager is now part of the suite
+
+The **Medicus Rota Manager** — until now a separate Chrome extension
+(`davetriska02-collab/medicus-rota-manager`, last released standalone at v1.10.0)
+— is subsumed into Medicus Suite. Practices no longer install and update two
+extensions, and the rota shares the suite's backup, settings and navigation.
+
+**The standalone repository is deprecated.** It receives no further releases; all
+rota development happens here, under `rota/`.
+
+#### The code (landed previously in the port commit)
+
+`rota/` is a self-contained ESM subtree with its own `package.json`
+(`"type": "module"`): `rota/engine/` (pure rules — `rules.js`, `leave.js`,
+`cover.js`, `solver.js`, `fairness.js`, `bradford.js`, `demand.js`, `swaps.js`
+and the rest; no DOM, no `chrome.*`, no `fetch`), `rota/shared/`
+(`store.js`, `time.js`, `model.js`, `esc.js`, `medicus-api.js`) and `rota/app/`
+(the full application shell and its views). Its 17 `test-rota-*.js` suites run
+in the suite's CI on every push.
+
+#### Two ways in
+
+- **Rota** (`rota-app`) — a **panel-only** nav tab that opens the full
+  application in a browser tab, exactly like Visualiser. `side-panel/panel.js`
+  special-cases it in the nav click handler and excludes it from the
+  Ctrl/Cmd+Alt+Arrow tab cycle; it is deliberately absent from `MODULES`, so the
+  boot guard will never try to restore the panel into it. Opening is
+  focus-or-create — `side-panel/modules/rota/rota-open.js` raises an existing
+  rota tab (and its window) instead of stacking duplicates. The same helper backs
+  the command palette's *Open Rota manager* command, which is how the pop-out —
+  which has no `rota-app` tab — reaches the full app.
+- **Rota status** (`rota`) — a compact module in **both** shells
+  (`side-panel/modules/rota/rota.js` + `.css`, registered in `panel.js` and
+  `pop-out/pop-out.js`). It reads the eight `rota.*` keys straight from
+  `chrome.storage.local`, runs the pure engine (`checkWeek`, `capacitySummary`,
+  `approvedLeaveFor`) over them and shows: duty cover for today AM/PM with an
+  OK/Gap state, who is on approved leave today, upcoming sessions still needing
+  cover, this week's high-severity safe-staffing warnings, and estimated GP
+  appointments against the ~72-per-1,000 benchmark — plus an *Open full rota*
+  button. Before any staff exist it shows a short pitch and a single button into
+  the full app. It refreshes on `chrome.storage.onChanged` for `rota.*` and polls
+  once a minute so the date rolls over on a panel left open overnight. No network
+  I/O, and no patient-identifiable data is read or persisted.
+
+Both entries are described in `side-panel/tab-catalog.js` (and added to the
+practice-manager preset), carry `TAB_HELP` copy in `panel.js`/`pop-out.js`, and
+are recorded in `test-tour-steps.js`'s `NAV_COVERED_BY_OVERVIEW` — the guided
+tour teaches them via the nav overview rather than dedicated steps.
+
+#### Backups
+
+All eight rota keys — `rota.staff`, `rota.entries`, `rota.leave`, `rota.rooms`,
+`rota.swaps`, `rota.audit`, `rota.demand`, `rota.settings` — are covered by
+`shared/io/rota-io.js` and the suite envelope, so a suite backup now carries the
+whole rota. `test-rota-store.js` asserts set-equality between that key list and
+`rota/shared/store.js`'s own `KEYS`, so a new rota key cannot silently escape.
+
+> **Scope note:** the rota's safe-staffing rules encode BMA/CQC/NHSE *guidance*,
+> not law. They warn; they never block. Thresholds are practice settings, not
+> constants.
+
 ## [v3.125.0] — 2026-06-20
 
 ### Fix: urine electrolytes no longer matches a blood U&E request

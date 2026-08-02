@@ -8,6 +8,7 @@ import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
 import { initSetup } from './setup/setup.js';
+import { openRotaTab } from './modules/rota/rota-open.js';
 
 const content = document.getElementById('suiteContent');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -119,8 +120,13 @@ const MODULES = {
   sweep: { js: () => import('./modules/sweep/sweep.js'), css: './modules/sweep/sweep.css' },
   knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
   record: { js: () => import('./modules/record/record.js'), css: './modules/record/record.css' },
+  rota: { js: () => import('./modules/rota/rota.js'), css: './modules/rota/rota.css' },
   about: null,
 };
+// NOTE: 'rota-app' is deliberately absent. Like 'visualiser', it opens the full
+// application in a browser tab; the nav click handler returns before
+// switchModule is reached, and the boot guard (`m in MODULES`) then correctly
+// refuses to restore the panel into it.
 
 // ── Per-tab help registry ──────────────────────────────────────────────────────
 // Plain-English, UK English, two-line summary per module: what the tab is, and
@@ -188,6 +194,11 @@ const TAB_HELP = {
     title: 'Knowledge',
     what: 'A searchable store of the practice’s own notes, contacts and how-to information.',
     firstStep: 'Type a keyword to find the relevant practice note.',
+  },
+  rota: {
+    title: 'Rota status',
+    what: 'Today’s duty cover, who is on leave, sessions still needing cover and this week’s high-priority staffing warnings.',
+    firstStep: 'Glance at duty cover for AM and PM, then open the full rota to fix any gap.',
   },
 };
 
@@ -348,7 +359,8 @@ function wireAllTabsButton() {
 
 // Keyboard tab navigation (power-user finding R4): Ctrl/Cmd+Alt+Left/Right cycle
 // the visible in-panel tabs without the mouse. Skipped while typing in a field,
-// and skips Visualiser (it opens a full browser tab, not an in-panel switch).
+// and skips Visualiser and Rota (both open a full browser tab, not an in-panel
+// switch — the compact 'rota' status module stays in the cycle).
 function wireTabNavShortcuts() {
   document.addEventListener(
     'keydown',
@@ -358,7 +370,10 @@ function wireTabNavShortcuts() {
       const ae = document.activeElement;
       if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
       const tabs = Array.from(document.querySelectorAll('.nav-tab')).filter(
-        (t) => !t.classList.contains('nav-tab-hidden') && t.dataset.module !== 'visualiser'
+        (t) =>
+          !t.classList.contains('nav-tab-hidden') &&
+          t.dataset.module !== 'visualiser' &&
+          t.dataset.module !== 'rota-app'
       );
       if (!tabs.length) return;
       e.preventDefault();
@@ -452,6 +467,10 @@ document.querySelectorAll('.nav-tab').forEach((tab) => {
     const mod = tab.dataset.module;
     if (mod === 'visualiser') {
       chrome.tabs.create({ url: chrome.runtime.getURL('visualiser-core.html') });
+      return;
+    }
+    if (mod === 'rota-app') {
+      openRotaTab();
       return;
     }
     if (mod === activeModule) return;
@@ -716,6 +735,20 @@ function renderAbout() {
           priority (Routine / Urgent / 2WW) and status breakdowns, plus horizontal bar charts
           by referring clinician, specialty, and hospital. Fetches from the Medicus
           clinical-audit-report endpoint. API-based.
+        </div>
+      </div>
+
+      <div class="module-card">
+        <div class="module-card-header">
+          <span class="module-card-name">Rota Manager</span>
+          <span class="module-card-version">v1.10</span>
+        </div>
+        <div class="module-card-desc">
+          Practice rota built in sessions: working patterns, leave (April–March, session-accounted),
+          registrar supervision, duty fairness pro-rata to contracted sessions and a cover worklist.
+          The Rota tab opens the full app in a browser tab; the Rota status tab is the compact
+          morning view. Formerly a standalone extension, now part of the suite. Local storage only;
+          read-only where it reads Medicus, and no patient data is ever persisted.
         </div>
       </div>
 
