@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.211.0
+**Version:** v3.212.0
 **Generated:** 2026-08-02 (automated)
 
 ## What it is
@@ -11,7 +11,7 @@ Medicus Suite is a Chrome extension that sits alongside the Medicus electronic p
 
 - 19 side-panel modules covering morning workflow, monitoring, capacity/demand, reception, referrals, reminders, staff rota and reference material
 - 6 full-tab-style tools: three opened from the panel (Patient Record Visualiser, Duplicate Problem Checker, Rota manager), one triggered from Medicus's own contacts page (Contacts Management), and two reached from Options/Condor (Practice Report, CQC Inspection Readiness)
-- roughly 15 in-page content-script features layered onto live Medicus screens (queue chips, inline booking/task/document widgets, code-cleanup tools)
+- roughly 16 in-page content-script features layered onto live Medicus screens (queue chips, inline booking/task/document widgets, code-cleanup tools)
 - 8 rule types in the clinical alert engine (drug-monitoring, drug-combo, drug/allergy conflict, qof-register, qof-indicator, event-count, vaccine, composite)
 - 34 drug-monitoring rules, 74 QOF rules (14 register + 60 indicator), 5 vaccine rules, 44 investigation-result rules, and 35 starter alerts in the practice alert library (32 prescribing-safety, 3 clinical-review)
 
@@ -143,6 +143,7 @@ The **full Rota Manager** (its own browser tab) covers working patterns and mult
 - **Reception quick-actions composer** — three chip rows (Action / With whom / Timeframe) above a task's Internal Comment box; inserts plain-English text only, the clinician still presses Medicus's own Submit
 - **Clean up code** — flags outdated/retired SNOMED problem-list codes and suggests a cleaner description or replacement code
 - **Bulk end problems** — inline checkboxes next to every active problem on the Clinical Summary, for ending several entries in one batch
+- **Allergy cleanup suite** — one "Clean up allergies?" trigger on the Clinical Summary covering junk/import-artefact code removal, duplicate-entry merge (with per-card exclude and an explicit clinical-decision review step), clearing a stale legacy code alongside an already-correct one, and converting a legacy pre-defined-allergy code to a proper coded substance — every action requires explicit confirmation, nothing is auto-applied
 - **Pusher relay** — keeps the panel's live data current via the practice's real-time feed
 - **Referrals discovery** — watches the referrals audit-report page and feeds discovered data to the Referrals Tracker tab
 
@@ -179,6 +180,7 @@ The shipped alert library carries 35 starter alerts a practice can enable (32 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.212.0 (2026-08-02)** — Allergy cleanup suite: a single "Clean up allergies?" trigger folding in junk/low-relevance-code removal, duplicate-entry merge, dual-coded (legacy code alongside an already-correct substance) cleanup, and pre-defined-allergy-to-substance conversion, each with its own review step appropriate to how much clinical judgement it needs.
 - **v3.211.0 (2026-08-02)** — Rota Manager subsumed into the suite: a full rota application in its own browser tab (**Rota manager**) plus a compact **Rota** module in the panel and pop-out; all eight `rota.*` storage keys covered by the suite backup. The standalone Medicus Rota Manager extension is deprecated.
 - **v3.192.0–v3.210.0 (26 Jul – 1 Aug)** — Contacts Management: a new tool for managing a patient's next-of-kin and family contacts as a drag-and-drop family tree, with review-driven fixes for wrong-record flagging safety, a confirmable and repairable "remove from tree" action, and better name-matching for contacts carried over from a previous practice.
 - **v3.176.13–v3.196.0 (22–28 Jul)** — Clean up code (renamed from "Fix description"): flags outdated/retired SNOMED problem-list codes and suggests a cleaner replacement, extended to catch more patterns, plus a "bulk end problems" companion tool and per-practice learning of preferred replacements.
