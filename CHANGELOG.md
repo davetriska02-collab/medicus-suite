@@ -2,7 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [Unreleased]
+## [v3.234.2] — 2026-08-19
+
+### Rules engine — recall due-date could land a day early/late around DST
+
+`lastDate` strings (`YYYY-MM-DD`) parse as UTC midnight, but the due-date calculation
+was advancing them with local-time `setDate`/`getDate`. On a BST (or other
+DST-shifted) host, adding the interval in local time could push the computed
+due date a day off from adding it in UTC. Switched to `setUTCDate`/`getUTCDate`
+so the whole calculation stays in UTC, matching the `Date.UTC` convention already
+used elsewhere in this file.
 
 ## [v3.234.1] — 2026-08-18
 
