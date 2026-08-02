@@ -51,7 +51,16 @@ function listFilesRecursive(dir, exts) {
 }
 
 // App source directories (per the task spec).
-const APP_DIRS = ['side-panel', 'pop-out', 'shared', 'options', 'engine', 'content-scripts', 'sentinel-options'];
+const APP_DIRS = [
+  'side-panel',
+  'pop-out',
+  'shared',
+  'options',
+  'engine',
+  'content-scripts',
+  'sentinel-options',
+  'rota',
+];
 const APP_FILES = [
   // Top-level JS
   path.join(ROOT, 'service-worker.js'),
@@ -98,6 +107,7 @@ const KEY_PREFIXES = [
   'knowledge',
   'sweep',
   'reception',
+  'rota',
 ];
 
 function hasKeyPrefix(k) {

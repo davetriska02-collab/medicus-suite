@@ -99,6 +99,7 @@ const VALID_SCOPES = [
   'reception',
   'knowledge',
   'notifications',
+  'rota',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -378,6 +379,19 @@ function previewEnvelope(envelope) {
     lines.push(`Notifications: badge ${badgeEnabled === false ? 'disabled' : 'enabled'}`);
   } else {
     const m = missing('Notifications');
+    if (m) lines.push(m);
+  }
+
+  if (mods.rota) {
+    const staffCount = (mods.rota.staff || []).length;
+    const entryCount = (mods.rota.entries || []).length;
+    const leaveCount = (mods.rota.leave || []).length;
+    lines.push(
+      `Rota: ${staffCount} staff, ${entryCount} rostered session${entryCount === 1 ? '' : 's'}, ` +
+        `${leaveCount} leave record${leaveCount === 1 ? '' : 's'}`
+    );
+  } else {
+    const m = missing('Rota');
     if (m) lines.push(m);
   }
 

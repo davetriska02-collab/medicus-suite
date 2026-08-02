@@ -520,6 +520,7 @@ async function doFullExport() {
     reception,
     knowledge,
     notifications,
+    rota,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -534,6 +535,7 @@ async function doFullExport() {
     receptionExport(),
     knowledgeExport(),
     notificationsExport(),
+    rotaExport(),
   ]);
   const suite = await suiteExport();
   return window.SuiteEnvelope.wrap('suite', {
@@ -550,6 +552,7 @@ async function doFullExport() {
     reception,
     knowledge,
     notifications,
+    rota,
     suite,
   });
 }
@@ -569,6 +572,7 @@ async function doModuleExport(scope) {
     reception: () => receptionExport(),
     knowledge: () => knowledgeExport(),
     notifications: () => notificationsExport(),
+    rota: () => rotaExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -602,6 +606,7 @@ async function applyEnvelope(envelope) {
     mods.reception && (() => receptionImport(mods.reception)),
     mods.knowledge && (() => knowledgeImport(mods.knowledge)),
     mods.notifications && (() => notificationsImport(mods.notifications)),
+    mods.rota && (() => rotaImport(mods.rota)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);

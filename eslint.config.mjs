@@ -44,6 +44,12 @@ export default [
     languageOptions: { sourceType: 'module' },
   },
   {
+    // Ported Rota Manager subtree — ES modules throughout (rota/package.json
+    // sets "type":"module"). app/ is DOM, engine/ + shared/ are pure.
+    files: ['rota/**/*.js'],
+    languageOptions: { sourceType: 'module' },
+  },
+  {
     // options/tabs-section.js is loaded as <script type="module"> and imports
     // from side-panel/tab-catalog.js (the rest of options/ is classic script).
     files: ['options/tabs-section.js'],
