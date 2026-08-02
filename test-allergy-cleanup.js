@@ -42,6 +42,7 @@ const {
   extractAllergenAndReactionHint,
   pickReactionSeed,
   groupDuplicateAllergies,
+  remapReviewsByGroupIdentity,
   isSameAllergenConcept,
   groupRelatedAllergies,
   pickDefaultKeeperId,
@@ -83,10 +84,20 @@ console.log('--- rules/allergy-junk-codes.json: the imported codes list itself -
     typeof noKnown.reasonEnded === 'string' && noKnown.reasonEnded.length > 0,
     '716186003 has a non-empty reasonEnded'
   );
-  const hoNonDrug = allergyJunkCodes.codes.find((c) => c.conceptId === '161611007');
+  // Pre-merge review must-fix A: a coded NKA entry is a positive "asked,
+  // answer nil" assertion — the per-code caution keeps it out of 'Select
+  // all' so only surplus duplicates get removed, never the last copy.
   check(
-    !!hoNonDrug && hoNonDrug.description === 'H/O: non-drug allergy' && hoNonDrug.category === 'import-artefact',
-    '161611007 "H/O: non-drug allergy" is present, category import-artefact'
+    typeof noKnown.caution === 'string' && /last remaining copy/i.test(noKnown.caution),
+    '716186003 carries a per-code caution warning against removing the last remaining copy'
+  );
+  const hoNonDrug = allergyJunkCodes.codes.find((c) => c.conceptId === '161611007');
+  // Pre-merge review must-fix B: the code's SNOMED semantics are a positive
+  // "has a history of non-drug allergy" finding, so it needs the too-generic
+  // per-instance caution protection, not the bulk-safe import-artefact class.
+  check(
+    !!hoNonDrug && hoNonDrug.description === 'H/O: non-drug allergy' && hoNonDrug.category === 'too-generic',
+    '161611007 "H/O: non-drug allergy" is present, category too-generic (recategorised 2026-08-02 review)'
   );
   const atopy = allergyJunkCodes.codes.find((c) => c.conceptId === '115665000');
   check(
@@ -108,6 +119,16 @@ console.log('--- rules/allergy-junk-codes.json: the imported codes list itself -
   check(
     typeof pollen.caution === 'string' && /hay fever/.test(pollen.caution),
     'the pollen entry carries a static per-code caution string mentioning hay fever'
+  );
+  // Select-all exclusion keys on the presence of a `caution` string, not on
+  // category — so this data invariant is what keeps every genuine-allergy
+  // (low-prescribing-relevance) entry out of bulk selection. A future entry
+  // added without a caution would silently become bulk-endable.
+  check(
+    allergyJunkCodes.codes
+      .filter((c) => c.category === 'low-prescribing-relevance')
+      .every((c) => typeof c.caution === 'string' && c.caution.length > 0),
+    'every low-prescribing-relevance entry carries a non-empty per-code caution (Select-all guard invariant)'
   );
 }
 
@@ -213,6 +234,30 @@ console.log('--- hasBothCodeTypes / classifyDualCodedEntries: real HAR46 "legacy
   check(flagged[0].authoritative === 'substances', 'the authoritative allergyCodeType is carried through too');
   check(classifyDualCodedEntries([], {}, new Set()).length === 0, 'no candidates -> no flags');
   check(classifyDualCodedEntries(null, {}, new Set()).length === 0, 'null candidates -> no flags, never throws');
+
+  // Pre-merge review fix: the checklist UI promises the substance is never
+  // touched, so ONLY the substances-authoritative direction may be flagged
+  // here. A dual-coded entry whose authoritative side is pre-defined-allergies
+  // (or unknown) must fall through to the conversion flow instead.
+  const preDefinedAuthoritative = Object.assign({}, overview, { allergyCodeType: 'pre-defined-allergies' });
+  const noCodeType = Object.assign({}, overview);
+  delete noCodeType.allergyCodeType;
+  check(
+    classifyDualCodedEntries(
+      [{ id: 'x', allergyCodeDescription: 'ALLERGY PENICILLIN', isDraft: false }],
+      { x: preDefinedAuthoritative },
+      new Set()
+    ).length === 0,
+    'a dual-coded entry with allergyCodeType pre-defined-allergies is NOT flagged for the bulk clear'
+  );
+  check(
+    classifyDualCodedEntries(
+      [{ id: 'x', allergyCodeDescription: 'ALLERGY PENICILLIN', isDraft: false }],
+      { x: noCodeType },
+      new Set()
+    ).length === 0,
+    'a dual-coded entry with NO allergyCodeType is NOT flagged for the bulk clear either'
+  );
 }
 
 console.log('--- buildClearLegacyCodePayload: real HAR46 shape, only the stale field is ever nulled ---');
@@ -250,14 +295,27 @@ console.log('--- buildClearLegacyCodePayload: real HAR46 shape, only the stale f
     'every clinical/provenance field passes through completely unchanged -- this only ever nulls the one stale field'
   );
 
+  // Pre-merge review fix: the builder FAILS CLOSED on any prefill that does
+  // not show substances as authoritative — the old "symmetric" behaviour
+  // cleared the SUBSTANCE (the field prescribing-safety checks depend on)
+  // while the UI told the clinician it never would.
   const prefillOtherWay = Object.assign({}, prefill, { allergyCodeType: 'pre-defined-allergies' });
-  const payloadOtherWay = buildClearLegacyCodePayload(prefillOtherWay);
-  check(
-    payloadOtherWay.substance === null &&
-      payloadOtherWay.allergyCode &&
-      payloadOtherWay.allergyCode.conceptId === '292954005',
-    'symmetric case: when pre-defined-allergies is authoritative instead, the stale SUBSTANCE is cleared and allergyCode is kept'
-  );
+  let threwOtherWay = false;
+  try {
+    buildClearLegacyCodePayload(prefillOtherWay);
+  } catch (e) {
+    threwOtherWay = /skipped to be safe/i.test(e.message);
+  }
+  check(threwOtherWay, 'a pre-defined-allergies-authoritative prefill THROWS instead of clearing the substance');
+  const prefillNoType = Object.assign({}, prefill);
+  delete prefillNoType.allergyCodeType;
+  let threwNoType = false;
+  try {
+    buildClearLegacyCodePayload(prefillNoType);
+  } catch (e) {
+    threwNoType = true;
+  }
+  check(threwNoType, 'a prefill with NO allergyCodeType throws too (older/thinner shape fails closed)');
 }
 
 console.log('--- buildEndAllergyPayload: matches the real captured end-allergy POST body ---');
@@ -527,9 +585,12 @@ console.log('--- classifyJunkEntries: real 2026-07-29 patient scenario, 5 duplic
   });
   const flagged = classifyJunkEntries(candidates, overviewsById, allergyJunkCodes.codes);
   check(flagged.length === 5, 'every one of the five real duplicate entries is flagged for bulk-end');
+  // Since the 2026-08-02 pre-merge review, every NKA instance carries the
+  // per-code caution (excluded from 'Select all') — the clinician removes the
+  // four surplus duplicates individually and keeps one, never bulk-ends to zero.
   check(
-    flagged.every((f) => f.conceptId === '716186003' && f.caution === null),
-    'all five resolve to the correct conceptId and carry no caution (genuinely empty junk)'
+    flagged.every((f) => f.conceptId === '716186003' && /last remaining copy/i.test(f.caution)),
+    'all five resolve to the correct conceptId and every one carries the per-code keep-one caution'
   );
   check(
     flagged.every((f) => typeof f.reasonEnded === 'string' && f.reasonEnded.length > 0),
@@ -631,6 +692,24 @@ console.log('--- rules/allergy-substance-conversion.json: the imported entries l
     !allergySubstanceConversion.entries.some((e) => e.conceptId === '294505008'),
     '"Amoxicillin allergy" (294505008) was never in the reviewed sweep -- correctly absent, falls to manual search'
   );
+
+  // Pre-merge review fix D: rule.substance is PRE-SELECTED in the conversion
+  // modal (one Convert click away), so a salt-level narrowing is a wrong-
+  // substance record waiting to happen. dm+d keeps depot esters (decanoate/
+  // enanthate) and the two perindopril salts as clinically distinct VTMs —
+  // these five must stay not-convertible (manual live search) until a
+  // verified same-salt dm+d target is recorded.
+  const saltAmbiguous = ['292402008', '292389002', '292390006', '609543001', '293509005'];
+  saltAmbiguous.forEach((id) => {
+    const e = allergySubstanceConversion.entries.find((x) => x.conceptId === id);
+    check(
+      !!e && e.kind === 'not-convertible' && e.substance === null && /salt/i.test(e.notes),
+      id +
+        ' "' +
+        (e ? e.description : '?') +
+        '" is not-convertible with a salt-mismatch note (never pre-selects the wrong salt)'
+    );
+  });
 }
 
 console.log('--- findConversionRule: exact conceptId match only ---');
@@ -1348,6 +1427,40 @@ console.log(
   check(
     normalizeOnsetDateForSubmit('some unrecognised format') === 'some unrecognised format',
     'an unrecognised shape passes through unchanged rather than guessing'
+  );
+}
+
+console.log('--- remapReviewsByGroupIdentity: review state survives concept-enrichment regrouping by id-identity ---');
+{
+  // Pre-merge review fix: _reviews (and the open modal) are keyed by group
+  // INDEX, but background concept enrichment can replace the group array
+  // with a regrouped one — indices shift, text-only groups merge. State must
+  // follow its group to the new index, and state for a group that no longer
+  // exists as-is must be dropped (its review restarts against the fuller
+  // group), never left pointing at a different group's cards.
+  const g = (ids) => ({ entries: ids.map((id) => ({ id })) });
+  const oldGroups = [g(['a1', 'a2']), g(['b1', 'b2']), g(['c1', 'c2'])];
+  const stateA = { keeperId: 'a1' };
+  const stateC = { keeperId: 'c2' };
+  const oldReviews = { 0: stateA, 2: stateC };
+
+  // Enrichment merged the b-group into the a-group; c survives but shifts index.
+  const newGroups = [g(['a1', 'a2', 'b1', 'b2']), g(['c1', 'c2'])];
+  const remapped = remapReviewsByGroupIdentity(oldGroups, newGroups, oldReviews);
+  check(remapped[0] === undefined, 'state for a group that was merged away is dropped, not left at its old index');
+  check(remapped[1] === stateC, 'state for a surviving group follows it to its NEW index');
+
+  // Identity is order-independent: same members, different order, still matched.
+  const reordered = [g(['c2', 'c1'])];
+  const remapped2 = remapReviewsByGroupIdentity(oldGroups, reordered, oldReviews);
+  check(remapped2[0] === stateC, 'group identity matching is order-independent on entry ids');
+
+  // No change -> everything stays put.
+  const same = remapReviewsByGroupIdentity(oldGroups, oldGroups, oldReviews);
+  check(same[0] === stateA && same[2] === stateC, 'identical regroup keeps every state at its index');
+  check(
+    Object.keys(remapReviewsByGroupIdentity(null, null, null)).length === 0,
+    'null inputs -> empty result, never throws'
   );
 }
 
