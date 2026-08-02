@@ -1,0 +1,72 @@
+{
+  "version": 2,
+  "lastUpdated": "2026-07-29",
+  "notes": "ALL known GP2GP-import boilerplate found in a problem's additionalInformation free text lives HERE, in one place, distinguished by `kind` -- consolidated 2026-07-29 (previously split across this file and a second severity-defaulting-pattern.json). kind:\"literal\" entries (the original schema) are matched PER LINE, trimmed, case-insensitive exact match against `text` -- pure noise, always safe to strip on its own, no further action ever needed. kind:\"pattern\" entries are matched against the WHOLE additionalInformation text instead (never split by line first, so the same two-fragment boilerplate is recognised whether it lands on separate lines or run together on one) using `pattern`+`flags` as a JS RegExp source, compiled at read time -- used when the boilerplate ALSO encodes a captured VALUE worth checking against the problem's own structured data; an `action` object on the entry says what further step to offer for that captured value -- `severityCorrection` when the value can be confidently compared against the problem's own significance and auto-corrected on a genuine mismatch (severityDefaultingContradiction below), `reviewSeverity` when the captured value has no confirmed mapping to Major/Minor at all and the honest response is a prompt asking the clinician to check it themselves, never a guessed correction (sourceSystemPriorityValue below). additionalInformation is often multi-line and can mix genuine free text with any number of these entries -- a genuine free-text fragment must never be silently dropped because the field ALSO happens to contain a generic one, whichever kind matched it. Used by content-scripts/problem-description-cleanup.js's stripGenericAdditionalInfoLines() (literal entries) and findPatternMatch()/computeAdditionalInfoFindings() (pattern entries, and the combined result). Add a new literal entry for a fixed boilerplate string with nothing further to check; add a pattern entry only when the boilerplate carries a captured value worth comparing against the record -- no code change needed for either.",
+  "knownScopeLimitations": [
+    "The \"Active Problem, ...\" family (Active Problem, Significant / Active Problem, Not Significant (Minor)) is DELIBERATELY matched as fixed kind:\"literal\" strings only, as of 2026-07-29 -- unlike sourceSystemPriorityValue's PRIORITY=n, the bracketed severity word in this template ((Major)/(Minor), and plausibly (Unspecified) for a problem with no significance set at all) is NOT extracted as a captured value or compared against anything structural. Practical consequence: a real 'Active Problem, Significant (Major)' or 'Active Problem, ... (Unspecified)' line would NOT currently be recognised at all -- only the two exact strings already confirmed live (no bracket, and '(Minor)') are matched; a bracketed '(Major)' sibling is a plausible but NOT yet observed variant, same 'confirm before adding' discipline as every other sibling in this file. This was a conscious choice, not an oversight: unlike severityDefaultingContradiction/sourceSystemPriorityValue, there is no known reason yet to believe a mismatch here (e.g. bracket says Major, structural significance says Minor) means anything different from what those other checks already catch -- generalising this family to a value-capturing pattern (mirroring severityDefaultingContradiction's approach) is a reasonable next step if/when a real example makes the case for it, not built pre-emptively."
+  ],
+  "entries": [
+    {
+      "kind": "literal",
+      "text": "Active Problem, Significant",
+      "addedDate": "2026-07-25",
+      "rationale": "GP2GP import boilerplate restating metadata already captured structurally on the problem itself (problemStatus:\"Active\", significance:\"Major\"/\"Minor\") -- confirmed on a real patient's problem list, carries no information not already available elsewhere on the record."
+    },
+    {
+      "kind": "literal",
+      "text": "Active Problem, Not Significant (Minor)",
+      "addedDate": "2026-07-29",
+      "rationale": "Sibling boilerplate to \"Active Problem, Significant\" above, for the OPPOSITE significance value -- confirmed live 2026-07-29, real patient, seen alongside a second severity-defaulting fragment on the same record (\"Defaulted to Minor\\nProblem severity: Minor grade 1 with small erosion at GOJ\\nActive Problem, Not Significant (Minor)\") -- per the user, plausibly the result of the record having passed through more than one GP EPR/GP2GP transfer, each layering its own boilerplate onto the same field. Same restates-existing-metadata reasoning as its sibling (problemStatus:\"Active\", significance:\"Minor\"), no clinical meaning on its own. A \"(Major)\" counterpart is plausible by the same template but NOT yet seen on a real patient -- add it only once actually observed, same discipline as every other sibling pair in this file. Note the motivating example's SECOND line — \"Problem severity: Minor grade 1 with small erosion at GOJ\" — mixes the boilerplate \"Problem severity: Minor\" prefix with genuine clinical free text (\"grade 1 with small erosion at GOJ\") on the SAME line; severityDefaultingContradiction's pattern-match is span-based, not whole-line, so it correctly strips only the boilerplate prefix and leaves the genuine clinical text as its own line — no separate rule needed for that."
+    },
+    {
+      "kind": "literal",
+      "text": "Unspecified Significance: Defaulted to Minor",
+      "addedDate": "2026-07-26",
+      "rationale": "GP2GP import boilerplate: the source record carried no significance value, so the importer defaulted it to Minor and recorded that decision as a free-text line -- restates significance:\"minor\" already captured structurally on the problem, no clinical meaning on its own. Kept as a STANDALONE literal entry in addition to being half of the severityDefaultingContradiction pattern below, so a copy of this line with no paired \"Problem severity:\" line at all is still recognised and stripped as plain noise, not left untouched."
+    },
+    {
+      "kind": "literal",
+      "text": "Defaulted to Minor",
+      "addedDate": "2026-07-29",
+      "rationale": "A SHORTER-PREFIX sibling of \"Unspecified Significance: Defaulted to Minor\" above, confirmed live 2026-07-29 (real patient, reported not flagging): the same line without the leading \"Unspecified Significance: \" -- some records carry only \"Defaulted to Minor\" on its own. Same restates-existing-metadata reasoning; kept as a STANDALONE literal entry for the same reason as its longer sibling (a solo/unpaired occurrence is still recognised), and the paired case is additionally covered by the now-generalised severityDefaultingContradiction pattern below, whose prefix is optional for exactly this reason."
+    },
+    {
+      "kind": "literal",
+      "text": "Problem severity: Minor",
+      "addedDate": "2026-07-26",
+      "rationale": "Sibling boilerplate line to \"Unspecified Significance: Defaulted to Minor\" above, same real example, same restates-existing-metadata reasoning. Kept standalone for the same reason -- a solo/unpaired occurrence is still recognised."
+    },
+    {
+      "kind": "literal",
+      "text": "Problem severity: Major",
+      "addedDate": "2026-07-29",
+      "rationale": "Sibling to \"Problem severity: Minor\" above, now confirmed on a real patient (HAR capture, SCTID 433144002 'Chronic kidney disease stage 3'). Kept standalone for the same reason as its siblings; the paired case (alongside an \"Unspecified Significance: Defaulted to ...\" line) is additionally covered by the severityDefaultingContradiction pattern below, which is what actually drives the severity-correction action."
+    },
+    {
+      "kind": "pattern",
+      "id": "severityDefaultingContradiction",
+      "pattern": "(?:Unspecified Significance: )?Defaulted to (Major|Minor)\\s+Problem severity: (Major|Minor)",
+      "flags": "i",
+      "addedDate": "2026-07-29",
+      "rationale": "Confirmed real-world layouts of the same GP2GP template, all matched by this one pattern: joined by a newline (HAR capture, 2026-07-29, SCTID 433144002 'Chronic kidney disease stage 3' -- \"Unspecified Significance: Defaulted to Minor\\nProblem severity: Major\", stored significance:\"minor\" while the source record said Major), joined by a single space on ONE line with no newline at all (also confirmed live, 2026-07-29, values agreeing this time -- \"Unspecified Significance: Defaulted to Minor Problem severity: Minor\"), and WITHOUT the leading \"Unspecified Significance: \" prefix at all (confirmed live 2026-07-29, real patient, reported not flagging -- \"Defaulted to Minor\\nProblem severity: Minor\") -- the leading `(?:Unspecified Significance: )?` group is optional for exactly this reason, and `\\s+` between the fragments tolerates the newline-vs-space variation independently of the prefix. The regex engine still captures the FULL matched span (prefix included, when present) so `cleaned` never leaves a dangling \"Unspecified Significance: \" behind. Group 1 is what the importer defaulted TO; group 2 is what the source record's own free text actually said the severity was. When group 2 disagrees with the problem's own stored significance, the record has almost certainly been mis-filed by the import -- see the `action` below and content-scripts/problem-description-cleanup.js's computeAdditionalInfoFindings. When group 2 agrees with the stored significance, this reduces to plain noise and is stripped with no further action, same as any literal entry.",
+      "action": {
+        "type": "severityCorrection",
+        "capturesDefaultedTo": 1,
+        "capturesStatedSeverity": 2
+      }
+    },
+    {
+      "kind": "pattern",
+      "id": "sourceSystemPriorityValue",
+      "pattern": "PRIORITY\\s*=\\s*([0-9]+)",
+      "flags": "i",
+      "addedDate": "2026-07-29",
+      "rationale": "Some source GP systems export a problem's severity/priority as a raw \"PRIORITY=n\" field (n observed 1-9, but the pattern isn't restricted to a single digit or that range since the exact bounds aren't confirmed -- widen the observed range in this note, not the regex, once a real out-of-range example is seen). UNLIKE severityDefaultingContradiction above, there is NO confirmed, consistent mapping from most of this scale to Medicus's Major/Minor significance -- different source systems plausibly use different scales for most values, and none has been reverse-engineered. The ONE exception is n=1 (see `valueSeverityMap` below): confirmed by the practice's own direct experience running the source system this convention came from, and holding across every example seen in imported data since -- n=1 reliably means Major on that system specifically. Every OTHER value still gets the plain informational prompt, never a guessed correction; only n=1 is confident enough to auto-suggest. Still flagged as junk/noise once reviewed either way -- the raw \"PRIORITY=n\" text carries no meaning Medicus can act on structurally beyond that one mapped case, so it's offered for removal the same as any other entry here.",
+      "action": {
+        "type": "reviewSeverity",
+        "capturesPriorityValue": 1,
+        "valueSeverityMap": { "1": "major" }
+      }
+    }
+  ]
+}

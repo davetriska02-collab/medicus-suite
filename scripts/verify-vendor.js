@@ -81,9 +81,14 @@ for (const entry of libraries) {
 const catalogued = new Set(libraries.map(e => path.resolve(ROOT, e.filename)));
 let vendorFiles;
 try {
-  vendorFiles = fs.readdirSync(VENDOR_DIR)
-    .filter(f => !f.startsWith('.'))
-    .map(f => path.resolve(VENDOR_DIR, f));
+  // Recursive (2026-07-18): vendor/ gained its first subdirectory
+  // (vendor/fonts/ — the vendored panel font, audit M16); every FILE at any
+  // depth must be catalogued, directories themselves are not entries.
+  const walk = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true })
+      .filter((e) => !e.name.startsWith('.'))
+      .flatMap((e) => (e.isDirectory() ? walk(path.resolve(dir, e.name)) : [path.resolve(dir, e.name)]));
+  vendorFiles = walk(VENDOR_DIR);
 } catch (e) {
   problems.push(`Cannot read vendor/ directory: ${e.message}`);
   vendorFiles = [];

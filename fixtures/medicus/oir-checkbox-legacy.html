@@ -1,0 +1,15 @@
+<!--
+  Fixture: oir.checkbox (legacy)
+  Provenance: SYNTHESISED from v3.145.0 selector expectations — mined from
+  content-scripts/triage-lens/content.js:2334-2373 (readOutstandingRows) during
+  Horizon-1 Batch H1 (2026-07-02). Zero patient data: every name/date/UUID
+  below is a placeholder. See fixtures/medicus/README.md.
+  Variant: legacy — pre-v3.143 Quasar checkbox markup (.q-checkbox with
+  aria-labelledby), kept as a fallback per the v3.143.1 fix.
+-->
+<div data-testid="test-outstanding-investigation-requests" class="oir-card">
+  <div class="oir-row">
+    <div class="q-checkbox" role="checkbox" aria-checked="false" aria-labelledby="oir-label-1"></div>
+    <span id="oir-label-1">Full Lipid Profile (Dr Placeholder &bull; 01 Jan 2026, 09:00)</span>
+  </div>
+</div>

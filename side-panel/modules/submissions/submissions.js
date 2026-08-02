@@ -7,7 +7,17 @@
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
 import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
 import { downloadCsv } from '../shared/export-util.js';
-import { DEFAULT_SUB_THRESHOLDS, getRagLevel } from './submissions-core.js';
+import {
+  DEFAULT_SUB_THRESHOLDS,
+  getRagLevel,
+  windowTaskList,
+  ledgerSeriesForDay,
+  ledgerCountsForDays,
+  ledgerDayWatched,
+  demandBaseline,
+  baselineLine,
+} from './submissions-core.js';
+import { recordTaskLists } from './submissions-ledger.js';
 
 // ── Task types ────────────────────────────────────────────────────────────────
 
@@ -82,7 +92,13 @@ let state = {
   rangeStart: addDays(todayISO(), -6),
   rangeEnd: todayISO(),
   compareDate: addDays(todayISO(), -1),
+  // 'day' = the original single-day-vs-single-day compare; 'month' = FEATURE 1a's
+  // month-to-date-vs-same-span-last-month comparison. Kept separate from `mode` because
+  // the Compare tab itself has two very different sub-views.
+  compareMode: 'day',
+  monthCompare: null, // { startA, endA, startB, endB } — set when compareMode==='month'
   data: { primary: null, compare: null },
+  ledger: null,
   loading: false,
   config: { ...DEFAULTS },
   hiddenSeries: new Set(),
@@ -171,9 +187,11 @@ function renderShell() {
 
       <div id="modeControls" class="mode-controls-row"></div>
       <div id="subBanner" class="banner hidden"></div>
+      <div id="subDataHealth" class="sub-data-health hidden" role="status" aria-live="polite"></div>
       <div id="subAlertStrip" class="sub-alert-strip hidden" role="status" aria-live="assertive" aria-atomic="true"></div>
 
       <div id="subMetrics" class="sub-metrics"></div>
+      <div id="subBaseline" class="sub-baseline hidden"></div>
 
       <div class="chart-card">
         <div class="chart-hdr"><span id="chart1Title">Cumulative through the day</span></div>
@@ -237,6 +255,8 @@ function renderModeControls() {
         <button class="ghost-btn" data-days="6">7d</button>
         <button class="ghost-btn" data-days="13">14d</button>
         <button class="ghost-btn" data-days="29">30d</button>
+        <button class="ghost-btn" data-month-preset="thisMonth">This month</button>
+        <button class="ghost-btn" data-month-preset="lastMonth">Last month</button>
       </div>`;
     ctr.querySelectorAll('[data-days]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -245,6 +265,31 @@ function renderModeControls() {
         renderModeControls();
         fetchAndRender();
       });
+    });
+    ctr.querySelectorAll('[data-month-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const range = monthRangePreset(btn.dataset.monthPreset);
+        if (!range) return;
+        [state.rangeStart, state.rangeEnd] = range;
+        renderModeControls();
+        fetchAndRender();
+      });
+    });
+  } else if (state.compareMode === 'month') {
+    const spans = state.monthCompare || (state.monthCompare = monthToDateVsLastMonth());
+    ctr.innerHTML = `
+      <div class="dp-wrap"><span class="dp-label">This span</span><span class="dp-readonly">${formatDateShort(spans.startA)} → ${formatDateShort(spans.endA)}</span></div>
+      <div class="dp-wrap"><span class="dp-label">Prior span</span><span class="dp-readonly">${formatDateShort(spans.startB)} → ${formatDateShort(spans.endB)}</span></div>
+      <div class="preset-row">
+        <button class="ghost-btn" data-preset="dayvday">Day vs day</button>
+        <button class="ghost-btn mode-active" data-preset="monthvmonth" disabled>This month vs last month</button>
+      </div>
+      <div class="mode-note">Month to date vs same span last month — a partial current month is never compared against a full prior month.</div>
+    `;
+    ctr.querySelector('[data-preset="dayvday"]')?.addEventListener('click', () => {
+      state.compareMode = 'day';
+      renderModeControls();
+      fetchAndRender();
     });
   } else {
     ctr.innerHTML =
@@ -259,6 +304,7 @@ function renderModeControls() {
       `<div class="preset-row">
         <button class="ghost-btn" data-preset="yesterday">vs yesterday</button>
         <button class="ghost-btn" data-preset="lastweek">vs last week</button>
+        <button class="ghost-btn" data-preset="monthvmonth">This month vs last month</button>
       </div>`;
     ctr.querySelector('[data-preset="yesterday"]')?.addEventListener('click', () => {
       state.primaryDate = todayISO();
@@ -269,6 +315,12 @@ function renderModeControls() {
     ctr.querySelector('[data-preset="lastweek"]')?.addEventListener('click', () => {
       state.primaryDate = todayISO();
       state.compareDate = addDays(todayISO(), -7);
+      renderModeControls();
+      fetchAndRender();
+    });
+    ctr.querySelector('[data-preset="monthvmonth"]')?.addEventListener('click', () => {
+      state.compareMode = 'month';
+      state.monthCompare = monthToDateVsLastMonth();
       renderModeControls();
       fetchAndRender();
     });
@@ -318,8 +370,17 @@ async function fetchAndRender(force = false) {
       if (state.mode === 'today') {
         state.data = { primary: await fetchDay(state.primaryDate), compare: null };
       } else if (state.mode === 'compare') {
-        const [p, c] = await Promise.all([fetchDay(state.primaryDate), fetchDay(state.compareDate)]);
-        state.data = { primary: p, compare: c };
+        if (state.compareMode === 'month') {
+          const spans = state.monthCompare || (state.monthCompare = monthToDateVsLastMonth());
+          const [p, c] = await Promise.all([
+            fetchRange(spans.startA, spans.endA),
+            fetchRange(spans.startB, spans.endB),
+          ]);
+          state.data = { primary: p, compare: c };
+        } else {
+          const [p, c] = await Promise.all([fetchDay(state.primaryDate), fetchDay(state.compareDate)]);
+          state.data = { primary: p, compare: c };
+        }
       } else {
         state.data = { primary: await fetchRange(state.rangeStart, state.rangeEnd), compare: null };
       }
@@ -337,38 +398,54 @@ async function fetchAndRender(force = false) {
 }
 
 async function fetchDay(dateISO) {
-  // F8: Validate practice code before interpolating into the fetch URL.
-  if (!_isValidPracticeCode(state.config.practiceCode)) {
-    throw new Error('Invalid practice code format — cannot fetch');
-  }
-  const result = {};
-  await Promise.all(
-    TASK_TYPES.map(async (tt) => {
-      const url = `https://${state.config.practiceCode}.api.england.medicus.health/tasks/data/${tt.type}/task-list?createdAt_startDate=${dateISO}&createdAt_endDate=${dateISO}`;
-      const r = await fetch(url, { credentials: 'include' });
-      if (!r.ok) throw new Error(`${tt.label} HTTP ${r.status}`);
-      const d = await r.json();
-      result[tt.key] = d.tasks || [];
-    })
-  );
-  return result;
+  return fetchWindow(dateISO, dateISO);
 }
 
 async function fetchRange(startISO, endISO) {
+  return fetchWindow(startISO, endISO);
+}
+
+// Shared fetch for both day and range modes. Responses go through
+// windowTaskList (submissions-core.js) so a server-side change to the
+// createdAt_* filter or the response envelope shows up as a visible data-health
+// warning (`result._diag`, rendered by renderDataHealth) instead of silently
+// wrong counts — see the v3.35.2 postmortem in CHANGELOG.
+//
+// The fetched lists are then merged into the persistent day ledger
+// (submissions-ledger.js) and the module RENDERS FROM THE LEDGER, not the raw
+// response: the task-list API only ever contains open tasks (completed
+// requests leave the table — confirmed by live probe, v3.153.0), so the raw
+// response undercounts "work received" as the team completes work. The ledger
+// keeps a task counted once it has been seen.
+async function fetchWindow(startISO, endISO) {
   // F8: Validate practice code before interpolating into the fetch URL.
   if (!_isValidPracticeCode(state.config.practiceCode)) {
     throw new Error('Invalid practice code format — cannot fetch');
   }
   const result = {};
+  const diag = { filterIgnored: false, dropped: 0, truncated: false };
   await Promise.all(
     TASK_TYPES.map(async (tt) => {
       const url = `https://${state.config.practiceCode}.api.england.medicus.health/tasks/data/${tt.type}/task-list?createdAt_startDate=${startISO}&createdAt_endDate=${endISO}`;
       const r = await fetch(url, { credentials: 'include' });
       if (!r.ok) throw new Error(`${tt.label} HTTP ${r.status}`);
       const d = await r.json();
-      result[tt.key] = d.tasks || [];
+      const w = windowTaskList(d, startISO, endISO);
+      result[tt.key] = w.tasks;
+      if (w.filterIgnored) {
+        diag.filterIgnored = true;
+        diag.dropped += w.dropped;
+      }
+      if (w.truncated) diag.truncated = true;
     })
   );
+  try {
+    state.ledger = await recordTaskLists(result);
+  } catch (_) {
+    // Storage failure — render falls back to the live (open-tasks-only) view.
+    state.ledger = null;
+  }
+  result._diag = diag;
   return result;
 }
 
@@ -418,7 +495,9 @@ function downloadSubCsv() {
     state.mode === 'range'
       ? `${state.rangeStart}-to-${state.rangeEnd}`
       : state.mode === 'compare'
-        ? `${state.primaryDate}-vs-${state.compareDate}`
+        ? state.compareMode === 'month' && state.monthCompare
+          ? `${state.monthCompare.startA}-to-${state.monthCompare.endA}-vs-${state.monthCompare.startB}-to-${state.monthCompare.endB}`
+          : `${state.primaryDate}-vs-${state.compareDate}`
         : state.primaryDate;
   const header = ['Category', 'Count'];
   const rows = _lastMetricItems.map((m) => [m.label, m.value]);
@@ -430,6 +509,7 @@ function downloadSubCsv() {
 function renderAll() {
   if (!container) return;
   updateTitles();
+  renderDataHealth();
   if (state.mode === 'today') renderToday();
   else if (state.mode === 'compare') renderCompare();
   else renderRange();
@@ -450,8 +530,14 @@ function updateTitles() {
         ? 'Inbound request volume — counts work received, not items submitted'
         : 'Inbound request volume through that day';
   } else if (state.mode === 'compare') {
-    t.textContent = 'Day vs day';
-    s.textContent = `${formatDateShort(state.primaryDate)} vs ${formatDateShort(state.compareDate)}`;
+    if (state.compareMode === 'month' && state.monthCompare) {
+      const { startA, endA, startB, endB } = state.monthCompare;
+      t.textContent = 'Month to date vs last month';
+      s.textContent = `${formatDateShort(startA)}–${formatDateShort(endA)} vs ${formatDateShort(startB)}–${formatDateShort(endB)} · month to date, not a full-month total`;
+    } else {
+      t.textContent = 'Day vs day';
+      s.textContent = `${formatDateShort(state.primaryDate)} vs ${formatDateShort(state.compareDate)}`;
+    }
   } else {
     t.textContent = 'Range';
     const days = daysBetween(state.rangeStart, state.rangeEnd) + 1;
@@ -459,13 +545,26 @@ function updateTitles() {
   }
 }
 
+// Chart series for one day: from the ledger (remembers completed tasks) when
+// available, else derived from the live open-tasks-only fetch.
+function daySeries(dateISO, liveDayData) {
+  if (state.ledger)
+    return ledgerSeriesForDay(
+      state.ledger,
+      dateISO,
+      TASK_TYPES.map((tt) => tt.key)
+    );
+  return buildHourlyCumulative(liveDayData || {});
+}
+
 function renderToday() {
   const day = state.data.primary;
   if (!day) return;
-  const series = buildHourlyCumulative(day);
+  const series = daySeries(state.primaryDate, day);
   renderMetrics(
     TASK_TYPES.map((tt) => ({ key: tt.key, label: tt.shortLabel, value: series[tt.key].total, color: tt.color }))
   );
+  renderBaselineLine();
   const t = container.querySelector('#chart1Title');
   if (t) t.textContent = 'Cumulative through the day';
   MWChart.line({
@@ -492,12 +591,41 @@ function renderToday() {
   renderAlertStrip();
 }
 
+// Same-weekday baseline line under the metrics (Gauntlet B3 / D3): today is
+// compared cumulative-to-the-current-hour; a viewed PAST day is compared as a
+// complete day (hour 23). Hidden entirely until the ledger holds enough
+// watched same-weekday history — no comparison invented from two points.
+function renderBaselineLine() {
+  const el = container.querySelector('#subBaseline');
+  if (!el) return;
+  const isToday = state.primaryDate === todayISO();
+  const hour = isToday ? new Date().getHours() : 23;
+  const b = demandBaseline(
+    state.ledger,
+    state.primaryDate,
+    hour,
+    TASK_TYPES.map((tt) => tt.key)
+  );
+  if (!b) {
+    el.classList.add('hidden');
+    return;
+  }
+  el.classList.remove('hidden');
+  el.className = `sub-baseline sub-baseline--${b.band}`;
+  el.title = 'All categories combined vs this weekday’s ledger history (watched days only, same hour of day)';
+  el.textContent = baselineLine(b, isToday);
+}
+
 function renderCompare() {
+  if (state.compareMode === 'month') {
+    renderCompareMonth();
+    return;
+  }
   const dayA = state.data.primary;
   const dayB = state.data.compare;
   if (!dayA || !dayB) return;
-  const sA = buildHourlyCumulative(dayA);
-  const sB = buildHourlyCumulative(dayB);
+  const sA = daySeries(state.primaryDate, dayA);
+  const sB = daySeries(state.compareDate, dayB);
   renderMetrics(
     TASK_TYPES.map((tt) => ({
       key: tt.key,
@@ -547,10 +675,67 @@ function renderCompare() {
   renderAlertStrip();
 }
 
+// FEATURE 1a: "This month vs last month" compare sub-mode. Ranges (not single days) come
+// in via fetchRange, one per task type per span — same shape as Range mode's data, so
+// totals are just raw task-list lengths (reconcilable against the tiles, per CLAUDE.md's
+// "every figure must remain reconcilable" convention). The hourly cumulative-through-the-day
+// chart doesn't make sense for a month span, so chart1 is replaced with a note pointing at
+// the totals/delta bar chart below, which reuses the existing grouped-bar + delta renderer.
+function renderCompareMonth() {
+  const rangeA = state.data.primary;
+  const rangeB = state.data.compare;
+  if (!rangeA || !rangeB) return;
+  const totalsA = {};
+  const totalsB = {};
+  for (const tt of TASK_TYPES) {
+    totalsA[tt.key] = (rangeA[tt.key] || []).length;
+    totalsB[tt.key] = (rangeB[tt.key] || []).length;
+  }
+  renderMetrics(
+    TASK_TYPES.map((tt) => ({
+      key: tt.key,
+      label: tt.shortLabel,
+      value: totalsA[tt.key],
+      compareValue: totalsB[tt.key],
+      color: tt.color,
+    }))
+  );
+  const t = container.querySelector('#chart1Title');
+  if (t) t.textContent = 'Month comparison';
+  MWChart.empty(
+    container.querySelector('#chart1'),
+    'Hourly trend view is not shown for month comparisons — see totals below'
+  );
+  const l1 = container.querySelector('#legend1');
+  if (l1) l1.innerHTML = '';
+  const t2 = container.querySelector('#chart2Title');
+  const { startA, endA, startB, endB } = state.monthCompare;
+  if (t2)
+    t2.textContent = `Totals · ${formatDateShort(startA)}–${formatDateShort(endA)} vs ${formatDateShort(startB)}–${formatDateShort(endB)}`;
+  MWChart.bar({
+    container: container.querySelector('#chart2'),
+    bars: TASK_TYPES.map((tt) => ({
+      key: tt.key,
+      label: tt.shortLabel,
+      value: totalsA[tt.key],
+      compareValue: totalsB[tt.key],
+      color: tt.color,
+    })),
+  });
+  renderAlertStrip();
+}
+
 function renderRange() {
   const data = state.data.primary;
   if (!data) return;
-  const { days, byDay } = buildDailyTotals(data, state.rangeStart, state.rangeEnd);
+  const { days, byDay: liveByDay } = buildDailyTotals(data, state.rangeStart, state.rangeEnd);
+  const byDay = state.ledger
+    ? ledgerCountsForDays(
+        state.ledger,
+        days,
+        TASK_TYPES.map((tt) => tt.key)
+      )
+    : liveByDay;
   const totals = {};
   for (const tt of TASK_TYPES) totals[tt.key] = days.reduce((a, d) => a + (byDay[d][tt.key] || 0), 0);
   renderMetrics(
@@ -604,6 +789,67 @@ function renderMetrics(items) {
     </div>`;
     })
     .join('');
+}
+
+// Data-health notice — shown when windowTaskList detected the Medicus API
+// misbehaving (date filter ignored, or a truncated/paginated response). Wrong
+// numbers presented confidently are worse than no numbers: this tells the user
+// the counts are suspect and why, instead of letting a demand undercount pass
+// as a quiet Monday.
+// Dates the current view displays — used for the ledger-coverage warning.
+function viewDates() {
+  if (state.mode === 'compare') return [state.primaryDate, state.compareDate];
+  if (state.mode === 'range') {
+    const days = [];
+    let cur = state.rangeStart;
+    while (cur <= state.rangeEnd) {
+      days.push(cur);
+      cur = addDays(cur, 1);
+    }
+    return days;
+  }
+  return [state.primaryDate];
+}
+
+function renderDataHealth() {
+  const el = container?.querySelector('#subDataHealth');
+  if (!el) return;
+  const diags = [state.data.primary?._diag, state.data.compare?._diag].filter(Boolean);
+  const filterIgnored = diags.some((d) => d.filterIgnored);
+  const truncated = diags.some((d) => d.truncated);
+  // Ledger coverage: Medicus only reports STILL-OPEN tasks for any date, so a
+  // day the suite didn't watch live shows residual open tasks, not what was
+  // received. Say so rather than present an undercount as history.
+  const unwatched = state.ledger ? viewDates().filter((d) => !ledgerDayWatched(state.ledger, d)) : [];
+  if (!filterIgnored && !truncated && unwatched.length === 0) {
+    el.className = 'sub-data-health hidden';
+    el.textContent = '';
+    return;
+  }
+  const dropped = diags.reduce((a, d) => a + (d.dropped || 0), 0);
+  const parts = [];
+  if (filterIgnored) {
+    parts.push(
+      `Medicus ignored the date filter on this request (${dropped} task${dropped === 1 ? '' : 's'} from other days excluded). ` +
+        `Counts show only tasks the API still returns for the selected period and are likely an UNDERCOUNT of work received — ` +
+        `completed items may be missing. The Medicus task-list API may have changed.`
+    );
+  }
+  if (truncated) {
+    parts.push('Medicus sent a partial page of tasks (server reports more than it returned) — counts may be low.');
+  }
+  if (unwatched.length > 0) {
+    const n = unwatched.length;
+    parts.push(
+      `${n} day${n === 1 ? '' : 's'} in this view ${n === 1 ? 'was' : 'were'} not watched live by the suite — ` +
+        `Medicus only reports still-open tasks for past dates, so ${n === 1 ? 'it shows' : 'they show'} what remains open, ` +
+        `not true received volume. Received counts build up from the day the suite starts watching.`
+    );
+  }
+  el.className = 'sub-data-health';
+  el.innerHTML =
+    `<svg class="sub-alert-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>` +
+    `<span>${filterIgnored || truncated ? 'Counts unreliable — ' : ''}${parts.join(' ')}</span>`;
 }
 
 function renderAlertStrip() {
@@ -904,6 +1150,51 @@ function addDays(iso, n) {
   d.setDate(d.getDate() + n);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+// Calendar-month range for the Range tab's "This month"/"Last month" presets (FEATURE 1a).
+// Mirrors shared/activity-api.js's preset() logic exactly, so "This month" here and
+// "This month" in Activity always resolve to the same [start,end] for the same practice.
+function monthRangePreset(name) {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const start = new Date(now);
+  const end = new Date(now);
+  if (name === 'thisMonth') {
+    start.setDate(1);
+  } else if (name === 'lastMonth') {
+    start.setMonth(start.getMonth() - 1);
+    start.setDate(1);
+    end.setDate(0); // last day of previous month
+  } else {
+    return null;
+  }
+  return [isoFromDate(start), isoFromDate(end)];
+}
+
+function isoFromDate(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// The Compare tab's "This month vs last month" preset (FEATURE 1a): month-to-date
+// (1st of this month → today) vs the SAME SPAN of the previous month (1st → same
+// day-of-month, clamped to that month's length) — a partial current month is deliberately
+// never compared against a full prior month, which would overstate the delta.
+function monthToDateVsLastMonth(todayIso = todayISO()) {
+  const d = new Date(todayIso + 'T12:00:00');
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const day = d.getDate();
+  const startA = `${y}-${pad(m + 1)}-01`;
+  const endA = todayIso;
+  const prevMonthDate = new Date(y, m - 1, 1); // JS Date rolls January back into prior December
+  const py = prevMonthDate.getFullYear();
+  const pm = prevMonthDate.getMonth();
+  const lastDayPrevMonth = new Date(py, pm + 1, 0).getDate();
+  const clampedDay = Math.min(day, lastDayPrevMonth);
+  const startB = `${py}-${pad(pm + 1)}-01`;
+  const endB = `${py}-${pad(pm + 1)}-${pad(clampedDay)}`;
+  return { startA, endA, startB, endB };
+}
+
 function daysBetween(a, b) {
   if (!a || !b) return 0;
   const d = Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 864e5);

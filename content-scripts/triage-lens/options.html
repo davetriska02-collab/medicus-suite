@@ -117,6 +117,42 @@
               <button class="tl-btn tl-btn-secondary" id="btnAddAction">+ Add action</button>
             </fieldset>
 
+            <fieldset class="tl-field">
+              <legend>
+                Require patient context
+                <small
+                  >(optional — ALL set fields must match; skipped entirely, never suppressing the base rule, when that
+                  data isn't available on the current page)</small
+                >
+              </legend>
+              <div class="tl-req-fields">
+                <label class="tl-field">
+                  <span>Min age (years)</span>
+                  <input type="number" id="fReqAgeMin" step="1" min="0" placeholder="e.g. 0" />
+                </label>
+                <label class="tl-field">
+                  <span>Max age (years)</span>
+                  <input type="number" id="fReqAgeMax" step="1" min="0" placeholder="e.g. 15" />
+                </label>
+                <label class="tl-field">
+                  <span>Sex</span>
+                  <select id="fReqSex">
+                    <option value="">Any</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
+                </label>
+                <label class="tl-field">
+                  <span>Medications <small>(one substring per line, optional)</small></span>
+                  <textarea id="fReqMedsAny" rows="2" placeholder="methotrexate&#10;warfarin"></textarea>
+                </label>
+                <label class="tl-field">
+                  <span>Problems <small>(one substring per line, optional)</small></span>
+                  <textarea id="fReqProblemsAny" rows="2" placeholder="ckd&#10;immunosuppress"></textarea>
+                </label>
+              </div>
+            </fieldset>
+
             <label class="tl-field">
               <span>Notes (your own reference, not shown anywhere)</span>
               <textarea id="fNotes" rows="2"></textarea>
@@ -348,6 +384,42 @@
             >Show built-in 6 tiles (Risk / Monitoring / Meds / Open loops / Care plan / Safeguarding)</span
           ></label
         >
+        <label class="tl-field tl-field-inline"
+          ><input type="checkbox" data-pref="queueRowTint" checked /><span
+            >Show red/amber severity tint on the left edge of queue rows</span
+          ></label
+        >
+        <label class="tl-field tl-field-inline"
+          ><input type="checkbox" data-pref="queueStatusBar" checked /><span
+            >Show the live triage status bar (counts + jump-to-alert) on the queue</span
+          ></label
+        >
+        <label class="tl-field tl-field-inline"
+          ><input type="checkbox" data-pref="detailVerdictBanner" checked /><span
+            >Echo the queue's result verdict on the task detail page</span
+          ></label
+        >
+        <label class="tl-field tl-field-inline"
+          ><input type="checkbox" data-pref="queueKeyboardNav" checked /><span
+            >Keyboard triage on the queue (j/k move, Enter opens, n jumps to next red/amber)</span
+          ></label
+        >
+        <label class="tl-field tl-field-inline"
+          ><input type="checkbox" data-pref="queueSeenDimming" /><span
+            >Dim queue rows already opened this session (never dims a red/amber row; opt-in)</span
+          ></label
+        >
+        <label class="tl-field tl-field-inline"
+          ><input type="checkbox" data-pref="queueFileableMarker" checked /><span
+            >Show a green tick on queue rows confirmed all-normal and fileable (marker only — files nothing)</span
+          ></label
+        >
+        <label class="tl-field tl-field-inline"
+          ><input type="checkbox" data-pref="requestPathwayChips" checked /><span
+            >Show Pharmacy First / ask-back chips on matched request-queue rows (decision support only — prepares
+            copyable drafts, never sends or diagnoses)</span
+          ></label
+        >
         <label class="tl-field"
           ><span>Snippet max characters</span><input type="number" min="50" max="2000" data-pref="snippetMaxChars"
         /></label>
@@ -529,8 +601,43 @@
                 <option value="threshold">Numeric threshold</option>
                 <option value="text">Text / culture</option>
                 <option value="combo">Combo (multi-condition)</option>
+                <option value="delta">Trend / delta (change over time)</option>
               </select>
             </label>
+
+            <fieldset class="tl-field">
+              <legend>Actions <small>(click-to-fire from the result-chip popover when this rule fires)</small></legend>
+              <div id="rrActionList"></div>
+              <button class="tl-btn tl-btn-secondary" id="btnRrAddAction" type="button">+ Add action</button>
+            </fieldset>
+
+            <fieldset class="tl-field">
+              <legend>
+                Patient context
+                <small
+                  >(optional — restricts this rule to matching patients; skipped entirely, never suppressing anything
+                  else, when age/sex isn't available on the surface being graded)</small
+                >
+              </legend>
+              <div class="tl-req-fields">
+                <label class="tl-field">
+                  <span>Min age (years)</span>
+                  <input type="number" id="rrContextMinAge" step="1" min="0" placeholder="e.g. 65" />
+                </label>
+                <label class="tl-field">
+                  <span>Max age (years)</span>
+                  <input type="number" id="rrContextMaxAge" step="1" min="0" placeholder="e.g. 120" />
+                </label>
+                <label class="tl-field">
+                  <span>Sex</span>
+                  <select id="rrContextSex">
+                    <option value="">Any</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
+                </label>
+              </div>
+            </fieldset>
 
             <div class="rr-fields-single">
               <label class="tl-field">
@@ -630,6 +737,53 @@
               </label>
             </div>
 
+            <!-- ── Delta / trend (change over time) fields — shown when Rule type = Trend / delta ── -->
+            <div class="rr-fields-delta" style="display: none">
+              <p class="tl-rr-inspector-hint">
+                A <strong>trend / delta</strong> rule grades on <strong>change over time</strong> against the analyte's
+                own most recent prior result — not just today's value. Use it for a value that is dangerous because of
+                how fast it is moving: a rising creatinine (AKI), a falling haemoglobin (possible bleed), a rising
+                potassium. Delta rules are <strong>escalate-only</strong> and use the
+                <strong>Analyte match / exclude / specimen</strong> fields above, same as a threshold rule.
+              </p>
+
+              <label class="tl-field">
+                <span>Direction <small>(which way of change fires)</small></span>
+                <select id="rrDeltaDirection">
+                  <option value="rise">Rise only (value going UP)</option>
+                  <option value="fall">Fall only (value going DOWN)</option>
+                  <option value="either">Either direction</option>
+                </select>
+              </label>
+
+              <label class="tl-field">
+                <span>Measure change as <small>(exactly one — chooses the amber/red units below)</small></span>
+                <select id="rrDeltaBasis">
+                  <option value="value">Absolute value change (e.g. +38, in the lab's own units)</option>
+                  <option value="percent">Percent change (e.g. +18%)</option>
+                </select>
+              </label>
+
+              <label class="tl-field">
+                <span>Amber change threshold <small>(optional — leave blank to omit)</small></span>
+                <input type="number" id="rrDeltaAmber" step="any" min="0" placeholder="e.g. 15" />
+              </label>
+
+              <label class="tl-field">
+                <span>Red change threshold <small>(optional — leave blank to omit)</small></span>
+                <input type="number" id="rrDeltaRed" step="any" min="0" placeholder="e.g. 26" />
+              </label>
+
+              <label class="tl-field">
+                <span>Only compare within <small>(days, optional — leave blank for no limit)</small></span>
+                <input type="number" id="rrDeltaMaxDays" step="1" min="1" placeholder="e.g. 7" />
+                <span class="tl-rr-unit-note"
+                  >If the most recent prior result is older than this, no delta fires — it will never compare against an
+                  even-older value instead.</span
+                >
+              </label>
+            </div>
+
             <div class="rr-fields-text" style="display: none">
               <label class="tl-field">
                 <span
@@ -675,6 +829,11 @@
               (logical AND) — e.g. sterile pyuria: pus cells above 40 AND culture shows no growth. Each condition
               carries its own analyte match / specimen. Combo is escalate-only, defaults to amber (review), and should
               stay disabled until a clinician has reviewed it. <br /><br />
+              <strong>Trend / delta rules</strong> grade on <em>change over time</em> against the analyte's own most
+              recent prior result — not just today's value (e.g. a rising creatinine, a falling haemoglobin). Choose a
+              direction (rise / fall / either), whether the amber/red thresholds are an absolute value change or a
+              percent change, and optionally cap how many days old the prior result may be. Escalate-only, like every
+              other rule kind, and never compares across a unit mismatch. <br /><br />
               <strong>No rule matched?</strong> The result still shows the lab's own flag — but an <em>absent</em> rule
               chip is not a clinical all-clear: it only means no rule covered that analyte.
             </div>
@@ -778,12 +937,33 @@
           >
         </label>
         <label class="tl-field tl-field-inline">
+          <input type="checkbox" data-pref="oirAutoTick" />
+          <span
+            >Auto-tick confident, report-covered requests
+            <small
+              class="tl-help"
+              style="
+                display: inline;
+                background: none;
+                border: none;
+                padding: 0;
+                margin: 0;
+                font-size: 11px;
+                color: var(--text-4);
+              "
+              >Off = the row is flagged "resulted (this report)" but never ticked automatically — manual ticking and the
+              bulk tick-off button above are unaffected. On (default): the confident/predating match is ticked, audited,
+              and a Review toast appears (ticking writes to Medicus immediately and can't be undone from there).</small
+            ></span
+          >
+        </label>
+        <label class="tl-field tl-field-inline">
           <input type="checkbox" data-pref="oirShowValueOnBadge" />
           <span>Show the matched result value on the inline flag <small>(e.g. '18 ug/L LOW')</small></span>
         </label>
         <label class="tl-field tl-field-inline">
           <input type="checkbox" data-pref="oirAuditLog" />
-          <span>Keep a local audit trail of bulk tick-offs</span>
+          <span>Keep a local audit trail of tick-offs (bulk, auto-tick and review actions)</span>
         </label>
         <label class="tl-field">
           <span>Confidence floor</span>
@@ -875,6 +1055,39 @@
             <button class="tl-btn tl-btn-primary" id="btnSaveOirTest">Save test</button>
             <button class="tl-btn" id="btnCancelOirTest" style="display: none">Cancel edit</button>
             <span id="oirFormStatus" style="font-size: 12px; color: var(--green)"></span>
+          </div>
+        </div>
+
+        <!-- OIR merge-conflict dialog -->
+        <div id="oirMergeOverlay" style="display: none" role="dialog" aria-modal="true" aria-labelledby="oirMergeTitle">
+          <div id="oirMergeDialog">
+            <h3 id="oirMergeTitle" style="margin: 0 0 6px">Merge overlapping entries?</h3>
+            <p id="oirMergeDesc" style="margin: 0 0 14px; font-size: 12px; color: var(--text-2)"></p>
+            <div class="tl-field">
+              <span>Merged label</span>
+              <input type="text" id="oirMergeLabel" maxlength="80" />
+            </div>
+            <div class="tl-field" style="margin-top: 8px">
+              <span>Request terms <small>(combined — read-only)</small></span>
+              <textarea id="oirMergeReq" rows="3" readonly></textarea>
+            </div>
+            <div class="tl-field" style="margin-top: 8px">
+              <span>Report terms <small>(combined — read-only)</small></span>
+              <textarea id="oirMergeRep" rows="3" readonly></textarea>
+            </div>
+            <div class="tl-field" style="margin-top: 8px">
+              <span>Analyte terms <small>(combined — read-only)</small></span>
+              <textarea id="oirMergeAnalytes" rows="3" readonly></textarea>
+            </div>
+            <label class="tl-field tl-field-inline" style="margin-top: 8px">
+              <input type="checkbox" id="oirMergeSingle" disabled />
+              <span>Single-analyte test <small>(only set when all merged entries agree)</small></span>
+            </label>
+            <div style="display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap">
+              <button class="tl-btn tl-btn-primary" id="btnOirMergeConfirm">Merge</button>
+              <button class="tl-btn" id="btnOirMergeSeparate">Save separately</button>
+              <button class="tl-btn tl-btn-ghost" id="btnOirMergeCancel">Cancel</button>
+            </div>
           </div>
         </div>
 

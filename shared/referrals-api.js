@@ -436,11 +436,158 @@
     }
   }
 
+  // ── 2WW / Faster-Diagnosis safety-net ──────────────────────────────────────
+  // An "open loop" is a suspected-cancer (TwoWeekWait) referral still showing
+  // displayStatus 'Incomplete' — no confirmed outcome has come back. NHS
+  // Resolution repeatedly cites absent safety-netting/follow-up as the root cause
+  // of cancer-delay negligence claims, and the Faster Diagnosis Standard (80% by
+  // Mar 2026) makes the open window a target as well as a medicolegal risk.
+  //
+  // Pure: classifies and ages the rows the Referrals module already fetched. No
+  // new endpoint. Ages are calendar days since referralDate; thresholds are
+  // heuristic and surfaced in the UI as such.
+  const SAFETY_NET_OPEN_STATUS = 'Incomplete';
+
+  function referralAgeDays(referralDate, nowISO) {
+    if (!referralDate) return null;
+    const start = new Date(String(referralDate).slice(0, 10) + 'T00:00:00');
+    const now = nowISO ? new Date(nowISO) : new Date();
+    if (isNaN(start.getTime()) || isNaN(now.getTime())) return null;
+    return Math.floor((now.getTime() - start.getTime()) / 86400000);
+  }
+
+  // buildSafetyNet(rawReferrals, { nowISO, watchDays=14, overdueDays=21, priorities=['TwoWeekWait'] })
+  //   → { rows: [{ ...referral, ageDays, severity }], counts:{ total, overdue, watch }, watchDays, overdueDays }
+  // rows = the OPEN loops (displayStatus Incomplete) for the chosen priorities,
+  // sorted oldest-first. severity: 'overdue' (≥ overdueDays), 'watch' (≥ watchDays), else 'open'.
+  function buildSafetyNet(rawReferrals, opts) {
+    const o = opts || {};
+    const watchDays = o.watchDays != null ? o.watchDays : 14;
+    const overdueDays = o.overdueDays != null ? o.overdueDays : 21;
+    const prioritySet = new Set(
+      (o.priorities && o.priorities.length ? o.priorities : ['TwoWeekWait']).map((p) => normalisePriority(p))
+    );
+    const rows = [];
+    let overdue = 0;
+    let watch = 0;
+    for (const r of rawReferrals || []) {
+      if (!r) continue;
+      if ((r.displayStatus || '') !== SAFETY_NET_OPEN_STATUS) continue;
+      if (!prioritySet.has(normalisePriority(r.priority || ''))) continue;
+      const ageDays = referralAgeDays(r.referralDate, o.nowISO);
+      let severity = 'open';
+      if (ageDays != null && ageDays >= overdueDays) {
+        severity = 'overdue';
+        overdue++;
+      } else if (ageDays != null && ageDays >= watchDays) {
+        severity = 'watch';
+        watch++;
+      }
+      rows.push({ ...r, ageDays, severity });
+    }
+    rows.sort((a, b) => {
+      const aa = a.ageDays == null ? -1 : a.ageDays;
+      const bb = b.ageDays == null ? -1 : b.ageDays;
+      return bb - aa; // oldest first
+    });
+    return { rows, counts: { total: rows.length, overdue, watch }, watchDays, overdueDays };
+  }
+
+  // ── Chase-letter draft (2WW safety-net "Chase draft" action) ────────────────
+  // Pure text builder over one safety-net row (see buildSafetyNet) plus the
+  // suite letterhead setting. Produces a ready-to-edit chase letter to the
+  // referring hospital/service — NEVER auto-sent; the panel only ever offers
+  // it as a copy-to-clipboard draft for a human to review/edit first,
+  // mirroring the "(Prepared draft only...)" framing used by buildAskBackText
+  // in engine/reception-match.js. Carries no clinical detail beyond the
+  // referral facts already on the row.
+  //
+  // `row` — one row from buildSafetyNet().rows (raw referral fields +
+  //   ageDays), or any object with the same shape (referralId, referralDate,
+  //   referralService, referringClinician, priority, patientGivenName,
+  //   patientFamilyName, ageDays).
+  // `letterhead` — { practiceName, clinicianName } from suite.letterhead, or
+  //   null/undefined. Blank fields keep bracketed placeholders — a letter must
+  //   never carry a real-looking but empty sign-off (same convention as
+  //   resolveLetterhead() in side-panel/modules/shared/action-packs.js).
+  // `nowISO` — used as the letter date and as the fallback for computing
+  //   ageDays when the row does not already carry a numeric ageDays. Pass
+  //   explicitly for deterministic output (tests); omit for "now".
+  const PRIORITY_LETTER_LABELS = { Routine: 'Routine', Urgent: 'Urgent', TwoWeekWait: '2WW' };
+
+  function buildChaseLetter(row, letterhead, nowISO) {
+    const r = row || {};
+    const lh = letterhead || {};
+
+    const practiceName = (typeof lh.practiceName === 'string' && lh.practiceName.trim()) || '[Practice name]';
+    const clinicianName = (typeof lh.clinicianName === 'string' && lh.clinicianName.trim()) || '[Clinician name]';
+
+    const now = nowISO ? new Date(nowISO) : new Date();
+    const dateLabel = isNaN(now.getTime()) ? '(date unavailable)' : now.toISOString().slice(0, 10);
+
+    const patientName =
+      [r.patientGivenName, r.patientFamilyName].filter((s) => typeof s === 'string' && s.trim()).join(' ') ||
+      '(patient name not recorded)';
+
+    let serviceLine;
+    if (r.referralService) {
+      const parsed = parseReferralService(r.referralService);
+      const bits = [parsed.specialty, parsed.hospital].filter((s) => s && s !== '(unknown)');
+      serviceLine = bits.length ? bits.join(', ') : r.referralService;
+    } else {
+      serviceLine = '(specialty/hospital not recorded)';
+    }
+
+    const clinician =
+      typeof r.referringClinician === 'string' && r.referringClinician.trim()
+        ? r.referringClinician
+        : '(referring clinician not recorded)';
+
+    const ageDays = typeof r.ageDays === 'number' ? r.ageDays : referralAgeDays(r.referralDate, nowISO);
+    const ageLabel = ageDays == null ? '(days outstanding not available)' : `${ageDays} day${ageDays === 1 ? '' : 's'}`;
+
+    const referralDate = r.referralDate || '(date not recorded)';
+    const referralId = r.referralId || '(not recorded)';
+
+    const priorityKey = normalisePriority(r.priority || '');
+    const priorityLabel =
+      PRIORITY_LETTER_LABELS[priorityKey] || (r.priority ? String(r.priority) : '(priority not recorded)');
+
+    const lines = [];
+    lines.push(
+      '(Prepared draft only — review and edit before sending. Confirm the patient and destination before use.)'
+    );
+    lines.push('');
+    lines.push(practiceName);
+    lines.push(dateLabel);
+    lines.push('');
+    lines.push(`Re: ${priorityLabel} referral — ${patientName}, referred ${referralDate}`);
+    lines.push('');
+    lines.push('Dear colleague,');
+    lines.push('');
+    lines.push(
+      `We are following up on the above referral to ${serviceLine}, made by ${clinician}, which our records still show as open — ${ageLabel} outstanding since referral (our reference: ${referralId}).`
+    );
+    lines.push('');
+    lines.push(
+      `As this is a ${priorityLabel} referral, please could you confirm receipt and let us know the appointment date, so we can update our safety-netting records.`
+    );
+    lines.push('');
+    lines.push('Many thanks,');
+    lines.push(clinicianName);
+    lines.push(practiceName);
+
+    return lines.join('\n').trim() + '\n';
+  }
+
   const api = {
     PRIORITY_COLOURS,
     STATUS_COLOURS,
     ALL_PRIORITIES,
     ALL_STATUSES,
+    referralAgeDays,
+    buildSafetyNet,
+    buildChaseLetter,
     buildApiUrl,
     buildUrlFromTemplate,
     extractBaseUrl,

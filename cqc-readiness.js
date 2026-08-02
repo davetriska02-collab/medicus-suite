@@ -64,13 +64,19 @@ function gatePlaceholder() {
 
 // ── Mode toggle ───────────────────────────────────────────────────────────────
 function setMode(mode) {
-  _mode = mode === 'export' ? 'export' : 'readiness';
+  // Three modes: readiness (default, internal), export (inspector pack, gated),
+  // clinician (verdict + drug-coverage only — the fast clinical glance).
+  _mode = mode === 'export' || mode === 'clinician' ? mode : 'readiness';
   $('cqcMode')
     .querySelectorAll('button')
     .forEach((b) => b.classList.toggle('active', b.dataset.mode === _mode));
   // The confirm gate only exists in export mode.
   $('cqcGate').hidden = _mode !== 'export';
   if (_mode !== 'export') $('cqcConfirm').checked = false;
+  // The Generate/Print-inspector toolbar hint is inspector-pack workflow — noise in
+  // the clinician glance (Tom), so hide it there.
+  const hint = $('cqcHint');
+  if (hint) hint.hidden = _mode === 'clinician';
   // Re-render whatever we have under the new mode + gate state.
   renderCurrent();
 }
@@ -95,7 +101,61 @@ function renderCurrent() {
     return;
   }
   out.innerHTML = buildReadinessHtml(_lastReadiness, { mode: _mode });
+  hydrateReconCounts();
   syncButtons(true);
+}
+
+// ── Reconciliation worksheet counts (Janet) ───────────────────────────────────
+// The "your count" cells are editable inputs the practice fills from its own
+// Medicus search. We persist them per-rule so they survive a regenerate/reopen and
+// print with the pack. The suite still supplies NO number — only the typed value.
+const COUNTS_KEY = 'cqc.recon.counts';
+let _reconCounts = {};
+
+async function loadReconCounts() {
+  try {
+    const r = await chrome.storage.local.get(COUNTS_KEY);
+    _reconCounts = r[COUNTS_KEY] || {};
+  } catch {
+    _reconCounts = {};
+  }
+}
+
+function hydrateReconCounts() {
+  document.querySelectorAll('#cqcOutput .cqc-recon-input').forEach((inp) => {
+    const key = inp.dataset.reconKey;
+    if (key && _reconCounts[key] != null) inp.value = _reconCounts[key];
+    inp.addEventListener('input', () => {
+      const k = inp.dataset.reconKey;
+      if (k) {
+        _reconCounts[k] = inp.value;
+        try {
+          chrome.storage.local.set({ [COUNTS_KEY]: _reconCounts });
+        } catch {
+          /* persistence is best-effort */
+        }
+      }
+      updateReconTotal();
+    });
+  });
+  updateReconTotal();
+}
+
+// Live total of the practice's own typed counts (Janet). Summing the user's own
+// figures is not a fabricated count — the suite still supplies no number.
+function updateReconTotal() {
+  const out = document.querySelector('#cqcOutput .cqc-recon-total');
+  if (!out) return;
+  let sum = 0;
+  let any = false;
+  document.querySelectorAll('#cqcOutput .cqc-recon-input').forEach((inp) => {
+    const n = parseInt(String(inp.value).replace(/[^0-9-]/g, ''), 10);
+    if (!Number.isNaN(n)) {
+      sum += n;
+      any = true;
+    }
+  });
+  out.textContent = any ? String(sum) : '0';
 }
 
 // Print/PDF + CSV are enabled only when a document is actually rendered and (for
@@ -111,6 +171,9 @@ async function generate() {
   const out = $('cqcOutput');
   out.innerHTML = '<div class="cqc-placeholder">Assembling readiness…</div>';
   syncButtons(false);
+
+  // Load any saved worksheet counts so they re-hydrate into the rebuilt inputs.
+  await loadReconCounts();
 
   // The anchor is the user's deliberately-saved previous run (A7), used for the delta.
   let anchor = null;
@@ -150,12 +213,41 @@ async function saveBaseline() {
 }
 
 // ── CSV download (Blob, like practice-report.js) ──────────────────────────────
+
+// RFC-4180 cell quoting: wrap in quotes and double any embedded quote when the
+// value contains a comma, quote or newline.
+function csvCell(v) {
+  const s = String(v ?? '');
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Serialise buildReadinessCsv's { suffix, sections:[{title,header,rows}] } shape
+// into CSV text. (Previously downloadCsvFile read a non-existent `csv.text`, so the
+// button silently produced nothing — the export was dead.)
+function serialiseReadinessCsv(built) {
+  if (!built || !Array.isArray(built.sections)) return '';
+  return built.sections
+    .map((sec) => {
+      const lines = [];
+      if (sec.title) lines.push(csvCell(sec.title));
+      if (Array.isArray(sec.header)) lines.push(sec.header.map(csvCell).join(','));
+      for (const row of sec.rows || []) lines.push((Array.isArray(row) ? row : [row]).map(csvCell).join(','));
+      return lines.join('\n');
+    })
+    .join('\n\n');
+}
+
 function downloadCsvFile() {
   if (!_lastReadiness || !exportAllowed()) return;
-  const csv = buildReadinessCsv(_lastReadiness);
-  const text = typeof csv === 'string' ? csv : (csv && csv.text) || '';
+  const built = buildReadinessCsv(_lastReadiness);
+  const text = typeof built === 'string' ? built : serialiseReadinessCsv(built);
   if (!text) return;
-  const stamp = (_lastReadiness.asAt && String(_lastReadiness.asAt).slice(0, 10)) || localISO();
+  // Engine emits `generatedAt` (not `asAt`); buildReadinessCsv already derives a
+  // dated `suffix` from it — prefer that, then fall back to today.
+  const stamp =
+    (built && built.suffix && /^\d{4}-\d{2}-\d{2}$/.test(built.suffix) ? built.suffix : null) ||
+    (_lastReadiness.generatedAt && String(_lastReadiness.generatedAt).slice(0, 10)) ||
+    localISO();
   const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -186,10 +278,45 @@ function init() {
   // The export gate — re-render + re-enable as soon as it's ticked/un-ticked.
   $('cqcConfirm').addEventListener('change', renderCurrent);
 
+  // One-click "Print inspector copy" (R4 — the admin's most-confusing journey was
+  // switch-mode → tick → print). This jumps to export mode and surfaces the gate so
+  // the next step is obvious; it never bypasses the confirm tick (governance).
+  const printCopyBtn = $('cqcPrintCopy');
+  if (printCopyBtn) {
+    printCopyBtn.addEventListener('click', () => {
+      if (_mode !== 'export') setMode('export');
+      if (!_lastReadiness) {
+        generate();
+      }
+      if (!$('cqcConfirm').checked) {
+        $('cqcGate').classList.add('cqc-gate-flash');
+        $('cqcConfirm').focus();
+        setTimeout(() => $('cqcGate').classList.remove('cqc-gate-flash'), 1600);
+      } else if (exportAllowed()) {
+        window.print();
+      }
+    });
+  }
+
+  // Collapsed <details> (matched terms, reconciliation worksheet) are force-opened
+  // for printing so the inspector PDF carries the full evidence, then restored.
+  window.addEventListener('beforeprint', () => {
+    document.querySelectorAll('#cqcOutput details:not([open])').forEach((d) => {
+      d.dataset.printForced = '1';
+      d.open = true;
+    });
+  });
+  window.addEventListener('afterprint', () => {
+    document.querySelectorAll('#cqcOutput details[data-print-forced]').forEach((d) => {
+      d.open = false;
+      delete d.dataset.printForced;
+    });
+  });
+
   // Honour ?mode= from the launcher.
   const params = new URLSearchParams(location.search);
   const mode = params.get('mode');
-  if (mode === 'export' || mode === 'readiness') setMode(mode);
+  if (mode === 'export' || mode === 'readiness' || mode === 'clinician') setMode(mode);
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

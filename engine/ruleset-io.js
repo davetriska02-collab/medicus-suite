@@ -258,6 +258,33 @@
     return result;
   }
 
+  // Fields an override may actually change at merge time. MUST stay in
+  // lock-step with the `allowed` warning list in validateRulesetDoc above —
+  // audit M20 (2026-07-18): validation warned "unknown override field,
+  // ignored" but mergeRules merged EVERYTHING, so an imported file could
+  // silently rewrite safety-critical fields (e.g. drug.match) while the UI
+  // said otherwise. Now the merge itself only copies the allowed set.
+  const MERGEABLE_OVERRIDE_FIELDS = [
+    'enabled',
+    'tests',
+    'thresholds',
+    'check',
+    'ageRange',
+    'excludeIfProblem',
+    'problemMatch',
+    'problemExclude',
+    'intervalDays',
+    'dueSoonDays',
+    'notes',
+  ];
+  function pickAllowedOverrideFields(override) {
+    const out = {};
+    MERGEABLE_OVERRIDE_FIELDS.forEach((f) => {
+      if (override[f] !== undefined) out[f] = override[f];
+    });
+    return out;
+  }
+
   function mergeRules(canonicalRules, orgOverrides, individualOverrides) {
     const orgMap = (orgOverrides && orgOverrides.drugRuleOverrides) || {};
     const orgQofMap = (orgOverrides && orgOverrides.qofRuleOverrides) || {};
@@ -267,14 +294,15 @@
       const fromInd = indMap[rule.id] || null;
       if (!fromOrg && !fromInd) return rule;
       // Apply in order: canonical -> org -> individual.
-      // safeCopy strips dangerous keys (e.g. __proto__) before Object.assign.
+      // safeCopy strips dangerous keys (e.g. __proto__); pickAllowedOverrideFields
+      // then drops everything the validator would have warned about (audit M20).
       const merged = { ...rule };
       if (fromOrg) {
-        Object.assign(merged, safeCopy(fromOrg));
+        Object.assign(merged, pickAllowedOverrideFields(safeCopy(fromOrg)));
         merged._orgOverridden = true;
       }
       if (fromInd) {
-        Object.assign(merged, safeCopy(fromInd));
+        Object.assign(merged, pickAllowedOverrideFields(safeCopy(fromInd)));
         merged._personalOverridden = true;
       }
       return merged;

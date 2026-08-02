@@ -1,7 +1,19 @@
 /* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
 /* Medicus Suite — Side Panel */
 
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* JetBrains Mono vendored locally (audit M16, 2026-07-18): the remote Google
+   Fonts @import made an outbound third-party request on every panel open —
+   an IG/data-minimisation break for software whose posture is "nothing
+   leaves the browser" — and broke typography offline. Latin-subset variable
+   font (weights 100-800 on the wght axis) from fonts.gstatic.com JetBrains
+   Mono v24, OFL-1.1 licensed; see docs/SOUP.md. */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('../vendor/fonts/jetbrains-mono-latin-var.woff2') format('woff2');
+}
 
 *,
 *::before,
@@ -26,7 +38,7 @@
      (setup badges, strip labels, OPTIONAL/RECOMMENDED). Lifted one slate step
      each for contrast — a tired technophobe reader misread the old pale grey. */
   --text-4: #556377;
-  --text-5: #6c7c91;
+  --text-5: #5f6f85;
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
   --accent-dim: rgba(37, 99, 235, 0.09);
@@ -102,7 +114,7 @@ html[data-theme='dark'] {
   --text-3: #93a8c5;
   /* Eyesight floor (dark): lift the two faintest text tokens one step. */
   --text-4: #7d97b5;
-  --text-5: #5d7a9d;
+  --text-5: #6c89ac;
   --accent: #5b8fc7;
   --accent-hover: #7eaad6;
   --accent-dim: rgba(91, 143, 199, 0.14);
@@ -275,6 +287,69 @@ body {
   }
 }
 
+/* ── Signature motion (2026-06-21 craft pass) ────────────────────────────────
+   Restrained, interaction-driven only — overlays ease in on open, never on a
+   data poll (modules re-render on poll, so animating their content would twitch
+   every few seconds). All motion is killed under prefers-reduced-motion. */
+@keyframes ch-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes ch-pop-in-center {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+.dp-popover,
+.alltabs-popover,
+.help-popover {
+  animation: ch-pop-in 130ms var(--ease);
+}
+.suite-palette {
+  animation: ch-pop-in-center 130ms var(--ease);
+}
+
+/* Reticle-geometry spinner — a ring with one accent arc, echoing the brand
+   mark's rangefinder ring. Consumed via the .ch-spinner utility or ::before. */
+@keyframes ch-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ch-spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: ch-spin 700ms linear infinite;
+  vertical-align: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dp-popover,
+  .alltabs-popover,
+  .help-popover,
+  .suite-palette {
+    animation: none;
+  }
+  .ch-spinner {
+    animation-duration: 0s;
+  }
+}
+
 .nav-brand {
   display: flex;
   align-items: center;
@@ -291,14 +366,12 @@ body {
   flex: none;
 }
 
+/* In the 400px panel chrome the wordmark text crowded the tab rail enough to
+   clip the active tab's label ("TODA"). The distinctive mark now carries the
+   brand in-chrome; the full wordmark still appears in About / Options / the
+   visualiser. (Practice/Vogue 10-review, 2026-06-21.) */
 .nav-name {
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--text-3);
-  text-transform: uppercase;
-  white-space: nowrap;
+  display: none;
 }
 
 .nav-tabs {
@@ -310,8 +383,12 @@ body {
   overflow-y: hidden;
   scrollbar-width: none;
   scroll-behavior: smooth;
-  -webkit-mask-image: linear-gradient(to right, black 92%, transparent 100%);
-  mask-image: linear-gradient(to right, black 92%, transparent 100%);
+  /* The overflow fade hints "more tabs that way" but must never eat a tab label:
+     an 8% fade clipped the active tab to "TODA". Keep it to a narrow 3% so the
+     hint stays without truncating the busiest control. (Practice/Vogue 10-review,
+     2026-06-21.) */
+  -webkit-mask-image: linear-gradient(to right, black 97%, transparent 100%);
+  mask-image: linear-gradient(to right, black 97%, transparent 100%);
 }
 .nav-tabs::-webkit-scrollbar {
   display: none;
@@ -472,11 +549,14 @@ body {
   margin-bottom: 14px;
 }
 
+/* Type-system revision 2026-06-21 (DOCTRINE #4): the module eyebrow is the
+   voice, so it is sentence-case sans now, not mono-caps. Hierarchy by weight. */
 .mod-eyebrow {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-3);
   margin-bottom: 3px;
 }
@@ -498,11 +578,11 @@ body {
   background: transparent;
   border: 1px solid var(--border-hi);
   color: var(--text-3);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   border-radius: var(--r-md);
   padding: 5px 10px;
@@ -957,6 +1037,16 @@ body {
   line-height: 1.4;
 }
 
+/* Monitoring action-count severity, layered on the neutral .nav-badge above —
+   used only when the WR strip is hidden (no waiting patients) so the Sentinel
+   badge falls back to the nav tab. See panel.js applySentinelBadgeToDom. */
+.nav-badge-amber {
+  background: var(--amber);
+}
+.nav-badge-red {
+  background: var(--red);
+}
+
 /* ── Waiting Room global strip ───────────────────────────────────────────────
    Sits between the nav bar and the module content. Visible on every tab.   */
 
@@ -1169,9 +1259,14 @@ body {
   display: none;
 }
 
+/* G2 (design-house appraisal 2026-06-21): a resting strip is CALM chrome, not an
+   always-on wash. A green tint that is always present cannot also be a sharp
+   signal, so the below-threshold state rests neutral and only amber/red (a
+   crossed threshold) washes. This RAISES signal contrast; it never dims an
+   alert. */
 .wr-strip-green {
-  background: var(--green-dim);
-  border-bottom-color: var(--green-line);
+  background: var(--bg-mid);
+  border-bottom-color: var(--border);
 }
 .wr-strip-amber {
   background: var(--amber-dim);
@@ -1265,6 +1360,20 @@ body {
   background: var(--bg-hover);
 }
 
+/* Monitoring action-count chip on the "Monitoring →" button — the open-patient
+   red/amber Sentinel count, visible from any tab without switching to
+   Monitoring. Amber/red only; never shown for an unavailable snapshot. */
+.wr-strip-goto-count {
+  margin-left: 4px;
+  font-weight: 700;
+}
+.wr-strip-goto-count-amber {
+  color: var(--amber);
+}
+.wr-strip-goto-count-red {
+  color: var(--red);
+}
+
 /* ── Request Monitor strip (v1.3) ────────────────────────────────────────────
    Same band style as the waiting room strip, with four bucket pills. */
 
@@ -1276,9 +1385,12 @@ body {
   padding: 6px 15px;
   font-size: 13px;
   flex-shrink: 0;
+  /* G2 (design-house 2026-06-21): rest neutral, not a permanent accent wash —
+     the always-on blue tint made the strip read as a standing alert. The
+     amber/red threshold states (.rm-strip-alerted-*) carry the signal. */
   border-bottom: 1px solid var(--border);
-  background: var(--accent-dim);
-  border-bottom-color: var(--accent-line);
+  background: var(--bg-mid);
+  border-bottom-color: var(--border);
   min-height: 35px;
 }
 
@@ -1298,14 +1410,17 @@ body {
   flex-shrink: 0;
 }
 
+/* Pill convergence (Vogue map Phase 2): the strip pill adopts the canonical
+   capsule grammar — sans label, mono count — so the same data does not read in
+   two different languages between the strip and the Triage Load card. */
 .rm-pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 3px 10px;
   border-radius: var(--r-pill);
-  font-family: var(--mono);
-  font-size: 12px;
+  font-family: var(--sans);
+  font-size: 11px;
   background: var(--bg-elev);
   color: var(--text-3);
   border: 1px solid var(--border);
@@ -1325,6 +1440,7 @@ body {
   border-color: var(--accent-line);
 }
 .rm-pill-count {
+  font-family: var(--mono);
   color: var(--text-1);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1332,22 +1448,20 @@ body {
   text-align: right;
 }
 
-/* Highlight pills with any items */
+/* Highlight pills with any items — Palette cull (Vogue map Phase 1): "has items"
+   reads from a neutral fill + a weighted count, not a hue. Amber/blue stay
+   reserved for the strip's real capacity alert (.rm-strip-alerted-*) and for
+   clinical signals, not decorative bucket tinting. */
 .rm-pill-active {
-  background: var(--accent-dim);
-  border-color: var(--accent-line);
+  background: var(--bg-mid);
+  border-color: var(--border-hi);
 }
 .rm-pill-active .rm-pill-count {
-  color: var(--accent);
+  color: var(--text-1);
 }
-
-/* Reply buckets in amber */
 .rm-pill-reply.rm-pill-active {
-  background: var(--amber-dim);
-  border-color: var(--amber-line);
-}
-.rm-pill-reply.rm-pill-active .rm-pill-count {
-  color: var(--amber);
+  background: var(--bg-mid);
+  border-color: var(--border-hi);
 }
 
 .rm-strip-error {
@@ -1515,6 +1629,256 @@ html[data-zen='1'] #rmStrip:not(.rm-strip-alerted-amber):not(.rm-strip-alerted-r
   background: var(--red-dim);
   border: 1px solid var(--red-line);
   color: var(--red);
+}
+
+/* ── Suite health strip (global, Horizon-1 H2) ────────────────────────────────
+   Amber-only self-diagnosis banner: shown when the runtime DOM-contract canary
+   (shared/contract-canary.js) has found >= 1 integration point the suite
+   depends on missing from the live Medicus page. NEVER red — this is the
+   extension flagging its OWN selectors may be stale, not a clinical alert.
+   Same band shape as .wr-strip/.sub-rag-strip; text is allowed to wrap since
+   feature-name lists have no natural width cap. */
+.health-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  transition:
+    background var(--med) var(--ease),
+    border-color var(--med) var(--ease);
+  min-height: 28px;
+}
+.health-strip-hidden {
+  display: none;
+}
+.health-strip-amber {
+  background: var(--amber-dim);
+  border-bottom-color: var(--amber-line);
+}
+.health-strip-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+  color: var(--amber);
+}
+.health-strip-text {
+  color: var(--text-2);
+  flex: 1 1 auto;
+  line-height: 1.35;
+}
+.health-strip-goto {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+  background: none;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-sm);
+  padding: 2px 7px;
+  cursor: pointer;
+  transition:
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+  white-space: nowrap;
+}
+.health-strip-dismiss {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-4);
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 3px 5px;
+  cursor: pointer;
+}
+.health-strip-dismiss:hover {
+  color: var(--text-1);
+  background: var(--amber-dim);
+}
+
+.health-strip-goto:hover {
+  color: var(--text-2);
+  border-color: var(--accent);
+}
+.health-strip-goto:active {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+
+/* ── Patient Alerts strip (global) ─────────────────────────────
+   Per-patient practice flags (patientAlerts.byPatient) for the patient
+   currently open in Medicus. Same band shape as .sub-rag-strip. */
+
+.pa-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  font-size: 11px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  min-height: 28px;
+  white-space: nowrap;
+}
+.pa-strip-hidden {
+  display: none;
+}
+.pa-strip--amber {
+  background: var(--amber-dim);
+  border-bottom-color: var(--amber-line);
+}
+.pa-strip--red {
+  background: var(--red-dim);
+  border-bottom-color: var(--red-line);
+}
+.pa-strip-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.pa-strip--red .pa-strip-icon {
+  color: var(--red);
+}
+.pa-strip--amber .pa-strip-icon {
+  color: var(--amber);
+}
+.pa-strip-label {
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.pa-strip-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pa-strip-pill--red {
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+  color: var(--red);
+}
+.pa-strip-pill--amber {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+}
+.pa-strip-pill--info {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+}
+.pa-strip-more {
+  font-size: 10px;
+  color: var(--text-4);
+  flex-shrink: 0;
+}
+.pa-strip-goto {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 9px;
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+  background: none;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-sm);
+  padding: 2px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pa-strip-goto:hover {
+  color: var(--text-2);
+  border-color: var(--accent);
+}
+
+/* ── Urgent breach-risk strip (global — A2) ───────────────────────────────────
+   Warns when URGENT unactioned requests are ageing towards the same-day
+   contractual cutoff: amber approaching, red past the red threshold. The
+   'unknown' variant is the fail-visible state (priority field unreadable) —
+   amber-toned, since "couldn't tell" is a caution, not a clinical emergency.
+   Same band shape as .sub-rag-strip. */
+.sla-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  font-size: 11px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  min-height: 28px;
+  white-space: nowrap;
+}
+.sla-strip-hidden {
+  display: none;
+}
+.sla-strip--amber,
+.sla-strip--unknown {
+  background: var(--amber-dim);
+  border-bottom-color: var(--amber-line);
+}
+.sla-strip--red {
+  background: var(--red-dim);
+  border-bottom-color: var(--red-line);
+}
+.sla-strip-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.sla-strip--red .sla-strip-icon {
+  color: var(--red);
+}
+.sla-strip--amber .sla-strip-icon,
+.sla-strip--unknown .sla-strip-icon {
+  color: var(--amber);
+}
+.sla-strip-label {
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.sla-strip-text {
+  color: var(--text-2);
+  flex: 1 1 auto;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sla-strip-goto {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 9px;
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+  background: none;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-sm);
+  padding: 2px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sla-strip-goto:hover {
+  color: var(--text-2);
+  border-color: var(--accent);
 }
 
 /* ── Medicus UI-change canary strip (global) ──────────────────────────────────
@@ -1886,11 +2250,11 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   border: 1px solid var(--border-hi);
   border-radius: var(--r-md);
   color: var(--text-3);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 4px 9px;
   cursor: pointer;
   transition:
@@ -1930,11 +2294,11 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   border: none;
   padding: 0;
   cursor: pointer;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
   transition: color var(--fast) var(--ease);
 }
@@ -2109,13 +2473,19 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 }
 
 /* Collapsed strip — shown once the practice code is detected so the full
-   multi-step card no longer dominates the module body. Thin, single row. */
+   multi-step card no longer dominates the module body. Thin, single row.
+   Phase 3 (Vogue map): a transient confirmation must NOT out-rank the live
+   Waiting Room card below it, so the collapsed strip sheds the bright card
+   surface (bg/border/shadow) and rests as a quiet line. */
 .setup-card--collapsed {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 12px;
+  padding: 6px 4px;
   margin-bottom: 2px;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .setup-collapsed-icon {
@@ -2259,7 +2629,7 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 .setup-optional-badge,
 .setup-recommended-badge {
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2325,11 +2695,11 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 }
 
 .setup-link {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--accent);
   text-decoration: none;
   border-bottom: 1px solid var(--accent-line);
@@ -2455,10 +2825,10 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   margin-bottom: 12px;
 }
 .suite-tabs-presets-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
   margin-right: 2px;
 }
@@ -2467,11 +2837,11 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   border: 1px solid var(--border-hi);
   border-radius: var(--r-pill);
   color: var(--text-3);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 4px 10px;
   cursor: pointer;
   transition:
@@ -2578,11 +2948,11 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   border: 1px solid var(--accent);
   border-radius: var(--r-md);
   color: var(--bg-deep);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 6px 16px;
   cursor: pointer;
   flex-shrink: 0;
@@ -2891,4 +3261,197 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   font-size: 12px;
   line-height: 1.45;
   color: var(--text-2);
+}
+
+/* ── Keyboard-shortcuts section appended to every help popover ──────────────
+   side-panel/panel.js buildKeyboardHelpSectionHTML(). Kbd token styled like
+   .suite-palette-kbd so the two shortcut surfaces read as one system. */
+.help-popover-kbd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.help-popover-kbd-list > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.help-popover-kbd {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+}
+
+/* ── "g" chord transient indicator ───────────────────────────────────────────
+   side-panel/panel.js wireKeyboardNav()/showGChordIndicator(). Emulates the
+   popover shell (bg-elev/border-hi/shadow-3) + kbd token above rather than a
+   new visual language; fades in/out, never steals focus (pointer-events: none). */
+.kbdnav-chord-indicator {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition:
+    opacity var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
+}
+.kbdnav-chord-indicator-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.kbdnav-chord-indicator kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+}
+
+/* ── Quick Leaflet popover (panel shell — see quick-leaflet/quick-leaflet.js) ─ */
+
+.ql-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(300px, calc(100vw - 24px));
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 10px;
+  z-index: 9999;
+  box-shadow: var(--shadow-3);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ql-input {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--text-1);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  outline: none;
+}
+.ql-input:focus {
+  border-color: var(--accent-line);
+}
+
+.ql-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.ql-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: var(--r-md);
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.ql-row:hover,
+.ql-row--active {
+  background: var(--accent-dim);
+  color: var(--text-1);
+}
+
+.ql-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ql-kind,
+.ql-recent {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px 4px;
+}
+
+.ql-copy {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--text-4);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: var(--r-sm);
+}
+.ql-copy:hover {
+  color: var(--text-1);
+  background: var(--bg);
+}
+
+.ql-row--fallback {
+  border-top: 1px dashed var(--border);
+  margin-top: 3px;
+  padding-top: 7px;
+}
+
+.ql-hint {
+  padding: 8px 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-4);
+}
+
+.ql-foot {
+  border-top: 1px solid var(--border);
+  padding-top: 7px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ql-open-tab {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--r-sm);
+}
+.ql-open-tab:hover {
+  background: var(--accent-dim);
 }

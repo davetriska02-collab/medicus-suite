@@ -24,11 +24,12 @@
 }
 
 .ref-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 10px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   color: var(--text-4);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .ref-date-input {
@@ -151,10 +152,11 @@
 }
 
 .ref-summary-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
 }
 
@@ -240,10 +242,11 @@
 }
 
 .ref-card-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
   margin-bottom: 10px;
 }
@@ -837,6 +840,56 @@
   color: var(--text-2);
 }
 
+/* ── Patient-name search + clinician filter (item 5) ─────────────────────── */
+
+.ref-pc-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ref-pc-search-wrap {
+  position: relative;
+  flex: 1 1 160px;
+  min-width: 140px;
+}
+.ref-pc-search-wrap .ref-search-input {
+  width: 100%;
+}
+
+.ref-clinician-select {
+  flex: 1 1 140px;
+  min-width: 120px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  padding: 5px 8px;
+  font-family: var(--sans);
+  font-size: 11px;
+  border-radius: var(--r-md);
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+.ref-clinician-select:focus {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+
+.ref-pc-filter-active {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
 /* ── Show all toggle ──────────────────────────────────────────────────────── */
 
 .ref-show-all {
@@ -951,4 +1004,213 @@
   color: var(--text-4);
   padding: 16px 0;
   text-align: center;
+}
+
+/* ── 2WW / Faster-Diagnosis safety-net worklist ─────────────────────────────── */
+.ref-sn-card {
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+  border-left: 3px solid var(--red);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.ref-sn-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.ref-sn-title {
+  font-weight: 600;
+  color: var(--red);
+  font-size: 13px;
+}
+.ref-sn-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+}
+.ref-sn-badge-overdue {
+  color: var(--red);
+  background: var(--bg-elev);
+  border: 1px solid var(--red-line);
+}
+.ref-sn-badge-watch {
+  color: var(--amber);
+  background: var(--bg-elev);
+  border: 1px solid var(--amber-line);
+}
+.ref-sn-note {
+  margin: 0 0 4px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.ref-sn-legend {
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--text-4);
+}
+.ref-sn-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ref-sn-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px 6px;
+  font-size: 12px;
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+}
+.ref-sn-row-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.ref-sn-age {
+  font-family: var(--mono);
+  font-weight: 600;
+  min-width: 34px;
+  text-align: right;
+  color: var(--text-3);
+}
+.ref-sn-overdue .ref-sn-age {
+  color: var(--red);
+}
+.ref-sn-watch .ref-sn-age {
+  color: var(--amber);
+}
+.ref-sn-name {
+  flex: 1;
+  color: var(--text-1);
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+.ref-sn-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  /* indent under the name, past the age column (min-width 34px + 8px gap) */
+  padding-left: 42px;
+}
+.ref-sn-svc {
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60%;
+}
+.ref-sn-clin {
+  color: var(--text-4);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* ── 2WW safety-net: "Chase draft" letter (prepare-only, never auto-sent) ───── */
+.ref-sn-chase-btn {
+  flex-shrink: 0;
+  margin-left: auto;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  padding: 2px 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.ref-sn-chase-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+  border-color: var(--border-hi);
+}
+.ref-sn-chase-btn:active {
+  background: var(--bg-hover);
+}
+
+.ref-sn-chase-panel {
+  margin: 6px 0 2px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--red-line);
+}
+.ref-sn-chase-text {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 140px;
+  resize: vertical;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.55;
+  padding: 6px 8px;
+}
+.ref-sn-chase-text:focus {
+  border-color: var(--accent);
+}
+.ref-sn-chase-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.ref-sn-chase-copy {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--bg-deep);
+  font-weight: 600;
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+.ref-sn-chase-copy:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.ref-sn-chase-close {
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+.ref-sn-chase-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+  border-color: var(--border-hi);
+}
+.ref-sn-chase-msg {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.ref-sn-chase-msg-ok {
+  color: var(--green);
+}
+.ref-sn-chase-fineprint {
+  margin-top: 5px;
+  font-size: 10.5px;
+  color: var(--text-4);
+  line-height: 1.4;
 }

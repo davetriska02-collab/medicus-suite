@@ -3,12 +3,26 @@
 'use strict';
 
 import { createModuleLoader } from './module-loader.js';
-import { DEFAULT_SUB_THRESHOLDS, ragLevel } from './modules/submissions/submissions-core.js';
+import {
+  DEFAULT_SUB_THRESHOLDS,
+  ragLevel,
+  windowTaskList,
+  ledgerSeriesForDay,
+} from './modules/submissions/submissions-core.js';
+import { recordTaskLists } from './modules/submissions/submissions-ledger.js';
 import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
+import { initQuickLeaflet } from './quick-leaflet/quick-leaflet.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
 import { initSetup } from './setup/setup.js';
 import { openRotaTab } from './modules/rota/rota-open.js';
+import { TAB_HELP } from '../shared/tab-help.js';
+import { STATUS_RANK } from './modules/sentinel/sentinel-core.js';
+import {
+  findEntryForPatient,
+  maxSeverity as paMaxSeverity,
+  sortAlerts as paSortAlerts,
+} from './modules/patient-alerts/patient-alerts-core.js';
 
 const content = document.getElementById('suiteContent');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -117,9 +131,20 @@ const MODULES = {
   condor: { js: () => import('./modules/condor/condor.js'), css: './modules/condor/condor.css' },
   trends: { js: () => import('./modules/trends/trends.js'), css: './modules/trends/trends.css' },
   reception: { js: () => import('./modules/reception/reception.js'), css: './modules/reception/reception.css' },
+  signing: { js: () => import('./modules/signing/signing.js'), css: './modules/signing/signing.css' },
+  followups: {
+    js: () => import('./modules/followups/followups.js'),
+    css: './modules/followups/followups.css',
+  },
   sweep: { js: () => import('./modules/sweep/sweep.js'), css: './modules/sweep/sweep.css' },
   knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
+  leaflets: { js: () => import('./modules/leaflets/leaflets.js'), css: './modules/leaflets/leaflets.css' },
   record: { js: () => import('./modules/record/record.js'), css: './modules/record/record.css' },
+  'patient-alerts': {
+    js: () => import('./modules/patient-alerts/patient-alerts.js'),
+    css: './modules/patient-alerts/patient-alerts.css',
+  },
+  phrases: { js: () => import('./modules/phrases/phrases.js'), css: './modules/phrases/phrases.css' },
   rota: { js: () => import('./modules/rota/rota.js'), css: './modules/rota/rota.css' },
   about: null,
 };
@@ -128,90 +153,43 @@ const MODULES = {
 // switchModule is reached, and the boot guard (`m in MODULES`) then correctly
 // refuses to restore the panel into it.
 
-// ── Per-tab help registry ──────────────────────────────────────────────────────
-// Plain-English, UK English, two-line summary per module: what the tab is, and
-// what to do first. Keyed by MODULES key. Reference aid only — these descriptions
-// are orientation help, NOT clinical decision support. Keep copy concise and
-// clinically careful. Mirrored in pop-out.js (keep in sync).
-const TAB_HELP = {
-  today: {
-    title: 'Today',
-    what: 'A morning overview of the practice: waiting room, triage load, demand and free slots, all on one screen.',
-    firstStep: 'Read it top to bottom before clinic to see what the day looks like.',
-  },
-  slots: {
-    title: 'Slots',
-    what: 'Counts of free appointment slots by type for any chosen date.',
-    firstStep: 'Pick a date to see how many slots of each type are still free.',
-  },
-  capacity: {
-    title: 'Forecast',
-    what: 'A short-term projection of appointment capacity against expected demand.',
-    firstStep: 'Check the coming days for any shortfall between slots and demand.',
-  },
-  sentinel: {
-    title: 'Monitoring',
-    what: 'Shows drug-monitoring and QOF (Quality and Outcomes Framework) reminders for the patient record you have open in Medicus.',
-    firstStep: 'Open a patient in Medicus, then check the reminders here against the record.',
-  },
-  record: {
-    title: 'Record',
-    what: 'A live snapshot of the patient open in Medicus: problems, current medicines, recent results and prescribing-safety prompts — no PDF needed. It is incomplete by design (no allergies or immunisations, limited history) and never replaces reading the record.',
-    firstStep:
-      'Open a patient in Medicus, then read the summary here. For the multi-year timeline and continuity, open the full visualiser from the footer.',
-  },
-  activity: {
-    title: 'Activity',
-    what: 'Workload per staff member over a date range, broken down by task type.',
-    firstStep: 'Choose a date range to see each person’s totals.',
-  },
-  referrals: {
-    title: 'Referrals',
-    what: 'A summary of referrals over a date range by priority, status, clinician and specialty.',
-    firstStep: 'Set a date range to see referral counts and breakdowns.',
-  },
-  condor: {
-    title: 'Condor',
-    what: 'A live dashboard of practice pressure, pulling several demand signals together.',
-    firstStep: 'Glance at the headline level to gauge how busy the practice is right now.',
-  },
-  trends: {
-    title: 'Trends',
-    what: 'How key practice figures have moved over time, shown as charts.',
-    firstStep: 'Pick a measure and time window to see the trend line.',
-  },
-  reception: {
-    title: 'Reception',
-    what: 'Quick-reference pathways to help reception direct patient requests to the right place.',
-    firstStep: 'Search or browse for the request type to see the suggested pathway.',
-  },
-  sweep: {
-    title: 'Sweep',
-    what: 'A pre-clinic scan of your upcoming patients that flags points worth a look beforehand.',
-    firstStep: 'Run the sweep before clinic, then review each flagged patient in Medicus.',
-  },
-  knowledge: {
-    title: 'Knowledge',
-    what: 'A searchable store of the practice’s own notes, contacts and how-to information.',
-    firstStep: 'Type a keyword to find the relevant practice note.',
-  },
-  rota: {
-    title: 'Rota',
-    what: 'Today’s duty cover, who is on leave, sessions still needing cover and this week’s high-priority staffing warnings.',
-    firstStep: 'Glance at duty cover for AM and PM, then open the Rota manager (new tab) to fix any gap.',
-  },
-};
-
 // ── Help popover (per-tab "what is this?" affordance) ──────────────────────────
+// TAB_HELP content lives in shared/tab-help.js — ONE source consumed by both
+// this file and pop-out.js (see CLAUDE.md backup-convention-adjacent rule:
+// shared content lives in one place, not duplicated per shell).
 let helpOpen = false;
 let _helpCloseHandler = null;
 
+// Keyboard-shortcuts reference appended to every "?" help popover (see
+// wireKeyboardNav below) — one copy, not duplicated per tab. The "g" row's
+// title carries the full chord map so it's discoverable on hover without
+// cluttering the fixed-width popover with 14 lines.
+function buildKeyboardHelpSectionHTML() {
+  const chordList = Object.entries(G_CHORD_MAP)
+    .map(([key, mod]) => `${key}=${TAB_HELP[mod]?.title || mod}`)
+    .join(', ');
+  return `<div class="help-popover-row">
+    <span class="help-popover-lbl">Keyboard shortcuts</span>
+    <div class="help-popover-kbd-list">
+      <span><kbd class="help-popover-kbd">ctrl</kbd>+<kbd class="help-popover-kbd">k</kbd> command palette</span>
+      <span><kbd class="help-popover-kbd">ctrl</kbd>+<kbd class="help-popover-kbd">alt</kbd>+<kbd class="help-popover-kbd">←/→</kbd> cycle tabs</span>
+      <span><kbd class="help-popover-kbd">1</kbd>–<kbd class="help-popover-kbd">9</kbd> jump to tab</span>
+      <span title="${escStrip(chordList)}"><kbd class="help-popover-kbd">g</kbd> then a letter — jump to tab</span>
+      <span><kbd class="help-popover-kbd">/</kbd> focus search</span>
+      <span><kbd class="help-popover-kbd">?</kbd> this help</span>
+      <span><kbd class="help-popover-kbd">esc</kbd> close popovers</span>
+    </div>
+  </div>`;
+}
+
 function buildHelpPopoverHTML() {
   const h = TAB_HELP[activeModule];
+  const kbdSection = buildKeyboardHelpSectionHTML();
   if (!h) {
     return `<div class="help-popover" id="helpPopover" role="dialog" aria-label="Tab help">
       <div class="help-popover-title">Help</div>
       <div class="help-popover-row"><span class="help-popover-text">No help is available for this tab yet.</span></div>
+      ${kbdSection}
     </div>`;
   }
   return `<div class="help-popover" id="helpPopover" role="dialog" aria-label="Help: ${escStrip(h.title)}">
@@ -224,6 +202,7 @@ function buildHelpPopoverHTML() {
       <span class="help-popover-lbl">Do this first</span>
       <span class="help-popover-text">${escStrip(h.firstStep)}</span>
     </div>
+    ${kbdSection}
   </div>`;
 }
 
@@ -357,6 +336,28 @@ function wireAllTabsButton() {
   });
 }
 
+// Shared typing-guard predicate — single source used by wireTabNavShortcuts
+// below AND by wireKeyboardNav's single-key bindings, so the two never drift
+// out of step on what counts as "the user is typing".
+function isTypingTarget(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!el.isContentEditable;
+}
+
+// Visible, jumpable nav tabs in current DOM order — shared by the Ctrl/Cmd+Alt
+// cycler below and by wireKeyboardNav's digit-jump / "g" chord (item 6.1/6.2):
+// hidden tabs (suite.hiddenTabs) and the Visualiser special-case (it opens a
+// full browser tab, not an in-panel switch) are excluded from all three.
+function jumpableTabs() {
+  return Array.from(document.querySelectorAll('.nav-tab')).filter(
+    (t) =>
+      !t.classList.contains('nav-tab-hidden') &&
+      t.dataset.module !== 'visualiser' &&
+      t.dataset.module !== 'rota-app'
+  );
+}
+
 // Keyboard tab navigation (power-user finding R4): Ctrl/Cmd+Alt+Left/Right cycle
 // the visible in-panel tabs without the mouse. Skipped while typing in a field,
 // and skips Visualiser and Rota manager (both open a full browser tab, not an
@@ -367,14 +368,8 @@ function wireTabNavShortcuts() {
     (e) => {
       if (!(e.ctrlKey || e.metaKey) || !e.altKey || e.shiftKey) return;
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-      const ae = document.activeElement;
-      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
-      const tabs = Array.from(document.querySelectorAll('.nav-tab')).filter(
-        (t) =>
-          !t.classList.contains('nav-tab-hidden') &&
-          t.dataset.module !== 'visualiser' &&
-          t.dataset.module !== 'rota-app'
-      );
+      if (isTypingTarget(document.activeElement)) return;
+      const tabs = jumpableTabs();
       if (!tabs.length) return;
       e.preventDefault();
       const activeIdx = tabs.findIndex((t) => t.classList.contains('active'));
@@ -382,6 +377,187 @@ function wireTabNavShortcuts() {
       const start = activeIdx === -1 ? 0 : activeIdx;
       const next = (start + dir + tabs.length) % tabs.length;
       tabs[next].click();
+    },
+    true
+  );
+}
+
+// ── Keyboard-first panel navigation (power-user partner ask: jump tabs, focus
+// search, no mouse trips) ────────────────────────────────────────────────────
+// A single global keydown layer, thin and additive — it never claims a key
+// already owned elsewhere: Ctrl/Cmd+K (command palette, palette.js), Ctrl/Cmd+
+// Alt+←/→ (tab cycling, wireTabNavShortcuts above) or Esc (popover dismissal,
+// wireHelpButton/wireAllTabsButton). What it adds:
+//   1. Digits 1-9        → jump to the Nth visible tab (jumpableTabs()).
+//   2. "g" then a letter  → chord-jump to a specific tab (G_CHORD_MAP).
+//   3. "/"                → focus the active module's search/filter input.
+//   4. "?" (shift+/)      → open the per-tab help popover (now carrying a
+//                           keyboard-shortcuts section, see buildHelpPopoverHTML).
+// Reduced-attention rule (item 6): none of this fires while typing in a field,
+// or while any shell-level overlay (command palette, tour, tab chooser, or this
+// panel's own help/all-tabs/display popovers) is open — see isOverlayOpen().
+
+// Second key of a "g" chord → module to jump to. Preference is the module's
+// own data-module first letter; where two or more modules share a first
+// letter, one keeps it and the rest are reassigned a letter from elsewhere in
+// their name so every entry stays mnemonic. Collisions and their resolutions:
+//   s* → slots keeps 's'; sentinel → 'm' (Monitoring), submissions → 'u',
+//        sweep → 'w'
+//   c* → condor keeps 'c'; capacity → 'p'
+//   r* → referrals keeps 'r'; record → 'd', reception → 'e'
+//   t* → today keeps 't'; trends → 'n'
+const G_CHORD_MAP = {
+  t: 'today',
+  s: 'slots',
+  m: 'sentinel',
+  r: 'referrals',
+  c: 'condor',
+  a: 'activity',
+  u: 'submissions',
+  k: 'knowledge',
+  l: 'leaflets',
+  p: 'capacity',
+  w: 'sweep',
+  e: 'reception',
+  d: 'record',
+  n: 'trends',
+};
+
+const G_CHORD_TIMEOUT_MS = 1500;
+let _gChordArmed = false;
+let _gChordTimer = null;
+let _gChordIndicatorEl = null;
+
+// Transient "g …" indicator — the chord has no other visible cue, so this is
+// the discoverability affordance the panel ask calls for. Styled to emulate
+// the existing kbd-token + floating-popover patterns (suite-palette-kbd,
+// help-popover) rather than inventing a new visual language.
+function showGChordIndicator() {
+  if (!_gChordIndicatorEl) {
+    _gChordIndicatorEl = document.createElement('div');
+    _gChordIndicatorEl.className = 'kbdnav-chord-indicator';
+    _gChordIndicatorEl.setAttribute('aria-live', 'polite');
+    _gChordIndicatorEl.innerHTML = '<kbd>g</kbd> …';
+    document.body.appendChild(_gChordIndicatorEl);
+  }
+  _gChordIndicatorEl.classList.add('kbdnav-chord-indicator-visible');
+}
+
+function hideGChordIndicator() {
+  _gChordIndicatorEl?.classList.remove('kbdnav-chord-indicator-visible');
+}
+
+function armGChord() {
+  _gChordArmed = true;
+  showGChordIndicator();
+  if (_gChordTimer) clearTimeout(_gChordTimer);
+  _gChordTimer = setTimeout(disarmGChord, G_CHORD_TIMEOUT_MS);
+}
+
+function disarmGChord() {
+  _gChordArmed = false;
+  if (_gChordTimer) {
+    clearTimeout(_gChordTimer);
+    _gChordTimer = null;
+  }
+  hideGChordIndicator();
+}
+
+// Any open shell-level overlay — a keyboard shortcut must never steal focus
+// out from under one of these (reduced-attention rule, item 6). The command
+// palette, tour and tab chooser render into the DOM rather than exposing an
+// importable "is open" flag, so they're checked by their layer class; the
+// panel's own help/all-tabs/display popovers are already tracked in local
+// module state (helpOpen/allTabsOpen/displayOpen) declared above.
+function isOverlayOpen() {
+  return (
+    helpOpen ||
+    allTabsOpen ||
+    displayOpen ||
+    !!document.querySelector('.suite-palette-layer') ||
+    !!document.querySelector('.suite-tour-layer') ||
+    !!document.querySelector('.suite-tabs-layer')
+  );
+}
+
+// "/" target: the active module's own search/filter input, checked in
+// priority order (search-typed input, then anything explicitly marked
+// data-search, then the first visible plain text input). No-op silently if
+// the active module has none of these.
+function isVisible(el) {
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+
+function focusModuleSearch() {
+  if (!content) return;
+  const tiers = ['input[type="search"]', '[data-search]', 'input[type="text"], input:not([type])'];
+  for (const sel of tiers) {
+    const target = Array.from(content.querySelectorAll(sel)).find(isVisible);
+    if (target) {
+      target.focus();
+      if (typeof target.select === 'function') target.select();
+      return;
+    }
+  }
+}
+
+function wireKeyboardNav() {
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (isOverlayOpen()) return;
+      if (isTypingTarget(document.activeElement)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return; // these are single-key/chord bindings only
+      // A bare modifier keydown (e.g. Shift held down before typing "?") must not
+      // itself count as the chord's second key or cancel an armed chord.
+      if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta' || e.key === 'CapsLock') {
+        return;
+      }
+
+      // Mid-chord: this keystroke completes or cancels the "g" chord — either
+      // way it's consumed here, so it never also falls through to the "?"/
+      // "/"/digit handlers below.
+      if (_gChordArmed) {
+        disarmGChord();
+        const mod = e.key.length === 1 ? G_CHORD_MAP[e.key.toLowerCase()] : undefined;
+        const tab = mod && jumpableTabs().find((t) => t.dataset.module === mod);
+        if (tab) {
+          e.preventDefault();
+          tab.click();
+        }
+        return;
+      }
+
+      if (e.key.toLowerCase() === 'g') {
+        e.preventDefault();
+        armGChord();
+        return;
+      }
+
+      if (e.key === '?') {
+        e.preventDefault();
+        if (!helpOpen) {
+          helpOpen = true;
+          renderHelpPopover();
+        }
+        return;
+      }
+
+      if (e.key === '/') {
+        e.preventDefault();
+        focusModuleSearch();
+        return;
+      }
+
+      if (e.key >= '1' && e.key <= '9') {
+        const tabs = jumpableTabs();
+        const idx = Number(e.key) - 1;
+        if (idx < tabs.length) {
+          e.preventDefault();
+          tabs[idx].click();
+        }
+      }
     },
     true
   );
@@ -418,6 +594,10 @@ updateNavOverflow();
   const total = document.querySelectorAll('.nav-tab').length;
   if (!total) return;
   btn.title = `Jump to any of the ${total} tabs · Command palette (Ctrl+K)`;
+  // The bare count badge ("15") read as a mystery number to the appraisal panel;
+  // name it for assistive tech and tooltip so it can't be mistaken for an unread
+  // count. (Practice appraisal U2, 2026-06-21.)
+  btn.setAttribute('aria-label', `Command palette — jump to any of the ${total} tabs (Ctrl+K)`);
   let badge = btn.querySelector('.palette-count');
   if (!badge) {
     badge = document.createElement('span');
@@ -467,6 +647,10 @@ document.querySelectorAll('.nav-tab').forEach((tab) => {
     const mod = tab.dataset.module;
     if (mod === 'visualiser') {
       chrome.tabs.create({ url: chrome.runtime.getURL('visualiser-core.html') });
+      return;
+    }
+    if (mod === 'duplicate-checker') {
+      chrome.tabs.create({ url: chrome.runtime.getURL('duplicate-checker.html') });
       return;
     }
     if (mod === 'rota-app') {
@@ -893,7 +1077,13 @@ function renderAbout() {
 chrome.runtime.onMessage.addListener((msg, sender) => {
   // F5: Only accept messages from this extension's own contexts.
   if (!sender || sender.id !== chrome.runtime.id) return;
-  if (msg?.type === 'slots:refresh' && activeModule === 'slots') {
+  // Dispatched UNCONDITIONALLY (v3.173.2): the Capacity tab listens for this
+  // same DOM event as its ONLY live-update path, so the old
+  // `activeModule === 'slots'` gate silently froze Capacity (the classic
+  // symptom: "slots no longer auto refresh"). Unconditional dispatch cannot
+  // double-fire — module switching runs the outgoing module's cleanup(), which
+  // removes its listener, so at any instant only the active module listens.
+  if (msg?.type === 'slots:refresh') {
     document.dispatchEvent(new CustomEvent('suite:slots:refresh'));
   }
 });
@@ -960,8 +1150,11 @@ function renderRollup() {
   const maxLevel = hasRed ? 'red' : 'amber';
   // Expanded when: the user pinned it open, OR (default) it's red. Amber starts
   // collapsed unless the session toggle or the persistent pref says otherwise.
-  if (_rollupAlwaysExpanded) _rollupExpanded = true;
-  else if (_rollupExpanded === null) _rollupExpanded = hasRed;
+  // The pinned pref supplies the DEFAULT only — a session click must still be
+  // able to collapse (audit low: the Hide button visibly no-op'd while
+  // suite.rollup.alwaysExpanded was on, because this re-forced true on the
+  // re-render the click itself triggered).
+  if (_rollupExpanded === null) _rollupExpanded = _rollupAlwaysExpanded || hasRed;
 
   const pills = elevated
     .map(
@@ -1005,9 +1198,9 @@ alertRollupEl?.addEventListener('click', () => {
 // ── Waiting Room strip (global — visible on every module) ─────────────────────
 
 let SITE_ID_WR = null;
-let WR_API = null;
 const WR_POLL_MS = 30 * 1000;
 const wrStripEl = document.getElementById('wrStrip');
+let _wrPrevHtml = null; // changed-guard for the 30s poll re-render (see below)
 
 // Waiting-room alert thresholds (minutes). User-configurable via the alert-threshold
 // editor (suite.waitingRoom.thresholds); defaults match the long-standing fixed
@@ -1038,29 +1231,22 @@ let wrPoller = null;
 
 async function fetchAndRenderStrip(bypassCache = false) {
   if (document.visibilityState !== 'visible') return true;
-  // Resolve practice code on every call so user changes take effect immediately
-  const { code, source } = await window.PracticeCode.resolve();
-  SITE_ID_WR = code;
-  if (!SITE_ID_WR) {
-    // No practice code set — hide strip silently. User will see the prompt in Options.
-    if (wrStripEl) {
-      wrStripEl.className = 'wr-strip wr-strip-hidden';
-      wrStripEl.innerHTML = '';
-    }
-    return true;
-  }
-  WR_API = `https://${SITE_ID_WR}.api.england.medicus.health/scheduling/data/homepage/my-appointments`;
   try {
-    const r = await window.ApiDiag.fetch({
-      module: 'panel-wr-strip',
-      url: WR_API,
-      code: SITE_ID_WR,
-      codeSource: source,
-    });
-    const raw = await r.json();
-    const arrived = (raw?.schedule?.schedule ?? [])
-      .flatMap((d) => d.entries ?? [])
-      .filter((e) => e?.diaryEntryType?.value === 'appointment' && e?.displayStatus?.value === 'arrived')
+    // Shared memoised fetcher (audit M10): coalesces this strip's poll with the
+    // Sentinel/Today modules' waiting-room fetches of the same endpoint.
+    // Practice code is re-resolved inside on every call, so user changes still
+    // take effect immediately.
+    const { raw, code } = await window.AppointmentsFeed.fetchRaw({ module: 'panel-wr-strip', bypassCache });
+    SITE_ID_WR = code;
+    if (!code) {
+      // No practice code set — hide strip silently. User will see the prompt in Options.
+      if (wrStripEl) {
+        wrStripEl.className = 'wr-strip wr-strip-hidden';
+        wrStripEl.innerHTML = '';
+      }
+      return true;
+    }
+    const arrived = window.AppointmentsFeed.arrivedEntries(raw)
       .map((e) => ({
         name: e.patient?.name ?? 'Unknown',
         start: e.start ?? '',
@@ -1092,6 +1278,10 @@ function renderStrip(patients) {
     wrStripEl.className = 'wr-strip wr-strip-hidden';
     wrStripEl.innerHTML = '';
     reportAlert('waiting', null);
+    _wrPrevHtml = null;
+    // Strip just lost its "Monitoring →" button — the badge falls back to the
+    // nav tab (see applySentinelBadgeToDom).
+    applySentinelBadgeToDom(_sentBadgeActionCount, _sentBadgeHasRed);
     return;
   }
 
@@ -1118,17 +1308,27 @@ function renderStrip(patients) {
   const extraChip = extra > 0 ? `<span class="wr-chip wr-chip-more">+${extra} more</span>` : '';
 
   wrStripEl.className = `wr-strip wr-strip-${urgency}`;
-  wrStripEl.innerHTML = `
+  // Changed-guard (audit, 2026-07-18): the strip used to rebuild identical
+  // innerHTML on every successful 30s poll, destroying hover/tooltip state
+  // mid-use. Same signature pattern as the pa-strip.
+  const wrHtml = `
     <span class="wr-strip-icon">🚶</span>
     <span class="wr-strip-count">${patients.length} waiting</span>
     <span class="wr-strip-chips">${chips}${extraChip}</span>
     <button class="wr-strip-goto" title="Go to Monitoring">Monitoring →</button>
   `;
+  if (wrHtml === _wrPrevHtml && wrStripEl.firstElementChild) {
+    return; // unchanged — the previous reportAlert payload also still holds
+  }
+  _wrPrevHtml = wrHtml;
+  wrStripEl.innerHTML = wrHtml;
 
   wrStripEl.querySelector('.wr-strip-goto')?.addEventListener('click', () => {
     switchModule('sentinel');
     document.querySelector('[data-module="sentinel"]')?.scrollIntoView({ behavior: 'smooth', inline: 'nearest' });
   });
+  // Rebuilt the button above — reapply the last-known Monitoring badge state.
+  applySentinelBadgeToDom(_sentBadgeActionCount, _sentBadgeHasRed);
 
   reportAlert('waiting', {
     level: urgency,
@@ -1234,10 +1434,15 @@ chrome.storage.onChanged.addListener((changes) => {
 _updateQuietPill();
 
 function escStrip(s) {
+  // Quote-safe (audit M8, 2026-07-18): escStrip feeds double-quoted attribute
+  // contexts (pa-strip pill title carries staff-typed free text) — without
+  // quote escaping a '"' broke out of the attribute.
   return String(s ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // ── Failure-backoff poller ────────────────────────────────────────────────────
@@ -1301,8 +1506,9 @@ function makePoller(fn, baseMs, label) {
 // Listen for Pusher-triggered refresh from service worker
 // F5: Sender guard — only accept messages from intra-extension contexts.
 // Light coalescing: fetchAndRenderStrip / fetchAndRenderRmStrip are already
-// guarded by document.visibilityState and their own fetch-in-flight logic,
-// so duplicate refreshes within the same tick are absorbed naturally.
+// guarded by document.visibilityState and their own fetch-in-flight guard
+// (_rmFetchInFlight for the RM strip), so duplicate refreshes within the same
+// tick are absorbed naturally by awaiting the existing in-flight call.
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!sender || sender.id !== chrome.runtime.id) return;
   if (msg?.type === 'waiting:refresh') fetchAndRenderStrip(true);
@@ -1311,6 +1517,104 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
 // Boot the strip — initial fetch + self-scheduling poll with failure backoff
 wrPoller = makePoller(fetchAndRenderStrip, WR_POLL_MS, 'wr-strip').start();
+
+// ── Monitoring (Sentinel) action-count badge — visible from any tab ───────────
+// Panel finding: the GP wants to know whether the patient open in Medicus has
+// red/amber monitoring chips without switching to the Monitoring tab. The rules
+// engine runs ONLY in the content script (content-scripts/sentinel.js); this
+// reads its already-published snapshot via getSentinelSnapshot — it never runs
+// the rules engine itself. Refreshed on chrome.tabs.onActivated and on the
+// content script's bare 'sentinel:snapshot-updated' ping (debounced — the ping
+// can fire repeatedly on SPA churn).
+//
+// CLINICAL SAFETY: an unavailable snapshot, chips: null, or no active Medicus
+// tab must render as NO badge — never "0" and never an implied all-clear. The
+// badge only ever signals "action-needed chips are present"; absence of the
+// badge means "unknown", not "clear".
+let _sentBadgeTimer = null;
+
+function scheduleSentinelBadgeUpdate() {
+  if (_sentBadgeTimer) return;
+  _sentBadgeTimer = setTimeout(() => {
+    _sentBadgeTimer = null;
+    updateSentinelBadge();
+  }, 400);
+}
+
+async function updateSentinelBadge() {
+  let chips = null; // stays null (= unavailable) unless a real snapshot with chips comes back
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (tab?.id && tab?.url && /medicus\.health/.test(tab.url)) {
+      const snapshot = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
+      if (snapshot && !snapshot.unavailable && Array.isArray(snapshot.chips)) {
+        chips = snapshot.chips;
+      }
+    }
+  } catch (_) {
+    // No Medicus tab, no content script mounted, or the message failed — chips
+    // stays null, which renders as no badge (see CLINICAL SAFETY note above).
+  }
+  const actionCount = chips ? chips.filter((c) => STATUS_RANK[c.status] <= 2).length : null;
+  const hasRed = chips ? chips.some((c) => STATUS_RANK[c.status] === 0) : false;
+  applySentinelBadgeToDom(actionCount, hasRed);
+}
+
+// Last-known state, reapplied whenever the WR strip re-renders (it owns the
+// "Monitoring →" button this badge decorates) so the two stay in sync without
+// a second round-trip to the content script.
+let _sentBadgeActionCount = null;
+let _sentBadgeHasRed = false;
+
+function applySentinelBadgeToDom(actionCount, hasRed) {
+  _sentBadgeActionCount = actionCount;
+  _sentBadgeHasRed = hasRed;
+
+  const gotoBtn = wrStripEl?.querySelector('.wr-strip-goto');
+  // Prefer the strip chip when the WR strip is actually showing a "Monitoring →"
+  // button; fall back to the nav-tab badge when the strip is hidden (no
+  // waiting patients) — same fallback pattern as the Slots nav badge above.
+  if (gotoBtn) {
+    let chip = gotoBtn.querySelector('.wr-strip-goto-count');
+    if (actionCount) {
+      if (!chip) {
+        chip = document.createElement('span');
+        chip.className = 'wr-strip-goto-count';
+        gotoBtn.appendChild(chip);
+      }
+      chip.textContent = `· ${actionCount}`;
+      chip.classList.toggle('wr-strip-goto-count-red', hasRed);
+      chip.classList.toggle('wr-strip-goto-count-amber', !hasRed);
+    } else if (chip) {
+      chip.remove();
+    }
+  }
+
+  const navTab = document.querySelector('[data-module="sentinel"]');
+  if (!navTab) return;
+  let badge = navTab.querySelector('.nav-badge');
+  if (actionCount && !gotoBtn) {
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'nav-badge';
+      navTab.appendChild(badge);
+    }
+    badge.textContent = String(actionCount);
+    badge.classList.toggle('nav-badge-red', hasRed);
+    badge.classList.toggle('nav-badge-amber', !hasRed);
+    badge.style.display = '';
+  } else if (badge) {
+    badge.style.display = 'none';
+  }
+}
+
+chrome.tabs.onActivated.addListener(() => scheduleSentinelBadgeUpdate());
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!sender || sender.id !== chrome.runtime.id) return;
+  if (msg?.type === 'sentinel:snapshot-updated') scheduleSentinelBadgeUpdate();
+});
+updateSentinelBadge();
 
 // ── Request Monitor strip (v1.3) ─────────────────────────────────────────────
 // Sits below the waiting room strip. Hidden entirely unless toggled on in
@@ -1321,7 +1625,17 @@ const rmStripEl = document.getElementById('rmStrip');
 let rmPoller = null;
 let rmPollSeconds = 60;
 
+let _rmFetchInFlight = null;
+
 async function fetchAndRenderRmStrip() {
+  if (_rmFetchInFlight) return _rmFetchInFlight;
+  _rmFetchInFlight = _doFetchAndRenderRmStrip().finally(() => {
+    _rmFetchInFlight = null;
+  });
+  return _rmFetchInFlight;
+}
+
+async function _doFetchAndRenderRmStrip() {
   if (document.visibilityState !== 'visible') return true;
   if (!rmStripEl || !window.RequestMonitor) return true;
 
@@ -1346,12 +1660,31 @@ async function fetchAndRenderRmStrip() {
     return true;
   }
 
-  // Direct fetch via API diag so failures show up in the Debug panel
-  let result;
+  // SINGLE-POLLER (audit H10, 2026-07-18): the service worker's alarm already
+  // runs pollAll and persists suite.requestMonitor.state — the panel used to
+  // run a SECOND full poll cycle (8 GETs/min instead of 4, ~1,900 wasted
+  // requests/day) with racing state writes that could double-fire or swallow
+  // "fresh item" notifications. Render from the SW's state when it is fresh
+  // (within 2 poll periods); fall back to a direct poll only when the SW's
+  // state is stale/absent, so a broken SW degrades to the old behaviour
+  // rather than a dead strip.
+  let result = null;
   try {
-    result = await window.RequestMonitor.pollAll(code, cfg.assigneeId, {
-      fetch: (url, init) => window.ApiDiag.fetch({ module: 'request-monitor', url, code, codeSource: source, init }),
-    });
+    const stR = await chrome.storage.local.get('suite.requestMonitor.state');
+    const st = stR['suite.requestMonitor.state'];
+    const freshMs = Math.max(rmPollSeconds, cfg.pollSeconds || rmPollSeconds) * 2000;
+    if (st && st.buckets && typeof st.lastPoll === 'number' && Date.now() - st.lastPoll < freshMs) {
+      result = { buckets: st.buckets, error: st.error || null };
+    }
+  } catch (_) {
+    /* fall through to the direct poll */
+  }
+  try {
+    if (!result) {
+      result = await window.RequestMonitor.pollAll(code, cfg.assigneeId, {
+        fetch: (url, init) => window.ApiDiag.fetch({ module: 'request-monitor', url, code, codeSource: source, init }),
+      });
+    }
   } catch (e) {
     rmStripEl.className = 'rm-strip';
     rmStripEl.innerHTML = `<span class="rm-strip-icon">⚠</span><span class="rm-strip-label">Triage:</span><span class="rm-strip-error">${escStrip(e.message)}</span>`;
@@ -1532,7 +1865,10 @@ async function fetchAndRenderSubRagStrip() {
     return true;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // LOCAL calendar date, not toISOString() — UTC would query yesterday during
+  // the first BST hour of the day (same fix as condor's todayISO, v3.35.2).
+  const _now = new Date();
+  const today = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
   const results = await Promise.allSettled(
     SUB_RAG_TYPES.map(async (tt) => {
       const url = `https://${code}.api.england.medicus.health/tasks/data/${tt.apiType}/task-list?createdAt_startDate=${today}&createdAt_endDate=${today}`;
@@ -1541,9 +1877,37 @@ async function fetchAndRenderSubRagStrip() {
       const r = await window.ApiDiag.fetch({ module: 'panel-sub-rag-strip', url, code, codeSource: source });
       if (!r.ok) throw new Error(`${tt.label} HTTP ${r.status}`);
       const d = await r.json();
-      return { key: tt.key, label: tt.label, count: (d.tasks || []).length };
+      // windowTaskList: thresholds must fire on tasks CREATED today, even if
+      // the server-side createdAt filter is ever renamed/ignored upstream.
+      return { key: tt.key, label: tt.label, tasks: windowTaskList(d, today, today).tasks };
     })
   );
+
+  // Thresholds fire on the DAY-LEDGER count (tasks seen today, including ones
+  // the team has since completed) — the task-list API only contains open
+  // tasks, so a raw count would sag as work is cleared and could un-trip an
+  // alert mid-morning while true demand keeps climbing (v3.153.0).
+  let ledger = null;
+  try {
+    const byKey = {};
+    for (const res of results) {
+      if (res.status === 'fulfilled') byKey[res.value.key] = res.value.tasks;
+    }
+    ledger = await recordTaskLists(byKey);
+  } catch (_) {
+    // Storage failure — fall back to live (open-only) counts below.
+  }
+  const ledgerSeries = ledger
+    ? ledgerSeriesForDay(
+        ledger,
+        today,
+        SUB_RAG_TYPES.map((t) => t.key)
+      )
+    : null;
+  for (const res of results) {
+    if (res.status !== 'fulfilled') continue;
+    res.value.count = ledgerSeries ? ledgerSeries[res.value.key].total : res.value.tasks.length;
+  }
 
   // A failure in any sub-request counts as a polling failure for backoff purposes
   const anyFailed = results.some((r) => r.status === 'rejected');
@@ -1614,19 +1978,343 @@ async function fetchAndRenderSubRagStrip() {
 
 let subRagPoller = makePoller(fetchAndRenderSubRagStrip, SUB_RAG_POLL_MS, 'sub-rag-strip').start();
 
-// Refresh all three strips immediately when the panel becomes visible again
+// ── Suite health strip (global — visible on every module) ─────────────────────
+// Self-diagnosis, not a clinical alert: shown ONLY when >= 1 DOM contract this
+// suite depends on (shared/dom-contracts.js) has been probed 'degraded' by the
+// runtime canary (shared/contract-canary.js, injected into the live Medicus
+// page — see manifest.json's content-script list). The canary does all the
+// probing and hysteresis; this strip only reads its result out of
+// chrome.storage.local — no API calls, no polling backoff needed. Calm and
+// amber-only by design (never red — Medicus changing its own UI is expected,
+// not a clinical emergency). Same strip family as #wrStrip/#rmStrip/
+// #subRagStrip (CLAUDE.md "Global demand / alert strips"); panel-only by the
+// same convention those three already use (no WR/RM/SubRag strips in the
+// pop-out either — see pop-out/pop-out.js's MODULES comment).
+const healthStripEl = document.getElementById('healthStrip');
+const HEALTH_POLL_MS = 30 * 1000;
+
+// Acknowledge/snooze: an amber self-diagnosis the user has SEEN shouldn't nag
+// every day while the degradation is unchanged. Dismiss hides the strip for
+// this exact degraded-contract set for 7 days; if the set CHANGES (a new
+// contract degrades, or one recovers and a different one breaks) the strip
+// reappears immediately — new problems always surface. Options → Suite health
+// keeps the full detail regardless of the snooze.
+const HEALTH_SNOOZE_KEY = 'health.stripSnooze';
+const HEALTH_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function fetchAndRenderHealthStrip() {
+  if (!healthStripEl) return true;
+  try {
+    const r = await chrome.storage.local.get(['health.contracts', HEALTH_SNOOZE_KEY]);
+    const health = r['health.contracts'] || {};
+    const DC = window.DomContracts;
+    const degradedIds = Object.keys(health)
+      .filter((id) => health[id]?.status === 'degraded')
+      .sort();
+    if (degradedIds.length === 0 || !DC) {
+      healthStripEl.className = 'health-strip health-strip-hidden';
+      healthStripEl.innerHTML = '';
+      return true;
+    }
+    const sig = degradedIds.join('|');
+    const snooze = r[HEALTH_SNOOZE_KEY];
+    if (snooze && snooze.sig === sig && typeof snooze.until === 'number' && Date.now() < snooze.until) {
+      healthStripEl.className = 'health-strip health-strip-hidden';
+      healthStripEl.innerHTML = '';
+      return true;
+    }
+    // Several contracts can share one owning feature (e.g. the three queue-chip
+    // contracts) — de-dupe so the strip reads "Queue chips degraded", not
+    // "Queue chips, Queue chips, Queue chips degraded".
+    const features = degradedIds.map((id) => DC.get(id)?.feature || id).filter((f, i, arr) => arr.indexOf(f) === i);
+    healthStripEl.className = 'health-strip health-strip-amber';
+    healthStripEl.innerHTML = `
+      <span class="health-strip-icon">⚠</span>
+      <span class="health-strip-text">Medicus may have changed — ${escStrip(features.join(', '))} degraded. Details in Options → Suite health.</span>
+      <button class="health-strip-goto">Details →</button>
+      <button class="health-strip-dismiss" title="Dismiss for 7 days (reappears if anything new degrades)" aria-label="Dismiss health warning for 7 days">✕</button>
+    `;
+    healthStripEl.querySelector('.health-strip-goto')?.addEventListener('click', () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-health') });
+    });
+    healthStripEl.querySelector('.health-strip-dismiss')?.addEventListener('click', async () => {
+      await chrome.storage.local.set({ [HEALTH_SNOOZE_KEY]: { sig, until: Date.now() + HEALTH_SNOOZE_MS } });
+      fetchAndRenderHealthStrip();
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+let healthPoller = makePoller(fetchAndRenderHealthStrip, HEALTH_POLL_MS, 'health-strip').start();
+// Snappier than the 30s poll: the canary writes this key directly, so react
+// to it immediately when the panel is open and watching.
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes['health.contracts']) fetchAndRenderHealthStrip();
+});
+
+// ── Patient Alerts strip (global — visible on every module) ───────────────────
+// Shows the practice's own per-patient flags (patientAlerts.byPatient, owned by
+// the Patient Alerts tab) for the patient currently open in Medicus, so the
+// flag is seen the moment the record loads whatever tab the panel is on.
+// Identity comes from the same Sentinel snapshot bridge the Monitoring badge
+// uses; alerts are looked up fresh on every render (wrong-patient safety — a
+// navigation must never leave the previous patient's flags on screen).
+// Panel-only, same convention as the other strips; deliberately NOT in the
+// alert roll-up (ALERT_CHANNELS): those group practice-demand signals, whereas
+// this is patient-context — collapsing a safeguarding flag into a demand
+// roll-up could hide it at exactly the moment it matters.
+//
+// CLINICAL SAFETY: absence of this strip means "no flags recorded or patient
+// not identified", never a verified "no concerns".
+const paStripEl = document.getElementById('paStrip');
+// 60s backstop only (audit M12): the strip's real triggers are the snapshot
+// ping, tabs.onActivated and the store's onChanged below — the poll exists so
+// none of those being missed can strand a stale strip for long.
+const PA_STRIP_POLL_MS = 60 * 1000;
+let _paStripPrevSig = null;
+// patientAlerts.byPatient cached with onChanged invalidation (audit M12) —
+// the strip used to re-read the whole store from chrome.storage every tick.
+let _paStripStore = null;
+chrome.storage.local.get('patientAlerts.byPatient').then((r) => {
+  _paStripStore = r['patientAlerts.byPatient'] || {};
+});
+
+async function fetchAndRenderPaStrip() {
+  if (!paStripEl) return true;
+  // Visibility gate (audit M12) — this was the only strip without one; the
+  // tabs.query + IPC round-trip ran ~8,600×/day even while hidden.
+  if (document.visibilityState !== 'visible') return true;
+  const hide = () => {
+    paStripEl.className = 'pa-strip pa-strip-hidden';
+    paStripEl.innerHTML = '';
+    _paStripPrevSig = null;
+  };
+  try {
+    let pc = null;
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    let tab = tabs[0]?.url && /medicus\.health/.test(tabs[0].url) ? tabs[0] : null;
+    // Audit M11: with 2+ Medicus tabs the fallback pick is arbitrary — label
+    // the strip so a background tab's patient can't be misread as the one on
+    // screen.
+    let fromBackgroundTab = false;
+    if (!tab) {
+      const any = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
+      tab = any[0] || null;
+      fromBackgroundTab = !!tab && any.length > 1;
+    }
+    if (tab?.id) {
+      try {
+        const snap = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
+        if (snap && !snap.unavailable && snap.patientContext) pc = snap.patientContext;
+      } catch (_) {
+        /* content script not mounted */
+      }
+    }
+    if (!pc) {
+      hide();
+      return true;
+    }
+    if (_paStripStore === null) {
+      const r = await chrome.storage.local.get('patientAlerts.byPatient');
+      _paStripStore = r['patientAlerts.byPatient'] || {};
+    }
+    const found = findEntryForPatient(_paStripStore, pc);
+    const alerts = found ? paSortAlerts(found.entry.alerts) : [];
+    if (alerts.length === 0) {
+      hide();
+      return true;
+    }
+    const level = paMaxSeverity(alerts) === 'red' ? 'red' : 'amber';
+    const name = pc.displayName || pc.patientName || pc.name || '';
+    const sig = `${found.key}|${alerts.map((a) => `${a.id}:${a.severity}`).join(',')}`;
+    if (sig === _paStripPrevSig) return true; // unchanged — don't rebuild (keeps focus/hover stable)
+    _paStripPrevSig = sig;
+    const pills = alerts
+      .slice(0, 4)
+      .map(
+        (a) =>
+          `<span class="pa-strip-pill pa-strip-pill--${a.severity}" title="${escStrip(a.note || a.label)}">${escStrip(a.label)}</span>`
+      )
+      .join('');
+    const more = alerts.length > 4 ? `<span class="pa-strip-more">+${alerts.length - 4} more</span>` : '';
+    paStripEl.className = `pa-strip pa-strip--${level}`;
+    paStripEl.innerHTML = `
+      <span class="pa-strip-icon">&#x2691;</span>
+      <span class="pa-strip-label">PATIENT${name ? ` · ${escStrip(name)}` : ''}${fromBackgroundTab ? ' · OTHER TAB' : ''}</span>
+      ${pills}${more}
+      <button class="pa-strip-goto" title="Open the Patient Alerts tab">Manage &rarr;</button>
+    `;
+    paStripEl.querySelector('.pa-strip-goto')?.addEventListener('click', () => switchModule('patient-alerts'));
+    return true;
+  } catch (_) {
+    hide();
+    return false;
+  }
+}
+
+let paStripPoller = makePoller(fetchAndRenderPaStrip, PA_STRIP_POLL_MS, 'pa-strip').start();
+// React immediately to patient changes (snapshot ping), tab switches, and
+// alert edits — the 10s poll is only the backstop.
+let _paStripDebounce = null;
+function schedulePaStripRefresh() {
+  if (_paStripDebounce) return;
+  _paStripDebounce = setTimeout(() => {
+    _paStripDebounce = null;
+    fetchAndRenderPaStrip();
+  }, 400);
+}
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!sender || sender.id !== chrome.runtime.id) return;
+  if (msg?.type === 'sentinel:snapshot-updated') schedulePaStripRefresh();
+});
+chrome.tabs.onActivated.addListener(() => schedulePaStripRefresh());
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes['patientAlerts.byPatient']) {
+    _paStripStore = changes['patientAlerts.byPatient'].newValue || {};
+    _paStripPrevSig = null; // force rebuild — content changed even if patient didn't
+    schedulePaStripRefresh();
+  }
+});
+
+// ── Urgent breach-risk strip (global — A2, panel-only) ────────────────────────
+// Fifth-family global strip after #wrStrip/#rmStrip/#subRagStrip/#healthStrip/
+// #paStrip (CLAUDE.md "Global demand / alert strips"). Warns when URGENT
+// unactioned requests are ageing towards the April-2026 same-day contractual
+// cutoff. WORKFLOW ONLY: it echoes Medicus's OWN priority flag (unvalidated
+// upstream) and counts timestamps — no clinical interpretation of request
+// content. See docs HAZARD-LOG (A2).
+//
+// Data source: it reuses the Request Monitor's cached poll state
+// (suite.requestMonitor.state, written by the service-worker alarm and the RM
+// strip). NO new API polling — it reads that cached state and reacts to its
+// onChanged; a 60s backstop poll only re-reads storage. When the monitor is
+// disabled/unconfigured there is no state and the strip stays hidden.
+//
+// The computation lives in shared/sla-breach-core.js (tested in
+// test-sla-breach-core.js). This strip can never suppress, reorder or hide a
+// request — it is purely additive. It has NO green/"all clear" state: it is
+// hidden when there is nothing to report, EXCEPT the explicit fail-visible
+// "urgency unknown" state when the fetched items carry no readable priority
+// field (which must never look like a reassuring "zero urgent").
+const slaStripEl = document.getElementById('slaBreachStrip');
+const SLA_STRIP_POLL_MS = 60 * 1000;
+
+async function fetchAndRenderSlaStrip() {
+  if (document.visibilityState !== 'visible') return true;
+  if (!slaStripEl || !window.RequestMonitor || !window.SlaBreachCore) return true;
+
+  const hide = () => {
+    slaStripEl.className = 'sla-strip sla-strip-hidden';
+    slaStripEl.innerHTML = '';
+  };
+
+  const cfg = await window.RequestMonitor.getConfig();
+  if (!cfg.enabled || !cfg.assigneeId) {
+    hide();
+    return true;
+  }
+
+  // Read the Request Monitor's cached poll state — no fetch of our own.
+  const stR = await chrome.storage.local.get('suite.requestMonitor.state');
+  const st = stR['suite.requestMonitor.state'];
+  if (!st || !st.buckets) {
+    hide();
+    return true;
+  }
+
+  // Flatten every open new/reply request item across the four buckets, keeping
+  // a bucket reference so the click-through can target the queue holding the
+  // oldest urgent item.
+  const flat = [];
+  for (const b of window.RequestMonitor.BUCKETS) {
+    const items = st.buckets[b.key]?.items;
+    if (Array.isArray(items)) for (const it of items) flat.push({ it, bucket: b });
+  }
+
+  const amberMs = Math.max(0, Number(cfg.urgentAgeAmberHours) || window.SlaBreachCore.DEFAULT_AMBER_HOURS) * 3600000;
+  const redMs = Math.max(0, Number(cfg.urgentAgeRedHours) || window.SlaBreachCore.DEFAULT_RED_HOURS) * 3600000;
+  const now = Date.now();
+  const result = window.SlaBreachCore.computeBreachRisk(
+    flat.map((f) => f.it),
+    { now, amberMs, redMs }
+  );
+
+  if (!result.visible) {
+    hide();
+    return true;
+  }
+
+  // Pick the bucket of the oldest urgent item for the click-through; default to
+  // the first bucket if none can be aged (e.g. the 'unknown' state).
+  let target = window.RequestMonitor.BUCKETS[0];
+  let oldestAge = -1;
+  for (const f of flat) {
+    if (!window.SlaBreachCore.isUrgentItem(f.it)) continue;
+    const age = window.SlaBreachCore.itemAgeMs(f.it, now);
+    if (age !== null && age > oldestAge) {
+      oldestAge = age;
+      target = f.bucket;
+    }
+  }
+  const { code, source } = await window.PracticeCode.resolve();
+  const clickUrl = code
+    ? window.RequestMonitor.buildClickUrl(code, target.taskType, target.status, cfg.assigneeId)
+    : null;
+  void source;
+
+  let text;
+  if (result.level === 'unknown') {
+    text = 'Urgent requests: urgency unknown — check queue';
+  } else {
+    const oldest = window.SlaBreachCore.formatAge(result.oldestAgeMs);
+    const plural = result.urgentCount === 1 ? '' : 's';
+    text =
+      `${result.urgentCount} urgent request${plural} unactioned` + (oldest ? ` · oldest ${oldest}` : '');
+  }
+
+  slaStripEl.className = `sla-strip sla-strip--${result.level}`;
+  slaStripEl.innerHTML = `
+    <span class="sla-strip-icon">⚠</span>
+    <span class="sla-strip-label">SLA:</span>
+    <span class="sla-strip-text">${escStrip(text)}</span>
+    ${clickUrl ? `<button class="sla-strip-goto" data-sla-url="${escStrip(clickUrl)}" title="Open the request queue">Open queue →</button>` : ''}
+  `;
+  slaStripEl.querySelector('.sla-strip-goto[data-sla-url]')?.addEventListener('click', (e) => {
+    const url = e.currentTarget.dataset.slaUrl;
+    if (url) chrome.tabs.create({ url });
+  });
+  return true;
+}
+
+let slaStripPoller = makePoller(fetchAndRenderSlaStrip, SLA_STRIP_POLL_MS, 'sla-strip').start();
+// React immediately when the Request Monitor writes fresh poll state, and when
+// the breach thresholds change — the 60s poll is only a backstop.
+chrome.storage.onChanged.addListener((changes) => {
+  if (
+    changes['suite.requestMonitor.state'] ||
+    changes['suite.requestMonitor.urgentAgeAmberHours'] ||
+    changes['suite.requestMonitor.urgentAgeRedHours'] ||
+    changes['suite.requestMonitor.enabled'] ||
+    changes['suite.requestMonitor.assigneeId']
+  ) {
+    fetchAndRenderSlaStrip();
+  }
+});
+
+// Refresh all strips immediately when the panel becomes visible again
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     fetchAndRenderStrip();
     fetchAndRenderRmStrip();
     fetchAndRenderSubRagStrip();
+    fetchAndRenderHealthStrip();
+    fetchAndRenderPaStrip();
+    fetchAndRenderSlaStrip();
   }
 });
 
-// Tear down all strip pollers when the panel document goes away. The side
-// panel is normally permanent, but if Chrome re-creates the document (e.g. an
-// extension reload without a browser restart) the old timers would otherwise
-// keep running and a fresh set would stack on top.
 // ── Tab visibility (suite.hiddenTabs — USER-OWNED, never profile-pushed) ─────
 // Hidden tabs disappear from the nav but stay reachable via the Ctrl+K palette.
 function applyTabVisibility(raw) {
@@ -1640,10 +2328,17 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes['suite.hiddenTabs']) applyTabVisibility(changes['suite.hiddenTabs'].newValue);
 });
 
+// Tear down all strip pollers when the panel document goes away. The side
+// panel is normally permanent, but if Chrome re-creates the document (e.g. an
+// extension reload without a browser restart) the old timers would otherwise
+// keep running and a fresh set would stack on top.
 window.addEventListener('pagehide', () => {
   if (wrPoller) wrPoller.stop();
   if (rmPoller) rmPoller.stop();
   if (subRagPoller) subRagPoller.stop();
+  if (healthPoller) healthPoller.stop();
+  if (paStripPoller) paStripPoller.stop();
+  if (slaStripPoller) slaStripPoller.stop();
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -1670,10 +2365,14 @@ document.getElementById('displayBtn')?.addEventListener('click', (e) => {
   renderDisplayPopover();
 });
 
+// Wire quick-leaflet popover (leaflet search from any tab — panel only)
+initQuickLeaflet({ switchModule });
+
 // Wire per-tab help button
 wireHelpButton();
 wireAllTabsButton();
 wireTabNavShortcuts();
+wireKeyboardNav();
 
 // ── Boot — restore last active module ────────────────────────────────────────
 // Read the persisted module name and switch to it, falling back to 'slots' if

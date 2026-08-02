@@ -8,8 +8,10 @@ import { resolveRange, buildReport, localISO } from './side-panel/modules/condor
 import { getProfile, applyProfile } from './side-panel/modules/condor/report/report-profiles.js';
 import { buildReportHtml, buildReportCsv, SECTION_LABELS } from './side-panel/modules/condor/report/report-render.js';
 import { fetchAllStreams } from './side-panel/modules/condor/condor-data.js';
-import { computeIndex } from './side-panel/modules/condor/condor.js';
+import { computeIndex } from './side-panel/modules/condor/condor-index-core.js';
 import { downloadCsv, toCsv } from './side-panel/modules/shared/export-util.js';
+
+const INDEX_CONFIG_KEY = 'condor.indexConfig';
 
 const $ = (id) => document.getElementById(id);
 let _preset = '7d';
@@ -98,11 +100,16 @@ async function generate() {
   const range = resolveRange(_preset, { today: localISO(), start: $('prStart').value, end: $('prEnd').value });
 
   // Live snapshot (today's PPI / waiting room / urgent) for the current-snapshot block.
+  // Reads the same custom weightings/thresholds override (item 8) as the live
+  // Condor gauge so the report's PPI can never quietly disagree with the panel.
   let live = null;
   let ppi = null;
   try {
     live = await fetchAllStreams();
-    if (live && live.siteId) ppi = computeIndex(live);
+    if (live && live.siteId) {
+      const stored = await chrome.storage.local.get(INDEX_CONFIG_KEY);
+      ppi = computeIndex(live, stored[INDEX_CONFIG_KEY] ?? null);
+    }
   } catch {
     /* report still works from historical data without the live block */
   }

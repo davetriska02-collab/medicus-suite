@@ -1,14 +1,31 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 'use strict';
 
+import { computeIndex } from '../condor-index-core.js';
+
 let cssInjected = false;
 function ensureStyles() {
   if (cssInjected) return;
   cssInjected = true;
   const s = document.createElement('style');
   s.textContent = `
-    .condor-ppi-svg { display:block; margin:0 auto; max-width:200px; }
-    .condor-ppi-label { text-align:center; font-size:13px; font-weight:700; margin:4px 0; }
+    /* Owned index meter (replaces the stock half-doughnut, 2026-06-21). A linear
+       0-100 track with the GREEN/AMBER/RED band thresholds marked at 40 and 70,
+       so a low index that is floored to AMBER by capacity reads truthfully: you
+       see the fill sit left of the amber tick. */
+    .condor-ppi-meter { padding: 2px 2px 0; }
+    .condor-ppi-readout { display:flex; align-items:baseline; justify-content:center; gap:5px; margin-bottom:9px; }
+    .condor-ppi-value { font-family:var(--sans); font-size:30px; font-weight:700; line-height:1; }
+    .condor-ppi-outof { font-family:var(--mono); font-size:11px; color:var(--text-4); font-variant-numeric:tabular-nums; }
+    .condor-ppi-band { font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:0.08em; margin-left:3px; }
+    .condor-ppi-track { position:relative; height:10px; border-radius:var(--r-pill); background:var(--bg-mid); border:1px solid var(--border); overflow:hidden; }
+    .condor-ppi-fill { position:absolute; left:0; top:0; bottom:0; border-radius:var(--r-pill); transform-origin:left center; animation:condor-ppi-grow 520ms var(--ease) both; }
+    .condor-ppi-thresh { position:absolute; top:0; bottom:0; width:2px; transform:translateX(-1px); opacity:0.85; }
+    .condor-ppi-thresh--amber { background:var(--amber); }
+    .condor-ppi-thresh--red { background:var(--red); }
+    .condor-ppi-scale { display:flex; justify-content:space-between; margin-top:3px; font-family:var(--mono); font-size:8px; color:var(--text-4); font-variant-numeric:tabular-nums; }
+    @keyframes condor-ppi-grow { from { transform:scaleX(0); } to { transform:scaleX(1); } }
+    @media (prefers-reduced-motion: reduce) { .condor-ppi-fill { animation:none; } }
     .condor-ppi-green { color:var(--green); }
     .condor-ppi-amber { color:var(--amber); }
     .condor-ppi-red   { color:var(--red); }
@@ -22,11 +39,19 @@ function ensureStyles() {
       font-size:11px; cursor:help; display:inline-flex; align-items:center; justify-content:center;
     }
     .condor-ppi-info:hover { color:var(--t1); }
+    .condor-ppi-custom-badge {
+      font-family:var(--mono); font-size:8px; letter-spacing:0.06em; text-transform:uppercase;
+      color:var(--accent); background:var(--accent-dim); border:1px solid var(--accent-line);
+      border-radius:var(--r-pill); padding:1px 6px;
+    }
   `;
   document.head.appendChild(s);
 }
 
-export function renderPpi(data) {
+// `config` is the module's optional custom { weights, thresholds } override
+// (item 8, chrome.storage.local['condor.indexConfig']) — passed through by
+// condor.js's poll(). Omitted/null means "shipped defaults", same as before.
+export function renderPpi(data, config) {
   ensureStyles();
 
   const allNull =
@@ -40,80 +65,47 @@ export function renderPpi(data) {
     return '<div class="condor-card condor-placeholder">Practice code not configured. <button class="ghost-btn setup-now-btn">Set up now</button></div>';
   }
 
-  const arrivedCount = data.waitingRoom?.arrivedCount ?? 0;
-  const medical = data.submissions?.totals?.medical ?? 0;
-  const admin = data.submissions?.totals?.admin ?? 0;
-  const queueCount = medical + admin;
-  const urgentCount = data.requestMonitor?.urgentCount ?? 0;
-  const minimum = data.capacityPreset?.minimum ?? 0;
-  const remaining = data.slots?.totalRemaining ?? 0;
+  // Single source of truth for the index/band math AND the capacity safety
+  // floor — shared with condor.js's headline strip and practice-report.js so
+  // none of the three can ever quietly disagree (see condor-index-core.js).
+  const idx = computeIndex(data, config);
+  const { ppi, band, arrivedCount, urgentCount, minimum, capacityCount: remaining, demandCount: queueCount } = idx;
+  const { weights, thresholds } = idx.config;
+  const scoreA = idx.scores.waitingRoom;
+  const scoreB = idx.scores.queue;
+  const scoreC = idx.scores.urgent;
+  const scoreD = idx.scores.capacity;
 
-  const scoreA = Math.min((arrivedCount / 10) * 100, 100);
-  const scoreB = Math.min((queueCount / 40) * 100, 100);
-  const scoreC = Math.min((urgentCount / 5) * 100, 100);
-  let scoreD = 0;
-  if (minimum !== 0) {
-    const deficit = Math.max(0, minimum - remaining);
-    scoreD = Math.min((deficit / minimum) * 100, 100);
-  }
-
-  const ppi = Math.round(scoreA * 0.3 + scoreB * 0.25 + scoreC * 0.25 + scoreD * 0.2);
+  const colorClass = band === 'GREEN' ? 'condor-ppi-green' : band === 'AMBER' ? 'condor-ppi-amber' : 'condor-ppi-red';
+  const strokeColor = band === 'GREEN' ? 'var(--green)' : band === 'AMBER' ? 'var(--amber)' : 'var(--red)';
 
   // Reconcile the headline band with the Demand/Capacity card: that card flags
-  // "Over/At capacity" off the requests-vs-slots ratio, but capacity is only 20%
-  // of the index (and 0 when no capacity preset is set), so the gauge can read
-  // GREEN while Demand reads red. Surface that explicitly rather than letting the
-  // two cards silently contradict each other. Ratio thresholds mirror demand-gap.js.
-  const demandRatio = remaining > 0 ? queueCount / remaining : queueCount > 0 ? Infinity : 0;
-  const capacityStretched = demandRatio >= 1.0;
+  // "Over/At capacity" off the requests-vs-slots ratio, but capacity is only a
+  // fraction of the index (0 when no capacity preset is set), so the gauge can
+  // read GREEN while Demand reads red. Surface that explicitly rather than
+  // letting the two cards silently contradict each other.
+  const capacityStretched = idx.capacityState !== 'none';
 
-  let colorClass, colorLabel, strokeColor;
-  if (ppi < 40) {
-    colorClass = 'condor-ppi-green';
-    colorLabel = 'GREEN';
-    strokeColor = 'var(--green)';
-  } else if (ppi < 70) {
-    colorClass = 'condor-ppi-amber';
-    colorLabel = 'AMBER';
-    strokeColor = 'var(--amber)';
-  } else {
-    colorClass = 'condor-ppi-red';
-    colorLabel = 'RED';
-    strokeColor = 'var(--red)';
-  }
-
-  // #1 trust fix: never show a GREEN dial while Demand/Capacity reads over limit.
-  // Floor the displayed band to AMBER (the numeric ppi is left unchanged). This
-  // mirrors the band-floor in condor.js computeIndex so the gauge, the headline
-  // strip and the copied figures never contradict one another. This only ever
-  // RAISES a signal, never lowers one.
-  const floored = capacityStretched && colorClass === 'condor-ppi-green';
-  if (floored) {
-    colorClass = 'condor-ppi-amber';
-    colorLabel = 'AMBER';
-    strokeColor = 'var(--amber)';
-  }
-
-  const total = Math.PI * 80;
-  // Clamp to 98% of arc at maximum so stroke-linecap="round" doesn't overshoot at PPI=100.
-  const maxDash = total - 2;
-  const dashLen = Math.min((ppi / 100) * total, maxDash);
-  const dashRem = total - dashLen;
-
-  const arcPath = 'M 20 100 A 80 80 0 0 1 180 100';
-
-  const svg =
-    `<svg viewBox="0 0 200 110" class="condor-svg condor-ppi-svg" aria-label="Practice Pressure Index gauge">` +
-    `<path d="${arcPath}" fill="none" stroke="var(--border)" stroke-width="12" stroke-linecap="round"/>` +
-    `<path d="${arcPath}" fill="none" stroke="${strokeColor}" stroke-width="12" stroke-linecap="round"` +
-    ` stroke-dasharray="${dashLen.toFixed(1)} ${dashRem.toFixed(1)}"/>` +
-    `<text x="100" y="88" text-anchor="middle" font-size="28" font-weight="700" fill="var(--t1)" font-family="var(--sans)">${ppi}</text>` +
-    `<text x="100" y="104" text-anchor="middle" font-size="9" fill="var(--text-3)" font-family="var(--sans)">PRESSURE INDEX · 0–100</text>` +
-    `</svg>`;
+  // Minimum visible sliver so a low-but-nonzero index still shows on the track.
+  const fillPct = ppi <= 0 ? 0 : Math.max(3, Math.min(ppi, 100));
+  const meter =
+    `<div class="condor-ppi-meter">` +
+    `<div class="condor-ppi-readout">` +
+    `<span class="condor-ppi-value ${colorClass}">${ppi}</span>` +
+    `<span class="condor-ppi-outof">/100</span>` +
+    `<span class="condor-ppi-band ${colorClass}">${band}</span>` +
+    `</div>` +
+    `<div class="condor-ppi-track" role="img" aria-label="Pressure index ${ppi} of 100, band ${band}">` +
+    `<div class="condor-ppi-fill" style="width:${fillPct}%;background:${strokeColor}"></div>` +
+    `<span class="condor-ppi-thresh condor-ppi-thresh--amber" style="left:${thresholds.amber}%" title="Amber from ${thresholds.amber}"></span>` +
+    `<span class="condor-ppi-thresh condor-ppi-thresh--red" style="left:${thresholds.red}%" title="Red from ${thresholds.red}"></span>` +
+    `</div>` +
+    `<div class="condor-ppi-scale"><span>0</span><span>pressure index</span><span>100</span></div>` +
+    `</div>`;
 
   const capacityNote =
-    capacityStretched && ppi < 70
-      ? `<div class="condor-ppi-note">Capacity is ${demandRatio >= 1.5 ? 'over' : 'at'} limit (${queueCount} requests vs ${remaining} slots). ${floored ? `Shown as AMBER though the weighted index is only ${ppi}` : `The index weights capacity at 20%`} — see Demand / Capacity below.</div>`
+    capacityStretched && band !== 'RED'
+      ? `<div class="condor-ppi-note">Capacity is ${idx.capacityState === 'over' ? 'over' : 'at'} limit (${queueCount} requests vs ${remaining} slots). ${idx.floored ? `Shown as ${band} though the weighted index is only ${ppi}` : `The index weights capacity at ${Math.round(weights.capacity * 100)}%`} — see Demand / Capacity below.</div>`
       : '';
 
   // R3: make the index transparent. The info button's data-tip explains the
@@ -122,22 +114,25 @@ export function renderPpi(data) {
   // (Tip uses textContent), so no HTML escaping concern, but keep quotes out.
   const ppiInfoText =
     `Practice Pressure Index = ` +
-    `waiting room 30% + request queue 25% + urgent 25% + capacity 20%. ` +
+    `waiting room ${Math.round(weights.waitingRoom * 100)}% + request queue ${Math.round(weights.queue * 100)}% + urgent ${Math.round(weights.urgent * 100)}% + capacity ${Math.round(weights.capacity * 100)}%. ` +
     `Now: WR ${Math.round(scoreA)}/100, Queue ${Math.round(scoreB)}/100, ` +
     `Urgent ${Math.round(scoreC)}/100, Capacity ${Math.round(scoreD)}/100 → ${ppi}/100. ` +
-    `Band: GREEN under 40, AMBER 40-70, RED 70 or over.`;
+    `Band: GREEN under ${thresholds.amber}, AMBER ${thresholds.amber}-${thresholds.red}, RED ${thresholds.red} or over.` +
+    (idx.isCustom ? ' (custom weightings — tune via the cog on this card)' : '');
   const ppiInfoAttr = ppiInfoText.replace(/"/g, '&quot;');
   const capTipText = `Slots remaining (${remaining}) out of your daily minimum (${minimum}).`;
   const capTipAttr = capTipText.replace(/"/g, '&quot;');
+
+  const customBadge = idx.isCustom ? `<span class="condor-ppi-custom-badge">custom</span>` : '';
 
   return (
     `<div class="condor-card condor-ppi">` +
     `<div class="condor-card-title-row">` +
     `<span class="condor-card-title">Practice Pressure</span>` +
+    customBadge +
     `<button class="condor-ppi-info" aria-label="How is the pressure index calculated?" data-tip="${ppiInfoAttr}" title="${ppiInfoAttr}">&#9432;</button>` +
     `</div>` +
-    svg +
-    `<div class="condor-ppi-label ${colorClass}">${colorLabel} · ${ppi}/100</div>` +
+    meter +
     `<div class="condor-ppi-breakdown">` +
     `<span class="condor-ppi-chip">WR: ${arrivedCount}</span>` +
     `<span class="condor-ppi-chip">Queue: ${queueCount}</span>` +

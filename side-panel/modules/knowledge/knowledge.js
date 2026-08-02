@@ -182,12 +182,26 @@ function renderCentralHint() {
   return `<div class="kb-notice-central" style="font-size:11px; color:var(--text-3, #888); padding:2px 0 6px;">Verification notice set by your practice.</div>`;
 }
 
+// "Locum brief" is a reserved, well-known category id (not a user-typed one):
+// a locum/covering doctor needs it findable at a glance, so when it exists it
+// is always pinned first (right after "All") regardless of creation order.
+const LOCUM_BRIEF_CAT_ID = 'locum-brief';
+const LOCUM_BRIEF_CAT_NAME = 'Locum brief';
+const LOCUM_BRIEF_EMPTY_HINT =
+  "What a locum needs on day one: who's on call, how to escalate, practice quirks. Add entries here.";
+
+function orderedCategoriesForToolbar() {
+  const locum = _categories.find((c) => c.id === LOCUM_BRIEF_CAT_ID);
+  if (!locum) return _categories;
+  return [locum, ..._categories.filter((c) => c.id !== LOCUM_BRIEF_CAT_ID)];
+}
+
 function renderToolbar() {
   const pills = [
     `<button class="kb-pill ${_activeCat === 'all' ? 'kb-pill-on' : ''}" data-act="cat" data-cat="all">All</button>`,
-    ..._categories.map(
+    ...orderedCategoriesForToolbar().map(
       (c) =>
-        `<button class="kb-pill ${_activeCat === c.id ? 'kb-pill-on' : ''}" data-act="cat" data-cat="${esc(c.id)}">${esc(c.name)}</button>`
+        `<button class="kb-pill ${c.id === LOCUM_BRIEF_CAT_ID ? 'kb-pill-locum' : ''} ${_activeCat === c.id ? 'kb-pill-on' : ''}" data-act="cat" data-cat="${esc(c.id)}">${esc(c.name)}</button>`
     ),
   ].join('');
   return `
@@ -214,6 +228,14 @@ function visibleItems() {
 
 function renderList() {
   const items = visibleItems();
+  const onEmptyLocumBrief =
+    _activeCat === LOCUM_BRIEF_CAT_ID &&
+    _categories.some((c) => c.id === LOCUM_BRIEF_CAT_ID) &&
+    items.length === 0 &&
+    _editingId === null;
+  if (onEmptyLocumBrief) {
+    return `<div class="kb-empty">${esc(LOCUM_BRIEF_EMPTY_HINT)}</div>`;
+  }
   if (_items.length === 0 && _editingId === null) {
     return `<div class="kb-empty">No entries yet. Use <strong>+ Add</strong> to create one, or generate a starter pack in
       <a href="#" data-act="open-options">Options → Knowledge</a>.</div>`;
@@ -291,6 +313,11 @@ function renderForm() {
   const catOpts = _categories
     .map((c) => `<option value="${esc(c.id)}" ${c.id === e.category ? 'selected' : ''}>${esc(c.name)}</option>`)
     .join('');
+  // Suggest the reserved "Locum brief" category (one click to create) when the
+  // practice hasn't already got one — no need to type a name for it.
+  const suggestLocumOpt = _categories.some((c) => c.id === LOCUM_BRIEF_CAT_ID)
+    ? ''
+    : `<option value="__locum_brief__">+ ${esc(LOCUM_BRIEF_CAT_NAME)} (suggested)</option>`;
   return `
     <div class="kb-form">
       <div class="kb-form-title">${editing ? 'Edit entry' : 'New entry'}</div>
@@ -319,7 +346,7 @@ function renderForm() {
       <div class="kb-form-row">
         <div>
           <label class="kb-label">Category</label>
-          <select id="kbFmCat" class="kb-input">${catOpts}<option value="__new__">+ New category…</option></select>
+          <select id="kbFmCat" class="kb-input">${catOpts}${suggestLocumOpt}<option value="__new__">+ New category…</option></select>
           <input type="text" id="kbFmNewCat" class="kb-input kb-hidden" maxlength="40" placeholder="New category name" />
         </div>
         <div>
@@ -551,6 +578,9 @@ function fillFromLlm() {
 function selectedCategory() {
   const sel = container.querySelector('#kbFmCat');
   if (!sel) return null;
+  // One-click creation of the reserved "Locum brief" category (see
+  // suggestLocumOpt in renderForm) — no free-text name needed.
+  if (sel.value === '__locum_brief__') return { id: LOCUM_BRIEF_CAT_ID, name: LOCUM_BRIEF_CAT_NAME };
   if (sel.value !== '__new__') return sel.value;
   const name = (container.querySelector('#kbFmNewCat')?.value || '').trim();
   if (!name) return null;

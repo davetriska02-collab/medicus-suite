@@ -8,7 +8,16 @@ import { STATUS_RANK, buildAdminSummaryText, isChipActionNeeded } from './sentin
 import { buildChipActions, buildPatientActions } from '../shared/action-packs.js';
 import { buildBrief } from './brief-core.js';
 import { buildPassport } from './passport-core.js';
+import { fetchTaskCreateForm, createGeneralTask } from '../../../shared/task-api.js';
+import { addFollowup } from '../followups/followups.js';
+import { dateOnlyISO } from '../followups/followups-core.js';
+import { buildRecallDescription, isActionNeeded } from '../sweep/sweep-core.js';
+import { buildCoverageView } from './coverage-core.js';
 import { startTour } from '../../tour/tour.js';
+import {
+  findEntryForPatient as paFindEntry,
+  sortAlerts as paSortAlerts,
+} from '../patient-alerts/patient-alerts-core.js';
 
 // Canonical clinical-safety caveats (shared/provenance.js, loaded as a classic
 // script in panel.html / pop-out.html). Sentinel is the primary monitoring
@@ -398,6 +407,20 @@ async function loadHiddenRules() {
   _hiddenRules = r['sentinel.hiddenRules'] || {};
 }
 
+// Practice-defined per-patient flags (Patient Alerts tab owns this store).
+// Cached here so render() can look the current patient up synchronously; the
+// lookup itself always runs against the snapshot's live patient identity at
+// render time (wrong-patient safety), and the onChanged listener keeps the
+// cache fresh when alerts are edited.
+let _paAlertStore = {};
+async function loadPatientAlertsStore() {
+  const r = await chrome.storage.local.get('patientAlerts.byPatient');
+  _paAlertStore =
+    r['patientAlerts.byPatient'] && typeof r['patientAlerts.byPatient'] === 'object'
+      ? r['patientAlerts.byPatient']
+      : {};
+}
+
 // Practice letterhead ({ practiceName, clinicianName }) used to auto-fill the
 // sign-off in action-pack letters and SMS. Loaded once on init and kept fresh via
 // the storage onChanged listener; passed to buildChipActions/buildPatientActions.
@@ -423,7 +446,6 @@ let _evidenceHandlersAttached = false;
 // ── Waiting room state ────────────────────────────────────────────────────────
 // Practice code resolved at fetch time from PracticeCode helper. No default.
 let WR_SITE_ID = null;
-let WR_API_URL = null;
 const WR_POLL_MS = 30 * 1000;
 
 let wrPatients = null; // null = not loaded yet, [] = loaded (empty), [...] = loaded
@@ -454,12 +476,18 @@ export async function init(el) {
 
   await loadHiddenRules();
   await loadLetterhead();
+  await loadPatientAlertsStore();
   // Load brief collapse preference (non-blocking — defaults to expanded).
   chrome.storage.local.get('sentinel.briefCollapsed', (r) => {
     _briefCollapsed = !!r['sentinel.briefCollapsed'];
   });
   await refresh();
-  pollTimer = setInterval(refresh, 10000);
+  // Visibility-gated (audit M13): each tick costs tabs.query + executeScript +
+  // two IPC round-trips (one carrying the full observationHistory payload) —
+  // pointless while the panel is hidden; triggers re-fire on visibilitychange.
+  pollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') refresh();
+  }, 10000);
   chrome.tabs.onActivated.addListener(refresh);
   chrome.tabs.onUpdated.addListener(onUpdated);
 
@@ -497,6 +525,19 @@ export async function init(el) {
     hidden[ruleId] = { until, statusAtDismissal, dismissedAt };
     await chrome.storage.local.set({ 'sentinel.hiddenRules': hidden });
     _hiddenRules = hidden;
+    // F2 Clinical Event Ledger — record the dismissal (fire-and-forget; the
+    // ledger swallows its own failures and can never block this handler).
+    if (window.EventLedger) {
+      const pc = _currentSnapshot && _currentSnapshot.patientContext;
+      window.EventLedger.record({
+        source: 'sentinel',
+        patientRef: (pc && (pc.patientUuid || pc.uuid)) || null,
+        severity: STATUS_COLOUR[statusAtDismissal] || null,
+        ruleId,
+        label: until ? `dismissed until ${until}` : 'hidden',
+        action: 'dismissed',
+      });
+    }
     refresh();
   };
   document.addEventListener('click', _dismissHandler, true);
@@ -526,6 +567,10 @@ export async function init(el) {
     }
     if (changes['suite.letterhead']) {
       _letterhead = changes['suite.letterhead'].newValue || {};
+      refresh();
+    }
+    if (changes['patientAlerts.byPatient']) {
+      _paAlertStore = changes['patientAlerts.byPatient'].newValue || {};
       refresh();
     }
   };
@@ -593,6 +638,12 @@ async function cleanup() {
   _snapshotTabId = null;
   _snapshotTabWindowId = null;
   _ruleCurrencyFooter = null;
+  _coverageView = null;
+  _coverageExpanded = false;
+  if (_coverageToggleHandler) {
+    container?.querySelector('#sentRulesToggle')?.removeEventListener('click', _coverageToggleHandler);
+    _coverageToggleHandler = null;
+  }
   _lastTrendData = null;
   _lastDynamicHtml = null;
   _lastBriefHtml = null;
@@ -606,6 +657,14 @@ async function cleanup() {
 // rule file is stale or has a version mismatch. Uses chrome.runtime.getURL so the
 // fetch works identically in the side-panel and the pop-out window.
 
+// Coverage drill-down state: the pure view built by buildCoverageView() and
+// whether the user has it expanded. Renders WITHOUT a patient loaded — it is
+// derived from the rule files themselves, fetched once alongside the currency
+// check below, and persists for the module's lifetime (rule files don't
+// change mid-session).
+let _coverageView = null;
+let _coverageExpanded = false;
+
 async function loadRuleCurrencyFooter() {
   if (!chrome.runtime?.getURL) return;
   try {
@@ -616,6 +675,9 @@ async function loadRuleCurrencyFooter() {
       fetch(base + 'vaccine-rules.json').then((r) => r.json()),
       fetch(base + 'alert-library.json').then((r) => r.json()),
     ]);
+
+    // Rule-coverage drill-down — built from the same fetch, no extra round trip.
+    _coverageView = buildCoverageView(drug, qof);
 
     const files = [
       { id: 'drug', lastUpdated: drug.lastUpdated, specVersion: drug.specVersion },
@@ -651,21 +713,37 @@ async function loadRuleCurrencyFooter() {
       .filter(Boolean)
       .join(' · ');
 
+    // The whole line is a toggle for the coverage drill-down below (only when
+    // there's something to show — a completely empty/failed fetch degrades to
+    // the old plain-text line rather than an inert-looking button).
+    const toggleAttrs =
+      _coverageView && (_coverageView.drug.rules.length || _coverageView.qof.total)
+        ? ` id="sentRulesToggle" type="button" aria-expanded="${_coverageExpanded}" aria-controls="sentCoverageDrilldown"`
+        : '';
+    const asToggle = (inner) =>
+      toggleAttrs ? `<button class="sent-rules-footer-btn"${toggleAttrs}>${inner}</button>` : inner;
+
     if (result.overall === 'red') {
       _ruleCurrencyFooter =
         `<div class="sent-rules-footer sent-rules-footer-red" title="${escAttr(result.warnings.join(' | '))}">` +
-        `<span class="sent-rules-footer-icon">&#9888;</span> ` +
-        `Rules: ${escHtml(summaryText)} — ${escHtml(result.warnings[0] || 'urgent review needed')}` +
+        asToggle(
+          `<span class="sent-rules-footer-icon">&#9888;</span> ` +
+            `Rules: ${escHtml(summaryText)} — ${escHtml(result.warnings[0] || 'urgent review needed')}`
+        ) +
         `</div>`;
     } else if (result.overall === 'amber') {
       _ruleCurrencyFooter =
         `<div class="sent-rules-footer sent-rules-footer-amber" title="${escAttr(result.warnings.join(' | '))}">` +
-        `<span class="sent-rules-footer-icon">&#9888;</span> ` +
-        `Rules: ${escHtml(summaryText)} — ${escHtml(result.warnings[0] || 'review needed')}` +
+        asToggle(
+          `<span class="sent-rules-footer-icon">&#9888;</span> ` +
+            `Rules: ${escHtml(summaryText)} — ${escHtml(result.warnings[0] || 'review needed')}`
+        ) +
         `</div>`;
     } else {
       _ruleCurrencyFooter =
-        `<div class="sent-rules-footer sent-rules-footer-green">` + `Rules: ${escHtml(summaryText)}` + `</div>`;
+        `<div class="sent-rules-footer sent-rules-footer-green">` +
+        asToggle(`Rules: ${escHtml(summaryText)}`) +
+        `</div>`;
     }
   } catch (_) {
     // Non-critical: suppress errors in currency footer silently
@@ -674,45 +752,118 @@ async function loadRuleCurrencyFooter() {
   updateRulesSlot();
 }
 
-// Push the rule-currency line into its persistent footer slot. Safe to call
-// any time; no-ops until the scaffold exists / the footer has loaded.
+// Push the rule-currency line into its persistent footer slot, followed by the
+// (collapsed-by-default) coverage drill-down. Safe to call any time; no-ops
+// until the scaffold exists / the footer has loaded.
 function updateRulesSlot() {
   const slot = container?.querySelector('#sentRulesSlot');
-  if (slot) slot.innerHTML = _ruleCurrencyFooter || '';
+  if (!slot) return;
+  slot.innerHTML = (_ruleCurrencyFooter || '') + renderCoverageDrilldown();
+  wireCoverageToggle();
+}
+
+// ── Rule-coverage drill-down ─────────────────────────────────────────────────
+// Read-only, renders WITHOUT a patient loaded (source is the rule files, not a
+// patient snapshot). Lists every drug-monitoring rule with the terms it
+// matches, and every QOF register/indicator, so "is my drug/indicator actually
+// covered?" can be answered by eye instead of by reading JSON. Collapsed by
+// default to keep the calm resting state; the toggle button lives in the rule
+// currency line above (loadRuleCurrencyFooter).
+
+function renderCoverageDrilldown() {
+  if (!_coverageView) return '';
+  const v = _coverageView;
+  if (!v.drug.rules.length && !v.qof.total) return '';
+
+  const drugItems = v.drug.rules
+    .map(
+      (r) => `
+      <li class="sent-cov-rule${r.enabled ? '' : ' sent-cov-rule-disabled'}">
+        <span class="sent-cov-rule-name">${escHtml(r.id)}</span>
+        ${r.drugClass ? `<span class="sent-cov-rule-class">${escHtml(r.drugClass)}</span>` : ''}
+        ${!r.enabled ? `<span class="sent-cov-rule-off">disabled</span>` : ''}
+        <div class="sent-cov-rule-terms">${r.terms.length ? escHtml(r.terms.join(', ')) : '(no match terms)'}</div>
+      </li>`
+    )
+    .join('');
+
+  const registerItems = v.qof.registers
+    .map(
+      (r) => `
+      <li class="sent-cov-item${r.enabled ? '' : ' sent-cov-item-disabled'}">
+        <span class="sent-cov-item-code">${escHtml(r.registerCode)}</span>
+        <span class="sent-cov-item-name">${escHtml(r.registerName)}</span>
+        ${!r.enabled ? `<span class="sent-cov-rule-off">disabled</span>` : ''}
+      </li>`
+    )
+    .join('');
+
+  const indicatorItems = v.qof.indicators
+    .map(
+      (i) => `
+      <li class="sent-cov-item${i.enabled ? '' : ' sent-cov-item-disabled'}">
+        <span class="sent-cov-item-code">${escHtml(i.indicatorCode)}</span>
+        <span class="sent-cov-item-name">${escHtml(i.indicatorName)}</span>
+        ${!i.enabled ? `<span class="sent-cov-rule-off">disabled</span>` : ''}
+      </li>`
+    )
+    .join('');
+
+  return `
+    <div class="sent-cov-drilldown" id="sentCoverageDrilldown" ${_coverageExpanded ? '' : 'hidden'}>
+      <p class="sent-cov-note">What Sentinel actually checks — every rule the engine can fire, straight from the rule files. A medicine or QOF area not listed here has no monitoring rule and will never produce a chip.</p>
+      <section class="sent-cov-section">
+        <h4 class="sent-cov-h">Drug-monitoring rules <span class="sent-cov-count">${v.drug.rules.length}</span></h4>
+        <ul class="sent-cov-list">${drugItems || '<li class="sent-cov-empty">No drug-monitoring rules loaded.</li>'}</ul>
+      </section>
+      <section class="sent-cov-section">
+        <h4 class="sent-cov-h">QOF registers <span class="sent-cov-count">${v.qof.registerCount}</span></h4>
+        <ul class="sent-cov-list sent-cov-list-compact">${registerItems || '<li class="sent-cov-empty">No QOF registers loaded.</li>'}</ul>
+      </section>
+      <section class="sent-cov-section">
+        <h4 class="sent-cov-h">QOF indicators <span class="sent-cov-count">${v.qof.indicatorCount}</span></h4>
+        <ul class="sent-cov-list sent-cov-list-compact">${indicatorItems || '<li class="sent-cov-empty">No QOF indicators loaded.</li>'}</ul>
+      </section>
+    </div>`;
+}
+
+let _coverageToggleHandler = null;
+function wireCoverageToggle() {
+  const btn = container?.querySelector('#sentRulesToggle');
+  if (!btn) return;
+  if (_coverageToggleHandler) btn.removeEventListener('click', _coverageToggleHandler);
+  _coverageToggleHandler = () => {
+    _coverageExpanded = !_coverageExpanded;
+    updateRulesSlot();
+    if (_coverageExpanded) container?.querySelector('#sentCoverageDrilldown')?.scrollIntoView({ block: 'nearest' });
+  };
+  btn.addEventListener('click', _coverageToggleHandler);
 }
 
 // ── Waiting room ─────────────────────────────────────────────────────────────
 
 async function fetchWaitingRoom(bypassCache = false) {
   if (!bypassCache && wrLastFetch && Date.now() - wrLastFetch < WR_POLL_MS) return;
-  // Resolve practice code on every fetch so user changes take effect immediately.
-  const { code, source } = await window.PracticeCode.resolve();
-  WR_SITE_ID = code;
-  if (!WR_SITE_ID) {
-    wrError = 'No practice code — open a Medicus tab or set it in Options.';
-    wrPatients = [];
-    // Update just the pinned waiting-room block (same as the success path).
-    // Previously this called render({state:'loaded'}) — an unhandled state that
-    // fell through to destructuring an undefined snapshot and threw (swallowed),
-    // so the "no practice code" message never showed.
-    if (container) {
-      const wrEl = container.querySelector('.wr-pinned');
-      if (wrEl) updateWrPinned(wrEl);
-    }
-    return;
-  }
-  WR_API_URL = `https://${WR_SITE_ID}.api.england.medicus.health/scheduling/data/homepage/my-appointments`;
   try {
-    const r = await window.ApiDiag.fetch({
-      module: 'sentinel-wr',
-      url: WR_API_URL,
-      code: WR_SITE_ID,
-      codeSource: source,
-    });
-    const raw = await r.json();
-    const entries = (raw?.schedule?.schedule ?? [])
-      .flatMap((d) => d.entries ?? [])
-      .filter((e) => e?.diaryEntryType?.value === 'appointment' && e?.displayStatus?.value === 'arrived');
+    // Shared memoised fetcher (audit M10) — coalesces with panel.js's WR strip
+    // poll of the same endpoint. Practice code is re-resolved inside on every
+    // call, so user changes take effect immediately.
+    const { raw, code } = await window.AppointmentsFeed.fetchRaw({ module: 'sentinel-wr', bypassCache });
+    WR_SITE_ID = code;
+    if (!code) {
+      wrError = 'No practice code — open a Medicus tab or set it in Options.';
+      wrPatients = [];
+      // Update just the pinned waiting-room block (same as the success path).
+      // Previously this called render({state:'loaded'}) — an unhandled state that
+      // fell through to destructuring an undefined snapshot and threw (swallowed),
+      // so the "no practice code" message never showed.
+      if (container) {
+        const wrEl = container.querySelector('.wr-pinned');
+        if (wrEl) updateWrPinned(wrEl);
+      }
+      return;
+    }
+    const entries = window.AppointmentsFeed.arrivedEntries(raw);
     wrPatients = entries
       .map((e) => ({
         name: e.patient?.name ?? 'Unknown',
@@ -972,6 +1123,43 @@ function updateFooterTs(ts) {
   if (el) el.textContent = ts ? `Data at ${ts}` : '';
 }
 
+// One calm, truncation-safe smoking-status line inside the patient banner card
+// (Practice-panel ruling 2026-07-16; requested by a real GP user). Deliberately
+// NEUTRAL — never red/amber: smoking status is a clinical fact and a
+// conversation prompt, not a safety alert, and the panel's alarm colours stay
+// reserved for genuine needs-action signals. The WORD carries the state
+// (colourblind-safe); full detail (verbatim coded term, exact date, the
+// 13-month-window honesty caveat, any conflicting-entries warning) rides in
+// the title tooltip. Data: snapshot.smoking, derived content-script-side from
+// the same observations the chips were evaluated on (shared/smoking-status.js).
+function smokingLineHtml(snapshot) {
+  const SS = typeof window !== 'undefined' ? window.SmokingStatus : null;
+  if (!SS) return '';
+  const line = SS.formatSmokingLine(snapshot && snapshot.smoking);
+  const conflict = !!(snapshot && snapshot.smoking && snapshot.smoking.conflict);
+  return `<div class="sent-patient-smoking${conflict ? ' sent-patient-smoking-conflict' : ''}" title="${escAttr(
+    line.title
+  )}">${escHtml(line.text)}</div>`;
+}
+
+// Practice-defined per-patient flags rendered inside the patient banner card.
+// Looked up from the SAME patientContext the banner renders (never a cached
+// identity), so the flags can never belong to a different patient than the
+// name above them. Read-only here — managed in the Patient Alerts tab.
+function patientAlertsChipsHtml(patient) {
+  const found = paFindEntry(_paAlertStore, patient);
+  if (!found) return '';
+  const alerts = paSortAlerts(found.entry.alerts);
+  if (alerts.length === 0) return '';
+  const chips = alerts
+    .map(
+      (a) =>
+        `<span class="sent-pa-chip sent-pa-chip--${escAttr(a.severity)}" title="${escAttr(a.note || a.label)}">${escHtml(a.label)}</span>`
+    )
+    .join('');
+  return `<div class="sent-pa-row" title="Practice-recorded patient alerts — manage in the Pt Alerts tab">${chips}</div>`;
+}
+
 function render(payload) {
   if (!container) return;
   const { state, snapshot, message } = payload;
@@ -1035,6 +1223,7 @@ function render(payload) {
     modules,
     unmatchedMeds,
     unmatchedMedsDetailed,
+    unmatchedHighRisk,
     trace,
     drift,
     journalAugmentFailed,
@@ -1100,6 +1289,8 @@ function render(payload) {
       ]
         .filter(Boolean)
         .join(' · ')}</div>
+      ${smokingLineHtml(snapshot)}
+      ${patientAlertsChipsHtml(patient)}
     </div>`
     : '';
 
@@ -1234,6 +1425,12 @@ function render(payload) {
   const unmatchedHtml = renderUnmatchedMedsSection(unmatchedMeds, unmatchedMedsDetailed);
   const _unmatchedWasOpen = container.querySelector('.sent-unmatched-section')?.open ?? false;
 
+  // High-risk blind-spot banner — a drug that genuinely needs monitoring but
+  // matched NO rule (odd brand / exclude / disabled rule), so no overdue chip
+  // could ever fire for it. Rendered prominently near the top (with the other
+  // warnings), not buried in the collapsible unmatched list below.
+  const highRiskUnmatchedHtml = renderHighRiskUnmatchedBanner(unmatchedHighRisk);
+
   // Journal-augment failure indicator — shown when the content script's
   // fetchJournalObservations threw. QOF chips that rely on journal-coded
   // evidence (AST007, COPD010, HF007, etc.) may show no_data incorrectly.
@@ -1254,6 +1451,30 @@ function render(payload) {
   // skipped, so the one-time toolbar/delegated handlers act on current data. ──
 
   _renderCtx = { chips, patient, actionCount, trace };
+
+  // F2 Clinical Event Ledger — record that red/amber chips were SHOWN for this
+  // patient ("did the tool flag this?" evidence). Deduped per patient+rule+day
+  // inside the ledger, so the ~10 s refresh poll cannot spam it. Fire-and-forget:
+  // the ledger swallows its own failures and can never break this render.
+  if (window.EventLedger) {
+    const pRef = (patient && (patient.patientUuid || patient.uuid)) || null;
+    chips.forEach((c) => {
+      const colour = STATUS_COLOUR[c.status];
+      if (colour !== 'red' && colour !== 'amber') return;
+      window.EventLedger.record(
+        {
+          source: 'sentinel',
+          patientRef: pRef,
+          severity: colour,
+          ruleId: c.ruleId || null,
+          label: c.drugName || c.indicatorCode || c.label || c.displayName || null,
+          action: 'shown',
+        },
+        { dedupe: true }
+      );
+    });
+  }
+
   updateToolbarState();
   updateFooterTs(ts);
   updateRulesSlot();
@@ -1298,6 +1519,7 @@ function render(payload) {
     patientHtml +
       headlineHtml +
       driftHtml +
+      highRiskUnmatchedHtml +
       filterHtml +
       groupsHtml +
       emptyMsg +
@@ -1683,21 +1905,59 @@ function renderChip(chip) {
 
 // Render the brief card HTML from a brief object (output of buildBrief()).
 // Returns an HTML string with CSS prefix sent-brief-*.
+//
+// The card is split into three RAG groups — meds monitoring (prescribing
+// safety), QOF, and general (vaccines etc.) — so a prescriber can glance
+// "meds green → prescribing checks clear" even when QOF/general are amber.
+// When NOTHING is action-needed the whole card goes loudly green (allClear)
+// instead of disappearing.
+const BRIEF_GROUPS = [
+  ['meds', 'Meds', 'Meds monitoring'],
+  ['qof', 'QOF', 'QOF'],
+  ['general', 'Gen', 'General'],
+];
+
+// Per-group RAG pill for the brief header. Text labels + tooltip carry the
+// state for colour-blind safety (never colour alone).
+function briefGroupPill(shortLabel, fullLabel, g) {
+  if (g.status === 'clear') {
+    return (
+      `<span class="sent-brief-pill sent-brief-pill-clear" ` +
+      `title="${escAttr(fullLabel)}: nothing due">${escHtml(shortLabel)} &#10003;</span>`
+    );
+  }
+  const breakdown = [g.red > 0 ? `${g.red} red` : '', g.amber > 0 ? `${g.amber} amber` : ''].filter(Boolean).join(', ');
+  const cls = g.status === 'red' ? 'sent-brief-pill-red' : 'sent-brief-pill-amber';
+  return (
+    `<span class="sent-brief-pill ${cls}" title="${escAttr(fullLabel)}: ${escAttr(breakdown)}">` +
+    `${escHtml(shortLabel)} ${g.red + g.amber}</span>`
+  );
+}
+
+// Group-section state text, e.g. "2 red · 1 amber" or "none due ✓".
+function briefGroupStateText(g) {
+  if (g.status === 'clear') return 'none due &#10003;';
+  const parts = [];
+  if (g.red > 0) parts.push(`${g.red} red`);
+  if (g.amber > 0) parts.push(`${g.amber} amber`);
+  return parts.join(' · ');
+}
+
 function renderBriefCard(brief) {
   const collapsed = _briefCollapsed;
+  const allClear = !!brief.allClear;
+  const cardClass = `sent-brief-card${allClear ? ' sent-brief-card-clear' : ''}`;
 
-  // Header: "Brief" label + patientLine + red/amber count badges
+  // Header: "Brief" label + patientLine + per-group RAG pills. The pills are
+  // always in the header so the meds/QOF/general glance survives collapsing.
   const patPart = brief.patientLine
     ? ` <span class="sent-brief-patient" title="${escAttr(brief.patientLine)}">${escHtml(brief.patientLine)}</span>`
     : '';
 
-  // Count badges — include text labels for colour-blind safety
-  const redBadge =
-    brief.counts.red > 0 ? `<span class="sent-brief-badge sent-brief-badge-red">${brief.counts.red} red</span>` : '';
-  const amberBadge =
-    brief.counts.amber > 0
-      ? `<span class="sent-brief-badge sent-brief-badge-amber">${brief.counts.amber} amber</span>`
-      : '';
+  const groups = brief.groups || {};
+  const pills = BRIEF_GROUPS.map(([key, shortLabel, fullLabel]) =>
+    briefGroupPill(shortLabel, fullLabel, groups[key] || { red: 0, amber: 0, status: 'clear' })
+  ).join('');
 
   const chevron = collapsed ? '▶' : '▼';
 
@@ -1705,26 +1965,15 @@ function renderBriefCard(brief) {
     <div class="sent-brief-header" id="sentBriefHeader" role="button" tabindex="0" aria-expanded="${!collapsed}" aria-controls="sentBriefBody">
       <span class="sent-brief-label">Brief</span>
       ${patPart}
-      <span class="sent-brief-badges">${redBadge}${amberBadge}</span>
+      <span class="sent-brief-badges">${pills}</span>
       <span class="sent-brief-chevron" aria-hidden="true">${chevron}</span>
     </div>`;
 
   if (collapsed) {
-    return `<div class="sent-brief-card sent-brief-collapsed">${headerHtml}</div>`;
+    return `<div class="${cardClass} sent-brief-collapsed">${headerHtml}</div>`;
   }
 
-  // Signal lines: severity dot + text
-  const signalLines = brief.signals
-    .map(
-      (sig) =>
-        `<div class="sent-brief-signal sent-brief-signal-${escHtml(sig.severity)}">` +
-        `<span class="sent-brief-dot" aria-hidden="true"></span>` +
-        `<span class="sent-brief-signal-text">${escHtml(sig.text)}</span>` +
-        `</div>`
-    )
-    .join('');
-
-  // Trend notes: ↑/↓ arrows + text
+  // Trend notes: ↑/↓ arrows + text (shown in both clear and action states)
   const trendLines = brief.trendNotes
     .map(
       (note) =>
@@ -1735,6 +1984,49 @@ function renderBriefCard(brief) {
     )
     .join('');
 
+  if (allClear) {
+    // Loud green all-clear: nothing action-needed anywhere. Wording stays
+    // honest — it reports the checks run, it does not assert absolute safety.
+    const bodyHtml = `
+    <div class="sent-brief-body" id="sentBriefBody">
+      <div class="sent-brief-allclear">&#10003; Nothing to do — meds monitoring, QOF and vaccines all clear</div>
+      ${trendLines}
+    </div>`;
+    return `<div class="${cardClass}">${headerHtml}${bodyHtml}</div>`;
+  }
+
+  // Grouped signal sections, fixed order: meds → QOF → general. Each section
+  // shows its own RAG state line; a clear section renders as a compact green
+  // row (that IS the signal — e.g. "meds clear, safe-to-prescribe checks done"
+  // while QOF is amber). Signal lines beyond the global max-4 cap are counted
+  // in the group state text and the "+N more below" line.
+  const signalsByGroup = { meds: [], qof: [], general: [] };
+  for (const sig of brief.signals) {
+    (signalsByGroup[sig.group] || signalsByGroup.general).push(sig);
+  }
+
+  const sections = BRIEF_GROUPS.map(([key, , fullLabel]) => {
+    const g = groups[key] || { red: 0, amber: 0, status: 'clear' };
+    const lines = (signalsByGroup[key] || [])
+      .map(
+        (sig) =>
+          `<div class="sent-brief-signal sent-brief-signal-${escHtml(sig.severity)}">` +
+          `<span class="sent-brief-dot" aria-hidden="true"></span>` +
+          `<span class="sent-brief-signal-text">${escHtml(sig.text)}</span>` +
+          `</div>`
+      )
+      .join('');
+    return (
+      `<div class="sent-brief-group sent-brief-group-${g.status}">` +
+      `<div class="sent-brief-group-header">` +
+      `<span class="sent-brief-group-name">${escHtml(fullLabel)}</span>` +
+      `<span class="sent-brief-group-state sent-brief-group-state-${g.status}">${briefGroupStateText(g)}</span>` +
+      `</div>` +
+      lines +
+      `</div>`
+    );
+  }).join('');
+
   // "+N more below" text (plain, not a link). R6: when some of the hidden
   // chips are RED, annotate the count so a red item is never silently swallowed.
   const moreLine =
@@ -1744,12 +2036,12 @@ function renderBriefCard(brief) {
 
   const bodyHtml = `
     <div class="sent-brief-body" id="sentBriefBody">
-      ${signalLines}
+      ${sections}
       ${trendLines}
       ${moreLine}
     </div>`;
 
-  return `<div class="sent-brief-card">${headerHtml}${bodyHtml}</div>`;
+  return `<div class="${cardClass}">${headerHtml}${bodyHtml}</div>`;
 }
 
 // Attach the brief card toggle handler after render. Idempotent — safe to call on every render.
@@ -1801,6 +2093,7 @@ const TOOL_ICONS = {
   printer:
     '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
   more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  plus: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
 };
 
 function scaffoldHtml() {
@@ -1816,7 +2109,6 @@ function scaffoldHtml() {
           <div class="mod-title">Monitoring</div>
         </div>
         <div class="sent-header-meta">
-          <span class="module-ver">v0.5.1</span>
           <button class="sent-tool-btn" id="sentRefreshBtn" title="Refresh now (the panel also refreshes itself every 10 seconds)" aria-label="Refresh">${toolIcon(TOOL_ICONS.refresh)}</button>
         </div>
       </div>
@@ -1826,9 +2118,12 @@ function scaffoldHtml() {
       <button class="sent-action-btn" id="sentApptSummaryBtn" disabled title="Copyable list of the appointments this patient is due, for admin to book">${toolIcon(TOOL_ICONS.calendar)}<span>Appointments</span></button>
       <button class="sent-action-btn" id="sentCopyAllActionsBtn" disabled title="Copy-ready blood forms, recall SMS and tasks for every alert needing action">${toolIcon(TOOL_ICONS.clipboard)}<span>Copy actions</span></button>
       <button class="sent-action-btn" id="sentPrintPassportBtn" disabled title="Print a plain-English health summary to hand to the patient">${toolIcon(TOOL_ICONS.printer)}<span>Print summary</span></button>
+      <button class="sent-action-btn" id="sentCreateTaskBtn" disabled title="Create a recall task in Medicus for this patient's overdue monitoring — Medicus's own task workflow, one explicit confirm">${toolIcon(TOOL_ICONS.plus)}<span>Create task</span></button>
       <div class="sent-overflow-wrap">
         <button class="sent-action-btn" id="sentOverflowBtn" title="More tools" aria-haspopup="menu" aria-expanded="false">${toolIcon(TOOL_ICONS.more)}<span>More</span></button>
         <div class="sent-overflow-menu" id="sentOverflowMenu" hidden role="menu" aria-label="More tools">
+          <button class="sent-menu-item" id="sentAddFollowupBtn" role="menuitem" disabled title="Add a personal follow-up reminder linked to this patient — stored on this machine only, never written to the record">Add follow-up reminder</button>
+          <div class="sent-menu-sep" role="separator"></div>
           <button class="sent-menu-item" id="sentSettingsBtn" role="menuitem" title="Open the extension's settings page">Monitoring settings</button>
           <button class="sent-menu-item" id="sentExportLogBtn" role="menuitem" disabled title="Download this patient's rule-evaluation trace as JSON. Contains patient-identifiable data — handle per your practice's IG policy">Export evaluation log</button>
           <div class="sent-menu-sep" role="separator"></div>
@@ -1836,6 +2131,7 @@ function scaffoldHtml() {
         </div>
       </div>
     </div>
+    <div id="sentTaskSlot"></div>
     <div id="sentWrSlot">${renderWaitingRoomBlock()}</div>
     <div id="sentDynamic" aria-live="polite"></div>
     <div class="sent-footer">
@@ -1844,6 +2140,234 @@ function scaffoldHtml() {
     </div>
     <div id="sentModalHost"></div>
   </div>`;
+}
+
+// ── Create recall task (lifted from Sweep — the same one-click-plus-confirm
+// close-the-loop, for the patient open in Monitoring) ─────────────────────────
+// Drives Medicus's OWN general-task endpoints via shared/task-api.js: Medicus
+// stays the system of record; its validation, access control and audit fire as
+// normal. One patient, one explicit confirm — no bulk create.
+//
+// WRONG-PATIENT GUARDS (H-023 extension): the form names the patient it was
+// opened for, and the submit handler re-checks that the currently-followed
+// patient UUID still matches the one the form was opened for — auto-follow
+// switching patients mid-form invalidates the submit instead of creating a
+// task against the wrong record.
+
+let _sentTaskFormCache = null; // assignee/priority options are practice-wide
+
+async function toggleCreateTaskForm() {
+  const slot = container?.querySelector('#sentTaskSlot');
+  if (!slot) return;
+  if (slot.dataset.open === '1') {
+    slot.innerHTML = '';
+    slot.dataset.open = '';
+    return;
+  }
+  const patient = _renderCtx?.patient;
+  const patientId = patient && (patient.patientUuid || patient.uuid);
+  if (!patientId) return;
+  const patientName = patient.patientName || patient.displayName || 'this patient';
+
+  slot.dataset.open = '1';
+  slot.innerHTML = `<div class="sent-task-loading">Loading task form…</div>`;
+
+  let code = null;
+  try {
+    const r = await window.PracticeCode.resolve();
+    code = r && r.code;
+  } catch (_) {
+    /* handled below */
+  }
+  if (!code || !/^[a-f0-9]{4,8}$/i.test(code)) {
+    slot.innerHTML = `<div class="sent-task-error">No practice code — open a Medicus tab or set it in Options.</div>`;
+    slot.dataset.open = '';
+    return;
+  }
+  const apiBase = `https://${code}.api.england.medicus.health`;
+
+  let form;
+  try {
+    if (!_sentTaskFormCache) _sentTaskFormCache = await fetchTaskCreateForm(apiBase, patientId);
+    form = _sentTaskFormCache;
+  } catch (e) {
+    slot.innerHTML = `<div class="sent-task-error">${escHtml(e.message || 'Could not load the task form.')}</div>`;
+    slot.dataset.open = '';
+    return;
+  }
+
+  const actionChips = (_renderCtx?.chips || []).filter((c) => c && isActionNeeded(c.status));
+  const desc = buildRecallDescription(actionChips, 'Monitoring');
+  const opt = (o) => `<option value="${escAttr(`${o.type}|${o.value}`)}">${escHtml(o.label)}</option>`;
+  let assigneeHtml = '<option value="">— select —</option>';
+  if (form.teams && form.teams.length)
+    assigneeHtml += `<optgroup label="Teams">${form.teams.map(opt).join('')}</optgroup>`;
+  if (form.staff && form.staff.length)
+    assigneeHtml += `<optgroup label="Staff">${form.staff.map(opt).join('')}</optgroup>`;
+  const priorityHtml =
+    form.priorities && form.priorities.length > 1
+      ? `<label class="sent-task-lbl">Priority
+           <select class="sent-task-priority">${form.priorities
+             .map((p) => `<option value="${escAttr(p.value)}">${escHtml(p.label)}</option>`)
+             .join('')}</select>
+         </label>`
+      : '';
+
+  slot.innerHTML = `
+    <div class="sent-task-form">
+      <div class="sent-task-for">Task for <strong>${escHtml(patientName)}</strong> — check this is who you mean before creating.</div>
+      <label class="sent-task-lbl">Assign to
+        <select class="sent-task-assignee">${assigneeHtml}</select>
+      </label>
+      <label class="sent-task-lbl">Details
+        <textarea class="sent-task-desc" rows="3" maxlength="2000">${escHtml(desc)}</textarea>
+      </label>
+      ${priorityHtml}
+      <div class="sent-task-actions">
+        <button class="sent-task-create" type="button" disabled>Create task</button>
+        <button class="sent-task-cancel" type="button">Cancel</button>
+      </div>
+      <div class="sent-task-status" role="status"></div>
+    </div>`;
+
+  const assigneeSel = slot.querySelector('.sent-task-assignee');
+  const descEl = slot.querySelector('.sent-task-desc');
+  const createBtn = slot.querySelector('.sent-task-create');
+  const updateEnabled = () => {
+    createBtn.disabled = !(assigneeSel.value && descEl.value.trim());
+  };
+  assigneeSel.addEventListener('change', updateEnabled);
+  descEl.addEventListener('input', updateEnabled);
+  slot.querySelector('.sent-task-cancel').addEventListener('click', () => {
+    slot.innerHTML = '';
+    slot.dataset.open = '';
+  });
+  createBtn.addEventListener('click', () => submitSentinelTask(slot, apiBase, patientId, patientName));
+}
+
+// ── Follow-up reminder (local ledger, no Medicus write) ──────────────────────
+// Same wrong-patient discipline as the task form: the patient is captured at
+// form-open, and the save re-checks the currently-followed UUID still
+// matches — auto-follow moving on mid-form invalidates the save instead of
+// pinning a reminder to the wrong patient. Unlike create-task this NEVER
+// touches Medicus: it writes to the machine-local Follow-ups ledger only
+// (followups.js addFollowup — validation, prune and event-ledger note live
+// there). Hazard log: H-040.
+function toggleFollowupForm() {
+  const slot = container?.querySelector('#sentTaskSlot');
+  if (!slot) return;
+  if (slot.dataset.open === '1') {
+    slot.innerHTML = '';
+    slot.dataset.open = '';
+    return;
+  }
+  const patient = _renderCtx?.patient;
+  const patientId = patient && (patient.patientUuid || patient.uuid);
+  if (!patientId) return;
+  const patientName = patient.patientName || patient.displayName || 'this patient';
+
+  slot.dataset.open = '1';
+  slot.innerHTML = `
+    <div class="sent-task-form">
+      <div class="sent-task-for">Follow-up for <strong>${escHtml(patientName)}</strong> — a personal reminder on this machine only, not a record entry. Document safety-netting in Medicus as usual.</div>
+      <label class="sent-task-lbl">Waiting for
+        <input type="text" class="sent-fu-what" maxlength="200" placeholder="e.g. chase MSU result" />
+      </label>
+      <label class="sent-task-lbl">Due
+        <input type="date" class="sent-fu-due" value="${escAttr(dateOnlyISO(Date.now() + 7 * 86400000))}" />
+      </label>
+      <div class="sent-task-actions">
+        <button class="sent-fu-save" type="button" disabled>Add reminder</button>
+        <button class="sent-task-cancel" type="button">Cancel</button>
+      </div>
+      <div class="sent-task-status" role="status"></div>
+    </div>`;
+
+  const whatEl = slot.querySelector('.sent-fu-what');
+  const dueEl = slot.querySelector('.sent-fu-due');
+  const saveBtn = slot.querySelector('.sent-fu-save');
+  whatEl.addEventListener('input', () => {
+    saveBtn.disabled = !whatEl.value.trim();
+  });
+  slot.querySelector('.sent-task-cancel').addEventListener('click', () => {
+    slot.innerHTML = '';
+    slot.dataset.open = '';
+  });
+  saveBtn.addEventListener('click', async () => {
+    const statusEl = slot.querySelector('.sent-task-status');
+    const nowPatient = _renderCtx?.patient;
+    const nowId = nowPatient && (nowPatient.patientUuid || nowPatient.uuid);
+    if (nowId && nowId !== patientId) {
+      if (statusEl)
+        statusEl.innerHTML = `<span class="sent-task-error">The open patient has changed since this form was opened — cancelled. Reopen it for the current patient.</span>`;
+      saveBtn.disabled = true;
+      return;
+    }
+    saveBtn.disabled = true;
+    try {
+      await addFollowup({
+        what: whatEl.value,
+        due: dueEl.value,
+        patientUuid: patientId,
+        patientName,
+        source: 'monitoring',
+      });
+      slot.innerHTML = `<div class="sent-task-done">&#10003; Reminder added for ${escHtml(patientName)} — it will resurface in Follow-ups when due.</div>`;
+      slot.dataset.open = 'done';
+    } catch (e) {
+      if (statusEl)
+        statusEl.innerHTML = `<span class="sent-task-error">${escHtml(e.message || 'Could not add the reminder.')}</span>`;
+      saveBtn.disabled = false;
+    }
+  });
+  whatEl.focus();
+}
+
+async function submitSentinelTask(slot, apiBase, patientId, patientName) {
+  const assigneeSel = slot.querySelector('.sent-task-assignee');
+  const assignee = assigneeSel?.value || '';
+  const description = slot.querySelector('.sent-task-desc')?.value || '';
+  const priority = slot.querySelector('.sent-task-priority')?.value ?? 0;
+  const createBtn = slot.querySelector('.sent-task-create');
+  const statusEl = slot.querySelector('.sent-task-status');
+  if (!assignee || !description.trim()) return;
+
+  // Wrong-patient guard: auto-follow may have moved on while the form was open.
+  const nowPatient = _renderCtx?.patient;
+  const nowId = nowPatient && (nowPatient.patientUuid || nowPatient.uuid);
+  if (nowId && nowId !== patientId) {
+    if (statusEl)
+      statusEl.innerHTML = `<span class="sent-task-error">The open patient has changed since this form was opened — cancelled. Reopen the form for the current patient.</span>`;
+    if (createBtn) createBtn.disabled = true;
+    return;
+  }
+
+  const assigneeLabel = assigneeSel.selectedOptions?.[0]?.textContent?.trim() || '';
+  createBtn.disabled = true;
+  createBtn.textContent = 'Creating…';
+  if (statusEl) statusEl.textContent = '';
+  try {
+    await createGeneralTask(apiBase, { patientId, assignee, description, priority });
+    if (window.EventLedger) {
+      window.EventLedger.record({
+        source: 'sentinel',
+        patientRef: patientId,
+        severity: null,
+        ruleId: null,
+        label: 'recall task created' + (assigneeLabel ? ` — ${assigneeLabel}` : ''),
+        action: 'recall-created',
+      });
+    }
+    slot.innerHTML = `<div class="sent-task-done">&#10003; Task created for ${escHtml(patientName)}${
+      assigneeLabel ? ` — assigned to ${escHtml(assigneeLabel)}` : ''
+    }.</div>`;
+    slot.dataset.open = 'done';
+  } catch (e) {
+    if (statusEl)
+      statusEl.innerHTML = `<span class="sent-task-error">${escHtml(e.message || 'Failed to create the task.')}</span>`;
+    createBtn.disabled = false;
+    createBtn.textContent = 'Create task';
+  }
 }
 
 // Wire the toolbar exactly once per module life (scaffold is never re-rendered).
@@ -1862,6 +2386,13 @@ function wireToolbar() {
   });
   $('sentPrintPassportBtn')?.addEventListener('click', () => {
     if (_currentSnapshot) onPrintPassport(_currentSnapshot);
+  });
+  $('sentCreateTaskBtn')?.addEventListener('click', () => {
+    toggleCreateTaskForm();
+  });
+  $('sentAddFollowupBtn')?.addEventListener('click', () => {
+    closeOverflowMenu();
+    toggleFollowupForm();
   });
   $('sentSettingsBtn')?.addEventListener('click', () => {
     closeOverflowMenu();
@@ -1922,6 +2453,8 @@ function updateToolbarState() {
   set('sentApptSummaryBtn', !!ctx);
   set('sentCopyAllActionsBtn', !!ctx && ctx.actionCount > 0);
   set('sentPrintPassportBtn', !!ctx && !!ctx.patient);
+  set('sentCreateTaskBtn', !!ctx && !!(ctx.patient && (ctx.patient.patientUuid || ctx.patient.uuid)));
+  set('sentAddFollowupBtn', !!ctx && !!(ctx.patient && (ctx.patient.patientUuid || ctx.patient.uuid)));
   set('sentExportLogBtn', !!ctx && !!ctx.trace);
 
   // Hide the whole action bar when there is nothing to act on (no data context).
@@ -2013,6 +2546,34 @@ function ensureFeedbackEmailLoaded() {
 // SHOULD have matched a monitoring rule but didn't. A "Report a possible missing
 // brand" mailto link is included when a feedback email address is configured.
 // When unmatchedDetailed is provided, excluded meds are annotated in amber.
+// Blind-spot guard: a prominent red banner for high-risk drugs that matched no
+// monitoring rule, so no overdue-blood chip could ever fire for them. The list
+// is a strict subset of the unmatched-meds section below; this just stops the
+// dangerous ones from hiding inside a collapsed "N unmatched" list.
+function renderHighRiskUnmatchedBanner(highRisk) {
+  if (!Array.isArray(highRisk) || highRisk.length === 0) return '';
+  const items = highRisk
+    .map((h) => {
+      const why =
+        h.reason === 'excluded' && h.excludedBy
+          ? `excluded by &lsquo;${escHtml(h.excludedBy.term)}&rsquo; (rule ${escHtml(h.excludedBy.ruleId)})`
+          : 'no monitoring rule matched';
+      return (
+        `<li><strong>${escHtml(h.name)}</strong> ` +
+        `<span class="sent-hrisk-class">${escHtml(h.riskClass)}</span> ` +
+        `<span class="sent-hrisk-why">&mdash; ${why}</span></li>`
+      );
+    })
+    .join('');
+  const n = highRisk.length;
+  return `
+    <div class="sent-hrisk-banner" role="alert">
+      <div class="sent-hrisk-head">&#9888; ${n} high-risk medicine${n === 1 ? '' : 's'} with no monitoring rule</div>
+      <ul class="sent-hrisk-list">${items}</ul>
+      <p class="sent-hrisk-note">These drugs normally require monitoring but matched no active rule, so Sentinel cannot track their bloods &mdash; <strong>verify monitoring is in place in Medicus</strong> and consider adding the brand to the rule set. ${escHtml(NO_ALERT_CAVEAT)}</p>
+    </div>`;
+}
+
 function renderUnmatchedMedsSection(meds, unmatchedDetailed) {
   ensureFeedbackEmailLoaded();
   if (!meds || meds.length === 0) return '';

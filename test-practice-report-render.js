@@ -78,6 +78,25 @@ const path = require('path');
       { date: '2026-06-15', ppi: 45, demand: 140 },
       { date: '2026-06-16', ppi: 67, demand: 151 },
     ],
+    // Full unfiltered series (report-data.js buildReport's `snapshotHistoryFull`) — spans the
+    // prior 7d window (2026-06-03..06-09, ppi 30 flat) AND the report's own 7d range
+    // (2026-06-10..06-16, rising to 67), so Pulse's prior-period comparison has real data
+    // on both sides. 2026-06-11/12 are deliberately missing to exercise coverage wording.
+    snapshotHistoryFull: [
+      { date: '2026-06-03', ppi: 30, demand: 100 },
+      { date: '2026-06-04', ppi: 30, demand: 100 },
+      { date: '2026-06-05', ppi: 30, demand: 100 },
+      { date: '2026-06-06', ppi: 30, demand: 100 },
+      { date: '2026-06-07', ppi: 30, demand: 100 },
+      { date: '2026-06-08', ppi: 30, demand: 100 },
+      { date: '2026-06-09', ppi: 30, demand: 100 },
+      { date: '2026-06-10', ppi: 40, demand: 120 },
+      // 06-11, 06-12 missing — gap, not interpolated
+      { date: '2026-06-13', ppi: 50, demand: 130 },
+      { date: '2026-06-14', ppi: 30, demand: 120 },
+      { date: '2026-06-15', ppi: 45, demand: 140 },
+      { date: '2026-06-16', ppi: 67, demand: 151 },
+    ],
     errors: [],
   });
 
@@ -264,10 +283,56 @@ const path = require('path');
     );
     // Delta direction: rawReport demand=19, prior=15 → +27% up.
     check(priorHtml.includes('+27%') || priorHtml.includes('27%'), 'prior-period demand delta percentage is shown');
-    // No prior data → no comparison rendered (guard nulls).
+    // No prior DEMAND data → no demand-summary comparison line rendered (guard nulls).
+    // Note: rawReport() carries a full snapshotHistoryFull with real prior-window data, so
+    // the separate Pulse trend section legitimately renders its OWN "vs prior period" text
+    // (see the "Pulse — prior-period trend" tests below) — this assertion is scoped to the
+    // summary section specifically, not the whole document.
     const noPrior = profiles.applyProfile(rawReport(), profiles.getProfile('management'));
     const noPriorHtml = render.buildReportHtml(noPrior);
-    check(!noPriorHtml.includes('prior period'), 'no prior-period line when priorDemand is absent');
+    const summarySection = noPriorHtml.match(/<section class="pr-summary">[\s\S]*?<\/section>/)?.[0] || '';
+    check(!summarySection.includes('prior period'), 'no prior-period line in the summary when priorDemand is absent');
+  }
+
+  // ── Practice Pulse — prior-period trend section (class-leaders F3) ───────────
+  console.log('\n--- Pulse prior-period trend ---');
+  {
+    const applied = profiles.applyProfile(rawReport(), profiles.getProfile('management'));
+    const html = render.buildReportHtml(applied);
+    check(
+      html.includes('Pulse') && html.includes('prior-period trend'),
+      'Pulse trend section renders with its heading'
+    );
+    check(html.includes('Pressure index'), 'Pulse trend includes the pressure-index row');
+    // ppi rises from a flat 30 (prior week) to 67 (current) → worsening → coloured pr-trend-worse.
+    check(html.includes('pr-trend-worse'), 'worsening pressure index is coloured (pr-trend-worse)');
+    check(/vs prior period/.test(html), 'Pulse row states the comparison is vs the prior period');
+    // Coverage disclosure: 2026-06-11/12 are deliberately missing from the fixture.
+    check(/of 7 possible snapshots/.test(html), 'Pulse discloses coverage as "N of 7 possible snapshots"');
+    check(
+      /as[- ]recorded on the day, not recalculated/i.test(html),
+      "Pulse states pressure-index figures are as-recorded, not recomputed under today's config"
+    );
+
+    // Absent snapshotHistoryFull → section omitted entirely, not a crash or an empty shell.
+    const noFull = profiles.applyProfile(
+      { ...rawReport(), snapshotHistoryFull: undefined },
+      profiles.getProfile('management')
+    );
+    const noFullHtml = render.buildReportHtml(noFull);
+    check(
+      !noFullHtml.includes('Pulse — prior-period trend'),
+      'Pulse section omitted when snapshotHistoryFull is absent'
+    );
+
+    // ICB profile still gets the trends section (sections.trends: true for all three profiles)
+    // and it stays practice-level — no per-clinician data, consistent with the rest of the ICB report.
+    const icbApplied = profiles.applyProfile(rawReport(), profiles.getProfile('icb'));
+    const icbHtml = render.buildReportHtml(icbApplied);
+    check(
+      icbHtml.includes('Pulse'),
+      'ICB profile also renders the Pulse trend (sections.trends is true for all profiles)'
+    );
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

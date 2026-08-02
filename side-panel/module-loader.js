@@ -46,11 +46,22 @@ export function createModuleLoader({
   errPrefix = 'Failed to load module',
 }) {
   function esc(s) {
-    return escFn ? escFn(s) : String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return escFn ? escFn(s) : String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  return async function switchModule(name) {
-    const mySeq = incSwitchSeq();
+  // Switches are SERIALISED (audit H9, 2026-07-18): switching A→B→A while A's
+  // first init was still awaiting used to run two init instances concurrently
+  // over the same module-level state; the superseded instance's cleanup then
+  // tore down the LIVE instance's timers/listeners (Sentinel froze on the
+  // last-rendered patient's chips — a wrong-patient-display risk). Queuing
+  // each switch behind the previous one's settlement guarantees at most one
+  // init in flight, so a superseded init's cleanup always runs BEFORE the next
+  // init registers anything. A 15s settle-timeout stops one pathological hung
+  // init from freezing tab switching for the session.
+  let switchChain = Promise.resolve();
+
+  async function runSwitch(name, mySeq) {
+    if (mySeq !== getSwitchSeq()) return; // superseded while queued — skip entirely
 
     // Cleanup previous module
     const prevCleanup = getCleanup();
@@ -74,8 +85,9 @@ export function createModuleLoader({
 
     ensureModuleCss(loadedCss, entry.css);
 
+    let mod = null;
     try {
-      const mod = await entry.js();
+      mod = await entry.js();
       if (mySeq !== getSwitchSeq()) return;
       if (mod.init) {
         const cleanup = await mod.init(container);
@@ -86,8 +98,23 @@ export function createModuleLoader({
         setCleanup(cleanup);
       }
     } catch (err) {
+      // Init threw part-way: any timers/listeners it already registered would
+      // leak (no cleanup was captured). Best-effort: run the module's exported
+      // cleanup so partially-registered state is torn down (audit H9).
+      if (mod && typeof mod.cleanup === 'function') try { mod.cleanup(); } catch (e2) { console.error(e2); }
       if (mySeq !== getSwitchSeq()) return;
       container.innerHTML = `<div class="module-wrap"><div class="banner">${errPrefix}: ${esc(err.message)}</div></div>`;
     }
+  }
+
+  return function switchModule(name) {
+    const mySeq = incSwitchSeq();
+    const prev = switchChain;
+    const settleTimeout = new Promise((res) => setTimeout(res, 15000));
+    switchChain = Promise.race([prev, settleTimeout]).then(
+      () => runSwitch(name, mySeq),
+      () => runSwitch(name, mySeq)
+    );
+    return switchChain;
   };
 }

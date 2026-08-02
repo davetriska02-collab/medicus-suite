@@ -2,7 +2,24 @@
 // Run with: node test-result-severity.js
 'use strict';
 
-const { evaluateReportSeverity } = require('./engine/result-severity.js');
+const {
+  evaluateReportSeverity,
+  extractPrior,
+  matchUnclassifiedPositive,
+  POSITIVE_QUALITATIVE,
+  UNCLASSIFIED_NEGATORS,
+  contextAllows,
+} = require('./engine/result-severity.js');
+
+// The REAL shipped result rules (root defaults.json is the source of truth) — used by
+// the item 3.3 (calibration pass) section below to test the actual calibrated content,
+// not a hand-rolled stand-in, mirroring test-chip-label-migration.js's own pattern.
+const SHIPPED_RESULT_RULES = require('./defaults.json').resultRules || [];
+function shippedRule(id) {
+  const r = SHIPPED_RESULT_RULES.find((x) => x && x.id === id);
+  if (!r) throw new Error(`shippedRule: no shipped resultRule with id "${id}"`);
+  return r;
+}
 
 let passed = 0;
 let failed = 0;
@@ -1090,7 +1107,8 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
       assert(validateResultRule(r).length === 0, `${id}: validates clean`);
     }
   }
-  // Fire the full shipped base set against representative results (now RED-ONLY).
+  // Fire the full shipped base set against representative results (mostly RED-ONLY;
+  // potassium gained an amber band in item 3.3 — see below).
   const baseSet = rules.filter((r) => baseIds.includes(r.id));
   const fire = (name, value, problems) =>
     evaluateReportSeverity(makeReport([mkResult(name, value)]), { resultRules: baseSet, problems }).level;
@@ -1100,7 +1118,9 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
   assert(fire('Haemoglobin', 95) === 'none', 'base: Haemoglobin 95 → none (red-only, >80, CSO-lowered from 100)');
   assert(fire('Haemoglobin', 130) === 'none', 'base: Haemoglobin 130 → none');
   assert(fire('Potassium', 6.6) === 'red', 'base: Potassium 6.6 → red');
-  assert(fire('Potassium', 6.2) === 'none', 'base: Potassium 6.2 → none (red-only, <6.5)');
+  // item 3.3 added an amber band (UKKA "moderate" 6.0–6.4) below the pre-existing red 6.5.
+  assert(fire('Potassium', 6.2) === 'amber', 'base: Potassium 6.2 → amber (item 3.3 amber band, was none)');
+  assert(fire('Potassium', 5.8) === 'none', 'base: Potassium 5.8 → none (below the new amber 6.0)');
   assert(fire('Urine potassium', 60) === 'none', 'base: Urine potassium 60 → none (excluded)');
   assert(fire('Sodium', 118) === 'red', 'base: Sodium 118 → red');
   assert(fire('Sodium', 125) === 'none', 'base: Sodium 125 → none (red-only, >120)');
@@ -1112,8 +1132,10 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
   assert(fire('INR', 8.5) === 'red', 'base: INR 8.5 → red');
   assert(fire('INR', 5.5) === 'none', 'base: INR 5.5 → none (red-only, <8)');
 
-  // HbA1c conditional flags
-  assert(fire('HbA1c', 50) === 'red', 'base: HbA1c 50, no record → red (possible diabetes)');
+  // HbA1c conditional flags. item 3.3 demoted the ≥48 "possible diabetes" outcome from
+  // red to amber (48 is the WHO/NICE NG28 DIAGNOSTIC threshold, not itself urgent —
+  // alert-fatigue fix); every case below that used to assert 'red' now asserts 'amber'.
+  assert(fire('HbA1c', 50) === 'amber', 'base: HbA1c 50, no record → amber (possible diabetes, item 3.3 demotion)');
   assert(fire('HbA1c', 44) === 'amber', 'base: HbA1c 44, no record → amber (prediabetes)');
   assert(fire('HbA1c', 38) === 'none', 'base: HbA1c 38 → none');
   // Known diabetic → diabetes flag suppressed (and prediabetes too)
@@ -1123,13 +1145,13 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
   );
   // Known prediabetic with a NEW diabetic-range HbA1c → diabetes flag still fires (progression)
   assert(
-    fire('HbA1c', 50, [{ label: 'Pre-diabetes' }]) === 'red',
-    'base: HbA1c 50 with prediabetes on record → red (progression to diabetes still flagged)'
+    fire('HbA1c', 50, [{ label: 'Pre-diabetes' }]) === 'amber',
+    'base: HbA1c 50 with prediabetes on record → amber (progression to diabetes still flagged)'
   );
   // "non-diabetic hyperglycaemia" must NOT suppress the diabetes flag (footgun guard)
   assert(
-    fire('HbA1c', 50, [{ label: 'Non-diabetic hyperglycaemia' }]) === 'red',
-    'base: HbA1c 50 with non-diabetic hyperglycaemia → red (not a diabetes diagnosis)'
+    fire('HbA1c', 50, [{ label: 'Non-diabetic hyperglycaemia' }]) === 'amber',
+    'base: HbA1c 50 with non-diabetic hyperglycaemia → amber (not a diabetes diagnosis)'
   );
   // Prediabetes flag suppressed once prediabetes is on record
   assert(
@@ -1138,8 +1160,8 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
   );
   // H1 (patient-safety): a FAMILY HISTORY code must NOT suppress the new-diabetes flag
   assert(
-    fire('HbA1c', 52, [{ label: 'Family history of diabetes mellitus' }]) === 'red',
-    'H1: HbA1c 52 with "Family history of diabetes mellitus" → red (NOT suppressed)'
+    fire('HbA1c', 52, [{ label: 'Family history of diabetes mellitus' }]) === 'amber',
+    'H1: HbA1c 52 with "Family history of diabetes mellitus" → amber (NOT suppressed)'
   );
   // M1 (alert fatigue): known diabetics coded without "mellitus"/"type N" still suppress
   assert(
@@ -1151,10 +1173,13 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
   assert(fire('HbA1c', 60, [{ label: 'T2DM' }]) === 'none', 'M1: "T2DM" abbreviation → suppressed');
   // Broadened match must NOT over-suppress the footgun look-alikes
   assert(
-    fire('HbA1c', 52, [{ label: 'Pre-diabetic retinopathy' }]) === 'red',
-    'pre-diabetic retinopathy → red (not suppressed)'
+    fire('HbA1c', 52, [{ label: 'Pre-diabetic retinopathy' }]) === 'amber',
+    'pre-diabetic retinopathy → amber (not suppressed)'
   );
-  assert(fire('HbA1c', 52, [{ label: 'Diabetes insipidus' }]) === 'red', 'diabetes insipidus → red (not suppressed)');
+  assert(
+    fire('HbA1c', 52, [{ label: 'Diabetes insipidus' }]) === 'amber',
+    'diabetes insipidus → amber (not suppressed)'
+  );
 
   // Attributable rule label flows onto top for rule-driven escalations
   const ruleDrivenRed = evaluateReportSeverity(makeReport([mkResult('Potassium', 6.7)]), { resultRules: baseSet });
@@ -1414,6 +1439,33 @@ console.log('\n--- Keeper: culture abnormalText positive-flag guard (shipped rul
     );
     assert(positiveOneBottle.noGrowthCount === 0, 'blood culture positive-in-one-bottle is NOT counted as noGrowth');
   }
+
+  // v21 false-amber negation fix: bare "gram positive"/"gram negative"/"candida" substrings
+  // used to collide with NEGATIVE phrasing ("No gram negative organisms isolated", "Candida
+  // species not isolated") and trip a false-amber review. Replaced with morphology-qualified
+  // gram-stain terms and named candida species, which do not appear in negation phrasing.
+  assert(
+    run('Blood culture', 'No growth after 5 days. No gram negative organisms isolated.').noGrowthCount === 1,
+    'blood culture "No gram negative organisms isolated" (negative) → calmed, not falsely reviewed'
+  );
+  assert(
+    run('Blood culture', 'Candida species not isolated. No growth after 5 days.').noGrowthCount === 1,
+    'blood culture "Candida species not isolated" (negative) → calmed, not falsely reviewed'
+  );
+  // Genuine positives still fire — including an interim gram-film-only report with no
+  // genus name yet, proving the morphology-qualified terms alone still carry a positive.
+  assert(
+    run('Blood culture', 'Escherichia coli (Gram negative bacilli) isolated').reviewCount === 1,
+    'blood culture genuine positive (named organism) → still review'
+  );
+  assert(
+    run('Blood culture', 'Gram-positive cocci in clusters seen; identification to follow').reviewCount === 1,
+    'blood culture interim gram-film-only positive (no genus name yet) → still review'
+  );
+  assert(
+    run('Blood culture', 'Candida albicans isolated from both bottles').reviewCount === 1,
+    'blood culture genuine candida positive (named species) → still review'
+  );
 }
 
 // ── Word-boundary normalText matching (calm path tightened; flag path left broad) ─
@@ -1785,6 +1837,1573 @@ console.log('\n--- shipped base-throat-swab rule: valid, scoped, fires correctly
       'base-throat-swab: does NOT fire on urine-headed culture (specimen gate)'
     );
   }
+}
+
+// ── item 2.2/2.6 (TRIAGE-LENS-2026-07-02.md) — additive `flagged`/top.prior fields ──
+console.log('\n--- item 2.2: evaluateReportSeverity() additive `flagged` array ---');
+{
+  const potassium = {
+    name: 'Potassium',
+    value: 6.8,
+    rawValue: '6.8',
+    comparator: null,
+    unit: 'mmol/L',
+    low: 3.5,
+    high: 5.3,
+    isAbove: true,
+    isBelow: false,
+    urgent: true,
+    interpretation: 'Above reference range',
+    date: '2026-06-12',
+    history: [],
+  };
+  const out = evaluateReportSeverity(makeReport([wbcNormal, potassium, mcvAbove]));
+  assert(Array.isArray(out.flagged), 'flagged is an array');
+  assert(out.flagged.length === 2, `flagged only contains the 2 non-normal results (got ${out.flagged.length})`);
+  assert(out.flagged[0].name === 'Potassium', 'flagged[0] is Potassium (report order preserved)');
+  assert(out.flagged[0].effSev === 'urgent', 'flagged[0].effSev is urgent (lab-flagged urgent)');
+  assert(out.flagged[0].index === 1, 'flagged[0].index is its position in report.results (1)');
+  assert(out.flagged[1].name === 'MCV' && out.flagged[1].effSev === 'abnormal', 'flagged[1] is MCV/abnormal');
+  assert(
+    out.flagged.every((f) => 'prior' in f),
+    'every flagged entry carries a prior field (possibly null)'
+  );
+  // Existing fields still computed exactly as before — additive field changes nothing else.
+  assert(out.level === 'red' && out.urgentCount === 1 && out.abnormalCount === 2, 'existing level/counts unchanged');
+
+  const noneOut = evaluateReportSeverity(makeReport([]));
+  assert(Array.isArray(noneOut.flagged) && noneOut.flagged.length === 0, 'empty report → flagged is []');
+}
+
+console.log('\n--- item 2.2: computeRuleSev additive comparator/threshold surface via `flagged` ---');
+{
+  const potassiumBorderline = {
+    name: 'Potassium',
+    value: 6.2,
+    rawValue: '6.2',
+    comparator: null,
+    unit: 'mmol/L',
+    low: 3.5,
+    high: 5.3,
+    isAbove: true, // lab already flags it abnormal
+    isBelow: false,
+    urgent: false, // NOT lab-urgent — a rule pushes it to urgent
+    interpretation: 'Above reference range',
+    date: '2026-06-12',
+    history: [],
+  };
+  const ruleRed = {
+    id: 'k-critical',
+    enabled: true,
+    kind: 'threshold',
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+    label: 'Critical high potassium',
+    analyte: { match: ['potassium'] },
+  };
+  const out = evaluateReportSeverity(makeReport([potassiumBorderline]), { resultRules: [ruleRed] });
+  assert(out.flagged.length === 1, 'one flagged entry');
+  const f = out.flagged[0];
+  assert(f.effSev === 'urgent', 'rule pushed effSev to urgent (6.2 >= red 6.0)');
+  assert(f.ruleLabel === 'Critical high potassium', 'ruleLabel set (rule-driven, exceeded lab severity)');
+  assert(f.ruleComparator === 'above', 'ruleComparator carried (additive computeRuleSev field)');
+  assert(f.ruleThreshold === 6.0, 'ruleThreshold carries the RED threshold that was crossed (additive field)');
+  assert(out.top && out.top.ruleLabel === 'Critical high potassium', 'top.ruleLabel unaffected by the addition');
+
+  // A rule that matches but does NOT exceed the lab's own severity must NOT be
+  // treated as rule-driven (ruleLabel/ruleComparator/ruleThreshold stay null) —
+  // unchanged precedence, just confirming the additive fields respect it too.
+  const ruleSameLevel = { ...ruleRed, red: 8.0, amber: 5.0 }; // amber only, lab already says abnormal
+  const out2 = evaluateReportSeverity(makeReport([potassiumBorderline]), { resultRules: [ruleSameLevel] });
+  assert(out2.flagged[0].ruleLabel === null, 'rule matching at the SAME (not higher) severity → ruleLabel null');
+  assert(out2.flagged[0].ruleComparator === null, 'not rule-driven → ruleComparator null');
+  assert(out2.flagged[0].ruleThreshold === null, 'not rule-driven → ruleThreshold null');
+}
+
+console.log('\n--- item 2.7: computeRuleSev/flagged additive `ruleId` (guidance-action lookup key) ---');
+{
+  const potassiumBorderline = {
+    name: 'Potassium',
+    value: 6.2,
+    rawValue: '6.2',
+    comparator: null,
+    unit: 'mmol/L',
+    low: 3.5,
+    high: 5.3,
+    isAbove: true,
+    isBelow: false,
+    urgent: false,
+    interpretation: 'Above reference range',
+    date: '2026-06-12',
+    history: [],
+  };
+  const ruleRed = {
+    id: 'k-critical',
+    enabled: true,
+    kind: 'threshold',
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+    label: 'Critical high potassium',
+    analyte: { match: ['potassium'] },
+    actions: [{ type: 'note', label: 'Reminder', text: 'Repeat urgently.' }],
+  };
+
+  // computeRuleSev itself (via evaluateReportSeverity's flagged[].ruleId) carries the
+  // winning rule's id when it drove the escalation — this is the popover's lookup key
+  // into CONFIG.resultRules to find `actions` (item 2.7), never consumed by grading.
+  const out = evaluateReportSeverity(makeReport([potassiumBorderline]), { resultRules: [ruleRed] });
+  assert(out.flagged.length === 1, 'one flagged entry');
+  assert(out.flagged[0].ruleId === 'k-critical', "flagged[0].ruleId carries the rule-driven rule's id");
+  // Existing counters/level are untouched by the additive field.
+  assert(out.level === 'red' && out.urgentCount === 1, 'level/urgentCount unaffected by ruleId addition');
+
+  // Not rule-driven (matches but does not exceed lab severity) → ruleId stays null,
+  // same gate as ruleLabel/ruleComparator/ruleThreshold.
+  const ruleSameLevel = { ...ruleRed, red: 8.0, amber: 5.0 };
+  const out2 = evaluateReportSeverity(makeReport([potassiumBorderline]), { resultRules: [ruleSameLevel] });
+  assert(out2.flagged[0].ruleId === null, 'not rule-driven → ruleId null (same gate as ruleLabel)');
+
+  // Rule with no explicit id string → ruleId null (never a non-string/undefined leak).
+  const ruleNoId = { ...ruleRed, id: undefined };
+  const out3 = evaluateReportSeverity(makeReport([potassiumBorderline]), { resultRules: [ruleNoId] });
+  assert(out3.flagged[0].ruleId === null, 'rule with no id → ruleId null, not undefined');
+
+  // No rules at all → flagged is still populated (lab-driven), ruleId simply null.
+  const labOnly = { ...potassiumBorderline, urgent: true }; // lab-urgent, no rules
+  const out4 = evaluateReportSeverity(makeReport([labOnly]), { resultRules: [] });
+  assert(out4.flagged[0].ruleId === null, 'lab-driven-only flagged entry → ruleId null (no rule fired)');
+}
+
+console.log('\n--- item 2.6: extractPrior() ---');
+{
+  assert(extractPrior(null) === null, 'null result → null');
+  assert(extractPrior({ value: 5, history: [] }) === null, 'no history → null');
+  assert(
+    extractPrior({ value: NaN, unit: 'mmol/L', history: [{ value: 4, unit: 'mmol/L' }] }) === null,
+    'non-finite current value → null'
+  );
+
+  const up = extractPrior({
+    value: 6.2,
+    unit: 'mmol/L',
+    history: [{ value: 4.1, date: '2026-05-03', unit: 'mmol/L' }],
+  });
+  assert(
+    up && up.dir === 'up' && up.value === 4.1 && up.date === '2026-05-03',
+    'higher current value → dir "up", value/date carried'
+  );
+
+  const down = extractPrior({
+    value: 82,
+    unit: 'g/L',
+    history: [{ value: 104, date: '2026-03-01', unit: 'g/L' }],
+  });
+  assert(down && down.dir === 'down', 'lower current value → dir "down"');
+
+  const same = extractPrior({
+    value: 5,
+    unit: 'mmol/L',
+    history: [{ value: 5, date: '2026-01-01', unit: 'mmol/L' }],
+  });
+  assert(same && same.dir === 'same', 'equal current/prior value → dir "same"');
+
+  const mismatch = extractPrior({
+    value: 6.2,
+    unit: 'mmol/L',
+    history: [{ value: 4.1, date: '2026-05-03', unit: 'mEq/L' }],
+  });
+  assert(mismatch === null, 'unit mismatch → null (never a cross-unit comparison)');
+
+  const oneAbsent = extractPrior({
+    value: 6.2,
+    unit: 'mmol/L',
+    history: [{ value: 4.1, date: '2026-05-03', unit: null }],
+  });
+  assert(oneAbsent === null, 'current has a unit, history entry does not → null (NOT "both absent")');
+
+  const bothAbsent = extractPrior({
+    value: 6.2,
+    unit: null,
+    history: [{ value: 4.1, date: '2026-05-03', unit: null }],
+  });
+  assert(bothAbsent && bothAbsent.dir === 'up', 'both units absent → treated as a match, arrow shown');
+
+  const caseWhitespace = extractPrior({
+    value: 6.2,
+    unit: ' MMOL/L ',
+    history: [{ value: 4.1, date: '2026-05-03', unit: 'mmol/l' }],
+  });
+  assert(caseWhitespace && caseWhitespace.dir === 'up', 'unit compare is case/whitespace-insensitive');
+
+  // History is newest-first; a leading non-finite entry (e.g. unparsable prior value)
+  // must be skipped in favour of the next finite one.
+  const skipNonFinite = extractPrior({
+    value: 6.2,
+    unit: 'mmol/L',
+    history: [
+      { value: NaN, date: '2026-06-01', unit: 'mmol/L' },
+      { value: 4.1, date: '2026-05-03', unit: 'mmol/L' },
+    ],
+  });
+  assert(
+    skipNonFinite && skipNonFinite.value === 4.1 && skipNonFinite.date === '2026-05-03',
+    'skips a non-finite history entry to find the next finite prior value'
+  );
+}
+
+console.log('\n--- item 2.6: top.prior on evaluateReportSeverity() ---');
+{
+  const kWithHistory = {
+    name: 'Potassium',
+    value: 6.8,
+    rawValue: '6.8',
+    comparator: null,
+    unit: 'mmol/L',
+    low: 3.5,
+    high: 5.3,
+    isAbove: true,
+    isBelow: false,
+    urgent: true,
+    interpretation: 'Above reference range',
+    date: '2026-06-12',
+    history: [{ value: 4.1, date: '2026-05-03', unit: 'mmol/L', flag: 'normal' }],
+  };
+  const out = evaluateReportSeverity(makeReport([kWithHistory]));
+  assert(
+    out.top && out.top.prior && out.top.prior.dir === 'up',
+    "top.prior computed from the salient result's history"
+  );
+  assert(
+    out.flagged[0].prior && out.flagged[0].prior.dir === 'up',
+    'flagged[0].prior matches top.prior for the same result'
+  );
+
+  const noHistOut = evaluateReportSeverity(makeReport([rdwUrgent])); // fixture has history: []
+  assert(noHistOut.top && noHistOut.top.prior === null, 'no history on the salient result → top.prior null');
+}
+
+// ── item 3.1: unit-mismatch guard (TRIAGE-LENS-2026-07-02.md) ─────────────────
+// A threshold rule's `unit` was historically display-only — the numeric threshold
+// applied to result.value regardless of the result's own reported unit. These
+// pin: a genuine mismatch SKIPS the rule (no grade, but recorded in
+// unitMismatches); an absent unit on EITHER side fails open (graded exactly as
+// before); notation-variant units (case/whitespace/µ-vs-u/cell-count) are
+// recognised as the SAME family and grade normally, without being recorded as a
+// mismatch.
+console.log('\n--- item 3.1: unit-mismatch guard — computeRuleSev / evaluateReportSeverity ---');
+{
+  const digoxinRule = {
+    id: 'test-digoxin',
+    enabled: true,
+    label: 'Digoxin toxicity',
+    analyte: { match: ['digoxin'] },
+    comparator: 'above',
+    amber: 1.5,
+    red: 2,
+    unit: 'µg/L',
+  };
+
+  // Mismatch: reported in nmol/L, not the rule's µg/L. A naive apply-regardless
+  // grading would fire red here (5 >= 2) — that would be the exact silent
+  // mis-grade this guard exists to prevent. The rule must be SKIPPED entirely.
+  const wrongUnitResult = mkResult('Digoxin level', 5, { unit: 'nmol/L' });
+  const mismatchOut = evaluateReportSeverity(makeReport([wrongUnitResult]), { resultRules: [digoxinRule] });
+  assert(mismatchOut.level === 'none', 'unit mismatch → rule SKIPPED, no grade contributed (not red despite 5 >= 2)');
+  assert(mismatchOut.unitMismatches.length === 1, 'exactly one unit mismatch recorded');
+  assert(mismatchOut.unitMismatches[0].name === 'Digoxin level', 'unitMismatches[0].name is the result name');
+  assert(mismatchOut.unitMismatches[0].resultUnit === 'nmol/L', 'unitMismatches[0].resultUnit is the reported unit');
+  assert(mismatchOut.unitMismatches[0].ruleId === 'test-digoxin', 'unitMismatches[0].ruleId carries the rule id');
+  assert(
+    mismatchOut.unitMismatches[0].ruleLabel === 'Digoxin toxicity',
+    'unitMismatches[0].ruleLabel carries the rule label'
+  );
+  assert(
+    mismatchOut.unitMismatches[0].ruleUnit === 'µg/L',
+    'unitMismatches[0].ruleUnit carries the rule’s declared unit'
+  );
+
+  // Result has NO unit at all → fail-open: graded exactly as before this guard
+  // existed, and NOT recorded as a mismatch (there was nothing to compare).
+  const noUnitResult = mkResult('Digoxin level', 2.4); // mkResult defaults unit: null
+  const noUnitOut = evaluateReportSeverity(makeReport([noUnitResult]), { resultRules: [digoxinRule] });
+  assert(noUnitOut.level === 'red', 'result has no unit → fail-open, graded normally (2.4 >= red 2)');
+  assert(noUnitOut.unitMismatches.length === 0, 'result has no unit → not recorded as a mismatch');
+
+  // Rule has NO declared unit → fail-open: graded normally even though the result
+  // DOES carry a unit (there is nothing on the rule side to conflict with).
+  const ruleNoUnit = { ...digoxinRule, unit: undefined };
+  const ruleNoUnitOut = evaluateReportSeverity(makeReport([mkResult('Digoxin level', 2.4, { unit: 'nmol/L' })]), {
+    resultRules: [ruleNoUnit],
+  });
+  assert(ruleNoUnitOut.level === 'red', 'rule has no unit → fail-open, graded normally');
+  assert(ruleNoUnitOut.unitMismatches.length === 0, 'rule has no unit → not recorded as a mismatch');
+
+  // Notation-variant units (case / whitespace / µ-vs-u / cell-count magnitude
+  // notation) are recognised as the SAME family via unitsCompatible's shared
+  // normalisation and grade exactly as a same-unit result would — never flagged
+  // as a mismatch.
+  const wbcRule = {
+    id: 'test-wbc',
+    enabled: true,
+    label: 'High WBC',
+    analyte: { match: ['wbc'] },
+    comparator: 'above',
+    amber: 11,
+    red: 20,
+    unit: '×10⁹/L',
+  };
+  const wbcNotationVariant = mkResult('WBC', 25, { unit: 'x10^9/L' });
+  const wbcOut = evaluateReportSeverity(makeReport([wbcNotationVariant]), { resultRules: [wbcRule] });
+  assert(wbcOut.level === 'red', 'cell-count notation variant recognised as same family → grades normally (25 >= 20)');
+  assert(wbcOut.unitMismatches.length === 0, 'notation-variant match → not recorded as a mismatch');
+
+  const ferritinRule = {
+    id: 'test-ferritin',
+    enabled: true,
+    label: 'Low ferritin',
+    analyte: { match: ['ferritin'] },
+    comparator: 'below',
+    amber: 60,
+    red: 15,
+    unit: 'micrograms/L',
+  };
+  const ferritinSymbolUnit = mkResult('Ferritin', 10, { unit: 'µg/L' });
+  const ferritinOut = evaluateReportSeverity(makeReport([ferritinSymbolUnit]), { resultRules: [ferritinRule] });
+  assert(
+    ferritinOut.level === 'red',
+    'spelled-out "micrograms/L" rule vs symbolic "µg/L" result → same family → grades normally'
+  );
+  assert(ferritinOut.unitMismatches.length === 0, 'micrograms/L vs µg/L → not recorded as a mismatch');
+
+  // Multiple flagged results with a genuine mismatch each → one entry per
+  // (result, rule) pair, in report order.
+  const potassiumRule = {
+    id: 'test-k',
+    enabled: true,
+    label: 'Critical high potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 6,
+    red: 6.5,
+    unit: 'mmol/L',
+  };
+  const twoResults = evaluateReportSeverity(
+    makeReport([mkResult('Digoxin level', 5, { unit: 'nmol/L' }), mkResult('Potassium', 9, { unit: 'mEq/L' })]),
+    { resultRules: [digoxinRule, potassiumRule] }
+  );
+  assert(twoResults.level === 'none', 'both rules skipped on unit mismatch → level stays none');
+  assert(twoResults.unitMismatches.length === 2, 'two distinct (result, rule) mismatches recorded');
+  assert(
+    twoResults.unitMismatches.some((m) => m.ruleId === 'test-digoxin') &&
+      twoResults.unitMismatches.some((m) => m.ruleId === 'test-k'),
+    'both rule ids present among the recorded mismatches'
+  );
+}
+
+// ── item 3.1: unit-mismatch guard — combo numeric condition path ──────────────
+// No shipped combo condition carries a `unit` field today (buildComboCondition in
+// options.js has no such input) — these pin that the engine-level guard is ready
+// for when one is added, and changes nothing for a condition that omits it.
+console.log('\n--- item 3.1: unit-mismatch guard — combo numeric condition ---');
+{
+  const comboWithUnitGuard = {
+    id: 'test-combo-unit',
+    kind: 'combo',
+    enabled: true,
+    label: 'Test combo unit guard',
+    level: 'amber',
+    conditions: [
+      { analyte: { match: ['pus cells'] }, comparator: 'above', value: 10, unit: 'mmol/L' },
+      { analyte: { match: ['culture'] }, contains: ['no growth'] },
+    ],
+  };
+  const pusWrongUnit = mkResult('Pus cells', 50, { unit: 'µmol/L' }); // conflicts with the condition's mmol/L
+  const cultureResult = { name: 'Culture', value: NaN, text: 'No growth', unit: null, history: [] };
+
+  const comboMismatchOut = evaluateReportSeverity(makeReport([pusWrongUnit, cultureResult]), {
+    resultRules: [comboWithUnitGuard],
+  });
+  assert(
+    comboMismatchOut.comboCount === 0,
+    'combo condition unit mismatch → condition not satisfied → combo does not fire'
+  );
+  assert(comboMismatchOut.unitMismatches.length === 1, 'combo condition mismatch recorded once');
+  assert(comboMismatchOut.unitMismatches[0].name === 'Pus cells', 'combo mismatch entry names the result');
+  assert(comboMismatchOut.unitMismatches[0].resultUnit === 'µmol/L', 'combo mismatch entry carries the result unit');
+  assert(
+    comboMismatchOut.unitMismatches[0].ruleId === 'test-combo-unit',
+    'combo mismatch entry carries the combo rule id'
+  );
+  assert(
+    comboMismatchOut.unitMismatches[0].ruleUnit === 'mmol/L',
+    'combo mismatch entry carries the condition’s declared unit'
+  );
+
+  // Same-family unit on the condition → fires normally, no mismatch recorded.
+  const comboMatchingUnit = {
+    ...comboWithUnitGuard,
+    id: 'test-combo-unit-match',
+    conditions: [
+      { analyte: { match: ['pus cells'] }, comparator: 'above', value: 10, unit: 'mmol/L' },
+      { analyte: { match: ['culture'] }, contains: ['no growth'] },
+    ],
+  };
+  const pusMatchingUnit = mkResult('Pus cells', 50, { unit: 'mmol/L' });
+  const comboMatchOut = evaluateReportSeverity(makeReport([pusMatchingUnit, cultureResult]), {
+    resultRules: [comboMatchingUnit],
+  });
+  assert(comboMatchOut.comboCount === 1, 'matching unit on the condition → combo fires normally');
+  assert(comboMatchOut.unitMismatches.length === 0, 'matching unit → no mismatch recorded');
+
+  // Dedup: two conditions on the SAME analyte+unit that both mismatch the same
+  // candidate result must collapse to ONE unitMismatches entry, not two.
+  const comboDoubleCondition = {
+    id: 'test-combo-dedup',
+    kind: 'combo',
+    enabled: true,
+    label: 'Dedup test combo',
+    level: 'amber',
+    conditions: [
+      { analyte: { match: ['pus cells'] }, comparator: 'above', value: 10, unit: 'mmol/L' },
+      { analyte: { match: ['pus cells'] }, comparator: 'above', value: 5, unit: 'mmol/L' },
+    ],
+  };
+  const dedupOut = evaluateReportSeverity(makeReport([pusWrongUnit]), { resultRules: [comboDoubleCondition] });
+  assert(dedupOut.comboCount === 0, 'both conditions unsatisfied (unit mismatch) → combo does not fire');
+  assert(
+    dedupOut.unitMismatches.length === 1,
+    'two conditions producing the same (result, rule) mismatch dedupe to one entry'
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Item 3.2 — Close the qualitative fall-through
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Fixtures: non-numeric text results (no numeric value, no lab flag).
+const textResult = (name, over) =>
+  Object.assign(
+    {
+      name,
+      value: NaN,
+      rawValue: '',
+      comparator: null,
+      unit: null,
+      low: null,
+      high: null,
+      isAbove: false,
+      isBelow: false,
+      urgent: false,
+      interpretation: null,
+      date: '2026-06-01',
+      history: [],
+      text: '',
+    },
+    over
+  );
+
+// ── Leg A: red-capable text rules ─────────────────────────────────────────────
+console.log('\n--- Leg A: red-capable text rules (abnormalLevel:red) ---');
+{
+  const bcRuleRed = {
+    id: 'bc-red',
+    kind: 'text',
+    enabled: true,
+    label: 'Positive blood culture',
+    analyte: { match: ['blood culture'] },
+    abnormalText: ['organism isolated'],
+    abnormalLevel: 'red',
+  };
+  const bc = textResult('Blood culture', {
+    rawValue: 'Staphylococcus aureus — organism isolated',
+    text: 'Staphylococcus aureus — organism isolated',
+  });
+  const out = evaluateReportSeverity(makeReport([bc]), { resultRules: [bcRuleRed] });
+  assert(out.level === 'red', 'red text rule (abnormalLevel:red) → report level red');
+  assert(out.reviewCount === 1, 'reviewCount is 1');
+  assert(out.reviewTop && out.reviewTop.level === 'red', "reviewTop.level is 'red'");
+  assert(out.reviewTop.label === 'Positive blood culture', 'reviewTop carries the red rule label');
+  assert(out.urgentCount === 0, 'urgentCount stays 0 (text-red is NOT lab-urgent)');
+  assert(out.misprioritised === false, 'misprioritised stays false regardless of priority (text-red excluded)');
+}
+{
+  // A red text rule is escalate-only and does not depend on priorityDisplay for misprioritised.
+  const bcRuleRed = {
+    id: 'bc-red',
+    kind: 'text',
+    enabled: true,
+    label: 'Positive blood culture',
+    analyte: { match: ['blood culture'] },
+    abnormalText: ['organism isolated'],
+    abnormalLevel: 'red',
+  };
+  const bc = textResult('Blood culture', { text: 'organism isolated' });
+  const out = evaluateReportSeverity(makeReport([bc]), { resultRules: [bcRuleRed], priorityDisplay: 'Routine' });
+  assert(
+    out.level === 'red' && out.misprioritised === false,
+    'text-red on a Routine row → red but never misprioritised'
+  );
+}
+{
+  // Default (no abnormalLevel) preserves EXACT prior behaviour: amber cap.
+  const bcRuleAmber = {
+    id: 'bc-amber',
+    kind: 'text',
+    enabled: true,
+    label: 'Blood culture flag',
+    analyte: { match: ['blood culture'] },
+    abnormalText: ['organism isolated'],
+  };
+  const bc = textResult('Blood culture', { text: 'organism isolated' });
+  const out = evaluateReportSeverity(makeReport([bc]), { resultRules: [bcRuleAmber] });
+  assert(out.level === 'amber', 'text rule with no abnormalLevel → amber (unchanged behaviour)');
+  assert(out.reviewTop.level === 'amber', "reviewTop.level defaults to 'amber'");
+}
+{
+  // A red review promotes reviewTop over an earlier amber review.
+  const amberRule = {
+    id: 'a',
+    kind: 'text',
+    enabled: true,
+    label: 'HVS review',
+    analyte: { match: ['HVS'] },
+    abnormalText: ['candida'],
+  };
+  const redRule = {
+    id: 'r',
+    kind: 'text',
+    enabled: true,
+    label: 'Positive blood culture',
+    analyte: { match: ['blood culture'] },
+    abnormalText: ['organism isolated'],
+    abnormalLevel: 'red',
+  };
+  const hvs = textResult('HVS', { text: 'candida seen' });
+  const bc = textResult('Blood culture', { text: 'organism isolated' });
+  const out = evaluateReportSeverity(makeReport([hvs, bc]), { resultRules: [amberRule, redRule] });
+  assert(out.reviewCount === 2, 'both reviews counted');
+  assert(out.level === 'red', 'presence of a red review → level red');
+  assert(
+    out.reviewTop.level === 'red' && out.reviewTop.name === 'Blood culture',
+    'reviewTop promoted to the red review'
+  );
+}
+{
+  // Red text review never LOWERS a lab-urgent result (escalate-only, stays red).
+  const bcRuleRed = {
+    id: 'bc-red',
+    kind: 'text',
+    enabled: true,
+    label: 'Positive blood culture',
+    analyte: { match: ['blood culture'] },
+    abnormalText: ['organism isolated'],
+    abnormalLevel: 'red',
+  };
+  const bc = textResult('Blood culture', { text: 'organism isolated' });
+  const out = evaluateReportSeverity(makeReport([bc, rdwUrgent]), { resultRules: [bcRuleRed] });
+  assert(out.level === 'red' && out.urgentCount === 1, 'lab-urgent + red text review → red, urgentCount from lab only');
+}
+
+// ── Leg B: unclassified-positive surfacing ────────────────────────────────────
+console.log('\n--- Leg B: unclassified qualitative positive surfacing ---');
+{
+  // "Detected" with no rule, no lab flag → surfaced amber.
+  const r = textResult('Respiratory PCR', { rawValue: 'Detected', text: 'Detected' });
+  const out = evaluateReportSeverity(makeReport([r]));
+  assert(out.level === 'amber', 'unclassified positive → level amber');
+  assert(out.unclassified.length === 1, 'unclassified list has 1 entry');
+  assert(out.unclassified[0] && out.unclassified[0].name === 'Respiratory PCR', 'unclassified[0] names the analyte');
+  assert(out.unclassified[0].token === 'detected', 'unclassified[0].token is the matched token');
+  assert(out.urgentCount === 0 && out.abnormalCount === 0, 'never numeric-graded (no value)');
+}
+{
+  // Negation guard: "Not detected" must NOT surface.
+  const r = textResult('Respiratory PCR', { rawValue: 'Not detected', text: 'Not detected' });
+  const out = evaluateReportSeverity(makeReport([r]));
+  assert(out.unclassified.length === 0, '"Not detected" → not surfaced (negation guard)');
+  assert(out.level === 'none', 'genuinely-negative qualitative result stays none');
+}
+{
+  // "No growth" negation guard.
+  const r = textResult('Wound swab', { text: 'No growth after 48 hours' });
+  const out = evaluateReportSeverity(makeReport([r]));
+  assert(out.unclassified.length === 0, '"No growth" → not surfaced');
+}
+{
+  // Whole-word discipline: "represent"/"presentation" must not trip 'present'.
+  const r = textResult('Note', { text: 'Sample representative of the presentation' });
+  const out = evaluateReportSeverity(makeReport([r]));
+  assert(out.unclassified.length === 0, 'substring inside a larger word does not trip the lexicon');
+}
+{
+  // A result COVERED by a text rule is left to that rule (not double-surfaced),
+  // even when the rule's outcome is 'none' (lone abnormalText, no phrase hit).
+  const coverRule = {
+    id: 'cov',
+    kind: 'text',
+    enabled: true,
+    label: 'Culture flag',
+    analyte: { match: ['culture'] },
+    abnormalText: ['heavy growth'],
+  };
+  const r = textResult('Urine culture', { text: 'Organism isolated, mixed growth' });
+  const out = evaluateReportSeverity(makeReport([r]), { resultRules: [coverRule] });
+  assert(out.unclassified.length === 0, 'a result a text rule touched is NOT also surfaced as unclassified');
+}
+{
+  // A lab-flagged (abnormal) result is already visible → not unclassified.
+  const r = textResult('Marker', { text: 'positive', isAbove: true });
+  const out = evaluateReportSeverity(makeReport([r]));
+  assert(out.unclassified.length === 0, 'lab-flagged result → not surfaced as unclassified (already visible)');
+}
+{
+  // A numeric result never enters the unclassified pass.
+  const r = textResult('Value', { value: 12, rawValue: '12 positive', text: '12 positive' });
+  const out = evaluateReportSeverity(makeReport([r]));
+  assert(out.unclassified.length === 0, 'numeric result → never unclassified');
+}
+{
+  // Sentence-scoped: a negation in a DIFFERENT clause does not cancel a genuine positive.
+  const r = textResult('Culture', { text: 'Organism isolated. No growth in anaerobic bottle.' });
+  const out = evaluateReportSeverity(makeReport([r]));
+  assert(out.unclassified.length === 1, 'positive in one sentence survives a negation in another');
+}
+
+// ── matchUnclassifiedPositive direct unit tests ───────────────────────────────
+console.log('\n--- matchUnclassifiedPositive (direct) ---');
+{
+  assert(
+    Array.isArray(POSITIVE_QUALITATIVE) && POSITIVE_QUALITATIVE.includes('reactive'),
+    'POSITIVE_QUALITATIVE exported'
+  );
+  assert(
+    Array.isArray(UNCLASSIFIED_NEGATORS) && UNCLASSIFIED_NEGATORS.includes('not'),
+    'UNCLASSIFIED_NEGATORS exported'
+  );
+  assert(matchUnclassifiedPositive({ text: 'HIV reactive' }) === 'reactive', 'reactive token matched');
+  assert(matchUnclassifiedPositive({ text: 'not reactive' }) === null, 'preceding negator negates the token');
+  assert(
+    matchUnclassifiedPositive({ text: 'none isolated' }) === null,
+    "'none' negator (culture phrasing) negates 'isolated'"
+  );
+  assert(
+    matchUnclassifiedPositive({ text: 'nothing to report' }) === null,
+    'no false match on unrelated text (whole-word)'
+  );
+  // 'non-' / 'non ' glued prefix is a negating prefix — standard true-negative serology
+  assert(
+    matchUnclassifiedPositive({ text: 'Hepatitis C antibody non-reactive' }) === null,
+    "'non-reactive' → not surfaced (glued negating prefix)"
+  );
+  assert(matchUnclassifiedPositive({ text: 'HBsAg non reactive' }) === null, "'non reactive' (spaced) → not surfaced");
+  assert(
+    matchUnclassifiedPositive({ text: 'non-Hodgkin lymphoma cells seen' }) === 'seen',
+    "'non' only negates the abutting token, not a distant one ('seen' still surfaces)"
+  );
+  assert(
+    matchUnclassifiedPositive({ text: 'cannon reactive' }) === 'reactive',
+    "'non' must be a whole word — 'cannon' does not negate 'reactive'"
+  );
+  assert(matchUnclassifiedPositive(null) === null, 'null-safe');
+}
+
+// ── item 3.6: delta/trend rule grading ─────────────────────────────────────────
+// No delta rule ships in defaults.json (ZERO shipped delta rules — see
+// TRIAGE-LENS-2026-07-02.md item 3.6), so every rule here is constructed inline.
+console.log('\n--- item 3.6: delta rules — rise/fall/either grading (absolute "by") ---');
+{
+  const risingCreatinine = {
+    id: 'delta-aki',
+    enabled: true,
+    kind: 'delta',
+    label: 'AKI watch',
+    analyte: { match: ['creatinine'], exclude: ['urine'] },
+    direction: 'rise',
+    by: true,
+    amber: 15,
+    red: 26,
+  };
+
+  // Rise beyond red — fires urgent, matches the plan's illustrative example exactly.
+  const creat148 = mkResult('Creatinine', 148, {
+    unit: 'umol/L',
+    low: 60,
+    high: 120,
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const redOut = evaluateReportSeverity(makeReport([creat148]), { resultRules: [risingCreatinine] });
+  assert(redOut.level === 'red', 'rise of 38 crosses red (>=26) → level red');
+  assert(redOut.flagged[0].ruleLabel === 'AKI watch', 'flagged entry attributes the delta rule label');
+  assert(redOut.flagged[0].ruleComparator === 'rise', 'flagged entry ruleComparator carries the observed direction');
+  assert(redOut.flagged[0].ruleThreshold === 26, 'flagged entry ruleThreshold carries the winning (red) magnitude');
+  assert(redOut.flagged[0].ruleId === 'delta-aki', 'flagged entry ruleId carries the rule id');
+  assert(
+    redOut.flagged[0].deltaSummary === '+38 in 5 days',
+    `deltaSummary exact (got "${redOut.flagged[0].deltaSummary}")`
+  );
+
+  // Rise beyond amber but below red — fires abnormal.
+  const creat128 = mkResult('Creatinine', 128, {
+    unit: 'umol/L',
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const amberOut = evaluateReportSeverity(makeReport([creat128]), { resultRules: [risingCreatinine] });
+  assert(amberOut.level === 'amber', 'rise of 18 crosses amber (>=15) but not red → level amber');
+
+  // Rise below amber — no fire.
+  const creat120 = mkResult('Creatinine', 120, {
+    unit: 'umol/L',
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const noneOut = evaluateReportSeverity(makeReport([creat120]), { resultRules: [risingCreatinine] });
+  assert(noneOut.level === 'none', 'rise of 10 stays below amber (15) → level none');
+
+  // Wrong direction — a FALL never fires a 'rise'-only rule, even if the magnitude qualifies.
+  const creatFallen = mkResult('Creatinine', 80, {
+    unit: 'umol/L',
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const wrongDirOut = evaluateReportSeverity(makeReport([creatFallen]), { resultRules: [risingCreatinine] });
+  assert(wrongDirOut.level === 'none', "a FALL never fires a 'rise'-only delta rule");
+
+  // Excluded analyte (urine creatinine) never matches, even with a qualifying rise.
+  const urineCreat = mkResult('Urine Creatinine', 148, {
+    unit: 'umol/L',
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const excludedOut = evaluateReportSeverity(makeReport([urineCreat]), { resultRules: [risingCreatinine] });
+  assert(excludedOut.level === 'none', 'analyte.exclude drops "Urine Creatinine" even with a qualifying rise');
+
+  // 'fall'-only rule: a rise never fires it.
+  const fallRule = { ...risingCreatinine, id: 'delta-fall', direction: 'fall' };
+  const fallOnRiseOut = evaluateReportSeverity(makeReport([creat148]), { resultRules: [fallRule] });
+  assert(fallOnRiseOut.level === 'none', "a RISE never fires a 'fall'-only delta rule");
+  const fallOnFallOut = evaluateReportSeverity(makeReport([creatFallen]), { resultRules: [fallRule] });
+  assert(fallOnFallOut.level === 'red', "a FALL of 30 fires a 'fall'-only delta rule (crosses red 26)");
+
+  // 'either'-direction rule fires on BOTH a qualifying rise and a qualifying fall.
+  const eitherRule = { ...risingCreatinine, id: 'delta-either', direction: 'either' };
+  const eitherRiseOut = evaluateReportSeverity(makeReport([creat148]), { resultRules: [eitherRule] });
+  assert(eitherRiseOut.level === 'red', "'either' direction fires on a qualifying rise");
+  const eitherFallOut = evaluateReportSeverity(makeReport([creatFallen]), { resultRules: [eitherRule] });
+  assert(eitherFallOut.level === 'red', "'either' direction fires on a qualifying fall");
+
+  // No change at all (exactly equal) never fires, even an 'either' rule.
+  const creatSame = mkResult('Creatinine', 110, {
+    unit: 'umol/L',
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const sameOut = evaluateReportSeverity(makeReport([creatSame]), { resultRules: [eitherRule] });
+  assert(sameOut.level === 'none', 'zero change never fires, even on an "either"-direction rule');
+}
+
+console.log('\n--- item 3.6: delta rules — percent change ("byPercent") ---');
+{
+  const fallingHb = {
+    id: 'delta-hb',
+    enabled: true,
+    kind: 'delta',
+    label: 'Falling Hb — possible bleed',
+    analyte: { match: ['haemoglobin'], exclude: ['a1c'] },
+    direction: 'fall',
+    byPercent: true,
+    amber: 15,
+    red: 25,
+  };
+  // 104 → 82 is a ~21.15% fall — crosses amber (15%) but not red (25%).
+  const hb82 = mkResult('Haemoglobin', 82, {
+    unit: 'g/L',
+    date: '2026-06-01',
+    history: [{ value: 104, date: '2026-03-01', unit: 'g/L' }],
+  });
+  const hbOut = evaluateReportSeverity(makeReport([hb82]), { resultRules: [fallingHb] });
+  assert(hbOut.level === 'amber', '~21% fall crosses amber (15%) but not red (25%) → level amber');
+  assert(hbOut.flagged[0].deltaSummary.includes('%'), 'percent-mode deltaSummary includes a "%" suffix');
+  assert(hbOut.flagged[0].deltaSummary.startsWith('-'), 'a FALL renders a signed negative percent (no explicit "+")');
+
+  // A bigger percent fall crosses red.
+  const hb60 = mkResult('Haemoglobin', 60, {
+    unit: 'g/L',
+    date: '2026-06-01',
+    history: [{ value: 104, date: '2026-03-01', unit: 'g/L' }],
+  });
+  const hbRedOut = evaluateReportSeverity(makeReport([hb60]), { resultRules: [fallingHb] });
+  assert(hbRedOut.level === 'red', '~42% fall crosses red (25%) → level red');
+
+  // Zero-baseline prior never produces a meaningful percent change — fails closed, no fire.
+  const hbZeroPrior = mkResult('Haemoglobin', 5, {
+    unit: 'g/L',
+    date: '2026-06-01',
+    history: [{ value: 0, date: '2026-03-01', unit: 'g/L' }],
+  });
+  const zeroBaselineOut = evaluateReportSeverity(makeReport([hbZeroPrior]), { resultRules: [fallingHb] });
+  assert(zeroBaselineOut.level === 'none', 'a zero-value prior never produces a percent-change delta (fails closed)');
+}
+
+console.log('\n--- item 3.6: delta rules — maxDays window ---');
+{
+  const kRise = {
+    id: 'delta-k',
+    enabled: true,
+    kind: 'delta',
+    label: 'Rising potassium',
+    analyte: { match: ['potassium'] },
+    direction: 'rise',
+    by: true,
+    amber: 0.5,
+    red: 1,
+    maxDays: 7,
+  };
+  // Prior 5 days ago — within the 7-day window → fires.
+  const kRecent = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2026-06-08', unit: 'mmol/L' }],
+  });
+  const recentOut = evaluateReportSeverity(makeReport([kRecent]), { resultRules: [kRise] });
+  assert(recentOut.level === 'red', 'prior within maxDays window → delta fires normally');
+
+  // Prior 30 days ago — OUTSIDE the 7-day window → no fire, even though the magnitude qualifies.
+  const kStale = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2026-05-14', unit: 'mmol/L' }],
+  });
+  const staleOut = evaluateReportSeverity(makeReport([kStale]), { resultRules: [kRise] });
+  assert(staleOut.level === 'none', 'prior OLDER than maxDays → no delta fires (never falls back to it)');
+
+  // Exactly at the boundary (7 days) → still within the window (inclusive).
+  const kBoundary = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2026-06-06', unit: 'mmol/L' }],
+  });
+  const boundaryOut = evaluateReportSeverity(makeReport([kBoundary]), { resultRules: [kRise] });
+  assert(boundaryOut.level === 'red', 'prior exactly at the maxDays boundary → still fires (inclusive)');
+
+  // Either date missing → fails CLOSED (maxDays configured, age unverifiable).
+  const kNoCurrentDate = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: null,
+    history: [{ value: 5.0, date: '2026-06-08', unit: 'mmol/L' }],
+  });
+  const noCurrentDateOut = evaluateReportSeverity(makeReport([kNoCurrentDate]), { resultRules: [kRise] });
+  assert(noCurrentDateOut.level === 'none', 'maxDays set + missing current date → fails closed, no delta');
+
+  const kNoPriorDate = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: null, unit: 'mmol/L' }],
+  });
+  const noPriorDateOut = evaluateReportSeverity(makeReport([kNoPriorDate]), { resultRules: [kRise] });
+  assert(noPriorDateOut.level === 'none', 'maxDays set + missing prior date → fails closed, no delta');
+
+  // No maxDays configured at all → an old prior still fires (no age limit).
+  const kNoLimit = { ...kRise, id: 'delta-k-nolimit', maxDays: undefined };
+  const kVeryStale = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2023-01-01', unit: 'mmol/L' }],
+  });
+  const noLimitOut = evaluateReportSeverity(makeReport([kVeryStale]), { resultRules: [kNoLimit] });
+  assert(noLimitOut.level === 'red', 'no maxDays configured → an old prior still fires (no age limit)');
+}
+
+console.log('\n--- item 3.6: delta rules — unit-guarded (3.1 reuse) ---');
+{
+  const kRise = {
+    id: 'delta-k-unit',
+    enabled: true,
+    kind: 'delta',
+    label: 'Rising potassium',
+    analyte: { match: ['potassium'] },
+    direction: 'rise',
+    by: true,
+    amber: 0.5,
+    red: 1,
+  };
+  // Genuine mismatch (both units present, different families) → no delta, recorded.
+  const kMismatch = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2026-06-08', unit: 'mg/dL' }],
+  });
+  const mismatchOut = evaluateReportSeverity(makeReport([kMismatch]), { resultRules: [kRise] });
+  assert(mismatchOut.level === 'none', 'unit mismatch (mmol/L vs mg/dL) → delta SKIPPED, no fire');
+  assert(mismatchOut.unitMismatches.length === 1, 'a genuine unit mismatch IS recorded (mirrors 3.1)');
+  assert(mismatchOut.unitMismatches[0].ruleId === 'delta-k-unit', 'unitMismatches entry carries the delta rule id');
+
+  // One side absent (current has a unit, prior does not) → no delta, NOT recorded
+  // (nothing confidently wrong to report — same silent-fail-closed rule as extractPrior).
+  const kOneAbsent = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2026-06-08', unit: null }],
+  });
+  const oneAbsentOut = evaluateReportSeverity(makeReport([kOneAbsent]), { resultRules: [kRise] });
+  assert(oneAbsentOut.level === 'none', 'one side has a unit, the other does not → no delta (never a guess)');
+  assert(
+    oneAbsentOut.unitMismatches.length === 0,
+    'one-side-absent is NOT recorded as a mismatch (nothing confirmed wrong)'
+  );
+
+  // Both sides absent → treated as comparable (matches extractPrior's own precedent).
+  const kBothAbsent = mkResult('Potassium', 6.2, {
+    unit: null,
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2026-06-08', unit: null }],
+  });
+  const bothAbsentOut = evaluateReportSeverity(makeReport([kBothAbsent]), { resultRules: [kRise] });
+  assert(bothAbsentOut.level === 'red', 'both sides absent a unit → treated as comparable, delta fires normally');
+}
+
+console.log('\n--- item 3.6: delta rules — no history / suppressIfProblem / disabled ---');
+{
+  const kRise = {
+    id: 'delta-k-hist',
+    enabled: true,
+    kind: 'delta',
+    label: 'Rising potassium',
+    analyte: { match: ['potassium'] },
+    direction: 'rise',
+    by: true,
+    amber: 0.5,
+    red: 1,
+  };
+  // No history at all → never fires (nothing to compare against).
+  const kNoHistory = mkResult('Potassium', 6.2, { unit: 'mmol/L', date: '2026-06-13', history: [] });
+  const noHistOut = evaluateReportSeverity(makeReport([kNoHistory]), { resultRules: [kRise] });
+  assert(noHistOut.level === 'none', 'no history at all → delta never fires');
+
+  // Disabled delta rule is ignored entirely.
+  const kQualifying = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2026-06-08', unit: 'mmol/L' }],
+  });
+  const disabledOut = evaluateReportSeverity(makeReport([kQualifying]), {
+    resultRules: [{ ...kRise, enabled: false }],
+  });
+  assert(disabledOut.level === 'none', 'a disabled delta rule is ignored (like every other rule kind)');
+
+  // suppressIfProblem honoured — patient already on record for the relevant problem.
+  const kSuppressed = {
+    ...kRise,
+    id: 'delta-k-suppress',
+    suppressIfProblem: { match: ['chronic kidney disease'] },
+  };
+  const suppressedOut = evaluateReportSeverity(makeReport([kQualifying]), {
+    resultRules: [kSuppressed],
+    problems: [{ label: 'Chronic kidney disease stage 3' }],
+  });
+  assert(suppressedOut.level === 'none', 'suppressIfProblem honoured for a delta rule, exactly like other kinds');
+  const notSuppressedOut = evaluateReportSeverity(makeReport([kQualifying]), {
+    resultRules: [kSuppressed],
+    problems: [{ label: 'Asthma' }],
+  });
+  assert(notSuppressedOut.level === 'red', 'an unrelated problem does not suppress the delta rule');
+}
+
+console.log('\n--- item 3.6: delta rules — escalate-only (raises, never lowers) ---');
+{
+  // A delta rule can RAISE a lab-normal result to amber/red …
+  const raiseRule = {
+    id: 'delta-raise',
+    enabled: true,
+    kind: 'delta',
+    label: 'Rising creatinine',
+    analyte: { match: ['creatinine'] },
+    direction: 'rise',
+    by: true,
+    amber: 15,
+    red: 26,
+  };
+  const labNormalButRising = mkResult('Creatinine', 128, {
+    unit: 'umol/L',
+    low: 60,
+    high: 135, // 128 is within the lab's own reference range → isAbove/isBelow both false
+    isAbove: false,
+    isBelow: false,
+    urgent: false,
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const raisedOut = evaluateReportSeverity(makeReport([labNormalButRising]), { resultRules: [raiseRule] });
+  assert(raisedOut.level === 'amber', "a delta rule RAISES a lab-normal-range result's severity");
+
+  // … but NEVER lowers a lab-urgent flag, even when the delta itself would only grade amber.
+  const labUrgentTinyRise = mkResult('Creatinine', 150, {
+    unit: 'umol/L',
+    low: 60,
+    high: 120,
+    isAbove: true,
+    isBelow: false,
+    urgent: true, // lab itself already flags this urgent
+    date: '2026-06-13',
+    history: [{ value: 148, date: '2026-06-12', unit: 'umol/L' }], // rise of only 2 — below even amber (15)
+  });
+  const neverLoweredOut = evaluateReportSeverity(makeReport([labUrgentTinyRise]), { resultRules: [raiseRule] });
+  assert(neverLoweredOut.level === 'red', 'a lab-urgent flag is NEVER lowered by a weak/non-firing delta rule');
+  assert(
+    neverLoweredOut.flagged[0].ruleLabel === null,
+    'the lab flag (not the delta rule) drove severity → no rule attribution on the chip'
+  );
+
+  // … nor lowers a THRESHOLD rule's escalation when the delta rule itself doesn't fire.
+  const potassiumThreshold = {
+    id: 'threshold-k',
+    enabled: true,
+    label: 'High potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+  };
+  const weakDelta = {
+    id: 'delta-k-weak',
+    enabled: true,
+    kind: 'delta',
+    label: 'Rising potassium (weak)',
+    analyte: { match: ['potassium'] },
+    direction: 'rise',
+    by: true,
+    amber: 5, // a huge bar — this result's actual rise won't cross it
+    red: 10,
+  };
+  const kBothRulesResult = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 6.0, date: '2026-06-08', unit: 'mmol/L' }], // rise of only 0.2 — the delta rule never fires
+  });
+  const combinedOut = evaluateReportSeverity(makeReport([kBothRulesResult]), {
+    resultRules: [potassiumThreshold, weakDelta],
+  });
+  assert(combinedOut.level === 'red', "the threshold rule's red escalation is not diluted by a non-firing delta rule");
+  assert(
+    combinedOut.flagged[0].ruleLabel === 'High potassium',
+    'the THRESHOLD rule (not the delta) attributes the chip'
+  );
+
+  // When a delta rule reaches a HIGHER severity than a firing threshold rule, the
+  // delta rule's attribution wins the chip (never diluted by the weaker threshold).
+  const amberOnlyThreshold = { ...potassiumThreshold, id: 'threshold-k-amber-only', red: null };
+  const strongDelta = {
+    id: 'delta-k-strong',
+    enabled: true,
+    kind: 'delta',
+    label: 'Rising potassium (strong)',
+    analyte: { match: ['potassium'] },
+    direction: 'rise',
+    by: true,
+    amber: 0.1,
+    red: 0.15, // this result's rise of 0.2 crosses red
+  };
+  const bothFireOut = evaluateReportSeverity(makeReport([kBothRulesResult]), {
+    resultRules: [amberOnlyThreshold, strongDelta],
+  });
+  assert(bothFireOut.level === 'red', 'threshold reaches amber, delta reaches red → combined level is red');
+  assert(
+    bothFireOut.flagged[0].ruleLabel === 'Rising potassium (strong)',
+    'the HIGHER-severity delta rule attributes the chip, not the weaker amber-only threshold rule'
+  );
+  assert(bothFireOut.flagged[0].deltaSummary !== null, 'deltaSummary is set when the delta rule wins the attribution');
+
+  // Tie (both reach the SAME severity): the threshold-rule result wins the tie, so a
+  // report with NO delta rules configured is byte-identical to before this field existed.
+  const tiedDelta = { ...strongDelta, id: 'delta-k-tied', amber: 0.15, red: 10 }; // reaches only 'abnormal', same as threshold
+  const tiedOut = evaluateReportSeverity(makeReport([kBothRulesResult]), {
+    resultRules: [amberOnlyThreshold, tiedDelta],
+  });
+  assert(tiedOut.level === 'amber', 'a tie between threshold and delta severity still grades correctly');
+  assert(
+    tiedOut.flagged[0].ruleLabel === 'High potassium',
+    'on a severity TIE, the threshold-rule result wins attribution (preserves pre-delta behaviour)'
+  );
+  assert(tiedOut.flagged[0].deltaSummary === null, 'on a threshold-wins tie, deltaSummary is null');
+}
+
+// ── item 3.5: patient-context gate (contextAllows + evaluateReportSeverity) ───
+// No shipped result rule carries a context clause (ZERO shipped context rules —
+// see TRIAGE-LENS-2026-07-02.md item 3.5), so every rule here is constructed inline.
+console.log('\n--- item 3.5: contextAllows (direct) ---');
+{
+  // No context clause on the rule → always allowed, regardless of patientContext.
+  assert(contextAllows({}, undefined) === true, 'no context clause: allowed with no patientContext');
+  assert(
+    contextAllows({}, { ageYears: 10, sex: 'male' }) === true,
+    'no context clause: allowed with any patientContext'
+  );
+  assert(contextAllows({ context: null }, undefined) === true, 'context: null is treated as no gate');
+
+  // An EMPTY context object ({}) has no clauses to violate — always allowed.
+  assert(contextAllows({ context: {} }, undefined) === true, 'context: {} (no clauses) allowed with no patientContext');
+
+  // minAge / maxAge — fail closed when patientContext or ageYears is absent.
+  const over65 = { context: { minAge: 65 } };
+  assert(contextAllows(over65, undefined) === false, 'minAge clause: no patientContext at all → fail closed');
+  assert(contextAllows(over65, {}) === false, 'minAge clause: patientContext present but no ageYears → fail closed');
+  assert(contextAllows(over65, { ageYears: 70 }) === true, 'minAge clause: age 70 >= 65 → allowed');
+  assert(contextAllows(over65, { ageYears: 65 }) === true, 'minAge clause: age exactly 65 (inclusive) → allowed');
+  assert(contextAllows(over65, { ageYears: 64 }) === false, 'minAge clause: age 64 < 65 → not allowed');
+  assert(contextAllows(over65, { ageYears: NaN }) === false, 'minAge clause: non-finite ageYears → fail closed');
+
+  const under16 = { context: { maxAge: 15 } };
+  assert(contextAllows(under16, { ageYears: 10 }) === true, 'maxAge clause: age 10 <= 15 → allowed');
+  assert(contextAllows(under16, { ageYears: 15 }) === true, 'maxAge clause: age exactly 15 (inclusive) → allowed');
+  assert(contextAllows(under16, { ageYears: 16 }) === false, 'maxAge clause: age 16 > 15 → not allowed');
+  assert(contextAllows(under16, undefined) === false, 'maxAge clause: no patientContext → fail closed');
+
+  const band = { context: { minAge: 18, maxAge: 65 } };
+  assert(contextAllows(band, { ageYears: 40 }) === true, 'band clause: age within [18,65] → allowed');
+  assert(contextAllows(band, { ageYears: 17 }) === false, 'band clause: age below band → not allowed');
+  assert(contextAllows(band, { ageYears: 66 }) === false, 'band clause: age above band → not allowed');
+
+  // sex — fail closed when patientContext or sex is absent; case-insensitive compare.
+  const femaleOnly = { context: { sex: 'female' } };
+  assert(contextAllows(femaleOnly, undefined) === false, 'sex clause: no patientContext → fail closed');
+  assert(contextAllows(femaleOnly, {}) === false, 'sex clause: patientContext present but no sex → fail closed');
+  assert(contextAllows(femaleOnly, { sex: 'female' }) === true, 'sex clause: matching sex → allowed');
+  assert(contextAllows(femaleOnly, { sex: 'male' }) === false, 'sex clause: non-matching sex → not allowed');
+  assert(contextAllows(femaleOnly, { sex: 'Female' }) === true, 'sex clause: case-insensitive match ("Female")');
+
+  // Both age and sex clauses — AND semantics, both must be confirmed and satisfied.
+  const both = { context: { minAge: 65, sex: 'male' } };
+  assert(contextAllows(both, { ageYears: 70, sex: 'male' }) === true, 'both clauses satisfied → allowed');
+  assert(contextAllows(both, { ageYears: 70, sex: 'female' }) === false, 'age ok, sex wrong → not allowed');
+  assert(contextAllows(both, { ageYears: 40, sex: 'male' }) === false, 'sex ok, age wrong → not allowed');
+  assert(contextAllows(both, { ageYears: 70 }) === false, 'age ok, sex missing from patientContext → fail closed');
+  assert(contextAllows(both, { sex: 'male' }) === false, 'sex ok, age missing from patientContext → fail closed');
+}
+
+console.log('\n--- item 3.5: context gate — threshold rules ---');
+{
+  const fib4Over65 = {
+    id: 'ctx-fib4-over65',
+    enabled: true,
+    kind: 'threshold',
+    label: 'FIB-4 raised (over 65)',
+    analyte: { match: ['fib-4'] },
+    comparator: 'above',
+    amber: 3.25,
+    context: { minAge: 65 },
+  };
+  const fib4Result = mkResult('FIB-4', 3.5);
+
+  const firesOut = evaluateReportSeverity(makeReport([fib4Result]), {
+    resultRules: [fib4Over65],
+    patientContext: { ageYears: 70 },
+  });
+  assert(firesOut.level === 'amber', 'threshold+context: fires when patient matches (age 70 >= 65)');
+  assert(
+    firesOut.flagged[0].ruleLabel === 'FIB-4 raised (over 65)',
+    'threshold+context: chip attributes the context rule'
+  );
+
+  const noPatientContextOut = evaluateReportSeverity(makeReport([fib4Result]), { resultRules: [fib4Over65] });
+  assert(
+    noPatientContextOut.level === 'none',
+    'threshold+context: SKIPPED (fail closed) when patientContext is omitted entirely'
+  );
+
+  const underAgeOut = evaluateReportSeverity(makeReport([fib4Result]), {
+    resultRules: [fib4Over65],
+    patientContext: { ageYears: 40 },
+  });
+  assert(underAgeOut.level === 'none', 'threshold+context: SKIPPED when patient age is confirmed but out of range');
+
+  const noAgeFieldOut = evaluateReportSeverity(makeReport([fib4Result]), {
+    resultRules: [fib4Over65],
+    patientContext: { sex: 'male' }, // patientContext present, but no ageYears
+  });
+  assert(
+    noAgeFieldOut.level === 'none',
+    'threshold+context: SKIPPED when patientContext lacks the needed ageYears field'
+  );
+}
+
+console.log('\n--- item 3.5: context gate — text rules ---');
+{
+  // Deliberately avoids every item-3.2-Part-B POSITIVE_QUALITATIVE lexicon token
+  // ('positive','detected','reactive','isolated','abnormal','seen','present',
+  // 'grown','raised') in both the abnormalText phrase and the result text — a
+  // context-skipped rule is expected to fall through to 'none' here, and using a
+  // lexicon word would instead trip the UNRELATED unclassified-positive fallback
+  // (see the dedicated fall-through assertion further below, which deliberately
+  // DOES use 'isolated' to pin that separate mechanism).
+  const femaleTextRule = {
+    id: 'ctx-text-female',
+    enabled: true,
+    kind: 'text',
+    label: 'Needs review (female)',
+    analyte: { match: ['culture'] },
+    abnormalText: ['mrsa colonisation confirmed'],
+    context: { sex: 'female' },
+  };
+  const cultureResult = { name: 'Culture', value: NaN, text: 'mrsa colonisation confirmed', unit: null, history: [] };
+
+  const firesOut = evaluateReportSeverity(makeReport([cultureResult]), {
+    resultRules: [femaleTextRule],
+    patientContext: { sex: 'female' },
+  });
+  assert(firesOut.level === 'amber', 'text+context: fires when patient sex matches');
+  assert(
+    firesOut.reviewTop && firesOut.reviewTop.label === 'Needs review (female)',
+    'text+context: reviewTop attributes the context rule'
+  );
+
+  const wrongSexOut = evaluateReportSeverity(makeReport([cultureResult]), {
+    resultRules: [femaleTextRule],
+    patientContext: { sex: 'male' },
+  });
+  assert(wrongSexOut.level === 'none', 'text+context: SKIPPED when patient sex does not match');
+  assert(wrongSexOut.reviewCount === 0, 'text+context: no review recorded on a sex mismatch');
+
+  const noPatientContextOut = evaluateReportSeverity(makeReport([cultureResult]), { resultRules: [femaleTextRule] });
+  assert(noPatientContextOut.level === 'none', 'text+context: SKIPPED (fail closed) when patientContext is omitted');
+
+  // A context-skipped text rule must NOT mark the result "applied" — it must stay
+  // eligible for the item 3.2 Part B unclassified-positive fall-through exactly as
+  // if no text rule existed at all (skipped ≡ not seen, not ≡ seen-but-none).
+  const positiveOnlyResult = { name: 'Culture', value: NaN, text: 'Organisms isolated', unit: null, history: [] };
+  const skippedFallThroughOut = evaluateReportSeverity(makeReport([positiveOnlyResult]), {
+    resultRules: [femaleTextRule],
+    patientContext: { sex: 'male' },
+  });
+  assert(
+    skippedFallThroughOut.unclassified.length === 1 && skippedFallThroughOut.unclassified[0].token === 'isolated',
+    'text+context: a context-skipped rule leaves the result open to the unclassified-positive fall-through'
+  );
+}
+
+console.log('\n--- item 3.5: context gate — delta rules ---');
+{
+  const childKRise = {
+    id: 'ctx-delta-child-k',
+    enabled: true,
+    kind: 'delta',
+    label: 'Rising potassium (child)',
+    analyte: { match: ['potassium'] },
+    direction: 'rise',
+    by: true,
+    amber: 0.5,
+    context: { maxAge: 15 },
+  };
+  const kResult = mkResult('Potassium', 5.0, {
+    unit: 'mmol/L',
+    history: [{ value: 4.2, date: '2026-06-08', unit: 'mmol/L' }],
+  });
+
+  const firesOut = evaluateReportSeverity(makeReport([kResult]), {
+    resultRules: [childKRise],
+    patientContext: { ageYears: 10 },
+  });
+  assert(firesOut.level === 'amber', 'delta+context: fires when patient matches (age 10 <= 15)');
+  assert(
+    firesOut.flagged[0].deltaSummary !== null,
+    'delta+context: deltaSummary set when the context-gated delta wins attribution'
+  );
+
+  const adultOut = evaluateReportSeverity(makeReport([kResult]), {
+    resultRules: [childKRise],
+    patientContext: { ageYears: 40 },
+  });
+  assert(adultOut.level === 'none', 'delta+context: SKIPPED when patient age is confirmed but out of range');
+
+  const noPatientContextOut = evaluateReportSeverity(makeReport([kResult]), { resultRules: [childKRise] });
+  assert(noPatientContextOut.level === 'none', 'delta+context: SKIPPED (fail closed) when patientContext is omitted');
+}
+
+console.log('\n--- item 3.5: context gate — combo rules ---');
+{
+  const comboOver65Male = {
+    id: 'ctx-combo-over65-male',
+    kind: 'combo',
+    enabled: true,
+    label: 'Combo (over 65, male)',
+    level: 'amber',
+    context: { minAge: 65, sex: 'male' },
+    conditions: [
+      { analyte: { match: ['pus cells'] }, comparator: 'above', value: 10 },
+      { analyte: { match: ['culture'] }, contains: ['no growth'] },
+    ],
+  };
+  const pusResult = mkResult('Pus cells', 50);
+  const noGrowthResult = { name: 'Culture', value: NaN, text: 'No growth', unit: null, history: [] };
+  const comboReport = makeReport([pusResult, noGrowthResult]);
+
+  const firesOut = evaluateReportSeverity(comboReport, {
+    resultRules: [comboOver65Male],
+    patientContext: { ageYears: 70, sex: 'male' },
+  });
+  assert(firesOut.comboCount === 1, 'combo+context: fires when patient matches both clauses');
+  assert(firesOut.level === 'amber', 'combo+context: report escalated to amber');
+
+  const wrongSexOut = evaluateReportSeverity(comboReport, {
+    resultRules: [comboOver65Male],
+    patientContext: { ageYears: 70, sex: 'female' },
+  });
+  assert(wrongSexOut.comboCount === 0, 'combo+context: SKIPPED when one clause (sex) does not match');
+
+  const noPatientContextOut = evaluateReportSeverity(comboReport, { resultRules: [comboOver65Male] });
+  assert(noPatientContextOut.comboCount === 0, 'combo+context: SKIPPED (fail closed) when patientContext is omitted');
+}
+
+console.log('\n--- item 3.5: byte-identical when no rule carries a context clause ---');
+{
+  // A report with a mix of threshold/text/delta rules, NONE carrying a context
+  // clause, must produce the EXACT SAME evaluateReportSeverity output whether or
+  // not patientContext is supplied — the gate must be a true no-op for every
+  // rule that doesn't opt into it.
+  const plainThreshold = {
+    id: 'plain-k',
+    enabled: true,
+    kind: 'threshold',
+    label: 'High potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+  };
+  const plainText = {
+    id: 'plain-msu',
+    enabled: true,
+    kind: 'text',
+    label: 'Needs review',
+    analyte: { match: ['MSU'] },
+    normalText: ['no growth'],
+  };
+  const kResult = mkResult('Potassium', 6.2, { unit: 'mmol/L' });
+  const msuResult = { name: 'MSU', value: NaN, text: 'growth of e. coli', unit: null, history: [] };
+  const rules = [plainThreshold, plainText];
+  const report = makeReport([kResult, msuResult]);
+
+  const withoutPatientContext = evaluateReportSeverity(report, { resultRules: rules });
+  const withPatientContext = evaluateReportSeverity(report, {
+    resultRules: rules,
+    patientContext: { ageYears: 70, sex: 'female' },
+  });
+  assert(
+    JSON.stringify(withoutPatientContext) === JSON.stringify(withPatientContext),
+    'output is byte-identical with/without patientContext when no rule carries a context clause'
+  );
+  assert(withoutPatientContext.level === 'red', 'sanity: the plain rules still fire as expected (level red)');
+}
+
+// ── item 3.3: calibration pass — new/changed shipped result rules ─────────────
+// Tests the REAL shipped defaults.json rules (SHIPPED_RESULT_RULES/shippedRule above),
+// not stand-ins — pins the calibrated thresholds themselves, so a future accidental
+// edit to defaults.json fails here, not just in production.
+
+console.log('\n--- item 3.3: base-high-sodium (hypernatraemia, NEW) ---');
+{
+  const rule = shippedRule('base-high-sodium');
+  const rules = [rule];
+  const below = evaluateReportSeverity(makeReport([mkResult('Sodium', 149, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(below.level === 'none', 'sodium 149 (below amber 150) → quiet');
+  const amber = evaluateReportSeverity(makeReport([mkResult('Sodium', 152, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(amber.level === 'amber', 'sodium 152 (>= amber 150, < red 160) → amber');
+  const stillAmber = evaluateReportSeverity(makeReport([mkResult('Sodium', 156, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(stillAmber.level === 'amber', 'sodium 156 (>= amber 150, still < red 160) → amber');
+  const red = evaluateReportSeverity(makeReport([mkResult('Sodium', 162, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(red.level === 'red', 'sodium 162 (>= red 160, better-sourced "severe" cutoff) → red');
+}
+
+console.log('\n--- item 3.3: base-high-creatinine-aki (NEW) ---');
+{
+  const rule = shippedRule('base-high-creatinine-aki');
+  const rules = [rule];
+  const below = evaluateReportSeverity(makeReport([mkResult('Creatinine', 200, { unit: 'µmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(below.level === 'none', 'creatinine 200 (below red 354, no amber configured) → quiet');
+  const red = evaluateReportSeverity(makeReport([mkResult('Creatinine', 400, { unit: 'µmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(red.level === 'red', 'creatinine 400 (>= red 354) → red (KDIGO stage 3)');
+}
+
+console.log('\n--- item 3.3: base-creatinine-delta-aki (NEW, kind:delta) ---');
+{
+  const rule = shippedRule('base-creatinine-delta-aki');
+  assert(rule.kind === 'delta', 'sanity: base-creatinine-delta-aki is kind:delta');
+  const rules = [rule];
+  const risingWithinWindow = mkResult('Creatinine', 176, {
+    unit: 'µmol/L',
+    date: '2026-06-13',
+    history: [{ value: 148, date: '2026-06-11', unit: 'µmol/L' }],
+  });
+  const fires = evaluateReportSeverity(makeReport([risingWithinWindow]), { resultRules: rules });
+  assert(fires.level === 'amber', 'creatinine +28 µmol/L over 2 days (KDIGO stage 1 absolute rise) → amber');
+
+  const smallRise = mkResult('Creatinine', 160, {
+    unit: 'µmol/L',
+    date: '2026-06-13',
+    history: [{ value: 148, date: '2026-06-11', unit: 'µmol/L' }],
+  });
+  const quiet = evaluateReportSeverity(makeReport([smallRise]), { resultRules: rules });
+  assert(quiet.level === 'none', 'creatinine +12 µmol/L (below the 26.5 delta) → quiet');
+
+  const risingOutsideWindow = mkResult('Creatinine', 176, {
+    unit: 'µmol/L',
+    date: '2026-06-13',
+    history: [{ value: 148, date: '2026-06-01', unit: 'µmol/L' }], // 12 days prior
+  });
+  const outsideWindow = evaluateReportSeverity(makeReport([risingOutsideWindow]), { resultRules: rules });
+  assert(outsideWindow.level === 'none', 'same +28 rise but prior is outside the 48h maxDays window → quiet');
+}
+
+console.log('\n--- item 3.3: base-high-glucose (hyperglycaemia, NEW) ---');
+{
+  const rule = shippedRule('base-high-glucose');
+  const rules = [rule];
+  const below = evaluateReportSeverity(makeReport([mkResult('Glucose', 9, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(below.level === 'none', 'glucose 9 (below amber 11.1) → quiet');
+  const amber = evaluateReportSeverity(makeReport([mkResult('Glucose', 15, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(amber.level === 'amber', 'glucose 15 (>= amber 11.1, < red 30) → amber');
+  const red = evaluateReportSeverity(makeReport([mkResult('Glucose', 32, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(red.level === 'red', 'glucose 32 (>= red 30, HHS range) → red');
+}
+
+console.log('\n--- item 3.3: base-low-glucose (hypoglycaemia, NEW) ---');
+{
+  const rule = shippedRule('base-low-glucose');
+  const rules = [rule];
+  const above = evaluateReportSeverity(makeReport([mkResult('Glucose', 4.5, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(above.level === 'none', 'glucose 4.5 (above amber 4.0) → quiet');
+  const amber = evaluateReportSeverity(makeReport([mkResult('Glucose', 3.5, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(amber.level === 'amber', 'glucose 3.5 (<= amber 4.0, > red 3.0) → amber ("4 is the floor")');
+  const red = evaluateReportSeverity(makeReport([mkResult('Glucose', 2.6, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(red.level === 'red', 'glucose 2.6 (<= red 3.0, JBDS level 2) → red');
+}
+
+console.log('\n--- item 3.3: base-high-alt / base-high-ast (transaminitis, NEW) ---');
+{
+  for (const id of ['base-high-alt', 'base-high-ast']) {
+    const rule = shippedRule(id);
+    const name = id === 'base-high-alt' ? 'ALT' : 'AST';
+    const rules = [rule];
+    const below = evaluateReportSeverity(makeReport([mkResult(name, 80, { unit: 'U/L' })]), { resultRules: rules });
+    assert(below.level === 'none', `${id}: ${name} 80 (below amber 120, ~2x ULN) → quiet`);
+    const amber = evaluateReportSeverity(makeReport([mkResult(name, 150, { unit: 'U/L' })]), { resultRules: rules });
+    assert(amber.level === 'amber', `${id}: ${name} 150 (>= amber 120, 3x ULN) → amber`);
+    const red = evaluateReportSeverity(makeReport([mkResult(name, 350, { unit: 'U/L' })]), { resultRules: rules });
+    assert(red.level === 'red', `${id}: ${name} 350 (>= red 320, 8x ULN) → red`);
+  }
+}
+
+console.log('\n--- item 3.3: base-high-crp (NEW) ---');
+{
+  const rule = shippedRule('base-high-crp');
+  const rules = [rule];
+  const below = evaluateReportSeverity(makeReport([mkResult('CRP', 10, { unit: 'mg/L' })]), { resultRules: rules });
+  assert(below.level === 'none', 'CRP 10 (below amber 20, NICE CG191 no-antibiotic band) → quiet');
+  const amber = evaluateReportSeverity(makeReport([mkResult('CRP', 50, { unit: 'mg/L' })]), { resultRules: rules });
+  assert(amber.level === 'amber', 'CRP 50 (>= amber 20, delayed-antibiotic band) → amber');
+  const red = evaluateReportSeverity(makeReport([mkResult('CRP', 120, { unit: 'mg/L' })]), { resultRules: rules });
+  assert(red.level === 'red', 'CRP 120 (>= red 100, immediate-antibiotic band) → red');
+}
+
+console.log('\n--- item 3.3: base-high-wcc (sepsis signal, NEW) ---');
+{
+  const wccRule = shippedRule('base-high-wcc');
+  const below = evaluateReportSeverity(makeReport([mkResult('White cell count', 8, { unit: '×10⁹/L' })]), {
+    resultRules: [wccRule],
+  });
+  assert(below.level === 'none', 'WCC 8 (below amber 12) → quiet');
+  const amber = evaluateReportSeverity(makeReport([mkResult('White cell count', 14, { unit: '×10⁹/L' })]), {
+    resultRules: [wccRule],
+  });
+  assert(amber.level === 'amber', 'WCC 14 (>= amber 12, SIRS/sepsis-screen criterion) → amber');
+}
+
+console.log('\n--- item 3.3: base-high-potassium amber band (CHANGED — added amber) ---');
+{
+  const rule = shippedRule('base-high-potassium');
+  const rules = [rule];
+  const below = evaluateReportSeverity(makeReport([mkResult('Potassium', 5.8, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(below.level === 'none', 'potassium 5.8 (below amber 6.0) → quiet');
+  const amber = evaluateReportSeverity(makeReport([mkResult('Potassium', 6.2, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(amber.level === 'amber', 'potassium 6.2 (UKKA "moderate" 6.0–6.4) → amber, NOT red');
+  const red = evaluateReportSeverity(makeReport([mkResult('Potassium', 6.6, { unit: 'mmol/L' })]), {
+    resultRules: rules,
+  });
+  assert(red.level === 'red', 'potassium 6.6 (still >= red 6.5, unchanged) → red');
+}
+
+console.log('\n--- item 3.3: base-hba1c-diabetes recalibration (CHANGED — red → amber) ---');
+{
+  const rule = shippedRule('base-hba1c-diabetes');
+  assert(rule.red === null || rule.red === undefined, 'sanity: base-hba1c-diabetes no longer carries a red threshold');
+  assert(rule.amber === 48, 'sanity: base-hba1c-diabetes amber is 48');
+  const out = evaluateReportSeverity(makeReport([mkResult('HbA1c', 52, { unit: 'mmol/mol' })]), {
+    resultRules: [rule],
+  });
+  assert(out.level === 'amber', 'HbA1c 52 (>= 48) → amber, not red (alert-fatigue demotion)');
+  assert(out.urgentCount === 0, 'HbA1c 52 → urgentCount 0 (never escalates to red any more)');
+}
+
+console.log('\n--- item 3.3 (REVERTED): base-fib4-elevated status quo (red ≥2.67 all ages) ---');
+{
+  // The 3.3 FIB-4 recalibration (red→3.25 + a context:{maxAge:64} companion rule) was
+  // REVERTED after independent verification: red 3.25 is the hepatitis-C FIB-4 cutoff,
+  // wrong for NAFLD/MASLD; and the real age-adjustment raises the rule-OUT (low-risk)
+  // cutoff for ≥65 — a SUPPRESSION this escalate-only engine cannot express. So the rule
+  // is back at its original red 2.67 for all ages, and the under-65 companion rule is gone.
+  const baseRule = shippedRule('base-fib4-elevated');
+  assert(baseRule.red === 2.67, 'sanity: base-fib4-elevated red is back at the status-quo 2.67');
+  assert(baseRule.amber === 1.3, 'sanity: base-fib4-elevated amber unchanged at 1.3');
+  assert(
+    !SHIPPED_RESULT_RULES.some((r) => r && r.id === 'base-fib4-elevated-under65'),
+    'the base-fib4-elevated-under65 companion rule was deleted (no longer shipped)'
+  );
+  const rules = [baseRule];
+
+  const highEveryone = evaluateReportSeverity(makeReport([mkResult('Fibrosis-4 score', 2.9)]), {
+    resultRules: rules,
+  });
+  assert(highEveryone.level === 'red', 'FIB-4 2.9 (>= red 2.67) fires red for everyone, no patientContext needed');
+
+  const amberBand = evaluateReportSeverity(makeReport([mkResult('Fibrosis-4 score', 2.0)]), {
+    resultRules: rules,
+  });
+  assert(amberBand.level === 'amber', 'FIB-4 2.0 (>= amber 1.3, < red 2.67) → amber');
+
+  const quiet = evaluateReportSeverity(makeReport([mkResult('Fibrosis-4 score', 1.1)]), {
+    resultRules: rules,
+  });
+  assert(quiet.level === 'none', 'FIB-4 1.1 (below amber 1.3) → quiet');
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

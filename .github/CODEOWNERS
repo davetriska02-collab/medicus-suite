@@ -1,0 +1,17 @@
+# Code owners — who must review changes to safety-critical paths.
+#
+# These globs require @davetriska02-collab's approval before a PR touching them
+# can merge. They cover the files where a mistake is a patient-safety event,
+# not a cosmetic one: clinical rules, the engine, the injected content scripts,
+# and the two version/config files that gate what ships.
+#
+# NOTE: this only *enforces* review if branch protection on `main` has
+# "Require review from Code Owners" enabled (see docs/PR-REVIEW-SETUP.md).
+# Without that toggle, CODEOWNERS only auto-requests the review.
+
+/rules/                       @davetriska02-collab
+/engine/                      @davetriska02-collab
+/content-scripts/             @davetriska02-collab
+/manifest.json                @davetriska02-collab
+/defaults.json                @davetriska02-collab
+/content-scripts/triage-lens/defaults.json   @davetriska02-collab

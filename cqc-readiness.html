@@ -14,13 +14,20 @@
         <span class="cqc-controls-title">CQC Inspection Readiness</span>
         <div class="cqc-seg" id="cqcMode" role="group" aria-label="Mode">
           <button data-mode="readiness" class="active">Readiness check</button>
+          <button data-mode="clinician">Clinician view</button>
           <button data-mode="export">Evidence export</button>
         </div>
         <button class="cqc-btn cqc-btn-primary" id="cqcGenerate">Generate</button>
-        <button class="cqc-btn" id="cqcPrint" disabled>Print / PDF</button>
-        <button class="cqc-btn" id="cqcCsv" disabled>Download CSV</button>
-        <button class="cqc-btn" id="cqcBaseline" disabled>Save as baseline</button>
+        <button class="cqc-btn" id="cqcPrint" disabled title="Press Generate first">Print / PDF</button>
+        <button class="cqc-btn" id="cqcPrintCopy" title="Switch to the inspector copy and print it">Print inspector copy</button>
+        <button class="cqc-btn" id="cqcCsv" disabled title="Press Generate first">Download CSV</button>
+        <button class="cqc-btn" id="cqcBaseline" disabled title="Press Generate first">Save as baseline</button>
       </div>
+      <p class="cqc-controls-hint" id="cqcHint">
+        <strong>Step 1:</strong> press <strong>Generate</strong>. <strong>Step 2:</strong> to print the copy for the
+        inspector, just press <strong>Print inspector copy</strong> — it does the rest (switches to the inspector
+        version and takes you to the confirmation step). You do not need to change the mode yourself.
+      </p>
       <!-- Evidence-export gate (R-A): the inspector document is never auto-produced.
            Print/PDF + the export rendering stay disabled until this is ticked. -->
       <div class="cqc-gate" id="cqcGate" hidden>
@@ -28,6 +35,10 @@
           <input type="checkbox" id="cqcConfirm" />
           <span>I have reviewed these figures and confirm they are accurate</span>
         </label>
+        <p class="cqc-gate-hint">
+          This is a sign-off step, not a barrier. Anyone may print the pack &mdash; just make sure a clinician or
+          practice manager has reviewed the figures and is happy for it to be ticked. If that's been done, go ahead.
+        </p>
       </div>
     </div>
 
@@ -43,6 +54,10 @@
 
     <!-- Classic scripts first: expose window.RuleCurrency + window.CqcEvidence. -->
     <script src="shared/rule-currency.js"></script>
+    <!-- Engine SPEC constants only — read by cqc-evidence to name the published
+         version of each clinical method (ACB, STOPP/START) without drift. -->
+    <script src="engine/acb-scores.js"></script>
+    <script src="engine/stopp-start.js"></script>
     <script src="engine/cqc-evidence.js"></script>
     <script type="module" src="cqc-readiness.js"></script>
   </body>

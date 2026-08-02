@@ -4,6 +4,8 @@
 'use strict';
 
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
+import { applyReferralFilters, collectClinicians, filtersActive, describeFilters } from './referrals-filter-core.js';
+import { copyText } from '../shared/export-util.js';
 
 function ApiNs() {
   return typeof window !== 'undefined' ? window.ReferralsApi : null;
@@ -19,6 +21,7 @@ const TOP_N = 15;
 const STALE_MS = 30 * 60 * 1000;
 const DISCOVERY_KEY = 'referrals.discovery';
 const CONFIG_KEY = 'referrals.config';
+const LETTERHEAD_KEY = 'suite.letterhead';
 
 let container = null;
 let stalenessTimer = null;
@@ -40,6 +43,12 @@ let state = {
   chartView: 'clinician',
   chartExpanded: false,
   clinicianSearch: '',
+  // Patient-name search + clinician-dropdown filter — apply across BOTH the
+  // main referral list/chart and the 2WW safety-net worklist (item 5). These
+  // are independent of clinicianSearch above, which only scopes the "By
+  // clinician"/"Rate" chart tabs' bar list, not the underlying data.
+  patientNameFilter: '',
+  clinicianDropdownFilter: '',
   activePriorities: new Set(['Routine', 'Urgent', 'TwoWeekWait']),
   activeStatuses: new Set(['Completed', 'Incomplete', 'Cancelled']),
   lastFetched: null,
@@ -49,6 +58,13 @@ let state = {
   activityData: null,
   activityError: null,
   activityLoading: false,
+  // 2WW safety-net "Chase draft" — practice letterhead used to auto-fill the
+  // letter sign-off (loaded once, kept fresh via storage.onChanged, same
+  // pattern as sentinel.js's loadLetterhead). chaseDraftId is the referralId
+  // of the row whose draft panel is currently open (at most one at a time);
+  // null when none is open.
+  letterhead: {},
+  chaseDraftId: null,
 };
 
 function resolveStored(stored) {
@@ -62,15 +78,35 @@ function resolveStored(stored) {
   };
 }
 
-// Re-aggregate raw referrals using only the active priority/status chips.
-// Returns full aggregation unchanged when all chips are active.
+// Raw referrals narrowed by the patient-name search + clinician dropdown
+// (item 5) — the two filters that apply everywhere: the main list/chart, the
+// 2WW safety-net worklist, and the CSV export. Independent of the priority/
+// status chips (see getFilteredAggregated) and of clinicianSearch (which only
+// scopes the "By clinician"/"Rate" chart bar list).
+function getSearchFilteredRawRows() {
+  if (!Array.isArray(state.rawReferrals)) return state.rawReferrals;
+  return applyReferralFilters(state.rawReferrals, {
+    patientName: state.patientNameFilter,
+    clinician: state.clinicianDropdownFilter,
+  });
+}
+
+// Re-aggregate raw referrals using the active priority/status chips AND the
+// patient-name/clinician filters. Returns full aggregation unchanged when
+// every chip is active and no search/clinician filter is set.
 function getFilteredAggregated() {
   const api = ApiNs();
   if (!api || !state.rawReferrals) return state.aggregated;
   const allP = ['Routine', 'Urgent', 'TwoWeekWait'];
   const allS = ['Completed', 'Incomplete', 'Cancelled'];
-  if (state.activePriorities.size === allP.length && state.activeStatuses.size === allS.length) return state.aggregated;
-  const filtered = state.rawReferrals.filter(
+  const chipsAllActive = state.activePriorities.size === allP.length && state.activeStatuses.size === allS.length;
+  const searchActive = filtersActive({
+    patientName: state.patientNameFilter,
+    clinician: state.clinicianDropdownFilter,
+  });
+  if (chipsAllActive && !searchActive) return state.aggregated;
+  const searchFiltered = getSearchFilteredRawRows();
+  const filtered = searchFiltered.filter(
     (r) =>
       state.activePriorities.has(api.normalisePriority(r.priority || '')) &&
       state.activeStatuses.has(r.displayStatus || '')
@@ -118,12 +154,13 @@ export async function init(el) {
     }
   }
 
-  const stored = await chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY]);
+  const stored = await chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY, LETTERHEAD_KEY]);
   const r = resolveStored(stored);
   state.discoveryUrl = r.discoveryUrl;
   state.configUrl = r.configUrl;
   state.configPriorities = r.priorities;
   state.configStatuses = r.statuses;
+  state.letterhead = stored[LETTERHEAD_KEY] || {};
 
   // Restore persisted view state (filters, chart view, search)
   const savedUi = await loadUiState('referrals');
@@ -142,6 +179,9 @@ export async function init(el) {
     if (typeof savedUi.chartView === 'string' && VALID_VIEWS.includes(savedUi.chartView))
       state.chartView = savedUi.chartView;
     if (typeof savedUi.clinicianSearch === 'string') state.clinicianSearch = savedUi.clinicianSearch;
+    if (typeof savedUi.patientNameFilter === 'string') state.patientNameFilter = savedUi.patientNameFilter;
+    if (typeof savedUi.clinicianDropdownFilter === 'string')
+      state.clinicianDropdownFilter = savedUi.clinicianDropdownFilter;
   }
 
   render();
@@ -201,9 +241,23 @@ export async function init(el) {
     tsEl.querySelector('#refTsRefresh')?.addEventListener('click', fetchAndRender);
   }, 60_000);
 
+  // Esc closes an open chase-draft panel (Copy/Close buttons handle click).
+  const onChaseKeyDown = (e) => {
+    if (e.key === 'Escape' && state.chaseDraftId) {
+      state.chaseDraftId = null;
+      render();
+    }
+  };
+  document.addEventListener('keydown', onChaseKeyDown);
+
   const onChange = (ch) => {
     if (ch['suite.practiceCode']) {
       fetchAndRender();
+      return;
+    }
+    if (ch[LETTERHEAD_KEY]) {
+      state.letterhead = ch[LETTERHEAD_KEY].newValue || {};
+      render();
       return;
     }
     if (ch[DISCOVERY_KEY] || ch[CONFIG_KEY]) {
@@ -224,6 +278,7 @@ export async function init(el) {
     clearInterval(stalenessTimer);
     stalenessTimer = null;
     chrome.storage.onChanged.removeListener(onChange);
+    document.removeEventListener('keydown', onChaseKeyDown);
     container = null;
   };
 }
@@ -428,6 +483,41 @@ function renderControls() {
       </div>
       ${state.lastFetched ? `<div class="ref-ts">${renderTimestampContent()}</div>` : ''}
       ${renderFilterChips()}
+      ${hasData ? renderPatientClinicianFilters() : ''}
+    </div>
+  `;
+}
+
+// Patient-name search + clinician dropdown (item 5). Independent of the
+// priority/status chips above and of the chart-tab clinicianSearch — these two
+// narrow the main list/chart AND the 2WW safety-net worklist together (AND
+// combined with each other, and with the chips for the main list/chart only —
+// see getFilteredAggregated / renderSafetyNet).
+function renderPatientClinicianFilters() {
+  const api = ApiNs();
+  const clinicians = api ? collectClinicians(state.rawReferrals) : [];
+  const active = filtersActive({
+    patientName: state.patientNameFilter,
+    clinician: state.clinicianDropdownFilter,
+  });
+  const optionsHtml = clinicians
+    .map(
+      (c) =>
+        `<option value="${escAttr(c)}"${state.clinicianDropdownFilter === c ? ' selected' : ''}>${escHtml(c)}</option>`
+    )
+    .join('');
+  return `
+    <div class="ref-pc-filter-row">
+      <div class="ref-pc-search-wrap">
+        <input type="text" id="refPatientSearch" class="ref-search-input"
+          placeholder="Search patient name…" value="${escAttr(state.patientNameFilter)}" />
+        ${state.patientNameFilter ? `<button class="ref-search-clear" id="refPatientSearchClear" title="Clear">×</button>` : ''}
+      </div>
+      <select id="refClinicianDropdown" class="ref-clinician-select">
+        <option value="">All clinicians</option>
+        ${optionsHtml}
+      </select>
+      ${active ? `<span class="ref-pc-filter-active" title="Filters apply to the list, chart and 2WW safety-net below">Filtered</span>` : ''}
     </div>
   `;
 }
@@ -519,9 +609,99 @@ function renderDiagnostics() {
   `;
 }
 
+// 2WW / Faster-Diagnosis safety-net worklist: suspected-cancer referrals still
+// showing Incomplete, oldest-first, with calendar-day ages. Reads raw referrals
+// (the module already fetched them) — no new endpoint, no patient UUID needed.
+//
+// Deliberately reads the PATIENT-NAME/CLINICIAN-filtered rows (item 5 — "find
+// this one patient's/clinician's open loops"), but NEVER the priority/status
+// chip-filtered view: a clinician unticking "Incomplete" from the chips must
+// never make an open 2WW loop disappear from this card. Narrowing by who
+// (name/clinician) cannot hide a clinical status the way narrowing by status
+// can, so it is safe to apply here.
+function renderSafetyNet() {
+  const api = ApiNs();
+  if (!api || !api.buildSafetyNet || !Array.isArray(state.rawReferrals)) return '';
+  const sn = api.buildSafetyNet(getSearchFilteredRawRows(), {});
+  if (!sn.rows.length) return '';
+
+  const rowsHtml = sn.rows
+    .map((r) => {
+      const name = [r.patientGivenName, r.patientFamilyName].filter(Boolean).join(' ') || 'Patient';
+      const age = r.ageDays == null ? '—' : `${r.ageDays}d`;
+      const sevClass =
+        r.severity === 'overdue' ? 'ref-sn-overdue' : r.severity === 'watch' ? 'ref-sn-watch' : 'ref-sn-open';
+      const svc = r.referralService ? `<span class="ref-sn-svc">${escHtml(r.referralService)}</span>` : '';
+      const clin = r.referringClinician ? `<span class="ref-sn-clin">${escHtml(r.referringClinician)}</span>` : '';
+      // Name goes on its own line and is allowed to wrap in full — a secretary
+      // must be able to read the whole name to act on it. Service/clinician
+      // are secondary context, so they move to a sub-line rather than compete
+      // with the name for width.
+      const sub = svc || clin ? `<div class="ref-sn-sub">${svc}${clin}</div>` : '';
+      const refId = r.referralId || '';
+      const draftOpen = !!refId && state.chaseDraftId === refId;
+      return `<div class="ref-sn-row ${sevClass}">
+        <div class="ref-sn-row-main">
+          <span class="ref-sn-age" title="calendar days since referral">${escHtml(age)}</span>
+          <span class="ref-sn-name">${escHtml(name)}</span>
+          <button class="ref-sn-chase-btn" data-chase-btn="${escAttr(refId)}"
+            title="Prepare a chase letter draft for this referral">${draftOpen ? 'Close draft' : 'Chase draft'}</button>
+        </div>
+        ${sub}
+        ${draftOpen ? renderChaseDraft(r) : ''}
+      </div>`;
+    })
+    .join('');
+
+  const overdueBadge = sn.counts.overdue
+    ? `<span class="ref-sn-badge ref-sn-badge-overdue">${sn.counts.overdue} &ge; ${sn.overdueDays}d</span>`
+    : '';
+  const watchBadge = sn.counts.watch
+    ? `<span class="ref-sn-badge ref-sn-badge-watch">${sn.counts.watch} &ge; ${sn.watchDays}d</span>`
+    : '';
+
+  const legend = `<p class="ref-sn-legend">Watch &ge; ${sn.watchDays}d &middot; Overdue &ge; ${sn.overdueDays}d — days since referral</p>`;
+
+  return `
+    <div class="ref-sn-card">
+      <div class="ref-sn-head">
+        <span class="ref-sn-title">&#9888; Open 2WW safety-net (${sn.counts.total})</span>
+        ${overdueBadge}${watchBadge}
+      </div>
+      <p class="ref-sn-note">Suspected-cancer (2WW) referrals still showing <strong>Incomplete</strong> — no confirmed outcome yet. Check each has been received and an appointment booked; absent safety-netting/follow-up is the top root cause of cancer-delay claims. Ages are calendar days since referral; thresholds are a guide, not a clinical standard.</p>
+      ${legend}
+      <div class="ref-sn-rows">${rowsHtml}</div>
+    </div>`;
+}
+
+// Prepared-draft chase letter panel for one safety-net row — a ready-to-edit
+// letter to the referring hospital/service, copy-to-clipboard only, NEVER
+// auto-sent. Text is built by the pure ReferralsApi.buildChaseLetter (mirrors
+// the reception.js #rcpOutputText readonly-textarea + Copy + fineprint
+// pattern). At most one panel is open at a time (state.chaseDraftId).
+function renderChaseDraft(r) {
+  const api = ApiNs();
+  if (!api || !api.buildChaseLetter) return '';
+  const text = api.buildChaseLetter(r, state.letterhead);
+  return `
+    <div class="ref-sn-chase-panel">
+      <textarea class="ref-sn-chase-text" id="refChaseText" readonly rows="11">${escHtml(text)}</textarea>
+      <div class="ref-sn-chase-actions">
+        <button class="ref-sn-chase-copy" id="refChaseCopy">Copy to clipboard</button>
+        <button class="ref-sn-chase-close" id="refChaseClose">Close</button>
+        <span class="ref-sn-chase-msg" id="refChaseMsg"></span>
+      </div>
+      <div class="ref-sn-chase-fineprint">Prepared draft only — review and edit before sending. Double-check you're on the right patient and hospital before pasting.</div>
+    </div>`;
+}
+
 function renderData() {
+  // The 2WW safety-net reads the patient-name/clinician-filtered rows but NOT
+  // the chip-filtered view — a clinician filtering to e.g. "Completed" can
+  // never hide an open 2WW loop (see renderSafetyNet).
+  const safetyNet = renderSafetyNet();
   const a = getFilteredAggregated() || state.aggregated;
-  if (!a || a.total === 0) return `<div class="ref-empty">No referrals in this date range.</div>`;
+  if (!a || a.total === 0) return safetyNet + `<div class="ref-empty">No referrals in this date range.</div>`;
 
   const total = a.total;
   const dbTotal = state.totalCount;
@@ -533,6 +713,8 @@ function renderData() {
       : `${formatDateLabel(state.startDate)} → ${formatDateLabel(state.endDate)}`;
 
   return `
+    ${safetyNet}
+
     ${dbTotal > shown ? renderPageNotice(shown, dbTotal) : ''}
 
     <div class="ref-summary-card">
@@ -808,6 +990,19 @@ function renderRateChart() {
 
 // ── Wiring ────────────────────────────────────────────────────────────────────
 
+// Single source of truth for what gets persisted to suite.uiState — every
+// call site was duplicating this shape; item 5 adds two more fields to it.
+function persistUiState() {
+  saveUiState('referrals', {
+    activePriorities: [...state.activePriorities],
+    activeStatuses: [...state.activeStatuses],
+    chartView: state.chartView,
+    clinicianSearch: state.clinicianSearch,
+    patientNameFilter: state.patientNameFilter,
+    clinicianDropdownFilter: state.clinicianDropdownFilter,
+  });
+}
+
 function wireControls() {
   const startEl = container.querySelector('#refStart');
   const endEl = container.querySelector('#refEnd');
@@ -844,12 +1039,7 @@ function wireControls() {
       state.chartView = btn.dataset.view;
       state.chartExpanded = false;
       state.clinicianSearch = '';
-      saveUiState('referrals', {
-        activePriorities: [...state.activePriorities],
-        activeStatuses: [...state.activeStatuses],
-        chartView: state.chartView,
-        clinicianSearch: state.clinicianSearch,
-      });
+      persistUiState();
       render();
     });
   });
@@ -862,12 +1052,7 @@ function wireControls() {
       } else {
         state.activePriorities.add(key);
       }
-      saveUiState('referrals', {
-        activePriorities: [...state.activePriorities],
-        activeStatuses: [...state.activeStatuses],
-        chartView: state.chartView,
-        clinicianSearch: state.clinicianSearch,
-      });
+      persistUiState();
       render();
     });
   });
@@ -880,12 +1065,7 @@ function wireControls() {
       } else {
         state.activeStatuses.add(key);
       }
-      saveUiState('referrals', {
-        activePriorities: [...state.activePriorities],
-        activeStatuses: [...state.activeStatuses],
-        chartView: state.chartView,
-        clinicianSearch: state.clinicianSearch,
-      });
+      persistUiState();
       render();
     });
   });
@@ -900,24 +1080,60 @@ function wireControls() {
     searchEl.addEventListener('input', () => {
       state.clinicianSearch = searchEl.value;
       state.chartExpanded = false;
-      saveUiState('referrals', {
-        activePriorities: [...state.activePriorities],
-        activeStatuses: [...state.activeStatuses],
-        chartView: state.chartView,
-        clinicianSearch: state.clinicianSearch,
-      });
+      persistUiState();
       render();
     });
   }
   container.querySelector('#refSearchClear')?.addEventListener('click', () => {
     state.clinicianSearch = '';
-    saveUiState('referrals', {
-      activePriorities: [...state.activePriorities],
-      activeStatuses: [...state.activeStatuses],
-      chartView: state.chartView,
-      clinicianSearch: state.clinicianSearch,
-    });
+    persistUiState();
     render();
+  });
+
+  // Patient-name search + clinician dropdown (item 5) — filter the main list/
+  // chart AND the 2WW safety-net worklist together.
+  const patientSearchEl = container.querySelector('#refPatientSearch');
+  if (patientSearchEl) {
+    patientSearchEl.addEventListener('input', () => {
+      state.patientNameFilter = patientSearchEl.value;
+      persistUiState();
+      render();
+    });
+  }
+  container.querySelector('#refPatientSearchClear')?.addEventListener('click', () => {
+    state.patientNameFilter = '';
+    persistUiState();
+    render();
+  });
+  container.querySelector('#refClinicianDropdown')?.addEventListener('change', (e) => {
+    state.clinicianDropdownFilter = e.target.value;
+    persistUiState();
+    render();
+  });
+
+  // 2WW safety-net "Chase draft" — toggle open/closed (again-click or Esc
+  // closes; opening a different row's draft replaces the open one, since
+  // chaseDraftId holds at most one referralId at a time).
+  container.querySelectorAll('[data-chase-btn]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.chaseBtn;
+      state.chaseDraftId = id && state.chaseDraftId === id ? null : id || null;
+      render();
+    });
+  });
+  container.querySelector('#refChaseClose')?.addEventListener('click', () => {
+    state.chaseDraftId = null;
+    render();
+  });
+  container.querySelector('#refChaseCopy')?.addEventListener('click', async () => {
+    const ta = container.querySelector('#refChaseText');
+    const msg = container.querySelector('#refChaseMsg');
+    if (!ta) return;
+    const ok = await copyText(ta.value);
+    if (msg) {
+      msg.textContent = ok ? 'Copied.' : 'Copy failed — select the text and copy manually.';
+      msg.className = ok ? 'ref-sn-chase-msg ref-sn-chase-msg-ok' : 'ref-sn-chase-msg';
+    }
   });
 
   container.querySelector('#refDiscoveryOpen')?.addEventListener('click', focusMedicusReferrals);
@@ -946,10 +1162,19 @@ function wireControls() {
 
 // ── CSV Export ────────────────────────────────────────────────────────────────
 
+// The patient-name search + clinician dropdown (item 5) are the "active
+// filters" this export respects — the priority/status chips deliberately do
+// NOT narrow the export (unchanged pre-existing behaviour: the CSV is always
+// a full audit trail for the chosen date range regardless of chip state).
 function downloadCSV() {
   const api = ApiNs();
-  const rows = state.rawReferrals;
+  const rows = getSearchFilteredRawRows();
   if (!api || !rows?.length) return;
+
+  const filterDesc = describeFilters({
+    patientName: state.patientNameFilter,
+    clinician: state.clinicianDropdownFilter,
+  });
 
   const header = [
     'Date',
@@ -963,7 +1188,12 @@ function downloadCSV() {
     'e-Referral',
     'Manual',
   ];
-  const lines = [header.join(',')];
+  // Header comment line discloses the active filters so a CSV opened later
+  // (or forwarded) is never mistaken for the full unfiltered date range.
+  // describeFilters() already strips CR/LF from the free-text patient-name
+  // search before returning — see its doc comment (CSV row-injection guard).
+  const lines = filterDesc ? [`# Filtered: ${filterDesc}`] : [];
+  lines.push(header.join(','));
 
   for (const r of rows) {
     const { specialty, hospital } = api.parseReferralService(r.referralService);
@@ -987,7 +1217,8 @@ function downloadCSV() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `referrals-${state.startDate}-to-${state.endDate}.csv`;
+  const suffix = filterDesc ? '-filtered' : '';
+  a.download = `referrals-${state.startDate}-to-${state.endDate}${suffix}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }

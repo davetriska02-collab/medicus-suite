@@ -104,6 +104,35 @@ console.log('--- source parity: single source of truth ---');
   check(!/new RegExp\(wrapped/.test(opts), 'options.js no longer has its own divergent compile loop');
   // The preview no longer swallows compile errors silently.
   check(/_errors/.test(opts), 'options.js surfaces compile errors (_errors), not catch(e){}');
+  // Item 3.4 (TRIAGE-LENS-2026-07-02.md) — the preview also surfaces the
+  // negation/past-tense qualifier via the SAME shared matcher, so it can
+  // never disagree with what the live queue chip demotes.
+  check(
+    /window\.TriageLensMatch\.ruleMatchEvidence/.test(opts),
+    'options.js preview surfaces the qualifier via window.TriageLensMatch.ruleMatchEvidence'
+  );
+}
+
+// ── 6. Item 3.4: the preview path's qualifier is computed by the SAME shared
+//    matcher the runtime uses — evidence.qualifier for a given (rule, text)
+//    is identical regardless of caller, so a GP tuning a rule in Options sees
+//    exactly the demotion the live queue chip will show. ─────────────────────
+console.log('--- qualifier parity: preview computation matches the shared matcher directly ---');
+{
+  const c = M.compileRule(rule({ regex: true, patterns: ['chest pain'] }));
+  const text = 'Patient reports no chest pain today.';
+  // What the preview does: ruleMatchesText gate, then ruleMatchEvidence for display.
+  const fires = M.ruleMatchesText(c, text);
+  const ev = M.ruleMatchEvidence(c, text);
+  check(fires === true, 'preview gate (ruleMatchesText) fires for this text');
+  check(
+    ev !== null && ev.qualifier === 'negated',
+    `the SAME call the preview makes reports the negated qualifier (got ${ev && ev.qualifier})`
+  );
+
+  // An unqualified hit: preview shows no suffix (qualifier null).
+  const evClear = M.ruleMatchEvidence(c, 'Patient reports chest pain today.');
+  check(evClear !== null && evClear.qualifier === null, 'an unqualified hit reports qualifier === null (no suffix)');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

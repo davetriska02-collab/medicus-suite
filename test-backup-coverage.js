@@ -107,6 +107,23 @@ const KEY_PREFIXES = [
   'knowledge',
   'sweep',
   'reception',
+  'ledger',
+  'health',
+  'leaflets',
+  // Audit M18 (2026-07-18): these four were missing, so the drift guard was
+  // blind to their modules' keys (labfiling.suppress had already escaped it).
+  'labfiling',
+  'patientAlerts',
+  'followups',
+  'practice',
+  'pdc',
+  'phrases',
+  // Contacts Management family-cycling session (content-scripts/contacts-canvas.js) — found
+  // MISSING here entirely (not even in the USED set, since hasKeyPrefix silently filtered it out)
+  // while addressing a live-testing review finding that this key needed a documented backup
+  // exclusion; without this prefix the scanner was blind to it, same class of gap Audit M18 found
+  // for labfiling/patientAlerts/followups/practice above.
+  'contactsCanvas',
   'rota',
 ];
 
@@ -160,6 +177,10 @@ for (const f of IO_FILES) {
 // Each entry must have a comment stating why it is excluded from backup.
 
 const ALLOWLIST = new Set([
+  // labfiling.suppress: per-patient "never auto-file" list — DELIBERATELY
+  // machine-local (see shared/io/labfiling-io.js header); surfaced by the
+  // 2026-07-18 audit when the labfiling prefix was added to KEY_PREFIXES.
+  'labfiling.suppress',
   // Transient runtime state (documented in shared/io/request-monitor-io.js):
   'suite.requestMonitor.state', // live poll state object — not user config
   'suite.requestMonitor.notifMap', // service-worker notification tracking map — transient
@@ -167,6 +188,11 @@ const ALLOWLIST = new Set([
 
   // OS window handle — session-transient (documented in shared/io/popout-io.js):
   'popout.windowId',
+
+  // Transient cross-module handoff — written by the Reception pathway tiles'
+  // "Leaflet" link, read once and removed by leaflets.js init. Not user config
+  // (see side-panel/modules/reception/reception.js goToLeaflet):
+  'leaflets.pendingQuery',
 
   // Transient print payload — written on "Print reception handout", read by
   // handout.html, overwritten on every print. Not user config (documented in
@@ -183,6 +209,15 @@ const ALLOWLIST = new Set([
   // sweep.handout convention — see side-panel/modules/sentinel/sentinel.js):
   'sentinel.passport',
 
+  // Transient print payload — written on "SMR prep pack", read by
+  // smr-pack.html, overwritten on every print. Not user config (mirrors the
+  // sweep.handout convention — see side-panel/modules/record/record.js).
+  // NOTE: the 'record' top-level prefix is deliberately NOT in KEY_PREFIXES
+  // (triage-lens chip ids like 'record.age' squat on it), so this key is not
+  // reached by the scan today — the entry is kept as documentation and as the
+  // guard if the prefix situation ever changes:
+  'record.smrPack',
+
   // Guided-tour seen marker — localStorage, NOT chrome.storage (per-machine
   // onboarding state, deliberately excluded from backups so a restore onto a
   // new machine still offers the tour). See side-panel/tour/tour.js:
@@ -197,6 +232,7 @@ const ALLOWLIST = new Set([
   'suite.practiceProfile', // applied-profile metadata (version etc.)
   'suite.practiceProfile.notifiedVersions', // which profile versions have been notified
   'suite.practiceProfile.publisher', // Publisher-PC UI state for the practice-profile publish flow — not user config
+  'suite.practiceProfile.lastAutoPublishAt', // this machine's daily auto-publish gate — timing bookkeeping, not user config
 
   // Transient release metadata (update-checker — expires after 24h, not user config):
   'suite.update.latestVersion',
@@ -226,6 +262,40 @@ const ALLOWLIST = new Set([
   // referrals.config IS covered via referrals-io.
   'referrals.discovery',
 
+  // Locally-discovered patient-listing/journal API endpoint URLs (and their
+  // UUID-templated forms) captured by content-scripts/api-discovery.js —
+  // endpoint shapes only, no PHI. Rediscovered on visiting the relevant
+  // Medicus page; feeds duplicate-checker.js's practice-wide GP2GP-duplicate
+  // scan and per-patient click-through. Never exported to backup:
+  'suite.discoveredPatientListUrl',
+  'suite.discoveredAllPatientUrls',
+  'suite.discoveredJournalUrl',
+  'suite.discoveredAllJournalUrls',
+  'suite.discoveredJournalUrlTemplate',
+  'suite.discoveredAllJournalUrlTemplates',
+  'suite.apiDiscoveryLastRun',
+
+  // Practice-wide flagged-patient scan results from duplicate-checker.js —
+  // NAMES, NHS NUMBERS AND DATES OF BIRTH for every patient the GP2GP
+  // duplicate scan flags, persisted so re-scans can skip already-checked
+  // patients. This is the largest identifiable-PHI surface in the suite
+  // (practice-wide, not per-patient) and is DELIBERATELY excluded from suite
+  // backups — a portable JSON export must never carry a practice-wide PHI
+  // list. If you're tempted to wire this into an io file per the usual
+  // convention, don't — that would ship real patient data in every backup
+  // file. (duplicate-checker.js lives at the repo root, outside the APP_DIRS
+  // this audit scans, so this entry is defence-in-depth documentation, not
+  // something the scanner currently detects on its own.)
+  'suite.dupChecker.state',
+
+  // Local audit trail of every EXACT-tier duplicate entry duplicate-checker.js
+  // has removed from a patient's record (patient uuid/name, entry kind/id,
+  // reason, timestamp) — the only record of these writes, since there is no
+  // confirmed "undo" endpoint yet. Same PHI reasoning as suite.dupChecker.state
+  // directly above: deliberately excluded from suite backups, never wire this
+  // into an io file.
+  'suite.dupChecker.removalLog',
+
   // Per-machine view state — not user config, not PHI, deliberately excluded from
   // backups so a restore onto a new machine starts fresh (see shared/modules/shared/ui-state.js):
   'suite.uiState',
@@ -245,6 +315,26 @@ const ALLOWLIST = new Set([
   // purpose is to allow resuming after a module switch, not to back up.
   // Mirrors sweep.handout pattern:
   'sweep.lastRun',
+
+  // Transient print payload — written on "Print prep list", read by
+  // worklist.html, overwritten on every print. Not user config (mirrors
+  // sweep.handout exactly — see side-panel/modules/sweep/sweep.js):
+  'sweep.worklist',
+
+  // Practice's own £-per-QOF-point figure (manager £ projection — explicitly
+  // non-clinical arithmetic; no national default exists in this repo on
+  // purpose, see sweep-core.js qofPoundsValue). Unlike the transient keys
+  // above, this genuinely IS user config, not PHI or session state — in
+  // principle it should ride a real shared/io/sweep-io.js the way
+  // condor.indexConfig rides condor-io.js (see shared/io/condor-io.js), so a
+  // practice's figure survives a suite backup/restore. Sweep has no io file
+  // today (its other keys are all transient/PHI and were never meant to be
+  // backed up), and this change's scope was restricted to the sweep module +
+  // test files, not options.js/options.html/suite-envelope.js. Allowlisted
+  // for now; a follow-up should add shared/io/sweep-io.js (covering just this
+  // key) and wire it into doFullExport()/applyEnvelope()/previewEnvelope(),
+  // then remove this entry:
+  'sweep.qofConfig',
 
   // Per-machine first-run onboarding state — dismissed/skipped flags.
   // Not user config; deliberately excluded from backups so a restore onto a
@@ -268,6 +358,79 @@ const ALLOWLIST = new Set([
   // Mirrors the suite.alertLog rationale. The OIR *config* (oirTests + oir prefs)
   // IS backed up — it rides triagelens.config via triage-io:
   'triagelens.oir.auditLog',
+
+  // Routine-prescription button audit trail (Phase 1.4, H-035 gap fix) —
+  // machine-local ring buffer (cap 200) of what the "send to routine
+  // prescriptions" macro did on THIS device: task URL/UUID, team, commit
+  // mode, timestamp, outcome (committed/highlighted/aborted+reason). Same
+  // doctrine as labfiling.auditLog / triagelens.oir.auditLog: it is a
+  // per-device governance record, not user config, and restoring it onto
+  // another machine would fabricate a misleading "what this macro did here"
+  // trail. The routine-rx *config* (teams/lastTeam/commitMode) IS backed up —
+  // it rides triagelens.routineRx via triage-io; only the audit log is
+  // excluded:
+  'triagelens.routinerx.auditLog',
+
+  // F2 Clinical Event Ledger — machine-local ring buffer (cap 5000 events /
+  // 90 days) of what the suite displayed or did on THIS machine
+  // (shared/event-ledger.js; read/export/clear UI in the Options "Event
+  // ledger" card). Deliberately EXCLUDED from suite backup — same doctrine as
+  // labfiling.auditLog and triagelens.oir.auditLog: it contains patient UUIDs,
+  // and restoring an event ledger onto another machine would fabricate a
+  // misleading "what was shown here" record. The exclusion is stated in the
+  // user-facing disclosure block in options.html:
+  'ledger.events',
+  // Day-sharded ledger layout (audit H12, v3.176.4): the shard directory key.
+  // The per-day shard keys themselves ('ledger.events.<YYYY-MM-DD>') are built
+  // dynamically and never appear as literals, so this scanner cannot see them;
+  // they follow the exact same never-backed-up doctrine as ledger.events:
+  'ledger.shardIndex',
+
+  // B3/B5 contact & task-age ledgers (shared/contact-ledger.js) — a device-local
+  // rolling history of what THIS extension saw in the queues on THIS machine:
+  //   ledger.contactLog — patientUuid → distinct task first-seen days (28d window)
+  //   ledger.taskAge    — taskUuid → first/last-seen day + task-type slug (14d)
+  // Same doctrine as ledger.events / followups.entries: it carries patient/task
+  // UUIDs (no names, no free text) and is an observational trail. Restoring it
+  // onto another machine would fabricate a false "this patient has contacted us N
+  // times"/"we've carried this task N days" history that machine never observed —
+  // a wrong-signal hazard, not just useless. Pruned + capped, machine-local BY
+  // DESIGN, never backed up:
+  'ledger.contactLog',
+  'ledger.taskAge',
+
+  // Contacts Management cycling session (content-scripts/contacts-canvas.js "Family cycling"
+  // section) — a short-lived, single-key snapshot written right before the browser navigates to
+  // the next linked family member's own record, and consumed/cleared on the other side. Carries
+  // real patient UUIDs and a family-relationship graph for whichever family the GP is mid-review
+  // on — a device-local working record, not user configuration, and restoring it onto another
+  // machine days later would resurrect a stale, possibly-wrong mid-review state pointing at
+  // patients that machine's user may have no business seeing. Self-pruning (4h TTL, enforced
+  // eagerly on every Medicus page load — see checkResumableFamilySession), never backed up:
+  'contactsCanvas.familySession',
+
+  // Horizon-1 H2 — DOM-contract runtime canary state (shared/contract-canary.js):
+  // per-contract { lastProbe, status, sinceTs, probeCount, failStreak, lastFailTs }
+  // written by the content-script probe injected into the live Medicus page.
+  // Machine-local diagnostic telemetry — same doctrine as
+  // sentinel.extractionBaseline/ledger.events: restoring it onto another
+  // machine would import a stale/foreign "is Medicus broken here" verdict
+  // that has nothing to do with that machine's actual, current DOM. Surfaced
+  // read-only in Options → Suite health (options.html #sect-health):
+  'health.contracts',
+
+  // Health-strip acknowledgement (v3.154.1): 7-day snooze of the CURRENT
+  // degraded-contract set. Transient by design — restoring it onto another
+  // machine (or a fresh install) must NOT silently suppress that machine's
+  // own health warning, so it is never backed up:
+  'health.stripSnooze',
+
+  // Follow-ups ledger (v3.160.0): personal safety-net reminders carrying
+  // patient-identifiable free text + patient UUIDs. Machine-local BY DESIGN
+  // (same doctrine as ledger.events): backups are configuration only, never
+  // patient-identifiable data, and restoring stale patient reminders onto
+  // another machine would surface them out of context. Never backed up:
+  'followups.entries',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

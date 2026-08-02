@@ -61,7 +61,287 @@
     return compiledRule._compiled.some((re) => re.test(text));
   }
 
-  const api = { compileRule, ruleMatchesText };
+  // ---- Match evidence (item 2.1, TRIAGE-LENS-2026-07-02.md) ----
+  // Built ON TOP of the SAME compiled pattern array ruleMatchesText tests
+  // against — same patterns, same order, same "first pattern that matches
+  // wins" — so this can never disagree with ruleMatchesText: evidence !==
+  // null exactly when ruleMatchesText(compiledRule, text) is true. Returns
+  // null when nothing matches, else:
+  //   term    — the matched substring exactly as it appears in `text`
+  //             (patterns are case-insensitive, so this preserves the
+  //             original text's casing/inflection, e.g. "Coughing").
+  //   start/end — character offsets of the match within `text`.
+  //   context — the sentence containing the match (bounded by the nearest
+  //             `.`/`!`/`?`/newline on each side, or the start/end of `text`
+  //             itself), trimmed. If `text` contains NO sentence-ending
+  //             punctuation anywhere (common in free-typed patient request
+  //             text), falls back to an ellipsised +/-80 character window
+  //             around the match instead.
+  //   qualifier / qualifierTerm — item 3.4 (TRIAGE-LENS-2026-07-02.md),
+  //             display-only negation/past-tense demotion. See below.
+  const SENTENCE_BOUNDARY = /[.!?\n]/;
+  const CONTEXT_WINDOW = 80;
+
+  // The sentence (or, absent any sentence punctuation, the +/-80 char window)
+  // bounding a match — shared by matchContext (the human-readable evidence
+  // snippet) and detectQualifier (item 3.4's negation/past-tense scan), so
+  // both always agree on "the same sentence as the match". `isSentence`
+  // distinguishes the two paths because only the window-fallback path gets
+  // ellipsis markers in matchContext.
+  function sentenceSpan(text, start, end) {
+    if (SENTENCE_BOUNDARY.test(text)) {
+      let left = start;
+      while (left > 0 && !SENTENCE_BOUNDARY.test(text[left - 1])) left--;
+      let right = end;
+      while (right < text.length && !SENTENCE_BOUNDARY.test(text[right])) right++;
+      if (right < text.length) right++; // include the terminating punctuation itself
+      return { left, right, isSentence: true };
+    }
+    const left = Math.max(0, start - CONTEXT_WINDOW);
+    const right = Math.min(text.length, end + CONTEXT_WINDOW);
+    return { left, right, isSentence: false };
+  }
+
+  function matchContext(text, start, end) {
+    const { left, right, isSentence } = sentenceSpan(text, start, end);
+    if (isSentence) {
+      return text.slice(left, right).trim();
+    }
+    let ctx = text.slice(left, right).trim();
+    if (left > 0) ctx = '…' + ctx;
+    if (right < text.length) ctx = ctx + '…';
+    return ctx;
+  }
+
+  // ---- Negation / past-tense demotion (item 3.4, TRIAGE-LENS-2026-07-02.md) ----
+  // DISPLAY-ONLY: a qualified match is never suppressed, only ranked lower and
+  // shown distinctly (escalate-only safety stance — see content.js's rule-chip
+  // rendering and CLAUDE.md's clinical-safety conventions). Kept as exported
+  // consts so they're listed in the phase's clinical review doc.
+  //
+  //  - negated: one of NEGATORS appearing as a WHOLE WORD before the matched
+  //    term, within 6 words of the match start, in the SAME sentence as the
+  //    match (sentenceSpan above). Order matters: a negator AFTER the term
+  //    ("chest pain, no relief") does not qualify.
+  //  - past: one of PAST_MARKERS appearing as a whole PHRASE anywhere in the
+  //    same sentence ("had a UTI last year").
+  //  - negated wins if both are present.
+  const NEGATORS = ['no', 'not', 'denies', 'denied', 'denying', 'without', 'never', 'nil'];
+  const PAST_MARKERS = [
+    'last year',
+    'last month',
+    'years ago',
+    'months ago',
+    'weeks ago',
+    'previously',
+    'in the past',
+    'history of',
+    'previous',
+  ];
+  const NEGATOR_SET = new Set(NEGATORS);
+  const PAST_MARKER_PATTERNS = PAST_MARKERS.map(
+    (phrase) => new RegExp('\\b' + phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i')
+  );
+  const NEGATION_WORD_WINDOW = 6;
+
+  function detectQualifier(text, start, end) {
+    const { left, right } = sentenceSpan(text, start, end);
+    const sentenceText = text.slice(left, right);
+    const matchStartInSentence = start - left;
+
+    // Negation: a whole-word negator among the (up to) 6 words immediately
+    // BEFORE the match, within this sentence only.
+    const before = sentenceText.slice(0, Math.max(0, matchStartInSentence));
+    const beforeWords = before.split(/\s+/).filter(Boolean);
+    const window = beforeWords.slice(-NEGATION_WORD_WINDOW);
+    for (let i = window.length - 1; i >= 0; i--) {
+      // Strip surrounding punctuation so "no," / "(no" still match, but
+      // "notable"/"nothing" — real words that merely CONTAIN a negator —
+      // never do (whole-word discipline).
+      const clean = window[i].replace(/[^a-zA-Z]/g, '').toLowerCase();
+      if (NEGATOR_SET.has(clean)) {
+        return { qualifier: 'negated', qualifierTerm: clean };
+      }
+    }
+
+    // Past-tense: a whole phrase anywhere in the sentence (before OR after).
+    for (let i = 0; i < PAST_MARKERS.length; i++) {
+      if (PAST_MARKER_PATTERNS[i].test(sentenceText)) {
+        return { qualifier: 'past', qualifierTerm: PAST_MARKERS[i] };
+      }
+    }
+
+    return { qualifier: null, qualifierTerm: null };
+  }
+
+  // Every match (across the WHOLE compiled pattern set) in `text`, sorted by
+  // position — used only to look for a later, unqualified restatement of the
+  // same rule (see ruleMatchEvidence below). Each compiled regex is re-run in
+  // global mode so every one of its occurrences is found, not just the first.
+  function findAllMatches(compiledRule, text) {
+    const matches = [];
+    for (const re of compiledRule._compiled) {
+      const flags = re.flags.includes('g') ? re.flags : re.flags + 'g';
+      const globalRe = new RegExp(re.source, flags);
+      let m;
+      while ((m = globalRe.exec(text))) {
+        matches.push({ term: m[0], start: m.index, end: m.index + m[0].length });
+        if (m[0].length === 0) globalRe.lastIndex++; // defensive: never spin on a zero-width match
+      }
+    }
+    matches.sort((a, b) => a.start - b.start);
+    return matches;
+  }
+
+  function evidenceFromMatch(text, match) {
+    const q = detectQualifier(text, match.start, match.end);
+    return {
+      term: match.term,
+      start: match.start,
+      end: match.end,
+      context: matchContext(text, match.start, match.end),
+      qualifier: q.qualifier,
+      qualifierTerm: q.qualifierTerm,
+    };
+  }
+
+  function ruleMatchEvidence(compiledRule, text) {
+    if (!compiledRule || !compiledRule._compiled) return null;
+    const s = text == null ? '' : String(text);
+    // "First pattern that matches wins" — same order/short-circuit as
+    // ruleMatchesText, unchanged.
+    let first = null;
+    for (const re of compiledRule._compiled) {
+      const m = re.exec(s);
+      if (m) {
+        first = { term: m[0], start: m.index, end: m.index + m[0].length };
+        break;
+      }
+    }
+    if (!first) return null;
+
+    const firstEv = evidenceFromMatch(s, first);
+    if (!firstEv.qualifier) return firstEv;
+
+    // The first match is negated/past — a request can contain a LATER,
+    // un-negated restatement of the same rule ("no chest pain yesterday but
+    // definite chest pain again now"); prefer that stronger evidence over the
+    // qualified one so the chip/menu lead with the live mention.
+    const later = findAllMatches(compiledRule, s).find(
+      (m) => m.start >= first.end && !detectQualifier(s, m.start, m.end).qualifier
+    );
+    return later ? evidenceFromMatch(s, later) : firstEv;
+  }
+
+  // ---- require gate (item 3.5, TRIAGE-LENS-2026-07-02.md) ----
+  // A request/alert rule may carry an OPTIONAL top-level `require` object:
+  //   { ageMin?:number, ageMax?:number, sex?:'male'|'female',
+  //     medsAny?:string[], problemsAny?:string[] }
+  // ALL present clauses must be satisfied (AND) for ruleRequireMet to return true.
+  // This is a SEPARATE gate applied by the caller AFTER a text match — it never
+  // touches ruleMatchesText/ruleMatchEvidence, which stay pure text matchers so the
+  // Options preview and the live page can never disagree about whether the PATTERN
+  // matched. require only decides whether a rule that already matched the text is
+  // ALSO shown, given whatever patient context is available on the current surface.
+  //
+  // FAIL CLOSED: a clause whose data is absent from `ctx` is treated as unsatisfied
+  // (never assumed true, never assumed false-because-absent — the rule simply is not
+  // shown from that clause's perspective). This is the same escalate-only,
+  // never-suppress-the-base-rule posture as engine/result-severity.js's
+  // contextAllows: require only ever ADDS a gated variant/escalation alongside the
+  // always-on base match; the caller in content.js never uses a failed require gate
+  // to suppress the UNGATED base chip a rule would otherwise render.
+  //
+  // ctx = { ageYears?:number, sex?:string, medsText?:string, problemsText?:string }
+  // medsText/problemsText are free-text blobs (e.g. med names / problem labels joined
+  // with whitespace); medsAny/problemsAny match as case-insensitive substrings against
+  // them, mirroring result-rules.js's analyte.match substring semantics.
+  function ruleRequireMet(rule, ctx) {
+    const req = rule && rule.require;
+    if (!req || typeof req !== 'object') return true; // no gate → always allowed
+    const c = ctx && typeof ctx === 'object' ? ctx : {};
+
+    const hasAgeMin = Number.isFinite(req.ageMin);
+    const hasAgeMax = Number.isFinite(req.ageMax);
+    if (hasAgeMin || hasAgeMax) {
+      const age = c.ageYears;
+      if (!Number.isFinite(age)) return false; // can't confirm → fail closed
+      if (hasAgeMin && age < req.ageMin) return false;
+      if (hasAgeMax && age > req.ageMax) return false;
+    }
+
+    if (typeof req.sex === 'string' && req.sex) {
+      const sex = typeof c.sex === 'string' ? c.sex.toLowerCase() : null;
+      if (!sex) return false; // can't confirm → fail closed
+      if (sex !== req.sex.toLowerCase()) return false;
+    }
+
+    if (Array.isArray(req.medsAny) && req.medsAny.length) {
+      const medsText = typeof c.medsText === 'string' ? c.medsText.toLowerCase() : '';
+      if (!medsText) return false; // no meds data on this surface → can't confirm
+      const hit = req.medsAny.some(
+        (m) => typeof m === 'string' && m.trim() && medsText.includes(m.trim().toLowerCase())
+      );
+      if (!hit) return false;
+    }
+
+    if (Array.isArray(req.problemsAny) && req.problemsAny.length) {
+      const problemsText = typeof c.problemsText === 'string' ? c.problemsText.toLowerCase() : '';
+      if (!problemsText) return false; // no problems data on this surface → can't confirm
+      const hit = req.problemsAny.some(
+        (p) => typeof p === 'string' && p.trim() && problemsText.includes(p.trim().toLowerCase())
+      );
+      if (!hit) return false;
+    }
+
+    return true;
+  }
+
+  // validateRuleRequire(rule) → string[] — used by options.js's validateTriageRule
+  // and the LLM importer for request/alert rules. Returns an array of human-readable
+  // error strings (empty = valid).
+  function validateRuleRequire(rule) {
+    const errs = [];
+    if (!rule || rule.require === undefined) return errs;
+    const req = rule.require;
+    if (!req || typeof req !== 'object' || Array.isArray(req)) {
+      errs.push('require, if present, must be an object with optional ageMin/ageMax/sex/medsAny/problemsAny.');
+      return errs;
+    }
+    const hasAgeMin = req.ageMin !== undefined && req.ageMin !== null;
+    const hasAgeMax = req.ageMax !== undefined && req.ageMax !== null;
+    const ageMinValid = !hasAgeMin || (Number.isFinite(req.ageMin) && req.ageMin >= 0);
+    const ageMaxValid = !hasAgeMax || (Number.isFinite(req.ageMax) && req.ageMax >= 0);
+    if (!ageMinValid) errs.push('require.ageMin, if present, must be a non-negative finite number.');
+    if (!ageMaxValid) errs.push('require.ageMax, if present, must be a non-negative finite number.');
+    if (hasAgeMin && hasAgeMax && ageMinValid && ageMaxValid && req.ageMin > req.ageMax) {
+      errs.push('require.ageMin must be <= require.ageMax when both are present.');
+    }
+    if (req.sex !== undefined && req.sex !== null && req.sex !== 'male' && req.sex !== 'female') {
+      errs.push("require.sex, if present, must be 'male' or 'female' (lowercase).");
+    }
+    if (req.medsAny !== undefined) {
+      if (!Array.isArray(req.medsAny) || req.medsAny.some((m) => typeof m !== 'string')) {
+        errs.push('require.medsAny, if present, must be an array of strings.');
+      }
+    }
+    if (req.problemsAny !== undefined) {
+      if (!Array.isArray(req.problemsAny) || req.problemsAny.some((p) => typeof p !== 'string')) {
+        errs.push('require.problemsAny, if present, must be an array of strings.');
+      }
+    }
+    return errs;
+  }
+
+  const api = {
+    compileRule,
+    ruleMatchesText,
+    ruleMatchEvidence,
+    NEGATORS,
+    PAST_MARKERS,
+    ruleRequireMet,
+    validateRuleRequire,
+  };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

@@ -93,6 +93,17 @@
   color: var(--text-1);
 }
 
+/* Pinned "Locum brief" category — subtle distinct treatment (not the same as
+   the selected/"on" state) so it reads as a known, always-first category a
+   covering doctor can find at a glance. */
+.kb-pill-locum {
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+}
+.kb-pill-locum.kb-pill-on {
+  border-left-color: var(--accent-hover);
+}
+
 /* ── Buttons ── */
 .kb-btn {
   background: var(--bg-elev);
@@ -270,10 +281,11 @@
   word-break: break-all;
 }
 .kb-detail-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
   min-width: 62px;
 }
@@ -314,10 +326,10 @@
 }
 .kb-label {
   display: block;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-3);
   font-weight: 600;
   margin: 8px 0 3px;

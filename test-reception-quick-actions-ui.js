@@ -1,0 +1,144 @@
+// Medicus Suite — H-049 WORDING-CONTROL source test for the GP → reception
+// quick-actions composer widget.
+// Run with: node test-reception-quick-actions-ui.js
+//
+// content-scripts/reception-quick-actions.js is a browser IIFE (not requireable),
+// and until v3.204.0 nothing in CI loaded it at all — which meant every WORDING
+// control in hazard H-049(e) (docs/HAZARD-LOG.md) lived in an uncovered file.
+// This test source-greps the widget (the test-chip-contract.js style of guard)
+// and pins:
+//   1. the safety strings H-049(e) quotes verbatim are present and contiguous;
+//   2. no UI string literal claims completion ("Done", "Sent", "Booked" — the
+//      words H-049 deliberately never uses; a click on Submit is not a
+//      successful submit, so the widget must never assert one);
+//   3. the mechanical safety invariants that are grep-visible: Submit is
+//      highlighted never clicked, the insert is append-only, and focus() never
+//      scroll-jacks the page after an insert.
+
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+let passed = 0,
+  failed = 0;
+function check(cond, msg) {
+  if (cond) {
+    console.log(`  OK  ${msg}`);
+    passed++;
+  } else {
+    console.error(`  FAIL  ${msg}`);
+    failed++;
+    process.exitCode = 1;
+  }
+}
+
+const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'reception-quick-actions.js'), 'utf8');
+
+// ============================================================
+// 1. H-049(e) safety strings — present, contiguous, verbatim
+// ============================================================
+console.log('1. H-049(e) safety wording present and contiguous');
+
+check(src.includes('Insert into comment'), 'button substring "Insert into comment" is exact and contiguous');
+check(src.includes('writes text only — books nothing'), 'header states "writes text only — books nothing"');
+check(/not yet submitted/i.test(src), 'the un-submitted state is named ("not yet submitted")');
+check(src.includes('reception sees nothing'), 'pending reminder states the consequence ("reception sees nothing")');
+check(src.includes('Pick an action first'), 'disabled Insert explains itself ("Pick an action first")');
+
+// ============================================================
+// 2. No completion claim in any UI string literal
+// ============================================================
+// Extract single-quoted string literals from the source (the file is
+// single-quote-only, enforced by Prettier) and assert none claims completion.
+// Scoped to literals so the comment block's prose can discuss the rule freely.
+console.log('\n2. no UI string claims completion');
+
+const literals = src.match(/'(?:[^'\\\n]|\\.)*'/g) || [];
+check(literals.length > 50, `extracted a plausible number of string literals (got ${literals.length})`);
+const BANNED = /\b(Done|Sent|Booked|Submitted)\b/; // capitalised claim-words; "not yet submitted" stays legal
+const offenders = literals.filter((l) => BANNED.test(l));
+check(
+  offenders.length === 0,
+  `no string literal claims completion (Done/Sent/Booked/Submitted)${offenders.length ? ': ' + offenders.join(', ') : ''}`
+);
+
+// ============================================================
+// 3. Grep-visible mechanical invariants
+// ============================================================
+console.log('\n3. mechanical safety invariants');
+
+// Submit is highlighted, never clicked: the only .click() in the file is the
+// keyboard-activation forward on the widget's own header toggle.
+const clickCalls = src.match(/\.click\(\)/g) || [];
+check(clickCalls.length <= 1, `at most one .click() call in the file (got ${clickCalls.length})`);
+check(!/submit[^\n]*\.click\(\)/i.test(src), 'no .click() is ever applied to a submit control');
+check(/highlight\(submit\)/.test(src), "the card's Submit control is highlighted after an insert");
+
+// Append-only write: the textarea is only ever assigned through appendToComment.
+check(/QA\.appendToComment\(ta\.value,/.test(src), 'the comment write goes through QA.appendToComment(ta.value, …)');
+
+// The insert must not scroll-jack: focus() after an insert uses preventScroll.
+check(/ta\.focus\(\{ preventScroll: true \}\)/.test(src), 'post-insert focus() uses { preventScroll: true }');
+
+// The pending reminder is stateful, not timed: no setTimeout may clear s.pending.
+check(!/setTimeout[\s\S]{0,200}?s\.pending\s*=\s*false/.test(src), 'no timer ever clears the pending reminder');
+
+// ============================================================
+// 4. Comment-box crush guard (v3.204.1) — the textarea must stay readable
+// ============================================================
+// The v3.204.0 inject-time-only layout fix did not hold on the live Medicus
+// layout (field evidence in H-049): the crushing flex container is not always
+// the textarea's direct parent, and Vue re-applies its layout after a one-shot
+// measure. Pin the three layers of the replacement guard.
+console.log('\n4. comment-box crush guard');
+
+const css = fs.readFileSync(path.join(__dirname, 'content-scripts', 'reception-quick-actions.css'), 'utf8');
+
+// (a) CSS backstop: a hard min-width on the following-sibling textarea —
+//     min-width beats flex-shrink whichever ancestor does the crushing, and
+//     !important survives Vue rewriting the textarea's inline style.
+const sibRule = css.match(/#ms-qa-widget\s*~\s*textarea\s*\{[^}]*\}/);
+check(!!sibRule, 'CSS has a #ms-qa-widget ~ textarea rule');
+check(
+  !!sibRule && /min-width:\s*\d{3,}px\s*!important/.test(sibRule[0]),
+  'the sibling textarea min-width is ≥100px and !important'
+);
+
+// (a2) Grid backstops (v3.204.2 — the second field report was a grid, which the
+//      flex-only walk could not see): the widget must span all grid columns so
+//      auto-placed items are not shifted into narrow tracks, injection must climb
+//      out of single-child wrapper shells, and the textarea min-width must also
+//      be patched INLINE (the stylesheet sibling rule stops matching if the
+//      widget is hoisted or anchored higher).
+const baseRule = css.match(/#ms-qa-widget\s*\{[^}]*\}/);
+check(
+  !!baseRule && /grid-column:\s*1\s*\/\s*-1/.test(baseRule[0]),
+  'the widget spans all grid columns (grid-column: 1 / -1)'
+);
+check(/function insertionAnchor\(/.test(src), 'injection climbs out of single-child wrapper shells (insertionAnchor)');
+check(/patchStyle\(ta, 'minWidth'/.test(src), 'the textarea min-width is also patched inline');
+check(/gridTemplateColumns/.test(src), 'fixCrushedLayout has a grid-container escalation step');
+
+// (b) JS self-heal is continuous, not inject-time-only: the connected-widget
+//     path of runInject must re-verify the layout on DOM churn.
+check(/function fixCrushedLayout\(/.test(src), 'fixCrushedLayout() exists');
+check(/function ensureReadableLayout\(/.test(src), 'ensureReadableLayout() exists');
+const runInjectBody = src.match(/function runInject\(\) \{[\s\S]*?\n {2}\}/);
+check(
+  !!runInjectBody && /ensureReadableLayout\(\)/.test(runInjectBody[0]),
+  'runInject re-checks the layout while the widget is connected'
+);
+
+// (c) No permanent mutations of Medicus DOM: every style patch is recorded and
+//     restored when the widget is removed.
+check(/patchStyle\(/.test(src) && /restoreStylePatches\(\)/.test(src), 'host style patches are recorded and restored');
+const removeWidgetBody = src.match(/function removeWidget\(\) \{[\s\S]*?\n {2}\}/);
+check(
+  !!removeWidgetBody && /restoreStylePatches\(\)/.test(removeWidgetBody[0]),
+  'removeWidget restores all host style patches'
+);
+
+// ============================================================
+console.log(`\n${passed} passed, ${failed} failed`);
+process.exit(failed === 0 ? 0 : 1);

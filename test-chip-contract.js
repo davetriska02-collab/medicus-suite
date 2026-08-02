@@ -541,6 +541,49 @@ if (selectResultChips) {
       },
     },
     {
+      // item 3.2 Leg A — red-level labelled text review → red chip family
+      name: 'labelled red review',
+      sev: {
+        level: 'red',
+        urgentCount: 0,
+        abnormalCount: 0,
+        top: null,
+        misprioritised: false,
+        unmatched: false,
+        reviewCount: 1,
+        reviewTop: { name: 'Blood culture', label: 'Positive blood culture', level: 'red' },
+      },
+    },
+    {
+      // item 3.2 Leg A — generic red review (label defaults to "Needs review")
+      name: 'generic red review',
+      sev: {
+        level: 'red',
+        urgentCount: 0,
+        abnormalCount: 0,
+        top: null,
+        misprioritised: false,
+        unmatched: false,
+        reviewCount: 1,
+        reviewTop: { name: 'Blood culture', label: 'Needs review', level: 'red' },
+      },
+    },
+    {
+      // item 3.2 Leg B — unclassified qualitative positive. NOT rendered by
+      // selectResultChips (it ships no new systemChip — surfaced via fixed injected markup,
+      // like the "unit?" meta chip), so this branch emits no chip; included for completeness.
+      name: 'unclassified positive',
+      sev: {
+        level: 'amber',
+        urgentCount: 0,
+        abnormalCount: 0,
+        top: null,
+        misprioritised: false,
+        unmatched: false,
+        unclassified: [{ name: 'Respiratory PCR', token: 'detected' }],
+      },
+    },
+    {
       name: 'meta chips',
       sev: {
         level: 'red',

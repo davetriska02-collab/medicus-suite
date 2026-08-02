@@ -68,11 +68,11 @@
   border: 1px solid var(--border-hi);
   border-radius: var(--r-md);
   color: var(--text-3);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 4px 9px;
   cursor: pointer;
   white-space: nowrap;
@@ -210,10 +210,11 @@
    Muted/uppercase like .sent-group-label; does not reduce alert salience. */
 .sent-patient-lead {
   display: block;
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
   margin-bottom: 3px;
 }
@@ -229,6 +230,65 @@
   font-size: 10px;
   color: var(--text-2);
   letter-spacing: 0.03em;
+}
+
+/* Smoking-status line (Practice-panel ruling 2026-07-16). NEUTRAL by design —
+   never red/amber (the fact is context, not an alert; alarm colours stay
+   reserved for needs-action signals). Hard single-line ellipsis: a wrapped
+   flag defeats the at-a-glance point at 420px (panel truncation rule). */
+.sent-patient-smoking {
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-1);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Conflicting entries: a quiet underline cue, still not an alarm colour — the
+   tooltip explains. The word "multiple entries" already carries the state. */
+.sent-patient-smoking-conflict {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+/* Practice-defined per-patient flags (Patient Alerts tab) inside the banner.
+   Severity colour IS the signal here — these are deliberate practice alerts,
+   unlike the neutral smoking fact line above. */
+.sent-pa-row {
+  margin-top: 5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.sent-pa-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sent-pa-chip--red {
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+  color: var(--red);
+}
+.sent-pa-chip--amber {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+}
+.sent-pa-chip--info {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
 }
 
 /* Extraction drift banner (amber — distinct from red degraded state) */
@@ -290,6 +350,51 @@
   line-height: 1.5;
 }
 
+/* High-risk blind-spot banner — a monitored drug that matched no rule. Red, not
+   amber: this is a patient-safety alert, not advisory drift noise. */
+.sent-hrisk-banner {
+  border-left: 3px solid var(--red);
+  background: var(--red-dim);
+  border-radius: var(--r-md);
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.sent-hrisk-head {
+  font-weight: 600;
+  color: var(--red);
+  margin-bottom: 6px;
+}
+.sent-hrisk-list {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  line-height: 1.5;
+}
+.sent-hrisk-list strong {
+  color: var(--text-1);
+}
+.sent-hrisk-class {
+  font-size: 10px;
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+  color: var(--red);
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+  border-radius: var(--r-sm);
+  padding: 0 5px;
+  white-space: nowrap;
+}
+.sent-hrisk-why {
+  color: var(--text-3);
+}
+.sent-hrisk-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
 /* Filter bar */
 .sent-filter-bar {
   display: flex;
@@ -305,11 +410,11 @@
   background: transparent;
   border: 1px solid transparent; /* reserved — active state adds border without layout shift */
   color: var(--text-4);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   border-radius: var(--r-md);
   padding: 5px 4px;
@@ -350,11 +455,12 @@
   margin-bottom: 14px;
 }
 .sent-group-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-2);
   margin-bottom: 5px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border);
@@ -602,12 +708,14 @@
   margin: 0 auto 8px;
   color: var(--text-5);
 }
+/* Type recast 2026-06-21 (DOCTRINE #4): headings/labels are sentence-case sans. */
 .sent-idle-heading {
-  font-family: var(--mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-3);
   margin-bottom: 4px;
 }
 .sent-idle-body {
@@ -716,11 +824,15 @@
   color: var(--green);
 }
 
-/* B: .wr-waiting de-amberised — calm surface, left bar only for accent */
+/* The waiting-room block is the room, NOT a monitoring result, so it must not
+   wear the clinical alert hue: an amber/red left-bar read as "overdue" to three
+   domain personas (nurse, pharmacist, registrar). Use the informational accent
+   so the container reads as a status panel, not an alert. The per-row wait-time
+   escalation below is a duration signal, kept. (Practice appraisal G2, 2026-06-21.) */
 .wr-waiting {
   background: var(--bg-elev);
   border-color: var(--border-hi);
-  border-left: 3px solid var(--amber);
+  border-left: 3px solid var(--accent);
 }
 
 /* B: .wr-pin-head border uses neutral --border */
@@ -786,15 +898,23 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Wait duration colour escalation — UNCHANGED (salience well spent) */
+/* Wait-duration emphasis carried by WEIGHT, not clinical hue. The minutes are a
+   waiting-room duration, NOT a monitoring result; four domain personas read the
+   old amber/red minutes as "overdue/act now" and warned a tired clinician could
+   mistake the idle waiting list for a fired monitoring alert (a patient-safety
+   misread). Within the Monitoring tab, red is now reserved for a genuine
+   overdue monitoring check; the longest waits still stand out via weight and a
+   muted neutral tone. (Practice appraisal G2 follow-through, 2026-06-21.) */
 .wr-row-amber .wr-row-wait {
-  color: var(--amber);
+  color: var(--text-2);
+  font-weight: 700;
 }
 .wr-row-amber .wr-row-name {
   color: var(--text-1);
 }
 .wr-row-red .wr-row-wait {
-  color: var(--red);
+  color: var(--text-1);
+  font-weight: 700;
 }
 .wr-row-red .wr-row-name {
   color: var(--text-1);
@@ -1047,10 +1167,11 @@
 /* K-10: .sent-ev-label — letter-spacing 0.06em + mono font (surveyor F-21) */
 .sent-ev-label {
   color: var(--text-3);
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   padding-top: 1px;
 }
 .sent-ev-value {
@@ -1107,10 +1228,11 @@
 }
 /* K-10: .sent-ev-refs-head — letter-spacing 0.06em + mono font (surveyor F-21) */
 .sent-ev-refs-head {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-3);
   margin-bottom: 4px;
 }
@@ -1412,6 +1534,131 @@
   margin-right: 4px;
 }
 
+/* The rule-currency line doubles as the coverage drill-down toggle when rule
+   data has loaded (loadRuleCurrencyFooter / wireCoverageToggle). Reset button
+   chrome so it reads exactly like the plain-text line it replaces. */
+.sent-rules-footer-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+}
+.sent-rules-footer-btn:hover {
+  text-decoration: underline;
+}
+.sent-rules-footer-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* ── Rule-coverage drill-down ─────────────────────────────────────────────── */
+/* Read-only listing of every drug-monitoring rule and QOF register/indicator,
+   built from coverage-core.js. Collapsed by default; toggled from the rule
+   currency line above. Renders without a patient loaded (source is the rule
+   files, not a patient snapshot). Calm, low-chroma — this is reference
+   material, not an alert. */
+.sent-cov-drilldown {
+  margin-top: 8px;
+  padding: 10px 10px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-mid);
+}
+.sent-cov-note {
+  margin: 0 0 10px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.sent-cov-section {
+  margin-bottom: 12px;
+}
+.sent-cov-section:last-child {
+  margin-bottom: 6px;
+}
+.sent-cov-h {
+  margin: 0 0 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  font-weight: 600;
+}
+.sent-cov-count {
+  font-weight: 400;
+  color: var(--text-5);
+}
+.sent-cov-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.sent-cov-rule {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+.sent-cov-rule:last-child {
+  border-bottom: none;
+}
+.sent-cov-rule-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.sent-cov-rule-class {
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--text-5);
+}
+.sent-cov-rule-off {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-5);
+}
+.sent-cov-rule-disabled .sent-cov-rule-name {
+  color: var(--text-5);
+}
+.sent-cov-rule-terms {
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.sent-cov-list-compact .sent-cov-item {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 3px 0;
+  font-size: 11px;
+}
+.sent-cov-item-code {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  min-width: 52px;
+}
+.sent-cov-item-name {
+  color: var(--text-2);
+}
+.sent-cov-item-disabled .sent-cov-item-code,
+.sent-cov-item-disabled .sent-cov-item-name {
+  color: var(--text-5);
+}
+.sent-cov-empty {
+  font-size: 11px;
+  color: var(--text-5);
+  padding: 3px 0;
+}
+
 /* ── Appointments summary modal ─────────────────────────────────────────────── */
 .sent-appt-modal {
   /* Fixed to the viewport (not the module) so it is always fully visible
@@ -1559,11 +1806,11 @@
   border: 1px solid var(--accent-line);
   border-radius: var(--r-sm);
   color: var(--accent);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   padding: 3px 9px;
   transition:
@@ -1637,12 +1884,12 @@
 }
 
 .sent-act-section-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-2);
 }
 
 /* Per-section Copy button */
@@ -1725,12 +1972,12 @@
 }
 
 .sent-brief-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
   flex-shrink: 0;
 }
 
@@ -1849,6 +2096,104 @@
   text-transform: uppercase;
 }
 
+/* ── Brief: all-clear (loudly green) state ────────────────────────────────── */
+/* Same green treatment as .wr-clear — an explicit "nothing to do" signal,
+   not an absent card. */
+.sent-brief-card-clear {
+  background: var(--green-dim);
+  border-color: var(--green-line);
+}
+.sent-brief-card-clear .sent-brief-body {
+  border-top-color: var(--green-line);
+}
+.sent-brief-card-clear .sent-brief-label {
+  color: var(--green);
+}
+
+.sent-brief-allclear {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0 2px;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+  line-height: 1.4;
+}
+
+/* ── Brief: per-group RAG pills (header, survive collapse) ────────────────── */
+.sent-brief-pill {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.sent-brief-pill-clear {
+  background: var(--green-dim);
+  color: var(--green);
+  border: 1px solid var(--green-line);
+}
+.sent-brief-pill-amber {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid var(--amber-line);
+}
+.sent-brief-pill-red {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red-line);
+}
+
+/* ── Brief: grouped body sections (Meds monitoring / QOF / General) ───────── */
+.sent-brief-group {
+  padding: 4px 0 2px;
+}
+.sent-brief-group + .sent-brief-group {
+  border-top: 1px solid var(--border);
+}
+
+.sent-brief-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 2px 0;
+}
+.sent-brief-group-name {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.sent-brief-group-state {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.sent-brief-group-state-clear {
+  color: var(--green);
+}
+.sent-brief-group-state-amber {
+  color: var(--amber);
+}
+.sent-brief-group-state-red {
+  color: var(--red);
+}
+
+/* A clear group inside a non-clear card is itself a positive signal — tint
+   its name green too so "Meds monitoring · none due ✓" reads at a glance. */
+.sent-brief-group-clear .sent-brief-group-name {
+  color: var(--green);
+}
+
 /* ── Unmatched meds: excluded-by annotation ───────────────────────────────── */
 /* Amber inline annotation shown next to meds silently suppressed by an
    exclude term — surfaces the "wrong injection suppresses everything" class of
@@ -1936,4 +2281,107 @@
   font-family: var(--mono);
   font-size: 9px;
   color: var(--text-4);
+}
+
+/* ── Create recall task (from the action bar — Sweep's close-the-loop, for the
+   open patient). Mirrors sweep.css's recall-form styling. ─────────────────── */
+
+.sent-task-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 10px;
+  padding: 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+/* Wrong-patient guard: the form always names who it is for. */
+.sent-task-for {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-2);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sent-task-lbl {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.sent-task-assignee,
+.sent-task-priority,
+.sent-task-desc,
+.sent-fu-what,
+.sent-fu-due {
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-1);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 6px;
+}
+
+.sent-task-desc {
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.sent-task-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.sent-task-create,
+.sent-fu-save {
+  font-size: 12px;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.sent-task-create:disabled,
+.sent-fu-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sent-task-cancel {
+  font-size: 12px;
+  color: var(--text-3);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.sent-task-loading {
+  margin: 6px 0 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+}
+
+.sent-task-error {
+  font-size: 11px;
+  color: var(--red);
+}
+
+.sent-task-done {
+  margin: 6px 0 10px;
+  padding: 6px 9px;
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
 }

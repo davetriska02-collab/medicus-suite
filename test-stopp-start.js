@@ -478,6 +478,98 @@ console.log('\n--- Flag structure ---');
   assert(f.source.includes('STOPP/START v3'), 'source cites STOPP/START v3');
 }
 
+// ── 2026-07-11 Keeper: BENZO_TERMS additions (loprazolam, lormetazepam) ──────
+console.log('\n--- 2026-07-11 Keeper: BENZO_TERMS additions ---');
+{
+  const flags = computeStoppStart({ drugs: ['loprazolam 1mg tablets'], problems: [], ageYears: 70, egfr: null });
+  assert(!!find(flags, 'stopp_benzo_elderly'), 'STOPP 4 fires: loprazolam (UK benzo) + age 70');
+}
+{
+  const flags = computeStoppStart({ drugs: ['lormetazepam 1mg tablets'], problems: [], ageYears: 72, egfr: null });
+  assert(!!find(flags, 'stopp_benzo_elderly'), 'STOPP 4 fires: lormetazepam (UK benzo) + age 72');
+}
+
+// ── 2026-07-11 Keeper: STATIN_TERMS addition (pitavastatin) ───────────────
+console.log('\n--- 2026-07-11 Keeper: STATIN_TERMS addition (pitavastatin) ---');
+{
+  // Pitavastatin present → no START 11 (IHD + statin is satisfied)
+  const flags = computeStoppStart({
+    drugs: ['pitavastatin 2mg tablets'],
+    problems: [{ name: 'ischaemic heart disease' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_statin_ihd'), 'pitavastatin recognised as statin: START 11 suppressed');
+}
+
+// ── 2026-07-11 Keeper: BETA_BLOCKER_TERMS additions ──────────────────────
+console.log('\n--- 2026-07-11 Keeper: BETA_BLOCKER_TERMS additions ---');
+{
+  const flags = computeStoppStart({
+    drugs: ['acebutolol 200mg capsules'],
+    problems: [{ name: 'myocardial infarction' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bb_post_mi'), 'acebutolol recognised as beta-blocker: START 13 suppressed');
+}
+{
+  const flags = computeStoppStart({
+    drugs: ['celiprolol 200mg tablets'],
+    problems: [{ name: 'myocardial infarction' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bb_post_mi'), 'celiprolol recognised as beta-blocker: START 13 suppressed');
+}
+{
+  const flags = computeStoppStart({
+    drugs: ['nadolol 40mg tablets'],
+    problems: [{ name: 'myocardial infarction' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bb_post_mi'), 'nadolol recognised as beta-blocker: START 13 suppressed');
+}
+{
+  const flags = computeStoppStart({
+    drugs: ['oxprenolol 40mg tablets'],
+    problems: [{ name: 'myocardial infarction' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bb_post_mi'), 'oxprenolol recognised as beta-blocker: START 13 suppressed');
+}
+
+// ── 2026-07-11 Keeper: FIRSTGEN_AH_TERMS additions (alimemazine, trimeprazine) ─
+console.log('\n--- 2026-07-11 Keeper: FIRSTGEN_AH_TERMS additions ---');
+{
+  const flags = computeStoppStart({ drugs: ['alimemazine 7.5mg syrup'], problems: [], ageYears: 70, egfr: null });
+  assert(!!find(flags, 'stopp_firstgen_ah_elderly'), 'STOPP 3 fires: alimemazine + age 70');
+}
+{
+  const flags = computeStoppStart({ drugs: ['trimeprazine 30mg'], problems: [], ageYears: 66, egfr: null });
+  assert(!!find(flags, 'stopp_firstgen_ah_elderly'), 'STOPP 3 fires: trimeprazine + age 66');
+}
+
+// ── 2026-07-25 Keeper: NSAID_TERMS celebrex, LOOP_DIURETIC_TERMS torasemide, FIRSTGEN_AH brompheniramine ─
+console.log('\n--- 2026-07-25 Keeper: NSAID celebrex, loop diuretic torasemide, firstgen-AH brompheniramine ---');
+{
+  // celebrex is the Pfizer brand of celecoxib; not a substring of 'celecoxib', must be listed explicitly
+  const flags = computeStoppStart({ drugs: ['Celebrex 200mg capsules'], problems: ['chronic kidney disease stage 3'], ageYears: 72, egfr: 45 });
+  assert(!!find(flags, 'stopp_nsaid_ckd'), 'STOPP 1 fires: Celebrex (celecoxib brand) + CKD — celebrex recognised as NSAID');
+}
+{
+  // torasemide is a BNF 2.2.2 loop diuretic, brand Torem; LOOP_DIURETIC_TERMS feeds stopp_nsaid_loop (NSAID+loop diuretic combo)
+  const flags = computeStoppStart({ drugs: ['ibuprofen 400mg', 'torasemide 5mg tablets'], problems: [], ageYears: 78, egfr: null });
+  assert(!!find(flags, 'stopp_nsaid_loop'), 'STOPP nsaid_loop fires: ibuprofen + torasemide — torasemide recognised as loop diuretic');
+}
+{
+  // brompheniramine: first-gen sedating AH, must fire STOPP_3 in older patients
+  const flags = computeStoppStart({ drugs: ['brompheniramine 4mg tablets'], problems: [], ageYears: 68, egfr: null });
+  assert(!!find(flags, 'stopp_firstgen_ah_elderly'), 'STOPP 3 fires: brompheniramine + age 68 — brompheniramine recognised as first-gen AH');
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

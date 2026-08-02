@@ -1,20 +1,33 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.126.0",
-  "description": "The clinical intelligence layer for Medicus: read-only safety monitoring, triage red-flags, QOF tracking and operational dashboards.",
+  "version": "3.211.0",
+  "description": "Clinical intelligence for Medicus: safety monitoring, triage red-flags, QOF tracking, dashboards, confirmed record tidy-up tools.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
     "https://*.medicus.health/*",
     "https://*.api.england.medicus.health/*",
-    "https://api.github.com/repos/davetriska02-collab/medicus-suite/*"
+    "https://api.github.com/repos/davetriska02-collab/medicus-suite/*",
+    "https://api.nhs.uk/*",
+    "https://termbrowser.nhs.uk/*",
+    "https://*.supabase.co/*"
   ],
-  "background": { "service_worker": "service-worker.js" },
-  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self'" },
-  "side_panel": { "default_path": "side-panel/panel.html" },
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'"
+  },
+  "side_panel": {
+    "default_path": "side-panel/panel.html"
+  },
   "action": {
     "default_title": "Medicus Suite",
-    "default_icon": { "16": "icons/icon-16.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
   },
   "content_scripts": [
     {
@@ -26,6 +39,9 @@
     {
       "matches": ["https://*.medicus.health/*"],
       "js": [
+        "shared/dom-contracts.js",
+        "content-scripts/dom-observer-hub.js",
+        "shared/contract-canary.js",
         "content-scripts/pusher-relay.js",
         "engine/extractors/patient-context.js",
         "engine/extractors/medications.js",
@@ -42,15 +58,71 @@
         "engine/data-fetcher.js",
         "shared/extraction-health.js",
         "shared/chip-renderer.js",
+        "shared/shadow-compare.js",
+        "shared/event-ledger.js",
+        "shared/txn-shadow-summary.js",
+        "shared/smoking-status.js",
         "content-scripts/sentinel.js",
-        "content-scripts/referrals-discovery.js"
+        "content-scripts/referrals-discovery.js",
+        "content-scripts/api-discovery.js",
+        "shared/patient-alerts-lookup.js",
+        "content-scripts/patient-alerts-banner.js"
+      ],
+      "css": ["content-scripts/patient-alerts-banner.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.medicus.health/*"],
+      "js": [
+        "content-scripts/triage-lens/rule-match.js",
+        "engine/reception-match.js",
+        "shared/pending-result-index.js",
+        "shared/contact-ledger.js",
+        "content-scripts/triage-lens/content.js",
+        "content-scripts/triage-lens/routine-rx-button.js",
+        "shared/lab-filing-utils.js",
+        "content-scripts/triage-lens/lab-file-button.js"
+      ],
+      "css": ["content-scripts/triage-lens/hud.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.medicus.health/*"],
+      "js": [
+        "content-scripts/booking-inline.js",
+        "content-scripts/task-inline.js",
+        "shared/quick-actions-core.js",
+        "content-scripts/reception-quick-actions.js",
+        "content-scripts/document-file-inline.js",
+        "shared/legacy-coded-description.js",
+        "shared/coding-specificity.js",
+        "shared/snomed-retirement.js",
+        "shared/preferred-descriptions.js",
+        "content-scripts/problem-description-cleanup.js",
+        "content-scripts/problem-bulk-end.js"
+      ],
+      "css": [
+        "content-scripts/booking-inline.css",
+        "content-scripts/task-inline.css",
+        "content-scripts/reception-quick-actions.css",
+        "content-scripts/document-file-inline.css",
+        "content-scripts/problem-description-cleanup.css",
+        "content-scripts/problem-bulk-end.css"
       ],
       "run_at": "document_idle"
     },
     {
       "matches": ["https://*.medicus.health/*"],
-      "js": ["content-scripts/triage-lens/rule-match.js", "content-scripts/triage-lens/content.js"],
-      "css": ["content-scripts/triage-lens/hud.css"],
+      "js": [
+        "engine/contact-relationships.js",
+        "engine/name-derivations.js",
+        "engine/contact-match.js",
+        "engine/contact-tree.js",
+        "content-scripts/contacts-api.js",
+        "content-scripts/contacts-canvas.js",
+        "content-scripts/contacts-link-button.js"
+      ],
+      "css": ["content-scripts/contacts-canvas.css", "content-scripts/contacts-link-button.css"],
       "run_at": "document_idle"
     }
   ],
@@ -63,10 +135,20 @@
         "rules/drug-rules.json",
         "rules/qof-rules.json",
         "rules/vaccine-rules.json",
+        "rules/reception-pathways.json",
+        "rules/document-types.json",
+        "rules/non-problem-root-codes.json",
+        "rules/snomed-terminology-server.json",
+        "rules/generic-additional-info-text.json",
+        "rules/contact-relationships.json",
         "side-panel/modules/sentinel/passport.html"
       ],
       "matches": ["https://*.medicus.health/*"]
     }
   ],
-  "icons": { "16": "icons/icon-16.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
 }

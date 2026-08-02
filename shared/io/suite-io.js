@@ -19,6 +19,7 @@ const SUITE_KEYS = [
   'suite.rollup.alwaysExpanded',
   'suite.waitingRoom.thresholds',
   'suite.letterhead',
+  'suite.practiceProfile.attestations',
 ];
 
 // Tab/module ids are short lowercase slugs (e.g. "slots", "sentinel").
@@ -45,6 +46,12 @@ async function suiteExport() {
     // Practice letterhead ({ practiceName, clinicianName }) auto-filling the
     // sign-off in Sentinel/Sweep recall letters and SMS; absent == placeholders.
     letterhead: r['suite.letterhead'] ?? null,
+    // Central-attestation provenance ({ <gateName>: { by, at, via } }) recording
+    // which per-install clinical gates were satisfied via a signed practice
+    // profile rather than a local click. Written by practice-profile.js. Must
+    // travel in a backup so a restore doesn't lose the "accepted centrally by
+    // <admin>" provenance shown by options.js and knowledge.js.
+    attestations: r['suite.practiceProfile.attestations'] ?? null,
   };
 }
 
@@ -113,6 +120,24 @@ async function suiteImport(data) {
       practiceName: typeof lh.practiceName === 'string' ? lh.practiceName : '',
       clinicianName: typeof lh.clinicianName === 'string' ? lh.clinicianName : '',
     };
+  }
+  if (data.attestations != null) {
+    const at = data.attestations;
+    if (typeof at !== 'object' || Array.isArray(at)) {
+      throw new Error('suite.practiceProfile.attestations must be an object.');
+    }
+    const cleanAtt = {};
+    for (const [gate, prov] of Object.entries(at)) {
+      if (!prov || typeof prov !== 'object' || Array.isArray(prov)) {
+        throw new Error('suite.practiceProfile.attestations entries must be objects.');
+      }
+      cleanAtt[gate] = {
+        by: typeof prov.by === 'string' ? prov.by : '',
+        at: typeof prov.at === 'string' ? prov.at : '',
+        via: typeof prov.via === 'string' ? prov.via : '',
+      };
+    }
+    toSet['suite.practiceProfile.attestations'] = cleanAtt;
   }
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);

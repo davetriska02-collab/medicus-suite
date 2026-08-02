@@ -578,14 +578,33 @@ const HIGH_RISK_DRUGS = [
   {
     id: 'aspirin_ap',
     label: 'Aspirin (antiplatelet)',
-    terms: ['aspirin 75', 'aspirin 300', 'aspirin tablet'],
+    terms: [
+      'aspirin 75',
+      'aspirin 300',
+      'aspirin tablet',
+      'aspirin dispersible', // 2026-07-11 Keeper: dm+d form name may appear without dose
+      'aspirin gastro', // 2026-07-11 Keeper: gastro-resistant form word-order variant
+      'nu-seals', // 2026-07-11 Keeper: AZ aspirin 75mg brand
+      'caprin', // 2026-07-11 Keeper: Pinewood aspirin 75mg brand
+      'micropirin', // 2026-07-11 Keeper: M&A Pharmachem aspirin 75mg brand
+    ],
     requires: [],
     interval: 0,
   },
   {
     id: 'antipsych',
     label: 'Antipsychotic',
-    terms: ['olanzapine', 'risperidone', 'quetiapine', 'aripiprazole', 'haloperidol', 'clozapine', 'chlorpromazine'],
+    terms: [
+      'olanzapine',
+      'risperidone',
+      'quetiapine',
+      'aripiprazole',
+      'haloperidol',
+      'clozapine',
+      'chlorpromazine',
+      'amisulpride', // 2026-07-11 Keeper: atypical antipsychotic, NICE CG178 monitoring
+      'paliperidone', // 2026-07-11 Keeper: active metabolite of risperidone, NICE CG178 monitoring
+    ],
     requires: ['fbc', 'full blood count', 'u&e', 'lft', 'glucose', 'hba1c', 'cholesterol'],
     interval: 183,
   },
@@ -603,12 +622,43 @@ const HIGH_RISK_DRUGS = [
       'chlordiazepoxide',
       'clonazepam',
       'alprazolam',
+      'loprazolam', // 2026-07-11 Keeper: BNF-listed UK benzo, missing from original list
+      'lormetazepam', // 2026-07-11 Keeper: BNF-listed UK benzo, missing from original list
       'zopiclone',
       'zolpidem',
       'zaleplon',
     ],
     requires: [],
     interval: 0,
+  },
+  // 2026-07-25 Keeper additions — confirmed against BNF / BSR / NICE sources:
+  {
+    id: 'leflunomide',
+    label: 'Leflunomide',
+    terms: ['leflunomide', 'arava'],
+    requires: ['fbc', 'full blood count', 'liver function', 'lft', 'u&e', 'urea'],
+    interval: 84, // BNF / BSR: 3-monthly (12-weekly) after stabilisation
+  },
+  {
+    id: 'carbamazepine',
+    label: 'Carbamazepine',
+    terms: ['carbamazepine', 'tegretol', 'carbagen'],
+    requires: ['fbc', 'full blood count', 'liver function', 'lft', 'u&e', 'sodium', 'carbamazepine level'],
+    interval: 182, // BNF: 6-monthly once stable; more frequent on initiation/dose change
+  },
+  {
+    id: 'valproate',
+    label: 'Sodium valproate / Valproic acid',
+    terms: ['sodium valproate', 'valproate', 'valproic acid', 'epilim', 'episenta', 'orlept', 'convulex', 'depakote', 'belvo', 'dyzantil', 'epival', 'syonell'],
+    requires: ['fbc', 'full blood count', 'liver function', 'lft', 'u&e'],
+    interval: 365, // BNF: annually once stable; Valproate Pregnancy Prevention Programme triggers 3-monthly for WOCBP
+  },
+  {
+    id: 'finerenone',
+    label: 'Finerenone',
+    terms: ['finerenone', 'kerendia'],
+    requires: ['u&e', 'urea', 'potassium', 'egfr'],
+    interval: 120, // NICE TA877 / SmPC: U&E at 1 month then every 4 months; using 120d (4 months) as recurring interval
   },
 ];
 
@@ -1521,7 +1571,8 @@ function computeEFI(activeProblems, pastProblems, drugs) {
   const ticked = [];
   for (const d of EFI_DEFICITS) {
     if (d.id === 'polypharm') {
-      if (drugs && drugs.length >= 5) ticked.push({ ...d, evidence: `${drugs.length} drugs detected` });
+      const activeDrugs = drugs ? drugs.filter((rx) => rx.active) : [];
+      if (activeDrugs.length >= 5) ticked.push({ ...d, evidence: `${activeDrugs.length} drugs detected` });
       continue;
     }
     const match = all.find((p) => d.terms.some((t) => p.name.toLowerCase().includes(t)));
@@ -1559,7 +1610,18 @@ function computeDrugMonitoring(entries) {
 
   for (const d of HIGH_RISK_DRUGS) {
     const drugRe = new RegExp(
-      '\\b(' + d.terms.map((t) => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')).join('|') + ')\\b',
+      '\\b(' +
+        d.terms
+          .map((t) => {
+            const esc = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // A term ending in a digit (e.g. "aspirin 75") is written in real
+            // label text with no space before the unit ("75mg") — "5" and "m"
+            // are both word chars, so a trailing \b never matches there. Drop
+            // the trailing boundary for such terms so "aspirin 75mg ..." matches.
+            return /\d$/.test(t) ? esc : esc + '\\b';
+          })
+          .join('|') +
+        ')',
       'i'
     );
     const drugEntries = scanEntries.filter((e) => {

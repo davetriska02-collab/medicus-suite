@@ -11,6 +11,7 @@
 'use strict';
 
 import { comparePct, DEMAND_KEYS } from './report-data.js';
+import { buildPulseRows } from '../pulse-core.js';
 
 const DEMAND_LABELS = {
   medical: 'Medical requests',
@@ -189,10 +190,16 @@ function renderCurrentSnapshot(report) {
     s.bandFloored && typeof s.ppi === 'number'
       ? `<p class="pr-floor-reason">Showing AMBER: the practice is over capacity — the weighted index alone is ${s.ppi}.</p>`
       : '';
-  // (1) Scale hint kept as secondary pr-note.
+  // (1) Scale hint kept as secondary pr-note. Uses the ACTUAL band thresholds
+  // captured on the snapshot (item 8 — these may differ from the shipped
+  // 40/70 defaults when a custom pressure-index config is active) so the hint
+  // never states a cut-off that isn't the one that was really applied.
+  const amber = s.thresholds?.amber ?? 40;
+  const red = s.thresholds?.red ?? 70;
+  const customNote = s.customWeightings ? ' Custom weightings are active.' : '';
   const scaleHint =
     typeof s.ppi === 'number'
-      ? `<p class="pr-note">GREEN under 40 &middot; AMBER 40&ndash;70 &middot; RED 70 or over.</p>`
+      ? `<p class="pr-note">GREEN under ${amber} &middot; AMBER ${amber}&ndash;${red} &middot; RED ${red} or over.${esc(customNote)}</p>`
       : '';
   return (
     `<section class="pr-card pr-card-live"><h2>Current snapshot ${s.band ? bandBadge(s.band) : ''}` +
@@ -345,27 +352,53 @@ function renderReferrals(report) {
   );
 }
 
+// Practice Pulse — prior-period comparison, built from the SAME pure core
+// (pulse-core.js buildPulseRows) that drives the Condor panel's Pulse card, so the
+// report and the live dashboard can never quietly disagree about a delta or a coverage
+// figure. Needs the FULL (unfiltered) snapshot series — `report.snapshotHistoryFull` —
+// because the prior-period window sits immediately BEFORE `report.range`, outside the
+// range-scoped `snapshotHistory` slice used elsewhere in this report.
 function renderTrends(report) {
-  const hist = report.snapshotHistory;
-  if (!Array.isArray(hist) || hist.length < 2) return '';
-  const ppiSeries = hist.map((s) => s.ppi).filter((v) => v != null);
-  const demandSeries = hist.map((s) => s.demand).filter((v) => v != null);
-  const parts = [];
-  if (ppiSeries.length >= 2) {
-    const cmp = comparePct(ppiSeries[ppiSeries.length - 1], ppiSeries[0]);
-    parts.push(
-      `<div class="pr-trend"><span class="pr-trend-label">Pressure index</span>${sparkline(ppiSeries)}<span class="pr-trend-delta">${cmp.pct == null ? '' : `${cmp.pct > 0 ? '+' : ''}${cmp.pct}%`}</span></div>`
-    );
-  }
-  if (demandSeries.length >= 2) {
-    parts.push(
-      `<div class="pr-trend"><span class="pr-trend-label">Daily demand</span>${sparkline(demandSeries)}</div>`
-    );
-  }
-  if (!parts.length) return '';
+  const full = report.snapshotHistoryFull;
+  if (!Array.isArray(full) || full.length < 1) return '';
+
+  // Anchor the comparison at the end of the report's own range, and pick the closest
+  // supported Pulse period (7 or 30) to that range's length — a "Today" or custom report
+  // still gets a sensible trend window rather than none at all.
+  const days = report.range?.days || 7;
+  const period = days > 14 ? 30 : 7;
+  const asOf = report.range?.end;
+  const built = buildPulseRows(full, period, asOf ? { asOf } : {});
+  if (!built.metrics.length) return '';
+
+  const rows = built.metrics
+    .map((m) => {
+      const values = m.series.map((p) => p.value);
+      const spark = values.filter((v) => v != null).length >= 2 ? sparkline(values.map((v) => v ?? 0)) : '';
+      const current = m.current == null ? '—' : `${m.current}${m.unit || ''}`;
+      let deltaHtml = '<span class="pr-trend-delta pr-trend-unknown">no prior-period data</span>';
+      if (m.delta != null) {
+        const sign = m.delta > 0 ? '+' : '';
+        const pctText = m.pct == null ? '' : ` (${sign}${m.pct}%)`;
+        const cls =
+          m.sense === 'worsening' ? 'pr-trend-worse' : m.sense === 'improving' ? 'pr-trend-better' : 'pr-trend-flat';
+        deltaHtml = `<span class="pr-trend-delta ${cls}">${esc(`${sign}${m.delta}${pctText} vs prior period`)}</span>`;
+      }
+      return (
+        `<div class="pr-trend"><span class="pr-trend-label">${esc(m.label)}</span>${spark}` +
+        `<span class="pr-trend-current">${esc(current)}</span>${deltaHtml}</div>`
+      );
+    })
+    .join('');
+
+  // Coverage: the best-covered metric's line, honestly stating gaps (never interpolated).
+  const best = built.metrics.reduce((a, b) => (b.coverage.recorded > a.coverage.recorded ? b : a));
+
   return (
-    `<section class="pr-card"><h2>Trends</h2>` +
-    `<p class="pr-note">From daily snapshots captured since this feature was enabled (${hist.length} days).</p>${parts.join('')}</section>`
+    `<section class="pr-card"><h2>Pulse — prior-period trend</h2>` +
+    `<p class="pr-note">Compares the last ${built.period} days to the ${built.period} days immediately before, from daily snapshots captured while the Condor panel was open — ${esc(best.coverage.text)}. Pressure-index figures are shown as recorded on the day, not recalculated under today's settings.</p>` +
+    rows +
+    `</section>`
   );
 }
 

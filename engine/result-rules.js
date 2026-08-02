@@ -11,7 +11,7 @@
 // regardless of what a user rule says. Rules arrive imported as disabled and must
 // be reviewed by a clinician before they fire.
 //
-// Rule object shape — TWO KINDS:
+// Rule object shape — FOUR KINDS:
 //
 // kind:'threshold' (or kind absent — treated as threshold):
 //   {
@@ -61,6 +61,14 @@
 //                                    surface a specific coded finding without having to
 //                                    enumerate the full "normal" set (which risks a
 //                                    false-negative — e.g. "abnormal" contains "normal").
+//     abnormalLevel: 'amber'|'red'  — OPTIONAL; default 'amber' (= exact prior behaviour).
+//                                    The severity a FIRED abnormalText flag escalates the
+//                                    report to. 'red' lets a designated text finding (e.g. a
+//                                    positive blood culture) reach RED instead of being
+//                                    amber-capped. Escalate-only — never lowers anything.
+//                                    Meaningful ONLY with abnormalText (it governs the
+//                                    abnormalText flag); an abnormalLevel with no abnormalText
+//                                    is a validation error, not a silent no-op.
 //     normalLabel : string          — optional; label shown on chip when outcome is 'noGrowth'
 //                                    (default "No growth")
 //   }
@@ -95,6 +103,84 @@
 // condition may be satisfied by a DIFFERENT result row). Combo is ESCALATE-ONLY: a fired amber
 // combo raises the report level to ≥ amber; a fired red combo to red. It never lowers severity
 // and never calms/suppresses (other than honouring its own suppressIfProblem).
+//
+// kind:'delta' (item 3.6, TRIAGE-LENS-2026-07-02.md — trend/delta grading):
+//   {
+//     id          : string          — set by importer
+//     enabled     : boolean         — importer forces false; clinician enables after review
+//     builtin     : boolean         — always false for user-authored rules
+//     kind        : 'delta'         — required to use this path
+//     label       : string          — required, ≤ 60 chars; shown on chip when the delta fires
+//     analyte     : { match:string[] (≥1 non-empty), exclude?:string[], specimen?:string[] } —
+//                                    same semantics as threshold/text (matched against
+//                                    result.name).
+//     direction   : 'rise'|'fall'|'either' — required. Which way of change fires: 'rise' only
+//                                    fires on an increase, 'fall' only on a decrease, 'either'
+//                                    on a change of the required magnitude in EITHER direction.
+//     by          : true            — EXACTLY ONE of `by` / `byPercent` must be `true` (mutually
+//     byPercent   : true             exclusive — same "presence of the key selects the kind"
+//                                    idiom as a combo condition's comparator XOR contains).
+//                                    `by:true` measures the ABSOLUTE change (current − prior, in
+//                                    the result's own reported units); `byPercent:true` measures
+//                                    the PERCENT change relative to the prior value.
+//     amber       : number|null     — amber threshold, as an UNSIGNED CHANGE MAGNITUDE (never a
+//                                    signed value) in the `by`/`byPercent` unit chosen above.
+//     red         : number|null     — red threshold, same magnitude units. At least one of
+//                                    amber/red must be a finite number (like threshold rules).
+//                                    Ordering: when both are set, red MUST be >= amber — a
+//                                    bigger change is always MORE severe, in EITHER direction,
+//                                    so this ordering does not flip with `direction` the way a
+//                                    threshold rule's does with `comparator`.
+//     maxDays     : number          — OPTIONAL positive integer. Only compare against a prior
+//                                    result no older than this many days (by history entry
+//                                    date vs. the current result's date). A prior older than
+//                                    this — or either date unavailable when maxDays is set —
+//                                    means NO delta fires for that pairing; the guard never
+//                                    falls back to an even-older history entry.
+//     suppressIfProblem : {...}     — OPTIONAL; same semantics as the other kinds.
+//   }
+//   A delta rule is unit-guarded: it NEVER compares across a unit mismatch. Reuses
+//   unitsCompatible (item 3.1) with the SAME strict comparability rule extractPrior (item 2.6)
+//   already uses: a 'match' (both present, same family) or BOTH-absent counts as comparable;
+//   "one side has a unit, the other doesn't" is never assumed comparable. A genuine mismatch
+//   (both present, different families) is recorded (display-only, mirrors computeRuleSev's
+//   unitMismatches); the "one side absent" case fails silently closed (no delta, no record —
+//   there was nothing confidently wrong to report, just nothing confidently comparable).
+//   Delta is ESCALATE-ONLY, exactly like threshold/text/combo: it can only RAISE a result's
+//   severity on top of the lab's own flag and any threshold rule — never lower one.
+//
+// actions (OPTIONAL, all four kinds — item 2.7, TRIAGE-LENS-2026-07-02.md):
+//   actions    : <action>[]     — OPTIONAL. Click-to-fire guidance shortcuts shown in the
+//                                queue result-chip detail popover when this rule fires
+//                                (e.g. a local hyperkalaemia pathway link on a K+ rule).
+//                                Same schema as an alert rule's actions (options.js
+//                                validateTriageRule / the alert-rule action editor).
+//   Each <action> is one of:
+//     { type:'link',    label:string, url:string  } — url must be absolute http(s).
+//     { type:'snippet', label:string, text:string  } — text copied to clipboard on click.
+//     { type:'note',    label:string, text:string  } — text shown inline on click.
+//
+// context (OPTIONAL, all four kinds — item 3.5, TRIAGE-LENS-2026-07-02.md):
+//   context    : { minAge?:number, maxAge?:number, sex?:'male'|'female' } — OPTIONAL. An
+//               AND-gate restricting this rule to patients matching EVERY present clause.
+//               minAge/maxAge — non-negative finite numbers (years), inclusive; minAge must
+//               be <= maxAge when both are present. sex — lowercase 'male' or 'female'.
+//               FAIL-CLOSED at evaluation time (engine/result-severity.js): if the caller
+//               did not supply patientContext, or supplied it without the specific field(s)
+//               this rule's context clause needs, the rule is SKIPPED — never assumed to
+//               match, never assumed not to match. Because every result rule is
+//               escalate-only (see above), a skipped context rule simply does not ADD its
+//               escalation on top of the lab flag / other rules; it can never suppress
+//               anything. Worked example — FIB-4 (liver fibrosis index): the standard
+//               counselling cutoff (2.67) over-calls fibrosis risk in patients over 65;
+//               age-adjusted guidance recommends ~3.25 in that group instead. Model this as
+//               an age-scoped rule: { "context": { "minAge": 65 }, "comparator": "above",
+//               "amber": 3.25, ... } — a SEPARATE, non-context-gated rule (or the lab's own
+//               reference range) covers the general population at the standard cutoff; the
+//               context-gated rule ONLY ever adds its own amber flag for confirmed-over-65
+//               patients, and is silently skipped (no flag, no error) for any patient whose
+//               age could not be confirmed on the current surface. See resultRuleSchemaPrompt
+//               below for the full worked JSON example.
 
 (function (global) {
   'use strict';
@@ -146,6 +232,83 @@
         errs.push(where + 'analyte.specimen, if present, must be an array of strings.');
       }
     }
+  }
+
+  // isSafeActionUrl(url) → boolean
+  // Only absolute http(s) URLs are permitted for a link action, so an authored/imported
+  // result rule can't smuggle a javascript:/data: URL that runs on click. Mirrors the
+  // isSafeActionUrl() scheme allowlist in content.js (executeAction, the click-time
+  // guard) and options.js (validateTriageRule, the alert-rule editor/import guard) —
+  // result-rules.js is a standalone module (Node + browser-global, no shared import
+  // path with those two content-script files), so this ~10-line check is duplicated
+  // here rather than imported. Keep the three in lock-step if the semantics ever change.
+  function isSafeActionUrl(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  const ALLOWED_ACTION_TYPES = ['link', 'snippet', 'note'];
+
+  // context — OPTIONAL on every rule kind (item 3.5, TRIAGE-LENS-2026-07-02.md):
+  // { minAge?:number, maxAge?:number, sex?:'male'|'female' }. Pushes errors onto `errs`.
+  // Shared so threshold/text/combo/delta all validate identically.
+  function validateContext(rule, errs) {
+    if (rule.context === undefined) return;
+    const c = rule.context;
+    if (!c || typeof c !== 'object' || Array.isArray(c)) {
+      errs.push('context, if present, must be an object with optional minAge/maxAge/sex.');
+      return;
+    }
+    const hasMinAge = c.minAge !== undefined && c.minAge !== null;
+    const hasMaxAge = c.maxAge !== undefined && c.maxAge !== null;
+    const minAgeValid = !hasMinAge || (Number.isFinite(c.minAge) && c.minAge >= 0);
+    const maxAgeValid = !hasMaxAge || (Number.isFinite(c.maxAge) && c.maxAge >= 0);
+    if (!minAgeValid) errs.push('context.minAge, if present, must be a non-negative finite number.');
+    if (!maxAgeValid) errs.push('context.maxAge, if present, must be a non-negative finite number.');
+    if (hasMinAge && hasMaxAge && minAgeValid && maxAgeValid && c.minAge > c.maxAge) {
+      errs.push('context.minAge must be <= context.maxAge when both are present.');
+    }
+    if (c.sex !== undefined && c.sex !== null && c.sex !== 'male' && c.sex !== 'female') {
+      errs.push("context.sex, if present, must be 'male' or 'female' (lowercase).");
+    }
+  }
+
+  // actions — OPTIONAL on every rule kind (threshold/text/combo). Same schema as an
+  // alert rule's actions (options.js validateTriageRule): an array of
+  // { type:'link'|'snippet'|'note', label:string, url?:string, text?:string }.
+  // Pushes errors onto `errs`, each naming its index so a malformed entry is locatable.
+  function validateActions(rule, errs) {
+    if (rule.actions === undefined) return;
+    if (!Array.isArray(rule.actions)) {
+      errs.push('actions, if present, must be an array.');
+      return;
+    }
+    rule.actions.forEach((a, i) => {
+      if (!a || typeof a !== 'object' || Array.isArray(a)) {
+        errs.push('actions[' + i + ']: must be an object.');
+        return;
+      }
+      if (!ALLOWED_ACTION_TYPES.includes(a.type)) {
+        errs.push('actions[' + i + '].type must be one of: ' + ALLOWED_ACTION_TYPES.join(', ') + '.');
+      }
+      if (!a.label || typeof a.label !== 'string' || !a.label.trim()) {
+        errs.push('actions[' + i + ']: label is required.');
+      }
+      if (a.type === 'link') {
+        if (!a.url || typeof a.url !== 'string') {
+          errs.push('actions[' + i + ']: url is required for link actions.');
+        } else if (!isSafeActionUrl(a.url)) {
+          errs.push('actions[' + i + ']: url must be an absolute http:// or https:// URL.');
+        }
+      }
+      if ((a.type === 'snippet' || a.type === 'note') && (a.text == null || typeof a.text !== 'string')) {
+        errs.push('actions[' + i + ']: text is required for ' + a.type + ' actions.');
+      }
+    });
   }
 
   // Validate the combo-specific fields: level (optional amber|red) and the conditions
@@ -204,6 +367,102 @@
     });
   }
 
+  // Validate the delta-specific fields (item 3.6): direction, exactly one of
+  // by/byPercent, amber/red (unsigned change magnitude, at least one required,
+  // ordering red >= amber when both set — direction-independent, unlike threshold's
+  // comparator-flipped ordering), and the optional maxDays window. Pushes errors
+  // onto `errs`.
+  function validateDeltaFields(rule, errs) {
+    // direction — required, one of 'rise' | 'fall' | 'either'.
+    if (rule.direction !== 'rise' && rule.direction !== 'fall' && rule.direction !== 'either') {
+      errs.push("delta direction must be 'rise', 'fall', or 'either'.");
+    }
+
+    // by / byPercent — EXACTLY ONE must be present and === true. Mirrors the
+    // combo condition's comparator-XOR-contains "presence of the key selects the
+    // form" idiom: the key itself (not a numeric value on it) picks absolute-value
+    // vs percent-change comparison.
+    if (rule.by !== undefined && rule.by !== true) {
+      errs.push('delta "by", if present, must be true (its presence selects an absolute-value change).');
+    }
+    if (rule.byPercent !== undefined && rule.byPercent !== true) {
+      errs.push('delta "byPercent", if present, must be true (its presence selects a percent-change).');
+    }
+    const hasBy = rule.by === true;
+    const hasByPercent = rule.byPercent === true;
+    if (hasBy === hasByPercent) {
+      errs.push('Exactly one of delta "by" (absolute-value change) or "byPercent" (percent change) must be true.');
+    }
+
+    // amber and red — unsigned change-magnitude thresholds; each must be a finite
+    // number or null; at least one must be set.
+    const hasAmber = rule.amber !== null && rule.amber !== undefined && Number.isFinite(rule.amber);
+    const hasRed = rule.red !== null && rule.red !== undefined && Number.isFinite(rule.red);
+
+    if (rule.amber !== null && rule.amber !== undefined && !Number.isFinite(rule.amber)) {
+      errs.push('delta amber must be a finite number or null.');
+    }
+    if (rule.red !== null && rule.red !== undefined && !Number.isFinite(rule.red)) {
+      errs.push('delta red must be a finite number or null.');
+    }
+    if (hasAmber && rule.amber < 0) {
+      errs.push('delta amber must be a non-negative change magnitude (direction is set separately).');
+    }
+    if (hasRed && rule.red < 0) {
+      errs.push('delta red must be a non-negative change magnitude (direction is set separately).');
+    }
+    if (!hasAmber && !hasRed) {
+      errs.push('At least one of delta amber or red must be a finite number.');
+    }
+
+    // Ordering — a bigger change is always MORE severe, in either direction, so
+    // red must be >= amber regardless of `direction` (contrast with threshold's
+    // comparator-dependent ordering).
+    if (hasAmber && hasRed && rule.red < rule.amber) {
+      errs.push('delta red threshold must be >= amber threshold (red fires at a bigger change than amber).');
+    }
+
+    // maxDays — OPTIONAL positive integer.
+    if (rule.maxDays !== undefined && rule.maxDays !== null) {
+      if (!Number.isInteger(rule.maxDays) || rule.maxDays <= 0) {
+        errs.push('delta maxDays, if present, must be a positive integer.');
+      }
+    }
+  }
+
+  // Delta-only fields (item 3.6) — must never appear on a threshold/text/combo
+  // rule (they would silently do nothing, masking an authoring mistake).
+  const DELTA_ONLY_FIELDS = ['direction', 'by', 'byPercent', 'maxDays'];
+  // Fields that belong to OTHER kinds and must never appear on a delta rule (same
+  // masking-mistake risk in the other direction). `amber`/`red`/`unit` are
+  // deliberately excluded — amber/red are shared with threshold (delta reuses the
+  // same names for its own magnitude thresholds) and no kind-exclusivity check
+  // has ever been enforced for `unit` on any kind.
+  const NON_DELTA_FIELDS_FORBIDDEN_ON_DELTA = [
+    'comparator',
+    'normalText',
+    'abnormalText',
+    'normalLabel',
+    'conditions',
+    'level',
+  ];
+
+  function validateNoCrossKindFields(rule, kind, errs) {
+    if (kind === 'delta') {
+      NON_DELTA_FIELDS_FORBIDDEN_ON_DELTA.forEach((f) => {
+        if (rule[f] !== undefined) {
+          errs.push('"' + f + '" is not a valid field on kind:"delta" rules.');
+        }
+      });
+    } else {
+      DELTA_ONLY_FIELDS.forEach((f) => {
+        if (rule[f] !== undefined) {
+          errs.push('"' + f + '" is only valid on kind:"delta" rules (this rule is kind:"' + kind + '").');
+        }
+      });
+    }
+  }
+
   // ── validateResultRule ────────────────────────────────────────────────────────
 
   /**
@@ -223,11 +482,14 @@
     }
 
     // Determine kind — absent or 'threshold' → numeric; 'text' → text classification;
-    // 'combo' → composite (AND of conditions across results in one report).
+    // 'combo' → composite (AND of conditions across results in one report); 'delta'
+    // → trend/change grading (item 3.6).
     const kind = rule.kind !== undefined ? rule.kind : 'threshold';
 
-    if (kind !== 'threshold' && kind !== 'text' && kind !== 'combo') {
-      errs.push("rule.kind must be 'threshold', 'text', or 'combo' (or omitted, which defaults to 'threshold').");
+    if (kind !== 'threshold' && kind !== 'text' && kind !== 'combo' && kind !== 'delta') {
+      errs.push(
+        "rule.kind must be 'threshold', 'text', 'combo', or 'delta' (or omitted, which defaults to 'threshold')."
+      );
       return errs; // unknown kind — no further field checks make sense
     }
 
@@ -238,13 +500,38 @@
       errs.push('label should be 60 characters or fewer (got ' + rule.label.trim().length + ').');
     }
 
+    // abnormalLevel — OPTIONAL, and ONLY meaningful/valid on kind:'text' rules (item 3.2,
+    // TRIAGE-LENS-2026-07-02.md — it governs the level a fired abnormalText flag escalates
+    // to). A 'threshold' or 'combo' rule has no abnormalText to escalate, so the field can
+    // only ever be a silent no-op there — reject it outright (naming the rule), rather than
+    // accept dead config a clinician might mistake for working. Checked here (before the
+    // combo early-return below) so it covers ALL non-text kinds in one place; the 'amber'/
+    // 'red' value check + the "must accompany a non-empty abnormalText" check for kind:'text'
+    // itself live further down, in the text-kind block.
+    if (rule.abnormalLevel !== undefined && kind !== 'text') {
+      errs.push(
+        (rule.label && typeof rule.label === 'string' && rule.label.trim()
+          ? '"' + rule.label.trim() + '"'
+          : '(unlabelled rule)') + ": abnormalLevel is only valid on kind:'text' rules."
+      );
+    }
+    // Cross-kind field rejection (item 3.6) — a delta-only field on a non-delta
+    // rule, or a non-delta field on a delta rule, silently does nothing today;
+    // reject it instead of masking the authoring mistake.
+    validateNoCrossKindFields(rule, kind, errs);
+
+    // context — OPTIONAL, valid on EVERY kind (item 3.5) — checked once here, before
+    // the combo early-return below, so it covers all four kinds in one place.
+    validateContext(rule, errs);
+
     // ── combo kind: a top-level rule with no single analyte — its analytes live on
     //    each condition. Validate conditions then fall through to the shared
     //    suppressIfProblem block and return; the per-kind analyte/threshold/text
-    //    checks below are for threshold/text rules only.
+    //    checks below are for threshold/text/delta rules only.
     if (kind === 'combo') {
       validateComboFields(rule, errs);
       validateSuppressIfProblem(rule, errs);
+      validateActions(rule, errs);
       return errs;
     }
 
@@ -289,6 +576,9 @@
     // for a known diabetic). Object: { match: string[] (≥1 non-empty), exclude?: string[] }.
     validateSuppressIfProblem(rule, errs);
 
+    // actions — OPTIONAL (all kinds, item 2.7). See validateActions above.
+    validateActions(rule, errs);
+
     if (kind === 'text') {
       // A text rule classifies by phrase lists: normalText (calm-if-present) and/or
       // abnormalText (flag-if-present). At least one must be a non-empty array of strings.
@@ -314,6 +604,25 @@
       if (rule.normalLabel !== undefined && rule.normalLabel !== null && typeof rule.normalLabel !== 'string') {
         errs.push('normalLabel must be a string or omitted.');
       }
+
+      // abnormalLevel — OPTIONAL; default 'amber'. Only 'amber' or 'red' are permitted, and
+      // it is meaningful ONLY alongside a non-empty abnormalText (it sets the level a fired
+      // abnormalText flag escalates to). An abnormalLevel with no abnormalText can never take
+      // effect, so it is an ERROR rather than a silent no-op (a red text rule with no
+      // abnormalText would look red-capable but never fire red — a patient-safety trap).
+      if (rule.abnormalLevel !== undefined && rule.abnormalLevel !== null) {
+        if (rule.abnormalLevel !== 'amber' && rule.abnormalLevel !== 'red') {
+          errs.push("abnormalLevel, if present, must be 'amber' or 'red'.");
+        }
+        if (abnormalCount <= 0) {
+          errs.push(
+            'abnormalLevel is only meaningful with abnormalText (it sets the level a fired ' +
+              'abnormalText flag escalates to).'
+          );
+        }
+      }
+    } else if (kind === 'delta') {
+      validateDeltaFields(rule, errs);
     } else {
       // threshold kind: comparator, amber, red, unit
 
@@ -375,7 +684,7 @@
   function resultRuleSchemaPrompt() {
     return `You are generating a single Investigation Results rule for a UK GP practice using Medicus Suite. Output ONLY a JSON object — no prose, no markdown fences, no code blocks. The object must conform exactly to the schema below.
 
-There are TWO rule kinds. Choose the correct kind for the analyte you are targeting:
+There are FOUR rule kinds. Choose the correct kind for the analyte you are targeting:
 
   kind:"threshold"  — numeric analyte (e.g. potassium, eGFR, haemoglobin). Fires when
                       the numeric result value is above or below a threshold. Omitting
@@ -394,13 +703,24 @@ There are TWO rule kinds. Choose the correct kind for the analyte you are target
                           Best for surfacing ONE specific coded finding (e.g. a bowel cancer
                           screening non-responder) without enumerating the whole normal set.
 
+  kind:"combo"      — a PATTERN across several analytes in the same report (e.g. sterile
+                      pyuria: pus cells raised AND culture no growth). Fires only when
+                      EVERY one of ≥2 conditions is satisfied (logical AND).
+
+  kind:"delta"      — grade on CHANGE OVER TIME against the analyte's own prior result
+                      (e.g. rising creatinine/AKI, falling haemoglobin/bleed, rising
+                      potassium), not just the current absolute value. Fires when the
+                      change from the most recent prior result (within an optional
+                      maxDays window) crosses an amber/red change-magnitude threshold in
+                      the configured direction.
+
 === CLINICAL SAFETY INSTRUCTIONS ===
 
 1. Analyte matching is CASE-INSENSITIVE SUBSTRING — "potassium" matches "Serum Potassium (EDTA)" and "Potassium". List the most specific substring that uniquely identifies the analyte to avoid false matches.
-2. Rules ESCALATE severity only — they raise a chip from none→amber or none/amber→red (threshold) or flag a result for review (text). They NEVER lower a lab-flagged result. If the laboratory has already flagged a result as urgent, it remains urgent regardless of what the rule says.
-3. Imported rules arrive DISABLED (enabled:false is forced on import). A clinician MUST review the analyte match strings and threshold/text values before enabling the rule. Incorrect rules are a patient-safety risk.
-4. For threshold rules: use current UK reference ranges and NICE/BNF guidance when choosing threshold values. When in doubt, use a more conservative (wider) threshold rather than a narrower one.
-5. The 'unit' field is for display only — the engine does not perform unit conversion. Ensure the threshold values are in the same units as reported by your laboratory system.
+2. Rules ESCALATE severity only — they raise a chip from none→amber or none/amber→red (threshold/delta), flag a result for review (text), or raise a report to amber/red (combo). They NEVER lower a lab-flagged result. If the laboratory has already flagged a result as urgent, it remains urgent regardless of what the rule says.
+3. Imported rules arrive DISABLED (enabled:false is forced on import). A clinician MUST review the analyte match strings and threshold/text/delta values before enabling the rule. Incorrect rules are a patient-safety risk.
+4. For threshold and delta rules: use current UK reference ranges and NICE/BNF guidance when choosing threshold/change values. When in doubt, use a more conservative (wider) threshold rather than a narrower one.
+5. The 'unit' field (threshold rules only) is for display only — the engine does not perform unit conversion. Ensure the threshold values are in the same units as reported by your laboratory system. A delta rule has no 'unit' field: it compares a result against ITS OWN prior value from the same lab feed, and is automatically skipped (no delta fires) rather than guessed across a unit mismatch.
 6. For text rules: normalText / abnormalText phrases are matched case-insensitively anywhere in the result text (rawValue, interpretation, performer comments). For normalText, only include phrases that unambiguously indicate a negative / no-growth result — a phrase that is too short or too generic risks a false-negative (a positive result classed as normal; note "abnormal" contains the substring "normal", so never use a bare "normal"). For abnormalText, prefer a positive match on the exact finding you want to surface; it only ever ADDS a review flag, so it cannot hide a result.
 
 === SCHEMA — kind:"threshold" ===
@@ -480,6 +800,13 @@ This example escalates a potassium result to amber if >= 5.5 mmol/L and to red i
                                                 abnormalText rule cannot hide or calm anything.
                                                 e.g. ["no response to bowel cancer screening"]
                                    * At least one of normalText / abnormalText is required.
+  abnormalLevel ("amber"|"red", optional) — The severity a FIRED abnormalText flag escalates
+                                   the report to. Default "amber" (the historic behaviour — a
+                                   text finding could never exceed amber). Set "red" ONLY for a
+                                   finding that genuinely warrants same-day review on its own
+                                   (e.g. a positive blood culture / bacteraemia). Escalate-only:
+                                   it never lowers a lab flag. Meaningful ONLY with abnormalText
+                                   — an abnormalLevel with no abnormalText is rejected on import.
   normalLabel (string, optional) — Label on the calm chip when a normal phrase is found.
                                    Default "No growth" if omitted.
 
@@ -515,6 +842,24 @@ This example applies to any result whose name contains "MSU" or "urine culture".
 --- END TEXT EXAMPLE ---
 
 This example surfaces bowel cancer screening non-responders: it applies to bowel-screening results and flags 'review' ONLY when the text contains a "no response" phrase. A normal or abnormal screening result contains no such phrase, so it is left untouched — the rule can never hide a positive result.
+
+--- TEXT EXAMPLE (positive blood culture — abnormalText, RED) ---
+{
+  "id": "rule_placeholder",
+  "enabled": false,
+  "builtin": false,
+  "kind": "text",
+  "label": "Positive blood culture",
+  "analyte": {
+    "match": ["blood culture"],
+    "specimen": ["blood culture"]
+  },
+  "abnormalText": ["organism isolated", "gram positive cocci", "gram negative bacilli", "positive blood culture"],
+  "abnormalLevel": "red"
+}
+--- END TEXT EXAMPLE ---
+
+This example flags a blood culture RED (same-day review) when the text names an isolate. abnormalLevel:"red" lifts the amber cap so a genuine bacteraemia is not under-graded. Use "red" only for findings that warrant urgent review on their own; leave it out (defaulting to amber) otherwise.
 
 === SCHEMA — kind:"combo" ===
 
@@ -568,6 +913,179 @@ A combo rule fires ONLY when MULTIPLE conditions are ALL satisfied (logical AND)
 --- END COMBO EXAMPLE ---
 
 This example fires amber ONLY when a urine report shows BOTH a pus-cell count above 40 AND a culture that reads "no growth" (sterile pyuria — a pattern a clinician should review). Either finding alone does not fire it. It cannot lower a lab-urgent flag on the same report.
+
+=== SCHEMA — kind:"delta" ===
+
+A delta rule grades on CHANGE OVER TIME for ONE analyte, comparing the current result against its own most recent PRIOR result (from the same lab feed's result history) — not just the current absolute value. Use this for a value that is dangerous because of how fast it is moving, even while still inside (or only just outside) the normal range: a rising creatinine (acute kidney injury), a falling haemoglobin (occult bleed), a rising potassium. A delta rule is ESCALATE-ONLY, exactly like the other kinds: it never lowers a lab flag or another rule's severity.
+
+  id          (string)   — Will be replaced on import.
+  enabled     (boolean)  — Set false. Forced on import.
+  builtin     (boolean)  — Always false for user-authored rules.
+  kind        (string)   — "delta" (required for this path).
+  label       (string, required) — Short label for the chip shown when the delta fires. Max ~60 chars.
+                                   e.g. "AKI watch (rising creatinine)".
+  analyte     (object, required) — same as threshold/text:
+    match     (string[], required, non-empty) — Case-insensitive substrings against result.name.
+    exclude   (string[], optional) — Skip a result whose name contains any of these.
+    specimen  (string[], optional) — Case-insensitive substrings against the specimen header.
+  direction   ("rise"|"fall"|"either", required) — which way of change fires. "rise" only
+                                   fires on an increase (e.g. creatinine, potassium); "fall"
+                                   only on a decrease (e.g. haemoglobin); "either" fires on a
+                                   change of the required magnitude in EITHER direction.
+  by          (true)     — EXACTLY ONE of "by" / "byPercent" must be present and true — the KEY
+  byPercent   (true)       ITSELF selects the comparison, not a number on it (same idiom as a
+                           combo condition's comparator XOR contains). "by":true measures the
+                           ABSOLUTE change (current value − prior value, in the result's own
+                           reported units, e.g. "+38 µmol/L"). "byPercent":true measures the
+                           PERCENT change relative to the prior value (e.g. "+38%") — prefer this
+                           for an analyte where a fixed absolute change means different things at
+                           different baselines (e.g. creatinine: KDIGO AKI staging is percent-
+                           and-time based, not a fixed µmol/L jump).
+  amber       (number|null) — Amber threshold, as an UNSIGNED CHANGE MAGNITUDE (never a signed
+                              value) in the "by"/"byPercent" unit chosen above.
+  red         (number|null) — Red threshold, same magnitude units. At least one of amber/red is
+                              required. Ordering: red MUST be >= amber when both are set — a
+                              BIGGER change is always MORE severe in either direction, so (unlike
+                              a threshold rule) this ordering never flips with "direction".
+  maxDays     (number, optional) — Only compare against a prior result no older than this many
+                              days. If the most recent prior is older than this (or its date is
+                              unavailable), NO delta fires for that pairing — never falls back to
+                              comparing against an even-older value. Omit for no age limit.
+  suppressIfProblem (object, optional) — same as the other kinds: { match:string[], exclude?:string[] }.
+
+A delta rule has NO "unit" field — it never needs one, because it always compares a result against ITS OWN reported unit history, never a rule-declared unit. If the current result's unit and the prior result's unit are both present but disagree (or the analyte's unit changed lab feed), the delta is skipped — never guessed across a unit change.
+
+--- DELTA EXAMPLE (rising creatinine — AKI watch, absolute change) ---
+{
+  "id": "rule_placeholder",
+  "enabled": false,
+  "builtin": false,
+  "kind": "delta",
+  "label": "AKI watch (rising creatinine)",
+  "analyte": {
+    "match": ["creatinine"],
+    "exclude": ["urine"]
+  },
+  "direction": "rise",
+  "by": true,
+  "amber": 15,
+  "red": 26,
+  "maxDays": 7
+}
+--- END DELTA EXAMPLE ---
+
+This example fires amber when serum creatinine rises by 15 or more (in the lab's own reported units) against the most recent prior result within the last 7 days, and red when it rises by 26 or more — mirroring the KDIGO AKI stage-1 absolute-rise criterion. A prior older than 7 days, or a prior with no comparable unit, never fires it. It cannot lower a lab-urgent flag on the same result.
+
+--- DELTA EXAMPLE (falling haemoglobin — possible bleed, percent change) ---
+{
+  "id": "rule_placeholder",
+  "enabled": false,
+  "builtin": false,
+  "kind": "delta",
+  "label": "Falling Hb — possible bleed",
+  "analyte": {
+    "match": ["haemoglobin"],
+    "exclude": ["a1c", "glycated"]
+  },
+  "direction": "fall",
+  "byPercent": true,
+  "amber": 15,
+  "red": 25
+}
+--- END DELTA EXAMPLE ---
+
+This example fires amber when haemoglobin falls by 15% or more against the most recent prior result (no age limit set), and red when it falls by 25% or more — a fall large enough to raise concern for an occult bleed even if the absolute value is still inside the normal range.
+
+=== OPTIONAL: actions (guidance shortcuts) ===
+
+Any of the four rule kinds above ("threshold", "text", "combo", "delta") may carry an OPTIONAL top-level "actions" array — click-to-fire guidance shortcuts shown in the queue result-chip popover when the rule fires (e.g. a local hyperkalaemia pathway link on a high-potassium rule). Same schema as a Triage Lens alert rule's actions.
+
+  actions     (array, optional) — each entry:
+    type      (string, required) — "link" | "snippet" | "note"
+    label     (string, required) — Button label, e.g. "Local hyperkalaemia pathway".
+    url       (string)           — Required for type "link". Must be an absolute
+                                   http:// or https:// URL — javascript:/data: URLs
+                                   are rejected.
+    text      (string)           — Required for type "snippet" and "note".
+                       snippet: text copied to clipboard on click.
+                       note: informational text shown inline in the popover on click.
+
+--- ACTIONS EXAMPLE (added to the "High potassium" threshold rule above) ---
+{
+  "id": "rule_placeholder",
+  "enabled": false,
+  "builtin": false,
+  "kind": "threshold",
+  "label": "High potassium",
+  "analyte": {
+    "match": ["potassium"]
+  },
+  "comparator": "above",
+  "amber": 5.5,
+  "red": 6.0,
+  "unit": "mmol/L",
+  "actions": [
+    {
+      "type": "link",
+      "label": "Local hyperkalaemia pathway",
+      "url": "https://www.example-lmc.nhs.uk/pathways/hyperkalaemia"
+    },
+    {
+      "type": "note",
+      "label": "Safety-net reminder",
+      "text": "If red (>=6.0 mmol/L), repeat urgently and consider same-day ECG per local pathway."
+    }
+  ]
+}
+--- END ACTIONS EXAMPLE ---
+
+=== OPTIONAL: context (patient age/sex gate) ===
+
+Any of the four rule kinds above may carry an OPTIONAL top-level "context" object that
+restricts the rule to patients matching EVERY clause present (an AND-gate). Use this ONLY
+when a threshold/finding genuinely means something different in a specific age band or sex
+— it does not narrow or override any other rule; it just decides whether THIS rule's own
+escalation applies to THIS patient.
+
+  context     (object, optional)
+    minAge    (number, optional) — non-negative, years, inclusive.
+    maxAge    (number, optional) — non-negative, years, inclusive. Must be >= minAge if both set.
+    sex       ("male"|"female", optional) — lowercase.
+
+FAIL-CLOSED: if the patient's age/sex is not known on the surface where the rule is being
+evaluated, the rule is SKIPPED entirely for that patient — never assumed to match, never
+assumed not to. Because every result rule is escalate-only, a skipped context rule simply
+does not add its flag on top of whatever the lab/other rules already show; it can never hide
+or downgrade anything.
+
+--- CONTEXT EXAMPLE (FIB-4 raised, age-adjusted cutoff for patients over 65) ---
+
+FIB-4 (a liver fibrosis index) is usually flagged at >= 2.67, but that cutoff over-calls
+fibrosis risk in patients over 65 — age-adjusted guidance instead recommends a threshold
+around 3.25 for that age group. Rather than lowering the general-population rule's
+sensitivity, add a SEPARATE rule scoped to the over-65 cohort at the higher, more
+appropriate threshold (the standard <=64 cutoff stays on its own unscoped rule):
+
+{
+  "id": "rule_placeholder",
+  "enabled": false,
+  "builtin": false,
+  "kind": "threshold",
+  "label": "FIB-4 raised (over 65, age-adjusted cutoff)",
+  "analyte": {
+    "match": ["fib-4", "fib4"]
+  },
+  "comparator": "above",
+  "amber": 3.25,
+  "red": null,
+  "context": { "minAge": 65 }
+}
+--- END CONTEXT EXAMPLE ---
+
+This rule ONLY evaluates when the patient's age is confirmed >= 65 on the surface where the
+result is graded — for a patient younger than 65, or whenever age cannot be confirmed, this
+rule is silently skipped (no flag from THIS rule; a separate all-ages/under-65 FIB-4 rule, if
+authored, still applies normally). It can never suppress a lab flag or another rule's chip.
 
 === CLOSING REMINDER ===
 

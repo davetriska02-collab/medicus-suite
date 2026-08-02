@@ -1,7 +1,7 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Reception module
 //
-// A reception-facing panel with two cards:
+// A reception-facing panel with three cards:
 //   1. Patient — a single green/amber/red status pill for the patient open in
 //      the Medicus tab; clicking it expands the action-needed monitoring/QOF
 //      detail ("book the overdue bloods while they're on the phone"). Which
@@ -14,15 +14,38 @@
 //      with escalation prompts; output is a structured plain-text block to
 //      copy-paste into the Medicus triage entry. Capture only — the tool
 //      never triages, diagnoses, or advises beyond red-flag escalation.
+//   3. Book an appointment (plan D3, hazard H-051) — the shared booking panel,
+//      created and destroyed WITH the capture form. It is the suite's first
+//      clinical write surface aimed at non-clinical staff, so it is gated hard:
+//      docked panel only, an open record required, and suppressed entirely on
+//      any positive or unanswered red flag and on every sensitive pathway.
 //
 // Storage (managed in Options, read-only here):
-//   reception.config           { enabledPathways, hiddenChipRules, disclaimerAcceptedAt }
-//   reception.customPathways   [pathway]
-//   reception.pathwayOverrides { id: pathway }
+//   reception.config              { enabledPathways, hiddenChipRules, disclaimerAcceptedAt,
+//                                   safeguardingContact, crisisLineText, seenBundledIds }
+//   reception.customPathways      [pathway]
+//   reception.pathwayOverrides    { id: pathway }
+//   reception.routingAttestation  { attestedBy, role, attestedAt, scope } — the CSO/partner
+//                                 sign-off that lets CUSTOM/EDITED pathways suggest a
+//                                 non-clinician destination. Read-only here.
 
 'use strict';
 
-import { summariseActionChips, evaluateRedFlags, buildCaptureText, pharmacyFirstHint } from './reception-core.js';
+import {
+  summariseActionChips,
+  evaluateRedFlags,
+  buildCaptureText,
+  pharmacyFirstHint,
+  isSensitivePathway,
+  safeguardingActionLine,
+  crisisLineText,
+  evaluateDisposition,
+  destinationLabel,
+  overrideDestinations,
+} from './reception-core.js';
+
+import { createBookingPanel } from '../shared/booking-panel.js';
+import { bookingGateState } from '../shared/booking-panel-core.js';
 
 // Canonical "no alert ≠ monitoring complete" caveat (shared/provenance.js,
 // loaded as a classic script in panel.html / pop-out.html). Fall back to the
@@ -35,20 +58,45 @@ const NO_ALERT_CAVEAT =
 let container = null;
 let _bundledDoc = null; // reception-pathways.json document
 let _config = {}; // reception.config
+let _routingAttestation = null; // reception.routingAttestation (custom-routing sign-off)
 let _effective = { all: [], enabled: [] };
 let _snapshot = null; // last Sentinel snapshot (or null)
 let _takerInitials = ''; // in-memory only, per panel session
 let _pillExpanded = false;
 let _onActivated = null;
 let _storageListener = null;
+let _patientCardGen = 0; // request-token guard against stale fetchSnapshot() resolution races
+let _snapshotListener = null; // sentinel:snapshot-updated runtime listener (SPA patient change)
+let _snapshotDebounce = null; // coalesces the ping bursts a patient switch produces
+let _pollTimer = null; // visibility-gated backstop poll (net for a lost ping)
+let _snapshotRefreshing = false; // true while Sentinel has invalidated mid-navigation
+let _patientCardHtml = null; // last-rendered card body — skip no-op re-renders (focus/layout)
+let _cardPatientUuid = null; // uuid behind the last render — collapses the pill on patient change
+let _capturePatient = null; // patient identity PINNED when the capture form opened (see generateSummary)
+
+const SNAPSHOT_POLL_MS = 10 * 1000;
 
 // ── Draft autosave ────────────────────────────────────────────────────────────
 // reception.captureDraft — transient working state, PHI-bearing, TTL 4 h.
 // Never backed up (allowlisted in test-backup-coverage.js).
+//
+// SENSITIVE PATHWAYS ARE EXCLUDED ENTIRELY (pathway `sensitive: true`, e.g.
+// mental-health). Suicidal-ideation free text must not sit in
+// chrome.storage.local for four hours on a shared front-desk profile, so for a
+// sensitive pathway there is no save, no restore banner, and any pre-existing
+// stored draft is deleted the moment the form opens or the draft is read back.
 
 const DRAFT_KEY = 'reception.captureDraft';
 const DRAFT_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 let _draftDebounceTimer = null;
+
+// pathwayIsSensitive(id) — looks the id up in the resolved set (bundled, edited,
+// or custom) so the guard also covers a practice fork that turns `sensitive` on.
+function pathwayIsSensitive(pathwayId) {
+  if (!pathwayId) return false;
+  const entry = (_effective.all || []).find((e) => e.pathway && e.pathway.id === pathwayId);
+  return isSensitivePathway(entry && entry.pathway);
+}
 
 async function loadDraft() {
   try {
@@ -56,6 +104,13 @@ async function loadDraft() {
     const d = r[DRAFT_KEY];
     if (!d || typeof d !== 'object') return null;
     if (typeof d.savedAt !== 'number' || Date.now() - d.savedAt > DRAFT_TTL_MS) {
+      chrome.storage.local.remove(DRAFT_KEY);
+      return null;
+    }
+    // A draft belonging to a sensitive pathway must never be offered or restored.
+    // (Reachable when a practice edit switches `sensitive` on after a draft was
+    // stored, or after an upgrade — delete it rather than leave it lying around.)
+    if (pathwayIsSensitive(d.pathwayId)) {
       chrome.storage.local.remove(DRAFT_KEY);
       return null;
     }
@@ -103,6 +158,9 @@ function saveDraft(pathwayId, form) {
 }
 
 function scheduleDraftSave(pathwayId, form) {
+  // Sensitive pathways: no autosave at all. Guarded here as well as at the call
+  // site so a future caller can't reintroduce the leak by forgetting the check.
+  if (pathwayIsSensitive(pathwayId)) return;
   if (_draftDebounceTimer !== null) clearTimeout(_draftDebounceTimer);
   _draftDebounceTimer = setTimeout(() => {
     _draftDebounceTimer = null;
@@ -183,12 +241,52 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+// ── Leaflet suggestion handoff ────────────────────────────────────────────────
+// Each pathway tile carries a small secondary "Leaflet" link — pure signposting
+// to the NHS A-Z leaflet index (Leaflets tab), no clinical claim, and it never
+// touches the tile's own capture-launch click.
+//
+// There is no exported switchModule, so the jump is done the same way as the
+// other cross-tab links in this file (see rcpGotoSentinel below) and in
+// today.js:64 — click the nav-tab button. The search query itself travels via
+// a one-shot storage key (leaflets.pendingQuery): leaflets.js's init() reads
+// it as the initial query and removes it immediately. Machine-local and
+// transient — deliberately NOT added to shared/io/leaflets-io.js.
+
+// Turn a pathway title into a plausible NHS leaflet search term. Deliberately
+// simple — searchIndex() is a forgiving fuzzy match with its own "no bundled
+// match" fallback (search nhs.uk directly), so this only needs to strip the
+// obvious non-condition noise, not guarantee a hit.
+function deriveLeafletQuery(title) {
+  let q = String(title || '').trim();
+  // Trailing age/context qualifier, e.g. "Headache (adult)" -> "Headache"
+  q = q.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  // Titles offering alternates via "/" — the first term is the more specific one
+  if (q.includes('/')) q = q.split('/')[0].trim();
+  // A couple of generic trailing words that don't help a leaflet search
+  q = q.replace(/\s+(symptoms|problems?)$/i, '').trim();
+  return q;
+}
+
+async function goToLeaflet(query) {
+  try {
+    await chrome.storage.local.set({ 'leaflets.pendingQuery': query });
+  } catch (_) {
+    // best-effort — worst case the Leaflets tab just opens with a blank search
+  }
+  document.querySelector('.nav-tab[data-module="leaflets"]')?.click();
+}
+
 // ── Init / cleanup ────────────────────────────────────────────────────────────
 
 export async function init(el) {
   container = el;
   _organising = false;
   _openColourFor = null;
+  _snapshotRefreshing = false;
+  _patientCardHtml = null; // the card body was just re-created — never skip its first render
+  _cardPatientUuid = null;
+  _capturePatient = null;
 
   container.innerHTML = `
     <div class="rcp-module">
@@ -214,8 +312,27 @@ export async function init(el) {
   renderPathwayPicker(initDraft);
   refreshPatientCard();
 
-  _onActivated = () => refreshPatientCard();
+  _onActivated = () => schedulePatientCardRefresh();
   chrome.tabs.onActivated.addListener(_onActivated);
+
+  // The content script broadcasts sentinel:snapshot-updated on every SPA
+  // patient change (invalidate + publish — see content-scripts/sentinel.js
+  // notifySnapshotUpdated). Without this listener the Patient card is a
+  // one-shot render pinned to whoever was open when the tab was entered — the
+  // stale name/NHS-number bug (H-001 field evidence, v3.206.0). Same idiom as
+  // patient-alerts.js / record.js / sentinel.js; the pop-out shell delivers
+  // the same message (pop-out.js registers no relay for it by design).
+  _snapshotListener = (msg, sender) => {
+    if (!sender || sender.id !== chrome.runtime.id) return;
+    if (msg?.type === 'sentinel:snapshot-updated') schedulePatientCardRefresh();
+  };
+  chrome.runtime.onMessage.addListener(_snapshotListener);
+
+  // Backstop only — the ping above is the real trigger. Visibility-gated: each
+  // tick costs tabs.query + executeScript + IPC, pointless while hidden.
+  _pollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') refreshPatientCard();
+  }, SNAPSHOT_POLL_MS);
 
   // Live-update when the admin changes reception config/pathways in Options, or
   // when tile prefs change in another context (pop-out ↔ panel).
@@ -241,6 +358,7 @@ export async function init(el) {
       changes['reception.config'] ||
       changes['reception.customPathways'] ||
       changes['reception.pathwayOverrides'] ||
+      changes['reception.routingAttestation'] ||
       changes['suite.practiceAcceptedAt'] // the single "Accept for practice" switch
     ) {
       loadConfigAndResolve().then(async () => {
@@ -264,10 +382,31 @@ function cleanup() {
     chrome.storage.onChanged.removeListener(_storageListener);
     _storageListener = null;
   }
+  if (_snapshotListener) {
+    chrome.runtime.onMessage.removeListener(_snapshotListener);
+    _snapshotListener = null;
+  }
+  if (_pollTimer) {
+    clearInterval(_pollTimer);
+    _pollTimer = null;
+  }
+  if (_snapshotDebounce) {
+    clearTimeout(_snapshotDebounce);
+    _snapshotDebounce = null;
+  }
   if (_draftDebounceTimer !== null) {
     clearTimeout(_draftDebounceTimer);
     _draftDebounceTimer = null;
   }
+  _snapshotRefreshing = false;
+  _patientCardHtml = null;
+  _cardPatientUuid = null;
+  _capturePatient = null;
+  // Panel teardown must release a held slot reservation (plan D3.6). The
+  // component's own `pagehide` listener covers a window/panel close; this
+  // covers a module switch, where pagehide never fires.
+  destroyBookingCard();
+  _bookedLines = [];
   _snapshot = null;
   container = null;
 }
@@ -280,9 +419,13 @@ async function loadConfigAndResolve() {
     'reception.customPathways',
     'reception.pathwayOverrides',
     'reception.tilePrefs',
+    'reception.routingAttestation',
     'suite.practiceAcceptedAt',
   ]);
   _config = r['reception.config'] || {};
+  // Validated inside evaluateDisposition — anything malformed simply fails the
+  // check there and custom pathways stay clinician-only.
+  _routingAttestation = r['reception.routingAttestation'] || null;
   // Acceptance is satisfied by EITHER the per-install reception disclaimer OR the
   // single suite-level "Accept for practice" switch (which travels in backups).
   const accepted = _config.disclaimerAcceptedAt != null || r['suite.practiceAcceptedAt'] != null;
@@ -305,17 +448,49 @@ async function loadConfigAndResolve() {
 
 // ── Card 1: patient status pill ───────────────────────────────────────────────
 
+// Coalesces the snapshot-updated ping bursts (a patient switch fires at least
+// two: invalidate, then publish) into one fetch. Same 400 ms shape as
+// patient-alerts.js scheduleSnapshotRefresh.
+function schedulePatientCardRefresh() {
+  if (_snapshotDebounce) return;
+  _snapshotDebounce = setTimeout(() => {
+    _snapshotDebounce = null;
+    refreshPatientCard();
+  }, 400);
+}
+
+// Sentinel value: the content script answered, but its snapshot is invalidated
+// mid SPA-navigation — the new patient's data is a re-evaluation away.
+const SNAPSHOT_UNAVAILABLE = { unavailable: true };
+
+async function findMedicusTab() {
+  const active = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (active[0]?.url && /medicus\.health/.test(active[0].url)) return active[0];
+  // Pop-out only: currentWindow is the pop-out popup itself, so the active-tab
+  // query can never see Medicus there — fall back to any open Medicus tab so
+  // the Patient card works at all in the pop-out. The DOCKED panel deliberately
+  // has no fallback: the active-tab snapshot is the documented booking identity
+  // source (H-051 control (b)), and booking is hard-gated off in the pop-out,
+  // so this fallback can never feed a booking.
+  if (isPopOutContext()) {
+    const any = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
+    return any[0] || null;
+  }
+  return null;
+}
+
 async function fetchSnapshot() {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  const tab = tabs[0];
-  if (!tab?.id || !tab?.url || !/medicus\.health/.test(tab.url)) return null;
+  const tab = await findMedicusTab();
+  if (!tab?.id) return null;
   const mountCheck = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     func: () => !!window.__sentinelMounted,
   });
   if (!mountCheck?.[0]?.result) return null;
   const snapshot = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
-  if (!snapshot || snapshot.unavailable || !snapshot.chips) return null;
+  if (!snapshot) return null;
+  if (snapshot.unavailable) return SNAPSHOT_UNAVAILABLE;
+  if (!snapshot.chips) return null;
   return snapshot;
 }
 
@@ -323,13 +498,44 @@ async function refreshPatientCard() {
   if (!container) return;
   const card = container.querySelector('#rcpPatientCard .rcp-card-body');
   if (!card) return;
+  const gen = ++_patientCardGen;
+  let snapshot;
   try {
-    _snapshot = await fetchSnapshot();
+    snapshot = await fetchSnapshot();
   } catch (_) {
-    _snapshot = null;
+    snapshot = null;
   }
+  if (gen !== _patientCardGen) return; // a newer refresh superseded this one — discard stale result
   if (!container) return; // cleaned up mid-fetch
+  if (snapshot === SNAPSHOT_UNAVAILABLE) {
+    // Mid-navigation transient: blank the identity NOW (the previous patient's
+    // name must never sit under a new record — H-001) but do NOT push the null
+    // into the booking gate — the publish ping that always follows a
+    // re-evaluation lands the real answer within ~a second, and tearing down a
+    // held reservation on every same-patient sub-navigation blip would push
+    // reception back to booking in Medicus (H-051 review q4). A genuinely dead
+    // content script fails the mount check instead and takes the null path
+    // below, which DOES re-gate the booking card.
+    _snapshot = null;
+    _snapshotRefreshing = true;
+    renderPatientCard();
+    return;
+  }
+  _snapshotRefreshing = false;
+  _snapshot = snapshot;
+  // A different patient (or none) behind the card: the expanded pill detail
+  // would otherwise swap its rows silently under the reader.
+  const pc = snapshot?.patientContext;
+  const uuid = (pc && (pc.patientUuid || pc.patientId)) || null;
+  if (uuid !== _cardPatientUuid) {
+    _cardPatientUuid = uuid;
+    _pillExpanded = false;
+  }
   renderPatientCard();
+  // The open record IS the booking identity source, so a snapshot refresh that
+  // changes (or loses) the patient must reach the booking card: it re-gates and,
+  // if the patient changed under an armed panel, the panel releases and re-arms.
+  if (_bookingCtx) updateBookingCard(_bookingCtx.form, _bookingCtx.pathway);
 }
 
 function renderPatientCard() {
@@ -337,8 +543,17 @@ function renderPatientCard() {
   if (!card) return;
 
   if (!_snapshot) {
-    card.innerHTML = `<span class="rcp-muted">This panel mirrors the patient open in Medicus. Open a record and their details appear here.</span>
+    // Two distinct empty states: "no record open" (idle) vs "the record is
+    // changing right now" (Sentinel invalidated mid-navigation; the publish
+    // ping repopulates this in under a second). Rendering the transient as the
+    // idle copy made every patient switch read as "it lost the patient".
+    const html = _snapshotRefreshing
+      ? `<span class="rcp-muted">Record changing in Medicus — refreshing…</span>`
+      : `<span class="rcp-muted">This panel mirrors the patient open in Medicus. Open a record and their details appear here.</span>
       <button class="rcp-link-btn" id="rcpPatientRefresh">Refresh</button>`;
+    if (html === _patientCardHtml) return;
+    _patientCardHtml = html;
+    card.innerHTML = html;
     card.querySelector('#rcpPatientRefresh')?.addEventListener('click', refreshPatientCard);
     return;
   }
@@ -377,7 +592,7 @@ function renderPatientCard() {
       </div>`;
   }
 
-  card.innerHTML = `
+  const html = `
     <div class="rcp-patient-line"><strong>${esc(who || 'Patient')}</strong>${pc.nhsNumber ? ` <span class="rcp-nhs">NHS ${esc(pc.nhsNumber)}</span>` : ''}
       <button class="rcp-link-btn" id="rcpPatientRefresh">Refresh</button>
     </div>
@@ -387,6 +602,12 @@ function renderPatientCard() {
       <span class="rcp-pill-caret" aria-hidden="true">${_pillExpanded ? '▴' : '▾'}</span>
     </button>
     ${detailHtml}`;
+  // With the card auto-refreshing, an unchanged render must be a no-op: an
+  // innerHTML replace drops keyboard focus and shifts the red-flag radios
+  // below the card mid-click. The markup itself is the change key.
+  if (html === _patientCardHtml) return;
+  _patientCardHtml = html;
+  card.innerHTML = html;
 
   card.querySelector('#rcpPatientRefresh')?.addEventListener('click', refreshPatientCard);
   card.querySelector('#rcpPill')?.addEventListener('click', () => {
@@ -402,6 +623,10 @@ function renderPatientCard() {
 
 function renderPathwayPicker(_activeDraft) {
   if (!container) return;
+  // Leaving the capture form (tile navigation, an Options storage-change
+  // re-render, "New capture") tears the booking card down and releases any
+  // reservation it was holding.
+  destroyBookingCard();
   const body = container.querySelector('#rcpCaptureBody');
   if (!body || !_bundledDoc) return;
 
@@ -467,6 +692,11 @@ function renderPathwayPicker(_activeDraft) {
       // in the same corner instead). A dot reads as a personal tag, not a
       // clinical-severity edge-bar.
       const tag = !_organising && colour !== 'default' ? `<span class="rcp-tile-tag" aria-hidden="true"></span>` : '';
+      // Secondary, non-competing suggestion — hidden in organise mode, same as
+      // the draft pill and colour tag above.
+      const leafletLink = !_organising
+        ? `<a href="#" class="rcp-tile-leaflet" data-leaflet-query="${esc(deriveLeafletQuery(p.title))}" title="Find the NHS patient leaflet for this">Leaflet <span aria-hidden="true">&rarr;</span></a>`
+        : '';
       return `<div class="rcp-pathway-tile rcp-tile-c-${esc(colour)}${_organising ? ' rcp-tile-organising' : ''}" data-pathway="${esc(p.id)}"${draggable ? ' draggable="true"' : ''}>
       ${handle}
       <button class="rcp-pathway-btn" data-pathway-go="${esc(p.id)}" type="button"${_organising ? ' tabindex="-1"' : ''}>
@@ -474,7 +704,7 @@ function renderPathwayPicker(_activeDraft) {
         <span class="rcp-pathway-applies">${esc(p.appliesTo || '')}</span>
         ${draftPill}
       </button>
-      ${tag}${swatch}${palette}
+      ${tag}${swatch}${palette}${leafletLink}
     </div>`;
     })
     .join('');
@@ -499,6 +729,13 @@ function renderPathwayPicker(_activeDraft) {
       if (_organising) return; // organise mode: launching a capture is disabled
       const p = enabled.find((x) => x.id === btn.dataset.pathwayGo);
       if (p) renderCaptureForm(p);
+    });
+  });
+  body.querySelectorAll('.rcp-tile-leaflet').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation(); // do not also trigger the tile's capture launch
+      goToLeaflet(a.dataset.leafletQuery);
     });
   });
 
@@ -640,6 +877,36 @@ async function renderCaptureForm(pathway) {
   const body = container?.querySelector('#rcpCaptureBody');
   if (!body || !_bundledDoc) return;
 
+  const sensitive = isSensitivePathway(pathway);
+  // Sensitive pathway: bin any stored draft the moment the form opens, before a
+  // single keystroke can be autosaved, and never offer a restore banner below.
+  if (sensitive) clearDraft();
+
+  // A new capture starts with no bookings recorded, and any booking panel left
+  // over from the previous pathway is torn down (releasing its reservation)
+  // before this one's is built.
+  destroyBookingCard();
+  _bookedLines = [];
+
+  // PIN the patient identity to this capture, now. The Patient card
+  // auto-refreshes (v3.206.0), so `_snapshot` tracks whatever record is open in
+  // Medicus — which can change mid-call on a shared front-desk profile. The
+  // summary header must name the patient this capture STARTED on, never
+  // whoever happens to be open when Generate is pressed (H-001/H-029 class);
+  // generateSummary compares this pin against the live snapshot and warns on
+  // divergence. No record open when the form opens → nothing pinned, no
+  // patient line in the text (as before).
+  const pinPc = _snapshot?.patientContext || null;
+  _capturePatient = pinPc
+    ? {
+        patientId: pinPc.patientUuid || pinPc.patientId || null,
+        patientName: pinPc.patientName || '',
+        dateOfBirth: pinPc.dateOfBirth || '',
+        nhsNumber: pinPc.nhsNumber || '',
+        ageYears: pinPc.ageYears ?? null,
+      }
+    : null;
+
   const rfRows = (pathway.redFlags || [])
     .map(
       (rf) => `
@@ -666,6 +933,15 @@ async function renderCaptureForm(pathway) {
     )
     .join('');
 
+  // Sensitive pathways: the crisis route is a fixed footer on the form (and goes
+  // into the pasted text too). Practice-editable via reception.config.
+  const crisisFooter = sensitive
+    ? `<div class="rcp-crisis-line" id="rcpCrisisLine">${esc(crisisLineText(_config.crisisLineText))}</div>`
+    : '';
+  const sensitiveNote = sensitive
+    ? `<div class="rcp-fineprint">This pathway is marked sensitive: nothing typed here is saved as a draft, and your initials are required before a summary can be generated.</div>`
+    : '';
+
   body.innerHTML = `
     <form class="rcp-form" id="rcpForm">
       <div class="rcp-form-head">
@@ -673,6 +949,7 @@ async function renderCaptureForm(pathway) {
         <span class="rcp-form-title">${esc(pathway.title)}</span>
         <label class="rcp-initials">Your initials <input type="text" id="rcpInitials" maxlength="5" value="${esc(_takerInitials)}"></label>
       </div>
+      ${sensitiveNote}
 
       <div class="rcp-draft-banner rcp-draft-banner-hidden" id="rcpDraftBanner" aria-live="polite"></div>
 
@@ -695,16 +972,29 @@ async function renderCaptureForm(pathway) {
         ${cRows}
       </div>
 
+      <div class="rcp-disposition rcp-disposition-hidden" id="rcpDisposition">
+        <div class="rcp-disp-head">
+          <span class="rcp-disp-title">Where could this patient safely go?</span>
+          <label class="rcp-disp-age">Age confirmed on the call
+            <input type="number" id="rcpDispAge" min="0" max="120" step="1" inputmode="numeric" placeholder="yrs" autocomplete="off">
+          </label>
+        </div>
+        <div id="rcpDispBody"></div>
+      </div>
+
       <div class="rcp-form-actions">
         <button type="submit" class="rcp-btn rcp-btn-primary">Generate summary</button>
         <span class="rcp-form-msg" id="rcpFormMsg"></span>
       </div>
+      ${crisisFooter}
     </form>`;
 
   const form = body.querySelector('#rcpForm');
+  resetDispositionState();
 
-  // Check for a restorable draft for this specific pathway
-  const draft = await loadDraft();
+  // Check for a restorable draft for this specific pathway (never for a sensitive
+  // one — there is no stored draft to restore, and offering one would be a leak).
+  const draft = sensitive ? null : await loadDraft();
   if (draft && draft.pathwayId === pathway.id) {
     const banner = form.querySelector('#rcpDraftBanner');
     if (banner) {
@@ -713,6 +1003,10 @@ async function renderCaptureForm(pathway) {
       banner.querySelector('#rcpDraftRestore')?.addEventListener('click', () => {
         restoreDraftFields(form, draft.fields);
         updateEscalationBanner(form, pathway);
+        // Restoring red-flag answers can complete the screen — re-evaluate the
+        // disposition too (the age is never restored; it must be re-confirmed).
+        updateDispositionCard(form, pathway);
+        updateBookingCard(form, pathway);
         banner.className = 'rcp-draft-banner rcp-draft-banner-hidden';
       });
       banner.querySelector('#rcpDraftDiscard')?.addEventListener('click', () => {
@@ -729,12 +1023,27 @@ async function renderCaptureForm(pathway) {
     _takerInitials = e.target.value.trim();
   });
 
-  // Escalation banner reacts the moment any red flag is answered YES.
+  // Escalation banner reacts the moment any red flag is answered YES; the
+  // disposition card re-evaluates on the same hook, so a red flag flipped to
+  // YES removes a suggestion that was already on screen.
   form.addEventListener('change', () => {
     updateEscalationBanner(form, pathway);
-    scheduleDraftSave(pathway.id, form);
+    updateDispositionCard(form, pathway);
+    // Same hook, same red-flag evaluation: a flag flipped to YES pulls the
+    // booking card and releases any slot it was holding.
+    updateBookingCard(form, pathway);
+    if (!sensitive) scheduleDraftSave(pathway.id, form);
   });
-  form.addEventListener('input', () => scheduleDraftSave(pathway.id, form));
+  form.addEventListener('input', () => {
+    if (!sensitive) scheduleDraftSave(pathway.id, form);
+  });
+  // The confirmed-age field re-evaluates live (an age typed digit by digit
+  // would otherwise only take effect on blur). It is deliberately NOT part of
+  // the draft autosave (no `name` attribute): the age must be re-confirmed on
+  // the call every time, never restored from an earlier contact.
+  form.querySelector('#rcpDispAge')?.addEventListener('input', () => updateDispositionCard(form, pathway));
+  updateDispositionCard(form, pathway);
+  updateBookingCard(form, pathway);
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     generateSummary(form, pathway);
@@ -765,6 +1074,307 @@ function updateEscalationBanner(form, pathway) {
   // Fallback includes the level so the receptionist always knows 999-vs-duty even if
   // the escalations map entry is missing (near-unreachable; validation forces level ∈ {999,duty}).
   banner.textContent = `RED FLAG — ${(_bundledDoc.escalations && _bundledDoc.escalations[level]) || `ACTION (level ${level}): Escalate immediately.`}`;
+  // A safeguarding-flagged positive adds its own line INSIDE the same banner: duty
+  // clinician AND the practice safeguarding lead, bypassing all other routing.
+  // textContent throughout — the configured contact is free practice text.
+  if (positives.some((p) => p.safeguarding === true)) {
+    const sg = document.createElement('div');
+    sg.className = 'rcp-banner-safeguarding';
+    sg.textContent = safeguardingActionLine(_config.safeguardingContact);
+    banner.appendChild(sg);
+  }
+}
+
+// ── Disposition card (plan E) ─────────────────────────────────────────────────
+// A SUGGESTION, never a booking. It renders only when evaluateDisposition says
+// 'suggest' — i.e. every red flag answered and none positive, the pathway is not
+// clinician-only, and (for custom/edited packs) a CSO/partner routing sign-off
+// exists. Withheld and 'none' states render nothing on the form; withheld states
+// are still recorded in the pasted capture text.
+//
+// The receptionist's own decision lives here, not in storage: it is part of the
+// contact in front of them and dies with the form.
+let _disp = { decision: null, decidedFor: null, overrideOpen: false, overrideTo: '', overrideNote: '' };
+
+function resetDispositionState() {
+  _disp = { decision: null, decidedFor: null, overrideOpen: false, overrideTo: '', overrideNote: '' };
+}
+
+// The age the RECEPTIONIST confirmed on the call. Never seeded from the open
+// record's ageYears — a wrong record open is exactly how a three-year-old
+// caller would be handed an adult Pharmacy First suggestion.
+function readConfirmedAge(form) {
+  const raw = (form.querySelector('#rcpDispAge')?.value ?? '').trim();
+  if (raw === '') return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0 || n > 120) return null;
+  return n;
+}
+
+// The single red-flag evaluation for this form, shared by the disposition card
+// and the booking gate (plan D3.3: "same gate as E's guardrail 1; write it
+// once, use it twice"). Both must see identical positives/unanswered — a
+// booking card that disagreed with the disposition card about whether a flag
+// was answered is the whole hazard.
+function redFlagState(form, pathway) {
+  return evaluateRedFlags(pathway.redFlags, readRedFlagAnswers(form, pathway));
+}
+
+function dispositionContext(form, pathway) {
+  const { positives, unanswered } = redFlagState(form, pathway);
+  const entry = (_effective.all || []).find((e) => e.pathway && e.pathway.id === pathway.id);
+  const origin = entry ? entry.origin : 'custom';
+  return {
+    redFlagPositives: positives,
+    redFlagUnanswered: unanswered,
+    confirmedAge: readConfirmedAge(form),
+    // A practice-edited bundled pathway keeps its bundled id, which is what the
+    // frozen clinician-only sets are keyed on.
+    bundledId: origin === 'custom' ? null : pathway.id,
+    origin,
+    routingAttestation: _routingAttestation,
+  };
+}
+
+// The full record written into the capture text: what the engine said plus what
+// the receptionist did with it. Re-evaluated at submit time, never trusted from
+// the last render.
+function dispositionRecord(form, pathway) {
+  const result = evaluateDisposition(pathway, dispositionContext(form, pathway));
+  if (result.status !== 'suggest') return result;
+  if (_disp.decision && _disp.decidedFor === result.destination) {
+    return Object.assign({}, result, {
+      decision: _disp.decision,
+      overrideTo: _disp.overrideTo,
+      overrideNote: _disp.overrideNote,
+    });
+  }
+  return result;
+}
+
+function updateDispositionCard(form, pathway) {
+  const card = form.querySelector('#rcpDisposition');
+  const body = form.querySelector('#rcpDispBody');
+  if (!card || !body) return;
+  const ctx = dispositionContext(form, pathway);
+  const result = evaluateDisposition(pathway, ctx);
+
+  if (result.status !== 'suggest') {
+    card.className = 'rcp-disposition rcp-disposition-hidden';
+    body.innerHTML = '';
+    return;
+  }
+  // The suggestion changed under a recorded decision (e.g. the age was edited
+  // after Confirm) — drop the decision rather than carry it onto a different
+  // destination.
+  if (_disp.decision && _disp.decidedFor !== result.destination) {
+    _disp.decision = null;
+    _disp.decidedFor = null;
+  }
+  card.className = 'rcp-disposition';
+
+  const decided =
+    _disp.decision === 'confirmed'
+      ? `<div class="rcp-disp-decided">Recorded: receptionist confirmed this route.</div>`
+      : _disp.decision === 'overridden'
+        ? `<div class="rcp-disp-decided">Recorded: overridden to ${esc(destinationLabel(_disp.overrideTo))}${_disp.overrideNote ? ` — ${esc(_disp.overrideNote)}` : ''}.</div>`
+        : '';
+
+  const dests = overrideDestinations(pathway, ctx.confirmedAge);
+  const overridePanel = _disp.overrideOpen
+    ? `<div class="rcp-disp-override">
+        <label class="rcp-disp-override-lbl">Send instead to
+          <select id="rcpDispOverrideTo">${dests
+            .map(
+              (d) =>
+                `<option value="${esc(d)}" ${d === (_disp.overrideTo || '') ? 'selected' : ''}>${esc(destinationLabel(d))}</option>`
+            )
+            .join('')}</select>
+        </label>
+        <input type="text" id="rcpDispOverrideNote" maxlength="120" placeholder="Note (optional) — why this route" autocomplete="off" value="${esc(_disp.overrideNote)}">
+        <button type="button" class="rcp-btn rcp-btn-small" id="rcpDispOverrideSave">Record override</button>
+       </div>`
+    : '';
+
+  body.innerHTML = `
+    <div class="rcp-disp-suggest">Suggested route: <strong>${esc(destinationLabel(result.destination))}</strong>${result.basis ? ` &mdash; ${esc(result.basis)}` : ''}</div>
+    <div class="rcp-disp-fallback">${esc(result.fallbackLine)}</div>
+    ${decided}
+    <div class="rcp-disp-actions">
+      <button type="button" class="rcp-btn rcp-btn-small" id="rcpDispConfirm">Confirm</button>
+      <button type="button" class="rcp-link-btn" id="rcpDispOverride">${_disp.overrideOpen ? 'Cancel override' : 'Override…'}</button>
+    </div>
+    ${overridePanel}
+    <div class="rcp-fineprint">A suggestion only &mdash; nothing is booked and nothing is sent. A clinician decides. If in any doubt, offer the clinician callback.</div>`;
+
+  body.querySelector('#rcpDispConfirm')?.addEventListener('click', () => {
+    _disp.decision = 'confirmed';
+    _disp.decidedFor = result.destination;
+    _disp.overrideOpen = false;
+    updateDispositionCard(form, pathway);
+  });
+  body.querySelector('#rcpDispOverride')?.addEventListener('click', () => {
+    _disp.overrideOpen = !_disp.overrideOpen;
+    if (_disp.overrideOpen && !_disp.overrideTo) _disp.overrideTo = dests[0] || 'gp_routine';
+    updateDispositionCard(form, pathway);
+  });
+  body.querySelector('#rcpDispOverrideNote')?.addEventListener('input', (e) => {
+    _disp.overrideNote = e.target.value;
+  });
+  body.querySelector('#rcpDispOverrideTo')?.addEventListener('change', (e) => {
+    _disp.overrideTo = e.target.value;
+  });
+  body.querySelector('#rcpDispOverrideSave')?.addEventListener('click', () => {
+    const sel = body.querySelector('#rcpDispOverrideTo');
+    const note = body.querySelector('#rcpDispOverrideNote');
+    _disp.overrideTo = sel ? sel.value : 'gp_routine';
+    _disp.overrideNote = (note ? note.value : '').trim();
+    _disp.decision = 'overridden';
+    _disp.decidedFor = result.destination;
+    _disp.overrideOpen = false;
+    updateDispositionCard(form, pathway);
+  });
+}
+
+// ── Card 3: booking (plan D3, hazard H-051) ───────────────────────────────────
+//
+// The suite's first clinical WRITE surface aimed at non-clinical staff. It is
+// created and destroyed WITH the capture form — never in the pathway picker,
+// never in the summary/output view — and every gate below is load-bearing:
+//
+//   • Docked panel only. Reception also renders in the floating pop-out, and a
+//     slot list + write flow in a narrow always-on-top window that can sit over
+//     a DIFFERENT Medicus tab is exactly the identity hazard the booking-core
+//     extraction (plan D1.2) exists to kill. The pop-out gets a one-line note
+//     pointing at the docked panel instead — recorded deliberately, the same
+//     convention as the panel-only demand strips.
+//   • An open record is mandatory. Capture deliberately works with no record
+//     open; booking must never fire against an ambient one.
+//   • Any positive OR unanswered red flag stops a booking, using the SAME
+//     evaluation the disposition card uses (redFlagState above). A POSITIVE flag
+//     hides the card outright; an UNANSWERED one leaves an explanatory note in
+//     its place ("answer every red-flag question first") — CSO decision
+//     2026-07-28, H-051 review question 4, reasoning in booking-panel-core.js.
+//   • Sensitive pathways (mental-health) NEVER show it, red flags or not:
+//     what to offer someone in distress is a clinician's decision, not a slot
+//     the front desk picks off a list mid-call.
+//
+// All of that lives in bookingGateState() (booking-panel-core.js) as a pure
+// truth table so test-reception-booking.js can drive it directly.
+
+let _bookingPanel = null; // createBookingPanel() instance, or null
+let _bookingCtx = null; // { form, pathway } the panel's closures read
+let _bookingGateKey = null; // last rendered gate+patient key (re-render only on change)
+let _bookedLines = []; // capture-text lines for appointments booked in THIS capture
+
+// POP-OUT DETECTION. The reception module is loaded by both shells; the pop-out
+// shell lives at /pop-out/pop-out.html and the docked panel at
+// /side-panel/panel.html. Anything we cannot classify counts as "not the docked
+// panel" — the gate fails closed towards no booking.
+function isPopOutContext() {
+  try {
+    return /(^|\/)pop-out\//.test(location.pathname);
+  } catch (_) {
+    return true;
+  }
+}
+
+// THE BOOKING IDENTITY SOURCE — deliberately singular and documented here.
+// It is the Sentinel snapshot taken from the ACTIVE Medicus tab
+// (fetchSnapshot() queries { active: true, currentWindow: true }; the
+// any-Medicus-tab fallback in findMedicusTab runs ONLY in the pop-out, where
+// booking is hard-gated off, so it can never feed this), i.e. the
+// same record whose name/DOB the patient card is showing the receptionist. The
+// booking shim's own detectMedicusTab() resolves the FIRST matching Medicus
+// tab instead, which can be a different one; the booking panel therefore
+// requires the two to AGREE both when it arms and again at commit rather than
+// trusting either alone (plan D1.2, hazard H-043).
+//
+// No patient uuid → no booking: the panel could not re-verify at commit, so the
+// card renders in its disabled "open the caller's record" state rather than
+// leading the receptionist to a dead end.
+function bookingPatientContext() {
+  const pc = _snapshot?.patientContext;
+  if (!pc) return null;
+  const patientId = pc.patientUuid || pc.patientId || null;
+  if (!patientId) return null;
+  return {
+    patientId,
+    name: pc.patientName || '',
+    dob: pc.dateOfBirth || pc.dobRaw || pc.dob || '',
+    nhsNumber: pc.nhsNumber || '',
+  };
+}
+
+function bookingGateFor(form, pathway) {
+  const flags = form && pathway ? redFlagState(form, pathway) : { positives: [], unanswered: ['*'] };
+  return bookingGateState({
+    hasPatientContext: !!bookingPatientContext(),
+    redFlagPositives: flags.positives,
+    redFlagUnanswered: flags.unanswered,
+    isSensitivePathway: isSensitivePathway(pathway),
+    isPopOut: isPopOutContext(),
+  });
+}
+
+function ensureBookingCard() {
+  if (!container) return null;
+  const captureCard = container.querySelector('#rcpCaptureCard');
+  if (!captureCard) return null;
+  let card = container.querySelector('#rcpBookingCard');
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'rcp-card';
+    card.id = 'rcpBookingCard';
+    card.innerHTML = `<div class="rcp-card-title">Book an appointment</div><div class="rcp-card-body" id="rcpBookingBody"></div>`;
+    captureCard.insertAdjacentElement('afterend', card);
+  }
+  if (!_bookingPanel) {
+    _bookingPanel = createBookingPanel({
+      mountEl: card.querySelector('#rcpBookingBody'),
+      getPatientContext: bookingPatientContext,
+      getGateState: () => bookingGateFor(_bookingCtx?.form, _bookingCtx?.pathway),
+      // Reason pre-fill = the active pathway's title, editable at the confirm
+      // step (plan D3.1). The clinician reading the record sees what the caller
+      // was booked for, in the practice's own pathway wording.
+      getDefaultReason: () => _bookingCtx?.pathway?.title || '',
+      onBooked: (summary) => {
+        if (summary && summary.line) _bookedLines.push(summary.line);
+      },
+    });
+  }
+  return card;
+}
+
+// Called on first render of the capture form and on every answer change, so a
+// red flag flipped to YES pulls the card (and hands back any held slot) in the
+// same beat as the escalation banner appearing.
+function updateBookingCard(form, pathway) {
+  if (!container) return;
+  _bookingCtx = { form, pathway };
+  const gate = bookingGateFor(form, pathway);
+  const card = ensureBookingCard();
+  if (!card) return;
+  card.hidden = gate.render === 'hidden';
+  const key = [gate.render, gate.reason, bookingPatientContext()?.patientId || ''].join('|');
+  if (key === _bookingGateKey) return; // nothing the panel needs to redraw for
+  _bookingGateKey = key;
+  _bookingPanel?.render();
+}
+
+// EVERY exit from the capture form runs through here: pathway-tile navigation
+// ("All pathways"), the picker re-render triggered by an Options storage change,
+// the summary/output view, and module cleanup(). destroy() releases any held
+// reservation, so no exit path can leave a slot locked for the rest of the
+// practice (plan D3.6).
+function destroyBookingCard() {
+  if (_bookingPanel) {
+    _bookingPanel.destroy();
+    _bookingPanel = null;
+  }
+  _bookingCtx = null;
+  _bookingGateKey = null;
+  container?.querySelector('#rcpBookingCard')?.remove();
 }
 
 function readQuestionAnswers(form, scope, questions) {
@@ -795,14 +1405,31 @@ function generateSummary(form, pathway) {
     form.querySelector('.rcp-rf-missing')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
+  // Sensitive pathways: the taker's initials are mandatory (same block-and-tell
+  // UX as the unanswered-red-flag guard above — nothing is generated until it's
+  // clear who took the call).
+  if (isSensitivePathway(pathway) && !_takerInitials.trim()) {
+    if (msg) msg.textContent = 'Enter your initials before generating the summary (required for this pathway).';
+    const initials = form.querySelector('#rcpInitials');
+    initials?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    initials?.focus();
+    return;
+  }
   if (msg) msg.textContent = '';
 
-  const pc = _snapshot?.patientContext || null;
+  // Identity comes from the PIN taken when this capture form opened
+  // (renderCaptureForm), NOT the live snapshot: with the Patient card
+  // auto-refreshing, reading `_snapshot` here would stamp whichever record a
+  // colleague has open at generate time onto THIS caller's answers.
+  const pc = _capturePatient;
   const patientLine = pc?.patientName
     ? [pc.patientName, pc.dateOfBirth ? `DOB ${pc.dateOfBirth}` : null, pc.nhsNumber ? `NHS ${pc.nhsNumber}` : null]
         .filter(Boolean)
         .join(', ')
     : null;
+  const livePc = _snapshot?.patientContext || null;
+  const liveId = livePc ? livePc.patientUuid || livePc.patientId || null : null;
+  const identityChanged = !!(pc?.patientId && liveId && liveId !== pc.patientId);
 
   const text = buildCaptureText({
     pathway,
@@ -818,18 +1445,32 @@ function generateSummary(form, pathway) {
       suiteVersion: chrome.runtime.getManifest?.().version || '',
       patientLine,
       pharmacyFirstHint: pharmacyFirstHint(pathway, pc?.ageYears ?? null),
+      safeguardingContact: _config.safeguardingContact || '',
+      crisisLine: _config.crisisLineText || '',
+      // Re-evaluated here, not read off the last render: what goes in the
+      // record is what the guardrails say at the moment the summary is built.
+      // Withheld states are recorded too (an SEA needs to see what the tool
+      // did NOT say); 'none' writes nothing.
+      disposition: dispositionRecord(form, pathway),
+      // Appointments booked from card 3 during THIS capture (plan D3.1 — the
+      // chosen type and slot land in the capture text so the clinician sees
+      // what reception booked). In-memory only; never persisted.
+      bookedLines: _bookedLines.slice(),
     },
   });
 
   // Draft completed — clear it before rendering the output screen.
   clearDraft();
 
-  renderOutput(text, pathway);
+  renderOutput(text, pathway, { identityChanged });
 }
 
-function renderOutput(text, pathway) {
+function renderOutput(text, pathway, opts) {
   const body = container?.querySelector('#rcpCaptureBody');
   if (!body) return;
+  // The capture is finished: the booking card belongs to the form, not the
+  // summary view. Tearing it down here also releases any reservation still held.
+  destroyBookingCard();
   body.innerHTML = `
     <div class="rcp-output">
       <div class="rcp-output-head">
@@ -841,6 +1482,11 @@ function renderOutput(text, pathway) {
         <button class="rcp-btn" id="rcpNewCapture">New capture</button>
         <span class="rcp-form-msg" id="rcpCopyMsg"></span>
       </div>
+      ${
+        opts?.identityChanged
+          ? `<div class="rcp-error">The record open in Medicus has changed since this capture started. The summary above is headed with the patient the capture began on — if you paste it into the record now open, it goes in the wrong patient's notes.</div>`
+          : ''
+      }
       <div class="rcp-fineprint">Paste into the Medicus triage entry / task for this patient. Double-check you're on the right patient before pasting.</div>
     </div>`;
   const ta = body.querySelector('#rcpOutputText');

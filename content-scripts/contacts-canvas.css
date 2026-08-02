@@ -1,0 +1,916 @@
+/* Medicus Suite — contacts canvas overlay: visual family tree (Phase 4) + drag sources (Phase 3) */
+/* Self-contained, not part of the triage-lens hud.css token family (same convention as
+   contacts-link-button.css / task-inline.css). */
+
+#ms-contacts-canvas-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  color: #1a2030;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-panel {
+  background: #fff;
+  border-radius: 8px;
+  width: min(1100px, 94vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+#ms-contacts-canvas-overlay .ms-cv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: #f0f4ff;
+  border-bottom: 1px solid #c3cef5;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Secondary, quieter than the Close button — this is an escape hatch to a different, older flow
+   (contacts-link-button.js's "import" mode), not a primary action of this canvas. */
+#ms-contacts-canvas-overlay .ms-cv-header-link {
+  font-weight: 400;
+  font-size: 12px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-loading {
+  padding: 40px;
+  text-align: center;
+  color: #666;
+  font-style: italic;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Duplicate-address warning (hub patient only — see renderDuplicateAddressWarning) */
+#ms-contacts-canvas-overlay .ms-cv-dupaddr-warn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-dupaddr-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 4px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-dupaddr-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-dupaddr-line input[type='radio'] {
+  flex-shrink: 0;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-dupaddr-merge {
+  margin-top: 4px;
+}
+
+/* ── Family tree (Phase 4) — parents row / siblings-index-partner row / children row, with
+   collapsible grandparents/aunts-uncles/other rows and a "not yet placed" holding strip
+   underneath for any already-linked contact with nowhere else to go (no tree slot, no plausible
+   manual-contact match — see .ms-cv-unplaced, and contacts-canvas.js's bestManualMatchFor). ───── */
+
+#ms-contacts-canvas-overlay .ms-cv-tree {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-row {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-row-extra {
+  flex-wrap: wrap;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-row-parents {
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+/* The core lineage — parents / connector / siblings+index — grouped with NO gap between rows,
+   unlike .ms-cv-tree's own 10px gap around it. Each branch row's own half-border pseudo-elements
+   already draw their joining line flush with the row's own edge (see .ms-cv-tree-branch below),
+   so zero gap here is what makes the .ms-cv-connector in between actually touch both lines rather
+   than leaving a blank space on either side of it. Also gives the parents/siblings+index rows a
+   single shared width (auto-sized to the widest of the two, since neither declares an explicit
+   width here) so they share exactly the same horizontal centre. Children (nested inside the index
+   item, see .ms-cv-tree-children-attach) and grandparents (nested inside a parent's own item, see
+   .ms-cv-tree-grandparents-attach) are no longer separate rows here at all — see their own
+   comments for why nesting inside the specific family member they belong to, rather than trying
+   to independently centre a whole extra row, is what keeps their own connectors correctly
+   attached regardless of how wide the row around them gets. */
+#ms-contacts-canvas-overlay .ms-cv-tree-lineage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Pure-CSS "org chart" joining lines — no JS measurement or SVG, so it stays correct regardless
+   of how many items are in a row. Each item contributes a HALF horizontal border (its own
+   ::before draws the left half, ::after the right half); with no gap between flex items, two
+   neighbours' half-borders meet exactly at the boundary between them, forming one continuous
+   line across the whole row. first-child/last-child suppress the outward-facing half so the line
+   never trails off past the actual items.
+   --above: the shared line sits ABOVE the row (fed by a single connector from the level above)
+     and EACH item also gets its own vertical stub down from that line into its card — used for
+     the siblings+index row, so a sibling branches off individually rather than being lumped into
+     one box.
+   --below: the mirror image — the shared line sits BELOW the row, with no per-item stub, because
+     here it's peers (parents) being joined to EACH OTHER, and only one shared line should
+     continue further down from the joining point (the plain .ms-cv-connector below handles that
+     single line, already centred in the same column so it lines up with the bus's midpoint). */
+#ms-contacts-canvas-overlay .ms-cv-tree-branch {
+  display: flex;
+  justify-content: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Neither variant uses the flex DEFAULT of stretch: an item can be considerably taller than its
+   neighbours once a nested children/grandparents branch is attached inside it (see
+   .ms-cv-tree-children-attach / grandparentsPairHtml) — with stretch, every OTHER item in the row
+   would be forced to match that height, leaving a large empty gap for no reason. But the two
+   variants need OPPOSITE alignment, not the same one — found live (screenshot): applying
+   flex-start to BOTH broke the --below variant specifically. --above's shared bus sits at the TOP
+   of the row (fed from above), with extra content (nested children) growing DOWNWARD, so
+   flex-start keeps shorter items anchored to that top edge, correctly touching the bus. --below's
+   shared bus sits at the BOTTOM (feeding the line below), with extra content (nested grandparents)
+   growing UPWARD — flex-start there anchored every item to the row's TOP instead, which pushed a
+   parent WITH nested grandparents (their own extra height above their card) down out of line with
+   a parent WITHOUT any — visually stranding the grandparents at the top next to the wrong parent,
+   and the actual parent card floating below on its own. flex-end fixes it: every item's BOTTOM
+   (where its own card and the joining line actually are) aligns together regardless of how much
+   extra content sits above it, so the join-line stays level and grandparents correctly hang only
+   above the specific parent they belong to. */
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--above {
+  align-items: flex-start;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--below {
+  align-items: flex-end;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 150px;
+  max-width: 240px;
+}
+
+/* Each item's own vertical stub (bus <-> card) is a single centred background bar, NOT the
+   border-right/border-left of the two horizontal-line half-elements below — found live: two
+   separate 2px borders that have to land exactly on each other's edge at the 50% mark round to
+   slightly different sub-pixel positions on an odd-width item, so the combined "stub" visibly
+   varied in thickness from one card to the next. A background, positioned `center`, is one paint
+   operation with no second edge to misalign against — always exactly 2px, always exactly centred,
+   regardless of the item's own width. Applied unconditionally (not gated by first/last/only-child
+   the way the horizontal half-borders below are) — every card gets its own stub into the shared
+   line, including a lone only-child item (e.g. a single grandparent with no sibling grandparent to
+   join to) which still needs a line down to whatever's below it, even with no horizontal line to
+   draw. */
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--above > .ms-cv-tree-branch-item {
+  padding: 16px 10px 0 10px;
+  background: linear-gradient(#c3cef5, #c3cef5) no-repeat center top / 2px 16px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--above > .ms-cv-tree-branch-item::before,
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--above > .ms-cv-tree-branch-item::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 16px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--above > .ms-cv-tree-branch-item::before {
+  right: 50%;
+  border-top: 2px solid #c3cef5;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--above > .ms-cv-tree-branch-item::after {
+  left: 50%;
+  border-top: 2px solid #c3cef5;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--above > .ms-cv-tree-branch-item:first-child::before,
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--above > .ms-cv-tree-branch-item:only-child::before {
+  border-top: none;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--above > .ms-cv-tree-branch-item:last-child::after,
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--above > .ms-cv-tree-branch-item:only-child::after {
+  border-top: none;
+}
+
+/* Mirrors --above's own vertical-stub reasoning immediately above, opposite direction. Found live:
+   this variant (Parents, and the nested grandparent pairs) had NO per-item stub at all before —
+   only the shared horizontal line, floating below the cards with nothing visibly connecting it
+   back up to them. The horizontal-joining reasoning for omitting it (peers being joined to EACH
+   OTHER, not each individually fed from below) doesn't mean each card shouldn't ALSO visibly
+   connect to that shared line — it should, the same way --above's cards visibly connect to theirs. */
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--below > .ms-cv-tree-branch-item {
+  padding: 0 10px 16px 10px;
+  background: linear-gradient(#c3cef5, #c3cef5) no-repeat center bottom / 2px 16px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--below > .ms-cv-tree-branch-item::before,
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--below > .ms-cv-tree-branch-item::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  width: 50%;
+  height: 16px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--below > .ms-cv-tree-branch-item::before {
+  right: 50%;
+  border-bottom: 2px solid #c3cef5;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--below > .ms-cv-tree-branch-item::after {
+  left: 50%;
+  border-bottom: 2px solid #c3cef5;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--below > .ms-cv-tree-branch-item:first-child::before,
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--below > .ms-cv-tree-branch-item:only-child::before {
+  border-bottom: none;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--below > .ms-cv-tree-branch-item:last-child::after,
+#ms-contacts-canvas-overlay .ms-cv-tree-branch--below > .ms-cv-tree-branch-item:only-child::after {
+  border-bottom: none;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch-item .ms-cv-card {
+  width: 100%;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch-placeholder {
+  justify-content: center;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-branch-placeholder .ms-cv-slot-placeholder {
+  border: 1px dashed #c3cef5;
+  border-radius: 6px;
+  padding: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* The index item drops the generic branch-item width constraints — it holds a single fixed box,
+   not a fixed card grid slot — it now wraps the whole index+partner "couple" branch plus the
+   children branch below it (see siblingsAndIndexBranchHtml), both variable width, so it just
+   hugs its own content rather than taking the generic per-card 150-240px sizing. */
+#ms-contacts-canvas-overlay .ms-cv-tree-branch-index {
+  position: relative;
+  justify-content: center;
+  min-width: 0;
+  max-width: none;
+  width: auto;
+}
+
+/* The index card and the partner slot, joined by a shared line below them — the SAME
+   .ms-cv-tree-branch--below styling parentsBranchHtml uses for the two parents, reused here
+   rather than duplicated, so index+partner reads as a couple the same way. Replaces the old
+   position:absolute side-attachment (removed 2026-07-27): that drew a long, disconnected-looking
+   line whenever siblings pushed the index card away from centre, and didn't reflect that the
+   children below belong to the couple, not the index patient alone. */
+#ms-contacts-canvas-overlay .ms-cv-tree-couple {
+  margin: 0 auto;
+}
+
+/* A plain vertical rule standing in for the parents->index connector — deliberately simple
+   (CSS-only, no dynamic SVG line-drawing) rather than per-child geometry; distinguishing which
+   specific parent a half-sibling connects to is a known simplification, not yet attempted here. */
+#ms-contacts-canvas-overlay .ms-cv-connector {
+  width: 2px;
+  height: 14px;
+  background: #c3cef5;
+}
+
+/* The children branch, nested as a normal-flow child of the index item's own LI (see
+   siblingsAndIndexBranchHtml) rather than a separate row centred on the whole siblings+index
+   width — trivially inherits the index card's own horizontal centre this way, with no independent
+   alignment needed... PROVIDED this div's own children (the connector bar, then the branch <ul>)
+   are themselves centred within it — found live they weren't: a plain block div left-aligns its
+   children by default, so the 2px connector bar sat at this div's own left edge rather than
+   centred under it, visibly offset from the index card above. display:flex fixes that the same
+   way every other centred element in this tree already does. */
+#ms-contacts-canvas-overlay .ms-cv-tree-children-attach {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 4px;
+}
+
+/* Mirrors .ms-cv-tree-children-attach for grandparents nested above a parent's own card in
+   parentsBranchHtml (grandparentsPairHtml) — same reasoning, opposite direction, same fix. */
+#ms-contacts-canvas-overlay .ms-cv-tree-grandparents-attach {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-tree-index {
+  align-self: center;
+  padding: 10px 16px;
+  border: 2px solid #1e3a8a;
+  border-radius: 6px;
+  background: #eef2ff;
+  color: #1e3a8a;
+  font-weight: 700;
+  text-align: center;
+  min-width: 120px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-slot {
+  flex: 1;
+  min-width: 160px;
+  max-width: 260px;
+  border: 1px dashed #c3cef5;
+  border-radius: 8px;
+  padding: 8px;
+  background: #f8faff;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-slot-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-slot-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Always present, even when the slot already holds cards — a populated slot must stay a visibly
+   valid drop target for one more (e.g. a second sibling). */
+#ms-contacts-canvas-overlay .ms-cv-slot-placeholder {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+  text-align: center;
+  padding: 4px;
+}
+
+/* Optional context under "Drop here" — currently only the Parents branch's third slot, once both
+   biological/legal parents are already placed (see parentsBranchHtml) — smaller and non-italic so
+   it reads as a label, not a continuation of the placeholder's own italic "empty state" wording. */
+#ms-contacts-canvas-overlay .ms-cv-slot-hint {
+  font-size: 10px;
+  font-style: normal;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-slot-expand {
+  font-size: 12px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-unplaced {
+  width: 100%;
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-unplaced .ms-cv-slot-title {
+  color: #92400e;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-unplaced .ms-cv-slot-body {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-unplaced .ms-cv-card {
+  min-width: 160px;
+}
+
+/* ── Drag sources: manual contacts to convert (each with its own ranked matches nested beneath,
+   never a flat globally-sorted list) + other patients at the index patient's address. ──────────── */
+
+#ms-contacts-canvas-overlay .ms-cv-sources {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Manual card + its own ranked matches sit in one horizontal row rather than stacked vertically —
+   stacking was what made a column of several manual contacts, each with a different number of
+   matches, look "stepped" down the page instead of aligned. Found live that this alone wasn't
+   enough: the manual card's own width used to size to its content, so one group's matches could
+   start 40px further right than the next group's — nothing actually LINED UP down the page even
+   though each individual row was internally tidy. Fixed with two changes: the manual card is now
+   a FIXED width (not just min-width), so every group's matches start at the same x position, and
+   the matches themselves sit in a fixed 3-column CSS grid (not flex-wrap) rather than reflowing
+   to whatever fits — three same-sized candidate columns, aligned the same way in every row down
+   the page, is exactly the "rows, not scattered" layout asked for after live testing. */
+/* Column sub-headers for the manual-contact/matches pair below — labels the middle "matches" area
+   as candidates rather than something already real, aligned to the exact same widths as the rows
+   underneath (190px manual column, flexible matches column) so it reads as a genuine header. */
+#ms-contacts-canvas-overlay .ms-cv-source-group-header {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-source-group-header-manual,
+#ms-contacts-canvas-overlay .ms-cv-source-group-header-matches {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-source-group-header-manual {
+  width: 190px;
+  flex: 0 0 190px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-source-group-header-matches {
+  flex: 1 1 auto;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-source-group {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eef1fa;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-source-group > .ms-cv-card:first-child {
+  width: 190px;
+  flex: 0 0 190px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-source-matches {
+  display: grid;
+  grid-template-columns: repeat(3, 150px);
+  gap: 8px;
+  flex: 1 1 auto;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-source-matches > .ms-cv-card,
+#ms-contacts-canvas-overlay .ms-cv-source-matches > .ms-cv-empty {
+  width: 150px;
+}
+
+/* "Matched and linked" — already-linked, already-placed real contacts with no manual duplicate at
+   all (unmatchedLinkedHtml in renderSources), shown below this divider as a visual "this part of
+   the family is done" signal. Found live: a manual contact itself should NEVER appear down here,
+   however plausible its match looks — it hasn't actually been matched-and-confirmed (or deleted)
+   yet, so calling it "linked" while it still exists as an unresolved manual record is misleading.
+   Manual contacts always stay in the working area above until they're genuinely resolved (which
+   removes them from the list entirely, rather than moving them here). */
+#ms-contacts-canvas-overlay .ms-cv-settled-heading {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid #dbe2f5;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-hint {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+  margin-bottom: 4px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-column-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+/* Real contacts pulled from a related patient's own record (loadCanvas step 1.5) that matched no
+   manual contact of this patient's own — a full-width row below the two-column sources grid
+   rather than a third grid column, so it only takes up space when it actually has something to
+   show. */
+#ms-contacts-canvas-overlay .ms-cv-transitive {
+  margin-top: 14px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-transitive .ms-cv-source-matches > .ms-cv-card {
+  width: 150px;
+  flex: 0 0 auto;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-card {
+  border: 1px solid #e2e6f0;
+  border-left: 4px solid #94a3b8;
+  border-radius: 5px;
+  padding: 8px 10px;
+  cursor: grab;
+  background: #fff;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-card[draggable='true']:hover {
+  background: #f7f9ff;
+  border-color: #c3cef5;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-card:not([draggable]) {
+  cursor: default;
+  opacity: 0.85;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-card-faded {
+  opacity: 0.55;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-card-outlined {
+  outline: 2px solid #16a34a;
+  outline-offset: -1px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-card-name {
+  font-weight: 600;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-card-sub {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-badge {
+  font-size: 11px;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+/* Always-visible drag source above the tree for setting NOK/copy-correspondence on an
+   already-linked card — see renderFlagTokens/setContactFlag. */
+#ms-contacts-canvas-overlay .ms-cv-flag-tokens {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-flag-token {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5b21b6;
+  background: #f5f3ff;
+  border: 1px dashed #a78bfa;
+  border-radius: 12px;
+  padding: 3px 10px;
+  cursor: grab;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-flag-token:active {
+  cursor: grabbing;
+}
+
+/* Dedicated drop target for unplacing a card dropped in the wrong slot by mistake — see
+   renderRemoveZone/removeCardFromTree. Sized and shaped like the tree's own "Drop here" boxes
+   (.ms-cv-tree-branch-placeholder .ms-cv-slot-placeholder — same min/max width as a single
+   tree-branch-item) rather than a full-width bar, so it reads as one more family-tree-style drop
+   target, just red-tinted to mark it as distinct from an ordinary slot. */
+#ms-contacts-canvas-overlay .ms-cv-remove-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 150px;
+  max-width: 240px;
+  border: 1px dashed #fca5a5;
+  border-radius: 6px;
+  background: #fef2f2;
+  padding: 8px;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-remove-zone .ms-ct-note {
+  font-size: 12px;
+  color: #991b1b;
+  font-style: italic;
+  text-align: center;
+}
+
+/* Badge produced on a card once a flag is set — clickable button (relationshipId known) or a
+   plain non-interactive pill (a card linked earlier THIS session, no relationshipId yet). */
+#ms-contacts-canvas-overlay .ms-cv-flag-pill {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #5b21b6;
+  background: #ede9fe;
+  border: 1px solid #c4b5fd;
+  border-radius: 10px;
+  padding: 1px 7px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+#ms-contacts-canvas-overlay button.ms-cv-flag-pill {
+  cursor: pointer;
+}
+
+#ms-contacts-canvas-overlay button.ms-cv-flag-pill:hover:not(:disabled) {
+  background: #ddd6fe;
+}
+
+#ms-contacts-canvas-overlay button.ms-cv-flag-pill:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-flag-pill-static {
+  cursor: default;
+  border-style: dashed;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-shared-info {
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 4px;
+  padding: 4px 6px;
+  margin-top: 4px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-empty {
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+}
+
+/* The panel that appears once a card is dropped on a slot (relationship form) or a merge/link
+   completes — floats between the tree and the sources list rather than living inside a fixed
+   "drop here" zone, since Phase 4 replaced the single generic dropzone with per-slot targets. */
+#ms-contacts-canvas-overlay .ms-cv-confirm-panel {
+  border: 2px solid #c3cef5;
+  border-radius: 8px;
+  padding: 14px 16px;
+  text-align: left;
+  color: #1a2030;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-confirm-panel-done {
+  align-items: center;
+  text-align: center;
+}
+
+/* Forward (Jane's relationship to John, written on John's record) / reverse (John's reciprocal
+   relationship to Jane, written on Jane's own record) side by side — two separate writes, so two
+   separate sets of controls, but shown together since confirming one link naturally means deciding
+   both at once. Stacks to one column on narrow viewports rather than a fixed two-up grid. */
+#ms-contacts-canvas-overlay .ms-cv-confirm-columns {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-confirm-col {
+  flex: 1 1 240px;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-confirm-col-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: #1e3a8a;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-confirm-reverse-label {
+  font-weight: 600;
+  padding: 6px 0;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-confirm-panel select,
+#ms-contacts-canvas-overlay .ms-cv-confirm-panel input,
+#ms-contacts-canvas-overlay .ms-cv-confirm-panel label {
+  font-size: 13px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-phone-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Scoped to the phone-edit form specifically — .ms-cv-confirm-panel's OTHER labels are inline
+   checkbox labels ("Next of kin", "Note the manual phone number too", etc.) that shouldn't
+   become bold block labels just because this form also lives inside a .ms-cv-confirm-panel. */
+#ms-contacts-canvas-overlay .ms-cv-phone-edit-form label:not(:has(input[type='checkbox'])) {
+  display: block;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+/* Edit/Delete sit together on their own row below the phone value, laid out horizontally —
+   previously each button was inline text after the value with no wrapper, so a narrow keep-col
+   would wrap Edit and Delete onto separate lines, stacking them vertically. */
+#ms-contacts-canvas-overlay .ms-cv-phone-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-merge-edit-btn,
+#ms-contacts-canvas-overlay .ms-cv-merge-delete-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-merge-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-merge-table th {
+  text-align: left;
+  padding: 4px 8px;
+  color: #666;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-merge-table td {
+  padding: 5px 8px;
+  border-top: 1px solid #e2e6f0;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-merge-label {
+  color: #666;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-merge-keep-col {
+  border-left: 2px solid #16a34a;
+  color: #166534;
+  font-weight: 600;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-merge-row-differs {
+  background: #fffbeb;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-confirm-panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
+#ms-contacts-canvas-overlay .ms-cv-success-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #166534;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+/* Buttons/warnings/notes/select intentionally reuse contacts-link-button.css's .ms-ct-* classes —
+   that file's rules for .ms-ct-btn/.ms-ct-btn-ghost/.ms-ct-error/.ms-ct-warn/.ms-ct-note/
+   .ms-ct-select/.ms-ct-import-mods are extended with an #ms-contacts-canvas-overlay selector
+   alongside their #ms-contacts-widget one, rather than duplicating the declarations here — both
+   files are always loaded together (same manifest block), so this avoids the two ever drifting
+   visually apart for the shared vocabulary. */
+
+/* Resume-family-review banner (family cycling, see contacts-canvas.js's "Family cycling" section)
+   — deliberately NOT inside #ms-contacts-canvas-overlay (so it can't reuse that file's shared
+   .ms-ct-btn rules above): it has to render BEFORE the overlay exists at all, as a small dismissible
+   prompt sitting on top of Medicus's own page rather than a full-screen takeover — see the banner's
+   own comment in contacts-canvas.js for why an auto-reopened overlay was rejected. Self-contained
+   styling here rather than extending the shared selector list, since it's a one-off component, not
+   part of the widget/canvas vocabulary those rules were built for. */
+#ms-cv-resume-banner {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1px solid #c3cef5;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  color: #1a2030;
+}
+
+#ms-cv-resume-banner button {
+  padding: 6px 12px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+#ms-cv-resume-banner #ms-cv-resume-open {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  font-weight: 600;
+}
+
+#ms-cv-resume-banner #ms-cv-resume-open:hover {
+  background: #1d4ed8;
+}
+
+#ms-cv-resume-banner #ms-cv-resume-dismiss {
+  background: transparent;
+  color: #2563eb;
+  border: 1px solid #c3cef5;
+}
+
+#ms-cv-resume-banner #ms-cv-resume-dismiss:hover {
+  background: #f0f4ff;
+}

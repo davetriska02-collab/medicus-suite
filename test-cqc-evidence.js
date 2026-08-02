@@ -330,6 +330,53 @@
   const reconEmpty = buildReconciliation({ rules: [] });
   check(Array.isArray(reconEmpty.entries) && reconEmpty.entries.length === 0, 'empty rules → empty entries (safe)');
 
+  // ── Per-exclude reasons (Eileen): each dropped term carries a clinical rationale ──
+  {
+    const recon = buildReconciliation({
+      rules: [
+        {
+          type: 'drug-monitoring',
+          id: 'hrt-systemic',
+          drugClass: 'HRT',
+          drug: { match: ['estradiol'], exclude: ['vagifem', 'qlaira'] },
+          tests: [{ name: 'BP', intervalDays: 365 }],
+        },
+      ],
+    });
+    const e = recon.entries[0];
+    check(e && Array.isArray(e.excludeDetails) && e.excludeDetails.length === 2, 'excludeDetails: one per exclude term');
+    const vagifem = e.excludeDetails.find((d) => d.term === 'vagifem');
+    const qlaira = e.excludeDetails.find((d) => d.term === 'qlaira');
+    check(vagifem && /vaginal|systemic absorption/i.test(vagifem.reason), 'vaginal-oestrogen exclude carries its reason');
+    check(qlaira && /contracept/i.test(qlaira.reason), 'contraceptive exclude carries its reason');
+    check(
+      e.excludeDetails.every((d) => typeof d.reason === 'string' && d.reason.length > 0),
+      'no exclude is shown reason-less (generic fallback)'
+    );
+  }
+
+  // ── Clinical methods & sources (Raj): named, drift-safe versions ──
+  {
+    const r2 = buildReadiness(ruleFiles, {
+      todayISO,
+      currency,
+      clinicalMethods: {
+        acb: { name: 'Anticholinergic burden', version: 'Boustani ACB scale (ACBcalc.com)', source: 'Boustani 2008' },
+        stoppStart: { name: 'STOPP/START', version: 'v3 (2023)', source: 'OMahony 2023' },
+      },
+    });
+    const cm = r2.clinicalMethods;
+    check(Array.isArray(cm) && cm.length >= 3, 'clinicalMethods lists PINCER + ACB + STOPP/START');
+    check(cm.some((m) => /STOPP\/START/.test(m.name) && /v3 \(2023\)/.test(m.version)), 'STOPP/START version named');
+    check(cm.some((m) => /Boustani/.test(m.version)), 'ACB (Boustani) scale named');
+    check(cm.some((m) => /PINCER/i.test(m.name) && m.inCurrency === true), 'PINCER named + flagged in rule-currency');
+    check(
+      cm.some((m) => /PINCER/i.test(m.name) && /\d+ of \d+ alert rules are PINCER-derived/.test(m.detail || '')),
+      'PINCER detail reconciles count against total alert rules (Raj)'
+    );
+    check(cm.some((m) => /STOPP/.test(m.name) && m.inCurrency === false), 'engine methods flagged NOT in rule-currency');
+  }
+
   // A disabled rule must not appear in reconciliation.
   const disabledDrug = {
     rules: [

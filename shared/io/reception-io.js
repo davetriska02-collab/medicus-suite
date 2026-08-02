@@ -36,6 +36,7 @@ const RECEPTION_KEYS = [
   'reception.customPathways',
   'reception.pathwayOverrides',
   'reception.tilePrefs',
+  'reception.routingAttestation',
 ];
 
 async function receptionExport() {
@@ -45,10 +46,21 @@ async function receptionExport() {
     customPathways:   r['reception.customPathways']   ?? [],
     pathwayOverrides: r['reception.pathwayOverrides'] ?? {},
     tilePrefs:        r['reception.tilePrefs']        ?? {},
+    // The CSO/partner custom-routing sign-off. Unlike disclaimerAcceptedAt this
+    // one DOES travel: it is a practice-level clinical sign-off on the practice's
+    // own pathway content (which travels in the same envelope), not a per-install
+    // "I have read this screen" acknowledgement. It is re-validated on import and
+    // dropped whole if its shape is wrong — a half-recognised attestation must
+    // never read as a sign-off.
+    routingAttestation: r['reception.routingAttestation'] ?? null,
   };
 }
 
 const ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+
+// Length clamp for the practice-editable reception free-text config fields
+// (safeguardingContact, crisisLineText). Matches the options-page maxlength.
+const CONTACT_MAX_LEN = 200;
 
 function _isFlagMap(v) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
@@ -88,6 +100,40 @@ async function receptionImport(data) {
       _assertFlagMapKeys(c.hiddenChipRules, 'reception.config.hiddenChipRules');
       clean.hiddenChipRules = c.hiddenChipRules;
     }
+    // Practice-editable free text surfaced verbatim to reception staff (the
+    // safeguarding-lead contact on the escalation banner, and the crisis route on
+    // sensitive pathways). Strings only, trimmed and clamped — a backup must not
+    // be able to inject a wall of text into a red-flag banner. Both render via
+    // textContent, so there is no markup path; the clamp is a size guard.
+    if (c.safeguardingContact !== undefined && c.safeguardingContact !== null) {
+      if (typeof c.safeguardingContact !== 'string') {
+        throw new Error('reception.config.safeguardingContact must be a string.');
+      }
+      clean.safeguardingContact = c.safeguardingContact.trim().slice(0, CONTACT_MAX_LEN);
+    }
+    if (c.crisisLineText !== undefined && c.crisisLineText !== null) {
+      if (typeof c.crisisLineText !== 'string') {
+        throw new Error('reception.config.crisisLineText must be a string.');
+      }
+      clean.crisisLineText = c.crisisLineText.trim().slice(0, CONTACT_MAX_LEN);
+    }
+    // seenBundledIds — which bundled pathway ids the practice has already been
+    // shown (drives the NEW badge in options). Cosmetic, but the ids are the same
+    // shape as every other reception id map, so they get the same key discipline
+    // as _assertFlagMapKeys: anything not id-shaped is a crafted backup, not a typo.
+    if (c.seenBundledIds !== undefined && c.seenBundledIds !== null) {
+      if (!Array.isArray(c.seenBundledIds)) {
+        throw new Error('reception.config.seenBundledIds must be an array of pathway ids.');
+      }
+      const ids = [];
+      for (const id of c.seenBundledIds) {
+        if (typeof id !== 'string' || !_FLAG_KEY_RE.test(id)) {
+          throw new Error(`reception.config.seenBundledIds contains an invalid id "${id}" (ids must match [a-z0-9][a-z0-9-]{0,49}).`);
+        }
+        if (ids.indexOf(id) === -1) ids.push(id);
+      }
+      clean.seenBundledIds = ids;
+    }
     // disclaimerAcceptedAt is intentionally NOT imported: acceptance is a per-install
     // attestation that must only be set when a local admin explicitly clicks "Accept"
     // in the Options UI. A backup carrying a foreign timestamp must not unlock pathways
@@ -100,6 +146,13 @@ async function receptionImport(data) {
       }
       // Intentionally not written: clean.disclaimerAcceptedAt is omitted.
     }
+    // Preserve the LOCAL attestation (audit M18, 2026-07-18): the whole-config
+    // replace used to WIPE this install's own disclaimerAcceptedAt on restore —
+    // failing safe (pathways re-lock) but destroying local state the contract
+    // says the import ignores. The incoming value is still never written.
+    const existingR = await chrome.storage.local.get('reception.config');
+    const existingAccepted = existingR['reception.config'] && existingR['reception.config'].disclaimerAcceptedAt;
+    if (existingAccepted) clean.disclaimerAcceptedAt = existingAccepted;
     toSet['reception.config'] = clean;
   }
 
@@ -140,6 +193,21 @@ async function receptionImport(data) {
     // builds a fresh object — dropping unknown sort modes, non-id-shaped keys
     // (prototype-pollution defence), and invalid colour keys.
     toSet['reception.tilePrefs'] = PU.sanitiseTilePrefs(tp || {});
+  }
+
+  // reception.routingAttestation — the CSO/partner sign-off that lets CUSTOM and
+  // practice-EDITED pathways suggest a non-clinician destination (plan E
+  // guardrail 6). Validated strictly and dropped (not thrown on, and never
+  // partially stored) when the shape is wrong: the fail-safe direction is
+  // "custom packs stay clinician-only", so a malformed record must simply not
+  // arrive. An explicit null clears any local attestation.
+  if (data.routingAttestation !== undefined) {
+    if (data.routingAttestation === null) {
+      toSet['reception.routingAttestation'] = null;
+    } else {
+      const clean = PU.sanitiseRoutingAttestation(data.routingAttestation);
+      if (clean) toSet['reception.routingAttestation'] = clean;
+    }
   }
 
   if (Object.keys(toSet).length) await chrome.storage.local.set(toSet);

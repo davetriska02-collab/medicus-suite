@@ -68,6 +68,8 @@ const EXPECTED = {
     'Enalapril 10mg', 'Innovace 10mg', 'Innozide 20mg/12.5mg',
     'Captopril 25mg', 'Capoten 25mg', 'Noyada 5mg/5ml oral solution',
     'Trandolapril 2mg', 'Gopten 2mg', 'Fosinopril 10mg', 'Staril 10mg',
+    'Cilazapril 2.5mg tablets', 'Vascace 2.5mg tablets',
+    'Imidapril 5mg tablets', 'Tanatril 5mg tablets',
     'Losartan 50mg', 'Cozaar 50mg', 'Hyzaar 50/12.5', 'Arbli 12.5mg/2.5ml',
     'Candesartan 8mg', 'Amias 8mg', 'Valsartan 80mg', 'Diovan 80mg',
     'Co-Diovan 160/25', 'Exforge 5mg/160mg', 'Irbesartan 150mg', 'Aprovel 150mg',
@@ -114,7 +116,12 @@ const EXPECTED = {
     'Chlorpromazine 25mg', 'Largactil 25mg', 'Amisulpride 200mg', 'Solian 200mg',
     'Paliperidone 6mg', 'Invega 6mg', 'Xeplion 75mg', 'Trevicta 175mg', 'Byannli 700mg',
     'Lurasidone 37mg', 'Latuda 37mg', 'Asenapine 10mg', 'Sycrest 10mg',
-    'Cariprazine 3mg', 'Reagila 3mg'
+    'Cariprazine 3mg', 'Reagila 3mg',
+    // 2026-07-11 Keeper additions — depot antipsychotics managed in primary care (NICE CG178)
+    'Sulpiride 200mg tablets', 'Dolmatil 200mg tablets', 'Sulpitil 200mg tablets', 'Sulpor 200mg/5ml oral solution',
+    'Zuclopenthixol 25mg tablets', 'Clopixol 25mg tablets', 'Clopixol Acuphase 50mg/ml injection', 'Clopixol Depot 200mg/ml injection',
+    'Flupentixol 0.5mg tablets', 'Depixol 20mg/ml injection', 'Fluanxol 0.5mg tablets',
+    'Fluphenazine 1mg tablets', 'Modecate 25mg/ml injection'
   ],
   'mirabegron': ['Mirabegron 50mg', 'Betmiga 50mg'],
   'levothyroxine': [
@@ -140,7 +147,29 @@ const EXPECTED = {
   ],
   'atomoxetine-maintenance': ['Atomoxetine 40mg', 'Strattera 40mg'],
   'guanfacine-maintenance': ['Guanfacine 2mg', 'Intuniv 2mg'],
-  'dmpa-injectable': ['Depo-Provera 150mg/1ml injection', 'Depo Provera injection', 'Sayana Press 104mg/0.65ml injection', 'DMPA injection']
+  'dmpa-injectable': ['Depo-Provera 150mg/1ml injection', 'Depo Provera injection', 'Sayana Press 104mg/0.65ml injection', 'DMPA injection'],
+  'chc-combined-hormonal': [
+    'Microgynon 30 tablets', 'Rigevidon tablets', 'Yasmin tablets', 'Marvelon tablets',
+    'Cilique tablets', 'Gedarel 30/150 tablets', 'Femodene tablets', 'Lucette tablets',
+    'Evra transdermal patch', 'NuvaRing vaginal ring', 'Qlaira tablets', 'Zoely tablets',
+    'Logynon tablets', 'Synphase tablets'
+  ],
+  // 2026-07-11 Keeper additions — new drug-monitoring rules
+  'sodium-valproate': [
+    'Sodium valproate 200mg tablets', 'Epilim 200mg tablets', 'Epilim Chrono 300mg tablets',
+    'Episenta 150mg capsules', 'Orlept 200mg tablets', 'Convulex 300mg capsules',
+    'Depakote 250mg tablets', 'Valproic acid 300mg capsules',
+    // 2026-07-25 Keeper: new UK brands from MHRA DSU Feb 2025
+    'Belvo 200mg tablets', 'Dyzantil 200mg tablets', 'Epival 200mg tablets', 'Syonell 200mg tablets'
+  ],
+  'finerenone': [
+    'Finerenone 10mg tablets', 'Kerendia 10mg tablets', 'Kerendia 20mg tablets'
+  ],
+  // 2026-08-01 Keeper alert-C005: digoxin monitoring rule (disabled pending CSO activation — brands still regression-locked)
+  'digoxin-renal-monitoring': [
+    'Digoxin 62.5mcg tablets', 'Digoxin 125mcg tablets', 'Digoxin 250mcg tablets',
+    'Lanoxin 125mcg tablets', 'Lanoxin-PG 62.5mcg/5ml oral solution'
+  ]
 };
 
 for (const [id, meds] of Object.entries(EXPECTED)) {
@@ -166,7 +195,12 @@ const MUST_NOT = [
   ['hrt-systemic', 'Vagifem 10mcg vaginal tablets'],
   ['hrt-systemic', 'Ovestin 0.1% vaginal cream'],
   ['hrt-systemic', 'Estring 7.5mcg vaginal ring'],
-  ['dmpa-injectable', 'Medroxyprogesterone 10mg tablets']
+  ['dmpa-injectable', 'Medroxyprogesterone 10mg tablets'],
+  // progestogen-only pills (desogestrel) must NOT fire combined hormonal contraception
+  ['chc-combined-hormonal', 'Cerazette 75mcg tablets'],
+  ['chc-combined-hormonal', 'Cerelle 75microgram tablets'],
+  // Slinda (drospirenone POP) added to CHC exclude list — must not fire CHC rule
+  ['chc-combined-hormonal', 'Slinda 3mg tablets']
 ];
 
 console.log('\n--- negative controls (must NOT fire) ---');

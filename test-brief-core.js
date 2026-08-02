@@ -4,6 +4,8 @@
 // Pins:
 //   • signal ordering: red before amber, drug-monitoring before QOF
 //   • max-4 cap + moreCount arithmetic
+//   • per-group RAG (meds / qof / general): counts, status, signal.group
+//   • all-clear chips → allClear brief (green card), NOT null
 //   • drug signal text lists only the due (action-needed) tests
 //   • BP delta ≥10 → trend note; delta <10 → no note
 //   • HbA1c delta ≥5 → trend note; delta <5 → no note
@@ -120,7 +122,15 @@ async function runTests() {
   check(buildBrief(null, null) === null, 'null snapshot → null');
   check(buildBrief(undefined, null) === null, 'undefined snapshot → null');
   check(buildBrief({}, null) === null, 'snapshot without chips → null');
-  check(buildBrief({ chips: [] }, null) === null, 'empty chips with no trend data → null');
+  // Empty chips = patient open, nothing found → explicit green all-clear brief,
+  // not a suppressed card.
+  const emptyChips = buildBrief({ chips: [] }, null);
+  check(emptyChips !== null, 'empty chips → brief non-null (all-clear card)');
+  check(emptyChips.allClear === true, 'empty chips → allClear true');
+  check(emptyChips.signals.length === 0, 'empty chips → no signals');
+  check(emptyChips.groups.meds.status === 'clear', 'empty chips → meds group clear');
+  check(emptyChips.groups.qof.status === 'clear', 'empty chips → qof group clear');
+  check(emptyChips.groups.general.status === 'clear', 'empty chips → general group clear');
 
   // ── 2. Basic brief with one action chip ───────────────────────────────────
   console.log('\n--- basic brief ---');
@@ -416,10 +426,87 @@ async function runTests() {
   check(countBrief.counts.red === 2, `counts.red = 2 (got ${countBrief.counts.red})`);
   check(countBrief.counts.amber === 2, `counts.amber = 2 (got ${countBrief.counts.amber})`);
 
-  // ── 13. Only green/neutral chips → null (no brief needed) ─────────────────
+  // ── 13. Only green/neutral chips → allClear brief (loud green card) ───────
   console.log('\n--- all-clear chips ---');
   const allClear = buildBrief(makeSnapshot([inDateChip, achievedChip]), null);
-  check(allClear === null, 'all-clear chips + no trend data → null brief');
+  check(allClear !== null, 'all-clear chips → brief non-null (green card, not suppressed)');
+  check(allClear.allClear === true, 'all-clear chips → allClear true');
+  check(allClear.signals.length === 0, 'all-clear chips → no signals');
+  check(allClear.counts.red === 0 && allClear.counts.amber === 0, 'all-clear chips → zero counts');
+  check(
+    allClear.groups.meds.status === 'clear' &&
+      allClear.groups.qof.status === 'clear' &&
+      allClear.groups.general.status === 'clear',
+    'all-clear chips → all three groups clear'
+  );
+
+  // allClear is false as soon as anything is action-needed
+  check(buildBrief(makeSnapshot([mtxChip]), null).allClear === false, 'action chip present → allClear false');
+
+  // ── 13b. Per-group RAG: meds / qof / general split ────────────────────────
+  console.log('\n--- per-group RAG ---');
+  const vaxChip = { type: 'vaccine', ruleId: 'pcv20', status: 'vax_due', displayName: 'Pneumococcal (PCV20)' };
+  const comboChip = { type: 'drug-combo', ruleId: 'pincer-2', status: 'alert', label: 'Anticoagulant + NSAID' };
+  const fallsChip = { type: 'event-count', ruleId: 'falls', status: 'alert', label: 'Recurrent falls' };
+
+  // meds red (combo alert), qof amber only via... dm006 is not_met = red. Use stale hyp001 for amber qof.
+  const grouped = buildBrief(makeSnapshot([comboChip, mtxChip, hyp001Chip, vaxChip, inDateChip, achievedChip]), null);
+  check(grouped !== null, 'grouped snapshot → brief non-null');
+  check(grouped.allClear === false, 'grouped snapshot → allClear false');
+  check(grouped.groups.meds.red === 2, `meds group red = 2 (got ${grouped.groups.meds.red})`);
+  check(grouped.groups.meds.status === 'red', `meds group status red (got ${grouped.groups.meds.status})`);
+  check(grouped.groups.qof.red === 0, `qof group red = 0 (got ${grouped.groups.qof.red})`);
+  check(grouped.groups.qof.amber === 1, `qof group amber = 1 (got ${grouped.groups.qof.amber})`);
+  check(grouped.groups.qof.status === 'amber', `qof group status amber (got ${grouped.groups.qof.status})`);
+  check(grouped.groups.general.amber === 1, `general group amber = 1 (vax_due) (got ${grouped.groups.general.amber})`);
+  check(grouped.groups.general.status === 'amber', `general group status amber (got ${grouped.groups.general.status})`);
+  // in_date + achieved chips must not count anywhere
+  check(grouped.counts.red === 2 && grouped.counts.amber === 2, 'green chips excluded from counts');
+
+  // The safe-to-prescribe glance: meds clear while QOF/general have work.
+  const medsClear = buildBrief(makeSnapshot([inDateChip, hyp001Chip, vaxChip]), null);
+  check(medsClear.groups.meds.status === 'clear', 'in-date drug chip → meds group clear');
+  check(medsClear.groups.qof.status === 'amber', 'QOF stale → qof group amber while meds clear');
+  check(medsClear.allClear === false, 'meds clear but QOF/general due → allClear false');
+
+  // Signals carry their group; unknown types fall through to general.
+  check(
+    grouped.signals.every((s) => ['meds', 'qof', 'general'].includes(s.group)),
+    'every signal has a valid group'
+  );
+  const medsSignal = grouped.signals.find((s) => s.text.includes('Methotrexate'));
+  check(medsSignal?.group === 'meds', `Methotrexate signal grouped as meds (got ${medsSignal?.group})`);
+  const qofSignal = grouped.signals.find((s) => s.text.includes('HYP001'));
+  check(qofSignal?.group === 'qof', `HYP001 signal grouped as qof (got ${qofSignal?.group})`);
+  const unknownType = buildBrief(
+    makeSnapshot([{ type: 'future-thing', ruleId: 'x', status: 'alert', label: 'X' }]),
+    null
+  );
+  check(unknownType.groups.general.red === 1, 'unknown chip type falls through to general group');
+  check(unknownType.signals[0].group === 'general', 'unknown chip type signal grouped as general');
+  check(
+    fallsChip && buildBrief(makeSnapshot([fallsChip]), null).groups.general.red === 1,
+    'event-count grouped as general'
+  );
+
+  // Safety-monitoring observation alerts carry type 'qof-indicator' but
+  // category 'safety-monitoring' — they are prescribing-safety, NOT QOF, and
+  // must land in the meds group (sentinel's own list buckets them "not QOF").
+  const safetyChip = {
+    type: 'qof-indicator',
+    category: 'safety-monitoring',
+    ruleId: 'trend-egfr',
+    status: 'alert',
+    indicatorCode: 'TREND-EGFR',
+    indicatorName: 'Falling eGFR trend',
+  };
+  const safety = buildBrief(makeSnapshot([safetyChip]), null);
+  check(safety.groups.meds.red === 1, `safety-monitoring alert counts in meds group (got ${safety.groups.meds.red})`);
+  check(safety.groups.qof.status === 'clear', 'safety-monitoring alert does NOT count as QOF');
+  check(
+    safety.signals[0].group === 'meds',
+    `safety-monitoring signal grouped as meds (got ${safety.signals[0].group})`
+  );
 
   // ── 14. Snapshot using patient field (not patientContext) ─────────────────
   console.log('\n--- snapshot.patient fallback ---');

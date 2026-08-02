@@ -142,6 +142,60 @@ console.log('\n--- UK brand names ---');
   assert(r.perDrug[0].score === 3, 'Ditropan scores 3');
 }
 
+// ── Levomepromazine / methotrimeprazine / Nozinan (Keeper follow-up) ──────
+console.log('\n--- Levomepromazine (ACB score 3) ---');
+{
+  const r = computeACB(['Levomepromazine 25mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'levomepromazine scores 3');
+}
+{
+  const r = computeACB(['Nozinan 25mg']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Nozinan (levomepromazine) scores 3');
+}
+{
+  const r = computeACB(['methotrimeprazine 25mg']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'methotrimeprazine scores 3');
+}
+
+// ── 2026-07-11 Keeper additions (trimipramine, darifenacin, trifluoperazine) ─
+console.log('\n--- 2026-07-11 Keeper ACB additions ---');
+{
+  const r = computeACB(['trimipramine 25mg capsules']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'trimipramine scores 3 (TCA)');
+  assert(r.perDrug[0] && r.perDrug[0].matchedTerm === 'trimipramine', 'trimipramine matched by own term');
+}
+{
+  const r = computeACB(['Surmontil 25mg capsules']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Surmontil (trimipramine brand) scores 3');
+}
+{
+  const r = computeACB(['darifenacin 7.5mg modified-release tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'darifenacin scores 3 (M3-selective antimuscarinic)');
+}
+{
+  const r = computeACB(['Emselex 7.5mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Emselex (darifenacin brand) scores 3');
+}
+{
+  const r = computeACB(['trifluoperazine 1mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'trifluoperazine scores 3 (phenothiazine)');
+}
+
+// ── 2026-07-25 Keeper: first-gen AH additions (alimemazine, trimeprazine, brompheniramine) ─
+console.log('\n--- 2026-07-25 Keeper: ACB score-3 first-gen AH additions ---');
+{
+  const r = computeACB(['alimemazine 7.5mg/5ml oral solution']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'alimemazine scores 3 (first-gen AH, ACBcalc)');
+}
+{
+  const r = computeACB(['trimeprazine 30mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'trimeprazine scores 3 (older name for alimemazine; separate term needed)');
+}
+{
+  const r = computeACB(['brompheniramine 4mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'brompheniramine scores 3 (first-gen AH, ACBcalc score 3)');
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

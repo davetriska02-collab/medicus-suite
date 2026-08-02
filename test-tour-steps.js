@@ -35,6 +35,21 @@ const ROOT = __dirname;
 // dedicated walkthrough step). Move one out of this list and give it a step
 // when it gains a flagship feature worth 15 seconds of a new user's time.
 const NAV_COVERED_BY_OVERVIEW = new Set([
+  // signing (v3.155.0): 20-step cap reached; the tab's fixed honest-state
+  // header is self-explanatory and tab-help carries the first-step guidance.
+  // Revisit for a dedicated step when the cap is next re-balanced.
+  'signing',
+  // followups (v3.160.0): same 20-step-cap decision as signing — the tab is
+  // a single add-form + list with a fixed honest-state header, and tab-help
+  // carries the first-step guidance. Revisit with the next cap re-balance.
+  'followups',
+  // patient-alerts (v3.175.0): 20-step cap still reached, so no dedicated
+  // step — but the feature's visible surface (the #paStrip flag strip) IS
+  // taught: the 'alert-strips' step was reworked to name it and retagged to
+  // TOUR_VERSION 11 so returning users see it in the What's-new pass. The
+  // tab itself is a single card stack with tab-help first-step guidance.
+  // Revisit for a dedicated step at the next cap re-balance.
+  'patient-alerts',
   'trends',
   'capacity',
   'submissions',
@@ -44,9 +59,14 @@ const NAV_COVERED_BY_OVERVIEW = new Set([
   'reception',
   'sweep',
   'knowledge',
+  // phrases (v3.205.0): 20-step cap still reached, so no dedicated step — the
+  // tab is a search + compose + copy surface with tab-help first-step guidance
+  // and an in-tab empty-state explainer. Revisit at the next cap re-balance.
+  'phrases',
   'rota', // compact rota status module (panel + pop-out) — overview mention only
   'rota-app', // opens the full rota app in a browser tab — overview mention only
   'visualiser', // opens a full tab, not a panel module — overview mention only
+  'duplicate-checker', // opens a full tab, not a panel module — overview mention only
   'about',
 ]);
 

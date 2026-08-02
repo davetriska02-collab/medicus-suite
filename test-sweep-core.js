@@ -16,30 +16,45 @@ const path = require('path');
 
 // We need dynamic import for ES modules. Wrap in an async IIFE.
 (async () => {
-  let passed = 0, failed = 0;
+  let passed = 0,
+    failed = 0;
 
   function check(cond, msg) {
-    if (cond) { console.log(`  OK  ${msg}`); passed++; }
-    else { console.error(`  FAIL  ${msg}`); failed++; process.exitCode = 1; }
+    if (cond) {
+      console.log(`  OK  ${msg}`);
+      passed++;
+    } else {
+      console.error(`  FAIL  ${msg}`);
+      failed++;
+      process.exitCode = 1;
+    }
   }
 
   // Dynamic import of the ES module
-  const sweepCorePath = new URL(
-    'side-panel/modules/sweep/sweep-core.js',
-    `file://${path.resolve(__dirname)}/`
-  ).href;
+  const sweepCorePath = new URL('side-panel/modules/sweep/sweep-core.js', `file://${path.resolve(__dirname)}/`).href;
 
-  let extractBookedPatients, summariseSweep, isActionNeeded, MAX_SWEEP_PATIENTS, ACTION_COLOURS,
-      chipInstruction, buildHandout;
+  let extractBookedPatients,
+    summariseSweep,
+    isActionNeeded,
+    MAX_SWEEP_PATIENTS,
+    ACTION_COLOURS,
+    chipInstruction,
+    buildHandout,
+    buildRecallDescription,
+    summariseWorklistByAction,
+    buildWorklist;
   try {
     const mod = await import(sweepCorePath);
     extractBookedPatients = mod.extractBookedPatients;
-    summariseSweep        = mod.summariseSweep;
-    isActionNeeded        = mod.isActionNeeded;
-    MAX_SWEEP_PATIENTS    = mod.MAX_SWEEP_PATIENTS;
-    ACTION_COLOURS        = mod.ACTION_COLOURS;
-    chipInstruction       = mod.chipInstruction;
-    buildHandout          = mod.buildHandout;
+    summariseSweep = mod.summariseSweep;
+    isActionNeeded = mod.isActionNeeded;
+    MAX_SWEEP_PATIENTS = mod.MAX_SWEEP_PATIENTS;
+    ACTION_COLOURS = mod.ACTION_COLOURS;
+    chipInstruction = mod.chipInstruction;
+    buildHandout = mod.buildHandout;
+    buildRecallDescription = mod.buildRecallDescription;
+    summariseWorklistByAction = mod.summariseWorklistByAction;
+    buildWorklist = mod.buildWorklist;
   } catch (e) {
     console.error('FATAL: could not import sweep-core.js:', e.message);
     process.exit(1);
@@ -48,63 +63,97 @@ const path = require('path');
   check(typeof extractBookedPatients === 'function', 'extractBookedPatients is a function');
   check(typeof summariseSweep === 'function', 'summariseSweep is a function');
   check(typeof isActionNeeded === 'function', 'isActionNeeded is a function');
-  check(typeof MAX_SWEEP_PATIENTS === 'number' && MAX_SWEEP_PATIENTS > 0, `MAX_SWEEP_PATIENTS is a positive number (${MAX_SWEEP_PATIENTS})`);
+  check(
+    typeof MAX_SWEEP_PATIENTS === 'number' && MAX_SWEEP_PATIENTS > 0,
+    `MAX_SWEEP_PATIENTS is a positive number (${MAX_SWEEP_PATIENTS})`
+  );
 
   // ── isActionNeeded ────────────────────────────────────────────────────────────
   console.log('\n--- isActionNeeded ---');
-  check(isActionNeeded('overdue')           === true,  'overdue → action needed');
-  check(isActionNeeded('not_met')           === true,  'not_met → action needed');
-  check(isActionNeeded('alert')             === true,  'alert → action needed');
-  check(isActionNeeded('stale')             === true,  'stale → action needed (amber)');
-  check(isActionNeeded('due_soon')          === true,  'due_soon → action needed (amber)');
-  check(isActionNeeded('caution')           === true,  'caution → action needed (amber)');
-  check(isActionNeeded('vax_due')           === true,  'vax_due → action needed (amber)');
-  check(isActionNeeded('in_date')           === false, 'in_date → no action');
-  check(isActionNeeded('achieved')          === false, 'achieved → no action');
-  check(isActionNeeded('no_data')           === false, 'no_data → no action (neutral)');
+  check(isActionNeeded('overdue') === true, 'overdue → action needed');
+  check(isActionNeeded('not_met') === true, 'not_met → action needed');
+  check(isActionNeeded('alert') === true, 'alert → action needed');
+  check(isActionNeeded('stale') === true, 'stale → action needed (amber)');
+  check(isActionNeeded('due_soon') === true, 'due_soon → action needed (amber)');
+  check(isActionNeeded('caution') === true, 'caution → action needed (amber)');
+  check(isActionNeeded('vax_due') === true, 'vax_due → action needed (amber)');
+  check(isActionNeeded('in_date') === false, 'in_date → no action');
+  check(isActionNeeded('achieved') === false, 'achieved → no action');
+  check(isActionNeeded('no_data') === false, 'no_data → no action (neutral)');
   check(isActionNeeded('recently_initiated') === false, 'recently_initiated → no action');
-  check(isActionNeeded('vax_given')         === false, 'vax_given → no action');
+  check(isActionNeeded('vax_given') === false, 'vax_given → no action');
 
   // ── extractBookedPatients — normal payload ────────────────────────────────────
   console.log('\n--- extractBookedPatients: normal payload ---');
   const normalRaw = {
-    staffSchedules: [{
-      name: 'Dr Test',
-      schedule: [{
-        entries: [
-          { diaryEntryType: { value: 'appointment' }, patient: { id: 'aaaaaaaa-0000-0000-0000-000000000001', name: 'Smith, Alice' }, start: '09:00' },
-          { diaryEntryType: { value: 'appointment' }, patient: { id: 'aaaaaaaa-0000-0000-0000-000000000002', name: 'Jones, Bob'   }, start: '09:30' },
-          { diaryEntryType: { value: 'slot'        }, patient: { id: 'aaaaaaaa-0000-0000-0000-000000000003', name: 'Slot'         }, start: '10:00' },
-        ]
-      }]
-    }]
+    staffSchedules: [
+      {
+        name: 'Dr Test',
+        schedule: [
+          {
+            entries: [
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { id: 'aaaaaaaa-0000-0000-0000-000000000001', name: 'Smith, Alice' },
+                start: '09:00',
+              },
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { id: 'aaaaaaaa-0000-0000-0000-000000000002', name: 'Jones, Bob' },
+                start: '09:30',
+              },
+              {
+                diaryEntryType: { value: 'slot' },
+                patient: { id: 'aaaaaaaa-0000-0000-0000-000000000003', name: 'Slot' },
+                start: '10:00',
+              },
+            ],
+          },
+        ],
+      },
+    ],
   };
 
   const normalResult = extractBookedPatients(normalRaw);
   check(normalResult.patients.length === 2, 'Two appointment entries → 2 patients');
   check(normalResult.patients[0].name === 'Smith, Alice', 'First patient name correct');
-  check(normalResult.patients[1].name === 'Jones, Bob',   'Second patient name correct');
+  check(normalResult.patients[1].name === 'Jones, Bob', 'Second patient name correct');
   check(normalResult.patients[0].uuid === 'aaaaaaaa-0000-0000-0000-000000000001', 'UUID extracted from patient.id');
   check(normalResult.missingUuidCount === 0, 'No missing UUIDs');
   check(normalResult.cappedAt === null, 'No cap applied');
   check(normalResult.diagnosticMessage === null, 'No diagnostic message');
   check(normalResult.patients[0].clinician === 'Dr Test', 'clinician captured from staff schedule');
-  check(Array.isArray(normalResult.clinicians) && normalResult.clinicians[0] === 'Dr Test', 'clinicians list populated');
+  check(
+    Array.isArray(normalResult.clinicians) && normalResult.clinicians[0] === 'Dr Test',
+    'clinicians list populated'
+  );
 
   // ── extractBookedPatients — uuid fallback strategies ─────────────────────────
   console.log('\n--- extractBookedPatients: UUID fallback strategies ---');
   const uuidFallbackRaw = {
-    staffSchedules: [{
-      name: 'Dr Test',
-      schedule: [{
-        entries: [
-          // Strategy: patient.uuid field
-          { diaryEntryType: { value: 'appointment' }, patient: { uuid: 'bbbbbbbb-0000-0000-0000-000000000001', name: 'A' }, start: '08:00' },
-          // Strategy: UUID in a string value on entry.patient
-          { diaryEntryType: { value: 'appointment' }, patient: { name: 'B', someLink: '/patient/cccccccc-0000-0000-0000-000000000001/care-record' }, start: '08:10' },
-        ]
-      }]
-    }]
+    staffSchedules: [
+      {
+        name: 'Dr Test',
+        schedule: [
+          {
+            entries: [
+              // Strategy: patient.uuid field
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { uuid: 'bbbbbbbb-0000-0000-0000-000000000001', name: 'A' },
+                start: '08:00',
+              },
+              // Strategy: UUID in a string value on entry.patient
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { name: 'B', someLink: '/patient/cccccccc-0000-0000-0000-000000000001/care-record' },
+                start: '08:10',
+              },
+            ],
+          },
+        ],
+      },
+    ],
   };
   const fbResult = extractBookedPatients(uuidFallbackRaw);
   check(fbResult.patients.length === 2, 'Both UUID fallback strategies produce patients');
@@ -114,45 +163,105 @@ const path = require('path');
   // ── extractBookedPatients — missing UUID ──────────────────────────────────────
   console.log('\n--- extractBookedPatients: missing UUID ---');
   const missingUuidRaw = {
-    staffSchedules: [{
-      name: 'Dr Test',
-      schedule: [{
-        entries: [
-          { diaryEntryType: { value: 'appointment' }, patient: { name: 'No UUID here'    }, start: '09:00' },
-          { diaryEntryType: { value: 'appointment' }, patient: { id: 'dddddddd-0000-0000-0000-000000000001', name: 'Has UUID' }, start: '09:30' },
-        ]
-      }]
-    }]
+    staffSchedules: [
+      {
+        name: 'Dr Test',
+        schedule: [
+          {
+            entries: [
+              { diaryEntryType: { value: 'appointment' }, patient: { name: 'No UUID here' }, start: '09:00' },
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { id: 'dddddddd-0000-0000-0000-000000000001', name: 'Has UUID' },
+                start: '09:30',
+              },
+            ],
+          },
+        ],
+      },
+    ],
   };
   const missingResult = extractBookedPatients(missingUuidRaw);
-  check(missingResult.patients.length === 1,       '1 patient extracted (1 with UUID)');
-  check(missingResult.missingUuidCount === 1,       'missingUuidCount = 1');
-  check(missingResult.diagnosticMessage === null,   'No diagnostic message when at least one UUID found');
+  check(missingResult.patients.length === 1, '1 patient extracted (1 with UUID)');
+  check(missingResult.missingUuidCount === 1, 'missingUuidCount = 1');
+  check(missingResult.diagnosticMessage === null, 'No diagnostic message when at least one UUID found');
+  check(
+    Array.isArray(missingResult.skippedEntries) && missingResult.skippedEntries.length === 1,
+    'skippedEntries collected — one entry, matching missingUuidCount'
+  );
+  check(missingResult.skippedEntries[0].time === '09:00', 'skippedEntries entry carries the appointment time');
+  check(missingResult.skippedEntries[0].clinician === 'Dr Test', 'skippedEntries entry carries the clinician');
+  check(
+    missingResult.skippedEntries[0].rawName === 'No UUID here',
+    'skippedEntries entry carries the raw patient name'
+  );
+
+  // ── extractBookedPatients — skippedEntries rawName fallback ─────────────────
+  console.log('\n--- extractBookedPatients: skippedEntries rawName fallback ---');
+  const noNameRaw = {
+    staffSchedules: [
+      {
+        name: 'Dr Fallback',
+        schedule: [
+          {
+            entries: [{ diaryEntryType: { value: 'appointment' }, patient: {}, startDateTime: '2026-06-10T09:15:00' }],
+          },
+        ],
+      },
+    ],
+  };
+  const noNameResult = extractBookedPatients(noNameRaw);
+  check(noNameResult.skippedEntries.length === 1, 'skippedEntries collected when patient has no name field at all');
+  check(noNameResult.skippedEntries[0].rawName === 'Unknown name', 'rawName falls back to "Unknown name" when absent');
+  check(
+    noNameResult.skippedEntries[0].time === '2026-06-10T09:15:00',
+    'skippedEntries time reads startDateTime the same way kept patients do'
+  );
 
   // ── extractBookedPatients — ALL UUIDs missing (diagnostic) ───────────────────
   console.log('\n--- extractBookedPatients: all UUIDs missing → diagnostic ---');
   const allMissingRaw = {
-    staffSchedules: [{
-      name: 'Dr Test',
-      schedule: [{
-        entries: [
-          { diaryEntryType: { value: 'appointment' }, patient: { name: 'No UUID A' }, start: '09:00' },
-          { diaryEntryType: { value: 'appointment' }, patient: { name: 'No UUID B' }, start: '09:30' },
-        ]
-      }]
-    }]
+    staffSchedules: [
+      {
+        name: 'Dr Test',
+        schedule: [
+          {
+            entries: [
+              { diaryEntryType: { value: 'appointment' }, patient: { name: 'No UUID A' }, start: '09:00' },
+              { diaryEntryType: { value: 'appointment' }, patient: { name: 'No UUID B' }, start: '09:30' },
+            ],
+          },
+        ],
+      },
+    ],
   };
   const allMissingResult = extractBookedPatients(allMissingRaw);
-  check(allMissingResult.patients.length === 0,     'No patients when all UUIDs missing');
-  check(allMissingResult.missingUuidCount === 2,     'missingUuidCount = 2');
+  check(allMissingResult.patients.length === 0, 'No patients when all UUIDs missing');
+  check(allMissingResult.missingUuidCount === 2, 'missingUuidCount = 2');
   check(typeof allMissingResult.diagnosticMessage === 'string', 'Diagnostic message present');
   check(allMissingResult.diagnosticMessage.includes('sweep unavailable'), 'Diagnostic includes "sweep unavailable"');
+  check(
+    allMissingResult.skippedEntries.length === allMissingResult.missingUuidCount,
+    'skippedEntries length matches missingUuidCount when every entry is unidentifiable'
+  );
+  check(
+    allMissingResult.skippedEntries.map((s) => s.rawName).join(',') === 'No UUID A,No UUID B',
+    'skippedEntries name every skipped entry, in order'
+  );
+  check(
+    allMissingResult.skippedEntries.every((s) => s.clinician === 'Dr Test'),
+    'skippedEntries carry the clinician for every entry'
+  );
 
   // ── extractBookedPatients — no schedule field ─────────────────────────────────
   console.log('\n--- extractBookedPatients: no schedule field ---');
   const noScheduleResult = extractBookedPatients({});
   check(noScheduleResult.patients.length === 0, 'No patients from empty payload');
   check(typeof noScheduleResult.diagnosticMessage === 'string', 'Diagnostic message present for empty payload');
+  check(
+    Array.isArray(noScheduleResult.skippedEntries) && noScheduleResult.skippedEntries.length === 0,
+    'skippedEntries is an empty array for an unrecognised payload (never undefined)'
+  );
 
   const nullResult = extractBookedPatients(null);
   check(nullResult.patients.length === 0, 'No crash on null');
@@ -161,50 +270,124 @@ const path = require('path');
   // (v3.40.2 regression guard: an empty/filtered-out book previously fell
   // through to "No action-needed alerts found across 0 patients".)
   console.log('\n--- extractBookedPatients: empty book → explicit diagnostic ---');
-  const emptyBook = extractBookedPatients({ staffSchedules: [{ name: 'Dr Test', schedule: [{ entries: [
-    { diaryEntryType: { value: 'slot' } },
-  ] }] }] });
+  const emptyBook = extractBookedPatients({
+    staffSchedules: [{ name: 'Dr Test', schedule: [{ entries: [{ diaryEntryType: { value: 'slot' } }] }] }],
+  });
   check(emptyBook.patients.length === 0, 'slots-only book → no patients');
-  check(typeof emptyBook.diagnosticMessage === 'string' && /No booked appointments/.test(emptyBook.diagnosticMessage),
-        'slots-only book → explicit "No booked appointments" diagnostic (not silent)');
+  check(
+    typeof emptyBook.diagnosticMessage === 'string' && /No booked appointments/.test(emptyBook.diagnosticMessage),
+    'slots-only book → explicit "No booked appointments" diagnostic (not silent)'
+  );
   const emptySchedules = extractBookedPatients({ staffSchedules: [] });
-  check(/No booked appointments/.test(emptySchedules.diagnosticMessage || ''), 'empty staffSchedules → explicit diagnostic');
+  check(
+    /No booked appointments/.test(emptySchedules.diagnosticMessage || ''),
+    'empty staffSchedules → explicit diagnostic'
+  );
 
   // ── extractBookedPatients — cancelled excluded, clinician filter ─────────────
   console.log('\n--- extractBookedPatients: cancelled + clinician filter ---');
-  const twoClinRaw = { staffSchedules: [
-    { name: 'Dr A', schedule: [{ entries: [
-      { diaryEntryType: { value: 'appointment' }, patient: { id: '11111111-0000-0000-0000-000000000001', name: 'P1' }, startDateTime: '2026-06-10T09:00:00' },
-      { diaryEntryType: { value: 'appointment' }, displayStatus: { value: 'cancelled' }, patient: { id: '11111111-0000-0000-0000-000000000002', name: 'P2' }, startDateTime: '2026-06-10T09:30:00' },
-    ] }] },
-    { name: 'Dr B', schedule: [{ entries: [
-      { diaryEntryType: { value: 'appointment' }, patient: { id: '11111111-0000-0000-0000-000000000003', name: 'P3' }, startDateTime: '2026-06-10T10:00:00' },
-    ] }] },
-  ] };
+  const twoClinRaw = {
+    staffSchedules: [
+      {
+        name: 'Dr A',
+        schedule: [
+          {
+            entries: [
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { id: '11111111-0000-0000-0000-000000000001', name: 'P1' },
+                startDateTime: '2026-06-10T09:00:00',
+              },
+              {
+                diaryEntryType: { value: 'appointment' },
+                displayStatus: { value: 'cancelled' },
+                patient: { id: '11111111-0000-0000-0000-000000000002', name: 'P2' },
+                startDateTime: '2026-06-10T09:30:00',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        name: 'Dr B',
+        schedule: [
+          {
+            entries: [
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { id: '11111111-0000-0000-0000-000000000003', name: 'P3' },
+                startDateTime: '2026-06-10T10:00:00',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
   let twoClin = extractBookedPatients(twoClinRaw);
   check(twoClin.patients.length === 2, 'cancelled appointment excluded');
-  check(twoClin.clinicians.length === 2 && twoClin.clinicians.includes('Dr A') && twoClin.clinicians.includes('Dr B'), 'both clinicians listed');
+  check(
+    twoClin.clinicians.length === 2 && twoClin.clinicians.includes('Dr A') && twoClin.clinicians.includes('Dr B'),
+    'both clinicians listed'
+  );
   check(twoClin.patients[0].time === '2026-06-10T09:00:00', 'startDateTime used as time');
   twoClin = extractBookedPatients(twoClinRaw, { clinician: 'Dr B' });
   check(twoClin.patients.length === 1 && twoClin.patients[0].name === 'P3', 'clinician filter narrows to that diary');
   check(twoClin.clinicians.length === 2, 'clinicians list stays unfiltered (for the dropdown)');
   twoClin = extractBookedPatients(twoClinRaw, { clinician: 'Dr Nobody' });
-  check(twoClin.patients.length === 0 && /No booked appointments found for Dr Nobody/.test(twoClin.diagnosticMessage || ''),
-        'filter matching nothing → explicit per-clinician diagnostic');
+  check(
+    twoClin.patients.length === 0 && /No booked appointments found for Dr Nobody/.test(twoClin.diagnosticMessage || ''),
+    'filter matching nothing → explicit per-clinician diagnostic'
+  );
 
   // ── extractBookedPatients — MULTI-clinician selection (v3.84.0) ──────────────
   console.log('\n--- extractBookedPatients: multi-clinician selection ---');
-  const threeClinRaw = { staffSchedules: [
-    { name: 'Dr A', schedule: [{ entries: [
-      { diaryEntryType: { value: 'appointment' }, patient: { id: '22222222-0000-0000-0000-000000000001', name: 'PA' }, startDateTime: '2026-06-10T09:00:00' },
-    ] }] },
-    { name: 'Dr B', schedule: [{ entries: [
-      { diaryEntryType: { value: 'appointment' }, patient: { id: '22222222-0000-0000-0000-000000000002', name: 'PB' }, startDateTime: '2026-06-10T10:00:00' },
-    ] }] },
-    { name: 'Dr C', schedule: [{ entries: [
-      { diaryEntryType: { value: 'appointment' }, patient: { id: '22222222-0000-0000-0000-000000000003', name: 'PC' }, startDateTime: '2026-06-10T11:00:00' },
-    ] }] },
-  ] };
+  const threeClinRaw = {
+    staffSchedules: [
+      {
+        name: 'Dr A',
+        schedule: [
+          {
+            entries: [
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { id: '22222222-0000-0000-0000-000000000001', name: 'PA' },
+                startDateTime: '2026-06-10T09:00:00',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        name: 'Dr B',
+        schedule: [
+          {
+            entries: [
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { id: '22222222-0000-0000-0000-000000000002', name: 'PB' },
+                startDateTime: '2026-06-10T10:00:00',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        name: 'Dr C',
+        schedule: [
+          {
+            entries: [
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { id: '22222222-0000-0000-0000-000000000003', name: 'PC' },
+                startDateTime: '2026-06-10T11:00:00',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
 
   // Two named clinicians → only those two patients, Dr C excluded.
   let multi = extractBookedPatients(threeClinRaw, { clinicians: ['Dr A', 'Dr B'] });
@@ -216,7 +399,10 @@ const path = require('path');
 
   // Single-string API still works (back-compat).
   multi = extractBookedPatients(threeClinRaw, { clinician: 'Dr A' });
-  check(multi.patients.length === 1 && multi.patients[0].name === 'PA', 'single { clinician: "Dr A" } still works (back-compat)');
+  check(
+    multi.patients.length === 1 && multi.patients[0].name === 'PA',
+    'single { clinician: "Dr A" } still works (back-compat)'
+  );
 
   // Empty array → all clinicians (never a silent zero).
   multi = extractBookedPatients(threeClinRaw, { clinicians: [] });
@@ -232,22 +418,40 @@ const path = require('path');
 
   // Multi-select matching nobody → explicit diagnostic listing the names.
   multi = extractBookedPatients(threeClinRaw, { clinicians: ['Dr X', 'Dr Y'] });
-  check(multi.patients.length === 0 && /No booked appointments found for Dr X, Dr Y/.test(multi.diagnosticMessage || ''),
-        'multi-select matching nothing → diagnostic lists the names');
+  check(
+    multi.patients.length === 0 && /No booked appointments found for Dr X, Dr Y/.test(multi.diagnosticMessage || ''),
+    'multi-select matching nothing → diagnostic lists the names'
+  );
 
   // ── extractBookedPatients — deduplication ─────────────────────────────────────
   console.log('\n--- extractBookedPatients: deduplication ---');
   const dupeRaw = {
-    staffSchedules: [{
-      name: 'Dr Test',
-      schedule: [{
-        entries: [
-          { diaryEntryType: { value: 'appointment' }, patient: { id: 'eeeeeeee-0000-0000-0000-000000000001', name: 'Same Patient' }, start: '09:00' },
-          { diaryEntryType: { value: 'appointment' }, patient: { id: 'eeeeeeee-0000-0000-0000-000000000001', name: 'Same Patient' }, start: '10:00' },
-          { diaryEntryType: { value: 'appointment' }, patient: { id: 'ffffffff-0000-0000-0000-000000000001', name: 'Other' }, start: '11:00' },
-        ]
-      }]
-    }]
+    staffSchedules: [
+      {
+        name: 'Dr Test',
+        schedule: [
+          {
+            entries: [
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { id: 'eeeeeeee-0000-0000-0000-000000000001', name: 'Same Patient' },
+                start: '09:00',
+              },
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { id: 'eeeeeeee-0000-0000-0000-000000000001', name: 'Same Patient' },
+                start: '10:00',
+              },
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { id: 'ffffffff-0000-0000-0000-000000000001', name: 'Other' },
+                start: '11:00',
+              },
+            ],
+          },
+        ],
+      },
+    ],
   };
   const dupeResult = extractBookedPatients(dupeRaw);
   check(dupeResult.patients.length === 2, 'Duplicate patient (same UUID) deduped → 2 unique patients');
@@ -263,73 +467,121 @@ const path = require('path');
     manyEntries.push({
       diaryEntryType: { value: 'appointment' },
       patient: { id: uuid, name: `Patient${i + 1}` },
-      start: `${String(Math.floor(i / 2 + 8)).padStart(2,'0')}:${i % 2 === 0 ? '00' : '30'}`
+      start: `${String(Math.floor(i / 2 + 8)).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'}`,
     });
   }
   const capRaw = { staffSchedules: [{ name: 'Dr Test', schedule: [{ entries: manyEntries }] }] };
   const capResult = extractBookedPatients(capRaw);
   check(capResult.patients.length === MAX_SWEEP_PATIENTS, `Cap: exactly ${MAX_SWEEP_PATIENTS} patients returned`);
-  check(capResult.cappedAt === totalPatients,              `cappedAt = ${totalPatients}`);
+  check(capResult.cappedAt === totalPatients, `cappedAt = ${totalPatients}`);
 
   // ── extractBookedPatients — time sorting ──────────────────────────────────────
   console.log('\n--- extractBookedPatients: time sorting ---');
   const sortRaw = {
-    staffSchedules: [{
-      name: 'Dr Test',
-      schedule: [{
-        entries: [
-          { diaryEntryType: { value: 'appointment' }, patient: { id: 'aabbccdd-0000-0000-0003-000000000003', name: 'Third'  }, start: '11:00' },
-          { diaryEntryType: { value: 'appointment' }, patient: { id: 'aabbccdd-0000-0000-0001-000000000001', name: 'First'  }, start: '09:00' },
-          { diaryEntryType: { value: 'appointment' }, patient: { id: 'aabbccdd-0000-0000-0002-000000000002', name: 'Second' }, start: '10:00' },
-        ]
-      }]
-    }]
+    staffSchedules: [
+      {
+        name: 'Dr Test',
+        schedule: [
+          {
+            entries: [
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { id: 'aabbccdd-0000-0000-0003-000000000003', name: 'Third' },
+                start: '11:00',
+              },
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { id: 'aabbccdd-0000-0000-0001-000000000001', name: 'First' },
+                start: '09:00',
+              },
+              {
+                diaryEntryType: { value: 'appointment' },
+                patient: { id: 'aabbccdd-0000-0000-0002-000000000002', name: 'Second' },
+                start: '10:00',
+              },
+            ],
+          },
+        ],
+      },
+    ],
   };
   const sortResult = extractBookedPatients(sortRaw);
-  check(sortResult.patients[0].name === 'First',  'Time sorting: first slot first');
+  check(sortResult.patients[0].name === 'First', 'Time sorting: first slot first');
   check(sortResult.patients[1].name === 'Second', 'Time sorting: second slot second');
-  check(sortResult.patients[2].name === 'Third',  'Time sorting: third slot third');
+  check(sortResult.patients[2].name === 'Third', 'Time sorting: third slot third');
 
   // ── summariseSweep — basic sorting ────────────────────────────────────────────
   console.log('\n--- summariseSweep: sorting ---');
   const sweepInput = [
-    { uuid: 'uuid-1', name: 'AAmber', time: '09:00', chips: [
-        { status: 'due_soon', ruleId: 'r1' }, { status: 'due_soon', ruleId: 'r2' }
-      ], error: null, hiddenRuleIds: new Set()
+    {
+      uuid: 'uuid-1',
+      name: 'AAmber',
+      time: '09:00',
+      chips: [
+        { status: 'due_soon', ruleId: 'r1' },
+        { status: 'due_soon', ruleId: 'r2' },
+      ],
+      error: null,
+      hiddenRuleIds: new Set(),
     },
-    { uuid: 'uuid-2', name: 'BRedAmber', time: '09:30', chips: [
-        { status: 'overdue', ruleId: 'r3' }, { status: 'due_soon', ruleId: 'r4' }
-      ], error: null, hiddenRuleIds: new Set()
+    {
+      uuid: 'uuid-2',
+      name: 'BRedAmber',
+      time: '09:30',
+      chips: [
+        { status: 'overdue', ruleId: 'r3' },
+        { status: 'due_soon', ruleId: 'r4' },
+      ],
+      error: null,
+      hiddenRuleIds: new Set(),
     },
-    { uuid: 'uuid-3', name: 'CRedRed', time: '10:00', chips: [
-        { status: 'overdue', ruleId: 'r5' }, { status: 'not_met', ruleId: 'r6' }
-      ], error: null, hiddenRuleIds: new Set()
+    {
+      uuid: 'uuid-3',
+      name: 'CRedRed',
+      time: '10:00',
+      chips: [
+        { status: 'overdue', ruleId: 'r5' },
+        { status: 'not_met', ruleId: 'r6' },
+      ],
+      error: null,
+      hiddenRuleIds: new Set(),
     },
-    { uuid: 'uuid-4', name: 'DClear', time: '10:30', chips: [
-        { status: 'in_date', ruleId: 'r7' }
-      ], error: null, hiddenRuleIds: new Set()
+    {
+      uuid: 'uuid-4',
+      name: 'DClear',
+      time: '10:30',
+      chips: [{ status: 'in_date', ruleId: 'r7' }],
+      error: null,
+      hiddenRuleIds: new Set(),
     },
   ];
   const summary = summariseSweep(sweepInput);
   check(summary.actionRows.length === 3, '3 action rows');
-  check(summary.clearRows.length  === 1, '1 clear row');
-  check(summary.errorRows.length  === 0, '0 error rows');
+  check(summary.clearRows.length === 1, '1 clear row');
+  check(summary.errorRows.length === 0, '0 error rows');
   // Most red first
-  check(summary.actionRows[0].name === 'CRedRed',  'Most-red first: CRedRed first');
+  check(summary.actionRows[0].name === 'CRedRed', 'Most-red first: CRedRed first');
   check(summary.actionRows[1].name === 'BRedAmber', 'BRedAmber second (1 red, 1 amber)');
-  check(summary.actionRows[2].name === 'AAmber',   'AAmber last (0 red, 2 amber)');
-  check(summary.actionRows[0].redCount   === 2, 'redCount correct (2)');
+  check(summary.actionRows[2].name === 'AAmber', 'AAmber last (0 red, 2 amber)');
+  check(summary.actionRows[0].redCount === 2, 'redCount correct (2)');
   check(summary.actionRows[0].amberCount === 0, 'amberCount correct (0)');
 
   // ── summariseSweep — zero-action split ────────────────────────────────────────
   console.log('\n--- summariseSweep: zero-action split ---');
   const clearInput = [
-    { uuid: 'uuid-x1', name: 'Xavier', time: '09:00', chips: [{ status: 'achieved', ruleId: 'r1' }], error: null, hiddenRuleIds: new Set() },
-    { uuid: 'uuid-y1', name: 'Yvette', time: '09:30', chips: [],                                       error: null, hiddenRuleIds: new Set() },
+    {
+      uuid: 'uuid-x1',
+      name: 'Xavier',
+      time: '09:00',
+      chips: [{ status: 'achieved', ruleId: 'r1' }],
+      error: null,
+      hiddenRuleIds: new Set(),
+    },
+    { uuid: 'uuid-y1', name: 'Yvette', time: '09:30', chips: [], error: null, hiddenRuleIds: new Set() },
   ];
   const clearSummary = summariseSweep(clearInput);
   check(clearSummary.actionRows.length === 0, 'No action rows for all-clear patients');
-  check(clearSummary.clearRows.length  === 2, '2 clear rows');
+  check(clearSummary.clearRows.length === 2, '2 clear rows');
   check(clearSummary.clearRows[0].name === 'Xavier', 'Clear rows sorted alphabetically');
   check(clearSummary.clearRows[1].name === 'Yvette', 'Clear rows sorted alphabetically (2)');
 
@@ -337,11 +589,18 @@ const path = require('path');
   console.log('\n--- summariseSweep: error rows preserved ---');
   const errorInput = [
     { uuid: 'uuid-e1', name: 'Errored', time: '09:00', chips: null, error: 'HTTP 403', hiddenRuleIds: new Set() },
-    { uuid: 'uuid-e2', name: 'Fine',    time: '09:30', chips: [{ status: 'overdue', ruleId: 'r1' }], error: null, hiddenRuleIds: new Set() },
+    {
+      uuid: 'uuid-e2',
+      name: 'Fine',
+      time: '09:30',
+      chips: [{ status: 'overdue', ruleId: 'r1' }],
+      error: null,
+      hiddenRuleIds: new Set(),
+    },
   ];
   const errorSummary = summariseSweep(errorInput);
-  check(errorSummary.errorRows.length  === 1,        '1 error row');
-  check(errorSummary.actionRows.length === 1,        '1 action row');
+  check(errorSummary.errorRows.length === 1, '1 error row');
+  check(errorSummary.actionRows.length === 1, '1 action row');
   check(errorSummary.errorRows[0].name === 'Errored', 'Error row has correct name');
   check(errorSummary.errorRows[0].error === 'HTTP 403', 'Error message preserved');
 
@@ -353,7 +612,7 @@ const path = require('path');
       name: 'HiddenPatient',
       time: '09:00',
       chips: [
-        { status: 'overdue', ruleId: 'drug-mtx' },  // this one is hidden
+        { status: 'overdue', ruleId: 'drug-mtx' }, // this one is hidden
         { status: 'in_date', ruleId: 'drug-ramipril' },
       ],
       error: null,
@@ -364,7 +623,7 @@ const path = require('path');
   // Hidden rules are NOT applied as suppression (CLINICAL-SAFETY-NOTICE limitation
   // 26): the hidden overdue chip still counts, so the patient stays on the worklist.
   check(hiddenSummary.actionRows.length === 1, 'Patient with hidden action chip stays an action row');
-  check(hiddenSummary.clearRows.length  === 0, 'Hidden action chip does not demote patient to clear');
+  check(hiddenSummary.clearRows.length === 0, 'Hidden action chip does not demote patient to clear');
   check(hiddenSummary.actionRows[0].redCount === 1, 'Hidden overdue chip still counted as red');
   check(hiddenSummary.actionRows[0].hasHiddenActionChips === true, 'hasHiddenActionChips flagged on action row');
 
@@ -372,8 +631,8 @@ const path = require('path');
   console.log('\n--- summariseSweep: empty/null ---');
   const emptyS = summariseSweep([]);
   check(emptyS.actionRows.length === 0, 'Empty input → empty actionRows');
-  check(emptyS.clearRows.length  === 0, 'Empty input → empty clearRows');
-  check(emptyS.errorRows.length  === 0, 'Empty input → empty errorRows');
+  check(emptyS.clearRows.length === 0, 'Empty input → empty clearRows');
+  check(emptyS.errorRows.length === 0, 'Empty input → empty errorRows');
 
   const nullS = summariseSweep(null);
   check(nullS.actionRows.length === 0, 'null input → no crash');
@@ -382,58 +641,117 @@ const path = require('path');
   console.log('\n--- summariseSweep: hiddenRuleIds array fallback ---');
   const arrayHiddenInput = [
     {
-      uuid: 'uuid-z1', name: 'ArrayFallback', time: '09:00',
+      uuid: 'uuid-z1',
+      name: 'ArrayFallback',
+      time: '09:00',
       chips: [{ status: 'overdue', ruleId: 'rx1' }],
       error: null,
-      hiddenRuleIds: ['rx1'],  // array, not Set
+      hiddenRuleIds: ['rx1'], // array, not Set
     },
   ];
   const arrayS = summariseSweep(arrayHiddenInput);
-  check(arrayS.actionRows.length === 1,               'Array hiddenRuleIds treated as Set → patient stays in action');
+  check(arrayS.actionRows.length === 1, 'Array hiddenRuleIds treated as Set → patient stays in action');
   check(arrayS.actionRows[0].hasHiddenActionChips === true, 'hasHiddenActionChips set via array path');
 
   // ── chipInstruction (reception handout wording) ──────────────────────────────
   console.log('\n--- chipInstruction ---');
 
   let instr = chipInstruction({
-    type: 'drug-monitoring', status: 'overdue', drugName: 'Lithium carbonate',
+    type: 'drug-monitoring',
+    status: 'overdue',
+    drugName: 'Lithium carbonate',
     tests: [
       { name: 'FBC', status: 'overdue' },
       { name: 'U&E', status: 'stale' },
       { name: 'TFT', status: 'in_date' },
     ],
   });
-  check(instr.action === 'Book a blood test appointment: FBC, U&E', 'drug chip → book named overdue tests (in-date test excluded)');
+  check(
+    instr.action === 'Book a blood test appointment: FBC, U&E',
+    'drug chip → book named overdue tests (in-date test excluded)'
+  );
   check(/Lithium carbonate monitoring overdue/.test(instr.detail), 'drug chip detail names the drug');
 
-  instr = chipInstruction({ type: 'drug-monitoring', status: 'due_soon', drugName: 'Azathioprine', tests: [{ name: 'FBC', status: 'due_soon' }] });
+  instr = chipInstruction({
+    type: 'drug-monitoring',
+    status: 'due_soon',
+    drugName: 'Azathioprine',
+    tests: [{ name: 'FBC', status: 'due_soon' }],
+  });
   check(/due soon/.test(instr.detail), 'due_soon wording is "due soon", not "overdue"');
 
   // BP / Weight / Pulse are HCA checks, not blood tests — wording must not say "blood test".
-  instr = chipInstruction({ type: 'drug-monitoring', status: 'overdue', drugName: 'Estradiol gel', tests: [{ name: 'BP', status: 'overdue' }, { name: 'Weight', status: 'overdue' }] });
-  check(instr.action === 'Book a check-up appointment: BP, Weight', 'non-blood checks → "check-up appointment", not "blood test"');
+  instr = chipInstruction({
+    type: 'drug-monitoring',
+    status: 'overdue',
+    drugName: 'Estradiol gel',
+    tests: [
+      { name: 'BP', status: 'overdue' },
+      { name: 'Weight', status: 'overdue' },
+    ],
+  });
+  check(
+    instr.action === 'Book a check-up appointment: BP, Weight',
+    'non-blood checks → "check-up appointment", not "blood test"'
+  );
 
-  instr = chipInstruction({ type: 'drug-monitoring', status: 'overdue', drugName: 'Guanfacine', tests: [{ name: 'Blood pressure', status: 'overdue' }, { name: 'Pulse / heart rate', status: 'overdue' }] });
+  instr = chipInstruction({
+    type: 'drug-monitoring',
+    status: 'overdue',
+    drugName: 'Guanfacine',
+    tests: [
+      { name: 'Blood pressure', status: 'overdue' },
+      { name: 'Pulse / heart rate', status: 'overdue' },
+    ],
+  });
   check(!/blood test/.test(instr.action), 'blood pressure + pulse not labelled a blood test');
 
   // Mixed bloods + checks → honest combined wording.
-  instr = chipInstruction({ type: 'drug-monitoring', status: 'overdue', drugName: 'Lithium', tests: [{ name: 'Lithium level', status: 'overdue' }, { name: 'U&E', status: 'overdue' }, { name: 'Weight', status: 'overdue' }] });
-  check(instr.action === 'Book a blood test and check appointment: Lithium level, U&E, Weight', 'mixed bloods + checks → combined wording, bloods first');
+  instr = chipInstruction({
+    type: 'drug-monitoring',
+    status: 'overdue',
+    drugName: 'Lithium',
+    tests: [
+      { name: 'Lithium level', status: 'overdue' },
+      { name: 'U&E', status: 'overdue' },
+      { name: 'Weight', status: 'overdue' },
+    ],
+  });
+  check(
+    instr.action === 'Book a blood test and check appointment: Lithium level, U&E, Weight',
+    'mixed bloods + checks → combined wording, bloods first'
+  );
 
-  instr = chipInstruction({ type: 'qof-indicator', status: 'not_met', indicatorCode: 'HYP010', indicatorName: 'BP ≤140/90' });
+  instr = chipInstruction({
+    type: 'qof-indicator',
+    status: 'not_met',
+    indicatorCode: 'HYP010',
+    indicatorName: 'BP ≤140/90',
+  });
   check(instr.action === 'Book a blood pressure check', 'HYP indicator → blood pressure check');
   check(/HYP010/.test(instr.detail), 'QOF detail carries indicator code');
 
-  instr = chipInstruction({ type: 'qof-indicator', status: 'not_met', indicatorCode: 'NDH001', indicatorName: 'Pre-diabetes HbA1c' });
+  instr = chipInstruction({
+    type: 'qof-indicator',
+    status: 'not_met',
+    indicatorCode: 'NDH001',
+    indicatorName: 'Pre-diabetes HbA1c',
+  });
   check(instr.action === 'Book a review appointment', 'unmapped indicator → generic review booking');
 
   instr = chipInstruction({ type: 'vaccine', status: 'vax_due', displayName: 'Flu vaccine' });
   check(instr.action === 'Offer to book: Flu vaccine', 'vaccine chip → offer to book');
 
   instr = chipInstruction({ type: 'event-count', status: 'alert', label: 'Polypharmacy ≥10 meds' });
-  check(instr.action === 'Flag to the duty clinician', 'non-bookable chip → flag to duty clinician (reception never acts clinically)');
+  check(
+    instr.action === 'Flag to the duty clinician',
+    'non-bookable chip → flag to duty clinician (reception never acts clinically)'
+  );
 
-  check(chipInstruction({ type: 'drug-monitoring', status: 'in_date', drugName: 'X', tests: [] }) === null, 'non-action chip → null');
+  check(
+    chipInstruction({ type: 'drug-monitoring', status: 'in_date', drugName: 'X', tests: [] }) === null,
+    'non-action chip → null'
+  );
   check(chipInstruction(null) === null, 'null chip → null');
 
   // ── buildHandout ──────────────────────────────────────────────────────────────
@@ -441,48 +759,93 @@ const path = require('path');
 
   const handoutRows = [
     {
-      name: 'Mr B', time: '2026-06-10T10:30:00Z', clinician: 'Dr Y', redCount: 1, amberCount: 0,
+      name: 'Mr B',
+      time: '2026-06-10T10:30:00Z',
+      clinician: 'Dr Y',
+      redCount: 1,
+      amberCount: 0,
       chips: [
         { type: 'qof-indicator', status: 'not_met', indicatorCode: 'HYP010', indicatorName: 'BP' },
         { type: 'qof-indicator', status: 'not_met', indicatorCode: 'HYP010', indicatorName: 'BP' }, // duplicate
-        { type: 'qof-register', status: 'achieved', registerName: 'HYP' },                            // not action-needed
+        { type: 'qof-register', status: 'achieved', registerName: 'HYP' }, // not action-needed
       ],
       hasHiddenActionChips: true,
     },
     {
-      name: 'Ms A', time: '2026-06-10T08:35:00Z', clinician: 'Dr X', redCount: 2, amberCount: 1,
-      chips: [{ type: 'drug-monitoring', status: 'overdue', drugName: 'Methotrexate', tests: [{ name: 'FBC', status: 'overdue' }] }],
+      name: 'Ms A',
+      time: '2026-06-10T08:35:00Z',
+      clinician: 'Dr X',
+      redCount: 2,
+      amberCount: 1,
+      chips: [
+        {
+          type: 'drug-monitoring',
+          status: 'overdue',
+          drugName: 'Methotrexate',
+          tests: [{ name: 'FBC', status: 'overdue' }],
+        },
+      ],
       hasHiddenActionChips: false,
     },
-    { name: 'No actions', time: '2026-06-10T09:00:00Z', clinician: 'Dr X', redCount: 0, amberCount: 0, chips: [], hasHiddenActionChips: false },
+    {
+      name: 'No actions',
+      time: '2026-06-10T09:00:00Z',
+      clinician: 'Dr X',
+      redCount: 0,
+      amberCount: 0,
+      chips: [],
+      hasHiddenActionChips: false,
+    },
   ];
   const handout = buildHandout(handoutRows, { runAt: '2026-06-10T08:00:00Z', clinician: null, suiteVersion: '9.9.9' });
 
   check(handout.patients.length === 2, 'patients without printable actions are dropped');
-  check(handout.patients[0].name === 'Ms A' && handout.patients[1].name === 'Mr B',
-    'handout is in appointment-time order (reception order), not severity order');
+  check(
+    handout.patients[0].name === 'Ms A' && handout.patients[1].name === 'Mr B',
+    'handout is in appointment-time order (reception order), not severity order'
+  );
   check(handout.patients[1].actions.length === 1, 'identical instructions deduplicated per patient');
   check(handout.patients[1].hasHiddenActionChips === true, 'hidden-chips flag carried through');
 
   // Repeated bookings that resolve to the same action collapse to one line, reasons merged.
-  const multiQof = buildHandout([{
-    name: 'Multi', time: '2026-06-10T11:00:00Z', clinician: 'Dr Z', redCount: 0, amberCount: 3,
-    chips: [
-      { type: 'qof-indicator', status: 'not_met', indicatorCode: 'CD001', indicatorName: 'BP in CHD' },
-      { type: 'qof-indicator', status: 'not_met', indicatorCode: 'CHOL004', indicatorName: 'Cholesterol' },
-      { type: 'qof-indicator', status: 'not_met', indicatorCode: 'KHIGH', indicatorName: 'Raised potassium' },
+  const multiQof = buildHandout(
+    [
+      {
+        name: 'Multi',
+        time: '2026-06-10T11:00:00Z',
+        clinician: 'Dr Z',
+        redCount: 0,
+        amberCount: 3,
+        chips: [
+          { type: 'qof-indicator', status: 'not_met', indicatorCode: 'CD001', indicatorName: 'BP in CHD' },
+          { type: 'qof-indicator', status: 'not_met', indicatorCode: 'CHOL004', indicatorName: 'Cholesterol' },
+          { type: 'qof-indicator', status: 'not_met', indicatorCode: 'KHIGH', indicatorName: 'Raised potassium' },
+        ],
+      },
     ],
-  }], {});
+    {}
+  );
   check(multiQof.patients[0].actions.length === 1, 'three review-type gaps → one booking line for reception');
-  check(/CD001/.test(multiQof.patients[0].actions[0].detail) && /CHOL004/.test(multiQof.patients[0].actions[0].detail),
-    'merged booking keeps all reasons in the detail');
+  check(
+    /CD001/.test(multiQof.patients[0].actions[0].detail) && /CHOL004/.test(multiQof.patients[0].actions[0].detail),
+    'merged booking keeps all reasons in the detail'
+  );
   check(handout.generatedAt === '2026-06-10T08:00:00Z' && handout.suiteVersion === '9.9.9', 'meta carried through');
   check(buildHandout([], {}).patients.length === 0, 'empty rows → empty handout');
 
   // ── buildHandout — multi-clinician meta (v3.84.0) ────────────────────────────
   console.log('\n--- buildHandout: multi-clinician meta ---');
-  const oneRow = [{ name: 'P', time: '2026-06-10T09:00:00Z', clinician: 'Dr A', redCount: 1, amberCount: 0,
-    chips: [{ type: 'qof-indicator', status: 'not_met', indicatorCode: 'HYP010', indicatorName: 'BP' }], hasHiddenActionChips: false }];
+  const oneRow = [
+    {
+      name: 'P',
+      time: '2026-06-10T09:00:00Z',
+      clinician: 'Dr A',
+      redCount: 1,
+      amberCount: 0,
+      chips: [{ type: 'qof-indicator', status: 'not_met', indicatorCode: 'HYP010', indicatorName: 'BP' }],
+      hasHiddenActionChips: false,
+    },
+  ];
 
   let h = buildHandout(oneRow, { clinicians: ['Dr A', 'Dr B'] });
   check(Array.isArray(h.clinicians) && h.clinicians.join(',') === 'Dr A,Dr B', 'clinicians array carried into model');
@@ -495,13 +858,178 @@ const path = require('path');
   check(h.clinicians.length === 0 && h.clinician === null, 'empty selection → all (clinicians [], clinician null)');
 
   h = buildHandout(oneRow, { clinician: 'Dr Z' });
-  check(h.clinicians.join(',') === 'Dr Z' && h.clinician === 'Dr Z', 'single-string clinician meta normalised into array (back-compat)');
+  check(
+    h.clinicians.join(',') === 'Dr Z' && h.clinician === 'Dr Z',
+    'single-string clinician meta normalised into array (back-compat)'
+  );
+
+  // ── buildRecallDescription ────────────────────────────────────────────────────
+  console.log('\n--- buildRecallDescription ---');
+  check(typeof buildRecallDescription === 'function', 'buildRecallDescription is a function');
+  {
+    const drugChip = {
+      type: 'drug-monitoring',
+      drugName: 'Methotrexate',
+      status: 'overdue',
+      tests: [
+        { name: 'FBC', status: 'overdue' },
+        { name: 'U&E', status: 'overdue' },
+      ],
+    };
+    const qofChip = { type: 'qof-indicator', indicatorCode: 'DM020', indicatorName: 'HbA1c', status: 'not_met' };
+    const desc = buildRecallDescription([drugChip, qofChip]);
+    check(desc.startsWith('Recall (from Sweep): '), 'description is prefixed "Recall (from Sweep): "');
+    check(/Methotrexate|FBC|U&E/.test(desc), 'description mentions the overdue drug-monitoring detail');
+    check(/DM020/.test(desc), 'description mentions the QOF indicator code');
+  }
+  {
+    // No action-needed chips → empty description (nothing to recall).
+    const clearChip = { type: 'qof-indicator', indicatorCode: 'HYP010', status: 'achieved' };
+    check(buildRecallDescription([clearChip]) === '', 'no action-needed chips → empty description');
+    check(buildRecallDescription([]) === '', 'empty chips → empty description');
+    check(buildRecallDescription(null) === '', 'null chips → empty description');
+  }
+
+  // ── summariseWorklistByAction ─────────────────────────────────────────────────
+  console.log('\n--- summariseWorklistByAction ---');
+
+  // Both-bucket drug: methotrexate contributes FBC (blood) AND weight (check)
+  // for the SAME patient — must appear in both buckets, per CLAUDE.md.
+  const bothBucketDrugChip = {
+    type: 'drug-monitoring',
+    status: 'overdue',
+    drugName: 'Methotrexate',
+    tests: [
+      { name: 'FBC', status: 'overdue' },
+      { name: 'LFT', status: 'due_soon' },
+      { name: 'Weight', status: 'stale' },
+      { name: 'U&E', status: 'in_date' }, // not action-needed → excluded
+    ],
+  };
+  const vaccineDueChip = { type: 'vaccine', status: 'vax_due', displayName: 'Flu vaccine' };
+  const vaccineGivenChip = { type: 'vaccine', status: 'vax_given', displayName: 'Shingles vaccine' }; // excluded
+  const reviewChip = { type: 'qof-indicator', status: 'not_met', indicatorCode: 'HYP010', indicatorName: 'BP control' };
+  const clearQofChip = { type: 'qof-indicator', status: 'achieved', indicatorCode: 'DM020' }; // excluded
+
+  const worklistInput = [
+    {
+      uuid: 'w-1',
+      name: 'Alice Prep',
+      time: '2026-07-04T09:00:00',
+      clinician: 'Nurse A',
+      chips: [bothBucketDrugChip, vaccineDueChip],
+      error: null,
+    },
+    {
+      uuid: 'w-2',
+      name: 'Bob Review',
+      time: '2026-07-04T08:30:00',
+      clinician: 'Dr B',
+      chips: [reviewChip, clearQofChip, vaccineGivenChip],
+      error: null,
+    },
+    {
+      uuid: 'w-3',
+      name: 'Errored Patient',
+      time: '2026-07-04T08:00:00',
+      chips: null,
+      error: 'HTTP 500', // must be skipped entirely
+    },
+  ];
+
+  const worklist = summariseWorklistByAction(worklistInput);
+
+  check(worklist.bloods.length === 1, 'bloods bucket has 1 patient');
+  check(worklist.bloods[0].uuid === 'w-1', 'bloods bucket patient is Alice');
+  check(
+    worklist.bloods[0].items.length === 2 &&
+      worklist.bloods[0].items.includes('FBC — Methotrexate') &&
+      worklist.bloods[0].items.includes('LFT — Methotrexate'),
+    `bloods items correct (overdue + due_soon both included), got ${JSON.stringify(worklist.bloods[0].items)}`
+  );
+  check(
+    !worklist.bloods[0].items.some((i) => i.includes('U&E')),
+    'in_date test excluded from bloods (not action-needed)'
+  );
+
+  check(worklist.checks.length === 1, 'checks bucket has 1 patient');
+  check(worklist.checks[0].uuid === 'w-1', 'checks bucket patient is Alice');
+  check(
+    worklist.checks[0].items.length === 1 && worklist.checks[0].items[0] === 'Weight — Methotrexate',
+    `checks items correct (the non-blood test only), got ${JSON.stringify(worklist.checks[0].items)}`
+  );
+
+  check(worklist.vaccines.length === 1, 'vaccines bucket has 1 patient');
+  check(worklist.vaccines[0].uuid === 'w-1', 'vaccines bucket patient is Alice');
+  check(worklist.vaccines[0].items[0] === 'Flu vaccine', 'vaccine item is the displayName');
+  check(!worklist.vaccines.some((p) => p.uuid === 'w-2'), 'vax_given excluded from vaccines bucket');
+
+  check(worklist.reviews.length === 1, 'reviews bucket has 1 patient');
+  check(worklist.reviews[0].uuid === 'w-2', 'reviews bucket patient is Bob');
+  check(/Book a blood pressure check/.test(worklist.reviews[0].items[0]), 'review item carries the booking verb');
+  check(/HYP010/.test(worklist.reviews[0].items[0]), 'review item carries the indicator code');
+  check(!worklist.reviews.some((p) => p.items.some((i) => /DM020/.test(i))), 'achieved QOF chip excluded from reviews');
+
+  check(!worklist.bloods.some((p) => p.uuid === 'w-3'), 'errored patient excluded from every bucket (bloods)');
+  check(!worklist.reviews.some((p) => p.uuid === 'w-3'), 'errored patient excluded from every bucket (reviews)');
+
+  // Time ordering within a bucket (Bob 08:30 before hypothetical later entries).
+  const orderInput = [
+    { uuid: 'o-1', name: 'Later', time: '2026-07-04T11:00:00', chips: [vaccineDueChip], error: null },
+    { uuid: 'o-2', name: 'Earlier', time: '2026-07-04T08:15:00', chips: [vaccineDueChip], error: null },
+  ];
+  const orderResult = summariseWorklistByAction(orderInput);
+  check(
+    orderResult.vaccines[0].name === 'Earlier' && orderResult.vaccines[1].name === 'Later',
+    'worklist buckets are time-ordered'
+  );
+
+  // Empty / null input.
+  const emptyWorklist = summariseWorklistByAction([]);
+  check(
+    emptyWorklist.bloods.length === 0 &&
+      emptyWorklist.checks.length === 0 &&
+      emptyWorklist.vaccines.length === 0 &&
+      emptyWorklist.reviews.length === 0,
+    'empty input → all buckets empty'
+  );
+  const nullWorklist = summariseWorklistByAction(null);
+  check(nullWorklist.bloods.length === 0, 'null input → no crash, empty buckets');
+
+  // ── buildWorklist ─────────────────────────────────────────────────────────────
+  console.log('\n--- buildWorklist ---');
+  const builtWorklist = buildWorklist(worklistInput, {
+    runAt: '2026-07-04T07:00:00Z',
+    clinicDate: '2026-07-04',
+    clinicians: ['Nurse A', 'Dr B'],
+    suiteVersion: '9.9.9',
+  });
+  check(builtWorklist.generatedAt === '2026-07-04T07:00:00Z', 'buildWorklist carries runAt through');
+  check(builtWorklist.clinicDate === '2026-07-04', 'buildWorklist carries clinicDate through');
+  check(builtWorklist.clinicians.join(',') === 'Nurse A,Dr B', 'buildWorklist carries clinicians array through');
+  check(builtWorklist.clinician === null, 'buildWorklist clinician back-compat null when ≥2 selected');
+  check(builtWorklist.suiteVersion === '9.9.9', 'buildWorklist carries suiteVersion through');
+  check(
+    builtWorklist.bloods.length === 1 && builtWorklist.reviews.length === 1,
+    'buildWorklist model wraps the buckets'
+  );
+
+  const oneClinWorklist = buildWorklist(worklistInput, { clinicians: ['Nurse A'] });
+  check(oneClinWorklist.clinician === 'Nurse A', 'buildWorklist clinician set when exactly one selected');
+
+  const emptyBuiltWorklist = buildWorklist([], {});
+  check(
+    emptyBuiltWorklist.bloods.length === 0 &&
+      emptyBuiltWorklist.checks.length === 0 &&
+      emptyBuiltWorklist.vaccines.length === 0 &&
+      emptyBuiltWorklist.reviews.length === 0,
+    'empty perPatientResults → empty worklist model'
+  );
 
   // ── Final results ─────────────────────────────────────────────────────────────
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
-
-})().catch(e => {
+})().catch((e) => {
   console.error('FATAL:', e);
   process.exit(1);
 });

@@ -8,11 +8,20 @@
 // a silent clinical miss (the chip just never fires), so this test fails the
 // build if any shipped pattern is invalid, plus pins schema invariants and a
 // set of positive/negative match examples for the high-risk rules.
+//
+// The compile/match step below is NOT a local reimplementation — it requires
+// the real shared matcher (content-scripts/triage-lens/rule-match.js,
+// window.TriageLensMatch) that content.js and options.js both delegate to
+// (see test-triage-preview-parity.js). A local mirror here could silently
+// diverge from the real matcher and this test would keep passing while the
+// live page behaved differently — exactly the latent-divergence risk this
+// file exists to close.
 
 'use strict';
 
 const path = require('path');
 const cfg = require(path.join(__dirname, 'defaults.json'));
+const M = require(path.join(__dirname, 'content-scripts', 'triage-lens', 'rule-match.js'));
 
 let passed = 0,
   failed = 0;
@@ -25,17 +34,20 @@ function check(cond, msg) {
   }
 }
 
-// ---- Mirror of the engine's compile step (content.js compileRule) ----
+// ---- Real engine compile step (content-scripts/triage-lens/rule-match.js) ----
+// M.compileRule returns null for a disabled rule or one with no usable
+// patterns; every rule in defaults.json is builtin:true + enabled:true, so
+// that null path is exercised separately in test-triage-preview-parity.js,
+// not here. Wrap to preserve this file's original "throws on invalid" shape
+// so section 1 below (which expects compileRule to throw on a bad pattern)
+// keeps working unchanged.
 function compileRule(rule) {
-  const compiled = [];
-  for (const p of rule.patterns || []) {
-    const s = String(p || '').trim();
-    if (!s) continue;
-    const src = rule.regex ? s : s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const wrapped = rule.regex ? '\\b' + src + '\\b' : '\\b' + src;
-    compiled.push(new RegExp(wrapped, 'i')); // throws on invalid — intentional
+  const compiled = M.compileRule(rule);
+  if (!compiled) return [];
+  if (Array.isArray(compiled._errors) && compiled._errors.length) {
+    throw new Error(compiled._errors.join('; '));
   }
-  return compiled;
+  return compiled._compiled;
 }
 
 // ---- 1. Every shipped pattern must compile ----
@@ -230,6 +242,98 @@ for (const r of cfg.rules.filter((r) => r.kind === 'red')) {
     (r.actions || []).some((a) => a.type === 'note'),
     `${r.id}: red rule should carry a clinical note action`
   );
+}
+
+// ---- Item 4.3 (TRIAGE-LENS-2026-07-02.md): green routine rule set ----
+// Two shipped green rules: practice-admin-details (address/phone/registration/
+// name/leaving), pharmacy-process-query (dispensing/collection/nominated
+// pharmacy — deliberately NOT the same territory as the existing 'repeat-meds'
+// info rule, which owns "need a new/reorder my repeat prescription").
+
+// Positive: each green rule fires on realistic administrative phrasing.
+expectMatch('I need proof of address for a mortgage application', ['practice-admin-details']);
+expectMatch('This is a registration query, I want to register with the practice', ['practice-admin-details']);
+expectMatch('new patient registration for my daughter', ['practice-admin-details']);
+expectMatch('can you change my address on the system please', ['practice-admin-details']);
+expectMatch('please update my mobile number, it has changed', ['practice-admin-details']);
+expectMatch('I want to change my contact details', ['practice-admin-details']);
+expectMatch('I had a change of name after getting married', ['practice-admin-details']);
+expectMatch('I would like to deregister from the practice', ['practice-admin-details']);
+expectMatch('I am leaving the practice and moving to a new area', ['practice-admin-details']);
+expectMatch('please transfer my medical records to another surgery', ['practice-admin-details']);
+
+expectMatch('I have a pharmacy query about my last order', ['pharmacy-process-query']);
+expectMatch('my prescription not ready at the chemist again', ['pharmacy-process-query']);
+expectMatch("my prescription hasn't arrived at the pharmacy yet", ['pharmacy-process-query']);
+expectMatch("the pharmacy hasn't received my prescription from you", ['pharmacy-process-query']);
+expectMatch('they sent my prescription to the wrong pharmacy', ['pharmacy-process-query']);
+expectMatch('can you change my nominated pharmacy to the one on the high street', ['pharmacy-process-query']);
+expectMatch('when can I collect my prescription', ['pharmacy-process-query']);
+expectMatch('is my prescription ready for collection yet', ['pharmacy-process-query']);
+
+// Negative: green rules must NEVER fire on clinical phrasing (no symptom words
+// anywhere in either pattern list) — checked directly against the compiled
+// patterns rather than via expectMatch, since these are deliberately generic
+// clinical sentences with no administrative content at all.
+expectMatch('I have chest pain and feel very unwell', [], ['practice-admin-details', 'pharmacy-process-query']);
+expectMatch('having thoughts of harming myself', [], ['practice-admin-details', 'pharmacy-process-query']);
+expectMatch('my son has a high fever and is very drowsy', [], ['practice-admin-details', 'pharmacy-process-query']);
+
+// Negative: the existing 'repeat-meds' territory (reorder/need-more/refill) must
+// NOT trip pharmacy-process-query — the two rules are deliberately scoped to
+// disjoint phrasing (see the mechanism comment above rankRuleMatches in content.js).
+expectMatch('I need a repeat prescription, running out of my tablets', ['repeat-meds'], ['pharmacy-process-query']);
+// And conversely: a genuine dispensing-process query must not trip repeat-meds.
+expectMatch('my prescription not ready at the chemist', ['pharmacy-process-query'], ['repeat-meds']);
+
+// Safety argument (mechanism point 2): when an administrative green-rule phrase
+// co-occurs with a genuine red/amber/info symptom in the SAME request, the
+// symptom rule still fires (matches() returns both ids) — ranking that red/
+// amber/info above green is rankRuleMatches' job in content.js (see the
+// RULE_KIND_RANK ordering test in test-queue-injection-smoke.js Layer 14/19),
+// not this file's. Here we just confirm BOTH rules still fire together (the
+// green rule is additive, never suppressive) and that the resulting top pick
+// — using the SAME red<amber<info<green ordering rankRuleMatches applies —
+// is never green when a red/amber/info rule also matched.
+const GREEN_MECHANISM_RANK = { red: 0, amber: 1, info: 2, green: 3 };
+function topKindFor(text) {
+  const hitIds = matches(text);
+  if (!hitIds.length) return null;
+  const hitKinds = hitIds.map((id) => cfg.rules.find((r) => r.id === id).kind);
+  hitKinds.sort((a, b) => (GREEN_MECHANISM_RANK[a] ?? 4) - (GREEN_MECHANISM_RANK[b] ?? 4));
+  return hitKinds[0];
+}
+{
+  const text = 'please change my address, also I have chest pain';
+  const hits = matches(text);
+  check(
+    hits.includes('practice-admin-details'),
+    `co-occurrence text still fires the green rule (fired: ${hits.join(', ')})`
+  );
+  check(hits.includes('chest-pain'), `co-occurrence text still fires the red rule (fired: ${hits.join(', ')})`);
+  check(
+    topKindFor(text) === 'red',
+    `top kind for a green+red co-occurrence is 'red', not 'green' (got ${topKindFor(text)})`
+  );
+}
+{
+  const text = "change of name, also I have a nosebleed that won't stop and I'm on apixaban";
+  const hits = matches(text);
+  check(
+    hits.includes('practice-admin-details'),
+    `co-occurrence text still fires the green rule (fired: ${hits.join(', ')})`
+  );
+  check(hits.includes('epistaxis'), `co-occurrence text still fires the amber rule (fired: ${hits.join(', ')})`);
+  check(
+    topKindFor(text) === 'amber',
+    `top kind for a green+amber co-occurrence is 'amber', not 'green' (got ${topKindFor(text)})`
+  );
+}
+
+// Every green rule needs at least one action (informational, not a clinical
+// note requirement — see the red-rule check above, which is note-specific).
+for (const r of cfg.rules.filter((r) => r.kind === 'green')) {
+  check((r.actions || []).length > 0, `${r.id}: green rule should carry at least one action`);
 }
 
 // Modified existing rules: pinned expectations

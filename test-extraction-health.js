@@ -120,5 +120,301 @@ console.log('\n--- BP synthesis: 3-day gap does NOT pair ---');
   check(bp.length === 0, '3-day gap: no BP obs synthesised');
 }
 
+// ── findCardByTitle tiered matching (item 1.1 leg A, TRIAGE-LENS-2026-07-02.md) ──
+// vm-extracts the REAL findCardByTitle (+ its _cardMissWarned Set guard) from
+// content-scripts/triage-lens/content.js. A plain exact `===` match silently
+// drops the whole card the moment Medicus tweaks a label or appends a live
+// count ("Active Problems (5)") — a patient-safety risk (everything computed
+// from that card goes empty with no error). This is tiered: exact-normalised,
+// then count-suffix-stripped exact, then an UNAMBIGUOUS startsWith, and warns
+// once per missing title per page load via a Set (not per findCardByTitle
+// call — run() fires constantly).
+console.log('\n--- findCardByTitle: tiered card-title matching (item 1.1 leg A) ---');
+
+const triageLensSrc = fs.readFileSync(
+  path.join(__dirname, 'content-scripts', 'triage-lens', 'content.js'),
+  'utf8'
+);
+const fcbtMatch = triageLensSrc.match(
+  /const _cardMissWarned = new Set\(\);[\s\S]*?const findCardByTitle = \(title\) => \{[\s\S]*?\n {2}\};/
+);
+check(!!fcbtMatch, 'findCardByTitle (+ _cardMissWarned) extracted from content.js');
+
+// Minimal fake header + document — just enough for findCardByTitle's own
+// contract: document.querySelectorAll('h2, h3, h4') returns header-like
+// objects with .textContent / .closest() / .parentElement. Each header's
+// closest() returns null (no .m-card-v2 ancestor in this fixture) so
+// findCardByTitle falls through to its final `h2.parentElement?.parentElement`
+// fallback — a distinct marker object per header lets assertions confirm
+// WHICH header (if any) was actually selected.
+function makeHeader(text) {
+  const marker = { __card: text };
+  return { textContent: text, closest: () => null, parentElement: { parentElement: marker }, __marker: marker };
+}
+function makeCardDoc(headers) {
+  return { querySelectorAll: () => headers };
+}
+
+function makeFindCardByTitleSandbox(headers) {
+  const warnings = [];
+  const sandbox = {
+    console: { warn: (...a) => warnings.push(a.join(' ')), log: () => {} },
+    document: makeCardDoc(headers),
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(
+    fcbtMatch[0] + '\nthis.findCardByTitle = findCardByTitle;',
+    sandbox,
+    { filename: 'find-card-by-title-extract.js' }
+  );
+  sandbox.__warnings = warnings;
+  return sandbox;
+}
+
+if (fcbtMatch) {
+  // Tier 1 — exact match after trim/whitespace-collapse/case-insensitive.
+  {
+    const h = makeHeader('  Active   Problems ');
+    const sandbox = makeFindCardByTitleSandbox([h]);
+    check(
+      sandbox.findCardByTitle('Active Problems') === h.__marker,
+      'tier 1: matches despite extra/collapsed whitespace and leading/trailing trim'
+    );
+  }
+  {
+    const h = makeHeader('active problems');
+    const sandbox = makeFindCardByTitleSandbox([h]);
+    check(
+      sandbox.findCardByTitle('Active Problems') === h.__marker,
+      'tier 1: matches case-insensitively'
+    );
+  }
+
+  // Tier 2 — a trailing " (N)" count suffix Medicus appended must not drop the card.
+  {
+    const h = makeHeader('Active Problems (5)');
+    const sandbox = makeFindCardByTitleSandbox([h]);
+    check(
+      sandbox.findCardByTitle('Active Problems') === h.__marker,
+      'tier 2: matches with a trailing count suffix stripped ("Active Problems (5)")'
+    );
+    check(sandbox.__warnings.length === 0, 'tier 2: a successful count-suffix match does NOT warn');
+  }
+
+  // Tier 3 — unambiguous startsWith when exactly one header qualifies.
+  {
+    const h = makeHeader('Tasks & Actions Overview');
+    const sandbox = makeFindCardByTitleSandbox([h]);
+    check(
+      sandbox.findCardByTitle('Tasks & Actions') === h.__marker,
+      'tier 3: unambiguous startsWith match (only one qualifying header)'
+    );
+  }
+
+  // Ambiguity — startsWith must resolve to NO match when more than one header
+  // qualifies. Neither "Tasks & Actions" nor "Tasks & Referrals" exactly equals
+  // "Tasks" (so tier 1/2 don't resolve it), and BOTH start with it — an
+  // ambiguous prefix must never silently grab either one.
+  {
+    const hActions = makeHeader('Tasks & Actions');
+    const hReferrals = makeHeader('Tasks & Referrals');
+    const sandbox = makeFindCardByTitleSandbox([hActions, hReferrals]);
+    check(
+      sandbox.findCardByTitle('Tasks') === null,
+      'ambiguity: a startsWith prefix matching MULTIPLE headers resolves to null, never picks either one'
+    );
+  }
+  // An exact match on the full, specific title is unaffected by the presence
+  // of a sibling card sharing the same prefix — tier 1 wins outright for it,
+  // no ambiguity to resolve. (CLAUDE.md: order lookups so longer/specific
+  // titles are looked up as their own exact string, which extractTasks()
+  // already does by querying 'Tasks & Actions', not the ambiguous 'Tasks'.)
+  {
+    const hActions = makeHeader('Tasks & Actions');
+    const hReferrals = makeHeader('Tasks & Referrals');
+    const sandbox = makeFindCardByTitleSandbox([hActions, hReferrals]);
+    check(
+      sandbox.findCardByTitle('Tasks & Actions') === hActions.__marker,
+      'the longer/specific title still resolves via its own exact match regardless of a sibling sharing the prefix'
+    );
+  }
+
+  // No match at all -> null, plus the one-time warn.
+  {
+    const sandbox = makeFindCardByTitleSandbox([makeHeader('Something Else Entirely')]);
+    check(sandbox.findCardByTitle('Active Problems') === null, 'no qualifying header at all -> null');
+    check(sandbox.__warnings.length === 1, `missing card warns once (got ${sandbox.__warnings.length})`);
+    check(/Active Problems/.test(sandbox.__warnings[0] || ''), 'the warning names the missing title');
+  }
+
+  // One-time-per-title guard: calling findCardByTitle repeatedly for the SAME
+  // missing title within one sandbox (== one page load, since _cardMissWarned
+  // is module-level) must warn only ONCE — run() fires constantly, so this is
+  // the difference between a single diagnostic line and console spam.
+  {
+    const sandbox = makeFindCardByTitleSandbox([makeHeader('Unrelated Card')]);
+    sandbox.findCardByTitle('Active Problems');
+    sandbox.findCardByTitle('Active Problems');
+    sandbox.findCardByTitle('Active Problems');
+    check(sandbox.__warnings.length === 1, `repeated calls for the same missing title warn only ONCE (got ${sandbox.__warnings.length})`);
+    // A DIFFERENT missing title still gets its own warning — the guard is
+    // per-title, not a single global "already warned once" latch.
+    sandbox.findCardByTitle('Current Medication');
+    check(sandbox.__warnings.length === 2, `a different missing title gets its own warning (got ${sandbox.__warnings.length})`);
+  }
+}
+
+// ── HUD extraction-health state (item 1.1 leg B) ──────────────────────────────
+// vm-extracts the REAL pure helpers content.js's renderHUD() uses: which cards
+// are missing per page type (computeMissingCards, built on findCardByTitle),
+// whether a tile's clear/zero state is actually "never read" vs "genuinely
+// clear" (tileNotAssessed), and the two render-string choosers (headline chip
+// + footer line). Kept pure specifically so this level of test can drive them
+// without a full renderHUD()/DOM.
+console.log('\n--- HUD extraction-health: missing-card computation + tile/headline choosers (item 1.1 leg B) ---');
+
+const ecpMatch = triageLensSrc.match(/const EXPECTED_CARDS_BY_PAGE = \{[\s\S]*?\n {2}\};/);
+const cmcCardsMatch = triageLensSrc.match(/const computeMissingCards = \(pageTypeVal, isDocTask\) => \{[\s\S]*?\n {2}\};/);
+check(!!ecpMatch, 'EXPECTED_CARDS_BY_PAGE extracted from content.js');
+check(!!cmcCardsMatch, 'computeMissingCards extracted from content.js');
+
+function makeMissingCardsSandbox(headers) {
+  const sandbox = {
+    console: { warn: () => {}, log: () => {} },
+    document: makeCardDoc(headers),
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(
+    fcbtMatch[0] + '\n' + ecpMatch[0] + '\n' + cmcCardsMatch[0] +
+      '\nthis.computeMissingCards = computeMissingCards;',
+    sandbox,
+    { filename: 'missing-cards-extract.js' }
+  );
+  return sandbox;
+}
+
+if (ecpMatch && cmcCardsMatch && fcbtMatch) {
+  const recordTitles = ['Registers', 'Active Problems', 'Current Medication', 'Tasks & Actions', 'Observations & Results'];
+
+  // All expected record cards present -> nothing missing.
+  {
+    const sandbox = makeMissingCardsSandbox(recordTitles.map(makeHeader));
+    check(
+      JSON.stringify(sandbox.computeMissingCards('record', false)) === '[]',
+      'record page, all 5 cards present -> computeMissingCards returns []'
+    );
+  }
+  // One card genuinely absent -> named, and ONLY that one (present-but-findable
+  // cards must not spuriously appear in the list).
+  {
+    const present = recordTitles.filter((t) => t !== 'Registers');
+    const sandbox = makeMissingCardsSandbox(present.map(makeHeader));
+    check(
+      JSON.stringify(sandbox.computeMissingCards('record', false)) === JSON.stringify(['Registers']),
+      'record page, Registers card absent -> missing list is exactly ["Registers"]'
+    );
+  }
+  // Non-document detail page expects the request-triage cards, NOT the
+  // record-summary ones — a document/communication task page that never
+  // renders Registers/Active Problems must not be flagged over it.
+  {
+    const sandbox = makeMissingCardsSandbox(
+      ['Task Details', 'Requester Details', 'Initial Request'].map(makeHeader)
+    );
+    check(
+      JSON.stringify(sandbox.computeMissingCards('detail', false)) === '[]',
+      'non-document detail page, its 3 expected cards present -> []'
+    );
+    check(
+      JSON.stringify(sandbox.computeMissingCards('detail', true)) !==
+        JSON.stringify(sandbox.computeMissingCards('detail', false)),
+      'isDocTask flips to the detail-document expected set (a materially different list)'
+    );
+  }
+  // Document-task detail page expects its own card set, independent of
+  // whether the non-document detail cards happen to exist.
+  {
+    const sandbox = makeMissingCardsSandbox(
+      ['Task Overview', 'Document Details', 'Internal Comments', 'Codes & Actions'].map(makeHeader)
+    );
+    check(
+      JSON.stringify(sandbox.computeMissingCards('detail', true)) === '[]',
+      'document-task detail page, its 4 expected cards present -> []'
+    );
+  }
+}
+
+// ---- tileNotAssessed / TILE_CARD_SOURCES ----
+const tcsMatch = triageLensSrc.match(/const TILE_CARD_SOURCES = \{[\s\S]*?\n {2}\};/);
+const tnaMatch = triageLensSrc.match(/const tileNotAssessed = \(key, signal, missingCards\) => \{[\s\S]*?\n {2}\};/);
+check(!!tcsMatch, 'TILE_CARD_SOURCES extracted from content.js');
+check(!!tnaMatch, 'tileNotAssessed extracted from content.js');
+
+let tileNotAssessed = null;
+if (tcsMatch && tnaMatch) {
+  const sandbox = {};
+  vm.runInNewContext(tcsMatch[0] + '\n' + tnaMatch[0] + '\nthis.tileNotAssessed = tileNotAssessed;', sandbox);
+  tileNotAssessed = sandbox.tileNotAssessed;
+  check(typeof tileNotAssessed === 'function', 'tileNotAssessed extracted and callable');
+}
+if (tileNotAssessed) {
+  check(
+    tileNotAssessed('meds', { items: [] }, ['Current Medication']) === true,
+    'meds tile, zero findings, its one source card missing -> not-assessed'
+  );
+  check(
+    tileNotAssessed('meds', { items: [{ text: 'Polypharmacy' }] }, ['Current Medication']) === false,
+    'meds tile with a REAL finding present is never masked to not-assessed, even if its card is missing'
+  );
+  check(
+    tileNotAssessed('risk', { items: [] }, ['Active Problems']) === false,
+    'risk tile: only ONE of its two source cards missing -> stays a normal (real) clear, not not-assessed'
+  );
+  check(
+    tileNotAssessed('risk', { items: [] }, ['Active Problems', 'Registers']) === true,
+    'risk tile: BOTH source cards missing, zero findings -> not-assessed'
+  );
+  check(
+    tileNotAssessed('unknownTile', { items: [] }, ['Registers']) === false,
+    'an unmapped tile key never claims not-assessed (no TILE_CARD_SOURCES entry)'
+  );
+}
+
+// ---- headlineNoFlagsChipHtml / missingCardsFooterHtml ----
+const escMatch = triageLensSrc.match(/const _HTML_ESC = \{[\s\S]*?\};/);
+const escFnMatch = triageLensSrc.match(/const escapeHtml = \(s\)[\s\S]*?;/);
+const headlineMatch = triageLensSrc.match(/const headlineNoFlagsChipHtml = \(missingCards\) => \{[\s\S]*?\n {2}\};/);
+const footerMatch = triageLensSrc.match(/const missingCardsFooterHtml = \(missingCards\) => \{[\s\S]*?\n {2}\};/);
+check(!!headlineMatch, 'headlineNoFlagsChipHtml extracted from content.js');
+check(!!footerMatch, 'missingCardsFooterHtml extracted from content.js');
+
+let headlineNoFlagsChipHtml = null, missingCardsFooterHtml = null;
+if (escMatch && escFnMatch && headlineMatch && footerMatch) {
+  const sandbox = {};
+  vm.runInNewContext(
+    escMatch[0] + '\n' + escFnMatch[0] + '\n' + headlineMatch[0] + '\n' + footerMatch[0] +
+      '\nthis.headlineNoFlagsChipHtml = headlineNoFlagsChipHtml;\nthis.missingCardsFooterHtml = missingCardsFooterHtml;',
+    sandbox
+  );
+  headlineNoFlagsChipHtml = sandbox.headlineNoFlagsChipHtml;
+  missingCardsFooterHtml = sandbox.missingCardsFooterHtml;
+}
+if (headlineNoFlagsChipHtml) {
+  const clear = headlineNoFlagsChipHtml([]);
+  check(/No flags/.test(clear) && /ch-chip-info/.test(clear), 'no missing cards -> the genuine green/info "No flags" chip');
+  check(!/Not fully assessed/.test(clear), 'no missing cards -> never the "Not fully assessed" wording');
+
+  const notAssessed = headlineNoFlagsChipHtml(['Registers']);
+  check(/Not fully assessed/.test(notAssessed), 'a missing card -> "Not fully assessed" headline, never "No flags"');
+  check(/ch-chip-not-assessed/.test(notAssessed), 'a missing card -> the grey ch-chip-not-assessed class, not ch-chip-info');
+  check(!/No flags/.test(notAssessed), 'a missing card -> the string "No flags" must not appear at all (H-005)');
+  check(/Registers/.test(notAssessed), 'the missing card title is named in the chip (tooltip)');
+}
+if (missingCardsFooterHtml) {
+  check(missingCardsFooterHtml([]) === '', 'no missing cards -> empty footer (renders nothing)');
+  const footer = missingCardsFooterHtml(['Registers', 'Active Problems']);
+  check(/Could not read: Registers, Active Problems/.test(footer), 'footer lists every missing card, joined');
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

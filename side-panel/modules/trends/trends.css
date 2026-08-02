@@ -19,6 +19,88 @@
   padding: 16px 12px;
 }
 
+/* ── Resting state (no patient open) ─────────────────────────────────────────
+   Self-describing rest: worked example (sparkline) + purpose + first step.
+   Deliberately calm — accent/neutral ink only, no amber/red — this is a
+   resting state, not an alert. Replaces the old one-line "black box" empty
+   state (whole-suite appraisal). */
+.trends-rest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 20px 24px;
+  text-align: center;
+}
+
+.trends-rest-example {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 14px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.trends-rest-spark {
+  display: block;
+  overflow: visible;
+}
+
+.trends-rest-spark-line {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.75;
+}
+
+.trends-rest-spark-dot {
+  fill: var(--accent);
+  opacity: 0.85;
+}
+
+.trends-rest-example-lbl {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-4);
+  letter-spacing: 0.04em;
+}
+
+.trends-rest-purpose {
+  margin: 0;
+  max-width: 320px;
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+
+.trends-rest-step {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.trends-rest-step strong {
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+/* Feed provenance ("Data: API feed" / "Data: session") — subtle, not a badge.
+   Mirrors record.css .rec-feed-label's idiom. */
+.trends-source {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-4);
+  padding: 0 12px 4px;
+}
+
 /* ── Picker ──────────────────────────────────────────────────────────────────── */
 .trends-picker {
   display: flex;
@@ -235,13 +317,13 @@
 }
 
 .trends-section-lbl {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
   color: var(--text-4);
   padding: 6px 12px 2px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  text-transform: none;
+  letter-spacing: 0;
 }
 .trends-count {
   font-family: var(--mono);
@@ -499,13 +581,13 @@
 }
 
 .acrt-section-lbl {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
   color: var(--text-4);
   padding: 6px 12px 2px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .acrt-band-legend {

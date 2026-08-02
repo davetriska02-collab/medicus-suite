@@ -29,6 +29,7 @@ const PAGES = [
   { name: 'popout', path: '/pop-out/pop-out.html', width: 520, height: 860 },
   { name: 'options', path: '/options/options.html', width: 1280, height: 900 },
   { name: 'visualiser', path: '/visualiser-core.html', width: 1280, height: 900 },
+  { name: 'duplicate-checker', path: '/duplicate-checker.html', width: 1280, height: 900 },
 ];
 
 function chromeShim(theme) {
