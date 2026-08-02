@@ -43,6 +43,23 @@ export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + counter.toString(36);
 }
 
+// The settings merge is a spread, so a STORED value always beats the default —
+// including a stored null. The engine indexes into these four without guarding
+// (rules.js does settings.openDays.includes(...) directly), so a null there is
+// a TypeError on every render. Belt-and-braces: anything that is not an array
+// falls back to the shipped default. Validation upstream (engine/validate.js on
+// the sync path, shared/io/rota-io.js on the backup path) should stop bad data
+// reaching storage; this makes sure already-stored bad data cannot crash us.
+const SETTINGS_ARRAY_FIELDS = ['openDays', 'bankHolidays', 'sites', 'peakPeriods'];
+
+function coerceSettings(stored) {
+  const settings = { ...DEFAULT_SETTINGS, ...(stored || {}) };
+  for (const field of SETTINGS_ARRAY_FIELDS) {
+    if (!Array.isArray(settings[field])) settings[field] = DEFAULT_SETTINGS[field];
+  }
+  return settings;
+}
+
 export async function loadAll() {
   const got = await rawGet(Object.values(KEYS));
   return {
@@ -53,7 +70,7 @@ export async function loadAll() {
     swaps: got[KEYS.swaps] || [],
     audit: got[KEYS.audit] || [],
     demand: got[KEYS.demand] || { days: {}, pulledAt: '' },
-    settings: { ...DEFAULT_SETTINGS, ...(got[KEYS.settings] || {}) },
+    settings: coerceSettings(got[KEYS.settings]),
   };
 }
 
@@ -100,6 +117,6 @@ export async function importEnvelope(envelope) {
   if (Array.isArray(s.audit)) await save('audit', s.audit);
   if (s.demand && typeof s.demand === 'object') await save('demand', s.demand);
   if (s.settings && typeof s.settings === 'object') {
-    await save('settings', { ...DEFAULT_SETTINGS, ...s.settings });
+    await save('settings', coerceSettings(s.settings));
   }
 }

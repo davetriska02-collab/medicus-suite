@@ -72,5 +72,56 @@ if (extra.length) {
 check(missing.length === 0, 'every rota/shared/store.js key is covered by shared/io/rota-io.js');
 check(extra.length === 0, 'shared/io/rota-io.js declares no keys the app does not use');
 
+// ── Third copy: rota/app/app.js SYNC_SCOPES ──────────────────────────────────
+//
+// The list of scopes replicated to the practice shared folder is a THIRD
+// parallel copy of the same eight keys (store.js KEYS → rota-io.js ROTA_KEYS →
+// app.js SYNC_SCOPES). It uses the unprefixed FIELD names ('staff'), not the
+// storage keys ('rota.staff').
+//
+// The intended relationship is FULL EQUALITY, verified against the file as it
+// stands: everything the app persists is also shared, including `audit` (the
+// named who-did-what trail is deliberately synced — practices want one audit
+// trail, not one per machine) and `settings` (safe-staffing policy is a
+// practice-level setting, not a per-machine one). If a future change means a
+// scope must be deliberately withheld from the shared folder, narrow this
+// assertion explicitly and say why here — do not delete it.
+//
+// Parsed, not imported: app.js is ESM and touches document/chrome on import.
+
+const APP_PATH = path.join(__dirname, 'rota', 'app', 'app.js');
+const appSrc = fs.readFileSync(APP_PATH, 'utf8');
+const syncBlock = appSrc.match(/const\s+SYNC_SCOPES\s*=\s*\[([\s\S]*?)\]\s*;/);
+check(!!syncBlock, 'rota/app/app.js exposes a `const SYNC_SCOPES = [ … ];` literal');
+
+if (syncBlock) {
+  const syncScopes = new Set();
+  const srx = /'([^']+)'/g;
+  let sm;
+  while ((sm = srx.exec(syncBlock[1])) !== null) syncScopes.add(sm[1]);
+
+  console.log(`  Scopes synced by rota/app/app.js:      ${syncScopes.size}`);
+
+  const syncAsKeys = new Set([...syncScopes].map((s) => `rota.${s}`));
+  const notSynced = [...storeKeys].filter((k) => !syncAsKeys.has(k));
+  const syncedButUnknown = [...syncAsKeys].filter((k) => !storeKeys.has(k));
+
+  if (notSynced.length) {
+    console.error('\n  NOT SHARED (missing from SYNC_SCOPES in rota/app/app.js):');
+    notSynced.forEach((k) => console.error(`    ${k}`));
+  }
+  if (syncedButUnknown.length) {
+    console.error('\n  Synced but not a real store key (stale entry in SYNC_SCOPES):');
+    syncedButUnknown.forEach((k) => console.error(`    ${k}`));
+  }
+
+  check(notSynced.length === 0, 'every rota/shared/store.js key is in rota/app/app.js SYNC_SCOPES');
+  check(syncedButUnknown.length === 0, 'SYNC_SCOPES names no scope the store does not own');
+  check(
+    syncScopes.size === storeKeys.size,
+    `SYNC_SCOPES is the same size as store.js KEYS (${syncScopes.size} vs ${storeKeys.size})`
+  );
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

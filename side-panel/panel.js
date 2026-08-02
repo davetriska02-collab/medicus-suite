@@ -196,9 +196,9 @@ const TAB_HELP = {
     firstStep: 'Type a keyword to find the relevant practice note.',
   },
   rota: {
-    title: 'Rota status',
+    title: 'Rota',
     what: 'Today’s duty cover, who is on leave, sessions still needing cover and this week’s high-priority staffing warnings.',
-    firstStep: 'Glance at duty cover for AM and PM, then open the full rota to fix any gap.',
+    firstStep: 'Glance at duty cover for AM and PM, then open the Rota manager (new tab) to fix any gap.',
   },
 };
 
@@ -359,8 +359,8 @@ function wireAllTabsButton() {
 
 // Keyboard tab navigation (power-user finding R4): Ctrl/Cmd+Alt+Left/Right cycle
 // the visible in-panel tabs without the mouse. Skipped while typing in a field,
-// and skips Visualiser and Rota (both open a full browser tab, not an in-panel
-// switch — the compact 'rota' status module stays in the cycle).
+// and skips Visualiser and Rota manager (both open a full browser tab, not an
+// in-panel switch — the compact 'rota' module stays in the cycle).
 function wireTabNavShortcuts() {
   document.addEventListener(
     'keydown',
@@ -746,7 +746,7 @@ function renderAbout() {
         <div class="module-card-desc">
           Practice rota built in sessions: working patterns, leave (April–March, session-accounted),
           registrar supervision, duty fairness pro-rata to contracted sessions and a cover worklist.
-          The Rota tab opens the full app in a browser tab; the Rota status tab is the compact
+          The Rota manager tab opens the full app in a new browser tab; the Rota tab is the compact
           morning view. Formerly a standalone extension, now part of the suite. Local storage only;
           read-only where it reads Medicus, and no patient data is ever persisted.
         </div>

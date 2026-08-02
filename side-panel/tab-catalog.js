@@ -34,10 +34,14 @@ export const TAB_CATALOG = [
   },
   {
     id: 'rota',
-    name: 'Rota status',
+    name: 'Rota',
     blurb: 'Today’s duty cover, leave, uncovered sessions and staffing warnings.',
   },
-  { id: 'rota-app', name: 'Rota', blurb: 'Full rota manager — patterns, leave, duty fairness and cover.' },
+  {
+    id: 'rota-app',
+    name: 'Rota manager',
+    blurb: 'Opens the full rota in a new tab — patterns, leave, duty fairness and cover.',
+  },
   { id: 'visualiser', name: 'Visualiser', blurb: 'Analyse an exported record PDF in a full browser tab.' },
   { id: 'about', name: 'About', blurb: 'Module info, version checks and feedback.' },
 ];

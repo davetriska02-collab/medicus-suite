@@ -26,8 +26,8 @@ in the suite's CI on every push.
 
 #### Two ways in
 
-- **Rota** (`rota-app`) — a **panel-only** nav tab that opens the full
-  application in a browser tab, exactly like Visualiser. `side-panel/panel.js`
+- **Rota manager** (`rota-app`) — a **panel-only** nav tab that opens the full
+  application in a new browser tab, exactly like Visualiser. `side-panel/panel.js`
   special-cases it in the nav click handler and excludes it from the
   Ctrl/Cmd+Alt+Arrow tab cycle; it is deliberately absent from `MODULES`, so the
   boot guard will never try to restore the panel into it. Opening is
@@ -35,7 +35,7 @@ in the suite's CI on every push.
   rota tab (and its window) instead of stacking duplicates. The same helper backs
   the command palette's *Open Rota manager* command, which is how the pop-out —
   which has no `rota-app` tab — reaches the full app.
-- **Rota status** (`rota`) — a compact module in **both** shells
+- **Rota** (`rota`) — a compact module in **both** shells
   (`side-panel/modules/rota/rota.js` + `.css`, registered in `panel.js` and
   `pop-out/pop-out.js`). It reads the eight `rota.*` keys straight from
   `chrome.storage.local`, runs the pure engine (`checkWeek`, `capacitySummary`,
@@ -60,6 +60,72 @@ All eight rota keys — `rota.staff`, `rota.entries`, `rota.leave`, `rota.rooms`
 `shared/io/rota-io.js` and the suite envelope, so a suite backup now carries the
 whole rota. `test-rota-store.js` asserts set-equality between that key list and
 `rota/shared/store.js`'s own `KEYS`, so a new rota key cannot silently escape.
+
+#### An unavailable check now says so
+
+The compact module used to swallow any rules-engine exception, leaving the
+warnings list empty — which rendered as a green *"High-priority warnings this
+week — None."* A crash was being shown as a clean bill of health. (It was
+reachable: a `rota.settings` with a null `openDays` survives backup validation,
+beats the shipped default in the `{ ...DEFAULT_SETTINGS, ...stored }` merge, and
+then makes `rules.js` throw.)
+
+It now tracks the failure and shows an **amber** *"Safe-staffing checks
+unavailable — open the full rota to investigate"* card instead. Nothing else on
+the panel asserts a positive state off that failed computation either: the duty
+pills degrade from green **OK** to a neutral **Unchecked**, and *"Sessions
+needing cover — None outstanding"* becomes *"Not verified — check the full
+rota"*. A **Gap** is still shown in red — withdrawing reassurance must never
+hide a problem. `rota/shared/store.js` additionally coerces the settings members
+the engine dereferences (`openDays`, `bankHolidays`, `sites`, `peakPeriods`)
+back to their defaults when a stored value is not an array.
+
+#### Shared-folder sync is now validated before it is saved
+
+The shared-drive sync file lives in a folder anyone with practice-share access
+can write, is re-read every 15 seconds and is last-writer-wins — yet it was
+being saved to storage **verbatim**, while the cold backup-restore path
+type-checked everything. New pure module `rota/engine/validate.js`
+(`validateRotaScopes`, returns a rejects list) type-checks all eight `rota.*`
+scopes, and `rota/app/app.js` calls it **before writing anything**. A malformed
+document is **refused whole** — no half-applied rota — the local copy is left
+untouched, and the rejection is surfaced both as the usual sync toast and as a
+sticky banner in Settings naming the version, the author and the reasons (a
+pulled version is only ever returned once, so a 3-second toast could otherwise
+be the only notice).
+
+`shared/io/rota-io.js` keeps its own checks (it is a classic script and cannot
+import an ES module) and gains the matching `rota.settings` shape checks. New
+`test-rota-validate.js` feeds identical malformed fixtures to **both**
+validators and asserts they agree, so the two copies cannot drift apart.
+`test-rota-store.js` now also parses `SYNC_SCOPES` out of `rota/app/app.js` —
+the third parallel copy of the eight keys — and asserts set-equality with the
+other two.
+
+#### Clearer names for the two rota tabs
+
+Two adjacent tabs called *Rota* and *Rota status*, both with near-identical
+calendar icons, were a daily misclick — and one of them silently opens a new
+browser tab. The compact in-panel module is now simply **Rota**; the full-app
+opener is **Rota manager** and carries an arrow-out-of-box glyph instead of a
+second calendar, with an "opens in a new tab" aria-label. The compact module's
+*Open full rota →* button gained a muted *"Opens in a new tab"* hint underneath.
+Tab ids (`rota`, `rota-app`) are unchanged, so stored tab order and visibility
+preferences carry over.
+
+#### Safety documentation
+
+`docs/HAZARD-LOG.md` gains a §2 scope bullet for the rota surface and two
+hazards — **H-035** (staffing decision taken on a stale or degraded rota status
+panel) and **H-036** (malformed shared-drive sync data corrupts rota state) —
+recorded as a v3.12 addendum, not a re-baseline. `docs/DPIA.md` (v1.1) records
+the rota's employee data as a distinct processing purpose, including UK GDPR
+**Article 9 special-category staff health data** (sickness, fit-note flags,
+Bradford Factor scores, parental leave) and the optional shared-drive
+replication of it, with the lawful basis, mitigations and the practice's
+responsibilities as employer. `docs/INTENDED-PURPOSE.md` adds the rota to the
+module table, the frozen statement, the "what this is not" list and the intended
+user.
 
 > **Scope note:** the rota's safe-staffing rules encode BMA/CQC/NHSE *guidance*,
 > not law. They warn; they never block. Thresholds are practice settings, not

@@ -37,6 +37,27 @@
   const ARRAY_FIELDS = ['staff', 'entries', 'leave', 'rooms', 'swaps', 'audit'];
   const OBJECT_FIELDS = ['demand', 'settings'];
 
+  // Members of rota.settings that the pure engine indexes into without
+  // guarding (rules.js does settings.openDays.includes(...) directly). Because
+  // settings are loaded as { ...DEFAULT_SETTINGS, ...stored }, a stored null
+  // BEATS the default and reaches the engine — so the shapes are checked here.
+  // Kept in lock-step with rota/engine/validate.js (the sync-path validator);
+  // test-rota-validate.js feeds identical fixtures to both and asserts they
+  // agree, so the two copies cannot drift. rota-io.js deliberately keeps its
+  // own checks rather than importing the ESM validator — this is a classic
+  // script loaded by a bare <script src> and cannot import.
+  const SETTINGS_ARRAY_FIELDS = ['openDays', 'bankHolidays', 'sites', 'peakPeriods'];
+  const SETTINGS_OBJECT_FIELDS = [
+    'dutyRequired',
+    'maxSimultaneousLeave',
+    'bradfordThresholds',
+    'registrarWeights',
+    'extraPeriods',
+    'demand',
+  ];
+
+  const isPlainObject = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+
   const storageKey = (field) => `rota.${field}`;
 
   async function rotaExport() {
@@ -65,7 +86,7 @@
         throw new Error(`${storageKey(field)} must be an array.`);
       }
       data[field].forEach((item, i) => {
-        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        if (!isPlainObject(item)) {
           throw new Error(`${storageKey(field)}[${i}] is not an object.`);
         }
       });
@@ -74,7 +95,7 @@
 
     for (const field of OBJECT_FIELDS) {
       if (data[field] === undefined) continue;
-      if (!data[field] || typeof data[field] !== 'object' || Array.isArray(data[field])) {
+      if (!isPlainObject(data[field])) {
         throw new Error(`${storageKey(field)} must be an object.`);
       }
       toSet[storageKey(field)] = data[field];
@@ -84,8 +105,24 @@
     // non-object so a malformed backup cannot break the demand views on load.
     if (toSet['rota.demand'] !== undefined) {
       const d = toSet['rota.demand'];
-      if (d.days !== undefined && (!d.days || typeof d.days !== 'object' || Array.isArray(d.days))) {
+      if (d.days !== undefined && !isPlainObject(d.days)) {
         throw new Error('rota.demand.days must be an object.');
+      }
+    }
+
+    // rota.settings members the engine dereferences — a null openDays here is
+    // a TypeError on every rota render, so it never reaches storage.
+    if (toSet['rota.settings'] !== undefined) {
+      const s = toSet['rota.settings'];
+      for (const field of SETTINGS_ARRAY_FIELDS) {
+        if (s[field] !== undefined && !Array.isArray(s[field])) {
+          throw new Error(`rota.settings.${field} must be an array.`);
+        }
+      }
+      for (const field of SETTINGS_OBJECT_FIELDS) {
+        if (s[field] !== undefined && !isPlainObject(s[field])) {
+          throw new Error(`rota.settings.${field} must be an object.`);
+        }
       }
     }
 

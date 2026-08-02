@@ -25,6 +25,12 @@
           "date": "2026-06-17",
           "scope": "Added H-031 (cross-surface clinical-score divergence, closed by the single ACB scorer); updated H-016/H-006 controls.",
           "doc_version": "3.10"
+        },
+        {
+          "version": "3.126.0",
+          "date": "2026-08-02",
+          "scope": "Rota addendum: §2 scope bullet for the Rota (compact) / Rota manager (full app) surface subsumed at 3.126.0; new H-035 (staffing decision on a stale or degraded rota status panel — explicit amber 'checks unavailable' state replaces the swallowed-exception green 'None') and H-036 (malformed shared-drive sync data corrupts rota state — validate-before-write on the 15s read-back path, whole-document rejection, surfaced error, store coercion, validator parity test). Staff-data/Article 9 aspects recorded in DPIA.md v1.1; INTENDED-PURPOSE.md updated. Incremental only — the product-version pin remains 3.115.0 until the next full re-baseline.",
+          "doc_version": "3.12"
         }
       ],
       "notes": "Hazard Log v3.11. FULL CSO hazard re-baseline completed at 3.115.0 (Dr Dave Triska, 2026-06-17, signed off by merge): the 3.64->3.113 backlog was closed — new hazards H-032 (Record snapshot misread as complete record), H-033 (CQC pack misread as compliance proof/coverage), H-034 (Select-all bulk action); control updates to H-002/H-006/H-007/H-009/H-016/H-022/H-023/H-024/H-028/H-030, including the v3.91.2 attribute-injection-XSS remediation (H-009), the PDF.js 4.x / CVE-2024-4367 upgrade (SOUP), and the v3.100.0 critical-low-Hb 100->80 g/L threshold change (H-030). Prior baseline was 3.64.0 (2026-06-13)."

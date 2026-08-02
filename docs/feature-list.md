@@ -137,9 +137,9 @@ A live-first snapshot of the patient currently open in Medicus, sourced from the
 - "Open full visualiser" footer link to the full multi-year Patient Record Visualiser (built from an exported record PDF) for the deep view
 - Available in both the side panel and the pop-out window
 
-### Rota status (Practice rota)
+### Rota (Practice rota)
 
-The compact, glanceable half of the Rota Manager — available in both the side panel and the pop-out window. The full application opens in its own browser tab from the **Rota** tab (side panel) or Ctrl+K → "Open Rota manager".
+The compact, glanceable half of the Rota Manager — available in both the side panel and the pop-out window. The full application opens in its own browser tab from the **Rota manager** tab (side panel) or Ctrl+K → "Open Rota manager".
 
 - Duty cover for today, AM and PM, with an OK/Gap state and the named duty doctors
 - Who is on approved leave today; upcoming sessions still flagged as vacancies needing cover
@@ -187,7 +187,7 @@ Rules are practice-editable via a form-based editor in Options with a live engin
 
 ## Recent additions (last 4 weeks)
 
-- **v3.126.0 (2026-08-02)** — Rota Manager subsumed into the suite: a full rota application in its own browser tab plus a compact **Rota status** module in the panel and pop-out; all eight `rota.*` storage keys covered by the suite backup. The standalone Medicus Rota Manager extension is deprecated
+- **v3.126.0 (2026-08-02)** — Rota Manager subsumed into the suite: a full rota application in its own browser tab plus a compact **Rota** module in the panel and pop-out; all eight `rota.*` storage keys covered by the suite backup. The standalone Medicus Rota Manager extension is deprecated
 - **v3.111.0–v3.113.0 (2026-06-16)** — Whole-suite UX from a Practice appraisal: plain-language + legibility lift on load-bearing labels, an "All tabs" menu (every tab reachable by name in one click), keyboard tab navigation, and Condor CSV export
 - **v3.110.2 (2026-06-16)** — CQC Inspection Readiness is now a discoverable **Settings tab** (Options → CQC Readiness) with a launch button, not only the Ctrl+K command
 - **v3.110.0 (2026-06-16)** — CQC Inspection Readiness: a new page (Ctrl+K → "CQC inspection readiness…") turning the monitoring rule-set and its dated currency into Safe/Well-led evidence — internal readiness check plus a gated, sign-off-stamped Evidence export. Supporting evidence, not proof of compliance; built from shipped rule data only, no patient data

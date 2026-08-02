@@ -130,9 +130,9 @@ const TAB_HELP = {
     firstStep: 'Type a keyword to find the relevant practice note.',
   },
   rota: {
-    title: 'Rota status',
+    title: 'Rota',
     what: 'Today’s duty cover, who is on leave, sessions still needing cover and this week’s high-priority staffing warnings.',
-    firstStep: 'Glance at duty cover for AM and PM, then open the full rota to fix any gap.',
+    firstStep: 'Glance at duty cover for AM and PM, then open the Rota manager (new tab) to fix any gap.',
   },
 };
 

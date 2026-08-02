@@ -4,6 +4,7 @@
 // folder (debounced) and remote changes are pulled on a poll.
 
 import { loadAll, save } from '../shared/store.js';
+import { validateRotaScopes } from '../engine/validate.js';
 import { mondayOf, todayISO } from '../shared/time.js';
 import * as sync from '../shared/sync.js';
 import { notify } from '../shared/notify.js';
@@ -81,6 +82,28 @@ function render() {
 }
 
 async function applyRemote(remote) {
+  // The shared folder is writable by anyone with access to the practice share
+  // and is re-read every 15s — it is not a trusted input. Validate BEFORE
+  // writing anything: a malformed document is refused whole (no partial,
+  // half-applied rota) and the reason is surfaced, never swallowed. pollRemote
+  // swallows exceptions by design, so this must not throw to report itself.
+  const rejects = validateRotaScopes(remote.scopes || {});
+  if (rejects.length) {
+    // Toast to match how a failed sync push already reports itself, PLUS a
+    // sticky banner in Settings: pull() only ever returns a given version once,
+    // so a 3-second toast alone could be the only notice this rota is broken.
+    state.ui.syncRejected = {
+      version: remote.version,
+      by: remote.updatedBy || '',
+      at: new Date().toISOString(),
+      reasons: rejects,
+    };
+    toast(`Sync rejected: shared rota v${remote.version} is malformed — nothing was saved`);
+    render();
+    return;
+  }
+  state.ui.syncRejected = null;
+
   const pendingBefore =
     state.leave.filter((l) => l.status === 'requested').length +
     state.swaps.filter((s) => s.status === 'requested').length;

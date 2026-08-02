@@ -57,6 +57,13 @@
   background: var(--red-dim);
 }
 
+/* Degraded: the checks did not run. Amber, never green — an unavailable check
+   must not be presented as a clean result. */
+.rota-card-degraded {
+  border-color: var(--amber-line);
+  background: var(--amber-dim);
+}
+
 .rota-card-title {
   margin: 0 0 6px;
   font-family: var(--mono);
@@ -132,6 +139,14 @@
   border: 1px solid var(--red-line);
 }
 
+/* "Unchecked" — used when the rules engine could not evaluate the stored rota,
+   so neither OK nor Gap can be asserted for a staffed session. */
+.rota-pill-neutral {
+  color: var(--text-3);
+  background: var(--bg-mid);
+  border: 1px dashed var(--border-hi);
+}
+
 .rota-duty-names {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -148,6 +163,16 @@
 
 .rota-line-good {
   color: var(--green);
+}
+
+.rota-line-warn {
+  color: var(--amber);
+  font-weight: 600;
+}
+
+/* Neither good nor bad — the check simply did not run. */
+.rota-line-muted {
+  color: var(--text-4);
 }
 
 .rota-sub {
@@ -220,6 +245,19 @@
 .rota-actions .rota-open-btn {
   width: 100%;
   justify-content: center;
+}
+
+/* Sets the expectation before the click: the full app is a browser tab, not a
+   panel view. */
+.rota-hint {
+  margin: -4px 0 0;
+  font-size: 10px;
+  color: var(--text-4);
+  text-align: center;
+}
+
+.rota-empty .rota-hint {
+  margin: 6px 0 0;
 }
 
 .rota-foot {

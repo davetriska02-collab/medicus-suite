@@ -53,6 +53,11 @@ export default {
                    <span class="sub">Pick a folder on the practice's shared drive — every machine pointed at the same folder shares one live rota. Data never leaves the practice.</span>`
           }
         </div>
+        ${
+          state.ui.syncRejected
+            ? `<div class="warn mt8"><span class="sev high">sync</span><span>Shared rota v${esc(String(state.ui.syncRejected.version))}${state.ui.syncRejected.by ? ` from ${esc(state.ui.syncRejected.by)}` : ''} was <strong>rejected</strong> — malformed data, nothing was saved. Your local rota is unchanged. Reasons: ${esc(state.ui.syncRejected.reasons.join(' '))}</span></div>`
+            : ''
+        }
       </div>
 
       <div class="card">

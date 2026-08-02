@@ -240,7 +240,7 @@
             </svg>
             <span>Record</span>
           </button>
-          <button class="nav-tab" data-module="rota" aria-label="Rota status">
+          <button class="nav-tab" data-module="rota" aria-label="Rota">
             <svg
               width="14"
               height="14"
@@ -254,9 +254,12 @@
               <path d="M3 10h18M8 3v4M16 3v4" />
               <path d="M8 14h3M8 17.5h6" />
             </svg>
-            <span>Rota status</span>
+            <span>Rota</span>
           </button>
-          <button class="nav-tab" data-module="rota-app" aria-label="Rota (full app)">
+          <!-- Full-tab opener. Arrow-out-of-box glyph, NOT a second calendar: a
+               near-duplicate calendar beside the compact Rota tab was a daily
+               misclick, and this one leaves the panel for a new browser tab. -->
+          <button class="nav-tab" data-module="rota-app" aria-label="Rota manager (opens in a new tab)">
             <svg
               width="14"
               height="14"
@@ -265,12 +268,13 @@
               stroke="currentColor"
               stroke-width="2"
               stroke-linecap="round"
+              stroke-linejoin="round"
             >
-              <rect x="3" y="4" width="18" height="17" rx="2" />
-              <path d="M3 9h18M8 2v4M16 2v4" />
-              <path d="M8 13h2M14 13h2M8 17h2M14 17h2" />
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <path d="M15 3h6v6" />
+              <path d="M10 14 21 3" />
             </svg>
-            <span>Rota</span>
+            <span>Rota manager</span>
           </button>
           <button class="nav-tab" data-module="visualiser" aria-label="Patient Record Visualiser">
             <svg
