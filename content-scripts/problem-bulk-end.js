@@ -169,6 +169,49 @@
     return detail ? base + ' — ' + detail : base;
   }
 
+  // ── Page-shape parsing (pure, so both URL shapes are unit-testable) ──────────
+
+  // Care-record page: .../{siteId}/patient/patient/care-record/{patientId}
+  // (same confirmed-live / by-analogy notes as problem-description-cleanup.js's
+  // RECORD_URL_RE copy — see that file's URL-detection comment).
+  function parseCareRecordPath(pathname) {
+    var m = /\/([0-9a-f]{4,})\/(?:patient\/patient\/care-record|care-record)\/([0-9a-f-]{36})/i.exec(
+      String(pathname == null ? '' : pathname)
+    );
+    if (!m) return null;
+    return { siteId: m[1], patientId: m[2] };
+  }
+
+  // Task-overview ("split") page: .../{siteId}/tasks/data/{typeSlug}/overview/
+  // {taskUuid} — the same shape task-inline.js/booking-inline.js already
+  // match. Its embedded Clinical Summary panel renders the same problem list
+  // as the care-record page, but the URL carries no patientId — that's
+  // resolved via the task's own overview endpoint (resolveTaskPatientId, in
+  // the browser boot).
+  function parseTaskOverviewPath(pathname) {
+    var m =
+      /\/([0-9a-f]{4,})\/tasks\/data\/([^/]+)\/overview\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(
+        String(pathname == null ? '' : pathname)
+      );
+    if (!m) return null;
+    return { siteId: m[1], typeSlug: m[2], taskUuid: m[3] };
+  }
+
+  // The task-overview response's patient id — the same fallback chain
+  // task-inline.js's resolvePatientId already uses (data.data.patient.id →
+  // data.data.patientId → data.patient.id → data.patientId). Null when the
+  // task genuinely has no patient (some task types don't).
+  function extractPatientIdFromTaskOverview(data) {
+    var candidates = [data && data.data, data];
+    for (var i = 0; i < candidates.length; i++) {
+      var d = candidates[i];
+      if (!d || typeof d !== 'object') continue;
+      if (d.patient && d.patient.id) return String(d.patient.id);
+      if (d.patientId) return String(d.patientId);
+    }
+    return null;
+  }
+
   // ── Badge-scan pure helpers (ported from the retired
   // problem-junk-code-cleanup.js, 2026-07-27 merge — see header) ───────────────
 
@@ -252,6 +295,9 @@
       canSubmit: canSubmit,
       partitionSelection: partitionSelection,
       apiErrorMessage: apiErrorMessage,
+      parseCareRecordPath: parseCareRecordPath,
+      parseTaskOverviewPath: parseTaskOverviewPath,
+      extractPatientIdFromTaskOverview: extractPatientIdFromTaskOverview,
       rootConceptIdsCsv: rootConceptIdsCsv,
       resultContainsConceptId: resultContainsConceptId,
       isFlaggedConceptId: isFlaggedConceptId,
@@ -282,19 +328,24 @@
     );
   }
 
-  // ── URL detection — identical to problem-description-cleanup.js's copy ───────
-  var RECORD_URL_RE = /\/([0-9a-f]{4,})\/(?:patient\/patient\/care-record|care-record)\/([0-9a-f-]{36})/i;
-
+  // ── URL detection ────────────────────────────────────────────────────────────
+  // Two page shapes carry the Clinical Summary problem list this widget
+  // serves: the full care-record page (patientId in the URL) and the
+  // task-overview "split" page (patient resolved via the task's own overview
+  // endpoint — see resolveTaskPatientId below). Both parsers are pure
+  // helpers above so the regexes stay unit-tested.
   function getPatientInfo() {
-    var m = location.pathname.match(RECORD_URL_RE);
-    if (!m) return null;
-    return { siteId: m[1], patientId: m[2] };
+    return parseCareRecordPath(location.pathname);
+  }
+
+  function getTaskInfo() {
+    return parseTaskOverviewPath(location.pathname);
   }
 
   // ── API ───────────────────────────────────────────────────────────────────────
 
   function apiBaseUrl() {
-    var info = getPatientInfo();
+    var info = getPatientInfo() || getTaskInfo();
     var parts = location.pathname.split('/').filter(Boolean);
     var siteId = (info && info.siteId) || parts[0] || '';
     return 'https://' + siteId + '.api.' + location.hostname;
@@ -374,6 +425,36 @@
       }
     })();
     return _rootsPromise;
+  }
+
+  // ── Split-page patient resolution ─────────────────────────────────────────────
+  // The task-overview URL carries no patientId, so it's resolved ONCE per
+  // task via the same overview endpoint task-inline.js/booking-inline.js
+  // already drive. Cache semantics matter for safety and for chatter: a
+  // RESOLVED task caches its answer per taskUuid — including null for a
+  // patientless task, so it is never refetched — while a FAILED fetch caches
+  // nothing, so the throttled rescan retries later. The uuid keying (not a
+  // single "current" slot) means a stale resolve can never be attributed to
+  // a different task the clinician has since navigated to.
+  var _taskPatientIdByUuid = Object.create(null);
+  var _taskPatientResolveInFlight = false;
+
+  async function resolveTaskPatientId(task) {
+    if (_taskPatientIdByUuid[task.taskUuid] !== undefined) return _taskPatientIdByUuid[task.taskUuid];
+    if (_taskPatientResolveInFlight) return null; // another tick's resolve is running — this one just waits for the cache
+    _taskPatientResolveInFlight = true;
+    try {
+      var data = await apiFetch(
+        '/tasks/data/' + encodeURIComponent(task.typeSlug) + '/overview/' + encodeURIComponent(task.taskUuid)
+      );
+      _taskPatientIdByUuid[task.taskUuid] = extractPatientIdFromTaskOverview(data);
+    } catch (_) {
+      /* transient failure — left uncached so a later tick retries */
+    } finally {
+      _taskPatientResolveInFlight = false;
+    }
+    var resolved = _taskPatientIdByUuid[task.taskUuid];
+    return resolved === undefined ? null : resolved;
   }
 
   function postEndProblem(problemId, endDate, reason) {
@@ -600,10 +681,12 @@
     // problem description (the ledger's own no-free-text label rule).
     // Fire-and-forget; the ledger swallows its own failures.
     if (succeeded > 0 && typeof window !== 'undefined' && window.EventLedger) {
-      var info = getPatientInfo();
+      // _lastPatientId holds the patient this batch was scanned for on BOTH
+      // page shapes — URL-derived on the care-record page, task-overview-
+      // resolved on the split page (where getPatientInfo() returns null).
       window.EventLedger.record({
         source: 'record',
-        patientRef: info && info.patientId,
+        patientRef: _lastPatientId,
         severity: null,
         ruleId: 'bulk-end-problems',
         label: 'Bulk end: ' + succeeded + ' problem' + (succeeded === 1 ? '' : 's') + ' ended',
@@ -1114,7 +1197,18 @@
 
   async function ensureProblemsLoaded() {
     var info = getPatientInfo();
-    if (!info) return;
+    if (!info) {
+      // Split page: same widget, patient resolved from the task's overview.
+      // Re-read the URL after the await — if the clinician navigated to a
+      // different task while the resolve was in flight, drop this tick; the
+      // next one re-reads the fresh URL and its own cached resolution.
+      var task = getTaskInfo();
+      if (!task) return;
+      var resolvedPatientId = await resolveTaskPatientId(task);
+      var nowTask = getTaskInfo();
+      if (!resolvedPatientId || !nowTask || nowTask.taskUuid !== task.taskUuid) return;
+      info = { siteId: task.siteId, patientId: resolvedPatientId };
+    }
     if (info.patientId !== _lastPatientId) {
       _lastPatientId = info.patientId;
       resetForPatient();
