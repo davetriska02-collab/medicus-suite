@@ -612,11 +612,12 @@ input[class*='ms-pdc-']:focus-visible {
    independently). Scoped via :has() to ONLY the .m-card-v2__content that
    actually contains #ms-pdc-retired-widget --
    .m-card-v2__content is Medicus's own generic card-body class, reused by
-   unrelated cards. #ms-pbe-widget is also excluded from the full-width
-   catch-all here so the triggers share the row when both are present --
-   keep BOTH files' exclusion lists in lock-step. (#ms-pjc-widget was the
-   third sharer until the 2026-07-27 merge retired
-   problem-junk-code-cleanup.js into problem-bulk-end.js.) */
+   unrelated cards. #ms-pbe-widget and #ms-pn-widget ("Nest problems?",
+   problem-nesting.css) are also excluded from the full-width catch-all here
+   so the triggers share the row when present -- keep ALL THREE files'
+   exclusion lists in lock-step. (#ms-pjc-widget was a sharer until the
+   2026-07-27 merge retired problem-junk-code-cleanup.js into
+   problem-bulk-end.js.) */
 .m-card-v2__content:has(> #ms-pdc-retired-widget) {
   display: flex;
   flex-wrap: wrap;
@@ -625,7 +626,7 @@ input[class*='ms-pdc-']:focus-visible {
 }
 
 .m-card-v2__content:has(> #ms-pdc-retired-widget)
-  > *:not(#problems-major-label):not(#ms-pdc-retired-widget):not(#ms-pbe-widget) {
+  > *:not(#problems-major-label):not(#ms-pdc-retired-widget):not(#ms-pbe-widget):not(#ms-pn-widget) {
   flex-basis: 100%;
 }
 
