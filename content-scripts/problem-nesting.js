@@ -166,6 +166,75 @@
     });
   }
 
+  // ── Duplicate-merge helpers (the in-panel "merge these copies" shortcut) ─────
+  // Groups the active problems by IDENTICAL conceptId — two entries carrying
+  // the same code are duplicate copies, not a hierarchy (the exact case the
+  // suggestion engine refuses to pair). Groups of 2+ only; problems with no
+  // resolved conceptId never group. This is the lightweight, same-code-only
+  // sibling of the full Duplicate Problem Checker — it deliberately does NOT
+  // attempt the checker's fuzzy/cross-kind matching.
+  function buildDuplicateGroups(problems, infoById) {
+    var list = Array.isArray(problems) ? problems : [];
+    var info = infoById || {};
+    var byConcept = Object.create(null);
+    var order = [];
+    list.forEach(function (p) {
+      if (!p || !p.id) return;
+      var ci = info[p.id];
+      if (!ci || !ci.conceptId) return;
+      if (!byConcept[ci.conceptId]) {
+        byConcept[ci.conceptId] = [];
+        order.push(ci.conceptId);
+      }
+      byConcept[ci.conceptId].push(p);
+    });
+    return order
+      .filter(function (c) {
+        return byConcept[c].length >= 2;
+      })
+      .map(function (c) {
+        return { conceptId: c, entries: byConcept[c] };
+      });
+  }
+
+  // Default keeper = the EARLIEST copy. Medicus problem ids are UUIDv7
+  // (time-ordered), so the lexicographically smallest id is the oldest entry
+  // — the same "kept (earliest copy)" default the Duplicate Problem Checker
+  // uses. A default only; the keeper radio stays the clinician's choice.
+  function pickEarliestCopyId(entries) {
+    var best = null;
+    (Array.isArray(entries) ? entries : []).forEach(function (e) {
+      if (!e || !e.id) return;
+      if (best === null || e.id < best) best = e.id;
+    });
+    return best;
+  }
+
+  // The confirmed mark-incorrect-and-hidden POST body (identical to the
+  // Duplicate Problem Checker's buildRemovalRequest for kind 'problem'):
+  // {problemId, reason, isConfirmedRemoval: true}. Null (never a partial
+  // body) on a missing id or blank reason — a removal must never reach the
+  // record without its reason.
+  function buildMarkIncorrectPayload(problemId, reason) {
+    var trimmed = (reason || '').trim();
+    if (!problemId || !trimmed) return null;
+    return { problemId: problemId, reason: trimmed, isConfirmedRemoval: true };
+  }
+
+  // Which copies in a group the merge may actually remove: everything except
+  // the keeper and except any copy that has nested children (removing a
+  // parent would leave its children dangling — those copies need the full
+  // Duplicate Checker or Medicus itself, where the structure is visible).
+  function removableDuplicateIds(entries, keeperId) {
+    return (Array.isArray(entries) ? entries : [])
+      .filter(function (e) {
+        return e && e.id && e.id !== keeperId && !e.hasChildren;
+      })
+      .map(function (e) {
+        return e.id;
+      });
+  }
+
   // Same extraction as problem-bulk-end.js's apiErrorMessage — duplicated (not
   // shared) the same way each content script already carries its own apiFetch.
   function apiErrorMessage(status, bodyText) {
@@ -236,6 +305,10 @@
       wouldCreateCycle: wouldCreateCycle,
       buildNestingSuggestions: buildNestingSuggestions,
       manualChildOptions: manualChildOptions,
+      buildDuplicateGroups: buildDuplicateGroups,
+      pickEarliestCopyId: pickEarliestCopyId,
+      buildMarkIncorrectPayload: buildMarkIncorrectPayload,
+      removableDuplicateIds: removableDuplicateIds,
       apiErrorMessage: apiErrorMessage,
       resultContainsConceptId: resultContainsConceptId,
       parseCareRecordPath: parseCareRecordPath,
@@ -333,6 +406,19 @@
     });
   }
 
+  // Same confirmed write the Duplicate Problem Checker uses to retire a
+  // duplicate copy (engine/record-duplicate-parser.js WRITE_CONTRACTS.problem)
+  // — marks the entry incorrect and hides it from the record. Not an
+  // end-date: the copy disappears as recorded-in-error. No undo endpoint is
+  // known (the checker's own open question), so the confirm copy says so.
+  function postMarkIncorrectAndHidden(payload) {
+    return apiFetch('/clinical/problem/mark-incorrect-and-hidden', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
   // ── Split-page patient resolution (same block as problem-bulk-end.js) ────────
   var _taskPatientIdByUuid = Object.create(null);
   var _taskPatientResolveInFlight = false;
@@ -378,6 +464,10 @@
   // failures so a partial batch shows exactly which links didn't land.
   var _manual = { parentId: null, childIds: {}, confirming: false, linking: false, childErrors: {} };
   var _manualLinked = [];
+  // Duplicate-merge groups: [{conceptId, description, entries: [{id,
+  //   description, hasChildren, additionalInformation}], keeperId, open,
+  //   confirming, removing, reason, errors: {id: msg}, removedCount, done}]
+  var _mergeGroups = [];
 
   function resetForPatient() {
     _problemsCache = null;
@@ -390,6 +480,7 @@
     _infoById = {};
     _manual = { parentId: null, childIds: {}, confirming: false, linking: false, childErrors: {} };
     _manualLinked = [];
+    _mergeGroups = [];
   }
 
   // ── Scan (opt-in — only ever runs from the "Nest problems?" click) ───────────
@@ -416,6 +507,8 @@
         infoById[p.id] = {
           conceptId: resolveOverviewConceptId(ov),
           parentProblemId: (ov && ov.parentProblemId) || null,
+          hasChildren: !!(ov && Array.isArray(ov.childProblems) && ov.childProblems.length),
+          additionalInformation: (ov && ov.additionalInformation) || null,
         };
         if (ov && ov.parentProblemId) _parentIdByProblemId[p.id] = ov.parentProblemId;
       });
@@ -467,6 +560,30 @@
 
       _problems = problems;
       _infoById = infoById;
+      _mergeGroups = buildDuplicateGroups(problems, infoById).map(function (g) {
+        var entries = g.entries.map(function (p) {
+          var ci = infoById[p.id] || {};
+          return {
+            id: p.id,
+            description: p.description,
+            hasChildren: !!ci.hasChildren,
+            additionalInformation: ci.additionalInformation || null,
+          };
+        });
+        return {
+          conceptId: g.conceptId,
+          description: entries[0].description,
+          entries: entries,
+          keeperId: pickEarliestCopyId(entries),
+          open: false,
+          confirming: false,
+          removing: false,
+          reason: 'Duplicate entry - merged into retained copy',
+          errors: {},
+          removedCount: 0,
+          done: false,
+        };
+      });
       _suggestions = buildNestingSuggestions(problems, infoById, pairHits).map(function (s) {
         return Object.assign({}, s, {
           chosenParentId: s.parentOptions.length === 1 ? s.parentOptions[0].id : null,
@@ -581,6 +698,69 @@
     render();
   }
 
+  // Removes a merged-away copy from every piece of live widget state so the
+  // other sections stop offering it: the problem list, the info/link maps,
+  // any manual tick or parent pick, and (via the existence checks in
+  // cardHtml) any suggestion card that referenced it.
+  function forgetProblem(problemId) {
+    _problems = _problems.filter(function (p) {
+      return p.id !== problemId;
+    });
+    delete _infoById[problemId];
+    delete _parentIdByProblemId[problemId];
+    delete _manual.childIds[problemId];
+    if (_manual.parentId === problemId) {
+      _manual = { parentId: null, childIds: {}, confirming: false, linking: false, childErrors: {} };
+    }
+  }
+
+  // Commits one duplicate group's merge: mark-incorrect-and-hidden on every
+  // removable non-keeper copy, SEQUENTIALLY, with the group's shared reason.
+  // Per-copy failures record against their row and the rest carry on — the
+  // keeper is never touched by definition, so a partial batch is always
+  // recoverable (retry or fall back to the Duplicate Checker).
+  async function confirmMergeGroup(g) {
+    if (g.removing || g.done) return;
+    var targets = removableDuplicateIds(g.entries, g.keeperId);
+    var payloadCheck = buildMarkIncorrectPayload('x', g.reason);
+    if (!targets.length || !payloadCheck) return; // blank reason never reaches the record
+    g.removing = true;
+    g.errors = {};
+    render();
+    var batchRemoved = 0;
+    for (var i = 0; i < targets.length; i++) {
+      var id = targets[i];
+      try {
+        await postMarkIncorrectAndHidden(buildMarkIncorrectPayload(id, g.reason));
+        batchRemoved++;
+        g.removedCount++;
+        forgetProblem(id);
+        g.entries = g.entries.filter(function (e) {
+          return e.id !== id;
+        });
+      } catch (err) {
+        g.errors[id] = (err && err.message) || 'Failed to remove this copy — please try again.';
+      }
+    }
+    g.removing = false;
+    g.confirming = false;
+    if (!Object.keys(g.errors).length) g.done = true;
+    // One ledger record per batch (batch-local count so a retry never
+    // re-reports earlier successes), fixed label — never the problem
+    // description or the free-typed reason.
+    if (batchRemoved > 0 && window.EventLedger) {
+      window.EventLedger.record({
+        source: 'record',
+        patientRef: _lastPatientId,
+        severity: null,
+        ruleId: 'problem-merge',
+        label: 'Merge problems: ' + batchRemoved + ' duplicate cop' + (batchRemoved === 1 ? 'y' : 'ies') + ' removed',
+        action: 'committed',
+      });
+    }
+    render();
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────────
   function cardHtml(s, idx) {
     if (s.linked) {
@@ -592,6 +772,18 @@
         '</strong>. Medicus’s own list shows this after a page refresh.</div>'
       );
     }
+    // A child removed as a duplicate this session no longer exists to nest.
+    if (
+      !_problems.some(function (p) {
+        return p.id === s.childId;
+      })
+    ) {
+      return (
+        '<div class="ms-pn-card ms-pn-card-stale"><strong>' +
+        esc(s.childDescription) +
+        '</strong> — removed as a duplicate copy this session.</div>'
+      );
+    }
     // A child linked through the MANUAL builder this session retires its
     // suggestion card (its map entry exists but s.linked is false).
     if (_parentIdByProblemId[s.childId]) {
@@ -601,10 +793,15 @@
         '</strong> — already nested this session via a manual link.</div>'
       );
     }
-    // Options are re-filtered against the LIVE link map on every render, so a
-    // link committed on another card can retire a now-cyclic option here.
+    // Options are re-filtered against the LIVE link map (and the live problem
+    // list — a merged-away parent is gone) on every render, so a link or
+    // merge committed elsewhere can retire an option here.
     var liveOptions = s.parentOptions.filter(function (o) {
-      return !wouldCreateCycle(s.childId, o.id, _parentIdByProblemId);
+      return (
+        _problems.some(function (p) {
+          return p.id === o.id;
+        }) && !wouldCreateCycle(s.childId, o.id, _parentIdByProblemId)
+      );
     });
     if (!liveOptions.length) {
       return (
@@ -688,6 +885,146 @@
     }
     var error = s.linkError ? '<div class="ms-pn-card-error">' + esc(s.linkError) + '</div>' : '';
     return '<div class="ms-pn-card">' + body + actions + error + '</div>';
+  }
+
+  // One duplicate group's card in the "Merge duplicate copies" section.
+  // Collapsed: description + copy count + "Merge…". Expanded: keeper radios
+  // (blocked copies flagged, additional-info copies cautioned), then the
+  // KEEPING / REMOVING confirm with the reason echoed and the
+  // mark-incorrect-and-hidden consequence stated plainly.
+  function mergeGroupHtml(g, gIdx) {
+    if (g.done) {
+      return (
+        '<div class="ms-pn-card ms-pn-card-linked">✓ <strong>' +
+        esc(g.description) +
+        '</strong> — ' +
+        g.removedCount +
+        ' duplicate cop' +
+        (g.removedCount === 1 ? 'y' : 'ies') +
+        ' removed, earliest copy kept. Medicus’s own list shows this after a page refresh.</div>'
+      );
+    }
+    if (!g.open) {
+      return (
+        '<div class="ms-pn-card"><div class="ms-pn-card-main"><strong>' +
+        esc(g.description) +
+        '</strong> — ' +
+        g.entries.length +
+        ' copies with the same code.</div>' +
+        '<button type="button" class="ms-pn-link-btn ms-pn-merge-open" data-gidx="' +
+        gIdx +
+        '">Merge…</button></div>'
+      );
+    }
+    var rows = g.entries
+      .map(function (e) {
+        var notes = [];
+        if (e.hasChildren) notes.push('has nested children — kept; merge it via the Duplicate Checker or Medicus');
+        if (e.additionalInformation)
+          notes.push('has additional info — removing loses it; compare in the Duplicate Checker first');
+        var err = g.errors[e.id];
+        return (
+          '<label class="ms-pn-man-child-row">' +
+          '<input type="radio" name="ms-pn-merge-keeper-' +
+          gIdx +
+          '" class="ms-pn-merge-keeper" data-gidx="' +
+          gIdx +
+          '" data-entry-id="' +
+          esc(e.id) +
+          '"' +
+          (g.keeperId === e.id ? ' checked' : '') +
+          (g.removing ? ' disabled' : '') +
+          '>' +
+          '<span>' +
+          esc(e.description) +
+          (g.keeperId === e.id ? ' <em class="ms-pn-merge-keep-tag">keep this copy</em>' : '') +
+          (notes.length ? ' <em class="ms-pn-man-child-note">(' + esc(notes.join('; ')) + ')</em>' : '') +
+          '</span>' +
+          (err ? '<span class="ms-pn-card-error">' + esc(err) + '</span>' : '') +
+          '</label>'
+        );
+      })
+      .join('');
+    var removable = removableDuplicateIds(g.entries, g.keeperId);
+    var confirmHtml = '';
+    if (g.confirming && removable.length) {
+      var kept = g.entries.filter(function (e) {
+        return removable.indexOf(e.id) === -1;
+      });
+      confirmHtml =
+        '<div class="ms-pn-confirm">KEEPING ' +
+        kept
+          .map(function (e) {
+            return '<strong>' + esc(e.description) + '</strong>';
+          })
+          .join(', ') +
+        ' · REMOVING ' +
+        removable.length +
+        ' cop' +
+        (removable.length === 1 ? 'y' : 'ies') +
+        ' via Medicus’s mark-incorrect-and-hidden — removed copies are hidden from the record as recorded-in-error, ' +
+        'not end-dated, and there is no known undo endpoint. Reason recorded against each: ' +
+        '<input type="text" class="ms-pn-merge-reason" data-gidx="' +
+        gIdx +
+        '" value="' +
+        esc(g.reason) +
+        '" maxlength="120">' +
+        '<div class="ms-pn-confirm-actions">' +
+        '<button type="button" class="ms-pn-cancel ms-pn-merge-back" data-gidx="' +
+        gIdx +
+        '"' +
+        (g.removing ? ' disabled' : '') +
+        '>Back</button>' +
+        '<button type="button" class="ms-pn-confirm-btn ms-pn-merge-confirm" data-gidx="' +
+        gIdx +
+        '"' +
+        (g.removing || !(g.reason || '').trim() ? ' disabled' : '') +
+        '>' +
+        (g.removing
+          ? 'Removing…'
+          : 'Confirm — remove ' + removable.length + ' cop' + (removable.length === 1 ? 'y' : 'ies')) +
+        '</button>' +
+        '</div></div>';
+    }
+    return (
+      '<div class="ms-pn-card">' +
+      '<div class="ms-pn-card-main"><strong>' +
+      esc(g.description) +
+      '</strong> — pick the copy to KEEP; every other removable copy is removed.</div>' +
+      '<div class="ms-pn-man-children">' +
+      rows +
+      '</div>' +
+      (g.confirming
+        ? confirmHtml
+        : '<button type="button" class="ms-pn-link-btn ms-pn-merge-review" data-gidx="' +
+          gIdx +
+          '"' +
+          (removable.length && !g.removing ? '' : ' disabled') +
+          '>Review merge (' +
+          removable.length +
+          ' to remove)…</button>') +
+      '</div>'
+    );
+  }
+
+  function mergeSectionHtml() {
+    var live = _mergeGroups.filter(function (g) {
+      return g.done || g.entries.length >= 2;
+    });
+    if (!live.length) return '';
+    return (
+      '<div class="ms-pn-manual">' +
+      '<div class="ms-pn-manual-title">Merge duplicate copies</div>' +
+      '<div class="ms-pn-manual-note">Same code recorded more than once. Pick a keeper and the other copies are ' +
+      'retired the same way the Duplicate Problem Checker does it — for anything beyond same-code copies (or to ' +
+      'compare details first), use the full Duplicate Checker from the panel.</div>' +
+      live
+        .map(function (g) {
+          return mergeGroupHtml(g, _mergeGroups.indexOf(g));
+        })
+        .join('') +
+      '</div>'
+    );
   }
 
   function problemDescription(problemId) {
@@ -891,6 +1228,7 @@
       body =
         '<div class="ms-pn-body">' +
         suggestionsHtml +
+        mergeSectionHtml() +
         manualHtml() +
         (linkedCount > 0
           ? '<div class="ms-pn-footer">' +
@@ -965,6 +1303,61 @@
     });
     el.querySelector('#ms-pn-man-confirm')?.addEventListener('click', function () {
       confirmManualBatch();
+    });
+    el.querySelectorAll('.ms-pn-merge-open').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
+        if (g) {
+          g.open = true;
+          render();
+        }
+      });
+    });
+    el.querySelectorAll('.ms-pn-merge-keeper').forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        var g = _mergeGroups[Number(radio.getAttribute('data-gidx'))];
+        if (g && radio.checked) {
+          g.keeperId = radio.getAttribute('data-entry-id');
+          g.confirming = false;
+          render();
+        }
+      });
+    });
+    el.querySelectorAll('.ms-pn-merge-review').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
+        if (g && removableDuplicateIds(g.entries, g.keeperId).length) {
+          g.confirming = true;
+          render();
+        }
+      });
+    });
+    el.querySelectorAll('.ms-pn-merge-back').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
+        if (g) {
+          g.confirming = false;
+          render();
+        }
+      });
+    });
+    el.querySelectorAll('.ms-pn-merge-reason').forEach(function (input) {
+      input.addEventListener('input', function () {
+        var g = _mergeGroups[Number(input.getAttribute('data-gidx'))];
+        if (!g) return;
+        g.reason = input.value;
+        // No full re-render on every keystroke (it would drop focus
+        // mid-word); just keep the confirm button's disabled state honest —
+        // same discipline as problem-bulk-end's reason input.
+        var btn = el.querySelector('.ms-pn-merge-confirm[data-gidx="' + input.getAttribute('data-gidx') + '"]');
+        if (btn) btn.disabled = g.removing || !(g.reason || '').trim();
+      });
+    });
+    el.querySelectorAll('.ms-pn-merge-confirm').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
+        if (g) confirmMergeGroup(g);
+      });
     });
     el.querySelectorAll('.ms-pn-link-btn[data-idx]').forEach(function (btn) {
       btn.addEventListener('click', function () {

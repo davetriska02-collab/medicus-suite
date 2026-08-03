@@ -252,6 +252,27 @@ select[class*='ms-pn-']:focus-visible {
   padding: 0;
 }
 
+.ms-pn-merge-keep-tag {
+  color: #166534;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ms-pn-merge-reason {
+  display: block;
+  margin-top: 4px;
+  width: 100%;
+  max-width: 360px;
+  padding: 2px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #374151;
+  background: #fff;
+}
+
 .ms-pn-card-error {
   margin-top: 5px;
   color: #b91c1c;
