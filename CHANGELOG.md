@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.217.1] — 2026-08-03
+
+### Design-crit polish: Nest problems widget
+
+A three-critic design review (hostile art-direction pass against the suite doctrine, a token/code
+survey, and a fresh-eyes GP persona judging screenshots only) converged on the same defects; all
+settled rulings landed in one pass:
+
+- **Every problem reference now carries its onset date** (mono suffix, from the overview the scan
+  already fetches) — suggestion cards, dropdown options, merge keeper radios, manual checklist rows
+  and confirm lists. Three identical "Anorexia nervosa" rows are no longer indistinguishable, which
+  the fresh-eyes reviewer correctly called a safety defect, not polish.
+- **Accordion layout**: the three sections (Suggested links / Merge duplicate copies / Link
+  manually) open one at a time under compact headers with mono counts, and the body is capped at
+  60vh — an open widget no longer displaces ~700px of the problem list it exists to serve.
+- **Amber now means danger only**: routine nest confirms went neutral; the destructive merge
+  confirm is the sole amber block, gains a warning glyph, and its copy tightened to "this cannot
+  be undone from this tool". (The old identical-amber-for-everything rendering was itself a
+  degraded hazard control — a destructive action styled like a reversible one.)
+- **Scoped canon token block** per the injected-surfaces rule (the stylesheet was raw Tailwind
+  greys); ghost/primary button hierarchy (one filled button per view — the commit action); full
+  hover/active/disabled/focus-visible states incl. radios and checkboxes; focus restored across
+  re-renders; a polite live region announces scan results, links, removals and errors; checklist
+  gains a count line and scroll shadows; copy cut from ~120 words of preamble to one line per
+  section; quiet centred empty states.
+
+Sibling widget stylesheets (bulk-remove, retired-codes) still carry the old raw-hex palette —
+deferred to their own pass so this one stays reviewable.
+
 ## [v3.217.0] — 2026-08-03
 
 ### Nest problems: in-panel "Merge duplicate copies"
