@@ -107,14 +107,24 @@ const API = 'https://ab12cd.api.england.medicus.health';
   }
 
   {
+    // Computed relative to the clock, never hard-coded: fetchAvailableSlots's
+    // minDateTime rule branches on "is the requested date today?", so a
+    // hard-coded "future" date silently becomes "today" when the calendar
+    // catches up with it and the midnight assertion below stops holding —
+    // exactly how the original '2026-08-03' literal turned CI red on
+    // 2026-08-03 itself.
+    const future = new Date();
+    future.setDate(future.getDate() + 7);
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const futureYmd = `${future.getFullYear()}-${pad2(future.getMonth() + 1)}-${pad2(future.getDate())}`;
     const f = recordingFetch({
       availablePlaces: {
-        '2026-08-03': {
+        [futureYmd]: {
           diaries: [
             {
               entries: [
-                { diaryEntryType: { isSlot: true }, startDateTime: '2026-08-03 09:00:00' },
-                { diaryEntryType: { isSlot: false }, startDateTime: '2026-08-03 09:30:00' },
+                { diaryEntryType: { isSlot: true }, startDateTime: `${futureYmd} 09:00:00` },
+                { diaryEntryType: { isSlot: false }, startDateTime: `${futureYmd} 09:30:00` },
               ],
             },
           ],
@@ -125,7 +135,7 @@ const API = 'https://ab12cd.api.england.medicus.health';
     const slots = await core.fetchAvailableSlots(API, {
       providerId: 'prov-1',
       appointmentTypeId: 'type-1',
-      date: '2026-08-03',
+      date: futureYmd,
     });
     const url = f.calls[0].url;
     check(
@@ -139,7 +149,7 @@ const API = 'https://ab12cd.api.england.medicus.health';
       'fetchAvailableSlots query pins providerIsLocalOrganisation'
     );
     check(
-      qs.get('minDateTime') === '2026-08-03 00:00:00',
+      qs.get('minDateTime') === `${futureYmd} 00:00:00`,
       'fetchAvailableSlots query pins minDateTime (future date → midnight)'
     );
     check(
