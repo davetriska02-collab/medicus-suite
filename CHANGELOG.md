@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.213.0] — 2026-08-03
+
+### Problem "Bulk remove?" + "Clean up allergies?" now work on the task ("split") page
+
+Both record-tidy widgets previously only activated on the full care-record Clinical Summary page —
+their URL detection required the patientId in the path. The task-overview page (e.g. a Patient
+Request with the embedded Clinical Summary panel on the right) renders the same problem list and
+Allergies card, so both widgets now run there too:
+
+- **URL detection** recognises the task-overview shape
+  (`/{siteId}/tasks/data/{typeSlug}/overview/{taskUuid}`) alongside the care-record shape. Both
+  parsers are pure helpers with unit tests (`parseCareRecordPath` / `parseTaskOverviewPath`).
+- **Patient resolution**: the task URL carries no patientId, so it's resolved once per task via the
+  same `/tasks/data/{slug}/overview/{uuid}` endpoint task-inline.js/booking-inline.js already drive,
+  with the same field-fallback chain. Cached per taskUuid: a resolved task (including a genuinely
+  patientless one) is never refetched, while a transient fetch failure stays uncached so the
+  throttled rescan retries. The uuid keying + a post-await URL re-check mean a resolve that lands
+  after navigating to a different task is always discarded — the cross-patient-async discipline from
+  the v3.212.1 epoch fixes carries over unchanged.
+- **Everything downstream is untouched**: the same clinical-summary fetch, scan, checklists, modals,
+  two-step confirms and fail-closed DOM anchoring run against the resolved patient. If the split
+  page's embedded panel ever renders rows differently, the widgets simply don't inject (allergies)
+  or fall back to the panel checklist (problems) — no wrong-row action is possible.
+- The problems widget's Clinical Event Ledger entry now records the resolved patient on both page
+  shapes (it previously re-read the URL, which would have been empty on the split page).
+
+Not included (same pattern available if wanted): the "Check for retired/legacy codes?" widget
+(problem-description-cleanup.js) is still care-record-only.
+
 ## [v3.212.1] — 2026-08-02
 
 ### Allergy cleanup suite: pre-merge review fixes (PR #253)

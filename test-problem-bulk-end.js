@@ -23,6 +23,9 @@ const {
   canSubmit,
   partitionSelection,
   apiErrorMessage,
+  parseCareRecordPath,
+  parseTaskOverviewPath,
+  extractPatientIdFromTaskOverview,
   rootConceptIdsCsv,
   resultContainsConceptId,
   isFlaggedConceptId,
@@ -310,6 +313,51 @@ console.log('--- apiErrorMessage: same server-reason surfacing as problem-descri
     const long = 'a'.repeat(500);
     check(apiErrorMessage(400, long).endsWith('…'), 'a long body is truncated with an ellipsis');
   }
+}
+
+console.log('--- page-shape parsing: care-record vs task-overview ("split") page ---');
+{
+  const rec = parseCareRecordPath('/ab12/patient/patient/care-record/123e4567-e89b-12d3-a456-426614174000');
+  check(rec && rec.siteId === 'ab12', 'care-record: siteId parsed');
+  check(rec && rec.patientId === '123e4567-e89b-12d3-a456-426614174000', 'care-record: patientId parsed');
+  check(
+    parseCareRecordPath('/ab12/care-record/123e4567-e89b-12d3-a456-426614174000') !== null,
+    'bare /care-record/ form still matches'
+  );
+  check(
+    parseCareRecordPath('/ab12/tasks/data/patient-request/overview/123e4567-e89b-12d3-a456-426614174000') === null,
+    'a task URL never matches the care-record parser'
+  );
+
+  const task = parseTaskOverviewPath('/ab12/tasks/data/patient-request/overview/123e4567-e89b-12d3-a456-426614174000');
+  check(task && task.siteId === 'ab12', 'task-overview: siteId parsed');
+  check(task && task.typeSlug === 'patient-request', 'task-overview: typeSlug parsed');
+  check(task && task.taskUuid === '123e4567-e89b-12d3-a456-426614174000', 'task-overview: taskUuid parsed');
+  check(
+    parseTaskOverviewPath('/ab12/tasks/data/patient-request/task-list') === null,
+    'the queue (task-list) URL never matches — list pages have no single patient'
+  );
+  check(
+    parseTaskOverviewPath('/ab12/patient/patient/care-record/123e4567-e89b-12d3-a456-426614174000') === null,
+    'a care-record URL never matches the task parser'
+  );
+  check(
+    parseCareRecordPath(null) === null && parseTaskOverviewPath(null) === null,
+    'null pathname -> null, never throws'
+  );
+}
+
+console.log('--- extractPatientIdFromTaskOverview: the task-inline fallback chain ---');
+{
+  check(
+    extractPatientIdFromTaskOverview({ data: { patient: { id: 'p1' } } }) === 'p1',
+    'data.data.patient.id preferred'
+  );
+  check(extractPatientIdFromTaskOverview({ data: { patientId: 'p2' } }) === 'p2', 'data.data.patientId next');
+  check(extractPatientIdFromTaskOverview({ patient: { id: 'p3' } }) === 'p3', 'data.patient.id next');
+  check(extractPatientIdFromTaskOverview({ patientId: 'p4' }) === 'p4', 'data.patientId last');
+  check(extractPatientIdFromTaskOverview({}) === null, 'patientless task overview -> null');
+  check(extractPatientIdFromTaskOverview(null) === null, 'null response -> null, never throws');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
