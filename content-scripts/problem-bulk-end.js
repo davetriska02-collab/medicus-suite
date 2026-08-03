@@ -197,6 +197,19 @@
     return { siteId: m[1], typeSlug: m[2], taskUuid: m[3] };
   }
 
+  // Parses the page-world bridge attribute ('data-ch-summary-patient',
+  // written by triage-lens/page-world.js as '<patientId>|<epoch-ms>'): the
+  // patientId of the page's OWN most recent Clinical Summary panel fetch.
+  // This is the context source for page shapes with no parseable patientId
+  // in the URL (appointment views, consultation views, whatever Medicus adds
+  // next) — wherever the summary panel renders, the page itself has already
+  // told us whose it is. Strict full-UUID check; anything else is null.
+  function parseSummaryBridgeAttr(value) {
+    if (!value) return null;
+    var id = String(value).split('|')[0];
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? id : null;
+  }
+
   // The task-overview response's patient id — the same fallback chain
   // task-inline.js's resolvePatientId already uses (data.data.patient.id →
   // data.data.patientId → data.patient.id → data.patientId). Null when the
@@ -297,6 +310,7 @@
       apiErrorMessage: apiErrorMessage,
       parseCareRecordPath: parseCareRecordPath,
       parseTaskOverviewPath: parseTaskOverviewPath,
+      parseSummaryBridgeAttr: parseSummaryBridgeAttr,
       extractPatientIdFromTaskOverview: extractPatientIdFromTaskOverview,
       rootConceptIdsCsv: rootConceptIdsCsv,
       resultContainsConceptId: resultContainsConceptId,
@@ -479,6 +493,9 @@
 
   // ── State ─────────────────────────────────────────────────────────────────────
   var _lastPatientId = null;
+  // True when the current patient context came from the page-world bridge
+  // rather than a parseable URL — gates injection on a DOM row match.
+  var _contextViaBridge = false;
   var _problemsCache = null;
   var _open = false;
   var _step = 'select'; // 'select' | 'confirm' | 'done'
@@ -1177,6 +1194,11 @@
   function injectTrigger() {
     if (document.getElementById('ms-pbe-widget')) return;
     if (!_problemsCache || !_problemsCache.length) return;
+    // Wrong-patient guard for bridge-derived contexts: the fetched list must
+    // match at least one on-screen row before the widget offers itself — a
+    // stale bridge attribute (page navigated on, panel not yet refetched)
+    // produces rows that match nothing, and the widget simply stays away.
+    if (_contextViaBridge && !findFirstProblemRow(_problemsCache)) return;
     var list = findMajorProblemsList();
     if (!list) {
       var row = findFirstProblemRow(_problemsCache);
@@ -1197,18 +1219,33 @@
 
   async function ensureProblemsLoaded() {
     var info = getPatientInfo();
+    var viaBridge = false;
     if (!info) {
       // Split page: same widget, patient resolved from the task's overview.
       // Re-read the URL after the await — if the clinician navigated to a
       // different task while the resolve was in flight, drop this tick; the
       // next one re-reads the fresh URL and its own cached resolution.
       var task = getTaskInfo();
-      if (!task) return;
-      var resolvedPatientId = await resolveTaskPatientId(task);
-      var nowTask = getTaskInfo();
-      if (!resolvedPatientId || !nowTask || nowTask.taskUuid !== task.taskUuid) return;
-      info = { siteId: task.siteId, patientId: resolvedPatientId };
+      if (task) {
+        var resolvedPatientId = await resolveTaskPatientId(task);
+        var nowTask = getTaskInfo();
+        if (!resolvedPatientId || !nowTask || nowTask.taskUuid !== task.taskUuid) return;
+        info = { siteId: task.siteId, patientId: resolvedPatientId };
+      } else {
+        // Any other page shape (appointment view, consultation view, …):
+        // the page-world bridge tells us which patient the page's own
+        // embedded Clinical Summary panel was last fetched for. Guarded
+        // downstream: a bridge-derived context must ALSO match at least one
+        // on-screen problem row before the widget injects (see
+        // injectTrigger) — a stale attribute can never act on the wrong
+        // patient's rows.
+        var bridged = parseSummaryBridgeAttr(document.documentElement.getAttribute('data-ch-summary-patient'));
+        if (!bridged) return;
+        info = { siteId: null, patientId: bridged };
+        viaBridge = true;
+      }
     }
+    _contextViaBridge = viaBridge;
     if (info.patientId !== _lastPatientId) {
       _lastPatientId = info.patientId;
       resetForPatient();

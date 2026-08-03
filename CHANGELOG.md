@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.218.0] — 2026-08-03
+
+### Record-tidy widgets now work wherever the Clinical Summary panel renders
+
+Field report (2026-08-03, same day): the tidy widgets were missing from the appointment view and
+the consultation view — both render the embedded Clinical Summary panel, but neither URL carries a
+patientId, and per-shape URL parsing was never going to keep up with Medicus's page inventory.
+
+New approach: the page itself always announces the patient. Whenever any Medicus page fetches
+`/clinical/data/clinical-summary/summary/{patientId}` to render its summary panel, the MAIN-world
+bridge (`triage-lens/page-world.js`) stamps that patientId onto a `documentElement` attribute
+(`data-ch-summary-patient` — the DOM is shared between worlds, so late-loading widgets read it with
+no event-timing races; only the URL is read, never the response body). The three tidy widgets
+(`problem-bulk-end`, `problem-nesting`, `allergy-cleanup`) use it as their third context source
+after the care-record URL and the task-overview resolution — covering appointment views,
+consultation views, and any page shape Medicus adds later, with zero new endpoint knowledge.
+
+Wrong-patient guard: a bridge-derived context must ALSO match at least one on-screen row (problem
+description / allergy row) before a widget injects — a stale attribute after SPA navigation
+produces rows that match nothing, so nothing renders and nothing can act on the wrong patient's
+record. The allergy widget already had this property structurally (it only ever anchors to an
+exact-matched row in the scoped Allergies card); the two problem widgets gained an explicit gate.
+
 ## [v3.217.1] — 2026-08-03
 
 ### Design-crit polish: Nest problems widget
