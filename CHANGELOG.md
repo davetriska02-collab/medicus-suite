@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.215.0] — 2026-08-03
+
+### Nest problems: manual "Link manually" builder
+
+First-use feedback on v3.214.0 (a real record with several Anorexia nervosa / Eating disorder /
+Bradycardia entries): the SNOMED-ancestry suggestions only catch strict terminology descendants,
+but the clinician often knows the clinical hierarchy the terminology doesn't state — e.g. anorexia
+nervosa as the parent of its bradycardia and safeguarding entries. New "Link manually" section in
+the same widget: pick any problem to nest, pick its parent, same per-link explicit confirm, same
+confirmed `update-parent-problem` write path and event-ledger audit.
+
+Deliberately looser than the suggestion engine — no SNOMED gate, same-code pairs allowed (with a
+confirm-step pointer to the Duplicate Problem Checker, since nesting keeps both entries active),
+and re-parenting allowed (the confirm calls out that it MOVES the problem from its current parent).
+The cycle guard is the one rule that stays hard, at render and commit time, because it protects
+the record's structure rather than second-guessing a clinical judgement. A suggestion card whose
+child gets manually linked retires itself.
+
 ## [v3.214.0] — 2026-08-03
 
 ### New: "Nest problems?" — suggested parent/child links on the Clinical Summary

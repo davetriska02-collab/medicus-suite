@@ -190,6 +190,39 @@ select[class*='ms-pn-']:focus-visible {
   cursor: default;
 }
 
+.ms-pn-manual {
+  margin-top: 8px;
+  padding: 7px 9px;
+  background: #fff;
+  border: 1px dashed #d1d5db;
+  border-radius: 6px;
+  line-height: 1.45;
+}
+
+.ms-pn-manual-title {
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 2px;
+}
+
+.ms-pn-manual-note {
+  color: #6b7280;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.ms-pn-manual-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ms-pn-manual .ms-pn-card-linked {
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+
 .ms-pn-card-error {
   margin-top: 5px;
   color: #b91c1c;
