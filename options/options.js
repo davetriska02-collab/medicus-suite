@@ -701,6 +701,7 @@ async function doFullExport() {
     patientAlerts,
     problemDescriptionCleanup,
     phrases,
+    documentLens,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -720,6 +721,7 @@ async function doFullExport() {
     patientAlertsExport(),
     problemDescriptionCleanupExport(),
     phrasesExport(),
+    documentLensExport(),
   ]);
   const suite = await suiteExport();
   return window.SuiteEnvelope.wrap(
@@ -743,6 +745,7 @@ async function doFullExport() {
       patientAlerts,
       problemDescriptionCleanup,
       phrases,
+      documentLens,
       suite,
     },
     chrome.runtime.getManifest().version
@@ -769,6 +772,7 @@ async function doModuleExport(scope) {
     patientAlerts: () => patientAlertsExport(),
     problemDescriptionCleanup: () => problemDescriptionCleanupExport(),
     phrases: () => phrasesExport(),
+    documentLens: () => documentLensExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -809,6 +813,7 @@ async function applyEnvelope(envelope) {
     mods.patientAlerts && (() => patientAlertsImport(mods.patientAlerts)),
     mods.problemDescriptionCleanup && (() => problemDescriptionCleanupImport(mods.problemDescriptionCleanup)),
     mods.phrases && (() => phrasesImport(mods.phrases)),
+    mods.documentLens && (() => documentLensImport(mods.documentLens)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
@@ -2064,6 +2069,39 @@ lfSaveBtn?.addEventListener('click', async () => {
   if (lfSavedTag) {
     lfSavedTag.classList.add('show');
     setTimeout(() => lfSavedTag.classList.remove('show'), 2000);
+  }
+});
+
+// ── Document Lens (documentLensConfig) ──────────────────────────────────────
+// Same direct chrome.storage.local pattern as the Leaflets section above —
+// settings-page load/save path only. The content script
+// (content-scripts/document-lens/document-lens.js) watches storage.onChanged,
+// so a save here takes effect on the live Medicus tab without a reload.
+
+const dlEnabled = document.getElementById('dlEnabled');
+const dlSensitiveGate = document.getElementById('dlSensitiveGate');
+const dlSaveBtn = document.getElementById('saveDocLens');
+const dlSavedTag = document.getElementById('docLensSaved');
+
+(async function initDocLensSection() {
+  try {
+    const r = await chrome.storage.local.get('documentLensConfig');
+    const cfg = r['documentLensConfig'] || {};
+    if (dlEnabled) dlEnabled.checked = cfg.enabled === true;
+    // Sensitive gate DEFAULTS ON (hazard H-F) — only an explicit false unticks.
+    if (dlSensitiveGate) dlSensitiveGate.checked = cfg.sensitiveGate !== false;
+  } catch (e) {
+    console.warn('[DocLens init]', e.message);
+  }
+})();
+
+dlSaveBtn?.addEventListener('click', async () => {
+  const enabled = !!dlEnabled?.checked;
+  const sensitiveGate = !!dlSensitiveGate?.checked;
+  await chrome.storage.local.set({ documentLensConfig: { enabled, sensitiveGate } });
+  if (dlSavedTag) {
+    dlSavedTag.classList.add('show');
+    setTimeout(() => dlSavedTag.classList.remove('show'), 2000);
   }
 });
 

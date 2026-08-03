@@ -98,7 +98,18 @@
   // `label` the alert's PRESET type id (or 'custom') plus severity — NEVER the
   // free-typed alert text, per the no-free-text rule above. The author initials
   // ride on the stored alert itself (createdBy/updatedBy), not in this ledger.
-  const SOURCES = ['sentinel', 'sweep', 'labfiling', 'record', 'preflight', 'health', 'leaflets', 'routinerx', 'patient-alerts'];
+  const SOURCES = [
+    'sentinel',
+    'sweep',
+    'labfiling',
+    'record',
+    'preflight',
+    'health',
+    'leaflets',
+    'routinerx',
+    'patient-alerts',
+    'document-lens',
+  ];
   const ACTIONS = [
     'shown',
     'dismissed',

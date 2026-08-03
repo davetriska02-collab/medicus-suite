@@ -1028,6 +1028,7 @@
         <button class="nav-item" data-section="quickactions">Quick Actions</button>
         <button class="nav-item" data-section="knowledge">Knowledge</button>
         <button class="nav-item" data-section="leaflets">Leaflets</button>
+        <button class="nav-item" data-section="doclens">Document Lens</button>
         <button class="nav-item" data-section="pdc-prefs">Cleanup code preferences</button>
         <button class="nav-item" data-section="safety">Clinical Safety</button>
         <button class="nav-item" data-section="cqc">CQC Readiness</button>
@@ -2287,6 +2288,47 @@
           </div>
         </section>
 
+        <!-- Document Lens section -->
+        <section class="opt-section" id="sect-doclens">
+          <h1>Document Lens <span class="module-badge">Phase 1 &mdash; display-only</span></h1>
+          <p class="section-desc">
+            On the document processing screen, reads the open letter (Kettering HTML, PDF text layer &mdash; scans/TIFs
+            are honestly reported as unreadable) and shows a card beside Medicus's own <strong>Codes &amp; Actions</strong>:
+            candidate diagnoses with negation/history-aware status, a comparison against the coded problem list, GP
+            action language flags, and a coverage line saying how much of the letter the anchored sections reached.
+            <strong>It writes nothing</strong> &mdash; there are no accept buttons; coding happens in Medicus's own
+            controls or not at all. The card can never say a document is finished: absence of suggestions is never
+            "nothing to code".
+          </p>
+
+          <div class="field">
+            <label class="checkbox-row" style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+              <input type="checkbox" id="dlEnabled" />
+              <span class="field-label" style="margin: 0">Enable the Document Lens card</span>
+            </label>
+            <span class="field-help" style="margin-top: 4px; display: block">
+              Ships disabled. Enabling is a practice decision &mdash; review the hazard entries in
+              <code style="color: var(--text-3)">docs/plans/DOCUMENT-CODER-2026-08-01.md</code> first.
+            </span>
+          </div>
+
+          <div class="field">
+            <label class="checkbox-row" style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+              <input type="checkbox" id="dlSensitiveGate" checked />
+              <span class="field-label" style="margin: 0">Withhold the card on sensitive-marked documents</span>
+            </label>
+            <span class="field-help" style="margin-top: 4px; display: block">
+              Documents Medicus marks as hidden from patient-facing services render "NOT ASSESSED &mdash; sensitive"
+              instead of their content being read. Leave this on unless your Caldicott review says otherwise.
+            </span>
+          </div>
+
+          <div class="actions">
+            <button class="primary" id="saveDocLens">Save</button>
+            <span class="saved" id="docLensSaved">Saved ✓</span>
+          </div>
+        </section>
+
         <!-- Cleanup code preferences section -->
         <section class="opt-section" id="sect-pdc-prefs">
           <h1>Cleanup code preferences</h1>
@@ -3139,6 +3181,20 @@
                 </div>
               </div>
               <div class="module-export-card">
+                <div class="mec-name">Document Lens</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="documentLens">Export</button>
+                  <button class="ghost" data-mod-import="documentLens">Import</button>
+                  <input
+                    type="file"
+                    class="mod-file-input"
+                    data-mod="documentLens"
+                    accept=".json"
+                    style="display: none"
+                  />
+                </div>
+              </div>
+              <div class="module-export-card">
                 <div class="mec-name">Cleanup Code Preferences</div>
                 <div class="mec-note" style="font-size: 10px; color: var(--text-muted, #94a3b8); margin-bottom: 4px">
                   Import MERGES tally counts onto this machine's own rather than replacing them; a local manual
@@ -3266,6 +3322,7 @@
     <script src="../shared/io/notifications-io.js"></script>
     <script src="../shared/leaflets-utils.js"></script>
     <script src="../shared/io/leaflets-io.js"></script>
+    <script src="../shared/io/document-lens-io.js"></script>
     <script src="../shared/io/patient-alerts-io.js"></script>
     <script src="../shared/preferred-descriptions.js"></script>
     <script src="../shared/io/problem-description-cleanup-io.js"></script>

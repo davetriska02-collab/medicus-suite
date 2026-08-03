@@ -1,0 +1,200 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Document Lens card (display-only, Phase 1).
+   Self-contained: every token is defined on .dl-card so the card renders
+   identically regardless of what the host page (or hud.css) defines —
+   the "white rectangle" failure mode is a missing token scope (CLAUDE.md). */
+
+.dl-card {
+  --dl-bg: #ffffff;
+  --dl-fg: #1f2933;
+  --dl-muted: #616e7c;
+  --dl-border: #cbd2d9;
+  --dl-amber-bg: #fff7e6;
+  --dl-amber-border: #e8a13a;
+  --dl-amber-fg: #7c4a03;
+  --dl-red-bg: #fdecea;
+  --dl-red-border: #d64545;
+  --dl-red-fg: #8a1f1f;
+  --dl-blue-bg: #eef4fb;
+  --dl-blue-border: #7da7d9;
+  --dl-green-fg: #1f7a4d;
+
+  /* layout-inert in BOTH algorithms (composer rule 2, CLAUDE.md) */
+  flex: 0 0 100%;
+  grid-column: 1 / -1;
+  box-sizing: border-box;
+  margin: 0 0 10px 0;
+  border: 1px solid var(--dl-border);
+  border-radius: 6px;
+  background: var(--dl-bg);
+  color: var(--dl-fg);
+  font:
+    12px/1.45 -apple-system,
+    'Segoe UI',
+    Roboto,
+    Arial,
+    sans-serif;
+}
+
+.dl-inner {
+  padding: 8px 10px;
+}
+
+.dl-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.dl-title {
+  font-weight: 700;
+  font-size: 12px;
+}
+.dl-lane {
+  color: var(--dl-muted);
+  font-size: 10px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.dl-tag {
+  margin-left: auto;
+  color: var(--dl-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* The four states — each loud in its own register, never blank. */
+.dl-state {
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+.dl-state-not-run {
+  background: var(--dl-amber-bg);
+  border: 1px solid var(--dl-amber-border);
+  color: var(--dl-amber-fg);
+}
+.dl-state-could-not-read {
+  background: var(--dl-amber-bg);
+  border: 1px solid var(--dl-amber-border);
+  color: var(--dl-amber-fg);
+}
+.dl-state-nothing-anchored {
+  background: var(--dl-blue-bg);
+  border: 1px solid var(--dl-blue-border);
+}
+.dl-state-assessed {
+  background: var(--dl-blue-bg);
+  border: 1px solid var(--dl-blue-border);
+}
+
+.dl-banner-mismatch {
+  background: var(--dl-red-bg);
+  border: 1px solid var(--dl-red-border);
+  color: var(--dl-red-fg);
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.dl-demographics {
+  color: var(--dl-muted);
+  margin-bottom: 6px;
+}
+
+.dl-coverage {
+  margin: 6px 0;
+}
+
+.dl-h {
+  font-weight: 700;
+  margin: 6px 0 3px;
+}
+.dl-card ul {
+  margin: 2px 0 6px;
+  padding-left: 18px;
+}
+.dl-card li {
+  margin: 2px 0;
+}
+
+.dl-actions {
+  background: var(--dl-red-bg);
+  border: 1px solid var(--dl-red-border);
+  border-radius: 4px;
+  padding: 4px 8px 6px;
+  margin: 6px 0;
+}
+.dl-actions .dl-h {
+  color: var(--dl-red-fg);
+}
+.dl-action-kind {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: var(--dl-red-fg);
+}
+
+.dl-term {
+  font-weight: 600;
+}
+.dl-src {
+  color: var(--dl-muted);
+}
+.dl-status {
+  font-style: italic;
+  color: var(--dl-muted);
+}
+
+.dl-verdict {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid var(--dl-border);
+  margin-left: 4px;
+}
+.dl-verdict-possibly-new {
+  color: var(--dl-green-fg);
+  border-color: var(--dl-green-fg);
+}
+.dl-verdict-qualifier-conflict,
+.dl-verdict-status-conflict {
+  color: var(--dl-red-fg);
+  border-color: var(--dl-red-border);
+  background: var(--dl-red-bg);
+}
+.dl-verdict-probable-match {
+  color: var(--dl-muted);
+}
+.dl-verdict-detail {
+  color: var(--dl-muted);
+}
+
+.dl-offered-none {
+  padding: 4px 0;
+}
+
+.dl-mentioned summary {
+  cursor: pointer;
+  color: var(--dl-muted);
+  margin: 4px 0;
+}
+
+.dl-note {
+  color: var(--dl-muted);
+  font-size: 11px;
+  margin-top: 4px;
+}
+.dl-note-warn {
+  color: var(--dl-amber-fg);
+}
+
+.dl-footer {
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--dl-border);
+  color: var(--dl-muted);
+  font-size: 10px;
+}

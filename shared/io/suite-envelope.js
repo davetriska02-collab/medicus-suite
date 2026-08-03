@@ -104,6 +104,7 @@ const VALID_SCOPES = [
   'patientAlerts',
   'problemDescriptionCleanup',
   'phrases',
+  'documentLens',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -430,6 +431,15 @@ function previewEnvelope(envelope) {
     );
   } else {
     const m = missing('Leaflets');
+    if (m) lines.push(m);
+  }
+
+  if (mods.documentLens) {
+    const dlOn = mods.documentLens.config?.enabled === true;
+    const dlGate = mods.documentLens.config?.sensitiveGate !== false;
+    lines.push(`Document Lens: ${dlOn ? 'enabled' : 'off'}, sensitive-document gate ${dlGate ? 'on' : 'OFF'}`);
+  } else {
+    const m = missing('Document Lens');
     if (m) lines.push(m);
   }
 

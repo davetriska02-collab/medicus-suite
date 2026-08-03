@@ -2,6 +2,50 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.211.0] — 2026-08-03
+
+### Document Lens — Phase 1, display-only (ships DISABLED)
+
+The Document Coder's first shipping surface
+(`content-scripts/document-lens/document-lens.js` + `.css`), built entirely
+against live-confirmed contracts (capture programme Q1–Q7,
+`docs/learnings-medicus-snomed-search-live.md`). On the document processing
+screen it prepends a card beside Medicus's own **Codes & Actions** card
+(anchor: the `heading-codes-&-actions-*` heading → `.card-body`; prepended so
+Vue's reconciler leaves it alone) showing:
+
+- **Four-state honesty card** — exactly one of NOT ASSESSED / COULD NOT READ /
+  NO RECOGNISED SECTIONS / ASSESSED renders, always; a blank card is
+  impossible by construction (`buildCardModel` fails closed, test-guarded).
+- **Three content lanes** (per the real-inbox tally: 85% PDF): Kettering
+  `clinicalReport` HTML → direct text; PDF (both Kettering `pdf-preview` and
+  file-lane `download-file?convertToPDF=1`) → PDF.js text layer with
+  line-structure rebuild (lazy-loaded `vendor/pdf.min.js`, now
+  web-accessible; page cap 60, truncation surfaced on the card); TIF/scan/
+  conversion-failed → COULD NOT READ, loudly.
+- **Engines**: letter-extract (anchored sections, NegEx-lineage status
+  classification, whole-text action flags, coverage meter) + letter-delta
+  (probable-match / qualifier-conflict / status-conflict / possibly-new
+  against the live problem list via `resolveTaskToPatient` +
+  `fetchProblemListing`). Comparison failure is named on the card, never
+  silent.
+- **Wrong-patient guard (H-B)**: Kettering document-borne demographics
+  rendered with Medicus's own `isMatched` flag; a mismatch renders a loud
+  CHECK PATIENT banner above everything.
+- **Sensitive gate (H-F, default-on)**: `isHiddenFromPFS` documents render
+  NOT ASSESSED — sensitive, content unread.
+- **Display-only, enforced**: zero buttons/inputs/links in the card;
+  source-grep tests ban write-method fetches, synthetic clicks, appendChild
+  injection, and completion language. Event-ledger stamps (`document-lens`
+  source) record each card shown.
+
+Enable per-practice in Options → Document Lens (`documentLensConfig`;
+storage-watched, takes effect without reload). Backup convention followed:
+`shared/io/document-lens-io.js`, `documentLens` envelope scope, full-export +
+per-module export cards. `test-document-lens.js` (93 checks) covers the lane
+matrix, fail-closed model, renderer, XSS escaping, engine integration, and
+the wiring guards.
+
 ## [v3.210.2] — 2026-08-03
 
 ### Fix: document-task overview 404 spam (task-list slug ≠ overview slug)
