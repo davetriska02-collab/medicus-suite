@@ -186,3 +186,38 @@ Discharge summary 1, Telephone consultation 1.
 **Capture programme status: only Q4 (Codes & Actions card outerHTML anchor)
 still open.** Everything else Phase 1 needs is confirmed against the live
 system.
+
+## Part 6 — Q4 widget anchor, CLOSED (2026-08-03, live)
+
+Skeleton capture of the Codes & Actions card (all text/attribute values
+stripped at source — structure only):
+
+- **Ancestor chain:** `div.patient-record.h-full > div.m-layout-stack ×2 >
+  div.m-card > div.card-container.flex.flex-col > div.card-body >
+  div.inline-entry-list-container` (Vue scoped attr `data-v-b5e24aba` on the
+  card's own subtree).
+- **Stable find:** the card's `header > h3.heading` has
+  `id="heading-codes-&-actions-{uuidv7}"` — match on the
+  `heading-codes-&-actions-` **prefix** (trailing uuid varies per document),
+  then `closest('.card-body')`. That is the injection host.
+- **Injection rule:** PREPEND the Document Lens card as the first child of
+  `.card-body`, before `.inline-entry-list-container` (repo rule: prepended
+  foreign nodes survive Vue reconciliation; appended ones are stripped).
+- **DOM↔API join is free:** each entry row is
+  `.entry[data-entry-type][data-entry-id]` where `data-entry-id` equals the
+  entry uuid from `GET /clinical/document/entries/{documentId}` — the delta
+  card can highlight/scroll to Medicus's own rows without heuristics.
+- **The entry input IS Medicus's SNOMED combobox:** the note textarea
+  carries `aria-haspopup="listbox"`, `aria-autocomplete="list"`,
+  `aria-controls` → typing in it drives the same constrained SNOMED search.
+  So an even lower-risk insert path exists for Phase 3: focus + fill
+  Medicus's own textarea and let the host's listbox do the search/selection
+  (no direct POST at all). Note the `id`s (`source_mim_*`) are randomised —
+  anchor on `data-label="consultation-entry-textarea"` instead.
+- `data-dashlane-*` attributes in the capture are Dave's password manager,
+  not Medicus — ignore.
+
+**CAPTURE PROGRAMME COMPLETE — Q1–Q7 all closed.** Phase 1 has every
+contract it needs: read lanes + real-world mix, write contract, SNOMED
+search, worklist rows, wrong-patient demographics, sensitivity flag, and
+now the injection anchor.

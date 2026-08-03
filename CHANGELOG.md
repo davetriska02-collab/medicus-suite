@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.210.2] — 2026-08-03
+
+### Fix: document-task overview 404 spam (task-list slug ≠ overview slug)
+
+`engine/api-client.js` `resolveTaskToPatient` built the overview URL from the
+task-list slug, but document tasks list under `document_task` while their
+overview lives at `/tasks/data/document/overview/{id}` — so every document
+task in the workflow queue fired two 404s per queue load (live-confirmed
+during the Document Coder capture session, 2026-08-03; the patient resolve
+silently failed for those tasks). Added an overview-slug override map
+(`document_task` → `document`), regression tests in `test-api-clients.js`.
+
+Also banks the final Document Coder capture results in
+`docs/learnings-medicus-snomed-search-live.md`: Part 5 (Q7 real-inbox lane
+tally — 85% PDF lane, ~12% TIF could-not-read) and Part 6 (Q4 Codes &
+Actions injection anchor + entry `data-entry-id` DOM↔API join). Capture
+programme Q1–Q7 complete.
+
 ## [v3.210.1] — 2026-08-01
 
 ### Document Coder: interactive live-engine demo (dev tool)

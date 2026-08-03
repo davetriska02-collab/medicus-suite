@@ -255,13 +255,20 @@
   const TASK_PATIENT_CACHE = new Map();
   const TASK_PATIENT_TTL_MS = 5 * 60 * 1000;
 
+  // Some task types use a different slug on the overview endpoint than on the
+  // task-list endpoint. Live-confirmed 2026-08-03: document tasks list under
+  // `document_task` but their overview lives at /tasks/data/document/overview/{id}
+  // — the `document_task` form 404s (twice per task, every queue load).
+  const OVERVIEW_SLUG_OVERRIDES = { document_task: 'document' };
+
   async function resolveTaskToPatient(apiBase, taskTypeSlug, taskUuid) {
     if (!taskTypeSlug || !taskUuid) return null;
-    const k = `${apiBase}|${taskTypeSlug}|${taskUuid}`;
+    const overviewSlug = OVERVIEW_SLUG_OVERRIDES[taskTypeSlug] || taskTypeSlug;
+    const k = `${apiBase}|${overviewSlug}|${taskUuid}`;
     const entry = TASK_PATIENT_CACHE.get(k);
     if (entry && (Date.now() - entry.at) < TASK_PATIENT_TTL_MS) return entry.patientUuid;
     try {
-      const data = await safeFetch(`${apiBase}/tasks/data/${taskTypeSlug}/overview/${taskUuid}`);
+      const data = await safeFetch(`${apiBase}/tasks/data/${overviewSlug}/overview/${taskUuid}`);
       const patientUuid = data?.data?.patient?.id
         || data?.data?.patientId
         || data?.patient?.id

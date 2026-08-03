@@ -1144,6 +1144,47 @@ async function runApiClientTests() {
     'HTTP 500 → rejects with "HTTP 500"'
   );
   restoreFetch();
+
+  // ── resolveTaskToPatient: overview-slug overrides ──────────────────────────
+  // Live-confirmed: document tasks list under `document_task` but their
+  // overview endpoint slug is `document` (the `document_task` form 404s).
+
+  console.log('\n--- resolveTaskToPatient: overview slug override ---');
+
+  const { resolveTaskToPatient } = ApiClient;
+  check(typeof resolveTaskToPatient === 'function', 'resolveTaskToPatient exported');
+
+  let requestedUrl = null;
+  setFetch(async (url) => {
+    requestedUrl = String(url);
+    return mockResponse(200, { data: { patient: { id: 'p-uuid-doc' } } });
+  });
+  try {
+    const uuid = await resolveTaskToPatient(API_BASE, 'document_task', 'aaaabbbb-0000-0000-0000-000000000002');
+    check(
+      requestedUrl !== null && requestedUrl.includes('/tasks/data/document/overview/'),
+      'document_task → overview fetched with `document` slug'
+    );
+    check(
+      requestedUrl !== null && !requestedUrl.includes('document_task'),
+      'document_task → 404-ing slug not used in overview URL'
+    );
+    check(uuid === 'p-uuid-doc', 'document_task → patient uuid resolved from payload');
+  } catch (e) {
+    check(false, `slug override: unexpected rejection: ${e.message}`);
+  }
+
+  requestedUrl = null;
+  try {
+    await resolveTaskToPatient(API_BASE, 'prescription-requests', 'aaaabbbb-0000-0000-0000-000000000003');
+    check(
+      requestedUrl !== null && requestedUrl.includes('/tasks/data/prescription-requests/overview/'),
+      'non-overridden slug passes through unchanged'
+    );
+  } catch (e) {
+    check(false, `slug passthrough: unexpected rejection: ${e.message}`);
+  }
+  restoreFetch();
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
