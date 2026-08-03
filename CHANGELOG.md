@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.213.1] — 2026-08-03
+
+### Dev tooling: problem parent/child ("nesting") contract capture script
+
+`scripts/problem-nesting-capture.js` — paste-into-page-console instrumentation (adapted from
+`booking-flow-capture.js`: same fetch/XHR wrap, PII redaction, dialog inventory) for capturing how
+Medicus creates/changes a problem parent-child link, which the repo has never captured (the
+confirmed `edit-problem` POST carries no parent field; only `end-problem`'s `activeChildProblems[]`
+read side is known). Adds an active read probe (`chNest.probe()`) that maps the record's existing
+parent→child links and reports every hierarchy-smelling field across `end-problem`,
+`slideover/overview` and `edit-problem` per problem, working on both the care-record and task
+("split") page shapes. Groundwork for a future "nest related problems" widget — no shipped
+behaviour changes.
+
 ## [v3.213.0] — 2026-08-03
 
 ### Problem "Bulk remove?" + "Clean up allergies?" now work on the task ("split") page
