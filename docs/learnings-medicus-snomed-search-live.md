@@ -102,3 +102,43 @@ Task overview (`/tasks/data/document/overview/{taskId}`) returns
   bytes via `GET /clinical/document/download-file/{fileId}` — the generic
   content read for uploaded/scanned letters (PDF.js or COULD-NOT-READ lane
   depending on text layer).
+
+## Part 4 — the coding write contract, CONFIRMED (2026-08-03, live)
+
+(Endpoint shapes only; capture bodies contained live patient data and are
+NOT reproduced anywhere.)
+
+- **Coded entry on a document**:
+  `POST /clinical/document/{documentId}/change-notes` with
+  `{ notesToSave: [{ uuid (client-generated v7-style), entryType: "note",
+     code: { description, conceptId, descriptionId, parentConceptIds[] } }],
+     sortOrder: [{id, entryType}...], sortOrderHash }`
+  → responds `{ sortOrderHash }` (optimistic concurrency: GET
+  `/clinical/document/entries/{documentId}` first, replay its hash; each
+  write returns the next hash). Free-text note = same call with `text`
+  instead of `code`.
+- **THE PIPELINE CLOSES**: the `code` object is byte-shaped like the
+  `value` object Medicus's own SNOMED search returns (description,
+  conceptId, descriptionId, parentConceptIds) — extractor term → Medicus
+  search → human confirms → change-notes POST with the chosen search row.
+  No transformation layer needed.
+- **Filing**: `POST /clinical/inbound-document-task/complete { taskId }`;
+  conveyor `GET /task-list/document_task/next-task/{taskId}` → `{ route,
+  foundNextTask }`. Entries become `isFinalised: true` after filing.
+- **Coded-data lane exists natively**: document entries can be
+  `type: "observation"` (BP/weight/pulse coded from letters) — created via
+  the codesAndActionsOptions observation URL. The plan's copy-assist lane
+  has a real write path behind it (still human-gated, Phase 3+ and CSO).
+- **File lane completed**: `GET /tasks/data/document/file/document-preview/
+  {fileId}` → `{ fileType, conversionInProgress, conversionFailed,
+  rendersAsPdf, conversionFailureReason }` then
+  `GET /clinical/document/download-file/{fileId}?convertToPDF=1` →
+  application/pdf. Server converts non-PDF uploads; `rendersAsPdf` and the
+  conversion flags are clean COULD-NOT-READ signals.
+- Real letters carry rich metadata: `clinicalSpecialtyLabel`,
+  `additionalInformation`, `isHiddenFromPFS` (sensitivity flag — feeds the
+  Caldicott role gate), `linkedProblems`.
+
+**Capture session Q1/Q2/Q3/Q5/Q6 CLOSED.** Remaining: Q4 outerHTML anchor
+snippets (any time), Q7 letter-format tally (ongoing). Phase 1 can build
+against confirmed contracts end to end.
