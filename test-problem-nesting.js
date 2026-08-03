@@ -17,7 +17,11 @@ const {
   resolveOverviewConceptId,
   wouldCreateCycle,
   buildNestingSuggestions,
-  manualParentOptions,
+  manualChildOptions,
+  buildDuplicateGroups,
+  pickEarliestCopyId,
+  buildMarkIncorrectPayload,
+  removableDuplicateIds,
   apiErrorMessage,
   resultContainsConceptId,
   parseCareRecordPath,
@@ -141,7 +145,7 @@ console.log('--- buildNestingSuggestions: the safety rules ---');
   check(buildNestingSuggestions(null, null, null).length === 0, 'null inputs -> empty, never throws');
 }
 
-console.log('--- manualParentOptions: the manual builder is looser, except the cycle guard ---');
+console.log('--- manualChildOptions: the manual builder is looser, except the cycle guard ---');
 {
   const problems = [
     { id: 'an1', description: 'Anorexia nervosa' },
@@ -149,33 +153,81 @@ console.log('--- manualParentOptions: the manual builder is looser, except the c
     { id: 'brady', description: 'Bradycardia' },
     { id: 'dep', description: 'Depression' },
   ];
-  const opts = manualParentOptions('brady', problems, {});
-  check(opts.length === 3, 'every other problem is a candidate parent — no SNOMED gate');
-  check(!opts.some((o) => o.id === 'brady'), 'the child itself is never a parent option');
+  const opts = manualChildOptions('an1', problems, {});
+  check(opts.length === 3, 'every other problem is a candidate child — no SNOMED gate');
+  check(!opts.some((o) => o.id === 'an1'), 'the parent itself is never a child option');
   check(
-    manualParentOptions('an1', problems, {}).some((o) => o.id === 'an2'),
+    opts.some((o) => o.id === 'an2'),
     "a same-code problem IS offered manually (duplicate-vs-hierarchy is the clinician's call here)"
   );
   // Cycle guard stays hard: dep is already under brady, brady under an1 —
-  // an1 must not be offered brady or dep as a parent.
+  // nesting an1 (or brady) under dep would loop, so neither is a candidate.
   const map = { dep: 'brady', brady: 'an1' };
-  const an1opts = manualParentOptions('an1', problems, map);
+  const depOpts = manualChildOptions('dep', problems, map);
   check(
-    !an1opts.some((o) => o.id === 'brady') && !an1opts.some((o) => o.id === 'dep'),
-    'descendants in the LINK graph are cycle-filtered out'
+    !depOpts.some((o) => o.id === 'an1') && !depOpts.some((o) => o.id === 'brady'),
+    'ancestors in the LINK graph are cycle-filtered out of the child list'
   );
   check(
-    an1opts.some((o) => o.id === 'an2'),
+    depOpts.some((o) => o.id === 'an2'),
     'unrelated problems still offered'
   );
-  // A problem that already has a parent is still a valid PARENT option
-  // (multi-level hierarchy is confirmed).
+  // A problem that already has a parent is still offered as a CHILD (that's a
+  // re-parent — annotated in the UI and called out at confirm, not blocked).
   check(
-    manualParentOptions('an2', problems, map).some((o) => o.id === 'brady'),
-    'an already-parented problem can still BE a parent (multi-level)'
+    manualChildOptions('an2', problems, map).some((o) => o.id === 'brady'),
+    'an already-parented problem is still offered (re-parent, annotated)'
   );
-  check(manualParentOptions(null, problems, {}).length === 0, 'no child chosen -> no options');
-  check(manualParentOptions('x', null, {}).length === 0, 'null problems -> empty, never throws');
+  check(manualChildOptions(null, problems, {}).length === 0, 'no parent chosen -> no options');
+  check(manualChildOptions('x', null, {}).length === 0, 'null problems -> empty, never throws');
+}
+
+console.log('--- duplicate-merge helpers ---');
+{
+  const problems = [
+    { id: 'b-newer', description: 'Anorexia nervosa' },
+    { id: 'a-older', description: 'Anorexia nervosa' },
+    { id: 'brady', description: 'Bradycardia' },
+    { id: 'nocode', description: 'Mystery entry' },
+  ];
+  const info = {
+    'b-newer': { conceptId: 'AN' },
+    'a-older': { conceptId: 'AN' },
+    brady: { conceptId: 'BR' },
+    nocode: { conceptId: null },
+  };
+  const groups = buildDuplicateGroups(problems, info);
+  check(groups.length === 1, 'only same-conceptId sets of 2+ group');
+  check(groups[0].conceptId === 'AN' && groups[0].entries.length === 2, 'the duplicate pair is the group');
+  check(buildDuplicateGroups(null, null).length === 0, 'null inputs -> empty, never throws');
+
+  check(
+    pickEarliestCopyId([{ id: 'b-newer' }, { id: 'a-older' }]) === 'a-older',
+    'earliest copy (smallest UUIDv7 id) is the default keeper'
+  );
+  check(pickEarliestCopyId([]) === null, 'no entries -> null keeper');
+
+  const payload = buildMarkIncorrectPayload('prob-1', '  Duplicate entry  ');
+  check(
+    payload.problemId === 'prob-1' && payload.reason === 'Duplicate entry' && payload.isConfirmedRemoval === true,
+    'the confirmed mark-incorrect-and-hidden body: id, trimmed reason, isConfirmedRemoval'
+  );
+  check(
+    Object.keys(payload).sort().join(',') === 'isConfirmedRemoval,problemId,reason',
+    'exactly the three confirmed fields'
+  );
+  check(buildMarkIncorrectPayload('prob-1', '   ') === null, 'a blank reason never reaches the record');
+  check(buildMarkIncorrectPayload(null, 'x') === null, 'a missing id never reaches the record');
+
+  const entries = [
+    { id: 'keep', hasChildren: false },
+    { id: 'plain', hasChildren: false },
+    { id: 'parent-copy', hasChildren: true },
+  ];
+  const removable = removableDuplicateIds(entries, 'keep');
+  check(removable.length === 1 && removable[0] === 'plain', 'keeper and copies with children are never removable');
+  check(removableDuplicateIds(entries, 'plain').join(',') === 'keep', 'keeper choice flips what is removable');
+  check(removableDuplicateIds(null, 'x').length === 0, 'null entries -> empty, never throws');
 }
 
 console.log('--- resultContainsConceptId (descendant-search reader) ---');

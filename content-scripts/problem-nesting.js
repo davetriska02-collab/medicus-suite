@@ -43,10 +43,12 @@
 //
 // SAFETY POSTURE (same family rules as problem-bulk-end.js, adapted):
 //   - Nesting changes how the problem list READS — a child renders under its
-//     parent, so a wrong link visually demotes a live clinical problem. Every
-//     link is therefore an individual, explicit, per-pair confirm (child and
-//     parent echoed back by name) — no bulk apply, no select-all, nothing
-//     pre-chosen except a single-option default the clinician still confirms.
+//     parent, so a wrong link visually demotes a live clinical problem.
+//     Suggestion cards confirm per pair (child and parent echoed back by
+//     name); the manual builder confirms per BATCH under one parent, with
+//     every ticked child listed by name and any re-parents counted — but
+//     nothing is ever pre-ticked, there is no select-all, and each child
+//     still commits (and cycle-checks) individually.
 //   - Cycle guard at BOTH layers: suggestions that would create a loop are
 //     filtered at render time against the LIVE link map (which updates as
 //     links commit), and confirmLink() re-checks before POSTing regardless of
@@ -147,20 +149,90 @@
     return out;
   }
 
-  // Parent options for the MANUAL link builder: any OTHER problem the chosen
-  // child could be nested under without creating a loop. Deliberately looser
-  // than buildNestingSuggestions — no SNOMED gate, no same-concept exclusion,
-  // and already-parented problems are valid PARENTS (a parent can itself have
-  // a parent; the hierarchy is confirmed multi-level) — because here the
-  // clinician is making the call, not the terminology. The cycle guard is the
-  // one rule that stays hard: it protects the record's structure, not a
-  // judgement call.
-  function manualParentOptions(childId, problems, parentIdByProblemId) {
-    if (!childId) return [];
+  // Child options for the MANUAL link builder: every OTHER problem that could
+  // be nested under the chosen parent without creating a loop. Parent-first,
+  // multi-child (2026-08-03 feedback: several problems usually belong under
+  // one title — one at a time was too slow). Deliberately looser than
+  // buildNestingSuggestions — no SNOMED gate, no same-concept exclusion, and
+  // already-parented problems are valid candidates (re-parenting; annotated
+  // and called out at confirm) — because here the clinician is making the
+  // call, not the terminology. The cycle guard is the one rule that stays
+  // hard: it protects the record's structure, not a judgement call.
+  function manualChildOptions(parentId, problems, parentIdByProblemId) {
+    if (!parentId) return [];
     return (Array.isArray(problems) ? problems : []).filter(function (p) {
-      if (!p || !p.id || p.id === childId) return false;
-      return !wouldCreateCycle(childId, p.id, parentIdByProblemId || {});
+      if (!p || !p.id || p.id === parentId) return false;
+      return !wouldCreateCycle(p.id, parentId, parentIdByProblemId || {});
     });
+  }
+
+  // ── Duplicate-merge helpers (the in-panel "merge these copies" shortcut) ─────
+  // Groups the active problems by IDENTICAL conceptId — two entries carrying
+  // the same code are duplicate copies, not a hierarchy (the exact case the
+  // suggestion engine refuses to pair). Groups of 2+ only; problems with no
+  // resolved conceptId never group. This is the lightweight, same-code-only
+  // sibling of the full Duplicate Problem Checker — it deliberately does NOT
+  // attempt the checker's fuzzy/cross-kind matching.
+  function buildDuplicateGroups(problems, infoById) {
+    var list = Array.isArray(problems) ? problems : [];
+    var info = infoById || {};
+    var byConcept = Object.create(null);
+    var order = [];
+    list.forEach(function (p) {
+      if (!p || !p.id) return;
+      var ci = info[p.id];
+      if (!ci || !ci.conceptId) return;
+      if (!byConcept[ci.conceptId]) {
+        byConcept[ci.conceptId] = [];
+        order.push(ci.conceptId);
+      }
+      byConcept[ci.conceptId].push(p);
+    });
+    return order
+      .filter(function (c) {
+        return byConcept[c].length >= 2;
+      })
+      .map(function (c) {
+        return { conceptId: c, entries: byConcept[c] };
+      });
+  }
+
+  // Default keeper = the EARLIEST copy. Medicus problem ids are UUIDv7
+  // (time-ordered), so the lexicographically smallest id is the oldest entry
+  // — the same "kept (earliest copy)" default the Duplicate Problem Checker
+  // uses. A default only; the keeper radio stays the clinician's choice.
+  function pickEarliestCopyId(entries) {
+    var best = null;
+    (Array.isArray(entries) ? entries : []).forEach(function (e) {
+      if (!e || !e.id) return;
+      if (best === null || e.id < best) best = e.id;
+    });
+    return best;
+  }
+
+  // The confirmed mark-incorrect-and-hidden POST body (identical to the
+  // Duplicate Problem Checker's buildRemovalRequest for kind 'problem'):
+  // {problemId, reason, isConfirmedRemoval: true}. Null (never a partial
+  // body) on a missing id or blank reason — a removal must never reach the
+  // record without its reason.
+  function buildMarkIncorrectPayload(problemId, reason) {
+    var trimmed = (reason || '').trim();
+    if (!problemId || !trimmed) return null;
+    return { problemId: problemId, reason: trimmed, isConfirmedRemoval: true };
+  }
+
+  // Which copies in a group the merge may actually remove: everything except
+  // the keeper and except any copy that has nested children (removing a
+  // parent would leave its children dangling — those copies need the full
+  // Duplicate Checker or Medicus itself, where the structure is visible).
+  function removableDuplicateIds(entries, keeperId) {
+    return (Array.isArray(entries) ? entries : [])
+      .filter(function (e) {
+        return e && e.id && e.id !== keeperId && !e.hasChildren;
+      })
+      .map(function (e) {
+        return e.id;
+      });
   }
 
   // Same extraction as problem-bulk-end.js's apiErrorMessage — duplicated (not
@@ -232,7 +304,11 @@
       resolveOverviewConceptId: resolveOverviewConceptId,
       wouldCreateCycle: wouldCreateCycle,
       buildNestingSuggestions: buildNestingSuggestions,
-      manualParentOptions: manualParentOptions,
+      manualChildOptions: manualChildOptions,
+      buildDuplicateGroups: buildDuplicateGroups,
+      pickEarliestCopyId: pickEarliestCopyId,
+      buildMarkIncorrectPayload: buildMarkIncorrectPayload,
+      removableDuplicateIds: removableDuplicateIds,
       apiErrorMessage: apiErrorMessage,
       resultContainsConceptId: resultContainsConceptId,
       parseCareRecordPath: parseCareRecordPath,
@@ -330,6 +406,19 @@
     });
   }
 
+  // Same confirmed write the Duplicate Problem Checker uses to retire a
+  // duplicate copy (engine/record-duplicate-parser.js WRITE_CONTRACTS.problem)
+  // — marks the entry incorrect and hides it from the record. Not an
+  // end-date: the copy disappears as recorded-in-error. No undo endpoint is
+  // known (the checker's own open question), so the confirm copy says so.
+  function postMarkIncorrectAndHidden(payload) {
+    return apiFetch('/clinical/problem/mark-incorrect-and-hidden', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
   // ── Split-page patient resolution (same block as problem-bulk-end.js) ────────
   var _taskPatientIdByUuid = Object.create(null);
   var _taskPatientResolveInFlight = false;
@@ -369,10 +458,16 @@
   // ({id, description}) and each problem's overview-derived info.
   var _problems = [];
   var _infoById = {};
-  // Manual link builder state + this-session committed manual links
-  // ([{childDescription, parentDescription}], display only).
-  var _manual = { childId: null, parentId: null, confirming: false, linking: false, linkError: null };
+  // Manual link builder state (parent-first, multi-child) + this-session
+  // committed manual links ([{childDescription, parentDescription}], display
+  // only). childIds is the ticked set; childErrors carries per-child commit
+  // failures so a partial batch shows exactly which links didn't land.
+  var _manual = { parentId: null, childIds: {}, confirming: false, linking: false, childErrors: {} };
   var _manualLinked = [];
+  // Duplicate-merge groups: [{conceptId, description, entries: [{id,
+  //   description, hasChildren, additionalInformation}], keeperId, open,
+  //   confirming, removing, reason, errors: {id: msg}, removedCount, done}]
+  var _mergeGroups = [];
 
   function resetForPatient() {
     _problemsCache = null;
@@ -383,8 +478,9 @@
     _parentIdByProblemId = {};
     _problems = [];
     _infoById = {};
-    _manual = { childId: null, parentId: null, confirming: false, linking: false, linkError: null };
+    _manual = { parentId: null, childIds: {}, confirming: false, linking: false, childErrors: {} };
     _manualLinked = [];
+    _mergeGroups = [];
   }
 
   // ── Scan (opt-in — only ever runs from the "Nest problems?" click) ───────────
@@ -411,6 +507,8 @@
         infoById[p.id] = {
           conceptId: resolveOverviewConceptId(ov),
           parentProblemId: (ov && ov.parentProblemId) || null,
+          hasChildren: !!(ov && Array.isArray(ov.childProblems) && ov.childProblems.length),
+          additionalInformation: (ov && ov.additionalInformation) || null,
         };
         if (ov && ov.parentProblemId) _parentIdByProblemId[p.id] = ov.parentProblemId;
       });
@@ -462,6 +560,30 @@
 
       _problems = problems;
       _infoById = infoById;
+      _mergeGroups = buildDuplicateGroups(problems, infoById).map(function (g) {
+        var entries = g.entries.map(function (p) {
+          var ci = infoById[p.id] || {};
+          return {
+            id: p.id,
+            description: p.description,
+            hasChildren: !!ci.hasChildren,
+            additionalInformation: ci.additionalInformation || null,
+          };
+        });
+        return {
+          conceptId: g.conceptId,
+          description: entries[0].description,
+          entries: entries,
+          keeperId: pickEarliestCopyId(entries),
+          open: false,
+          confirming: false,
+          removing: false,
+          reason: 'Duplicate entry - merged into retained copy',
+          errors: {},
+          removedCount: 0,
+          done: false,
+        };
+      });
       _suggestions = buildNestingSuggestions(problems, infoById, pairHits).map(function (s) {
         return Object.assign({}, s, {
           chosenParentId: s.parentOptions.length === 1 ? s.parentOptions[0].id : null,
@@ -530,33 +652,113 @@
     }
   }
 
-  async function confirmManualLink() {
-    var m = _manual;
-    if (m.linking || !m.childId || !m.parentId) return;
-    var child = _problems.find(function (p) {
-      return p.id === m.childId;
+  function manualSelectedChildIds() {
+    return Object.keys(_manual.childIds).filter(function (id) {
+      return _manual.childIds[id];
     });
+  }
+
+  // Commits the ticked children under the chosen parent, SEQUENTIALLY — one
+  // confirmed update-parent-problem POST per child, never the
+  // update-child-problems full-replace endpoint (see the header's trap note).
+  // Each child re-passes the commit-time cycle guard inside commitParentLink;
+  // a failure records a per-child error and the batch carries on, so one bad
+  // link never blocks the rest. Successes untick; failures stay ticked for
+  // retry with their error shown against the row.
+  async function confirmManualBatch() {
+    var m = _manual;
+    if (m.linking || !m.parentId) return;
     var parent = _problems.find(function (p) {
       return p.id === m.parentId;
     });
-    if (!child || !parent) return;
+    var targets = manualSelectedChildIds();
+    if (!parent || !targets.length) return;
     m.linking = true;
-    m.linkError = null;
+    m.childErrors = {};
     render();
-    try {
-      await commitParentLink(m.childId, m.parentId);
-      _manualLinked.push({ childDescription: child.description, parentDescription: parent.description });
-      // Keep the child's info honest so a suggestion card for it (if any)
-      // retires, and reset the builder for the next link.
-      if (_infoById[m.childId]) _infoById[m.childId].parentProblemId = m.parentId;
-      _manual = { childId: null, parentId: null, confirming: false, linking: false, linkError: null };
-    } catch (err) {
-      m.linkError = (err && err.message) || 'Failed to link — please try again.';
-      m.linking = false;
-      m.confirming = false;
-    } finally {
-      render();
+    for (var i = 0; i < targets.length; i++) {
+      var childId = targets[i];
+      var child = _problems.find(function (p) {
+        return p.id === childId;
+      });
+      if (!child) continue;
+      try {
+        await commitParentLink(childId, m.parentId);
+        _manualLinked.push({ childDescription: child.description, parentDescription: parent.description });
+        // Keep the child's info honest so a suggestion card for it (if any)
+        // retires, and untick it now it's landed.
+        if (_infoById[childId]) _infoById[childId].parentProblemId = m.parentId;
+        delete m.childIds[childId];
+      } catch (err) {
+        m.childErrors[childId] = (err && err.message) || 'Failed to link — please try again.';
+      }
     }
+    m.linking = false;
+    m.confirming = false;
+    render();
+  }
+
+  // Removes a merged-away copy from every piece of live widget state so the
+  // other sections stop offering it: the problem list, the info/link maps,
+  // any manual tick or parent pick, and (via the existence checks in
+  // cardHtml) any suggestion card that referenced it.
+  function forgetProblem(problemId) {
+    _problems = _problems.filter(function (p) {
+      return p.id !== problemId;
+    });
+    delete _infoById[problemId];
+    delete _parentIdByProblemId[problemId];
+    delete _manual.childIds[problemId];
+    if (_manual.parentId === problemId) {
+      _manual = { parentId: null, childIds: {}, confirming: false, linking: false, childErrors: {} };
+    }
+  }
+
+  // Commits one duplicate group's merge: mark-incorrect-and-hidden on every
+  // removable non-keeper copy, SEQUENTIALLY, with the group's shared reason.
+  // Per-copy failures record against their row and the rest carry on — the
+  // keeper is never touched by definition, so a partial batch is always
+  // recoverable (retry or fall back to the Duplicate Checker).
+  async function confirmMergeGroup(g) {
+    if (g.removing || g.done) return;
+    var targets = removableDuplicateIds(g.entries, g.keeperId);
+    var payloadCheck = buildMarkIncorrectPayload('x', g.reason);
+    if (!targets.length || !payloadCheck) return; // blank reason never reaches the record
+    g.removing = true;
+    g.errors = {};
+    render();
+    var batchRemoved = 0;
+    for (var i = 0; i < targets.length; i++) {
+      var id = targets[i];
+      try {
+        await postMarkIncorrectAndHidden(buildMarkIncorrectPayload(id, g.reason));
+        batchRemoved++;
+        g.removedCount++;
+        forgetProblem(id);
+        g.entries = g.entries.filter(function (e) {
+          return e.id !== id;
+        });
+      } catch (err) {
+        g.errors[id] = (err && err.message) || 'Failed to remove this copy — please try again.';
+      }
+    }
+    g.removing = false;
+    g.confirming = false;
+    if (!Object.keys(g.errors).length) g.done = true;
+    // One ledger record per batch (batch-local count so a retry never
+    // re-reports earlier successes), fixed label — never the problem
+    // description or the free-typed reason.
+    if (batchRemoved > 0 && window.EventLedger) {
+      window.EventLedger.record({
+        source: 'record',
+        patientRef: _lastPatientId,
+        severity: null,
+        ruleId: 'problem-merge',
+        label: 'Merge problems: ' + batchRemoved + ' duplicate cop' + (batchRemoved === 1 ? 'y' : 'ies') + ' removed',
+        action: 'committed',
+      });
+    }
+    render();
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -570,6 +772,18 @@
         '</strong>. Medicus’s own list shows this after a page refresh.</div>'
       );
     }
+    // A child removed as a duplicate this session no longer exists to nest.
+    if (
+      !_problems.some(function (p) {
+        return p.id === s.childId;
+      })
+    ) {
+      return (
+        '<div class="ms-pn-card ms-pn-card-stale"><strong>' +
+        esc(s.childDescription) +
+        '</strong> — removed as a duplicate copy this session.</div>'
+      );
+    }
     // A child linked through the MANUAL builder this session retires its
     // suggestion card (its map entry exists but s.linked is false).
     if (_parentIdByProblemId[s.childId]) {
@@ -579,10 +793,15 @@
         '</strong> — already nested this session via a manual link.</div>'
       );
     }
-    // Options are re-filtered against the LIVE link map on every render, so a
-    // link committed on another card can retire a now-cyclic option here.
+    // Options are re-filtered against the LIVE link map (and the live problem
+    // list — a merged-away parent is gone) on every render, so a link or
+    // merge committed elsewhere can retire an option here.
     var liveOptions = s.parentOptions.filter(function (o) {
-      return !wouldCreateCycle(s.childId, o.id, _parentIdByProblemId);
+      return (
+        _problems.some(function (p) {
+          return p.id === o.id;
+        }) && !wouldCreateCycle(s.childId, o.id, _parentIdByProblemId)
+      );
     });
     if (!liveOptions.length) {
       return (
@@ -668,6 +887,146 @@
     return '<div class="ms-pn-card">' + body + actions + error + '</div>';
   }
 
+  // One duplicate group's card in the "Merge duplicate copies" section.
+  // Collapsed: description + copy count + "Merge…". Expanded: keeper radios
+  // (blocked copies flagged, additional-info copies cautioned), then the
+  // KEEPING / REMOVING confirm with the reason echoed and the
+  // mark-incorrect-and-hidden consequence stated plainly.
+  function mergeGroupHtml(g, gIdx) {
+    if (g.done) {
+      return (
+        '<div class="ms-pn-card ms-pn-card-linked">✓ <strong>' +
+        esc(g.description) +
+        '</strong> — ' +
+        g.removedCount +
+        ' duplicate cop' +
+        (g.removedCount === 1 ? 'y' : 'ies') +
+        ' removed, earliest copy kept. Medicus’s own list shows this after a page refresh.</div>'
+      );
+    }
+    if (!g.open) {
+      return (
+        '<div class="ms-pn-card"><div class="ms-pn-card-main"><strong>' +
+        esc(g.description) +
+        '</strong> — ' +
+        g.entries.length +
+        ' copies with the same code.</div>' +
+        '<button type="button" class="ms-pn-link-btn ms-pn-merge-open" data-gidx="' +
+        gIdx +
+        '">Merge…</button></div>'
+      );
+    }
+    var rows = g.entries
+      .map(function (e) {
+        var notes = [];
+        if (e.hasChildren) notes.push('has nested children — kept; merge it via the Duplicate Checker or Medicus');
+        if (e.additionalInformation)
+          notes.push('has additional info — removing loses it; compare in the Duplicate Checker first');
+        var err = g.errors[e.id];
+        return (
+          '<label class="ms-pn-man-child-row">' +
+          '<input type="radio" name="ms-pn-merge-keeper-' +
+          gIdx +
+          '" class="ms-pn-merge-keeper" data-gidx="' +
+          gIdx +
+          '" data-entry-id="' +
+          esc(e.id) +
+          '"' +
+          (g.keeperId === e.id ? ' checked' : '') +
+          (g.removing ? ' disabled' : '') +
+          '>' +
+          '<span>' +
+          esc(e.description) +
+          (g.keeperId === e.id ? ' <em class="ms-pn-merge-keep-tag">keep this copy</em>' : '') +
+          (notes.length ? ' <em class="ms-pn-man-child-note">(' + esc(notes.join('; ')) + ')</em>' : '') +
+          '</span>' +
+          (err ? '<span class="ms-pn-card-error">' + esc(err) + '</span>' : '') +
+          '</label>'
+        );
+      })
+      .join('');
+    var removable = removableDuplicateIds(g.entries, g.keeperId);
+    var confirmHtml = '';
+    if (g.confirming && removable.length) {
+      var kept = g.entries.filter(function (e) {
+        return removable.indexOf(e.id) === -1;
+      });
+      confirmHtml =
+        '<div class="ms-pn-confirm">KEEPING ' +
+        kept
+          .map(function (e) {
+            return '<strong>' + esc(e.description) + '</strong>';
+          })
+          .join(', ') +
+        ' · REMOVING ' +
+        removable.length +
+        ' cop' +
+        (removable.length === 1 ? 'y' : 'ies') +
+        ' via Medicus’s mark-incorrect-and-hidden — removed copies are hidden from the record as recorded-in-error, ' +
+        'not end-dated, and there is no known undo endpoint. Reason recorded against each: ' +
+        '<input type="text" class="ms-pn-merge-reason" data-gidx="' +
+        gIdx +
+        '" value="' +
+        esc(g.reason) +
+        '" maxlength="120">' +
+        '<div class="ms-pn-confirm-actions">' +
+        '<button type="button" class="ms-pn-cancel ms-pn-merge-back" data-gidx="' +
+        gIdx +
+        '"' +
+        (g.removing ? ' disabled' : '') +
+        '>Back</button>' +
+        '<button type="button" class="ms-pn-confirm-btn ms-pn-merge-confirm" data-gidx="' +
+        gIdx +
+        '"' +
+        (g.removing || !(g.reason || '').trim() ? ' disabled' : '') +
+        '>' +
+        (g.removing
+          ? 'Removing…'
+          : 'Confirm — remove ' + removable.length + ' cop' + (removable.length === 1 ? 'y' : 'ies')) +
+        '</button>' +
+        '</div></div>';
+    }
+    return (
+      '<div class="ms-pn-card">' +
+      '<div class="ms-pn-card-main"><strong>' +
+      esc(g.description) +
+      '</strong> — pick the copy to KEEP; every other removable copy is removed.</div>' +
+      '<div class="ms-pn-man-children">' +
+      rows +
+      '</div>' +
+      (g.confirming
+        ? confirmHtml
+        : '<button type="button" class="ms-pn-link-btn ms-pn-merge-review" data-gidx="' +
+          gIdx +
+          '"' +
+          (removable.length && !g.removing ? '' : ' disabled') +
+          '>Review merge (' +
+          removable.length +
+          ' to remove)…</button>') +
+      '</div>'
+    );
+  }
+
+  function mergeSectionHtml() {
+    var live = _mergeGroups.filter(function (g) {
+      return g.done || g.entries.length >= 2;
+    });
+    if (!live.length) return '';
+    return (
+      '<div class="ms-pn-manual">' +
+      '<div class="ms-pn-manual-title">Merge duplicate copies</div>' +
+      '<div class="ms-pn-manual-note">Same code recorded more than once. Pick a keeper and the other copies are ' +
+      'retired the same way the Duplicate Problem Checker does it — for anything beyond same-code copies (or to ' +
+      'compare details first), use the full Duplicate Checker from the panel.</div>' +
+      live
+        .map(function (g) {
+          return mergeGroupHtml(g, _mergeGroups.indexOf(g));
+        })
+        .join('') +
+      '</div>'
+    );
+  }
+
   function problemDescription(problemId) {
     var p = _problems.find(function (x) {
       return x.id === problemId;
@@ -675,31 +1034,16 @@
     return p ? p.description : null;
   }
 
-  // The manual link builder — the clinician's own pairing, no SNOMED gate.
-  // Same per-link explicit confirm and the same commit path as the suggestion
-  // cards; the confirm copy additionally calls out a re-parent (moving a
-  // problem that already has a parent) and a same-code pair (probably a
+  // The manual link builder — parent-first, multi-child, the clinician's own
+  // grouping, no SNOMED gate. Pick the parent "title", tick every problem to
+  // nest under it, then ONE explicit confirm that lists the whole batch by
+  // name. The confirm copy additionally calls out re-parents (ticked problems
+  // that already have a parent get MOVED) and same-code picks (probably a
   // duplicate — pointed at the right tool, but not blocked: clinical call).
+  // Commits are still one confirmed POST per child (see confirmManualBatch).
   function manualHtml() {
     var m = _manual;
-    var childOptions = _problems
-      .map(function (p) {
-        var currentParentId = _parentIdByProblemId[p.id] || null;
-        var currentParentDesc = currentParentId ? problemDescription(currentParentId) : null;
-        return (
-          '<option value="' +
-          esc(p.id) +
-          '"' +
-          (m.childId === p.id ? ' selected' : '') +
-          '>' +
-          esc(p.description) +
-          (currentParentDesc ? ' (currently under ' + esc(currentParentDesc) + ')' : '') +
-          '</option>'
-        );
-      })
-      .join('');
-    var parentOpts = manualParentOptions(m.childId, _problems, _parentIdByProblemId);
-    var parentOptions = parentOpts
+    var parentOptions = _problems
       .map(function (p) {
         return (
           '<option value="' +
@@ -713,6 +1057,46 @@
       })
       .join('');
 
+    var childListHtml = '';
+    if (m.parentId) {
+      var candidates = manualChildOptions(m.parentId, _problems, _parentIdByProblemId);
+      var pi = _infoById[m.parentId];
+      childListHtml =
+        '<div class="ms-pn-man-children">' +
+        candidates
+          .map(function (p) {
+            var currentParentId = _parentIdByProblemId[p.id] || null;
+            var notes = [];
+            if (currentParentId) {
+              notes.push(
+                'currently under ' + (problemDescription(currentParentId) || 'another problem') + ' — will move'
+              );
+            }
+            var ci = _infoById[p.id];
+            if (ci && pi && ci.conceptId && ci.conceptId === pi.conceptId) {
+              notes.push('same code as the parent — duplicate?');
+            }
+            var err = m.childErrors[p.id];
+            return (
+              '<label class="ms-pn-man-child-row">' +
+              '<input type="checkbox" class="ms-pn-man-child-cb" data-child-id="' +
+              esc(p.id) +
+              '"' +
+              (m.childIds[p.id] ? ' checked' : '') +
+              (m.linking ? ' disabled' : '') +
+              '>' +
+              '<span>' +
+              esc(p.description) +
+              (notes.length ? ' <em class="ms-pn-man-child-note">(' + esc(notes.join('; ')) + ')</em>' : '') +
+              '</span>' +
+              (err ? '<span class="ms-pn-card-error">' + esc(err) + '</span>' : '') +
+              '</label>'
+            );
+          })
+          .join('') +
+        '</div>';
+    }
+
     var linkedHtml = _manualLinked
       .map(function (l) {
         return (
@@ -725,33 +1109,35 @@
       })
       .join('');
 
+    var selected = manualSelectedChildIds();
     var confirmHtml = '';
-    if (m.confirming && m.childId && m.parentId) {
-      var childDesc = problemDescription(m.childId) || '';
+    if (m.confirming && m.parentId && selected.length) {
       var parentDesc = problemDescription(m.parentId) || '';
-      var currentParent = _parentIdByProblemId[m.childId] || null;
-      var moveNote = '';
-      if (currentParent) {
-        moveNote =
-          ' It is currently nested under <strong>' +
-          esc(problemDescription(currentParent) || 'another problem') +
-          '</strong> — confirming MOVES it to the new parent.';
-      }
-      var ci = _infoById[m.childId];
-      var pi = _infoById[m.parentId];
-      var sameCodeNote =
-        ci && pi && ci.conceptId && ci.conceptId === pi.conceptId
-          ? ' Both problems carry the SAME SNOMED code — if these are duplicate entries rather than parent/child, ' +
-            'the Duplicate Problem Checker is the better tool; nesting keeps both active.'
-          : '';
+      var moveCount = selected.filter(function (id) {
+        return !!_parentIdByProblemId[id];
+      }).length;
       confirmHtml =
-        '<div class="ms-pn-confirm">This will nest <strong>' +
-        esc(childDesc) +
-        '</strong> under <strong>' +
+        '<div class="ms-pn-confirm">This will nest ' +
+        selected.length +
+        ' problem' +
+        (selected.length === 1 ? '' : 's') +
+        ' under <strong>' +
         esc(parentDesc) +
-        '</strong> — it will display as a child on the problem list, not as a top-level problem.' +
-        moveNote +
-        sameCodeNote +
+        '</strong> — each will display as a child on the problem list, not as a top-level problem:' +
+        '<ul class="ms-pn-confirm-list">' +
+        selected
+          .map(function (id) {
+            return '<li>' + esc(problemDescription(id) || id) + '</li>';
+          })
+          .join('') +
+        '</ul>' +
+        (moveCount > 0
+          ? ' ' +
+            moveCount +
+            ' of these already ' +
+            (moveCount === 1 ? 'has' : 'have') +
+            ' a parent and will be MOVED to the new one.'
+          : '') +
         ' There is no bulk undo; un-nesting is done in Medicus, one problem at a time.' +
         '<div class="ms-pn-confirm-actions">' +
         '<button type="button" class="ms-pn-cancel" id="ms-pn-man-cancel"' +
@@ -760,37 +1146,42 @@
         '<button type="button" class="ms-pn-confirm-btn" id="ms-pn-man-confirm"' +
         (m.linking ? ' disabled' : '') +
         '>' +
-        (m.linking ? 'Linking…' : 'Confirm — nest it') +
+        (m.linking
+          ? 'Linking…'
+          : 'Confirm — nest ' + selected.length + ' problem' + (selected.length === 1 ? '' : 's')) +
         '</button>' +
         '</div></div>';
     }
 
+    var failedCount = Object.keys(m.childErrors).length;
     return (
       '<div class="ms-pn-manual">' +
       '<div class="ms-pn-manual-title">Link manually</div>' +
-      '<div class="ms-pn-manual-note">Your pairing, your call — no SNOMED gate. Pick the problem to nest, then its parent.</div>' +
-      '<div class="ms-pn-manual-row">Nest ' +
-      '<select class="ms-pn-parent-select" id="ms-pn-man-child">' +
-      '<option value=""' +
-      (m.childId ? '' : ' selected') +
-      ' disabled>Choose problem…</option>' +
-      childOptions +
-      '</select>' +
-      ' under ' +
-      '<select class="ms-pn-parent-select" id="ms-pn-man-parent"' +
-      (m.childId ? '' : ' disabled') +
-      '>' +
+      '<div class="ms-pn-manual-note">Your grouping, your call — no SNOMED gate. Pick the parent first, then tick ' +
+      'every problem to nest under it.</div>' +
+      '<div class="ms-pn-manual-row">Under ' +
+      '<select class="ms-pn-parent-select" id="ms-pn-man-parent">' +
       '<option value=""' +
       (m.parentId ? '' : ' selected') +
       ' disabled>Choose parent…</option>' +
       parentOptions +
       '</select>' +
+      ' nest:' +
       ' <button type="button" class="ms-pn-link-btn" id="ms-pn-man-link"' +
-      (m.childId && m.parentId && !m.confirming ? '' : ' disabled') +
-      '>Nest…</button>' +
+      (m.parentId && selected.length && !m.confirming && !m.linking ? '' : ' disabled') +
+      '>Nest ' +
+      (selected.length || '') +
+      ' selected…</button>' +
       '</div>' +
+      childListHtml +
       confirmHtml +
-      (m.linkError ? '<div class="ms-pn-card-error">' + esc(m.linkError) + '</div>' : '') +
+      (failedCount && !m.confirming
+        ? '<div class="ms-pn-card-error">' +
+          failedCount +
+          ' link' +
+          (failedCount === 1 ? '' : 's') +
+          ' failed — the error is shown against each row; they stay ticked so you can retry.</div>'
+        : '') +
       linkedHtml +
       '</div>'
     );
@@ -837,6 +1228,7 @@
       body =
         '<div class="ms-pn-body">' +
         suggestionsHtml +
+        mergeSectionHtml() +
         manualHtml() +
         (linkedCount > 0
           ? '<div class="ms-pn-footer">' +
@@ -881,23 +1273,26 @@
         }
       });
     });
-    el.querySelector('#ms-pn-man-child')?.addEventListener('change', function (e) {
-      _manual.childId = e.target.value || null;
-      // A new child invalidates the old parent pick (it may now be the child
-      // itself, or cycle-filtered out) and any open confirm.
-      _manual.parentId = null;
-      _manual.confirming = false;
-      _manual.linkError = null;
-      render();
-    });
     el.querySelector('#ms-pn-man-parent')?.addEventListener('change', function (e) {
       _manual.parentId = e.target.value || null;
+      // A new parent invalidates the ticked set (candidates and cycle
+      // filtering both change) and any open confirm.
+      _manual.childIds = {};
       _manual.confirming = false;
-      _manual.linkError = null;
+      _manual.childErrors = {};
       render();
     });
+    el.querySelectorAll('.ms-pn-man-child-cb').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var id = cb.getAttribute('data-child-id');
+        if (cb.checked) _manual.childIds[id] = true;
+        else delete _manual.childIds[id];
+        _manual.confirming = false;
+        render();
+      });
+    });
     el.querySelector('#ms-pn-man-link')?.addEventListener('click', function () {
-      if (_manual.childId && _manual.parentId) {
+      if (_manual.parentId && manualSelectedChildIds().length) {
         _manual.confirming = true;
         render();
       }
@@ -907,7 +1302,62 @@
       render();
     });
     el.querySelector('#ms-pn-man-confirm')?.addEventListener('click', function () {
-      confirmManualLink();
+      confirmManualBatch();
+    });
+    el.querySelectorAll('.ms-pn-merge-open').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
+        if (g) {
+          g.open = true;
+          render();
+        }
+      });
+    });
+    el.querySelectorAll('.ms-pn-merge-keeper').forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        var g = _mergeGroups[Number(radio.getAttribute('data-gidx'))];
+        if (g && radio.checked) {
+          g.keeperId = radio.getAttribute('data-entry-id');
+          g.confirming = false;
+          render();
+        }
+      });
+    });
+    el.querySelectorAll('.ms-pn-merge-review').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
+        if (g && removableDuplicateIds(g.entries, g.keeperId).length) {
+          g.confirming = true;
+          render();
+        }
+      });
+    });
+    el.querySelectorAll('.ms-pn-merge-back').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
+        if (g) {
+          g.confirming = false;
+          render();
+        }
+      });
+    });
+    el.querySelectorAll('.ms-pn-merge-reason').forEach(function (input) {
+      input.addEventListener('input', function () {
+        var g = _mergeGroups[Number(input.getAttribute('data-gidx'))];
+        if (!g) return;
+        g.reason = input.value;
+        // No full re-render on every keystroke (it would drop focus
+        // mid-word); just keep the confirm button's disabled state honest —
+        // same discipline as problem-bulk-end's reason input.
+        var btn = el.querySelector('.ms-pn-merge-confirm[data-gidx="' + input.getAttribute('data-gidx') + '"]');
+        if (btn) btn.disabled = g.removing || !(g.reason || '').trim();
+      });
+    });
+    el.querySelectorAll('.ms-pn-merge-confirm').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
+        if (g) confirmMergeGroup(g);
+      });
     });
     el.querySelectorAll('.ms-pn-link-btn[data-idx]').forEach(function (btn) {
       btn.addEventListener('click', function () {

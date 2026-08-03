@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.215.0
+**Version:** v3.217.0
 **Generated:** 2026-08-03 (automated)
 
 ## What it is
@@ -143,7 +143,7 @@ The **full Rota Manager** (its own browser tab) covers working patterns and mult
 - **Reception quick-actions composer** — three chip rows (Action / With whom / Timeframe) above a task's Internal Comment box; inserts plain-English text only, the clinician still presses Medicus's own Submit
 - **Clean up code** — flags outdated/retired SNOMED problem-list codes and suggests a cleaner description or replacement code
 - **Bulk end problems** — inline checkboxes next to every active problem on the Clinical Summary (care-record page and the task view's embedded summary panel alike), for ending several entries in one batch
-- **Nest problems** — a "Nest problems?" trigger on the Clinical Summary (care-record page and the task view's embedded summary panel alike) that suggests parent/child links between problems already coded on the record from SNOMED ancestry, plus a manual "Link manually" builder for the clinician's own pairings; every link individually confirmed
+- **Nest problems** — a "Nest problems?" trigger on the Clinical Summary (care-record page and the task view's embedded summary panel alike) that suggests parent/child links between problems already coded on the record from SNOMED ancestry, plus a manual "Link manually" builder for the clinician's own groupings (pick a parent, tick several problems, confirm the batch); every batch explicitly confirmed with each problem listed — and an in-panel "Merge duplicate copies" section that retires same-code duplicate problems (keeper chosen, others removed via the Duplicate Checker's confirmed removal write)
 - **Allergy cleanup suite** — one "Clean up allergies?" trigger on the Clinical Summary (care-record page and the task view's embedded summary panel alike) covering junk/import-artefact code removal, duplicate-entry merge (with per-card exclude and an explicit clinical-decision review step), clearing a stale legacy code alongside an already-correct one, and converting a legacy pre-defined-allergy code to a proper coded substance — every action requires explicit confirmation, nothing is auto-applied
 - **Pusher relay** — keeps the panel's live data current via the practice's real-time feed
 - **Referrals discovery** — watches the referrals audit-report page and feeds discovered data to the Referrals Tracker tab
@@ -181,6 +181,8 @@ The shipped alert library carries 35 starter alerts a practice can enable (32 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.217.0 (2026-08-03)** — Nest problems gains an in-panel "Merge duplicate copies" section: same-code duplicate problems merged down to a chosen keeper using the Duplicate Checker's confirmed removal contract, with children-protected copies excluded and additional-info copies cautioned.
+- **v3.216.0 (2026-08-03)** — Nest problems' manual builder goes parent-first and multi-child: tick several problems and nest them under one parent in a single confirmed batch.
 - **v3.215.0 (2026-08-03)** — Nest problems gains a manual "Link manually" builder: nest any problem under any other (re-parenting and same-code pairs included, cycle-guarded), alongside the SNOMED-ancestry suggestions.
 - **v3.214.0 (2026-08-03)** — "Nest problems?": suggested parent/child problem links on the Clinical Summary, driven by SNOMED ancestry between the problems already on the record, each link individually reviewed and confirmed; works on both the care-record and task ("split") pages.
 - **v3.213.0 (2026-08-03)** — "Bulk remove?" and "Clean up allergies?" now also run on the task ("split") page's embedded Clinical Summary panel, not just the full care-record page — same scans, review steps and confirmations, with the patient resolved from the task itself.
