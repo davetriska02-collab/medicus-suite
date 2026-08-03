@@ -19,7 +19,7 @@ resolves against Medicus's OWN concept index (the runtime resolution path).
   Product code must treat empty-with-missing-param as its own failure mode
   (four-state honesty: "search did not run correctly" ≠ "no matches").
 - **Response shape** exactly as SNOMED-API-GUIDE.md: `{results:[{label,
-  value:{description, conceptId, descriptionId, parentConceptIds?}}]}`.
+value:{description, conceptId, descriptionId, parentConceptIds?}}]}`.
 - **All 14 extractor corpus terms resolve** (constrained to 404684003
   Clinical finding, `outputParentConceptIds=1`): 12/14 with the exact concept
   as top hit, incl. Community acquired pneumonia→385093006 (unique match),
@@ -34,6 +34,7 @@ resolves against Medicus's OWN concept index (the runtime resolution path).
   canonical tier-calibration example.
 
 ## Still to confirm
+
 - Same calls from the extension's isolated world (expected fine — host
   permission exists); the §14 capture session Q1–Q6 remain open.
 
@@ -42,6 +43,7 @@ resolves against Medicus's OWN concept index (the runtime resolution path).
 # Part 2 — Document-processing capture, Q1/Q2 answered (2026-08-03, live)
 
 ## Q1 — the queue (CONFIRMED)
+
 - `GET /tasks/data/document_task/task-list?statuses[]=pending-initial-review&statuses[]=awaiting-filing&statuses[]=awaiting-patient-registration&viewContext=workflow`
 - Rows carry everything the Phase-4 worklist line needs: `documentCode`
   (SNOMED doc type), `documentType`, `author`, `patientName`, `namedGp`,
@@ -53,8 +55,10 @@ resolves against Medicus's OWN concept index (the runtime resolution path).
   triage-lens queue fetch for document tasks.
 
 ## Q2 — how content is served (CONFIRMED — the go/no-go passes)
+
 Task overview (`/tasks/data/document/overview/{taskId}`) returns
 `data.versionId` + `data.fileId`; then:
+
 - `GET /clinical/data/document/modals/version/preview/{versionId}` →
   attachment metadata: `fileType` (e.g. `text/xml`), `fileName`
   (`kettering_*.xml`), `fileRoute` (`xml/gb-nhs-kettering`).
@@ -74,6 +78,7 @@ Task overview (`/tasks/data/document/overview/{taskId}`) returns
   sections) — probe later.
 
 ## Q3 partial — coding surface (from overview payload, clicks pending)
+
 - Existing coded entries: `GET /clinical/document/entries/{documentId}` →
   `entries[]` with `type` (seen: `note`), `code` (null for notes), `text`,
   `onClickUrl`. Card is titled "Codes & Actions" (anchor for the widget).
@@ -111,8 +116,8 @@ NOT reproduced anywhere.)
 - **Coded entry on a document**:
   `POST /clinical/document/{documentId}/change-notes` with
   `{ notesToSave: [{ uuid (client-generated v7-style), entryType: "note",
-     code: { description, conceptId, descriptionId, parentConceptIds[] } }],
-     sortOrder: [{id, entryType}...], sortOrderHash }`
+   code: { description, conceptId, descriptionId, parentConceptIds[] } }],
+   sortOrder: [{id, entryType}...], sortOrderHash }`
   → responds `{ sortOrderHash }` (optimistic concurrency: GET
   `/clinical/document/entries/{documentId}` first, replay its hash; each
   write returns the next hash). Free-text note = same call with `text`
@@ -124,14 +129,14 @@ NOT reproduced anywhere.)
   No transformation layer needed.
 - **Filing**: `POST /clinical/inbound-document-task/complete { taskId }`;
   conveyor `GET /task-list/document_task/next-task/{taskId}` → `{ route,
-  foundNextTask }`. Entries become `isFinalised: true` after filing.
+foundNextTask }`. Entries become `isFinalised: true` after filing.
 - **Coded-data lane exists natively**: document entries can be
   `type: "observation"` (BP/weight/pulse coded from letters) — created via
   the codesAndActionsOptions observation URL. The plan's copy-assist lane
   has a real write path behind it (still human-gated, Phase 3+ and CSO).
 - **File lane completed**: `GET /tasks/data/document/file/document-preview/
-  {fileId}` → `{ fileType, conversionInProgress, conversionFailed,
-  rendersAsPdf, conversionFailureReason }` then
+{fileId}` → `{ fileType, conversionInProgress, conversionFailed,
+rendersAsPdf, conversionFailureReason }` then
   `GET /clinical/document/download-file/{fileId}?convertToPDF=1` →
   application/pdf. Server converts non-PDF uploads; `rendersAsPdf` and the
   conversion flags are clean COULD-NOT-READ signals.
@@ -150,13 +155,13 @@ only — no patient data in the capture).
 
 Lane mix:
 
-| Lane | Count | Meaning for the reader |
-|---|---|---|
-| `file-pdf` | 25 | uploaded/scanned file, `rendersAsPdf` → PDF.js lane |
-| `kettering-pdf` | 9 | Kettering XML wrapping a PDF payload → PDF.js lane |
-| `kettering-tif` | 5 | TIF image payload → **COULD-NOT-READ** (no text layer) |
-| `kettering-html` | 1 | `clinicalReport` letter HTML → the fast structured lane |
-| failures / unknown / no-content | 0 | every task classified cleanly |
+| Lane                            | Count | Meaning for the reader                                  |
+| ------------------------------- | ----- | ------------------------------------------------------- |
+| `file-pdf`                      | 25    | uploaded/scanned file, `rendersAsPdf` → PDF.js lane     |
+| `kettering-pdf`                 | 9     | Kettering XML wrapping a PDF payload → PDF.js lane      |
+| `kettering-tif`                 | 5     | TIF image payload → **COULD-NOT-READ** (no text layer)  |
+| `kettering-html`                | 1     | `clinicalReport` letter HTML → the fast structured lane |
+| failures / unknown / no-content | 0     | every task classified cleanly                           |
 
 Document types over the same 40: Clinical letter 22, A&E report 3,
 Discharge letter 3, Prescription 2, Administration section 2, Discharge
