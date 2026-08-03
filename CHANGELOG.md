@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.214.0] — 2026-08-03
+
+### New: "Nest problems?" — suggested parent/child links on the Clinical Summary
+
+Related problems often sit flat next to each other ("Insertion of coronary artery stent" beside
+"Percutaneous balloon coronary angioplasty") when Medicus can nest one under the other as a child
+problem — but Medicus's own UI is one manual slideover per link. New "Nest problems?" trigger on
+the problem list (`content-scripts/problem-nesting.js`, sharing the Major-heading row with "Bulk
+remove?" and the retired-codes check) scans the active problems and suggests child→parent pairs,
+each confirmed individually. Works on both the care-record page and the task ("split") page.
+
+Built on the contract captured live 2026-08-03 (`scripts/problem-nesting-capture.js` run on a test
+record — full write-up in `docs/learnings-problem-nesting-api.md`):
+
+- **Write path**: `POST /clinical/problem/update-parent-problem` `{patientId, problemId,
+  parentProblemId}` — exactly three fields, confirmed 200. The parent-side sibling
+  (`update-child-problems`) is deliberately NOT used: its `childProblemsToAdd` array is a **full
+  replace** of the child set despite the name (the captured Vue form seeds it with the existing
+  children), so posting one id to a parent that already has children would silently unlink the
+  others.
+- **Suggestion model**: a pair is offered only when the child's conceptId is a genuine SNOMED
+  descendant of another on-record problem's conceptId (the same confirmed constrained-search
+  mechanism as the bulk-remove badge scan). Identical concepts never pair (that's a duplicate, not
+  a hierarchy), and a problem that already has a parent is never re-parented by suggestion. The
+  widget never invents codes and never links anything automatically.
+- **Safety posture**: per-pair explicit confirm with both problems echoed back by name (nesting
+  visually demotes a problem on the list — a wrong link is a visibility change on the live record);
+  cycle guard at render time AND re-checked at commit time against the live link map; failed POSTs
+  surface the server's message per card; every committed link recorded in the Clinical Event Ledger
+  (patient UUID + fixed label only); no auto-reload — "Refresh page" offered instead. Unlink is not
+  offered (the null-parent shape is inferred from the Vue form but has never been captured live).
+
 ## [v3.213.1] — 2026-08-03
 
 ### Dev tooling: problem parent/child ("nesting") contract capture script
