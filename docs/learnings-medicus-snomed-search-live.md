@@ -88,3 +88,17 @@ Task overview (`/tasks/data/document/overview/{taskId}`) returns
   with description/onsetDate/significance) — the delta's record-side join
   may be even more direct than problem-list matching.
 - `ocrStatus: null` field exists — Medicus has OCR plumbing (watch item).
+
+## Part 3 — Q3 write path + non-Kettering lane (2026-08-03, live)
+
+- **Coding writes on a document go through
+  `POST /clinical/document/{documentId}/change-notes`** (fired ×3 during a
+  live coding action on the Codes & Actions card) — request body shape
+  pending from dump. Task completion/filing:
+  `POST /clinical/inbound-document-task/complete`. Workflow conveyor:
+  `GET /task-list/document_task/next-task/{taskId}`.
+- **Non-Kettering (file/scan) lane CONFIRMED:** file documents preview via
+  `GET /tasks/data/document/file/document-preview/{fileId}` and serve their
+  bytes via `GET /clinical/document/download-file/{fileId}` — the generic
+  content read for uploaded/scanned letters (PDF.js or COULD-NOT-READ lane
+  depending on text layer).
