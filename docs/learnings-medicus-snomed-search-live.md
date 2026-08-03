@@ -142,3 +142,42 @@ NOT reproduced anywhere.)
 **Capture session Q1/Q2/Q3/Q5/Q6 CLOSED.** Remaining: Q4 outerHTML anchor
 snippets (any time), Q7 letter-format tally (ongoing). Phase 1 can build
 against confirmed contracts end to end.
+
+## Part 5 — Q7 content-lane tally, CLOSED (2026-08-03, live)
+
+Whole-queue sweep of a real working inbox (40 pending document tasks; counts
+only — no patient data in the capture).
+
+Lane mix:
+
+| Lane | Count | Meaning for the reader |
+|---|---|---|
+| `file-pdf` | 25 | uploaded/scanned file, `rendersAsPdf` → PDF.js lane |
+| `kettering-pdf` | 9 | Kettering XML wrapping a PDF payload → PDF.js lane |
+| `kettering-tif` | 5 | TIF image payload → **COULD-NOT-READ** (no text layer) |
+| `kettering-html` | 1 | `clinicalReport` letter HTML → the fast structured lane |
+| failures / unknown / no-content | 0 | every task classified cleanly |
+
+Document types over the same 40: Clinical letter 22, A&E report 3,
+Discharge letter 3, Prescription 2, Administration section 2, Discharge
+report 2, Shared-care management plan 2, Home-visit admin 1, DNA letter 1,
+Discharge summary 1, Telephone consultation 1.
+
+**What this decides (feeds plan §reality-stats):**
+
+- **PDF.js is the critical path, not an optional lane** — 34/40 (85%) of the
+  real inbox renders as PDF. Phase 1 text extraction must lead with the
+  PDF.js pipeline; the Kettering `clinicalReport` HTML fast path is real but
+  rare (1/40) and cannot carry the feature.
+- **COULD-NOT-READ share ≈ 12%** (5/40 TIFs). The four-state honesty model's
+  "could not read this document" state will show on roughly one task in
+  eight — it is a routine state, not an edge case, so its UI copy matters.
+- **Zero conversion failures / unknowns** in the sweep — the lane classifier
+  logic (preview-endpoint flags) covers the real distribution completely.
+- Incidental re-confirmation: the extension's `document_task` overview-slug
+  bug (api-client.js `resolveTaskToPatient`) 404-spammed twice per task
+  throughout the sweep — fix queued.
+
+**Capture programme status: only Q4 (Codes & Actions card outerHTML anchor)
+still open.** Everything else Phase 1 needs is confirmed against the live
+system.
