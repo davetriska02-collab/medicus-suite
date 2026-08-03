@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.216.0] — 2026-08-03
+
+### Nest problems: manual builder goes parent-first and multi-child
+
+Feedback on v3.215.0 within the hour: several problems usually belong under one "title" problem,
+and one-pair-at-a-time was too slow. The "Link manually" section is now parent-first — choose the
+parent, tick every problem to nest under it (a scrollable checklist replaces the child dropdown),
+and confirm the whole batch once, with every child listed by name and a count of any that will be
+MOVED from an existing parent.
+
+The write path is unchanged and deliberately so: one confirmed `update-parent-problem` POST per
+child, committed sequentially — never `update-child-problems` (the full-replace trap). Each child
+re-passes the commit-time cycle guard individually; a failed link records its error against its own
+row and stays ticked for retry while the rest of the batch carries on. Per-child annotations in the
+checklist ("currently under X — will move", "same code as the parent — duplicate?") replace the old
+confirm-step notes.
+
 ## [v3.215.0] — 2026-08-03
 
 ### Nest problems: manual "Link manually" builder

@@ -17,7 +17,7 @@ const {
   resolveOverviewConceptId,
   wouldCreateCycle,
   buildNestingSuggestions,
-  manualParentOptions,
+  manualChildOptions,
   apiErrorMessage,
   resultContainsConceptId,
   parseCareRecordPath,
@@ -141,7 +141,7 @@ console.log('--- buildNestingSuggestions: the safety rules ---');
   check(buildNestingSuggestions(null, null, null).length === 0, 'null inputs -> empty, never throws');
 }
 
-console.log('--- manualParentOptions: the manual builder is looser, except the cycle guard ---');
+console.log('--- manualChildOptions: the manual builder is looser, except the cycle guard ---');
 {
   const problems = [
     { id: 'an1', description: 'Anorexia nervosa' },
@@ -149,33 +149,33 @@ console.log('--- manualParentOptions: the manual builder is looser, except the c
     { id: 'brady', description: 'Bradycardia' },
     { id: 'dep', description: 'Depression' },
   ];
-  const opts = manualParentOptions('brady', problems, {});
-  check(opts.length === 3, 'every other problem is a candidate parent — no SNOMED gate');
-  check(!opts.some((o) => o.id === 'brady'), 'the child itself is never a parent option');
+  const opts = manualChildOptions('an1', problems, {});
+  check(opts.length === 3, 'every other problem is a candidate child — no SNOMED gate');
+  check(!opts.some((o) => o.id === 'an1'), 'the parent itself is never a child option');
   check(
-    manualParentOptions('an1', problems, {}).some((o) => o.id === 'an2'),
+    opts.some((o) => o.id === 'an2'),
     "a same-code problem IS offered manually (duplicate-vs-hierarchy is the clinician's call here)"
   );
   // Cycle guard stays hard: dep is already under brady, brady under an1 —
-  // an1 must not be offered brady or dep as a parent.
+  // nesting an1 (or brady) under dep would loop, so neither is a candidate.
   const map = { dep: 'brady', brady: 'an1' };
-  const an1opts = manualParentOptions('an1', problems, map);
+  const depOpts = manualChildOptions('dep', problems, map);
   check(
-    !an1opts.some((o) => o.id === 'brady') && !an1opts.some((o) => o.id === 'dep'),
-    'descendants in the LINK graph are cycle-filtered out'
+    !depOpts.some((o) => o.id === 'an1') && !depOpts.some((o) => o.id === 'brady'),
+    'ancestors in the LINK graph are cycle-filtered out of the child list'
   );
   check(
-    an1opts.some((o) => o.id === 'an2'),
+    depOpts.some((o) => o.id === 'an2'),
     'unrelated problems still offered'
   );
-  // A problem that already has a parent is still a valid PARENT option
-  // (multi-level hierarchy is confirmed).
+  // A problem that already has a parent is still offered as a CHILD (that's a
+  // re-parent — annotated in the UI and called out at confirm, not blocked).
   check(
-    manualParentOptions('an2', problems, map).some((o) => o.id === 'brady'),
-    'an already-parented problem can still BE a parent (multi-level)'
+    manualChildOptions('an2', problems, map).some((o) => o.id === 'brady'),
+    'an already-parented problem is still offered (re-parent, annotated)'
   );
-  check(manualParentOptions(null, problems, {}).length === 0, 'no child chosen -> no options');
-  check(manualParentOptions('x', null, {}).length === 0, 'null problems -> empty, never throws');
+  check(manualChildOptions(null, problems, {}).length === 0, 'no parent chosen -> no options');
+  check(manualChildOptions('x', null, {}).length === 0, 'null problems -> empty, never throws');
 }
 
 console.log('--- resultContainsConceptId (descendant-search reader) ---');
