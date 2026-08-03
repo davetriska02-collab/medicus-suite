@@ -28,6 +28,11 @@
 
 'use strict';
 
+// A fixture day that is ALWAYS in the future — the original hard-coded
+// '2026-08-03' rotted the day the calendar reached it (booking-core clamps
+// today's minDateTime to now, not midnight), turning CI red on 2026-08-03.
+const FUTURE_DAY = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+
 let passed = 0;
 let failed = 0;
 
@@ -109,12 +114,12 @@ const API = 'https://ab12cd.api.england.medicus.health';
   {
     const f = recordingFetch({
       availablePlaces: {
-        '2026-08-03': {
+        [FUTURE_DAY]: {
           diaries: [
             {
               entries: [
-                { diaryEntryType: { isSlot: true }, startDateTime: '2026-08-03 09:00:00' },
-                { diaryEntryType: { isSlot: false }, startDateTime: '2026-08-03 09:30:00' },
+                { diaryEntryType: { isSlot: true }, startDateTime: `${FUTURE_DAY} 09:00:00` },
+                { diaryEntryType: { isSlot: false }, startDateTime: `${FUTURE_DAY} 09:30:00` },
               ],
             },
           ],
@@ -125,7 +130,7 @@ const API = 'https://ab12cd.api.england.medicus.health';
     const slots = await core.fetchAvailableSlots(API, {
       providerId: 'prov-1',
       appointmentTypeId: 'type-1',
-      date: '2026-08-03',
+      date: `${FUTURE_DAY}`,
     });
     const url = f.calls[0].url;
     check(
@@ -139,7 +144,7 @@ const API = 'https://ab12cd.api.england.medicus.health';
       'fetchAvailableSlots query pins providerIsLocalOrganisation'
     );
     check(
-      qs.get('minDateTime') === '2026-08-03 00:00:00',
+      qs.get('minDateTime') === `${FUTURE_DAY} 00:00:00`,
       'fetchAvailableSlots query pins minDateTime (future date → midnight)'
     );
     check(
@@ -155,7 +160,7 @@ const API = 'https://ab12cd.api.england.medicus.health';
     setFetch(f);
     await core.reserveSlot(API, {
       diaryId: 'diary-1',
-      startDateTime: '2026-08-03 09:00:00',
+      startDateTime: `${FUTURE_DAY} 09:00:00`,
       duration: 10,
       appointmentTypeId: 'type-1',
     });
@@ -189,7 +194,7 @@ const API = 'https://ab12cd.api.england.medicus.health';
       'reserveSlot substituteSlotFilters field names pinned'
     );
     check(
-      body.intendedStartDateTime === '2026-08-03 09:00:00',
+      body.intendedStartDateTime === `${FUTURE_DAY} 09:00:00`,
       'reserveSlot maps startDateTime → intendedStartDateTime'
     );
     check(body.intendedDuration === 10, 'reserveSlot maps duration → intendedDuration');
@@ -254,7 +259,7 @@ const API = 'https://ab12cd.api.england.medicus.health';
     diaryId: 'diary-1',
     isHighPriority: false,
     isHiddenFromPatientFacingServices: false,
-    intendedStartDateTime: '2026-08-03 09:00:00',
+    intendedStartDateTime: `${FUTURE_DAY} 09:00:00`,
     reasonForAppointment: null,
     additionalInformation: null,
     embargoOverrideReason: null,
