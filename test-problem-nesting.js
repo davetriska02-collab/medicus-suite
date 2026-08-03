@@ -17,6 +17,7 @@ const {
   resolveOverviewConceptId,
   wouldCreateCycle,
   buildNestingSuggestions,
+  manualParentOptions,
   apiErrorMessage,
   resultContainsConceptId,
   parseCareRecordPath,
@@ -138,6 +139,43 @@ console.log('--- buildNestingSuggestions: the safety rules ---');
   );
 
   check(buildNestingSuggestions(null, null, null).length === 0, 'null inputs -> empty, never throws');
+}
+
+console.log('--- manualParentOptions: the manual builder is looser, except the cycle guard ---');
+{
+  const problems = [
+    { id: 'an1', description: 'Anorexia nervosa' },
+    { id: 'an2', description: 'Anorexia nervosa' },
+    { id: 'brady', description: 'Bradycardia' },
+    { id: 'dep', description: 'Depression' },
+  ];
+  const opts = manualParentOptions('brady', problems, {});
+  check(opts.length === 3, 'every other problem is a candidate parent — no SNOMED gate');
+  check(!opts.some((o) => o.id === 'brady'), 'the child itself is never a parent option');
+  check(
+    manualParentOptions('an1', problems, {}).some((o) => o.id === 'an2'),
+    "a same-code problem IS offered manually (duplicate-vs-hierarchy is the clinician's call here)"
+  );
+  // Cycle guard stays hard: dep is already under brady, brady under an1 —
+  // an1 must not be offered brady or dep as a parent.
+  const map = { dep: 'brady', brady: 'an1' };
+  const an1opts = manualParentOptions('an1', problems, map);
+  check(
+    !an1opts.some((o) => o.id === 'brady') && !an1opts.some((o) => o.id === 'dep'),
+    'descendants in the LINK graph are cycle-filtered out'
+  );
+  check(
+    an1opts.some((o) => o.id === 'an2'),
+    'unrelated problems still offered'
+  );
+  // A problem that already has a parent is still a valid PARENT option
+  // (multi-level hierarchy is confirmed).
+  check(
+    manualParentOptions('an2', problems, map).some((o) => o.id === 'brady'),
+    'an already-parented problem can still BE a parent (multi-level)'
+  );
+  check(manualParentOptions(null, problems, {}).length === 0, 'no child chosen -> no options');
+  check(manualParentOptions('x', null, {}).length === 0, 'null problems -> empty, never throws');
 }
 
 console.log('--- resultContainsConceptId (descendant-search reader) ---');

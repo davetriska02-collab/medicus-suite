@@ -147,6 +147,22 @@
     return out;
   }
 
+  // Parent options for the MANUAL link builder: any OTHER problem the chosen
+  // child could be nested under without creating a loop. Deliberately looser
+  // than buildNestingSuggestions — no SNOMED gate, no same-concept exclusion,
+  // and already-parented problems are valid PARENTS (a parent can itself have
+  // a parent; the hierarchy is confirmed multi-level) — because here the
+  // clinician is making the call, not the terminology. The cycle guard is the
+  // one rule that stays hard: it protects the record's structure, not a
+  // judgement call.
+  function manualParentOptions(childId, problems, parentIdByProblemId) {
+    if (!childId) return [];
+    return (Array.isArray(problems) ? problems : []).filter(function (p) {
+      if (!p || !p.id || p.id === childId) return false;
+      return !wouldCreateCycle(childId, p.id, parentIdByProblemId || {});
+    });
+  }
+
   // Same extraction as problem-bulk-end.js's apiErrorMessage — duplicated (not
   // shared) the same way each content script already carries its own apiFetch.
   function apiErrorMessage(status, bodyText) {
@@ -216,6 +232,7 @@
       resolveOverviewConceptId: resolveOverviewConceptId,
       wouldCreateCycle: wouldCreateCycle,
       buildNestingSuggestions: buildNestingSuggestions,
+      manualParentOptions: manualParentOptions,
       apiErrorMessage: apiErrorMessage,
       resultContainsConceptId: resultContainsConceptId,
       parseCareRecordPath: parseCareRecordPath,
@@ -348,6 +365,14 @@
   // overviews, updated on every committed link so cycle checks and rescans
   // stay honest without refetching.
   var _parentIdByProblemId = {};
+  // Scan products the manual link builder reuses: the active problem list
+  // ({id, description}) and each problem's overview-derived info.
+  var _problems = [];
+  var _infoById = {};
+  // Manual link builder state + this-session committed manual links
+  // ([{childDescription, parentDescription}], display only).
+  var _manual = { childId: null, parentId: null, confirming: false, linking: false, linkError: null };
+  var _manualLinked = [];
 
   function resetForPatient() {
     _problemsCache = null;
@@ -356,6 +381,10 @@
     _scanError = null;
     _suggestions = [];
     _parentIdByProblemId = {};
+    _problems = [];
+    _infoById = {};
+    _manual = { childId: null, parentId: null, confirming: false, linking: false, linkError: null };
+    _manualLinked = [];
   }
 
   // ── Scan (opt-in — only ever runs from the "Nest problems?" click) ───────────
@@ -431,6 +460,8 @@
       );
       if (_lastPatientId !== scanPatientId) return;
 
+      _problems = problems;
+      _infoById = infoById;
       _suggestions = buildNestingSuggestions(problems, infoById, pairHits).map(function (s) {
         return Object.assign({}, s, {
           chosenParentId: s.parentOptions.length === 1 ? s.parentOptions[0].id : null,
@@ -451,6 +482,31 @@
     }
   }
 
+  // Shared commit path for BOTH the suggestion cards and the manual builder:
+  // commit-time cycle hard-guard (independent of what the UI showed — the
+  // live map may have changed since render), the confirmed three-field POST,
+  // the live-map update, and the ledger record. Throws on failure with a
+  // user-facing message.
+  async function commitParentLink(childId, parentId) {
+    if (wouldCreateCycle(childId, parentId, _parentIdByProblemId)) {
+      throw new Error('Linking these two would create a loop — another link committed first. Rescan to refresh.');
+    }
+    await postUpdateParentProblem(buildUpdateParentProblemPayload(_lastPatientId, childId, parentId));
+    _parentIdByProblemId[childId] = parentId;
+    // Machine-local audit trail: patient UUID only, fixed label — never the
+    // problem descriptions (the ledger's no-free-text label rule).
+    if (window.EventLedger) {
+      window.EventLedger.record({
+        source: 'record',
+        patientRef: _lastPatientId,
+        severity: null,
+        ruleId: 'problem-nesting',
+        label: 'Nest problems: 1 link created',
+        action: 'committed',
+      });
+    }
+  }
+
   async function confirmLink(s) {
     if (s.linking || s.linked) return;
     var parentId = s.chosenParentId;
@@ -458,38 +514,47 @@
       return o.id === parentId;
     });
     if (!parent) return;
-    // Commit-time hard guard, independent of what the UI showed — the live
-    // map may have changed since render (another card committed first).
-    if (wouldCreateCycle(s.childId, parentId, _parentIdByProblemId)) {
-      s.linkError = 'Linking these two would create a loop — the other link committed first. Rescan to refresh.';
-      render();
-      return;
-    }
     s.linking = true;
     s.linkError = null;
     render();
     try {
-      await postUpdateParentProblem(buildUpdateParentProblemPayload(_lastPatientId, s.childId, parentId));
+      await commitParentLink(s.childId, parentId);
       s.linked = true;
       s.confirming = false;
       s.linkedParentDescription = parent.description;
-      _parentIdByProblemId[s.childId] = parentId;
-      // Machine-local audit trail: patient UUID only, fixed label — never the
-      // problem descriptions (the ledger's no-free-text label rule).
-      if (window.EventLedger) {
-        window.EventLedger.record({
-          source: 'record',
-          patientRef: _lastPatientId,
-          severity: null,
-          ruleId: 'problem-nesting',
-          label: 'Nest problems: 1 link created',
-          action: 'committed',
-        });
-      }
     } catch (err) {
       s.linkError = (err && err.message) || 'Failed to link — please try again.';
     } finally {
       s.linking = false;
+      render();
+    }
+  }
+
+  async function confirmManualLink() {
+    var m = _manual;
+    if (m.linking || !m.childId || !m.parentId) return;
+    var child = _problems.find(function (p) {
+      return p.id === m.childId;
+    });
+    var parent = _problems.find(function (p) {
+      return p.id === m.parentId;
+    });
+    if (!child || !parent) return;
+    m.linking = true;
+    m.linkError = null;
+    render();
+    try {
+      await commitParentLink(m.childId, m.parentId);
+      _manualLinked.push({ childDescription: child.description, parentDescription: parent.description });
+      // Keep the child's info honest so a suggestion card for it (if any)
+      // retires, and reset the builder for the next link.
+      if (_infoById[m.childId]) _infoById[m.childId].parentProblemId = m.parentId;
+      _manual = { childId: null, parentId: null, confirming: false, linking: false, linkError: null };
+    } catch (err) {
+      m.linkError = (err && err.message) || 'Failed to link — please try again.';
+      m.linking = false;
+      m.confirming = false;
+    } finally {
       render();
     }
   }
@@ -503,6 +568,15 @@
         '</strong> is now nested under <strong>' +
         esc(s.linkedParentDescription) +
         '</strong>. Medicus’s own list shows this after a page refresh.</div>'
+      );
+    }
+    // A child linked through the MANUAL builder this session retires its
+    // suggestion card (its map entry exists but s.linked is false).
+    if (_parentIdByProblemId[s.childId]) {
+      return (
+        '<div class="ms-pn-card ms-pn-card-stale"><strong>' +
+        esc(s.childDescription) +
+        '</strong> — already nested this session via a manual link.</div>'
       );
     }
     // Options are re-filtered against the LIVE link map on every render, so a
@@ -594,6 +668,134 @@
     return '<div class="ms-pn-card">' + body + actions + error + '</div>';
   }
 
+  function problemDescription(problemId) {
+    var p = _problems.find(function (x) {
+      return x.id === problemId;
+    });
+    return p ? p.description : null;
+  }
+
+  // The manual link builder — the clinician's own pairing, no SNOMED gate.
+  // Same per-link explicit confirm and the same commit path as the suggestion
+  // cards; the confirm copy additionally calls out a re-parent (moving a
+  // problem that already has a parent) and a same-code pair (probably a
+  // duplicate — pointed at the right tool, but not blocked: clinical call).
+  function manualHtml() {
+    var m = _manual;
+    var childOptions = _problems
+      .map(function (p) {
+        var currentParentId = _parentIdByProblemId[p.id] || null;
+        var currentParentDesc = currentParentId ? problemDescription(currentParentId) : null;
+        return (
+          '<option value="' +
+          esc(p.id) +
+          '"' +
+          (m.childId === p.id ? ' selected' : '') +
+          '>' +
+          esc(p.description) +
+          (currentParentDesc ? ' (currently under ' + esc(currentParentDesc) + ')' : '') +
+          '</option>'
+        );
+      })
+      .join('');
+    var parentOpts = manualParentOptions(m.childId, _problems, _parentIdByProblemId);
+    var parentOptions = parentOpts
+      .map(function (p) {
+        return (
+          '<option value="' +
+          esc(p.id) +
+          '"' +
+          (m.parentId === p.id ? ' selected' : '') +
+          '>' +
+          esc(p.description) +
+          '</option>'
+        );
+      })
+      .join('');
+
+    var linkedHtml = _manualLinked
+      .map(function (l) {
+        return (
+          '<div class="ms-pn-card ms-pn-card-linked">✓ <strong>' +
+          esc(l.childDescription) +
+          '</strong> is now nested under <strong>' +
+          esc(l.parentDescription) +
+          '</strong>. Medicus’s own list shows this after a page refresh.</div>'
+        );
+      })
+      .join('');
+
+    var confirmHtml = '';
+    if (m.confirming && m.childId && m.parentId) {
+      var childDesc = problemDescription(m.childId) || '';
+      var parentDesc = problemDescription(m.parentId) || '';
+      var currentParent = _parentIdByProblemId[m.childId] || null;
+      var moveNote = '';
+      if (currentParent) {
+        moveNote =
+          ' It is currently nested under <strong>' +
+          esc(problemDescription(currentParent) || 'another problem') +
+          '</strong> — confirming MOVES it to the new parent.';
+      }
+      var ci = _infoById[m.childId];
+      var pi = _infoById[m.parentId];
+      var sameCodeNote =
+        ci && pi && ci.conceptId && ci.conceptId === pi.conceptId
+          ? ' Both problems carry the SAME SNOMED code — if these are duplicate entries rather than parent/child, ' +
+            'the Duplicate Problem Checker is the better tool; nesting keeps both active.'
+          : '';
+      confirmHtml =
+        '<div class="ms-pn-confirm">This will nest <strong>' +
+        esc(childDesc) +
+        '</strong> under <strong>' +
+        esc(parentDesc) +
+        '</strong> — it will display as a child on the problem list, not as a top-level problem.' +
+        moveNote +
+        sameCodeNote +
+        ' There is no bulk undo; un-nesting is done in Medicus, one problem at a time.' +
+        '<div class="ms-pn-confirm-actions">' +
+        '<button type="button" class="ms-pn-cancel" id="ms-pn-man-cancel"' +
+        (m.linking ? ' disabled' : '') +
+        '>Cancel</button>' +
+        '<button type="button" class="ms-pn-confirm-btn" id="ms-pn-man-confirm"' +
+        (m.linking ? ' disabled' : '') +
+        '>' +
+        (m.linking ? 'Linking…' : 'Confirm — nest it') +
+        '</button>' +
+        '</div></div>';
+    }
+
+    return (
+      '<div class="ms-pn-manual">' +
+      '<div class="ms-pn-manual-title">Link manually</div>' +
+      '<div class="ms-pn-manual-note">Your pairing, your call — no SNOMED gate. Pick the problem to nest, then its parent.</div>' +
+      '<div class="ms-pn-manual-row">Nest ' +
+      '<select class="ms-pn-parent-select" id="ms-pn-man-child">' +
+      '<option value=""' +
+      (m.childId ? '' : ' selected') +
+      ' disabled>Choose problem…</option>' +
+      childOptions +
+      '</select>' +
+      ' under ' +
+      '<select class="ms-pn-parent-select" id="ms-pn-man-parent"' +
+      (m.childId ? '' : ' disabled') +
+      '>' +
+      '<option value=""' +
+      (m.parentId ? '' : ' selected') +
+      ' disabled>Choose parent…</option>' +
+      parentOptions +
+      '</select>' +
+      ' <button type="button" class="ms-pn-link-btn" id="ms-pn-man-link"' +
+      (m.childId && m.parentId && !m.confirming ? '' : ' disabled') +
+      '>Nest…</button>' +
+      '</div>' +
+      confirmHtml +
+      (m.linkError ? '<div class="ms-pn-card-error">' + esc(m.linkError) + '</div>' : '') +
+      linkedHtml +
+      '</div>'
+    );
+  }
+
   function buildHtml() {
     var header =
       '<button type="button" class="ms-pn-toggle" id="ms-pn-toggle" aria-expanded="' +
@@ -611,24 +813,31 @@
         '<div class="ms-pn-body"><span class="ms-pn-error">' +
         esc(_scanError) +
         '</span> <button type="button" class="ms-pn-retry" id="ms-pn-retry">Retry</button></div>';
-    } else if (_scanState === 'done' && _suggestions.length === 0) {
-      body =
-        '<div class="ms-pn-body"><span class="ms-pn-empty">No nesting suggestions — no active problem is coded as a ' +
-        'SNOMED descendant of another problem on this record.</span></div>';
     } else if (_scanState === 'done') {
-      var linkedCount = _suggestions.filter(function (s) {
-        return s.linked;
-      }).length;
+      var suggestionsHtml;
+      if (_suggestions.length === 0) {
+        suggestionsHtml =
+          '<div class="ms-pn-empty">No nesting suggestions — no active problem is coded as a SNOMED descendant of ' +
+          'another problem on this record. You can still link problems yourself below.</div>';
+      } else {
+        suggestionsHtml =
+          '<div class="ms-pn-summary">Suggestions come only from SNOMED parent/child relationships between problems ' +
+          'already coded on this record — nothing is ever linked automatically, and each link needs its own confirm. ' +
+          'Problems that already have a parent are left alone.</div>' +
+          _suggestions
+            .map(function (s, i) {
+              return cardHtml(s, i);
+            })
+            .join('');
+      }
+      var linkedCount =
+        _suggestions.filter(function (s) {
+          return s.linked;
+        }).length + _manualLinked.length;
       body =
         '<div class="ms-pn-body">' +
-        '<div class="ms-pn-summary">Suggestions come only from SNOMED parent/child relationships between problems ' +
-        'already coded on this record — nothing is ever linked automatically, and each link needs its own confirm. ' +
-        'Problems that already have a parent are left alone.</div>' +
-        _suggestions
-          .map(function (s, i) {
-            return cardHtml(s, i);
-          })
-          .join('') +
+        suggestionsHtml +
+        manualHtml() +
         (linkedCount > 0
           ? '<div class="ms-pn-footer">' +
             linkedCount +
@@ -663,7 +872,7 @@
     el.querySelector('#ms-pn-refresh')?.addEventListener('click', function () {
       location.reload();
     });
-    el.querySelectorAll('.ms-pn-parent-select').forEach(function (sel) {
+    el.querySelectorAll('.ms-pn-parent-select[data-idx]').forEach(function (sel) {
       sel.addEventListener('change', function () {
         var s = _suggestions[Number(sel.getAttribute('data-idx'))];
         if (s) {
@@ -672,7 +881,35 @@
         }
       });
     });
-    el.querySelectorAll('.ms-pn-link-btn').forEach(function (btn) {
+    el.querySelector('#ms-pn-man-child')?.addEventListener('change', function (e) {
+      _manual.childId = e.target.value || null;
+      // A new child invalidates the old parent pick (it may now be the child
+      // itself, or cycle-filtered out) and any open confirm.
+      _manual.parentId = null;
+      _manual.confirming = false;
+      _manual.linkError = null;
+      render();
+    });
+    el.querySelector('#ms-pn-man-parent')?.addEventListener('change', function (e) {
+      _manual.parentId = e.target.value || null;
+      _manual.confirming = false;
+      _manual.linkError = null;
+      render();
+    });
+    el.querySelector('#ms-pn-man-link')?.addEventListener('click', function () {
+      if (_manual.childId && _manual.parentId) {
+        _manual.confirming = true;
+        render();
+      }
+    });
+    el.querySelector('#ms-pn-man-cancel')?.addEventListener('click', function () {
+      _manual.confirming = false;
+      render();
+    });
+    el.querySelector('#ms-pn-man-confirm')?.addEventListener('click', function () {
+      confirmManualLink();
+    });
+    el.querySelectorAll('.ms-pn-link-btn[data-idx]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var s = _suggestions[Number(btn.getAttribute('data-idx'))];
         if (s && s.chosenParentId) {
@@ -681,7 +918,7 @@
         }
       });
     });
-    el.querySelectorAll('.ms-pn-cancel').forEach(function (btn) {
+    el.querySelectorAll('.ms-pn-cancel[data-idx]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var s = _suggestions[Number(btn.getAttribute('data-idx'))];
         if (s) {
@@ -690,7 +927,7 @@
         }
       });
     });
-    el.querySelectorAll('.ms-pn-confirm-btn').forEach(function (btn) {
+    el.querySelectorAll('.ms-pn-confirm-btn[data-idx]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var s = _suggestions[Number(btn.getAttribute('data-idx'))];
         if (s) confirmLink(s);
