@@ -900,6 +900,19 @@
   // task-inline.js's resolvePatientId already uses (data.data.patient.id →
   // data.data.patientId → data.patient.id → data.patientId). Null when the
   // task genuinely has no patient (some task types don't).
+  // Parses the page-world bridge attribute ('data-ch-summary-patient',
+  // written by triage-lens/page-world.js as '<patientId>|<epoch-ms>'): the
+  // patientId of the page's OWN most recent Clinical Summary panel fetch.
+  // This is the context source for page shapes with no parseable patientId
+  // in the URL (appointment views, consultation views, whatever Medicus adds
+  // next) — wherever the summary panel renders, the page itself has already
+  // told us whose it is. Strict full-UUID check; anything else is null.
+  function parseSummaryBridgeAttr(value) {
+    if (!value) return null;
+    var id = String(value).split('|')[0];
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? id : null;
+  }
+
   function extractPatientIdFromTaskOverview(data) {
     var candidates = [data && data.data, data];
     for (var i = 0; i < candidates.length; i++) {
@@ -951,6 +964,7 @@
       normalizeOnsetDateForSubmit: normalizeOnsetDateForSubmit,
       parseCareRecordPath: parseCareRecordPath,
       parseTaskOverviewPath: parseTaskOverviewPath,
+      parseSummaryBridgeAttr: parseSummaryBridgeAttr,
       extractPatientIdFromTaskOverview: extractPatientIdFromTaskOverview,
     };
     return;
@@ -1348,11 +1362,23 @@
       // different task while the resolve was in flight, drop this tick; the
       // next one re-reads the fresh URL and its own cached resolution.
       var task = getTaskInfo();
-      if (!task) return;
-      var resolvedPatientId = await resolveTaskPatientId(task);
-      var nowTask = getTaskInfo();
-      if (!resolvedPatientId || !nowTask || nowTask.taskUuid !== task.taskUuid) return;
-      info = { siteId: task.siteId, patientId: resolvedPatientId };
+      if (task) {
+        var resolvedPatientId = await resolveTaskPatientId(task);
+        var nowTask = getTaskInfo();
+        if (!resolvedPatientId || !nowTask || nowTask.taskUuid !== task.taskUuid) return;
+        info = { siteId: task.siteId, patientId: resolvedPatientId };
+      } else {
+        // Any other page shape (appointment view, consultation view, …):
+        // the page-world bridge tells us which patient the page's own
+        // embedded Clinical Summary panel was last fetched for. No extra
+        // injection gate is needed here: this widget only ever injects
+        // against an exact-text-matched allergy row inside the scoped
+        // Allergies card (findFirstAllergyRow), so a stale bridge patient
+        // whose allergies match nothing on screen never renders anything.
+        var bridged = parseSummaryBridgeAttr(document.documentElement.getAttribute('data-ch-summary-patient'));
+        if (!bridged) return;
+        info = { siteId: null, patientId: bridged };
+      }
     }
     if (info.patientId !== _lastPatientId) {
       _lastPatientId = info.patientId;

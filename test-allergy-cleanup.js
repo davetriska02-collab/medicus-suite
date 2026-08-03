@@ -57,6 +57,7 @@ const {
   normalizeOnsetDateForSubmit,
   parseCareRecordPath,
   parseTaskOverviewPath,
+  parseSummaryBridgeAttr,
   extractPatientIdFromTaskOverview,
 } = require('./content-scripts/allergy-cleanup.js');
 const allergyJunkCodes = require('./rules/allergy-junk-codes.json');
@@ -1464,6 +1465,24 @@ console.log('--- remapReviewsByGroupIdentity: review state survives concept-enri
   check(
     Object.keys(remapReviewsByGroupIdentity(null, null, null)).length === 0,
     'null inputs -> empty result, never throws'
+  );
+}
+
+console.log('--- parseSummaryBridgeAttr: the page-world bridge context source ---');
+{
+  check(
+    parseSummaryBridgeAttr('123e4567-e89b-12d3-a456-426614174000|1754200000000') ===
+      '123e4567-e89b-12d3-a456-426614174000',
+    'well-formed attribute -> patientId'
+  );
+  check(
+    parseSummaryBridgeAttr('123e4567-e89b-12d3-a456-426614174000') === '123e4567-e89b-12d3-a456-426614174000',
+    'timestampless value still parses'
+  );
+  check(parseSummaryBridgeAttr('not-a-uuid|123') === null, 'malformed id -> null (strict full-UUID check)');
+  check(
+    parseSummaryBridgeAttr('') === null && parseSummaryBridgeAttr(null) === null,
+    'empty/null -> null, never throws'
   );
 }
 

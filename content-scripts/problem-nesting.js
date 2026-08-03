@@ -286,6 +286,19 @@
     return { siteId: m[1], typeSlug: m[2], taskUuid: m[3] };
   }
 
+  // Parses the page-world bridge attribute ('data-ch-summary-patient',
+  // written by triage-lens/page-world.js as '<patientId>|<epoch-ms>'): the
+  // patientId of the page's OWN most recent Clinical Summary panel fetch.
+  // This is the context source for page shapes with no parseable patientId
+  // in the URL (appointment views, consultation views, whatever Medicus adds
+  // next) — wherever the summary panel renders, the page itself has already
+  // told us whose it is. Strict full-UUID check; anything else is null.
+  function parseSummaryBridgeAttr(value) {
+    if (!value) return null;
+    var id = String(value).split('|')[0];
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? id : null;
+  }
+
   function extractPatientIdFromTaskOverview(data) {
     var candidates = [data && data.data, data];
     for (var i = 0; i < candidates.length; i++) {
@@ -313,6 +326,7 @@
       resultContainsConceptId: resultContainsConceptId,
       parseCareRecordPath: parseCareRecordPath,
       parseTaskOverviewPath: parseTaskOverviewPath,
+      parseSummaryBridgeAttr: parseSummaryBridgeAttr,
       extractPatientIdFromTaskOverview: extractPatientIdFromTaskOverview,
     };
     return;
@@ -329,6 +343,87 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  // ── Render-layer helpers (glyphs, dates, live region, focus restore) ─────────
+
+  // Feather-style stroke glyphs at currentColor — success check and the
+  // destructive-merge warning triangle. Inline so no external asset ever loads.
+  var CHECK_SVG =
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg>';
+  var WARN_SVG =
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
+  // Onset date for a problem reference — accepts a problemId (looked up in
+  // the scan's info map) or an entry object that carries its own onsetDate
+  // (merge-group entries survive removal of their info-map row).
+  function onsetDateFor(ref) {
+    if (ref && typeof ref === 'object') return ref.onsetDate || null;
+    var i = _infoById[ref];
+    return (i && i.onsetDate) || null;
+  }
+
+  // HTML date suffix for names in markup; empty string when no date.
+  function dateSuffix(ref) {
+    var d = onsetDateFor(ref);
+    return d ? ' <span class="ms-pn-date">· ' + esc(d) + '</span>' : '';
+  }
+
+  // Plain-text date suffix for <option> labels (no markup inside options).
+  // Callers esc() the combined string.
+  function dateSuffixText(ref) {
+    var d = onsetDateFor(ref);
+    return d ? ' · ' + d : '';
+  }
+
+  // Screen-reader announcements — writes into the persistent polite live
+  // region (which render() never rebuilds).
+  function announce(text) {
+    var el = document.getElementById('ms-pn-widget');
+    var live = el && el.querySelector('.ms-pn-live');
+    if (live) live.textContent = text;
+  }
+
+  // Focus restore across innerHTML rebuilds: capture the focused element's
+  // identity (id, or ms-pn-* class token + its data-* keys) before a render,
+  // re-focus the equivalent element after.
+  var FOCUS_KEY_ATTRS = ['data-idx', 'data-child-id', 'data-entry-id', 'data-gidx', 'data-sec'];
+
+  function captureFocusKey(el) {
+    var a = document.activeElement;
+    if (!a || !el.contains(a)) return null;
+    if (a.id) return { id: a.id };
+    var cls = null;
+    String(a.className || '')
+      .split(/\s+/)
+      .some(function (c) {
+        if (c.indexOf('ms-pn-') === 0) {
+          cls = c;
+          return true;
+        }
+        return false;
+      });
+    if (!cls) return null;
+    var key = { cls: cls };
+    FOCUS_KEY_ATTRS.forEach(function (attr) {
+      if (a.hasAttribute(attr)) key[attr] = a.getAttribute(attr);
+    });
+    return key;
+  }
+
+  function restoreFocusKey(el, key) {
+    if (!key) return;
+    var target = null;
+    if (key.id) {
+      target = el.querySelector('#' + key.id);
+    } else {
+      var sel = '.' + key.cls;
+      FOCUS_KEY_ATTRS.forEach(function (attr) {
+        if (key[attr] !== undefined) sel += '[' + attr + '="' + key[attr] + '"]';
+      });
+      target = el.querySelector(sel);
+    }
+    if (target && typeof target.focus === 'function') target.focus();
   }
 
   // ── URL detection — both page shapes (v3.213.0 discipline) ───────────────────
@@ -443,10 +538,15 @@
 
   // ── State ─────────────────────────────────────────────────────────────────────
   var _lastPatientId = null;
+  // True when the current patient context came from the page-world bridge
+  // rather than a parseable URL — gates injection on a DOM row match.
+  var _contextViaBridge = false;
   var _problemsCache = null;
   var _open = false;
   var _scanState = 'idle'; // 'idle' | 'scanning' | 'done' | 'error'
   var _scanError = null;
+  // Accordion: which done-view section is expanded (one at a time).
+  var _openSection = null; // 'suggest' | 'merge' | 'manual' | null
   // [{childId, childDescription, childConceptId, parentOptions, chosenParentId,
   //   confirming, linking, linked, linkedParentDescription, linkError}]
   var _suggestions = [];
@@ -474,6 +574,7 @@
     _open = false;
     _scanState = 'idle';
     _scanError = null;
+    _openSection = null;
     _suggestions = [];
     _parentIdByProblemId = {};
     _problems = [];
@@ -509,6 +610,10 @@
           parentProblemId: (ov && ov.parentProblemId) || null,
           hasChildren: !!(ov && Array.isArray(ov.childProblems) && ov.childProblems.length),
           additionalInformation: (ov && ov.additionalInformation) || null,
+          // Confirmed slideover-overview field — a UK display string like
+          // "20 Apr 2020"; shown beside every problem reference so same-named
+          // entries stay tellable-apart.
+          onsetDate: (ov && ov.onsetDate) || null,
         };
         if (ov && ov.parentProblemId) _parentIdByProblemId[p.id] = ov.parentProblemId;
       });
@@ -568,6 +673,7 @@
             description: p.description,
             hasChildren: !!ci.hasChildren,
             additionalInformation: ci.additionalInformation || null,
+            onsetDate: ci.onsetDate || null,
           };
         });
         return {
@@ -595,6 +701,17 @@
         });
       });
       _scanState = 'done';
+      // Accordion default: first section with something in it.
+      _openSection = _suggestions.length ? 'suggest' : _mergeGroups.length ? 'merge' : 'manual';
+      announce(
+        _suggestions.length +
+          ' suggestion' +
+          (_suggestions.length === 1 ? '' : 's') +
+          ', ' +
+          _mergeGroups.length +
+          ' duplicate group' +
+          (_mergeGroups.length === 1 ? '' : 's')
+      );
     } catch (err) {
       if (_lastPatientId !== scanPatientId) return;
       _scanState = 'error';
@@ -644,8 +761,10 @@
       s.linked = true;
       s.confirming = false;
       s.linkedParentDescription = parent.description;
+      announce('Nested ' + s.childDescription + ' under ' + parent.description);
     } catch (err) {
       s.linkError = (err && err.message) || 'Failed to link — please try again.';
+      announce('Action failed — see panel');
     } finally {
       s.linking = false;
       render();
@@ -689,8 +808,10 @@
         // retires, and untick it now it's landed.
         if (_infoById[childId]) _infoById[childId].parentProblemId = m.parentId;
         delete m.childIds[childId];
+        announce('Nested ' + child.description + ' under ' + parent.description);
       } catch (err) {
         m.childErrors[childId] = (err && err.message) || 'Failed to link — please try again.';
+        announce('Action failed — see panel');
       }
     }
     m.linking = false;
@@ -745,6 +866,11 @@
     g.removing = false;
     g.confirming = false;
     if (!Object.keys(g.errors).length) g.done = true;
+    if (Object.keys(g.errors).length) {
+      announce('Action failed — see panel');
+    } else if (batchRemoved > 0) {
+      announce(batchRemoved + ' cop' + (batchRemoved === 1 ? 'y' : 'ies') + ' removed');
+    }
     // One ledger record per batch (batch-local count so a retry never
     // re-reports earlier successes), fixed label — never the problem
     // description or the free-typed reason.
@@ -765,7 +891,9 @@
   function cardHtml(s, idx) {
     if (s.linked) {
       return (
-        '<div class="ms-pn-card ms-pn-card-linked">✓ <strong>' +
+        '<div class="ms-pn-card ms-pn-card-linked">' +
+        CHECK_SVG +
+        ' <strong>' +
         esc(s.childDescription) +
         '</strong> is now nested under <strong>' +
         esc(s.linkedParentDescription) +
@@ -812,13 +940,7 @@
     }
     var picker;
     if (liveOptions.length === 1) {
-      picker =
-        'child of <strong>' +
-        esc(liveOptions[0].description) +
-        '</strong>' +
-        '<input type="hidden" data-idx="' +
-        idx +
-        '">';
+      picker = 'child of <strong>' + esc(liveOptions[0].description) + '</strong>' + dateSuffix(liveOptions[0].id);
       s.chosenParentId = liveOptions[0].id;
     } else {
       picker =
@@ -836,7 +958,7 @@
               '"' +
               (s.chosenParentId === o.id ? ' selected' : '') +
               '>' +
-              esc(o.description) +
+              esc(o.description + dateSuffixText(o.id)) +
               '</option>'
             );
           })
@@ -846,7 +968,9 @@
     var body =
       '<div class="ms-pn-card-main"><strong>' +
       esc(s.childDescription) +
-      '</strong> — SNOMED marks this as a ' +
+      '</strong>' +
+      dateSuffix(s.childId) +
+      ' — SNOMED marks this as a ' +
       picker +
       '</div>';
     var actions;
@@ -895,7 +1019,9 @@
   function mergeGroupHtml(g, gIdx) {
     if (g.done) {
       return (
-        '<div class="ms-pn-card ms-pn-card-linked">✓ <strong>' +
+        '<div class="ms-pn-card ms-pn-card-linked">' +
+        CHECK_SVG +
+        ' <strong>' +
         esc(g.description) +
         '</strong> — ' +
         g.removedCount +
@@ -937,8 +1063,9 @@
           '>' +
           '<span>' +
           esc(e.description) +
-          (g.keeperId === e.id ? ' <em class="ms-pn-merge-keep-tag">keep this copy</em>' : '') +
-          (notes.length ? ' <em class="ms-pn-man-child-note">(' + esc(notes.join('; ')) + ')</em>' : '') +
+          dateSuffix(e) +
+          (g.keeperId === e.id ? ' <span class="ms-pn-merge-keep-tag">keep this copy</span>' : '') +
+          (notes.length ? ' <span class="ms-pn-man-child-note">(' + esc(notes.join('; ')) + ')</span>' : '') +
           '</span>' +
           (err ? '<span class="ms-pn-card-error">' + esc(err) + '</span>' : '') +
           '</label>'
@@ -952,18 +1079,20 @@
         return removable.indexOf(e.id) === -1;
       });
       confirmHtml =
-        '<div class="ms-pn-confirm">KEEPING ' +
+        '<div class="ms-pn-confirm ms-pn-confirm-danger">' +
+        WARN_SVG +
+        ' <strong>Keeping</strong> ' +
         kept
           .map(function (e) {
-            return '<strong>' + esc(e.description) + '</strong>';
+            return '<strong>' + esc(e.description) + '</strong>' + dateSuffix(e);
           })
           .join(', ') +
-        ' · REMOVING ' +
+        ' · <strong>Removing</strong> ' +
         removable.length +
         ' cop' +
         (removable.length === 1 ? 'y' : 'ies') +
         ' via Medicus’s mark-incorrect-and-hidden — removed copies are hidden from the record as recorded-in-error, ' +
-        'not end-dated, and there is no known undo endpoint. Reason recorded against each: ' +
+        'not end-dated, and this cannot be undone from this tool. Reason recorded against each: ' +
         '<input type="text" class="ms-pn-merge-reason" data-gidx="' +
         gIdx +
         '" value="' +
@@ -990,7 +1119,7 @@
       '<div class="ms-pn-card">' +
       '<div class="ms-pn-card-main"><strong>' +
       esc(g.description) +
-      '</strong> — pick the copy to KEEP; every other removable copy is removed.</div>' +
+      '</strong> — pick the copy to <strong>keep</strong>; every other removable copy is removed.</div>' +
       '<div class="ms-pn-man-children">' +
       rows +
       '</div>' +
@@ -1007,23 +1136,48 @@
     );
   }
 
-  function mergeSectionHtml() {
-    var live = _mergeGroups.filter(function (g) {
+  function liveMergeGroups() {
+    return _mergeGroups.filter(function (g) {
       return g.done || g.entries.length >= 2;
     });
-    if (!live.length) return '';
+  }
+
+  function emptyBlockHtml(title, sub) {
     return (
-      '<div class="ms-pn-manual">' +
-      '<div class="ms-pn-manual-title">Merge duplicate copies</div>' +
-      '<div class="ms-pn-manual-note">Same code recorded more than once. Pick a keeper and the other copies are ' +
-      'retired the same way the Duplicate Problem Checker does it — for anything beyond same-code copies (or to ' +
-      'compare details first), use the full Duplicate Checker from the panel.</div>' +
+      '<div class="ms-pn-empty-block"><div class="ms-pn-empty-title">' +
+      esc(title) +
+      '</div><div class="ms-pn-empty-sub">' +
+      esc(sub) +
+      '</div></div>'
+    );
+  }
+
+  function suggestSectionContent() {
+    if (!_suggestions.length) {
+      return emptyBlockHtml(
+        'No nesting suggestions',
+        'Nothing on this record is coded as a SNOMED descendant of anything else.'
+      );
+    }
+    return _suggestions
+      .map(function (s, i) {
+        return cardHtml(s, i);
+      })
+      .join('');
+  }
+
+  function mergeSectionContent() {
+    var live = liveMergeGroups();
+    if (!live.length) {
+      return emptyBlockHtml('No duplicate copies', 'No two active problems here share the same SNOMED code.');
+    }
+    return (
+      '<div class="ms-pn-sec-note">Same code recorded more than once. Pick the copy to keep.</div>' +
       live
         .map(function (g) {
           return mergeGroupHtml(g, _mergeGroups.indexOf(g));
         })
-        .join('') +
-      '</div>'
+        .join('')
     );
   }
 
@@ -1041,7 +1195,7 @@
   // that already have a parent get MOVED) and same-code picks (probably a
   // duplicate — pointed at the right tool, but not blocked: clinical call).
   // Commits are still one confirmed POST per child (see confirmManualBatch).
-  function manualHtml() {
+  function manualSectionContent() {
     var m = _manual;
     var parentOptions = _problems
       .map(function (p) {
@@ -1051,7 +1205,7 @@
           '"' +
           (m.parentId === p.id ? ' selected' : '') +
           '>' +
-          esc(p.description) +
+          esc(p.description + dateSuffixText(p.id)) +
           '</option>'
         );
       })
@@ -1061,7 +1215,15 @@
     if (m.parentId) {
       var candidates = manualChildOptions(m.parentId, _problems, _parentIdByProblemId);
       var pi = _infoById[m.parentId];
+      var tickedCount = manualSelectedChildIds().length;
       childListHtml =
+        '<div class="ms-pn-man-count">' +
+        candidates.length +
+        ' problem' +
+        (candidates.length === 1 ? '' : 's') +
+        ' · ' +
+        tickedCount +
+        ' selected</div>' +
         '<div class="ms-pn-man-children">' +
         candidates
           .map(function (p) {
@@ -1087,7 +1249,8 @@
               '>' +
               '<span>' +
               esc(p.description) +
-              (notes.length ? ' <em class="ms-pn-man-child-note">(' + esc(notes.join('; ')) + ')</em>' : '') +
+              dateSuffix(p.id) +
+              (notes.length ? ' <span class="ms-pn-man-child-note">(' + esc(notes.join('; ')) + ')</span>' : '') +
               '</span>' +
               (err ? '<span class="ms-pn-card-error">' + esc(err) + '</span>' : '') +
               '</label>'
@@ -1100,7 +1263,9 @@
     var linkedHtml = _manualLinked
       .map(function (l) {
         return (
-          '<div class="ms-pn-card ms-pn-card-linked">✓ <strong>' +
+          '<div class="ms-pn-card ms-pn-card-linked">' +
+          CHECK_SVG +
+          ' <strong>' +
           esc(l.childDescription) +
           '</strong> is now nested under <strong>' +
           esc(l.parentDescription) +
@@ -1127,7 +1292,7 @@
         '<ul class="ms-pn-confirm-list">' +
         selected
           .map(function (id) {
-            return '<li>' + esc(problemDescription(id) || id) + '</li>';
+            return '<li>' + esc(problemDescription(id) || id) + dateSuffix(id) + '</li>';
           })
           .join('') +
         '</ul>' +
@@ -1136,7 +1301,7 @@
             moveCount +
             ' of these already ' +
             (moveCount === 1 ? 'has' : 'have') +
-            ' a parent and will be MOVED to the new one.'
+            ' a parent and will be <strong>moved</strong> to the new one.'
           : '') +
         ' There is no bulk undo; un-nesting is done in Medicus, one problem at a time.' +
         '<div class="ms-pn-confirm-actions">' +
@@ -1155,10 +1320,7 @@
 
     var failedCount = Object.keys(m.childErrors).length;
     return (
-      '<div class="ms-pn-manual">' +
-      '<div class="ms-pn-manual-title">Link manually</div>' +
-      '<div class="ms-pn-manual-note">Your grouping, your call — no SNOMED gate. Pick the parent first, then tick ' +
-      'every problem to nest under it.</div>' +
+      '<div class="ms-pn-sec-note">Your grouping, your call — no SNOMED gate.</div>' +
       '<div class="ms-pn-manual-row">Under ' +
       '<select class="ms-pn-parent-select" id="ms-pn-man-parent">' +
       '<option value=""' +
@@ -1182,8 +1344,30 @@
           (failedCount === 1 ? '' : 's') +
           ' failed — the error is shown against each row; they stay ticked so you can retry.</div>'
         : '') +
-      linkedHtml +
-      '</div>'
+      linkedHtml
+    );
+  }
+
+  // Accordion section header: sans 12px/600 label, text chevron left,
+  // mono count right, aria-expanded honest. One open at a time.
+  function sectionHeadHtml(key, label, countText) {
+    var open = _openSection === key;
+    return (
+      '<button type="button" class="ms-pn-sec-head" data-sec="' +
+      key +
+      '" aria-expanded="' +
+      (open ? 'true' : 'false') +
+      '">' +
+      '<span class="ms-pn-sec-chevron">' +
+      (open ? '▾' : '▸') +
+      '</span>' +
+      '<span>' +
+      esc(label) +
+      '</span>' +
+      '<span class="ms-pn-sec-count">' +
+      esc(countText) +
+      '</span>' +
+      '</button>'
     );
   }
 
@@ -1205,37 +1389,27 @@
         esc(_scanError) +
         '</span> <button type="button" class="ms-pn-retry" id="ms-pn-retry">Retry</button></div>';
     } else if (_scanState === 'done') {
-      var suggestionsHtml;
-      if (_suggestions.length === 0) {
-        suggestionsHtml =
-          '<div class="ms-pn-empty">No nesting suggestions — no active problem is coded as a SNOMED descendant of ' +
-          'another problem on this record. You can still link problems yourself below.</div>';
-      } else {
-        suggestionsHtml =
-          '<div class="ms-pn-summary">Suggestions come only from SNOMED parent/child relationships between problems ' +
-          'already coded on this record — nothing is ever linked automatically, and each link needs its own confirm. ' +
-          'Problems that already have a parent are left alone.</div>' +
-          _suggestions
-            .map(function (s, i) {
-              return cardHtml(s, i);
-            })
-            .join('');
-      }
       var linkedCount =
         _suggestions.filter(function (s) {
           return s.linked;
         }).length + _manualLinked.length;
+      var selectedCount = manualSelectedChildIds().length;
+      var manualCountText = selectedCount > 0 ? selectedCount + ' selected' : String(_problems.length);
       body =
         '<div class="ms-pn-body">' +
-        suggestionsHtml +
-        mergeSectionHtml() +
-        manualHtml() +
+        '<div class="ms-pn-summary">From SNOMED codes already on this record — nothing links without its own confirm.</div>' +
+        sectionHeadHtml('suggest', 'Suggested links', String(_suggestions.length)) +
+        (_openSection === 'suggest' ? '<div class="ms-pn-sec-body">' + suggestSectionContent() + '</div>' : '') +
+        sectionHeadHtml('merge', 'Merge duplicate copies', String(liveMergeGroups().length)) +
+        (_openSection === 'merge' ? '<div class="ms-pn-sec-body">' + mergeSectionContent() + '</div>' : '') +
+        sectionHeadHtml('manual', 'Link manually', manualCountText) +
+        (_openSection === 'manual' ? '<div class="ms-pn-sec-body">' + manualSectionContent() + '</div>' : '') +
         (linkedCount > 0
-          ? '<div class="ms-pn-footer">' +
+          ? '<div class="ms-pn-footer"><span class="ms-pn-footer-count">' +
             linkedCount +
             ' link' +
             (linkedCount === 1 ? '' : 's') +
-            ' created. <button type="button" class="ms-pn-refresh" id="ms-pn-refresh">Refresh page</button></div>'
+            ' created</span> <button type="button" class="ms-pn-refresh" id="ms-pn-refresh">Refresh page</button></div>'
           : '') +
         '</div>';
     } else {
@@ -1257,6 +1431,13 @@
       } else {
         render();
       }
+    });
+    el.querySelectorAll('.ms-pn-sec-head').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var key = btn.getAttribute('data-sec');
+        _openSection = _openSection === key ? null : key;
+        render();
+      });
     });
     el.querySelector('#ms-pn-retry')?.addEventListener('click', function () {
       runScan();
@@ -1385,11 +1566,19 @@
     });
   }
 
+  // Rebuilds ONLY .ms-pn-root — the polite live region is a persistent
+  // sibling so announcements survive re-renders. Focus is captured before the
+  // rebuild and restored to the equivalent element after (an innerHTML swap
+  // otherwise dumps keyboard users back to <body>).
   function render() {
     var el = document.getElementById('ms-pn-widget');
     if (!el) return;
-    el.innerHTML = buildHtml();
+    var root = el.querySelector('.ms-pn-root');
+    if (!root) return;
+    var focusKey = captureFocusKey(el);
+    root.innerHTML = buildHtml();
     bindEvents(el);
+    restoreFocusKey(el, focusKey);
   }
 
   // ── Injection: one "Nest problems?" trigger — same anchor discipline as
@@ -1417,6 +1606,11 @@
   function injectTrigger() {
     if (document.getElementById('ms-pn-widget')) return;
     if (!_problemsCache || _problemsCache.length < 2) return; // nesting needs at least two problems
+    // Wrong-patient guard for bridge-derived contexts: the fetched list must
+    // match at least one on-screen row before the widget offers itself — a
+    // stale bridge attribute produces rows that match nothing, and the
+    // widget simply stays away.
+    if (_contextViaBridge && !findFirstProblemRow(_problemsCache)) return;
     var list = findMajorProblemsList();
     if (!list) {
       var row = findFirstProblemRow(_problemsCache);
@@ -1426,7 +1620,8 @@
     if (!list || !list.parentElement) return;
     var w = document.createElement('div');
     w.id = 'ms-pn-widget';
-    w.innerHTML = buildHtml();
+    w.innerHTML = '<div class="ms-pn-live" role="status" aria-live="polite"></div><div class="ms-pn-root"></div>';
+    w.querySelector('.ms-pn-root').innerHTML = buildHtml();
     list.parentElement.insertBefore(w, list);
     bindEvents(w);
   }
@@ -1438,14 +1633,27 @@
 
   async function ensureProblemsLoaded() {
     var info = getPatientInfo();
+    var viaBridge = false;
     if (!info) {
       var task = getTaskInfo();
-      if (!task) return;
-      var resolvedPatientId = await resolveTaskPatientId(task);
-      var nowTask = getTaskInfo();
-      if (!resolvedPatientId || !nowTask || nowTask.taskUuid !== task.taskUuid) return;
-      info = { siteId: task.siteId, patientId: resolvedPatientId };
+      if (task) {
+        var resolvedPatientId = await resolveTaskPatientId(task);
+        var nowTask = getTaskInfo();
+        if (!resolvedPatientId || !nowTask || nowTask.taskUuid !== task.taskUuid) return;
+        info = { siteId: task.siteId, patientId: resolvedPatientId };
+      } else {
+        // Any other page shape (appointment view, consultation view, …):
+        // the page-world bridge tells us which patient the page's own
+        // embedded Clinical Summary panel was last fetched for. Guarded
+        // downstream: a bridge-derived context must ALSO match at least one
+        // on-screen problem row before the widget injects (injectTrigger).
+        var bridged = parseSummaryBridgeAttr(document.documentElement.getAttribute('data-ch-summary-patient'));
+        if (!bridged) return;
+        info = { siteId: null, patientId: bridged };
+        viaBridge = true;
+      }
     }
+    _contextViaBridge = viaBridge;
     if (info.patientId !== _lastPatientId) {
       _lastPatientId = info.patientId;
       resetForPatient();
