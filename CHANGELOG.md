@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.223.0] — 2026-08-04
+
+### Practice-defined urgency brackets (Phase 1 — detail page only)
+
+New named, practice-configurable request CATEGORY tags — "Mental health", "Home visit", "Acute
+illness" shipped enabled — matched against the patient's free-text request on the task detail
+page and shown as a new `ch-bracket` chip family alongside the existing rule chips, with the
+SAME match-evidence popover the queue rule-match chips use. **Deliberately not a composite
+urgency score**: each bracket is its own named, sourced, advisory signal — escalate-only, never
+suppresses or routes, no aggregation into a single number (see
+`docs/plans/TRIAGE-NORTHSTAR-2026-07-22.md` design principles). Reuses the shared matcher
+(`rule-match.js`) unchanged — a bracket compiles through the exact same `compileRule` path as a
+rule.
+
+New top-level `urgencyBrackets` array in `defaults.json` (shipped-config version bumped to 27),
+propagated through `mergeShippedDefaults` in both `content.js` and `options.js` (append-by-id,
+sharing the existing `removedBuiltins` tombstone with rules/resultRules) and added to
+`scripts/defaults-config-lock.js`'s `MIGRATION_KEYS`. New "Brackets" tab in the Triage Lens
+options page (list + search + inline enable + add/edit/delete with builtin-tombstone,
+`validateUrgencyBracket`), and `validateImportedConfig` now validates `urgencyBrackets` on
+import/paste. No IO change needed — brackets live inside the existing `triagelens.config` blob
+`shared/io/triage-io.js` already exports/imports whole. New `test-urgency-bracket-coverage.js`
+(51 checks) pins every shipped bracket's patterns compiling plus match/non-match examples,
+modelled on `test-triage-rule-patterns.js`.
+
 ## [v3.222.0] — 2026-08-04
 
 ### Task presence: the practice's shared folder IS the store

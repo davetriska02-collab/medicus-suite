@@ -259,6 +259,14 @@
     backfillBuiltinAbnormalText(out.resultRules, shipped.resultRules);
     // Un-stick result-rule labels/thresholds frozen at a since-changed shipped default.
     revertRetiredResultRuleFields(out.resultRules, shipped.resultRules);
+    // Urgency brackets (Phase 1 — detail page only): same append-by-id merge as
+    // rules/resultRules above, sharing the SAME removedBuiltins tombstone set —
+    // kept in lock-step with the mirror in content.js.
+    out.urgencyBrackets = [...(Array.isArray(cfg.urgencyBrackets) ? cfg.urgencyBrackets : [])];
+    const haveUB = new Set(out.urgencyBrackets.map((b) => b && b.id));
+    for (const b of shipped.urgencyBrackets || []) {
+      if (b.builtin && !haveUB.has(b.id) && !removed.has(b.id)) out.urgencyBrackets.push(b);
+    }
     // OIR user test dictionary: a purely user/practice-authored array (built-in
     // tests live in engine TEST_DEFS, not here). Arrays aren't shallow-merged, so
     // carry it through explicitly or migration would drop the user's customs.
@@ -271,6 +279,7 @@
     DEFAULTS = await fetchDefaults();
     CONFIG = await loadConfig();
     if (!Array.isArray(CONFIG.resultRules)) CONFIG.resultRules = [];
+    if (!Array.isArray(CONFIG.urgencyBrackets)) CONFIG.urgencyBrackets = [];
     const merged = mergeShippedDefaults(CONFIG, DEFAULTS);
     if (merged) {
       await saveConfig(merged);
@@ -289,9 +298,12 @@
     setupResultEditPane();
     setupResultLlmPane();
     setupOirPane();
+    setupBracketsPane();
+    setupBracketEditPane();
     renderRules();
     renderSystemChips();
     renderResultRules();
+    renderBrackets();
     populateThresholds();
     populatePrefs();
     populateOir();
@@ -337,9 +349,11 @@
       CONFIG = change.newValue;
       if (!Array.isArray(CONFIG.rules)) CONFIG.rules = [];
       if (!Array.isArray(CONFIG.resultRules)) CONFIG.resultRules = [];
+      if (!Array.isArray(CONFIG.urgencyBrackets)) CONFIG.urgencyBrackets = [];
       renderRules();
       renderResultRules();
       renderSystemChips();
+      renderBrackets();
     });
   };
 
@@ -392,6 +406,8 @@
       resultRules: 'paneResultRules',
       resultEdit: 'paneResultEdit',
       oir: 'paneOir',
+      brackets: 'paneBrackets',
+      bracketEdit: 'paneBracketEdit',
     };
     $$('.tl-pane').forEach((p) => p.classList.remove('tl-pane-active'));
     const id = map[name];
@@ -755,6 +771,220 @@
   };
 
   // ============================================================
+  // URGENCY BRACKETS TAB (Phase 1 — detail page only)
+  // ============================================================
+  // Practice-defined, named CATEGORY tags matched against the request
+  // free-text on the task detail page. Deliberately a SMALLER schema than an
+  // alert rule (id/enabled/label/kind/patterns/regex/builtin only — no
+  // fields/pages/bumpsTile/actions/require): brackets only ever match
+  // "request" text on the "detail" page (TRIAGE-NORTHSTAR-2026-07-22.md —
+  // not a composite score, so there is nothing here to bump a tile or route
+  // an action). This pane clones the shape of the rules pane above (list +
+  // search, inline enable toggle, add/edit/delete with builtin-tombstone,
+  // deep-clone draft editor) without the fields that don't apply.
+  const setupBracketsPane = () => {
+    $('#btnAddBracket').addEventListener('click', () => {
+      const newBracket = makeBlankBracket();
+      CONFIG.urgencyBrackets.push(newBracket);
+      openBracketEditor(newBracket.id);
+    });
+    $('#bracketSearch').addEventListener('input', renderBrackets);
+    $('#filterBracketKind').addEventListener('change', renderBrackets);
+  };
+
+  const makeBlankBracket = () => ({
+    id: 'bracket_' + Math.random().toString(36).slice(2, 9),
+    enabled: true,
+    label: 'New bracket',
+    kind: 'amber',
+    patterns: [],
+    regex: false,
+    builtin: false,
+  });
+
+  const renderBrackets = () => {
+    const q = (($('#bracketSearch') && $('#bracketSearch').value) || '').trim().toLowerCase();
+    const kFilter = $('#filterBracketKind') ? $('#filterBracketKind').value : '';
+    const list = (CONFIG.urgencyBrackets || []).filter((b) => {
+      if (kFilter && b.kind !== kFilter) return false;
+      if (!q) return true;
+      const hay = (b.label + ' ' + (b.patterns || []).join(' ')).toLowerCase();
+      return hay.includes(q);
+    });
+
+    const container = $('#bracketList');
+    if (!container) return;
+    container.innerHTML = '';
+    if (!list.length) {
+      if ($('#bracketListEmpty')) $('#bracketListEmpty').style.display = 'block';
+      return;
+    }
+    if ($('#bracketListEmpty')) $('#bracketListEmpty').style.display = 'none';
+
+    for (const bracket of list) {
+      const row = document.createElement('div');
+      row.className = 'tl-rule-row' + (bracket.enabled ? '' : ' tl-rule-disabled');
+      row.innerHTML = `
+        <input type="checkbox" class="tl-rule-toggle" ${bracket.enabled ? 'checked' : ''}>
+        <span class="tl-rule-kind tl-rule-kind-${escAttr(bracket.kind)}">${KIND_LABEL[bracket.kind] || bracket.kind}</span>
+        <span>
+          <span class="tl-rule-label">${escHtml(bracket.label)}</span>
+          <span class="tl-rule-meta">  ${bracket.builtin ? '· built-in' : ''}</span>
+        </span>
+        <span class="tl-rule-meta">${bracket.patterns.length} pattern${bracket.patterns.length === 1 ? '' : 's'}</span>
+        <span class="tl-rule-actions">
+          <button class="tl-btn" data-act="edit">Edit</button>
+          <button class="tl-btn tl-btn-danger" data-act="del">×</button>
+        </span>`;
+      row.querySelector('.tl-rule-toggle').addEventListener('change', async (e) => {
+        bracket.enabled = e.target.checked;
+        await saveConfig(CONFIG);
+        flash('Saved');
+        renderBrackets();
+      });
+      row.querySelector('[data-act="edit"]').addEventListener('click', () => openBracketEditor(bracket.id));
+      row.querySelector('[data-act="del"]').addEventListener('click', async () => {
+        if (!confirm(`Delete bracket "${bracket.label}"? This can't be undone (unless you reset to defaults).`)) return;
+        CONFIG.urgencyBrackets = CONFIG.urgencyBrackets.filter((b) => b.id !== bracket.id);
+        // Tombstone a deleted builtin so the defaults-version merge never
+        // resurrects a bracket the user deliberately removed. Shares the SAME
+        // removedBuiltins array as rules/resultRules — see mergeShippedDefaults.
+        if (bracket.builtin) {
+          CONFIG.removedBuiltins = [...new Set([...(CONFIG.removedBuiltins || []), bracket.id])];
+        }
+        await saveConfig(CONFIG);
+        flash('Deleted');
+        renderBrackets();
+      });
+      container.appendChild(row);
+    }
+  };
+
+  let editingBracketId = null;
+  let editingBracketDraft = null;
+
+  const setupBracketEditPane = () => {
+    $('#btnBackToBrackets').addEventListener('click', () => {
+      editingBracketId = null;
+      activateTab('brackets');
+    });
+    $('#btnCancelBracketEdit').addEventListener('click', () => {
+      editingBracketId = null;
+      chrome.storage.local.get(['triagelens.config', 'config']).then((r) => {
+        const cfg = r['triagelens.config'] || r['config'];
+        if (cfg) CONFIG = cfg;
+        if (!Array.isArray(CONFIG.urgencyBrackets)) CONFIG.urgencyBrackets = [];
+        renderBrackets();
+        activateTab('brackets');
+      });
+    });
+    $('#btnSaveBracketEdit').addEventListener('click', saveCurrentBracket);
+    $('#btnDeleteBracket').addEventListener('click', async () => {
+      if (!editingBracketId) return;
+      const b = CONFIG.urgencyBrackets.find((x) => x.id === editingBracketId);
+      if (!b) return;
+      if (!confirm(`Delete bracket "${b.label}"?`)) return;
+      CONFIG.urgencyBrackets = CONFIG.urgencyBrackets.filter((x) => x.id !== editingBracketId);
+      if (b.builtin) {
+        CONFIG.removedBuiltins = [...new Set([...(CONFIG.removedBuiltins || []), b.id])];
+      }
+      await saveConfig(CONFIG);
+      editingBracketId = null;
+      flash('Deleted');
+      renderBrackets();
+      activateTab('brackets');
+    });
+  };
+
+  const openBracketEditor = (id) => {
+    const bracket = CONFIG.urgencyBrackets.find((b) => b.id === id);
+    if (!bracket) return;
+    editingBracketId = id;
+    editingBracketDraft = JSON.parse(JSON.stringify(bracket));
+
+    $('#editBracketTitle').textContent = bracket.builtin
+      ? 'Edit built-in bracket: ' + bracket.label
+      : 'Edit bracket: ' + bracket.label;
+    $('#brLabel').value = editingBracketDraft.label;
+    $('#brKind').value = editingBracketDraft.kind;
+    $('#brEnabled').checked = !!editingBracketDraft.enabled;
+    $('#brPatterns').value = (editingBracketDraft.patterns || []).join('\n');
+    $('#brRegex').checked = !!editingBracketDraft.regex;
+
+    activateTab('bracketEdit');
+  };
+
+  // validateUrgencyBracket(bracket) → string[] — mirrors validateTriageRule's
+  // kind/patterns checks, over the smaller bracket schema. Patterns compile
+  // through the SAME shared matcher (window.TriageLensMatch.compileRule) the
+  // runtime and the live preview use, so an invalid pattern is caught here
+  // rather than silently never firing (the same clinical-safety concern
+  // validateTriageRule's regex check exists for).
+  const validateUrgencyBracket = (bracket) => {
+    const errs = [];
+    if (!bracket || typeof bracket !== 'object') {
+      errs.push('Bracket must be an object.');
+      return errs;
+    }
+    if (!bracket.label || typeof bracket.label !== 'string' || !bracket.label.trim()) {
+      errs.push('label is required.');
+    }
+    if (!ALLOWED_KINDS.includes(bracket.kind)) {
+      errs.push('kind must be one of: ' + ALLOWED_KINDS.join(', ') + '.');
+    }
+    const patterns = Array.isArray(bracket.patterns)
+      ? bracket.patterns.filter((p) => typeof p === 'string' && p.trim())
+      : [];
+    if (patterns.length === 0) {
+      errs.push('At least one non-empty pattern is required.');
+    } else {
+      const COMPILE = window.TriageLensMatch && window.TriageLensMatch.compileRule;
+      if (COMPILE) {
+        const compiled = COMPILE({ ...bracket, patterns, enabled: true });
+        if (!compiled) {
+          errs.push('No usable patterns after compilation.');
+        } else if (Array.isArray(compiled._errors) && compiled._errors.length) {
+          errs.push(compiled._errors[0]);
+        }
+      } else if (bracket.regex) {
+        for (const p of patterns) {
+          try {
+            new RegExp(p, 'i');
+          } catch (e) {
+            errs.push('Invalid regex pattern "' + p + '": ' + e.message);
+          }
+        }
+      }
+    }
+    return errs;
+  };
+
+  const saveCurrentBracket = async () => {
+    editingBracketDraft.label = ($('#brLabel').value || '').trim() || 'Untitled bracket';
+    editingBracketDraft.kind = $('#brKind').value;
+    editingBracketDraft.enabled = $('#brEnabled').checked;
+    editingBracketDraft.patterns = ($('#brPatterns').value || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    editingBracketDraft.regex = $('#brRegex').checked;
+
+    const errs = validateUrgencyBracket(editingBracketDraft);
+    if (errs.length) {
+      flash(errs[0], 'error');
+      return;
+    }
+
+    const idx = CONFIG.urgencyBrackets.findIndex((b) => b.id === editingBracketId);
+    if (idx === -1) return;
+    CONFIG.urgencyBrackets[idx] = editingBracketDraft;
+    await saveConfig(CONFIG);
+    flash('Saved');
+    renderBrackets();
+    activateTab('brackets');
+  };
+
+  // ============================================================
   // FULL-CONFIG IMPORT VALIDATION (backup file + pasted JSON)
   // ============================================================
   // validateImportedConfig(parsed, currentConfig) → { errors: string[], normalized?: object }
@@ -797,6 +1027,20 @@
               const name = (parsed.resultRules[i] && parsed.resultRules[i].label) || 'untitled';
               errors.push('resultRules[' + i + '] (' + name + '): ' + errs[0]);
             }
+          }
+        }
+      }
+    }
+
+    if (errors.length === 0 && parsed.urgencyBrackets !== undefined) {
+      if (!Array.isArray(parsed.urgencyBrackets)) {
+        errors.push('urgencyBrackets must be an array.');
+      } else {
+        for (let i = 0; i < parsed.urgencyBrackets.length && errors.length === 0; i++) {
+          const errs = validateUrgencyBracket(parsed.urgencyBrackets[i]);
+          if (errs.length > 0) {
+            const name = (parsed.urgencyBrackets[i] && parsed.urgencyBrackets[i].label) || 'untitled';
+            errors.push('urgencyBrackets[' + i + '] (' + name + '): ' + errs[0]);
           }
         }
       }

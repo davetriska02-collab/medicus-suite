@@ -1,5 +1,5 @@
 {
-  "version": 25,
+  "version": 27,
   "rules": [
     {
       "id": "mh-crisis",
@@ -5109,6 +5109,75 @@
       "comparator": "above",
       "amber": 12,
       "unit": "×10⁹/L"
+    }
+  ],
+  "urgencyBrackets": [
+    {
+      "id": "bracket-mental-health",
+      "enabled": true,
+      "label": "Mental health",
+      "kind": "amber",
+      "patterns": [
+        "low mood",
+        "feeling low",
+        "depress\\w*",
+        "anxi\\w*",
+        "panic attack\\w*",
+        "panick\\w*",
+        "can.?t cope",
+        "not coping",
+        "struggling (mentally|emotionally)",
+        "mental health (support|review|help)",
+        "feeling (really |very )?overwhelm\\w*",
+        "constantly on edge",
+        "tearful all the time",
+        "mood is really low"
+      ],
+      "regex": true,
+      "builtin": true
+    },
+    {
+      "id": "bracket-home-visit",
+      "enabled": true,
+      "label": "Home visit",
+      "kind": "amber",
+      "patterns": [
+        "housebound",
+        "bed.?bound",
+        "can.?t get to the (surgery|practice)",
+        "unable to (get to|attend) the (surgery|practice)",
+        "can.?t leave (the house|home|bed)",
+        "too unwell to leave (the house|home|bed)",
+        "carer (says|reports|called|rang|is asking)",
+        "end of life",
+        "palliative",
+        "dying at home",
+        "terminal(ly)? ill",
+        "needs? a home visit",
+        "requesting a home visit"
+      ],
+      "regex": true,
+      "builtin": true
+    },
+    {
+      "id": "bracket-acute-illness",
+      "enabled": true,
+      "label": "Acute illness",
+      "kind": "amber",
+      "patterns": [
+        "started (suddenly|this morning|last night|yesterday)",
+        "since (this morning|last night|yesterday)",
+        "getting worse",
+        "high (fever|temperature)",
+        "keeps? (being sick|vomiting)",
+        "vomiting (a lot|repeatedly|non.?stop|all day)",
+        "can.?t keep (anything|food|fluids) down",
+        "(come|came) on (very )?(suddenly|quickly)",
+        "new (severe|really bad) pain",
+        "sudden(ly)? (unwell|worse)"
+      ],
+      "regex": true,
+      "builtin": true
     }
   ]
 }
