@@ -420,6 +420,10 @@ txnParityReportBtn?.addEventListener('click', async () => {
 // stored locally only, deliberately excluded from Suite backups (same stance
 // as txn.callerKey).
 
+const presencePickFolderBtn = document.getElementById('presencePickFolderBtn');
+const presenceReallowBtn = document.getElementById('presenceReallowBtn');
+const presenceForgetFolderBtn = document.getElementById('presenceForgetFolderBtn');
+const presenceFolderStatus = document.getElementById('presenceFolderStatus');
 const presenceEnabledInput = document.getElementById('presenceEnabled');
 const presenceUrlInput = document.getElementById('presenceUrl');
 const presenceKeyInput = document.getElementById('presenceKey');
@@ -463,6 +467,77 @@ const presenceSaved = document.getElementById('presenceSaved');
     console.warn('[Presence section init]', e.message);
   }
 })();
+
+// ── Folder store: pick / re-allow / disconnect ────────────────────────────────
+// The FSA picker and any permission prompt REQUIRE a user gesture, which is
+// why this lives here and not in the service worker. The handle persists in
+// extension IndexedDB (shared/presence-folder.js) and the worker does all
+// subsequent IO. Chrome's own prompt offers "Allow on every visit" — that is
+// what makes this one-click-forever; the re-allow button covers installs
+// where the grant lapsed instead.
+
+async function presenceRenderFolderStatus() {
+  if (!presenceFolderStatus || typeof PresenceFolder === 'undefined') return;
+  try {
+    const handle = await PresenceFolder.loadHandle();
+    if (!handle) {
+      presenceFolderStatus.textContent = 'not connected';
+      presenceFolderStatus.style.color = 'var(--text-3)';
+      if (presenceReallowBtn) presenceReallowBtn.style.display = 'none';
+      if (presenceForgetFolderBtn) presenceForgetFolderBtn.style.display = 'none';
+      return;
+    }
+    const perm = await PresenceFolder.permissionState(handle);
+    if (presenceForgetFolderBtn) presenceForgetFolderBtn.style.display = '';
+    if (perm === 'granted') {
+      presenceFolderStatus.textContent = `connected — "${handle.name}" (presence files in ${PresenceFolder.DIR_NAME}/)`;
+      presenceFolderStatus.style.color = 'var(--green)';
+      if (presenceReallowBtn) presenceReallowBtn.style.display = 'none';
+    } else {
+      presenceFolderStatus.textContent = `"${handle.name}" needs access re-allowed (Chrome dropped the grant)`;
+      presenceFolderStatus.style.color = 'var(--amber)';
+      if (presenceReallowBtn) presenceReallowBtn.style.display = '';
+    }
+  } catch (e) {
+    presenceFolderStatus.textContent = `status check failed: ${e.message}`;
+    presenceFolderStatus.style.color = 'var(--amber)';
+  }
+}
+presenceRenderFolderStatus();
+
+presencePickFolderBtn?.addEventListener('click', async () => {
+  if (typeof PresenceFolder === 'undefined' || typeof window.showDirectoryPicker !== 'function') {
+    alert('Folder access is not available in this browser.');
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'ms-presence' });
+    await PresenceFolder.saveHandle(handle);
+    await presenceRenderFolderStatus();
+  } catch (e) {
+    if (e && e.name !== 'AbortError') console.warn('[Presence folder pick]', e.message);
+  }
+});
+
+presenceReallowBtn?.addEventListener('click', async () => {
+  try {
+    const handle = await PresenceFolder.loadHandle();
+    if (!handle) return;
+    await handle.requestPermission({ mode: 'readwrite' });
+    await presenceRenderFolderStatus();
+  } catch (e) {
+    console.warn('[Presence folder re-allow]', e.message);
+  }
+});
+
+presenceForgetFolderBtn?.addEventListener('click', async () => {
+  try {
+    await PresenceFolder.clearHandle();
+    await presenceRenderFolderStatus();
+  } catch (e) {
+    console.warn('[Presence folder disconnect]', e.message);
+  }
+});
 
 savePresenceBtn?.addEventListener('click', async () => {
   const url = (presenceUrlInput?.value || '').trim().replace(/\/+$/, '');

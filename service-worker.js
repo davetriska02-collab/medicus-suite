@@ -100,6 +100,11 @@ try {
 } catch (e) {
   console.warn('[Suite] importScripts shared/quiet-mode.js failed:', e && e.message);
 }
+try {
+  importScripts('shared/presence-folder.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/presence-folder.js failed:', e && e.message);
+}
 
 // Transactional API integration (official Medicus API via our backend proxy).
 // The proxy caller credential (txn.callerKey) is only ever read HERE, in the
@@ -382,6 +387,73 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   syncPresenceFileConfig()
     .then(sendResponse)
     .catch((e) => sendResponse({ ok: false, reason: String((e && e.message) || e) }));
+  return true; // async sendResponse
+});
+
+// ── Task-presence FOLDER store IO (2026-08-04) ────────────────────────────────
+// The practice's shared folder IS the presence store (user decision: data
+// stays on the practice network — see shared/presence-folder.js's header).
+// The folder handle is picked once per machine in Options and persisted in
+// extension IndexedDB; ALL file IO happens here in the service worker, on
+// behalf of the content script, which only ever sends validated beat rows and
+// receives validated rows back. queryPermission never prompts — when the
+// grant has lapsed, status reports 'prompt' and Options shows a re-allow
+// button (a prompt needs a user gesture, which a worker doesn't have).
+
+async function presenceFolderStatus() {
+  if (typeof PresenceFolder === 'undefined') return { configured: false, permission: 'none' };
+  const handle = await PresenceFolder.loadHandle().catch(() => null);
+  if (!handle) return { configured: false, permission: 'none' };
+  const permission = await PresenceFolder.permissionState(handle);
+  return { configured: true, permission, folderName: handle.name || '' };
+}
+
+async function presenceFolderIO(kind, payload) {
+  if (typeof PresenceFolder === 'undefined') return { ok: false, reason: 'module-missing' };
+  const handle = await PresenceFolder.loadHandle().catch(() => null);
+  if (!handle) return { ok: false, reason: 'not-configured' };
+  const permission = await PresenceFolder.permissionState(handle);
+  if (permission !== 'granted') return { ok: false, reason: 'permission-' + permission };
+  try {
+    if (kind === 'beat') {
+      await PresenceFolder.writeBeat(handle, payload && payload.row);
+      return { ok: true };
+    }
+    if (kind === 'clear') {
+      await PresenceFolder.clearBeat(handle, payload && payload.site, payload && payload.staffId);
+      return { ok: true };
+    }
+    if (kind === 'read') {
+      const rows = await PresenceFolder.readAllBeats(handle, payload && payload.site, Date.now(), 90000);
+      return { ok: true, rows };
+    }
+    return { ok: false, reason: 'unknown-kind' };
+  } catch (e) {
+    return { ok: false, reason: String((e && e.message) || e).slice(0, 200) };
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return; // F5: intra-extension only
+  if (!msg || typeof msg.action !== 'string' || msg.action.indexOf('presence:folder') !== 0) return;
+  if (msg.action === 'presence:folderStatus') {
+    presenceFolderStatus()
+      .then(sendResponse)
+      .catch(() => sendResponse({ configured: false, permission: 'none' }));
+    return true;
+  }
+  const kind =
+    msg.action === 'presence:folderBeat'
+      ? 'beat'
+      : msg.action === 'presence:folderClear'
+        ? 'clear'
+        : msg.action === 'presence:folderRead'
+          ? 'read'
+          : null;
+  if (!kind) return;
+  presenceFolderIO(kind, msg)
+    .then(sendResponse)
+    .catch((e) => sendResponse({ ok: false, reason: String((e && e.message) || e).slice(0, 200) }));
   return true; // async sendResponse
 });
 
