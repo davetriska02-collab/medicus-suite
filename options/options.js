@@ -414,6 +414,61 @@ txnParityReportBtn?.addEventListener('click', async () => {
   }
 });
 
+// ── Task Presence settings ────────────────────────────────────────────────────
+// Advisory "someone is on this request" store config (content-scripts/
+// task-presence.js reads these). presence.key is a practice credential:
+// stored locally only, deliberately excluded from Suite backups (same stance
+// as txn.callerKey).
+
+const presenceEnabledInput = document.getElementById('presenceEnabled');
+const presenceUrlInput = document.getElementById('presenceUrl');
+const presenceKeyInput = document.getElementById('presenceKey');
+const presenceNameInput = document.getElementById('presenceName');
+const savePresenceBtn = document.getElementById('savePresenceBtn');
+const presenceSaved = document.getElementById('presenceSaved');
+
+(async function initPresenceSection() {
+  try {
+    const res = await chrome.storage.local.get(['presence.enabled', 'presence.url', 'presence.key', 'presence.name']);
+    if (presenceEnabledInput) presenceEnabledInput.checked = res['presence.enabled'] === true;
+    if (presenceUrlInput) presenceUrlInput.value = res['presence.url'] || '';
+    if (presenceKeyInput) presenceKeyInput.value = res['presence.key'] || '';
+    if (presenceNameInput) presenceNameInput.value = res['presence.name'] || '';
+  } catch (e) {
+    console.warn('[Presence section init]', e.message);
+  }
+})();
+
+savePresenceBtn?.addEventListener('click', async () => {
+  const url = (presenceUrlInput?.value || '').trim().replace(/\/+$/, '');
+  // Same gate the content script applies (validPresenceConfig): https on
+  // *.supabase.co, matching the manifest host permission. Reject here so a
+  // typo is a visible error at save time, not a silently-dormant feature.
+  if (url) {
+    let ok = false;
+    try {
+      const u = new URL(url);
+      ok = u.protocol === 'https:' && /^[a-z0-9-]+\.supabase\.co$/i.test(u.hostname);
+    } catch (_) {
+      ok = false;
+    }
+    if (!ok) {
+      alert('Store URL must be https://<project>.supabase.co');
+      return;
+    }
+  }
+  await chrome.storage.local.set({
+    'presence.enabled': presenceEnabledInput ? presenceEnabledInput.checked : false,
+    'presence.url': url,
+    'presence.key': (presenceKeyInput?.value || '').trim(),
+    'presence.name': (presenceNameInput?.value || '').trim(),
+  });
+  if (presenceSaved) {
+    presenceSaved.classList.add('show');
+    setTimeout(() => presenceSaved.classList.remove('show'), 2000);
+  }
+});
+
 // ── Capacity Forecast preset editor ──────────────────────────────────────────
 
 const presetEditor = document.getElementById('capPresetEditor');
@@ -3639,8 +3694,7 @@ initPdcTallySection({
       if (!domainSel || !note) return;
       const clinicianOnly =
         PU.CLINICIAN_ONLY_DOMAINS.indexOf(domainSel.value) !== -1 || !!$('rcpoEdSensitive')?.checked;
-      const frozenId =
-        !!(pathway && PU.CLINICIAN_ONLY_IDS.indexOf(pathway.id) !== -1);
+      const frozenId = !!(pathway && PU.CLINICIAN_ONLY_IDS.indexOf(pathway.id) !== -1);
       host.querySelectorAll('.rcpo-disp-allowed').forEach((cb) => {
         const block = (clinicianOnly || frozenId) && cb.value !== 'gp_routine';
         cb.disabled = block;
@@ -3871,7 +3925,12 @@ initPdcTallySection({
           <button class="ghost" id="rcpoRoutingRevoke" style="font-size:11px; padding:4px 10px;">Revoke</button>
         </div>`;
       $('rcpoRoutingRevoke')?.addEventListener('click', async () => {
-        if (!confirm('Revoke the custom routing sign-off? Custom and edited pathways go back to suggesting a clinician only.')) return;
+        if (
+          !confirm(
+            'Revoke the custom routing sign-off? Custom and edited pathways go back to suggesting a clinician only.'
+          )
+        )
+          return;
         await chrome.storage.local.remove('reception.routingAttestation');
         refresh();
       });

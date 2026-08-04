@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.219.0
+**Version:** v3.220.0
 **Generated:** 2026-08-03 (automated)
 
 ## What it is
@@ -145,6 +145,7 @@ The **full Rota Manager** (its own browser tab) covers working patterns and mult
 - **Bulk end problems** — inline checkboxes next to every active problem on the Clinical Summary (wherever the summary panel renders: care-record page, task view, appointment view, consultation view), for ending several entries in one batch
 - **Organise problems** — an "Organise problems?" trigger on the Clinical Summary (wherever the summary panel renders) with four confirmed-write sections: SNOMED-ancestry nesting suggestions, a "Merge duplicate copies" flow (keeper chosen, others retired via the Duplicate Checker's confirmed removal write), a "Change significance" batch re-grader riding Medicus's own edit form, and a manual parent-first link builder; every batch explicitly confirmed with each problem listed
 - **Allergy cleanup suite** — one "Clean up allergies?" trigger on the Clinical Summary (care-record page and the task view's embedded summary panel alike) covering junk/import-artefact code removal, duplicate-entry merge (with per-card exclude and an explicit clinical-decision review step), clearing a stale legacy code alongside an already-correct one, and converting a legacy pre-defined-allergy code to a proper coded substance — every action requires explicit confirmation, nothing is auto-applied
+- **Task presence** — stops two clinicians unknowingly working the same triage request: a "last actioned by" chip on queue rows (read straight off Medicus's own wire data, zero setup), plus — once the practice configures its shared store — a "👁 name" chip on any request a colleague currently has open and an advisory banner when you open one they're already in. Advisory only, never a lock; absence of a chip never means nobody is there (see docs/task-presence-setup.md)
 - **Pusher relay** — keeps the panel's live data current via the practice's real-time feed
 - **Referrals discovery** — watches the referrals audit-report page and feeds discovered data to the Referrals Tracker tab
 

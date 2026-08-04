@@ -1,0 +1,108 @@
+/* Medicus Suite — task presence: queue chips + open-task advisory banner */
+/* (ms-tp-* prefix; all selectors scoped to avoid Medicus conflicts) */
+
+/* Scoped light-canon token block — this stylesheet is injected into Medicus
+   pages, which never load panel.css, so the surface carries its own copy of
+   the light-theme canon values (host page is light). Canon source:
+   .claude/skills/ui-design/TOKENS.md ("Injected surfaces" rule) — when the
+   canon changes, update this block in the same commit. */
+.ms-tp-chips,
+#ms-tp-banner {
+  --bg-elev: #ffffff;
+  --border: #cbd5e1;
+  --text-1: #0f172a;
+  --text-3: #475569;
+  --text-4: #556377;
+  --accent: #2563eb;
+  --accent-dim: rgba(37, 99, 235, 0.09);
+  --accent-line: rgba(37, 99, 235, 0.3);
+  --amber: #b45309;
+  --amber-dim: rgba(180, 83, 9, 0.09);
+  --amber-line: rgba(180, 83, 9, 0.32);
+  --r-sm: 4px;
+  --r-pill: 999px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ── queue chips ─────────────────────────────────────────────────────────────
+   Injected (PREPENDED) into the fixed-width patient-name cell, so the whole
+   strip is width-capped and ellipsised: the patient name must never be pushed
+   out of its cell (CLAUDE.md queue-chip rule 2). */
+.ms-tp-chips {
+  display: inline-flex;
+  gap: 3px;
+  max-width: 46%;
+  margin-right: 5px;
+  vertical-align: middle;
+  overflow: hidden;
+}
+
+.ms-tp-chip {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  letter-spacing: 0.01em;
+}
+
+/* Presence — a colleague is IN the request right now. Amber: this is the
+   "stop, check before you duplicate work" signal (amber = danger-adjacent
+   caution in the canon; the only amber on the queue strip). */
+.ms-tp-chip-presence {
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+}
+
+/* Last-actioned — historical fact, neutral accent, informational only. */
+.ms-tp-chip-actioned {
+  color: var(--text-3);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+}
+
+/* ── open-task advisory banner ──────────────────────────────────────────────
+   Prepended into <main> on a task overview when a colleague's presence row is
+   fresh. Status triad: amber ink / amber wash / amber line. Advisory tone —
+   it warns, it never blocks. */
+#ms-tp-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 12px 4px;
+  padding: 8px 12px;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-sm);
+  color: var(--amber);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.ms-tp-banner-eye {
+  flex: 0 0 auto;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.ms-tp-banner-text {
+  min-width: 0;
+}
+
+.ms-tp-banner-text strong {
+  font-weight: 700;
+}
+
+.ms-tp-banner-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--text-4);
+}

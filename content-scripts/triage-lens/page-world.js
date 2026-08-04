@@ -87,6 +87,13 @@
           row.overviewURL = typeof item.overviewURL === 'string' ? item.overviewURL : '';
           row.priorityDisplay = typeof item.priorityDisplay === 'string' ? item.priorityDisplay : '';
           row.unmatched = !!item.unmatchedToPatient;
+          // Who last touched this task, straight off the wire (2026-08-04
+          // capture, docs/learnings-task-presence.md): the queue payload
+          // carries actionedBy/actionedDateTime but Medicus's own columnDefs
+          // never display them. task-presence.js renders them as a queue
+          // chip. Staff name + timestamp only — no patient fields are added.
+          row.actionedBy = typeof item.actionedBy === 'string' ? item.actionedBy.slice(0, 80) : '';
+          row.actionedDateTime = typeof item.actionedDateTime === 'string' ? item.actionedDateTime.slice(0, 40) : '';
         }
         return row;
       })
@@ -153,6 +160,49 @@
     } catch (_) {}
     return origSend.apply(this, arguments);
   };
+
+  // ---- Logged-in staff identity note (2026-08-04) ----
+  // The isolated world has no way to learn WHO is using Medicus, but the
+  // page's own Pusher subscriptions name the logged-in user twice over
+  // (docs/learnings-task-presence.md):
+  //   {site}-staff-task-counters-{staffUuid}   → the staff member's UUID
+  //   update-tenants-{email}                   → their login email
+  // Stamp both onto a documentElement attribute ('data-ch-staff', value
+  // 'staffUuid|email') the same way the summary-patient note works, so
+  // task-presence.js can attribute its advisory presence beacons. This reads
+  // channel NAMES only — no messages, no patient data — and stops polling as
+  // soon as the stamp lands (or after ~60s if Pusher never appears).
+  var STAFF_CH_RE =
+    /^[0-9a-z]{2,}-staff-task-counters-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+  var TENANT_CH_RE = /^update-tenants-(.+)$/;
+  var staffPollCount = 0;
+  function pollStaffIdentity() {
+    staffPollCount++;
+    var found = false;
+    try {
+      var app = document.querySelector('#app') || document.querySelector('[data-v-app]');
+      var gp = app && app.__vue_app__ && app.__vue_app__.config && app.__vue_app__.config.globalProperties;
+      var pusher = gp && gp.$pusher;
+      var map = pusher && pusher.channels && pusher.channels.channels;
+      if (map) {
+        var staffId = '';
+        var email = '';
+        for (var name in map) {
+          if (!Object.prototype.hasOwnProperty.call(map, name)) continue;
+          var sm = name.match(STAFF_CH_RE);
+          if (sm) staffId = sm[1].toLowerCase();
+          var tm = name.match(TENANT_CH_RE);
+          if (tm) email = tm[1].slice(0, 120);
+        }
+        if (staffId) {
+          document.documentElement.setAttribute('data-ch-staff', staffId + '|' + email);
+          found = true;
+        }
+      }
+    } catch (_) {}
+    if (!found && staffPollCount < 30) setTimeout(pollStaffIdentity, 2000);
+  }
+  setTimeout(pollStaffIdentity, 2000);
 
   console.debug('[ClinHUD] page-world interceptors installed (MAIN world)');
 })();

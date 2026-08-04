@@ -2,6 +2,101 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.220.0] — 2026-08-04
+
+### Task presence: "is someone already on this request?"
+
+Field request: two clinicians can open the same triage request without either knowing the other
+is in it. The v3.219.2 capture proved Medicus offers nothing to build on — opening a request
+writes nothing, the status enum has no in-progress, and every Pusher channel is public — so the
+signal is now the Suite's own (`content-scripts/task-presence.js`), in two layers:
+
+**Layer 1 — zero setup, on from install.** The queue payload already carries
+`actionedBy`/`actionedDateTime` on every row; Medicus just never displays them. page-world.js now
+forwards both over the existing `ch-task-list-data` bridge (validated as untrusted, same rules as
+content.js's listener) and a "✎ name · time" chip renders in the patient cell — who last touched
+the task, straight off the wire.
+
+**Layer 2 — shared presence, dormant until configured.** While a clinician has a task overview
+open AND visible, an advisory presence row (site, task UUID, staff UUID, display label,
+timestamps — no patient data of any kind) heartbeats every 25s to a practice-configured Supabase
+table (the manifest already carried the host permission). Colleagues then see a "👁 name" chip on
+that queue row, and opening a request someone else has open injects an amber advisory banner
+("opened this N min ago — they may be working on it"). Identity is never typed: page-world.js
+reads the logged-in staff UUID + email from the page's own Pusher channel names and stamps
+`data-ch-staff`, so a shared terminal attributes presence to whoever is actually in Medicus.
+
+Safety posture, stated everywhere it surfaces: advisory, never a lock — and **no chip never means
+no one** (unconfigured machine, colleague without the Suite, offline store). Heartbeats stop when
+the tab is hidden and rows stale out at 90s, so a request left open over lunch releases itself
+rather than warning colleagues off it; store failures are silent to the clinician (debug-logged)
+because a broken advisory layer must not add noise to a clinical queue. New Options → Task
+Presence section (store URL/key/display name; the key is machine-local and excluded from backups,
+same stance as the Transactional API caller key). Practice setup: `docs/task-presence-setup.md`.
+91-check test file (`test-task-presence.js`) covers the bridge-row sanitiser, identity parse,
+config gate, heartbeat payload (opened_at only on the first beat), the active-others filter
+(self/stale/future-dated excluded, store rows treated as untrusted) and the chip/banner text.
+
+## [v3.219.2] — 2026-08-04
+
+### Answered: Medicus does not tag a request as "being worked on"
+
+Capture run on a live triage request (`docs/learnings-task-presence.md`), and the answer is
+no — from three independent directions:
+
+- **Opening a request writes nothing.** The request was opened, left, and opened again:
+  20 network calls, every one a `GET`, zero writes. A claim or lock has to write on open,
+  so Medicus has nothing to show anyone else.
+- **No status for it.** The queue's Status filter offers New / Awaiting recipient response /
+  Reply received / Scheduled for later; the task page's own `taskStatusOptions` offers
+  `new-request` / `reply-received` / `awaiting-recipient-response` / `resolved` (+ `rejected`).
+  There is no `in-progress`.
+- **No presence channel.** 17 Pusher channels on a task page, none of them presence, and all
+  public — so client events are impossible and we cannot publish our own presence onto them.
+
+Useful by-catch: the queue row already carries `actionedBy` / `actionedById` /
+`actionedDateTime`, `assignedTo` / `assignedId` and `status` / `statusValue` / `statusText`,
+none of which `shared/request-monitor.js` reads. That makes "last actioned by X at HH:MM"
+available with no new endpoint — though it is a *last-actioned* signal, empty on an untouched
+task, so it misses the collision case that matters most (opened but not yet actioned).
+Medicus also runs a per-task broadcast channel `{site}-task-{uuid}` → `updated`, which fires
+on change, not on view.
+
+Two fixes to the capture tool itself, both exposed by the run: `apiBaseUrl()` stripped the
+first host label before prefixing `api`, building `{code}.api.medicus.health` (does not
+resolve) instead of `{code}.api.england.medicus.health` — both active probe GETs failed, and
+every finding above came from the passive fetch/XHR wrap catching the app's own traffic. And
+`BODY_KEEP_CAP` was raised 20k → 80k, because a task overview truncated mid-`taskStatusOptions`.
+
+## [v3.219.1] — 2026-08-04
+
+### Discovery tool: is a request tagged as "being worked on"?
+
+Dev tooling only — no runtime change, nothing added to the manifest's content scripts.
+
+Open question from the floor: when you open a triage request, does Medicus record or broadcast
+that anywhere, so a colleague can see someone is already on it? The repo could not answer it.
+What it knew: task-list rows carry only `id`/`patientName`/`summary`/`priority`/`createdAt`
+(`shared/request-monitor.js`); the list API filters on `statuses[]` with just two values ever
+observed (`new-request`, `reply-received`) plus `masterAssignee`; tasks can be re-assigned to a
+team (`routine-rx-button.js`) — but an assignee is who *should* do it, not who *is* doing it; and
+the page runs Pusher (`pusher-relay.js`), which is exactly the transport a presence signal would
+use, never enumerated.
+
+New `scripts/task-presence-capture.js` (`chWork`) answers it from the live page instead of by
+inference, per the capture-first rule. It looks in the four places such a tag could live — the
+task overview payload, the task-LIST row payload (what a queue chip could actually draw from),
+Pusher channels/events, and the page's own status controls — and adds the decisive behavioural
+test: whether merely OPENING a request produces a write. A claim or lock must POST on open; a
+silent open means nothing is being recorded and any indicator has to be ours.
+
+Read-only and reversible, same posture as the existing capture scripts: wraps `fetch`/XHR/
+`WebSocket`/`history` to observe, never blocks, rewrites, replays or POSTs; its own probe GETs
+are endpoints the shipped code already calls; `chWork.stop()` unwraps everything. Bodies go
+through the same key-based redactor (patient name, DOB, NHS number, address, postcode, phone,
+email), with staff names deliberately kept — "which colleague is shown against an open request"
+is the thing being studied. Output stays local and is never committed.
+
 ## [v3.219.0] — 2026-08-03
 
 ### Organise problems: "Change significance" section (and a trigger rename)
