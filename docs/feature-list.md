@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.222.0
-**Generated:** 2026-08-03 (automated)
+**Version:** v3.223.0
+**Generated:** 2026-08-04 (automated)
 
 ## What it is
 
@@ -133,7 +133,7 @@ The **full Rota Manager** (its own browser tab) covers working patterns and mult
 
 ## In-page features (content scripts)
 
-- **Triage Lens** — decoration chips on the request queue (age, flags) plus keyword-based red-flag detection with linked actions (Samaritans, risk-assessment snippets)
+- **Triage Lens** — decoration chips on the request queue (age, flags) plus keyword-based red-flag detection with linked actions (Samaritans, risk-assessment snippets), and practice-defined urgency brackets: named category tags (Mental health / Home visit / Acute illness, editable per practice) matched against the request text on the task detail page, each showing its match evidence on click — named side-by-side signals, never a combined urgency score
 - **Triage Lens investigation-results queue** — the same overlay applied to the lab-results queue, flagging results against configured thresholds
 - **Lab Results Auto-Filing button** — files a lab result as normal (driving Medicus's own filing controls) only when every parameter is confirmed within normal limits
 - **Prescribing workflow button** — one-click re-assignment of a routine prescription request to the practice's configured team, driving Medicus's own UI
@@ -182,6 +182,7 @@ The shipped alert library carries 35 starter alerts a practice can enable (32 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.223.0 (2026-08-04)** — Practice-defined urgency brackets on the task detail page: named request-category tags (Mental health / Home visit / Acute illness as shipped starters, fully editable in a new Options "Brackets" tab) matched against the patient's request text, shown as their own chip family with click-through match evidence. Deliberately named side-by-side signals rather than a combined urgency score — the clinician remains the aggregation step.
 - **v3.219.0 (2026-08-03)** — "Change significance": batch re-grade problems between Major/Minor/Unknown via Medicus's own edit form, with per-row current-grade display and explicit move-by-move confirm; the problems widget trigger renamed to "Organise problems?".
 - **v3.218.0 (2026-08-03)** — The record-tidy widgets (bulk end, nesting, allergy cleanup) now work on any page that renders the Clinical Summary panel — appointment and consultation views included — via a page-world bridge that reads the patient from the page's own summary fetch, with a wrong-patient row-match guard.
 - **v3.217.0 (2026-08-03)** — Nest problems gains an in-panel "Merge duplicate copies" section: same-code duplicate problems merged down to a chosen keeper using the Duplicate Checker's confirmed removal contract, with children-protected copies excluded and additional-info copies cautioned.
