@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.219.1] — 2026-08-04
+
+### Discovery tool: is a request tagged as "being worked on"?
+
+Dev tooling only — no runtime change, nothing added to the manifest's content scripts.
+
+Open question from the floor: when you open a triage request, does Medicus record or broadcast
+that anywhere, so a colleague can see someone is already on it? The repo could not answer it.
+What it knew: task-list rows carry only `id`/`patientName`/`summary`/`priority`/`createdAt`
+(`shared/request-monitor.js`); the list API filters on `statuses[]` with just two values ever
+observed (`new-request`, `reply-received`) plus `masterAssignee`; tasks can be re-assigned to a
+team (`routine-rx-button.js`) — but an assignee is who *should* do it, not who *is* doing it; and
+the page runs Pusher (`pusher-relay.js`), which is exactly the transport a presence signal would
+use, never enumerated.
+
+New `scripts/task-presence-capture.js` (`chWork`) answers it from the live page instead of by
+inference, per the capture-first rule. It looks in the four places such a tag could live — the
+task overview payload, the task-LIST row payload (what a queue chip could actually draw from),
+Pusher channels/events, and the page's own status controls — and adds the decisive behavioural
+test: whether merely OPENING a request produces a write. A claim or lock must POST on open; a
+silent open means nothing is being recorded and any indicator has to be ours.
+
+Read-only and reversible, same posture as the existing capture scripts: wraps `fetch`/XHR/
+`WebSocket`/`history` to observe, never blocks, rewrites, replays or POSTs; its own probe GETs
+are endpoints the shipped code already calls; `chWork.stop()` unwraps everything. Bodies go
+through the same key-based redactor (patient name, DOB, NHS number, address, postcode, phone,
+email), with staff names deliberately kept — "which colleague is shown against an open request"
+is the thing being studied. Output stays local and is never committed.
+
 ## [v3.219.0] — 2026-08-03
 
 ### Organise problems: "Change significance" section (and a trigger rename)
