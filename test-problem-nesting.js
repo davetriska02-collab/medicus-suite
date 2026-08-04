@@ -22,6 +22,8 @@ const {
   pickEarliestCopyId,
   buildMarkIncorrectPayload,
   removableDuplicateIds,
+  buildSignificancePayload,
+  resolveSignificanceOption,
   apiErrorMessage,
   resultContainsConceptId,
   parseCareRecordPath,
@@ -247,6 +249,79 @@ console.log('--- apiErrorMessage ---');
     apiErrorMessage(400, '{"message":"parentProblemId is invalid"}') === 'API 400 — parentProblemId is invalid',
     'a JSON body with .message surfaces the message'
   );
+}
+
+console.log('--- significance re-grade: the edit-problem full-replace discipline ---');
+{
+  const prefill = {
+    onsetDate: '2016-03-01',
+    contextId: null,
+    contextType: null,
+    significance: { value: 'minor', label: 'Minor' },
+    episode: { value: 'first', label: 'First' },
+    problemCode: { conceptId: '59621000', description: 'Essential hypertension', descriptionId: 'd1' },
+    additionalInformation: 'clinic BP series',
+    hiddenFromPatientFacingServices: false,
+    confidentialFromThirdParties: false,
+    endDate: null,
+    reasonEnded: null,
+    recordDate: '2016-03-02',
+    recordedAtAnotherOrganisation: false,
+    recordedByStaff: { value: 'staff-1', label: 'Dr T' },
+    significances: [
+      { value: 'major', label: 'Major' },
+      { value: 'minor', label: 'Minor' },
+      { value: 'unknown-significance', label: 'Unknown Significance' },
+    ],
+  };
+  const payload = buildSignificancePayload(prefill, 'major');
+  check(payload.significance === 'major', 'significance is the ONLY changed field');
+  check(payload.problemCode.conceptId === '59621000', 'problemCode passes through unchanged (never re-codes)');
+  check(payload.episode === 'first', 'option-object episode unwrapped to its bare value (the 2026-07-27 400 trap)');
+  check(payload.recordedByStaff === 'staff-1', 'recordedByStaff option unwrapped');
+  check(payload.additionalInformation === 'clinic BP series', 'additionalInformation resent unchanged');
+  check(
+    Object.keys(payload).sort().join(',') ===
+      'additionalInformation,confidentialFromThirdParties,contextId,contextType,endDate,episode,' +
+        'hiddenFromPatientFacingServices,onsetDate,problemCode,reasonEnded,recordDate,recordedByStaff,significance',
+    'exactly the confirmed full-replace key set, local-staff branch'
+  );
+
+  const orgPrefill = Object.assign({}, prefill, {
+    recordedAtAnotherOrganisation: true,
+    recordedByOrganisation: {
+      label: 'Park Road Surgery',
+      value: {
+        organisationName: 'Park Road Surgery',
+        organisationIdentifierType: null,
+        organisationIdentifierValue: null,
+      },
+    },
+    recordedByPractitioner: 'Mrs Sarah Elliott',
+  });
+  const orgPayload = buildSignificancePayload(orgPrefill, 'major');
+  check(
+    orgPayload.recordedByOrganisation.organisationName === 'Park Road Surgery' &&
+      !('label' in orgPayload.recordedByOrganisation),
+    'wrapped recordedByOrganisation unwrapped (the 2026-07-26 400 trap); org branch fields present'
+  );
+  check(!('recordedByStaff' in orgPayload), 'org branch never carries recordedByStaff');
+  check(
+    buildSignificancePayload(prefill, null) === null,
+    'a missing significance value refuses outright — never posted'
+  );
+  check(buildSignificancePayload(prefill, '') === null, 'empty value refuses too');
+
+  const opts = prefill.significances;
+  check(resolveSignificanceOption(opts, 'major') === 'major', "'major' resolved from the form's own options");
+  check(
+    resolveSignificanceOption(opts, 'unknown') === 'unknown-significance',
+    "'unknown' matches the unknown-significance option by prefix — never an invented enum"
+  );
+  check(resolveSignificanceOption(opts, 'minor') === 'minor', "'minor' resolved");
+  check(resolveSignificanceOption([], 'major') === null, 'a form offering no options -> null (per-row refusal)');
+  check(resolveSignificanceOption(null, 'major') === null, 'null options -> null, never throws');
+  check(resolveSignificanceOption(opts, null) === null, 'null target -> null, never throws');
 }
 
 console.log('--- parseSummaryBridgeAttr: the page-world bridge context source ---');

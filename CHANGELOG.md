@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.219.0] — 2026-08-03
+
+### Organise problems: "Change significance" section (and a trigger rename)
+
+Field request: Major/Minor/Unknown grading is often wrong at import ("Asthma" and "Essential
+hypertension" sitting under Minor), and Medicus's own UI re-grades one problem at a time. New
+"Change significance" section in the problems widget: tick problems (each row shows its current
+grade and onset date), pick the target grade, one explicit confirm listing every move
+("Essential hypertension · Mar 2016 — Minor → Major"), then sequential commits.
+
+No new endpoint knowledge needed: each commit rides the CONFIRMED `edit-problem` full-replace
+contract that "Clean up code" already drives in production — GET the problem's own prefill,
+resolve the target grade from the prefill's OWN `significances` options (a form that doesn't offer
+the grade is a per-row refusal, never an invented enum — only `'major'` has ever been captured on
+the wire), rebuild the full body with only `significance` changed (same option-object and
+recordedByOrganisation unwraps that fixed the two live 400s in the description-cleanup history),
+POST. Rows already at the target grade disable; per-row errors keep their tick for retry; one
+event-ledger record per batch; refresh note as ever.
+
+With four sections (suggested links, duplicate merge, significance, manual linking) the trigger
+label "Nest problems?" was no longer honest — renamed to **"Organise problems?"**. Same widget,
+same position, same everything else.
+
 ## [v3.218.0] — 2026-08-03
 
 ### Record-tidy widgets now work wherever the Clinical Summary panel renders

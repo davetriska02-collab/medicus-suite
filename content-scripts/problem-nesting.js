@@ -235,6 +235,88 @@
       });
   }
 
+  // ── Significance re-grade helpers ────────────────────────────────────────
+  // Change-significance rides the CONFIRMED edit-problem full-replace
+  // contract problem-description-cleanup.js drives in production: the
+  // payload below mirrors its buildEditProblemPayload rule-for-rule (same
+  // key set, same option-object unwraps, same recordedAtAnotherOrganisation
+  // branch), with significance swapped instead of problemCode. See
+  // docs/learnings-problem-description-cleanup.md for the captures that
+  // pinned every rule — including the two live-400 traps (option-object
+  // round-trip, wrapped recordedByOrganisation) the unwraps below exist for.
+
+  // Takes `.value` from anything shaped exactly like a UI-select option
+  // ({value,label}); passes every other shape through untouched.
+  function unwrapOptionValue(field) {
+    if (field && typeof field === 'object' && 'value' in field && 'label' in field) return field.value;
+    return field;
+  }
+
+  // Unwraps ONLY the confirmed double-wrapped shape ({label, value:
+  // {organisationName, …}}); both wrapped and plain shapes are real.
+  function unwrapRecordedByOrganisation(org) {
+    if (org && org.value && typeof org.value === 'object' && org.value.organisationName != null) {
+      return org.value;
+    }
+    return org != null ? org : null;
+  }
+
+  // problemCode passes through UNCHANGED here (this flow never re-codes),
+  // but defensively unwraps a {label, value:{conceptId,…}} select shape.
+  function unwrapProblemCode(code) {
+    if (code && code.value && typeof code.value === 'object' && code.value.conceptId != null) return code.value;
+    return code != null ? code : null;
+  }
+
+  // Builds the full edit-problem POST body with ONLY significance changed.
+  // `newSignificanceValue` is the bare enum value already resolved from the
+  // prefill's own significances options (resolveSignificanceOption below) —
+  // null/empty refuses outright (returns null): a missing significance must
+  // never reach the record via a full-replace write.
+  function buildSignificancePayload(prefill, newSignificanceValue) {
+    if (!newSignificanceValue) return null;
+    var p = prefill || {};
+    var payload = {
+      onsetDate: p.onsetDate != null ? p.onsetDate : null,
+      contextId: p.contextId != null ? p.contextId : null,
+      contextType: p.contextType != null ? p.contextType : null,
+      significance: newSignificanceValue,
+      episode: p.episode != null ? unwrapOptionValue(p.episode) : null,
+      problemCode: p.problemCode != null ? unwrapProblemCode(p.problemCode) : null,
+      additionalInformation: p.additionalInformation != null ? p.additionalInformation : null,
+      hiddenFromPatientFacingServices: !!p.hiddenFromPatientFacingServices,
+      confidentialFromThirdParties: !!p.confidentialFromThirdParties,
+      endDate: p.endDate != null ? p.endDate : null,
+      reasonEnded: p.reasonEnded != null ? unwrapOptionValue(p.reasonEnded) : null,
+      recordDate: p.recordDate != null ? p.recordDate : null,
+    };
+    if (p.recordedAtAnotherOrganisation) {
+      payload.recordedByOrganisation = unwrapRecordedByOrganisation(p.recordedByOrganisation);
+      payload.recordedByPractitioner = p.recordedByPractitioner != null ? p.recordedByPractitioner : null;
+    } else {
+      payload.recordedByStaff = p.recordedByStaff != null ? unwrapOptionValue(p.recordedByStaff) : null;
+    }
+    return payload;
+  }
+
+  // Resolves the bare enum value for a target grade ('major' | 'minor' |
+  // 'unknown') from the prefill's OWN significances option list — never
+  // guessed. The only live-confirmed enum value is 'major'; anything the
+  // form itself doesn't offer is a per-row refusal, not an invented string.
+  function resolveSignificanceOption(options, targetKey) {
+    var key = String(targetKey == null ? '' : targetKey).toLowerCase();
+    if (!key) return null;
+    var list = Array.isArray(options) ? options : [];
+    for (var i = 0; i < list.length; i++) {
+      var o = list[i];
+      if (!o) continue;
+      var v = String(o.value == null ? '' : o.value).toLowerCase();
+      var l = String(o.label == null ? '' : o.label).toLowerCase();
+      if (v === key || v.indexOf(key) === 0 || l === key || l.indexOf(key) === 0) return o.value;
+    }
+    return null;
+  }
+
   // Same extraction as problem-bulk-end.js's apiErrorMessage — duplicated (not
   // shared) the same way each content script already carries its own apiFetch.
   function apiErrorMessage(status, bodyText) {
@@ -322,6 +404,10 @@
       pickEarliestCopyId: pickEarliestCopyId,
       buildMarkIncorrectPayload: buildMarkIncorrectPayload,
       removableDuplicateIds: removableDuplicateIds,
+      unwrapOptionValue: unwrapOptionValue,
+      unwrapRecordedByOrganisation: unwrapRecordedByOrganisation,
+      buildSignificancePayload: buildSignificancePayload,
+      resolveSignificanceOption: resolveSignificanceOption,
       apiErrorMessage: apiErrorMessage,
       resultContainsConceptId: resultContainsConceptId,
       parseCareRecordPath: parseCareRecordPath,
@@ -387,7 +473,7 @@
   // Focus restore across innerHTML rebuilds: capture the focused element's
   // identity (id, or ms-pn-* class token + its data-* keys) before a render,
   // re-focus the equivalent element after.
-  var FOCUS_KEY_ATTRS = ['data-idx', 'data-child-id', 'data-entry-id', 'data-gidx', 'data-sec'];
+  var FOCUS_KEY_ATTRS = ['data-idx', 'data-child-id', 'data-entry-id', 'data-gidx', 'data-sec', 'data-sig-id'];
 
   function captureFocusKey(el) {
     var a = document.activeElement;
@@ -515,6 +601,20 @@
   }
 
   // ── Split-page patient resolution (same block as problem-bulk-end.js) ────────
+  function fetchEditProblemPrefill(problemId) {
+    return apiFetch('/clinical/data/problem/edit-problem/' + encodeURIComponent(problemId));
+  }
+
+  // The confirmed FULL-REPLACE write (see the significance helpers above) —
+  // the same endpoint problem-description-cleanup.js posts in production.
+  function postEditProblem(problemId, payload) {
+    return apiFetch('/clinical/problem/edit-problem/' + encodeURIComponent(problemId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
   var _taskPatientIdByUuid = Object.create(null);
   var _taskPatientResolveInFlight = false;
 
@@ -568,6 +668,10 @@
   //   description, hasChildren, additionalInformation}], keeperId, open,
   //   confirming, removing, reason, errors: {id: msg}, removedCount, done}]
   var _mergeGroups = [];
+  // Significance re-grade state: target grade key, ticked set, per-row
+  // errors; _sigChanged is this session's committed re-grades (display only).
+  var _sig = { target: null, ids: {}, confirming: false, committing: false, errors: {} };
+  var _sigChanged = [];
 
   function resetForPatient() {
     _problemsCache = null;
@@ -582,6 +686,8 @@
     _manual = { parentId: null, childIds: {}, confirming: false, linking: false, childErrors: {} };
     _manualLinked = [];
     _mergeGroups = [];
+    _sig = { target: null, ids: {}, confirming: false, committing: false, errors: {} };
+    _sigChanged = [];
   }
 
   // ── Scan (opt-in — only ever runs from the "Nest problems?" click) ───────────
@@ -614,6 +720,9 @@
           // "20 Apr 2020"; shown beside every problem reference so same-named
           // entries stay tellable-apart.
           onsetDate: (ov && ov.onsetDate) || null,
+          // Confirmed slideover-overview display string ('Major' / 'Minor' /
+          // 'Unknown Significance') — the current grade shown per row.
+          significance: (ov && ov.significance) || null,
         };
         if (ov && ov.parentProblemId) _parentIdByProblemId[p.id] = ov.parentProblemId;
       });
@@ -819,6 +928,101 @@
     render();
   }
 
+  var SIG_TARGETS = [
+    { key: 'major', label: 'Major' },
+    { key: 'minor', label: 'Minor' },
+    { key: 'unknown', label: 'Unknown significance' },
+  ];
+
+  function sigTargetLabel(key) {
+    var t = SIG_TARGETS.find(function (x) {
+      return x.key === key;
+    });
+    return t ? t.label : String(key || '');
+  }
+
+  // Current display grade ('Major'/'Minor'/'Unknown Significance') vs a
+  // target key — prefix match, case-insensitive.
+  function sigCurrentMatchesTarget(currentLabel, targetKey) {
+    if (!targetKey) return false;
+    return (
+      String(currentLabel || '')
+        .toLowerCase()
+        .indexOf(String(targetKey).toLowerCase()) === 0
+    );
+  }
+
+  function sigSelectedIds() {
+    return Object.keys(_sig.ids).filter(function (id) {
+      return _sig.ids[id];
+    });
+  }
+
+  // Commits the ticked re-grades SEQUENTIALLY: per row, GET the problem's
+  // own edit-problem prefill, resolve the target grade from the prefill's
+  // OWN significances options (a form that doesn't offer the grade is a
+  // per-row refusal, never an invented enum), rebuild the full-replace body
+  // with ONLY significance changed, POST. Per-row failures keep their tick
+  // and show their error; the batch carries on.
+  async function confirmSignificanceBatch() {
+    var m = _sig;
+    if (m.committing || !m.target) return;
+    var targets = sigSelectedIds();
+    if (!targets.length) return;
+    m.committing = true;
+    m.errors = {};
+    render();
+    var batch = 0;
+    for (var i = 0; i < targets.length; i++) {
+      var id = targets[i];
+      var prob = _problems.find(function (x) {
+        return x.id === id;
+      });
+      if (!prob) continue;
+      try {
+        var prefill = await fetchEditProblemPrefill(id);
+        var value = resolveSignificanceOption(prefill && prefill.significances, m.target);
+        if (!value) {
+          throw new Error(
+            "Medicus's own edit form doesn't offer that significance for this problem — change it in Medicus."
+          );
+        }
+        var payload = buildSignificancePayload(prefill, value);
+        if (!payload) throw new Error('Could not build a safe update for this problem — skipped.');
+        await postEditProblem(id, payload);
+        var fromLabel = (_infoById[id] && _infoById[id].significance) || 'Unknown';
+        _sigChanged.push({ description: prob.description, id: id, from: fromLabel, to: sigTargetLabel(m.target) });
+        if (_infoById[id]) _infoById[id].significance = sigTargetLabel(m.target);
+        delete m.ids[id];
+        batch++;
+      } catch (err) {
+        m.errors[id] = (err && err.message) || 'Failed to update this problem — please try again.';
+      }
+    }
+    m.committing = false;
+    m.confirming = false;
+    // One ledger record per batch, fixed label with the batch-local count —
+    // never problem descriptions.
+    if (batch > 0 && window.EventLedger) {
+      window.EventLedger.record({
+        source: 'record',
+        patientRef: _lastPatientId,
+        severity: null,
+        ruleId: 'problem-significance',
+        label: 'Change significance: ' + batch + ' problem' + (batch === 1 ? '' : 's') + ' re-graded',
+        action: 'committed',
+      });
+    }
+    announce(
+      batch +
+        ' problem' +
+        (batch === 1 ? '' : 's') +
+        ' re-graded' +
+        (Object.keys(m.errors).length ? ', ' + Object.keys(m.errors).length + ' failed' : '')
+    );
+    render();
+  }
+
   // Removes a merged-away copy from every piece of live widget state so the
   // other sections stop offering it: the problem list, the info/link maps,
   // any manual tick or parent pick, and (via the existence checks in
@@ -830,6 +1034,7 @@
     delete _infoById[problemId];
     delete _parentIdByProblemId[problemId];
     delete _manual.childIds[problemId];
+    delete _sig.ids[problemId];
     if (_manual.parentId === problemId) {
       _manual = { parentId: null, childIds: {}, confirming: false, linking: false, childErrors: {} };
     }
@@ -1348,6 +1553,138 @@
     );
   }
 
+  // The significance re-grade section — tick problems, pick a target grade,
+  // one confirmed batch. Non-destructive relative to the other sections (a
+  // grade can be changed back the same way), so the confirm stays neutral —
+  // but it is still a live-record write via a FULL-REPLACE endpoint, hence
+  // the same per-row prefill round-trip discipline as "Clean up code".
+  function sigSectionContent() {
+    var m = _sig;
+    var targetOptions = SIG_TARGETS.map(function (t) {
+      return (
+        '<option value="' + t.key + '"' + (m.target === t.key ? ' selected' : '') + '>' + esc(t.label) + '</option>'
+      );
+    }).join('');
+    var selected = sigSelectedIds();
+
+    var rows = _problems
+      .map(function (p) {
+        var current = (_infoById[p.id] && _infoById[p.id].significance) || 'Unknown';
+        var already = sigCurrentMatchesTarget(current, m.target);
+        var err = m.errors[p.id];
+        return (
+          '<label class="ms-pn-man-child-row">' +
+          '<input type="checkbox" class="ms-pn-sig-cb" data-sig-id="' +
+          esc(p.id) +
+          '"' +
+          (m.ids[p.id] && !already ? ' checked' : '') +
+          (m.committing || already ? ' disabled' : '') +
+          '>' +
+          '<span>' +
+          esc(p.description) +
+          dateSuffix(p.id) +
+          ' <span class="ms-pn-date">' +
+          esc(current) +
+          '</span>' +
+          (already ? ' <span class="ms-pn-man-child-note">(already ' + esc(current) + ')</span>' : '') +
+          '</span>' +
+          (err ? '<span class="ms-pn-card-error">' + esc(err) + '</span>' : '') +
+          '</label>'
+        );
+      })
+      .join('');
+
+    var changedHtml = _sigChanged
+      .map(function (c) {
+        return (
+          '<div class="ms-pn-card ms-pn-card-linked">' +
+          CHECK_SVG +
+          ' <strong>' +
+          esc(c.description) +
+          '</strong>' +
+          dateSuffix(c.id) +
+          ' — ' +
+          esc(c.from) +
+          ' → <strong>' +
+          esc(c.to) +
+          '</strong>. Medicus’s own list shows this after a page refresh.</div>'
+        );
+      })
+      .join('');
+
+    var confirmHtml = '';
+    if (m.confirming && m.target && selected.length) {
+      confirmHtml =
+        '<div class="ms-pn-confirm">This re-grades ' +
+        selected.length +
+        ' problem' +
+        (selected.length === 1 ? '' : 's') +
+        ' to <strong>' +
+        esc(sigTargetLabel(m.target)) +
+        '</strong> via Medicus’s own edit form — every other field on each problem is resent unchanged:' +
+        '<ul class="ms-pn-confirm-list">' +
+        selected
+          .map(function (id) {
+            var current = (_infoById[id] && _infoById[id].significance) || 'Unknown';
+            return (
+              '<li>' +
+              esc(problemDescription(id) || id) +
+              dateSuffix(id) +
+              ' — ' +
+              esc(current) +
+              ' → ' +
+              esc(sigTargetLabel(m.target)) +
+              '</li>'
+            );
+          })
+          .join('') +
+        '</ul>' +
+        'Significance changes how the problem list groups these entries; it can be changed back the same way.' +
+        '<div class="ms-pn-confirm-actions">' +
+        '<button type="button" class="ms-pn-cancel" id="ms-pn-sig-cancel"' +
+        (m.committing ? ' disabled' : '') +
+        '>Cancel</button>' +
+        '<button type="button" class="ms-pn-confirm-btn" id="ms-pn-sig-confirm"' +
+        (m.committing ? ' disabled' : '') +
+        '>' +
+        (m.committing
+          ? 'Updating…'
+          : 'Confirm — re-grade ' + selected.length + ' problem' + (selected.length === 1 ? '' : 's')) +
+        '</button>' +
+        '</div></div>';
+    }
+
+    var failedCount = Object.keys(m.errors).length;
+    return (
+      '<div class="ms-pn-sec-note">Tick the problems, pick the grade they should be.</div>' +
+      '<div class="ms-pn-manual-row">Move ticked problems to ' +
+      '<select class="ms-pn-parent-select" id="ms-pn-sig-target">' +
+      '<option value=""' +
+      (m.target ? '' : ' selected') +
+      ' disabled>Choose grade…</option>' +
+      targetOptions +
+      '</select>' +
+      ' <button type="button" class="ms-pn-link-btn" id="ms-pn-sig-go"' +
+      (m.target && selected.length && !m.confirming && !m.committing ? '' : ' disabled') +
+      '>Re-grade ' +
+      (selected.length || '') +
+      ' selected…</button>' +
+      '</div>' +
+      '<div class="ms-pn-man-children">' +
+      rows +
+      '</div>' +
+      confirmHtml +
+      (failedCount && !m.confirming
+        ? '<div class="ms-pn-card-error">' +
+          failedCount +
+          ' update' +
+          (failedCount === 1 ? '' : 's') +
+          ' failed — the error is shown against each row; they stay ticked so you can retry.</div>'
+        : '') +
+      changedHtml
+    );
+  }
+
   // Accordion section header: sans 12px/600 label, text chevron left,
   // mono count right, aria-expanded honest. One open at a time.
   function sectionHeadHtml(key, label, countText) {
@@ -1377,7 +1714,7 @@
       _open +
       '">' +
       (_open ? '▾' : '▸') +
-      ' Nest problems?</button>';
+      ' Organise problems?</button>';
     if (!_open) return header;
     var body;
     if (_scanState === 'scanning') {
@@ -1402,6 +1739,12 @@
         (_openSection === 'suggest' ? '<div class="ms-pn-sec-body">' + suggestSectionContent() + '</div>' : '') +
         sectionHeadHtml('merge', 'Merge duplicate copies', String(liveMergeGroups().length)) +
         (_openSection === 'merge' ? '<div class="ms-pn-sec-body">' + mergeSectionContent() + '</div>' : '') +
+        sectionHeadHtml(
+          'significance',
+          'Change significance',
+          sigSelectedIds().length > 0 ? sigSelectedIds().length + ' selected' : String(_problems.length)
+        ) +
+        (_openSection === 'significance' ? '<div class="ms-pn-sec-body">' + sigSectionContent() + '</div>' : '') +
         sectionHeadHtml('manual', 'Link manually', manualCountText) +
         (_openSection === 'manual' ? '<div class="ms-pn-sec-body">' + manualSectionContent() + '</div>' : '') +
         (linkedCount > 0
@@ -1484,6 +1827,36 @@
     });
     el.querySelector('#ms-pn-man-confirm')?.addEventListener('click', function () {
       confirmManualBatch();
+    });
+    el.querySelector('#ms-pn-sig-target')?.addEventListener('change', function (e) {
+      _sig.target = e.target.value || null;
+      // A new target re-filters which rows are tickable (already-at-target
+      // rows disable); keep ticks for rows still eligible.
+      _sig.confirming = false;
+      _sig.errors = {};
+      render();
+    });
+    el.querySelectorAll('.ms-pn-sig-cb').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var id = cb.getAttribute('data-sig-id');
+        if (cb.checked) _sig.ids[id] = true;
+        else delete _sig.ids[id];
+        _sig.confirming = false;
+        render();
+      });
+    });
+    el.querySelector('#ms-pn-sig-go')?.addEventListener('click', function () {
+      if (_sig.target && sigSelectedIds().length) {
+        _sig.confirming = true;
+        render();
+      }
+    });
+    el.querySelector('#ms-pn-sig-cancel')?.addEventListener('click', function () {
+      _sig.confirming = false;
+      render();
+    });
+    el.querySelector('#ms-pn-sig-confirm')?.addEventListener('click', function () {
+      confirmSignificanceBatch();
     });
     el.querySelectorAll('.ms-pn-merge-open').forEach(function (btn) {
       btn.addEventListener('click', function () {
