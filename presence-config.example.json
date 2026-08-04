@@ -1,0 +1,5 @@
+{
+  "_comment": "Task-presence shared store — fire-and-forget practice config. Copy this file to presence-config.json IN THE SAME FOLDER, fill in your practice's Supabase project URL and anon key, and every machine loading the extension from this folder picks it up automatically (no per-machine Options needed). Setup: docs/task-presence-setup.md. presence-config.json is git-ignored and must never be committed.",
+  "url": "https://YOUR-PROJECT.supabase.co",
+  "key": "YOUR-SUPABASE-ANON-KEY"
+}

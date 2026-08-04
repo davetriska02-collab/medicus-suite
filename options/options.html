@@ -1800,29 +1800,41 @@
           <p class="section-desc">
             Shows when a colleague already has a triage request open, so two people don't work the same request without
             knowing. A "&#128065;" chip appears on the queue row and an advisory banner on the open request. Medicus
-            records nothing when a request is opened, so this runs on the Suite's own shared store — every machine in
-            the practice must point at the same store, set up once (see <code>docs/task-presence-setup.md</code>).
+            records nothing when a request is opened, so this runs on the Suite's own shared store.
+            <strong>Fire-and-forget setup:</strong> drop a <code>presence-config.json</code> (copy
+            <code>presence-config.example.json</code>) into the shared extension folder and every machine loading from
+            it configures itself — nothing to enter below (see <code>docs/task-presence-setup.md</code>). The fields
+            here are a per-machine override for practices without a shared folder.
           </p>
           <p class="section-desc" style="color: var(--amber)">
             &#9888; Advisory only — it is never a lock, and <strong>no chip does not mean no one</strong> (a colleague
-            without the Suite, or an offline store, shows nothing). The "last actioned by" queue chip works without any
-            of this — it reads what Medicus already sends and needs no store.
+            without the Suite, or an offline store, shows nothing).
           </p>
+
+          <div class="field">
+            <label class="field-label">Shared-folder config</label>
+            <div><code id="presenceFileStatus" style="font-size: 12px">checking&hellip;</code></div>
+            <span class="field-help">
+              Whether a valid <code>presence-config.json</code> has been picked up from the extension folder.
+            </span>
+          </div>
 
           <div class="field">
             <label class="field-label" style="display: flex; align-items: center; gap: 8px">
               <input type="checkbox" id="presenceEnabled" style="width: auto" />
-              Enable shared presence
+              Presence active on this machine
             </label>
-            <span class="field-help">Off by default. The store URL and key below must both be set for it to run.</span>
+            <span class="field-help">
+              On by default whenever a store is configured (shared folder or below) — untick to opt this machine out.
+            </span>
           </div>
 
           <div class="field">
-            <label class="field-label" for="presenceUrl">Store URL</label>
+            <label class="field-label" for="presenceUrl">Store URL (manual override)</label>
             <input type="text" id="presenceUrl" placeholder="https://<project>.supabase.co" />
             <span class="field-help">
-              Your practice's Supabase project URL (https, <code>*.supabase.co</code>). One project per practice — every
-              machine uses the same URL.
+              Your practice's Supabase project URL (https, <code>*.supabase.co</code>). Leave blank when the shared
+              folder carries <code>presence-config.json</code>.
             </span>
           </div>
 

@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.221.0] — 2026-08-04
+
+### Task presence: fire-and-forget rollout via the shared extension folder
+
+v3.220.0's presence store needed URL + key typed into Options on every machine. Practices load
+the unpacked extension from a shared folder, so now ONE file does the whole rollout: copy
+`presence-config.example.json` to `presence-config.json` in that folder, fill in the practice's
+store URL + anon key, and every machine configures itself — the service worker syncs the packaged
+file into `presence.fileCache` (on install, browser start, and first Medicus page), and
+task-presence.js resolves config as manual-Options-override → shared-file → dormant. Enabled
+semantics are now "on unless this machine explicitly opted out", so a machine that has never
+opened Options runs the moment the file exists. The synced credentials are cached per machine, so
+presence survives a folder update that forgets to carry the file over. `presence-config.json` is
+git-ignored and never in release zips; Options gains a shared-folder status line and the fields
+become a per-machine override. (16 new checks on `resolvePresenceConfig`.)
+
+### Live-check corrections (v3.220.0 field test, same day)
+
+- **"Last actioned by" chip demoted to latent.** On the live queue, Medicus sends
+  `actionedBy`/`actionedDateTime` as empty strings on every row — including `Reply received` ones
+  — so the chip correctly renders nothing and v3.220.0's "works from install" claim was wrong.
+  The wiring stays (it lights up if Medicus ever populates the fields); feature-list and setup
+  doc now say so plainly. The presence store is the real signal.
+- **Queue monitoring resolves against the ROW's task type, not the queue's.** The same live check
+  caught every monitoring resolve on the requests queue 404ing: a `medical_patient_request_task`
+  queue serves `communication-thread` rows, and `_queueMonCache` stored the queue's slug for
+  every row. It now derives each row's true slug from its own validated `overviewURL` (queue slug
+  only as fallback), so `/tasks/data/{slug}/overview/{uuid}` resolves stop dying silently on
+  mixed-type queues.
+
 ## [v3.220.0] — 2026-08-04
 
 ### Task presence: "is someone already on this request?"

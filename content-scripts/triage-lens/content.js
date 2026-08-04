@@ -4095,7 +4095,6 @@
       if (typeof taskUuid !== 'string' || !_BRIDGE_UUID_RE.test(taskUuid)) continue;
       _queueRowUuids.set(rowIndex, taskUuid);
       _durableRowMap.set(rowIndex, taskUuid);
-      if (!_queueMonCache.has(taskUuid)) _queueMonCache.set(taskUuid, { taskTypeSlug, createdAt: Date.now() });
 
       // Validate and cache result-triage fields (UNTRUSTED — strict rules)
       const rawOverview = row.overviewURL;
@@ -4103,6 +4102,16 @@
       const rawUnmatched = row.unmatched;
       const overviewURL = (typeof rawOverview === 'string' && _OVERVIEW_URL_RE.test(rawOverview))
         ? rawOverview : '';
+
+      // The slug for THIS ROW's own /overview/ endpoint. A queue's rows are
+      // not all the queue's type — a medical_patient_request_task queue serves
+      // communication-thread rows — and resolving a row against the QUEUE's
+      // slug 404s (live-confirmed 2026-08-04: every monitoring resolve on the
+      // requests queue died silently). The row's validated overviewURL names
+      // its true type; the queue slug is only the fallback when a row has none.
+      const rowSlugMatch = overviewURL.match(/^\/tasks\/data\/([A-Za-z0-9_-]+)\//);
+      const rowTaskTypeSlug = (rowSlugMatch && rowSlugMatch[1]) || taskTypeSlug;
+      if (!_queueMonCache.has(taskUuid)) _queueMonCache.set(taskUuid, { taskTypeSlug: rowTaskTypeSlug, createdAt: Date.now() });
       const priorityDisplay = String(rawPriority != null ? rawPriority : '').slice(0, 40);
       const unmatched = !!rawUnmatched;
       // Only store/update entry if we don't have a fresh sev already

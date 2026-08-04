@@ -227,6 +227,33 @@
     return '✎ ' + who.slice(0, 40) + (tm ? ' · ' + tm[1] : '');
   }
 
+  // Resolve the presence config from a chrome.storage snapshot (fire-and-
+  // forget, 2026-08-04). Source order: manually-entered Options values (both
+  // url AND key set) win, else the shared-folder file cache
+  // ('presence.fileCache', synced by the service worker from
+  // presence-config.json in the extension folder — one file configures every
+  // machine that loads from the shared folder). Enabled semantics are
+  // "on unless this machine explicitly opted out": presence.enabled is only
+  // false when someone unticked the Options box, so a machine that has never
+  // opened Options runs the moment the shared file exists.
+  function resolvePresenceConfig(storage) {
+    storage = storage && typeof storage === 'object' ? storage : {};
+    var manualUrl =
+      typeof storage['presence.url'] === 'string' ? storage['presence.url'].trim().replace(/\/+$/, '') : '';
+    var manualKey = typeof storage['presence.key'] === 'string' ? storage['presence.key'].trim() : '';
+    var fc = storage['presence.fileCache'];
+    var fcUrl = fc && typeof fc === 'object' && typeof fc.url === 'string' ? fc.url.trim().replace(/\/+$/, '') : '';
+    var fcKey = fc && typeof fc === 'object' && typeof fc.key === 'string' ? fc.key.trim() : '';
+    var useManual = !!(manualUrl && manualKey);
+    return {
+      enabled: storage['presence.enabled'] !== false,
+      url: useManual ? manualUrl : fcUrl,
+      key: useManual ? manualKey : fcKey,
+      name: typeof storage['presence.name'] === 'string' ? storage['presence.name'] : '',
+      source: useManual ? 'manual' : fcUrl && fcKey ? 'file' : 'none',
+    };
+  }
+
   // task_uuid=in.(...) filter value for a queue presence read, deduped and
   // capped (PostgREST in.() syntax; UUIDs need no quoting).
   function buildPresenceInFilter(uuids, cap) {
@@ -259,28 +286,35 @@
       presenceChipText: presenceChipText,
       minutesAgoText: minutesAgoText,
       actionedChipText: actionedChipText,
+      resolvePresenceConfig: resolvePresenceConfig,
       buildPresenceInFilter: buildPresenceInFilter,
     };
     return; // node context: helpers only, no DOM/chrome wiring
   }
 
-  // ── config (chrome.storage; dormant until the practice opts in) ───────────
-  var _cfg = { enabled: false, url: '', key: '', name: '' };
+  // ── config (chrome.storage; dormant until a store is configured) ──────────
+  var _cfg = { enabled: false, url: '', key: '', name: '', source: 'none' };
 
   function refreshConfig() {
     try {
-      chrome.storage.local.get(['presence.enabled', 'presence.url', 'presence.key', 'presence.name'], function (res) {
-        if (chrome.runtime.lastError) return;
-        _cfg = {
-          enabled: res['presence.enabled'] === true,
-          url: typeof res['presence.url'] === 'string' ? res['presence.url'].trim().replace(/\/+$/, '') : '',
-          key: typeof res['presence.key'] === 'string' ? res['presence.key'].trim() : '',
-          name: typeof res['presence.name'] === 'string' ? res['presence.name'] : '',
-        };
-      });
+      chrome.storage.local.get(
+        ['presence.enabled', 'presence.url', 'presence.key', 'presence.name', 'presence.fileCache'],
+        function (res) {
+          if (chrome.runtime.lastError) return;
+          _cfg = resolvePresenceConfig(res);
+        }
+      );
     } catch (_) {}
   }
   refreshConfig();
+  // Ask the service worker to (re)sync presence-config.json from the shared
+  // extension folder — fire-and-forget; a successful sync lands in
+  // presence.fileCache and the onChanged listener below re-resolves.
+  try {
+    chrome.runtime.sendMessage({ action: 'presence:syncFileConfig' }, function () {
+      void chrome.runtime.lastError; // SW asleep/no file — both fine
+    });
+  } catch (_) {}
   try {
     chrome.storage.onChanged.addListener(function (changes, area) {
       if (area !== 'local') return;
@@ -288,7 +322,8 @@
         changes['presence.enabled'] ||
         changes['presence.url'] ||
         changes['presence.key'] ||
-        changes['presence.name']
+        changes['presence.name'] ||
+        changes['presence.fileCache']
       ) {
         refreshConfig();
       }

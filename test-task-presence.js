@@ -25,6 +25,7 @@ const {
   presenceChipText,
   minutesAgoText,
   actionedChipText,
+  resolvePresenceConfig,
   buildPresenceInFilter,
 } = require('./content-scripts/task-presence.js');
 
@@ -263,6 +264,50 @@ console.log('--- presenceChipText / minutesAgoText / actionedChipText ---');
   check(actionedChipText('Dr X', 'weird format') === '✎ Dr X', 'unrecognised datetime -> name only, never garbage');
   check(actionedChipText('Dr X', '') === '✎ Dr X', 'missing datetime tolerated');
   check(actionedChipText('x'.repeat(80), '').length <= 42, 'name capped for the fixed-width cell');
+}
+
+console.log('--- resolvePresenceConfig: shared-folder fire-and-forget resolution ---');
+{
+  const FILE = { 'presence.fileCache': { url: 'https://proj.supabase.co', key: 'f'.repeat(40) } };
+  const MANUAL = { 'presence.url': 'https://manual.supabase.co', 'presence.key': 'm'.repeat(40) };
+
+  const fileOnly = resolvePresenceConfig(FILE);
+  check(
+    fileOnly.url === 'https://proj.supabase.co' && fileOnly.key === 'f'.repeat(40),
+    'file cache used when no manual values'
+  );
+  check(fileOnly.source === 'file', 'source reported as file');
+  check(
+    fileOnly.enabled === true,
+    'never-touched enabled -> ON (fire-and-forget: a machine that never opened Options runs)'
+  );
+  check(validPresenceConfig(fileOnly) === true, 'file-resolved config passes the shape gate end-to-end');
+
+  const both = resolvePresenceConfig({ ...FILE, ...MANUAL });
+  check(both.url === 'https://manual.supabase.co' && both.source === 'manual', 'manual override wins over the file');
+
+  const manualPartial = resolvePresenceConfig({ ...FILE, 'presence.url': 'https://manual.supabase.co' });
+  check(manualPartial.source === 'file', 'manual url WITHOUT key does not half-override — falls back to the file pair');
+
+  const optedOut = resolvePresenceConfig({ ...FILE, 'presence.enabled': false });
+  check(optedOut.enabled === false, 'explicit opt-out respected');
+  check(validPresenceConfig(optedOut) === false, 'opted-out machine fails the gate even with a valid store');
+  check(resolvePresenceConfig({ ...FILE, 'presence.enabled': true }).enabled === true, 'explicit opt-in respected');
+
+  const none = resolvePresenceConfig({});
+  check(none.source === 'none' && none.url === '' && none.key === '', 'nothing configured -> empty');
+  check(validPresenceConfig(none) === false, 'unconfigured machine stays dormant');
+
+  const junkCache = resolvePresenceConfig({ 'presence.fileCache': 'not-an-object' });
+  check(junkCache.source === 'none', 'corrupt file cache -> treated as absent, never throws');
+  check(resolvePresenceConfig(null).source === 'none', 'null storage snapshot -> empty, never throws');
+
+  const trailing = resolvePresenceConfig({
+    'presence.fileCache': { url: 'https://proj.supabase.co///', key: 'f'.repeat(40) },
+  });
+  check(trailing.url === 'https://proj.supabase.co', 'trailing slashes stripped from file url');
+  check(resolvePresenceConfig(FILE).name === '', 'no name key -> empty string');
+  check(resolvePresenceConfig({ ...FILE, 'presence.name': 'Dr D' }).name === 'Dr D', 'name passed through');
 }
 
 console.log('--- buildPresenceInFilter: PostgREST in.() for queue reads ---');

@@ -11,9 +11,12 @@ the Suite's own.
 - **Queue chip `👁 <name>`** on any request a colleague currently has open.
 - **Advisory banner** when you open a request someone else already has open:
   "_<name> opened this 4 min ago — they may be working on it._"
-- **Queue chip `✎ <name> · <time>`** — who last actioned the task. This layer
-  needs **no setup at all**: it reads fields Medicus already sends to the
-  queue (`actionedBy` / `actionedDateTime`) and works from install.
+- **Queue chip `✎ <name> · <time>`** — who last actioned the task. LATENT:
+  live checks (2026-08-04, both a `New` and a `Reply received` row) found
+  Medicus sends `actionedBy` / `actionedDateTime` as **empty strings** in the
+  queue payload, so this chip currently renders nothing. The code stays wired
+  so it lights up the day Medicus populates the fields — but do not expect to
+  see it today. The presence layers below are the real signal.
 
 ## What it is NOT
 
@@ -73,21 +76,40 @@ Optional housekeeping (stale rows are ignored by the extension anyway, so
 this is cosmetic): a daily cron `delete from task_presence where last_seen <
 now() - interval '1 day';` via Supabase's pg_cron.
 
-### 3. Configure every machine
+### 3. Drop ONE file into the shared extension folder — that's every machine done
 
-Suite Options → **Task Presence**:
+Practices load the unpacked extension from a shared folder; every machine
+reads the same files. So: copy `presence-config.example.json` (in the
+extension folder) to **`presence-config.json`** in the same folder, and fill
+in the two values:
 
-| Field                  | Value                                                                     |
-| ---------------------- | ------------------------------------------------------------------------- |
-| Enable shared presence | ticked                                                                    |
-| Store URL              | `https://<project>.supabase.co`                                           |
-| Store key (anon)       | the anon public key                                                       |
-| Your display name      | optional — what colleagues see (else the login email's name part is used) |
+```json
+{
+  "url": "https://<project>.supabase.co",
+  "key": "<anon public key>"
+}
+```
 
-Every machine must use the **same URL + key**. Identity (who you are) is not
-typed anywhere — it comes from the Medicus session itself (staff UUID + login
-email, read from the page's own realtime subscriptions), so a shared terminal
-attributes presence to whoever is actually logged in to Medicus.
+That's the whole rollout. Each machine picks it up automatically (on browser
+start, extension reload, or first Medicus page after) and presence turns
+itself on — nobody opens Options, nothing is typed per machine. The picked-up
+credentials are also cached per machine, so presence keeps working even if a
+later folder update forgets to carry the file over (re-drop it to change
+stores).
+
+Identity (who you are) is never typed either — it comes from the Medicus
+session itself (staff UUID + login email, read from the page's own realtime
+subscriptions), so a shared terminal attributes presence to whoever is
+actually logged in to Medicus.
+
+**Per-machine control (optional), Suite Options → Task Presence:** a status
+line shows whether the shared file was detected; "Presence active on this
+machine" unticked opts one machine out; the URL/key fields are a manual
+override for machines that don't load from the shared folder; display name
+overrides what colleagues see (default: the login email's name part).
+
+`presence-config.json` is git-ignored and never in release zips — it is the
+practice's own credential and lives only in the practice's folder.
 
 ### 4. Check it works
 
@@ -109,6 +131,10 @@ and banner clear on B.
 - All store I/O is silent-to-the-clinician on failure (debug via
   `localStorage.setItem('ch-debug','1')` + reload, `[MSTP]` prefix) — a
   broken advisory layer must not add noise to a clinical queue.
+- Config resolution (`resolvePresenceConfig`): manual Options values (url+key
+  both set) win, else the `presence.fileCache` synced by the service worker
+  from the packaged `presence-config.json`; enabled is "on unless this
+  machine explicitly opted out".
 - Identity comes from `data-ch-staff` (stamped by
   `content-scripts/triage-lens/page-world.js` from the Pusher channel names
   `{site}-staff-task-counters-{staffUuid}` and `update-tenants-{email}`).

@@ -424,16 +424,41 @@ const presenceEnabledInput = document.getElementById('presenceEnabled');
 const presenceUrlInput = document.getElementById('presenceUrl');
 const presenceKeyInput = document.getElementById('presenceKey');
 const presenceNameInput = document.getElementById('presenceName');
+const presenceFileStatus = document.getElementById('presenceFileStatus');
 const savePresenceBtn = document.getElementById('savePresenceBtn');
 const presenceSaved = document.getElementById('presenceSaved');
 
 (async function initPresenceSection() {
   try {
-    const res = await chrome.storage.local.get(['presence.enabled', 'presence.url', 'presence.key', 'presence.name']);
-    if (presenceEnabledInput) presenceEnabledInput.checked = res['presence.enabled'] === true;
+    // Re-sync the shared-folder file first so the status line reflects the
+    // folder's CURRENT contents, not a stale cache.
+    try {
+      await chrome.runtime.sendMessage({ action: 'presence:syncFileConfig' });
+    } catch (_) {
+      /* SW asleep — cache below still shows last-known state */
+    }
+    const res = await chrome.storage.local.get([
+      'presence.enabled',
+      'presence.url',
+      'presence.key',
+      'presence.name',
+      'presence.fileCache',
+    ]);
+    // "On unless explicitly opted out" — matches task-presence.js's gate.
+    if (presenceEnabledInput) presenceEnabledInput.checked = res['presence.enabled'] !== false;
     if (presenceUrlInput) presenceUrlInput.value = res['presence.url'] || '';
     if (presenceKeyInput) presenceKeyInput.value = res['presence.key'] || '';
     if (presenceNameInput) presenceNameInput.value = res['presence.name'] || '';
+    if (presenceFileStatus) {
+      const fc = res['presence.fileCache'];
+      if (fc && fc.url) {
+        presenceFileStatus.textContent = `detected — ${fc.url}`;
+        presenceFileStatus.style.color = 'var(--green)';
+      } else {
+        presenceFileStatus.textContent = 'not found (drop presence-config.json into the extension folder)';
+        presenceFileStatus.style.color = 'var(--text-3)';
+      }
+    }
   } catch (e) {
     console.warn('[Presence section init]', e.message);
   }
