@@ -321,6 +321,70 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true; // async sendResponse
 });
 
+// ── Task-presence shared-folder config (fire-and-forget, 2026-08-04) ─────────
+// Practices load the unpacked extension from a shared folder, so a single
+// `presence-config.json` dropped into that folder configures EVERY machine at
+// once — no per-machine Options entry. This syncs the packaged file (if
+// present) into chrome.storage.local as 'presence.fileCache', which
+// content-scripts/task-presence.js resolves as its config source (manual
+// Options values, when set, take precedence). The storage cache also survives
+// a folder replacement that forgets to re-copy the json: presence keeps
+// running from the last-seen credentials until a new file appears.
+//
+// The file is git-ignored and never in the release zip (it holds the
+// practice's own store credentials) — see presence-config.example.json and
+// docs/task-presence-setup.md. A missing file is the normal case and is
+// silent; an unparseable or shape-invalid file is logged and ignored.
+async function syncPresenceFileConfig() {
+  let text;
+  try {
+    const resp = await fetch(chrome.runtime.getURL('presence-config.json'));
+    if (!resp.ok) return { ok: false, reason: 'no-file' };
+    text = await resp.text();
+  } catch (_) {
+    return { ok: false, reason: 'no-file' }; // not packaged — normal
+  }
+  try {
+    const cfg = JSON.parse(text);
+    const url = typeof cfg.url === 'string' ? cfg.url.trim().replace(/\/+$/, '') : '';
+    const key = typeof cfg.key === 'string' ? cfg.key.trim() : '';
+    let hostOk = false;
+    try {
+      const u = new URL(url);
+      hostOk = u.protocol === 'https:' && /^[a-z0-9-]+\.supabase\.co$/i.test(u.hostname);
+    } catch (_) {
+      hostOk = false;
+    }
+    if (!hostOk || key.length < 30) {
+      console.warn(
+        '[Presence] presence-config.json present but invalid (url must be https://<project>.supabase.co, key looks too short) — ignored'
+      );
+      return { ok: false, reason: 'invalid' };
+    }
+    await chrome.storage.local.set({ 'presence.fileCache': { url, key, syncedAt: Date.now() } });
+    return { ok: true };
+  } catch (e) {
+    console.warn('[Presence] presence-config.json is not valid JSON — ignored:', e.message);
+    return { ok: false, reason: 'parse' };
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  syncPresenceFileConfig();
+});
+chrome.runtime.onStartup.addListener(() => {
+  syncPresenceFileConfig();
+});
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return; // F5: intra-extension only
+  if (!msg || msg.action !== 'presence:syncFileConfig') return;
+  syncPresenceFileConfig()
+    .then(sendResponse)
+    .catch((e) => sendResponse({ ok: false, reason: String((e && e.message) || e) }));
+  return true; // async sendResponse
+});
+
 // ── Message router ────────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
