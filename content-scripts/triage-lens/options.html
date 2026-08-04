@@ -15,6 +15,7 @@
       </div>
       <nav class="tl-tabs" id="tlTabs">
         <button class="tl-tab tl-tab-active" data-tab="rules">Rules</button>
+        <button class="tl-tab" data-tab="brackets">Brackets</button>
         <button class="tl-tab" data-tab="systemChips">Baseline chips</button>
         <button class="tl-tab" data-tab="thresholds">Thresholds</button>
         <button class="tl-tab" data-tab="resultRules">Result rules</button>
@@ -226,6 +227,84 @@
             </div>
           </div>
         </details>
+      </section>
+
+      <!-- ============================ URGENCY BRACKETS TAB (Phase 1 — detail page only) ============================ -->
+      <!-- Practice-defined, named CATEGORY tags matched against the request free-text on the
+           task detail page. Deliberately NOT a composite urgency score — see
+           docs/plans/TRIAGE-NORTHSTAR-2026-07-22.md. Smaller schema than an alert rule
+           (label/severity/patterns/regex only — no fields/pages/bumpsTile/actions/require). -->
+      <section class="tl-pane" id="paneBrackets">
+        <div class="tl-help">
+          Named, practice-defined category tags (e.g. "Mental health", "Home visit") matched against the patient's
+          free-text request on the task detail page, shown as chips alongside the rule chips with visible match
+          evidence. Advisory only — brackets never suppress or reorder anything and are not a composite urgency score.
+        </div>
+        <div class="tl-toolbar">
+          <button class="tl-btn tl-btn-primary" id="btnAddBracket">+ New bracket</button>
+          <input type="search" id="bracketSearch" placeholder="Search brackets…" class="tl-search" />
+          <span class="tl-spacer"></span>
+          <select id="filterBracketKind" class="tl-select">
+            <option value="">All severities</option>
+            <option value="red">Red</option>
+            <option value="amber">Amber</option>
+            <option value="green">Green</option>
+            <option value="info">Info</option>
+          </select>
+        </div>
+        <div class="tl-rule-list" id="bracketList"></div>
+        <div class="tl-empty" id="bracketListEmpty" style="display: none">No brackets match.</div>
+      </section>
+
+      <!-- ============================ BRACKET EDITOR ============================ -->
+      <section class="tl-pane" id="paneBracketEdit">
+        <div class="tl-edit-header">
+          <button class="tl-btn tl-btn-ghost" id="btnBackToBrackets">← Back to brackets</button>
+          <h2 id="editBracketTitle">Edit bracket</h2>
+          <span class="tl-spacer"></span>
+          <button class="tl-btn tl-btn-danger" id="btnDeleteBracket">Delete bracket</button>
+        </div>
+
+        <div class="tl-edit-grid">
+          <div class="tl-edit-col">
+            <label class="tl-field">
+              <span>Label <small>(shown on the chip)</small></span>
+              <input type="text" id="brLabel" maxlength="40" />
+            </label>
+
+            <label class="tl-field">
+              <span>Severity <small>(the bracket's own display urgency — advisory only)</small></span>
+              <select id="brKind">
+                <option value="red">Red</option>
+                <option value="amber">Amber</option>
+                <option value="green">Green</option>
+                <option value="info">Info</option>
+              </select>
+            </label>
+
+            <label class="tl-field tl-field-inline">
+              <input type="checkbox" id="brEnabled" />
+              <span>Enabled</span>
+            </label>
+          </div>
+
+          <div class="tl-edit-col">
+            <label class="tl-field">
+              <span>Patterns <small>(one per line — matched against the request text only)</small></span>
+              <textarea id="brPatterns" rows="8" placeholder="housebound&#10;bed.?bound&#10;home visit"></textarea>
+            </label>
+
+            <label class="tl-field tl-field-inline">
+              <input type="checkbox" id="brRegex" />
+              <span>Treat patterns as regex</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="tl-edit-footer">
+          <button class="tl-btn" id="btnCancelBracketEdit">Cancel</button>
+          <button class="tl-btn tl-btn-primary" id="btnSaveBracketEdit">Save bracket</button>
+        </div>
       </section>
 
       <!-- ============================ SYSTEM CHIPS TAB ============================ -->

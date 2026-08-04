@@ -27,7 +27,7 @@ const LOCK = path.join(__dirname, 'defaults-config.lock.json');
 
 // Top-level keys mergeShippedDefaults propagates to existing users. A change to any of
 // them needs a "version" bump to reach installs that already have a stored config.
-const MIGRATION_KEYS = ['rules', 'thresholds', 'prefs', 'systemChips', 'resultRules'];
+const MIGRATION_KEYS = ['rules', 'thresholds', 'prefs', 'systemChips', 'resultRules', 'urgencyBrackets'];
 
 // Deterministic JSON (recursively sorted keys) so a pure key reorder doesn't churn the
 // hash; array order is preserved (reordering rules IS a semantic change).

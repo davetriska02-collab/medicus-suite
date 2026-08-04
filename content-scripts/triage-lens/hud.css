@@ -31,6 +31,7 @@
 .ch-row-sev-amber,
 .ch-kbd-cursor,
 .ch-row-seen,
+.ch-bracket,
 .ch-result-popover,
 .ch-detail-verdict {
   /* Surfaces */
@@ -197,6 +198,53 @@
   color: var(--green);
   border-color: var(--green-line);
   font-weight: 700;
+}
+
+/* ---- Urgency bracket chips (Phase 1 — detail page only) ----
+   Practice-defined, named CATEGORY tags matched against the request free-text
+   on the task detail page — a DELIBERATELY SEPARATE top-level chip family
+   from .ch-chip, never mixed in, so an advisory category tag can never be
+   mistaken for a scored/graded rule/result chip (TRIAGE-NORTHSTAR-2026-07-22.md
+   design principles: escalate-only, never a composite score, never
+   suppresses/routes). Always clickable — a rendered bracket chip has always
+   already matched, so there is always evidence to show (content.js
+   showBracketMenu, reusing the SAME buildEvidenceEl affordance the queue
+   rule-match chips use). This class is in the token-block selector list
+   above per CLAUDE.md rule 5. */
+.ch-bracket {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  border: 1px solid transparent;
+  font-family: var(--sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ch-bracket:hover {
+  filter: brightness(0.96);
+}
+.ch-bracket-red {
+  background: var(--red-dim);
+  color: var(--red);
+  border-color: var(--red-line);
+}
+.ch-bracket-amber {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border-color: var(--amber-line);
+}
+.ch-bracket-green {
+  background: var(--green-dim);
+  color: var(--green);
+  border-color: var(--green-line);
+}
+.ch-bracket-info {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: var(--accent-line);
 }
 
 /* ---- Queue row chips ---- */
