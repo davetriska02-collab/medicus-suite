@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.222.0] — 2026-08-04
+
+### Task presence: the practice's shared folder IS the store
+
+Field verdict on v3.221.0: still too complicated — and the data shouldn't leave the practice.
+Both fixed at once. The presence store is now **the shared folder the extension already loads
+from**: while a clinician has a request open (tab visible), the service worker writes one tiny
+self-expiring file — `ms-presence/<site>-<staffId>.json` — into the folder, and every machine
+reads the folder to draw the 👁 chips and the banner. One file per staff member, written only by
+its owner, so there are no write conflicts by construction. **Nothing leaves the practice
+network. No accounts, no cloud, no credentials, no config files.**
+
+Setup collapses to the irreducible minimum Chrome allows — one click per machine, once: Options →
+Task Presence → Choose folder → pick the Medicus Suite folder ("Allow on every visit" when Chrome
+asks). The File System Access directory handle persists in extension IndexedDB; all file IO runs
+in the service worker (`shared/presence-folder.js` + `presence:folder*` handlers); the Options
+page owns the picker and any re-allow prompt (both need a user gesture a worker doesn't have),
+with a live status line and one-click re-allow if Chrome ever drops the grant.
+
+Share contents are treated as untrusted on read (anything on the practice network can write to a
+share): the filename is the authorisation unit, rows are re-validated against it, oversize and
+junk files are skipped, and day-dead files are swept opportunistically. Transport dispatch in
+task-presence.js prefers the folder whenever it's connected and granted; the v3.221.0 hosted
+(Supabase) store survives as the documented fallback for practices without a shared folder.
+New `test-presence-folder.js` (31 checks) on the filename/row round-trip.
+
 ## [v3.221.0] — 2026-08-04
 
 ### Task presence: fire-and-forget rollout via the shared extension folder

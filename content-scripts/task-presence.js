@@ -330,8 +330,50 @@
     });
   } catch (_) {}
 
+  // ── folder store status (the PRIMARY transport, 2026-08-04) ───────────────
+  // The practice's shared folder is the store (see shared/presence-folder.js).
+  // All file IO lives in the service worker; this script only learns whether
+  // the folder is usable and routes beats/reads accordingly. The hosted
+  // (Supabase) transport below survives as the fallback for practices
+  // without a shared folder.
+  var _folder = { configured: false, permission: 'none' };
+
+  function swMessage(msg) {
+    return new Promise(function (resolve, reject) {
+      try {
+        chrome.runtime.sendMessage(msg, function (res) {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          resolve(res);
+        });
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  function refreshFolderStatus() {
+    swMessage({ action: 'presence:folderStatus' })
+      .then(function (res) {
+        if (res && typeof res === 'object') {
+          _folder = { configured: res.configured === true, permission: String(res.permission || 'none') };
+        }
+      })
+      .catch(function () {
+        /* SW unreachable — keep last-known state */
+      });
+  }
+  refreshFolderStatus();
+  setInterval(refreshFolderStatus, 120000);
+
+  function folderUsable() {
+    return _folder.configured && _folder.permission === 'granted';
+  }
+
   function presenceReady() {
-    return validPresenceConfig(_cfg);
+    return folderUsable() || validPresenceConfig(_cfg);
   }
 
   // ── identity (stamped by page-world.js) ───────────────────────────────────
@@ -413,6 +455,54 @@
     });
   }
 
+  // ── transport dispatch: folder first, hosted store as fallback ────────────
+  // Folder semantics differ from the hosted upsert in one way that matters:
+  // a beat is a WHOLE-FILE REPLACE, so opened_at must ride every beat (from
+  // the beacon's local state) — there is no server-side merge to preserve it.
+  function beatWrite(row, openedAtIso) {
+    if (folderUsable()) {
+      var full = Object.assign({}, row, { opened_at: openedAtIso });
+      return swMessage({ action: 'presence:folderBeat', row: full }).then(function (res) {
+        if (!res || !res.ok) throw new Error('folder beat: ' + ((res && res.reason) || 'no response'));
+        return { ok: true };
+      });
+    }
+    return storeUpsert(row);
+  }
+
+  function beatClear(site, taskUuid, staffId) {
+    if (folderUsable()) {
+      return swMessage({ action: 'presence:folderClear', site: site, staffId: staffId }).then(function (res) {
+        if (!res || !res.ok) throw new Error('folder clear: ' + ((res && res.reason) || 'no response'));
+      });
+    }
+    return storeDelete(site, taskUuid, staffId);
+  }
+
+  function readTaskRows(site, taskUuid) {
+    if (folderUsable()) {
+      return swMessage({ action: 'presence:folderRead', site: site }).then(function (res) {
+        if (!res || !res.ok) throw new Error('folder read: ' + ((res && res.reason) || 'no response'));
+        return (res.rows || []).filter(function (r) {
+          return r && r.task_uuid === taskUuid;
+        });
+      });
+    }
+    return storeReadTask(site, taskUuid);
+  }
+
+  function readManyRows(site, uuids) {
+    if (folderUsable()) {
+      // One directory listing returns every live beat for the site; the
+      // caller groups by task_uuid and ignores tasks not on its queue.
+      return swMessage({ action: 'presence:folderRead', site: site }).then(function (res) {
+        if (!res || !res.ok) throw new Error('folder read: ' + ((res && res.reason) || 'no response'));
+        return res.rows || [];
+      });
+    }
+    return storeReadMany(site, uuids);
+  }
+
   // ── LAYER 2a: heartbeat while a task overview is open + visible ───────────
   var _beat = null; // { site, slug, taskUuid, timer, openedAtIso, sentOpenedAt }
 
@@ -424,7 +514,7 @@
     if (sendDelete && presenceReady()) {
       var me = myIdentity();
       if (me) {
-        storeDelete(b.site, b.taskUuid, me.staffId).catch(function (e) {
+        Promise.resolve(beatClear(b.site, b.taskUuid, me.staffId)).catch(function (e) {
           log('presence delete failed', e && e.message);
         });
       }
@@ -446,7 +536,7 @@
       _beat.sentOpenedAt ? null : _beat.openedAtIso
     );
     var beatRef = _beat;
-    storeUpsert(payload)
+    beatWrite(payload, _beat.openedAtIso)
       .then(function (r) {
         if (r.ok && beatRef) beatRef.sentOpenedAt = true;
         if (!r.ok) log('presence upsert HTTP ' + r.status);
@@ -550,7 +640,7 @@
     if (!me) return;
     _bannerBusy = true;
     var forTask = _beat.taskUuid;
-    storeReadTask(_beat.site, forTask)
+    readTaskRows(_beat.site, forTask)
       .then(function (rows) {
         _bannerBusy = false;
         if (!_beat || _beat.taskUuid !== forTask) return; // navigated away mid-flight
@@ -677,7 +767,7 @@
     });
     _queuePollBusy = true;
     _lastQueuePoll = Date.now();
-    storeReadMany(site, uuids)
+    readManyRows(site, uuids)
       .then(function (rows) {
         _queuePollBusy = false;
         _presence.clear();

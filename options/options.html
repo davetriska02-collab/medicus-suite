@@ -1800,22 +1800,38 @@
           <p class="section-desc">
             Shows when a colleague already has a triage request open, so two people don't work the same request without
             knowing. A "&#128065;" chip appears on the queue row and an advisory banner on the open request. Medicus
-            records nothing when a request is opened, so this runs on the Suite's own shared store.
-            <strong>Fire-and-forget setup:</strong> drop a <code>presence-config.json</code> (copy
-            <code>presence-config.example.json</code>) into the shared extension folder and every machine loading from
-            it configures itself — nothing to enter below (see <code>docs/task-presence-setup.md</code>). The fields
-            here are a per-machine override for practices without a shared folder.
+            records nothing when a request is opened, so the Suite keeps its own signal —
+            <strong>in the practice's shared folder, on your own network. Nothing is sent anywhere else.</strong> Setup
+            is one click below, once per machine: point it at the Medicus Suite shared folder (tiny presence files live
+            in an <code>ms-presence</code> subfolder there, one per staff member, self-expiring).
           </p>
           <p class="section-desc" style="color: var(--amber)">
             &#9888; Advisory only — it is never a lock, and <strong>no chip does not mean no one</strong> (a colleague
-            without the Suite, or an offline store, shows nothing).
+            without the Suite, or an unreachable folder, shows nothing).
           </p>
 
           <div class="field">
-            <label class="field-label">Shared-folder config</label>
+            <label class="field-label">Practice shared folder (the store)</label>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+              <button class="primary" id="presencePickFolderBtn">Choose folder&hellip;</button>
+              <button class="ghost" id="presenceReallowBtn" style="display: none">Re-allow access</button>
+              <button class="ghost" id="presenceForgetFolderBtn" style="display: none">Disconnect</button>
+              <code id="presenceFolderStatus" style="font-size: 12px">checking&hellip;</code>
+            </div>
+            <span class="field-help">
+              Pick the shared folder the Medicus Suite extension loads from (any folder every machine mounts works).
+              When Chrome asks, choose <strong>"Allow on every visit"</strong> so the access survives restarts — then
+              this machine is done forever.
+            </span>
+          </div>
+
+          <div class="field">
+            <label class="field-label">Alternative: hosted store config file</label>
             <div><code id="presenceFileStatus" style="font-size: 12px">checking&hellip;</code></div>
             <span class="field-help">
-              Whether a valid <code>presence-config.json</code> has been picked up from the extension folder.
+              Only for practices using a hosted (Supabase) store instead of the shared folder: whether a valid
+              <code>presence-config.json</code> has been picked up from the extension folder. Ignored when a shared
+              folder is connected above.
             </span>
           </div>
 
@@ -1830,7 +1846,7 @@
           </div>
 
           <div class="field">
-            <label class="field-label" for="presenceUrl">Store URL (manual override)</label>
+            <label class="field-label" for="presenceUrl">Hosted store URL (manual override)</label>
             <input type="text" id="presenceUrl" placeholder="https://<project>.supabase.co" />
             <span class="field-help">
               Your practice's Supabase project URL (https, <code>*.supabase.co</code>). Leave blank when the shared
@@ -3348,6 +3364,7 @@
     <script src="../shared/io/phrases-io.js"></script>
     <script src="../shared/quick-actions-core.js"></script>
     <script src="../shared/lab-filing-utils.js"></script>
+    <script src="../shared/presence-folder.js"></script>
     <script src="../shared/io/labfiling-io.js"></script>
     <script src="../shared/io/notifications-io.js"></script>
     <script src="../shared/leaflets-utils.js"></script>
