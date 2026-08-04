@@ -1020,6 +1020,7 @@
         <button class="nav-item" data-section="submissions">Submissions</button>
         <button class="nav-item" data-section="sentinel">Monitoring</button>
         <button class="nav-item" data-section="txn">API Integration</button>
+        <button class="nav-item" data-section="presence">Task Presence</button>
         <button class="nav-item" data-section="triage">Triage Lens</button>
         <button class="nav-item" data-section="result-rules">Result Rules</button>
         <button class="nav-item" data-section="labfiling">Lab Filing</button>
@@ -1793,6 +1794,61 @@
           ></span>
         </section>
 
+        <!-- Task presence section (advisory "someone is on this request") -->
+        <section class="opt-section" id="sect-presence">
+          <h1>Task Presence</h1>
+          <p class="section-desc">
+            Shows when a colleague already has a triage request open, so two people don't work the same request without
+            knowing. A "&#128065;" chip appears on the queue row and an advisory banner on the open request. Medicus
+            records nothing when a request is opened, so this runs on the Suite's own shared store — every machine in
+            the practice must point at the same store, set up once (see <code>docs/task-presence-setup.md</code>).
+          </p>
+          <p class="section-desc" style="color: var(--amber)">
+            &#9888; Advisory only — it is never a lock, and <strong>no chip does not mean no one</strong> (a colleague
+            without the Suite, or an offline store, shows nothing). The "last actioned by" queue chip works without any
+            of this — it reads what Medicus already sends and needs no store.
+          </p>
+
+          <div class="field">
+            <label class="field-label" style="display: flex; align-items: center; gap: 8px">
+              <input type="checkbox" id="presenceEnabled" style="width: auto" />
+              Enable shared presence
+            </label>
+            <span class="field-help">Off by default. The store URL and key below must both be set for it to run.</span>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="presenceUrl">Store URL</label>
+            <input type="text" id="presenceUrl" placeholder="https://<project>.supabase.co" />
+            <span class="field-help">
+              Your practice's Supabase project URL (https, <code>*.supabase.co</code>). One project per practice — every
+              machine uses the same URL.
+            </span>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="presenceKey">Store key (anon)</label>
+            <input type="password" id="presenceKey" placeholder="Supabase anon key" autocomplete="off" />
+            <span class="field-help" style="color: var(--amber)">
+              &#9888; Stored locally on this device and never included in Suite backups. Only the opaque task UUID, site
+              code, staff name and timestamps are ever written to the store — no patient data.
+            </span>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="presenceName">Your display name (optional)</label>
+            <input type="text" id="presenceName" placeholder="e.g. Dr D Triska" maxlength="60" />
+            <span class="field-help">
+              What colleagues see on the chip and banner. Leave blank to use your Medicus login's email name.
+            </span>
+          </div>
+
+          <div class="actions">
+            <button class="primary" id="savePresenceBtn">Save</button>
+            <span class="saved" id="presenceSaved">Saved &#10003;</span>
+          </div>
+        </section>
+
         <!-- Triage Lens section -->
         <section class="opt-section" id="sect-triage">
           <h1>Triage Lens <span class="module-badge">v0.5.0</span></h1>
@@ -2006,7 +2062,17 @@
           </p>
           <div id="rcpoRoutingState" style="margin-bottom: 10px"></div>
           <div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; max-width: 640px">
-            <label style="font-size: 12px; color: var(--text-2); display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 220px">
+            <label
+              style="
+                font-size: 12px;
+                color: var(--text-2);
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                flex: 1;
+                min-width: 220px;
+              "
+            >
               Name of the person signing off
               <input
                 type="text"
@@ -2292,9 +2358,9 @@
           <h1>Cleanup code preferences</h1>
           <p class="section-desc">
             Two things the "Clean up code" panel on Clinical Summary learns locally as clinicians use it &mdash;
-            <strong>local to this device</strong>, travelling between machines only via a manual export/import below
-            (or the full suite backup); there is no live sync. A manual override, once set, always wins over the
-            tally, but the tally keeps counting underneath it so you can check whether it's actually being used.
+            <strong>local to this device</strong>, travelling between machines only via a manual export/import below (or
+            the full suite backup); there is no live sync. A manual override, once set, always wins over the tally, but
+            the tally keeps counting underneath it so you can check whether it's actually being used.
           </p>
 
           <h2 style="font-size: 13px; margin: 22px 0 6px">Preferred wording</h2>
@@ -2331,10 +2397,10 @@
 
           <h2 style="font-size: 13px; margin: 28px 0 6px">Code remapping</h2>
           <p class="field-help" style="margin: 0 0 12px">
-            Which OTHER SNOMED code this practice has actually replaced a given code with &mdash; a genuine recode
-            (e.g. an inactive/retired code manually replaced with an active one), not a wording tweak. Real precedent
-            from this practice's own history, not a guess &mdash; still only ever offered as a one-click suggestion in
-            the panel, never applied automatically.
+            Which OTHER SNOMED code this practice has actually replaced a given code with &mdash; a genuine recode (e.g.
+            an inactive/retired code manually replaced with an active one), not a wording tweak. Real precedent from
+            this practice's own history, not a guess &mdash; still only ever offered as a one-click suggestion in the
+            panel, never applied automatically.
           </p>
 
           <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
@@ -2527,22 +2593,21 @@
           <h1>Event ledger <span class="module-badge">machine-local</span></h1>
           <p class="section-desc">
             A record of what this extension <strong>displayed or did on this computer</strong> — alerts shown,
-            dismissals, recall tasks created, patient summaries copied, pre-flight checks run, and results filed via
-            Lab Filing. It exists to answer &ldquo;did the tool flag this?&rdquo; with evidence.
+            dismissals, recall tasks created, patient summaries copied, pre-flight checks run, and results filed via Lab
+            Filing. It exists to answer &ldquo;did the tool flag this?&rdquo; with evidence.
           </p>
 
           <div class="ledger-disclosure">
             <strong>What this is:</strong> a machine-local log of what this extension showed and did while it was open
-            on <strong>this machine only</strong>. Patients appear as their Medicus UUID — never by name.
-            <br /><br />
-            <strong>What it is not:</strong> it is <strong>not part of the clinical record</strong> and is no
-            substitute for Medicus&rsquo;s own audit trail. <strong>Absence of an event is not evidence that nothing
-            was shown</strong> — the extension only logs while it is open and running on this machine.
-            <br /><br />
+            on <strong>this machine only</strong>. Patients appear as their Medicus UUID — never by name. <br /><br />
+            <strong>What it is not:</strong> it is <strong>not part of the clinical record</strong> and is no substitute
+            for Medicus&rsquo;s own audit trail.
+            <strong>Absence of an event is not evidence that nothing was shown</strong> — the extension only logs while
+            it is open and running on this machine. <br /><br />
             <strong>Retention:</strong> capped at 5,000 events and 90 days — older events are pruned automatically. It
-            never leaves this machine and is <strong>deliberately excluded from suite backups</strong> (the same rule
-            as the Lab Filing audit log): restoring it onto another machine would fabricate a misleading record of
-            what was shown there.
+            never leaves this machine and is <strong>deliberately excluded from suite backups</strong> (the same rule as
+            the Lab Filing audit log): restoring it onto another machine would fabricate a misleading record of what was
+            shown there.
           </div>
 
           <div class="ledger-controls">
@@ -2582,28 +2647,27 @@
         <section class="opt-section" id="sect-health">
           <h1>Suite health <span class="module-badge">self-diagnosis</span></h1>
           <p class="section-desc">
-            The suite depends on specific pieces of Medicus's own page structure to work &mdash; a checkbox, a
-            button, a row of results. This section is the extension quietly checking that those pieces are still
-            where it expects, using a small background probe that runs on the live Medicus page. That probe counts
-            elements only &mdash; it never reads patient data or page text. A <strong>degraded</strong> row means
-            Medicus's interface may have changed since the extension was built, and that one feature may be silently
-            limited until the extension is updated to match.
-            <strong>It is not a fault report about Medicus</strong> &mdash; Medicus changing its own UI is normal and
-            expected; this is the suite catching up with it, automatically, before a clinician has to notice the
-            hard way.
+            The suite depends on specific pieces of Medicus's own page structure to work &mdash; a checkbox, a button, a
+            row of results. This section is the extension quietly checking that those pieces are still where it expects,
+            using a small background probe that runs on the live Medicus page. That probe counts elements only &mdash;
+            it never reads patient data or page text. A <strong>degraded</strong> row means Medicus's interface may have
+            changed since the extension was built, and that one feature may be silently limited until the extension is
+            updated to match. <strong>It is not a fault report about Medicus</strong> &mdash; Medicus changing its own
+            UI is normal and expected; this is the suite catching up with it, automatically, before a clinician has to
+            notice the hard way.
           </p>
           <p class="section-desc">
-            <strong>What to do about a degraded row:</strong> first check you're on the latest version of the
-            extension (see the version badge above, or the update checker) &mdash; most fixes for this ship as a
-            routine update. If it's still degraded after updating, tell Dave (the extension's maintainer) which
-            feature it is so the underlying selector can be fixed.
+            <strong>What to do about a degraded row:</strong> first check you're on the latest version of the extension
+            (see the version badge above, or the update checker) &mdash; most fixes for this ship as a routine update.
+            If it's still degraded after updating, tell Dave (the extension's maintainer) which feature it is so the
+            underlying selector can be fixed.
           </p>
           <p class="section-desc">
-            Some contracts below are marked <strong>fixture-tested only</strong> rather than live-checked &mdash;
-            their own selectors are too generic, or too transient (existing only for a few seconds mid-interaction),
-            to probe live without false alarms. Those are still regression-tested against recorded Medicus DOM
-            snapshots on every code change; they are just not re-checked against the live page every session. The
-            explanation column says why, contract by contract.
+            Some contracts below are marked <strong>fixture-tested only</strong> rather than live-checked &mdash; their
+            own selectors are too generic, or too transient (existing only for a few seconds mid-interaction), to probe
+            live without false alarms. Those are still regression-tested against recorded Medicus DOM snapshots on every
+            code change; they are just not re-checked against the live page every session. The explanation column says
+            why, contract by contract.
           </p>
           <div class="health-summary" id="healthSummary"></div>
           <div class="health-table-wrap" id="healthTableWrap"></div>
@@ -3141,8 +3205,8 @@
               <div class="module-export-card">
                 <div class="mec-name">Cleanup Code Preferences</div>
                 <div class="mec-note" style="font-size: 10px; color: var(--text-muted, #94a3b8); margin-bottom: 4px">
-                  Import MERGES tally counts onto this machine's own rather than replacing them; a local manual
-                  override always wins over a conflicting one in the imported file.
+                  Import MERGES tally counts onto this machine's own rather than replacing them; a local manual override
+                  always wins over a conflicting one in the imported file.
                 </div>
                 <div class="mec-actions">
                   <button class="ghost" data-mod-export="problemDescriptionCleanup">Export</button>

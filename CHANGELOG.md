@@ -2,6 +2,41 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.220.0] — 2026-08-04
+
+### Task presence: "is someone already on this request?"
+
+Field request: two clinicians can open the same triage request without either knowing the other
+is in it. The v3.219.2 capture proved Medicus offers nothing to build on — opening a request
+writes nothing, the status enum has no in-progress, and every Pusher channel is public — so the
+signal is now the Suite's own (`content-scripts/task-presence.js`), in two layers:
+
+**Layer 1 — zero setup, on from install.** The queue payload already carries
+`actionedBy`/`actionedDateTime` on every row; Medicus just never displays them. page-world.js now
+forwards both over the existing `ch-task-list-data` bridge (validated as untrusted, same rules as
+content.js's listener) and a "✎ name · time" chip renders in the patient cell — who last touched
+the task, straight off the wire.
+
+**Layer 2 — shared presence, dormant until configured.** While a clinician has a task overview
+open AND visible, an advisory presence row (site, task UUID, staff UUID, display label,
+timestamps — no patient data of any kind) heartbeats every 25s to a practice-configured Supabase
+table (the manifest already carried the host permission). Colleagues then see a "👁 name" chip on
+that queue row, and opening a request someone else has open injects an amber advisory banner
+("opened this N min ago — they may be working on it"). Identity is never typed: page-world.js
+reads the logged-in staff UUID + email from the page's own Pusher channel names and stamps
+`data-ch-staff`, so a shared terminal attributes presence to whoever is actually in Medicus.
+
+Safety posture, stated everywhere it surfaces: advisory, never a lock — and **no chip never means
+no one** (unconfigured machine, colleague without the Suite, offline store). Heartbeats stop when
+the tab is hidden and rows stale out at 90s, so a request left open over lunch releases itself
+rather than warning colleagues off it; store failures are silent to the clinician (debug-logged)
+because a broken advisory layer must not add noise to a clinical queue. New Options → Task
+Presence section (store URL/key/display name; the key is machine-local and excluded from backups,
+same stance as the Transactional API caller key). Practice setup: `docs/task-presence-setup.md`.
+91-check test file (`test-task-presence.js`) covers the bridge-row sanitiser, identity parse,
+config gate, heartbeat payload (opened_at only on the first beat), the active-others filter
+(self/stale/future-dated excluded, store rows treated as untrusted) and the chip/banner text.
+
 ## [v3.219.2] — 2026-08-04
 
 ### Answered: Medicus does not tag a request as "being worked on"
