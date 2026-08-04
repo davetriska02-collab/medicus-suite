@@ -82,7 +82,11 @@
 
   // ── config ────────────────────────────────────────────────────────────────
   var BODY_PARSE_CAP = 200000;
-  var BODY_KEEP_CAP = 20000;
+  // Task overviews run ~20k+ of JSON and the interesting inventories
+  // (taskStatusOptions, taskAssigneeOptions) sit near the END of the body —
+  // the 20k cap the other capture scripts use truncated them mid-array on the
+  // 2026-08-04 capture. Keep more here: payload shape IS the finding.
+  var BODY_KEEP_CAP = 80000;
   var captureAll = false;
   var redact = true;
 
@@ -435,10 +439,14 @@
   // ── read helpers ──────────────────────────────────────────────────────────
   function apiBaseUrl() {
     // england.medicus.health/{code}/... → {code}.api.england.medicus.health
+    // The API host prefixes 'api' onto the FULL page host — do not strip the
+    // first label first. Doing so produced {code}.api.medicus.health, whose
+    // DNS does not resolve, so both probe GETs failed with "Failed to fetch"
+    // on the 2026-08-04 capture (the passive wrap still caught the app's own
+    // calls, which is where that capture's findings came from).
     var parts = location.pathname.split('/').filter(Boolean);
     var code = parts[0] || '';
-    var host = location.hostname.replace(/^[^.]+\./, '');
-    return 'https://' + code + '.api.' + host;
+    return 'https://' + code + '.api.' + location.hostname;
   }
 
   function parseTaskUrl() {

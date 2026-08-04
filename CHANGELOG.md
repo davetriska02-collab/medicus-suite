@@ -2,6 +2,37 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.219.2] — 2026-08-04
+
+### Answered: Medicus does not tag a request as "being worked on"
+
+Capture run on a live triage request (`docs/learnings-task-presence.md`), and the answer is
+no — from three independent directions:
+
+- **Opening a request writes nothing.** The request was opened, left, and opened again:
+  20 network calls, every one a `GET`, zero writes. A claim or lock has to write on open,
+  so Medicus has nothing to show anyone else.
+- **No status for it.** The queue's Status filter offers New / Awaiting recipient response /
+  Reply received / Scheduled for later; the task page's own `taskStatusOptions` offers
+  `new-request` / `reply-received` / `awaiting-recipient-response` / `resolved` (+ `rejected`).
+  There is no `in-progress`.
+- **No presence channel.** 17 Pusher channels on a task page, none of them presence, and all
+  public — so client events are impossible and we cannot publish our own presence onto them.
+
+Useful by-catch: the queue row already carries `actionedBy` / `actionedById` /
+`actionedDateTime`, `assignedTo` / `assignedId` and `status` / `statusValue` / `statusText`,
+none of which `shared/request-monitor.js` reads. That makes "last actioned by X at HH:MM"
+available with no new endpoint — though it is a *last-actioned* signal, empty on an untouched
+task, so it misses the collision case that matters most (opened but not yet actioned).
+Medicus also runs a per-task broadcast channel `{site}-task-{uuid}` → `updated`, which fires
+on change, not on view.
+
+Two fixes to the capture tool itself, both exposed by the run: `apiBaseUrl()` stripped the
+first host label before prefixing `api`, building `{code}.api.medicus.health` (does not
+resolve) instead of `{code}.api.england.medicus.health` — both active probe GETs failed, and
+every finding above came from the passive fetch/XHR wrap catching the app's own traffic. And
+`BODY_KEEP_CAP` was raised 20k → 80k, because a task overview truncated mid-`taskStatusOptions`.
+
 ## [v3.219.1] — 2026-08-04
 
 ### Discovery tool: is a request tagged as "being worked on"?
