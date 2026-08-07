@@ -967,7 +967,7 @@
 }
 
 .rcp-bk-type-picker .rcp-bk-select,
-.rcp-bk-type-filter {
+.rcp-bk-type-picker .rcp-bk-type-filter {
   width: 100%;
   flex: none;
 }

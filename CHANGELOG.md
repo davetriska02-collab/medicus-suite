@@ -2,6 +2,39 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.224.1] — 2026-08-07
+
+### First available: design polish from a multi-critic review
+
+A three-critic design review (art director / token surveyor / fresh-eyes GP persona, per
+`/design-crit`) of the v3.224.0 surface, rendered against fixture data in twelve states. The
+convergent findings, all applied:
+
+- **One card per favourite.** The tile and its Book action were separate grid cells, tearing
+  holes in the grid and leaving Book's ownership ambiguous. Each favourite is now a single card:
+  type name (sans 11px, demoted), the **datetime as the primary read** (mono 13px `--text-1`),
+  and an always-rendered footer button — "Check" when unchecked, "Checking…" in flight, **"Book"**
+  on a found slot, "Retry" on error — so rows stay flush and the action is bound to its data.
+- **Status palette reclaimed.** Found times lose their green; "None in 4 weeks" loses its amber.
+  In this component amber now means exactly one thing — *the tool couldn't complete* (the
+  stopped-early caveat, per-type fetch errors, and the arm failure, now an amber banner with an
+  alert-triangle instead of bare red text). Red is used nowhere; the alert palette stays spent on
+  clinical states only.
+- **Freshness told once.** The per-tile "as at HH:MM" (which collided with slot times — "09:15 as
+  at 09:19") is hoisted to a single stamp in the section header; the snapshot caveat becomes its
+  own line above the picker instead of buried fineprint. "(2 that day)" — genuinely ambiguous in
+  the fresh-eyes read — is now "+1 later that day".
+- **One container model.** The whole component is a single `--r-lg` shell card on both hosts
+  (the Reception card-in-card nesting removed); the uppercase "FIND ANY OTHER TYPE" eyebrow —
+  the exact pattern the 2026-06-21 recast retired — is sentence-cased; the empty state follows
+  the canon recipe (centered, star glyph, breathing room); the collapsed badge reads "4 saved".
+- **Accessibility:** `aria-live="polite"` on async results in all three pickers (first-available,
+  Slots browse, Reception booking panel), `aria-label` on all three type selects, per-type
+  "Book <type>" labels, aria-busy while checking, a double-fire guard on the Book handoff, and
+  disabled/active states aligned to the canon.
+
+No behaviour changes to search, favourites, or the booking handoff; all H-043 controls untouched.
+
 ## [v3.224.0] — 2026-08-07
 
 ### Typable appointment-type search everywhere + book straight from First available

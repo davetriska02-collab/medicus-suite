@@ -1197,7 +1197,7 @@ html[data-theme='dark'] .staff-split .split-pm {
 }
 
 .bk-type-picker .bk-select,
-.bk-type-filter {
+.bk-type-picker .bk-type-filter {
   width: 100%;
   flex: none;
 }

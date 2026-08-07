@@ -543,7 +543,7 @@ export function createBookingPanel(opts) {
         <div class="rcp-bk-type-picker">
           <input type="text" class="rcp-bk-text rcp-bk-type-filter" id="rcpBkTypeFilter" value="${esc(st.typeFilter)}"
             placeholder="Type to filter &mdash; e.g. acute" autocomplete="off" aria-label="Filter appointment types">
-          <select class="rcp-bk-select" id="rcpBkType"${st.types.length === 0 ? ' disabled' : ''}>
+          <select class="rcp-bk-select" id="rcpBkType" aria-label="Appointment type"${st.types.length === 0 ? ' disabled' : ''}>
             ${typeOptionsHtml()}
           </select>
         </div>
@@ -578,14 +578,19 @@ export function createBookingPanel(opts) {
     </button>`;
   }
 
+  // Wrapped in a single aria-live region (design-crit Decision J) — the async
+  // result of a search (or its absence) is announced to screen reader users
+  // the same way the eye picks it up.
   function renderResults() {
-    if (st.searching) return `<div class="rcp-bk-loading">Looking for slots&hellip;</div>`;
-    if (st.searchError) return `<div class="rcp-error">${esc(st.searchError)}</div>`;
-    if (!st.searched) return '';
-    if (st.days.length === 0) return `<div class="rcp-bk-empty">No slots found.</div>`;
-    const daysHtml = st.days
-      .map(
-        (d, i) => `<div class="rcp-bk-day">
+    let inner;
+    if (st.searching) inner = `<div class="rcp-bk-loading">Looking for slots&hellip;</div>`;
+    else if (st.searchError) inner = `<div class="rcp-error">${esc(st.searchError)}</div>`;
+    else if (!st.searched) inner = '';
+    else if (st.days.length === 0) inner = `<div class="rcp-bk-empty">No slots found.</div>`;
+    else {
+      const daysHtml = st.days
+        .map(
+          (d, i) => `<div class="rcp-bk-day">
           <div class="rcp-bk-day-head">${esc(formatDayLabel(d.date))}</div>
           ${
             d.slots.length === 0
@@ -593,19 +598,21 @@ export function createBookingPanel(opts) {
               : `<div class="rcp-bk-slots">${d.slots.map((sl, j) => renderSlotButton(sl, i, j)).join('')}</div>`
           }
         </div>`
-      )
-      .join('');
-    // "Searched and full" vs "we stopped looking" must stay distinguishable —
-    // otherwise the desk tells a patient there is nothing for a fortnight when
-    // the search simply hit a cap.
-    const notes = [];
-    if (st.aborted)
-      notes.push(
-        'The scheduler was busy, so the search stopped early — days after the last one shown were not checked.'
-      );
-    if (st.truncated)
-      notes.push(`Showing the first ${SLOT_LIMIT} slots found — there may be more later in the window.`);
-    return `<div class="rcp-bk-days">${daysHtml}</div>${notes.map((n) => `<div class="rcp-bk-fineprint">${esc(n)}</div>`).join('')}`;
+        )
+        .join('');
+      // "Searched and full" vs "we stopped looking" must stay distinguishable —
+      // otherwise the desk tells a patient there is nothing for a fortnight when
+      // the search simply hit a cap.
+      const notes = [];
+      if (st.aborted)
+        notes.push(
+          'The scheduler was busy, so the search stopped early — days after the last one shown were not checked.'
+        );
+      if (st.truncated)
+        notes.push(`Showing the first ${SLOT_LIMIT} slots found — there may be more later in the window.`);
+      inner = `<div class="rcp-bk-days">${daysHtml}</div>${notes.map((n) => `<div class="rcp-bk-fineprint">${esc(n)}</div>`).join('')}`;
+    }
+    return `<div aria-live="polite">${inner}</div>`;
   }
 
   function renderBrowse() {
