@@ -33,6 +33,12 @@ GitHub-release (unpacked) channel:
   backup-export migration path for existing sideloaded installs (store
   installs get a new extension ID).
 - `SECURITY.md` supported-versions wording updated to cover both channels.
+- **Fix: date-rot in `test-alert-builder.js`.** The file pinned the engine
+  clock to a fixed `NOW` but computed observation/problem dates from the
+  *real* clock, so the "overdue" boundary assertion started failing once
+  enough calendar time passed (red on `main` since early August).
+  `isoDaysAgo()` now anchors on the same fixed `NOW` — the whole file is
+  date-stable.
 
 ## [v3.125.0] — 2026-06-20
 
