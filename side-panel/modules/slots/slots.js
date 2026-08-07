@@ -26,6 +26,7 @@ import {
   validateAlertRule,
 } from './slots-alert-core.js';
 import { createFirstAvailablePanel } from '../shared/first-available.js';
+import { filterAppointmentTypes } from '../shared/booking-panel-core.js';
 
 // Practice code resolved from chrome.storage.local['suite.practiceCode'].
 // No hardcoded default — null means the user has not configured a code yet.
@@ -62,6 +63,7 @@ let state = {
     providerId: null,
     types: [],
     selectedTypeId: '',
+    typeFilter: '', // typable filter over the type list ("acute" → matching types)
     date: null, // set to todayISO() on first open
     slots: null, // null = no search yet; [] = searched, no results
     hasSearched: false,
@@ -142,11 +144,13 @@ let _firstAvail = null; // createFirstAvailablePanel() instance, or null
 export async function init(el) {
   container = el;
 
-  // Load persisted hidden types, alert rules, and practice code
+  // Load persisted hidden types, alert rules, practice code, and any pending
+  // first-available → booking handoff left by another tab's mount
   const stored = await chrome.storage.local.get([
     'slots.hiddenTypes',
     'slots.alertRules',
     'slots.pillPrefs',
+    'slots.pendingBooking',
     'suite.practiceCode',
   ]);
   if (stored['slots.hiddenTypes']) state.hiddenTypes = new Set(stored['slots.hiddenTypes']);
@@ -179,6 +183,28 @@ export async function init(el) {
   fetchAndRender();
   const stopFresh = attachFreshnessTicker(container);
 
+  // First-available "Book" pressed while THIS module is mounted: claim the
+  // event (preventDefault) and open the booking section pre-filled.
+  const onFirstAvailBook = (e) => {
+    if (!container) return;
+    const d = e.detail || {};
+    if (!d.typeId) return;
+    e.preventDefault();
+    openBookingForType(d.typeId, d.date);
+  };
+  document.addEventListener('suite:first-avail:book', onFirstAvailBook);
+
+  // One-shot handoff left by a first-available mount on another tab
+  // (reception) before it jumped here. Stale notes (>2 min) are dropped —
+  // a day-old pending booking silently opening a search would be confusing.
+  const pending = stored['slots.pendingBooking'];
+  if (pending && typeof pending === 'object') {
+    chrome.storage.local.remove('slots.pendingBooking');
+    if (pending.typeId && Date.now() - (pending.savedAt || 0) < 2 * 60 * 1000) {
+      openBookingForType(pending.typeId, pending.date);
+    }
+  }
+
   // Listen for Pusher-triggered refresh from service worker
   document.addEventListener('suite:slots:refresh', onRefresh);
 
@@ -188,6 +214,7 @@ export async function init(el) {
   // Return cleanup
   return () => {
     document.removeEventListener('suite:slots:refresh', onRefresh);
+    document.removeEventListener('suite:first-avail:book', onFirstAvailBook);
     chrome.storage.onChanged.removeListener(onStorageChange);
     stopFresh();
     _firstAvail?.destroy();
@@ -811,17 +838,33 @@ function renderBookingContent() {
   return renderBookingBrowse();
 }
 
+// The booking type-select's options under the current typable filter. The
+// selected type always stays in the list (even when it stops matching the
+// filter) so the select can never show a blank while state holds a selection.
+function bkTypeOptionsHtml() {
+  const { bk } = state;
+  if (bk.types.length === 0) return '<option value="" disabled>No appointment types found</option>';
+  const filtered = filterAppointmentTypes(bk.types, bk.typeFilter);
+  const list = filtered.slice();
+  if (bk.selectedTypeId && !list.some((t) => t.value === bk.selectedTypeId)) {
+    const sel = bk.types.find((t) => t.value === bk.selectedTypeId);
+    if (sel) list.unshift(sel);
+  }
+  const opts = list
+    .map(
+      (t) =>
+        `<option value="${escHtml(t.value)}"${bk.selectedTypeId === t.value ? ' selected' : ''}>${escHtml(t.label)}</option>`
+    )
+    .join('');
+  const head =
+    filtered.length === 0
+      ? `<option value="" disabled>No types match &ldquo;${escHtml(bk.typeFilter)}&rdquo;</option>`
+      : `<option value="">${bk.typeFilter ? `${filtered.length} match${filtered.length === 1 ? '' : 'es'}&hellip;` : '— pick type —'}</option>`;
+  return head + opts;
+}
+
 function renderBookingBrowse() {
   const { bk } = state;
-  const typesHtml =
-    bk.types.length === 0
-      ? '<option value="" disabled>No appointment types found</option>'
-      : bk.types
-          .map(
-            (t) =>
-              `<option value="${escHtml(t.value)}"${bk.selectedTypeId === t.value ? ' selected' : ''}>${escHtml(t.label)}</option>`
-          )
-          .join('');
 
   let slotsHtml = '';
   if (bk.slotsLoading) {
@@ -842,11 +885,14 @@ function renderBookingBrowse() {
       ${!bk.appOrigin && !bk.initLoading ? `<div class="bk-warn">Could not detect Medicus — open a Medicus tab and sign in.</div>` : ''}
       ${!bk.patientId && !bk.initLoading ? `<div class="bk-warn">No patient record open — navigate to a patient in Medicus first.</div>` : ''}
       <div class="bk-row">
-        <label class="bk-label" for="bkType">Type</label>
-        <select class="bk-select" id="bkType"${bk.types.length === 0 ? ' disabled' : ''}>
-          <option value="">— pick type —</option>
-          ${typesHtml}
-        </select>
+        <label class="bk-label" for="bkTypeFilter">Type</label>
+        <div class="bk-type-picker">
+          <input type="text" class="bk-text-input bk-type-filter" id="bkTypeFilter" value="${escHtml(bk.typeFilter)}"
+            placeholder="Type to filter &mdash; e.g. acute" autocomplete="off" aria-label="Filter appointment types" />
+          <select class="bk-select" id="bkType"${bk.types.length === 0 ? ' disabled' : ''}>
+            ${bkTypeOptionsHtml()}
+          </select>
+        </div>
       </div>
       <div class="bk-row">
         <label class="bk-label" for="bkDate">Date</label>
@@ -1111,6 +1157,34 @@ async function doConfirmBooking() {
     bk.confirming = false;
     render();
   }
+}
+
+// ── First-available → booking handoff ─────────────────────────────────────────
+// The shared first-available component never books; its "Book" button hands the
+// chosen type + day to THIS booking section (same-module event, or the one-shot
+// 'slots.pendingBooking' key when the jump came from another tab's mount). All
+// identity controls are unchanged — this only pre-fills the browse step and
+// runs the search; reserve/confirm/verify stay exactly as they were.
+async function openBookingForType(typeId, date) {
+  const { bk } = state;
+  if (!typeId) return;
+  bk.open = true;
+  bk.selectedTypeId = typeId;
+  bk.typeFilter = '';
+  bk.date = date || todayISO();
+  bk.step = 'browse';
+  bk.hasSearched = false;
+  bk.slots = null;
+  bk.slotsError = null;
+  if (!bk.appOrigin && !bk.initLoading) {
+    await doInitBooking();
+  } else {
+    render();
+  }
+  if (bk.providerId && bk.selectedTypeId) {
+    await doSearchSlots();
+  }
+  container?.querySelector('.bk-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function resetBookingToSlots() {
@@ -1394,6 +1468,34 @@ function bindEvents() {
     } else {
       render();
     }
+  });
+
+  // Typable type filter. Rebuilding only the <select>'s options on each
+  // keystroke keeps focus (and the caret) in the input — a full render would
+  // recreate and blur it mid-word. A single remaining match auto-selects (that
+  // state change DOES re-render, with focus restored) so "acute → Find slots"
+  // is two actions, not three.
+  container.querySelector('#bkTypeFilter')?.addEventListener('input', (e) => {
+    const { bk } = state;
+    bk.typeFilter = e.target.value;
+    const filtered = filterAppointmentTypes(bk.types, bk.typeFilter);
+    if (filtered.length === 1 && filtered[0].value !== bk.selectedTypeId) {
+      bk.selectedTypeId = filtered[0].value;
+      bk.hasSearched = false;
+      bk.slots = null;
+      bk.slotsError = null;
+      render();
+      const input = container.querySelector('#bkTypeFilter');
+      if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+      return;
+    }
+    const selectEl = container.querySelector('#bkType');
+    if (selectEl) selectEl.innerHTML = bkTypeOptionsHtml();
+    const searchBtn = container.querySelector('#bkSearch');
+    if (searchBtn) searchBtn.disabled = !(bk.selectedTypeId && bk.date && !bk.slotsLoading && bk.apiBase);
   });
 
   container.querySelector('#bkType')?.addEventListener('change', (e) => {

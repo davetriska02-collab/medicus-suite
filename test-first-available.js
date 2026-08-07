@@ -140,14 +140,39 @@ function check(cond, msg) {
   const dNoTime = describeFirstAvailable({ date: '2026-08-11', slot: {}, dayCount: 1 }, today);
   check(dNoTime.whenText === 'Tue 11 Aug 2026', 'missing slot time degrades to the date alone');
 
-  // ── Component source pins (read-only + capped search) ──────────────────────
+  // ── filterAppointmentTypes (shared by all three type pickers) ──────────────
+  console.log('\nfilterAppointmentTypes:');
+  const bp = await import('./side-panel/modules/shared/booking-panel-core.js');
+  const { filterAppointmentTypes } = bp;
+  const TYPES = [
+    { value: '1', label: 'GP Acute' },
+    { value: '2', label: 'GP Routine' },
+    { value: '3', label: 'FCP MSK' },
+    { value: '4', label: 'Acute Nurse' },
+  ];
+  check(filterAppointmentTypes(TYPES, '').length === 4, 'empty query returns every type');
+  check(filterAppointmentTypes(TYPES, '   ').length === 4, 'whitespace query returns every type');
+  const acute = filterAppointmentTypes(TYPES, 'acute');
+  check(
+    acute.length === 2 && acute.every((t) => /acute/i.test(t.label)),
+    '"acute" → the two labels containing acute, case-insensitive'
+  );
+  check(
+    filterAppointmentTypes(TYPES, 'ACUTE GP').length === 1,
+    'multi-word query: all words must match ("ACUTE GP" → GP Acute)'
+  );
+  check(filterAppointmentTypes(TYPES, 'zzz').length === 0, 'no match → empty list, never a crash');
+  check(filterAppointmentTypes(null, 'x').length === 0, 'null types → empty list');
+  check(filterAppointmentTypes([{ value: '9' }], 'x').length === 0, 'entry with no label never matches');
+
+  // ── Component source pins (write-free + capped search + handoff) ───────────
   console.log('\ncomponent source pins:');
   const fs = require('fs');
   const path = require('path');
   const uiSrc = fs.readFileSync(path.join(__dirname, 'side-panel/modules/shared/first-available.js'), 'utf8');
   check(
     !/reserveSlot|createAppointment|fetchCreateForm/.test(uiSrc),
-    'first-available.js imports NO booking write functions — read-only'
+    'first-available.js imports NO booking write functions — booking is a handoff, never done here'
   );
   check(
     uiSrc.includes('findSlotsInWindow'),
@@ -158,8 +183,23 @@ function check(cond, msg) {
     uiSrc.includes("'slots.firstAvailFavs'") || uiSrc.includes('"slots.firstAvailFavs"'),
     'favourites storage key is slots.firstAvailFavs'
   );
+  check(uiSrc.includes('suite:first-avail:book'), 'the Book button dispatches the handoff event, not a booking call');
+  check(uiSrc.includes('slots.pendingBooking'), 'unclaimed handoffs travel via the one-shot slots.pendingBooking key');
   const ioSrc = fs.readFileSync(path.join(__dirname, 'shared/io/slot-counter-io.js'), 'utf8');
   check(ioSrc.includes('slots.firstAvailFavs'), 'slot-counter-io.js backs up slots.firstAvailFavs');
+
+  // The slots module claims the handoff and owns the actual booking flow —
+  // the pre-fill must land in front of the UNCHANGED reserve/verify/create
+  // path, and every type picker carries the typable filter.
+  const slotsSrc = fs.readFileSync(path.join(__dirname, 'side-panel/modules/slots/slots.js'), 'utf8');
+  check(
+    slotsSrc.includes('suite:first-avail:book') && slotsSrc.includes('preventDefault'),
+    'slots.js claims the handoff event (preventDefault) and opens its booking section'
+  );
+  check(slotsSrc.includes('slots.pendingBooking'), 'slots.js consumes the one-shot pending-booking handoff');
+  check(slotsSrc.includes('filterAppointmentTypes'), 'slots.js booking type picker is typably filterable');
+  const panelSrc = fs.readFileSync(path.join(__dirname, 'side-panel/modules/shared/booking-panel.js'), 'utf8');
+  check(panelSrc.includes('filterAppointmentTypes'), 'reception booking-panel type picker is typably filterable');
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

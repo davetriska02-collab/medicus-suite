@@ -2,6 +2,37 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.224.0] — 2026-08-07
+
+### Typable appointment-type search everywhere + book straight from First available
+
+Field feedback on v3.223.0, addressed in three parts:
+
+**Type to filter, on every booking picker.** All three appointment-type pickers — the Slots
+tab's booking section, the Reception guided-capture booking panel, and First available — now
+carry a filter box above the select: type "acute" and the list collapses to the types containing
+it (case-insensitive, multi-word queries AND together, one shared
+`filterAppointmentTypes` in `booking-panel-core.js` so all three behave identically). A single
+remaining match auto-selects, so "acute → Find slots" is two actions. Only the select's options
+rebuild per keystroke — focus never leaves the input mid-word.
+
+**Book from a First available result.** A found slot now carries an accent **Book →** button.
+The component still never books: the button is a *handoff* — it dispatches
+`suite:first-avail:book` with the type + day; a mounted Slots module claims it and opens its own
+booking section pre-filled and pre-searched (patient detection, commit-time re-verification and
+every other H-043 control untouched). From the Reception card the handoff travels via a one-shot
+`slots.pendingBooking` key (2-minute freshness, allowlisted from backups — the
+`leaflets.pendingQuery` idiom) and jumps to the Slots tab. `test-first-available.js` pins the
+component write-free and the handoff wiring on both sides.
+
+**Obvious buttons, not text lines.** Favourites redesigned from text rows into a grid of large
+tiles — type name bold, status/result beneath, tap to check, ✕ to unfavourite, Book → underneath
+a result. The section opener and the Slots "Book appointment for patient" opener are now
+button-shaped bars (background, border, hover) instead of underlined text lines, and the picker's
+star is a labelled "☆ Favourite" button.
+
+`test-first-available.js` grows to 45 checks (filter semantics + handoff/filter source pins).
+
 ## [v3.223.0] — 2026-08-07
 
 ### First available appointment — "when's the next FCP?" answered in one click

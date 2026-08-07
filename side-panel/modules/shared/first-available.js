@@ -4,9 +4,10 @@
 // The front-desk question this answers: "when is the next <type> appointment?"
 // — asked dozens of times a day on the phone, answered today by manually
 // paging through the appointment book. Favourite types (FCP, GP urgent, bloods,
-// …) get a one-click check; anything else is reachable through the full type
-// selector. Mounted by BOTH the Slots module (its own section) and the
-// Reception module (its own card); one instance per host, shared favourites.
+// …) are big one-click tiles; anything else is reachable by TYPING into the
+// filter box ("acute" → every type containing acute). Mounted by BOTH the
+// Slots module (its own section) and the Reception module (its own card); one
+// instance per host, shared favourites.
 //
 // ── CONTRACT ─────────────────────────────────────────────────────────────────
 //
@@ -20,11 +21,16 @@
 //
 // ── WHAT THIS COMPONENT IS NOT ───────────────────────────────────────────────
 //
-// A booking surface. It is READ-ONLY: no reserve, no create, no patient, no
-// identity. Both existing booking flows (slots.js's panel, reception's
-// createBookingPanel) stay the only places a slot can be taken, with their
-// H-043/H-051 identity controls intact. Keeping this component write-free is
-// what lets it render without a patient record and in the pop-out.
+// A booking surface. It NEVER reserves or creates an appointment itself: the
+// "Book" button on a result is a HANDOFF — it dispatches the cancelable
+// 'suite:first-avail:book' DOM event carrying { typeId, typeLabel, date }.
+// The Slots module handles it by opening its own booking section pre-filled
+// (patient detection, commit-time re-verification and every other H-043
+// control unchanged). If no handler claims the event (reception / pop-out
+// host), the component stores a one-shot 'slots.pendingBooking' and clicks
+// the Slots nav tab, where slots.js init() picks it up — same jump idiom as
+// reception's leaflet handoff (leaflets.pendingQuery). Keeping the write out
+// of this component is what lets it render without a patient record.
 //
 // Rate safety: every search goes through booking-core's findSlotsInWindow —
 // caps (≤28 days, ≤4 concurrent, abort on 429/5xx) live THERE (plan D1.4).
@@ -35,11 +41,14 @@
 //
 // Storage: 'slots.firstAvailFavs' — [{ id, label }], shared by every mount
 // (slots panel, pop-out, reception) via the storage listener, and included in
-// suite backups through shared/io/slot-counter-io.js.
+// suite backups through shared/io/slot-counter-io.js. 'slots.pendingBooking'
+// is transient handoff state — deliberately NOT backed up (allowlisted in
+// test-backup-coverage.js).
 
 'use strict';
 
 import { detectMedicusTab, fetchAppointmentFinder, findSlotsInWindow } from '../slots/booking-api.js';
+import { filterAppointmentTypes } from './booking-panel-core.js';
 import {
   MAX_FAVOURITES,
   sanitiseFirstAvailFavs,
@@ -50,6 +59,7 @@ import {
 } from './first-available-core.js';
 
 const FAVS_KEY = 'slots.firstAvailFavs';
+const PENDING_BOOKING_KEY = 'slots.pendingBooking';
 const WINDOW_DAYS = 28; // booking-core's MAX_WINDOW_DAYS — the widest the caps allow
 
 function esc(s) {
@@ -99,6 +109,7 @@ export function createFirstAvailablePanel() {
     types: [], // [{ value, label }] from the appointment finder
     favs: [], // [{ id, label }] — mirrored from storage
     selectedTypeId: '',
+    typeFilter: '', // the typable filter over the type list
     checkingAll: false,
     // typeId → { status: 'loading'|'done'|'error', found, desc, aborted,
     //            checkedAt, error } — results persist across host re-renders.
@@ -226,13 +237,36 @@ export function createFirstAvailablePanel() {
     }
   }
 
+  // ── Book handoff ───────────────────────────────────────────────────────────
+  // NEVER books here. Dispatches the cancelable handoff event; a mounted Slots
+  // module claims it (preventDefault) and opens its booking section pre-filled
+  // with this type + day. Unclaimed (reception host, or slots not mounted):
+  // store a one-shot pending-booking note and jump to the Slots tab, whose
+  // init() consumes it. All patient/identity controls live in the booking
+  // flow itself, unchanged.
+  function bookHandoff(typeId, typeLabel, date) {
+    if (!typeId) return;
+    const detail = { typeId, typeLabel: typeLabel || '', date: date || todayIso() };
+    const ev = new CustomEvent('suite:first-avail:book', { detail, cancelable: true, bubbles: false });
+    const unclaimed = document.dispatchEvent(ev); // false when a handler preventDefault()ed
+    if (!unclaimed) return;
+    chrome.storage.local
+      .set({ [PENDING_BOOKING_KEY]: { ...detail, savedAt: Date.now() } })
+      .catch(() => {})
+      .finally(() => {
+        document.querySelector('.nav-tab[data-module="slots"]')?.click();
+      });
+  }
+
   // ── Rendering ──────────────────────────────────────────────────────────────
 
-  function renderResult(typeId) {
+  function resultParts(typeId) {
     const r = st.results.get(typeId);
-    if (!r) return '<span class="fa-res fa-res-idle">not checked yet</span>';
-    if (r.status === 'loading') return '<span class="fa-res fa-res-loading">searching&hellip;</span>';
-    if (r.status === 'error') return `<span class="fa-res fa-res-error">${esc(r.error)}</span>`;
+    if (!r) return { statusHtml: '<span class="fa-res fa-res-idle">tap to check</span>', bookable: null };
+    if (r.status === 'loading')
+      return { statusHtml: '<span class="fa-res fa-res-loading">searching&hellip;</span>', bookable: null };
+    if (r.status === 'error')
+      return { statusHtml: `<span class="fa-res fa-res-error">${esc(r.error)}</span>`, bookable: null };
     const asAt = r.checkedAt ? ` <span class="fa-asat">as at ${esc(hhmm(r.checkedAt))}</span>` : '';
     if (!r.found) {
       // "None in the window" and "the search was cut short" must never blur —
@@ -241,60 +275,108 @@ export function createFirstAvailablePanel() {
       const none = r.aborted
         ? 'search stopped early — scheduler busy, try again'
         : `none in the next ${WINDOW_DAYS / 7} weeks`;
-      return `<span class="fa-res fa-res-none">${none}</span>${asAt}`;
+      return { statusHtml: `<span class="fa-res fa-res-none">${none}</span>${asAt}`, bookable: null };
     }
     const d = r.desc || {};
     const soon = d.relative === 'today' || d.relative === 'tomorrow';
     const more = r.found.dayCount > 1 ? ` <span class="fa-daycount">(${r.found.dayCount} that day)</span>` : '';
     const cut = r.aborted ? ' <span class="fa-res-note">— earlier days only, search stopped early</span>' : '';
-    return `<span class="fa-res fa-res-found${soon ? ' fa-res-soon' : ''}">${esc(d.whenText || '')}</span>${more}${cut}${asAt}`;
+    return {
+      statusHtml: `<span class="fa-res fa-res-found${soon ? ' fa-res-soon' : ''}">${esc(d.whenText || '')}</span>${more}${cut}${asAt}`,
+      bookable: { date: r.found.date },
+    };
   }
 
-  function renderFavRows() {
+  // Favourites as a grid of big tap targets: the tile checks, the accent Book
+  // button under a found result starts the real booking flow.
+  function renderFavTiles() {
     if (st.favs.length === 0) {
-      return '<div class="fa-empty">No favourites yet — pick a type below and star it.</div>';
+      return '<div class="fa-empty">No favourites yet — find a type below and star it.</div>';
     }
-    const rows = st.favs
-      .map(
-        (f) => `
-      <div class="fa-fav-row" data-fa-type="${esc(f.id)}">
-        <button type="button" class="fa-check-btn" data-fa-check="${esc(f.id)}" title="Check first available ${esc(f.label)}"${st.phase === 'ready' ? '' : ' disabled'}>${esc(f.label)}</button>
-        <span class="fa-fav-result">${renderResult(f.id)}</span>
-        <button type="button" class="fa-unstar-btn" data-fa-unstar="${esc(f.id)}" title="Remove ${esc(f.label)} from favourites" aria-label="Remove ${esc(f.label)} from favourites">★</button>
-      </div>`
-      )
+    const tiles = st.favs
+      .map((f) => {
+        const { statusHtml, bookable } = resultParts(f.id);
+        return `
+      <div class="fa-tile-wrap">
+        <button type="button" class="fa-tile" data-fa-check="${esc(f.id)}"
+          title="Check first available ${esc(f.label)}"${st.phase === 'ready' ? '' : ' disabled'}>
+          <span class="fa-tile-name">${esc(f.label)}</span>
+          <span class="fa-tile-status">${statusHtml}</span>
+        </button>
+        <button type="button" class="fa-tile-unstar" data-fa-unstar="${esc(f.id)}"
+          title="Remove ${esc(f.label)} from favourites" aria-label="Remove ${esc(f.label)} from favourites">&#10005;</button>
+        ${
+          bookable
+            ? `<button type="button" class="fa-book-btn" data-fa-book="${esc(f.id)}" data-fa-book-date="${esc(bookable.date)}"
+                 title="Open booking with ${esc(f.label)} pre-selected">Book &rarr;</button>`
+            : ''
+        }
+      </div>`;
+      })
       .join('');
     const anyLoading = [...st.results.values()].some((r) => r.status === 'loading');
     return `
-      <div class="fa-fav-list">${rows}</div>
+      <div class="fa-tile-grid">${tiles}</div>
       <div class="fa-actions">
         <button type="button" class="fa-checkall-btn" id="faCheckAll"${st.phase === 'ready' && !st.checkingAll && !anyLoading ? '' : ' disabled'}>${st.checkingAll ? 'Checking&hellip;' : 'Check all favourites'}</button>
       </div>`;
   }
 
-  function renderPicker() {
-    const opts = st.types
+  // The select's options for the current filter. The selected type is always
+  // kept in the list (even when it no longer matches the filter) so the select
+  // can never silently show a blank while state still holds a selection.
+  function typeOptionsHtml() {
+    const filtered = filterAppointmentTypes(st.types, st.typeFilter);
+    const list = filtered.slice();
+    if (st.selectedTypeId && !list.some((t) => t.value === st.selectedTypeId)) {
+      const sel = st.types.find((t) => t.value === st.selectedTypeId);
+      if (sel) list.unshift(sel);
+    }
+    const opts = list
       .map(
         (t) =>
           `<option value="${esc(t.value)}"${st.selectedTypeId === t.value ? ' selected' : ''}>${esc(t.label)}</option>`
       )
       .join('');
+    const head =
+      filtered.length === 0
+        ? `<option value="" disabled>No types match &ldquo;${esc(st.typeFilter)}&rdquo;</option>`
+        : `<option value="">${st.typeFilter ? `${filtered.length} match${filtered.length === 1 ? '' : 'es'}&hellip;` : 'Choose a type&hellip;'}</option>`;
+    return head + opts;
+  }
+
+  function renderPicker() {
     const sel = st.selectedTypeId;
     const selLabel = (st.types.find((t) => t.value === sel) || {}).label || '';
     const starred = sel && isFavourite(st.favs, sel);
     const favFull = !starred && st.favs.length >= MAX_FAVOURITES;
+    const { statusHtml, bookable } =
+      sel && !isFavourite(st.favs, sel) ? resultParts(sel) : { statusHtml: '', bookable: null };
     return `
+      <div class="fa-picker-label" id="faPickerLabel">Find any other type</div>
       <div class="fa-picker">
+        <input type="text" class="fa-filter-input" id="faTypeFilter" value="${esc(st.typeFilter)}"
+          placeholder="Type to filter &mdash; e.g. acute" autocomplete="off" aria-labelledby="faPickerLabel" />
         <select class="fa-select" id="faTypeSelect"${st.types.length === 0 ? ' disabled' : ''}>
-          <option value="">Any other type&hellip;</option>
-          ${opts}
+          ${typeOptionsHtml()}
         </select>
-        <button type="button" class="fa-find-btn" id="faFind"${sel && st.phase === 'ready' ? '' : ' disabled'}>Find first</button>
+      </div>
+      <div class="fa-picker-actions">
+        <button type="button" class="fa-find-btn" id="faFind"${sel && st.phase === 'ready' ? '' : ' disabled'}>Find first available</button>
         <button type="button" class="fa-star-btn${starred ? ' fa-starred' : ''}" id="faStar"${sel && !favFull ? '' : ' disabled'}
           title="${starred ? `Remove ${esc(selLabel)} from favourites` : favFull ? `Favourites are full (max ${MAX_FAVOURITES})` : `Add ${esc(selLabel)} to favourites`}"
-          aria-pressed="${!!starred}">${starred ? '★' : '☆'}</button>
+          aria-pressed="${!!starred}">${starred ? '★ Favourited' : '☆ Favourite'}</button>
       </div>
-      ${sel && !isFavourite(st.favs, sel) ? `<div class="fa-picker-result">${renderResult(sel)}</div>` : ''}`;
+      ${
+        statusHtml
+          ? `<div class="fa-picker-result">${statusHtml}${
+              bookable
+                ? ` <button type="button" class="fa-book-btn fa-book-inline" data-fa-book="${esc(sel)}" data-fa-book-date="${esc(bookable.date)}"
+                     title="Open booking with ${esc(selLabel)} pre-selected">Book &rarr;</button>`
+                : ''
+            }</div>`
+          : ''
+      }`;
   }
 
   function renderBody() {
@@ -307,9 +389,9 @@ export function createFirstAvailablePanel() {
         <div class="fa-actions"><button type="button" class="fa-checkall-btn" id="faRetryArm">Try again</button></div>`;
     }
     return `
-      ${renderFavRows()}
+      ${renderFavTiles()}
       ${renderPicker()}
-      <div class="fa-fineprint">Searches the next ${WINDOW_DAYS / 7} weeks, weekdays only. A result is a snapshot — the slot can be taken at any moment, so book it through the usual booking panel.</div>`;
+      <div class="fa-fineprint">Searches the next ${WINDOW_DAYS / 7} weeks, weekdays only. A result is a snapshot &mdash; the slot can be taken at any moment. &ldquo;Book&rdquo; opens the booking panel with the type and day filled in; the patient is checked there.</div>`;
   }
 
   function render() {
@@ -324,6 +406,31 @@ export function createFirstAvailablePanel() {
     bind();
   }
 
+  // In-place filter application: rebuilding only the <select> options on each
+  // keystroke keeps focus (and the caret) in the filter input — a full
+  // innerHTML render would recreate and blur it mid-word. A single remaining
+  // match is auto-selected so "acute → Find first available" is two actions,
+  // not three; that state change re-renders fully with focus restored.
+  function applyFilterInPlace() {
+    if (!mountEl) return;
+    const selectEl = mountEl.querySelector('#faTypeSelect');
+    if (!selectEl) return;
+    const filtered = filterAppointmentTypes(st.types, st.typeFilter);
+    if (filtered.length === 1 && filtered[0].value !== st.selectedTypeId) {
+      st.selectedTypeId = filtered[0].value;
+      render();
+      const input = mountEl.querySelector('#faTypeFilter');
+      if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+      return;
+    }
+    selectEl.innerHTML = typeOptionsHtml();
+    const findBtn = mountEl.querySelector('#faFind');
+    if (findBtn) findBtn.disabled = !(st.selectedTypeId && st.phase === 'ready');
+  }
+
   function bind() {
     if (!mountEl) return;
     mountEl.querySelector('#faToggle')?.addEventListener('click', () => {
@@ -335,6 +442,10 @@ export function createFirstAvailablePanel() {
     mountEl.querySelector('#faRetryArm')?.addEventListener('click', () => {
       st.phase = 'idle';
       arm();
+    });
+    mountEl.querySelector('#faTypeFilter')?.addEventListener('input', (e) => {
+      st.typeFilter = e.target.value;
+      applyFilterInPlace();
     });
     mountEl.querySelector('#faTypeSelect')?.addEventListener('change', (e) => {
       st.selectedTypeId = e.target.value;
@@ -357,6 +468,14 @@ export function createFirstAvailablePanel() {
         const id = btn.dataset.faCheck;
         const fav = st.favs.find((f) => f.id === id);
         if (fav) checkType(fav.id, fav.label);
+      })
+    );
+    mountEl.querySelectorAll('[data-fa-book]').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.faBook;
+        const label =
+          (st.favs.find((f) => f.id === id) || {}).label || (st.types.find((t) => t.value === id) || {}).label || '';
+        bookHandoff(id, label, btn.dataset.faBookDate);
       })
     );
     mountEl.querySelectorAll('[data-fa-unstar]').forEach((btn) =>
