@@ -309,15 +309,35 @@ body {
   align-items: center;
   gap: 12px;
   padding: 6px 0;
+  flex-wrap: wrap;
 }
 .pr-trend-label {
   width: 120px;
   color: var(--text2);
   font-size: 13px;
 }
+.pr-trend-current {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 32px;
+}
 .pr-trend-delta {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+/* Practice Pulse: only the WORSENING direction is coloured (calm, alert-salience-preserving
+   house style) — an improving or flat delta stays neutral/positive, never alarming. */
+.pr-trend-worse {
+  color: var(--red);
+}
+.pr-trend-better {
+  color: var(--green);
+}
+.pr-trend-flat,
+.pr-trend-unknown {
+  color: var(--text2);
+  font-weight: 400;
 }
 .pr-foot {
   margin-top: 4px;

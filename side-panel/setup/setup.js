@@ -131,7 +131,9 @@ function esc(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -243,7 +245,7 @@ function renderTriageStep() {
       ${stepIcon(done)}
       <div class="setup-step-body">
         <span class="setup-step-label">Triage monitor <span class="setup-optional-badge">optional</span></span>
-        <span class="setup-step-detail">Watching a triage inbox needs a team ID.</span>
+        <span class="setup-step-detail">Watching a triage inbox needs the practice's Team / assignee UUID. In Medicus, open the task list with your team filter applied and paste the whole URL into settings &mdash; or ask your practice manager.</span>
         <div class="setup-step-actions">
           <a class="setup-link" href="#" data-open-options="sect-suite">Configure in settings</a>
         </div>
@@ -267,7 +269,7 @@ function renderCollapsedStrip() {
   return `
     <div class="setup-card setup-card--collapsed" role="region" aria-label="Suite setup">
       <span class="setup-collapsed-icon setup-step-icon--done" aria-hidden="true">&#10003;</span>
-      <span class="setup-collapsed-text">Setup: practice code ready &middot; ${esc(optionalLabel)}</span>
+      <span class="setup-collapsed-text" title="Practice code set &middot; ${esc(optionalLabel)}">Practice code set</span>
       ${chooseTabs}
       <button class="ghost-btn setup-expand" aria-label="Expand setup checklist">Expand</button>
       <button class="ghost-btn setup-dismiss" aria-label="Dismiss setup checklist">Dismiss</button>

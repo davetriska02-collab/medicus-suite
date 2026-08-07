@@ -1,0 +1,488 @@
+// Settings: practice configuration, safe-staffing policy knobs,
+// backup/restore and demo data.
+
+import { esc } from '../../shared/esc.js';
+import { DAY_KEYS, DEFAULT_SETTINGS } from '../../shared/model.js';
+import { isValidPracticeCode } from '../../shared/medicus-api.js';
+import { exportEnvelope, importEnvelope, wipe, save, uid } from '../../shared/store.js';
+import { demoData } from '../../shared/demo.js';
+import { mondayOf, todayISO, addDays, dayKey } from '../../shared/time.js';
+import { buildEvidenceReport } from '../../engine/evidence.js';
+import { timesheetCSV } from '../../engine/timesheet.js';
+import { fetchOverviewRange } from '../../shared/medicus-api.js';
+import { parseOverview } from '../../engine/reconcile.js';
+import { inferRooms } from '../../engine/room-infer.js';
+import { demoOverviewPayload } from '../../shared/demo.js';
+import { download } from './ui.js';
+
+export default {
+  render(root, ctx) {
+    const { state } = ctx;
+    const s = state.settings;
+
+    const syncStatus = state.ui.syncStatus || 'off';
+    root.innerHTML = `
+      <h1>Settings</h1>
+      <div class="card">
+        <h2 class="mt0">You &amp; practice sync</h2>
+        <div class="formgrid">
+          <label class="field">Your name (audit trail)
+            <input id="s-username" value="${esc(s.userName || '')}" placeholder="e.g. Jo Bloggs (PM)">
+          </label>
+          <label class="field">Your role on this machine
+            <select id="s-userrole">
+              <option value="manager" ${s.userRole !== 'staff' ? 'selected' : ''}>Manager (full access)</option>
+              <option value="staff" ${s.userRole === 'staff' ? 'selected' : ''}>Staff (My week focused)</option>
+            </select>
+          </label>
+        </div>
+        <div class="mt8 mb8">
+          <label class="check"><input type="checkbox" id="s-notify" ${s.notifications ? 'checked' : ''}>Browser notifications for sync updates and waiting approvals</label>
+        </div>
+        <div class="toolbar mt8">
+          ${
+            syncStatus === 'unsupported'
+              ? '<span class="sub">Shared-folder sync is not supported by this browser.</span>'
+              : syncStatus === 'connected'
+                ? `<span class="pill approved">sync connected</span><span class="sub">v${ctx.sync.status().version} — changes share via the folder, polled every 15s</span>
+                 <span class="spacer"></span><button id="s-syncoff" class="danger">Disconnect</button>`
+                : syncStatus === 'needs-permission'
+                  ? `<span class="pill requested">reconnect needed</span>
+                   <button id="s-syncperm" class="primary">Re-allow folder access</button>`
+                  : `<button id="s-syncon" class="primary">Connect shared folder…</button>
+                   <span class="sub">Pick a folder on the practice's shared drive — every machine pointed at the same folder shares one live rota. Data never leaves the practice.</span>`
+          }
+        </div>
+        ${
+          state.ui.syncRejected
+            ? `<div class="warn mt8"><span class="sev high">sync</span><span>Shared rota v${esc(String(state.ui.syncRejected.version))}${state.ui.syncRejected.by ? ` from ${esc(state.ui.syncRejected.by)}` : ''} was <strong>rejected</strong> — malformed data, nothing was saved. Your local rota is unchanged. Reasons: ${esc(state.ui.syncRejected.reasons.join(' '))}</span></div>`
+            : ''
+        }
+      </div>
+
+      <div class="card">
+        <h2 class="mt0">Practice</h2>
+        <div class="formgrid">
+          <label class="field">Medicus practice code
+            <input id="s-code" value="${esc(s.practiceCode)}" placeholder="e.g. a3f2b1 (4–8 hex chars)">
+          </label>
+          <label class="field">List size (patients)
+            <input id="s-list" type="number" min="0" value="${esc(String(s.listSize))}">
+          </label>
+          <label class="field">Template anchor Monday
+            <input id="s-anchor" type="date" value="${esc(s.templateAnchorMonday || '')}">
+          </label>
+        </div>
+        <div class="mt8">
+          <strong>Open days:</strong>
+          ${DAY_KEYS.map((d) => `<label class="check"><input type="checkbox" class="s-day" value="${d}" ${s.openDays.includes(d) ? 'checked' : ''}>${d.toUpperCase()}</label>`).join('')}
+        </div>
+        <div class="mt8">
+          <strong>Enhanced access periods:</strong>
+          <label class="check"><input type="checkbox" id="s-early" ${(s.extraPeriods || {}).early ? 'checked' : ''}>Early morning (07:00–08:00)</label>
+          <label class="check"><input type="checkbox" id="s-eve" ${(s.extraPeriods || {}).eve ? 'checked' : ''}>Evening (18:30–20:00)</label>
+          <span class="sub">adds EARLY/EVE columns to the rota and templates, and tracks DES minutes vs 60/1,000/week</span>
+        </div>
+        <div class="formgrid mt10">
+          <label class="field">Sites (one per line — leave empty for single-site)
+            <textarea id="s-sites" rows="3" style="display:block;margin-top:4px;min-width:220px">${esc((s.sites || []).join('\n'))}</textarea>
+          </label>
+          <label class="field">Bank holidays (YYYY-MM-DD, one per line)
+            <textarea id="s-bh" rows="3" style="display:block;margin-top:4px;min-width:220px">${esc((s.bankHolidays || []).join('\n'))}</textarea>
+          </label>
+          <label class="field">Peak leave periods (name,start,end,maxSessions per line)
+            <textarea id="s-peaks" rows="3" style="display:block;margin-top:4px;min-width:220px" placeholder="Summer,2026-07-20,2026-09-01,12">${esc((s.peakPeriods || []).map((p) => `${p.name},${p.start},${p.end},${p.maxSessions}`).join('\n'))}</textarea>
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="mt0">Safe-staffing policy <span class="sub" style="font-weight:400">(guidance defaults — configure to local policy)</span></h2>
+        <div class="card-section">Duty &amp; access</div>
+        <div class="formgrid">
+          <label class="field">Duty doctors required — AM<input id="s-dutyam" type="number" min="0" max="5" value="${esc(String(s.dutyRequired.am))}"></label>
+          <label class="field">Duty doctors required — PM<input id="s-dutypm" type="number" min="0" max="5" value="${esc(String(s.dutyRequired.pm))}"></label>
+          <label class="field">Appointments per clinical session<input id="s-appts" type="number" min="1" value="${esc(String(s.apptsPerSurgerySession))}"></label>
+          <label class="field">Access benchmark (appts / 1,000 patients / week)<input id="s-bench" type="number" min="0" value="${esc(String(s.accessBenchmarkPer1000))}"></label>
+        </div>
+        <div class="card-section">Leave caps</div>
+        <div class="formgrid">
+          <label class="field">Max simultaneous leave — GPs<input id="s-maxgp" type="number" min="0" value="${esc(String(s.maxSimultaneousLeave.gp))}"></label>
+          <label class="field">Max simultaneous leave — nursing<input id="s-maxnur" type="number" min="0" value="${esc(String(s.maxSimultaneousLeave.nursing))}"></label>
+          <label class="field">Max simultaneous leave — ARRS<input id="s-maxarrs" type="number" min="0" value="${esc(String(s.maxSimultaneousLeave.arrs))}"></label>
+          <label class="field">Max simultaneous leave — non-clinical<input id="s-maxnon" type="number" min="0" value="${esc(String(s.maxSimultaneousLeave.nonclinical))}"></label>
+        </div>
+        <div class="card-section">Bradford &amp; WTD</div>
+        <div class="formgrid">
+          <label class="field">Bradford Factor — monitor at<input id="s-bfmon" type="number" min="0" value="${esc(String(s.bradfordThresholds.monitor))}"></label>
+          <label class="field">Bradford Factor — high at<input id="s-bfhigh" type="number" min="0" value="${esc(String(s.bradfordThresholds.high))}"></label>
+          <label class="field">Bradford Factor — severe at<input id="s-bfsev" type="number" min="0" value="${esc(String(s.bradfordThresholds.severe))}"></label>
+          <label class="field">WTD weekly hours cap (warn)<input id="s-wtd" type="number" min="0" value="${esc(String(s.wtdWeeklyHours ?? 48))}"></label>
+        </div>
+        <button id="s-save" class="primary mt8">Save settings</button>
+      </div>
+
+      <div class="card">
+        <h2 class="mt0">Rooms</h2>
+        ${
+          (state.rooms || [])
+            .map(
+              (r) => `
+          <div class="toolbar mb8">
+            <input value="${esc(r.name)}" data-roomname="${esc(r.id)}" style="width:240px" title="Edit to rename — usual-room assignments follow the room, not the name">
+            <span class="spacer"></span>
+            <button class="small danger" data-delroom="${esc(r.id)}">Remove</button>
+          </div>`
+            )
+            .join('') ||
+          '<div class="sub mb8">No rooms yet — add consulting/treatment rooms to assign them on the rota and catch double-bookings.</div>'
+        }
+        <div class="toolbar">
+          <input id="s-newroom" placeholder="e.g. Room 3 / Treatment 1" style="width:220px">
+          <button id="s-addroom">Add room</button>
+          <span class="spacer"></span>
+          <button id="s-inferrooms" ${isValidPracticeCode(s.practiceCode) ? '' : 'disabled title="Set your practice code above first"'}>Suggest from Medicus (4 weeks)</button>
+          <button id="s-inferrooms-demo">Suggest from sample data</button>
+        </div>
+        <p class="sub">Suggestion reads the appointment book and counts the peak number of clinicians consulting
+        face-to-face at once — that's how many rooms you need — then gives each clinician a stable usual room
+        that never clashes with anyone they actually overlap with.</p>
+        <div id="roominfer-out">${state.ui.roomInfer ? roomInferHTML(state.ui.roomInfer, state) : ''}</div>
+      </div>
+
+      <div class="card">
+        <h2 class="mt0">Reports</h2>
+        <div class="toolbar">
+          <select id="s-evweeks">${[4, 8, 12, 26].map((n) => `<option value="${n}" ${n === 12 ? 'selected' : ''}>Last ${n} weeks</option>`).join('')}</select>
+          <button id="s-evidence" class="primary">Generate CQC evidence pack</button>
+          <span class="sub">Safe-staffing rules in force + the weekly compliance record — opens printable, save as PDF.</span>
+        </div>
+        <div class="toolbar" style="margin-top:8px">
+          <input id="s-tsfrom" type="date" value="${esc(addDays(todayISO(), -27))}">
+          <input id="s-tsto" type="date" value="${esc(todayISO())}">
+          <button id="s-timesheet">Export timesheet CSV</button>
+          <span class="sub">Sessions worked per person (by type, hours, locum-covered) plus approved leave — payroll-ready.</span>
+        </div>
+      </div>
+
+      ${
+        (state.audit || []).length
+          ? `
+      <div class="card">
+        <h2 class="mt0">Audit log <span class="sub" style="font-weight:400">(last ${Math.min(state.audit.length, 25)} of ${state.audit.length})</span></h2>
+        <table>
+          <thead><tr><th>When</th><th>Who</th><th>Action</th></tr></thead>
+          <tbody>${state.audit
+            .slice(-25)
+            .reverse()
+            .map(
+              (a) => `
+            <tr><td class="sub">${esc(new Date(a.at).toLocaleString('en-GB'))}</td><td>${esc(a.by || '—')}</td><td>${esc(a.summary)}</td></tr>`
+            )
+            .join('')}
+          </tbody>
+        </table>
+      </div>`
+          : ''
+      }
+
+      <div class="card">
+        <h2 class="mt0">Data</h2>
+        <div class="toolbar">
+          <button id="s-export">Export backup</button>
+          <button id="s-import">Import backup</button>
+          <input id="s-file" type="file" accept="application/json" hidden>
+          <span class="spacer"></span>
+          <button id="s-demo">Load demo dataset</button>
+          <button id="s-wipe" class="danger">Wipe all data</button>
+        </div>
+        <p class="sub">Backups contain staff, rota entries, leave and settings — no patient data is ever stored by this product.</p>
+      </div>
+    `;
+
+    root.querySelector('#s-save').onclick = async () => {
+      const code = root.querySelector('#s-code').value.trim().toLowerCase();
+      if (code && !isValidPracticeCode(code)) {
+        ctx.toast('Practice code must be 4–8 hex characters');
+        return;
+      }
+      s.practiceCode = code;
+      s.userName = root.querySelector('#s-username').value.trim();
+      s.userRole = root.querySelector('#s-userrole').value;
+      s.sites = root
+        .querySelector('#s-sites')
+        .value.split('\n')
+        .map((x) => x.trim())
+        .filter(Boolean);
+      s.extraPeriods = {
+        early: root.querySelector('#s-early').checked,
+        eve: root.querySelector('#s-eve').checked,
+      };
+      s.bankHolidays = root
+        .querySelector('#s-bh')
+        .value.split('\n')
+        .map((x) => x.trim())
+        .filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x))
+        .sort();
+      s.peakPeriods = root
+        .querySelector('#s-peaks')
+        .value.split('\n')
+        .map((line) => {
+          const [name, start, end, max] = line.split(',').map((x) => x.trim());
+          if (!name || !/^\d{4}-\d{2}-\d{2}$/.test(start || '') || !/^\d{4}-\d{2}-\d{2}$/.test(end || '')) return null;
+          return { name, start, end, maxSessions: Number(max) || 0 };
+        })
+        .filter(Boolean);
+      s.listSize = Number(root.querySelector('#s-list').value) || 0;
+      s.templateAnchorMonday = root.querySelector('#s-anchor').value || null;
+      s.openDays = [...root.querySelectorAll('.s-day:checked')].map((c) => c.value);
+      s.dutyRequired = {
+        am: Number(root.querySelector('#s-dutyam').value) || 0,
+        pm: Number(root.querySelector('#s-dutypm').value) || 0,
+      };
+      s.apptsPerSurgerySession =
+        Number(root.querySelector('#s-appts').value) || DEFAULT_SETTINGS.apptsPerSurgerySession;
+      s.accessBenchmarkPer1000 = Number(root.querySelector('#s-bench').value) || 0;
+      s.maxSimultaneousLeave = {
+        gp: Number(root.querySelector('#s-maxgp').value) || 0,
+        nursing: Number(root.querySelector('#s-maxnur').value) || 0,
+        arrs: Number(root.querySelector('#s-maxarrs').value) || 0,
+        nonclinical: Number(root.querySelector('#s-maxnon').value) || 0,
+      };
+      s.bradfordThresholds = {
+        monitor: Number(root.querySelector('#s-bfmon').value) || 0,
+        high: Number(root.querySelector('#s-bfhigh').value) || 0,
+        severe: Number(root.querySelector('#s-bfsev').value) || 0,
+      };
+      s.wtdWeeklyHours = Number(root.querySelector('#s-wtd').value) || 48;
+      s.notifications = root.querySelector('#s-notify').checked;
+      await ctx.persist('settings');
+      ctx.toast('Settings saved');
+      ctx.rerender();
+    };
+
+    const syncOn = root.querySelector('#s-syncon');
+    if (syncOn)
+      syncOn.onclick = async () => {
+        try {
+          await ctx.sync.connect();
+          await ctx.syncConnected();
+          ctx.toast('Shared folder connected — this machine now syncs');
+        } catch (err) {
+          if (err && err.name !== 'AbortError') ctx.toast(`Could not connect: ${err.message || err}`);
+        }
+      };
+    const syncPerm = root.querySelector('#s-syncperm');
+    if (syncPerm)
+      syncPerm.onclick = async () => {
+        if (await ctx.sync.requestPermission()) {
+          await ctx.syncConnected();
+          ctx.toast('Folder access restored');
+        } else ctx.toast('Permission was not granted');
+      };
+    const syncOff = root.querySelector('#s-syncoff');
+    if (syncOff)
+      syncOff.onclick = async () => {
+        await ctx.sync.disconnect();
+        state.ui.syncStatus = 'off';
+        state.ui.syncReady = false;
+        ctx.toast('Sync disconnected — this machine is standalone again');
+        ctx.rerender();
+      };
+
+    root.querySelector('#s-timesheet').onclick = async () => {
+      const from = root.querySelector('#s-tsfrom').value;
+      const to = root.querySelector('#s-tsto').value;
+      if (!from || !to || to < from) {
+        ctx.toast('Check the dates');
+        return;
+      }
+      const csv = timesheetCSV({
+        startDate: from,
+        endDate: to,
+        staff: state.staff,
+        entries: state.entries,
+        leaveList: state.leave,
+      });
+      download(`timesheet-${from}-to-${to}.csv`, csv, 'text/csv');
+      await ctx.log(`Exported timesheet CSV ${from} – ${to}`);
+      ctx.toast('Timesheet exported');
+    };
+
+    root.querySelector('#s-evidence').onclick = async () => {
+      const weeks = Number(root.querySelector('#s-evweeks').value);
+      const startMonday = addDays(mondayOf(todayISO()), -7 * (weeks - 1));
+      const html = buildEvidenceReport({
+        startMonday,
+        weeks,
+        staff: state.staff,
+        entries: state.entries,
+        leave: state.leave,
+        rooms: state.rooms || [],
+        settings: s,
+        audit: state.audit || [],
+        generatedBy: s.userName,
+      });
+      const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+      window.open(url, '_blank');
+      await ctx.log(`Generated CQC evidence pack (${weeks} weeks)`);
+      ctx.toast('Evidence pack opened — use the browser print dialog to save as PDF');
+    };
+
+    const runRoomInfer = (rowsByDate) => {
+      state.ui.roomInfer = inferRooms({ rowsByDate, staff: state.staff });
+      ctx.rerender();
+    };
+    const inferLive = root.querySelector('#s-inferrooms');
+    if (inferLive)
+      inferLive.onclick = async () => {
+        ctx.toast('Reading 4 weeks of appointment-book history…');
+        const thisMonday = mondayOf(todayISO());
+        const dates = [];
+        for (let w = 4; w >= 1; w--) {
+          for (let i = 0; i < 5; i++) dates.push(addDays(thisMonday, -7 * w + i));
+        }
+        try {
+          const { byDate, errors } = await fetchOverviewRange(s.practiceCode, dates);
+          if (errors.length && !Object.keys(byDate).length) {
+            ctx.toast(`Fetch failed: ${errors[0]}`);
+            return;
+          }
+          runRoomInfer(Object.fromEntries(Object.entries(byDate).map(([d, payload]) => [d, parseOverview(payload)])));
+        } catch (err) {
+          ctx.toast(err instanceof Error ? err.message : String(err));
+        }
+      };
+    root.querySelector('#s-inferrooms-demo').onclick = () => {
+      const thisMonday = mondayOf(todayISO());
+      const rowsByDate = {};
+      for (let w = 2; w >= 1; w--) {
+        for (let i = 0; i < 4; i++) {
+          const d = addDays(thisMonday, -7 * w + i);
+          if (dayKey(d) !== 'sat' && dayKey(d) !== 'sun')
+            rowsByDate[d] = parseOverview(demoOverviewPayload(state.staff, d));
+        }
+      }
+      runRoomInfer(rowsByDate);
+    };
+    const applyInfer = root.querySelector('#s-applyrooms');
+    if (applyInfer)
+      applyInfer.onclick = async () => {
+        const result = state.ui.roomInfer;
+        if (!result) return;
+        // Top up the registry to the suggested count, then pin usual rooms.
+        while (state.rooms.length < result.roomCount) {
+          state.rooms.push({ id: uid(), name: `Room ${state.rooms.length + 1}` });
+        }
+        for (const a of result.assignments) {
+          const person = state.staff.find((p) => p.id === a.staffId);
+          const room = state.rooms[a.roomIndex];
+          if (person && room) person.usualRoomId = room.id;
+        }
+        await ctx.persist('rooms', 'staff');
+        await ctx.log(
+          `Applied room inference: ${result.roomCount} rooms, ${result.assignments.length} usual-room assignments`
+        );
+        ctx.toast(`${result.roomCount} room(s) ready and usual rooms set — use “Assign rooms” on the Rota page`);
+        state.ui.roomInfer = null;
+        ctx.rerender();
+      };
+
+    root.querySelectorAll('[data-roomname]').forEach((input) => {
+      input.onchange = async () => {
+        const room = state.rooms.find((r) => r.id === input.dataset.roomname);
+        if (!room) return;
+        const name = input.value.trim();
+        if (!name) {
+          input.value = room.name;
+          return;
+        } // blank rename rejected
+        if (name === room.name) return;
+        const old = room.name;
+        room.name = name;
+        await ctx.persist('rooms');
+        await ctx.log(`Renamed room "${old}" to "${name}"`);
+        ctx.toast(`Renamed to ${name} — assignments follow the room automatically`);
+      };
+    });
+
+    root.querySelector('#s-addroom').onclick = async () => {
+      const name = root.querySelector('#s-newroom').value.trim();
+      if (!name) return;
+      state.rooms = [...(state.rooms || []), { id: uid(), name }];
+      await ctx.persist('rooms');
+      ctx.rerender();
+    };
+    root.querySelectorAll('[data-delroom]').forEach((btn) => {
+      btn.onclick = async () => {
+        state.rooms = state.rooms.filter((r) => r.id !== btn.dataset.delroom);
+        state.entries = state.entries.map((e) => (e.roomId === btn.dataset.delroom ? { ...e, roomId: null } : e));
+        await ctx.persist('rooms', 'entries');
+        ctx.rerender();
+      };
+    });
+
+    root.querySelector('#s-export').onclick = async () => {
+      const env = await exportEnvelope();
+      download(`rota-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(env, null, 2));
+    };
+
+    root.querySelector('#s-import').onclick = () => root.querySelector('#s-file').click();
+    root.querySelector('#s-file').onchange = async (ev) => {
+      const file = ev.target.files[0];
+      if (!file) return;
+      try {
+        await importEnvelope(JSON.parse(await file.text()));
+        await ctx.reload();
+        ctx.toast('Backup imported');
+      } catch (err) {
+        ctx.toast(err instanceof Error ? err.message : 'Import failed');
+      }
+    };
+
+    root.querySelector('#s-demo').onclick = async () => {
+      if (state.staff.length && !confirm('Replace current data with the demo dataset?')) return;
+      const demo = demoData();
+      await save('staff', demo.staff);
+      await save('entries', demo.entries);
+      await save('leave', demo.leave);
+      await save('rooms', demo.rooms);
+      await save('swaps', []);
+      await save('audit', []);
+      await save('settings', demo.settings);
+      await ctx.reload();
+      ctx.toast('Demo practice loaded — try “Generate from templates” on the Rota page');
+    };
+
+    root.querySelector('#s-wipe').onclick = async () => {
+      if (!confirm('Delete ALL rota manager data? This cannot be undone.')) return;
+      await wipe();
+      await ctx.reload();
+      ctx.toast('All data wiped');
+    };
+  },
+};
+
+function roomInferHTML(result, state) {
+  return `
+    <div class="sub" style="margin-bottom:6px">${result.datesObserved} day(s) analysed — peak concurrent face-to-face clinicians: <strong>${result.roomCount}</strong></div>
+    ${
+      result.assignments.length
+        ? `<table>
+      <thead><tr><th>Clinician</th><th>F2F sessions seen</th><th>Suggested usual room</th></tr></thead>
+      <tbody>${result.assignments
+        .map(
+          (a) => `
+        <tr><td>${esc(a.name)}</td><td>${a.sessions}</td><td>Room ${a.roomIndex + 1}</td></tr>`
+        )
+        .join('')}
+      </tbody>
+    </table>`
+        : '<div class="muted">No registered clinicians matched the appointment-book data.</div>'
+    }
+    ${result.unmatched.length ? `<div class="sub" style="margin-top:6px">Also consulting (not in registry): ${result.unmatched.map(esc).join(', ')}</div>` : ''}
+    <div class="toolbar" style="margin-top:8px">
+      <button id="s-applyrooms" class="primary" ${result.assignments.length ? '' : 'disabled'}>Apply: create ${result.roomCount} room(s) + set usual rooms</button>
+    </div>
+  `;
+}

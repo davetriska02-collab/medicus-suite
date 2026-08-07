@@ -1,0 +1,320 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Signing Queue module */
+
+/* Honest-state line — fixed, not dismissable; part of the surface's contract. */
+.sg-honest {
+  margin: 4px 0 10px;
+  padding: 7px 10px;
+  border-radius: var(--r-md);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+}
+
+.sg-controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.sg-type-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.sg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sg-empty {
+  padding: 24px 0;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
+.sg-row {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+}
+
+.sg-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.sg-patient {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.sg-dob {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-4);
+}
+
+.sg-summary {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.sg-verdicts {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.sg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.sg-chip--red {
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+  color: var(--red);
+}
+
+.sg-chip--amber {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+}
+
+/* The loudest signal: the flagged drug appears in the request itself. */
+.sg-chip--requested {
+  outline: 2px solid var(--red-line);
+  outline-offset: 1px;
+}
+
+/* Combination family (H-038 k): the engine's existing CSO-reviewed
+   drug-combination evaluations, re-shown at the decision moment. Dashed
+   border distinguishes the family; the red/amber classes carry the tier. */
+.sg-chip--combo {
+  border-style: dashed;
+}
+
+.sg-chip-req {
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 4px;
+  border-radius: var(--r-sm);
+  background: var(--red);
+  color: var(--bg-elev);
+}
+
+.sg-status {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.sg-status--pending {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-4);
+}
+
+.sg-status--error {
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.sg-status--clear {
+  color: var(--text-3);
+}
+
+.sg-clear-caveat {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  margin-left: 4px;
+}
+
+.sg-meta {
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-4);
+}
+
+.sg-meta-high {
+  color: var(--red);
+  font-weight: 700;
+}
+
+.sg-more-btn {
+  margin-top: 10px;
+  width: 100%;
+}
+
+/* Renal fact — verbatim recorded eGFR + age; stale/absent gets amber salience. */
+.sg-renal {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-3);
+  border: 1px dashed var(--border-hi);
+}
+
+.sg-renal--stale {
+  color: var(--amber);
+  border-color: var(--amber-line);
+  background: var(--amber-dim);
+}
+
+/* Collection chip — row head after the name (real-user placement, Chris M.
+   2026-07-07, overriding the synthetic panel's meta-line ruling). The glyph
+   carries the glance category: house = practice dispensary (tinted),
+   Rx = community pharmacy (outline). Routing info, never red/amber. */
+.sg-collect {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+.sg-collect--home {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  font-weight: 600;
+}
+.sg-collect--chemist {
+  color: var(--text-3);
+  background: none;
+  border: 1px solid var(--border-hi);
+}
+
+/* Location filter pills — counts derived from the current pile; invisible at
+   practices that don't record collection locations. */
+.sg-loc-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.sg-loc-pills:empty {
+  display: none;
+}
+
+.sg-loc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--r-lg);
+  font-size: 10.5px;
+  color: var(--text-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  cursor: pointer;
+}
+.sg-loc-pill:hover {
+  border-color: var(--accent-line);
+}
+.sg-loc-pill--active {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  font-weight: 600;
+}
+
+.sg-loc-count {
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 0 5px;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+}
+
+/* Active-filter note — a narrowed view is never silent; hidden red flags are
+   called out by count (H-038 control (j)). */
+.sg-filter-note {
+  margin-bottom: 8px;
+  padding: 5px 9px;
+  border-radius: var(--r-md);
+  font-size: 10.5px;
+  color: var(--text-3);
+  background: var(--bg-elev);
+  border: 1px dashed var(--border-hi);
+}
+.sg-filter-note--red {
+  color: var(--red);
+  border-color: var(--red-line);
+  background: var(--red-dim);
+}
+.sg-filter-note.hidden {
+  display: none;
+}
+
+.sg-filter-clear {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 10.5px;
+  cursor: pointer;
+  padding: 0 2px;
+  text-decoration: underline;
+}
+
+/* Genuinely-finished pile — the panel's one warm line. Static text, sentence
+   case, muted green tick reusing the suite's existing ✓ language. Deliberately
+   NO animation, NO emoji, NO rotation (Practice-panel ruling 2026-07-07 — the
+   restraint is the point; if you are tempted to animate this, reread the
+   appraisal doc first). Only rendered by emptyStateKind === 'done'. */
+.sg-empty--done {
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text-2);
+}
+
+.sg-empty-tick {
+  color: var(--green);
+  font-weight: 700;
+  margin-right: 4px;
+}

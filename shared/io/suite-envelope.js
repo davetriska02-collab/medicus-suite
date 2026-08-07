@@ -98,7 +98,13 @@ const VALID_SCOPES = [
   'condor',
   'reception',
   'knowledge',
+  'labfiling',
   'notifications',
+  'leaflets',
+  'patientAlerts',
+  'problemDescriptionCleanup',
+  'phrases',
+  'rota',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -336,6 +342,15 @@ function previewEnvelope(envelope) {
     if (m) lines.push(m);
   }
 
+  if (mods.condor) {
+    const dayScoreCount = (mods.condor.dayScores || []).length;
+    const snapshotCount = (mods.condor.reportSnapshots || []).length;
+    lines.push(`Condor: ${dayScoreCount} day score(s), ${snapshotCount} report snapshot(s)`);
+  } else {
+    const m = missing('Condor');
+    if (m) lines.push(m);
+  }
+
   if (mods.reception) {
     const customCount = (mods.reception.customPathways || []).length;
     const editCount = Object.keys(mods.reception.pathwayOverrides || {}).length;
@@ -350,6 +365,15 @@ function previewEnvelope(envelope) {
       const shown = enabledIds.slice(0, 5).join(', ');
       const more = enabledIds.length > 5 ? ` … +${enabledIds.length - 5} more` : '';
       lines.push(`WARNING: Enables ${enabledIds.length} reception capture pathway(s): ${shown}${more}`);
+    }
+    // A custom-routing sign-off unlocks non-clinician disposition suggestions on
+    // custom/edited pathways (plan E guardrail 6) — same concern class as the
+    // enable flags above, so it is surfaced before the import, not after.
+    const att = mods.reception.routingAttestation;
+    if (att && typeof att === 'object' && att.scope === 'custom-routing') {
+      lines.push(
+        `WARNING: Carries a custom-routing sign-off (${att.role || 'unknown role'}) — enables routing suggestions on custom/edited pathways.`
+      );
     }
   } else {
     const m = missing('Reception');
@@ -373,11 +397,106 @@ function previewEnvelope(envelope) {
     if (m) lines.push(m);
   }
 
+  if (mods.labfiling) {
+    const profiles = mods.labfiling.profiles || [];
+    lines.push(`Lab filing: ${profiles.length} filing profile${profiles.length === 1 ? '' : 's'}`);
+    // Profiles always arrive disabled on import, but surface their backed-up state
+    // so a reviewer sees what was armed on the source machine.
+    const armed = profiles.filter((p) => p && p.enabled === true).length;
+    const withMsg = profiles.filter((p) => p && p.patientMessage && p.patientMessage.enabled === true).length;
+    lines.push(`NOTE: all imported filing profiles arrive DISABLED — review and enable each before it can file.`);
+    if (armed > 0 || withMsg > 0) {
+      lines.push(
+        `(On the source machine: ${armed} enabled, ${withMsg} with a patient message — both reset to off here.)`
+      );
+    }
+  } else {
+    const m = missing('Lab filing');
+    if (m) lines.push(m);
+  }
+
   if (mods.notifications) {
     const badgeEnabled = mods.notifications.notifications?.badgeEnabled;
     lines.push(`Notifications: badge ${badgeEnabled === false ? 'disabled' : 'enabled'}`);
   } else {
     const m = missing('Notifications');
+    if (m) lines.push(m);
+  }
+
+  if (mods.leaflets) {
+    const recentCount = (mods.leaflets.recent || []).length;
+    const apiEnabled = mods.leaflets.config?.enabled === true;
+    lines.push(
+      `Leaflets: ${recentCount} recent, in-panel API rendering ${apiEnabled ? 'enabled (key stays machine-local — not in this backup)' : 'off'}`
+    );
+  } else {
+    const m = missing('Leaflets');
+    if (m) lines.push(m);
+  }
+
+  if (mods.patientAlerts) {
+    const store = mods.patientAlerts.byPatient || {};
+    let patients = 0;
+    let alerts = 0;
+    for (const entry of Object.values(store)) {
+      const n = entry && Array.isArray(entry.alerts) ? entry.alerts.length : 0;
+      if (n > 0) {
+        patients += 1;
+        alerts += n;
+      }
+    }
+    const typeCount = Array.isArray(mods.patientAlerts.types) ? mods.patientAlerts.types.length : null;
+    lines.push(
+      `Patient Alerts: ${alerts} alert(s) across ${patients} patient(s)${typeCount != null ? `, ${typeCount} custom preset(s)` : ''}`
+    );
+    if (patients > 0) {
+      lines.push(
+        'WARNING: This backup contains PATIENT-IDENTIFIABLE DATA (names, NHS numbers, alert text). Importing merges it into this install — handle the file as a patient-identifiable document.'
+      );
+    }
+  } else {
+    const m = missing('Patient Alerts');
+    if (m) lines.push(m);
+  }
+
+  if (mods.problemDescriptionCleanup) {
+    const prefs = mods.problemDescriptionCleanup.preferredDescriptions || {};
+    const conceptIds = Object.keys(prefs);
+    const overrideCount = conceptIds.filter((id) => prefs[id] && prefs[id].override).length;
+    const remap = mods.problemDescriptionCleanup.conceptRemap || {};
+    const remapIds = Object.keys(remap);
+    const remapOverrideCount = remapIds.filter((id) => remap[id] && remap[id].override).length;
+    lines.push(
+      `Clean up code preferences: ${conceptIds.length} preferred-wording concept(s) (${overrideCount} with a manual override), ${remapIds.length} code-remap concept(s) (${remapOverrideCount} with a manual override). Importing MERGES tally counts onto this install's own (never replaces them); a local override always wins over a conflicting one from the backup.`
+    );
+  } else {
+    const m = missing('Cleanup Code Preferences');
+    if (m) lines.push(m);
+  }
+
+  if (mods.phrases) {
+    const personal = Array.isArray(mods.phrases.items) ? mods.phrases.items.length : 0;
+    const practice = Array.isArray((mods.phrases.config || {}).practiceBlocks)
+      ? mods.phrases.config.practiceBlocks.length
+      : 0;
+    lines.push(
+      `Phrases: ${personal} personal block${personal === 1 ? '' : 's'}, ${practice} practice block${practice === 1 ? '' : 's'}`
+    );
+  } else {
+    const m = missing('Phrases');
+    if (m) lines.push(m);
+  }
+
+  if (mods.rota) {
+    const staffCount = (mods.rota.staff || []).length;
+    const entryCount = (mods.rota.entries || []).length;
+    const leaveCount = (mods.rota.leave || []).length;
+    lines.push(
+      `Rota: ${staffCount} staff, ${entryCount} rostered session${entryCount === 1 ? '' : 's'}, ` +
+        `${leaveCount} leave record${leaveCount === 1 ? '' : 's'}`
+    );
+  } else {
+    const m = missing('Rota');
     if (m) lines.push(m);
   }
 

@@ -114,6 +114,50 @@
   display: inline-block;
   flex: none;
 }
+/* feed provenance ("Data: API feed" / "Data: session") — subtle, not a badge */
+.rec-feed-label {
+  color: var(--text-4);
+  font-weight: 400;
+}
+
+/* "Since last visit" — the brief's headline, rendered first ------------------ */
+.rec-delta-card {
+  border-left: 4px solid var(--accent);
+}
+.rec-delta-baseline,
+.rec-delta-none {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.rec-delta-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rec-delta-item {
+  font-size: 12.5px;
+  color: var(--text-1);
+  line-height: 1.4;
+}
+.rec-delta-allergy {
+  color: var(--red);
+  font-weight: 700;
+}
+.rec-delta-problem {
+  color: var(--amber);
+  font-weight: 600;
+}
+.rec-delta-medication,
+.rec-delta-immunisation {
+  color: var(--text-1);
+}
+.rec-delta-removed {
+  color: var(--text-3);
+  font-style: italic;
+}
 
 /* demographics -------------------------------------------------------------- */
 .rec-demo {
@@ -232,10 +276,10 @@
   padding: 10px 12px;
 }
 .rec-card-h {
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
   color: var(--text-3);
   margin: 0 0 8px;
   display: flex;
@@ -444,6 +488,326 @@
   color: var(--green);
 }
 
+/* Drug-allergy alert(s) — rendered by buildAllergyPrompts() via the SAME
+   ChipRenderer.renderDrugAllergyChip() markup content-scripts/sentinel.js
+   uses for this exact chip type (shared/chip-renderer.js), so it must carry
+   the same `.sent-chip*` classes here. sentinel.css (where these classes are
+   otherwise defined) is lazy-loaded per-module and is NOT guaranteed to be
+   loaded when the Record tab renders one of these, so the subset actually
+   used by renderDrugAllergyChip is reproduced below, scoped to
+   .rec-allergy-alerts so it can't leak into (or clash with) any other
+   module's rendering. Colour tokens (--red/--amber/--green/...) are suite
+   canon (panel.css), shared across every module. ------------------------- */
+.rec-allergy-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.rec-allergy-alerts .sent-chip {
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  padding: 8px 10px;
+  border-left-width: 3px;
+  position: relative;
+}
+.rec-allergy-alerts .sent-chip-red {
+  border-left-color: var(--red);
+  background: var(--red-dim);
+}
+.rec-allergy-alerts .sent-chip-amber {
+  border-left-color: var(--amber);
+  background: var(--amber-dim);
+}
+.rec-allergy-alerts .sent-chip-green {
+  border-left-color: var(--green);
+  background: var(--green-dim);
+}
+.rec-allergy-alerts .sent-chip-neutral {
+  border-left-color: var(--border-hi);
+}
+.rec-allergy-alerts .sent-chip-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.rec-allergy-alerts .sent-chip-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  flex: 1;
+  min-width: 0;
+}
+.rec-allergy-alerts .sent-chip-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 7px;
+}
+.rec-allergy-alerts .sent-badge-red {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red-line);
+}
+.rec-allergy-alerts .sent-badge-amber {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid var(--amber-line);
+}
+.rec-allergy-alerts .sent-badge-green {
+  background: var(--green-dim);
+  color: var(--green);
+  border: 1px solid var(--green-line);
+}
+.rec-allergy-alerts .sent-badge-neutral {
+  background: var(--bg-mid);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+.rec-allergy-alerts .sent-chip-obs {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 4px;
+  font-family: var(--mono);
+}
+.rec-allergy-alerts .sent-chip-facts {
+  margin-top: 4px;
+}
+.rec-allergy-alerts .sent-chip-fact {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.rec-allergy-alerts .sent-chip-fact-label {
+  font-weight: 600;
+  color: var(--text-2);
+}
+.rec-allergy-alerts .sent-chip-cat {
+  font-size: 10px;
+  color: var(--text-4);
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+.rec-allergy-alerts .sent-custom-tag {
+  --tag-ink: var(--violet);
+  --tag-dim: var(--violet-dim);
+  --tag-line: var(--violet-line);
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 8.5px;
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--tag-ink);
+  background: var(--tag-dim);
+  border: 1px solid var(--tag-line);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+.rec-allergy-alerts .sent-chip-chevron {
+  font-size: 9px;
+  color: var(--text-4);
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+/* No click-to-expand wired in the Record tab (the facts are already shown
+   inline above) — the chevron/data-evidence attributes ride along on the
+   shared chip markup but are inert here, so the "clickable" affordance
+   (pointer cursor, hover glow) is deliberately suppressed rather than
+   promising an interaction that doesn't happen. */
+.rec-allergy-alerts .sent-chip-clickable {
+  cursor: default;
+}
+
+/* Pre-flight — what-if safety preview ---------------------------------------- */
+.rec-preflight {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px 12px;
+}
+.rec-preflight-summary {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  padding: 9px 0;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rec-preflight-summary::-webkit-details-marker {
+  display: none;
+}
+.rec-preflight-summary::before {
+  content: '▸';
+  font-size: 10px;
+  color: var(--text-4);
+}
+.rec-preflight[open] .rec-preflight-summary::before {
+  content: '▾';
+}
+.rec-preflight-summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.rec-preflight-body {
+  padding: 0 0 12px;
+}
+.rec-preflight-intro {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.45;
+  margin: 0 0 9px;
+}
+.rec-preflight-row {
+  display: flex;
+  gap: 6px;
+}
+.rec-preflight-input {
+  flex: 1;
+  border: 1px solid var(--border-hi);
+  background: var(--bg-mid);
+  color: var(--text-1);
+  border-radius: 6px;
+  padding: 0 10px;
+  height: 30px;
+  font-size: 12.5px;
+}
+.rec-preflight-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.rec-preflight-btn {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  height: 30px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rec-preflight-btn:hover {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.rec-preflight-loading,
+.rec-preflight-empty {
+  font-size: 11.5px;
+  color: var(--text-4);
+  padding: 10px 2px 0;
+}
+.rec-preflight-empty {
+  color: var(--amber);
+}
+
+/* result — calm cards, red/amber only where an engine actually says so */
+.rec-pf-unknown {
+  font-size: 11.5px;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: 6px;
+  padding: 7px 9px;
+  margin-top: 10px;
+  line-height: 1.4;
+}
+.rec-pf-group {
+  margin-top: 10px;
+}
+.rec-pf-group-h {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 5px;
+}
+.rec-pf-section {
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 6px;
+  padding: 7px 9px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.rec-pf-section:first-child {
+  margin-top: 10px;
+}
+.rec-pf-ok {
+  border-left-color: var(--green);
+}
+.rec-pf-mid {
+  border-left-color: var(--amber);
+}
+.rec-pf-alert {
+  border-left-color: var(--red);
+}
+.rec-pf-section-h {
+  font-weight: 700;
+  color: var(--text-1);
+}
+.rec-pf-section-body {
+  color: var(--text-2);
+  margin-top: 2px;
+  line-height: 1.45;
+}
+.rec-pf-source {
+  font-size: 10.5px;
+  color: var(--text-4);
+  margin-top: 4px;
+  font-style: italic;
+}
+.rec-pf-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rec-pf-list li {
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+.rec-pf-test-name {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.rec-pf-test-ok {
+  color: var(--text-2);
+}
+.rec-pf-test-missing {
+  color: var(--amber);
+}
+.rec-pf-caveat {
+  font-size: 11px;
+  color: var(--text-3);
+  margin: 12px 0 0;
+  line-height: 1.4;
+  background: var(--bg-mid);
+  border-left: 3px solid var(--border-hi);
+  border-radius: 5px;
+  padding: 6px 9px;
+}
+
 /* footer — sticky so the deep-view launch is always reachable ---------------- */
 .rec-foot {
   position: sticky;
@@ -490,6 +854,13 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg-elev);
+}
+/* Reticle brand glyph echoed into the empty/state card (monochrome, faint —
+   no brand cyan in the clinical chrome). (Craft pass 2026-06-21.) */
+.rec-state-glyph {
+  display: block;
+  margin: 0 auto 10px;
+  color: var(--text-5);
 }
 .rec-state-title {
   font-size: 14px;

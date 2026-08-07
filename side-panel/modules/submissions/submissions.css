@@ -45,11 +45,11 @@
   /* Reserve the border on rest state so activation never shifts layout */
   border: 1px solid transparent;
   color: var(--text-4);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   border-radius: var(--r-sm);
   padding: 4px 10px;
@@ -94,11 +94,12 @@
 }
 
 .dp-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 9px;
   color: var(--text-4);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .dp-wrap input[type='date'] {
@@ -131,11 +132,53 @@
   gap: 4px;
 }
 
+/* FEATURE 1a: read-only span display for the Compare tab's month-to-date sub-mode
+   (replaces the editable date pickers, which don't apply to a computed calendar span). */
+.dp-readonly {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-2);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 3px 6px;
+}
+
+.mode-note {
+  flex-basis: 100%;
+  font-family: var(--sans);
+  font-size: 10px;
+  color: var(--text-4);
+  margin-top: 2px;
+}
+
 .sub-metrics {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 4px;
   margin-bottom: 12px;
+}
+
+/* Same-weekday baseline line (all categories combined) — hidden until the
+   ledger holds enough watched history. Informational, never red: demand
+   pressure vs thresholds is the alert strip's job, this line answers
+   "is today normal?". */
+.sub-baseline {
+  margin: -6px 0 12px;
+  padding: 5px 9px;
+  border-radius: var(--r-md);
+  font-size: 10.5px;
+  color: var(--text-3);
+  background: var(--bg-elev);
+  border: 1px dashed var(--border-hi);
+}
+.sub-baseline--high {
+  color: var(--amber);
+  border-color: var(--amber-line);
+  background: var(--amber-dim);
+}
+.sub-baseline.hidden {
+  display: none;
 }
 
 .sub-metric {
@@ -157,10 +200,11 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  font-family: var(--mono);
-  font-size: 8px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 9px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-3);
   margin-bottom: 3px;
 }
@@ -187,7 +231,7 @@
 
 .metric-delta {
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   font-variant-numeric: tabular-nums;
   margin-top: 3px;
   color: var(--text-4);
@@ -207,11 +251,11 @@
 }
 
 .chart-hdr {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-3);
   margin-bottom: 6px;
 }
 
@@ -304,7 +348,7 @@
 
 .legend-note {
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--text-4);
   letter-spacing: 0.04em;
   align-self: center;
@@ -383,4 +427,29 @@
   background: var(--red-dim);
   border: 1px solid var(--red-line);
   color: var(--red);
+}
+
+/* ── Data-health notice ──────────────────────────────── */
+/* API returned suspect data (date filter ignored / truncated page).
+   Amber: suite self-diagnosis, never a clinical alert. */
+
+.sub-data-health {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  border-radius: var(--r-md);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+}
+.sub-data-health.hidden {
+  display: none;
+}
+.sub-data-health .sub-alert-ico {
+  margin-top: 1px;
 }

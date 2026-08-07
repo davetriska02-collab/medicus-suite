@@ -1,21 +1,26 @@
-# Automated PR review — "Virtual Dave"
+# PR review & repo governance
 
-This repo can auto-review every pull request in the voice of **Virtual Dave**
-(Dr Dave Triska's digital twin, persona defined in
-[`.claude/agents/virtual-dave.md`](../.claude/agents/virtual-dave.md)). It's
-aimed at giving Nick — and any contributor — fast, safety-first feedback before
-a human review.
+How contributions are reviewed and gated on this repo. Two halves:
 
-There are **two ways** it runs. They're complementary.
+- **Automated "Virtual Dave" review** (sections 1–2) — auto-reviews each PR in
+  the voice of **Virtual Dave** (Dr Dave Triska's digital twin, persona in
+  [`.claude/agents/virtual-dave.md`](../.claude/agents/virtual-dave.md)), giving
+  Nick and any contributor fast, safety-first feedback before a human looks.
+- **The governance stack** (section 3) — branch protection, code owners, the
+  patient-data CI guard and the contributor checklist that actually *gate* a
+  merge. Virtual Dave is advisory; these are the real gates.
+
+Virtual Dave runs **two ways**, which are complementary.
 
 ---
 
 ## 1. Always-on GitHub Action (set up once)
 
 The workflow [`.github/workflows/claude-review.yml`](../.github/workflows/claude-review.yml)
-triggers on every PR (opened / new pushes / reopened), gets into the
-virtual-dave persona, reads `CLAUDE.md` + the diff, and posts **one** review
-comment with a verdict (`Ship it` / `Ship after tweaks` / `Needs work`).
+triggers when a PR is **opened / reopened / marked ready for review** (not on
+every push — see "Cost / quota" below), gets into the virtual-dave persona,
+reads `CLAUDE.md` + the diff, and posts **one** review comment with a verdict
+(`Ship it` / `Ship after tweaks` / `Needs work`).
 
 ### One-time setup (Dave, repo owner)
 
@@ -59,6 +64,15 @@ GitHub username), swap the guard for:
     if: ${{ github.event.pull_request.user.login == 'NICKS_USERNAME' }}
 ```
 
+### Cost / quota
+
+The review runs on `opened` / `reopened` / `ready_for_review` only — **not** on
+every push (`synchronize`) — so iterating on a PR doesn't burn a fresh review
+(and your subscription quota) on every commit. To re-trigger a review after
+changes, close+reopen the PR, or ask in a live session (section 2). Add
+`synchronize` back to the `on.pull_request.types` list in the workflow if you
+want every push reviewed.
+
 ---
 
 ## 2. Live-session review (hands-on, no setup)
@@ -91,3 +105,67 @@ Virtual Dave reviews in Dave's actual priority order:
 4. **Clinician UX** — does it get in the way of an 8-minute appointment.
 
 It reviews only — it never modifies code or pushes commits.
+
+---
+
+## 3. The wider governance stack
+
+Virtual Dave is **advisory** — a fast first opinion, never a gate. The actual
+gates are deterministic and human, layered around it:
+
+| Control | File | What it enforces |
+|---|---|---|
+| **Branch protection** | repo settings (see below) | No direct pushes to `main`; PR + passing checks + review required |
+| **Code owners** | [`.github/CODEOWNERS`](../.github/CODEOWNERS) | Maintainer review required on `rules/`, `engine/`, `content-scripts/`, `manifest.json`, `defaults.json` |
+| **Patient-data guard** | [`scripts/check-no-patient-data.js`](../scripts/check-no-patient-data.js) (in `test.yml`) | Fails CI on files under `uploads/`/`data/sars/`/`output/`, or Modulus-11-valid NHS numbers in PR-added lines |
+| **Contributor checklist** | [`CONTRIBUTING.md`](../CONTRIBUTING.md) + [`.github/pull_request_template.md`](../.github/pull_request_template.md) | No PHI, version+changelog, `defaults.json` bump, tests |
+
+> **Important:** Virtual Dave must stay advisory. Do **not** wire it as a
+> required status check or let it auto-approve — it's non-deterministic, and a
+> stochastic process should never be a patient-safety gate. The deterministic
+> tests + your human review (via CODEOWNERS) are the things that actually block.
+
+### Branch protection — one-time setup
+
+This is account-gated (no CLI/tool can set it). The GitHub **iOS app can't** —
+it's web-only — but **Safari on iPhone works**:
+
+1. Open **github.com** in Safari, sign in.
+2. Tap **`aA`** in the address bar → **Request Desktop Website** (mobile view
+   hides these settings).
+3. Go to **Settings → Branches** (URL:
+   `github.com/davetriska02-collab/medicus-suite/settings/branches`).
+4. **Add rule** → branch name pattern: `main`.
+5. Tick:
+   - ✅ **Require a pull request before merging**
+     - └ **Require approvals** → **1**
+     - └ **Require review from Code Owners** ← *this activates `CODEOWNERS`;
+       without it the file only auto-requests review, it doesn't block.*
+   - ✅ **Require status checks to pass before merging** → select **`test`**
+     (and `lint`, `visualiser` if offered).
+   - ⚠️ **Do not allow bypassing the above settings** — a conscious choice:
+     leave **unticked** to keep your own admin override (you become the safety
+     valve; Nick is fully gated regardless), or **tick** to apply the rules
+     even to yourself.
+6. **Create / Save**.
+
+### Verifying it works
+
+Quick non-destructive check (never touches `main`): open a throwaway PR against
+`main` and read its merge state — a protected `main` reports
+`mergeable_state: "blocked"` until the required gates are met. In a live
+session you can just ask Claude to *"test branch protection"* and it'll do this
+and clean up after itself.
+
+**Last verified:** 2026-06-21 — PR against `main` returned
+`mergeable_state: "blocked"`, confirming protection is active. The remaining
+real-world test of code-owner enforcement is the first contributor PR touching
+a `CODEOWNERS` path (e.g. `rules/`), which should require maintainer review
+before merge.
+
+### Token expiry (operational gotcha)
+
+The `CLAUDE_CODE_OAUTH_TOKEN` secret expires periodically. When it lapses, the
+review job fails silently and PRs just stop getting reviewed — no alarm. Set a
+calendar reminder to re-run `claude setup-token` and update the secret, or
+check the Action's status occasionally.

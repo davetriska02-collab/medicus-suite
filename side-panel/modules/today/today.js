@@ -1,9 +1,11 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Today module (morning command centre)
 //
-// Four data cards + one action card give a single-glance answer to
-// "what does today look like?" before clinic starts.
+// A headline sentence + four data cards + one action card give a
+// single-glance answer to "what needs you now?" before clinic starts.
 //
+//  0. Headline      — one plain-English sentence rolled up from the cards
+//                      below (today-headline.js, pure/testable). No new fetch.
 //  1. Waiting Room  — arrived patients, max wait (amber ≥10, red ≥20). Poll 30s.
 //  2. Triage Load   — RequestMonitor bucket counts as pills. Poll 60s.
 //  3. Demand Today  — medical + admin submission counts with threshold washes. Poll 60s.
@@ -13,6 +15,13 @@
 // No new chrome.storage keys — read-only consumers of keys owned by other modules.
 
 'use strict';
+
+import { buildHeadline } from './today-headline.js';
+import { hasEnabledRules, buildBreaches } from '../slots/slots-alert-core.js';
+import { isActionNeeded } from '../sweep/sweep-core.js';
+import { windowTaskList, ledgerSeriesForDay, demandBaseline, baselineLine } from '../submissions/submissions-core.js';
+import { recordTaskLists } from '../submissions/submissions-ledger.js';
+import { followupCounts } from '../followups/followups-core.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -34,7 +43,7 @@ let _timers = [];
 let _wrData = null; // { patients: [], error: null }
 let _rmData = null; // { buckets: {}, configured: bool, error: null }
 let _demandData = null; // { medical: n, admin: n, thresholds: {}, error: null }
-let _slotsData = null; // { count: n, error: null }
+let _slotsData = null; // { count: n, error: null, breaches: [{ typeName, threshold, count, level }] }
 let _sweepData = null; // { lastRun: obj|null }
 let _alertsData = null; // [{ ts, channel, level, label }, ...]
 
@@ -108,19 +117,17 @@ function fmtAge(ms) {
 async function fetchWr() {
   if (document.visibilityState !== 'visible') return;
   try {
-    const { code, source } = await window.PracticeCode.resolve();
+    // Shared memoised fetcher (audit M10) — coalesces with panel.js's WR strip
+    // poll of the same endpoint. Practice code is re-resolved inside.
+    const { raw, code } = await window.AppointmentsFeed.fetchRaw({ module: 'today-wr' });
     if (!code) {
       _wrData = { patients: [], error: null, noCode: true };
       renderCard('wr');
+      renderHeadline();
       return;
     }
-    const url = `https://${code}.api.england.medicus.health/scheduling/data/homepage/my-appointments`;
-    const r = await window.ApiDiag.fetch({ module: 'today-wr', url, code, codeSource: source });
-    const raw = await r.json();
     const now = Date.now();
-    const patients = (raw?.schedule?.schedule ?? [])
-      .flatMap((d) => d.entries ?? [])
-      .filter((e) => e?.diaryEntryType?.value === 'appointment' && e?.displayStatus?.value === 'arrived')
+    const patients = window.AppointmentsFeed.arrivedEntries(raw)
       .map((e) => {
         const ms = e.startDateTime ? new Date(e.startDateTime).getTime() : null;
         const mins = ms && !isNaN(ms) ? Math.max(0, Math.round((now - ms) / 60000)) : null;
@@ -132,6 +139,7 @@ async function fetchWr() {
     _wrData = { patients: [], error: e.message || 'Fetch failed' };
   }
   renderCard('wr');
+  renderHeadline();
 }
 
 // ── Fetch: Triage / Request Monitor ───────────────────────────────────────────
@@ -142,18 +150,21 @@ async function fetchRm() {
     if (!window.RequestMonitor) {
       _rmData = { configured: false, error: null };
       renderCard('rm');
+      renderHeadline();
       return;
     }
     const cfg = await window.RequestMonitor.getConfig();
     if (!cfg.enabled || !cfg.assigneeId) {
       _rmData = { configured: false, error: null };
       renderCard('rm');
+      renderHeadline();
       return;
     }
     const { code, source } = await window.PracticeCode.resolve();
     if (!code) {
       _rmData = { configured: true, buckets: {}, error: 'No practice code' };
       renderCard('rm');
+      renderHeadline();
       return;
     }
     const result = await window.RequestMonitor.pollAll(code, cfg.assigneeId, {
@@ -164,6 +175,7 @@ async function fetchRm() {
     _rmData = { configured: true, buckets: {}, error: e.message || 'Fetch failed' };
   }
   renderCard('rm');
+  renderHeadline();
 }
 
 // ── Fetch: Demand Today ────────────────────────────────────────────────────────
@@ -177,9 +189,11 @@ async function fetchDemand() {
     if (!code) {
       _demandData = { medical: null, admin: null, thresholds, error: null, noCode: true };
       renderCard('demand');
+      renderHeadline();
       return;
     }
     const today = todayISO();
+    let baseline = null;
     const [medRes, admRes] = await Promise.allSettled([
       window.ApiDiag.fetch({
         module: 'today-demand',
@@ -194,13 +208,42 @@ async function fetchDemand() {
         codeSource: source,
       }).then((r) => r.json()),
     ]);
-    const medical = medRes.status === 'fulfilled' ? (medRes.value.tasks || []).length : null;
-    const admin = admRes.status === 'fulfilled' ? (admRes.value.tasks || []).length : null;
+    // Route both responses through windowTaskList so a server-side change to
+    // the createdAt_* filter (silently ignored params → default open-task view)
+    // degrades to an honest count + visible warning, not a quietly wrong number.
+    const medW = medRes.status === 'fulfilled' ? windowTaskList(medRes.value, today, today) : null;
+    const admW = admRes.status === 'fulfilled' ? windowTaskList(admRes.value, today, today) : null;
+    let medical = medW ? medW.tasks.length : null;
+    let admin = admW ? admW.tasks.length : null;
+    // Count from the day ledger, not the raw response: the task-list only
+    // contains OPEN tasks (completed requests leave the table — v3.153.0), so
+    // the raw count erodes as the team works. The ledger remembers every task
+    // seen today, so "received today" survives completion.
+    try {
+      const byKey = {};
+      if (medW) byKey.medical = medW.tasks;
+      if (admW) byKey.admin = admW.tasks;
+      const ledger = await recordTaskLists(byKey);
+      const s = ledgerSeriesForDay(ledger, today, ['medical', 'admin']);
+      if (medW) medical = s.medical.total;
+      if (admW) admin = s.admin.total;
+      // Same-weekday baseline read (null until enough watched history) —
+      // cumulative to the CURRENT hour, so a half-day is compared honestly.
+      baseline = demandBaseline(ledger, today, new Date().getHours(), ['medical', 'admin']);
+    } catch (_) {
+      // Storage failure — fall back to the live (open-only) counts above.
+    }
+    const dataWarn =
+      medW?.filterIgnored || admW?.filterIgnored
+        ? 'Medicus ignored the date filter — counts may miss completed work'
+        : medW?.truncated || admW?.truncated
+          ? 'Medicus sent a partial task page — counts may be low'
+          : null;
     const error =
       medRes.status === 'rejected' || admRes.status === 'rejected'
         ? medRes.reason?.message || admRes.reason?.message || 'Fetch failed'
         : null;
-    _demandData = { medical, admin, thresholds, error };
+    _demandData = { medical, admin, thresholds, error, dataWarn, baseline };
   } catch (e) {
     _demandData = {
       medical: null,
@@ -210,41 +253,61 @@ async function fetchDemand() {
     };
   }
   renderCard('demand');
+  renderHeadline();
 }
 
 // ── Fetch: Slots ──────────────────────────────────────────────────────────────
 // Lean local implementation against the same embedded-overview endpoint as slots.js.
 // Counts entries where diaryEntryType.value === 'slot' and start is not in the past.
+//
+// Item 9: also reads 'slots.alertRules' — a key OWNED by the Slots module
+// (chrome.storage.local, per-appointment-type "alert if fewer than N left"
+// rules) — read-only, the same pattern this card already uses for other
+// modules' keys. Per-type counts are only bothered with when at least one
+// rule is enabled (hasEnabledRules gate), so a practice with no alert rules
+// configured pays no extra cost on this already-lean poll.
 
 async function fetchSlots() {
   if (document.visibilityState !== 'visible') return;
   try {
     const { code, source } = await window.PracticeCode.resolve();
     if (!code) {
-      _slotsData = { count: null, error: null, noCode: true };
+      _slotsData = { count: null, error: null, noCode: true, breaches: [] };
       renderCard('slots');
+      renderHeadline();
       return;
     }
+    const stored = await chrome.storage.local.get('slots.alertRules');
+    const alertRules = stored['slots.alertRules'] || [];
+    const trackBreaches = hasEnabledRules(alertRules);
+
     const today = todayISO();
     const url = `https://${code}.api.england.medicus.health/scheduling/data/appointment-book/embedded-overview?date=${today}&filterByUsualLocation=false`;
     const r = await window.ApiDiag.fetch({ module: 'today-slots', url, code, codeSource: source });
     const raw = await r.json();
     const now = new Date();
     let count = 0;
+    const byType = trackBreaches ? {} : null;
     for (const staff of raw.staffSchedules || []) {
       for (const session of staff.schedule || []) {
         for (const entry of session.entries || []) {
           if (entry.diaryEntryType?.value !== 'slot') continue;
           if (entry.startDateTime && new Date(entry.startDateTime) < now) continue;
           count++;
+          if (byType) {
+            const type = entry.appointmentType?.name || 'Unknown';
+            byType[type] = (byType[type] || 0) + 1;
+          }
         }
       }
     }
-    _slotsData = { count, error: null };
+    const breaches = byType ? buildBreaches(alertRules, byType) : [];
+    _slotsData = { count, error: null, breaches };
   } catch (e) {
-    _slotsData = { count: null, error: e.message || 'Fetch failed' };
+    _slotsData = { count: null, error: e.message || 'Fetch failed', breaches: [] };
   }
   renderCard('slots');
+  renderHeadline();
 }
 
 // ── Fetch: Sweep last run ─────────────────────────────────────────────────────
@@ -269,6 +332,7 @@ async function fetchSweep() {
   renderCard('sweep');
   // Recent Alerts borrows sweep provenance for its empty state — keep it in sync.
   renderCard('alerts');
+  renderHeadline();
 }
 
 // ── Fetch: Alert log ─────────────────────────────────────────────────────────
@@ -285,6 +349,34 @@ async function fetchAlerts() {
     _alertsData = [];
   }
   renderCard('alerts');
+}
+
+// ── Headline ──────────────────────────────────────────────────────────────────
+// "What needs you now" — one sentence rolled up from the cards already on
+// screen (waiting room, demand, triage, sweep). Pure logic lives in
+// today-headline.js; this is just the glue that feeds it the module's own
+// in-memory state and paints the result. Re-rendered after every card fetch
+// that can move the headline (wr/rm/demand/sweep) — never a fetch of its own.
+
+function renderHeadline() {
+  if (!container) return;
+  const el = container.querySelector('.today-headline');
+  if (!el) return;
+
+  const oldestUnansweredMs = _rmData?.configured ? oldestUnanswered(_rmData.buckets) : null;
+
+  const { text, severity } = buildHeadline({
+    wrData: _wrData,
+    rmData: _rmData,
+    demandData: _demandData,
+    slotsData: _slotsData,
+    sweepData: _sweepData,
+    oldestUnansweredMs,
+    formatProvenance: window.Provenance?.formatProvenance,
+  });
+
+  el.className = `today-headline${severity ? ` today-headline--${severity}` : ' today-headline--quiet'}`;
+  el.textContent = text;
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
@@ -401,7 +493,7 @@ function buildDemandBody() {
   if (!_demandData) return '<span class="today-loading">Loading…</span>';
   if (_demandData.noCode) return buildNoCodeMsg();
 
-  const { medical, admin, thresholds, error } = _demandData;
+  const { medical, admin, thresholds, error, dataWarn, baseline } = _demandData;
 
   if (error && medical == null && admin == null) {
     return errMsg(error);
@@ -434,6 +526,7 @@ function buildDemandBody() {
     : '';
 
   const errLine = error ? errMsgInline(error) : '';
+  const warnLine = dataWarn ? `<div class="today-demand-datawarn">⚠ ${dataWarn}</div>` : '';
 
   // Headroom meter — the card's altitude over the strip: the strip shows the
   // raw count, the meter shows where it sits against the amber/red thresholds.
@@ -468,6 +561,12 @@ function buildDemandBody() {
       ${admFlag}
     </div>
     ${meter('admin', admin)}
+    ${
+      baseline
+        ? `<div class="today-baseline today-baseline--${baseline.band}" title="Combined medical + admin received today vs the same weekday's history (watched days only, compared to the same hour)">${esc(baselineLine(baseline))}</div>`
+        : ''
+    }
+    ${warnLine}
     ${errLine}
   `;
 }
@@ -482,11 +581,29 @@ function buildSlotsBody() {
   const count = _slotsData.count ?? '—';
   const errLine = _slotsData.error ? errMsgInline(_slotsData.error) : '';
 
+  // Item 9: surface a breach of the Slots module's own alert rules here too —
+  // same threshold data, same amber/red convention as the Slots tab's ribbon
+  // and pills, so a clinician sees it before ever opening that tab.
+  const breaches = _slotsData.breaches || [];
+  const topLevel = breaches.some((b) => b.level === 'red') ? 'red' : breaches.length ? 'amber' : null;
+  const countCls = topLevel ? ` today-hero-count--${topLevel}` : '';
+  const breachLines = breaches.length
+    ? `<div class="today-slots-breaches">
+        ${breaches
+          .map(
+            (b) =>
+              `<span class="today-slots-breach today-slots-breach--${b.level}">${esc(b.typeName)}: ${b.count}</span>`
+          )
+          .join('')}
+      </div>`
+    : '';
+
   return `
     <div class="today-hero-row">
-      <span class="today-hero-count">${count}</span>
+      <span class="today-hero-count${countCls}">${count}</span>
       <span class="today-hero-label">open today</span>
     </div>
+    ${breachLines}
     ${errLine}
   `;
 }
@@ -501,7 +618,7 @@ function sweepProvenance() {
   const timeStr = runAtDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const results = Array.isArray(lastRun.results) ? lastRun.results : [];
   const actionNeeded = results.filter(
-    (r) => Array.isArray(r.chips) && r.chips.some((c) => ['overdue', 'not_met', 'alert'].includes(c.status))
+    (r) => Array.isArray(r.chips) && r.chips.some((c) => isActionNeeded(c.status))
   ).length;
   // Patients actually checked this run (fall back to total when offset absent).
   const checked = typeof lastRun.processedCount === 'number' ? lastRun.processedCount : (lastRun.totalCount ?? 0);
@@ -534,9 +651,20 @@ function buildSweepBody() {
   // Single clear provenance line: when, how many checked, how many alerts.
   const tone = actionNeeded > 0 ? 'today-sweep-result--action' : 'today-sweep-result--clear';
 
+  // Plain-English headline (GP panel feedback): a bare "N alerts" count reads
+  // as a stat to skim past, not a thing to act on. Say it as a sentence so the
+  // action-needed fact carries its own weight. The 0 case stays neutral — it
+  // must never imply "all clear" beyond what was actually checked.
+  const actionVerb = actionNeeded === 1 ? 'has' : 'have';
+  const headlineText =
+    actionNeeded > 0
+      ? `${actionNeeded} of ${checked} booked ${plural} ${actionVerb} checks due — open the sweep for names`
+      : `No action-needed alerts among ${checked} checked`;
+
   return `
     <div class="today-sweep-summary">
       <span class="today-sweep-time">Last sweep ${esc(timeStr)}</span>
+      <span class="today-sweep-headline ${tone}">${esc(headlineText)}</span>
       <span class="today-sweep-result ${tone}">${checked} ${plural} checked · ${actionNeeded} ${alertWord}</span>
     </div>
     <div class="today-sweep-actions">
@@ -611,11 +739,15 @@ function buildAlertsBody() {
 // Decision B: wireSweepButtons and wireSwepButtons alias removed entirely.
 // The delegated handler in wireCardInteractions handles open-sweep.
 
+// Named so cleanup() can remove it — the shell reuses the container across
+// modules, so an anonymous delegate stacked one copy per visit (audit H8-class).
+let _cardActionHandler = null;
+
 function wireCardInteractions() {
   if (!container) return;
 
   // Delegated handler — works even after card bodies are re-rendered
-  container.addEventListener('click', (e) => {
+  _cardActionHandler = (e) => {
     const actionEl = e.target.closest('[data-action]');
     if (!actionEl) return;
     const action = actionEl.dataset.action;
@@ -623,7 +755,8 @@ function wireCardInteractions() {
 
     if (action === 'open-setup') openSetup();
     if (action === 'open-sweep') navTo('sweep');
-  });
+  };
+  container.addEventListener('click', _cardActionHandler);
 
   // Decision A: use btn.dataset.nav (not btn.closest('.today-card')?.dataset.card)
   // Decision H: replace title with aria-label on .today-card-open
@@ -633,6 +766,36 @@ function wireCardInteractions() {
       const mod = btn.dataset.nav;
       if (mod) navTo(mod);
     });
+  });
+
+  container.querySelector('#todayFollowups')?.addEventListener('click', () => navTo('followups'));
+}
+
+// ── Follow-ups line ───────────────────────────────────────────────────────────
+// One compact line under the headline: the personal safety-net ledger's due
+// state. Hidden entirely when the ledger has no open entries (no noise for
+// non-users); red when anything has lapsed, amber when something is due
+// today. Reads storage directly — the ledger is machine-local by design.
+
+function renderFollowupsLine() {
+  const el = container?.querySelector('#todayFollowups');
+  if (!el) return;
+  chrome.storage.local.get(['followups.entries'], (res) => {
+    if (!container) return;
+    const c = followupCounts(res['followups.entries'], Date.now());
+    if (!c.open) {
+      el.classList.add('hidden');
+      return;
+    }
+    const bits = [];
+    if (c.lapsed) bits.push(`<strong>${c.lapsed} overdue</strong>`);
+    if (c.dueToday) bits.push(`${c.dueToday} due today`);
+    const rest = c.open - c.lapsed - c.dueToday;
+    if (rest) bits.push(`${rest} waiting`);
+    el.classList.remove('hidden');
+    el.classList.toggle('today-followups--red', c.lapsed > 0);
+    el.classList.toggle('today-followups--amber', c.lapsed === 0 && c.dueToday > 0);
+    el.innerHTML = `Follow-ups: ${bits.join(' &middot; ')} &rarr;`;
   });
 }
 
@@ -679,6 +842,8 @@ function renderScaffold() {
 
   container.innerHTML = `
     <div class="module-wrap today-module">
+      <div class="today-headline today-headline--quiet" aria-live="polite">Working out what needs you…</div>
+      <button class="today-followups hidden" id="todayFollowups" data-nav="followups" aria-label="Open Follow-ups"></button>
       <div class="today-cards">
         ${cards
           .map(
@@ -686,7 +851,7 @@ function renderScaffold() {
           <div class="today-card" data-card="${c.id}">
             <div class="today-card-header">
               <span class="today-card-label"${c.tipKey ? ` data-tip-key="${esc(c.tipKey)}" title="${esc(c.tipText || '')}" tabindex="0" role="button"` : ''}>${esc(c.label)}</span>
-              ${c.navModule ? `<button class="today-card-open" data-nav="${c.navModule}" aria-label="Open ${esc(c.label)}">Open →</button>` : ''}
+              ${c.navModule ? `<button class="today-card-open" data-nav="${c.navModule}" aria-label="Open ${esc(c.label)}">→</button>` : ''}
             </div>
             <div class="today-card-body" aria-live="polite"><span class="today-loading">Loading…</span></div>
           </div>
@@ -717,6 +882,10 @@ function onStorageChange(changes) {
   if (changes['submissions.thresholds']) fetchDemand();
   if (changes['sweep.lastRun']) fetchSweep();
   if (changes['suite.alertLog']) fetchAlerts();
+  if (changes['followups.entries']) renderFollowupsLine();
+  // Item 9: a rule edited in the Slots tab or options.html#sect-slots should
+  // reflect on the Slots Today card / headline without waiting for the next poll.
+  if (changes['slots.alertRules']) fetchSlots();
 }
 
 // ── Init / Cleanup ────────────────────────────────────────────────────────────
@@ -740,6 +909,7 @@ export async function init(el) {
   fetchSlots();
   fetchSweep();
   fetchAlerts();
+  renderFollowupsLine();
 
   // Pollers
   addTimer(fetchWr, WR_POLL_MS);
@@ -761,6 +931,7 @@ export async function init(el) {
       fetchSlots();
       fetchSweep();
       fetchAlerts();
+      renderFollowupsLine();
     }
   };
   document.addEventListener('visibilitychange', onVisible);
@@ -770,6 +941,8 @@ export async function init(el) {
     _timers = [];
     chrome.storage.onChanged.removeListener(onStorageChange);
     document.removeEventListener('visibilitychange', onVisible);
+    if (container && _cardActionHandler) container.removeEventListener('click', _cardActionHandler);
+    _cardActionHandler = null;
     container = null;
   };
 }

@@ -3,7 +3,7 @@
 Everything the Developer Dashboard asks for, ready to paste. Kept in the repo
 so it stays versioned alongside the manifest it describes.
 
-**Manifest version at time of writing:** 3.126.0
+**Manifest version at time of writing:** 3.223.0
 
 ---
 
@@ -13,7 +13,7 @@ so it stays versioned alongside the manifest it describes.
 
 **Summary (from manifest, 132-char limit):**
 
-> The clinical intelligence layer for Medicus: read-only safety monitoring, triage red-flags, QOF tracking and operational dashboards.
+> Clinical intelligence for Medicus: safety monitoring, triage red-flags, QOF tracking, dashboards, confirmed record tidy-up tools.
 
 **Category:** Productivity → Tools (or Workflow & Planning)
 
@@ -21,23 +21,29 @@ so it stays versioned alongside the manifest it describes.
 
 **Detailed description (paste into the listing):**
 
-> Medicus Suite is a read-only companion for clinical and administrative staff
-> in UK GP practices that use the Medicus electronic patient record. It works
-> only on medicus.health pages, using your existing Medicus sign-in.
+> Medicus Suite is a companion for clinical and administrative staff in UK GP
+> practices that use the Medicus electronic patient record. It works only on
+> medicus.health pages, using your existing Medicus sign-in.
 >
 > What it does:
-> • Drug-monitoring and QOF 2025/26 context alongside the open patient record
+> • Drug-monitoring and QOF context alongside the open patient record
 > • Triage red-flag highlighting and result-severity chips on the task queue
 > • Operational dashboards: waiting room, appointment slots, submissions,
 > activity, referrals and capacity — in the browser side panel or a
 > floating pop-out window
+> • Record tidy-up tools (problem descriptions, inactive problems, allergy
+> clean-up) — every change requires an explicit per-action confirmation by
+> the clinician and is made through your own Medicus session
 >
 > What it does not do:
-> • It never writes to the patient record
-> • It never transmits patient data anywhere — all processing is local to
-> your browser
-> • It provides no clinical decision support: it is a passive display and
-> memory aid; all clinical decisions remain the clinician's responsibility
+> • It never changes the record without a clinician confirming that specific
+> action
+> • It sends no data to the developer: no analytics, no telemetry, no
+> tracking. Patient data is processed locally in your browser (see the
+> privacy policy for the two optional practice-enabled integrations)
+> • It provides no clinical decision support: alerts are a passive display
+> and memory aid; all clinical decisions remain the clinician's
+> responsibility
 >
 > Medicus Suite is independent software from Graysbrook Ltd and is not made
 > by, or affiliated with, Medicus Health. It requires an authorised Medicus
@@ -54,15 +60,29 @@ URL instead — the store only needs a stable, public URL.)
 
 **Single purpose description:**
 
-> Displays, to signed-in Medicus (GP electronic patient record) users,
-> read-only clinical-safety and operational information derived from their own
-> authenticated Medicus session — drug-monitoring status, triage red-flags and
-> practice workload dashboards — processed entirely locally in the browser.
+> Assists signed-in users of the Medicus GP electronic patient record with
+> clinical-safety and operational awareness: drug-monitoring status, triage
+> red-flags and practice workload dashboards derived from the user's own
+> authenticated Medicus session, plus clinician-confirmed record tidy-up
+> actions performed through that same session.
 
-**Data usage — "What user data do you plan to collect?":** tick **nothing**.
-The extension collects no data: patient data it displays is processed locally
-and never transmitted to the developer or any third party. Certify compliance
-with the developer program policies / Limited Use.
+**Data usage — "What user data do you plan to collect?":**
+
+In the default configuration the extension transmits nothing about the user
+or patients to anyone (NHS terminology lookups carry only the clinical term
+being looked up). Two practice-opt-in integrations do transmit data, so
+disclose honestly:
+
+- Tick **Personally identifiable information** and **User activity** — the
+  optional task-presence feature, when a practice configures a hosted store,
+  transmits the staff member's name/identifier and which task they have open
+  (never patient data).
+- Tick **Health information** — the optional Transactional API integration,
+  when a practice completes onboarding and enables it, routes patient
+  care-record data through the developer-operated backend proxy to serve the
+  request.
+- Certify Limited Use compliance: data is used only to provide the single
+  purpose, never sold, never used for ads or creditworthiness.
 
 **Are you using remote code?** No. All JavaScript ships in the package;
 third-party libraries are vendored locally (`vendor/`), CSP is
@@ -72,7 +92,7 @@ third-party libraries are vendored locally (`vendor/`), CSP is
 
 | Permission      | Justification text                                                                                                                                                                                                  |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `storage`       | Stores the user's own configuration (alert rules, thresholds, preferences) and a minimised local working cache in chrome.storage.local. Nothing is transmitted off the device.                                      |
+| `storage`       | Stores the user's own configuration (alert rules, thresholds, preferences) and a minimised local working cache in chrome.storage.local.                                                                             |
 | `sidePanel`     | The extension's main user interface — dashboards and tools — is rendered in the browser side panel.                                                                                                                 |
 | `tabs`          | Used to find, open and focus the user's Medicus (medicus.health) tabs from the side panel, and to open the extension's own pages. The extension does not read browsing history or page content of non-Medicus tabs. |
 | `windows`       | Opens and manages the extension's own floating pop-out window (an alternative to the side panel) and focuses existing Medicus windows.                                                                              |
@@ -83,11 +103,14 @@ third-party libraries are vendored locally (`vendor/`), CSP is
 
 ### Host permission justifications
 
-| Host                                                               | Justification text                                                                                                                                                                                                    |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `https://*.medicus.health/*`                                       | The single site the extension exists for: it reads the signed-in user's Medicus electronic patient record session and overlays read-only clinical-safety information on those pages.                                  |
-| `https://*.api.england.medicus.health/*`                           | The Medicus application's own API, called with the user's existing session credentials to read the same data the user can already see (read-only).                                                                    |
-| `https://api.github.com/repos/davetriska02-collab/medicus-suite/*` | Once-daily version check against the project's public releases feed for manually installed (unpacked) copies. Carries no user or patient data. Store-installed copies never make this request (gated off at runtime). |
+| Host                                                               | Justification text                                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `https://*.medicus.health/*`                                       | The single site the extension exists for: it reads the signed-in user's Medicus electronic patient record session, overlays clinical-safety information, and performs clinician-confirmed record tidy-up actions through that same session.                |
+| `https://*.api.england.medicus.health/*`                           | The Medicus application's own API, called with the user's existing session credentials to read the same data the user can already see.                                                                                                                     |
+| `https://api.github.com/repos/davetriska02-collab/medicus-suite/*` | Once-daily version check against the project's public releases feed for manually installed (unpacked) copies. Carries no user or patient data. Store-installed copies never make this request (gated off at runtime).                                      |
+| `https://termbrowser.nhs.uk/*`                                     | Public NHS SNOMED CT terminology browser API, queried (from the service worker) to verify clinical concept status for the record tidy-up tools. Requests contain only SNOMED concept identifiers — never patient data.                                     |
+| `https://api.nhs.uk/*`                                             | Public NHS content API, queried for patient-information material about a condition or medicine the user selects. Requests contain only the selected term — never patient data.                                                                             |
+| `https://*.supabase.co/*`                                          | Two optional, practice-enabled integrations, both off by default: a practice-configured task-presence store (staff identity and open-task identifier only — no patient data) and the backend proxy for the official Medicus Transactional API (read-only). |
 
 ---
 
@@ -115,9 +138,8 @@ third-party libraries are vendored locally (`vendor/`), CSP is
 ## Upload package
 
 Use the release zip built by `.github/workflows/release.yml` (it excludes
-tests, internal docs, tooling and brand sources). Upload the zip's _inner
-folder contents_ re-zipped, or the zip as-is if the dashboard accepts the
-nested folder — the store requires `manifest.json` at the zip root, so:
+tests, internal docs, tooling and brand sources). The store requires
+`manifest.json` at the zip root, so re-zip the inner folder's contents:
 
 ```
 cd medicus-suite-vX.Y.Z && zip -r ../store-upload.zip .
@@ -135,13 +157,19 @@ so local settings do not carry over. Rollout instructions for the practice:
 2. Install from the store, then Options → Backup → **import** the file.
 3. Remove the unpacked extension.
 
+Note: the task-presence shared-folder grant and any `txn.callerKey` are
+per-install and deliberately excluded from backups — re-grant / re-enter them
+after switching.
+
 ---
 
 ## Review-friction notes (know before submitting)
 
-- The extension handles health data on-screen; the privacy policy states —
-  accurately — that nothing is collected or transmitted. If a reviewer asks,
-  the DPIA (`docs/DPIA.md`) and `SECURITY.md` back this up.
+- The extension handles health data on-screen; PRIVACY.md describes the data
+  flows accurately, including the two opt-in integrations. **The DPIA
+  (`docs/DPIA.md`) predates the task-presence and Transactional API features
+  and still claims zero egress — refresh it before submission** in case a
+  reviewer or deploying practice asks for it.
 - The vendored minified libraries (`vendor/pdf.min.js`, `vendor/d3.min.js`)
   contain `eval`-adjacent code paths that automated review occasionally
   flags; they are widely shipped libraries, CSP (`script-src 'self'`) blocks

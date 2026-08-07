@@ -613,6 +613,88 @@ check(
   'single-item branch accesses items[0].patient for initials (by design)'
 );
 
+console.log('\n--- termbrowser:fetchConcept relay: sender guard + host restriction ------');
+
+// Content-script fetch() to termbrowser.nhs.uk was found live to be blocked
+// by CORS (browser reported the MEDICUS PAGE's origin, not the extension's) —
+// this relay exists so the fetch happens from the service worker instead,
+// where there's no page/extension origin ambiguity. Lock: the listener block
+// for this specific action has the same sender.id guard as every other
+// handler, and the underlying fetchTermbrowserConcept function refuses
+// anything that isn't https://termbrowser.nhs.uk exactly (never a general-
+// purpose cross-origin proxy).
+const termbrowserListenerBlock = src.match(
+  /chrome\.runtime\.onMessage\.addListener\(\(msg, sender, sendResponse\) => \{\s*\n\s*if \(sender\.id !== chrome\.runtime\.id\) return;[\s\S]*?termbrowser:fetchConcept[\s\S]*?\}\s*\);/
+);
+check(!!termbrowserListenerBlock, 'termbrowser:fetchConcept listener block found');
+check(
+  termbrowserListenerBlock && /sender\.id\s*!==\s*chrome\.runtime\.id/.test(termbrowserListenerBlock[0]),
+  'the termbrowser:fetchConcept listener guards against external senders'
+);
+
+const fetchTermbrowserFn = src.match(/async function fetchTermbrowserConcept\(url\)\s*\{[\s\S]*?\n\}/);
+check(!!fetchTermbrowserFn, 'fetchTermbrowserConcept function extracted from source');
+
+if (fetchTermbrowserFn) {
+  const hostConstMatch = src.match(/const TERMBROWSER_HOST\s*=\s*'([^']+)'/);
+  check(!!hostConstMatch, 'TERMBROWSER_HOST constant found in source');
+
+  let lastFetchedUrl = null;
+  const sandbox = {
+    URL,
+    fetch: async (url) => {
+      lastFetchedUrl = url;
+      return { ok: true, status: 200, text: async () => '{"active":true}' };
+    },
+    TERMBROWSER_HOST: hostConstMatch ? hostConstMatch[1] : 'termbrowser.nhs.uk',
+  };
+  vm.runInNewContext(fetchTermbrowserFn[0] + '\nthis.fetchTermbrowserConcept = fetchTermbrowserConcept;', sandbox);
+  const fn = sandbox.fetchTermbrowserConcept;
+  check(typeof fn === 'function', 'fetchTermbrowserConcept is callable');
+
+  const good = await fn('https://termbrowser.nhs.uk/sct-browser-api/snomed/uk-edition/v20260603/concepts/184063008');
+  check(
+    good.ok === true && good.httpOk === true && good.status === 200 && good.text === '{"active":true}',
+    'a genuine termbrowser.nhs.uk URL is fetched and its response relayed through (got ' + JSON.stringify(good) + ')'
+  );
+  check(
+    lastFetchedUrl === 'https://termbrowser.nhs.uk/sct-browser-api/snomed/uk-edition/v20260603/concepts/184063008',
+    'the exact URL is passed through to fetch unmodified'
+  );
+
+  const wrongHost = await fn('https://evil.example.com/concepts/1');
+  check(
+    wrongHost.ok === false && lastFetchedUrl.indexOf('evil.example.com') === -1,
+    'a DIFFERENT host is rejected before ever calling fetch — never a general-purpose proxy'
+  );
+
+  const wrongProtocol = await fn('http://termbrowser.nhs.uk/concepts/1');
+  check(wrongProtocol.ok === false, 'a non-https URL to the same host is still rejected');
+
+  const malformed = await fn('not a url at all');
+  check(malformed.ok === false, 'a malformed URL string -> ok:false, never throws');
+
+  check((await fn(null)).ok === false, 'null url -> ok:false, never throws');
+  check((await fn(undefined)).ok === false, 'undefined url -> ok:false, never throws');
+}
+
+console.log(
+  '\n--- fetchRetirementStatus (content-scripts/problem-description-cleanup.js): relays through the service worker ---'
+);
+{
+  const pdcSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'problem-description-cleanup.js'), 'utf8');
+  check(
+    !/fetchRetirementStatus[\s\S]{0,400}?\bfetch\(url/.test(pdcSrc),
+    'fetchRetirementStatus no longer calls fetch(url) directly (the CORS-blocked path)'
+  );
+  const fetchRetirementFn = pdcSrc.match(/async function fetchRetirementStatus\(conceptId\)\s*\{[\s\S]*?\n  \}/);
+  check(!!fetchRetirementFn, 'fetchRetirementStatus function found in problem-description-cleanup.js');
+  check(
+    fetchRetirementFn && /chrome\.runtime\.sendMessage\(\{\s*action:\s*'termbrowser:fetchConcept'/.test(fetchRetirementFn[0]),
+    'fetchRetirementStatus relays the request via chrome.runtime.sendMessage({action: \'termbrowser:fetchConcept\', ...})'
+  );
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

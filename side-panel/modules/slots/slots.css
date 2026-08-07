@@ -43,10 +43,10 @@
   background: var(--bg-elev);
   border: 1px solid var(--border);
   color: var(--text-4);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   border-radius: var(--r-md);
   padding: 4px 10px;
@@ -75,11 +75,12 @@
 }
 
 .section-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-2);
   margin-bottom: 6px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border);
@@ -291,6 +292,22 @@ html[data-theme='dark'] .staff-split .split-pm {
 }
 
 /* staff-count — scoped to mini context (Decision H) */
+/* Phase 3 (Vogue map): the clinician row reads as a scannable micro-grid, not a
+   sentence — am / pm / total in fixed mono tabular columns so digits align down
+   the list and the eye scans a column. */
+.staff-count-mini {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.staff-count-mini > span[title] {
+  font-family: var(--mono);
+  display: inline-block;
+  min-width: 27px;
+  text-align: right;
+  color: var(--text-4);
+}
 .staff-count-mini .staff-count {
   font-family: var(--mono);
   font-size: 11px;
@@ -298,6 +315,8 @@ html[data-theme='dark'] .staff-split .split-pm {
   color: var(--green);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
+  min-width: 18px;
+  text-align: right;
 }
 
 .staff-detail {
@@ -476,15 +495,25 @@ html[data-theme='dark'] .staff-split .split-pm {
 
 /* slots-count-label: mono, uppercase, letterspaced, machine-voice label (Decision H) */
 .slots-count-label {
-  font-family: var(--mono);
-  font-size: 10px;
+  font-family: var(--sans);
+  font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--green);
 }
 .slots-count-label.zero {
   color: var(--text-4);
+}
+/* Practice-wide scope + defensible cut-off clock — a manager quoting free
+   capacity to partners needs to know it is the whole practice and "as at when".
+   (Practice appraisal, Slots re-run 2026-06-21.) */
+.slots-hero-asat {
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
 }
 /* Label inherits the highest triggered slot-alert level — signal, not décor */
 .slots-count-label.amber {
@@ -630,8 +659,8 @@ html[data-theme='dark'] .staff-split .split-pm {
   border: 1px solid var(--border-hi);
   border-radius: var(--r-md);
   color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   font-size: 9px;
   font-weight: 600;
 }
@@ -714,12 +743,15 @@ html[data-theme='dark'] .staff-split .split-pm {
   display: flex;
   gap: 8px;
 }
+/* G4 (design-house 2026-06-21): converge on the canonical pill family — the
+   AM/PM chips sit beside the r-pill slot pills, so they take the pill radius too
+   (was the squared --r-sm). Radius only; no box-size change. */
 .ampm-chip {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
   padding: 4px 8px;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-pill);
   background: var(--bg-elev);
   border: 1px solid var(--border);
 }
@@ -884,10 +916,10 @@ html[data-theme='dark'] .staff-split .split-pm {
   background: transparent;
   border: none;
   padding: 0;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: inherit;
   opacity: 0.7;
   cursor: pointer;
@@ -900,4 +932,442 @@ html[data-theme='dark'] .staff-split .split-pm {
 .slots-ribbon-link:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;
+}
+
+/* ── Alert threshold editor (item 9) ─────────────────────────────────────────
+   Cog button in the date-presets row + the minimal in-module editor panel it
+   toggles. .has-alert-rules gives the cog a quiet accent tint so a practice
+   with rules configured can tell at a glance without opening the panel. */
+#slotsAlertToggle.has-alert-rules {
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+#slotsAlertToggle.active {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--text-2);
+}
+
+.slots-alert-editor {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.slots-alert-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.slots-alert-editor-title {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-1);
+}
+
+.slots-alert-editor-close {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.slots-alert-editor-note {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
+.slots-alert-editor-empty {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  padding: 8px 0;
+}
+
+.slots-alert-rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.slots-alert-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.slots-alert-rule-row .sar-type {
+  flex: 1 1 140px;
+  min-width: 120px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  padding: 4px 6px;
+  font-family: var(--sans);
+  font-size: 11px;
+  border-radius: var(--r-sm);
+}
+.slots-alert-rule-row .sar-type:focus {
+  border-color: var(--accent);
+  background: var(--bg-deep);
+}
+
+.slots-alert-rule-row .sar-lte,
+.slots-alert-rule-row .sar-unit {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+
+.slots-alert-rule-row .sar-threshold {
+  width: 56px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  padding: 4px 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  border-radius: var(--r-sm);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.slots-alert-rule-row .sar-threshold:focus {
+  border-color: var(--accent);
+  background: var(--bg-deep);
+}
+
+.slots-alert-rule-row .sar-delete {
+  padding: 2px 8px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* ── Booking section ─────────────────────────────────────────────────────────
+   Collapsible panel at the bottom of the Slots tab.
+   bk-toggle-row acts as both the section-label and the open/close trigger. */
+
+.bk-section {
+  margin-top: 8px;
+}
+
+.bk-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 0 0 4px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition: opacity var(--fast) var(--ease);
+}
+
+.bk-toggle-row:hover {
+  opacity: 0.75;
+}
+
+.bk-toggle-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.bk-toggle-chevron {
+  font-size: 9px;
+  color: var(--text-5);
+  flex-shrink: 0;
+}
+
+.bk-toggle-text {
+  flex: 1;
+}
+
+.bk-pt-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: var(--text-4);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 1px 6px;
+  flex-shrink: 0;
+}
+
+/* Browse / confirm / success views all stack as a column */
+.bk-browse,
+.bk-confirm,
+.bk-success {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.bk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bk-label {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3);
+  min-width: 36px;
+  flex-shrink: 0;
+}
+
+.bk-optional {
+  font-weight: 400;
+  color: var(--text-5);
+}
+
+.bk-select {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  color: var(--text-2);
+  font-family: var(--sans);
+  font-size: 11px;
+  border-radius: var(--r-md);
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.bk-select:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.bk-date-input {
+  flex: 1;
+}
+
+.bk-text-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  color: var(--text-2);
+  font-family: var(--sans);
+  font-size: 11px;
+  border-radius: var(--r-md);
+  padding: 4px 8px;
+}
+
+.bk-text-input:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* Primary action button — Find slots / Confirm */
+.bk-action-btn {
+  align-self: flex-end;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.bk-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.bk-action-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.bk-confirm-btn {
+  flex: 1;
+  text-align: center;
+}
+
+.bk-loading,
+.bk-no-slots {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--text-4);
+  padding: 8px 0;
+  text-align: center;
+}
+
+.bk-error {
+  font-size: 11px;
+  color: var(--red);
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+  border-radius: var(--r-md);
+  padding: 6px 10px;
+}
+
+.bk-warn {
+  font-size: 11px;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-md);
+  padding: 6px 10px;
+}
+
+/* Slot list */
+.bk-slot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bk-slot-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-family: var(--sans);
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.bk-slot-row:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-line);
+}
+
+.bk-slot-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.bk-slot-time {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  min-width: 84px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.bk-slot-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.bk-slot-site {
+  font-size: 10px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bk-slot-type {
+  font-size: 10px;
+  color: var(--text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bk-slot-dur {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-4);
+  flex-shrink: 0;
+}
+
+/* Confirm step summary card */
+.bk-confirm-summary {
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bk-confirm-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.bk-confirm-label {
+  font-size: 10px;
+  color: var(--text-4);
+  min-width: 32px;
+  flex-shrink: 0;
+}
+
+.bk-confirm-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+/* Success step */
+.bk-success {
+  text-align: center;
+  padding: 12px 0;
+  align-items: center;
+}
+
+.bk-success-icon {
+  font-size: 22px;
+  color: var(--green);
+  line-height: 1;
+}
+
+.bk-success-msg {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.bk-success-detail {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.bk-again-btn {
+  margin-top: 2px;
 }

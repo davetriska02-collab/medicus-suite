@@ -1,8 +1,8 @@
 {
-  "lastUpdated": "2026-06-20",
+  "lastUpdated": "2026-07-25",
   "schemaVersion": 2,
-  "specVersion": "Sentinel drug rules - June 2026 review",
-  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-14 CSO-approved Keeper addition: added brand 'jayempi' to azathioprine-maintenance (licensed UK azathioprine 10mg/ml oral suspension, Nova Laboratories, MA PLGB 13581/0005, available Feb 2024) — WebSearch-corroborated (emc SmPC / NHSBSA Drug Tariff), CSO-signed-off. 2026-06-20 (The Keeper, CSO proposal): corrected the DOAC rule notes to specify CrCl (Cockcroft-Gault), NOT eGFR, for renal-banded monitoring frequency (eGFR overestimates clearance and raises bleeding risk; MHRA/SPS/EHRA) — no interval change. Added a DMPA injectable-contraception monitoring rule (dmpa-injectable, enabled, 2-yearly BP+weight, FSRH). Added a combined-hormonal-contraception rule (chc-combined-hormonal) SHIPPED DISABLED pending engine disambiguation: the hrt-systemic rule matches bare 'estradiol', a substring of 'ethinylestradiol', so an enabled CHC rule would double-fire the HRT rule for oestrogen-ingredient/natural-oestrogen records. SOURCE GAP: FSRH/BNF primary PDFs 403 — corroborated via NHS formulary/NICE CKS reproductions; pending primary-source confirmation.",
+  "specVersion": "Sentinel drug rules - July 2026 review (The Keeper)",
+  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-14 CSO-approved Keeper addition: added brand 'jayempi' to azathioprine-maintenance (licensed UK azathioprine 10mg/ml oral suspension, Nova Laboratories, MA PLGB 13581/0005, available Feb 2024) — WebSearch-corroborated (emc SmPC / NHSBSA Drug Tariff), CSO-signed-off. 2026-06-20 (The Keeper, CSO proposal): corrected the DOAC rule notes to specify CrCl (Cockcroft-Gault), NOT eGFR, for renal-banded monitoring frequency (eGFR overestimates clearance and raises bleeding risk; MHRA/SPS/EHRA) — no interval change. Added a DMPA injectable-contraception monitoring rule (dmpa-injectable, enabled, 2-yearly BP+weight, FSRH). Added a combined-hormonal-contraception rule (chc-combined-hormonal) SHIPPED DISABLED pending engine disambiguation: the hrt-systemic rule matches bare 'estradiol', a substring of 'ethinylestradiol', so an enabled CHC rule would double-fire the HRT rule for oestrogen-ingredient/natural-oestrogen records. SOURCE GAP: FSRH/BNF primary PDFs 403 — corroborated via NHS formulary/NICE CKS reproductions; pending primary-source confirmation. 2026-06-21 (The Keeper, Sentinel currency review): additive safety/source refresh only — added the MHRA DSU 29 Jan 2026 strengthened GLP-1/GIP pancreatitis warning (glp1-receptor-agonist), refreshed the csDMARD source citation to the 2025 BSR guideline (Rheumatology, Nov 2025) across methotrexate/leflunomide/azathioprine/sulfasalazine/hydroxychloroquine with NO interval change, and noted the MHRA tirzepatide-to-oral-contraceptive interaction on chc-combined-hormonal. All corroborated across multiple secondary summaries; primary gov.uk/journal PDFs were 403 this run, pending primary-source confirmation. NOT changed: QOF DM036 age band (file uses <=70; one secondary source says <=79) — held for primary confirmation to avoid a silent chip change. 2026-06-29 (additive safety enhancement, PENDING CSO REVIEW): added a post-initiation U&E test to the ace-arb (RAAS blocker) rule enforcing NICE NG136's requirement for a U&E within ~1-2 weeks of STARTING an ACE-I/ARB (previously only described in notes, not enforced). Implemented via a new engine `postInitiationDays`/`postInitiationDueSoonDays` test mechanism that fires only when the drug's start date is known AND no U&E has been recorded since starting — so it cannot raise a false alert on an established patient whose start date is not visible. No change to the existing annual U&E/BP intervals or to any other rule. 2026-07-08 (Transactional-API enablement): added the drug-allergy rule type and three starter cross-check rules (penicillin, NSAID hypersensitivity, sulfonamide) that fire only when a documented ACTIVE allergy co-occurs with a contraindicated drug. These read the allergies bundle, available ONLY from the Transactional (GP Connect Structured) feed; on the legacy session/DOM feed there are no allergies so they FAIL CLOSED and never fire. SHIPPED ENABLED because fail-closed makes them zero-risk today; marked PENDING CSO REVIEW for the term lists and cross-sensitivity scope. Sources: BNF interactions/allergy guidance, MHRA, NICE CKS drug-allergy; primary PDFs to be confirmed at CSO review.",
   "rules": [
     {
       "type": "drug-monitoring",
@@ -15,12 +15,30 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 84, "dueSoonDays": 14 },
-        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 84, "dueSoonDays": 14 },
-        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 84, "dueSoonDays": 14 }
+        {
+          "name": "FBC",
+          "match": ["fbc", "full blood count"],
+          "snomed": ["26604007"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "U&E",
+          "match": ["u&e", "urea and electrolytes", "renal profile"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        }
       ],
-      "source": "BNF / BSR DMARD shared care guideline (2024 update)",
-      "notes": "Intensive monitoring (every 2 weeks) for first 6 weeks, then 4-weekly until stable, then 12-weekly. BSR 2024 guideline now permits 6-monthly monitoring after 12 months of stable treatment with normal results — Sentinel keeps the 12-week baseline as the safer default; clinicians may extend intervals via Options if local shared care permits.",
+      "source": "BNF / 2025 BSR guideline for prescription & monitoring of csDMARDs (Rheumatology, Nov 2025)",
+      "notes": "Intensive monitoring (every 2 weeks) for first 6 weeks, then 4-weekly until stable, then 12-weekly. BSR 2025 guideline now permits 6-monthly monitoring after 12 months of stable treatment with normal results — Sentinel keeps the 12-week baseline as the safer default; clinicians may extend intervals via Options if local shared care permits.",
       "sharedCare": true
     },
     {
@@ -34,13 +52,43 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 84, "dueSoonDays": 14 },
-        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 84, "dueSoonDays": 14 },
-        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 84, "dueSoonDays": 14 },
-        { "name": "BP", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 84, "dueSoonDays": 14 },
-        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 84, "dueSoonDays": 14 }
+        {
+          "name": "FBC",
+          "match": ["fbc", "full blood count"],
+          "snomed": ["26604007"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "U&E",
+          "match": ["u&e", "urea and electrolytes", "renal profile"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "BP",
+          "match": ["blood pressure", "bp"],
+          "snomed": ["75367002"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "Weight",
+          "match": ["weight", "body weight"],
+          "snomed": ["27113001"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        }
       ],
-      "source": "BNF / BSR leflunomide shared care",
+      "source": "BNF / 2025 BSR guideline for prescription & monitoring of csDMARDs (Rheumatology, Nov 2025)",
       "notes": "Monthly FBC/U&E/LFT/BP/weight for first 6 months on initiation, then 12-weekly when stable. Hypertension is a recognised adverse effect. Long half-life (washout with cholestyramine if severe toxicity).",
       "sharedCare": true
     },
@@ -55,11 +103,29 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 365, "dueSoonDays": 30 },
-        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 365, "dueSoonDays": 30 },
-        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "FBC",
+          "match": ["fbc", "full blood count"],
+          "snomed": ["26604007"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "U&E",
+          "match": ["u&e", "urea and electrolytes", "renal profile"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
       ],
-      "source": "BNF / BSR shared care / RCOphth retinopathy screening guidelines (2020, reviewed 2024)",
+      "source": "BNF / 2025 BSR guideline for prescription & monitoring of csDMARDs (Rheumatology, Nov 2025) / RCOphth retinopathy screening guidelines (2020, reviewed 2024)",
       "notes": "Annual FBC/LFT/U&E plus annual review. RCOphth recommends baseline ophthalmology assessment within 6-12 months of starting and annual screening from 5 years cumulative use, or earlier if dose >5 mg/kg/day, eGFR <60, concurrent tamoxifen, or pre-existing retinal disease. Eye check is not a blood test so not enforced here.",
       "sharedCare": true
     },
@@ -74,11 +140,29 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 84, "dueSoonDays": 14 },
-        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 84, "dueSoonDays": 14 },
-        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 84, "dueSoonDays": 14 }
+        {
+          "name": "FBC",
+          "match": ["fbc", "full blood count"],
+          "snomed": ["26604007"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "U&E",
+          "match": ["u&e", "urea and electrolytes", "renal profile"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        }
       ],
-      "source": "BNF / BSR shared care",
+      "source": "BNF / 2025 BSR guideline for prescription & monitoring of csDMARDs (Rheumatology, Nov 2025)",
       "notes": "TPMT activity should be checked before initiation. Intensive monitoring in first 8 weeks.",
       "sharedCare": true
     },
@@ -93,10 +177,22 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 84, "dueSoonDays": 14 },
-        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 84, "dueSoonDays": 14 }
+        {
+          "name": "FBC",
+          "match": ["fbc", "full blood count"],
+          "snomed": ["26604007"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        }
       ],
-      "source": "BNF / BSR shared care",
+      "source": "BNF / 2025 BSR guideline for prescription & monitoring of csDMARDs (Rheumatology, Nov 2025)",
       "notes": "Monitoring may be discontinued after 12 months of stable treatment per some shared care protocols. Check local guidance.",
       "sharedCare": true
     },
@@ -111,11 +207,40 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 182, "dueSoonDays": 21 },
-        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 182, "dueSoonDays": 21 },
-        { "name": "U&E / Sodium", "match": ["u&e", "urea and electrolytes", "renal profile", "sodium"], "snomed": ["1019331000000106"], "intervalDays": 182, "dueSoonDays": 21 },
-        { "name": "Carbamazepine level", "match": ["carbamazepine level", "carbamazepine concentration", "serum carbamazepine"], "intervalDays": 182, "dueSoonDays": 21 },
-        { "name": "Lipid profile", "match": ["lipid profile", "cholesterol", "lipids"], "snomed": ["27171005"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "FBC",
+          "match": ["fbc", "full blood count"],
+          "snomed": ["26604007"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "U&E / Sodium",
+          "match": ["u&e", "urea and electrolytes", "renal profile", "sodium"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Carbamazepine level",
+          "match": ["carbamazepine level", "carbamazepine concentration", "serum carbamazepine"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Lipid profile",
+          "match": ["lipid profile", "cholesterol", "lipids"],
+          "snomed": ["27171005"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
       ],
       "source": "BNF / MHRA / NICE CG137 / shared care",
       "notes": "FBC: haematological toxicity risk (aplastic anaemia, agranulocytosis — rare but serious; check at baseline, 4 weeks, 6 months, then 6-monthly). LFT: hepatotoxicity risk; check same schedule. U&E/Sodium: enzyme-induction can cause SIADH and hyponatraemia — sodium should be monitored 6-monthly; risk heightened in the elderly and on concurrent diuretics. Carbamazepine level: narrow therapeutic index (target typically 4–12 mg/L); useful if toxicity suspected, poor seizure control, or dose change. Lipid profile: CYP enzyme induction raises LDL and total cholesterol — annual check. For women of childbearing age, ensure adequate contraception (enzyme inducer reduces hormonal contraceptive efficacy) and consider folic acid supplementation (teratogenicity risk — neural tube defects); refer to specialist before conception.",
@@ -132,10 +257,34 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "Lithium level", "match": ["lithium level", "serum lithium"], "snomed": ["166833002"], "intervalDays": 90, "dueSoonDays": 14 },
-        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 180, "dueSoonDays": 21 },
-        { "name": "TFT", "match": ["tft", "thyroid function"], "snomed": ["166842003"], "intervalDays": 180, "dueSoonDays": 21 },
-        { "name": "Calcium", "match": ["calcium", "ca2+", "corrected calcium"], "snomed": ["390967006"], "intervalDays": 180, "dueSoonDays": 21 }
+        {
+          "name": "Lithium level",
+          "match": ["lithium level", "serum lithium"],
+          "snomed": ["166833002"],
+          "intervalDays": 90,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "U&E",
+          "match": ["u&e", "urea and electrolytes", "renal profile"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 180,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "TFT",
+          "match": ["tft", "thyroid function"],
+          "snomed": ["166842003"],
+          "intervalDays": 180,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Calcium",
+          "match": ["calcium", "ca2+", "corrected calcium"],
+          "snomed": ["390967006"],
+          "intervalDays": 180,
+          "dueSoonDays": 21
+        }
       ],
       "source": "BNF / NICE CG185 / shared care",
       "notes": "Level should be 12 hours post-dose. Take sample before next dose if compliance unclear.",
@@ -152,12 +301,36 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "TFT", "match": ["tft", "thyroid function"], "snomed": ["166842003"], "intervalDays": 180, "dueSoonDays": 21 },
-        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 180, "dueSoonDays": 21 },
-        { "name": "CXR", "match": ["chest x-ray", "cxr", "chest xray"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "TFT",
+          "match": ["tft", "thyroid function"],
+          "snomed": ["166842003"],
+          "intervalDays": 180,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 180,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "CXR",
+          "match": ["chest x-ray", "cxr", "chest xray"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "U&E / Creatinine",
+          "match": ["u&e", "urea and electrolytes", "renal profile", "urea", "electrolytes", "creatinine"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        }
       ],
-      "source": "BNF / MHRA Drug Safety Update",
-      "notes": "Pulmonary toxicity is the principal monitoring concern. Patient should report new cough or breathlessness.",
+      "source": "BNF / MHRA Drug Safety Update / NICE CG185 (amiodarone monitoring) / BSR shared care",
+      "notes": "Pulmonary toxicity is the principal monitoring concern. Patient should report new cough or breathlessness. CSO FLAG (drugs-002, 2026-07-25 Keeper, PLAUSIBLE/apply): U&E monitoring at 6-monthly intervals added per BNF/NICE CG185 (amiodarone can cause hypothyroidism-associated hyponatraemia and has occasional direct renal effects; 6-monthly U&E is standard shared-care practice). VERIFIER-A confirmed the clinical rationale from BNF and shared-care protocol summaries; primary-source PDF 403 this run. CSO to review this addition before next PR merge — if local shared-care protocol omits U&E, notes can be updated to reflect that.",
       "sharedCare": false
     },
     {
@@ -171,9 +344,27 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "TFT", "match": ["tft", "thyroid function", "tsh", "free t4"], "snomed": ["166842003"], "intervalDays": 90, "dueSoonDays": 14 },
-        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 365, "dueSoonDays": 30 },
-        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "TFT",
+          "match": ["tft", "thyroid function", "tsh", "free t4"],
+          "snomed": ["166842003"],
+          "intervalDays": 90,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "FBC",
+          "match": ["fbc", "full blood count"],
+          "snomed": ["26604007"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
       ],
       "source": "BNF / MHRA Drug Safety Update / British Thyroid Association",
       "notes": "Agranulocytosis is a rare but life-threatening adverse effect — counsel patient to report sore throat, fever, mouth ulcers urgently. PTU carries hepatotoxicity risk. TFT every 4-6 weeks during titration, then 3-monthly when stable.",
@@ -185,15 +376,81 @@
       "id": "ace-arb",
       "drugClass": "RAAS blocker",
       "drug": {
-        "match": ["ramipril", "tritace", "triapin", "lisinopril", "zestril", "carace", "zestoretic", "perindopril", "coversyl", "enalapril", "innovace", "innozide", "captopril", "capoten", "noyada", "trandolapril", "gopten", "fosinopril", "staril", "losartan", "cozaar", "hyzaar", "arbli", "candesartan", "amias", "valsartan", "diovan", "exforge", "irbesartan", "aprovel", "karvea", "telmisartan", "micardis", "pritor", "tolura", "olmesartan", "olmetec", "sevikar", "azilsartan", "edarbi", "sacubitril", "entresto"]
+        "match": [
+          "ramipril",
+          "tritace",
+          "triapin",
+          "lisinopril",
+          "zestril",
+          "carace",
+          "zestoretic",
+          "perindopril",
+          "coversyl",
+          "enalapril",
+          "innovace",
+          "innozide",
+          "captopril",
+          "capoten",
+          "noyada",
+          "trandolapril",
+          "gopten",
+          "fosinopril",
+          "staril",
+          "losartan",
+          "cozaar",
+          "hyzaar",
+          "arbli",
+          "candesartan",
+          "amias",
+          "valsartan",
+          "diovan",
+          "exforge",
+          "irbesartan",
+          "aprovel",
+          "karvea",
+          "telmisartan",
+          "micardis",
+          "pritor",
+          "tolura",
+          "olmesartan",
+          "olmetec",
+          "sevikar",
+          "azilsartan",
+          "edarbi",
+          "sacubitril",
+          "entresto",
+          "cilazapril",
+          "vascace",
+          "imidapril",
+          "tanatril"
+        ]
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 365, "dueSoonDays": 30 },
-        { "name": "BP", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "U&E",
+          "match": ["u&e", "urea and electrolytes", "renal profile"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "BP",
+          "match": ["blood pressure", "bp"],
+          "snomed": ["75367002"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "U&E (within ~2 weeks of starting)",
+          "match": ["u&e", "urea and electrolytes", "renal profile"],
+          "snomed": ["1019331000000106"],
+          "postInitiationDays": 21,
+          "postInitiationDueSoonDays": 14
+        }
       ],
       "source": "NICE NG136 / BNF",
-      "notes": "U&E within 1-2 weeks of initiation or dose change. Annual review thereafter unless eGFR <60. Sacubitril/valsartan (Entresto) added to match list for HFrEF use.",
+      "notes": "U&E within 1-2 weeks of initiation or dose change, then annual review thereafter unless eGFR <60. The post-initiation U&E test fires only when the drug's start date is known and no U&E has been recorded since starting (it cannot cry wolf on an established patient whose start date is not visible). Sacubitril/valsartan (Entresto) added to match list for HFrEF use. Cilazapril (brand Vascace) and imidapril (brand Tanatril) are legacy UK ACE inhibitors, no longer widely initiated but may appear on older repeat prescriptions — added 2026-07-11 to close silent-failure gap (BNF/dm+d corroborated; primary-source PDFs 403 this run).",
       "sharedCare": false
     },
     {
@@ -207,7 +464,13 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 120, "dueSoonDays": 21 }
+        {
+          "name": "U&E",
+          "match": ["u&e", "urea and electrolytes", "renal profile"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 120,
+          "dueSoonDays": 21
+        }
       ],
       "source": "BNF / NICE NG106 heart failure",
       "notes": "Hyperkalaemia is the principal monitoring concern. Staged monitoring schedule (1 week, 4 weeks, 8 weeks, 12 weeks, then 4-monthly) for new starts. Now part of HF four-pillar therapy (QOF HF009).",
@@ -219,12 +482,34 @@
       "id": "sglt2-inhibitor",
       "drugClass": "SGLT2 inhibitor",
       "drug": {
-        "match": ["dapagliflozin", "forxiga", "xigduo", "qtern", "empagliflozin", "jardiance", "synjardy", "glyxambi", "canagliflozin", "invokana", "vokanamet", "ertugliflozin", "steglatro", "segluromet", "steglujan"],
+        "match": [
+          "dapagliflozin",
+          "forxiga",
+          "xigduo",
+          "qtern",
+          "empagliflozin",
+          "jardiance",
+          "synjardy",
+          "glyxambi",
+          "canagliflozin",
+          "invokana",
+          "vokanamet",
+          "ertugliflozin",
+          "steglatro",
+          "segluromet",
+          "steglujan"
+        ],
         "snomed": ["703674001"]
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile", "egfr"], "snomed": ["1019331000000106"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "U&E",
+          "match": ["u&e", "urea and electrolytes", "renal profile", "egfr"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
       ],
       "source": "NICE NG28 (T2DM), NG203 (CKD), NG106 (HF) / BNF / MHRA Drug Safety Updates 2020-2024",
       "notes": "Baseline and annual eGFR. Increased risk of DKA (including euglycaemic DKA) — counsel patient on sick-day rules and to stop before major surgery/illness. Increased risk of Fournier's gangrene and lower-limb amputation (canagliflozin). Volume depletion risk in elderly or on diuretics.",
@@ -236,15 +521,45 @@
       "id": "glp1-receptor-agonist",
       "drugClass": "GLP-1 receptor agonist",
       "drug": {
-        "match": ["semaglutide", "ozempic", "wegovy", "rybelsus", "tirzepatide", "mounjaro", "zepbound", "dulaglutide", "trulicity", "liraglutide", "victoza", "saxenda", "xultophy", "lixisenatide", "lyxumia", "exenatide", "byetta", "bydureon"]
+        "match": [
+          "semaglutide",
+          "ozempic",
+          "wegovy",
+          "rybelsus",
+          "tirzepatide",
+          "mounjaro",
+          "zepbound",
+          "dulaglutide",
+          "trulicity",
+          "liraglutide",
+          "victoza",
+          "saxenda",
+          "xultophy",
+          "lixisenatide",
+          "lyxumia",
+          "exenatide",
+          "byetta",
+          "bydureon"
+        ]
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "Annual review", "match": ["glp-1 review", "weight management review", "diabetes annual review", "obesity review"], "intervalDays": 365, "dueSoonDays": 30 },
-        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile", "egfr"], "snomed": ["1019331000000106"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "Annual review",
+          "match": ["glp-1 review", "weight management review", "diabetes annual review", "obesity review"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "U&E",
+          "match": ["u&e", "urea and electrolytes", "renal profile", "egfr"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
       ],
-      "source": "BNF / NICE TA1026 (semaglutide for weight), TA1004 (tirzepatide) / SPCs / MHRA Drug Safety Update Jan 2024",
-      "notes": "No mandatory blood monitoring schedule but annual review (renal function, treatment response, side-effect screening) is appropriate. Counsel on pancreatitis warning signs, dehydration risk from GI side effects, gallbladder disease, and (for T2DM) accelerated diabetic retinopathy when HbA1c drops rapidly. Tirzepatide specifically requires renal function assessment pre-initiation. SafePrescriber/MHRA repeatedly highlights non-medical use risks for weight-loss formulations.",
+      "source": "BNF / NICE TA1026 (semaglutide for weight), TA1004 (tirzepatide) / SPCs / MHRA Drug Safety Update Jan 2024 / MHRA DSU 29 Jan 2026 (GLP-1 & GIP/GLP-1 pancreatitis)",
+      "notes": "No mandatory blood monitoring schedule but annual review (renal function, treatment response, side-effect screening) is appropriate. Counsel on pancreatitis warning signs, dehydration risk from GI side effects, gallbladder disease, and (for T2DM) accelerated diabetic retinopathy when HbA1c drops rapidly. Tirzepatide specifically requires renal function assessment pre-initiation. SafePrescriber/MHRA repeatedly highlights non-medical use risks for weight-loss formulations. MHRA DSU 29 Jan 2026 strengthened the acute-pancreatitis warning across all GLP-1 and dual GIP/GLP-1 agonists (rare necrotising/fatal cases reported) — counsel patients to seek urgent help for severe persistent abdominal pain radiating to the back with vomiting, and to report via Yellow Card (corroborated 2026-06-21; primary DSU PDF pending confirmation). MHRA Jan 2025 aspiration risk during surgical procedures: GLP-1 agonists delay gastric emptying; pre-operative fasting periods may be inadequate — patients should inform anaesthetist/surgeon of GLP-1 use; consider withholding the weekly injection on the week of planned surgery per RCOA/MHRA guidance (corroborated 2026-07-11; primary PDF 403 this run). LIXISENATIDE WITHDRAWAL (drugs-003, 2026-07-25 Keeper, CONFIRMED): Lyxumia (lixisenatide, Sanofi) was withdrawn from the UK market; 'lixisenatide' and 'lyxumia' terms retained in match[] so that existing patients on repeat (or legacy records) still receive monitoring flags — confirm with dispensary that no new supplies are being issued. Patients still prescribed lixisenatide should be switched to an alternative GLP-1 agonist at next medication review.",
       "sharedCare": false
     },
     {
@@ -257,9 +572,27 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 365, "dueSoonDays": 30 },
-        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile", "egfr"], "snomed": ["1019331000000106"], "intervalDays": 365, "dueSoonDays": 30 },
-        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "FBC",
+          "match": ["fbc", "full blood count"],
+          "snomed": ["26604007"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "U&E",
+          "match": ["u&e", "urea and electrolytes", "renal profile", "egfr"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
       ],
       "source": "BNF / NICE NG196 / EHRA guideline (2024 update)",
       "notes": "Renal function for DOAC monitoring must be calculated as CrCl (Cockcroft-Gault), NOT eGFR — eGFR overestimates clearance (especially in low-weight elderly patients) and its use raises bleeding risk (MHRA/SPS). Monitoring frequency by CrCl: ≥60 mL/min → annual; 30–59 → 6-monthly; 15–29 → 3-monthly; <15 → all DOACs contraindicated (refer). EHRA rule-of-thumb for CrCl ≤60: recheck interval (months) = CrCl ÷ 10. Elderly (>75) or frail: at least 4–6 monthly regardless of band. Drug-specific renal handling: dabigatran ~80% renally cleared (contraindicated CrCl <30), edoxaban dose-adjusted <50, rivaroxaban ~35%, apixaban ~27% (least renal dependence). Sentinel enforces only the annual 365-day baseline (the schema cannot encode CrCl-conditional intervals — flagged for an engine extension); the clinician must intensify per CrCl band, age and frailty. Source: NHS SPS DOACs monitoring; EHRA practical guidance; 2024–2025 NHS ICB DOAC guidelines (corroborated; primary pages 403, pending confirmation).",
@@ -271,11 +604,32 @@
       "id": "statin",
       "drugClass": "Statin",
       "drug": {
-        "match": ["atorvastatin", "lipitor", "atozet", "simvastatin", "inegy", "rosuvastatin", "crestor", "enebium", "pravastatin", "lipostat", "fluvastatin", "lescol", "pitavastatin", "livazo"]
+        "match": [
+          "atorvastatin",
+          "lipitor",
+          "atozet",
+          "simvastatin",
+          "inegy",
+          "rosuvastatin",
+          "crestor",
+          "enebium",
+          "pravastatin",
+          "lipostat",
+          "fluvastatin",
+          "lescol",
+          "pitavastatin",
+          "livazo"
+        ]
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
       ],
       "source": "NICE NG181 (Lipids) / BNF",
       "notes": "NICE NG181: LFT baseline, at 3 months, and at 12 months only. Routine ongoing monitoring not required after 12 months on stable dose; do not check unless clinically indicated. CK only if muscle symptoms. Rule retained as a one-off prompt for new starts; consider disabling in Options once initial monitoring is complete on a given patient.",
@@ -292,8 +646,20 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 365, "dueSoonDays": 30 },
-        { "name": "Urate", "match": ["urate", "uric acid", "serum urate"], "snomed": ["302393005"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "U&E",
+          "match": ["u&e", "urea and electrolytes", "renal profile"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "Urate",
+          "match": ["urate", "uric acid", "serum urate"],
+          "snomed": ["302393005"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
       ],
       "source": "NICE NG219 (Gout, 2022) / BSR guideline",
       "notes": "Target serum urate <360 micromol/L (or <300 micromol/L in tophaceous gout, chronic arthropathy, or frequent flares). Annual review once stable. Febuxostat added to match list; carries cardiovascular warning per MHRA — use with caution in established CVD.",
@@ -305,19 +671,93 @@
       "id": "antipsychotic",
       "drugClass": "Antipsychotic",
       "drug": {
-        "match": ["olanzapine", "zyprexa", "zalasta", "zypadhera", "risperidone", "risperdal", "okedi", "quetiapine", "seroquel", "atrolak", "biquelle", "zaluron", "aripiprazole", "abilify", "haloperidol", "serenace", "dozic", "haldol", "chlorpromazine", "largactil", "amisulpride", "solian", "paliperidone", "invega", "xeplion", "trevicta", "byannli", "lurasidone", "latuda", "asenapine", "sycrest", "cariprazine", "reagila"],
+        "match": [
+          "olanzapine",
+          "zyprexa",
+          "zalasta",
+          "zypadhera",
+          "risperidone",
+          "risperdal",
+          "okedi",
+          "quetiapine",
+          "seroquel",
+          "atrolak",
+          "biquelle",
+          "zaluron",
+          "aripiprazole",
+          "abilify",
+          "haloperidol",
+          "serenace",
+          "dozic",
+          "haldol",
+          "chlorpromazine",
+          "largactil",
+          "amisulpride",
+          "solian",
+          "paliperidone",
+          "invega",
+          "xeplion",
+          "trevicta",
+          "byannli",
+          "lurasidone",
+          "latuda",
+          "asenapine",
+          "sycrest",
+          "cariprazine",
+          "reagila",
+          "sulpiride",
+          "dolmatil",
+          "sulpitil",
+          "sulpor",
+          "zuclopenthixol",
+          "clopixol",
+          "flupentixol",
+          "depixol",
+          "fluanxol",
+          "fluphenazine",
+          "modecate"
+        ],
         "exclude": ["clozapine"]
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "HbA1c", "match": ["hba1c", "haemoglobin a1c", "glycated"], "snomed": ["43396009"], "intervalDays": 365, "dueSoonDays": 30 },
-        { "name": "Lipids", "match": ["lipid profile", "cholesterol", "lipids"], "snomed": ["166830004"], "intervalDays": 365, "dueSoonDays": 30 },
-        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 365, "dueSoonDays": 30 },
-        { "name": "BP", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 365, "dueSoonDays": 30 },
-        { "name": "ECG", "match": ["ecg", "electrocardiogram"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "HbA1c",
+          "match": ["hba1c", "haemoglobin a1c", "glycated"],
+          "snomed": ["43396009"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "Lipids",
+          "match": ["lipid profile", "cholesterol", "lipids"],
+          "snomed": ["166830004"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "Weight",
+          "match": ["weight", "body weight"],
+          "snomed": ["27113001"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "BP",
+          "match": ["blood pressure", "bp"],
+          "snomed": ["75367002"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "ECG",
+          "match": ["ecg", "electrocardiogram"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
       ],
-      "source": "NICE CG178 / Maudsley Prescribing Guidelines 14th ed / QOF MH002-MH012",
-      "notes": "Metabolic syndrome screening. ECG recommended at baseline and annually if cardiovascular risk factors or QTc-prolonging concomitant drugs. Clozapine EXCLUDED here — monitored under separate national protocol (CPMS/ZTAS) with weekly FBC for 18 weeks, then 2-weekly to 1 year, then 4-weekly indefinitely; mandatorily clozapine-clinic led, not amenable to primary-care rule firing.",
+      "source": "NICE CG178 / Maudsley Prescribing Guidelines 14th ed / QOF MH002-MH012 / BNF",
+      "notes": "Metabolic syndrome screening. ECG recommended at baseline and annually if cardiovascular risk factors or QTc-prolonging concomitant drugs. Clozapine EXCLUDED here — monitored under separate national protocol (CPMS/ZTAS) with weekly FBC for 18 weeks, then 2-weekly to 1 year, then 4-weekly indefinitely; mandatorily clozapine-clinic led, not amenable to primary-care rule firing. 2026-07-11: added sulpiride (brands Dolmatil, Sulpitil, Sulpor), zuclopenthixol (brand Clopixol), flupentixol (brands Depixol, Fluanxol) and fluphenazine (brand Modecate) — depot antipsychotics frequently managed in primary care under shared-care; omission would silently fail metabolic monitoring for these patients (BNF/dm+d corroborated; primary-source PDFs 403 this run).",
       "sharedCare": true
     },
     {
@@ -330,7 +770,13 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "BP", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "BP",
+          "match": ["blood pressure", "bp"],
+          "snomed": ["75367002"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
       ],
       "source": "BNF / MHRA Drug Safety Update 2015 (severe hypertension warning) / SPC",
       "notes": "Causes hypertension — measure BP before starting and periodically during treatment, particularly in patients with pre-existing hypertension. Contraindicated in severe uncontrolled hypertension (≥180/110). BP rise typically modest (mean 1-3 mmHg) but case reports of severe hypertension and hypertensive crisis. Annual BP is a reasonable baseline for stable patients.",
@@ -347,7 +793,13 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "TSH", "match": ["tsh", "thyroid stimulating hormone", "thyroid function", "tft"], "snomed": ["1022791000000101", "166842003"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "TSH",
+          "match": ["tsh", "thyroid stimulating hormone", "thyroid function", "tft"],
+          "snomed": ["1022791000000101", "166842003"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
       ],
       "source": "NICE NG145 / BTA guidance",
       "notes": "Annual TSH once stable on levothyroxine. More frequent during dose titration or in pregnancy. TSH alone is sufficient for monitoring stable replacement; full TFTs only needed if TSH abnormal or symptoms.",
@@ -359,22 +811,148 @@
       "id": "hrt-systemic",
       "drugClass": "HRT",
       "drug": {
-        "match": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "progynova", "zumenon", "climaval", "estraderm", "nuvelle", "norethisterone", "medroxyprogesterone", "micronised progesterone", "utrogestan", "bijuve", "mirena", "levonorgestrel intrauterine", "levonorgestrel ius", "levosert", "jaydess", "kyleena", "lng-ius"],
-        "exclude": ["vagifem", "imvaggis", "ovestin", "estring", "vagirux", "blissel", "intrarosa", "vaginal cream", "vaginal tablet", "vaginal ring", "vaginal pessary", "vaginal gel", "pessary"]
+        "match": [
+          "estradiol",
+          "oestradiol",
+          "conjugated oestrogens",
+          "conjugated estrogens",
+          "tibolone",
+          "femoston",
+          "kliovance",
+          "kliofem",
+          "kliogest",
+          "elleste duet",
+          "elleste solo",
+          "indivina",
+          "premique",
+          "premarin",
+          "evorel",
+          "femseven",
+          "estradot",
+          "sandrena",
+          "oestrogel",
+          "livial",
+          "lenzetto",
+          "progynova",
+          "zumenon",
+          "climaval",
+          "estraderm",
+          "nuvelle",
+          "norethisterone",
+          "medroxyprogesterone",
+          "micronised progesterone",
+          "utrogestan",
+          "bijuve",
+          "mirena",
+          "levonorgestrel intrauterine",
+          "levonorgestrel ius",
+          "levosert",
+          "jaydess",
+          "kyleena",
+          "lng-ius"
+        ],
+        "exclude": [
+          "vagifem",
+          "imvaggis",
+          "ovestin",
+          "estring",
+          "vagirux",
+          "blissel",
+          "intrarosa",
+          "vaginal cream",
+          "vaginal tablet",
+          "vaginal ring",
+          "vaginal pessary",
+          "vaginal gel",
+          "pessary",
+          "ethinylestradiol",
+          "ethinyloestradiol",
+          "qlaira",
+          "zoely"
+        ]
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "BP", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 365, "dueSoonDays": 30 },
-        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "BP",
+          "match": ["blood pressure", "bp"],
+          "snomed": ["75367002"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "Weight",
+          "match": ["weight", "body weight"],
+          "snomed": ["27113001"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
       ],
       "source": "NICE NG23 (review 2024) / BNF / British Menopause Society",
       "notes": "Annual HRT review: BP, weight, symptom control, risks/benefits, breast awareness. No routine bloods required for standard HRT. Mammography per national screening. Excludes local vaginal preparations which have no systemic effects (vaginal pessaries, creams, tablets, rings, gels). The chip fires ONLY when a systemic oestrogen / HRT agent (estradiol, conjugated oestrogens, tibolone, etc.) is prescribed: a progestogen or LNG-IUS (Mirena, Levosert, Jaydess, Kyleena) on its own is contraception, not HRT, so it does not raise this review. When oestrogen IS prescribed, a co-prescribed LNG-IUS/progestogen is reported as the progestogen (endometrial-protection) component via hrtContext. A problem-coded IUS insertion only counts as cover if coded within iusValidityYears (5y, the licensed endometrial-protection life of the 52mg LNG-IUS); an older/undated coil code is flagged 'expired' so cover falls through to the patient's actual progestogen rather than a removed device silently asserting protection.",
       "sharedCare": false,
       "hrtContext": {
-        "oestrogenTerms": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "bijuve", "progynova", "zumenon", "climaval", "estraderm", "nuvelle"],
-        "iusTerms": ["mirena", "levonorgestrel intrauterine", "levonorgestrel ius", "levosert", "jaydess", "kyleena", "lng-ius"],
-        "iusProblemTerms": ["intrauterine system", "intrauterine device", "mirena coil", "insertion of mirena", "introduction of mirena", "replacement of intrauterine", "fitting of intrauterine", "iud fitted", "ius fitted", "coil fitted", "coil inserted", "hormone releasing intrauterine", "insertion of hormone releasing"],
-        "progestogenTerms": ["utrogestan", "micronised progesterone", "norethisterone", "medroxyprogesterone", "dydrogesterone", "progesterone"],
+        "oestrogenTerms": [
+          "estradiol",
+          "oestradiol",
+          "conjugated oestrogens",
+          "conjugated estrogens",
+          "tibolone",
+          "femoston",
+          "kliovance",
+          "kliofem",
+          "kliogest",
+          "elleste duet",
+          "elleste solo",
+          "indivina",
+          "premique",
+          "premarin",
+          "evorel",
+          "femseven",
+          "estradot",
+          "sandrena",
+          "oestrogel",
+          "livial",
+          "lenzetto",
+          "bijuve",
+          "progynova",
+          "zumenon",
+          "climaval",
+          "estraderm",
+          "nuvelle"
+        ],
+        "iusTerms": [
+          "mirena",
+          "levonorgestrel intrauterine",
+          "levonorgestrel ius",
+          "levosert",
+          "jaydess",
+          "kyleena",
+          "lng-ius"
+        ],
+        "iusProblemTerms": [
+          "intrauterine system",
+          "intrauterine device",
+          "mirena coil",
+          "insertion of mirena",
+          "introduction of mirena",
+          "replacement of intrauterine",
+          "fitting of intrauterine",
+          "iud fitted",
+          "ius fitted",
+          "coil fitted",
+          "coil inserted",
+          "hormone releasing intrauterine",
+          "insertion of hormone releasing"
+        ],
+        "progestogenTerms": [
+          "utrogestan",
+          "micronised progesterone",
+          "norethisterone",
+          "medroxyprogesterone",
+          "dydrogesterone",
+          "progesterone"
+        ],
         "hysterectomyTerms": ["hysterectomy", "hysterectomised", "hysterectomized"],
         "iusValidityYears": 5
       }
@@ -384,18 +962,68 @@
       "enabled": true,
       "id": "adhd-stimulant-paediatric",
       "drugClass": "ADHD stimulant",
-      "ageRange": { "max": 17 },
+      "ageRange": {
+        "max": 17
+      },
       "sex": "any",
       "drug": {
-        "match": ["methylphenidate", "ritalin", "concerta", "equasym", "medikinet", "xenidate", "delmosart", "tranquilyn", "affenid", "atenza", "kixel", "matoride", "xaggitin", "focusim", "meflynate", "metyrol", "lisdexamfetamine", "elvanse", "vyvanse", "dexamfetamine", "dexedrine", "amfexa", "amphetamine"],
+        "match": [
+          "methylphenidate",
+          "ritalin",
+          "concerta",
+          "equasym",
+          "medikinet",
+          "xenidate",
+          "delmosart",
+          "tranquilyn",
+          "affenid",
+          "atenza",
+          "kixel",
+          "matoride",
+          "xaggitin",
+          "focusim",
+          "meflynate",
+          "metyrol",
+          "lisdexamfetamine",
+          "elvanse",
+          "vyvanse",
+          "dexamfetamine",
+          "dexedrine",
+          "amfexa",
+          "amphetamine"
+        ],
         "snomed": ["372574004", "387340002", "31994002"]
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "Blood pressure", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 182, "dueSoonDays": 21 },
-        { "name": "Pulse / heart rate", "match": ["pulse", "heart rate", "hr", "resting heart rate"], "snomed": ["78564009"], "intervalDays": 182, "dueSoonDays": 21 },
-        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 182, "dueSoonDays": 21 },
-        { "name": "Height", "match": ["height", "body height"], "snomed": ["248335003"], "intervalDays": 182, "dueSoonDays": 21 }
+        {
+          "name": "Blood pressure",
+          "match": ["blood pressure", "bp"],
+          "snomed": ["75367002"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Pulse / heart rate",
+          "match": ["pulse", "heart rate", "hr", "resting heart rate"],
+          "snomed": ["78564009"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Weight",
+          "match": ["weight", "body weight"],
+          "snomed": ["27113001"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Height",
+          "match": ["height", "body height"],
+          "snomed": ["248335003"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        }
       ],
       "source": "NICE NG87 (ADHD diagnosis and management, 2018 updated 2019); BNF for Children; NHS shared care protocols",
       "notes": "Post-stabilisation shared-care monitoring for ADHD stimulants in under-18s: BP, pulse, weight and height every 6 months. Consider 3-monthly in children under 10. Plot height and weight on centile charts — Sentinel confirms the measurement was taken but cannot verify centile position or growth velocity; the clinician must interpret the result. Action if >10% weight loss over weeks or height tracking significantly below the expected centile (consider planned treatment breaks over school holidays). Withhold/refer if sustained resting HR >130 bpm or BP >95th centile for age/height; review if HR >120 bpm. Refer to cardiology on unexplained syncope, palpitations with dizziness, or QT prolongation. Contraindicated in structural heart disease, uncontrolled hypertension or arrhythmia. Annual formal review of ongoing need. No routine bloods required by NG87; ECG only if cardiac risk factors at baseline.",
@@ -406,17 +1034,61 @@
       "enabled": true,
       "id": "adhd-stimulant-adult",
       "drugClass": "ADHD stimulant",
-      "ageRange": { "min": 18 },
+      "ageRange": {
+        "min": 18
+      },
       "sex": "any",
       "drug": {
-        "match": ["methylphenidate", "ritalin", "concerta", "equasym", "medikinet", "xenidate", "delmosart", "tranquilyn", "affenid", "atenza", "kixel", "matoride", "xaggitin", "focusim", "meflynate", "metyrol", "lisdexamfetamine", "elvanse", "vyvanse", "dexamfetamine", "dexedrine", "amfexa", "amphetamine"],
+        "match": [
+          "methylphenidate",
+          "ritalin",
+          "concerta",
+          "equasym",
+          "medikinet",
+          "xenidate",
+          "delmosart",
+          "tranquilyn",
+          "affenid",
+          "atenza",
+          "kixel",
+          "matoride",
+          "xaggitin",
+          "focusim",
+          "meflynate",
+          "metyrol",
+          "lisdexamfetamine",
+          "elvanse",
+          "vyvanse",
+          "dexamfetamine",
+          "dexedrine",
+          "amfexa",
+          "amphetamine"
+        ],
         "snomed": ["372574004", "387340002", "31994002"]
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "Blood pressure", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 182, "dueSoonDays": 21 },
-        { "name": "Pulse / heart rate", "match": ["pulse", "heart rate", "hr", "resting heart rate"], "snomed": ["78564009"], "intervalDays": 182, "dueSoonDays": 21 },
-        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 182, "dueSoonDays": 21 }
+        {
+          "name": "Blood pressure",
+          "match": ["blood pressure", "bp"],
+          "snomed": ["75367002"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Pulse / heart rate",
+          "match": ["pulse", "heart rate", "hr", "resting heart rate"],
+          "snomed": ["78564009"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Weight",
+          "match": ["weight", "body weight"],
+          "snomed": ["27113001"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        }
       ],
       "source": "NICE NG87 (ADHD diagnosis and management, 2018 updated 2019); BNF; NHS shared care protocols",
       "notes": "Post-stabilisation shared-care monitoring for ADHD stimulants in adults (18+): BP, pulse and weight every 6 months. Height is not monitored in adults. Withhold/refer if sustained resting HR >130 bpm or BP >140/90 mmHg; review if HR >120 bpm. Refer to cardiology on unexplained syncope, palpitations with dizziness, or QT prolongation. Contraindicated in structural heart disease, uncontrolled hypertension or arrhythmia. Annual formal review of ongoing need. No routine bloods required by NG87; ECG only if cardiac risk factors at baseline.",
@@ -434,10 +1106,34 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "Blood pressure", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 182, "dueSoonDays": 21 },
-        { "name": "Pulse / heart rate", "match": ["pulse", "heart rate", "hr", "resting heart rate"], "snomed": ["78564009"], "intervalDays": 182, "dueSoonDays": 21 },
-        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 182, "dueSoonDays": 21 },
-        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "Blood pressure",
+          "match": ["blood pressure", "bp"],
+          "snomed": ["75367002"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Pulse / heart rate",
+          "match": ["pulse", "heart rate", "hr", "resting heart rate"],
+          "snomed": ["78564009"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Weight",
+          "match": ["weight", "body weight"],
+          "snomed": ["27113001"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
       ],
       "source": "NICE NG87; BNF / atomoxetine SmPC; MHRA hepatic and suicidality warnings",
       "notes": "Non-stimulant. BP, pulse and weight 6-monthly; annual LFT (hepatotoxicity risk — advise patient to report jaundice, dark urine or unexplained upper abdominal pain; discontinue and refer urgently if liver injury confirmed). Monitor closely for suicidal ideation, agitation or irritability in the first month and after any dose change — this is a clinical review responsibility not enforceable by Sentinel. In children, plot height and weight on centile charts 3-monthly (Sentinel does not enforce height to avoid false alerts in adults). Withhold/refer if resting HR sustained >130 bpm or significant BP rise (6-12% of patients experience clinically significant BP or HR increases). Contraindicated in narrow-angle glaucoma and concurrent MAOI use.",
@@ -455,13 +1151,102 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "Blood pressure", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 84, "dueSoonDays": 14 },
-        { "name": "Pulse / heart rate", "match": ["pulse", "heart rate", "hr", "resting heart rate"], "snomed": ["78564009"], "intervalDays": 84, "dueSoonDays": 14 },
-        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 84, "dueSoonDays": 14 }
+        {
+          "name": "Blood pressure",
+          "match": ["blood pressure", "bp"],
+          "snomed": ["75367002"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "Pulse / heart rate",
+          "match": ["pulse", "heart rate", "hr", "resting heart rate"],
+          "snomed": ["78564009"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "Weight",
+          "match": ["weight", "body weight"],
+          "snomed": ["27113001"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        }
       ],
       "source": "NICE NG87; BNF / guanfacine (Intuniv) SmPC; Sussex ICS shared care protocol",
       "notes": "Non-stimulant alpha-2A agonist with stricter cardiovascular monitoring than stimulants. BP and pulse 3-monthly (Sentinel enforces 84-day interval as the safer default for year 1; local shared care may permit 6-monthly once stable beyond year 1). Risks: hypotension, bradycardia, syncope, and AV block — check lying and standing BP. Dose must be tapered on discontinuation to avoid rebound hypertension; never abruptly stop. In children, plot height and weight on centile charts 3-monthly (Sentinel confirms measurement recency but cannot verify centile). Contraindicated in significant cardiovascular or cerebrovascular disease and concurrent strong CYP3A4 inhibitors (e.g. ketoconazole, clarithromycin).",
       "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "sodium-valproate",
+      "drugClass": "Antiepileptic / mood stabiliser",
+      "drug": {
+        "match": [
+          "sodium valproate",
+          "valproate",
+          "valproic acid",
+          "epilim",
+          "episenta",
+          "orlept",
+          "convulex",
+          "depakote",
+          "belvo",
+          "dyzantil",
+          "epival",
+          "syonell"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "FBC",
+          "match": ["fbc", "full blood count"],
+          "snomed": ["26604007"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "U&E / Ammonia",
+          "match": ["u&e", "urea and electrolytes", "renal profile", "ammonia"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "BNF / NICE CG137 / Valproate Pregnancy Prevention Programme (MHRA 2018, updated 2024) / MHRA Drug Safety Update Feb 2025 (new branded formulations: Belvo, Dyzantil, Epival, Syonell)",
+      "notes": "Annual FBC, LFT, U&E for patients on long-term valproate. More frequent monitoring during the first 6 months and after any dose change. VALPROATE PREGNANCY PREVENTION PROGRAMME (PPP): women and girls of childbearing potential must NOT be prescribed valproate without a signed annual Risk Acknowledgement Form — this is a regulatory requirement (MHRA 2018). Prescribers must confirm each year that: the patient understands the teratogenic risk (spina bifida, other birth defects, neurodevelopmental disorders); effective contraception is being used; and the patient has a specialist review annually. Sentinel cannot enforce the PPP form — check manually for all female patients of childbearing age. 'Epilim Chrono' (valproate semisodium controlled release) is matched by 'epilim'. Convulex = valproic acid (essentially the same drug). Depakote = valproate semisodium. 2026-07-25 Keeper (drugs-001 RED): Added four new UK valproate brands named in MHRA Feb 2025 Drug Safety Update — Belvo (Atnahs Pharma), Dyzantil (Pfizer UK), Epival (Abbott), Syonell (Zentiva) — to plug a patient-safety monitoring gap confirmed by VERIFIER-A. Added 2026-07-11: BNF/MHRA corroborated; primary-source PDFs 403 that run.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "finerenone",
+      "drugClass": "Non-steroidal MRA",
+      "drug": {
+        "match": ["finerenone", "kerendia"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "U&E (serum potassium + eGFR)",
+          "match": ["u&e", "urea and electrolytes", "renal profile", "potassium", "egfr"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 120,
+          "dueSoonDays": 21
+        }
+      ],
+      "source": "BNF / NICE TA877 (finerenone for CKD in T2DM, 2023) / finerenone SmPC (Kerendia, Bayer) / MHRA",
+      "notes": "Finerenone (Kerendia) is a non-steroidal mineralocorticoid receptor antagonist licensed for CKD in T2DM (NICE TA877). Primary monitoring concern is hyperkalaemia — serum potassium and eGFR at baseline, at 4 weeks after initiation, and then every 4 months (120d) during maintenance. Withhold if serum K+ >5.5 mmol/L before starting; restart only when K+ <5.0 mmol/L. Reduce or withhold if eGFR falls to <25 mL/min/1.73m² or K+ consistently >5.5 mmol/L. Contraindicated with strong CYP3A4 inhibitors (itraconazole, ketoconazole, clarithromycin, ritonavir). Dispensing-practice note: ensure patients receive branded Kerendia (not generic preparations of spironolactone etc.) — finerenone is structurally distinct from spironolactone and eplerenone. Added 2026-07-11: BNF/NICE TA877 corroborated; primary SmPC PDF 403 this run.",
+      "sharedCare": false
     },
     {
       "type": "drug-no-monitoring",
@@ -470,23 +1255,70 @@
       "notes": "Common drugs with no BNF/NICE-mandated routine primary-care blood monitoring protocol. Matched drugs are excluded from the 'Meds without a monitoring rule' diagnostic list to suppress noise. No monitoring chips are generated for these drugs.",
       "drug": {
         "match": [
-          "aspirin", "clopidogrel", "dipyridamole", "prasugrel",
-          "amlodipine", "felodipine", "lercanidipine", "nifedipine", "verapamil", "diltiazem",
-          "bisoprolol", "atenolol", "metoprolol", "nebivolol", "propranolol", "carvedilol",
-          "tamsulosin", "alfuzosin", "doxazosin", "terazosin",
-          "finasteride", "dutasteride",
-          "omeprazole", "lansoprazole", "esomeprazole", "pantoprazole", "rabeprazole",
-          "salbutamol", "salmeterol", "formoterol", "indacaterol", "vilanterol", "olodaterol",
-          "beclometasone", "budesonide", "ciclesonide", "mometasone",
-          "fluticasone", "azelastine",
-          "ipratropium", "tiotropium", "aclidinium", "glycopyrronium", "umeclidinium",
-          "montelukast", "zafirlukast",
-          "cetirizine", "loratadine", "fexofenadine", "chlorphenamine", "promethazine",
-          "acrivastine", "bilastine", "desloratadine", "levocetirizine", "rupatadine",
-          "cholecalciferol", "colecalciferol",
-          "calcium carbonate", "calcium citrate",
+          "aspirin",
+          "clopidogrel",
+          "dipyridamole",
+          "prasugrel",
+          "amlodipine",
+          "felodipine",
+          "lercanidipine",
+          "nifedipine",
+          "verapamil",
+          "diltiazem",
+          "bisoprolol",
+          "atenolol",
+          "metoprolol",
+          "nebivolol",
+          "propranolol",
+          "carvedilol",
+          "tamsulosin",
+          "alfuzosin",
+          "doxazosin",
+          "terazosin",
+          "finasteride",
+          "dutasteride",
+          "omeprazole",
+          "lansoprazole",
+          "esomeprazole",
+          "pantoprazole",
+          "rabeprazole",
+          "salbutamol",
+          "salmeterol",
+          "formoterol",
+          "indacaterol",
+          "vilanterol",
+          "olodaterol",
+          "beclometasone",
+          "budesonide",
+          "ciclesonide",
+          "mometasone",
+          "fluticasone",
+          "azelastine",
+          "ipratropium",
+          "tiotropium",
+          "aclidinium",
+          "glycopyrronium",
+          "umeclidinium",
+          "montelukast",
+          "zafirlukast",
+          "cetirizine",
+          "loratadine",
+          "fexofenadine",
+          "chlorphenamine",
+          "promethazine",
+          "acrivastine",
+          "bilastine",
+          "desloratadine",
+          "levocetirizine",
+          "rupatadine",
+          "cholecalciferol",
+          "colecalciferol",
+          "calcium carbonate",
+          "calcium citrate",
           "folic acid",
-          "ferrous sulfate", "ferrous fumarate", "ferrous gluconate"
+          "ferrous sulfate",
+          "ferrous fumarate",
+          "ferrous gluconate"
         ]
       }
     },
@@ -501,8 +1333,20 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "Blood pressure", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 730, "dueSoonDays": 60 },
-        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 730, "dueSoonDays": 60 }
+        {
+          "name": "Blood pressure",
+          "match": ["blood pressure", "bp"],
+          "snomed": ["75367002"],
+          "intervalDays": 730,
+          "dueSoonDays": 60
+        },
+        {
+          "name": "Weight",
+          "match": ["weight", "body weight"],
+          "snomed": ["27113001"],
+          "intervalDays": 730,
+          "dueSoonDays": 60
+        }
       ],
       "source": "FSRH Clinical Guideline: Progestogen-only Injectables (Dec 2014, amended Jul 2023)",
       "notes": "DMPA = Depo-Provera (medroxyprogesterone acetate 150mg/1ml IM) and Sayana Press (104mg/0.65ml SC). FSRH: review at least every 2 years (730d) to reassess risk/benefit — particularly bone mineral density (small, largely reversible loss; heightened under-18 and over-40 and with osteoporosis risk factors). Review weight at the 2-yearly assessment (weight gain is a recognised effect). BP does not rise with progestogen-only injectables (unlike CHC) but is checked as a UKMEC eligibility criterion at each visit (UKMEC 4 if BP ≥160/100). Return to fertility may be delayed up to ~1 year after the last injection. MATCH is brand-only by design: the bare generic 'medroxyprogesterone' is deliberately NOT used because it appears in the hrt-systemic rule (oral MPA), so a generic-string injectable record would double-fire — flagged for engine disambiguation. Noristerat (norethisterone enantate, 8-weekly, short-term only) is a different depot and is out of scope. SOURCE GAP: FSRH primary PDF 403 — corroborated via NHS formulary reproductions; pending primary-source confirmation.",
@@ -510,22 +1354,225 @@
     },
     {
       "type": "drug-monitoring",
-      "enabled": false,
+      "enabled": true,
       "id": "chc-combined-hormonal",
       "drugClass": "Combined hormonal contraception",
       "sex": "F",
       "drug": {
-        "match": ["microgynon", "ovranette", "rigevidon", "levest", "maexeni", "cilique", "lizinna", "marvelon", "mercilon", "gedarel", "cimizt", "femodene", "femodette", "millinette", "yasmin", "lucette", "eloine", "dianette", "brevinor", "norimin", "ovysmen", "loestrin", "qlaira", "zoely", "evra", "nuvaring", "syreniring"],
-        "exclude": ["cerazette", "cerelle", "zelleta", "lovima", "hana", "nacrez"]
+        "match": [
+          "microgynon",
+          "ovranette",
+          "rigevidon",
+          "levest",
+          "maexeni",
+          "cilique",
+          "lizinna",
+          "marvelon",
+          "mercilon",
+          "gedarel",
+          "cimizt",
+          "femodene",
+          "femodette",
+          "millinette",
+          "yasmin",
+          "lucette",
+          "eloine",
+          "dianette",
+          "brevinor",
+          "norimin",
+          "ovysmen",
+          "loestrin",
+          "qlaira",
+          "zoely",
+          "evra",
+          "nuvaring",
+          "syreniring",
+          "ethinylestradiol",
+          "ethinyloestradiol",
+          "logynon",
+          "synphase"
+        ],
+        "exclude": ["cerazette", "cerelle", "zelleta", "lovima", "hana", "nacrez", "slinda"]
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "Blood pressure", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 365, "dueSoonDays": 30 },
-        { "name": "BMI / Weight", "match": ["bmi", "body mass index", "weight", "body weight"], "snomed": ["60621009", "27113001"], "intervalDays": 365, "dueSoonDays": 30 }
+        {
+          "name": "Blood pressure",
+          "match": ["blood pressure", "bp"],
+          "snomed": ["75367002"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "BMI / Weight",
+          "match": ["bmi", "body mass index", "weight", "body weight"],
+          "snomed": ["60621009", "27113001"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
       ],
       "source": "FSRH Guideline: Combined Hormonal Contraception (Jan 2019, amended Oct 2023); NICE CKS Contraception",
-      "notes": "SHIPPED DISABLED pending engine disambiguation (Keeper 2026-06-20, needs_engine_change). FSRH/NICE mandate BP+BMI at initiation, a 3-month review, then at least annually — this rule would enforce the annual recurring BP+BMI check. CHC = combined pills + Evra patch + NuvaRing/SyreniRing. Contraindicated in uncontrolled hypertension (UKMEC 4 ≥160/100; UKMEC 3 ≥140/90 or BMI ≥35); reassess VTE/CVD risk at each review. WHY DISABLED: the hrt-systemic rule matches the bare term 'estradiol', which is a SUBSTRING of 'ethinylestradiol' and of natural-oestrogen pills' 'estradiol valerate'/'estradiol hemihydrate' — so CHC matched by oestrogen ingredient (and Qlaira/Zoely) would double-fire the HRT monitoring rule. Enabling safely needs engine-level drug-class disambiguation. POPs (Cerazette/Cerelle/Zelleta/Lovima/Hana/Nacrez — desogestrel) are excluded. SOURCE GAP: FSRH primary PDF 403 — corroborated via NHS formulary/NICE CKS; pending primary-source confirmation.",
+      "notes": "FSRH/NICE mandate BP+BMI at initiation, a 3-month review, then at least annually — this rule enforces the annual recurring BP+BMI check. CHC = combined pills + Evra patch + NuvaRing/SyreniRing. Contraindicated in uncontrolled hypertension (UKMEC 4 ≥160/100; UKMEC 3 ≥140/90 or BMI ≥35); reassess VTE/CVD risk at each review. DISAMBIGUATION (enabled 2026-06-20): the hrt-systemic rule matches the bare term 'estradiol', which is a SUBSTRING of the contraceptive oestrogen 'ethinylestradiol' and of the natural-oestrogen pills' 'estradiol valerate' (Qlaira) / 'estradiol hemihydrate' (Zoely). To stop CHC patients double-firing the HRT review, hrt-systemic now EXCLUDES 'ethinylestradiol'/'ethinyloestradiol'/'qlaira'/'zoely' (none of which are HRT). CHC matches by brand plus the contraceptive-only oestrogen 'ethinylestradiol'/'ethinyloestradiol' (so generic ethinylestradiol+progestogen combos fire here, never as HRT). POPs (Cerazette/Cerelle/Zelleta/Lovima/Hana/Nacrez — desogestrel) are excluded. Slinda (drospirenone 4 mg POP) added to exclude list 2026-07-11 — it is a POP, not a CHC, but 'slinda' contains no CHC-like substring that would auto-fire; excluded explicitly to future-proof against any prescribing-system records that render it alongside ethinylestradiol component names (BNF/FSRH corroborated; primary PDFs 403 this run). Logynon and Synphase (triphasic ethinylestradiol+levonorgestrel) added to match list 2026-07-11 — both are actively dispensed in the UK (BNF/dm+d corroborated). SOURCE: FSRH Combined Hormonal Contraception (2019, amended 2023); corroborated via NHS formulary/NICE CKS. MHRA: co-prescribed tirzepatide (Mounjaro) may reduce absorption of oral contraceptives, especially in overweight/obese patients — advise an additional barrier method or a non-oral method for 4 weeks after starting tirzepatide and after each dose increase (corroborated 2026-06-21; primary MHRA wording pending confirmation).",
       "sharedCare": false
+    },
+    {
+      "id": "digoxin-renal-monitoring",
+      "type": "drug-monitoring",
+      "enabled": false,
+      "drug": {
+        "match": ["digoxin", "lanoxin"],
+        "exclude": []
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "U&E / eGFR",
+          "match": ["urea", "electrolytes", "egfr", "creatinine", "renal function", "u&e"],
+          "snomed": ["166717003", "80274001"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "BNF Digoxin monograph (monitoring: U&E/eGFR at least annually; dose reduction required if eGFR <30 per STOPP v3 B1). 2026-08-01 (The Keeper, alert-C005 RED): gap identified by direct code inspection — no digoxin monitoring rule existed in drug-rules.json; stopp-start.js encodes the STOPP v3 B1 eGFR<30 dose-criterion (fail-closed when eGFR unknown) but provides no proactive annual monitoring chip. Lanoxin confirmed only UK-licensed brand (dm+d/BNF).",
+      "notes": "DISABLED PENDING CSO ACTIVATION (enabled:false). The Keeper identified this gap on 2026-08-01 (alert-C005, RED): digoxin is a high-risk drug with a narrow therapeutic index and renal-dose sensitivity but had no entry in Sentinel drug-monitoring rules. Lanoxin (GlaxoSmithKline/Aspen) is the only UK-licensed brand (Lanoxin-PG is the 25 mcg/5 ml paediatric liquid, same brand family). Annual U&E/eGFR monitoring is required to detect toxicity risk from renal impairment. CSO must review the monitoring interval and confirm this rule is appropriate for this practice before enabling. STOPP v3 B1 separately flags digoxin use when eGFR<30 — that criterion is in engine/stopp-start.js and fires independently of this rule.",
+      "sharedCare": false
+    },
+    {
+      "id": "allergy-penicillin",
+      "type": "drug-allergy",
+      "enabled": true,
+      "label": "Penicillin allergy + penicillin/beta-lactam",
+      "severity": "red",
+      "allergyTerms": [
+        "penicillin",
+        "amoxicillin allerg",
+        "flucloxacillin allerg",
+        "co-amoxiclav allerg",
+        "beta-lactam allerg",
+        "betalactam allerg",
+        "phenoxymethylpenicillin allerg",
+        "benzylpenicillin allerg"
+      ],
+      "drugSets": [
+        {
+          "name": "Penicillins",
+          "match": [
+            "penicillin",
+            "amoxicillin",
+            "ampicillin",
+            "flucloxacillin",
+            "co-amoxiclav",
+            "co amoxiclav",
+            "phenoxymethylpenicillin",
+            "benzylpenicillin",
+            "pivmecillinam",
+            "piperacillin",
+            "temocillin"
+          ],
+          "exclude": []
+        }
+      ],
+      "source": "BNF/NICE CKS drug allergy; MHRA. PENDING CSO REVIEW.",
+      "notes": "Fires when an active penicillin/beta-lactam allergy co-occurs with a penicillin-class drug. Cross-reactivity with cephalosporins/carbapenems is handled by the separate cross-sensitivity rule."
+    },
+    {
+      "id": "allergy-penicillin-cephalosporin-xs",
+      "type": "drug-allergy",
+      "enabled": true,
+      "label": "Penicillin allergy + cephalosporin (cross-sensitivity)",
+      "severity": "amber",
+      "crossSensitivity": true,
+      "allergyTerms": ["penicillin", "beta-lactam allerg", "betalactam allerg"],
+      "drugSets": [
+        {
+          "name": "Cephalosporins/carbapenems",
+          "match": [
+            "cefalexin",
+            "cephalexin",
+            "cefaclor",
+            "cefadroxil",
+            "cefuroxime",
+            "cefixime",
+            "cefotaxime",
+            "ceftriaxone",
+            "ceftazidime",
+            "cefepime",
+            "meropenem",
+            "imipenem",
+            "ertapenem",
+            "aztreonam"
+          ],
+          "exclude": []
+        }
+      ],
+      "source": "BNF/NICE CKS: ~1-3% cephalosporin cross-reactivity in penicillin allergy; lower with 3rd-gen. PENDING CSO REVIEW.",
+      "notes": "Cross-sensitivity CAUTION (amber), not an absolute contraindication — review documented reaction severity."
+    },
+    {
+      "id": "allergy-nsaid",
+      "type": "drug-allergy",
+      "enabled": true,
+      "label": "NSAID/aspirin hypersensitivity + NSAID",
+      "severity": "red",
+      "allergyTerms": [
+        "nsaid",
+        "non-steroidal anti-inflammatory",
+        "aspirin allerg",
+        "ibuprofen allerg",
+        "naproxen allerg",
+        "diclofenac allerg",
+        "salicylate allerg"
+      ],
+      "drugSets": [
+        {
+          "name": "NSAIDs",
+          "match": [
+            "ibuprofen",
+            "naproxen",
+            "diclofenac",
+            "aceclofenac",
+            "celecoxib",
+            "etoricoxib",
+            "meloxicam",
+            "piroxicam",
+            "indometacin",
+            "indomethacin",
+            "ketoprofen",
+            "mefenamic acid",
+            "nabumetone",
+            "etodolac",
+            "aspirin",
+            "acetylsalicylic"
+          ],
+          "exclude": ["topical", "gel", "cream", "patch", "spray", "eye drop"]
+        }
+      ],
+      "source": "BNF/NICE CKS NSAID hypersensitivity; cross-reactivity across NSAID class. PENDING CSO REVIEW.",
+      "notes": "Fires when active NSAID/aspirin/salicylate hypersensitivity co-occurs with a systemic NSAID. Topical formulations excluded. Aspirin-exacerbated respiratory disease is a class effect."
+    },
+    {
+      "id": "allergy-sulfonamide",
+      "type": "drug-allergy",
+      "enabled": true,
+      "label": "Sulfonamide allergy + sulfonamide antibiotic",
+      "severity": "red",
+      "allergyTerms": [
+        "sulfonamide",
+        "sulphonamide",
+        "sulfa allerg",
+        "co-trimoxazole allerg",
+        "trimethoprim-sulfamethoxazole allerg",
+        "sulfamethoxazole allerg"
+      ],
+      "drugSets": [
+        {
+          "name": "Sulfonamide antibiotics",
+          "match": ["co-trimoxazole", "co trimoxazole", "sulfamethoxazole", "sulfadiazine", "sulfasalazine"],
+          "exclude": []
+        }
+      ],
+      "source": "BNF/NICE CKS sulfonamide allergy. PENDING CSO REVIEW.",
+      "notes": "Fires when an active sulfonamide-antibiotic allergy co-occurs with a sulfonamide antibiotic. Non-antibiotic sulfonamide cross-reactivity (e.g. thiazides, sulfonylureas) is contested and NOT encoded."
     }
   ]
 }

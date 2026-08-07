@@ -70,10 +70,11 @@
     'relifex', // nabumetone
     'surgam', // tiaprofenic acid
     'lodine', // etodolac
+    'celebrex', // celecoxib — 2026-07-25 Keeper: brand not substring of generic; MHRA/BNF confirmed active UK brand
   ];
 
   // Loop diuretics — subset of HIGH_RISK_DRUGS id:'diuretic'
-  const LOOP_DIURETIC_TERMS = ['furosemide', 'frusemide', 'bumetanide'];
+  const LOOP_DIURETIC_TERMS = ['furosemide', 'frusemide', 'bumetanide', 'torasemide']; // 2026-07-25 Keeper: torasemide (BNF 2.2.2 loop diuretic, active UK licence, brand Torem)
 
   // Benzodiazepines — standard UK generics
   const BENZO_TERMS = [
@@ -85,6 +86,8 @@
     'clonazepam',
     'alprazolam',
     'oxazepam',
+    'loprazolam', // 2026-07-11 Keeper: BNF-listed UK benzo, missing from original list
+    'lormetazepam', // 2026-07-11 Keeper: BNF-listed UK benzo, missing from original list
   ];
 
   // Z-drugs (non-benzodiazepine hypnotics)
@@ -98,7 +101,16 @@
   ];
 
   // First-generation (sedating) antihistamines
-  const FIRSTGEN_AH_TERMS = ['chlorphenamine', 'promethazine', 'hydroxyzine', 'diphenhydramine', 'cyclizine'];
+  const FIRSTGEN_AH_TERMS = [
+    'chlorphenamine',
+    'promethazine',
+    'hydroxyzine',
+    'diphenhydramine',
+    'cyclizine',
+    'alimemazine', // 2026-07-11 Keeper: UK sedating AH (= trimeprazine), BNF 3.4.1
+    'trimeprazine', // 2026-07-11 Keeper: older name for alimemazine (not substring of it)
+    'brompheniramine', // 2026-07-25 Keeper: first-gen sedating AH; ACBcalc score 3; in OTC combination products
+  ];
 
   // PPIs — from HIGH_RISK_DRUGS id:'ppi'
   const PPI_TERMS = ['omeprazole', 'lansoprazole', 'pantoprazole', 'esomeprazole', 'rabeprazole'];
@@ -125,7 +137,14 @@
   const LONG_SU_TERMS = ['glibenclamide', 'glimepiride'];
 
   // Statins — from HIGH_RISK_DRUGS id:'statin'
-  const STATIN_TERMS = ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'fluvastatin'];
+  const STATIN_TERMS = [
+    'atorvastatin',
+    'simvastatin',
+    'rosuvastatin',
+    'pravastatin',
+    'fluvastatin',
+    'pitavastatin', // 2026-07-11 Keeper: licensed in UK (Livazo); BNF 2.12
+  ];
 
   // ACE inhibitors — from HIGH_RISK_DRUGS id:'acei' (first entries are ACEi).
   // Kept at parity with visualiser-core.js's ACEi list (medrev-001).
@@ -165,6 +184,10 @@
     'sotalol',
     'nebivolol',
     'labetalol',
+    'acebutolol', // 2026-07-11 Keeper: BNF-listed UK beta-blocker, missing from original list
+    'celiprolol', // 2026-07-11 Keeper: BNF-listed UK beta-blocker, missing from original list
+    'nadolol', // 2026-07-11 Keeper: BNF-listed UK beta-blocker, missing from original list
+    'oxprenolol', // 2026-07-11 Keeper: BNF-listed UK beta-blocker, missing from original list
   ];
 
   // Anticholinergic drugs with a meaningful burden — REUSED from the shared
@@ -224,6 +247,13 @@
     });
   }
 
+  // True if any problem is exactly the bare token (trimmed), for abbreviations too short
+  // to safely substring-match (e.g. "MI" alone, which would false-positive against
+  // unrelated term lists like DIABETES_TERMS/CKD_TERMS if added to hasProblem generally)
+  function hasBareProblemToken(problems, token) {
+    return problems.some((p) => problemName(p).trim() === token);
+  }
+
   // ── Problem term lists ─────────────────────────────────────────────────────
 
   // Cardiovascular/cerebrovascular disease (for aspirin primary-prevention check)
@@ -232,7 +262,7 @@
     'ischaemic heart',
     'ischemic heart',
     'myocardial infarction',
-    ' mi ',
+    'mi ',
     'angina',
     'heart failure',
     'atrial fibrillation',
@@ -291,7 +321,7 @@
   ];
 
   // Myocardial infarction (for beta-blocker START)
-  const MI_TERMS = ['myocardial infarction', 'mi ', ' mi\b', 'stemi', 'nstemi', 'heart attack'];
+  const MI_TERMS = ['myocardial infarction', 'mi ', 'stemi', 'nstemi', 'heart attack'];
 
   // Digoxin
   const DIGOXIN_TERMS = ['digoxin'];
@@ -459,7 +489,11 @@
     // in the problem list, flag as possible primary prevention.
     // Conservative: the terms list for CV disease is broad to minimise
     // false positives. If the problem list contains any CV term, no flag.
-    if (hasDrug(drugs, ASPIRIN_TERMS) && !hasProblem(problems, CV_DISEASE_TERMS)) {
+    if (
+      hasDrug(drugs, ASPIRIN_TERMS) &&
+      !hasProblem(problems, CV_DISEASE_TERMS) &&
+      !hasBareProblemToken(problems, 'mi')
+    ) {
       flags.push({
         id: 'stopp_aspirin_primary_prev',
         kind: 'stopp',
@@ -558,7 +592,10 @@
     }
 
     // START 13: Myocardial infarction AND no beta-blocker (amber)
-    if (hasProblem(problems, MI_TERMS) && !hasDrug(drugs, BETA_BLOCKER_TERMS)) {
+    if (
+      (hasProblem(problems, MI_TERMS) || hasBareProblemToken(problems, 'mi')) &&
+      !hasDrug(drugs, BETA_BLOCKER_TERMS)
+    ) {
       flags.push({
         id: 'start_bb_post_mi',
         kind: 'start',
@@ -577,7 +614,10 @@
   }
 
   // ── Module export (dual-mode: Node require OR browser global) ──────────────
-  const api = { computeStoppStart };
+  // SPEC is the published identifier of the criteria set implemented here. Read by
+  // the CQC readiness disclosure so the named version cannot drift from the engine.
+  const SPEC = { name: 'STOPP/START', version: 'v3 (2023)', source: "O'Mahony et al., Age and Ageing 2023" };
+  const api = { computeStoppStart, SPEC };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {

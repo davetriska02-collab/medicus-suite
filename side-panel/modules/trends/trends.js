@@ -3,6 +3,63 @@
 import { lineChart, esc, fmtDate, parseBp, bpTarget } from '../shared/trend-chart.js';
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
 import { downloadCsv } from '../shared/export-util.js';
+import { getTxnBundleIfEnabled, feedSourceLabel } from '../../../shared/panel-txn-feed.js';
+
+// ── Transactional feed integration (v3.165.0+) ──────────────────────────────
+//
+// Trends' existing data path (content-scripts/sentinel.js getTrendData) is
+// untouched: it stays the baseline "session" fetch and is always tried first,
+// since it is also the only place a patientUuid can be resolved without new
+// content-script plumbing (out of scope — this module may only touch its own
+// files). Once session data (and a patientUuid) is in hand, the official
+// Transactional API feed (shared/panel-txn-feed.js) is offered for the SAME
+// patient; getTxnBundleIfEnabled() returns null in every case except a
+// practice explicitly on integrationMode 'transactional' with a healthy feed.
+//
+// COMPATIBILITY MAPPING VERIFIED (engine/normalisers.js
+// normaliseObservationHistory vs shared/fhir-normaliser.js normaliseCareRecord
+// observationHistory), 2026-07-09:
+//   - Both group ONE observationHistory row per distinct analyte, with the
+//     SAME row shape { name, code, group, unit, history } and the SAME
+//     history-point shape { date, value(number|NaN), rawValue(string),
+//     isAbove, isBelow }. The FHIR side only gained value/rawValue/isAbove/
+//     isBelow parity with the session shape in v3.165.0 (see CHANGELOG) —
+//     before that this swap would NOT have been safe, since buildRenalModel/
+//     seriesFor both filter on Number.isFinite(h.value).
+//   - Row matching is NAME-substring based on both sides (session:
+//     row.investigationType; FHIR: text(Observation.code) i.e. the GP Connect
+//     display term) — neither source carries a code Trends can match on
+//     instead, so this was already the accepted strategy pre-dating this
+//     change (BP_NAMES/ACR_NAMES/EGFR_NAMES/OBS_METRICS[].match below).
+//   - BP is structurally identical end to end: both sources synthesise ONE
+//     "Blood pressure" row per patient with rawValue "sys/dia" — session by
+//     pairing separate systolic/diastolic investigationType rows, FHIR from a
+//     single component-based Observation — and buildBpModel()'s primary path
+//     reads h.rawValue (not h.value), so the BP row's `value: NaN` on both
+//     sides is a non-issue.
+//   - ACR/eGFR/HbA1c/cholesterol/weight are structurally identical (row/point
+//     shape), but the exact analyte NAME TEXT is source-specific vocabulary
+//     (Medicus's internal investigationType label vs GP Connect's SNOMED
+//     display term) that cannot be verified from static code alone, and a
+//     name-matching miss on any one metric would silently drop that chart's
+//     only series — exactly the kind of regression the "never render worse"
+//     rule forbids. So rather than trust the vocabulary blind, every refresh()
+//     runs a per-patient RUNTIME coverage check (feedCoversSessionSeries,
+//     below): it re-runs the SAME builders (buildBpModel/buildRenalModel/
+//     seriesFor) against both the session and feed observationHistory and
+//     only adopts the feed's observationHistory if it finds a series for
+//     every metric the session bundle found one for. If the feed is missing
+//     (or produces zero points for) any series the session has, the feed is
+//     rejected and the WHOLE tab stays on session data for that patient — one
+//     consistent provenance per render, not a per-chart source that would
+//     vary confusingly between tabs.
+//   - `registers` (the BP-target qualifying-register list) and `patientContext`
+//     (age, used for BP target banding) have NO transactional-feed equivalent
+//     — `registers` is a Trends-only field the content script attaches from
+//     the session Sentinel snapshot's qof-register chips, not part of any
+//     normalised bundle. These always come from session data regardless of
+//     which observationHistory is used, so BP-target computation is never
+//     affected by the feed swap (see resolveTrendData below).
 
 // ── Observation metrics (passive display — no clinical thresholds) ─────────────
 const OBS_METRICS = [
@@ -80,7 +137,9 @@ export async function init(el) {
 
   render({ state: 'loading' });
   await refresh();
-  pollTimer = setInterval(refresh, 15000);
+  pollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') (refresh)();
+  }, 15000);
   onRuntimeMsg = (msg, sender) => {
     if (!sender || sender.id !== chrome.runtime.id) return;
     if (msg && msg.type === 'sentinel:snapshot-updated') refresh();
@@ -109,22 +168,82 @@ async function refresh() {
       render({ state: 'no-medicus' });
       return;
     }
-    const data = await new Promise((res, rej) => {
+    const sessionData = await new Promise((res, rej) => {
       chrome.tabs.sendMessage(tab.id, { action: 'getTrendData' }, (r) => {
         if (chrome.runtime.lastError) rej(chrome.runtime.lastError);
         else res(r);
       });
     }).catch(() => null);
-    if (!data) {
+    if (!sessionData) {
       lastData = null;
       render({ state: 'no-data' });
       return;
     }
-    lastData = data;
+    lastData = await resolveTrendData(sessionData);
     render({ state: 'ok' });
   } catch (_) {
     render({ state: 'no-data' });
   }
+}
+
+// resolveTrendData(sessionData) -> data object Trends renders from.
+//
+// Session data is always the baseline (see header comment): `registers` and
+// `patientContext` are ALWAYS taken from it, since the feed has no equivalent
+// for either. Only `observationHistory` is ever replaced, and only after
+// feedCoversSessionSeries() confirms the feed's coverage is at least as good
+// as session's for THIS patient. Any failure anywhere in this path (no uuid,
+// mode not transactional, feed error, comparison error) simply returns
+// sessionData unchanged — fail-soft, never a broken tab.
+async function resolveTrendData(sessionData) {
+  const uuid = sessionData?.patientContext?.patientUuid;
+  if (!uuid) return sessionData;
+
+  let feedBundle = null;
+  try {
+    feedBundle = await getTxnBundleIfEnabled(uuid);
+  } catch (_) {
+    feedBundle = null;
+  }
+  if (!feedBundle || !Array.isArray(feedBundle.observationHistory)) return sessionData;
+
+  let feedIsUsable = false;
+  try {
+    feedIsUsable = feedCoversSessionSeries(feedBundle, sessionData);
+  } catch (_) {
+    feedIsUsable = false; // any comparison failure -> keep session, never guess
+  }
+  if (!feedIsUsable) return sessionData;
+
+  return {
+    ...sessionData,
+    observationHistory: feedBundle.observationHistory,
+    debug: { ...(sessionData.debug || {}), panelFeed: 'transactional' },
+  };
+}
+
+// feedCoversSessionSeries(feedData, sessionData) -> boolean
+//
+// Runtime per-patient coverage check (see header comment): re-runs the SAME
+// series builders Trends renders with, against both bundles, and requires the
+// feed to have found a non-empty series for every metric session found one
+// for. When session found nothing for a metric there is nothing to lose by
+// trying the feed (fallback-of-last-resort for that metric); when session DID
+// find something, the feed must match or the whole tab stays on session.
+function feedCoversSessionSeries(feedData, sessionData) {
+  const sessionBp = buildBpModel(sessionData);
+  if (sessionBp.pairs.length > 0 && buildBpModel(feedData).pairs.length === 0) return false;
+
+  const sessionRenal = buildRenalModel(sessionData);
+  const feedRenal = buildRenalModel(feedData);
+  if (sessionRenal.acrPts.length > 0 && feedRenal.acrPts.length === 0) return false;
+  if (sessionRenal.egfrPts.length > 0 && feedRenal.egfrPts.length === 0) return false;
+
+  for (const metric of OBS_METRICS) {
+    const sessionPts = seriesFor(metric, sessionData).pts;
+    if (sessionPts.length > 0 && seriesFor(metric, feedData).pts.length === 0) return false;
+  }
+  return true;
 }
 
 // ── Picker ─────────────────────────────────────────────────────────────────────
@@ -194,6 +313,56 @@ function exportCsv() {
   downloadCsv(filename, ['Date', `${metric.label} (${unit})`], rows);
 }
 
+// ── Resting state (no patient open yet) ─────────────────────────────────────────
+// "Black box" was the whole-suite appraisal's word for the old bare empty
+// state (a single line of prose, no worked example). This replaces it with a
+// self-describing rest: what Trends is, a worked example (a small annotated
+// sparkline built from static sample numbers — no live data, no new library),
+// and the first concrete step. Deliberately calm: no amber/red — this is a
+// resting state, not an alert, so it borrows only neutral/accent ink.
+const RESTING_SAMPLE_POINTS = [148, 152, 145, 139, 142, 136];
+
+function restingSparklineSvg() {
+  const w = 160;
+  const h = 40;
+  const pad = 4;
+  const vals = RESTING_SAMPLE_POINTS;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const range = max - min || 1;
+  const stepX = (w - pad * 2) / (vals.length - 1);
+  const coords = vals.map((v, i) => {
+    const x = pad + i * stepX;
+    const y = pad + (1 - (v - min) / range) * (h - pad * 2);
+    return [x, y];
+  });
+  const path = coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const [lastX, lastY] = coords[coords.length - 1];
+  return `
+    <svg class="trends-rest-spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Example trend line: a measurement gently falling over six readings">
+      <path class="trends-rest-spark-line" d="${path}" fill="none" />
+      <circle class="trends-rest-spark-dot" cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="2.5" />
+    </svg>`;
+}
+
+function buildRestingState() {
+  return `
+    <div class="trends-rest">
+      <div class="trends-rest-example">
+        ${restingSparklineSvg()}
+        <span class="trends-rest-example-lbl">Example: systolic BP over six readings</span>
+      </div>
+      <p class="trends-rest-purpose">
+        Trends draws a line chart of one patient's results over time — blood pressure, renal
+        function (ACR/eGFR), HbA1c, cholesterol or weight — so a slow drift is easy to see, not
+        just the latest number.
+      </p>
+      <p class="trends-rest-step">
+        <strong>First step:</strong> open a patient in Medicus, then pick a metric.
+      </p>
+    </div>`;
+}
+
 // ── Main render dispatcher ─────────────────────────────────────────────────────
 function render(m) {
   if (!container) return;
@@ -202,7 +371,7 @@ function render(m) {
     return;
   }
   if (m.state === 'no-medicus') {
-    container.innerHTML = `<div class="trends-msg">Trends mirror the patient open in Medicus — open a record to see their results over time.</div>`;
+    container.innerHTML = buildRestingState();
     return;
   }
 
@@ -211,8 +380,19 @@ function render(m) {
   else if (selectedView === 'renal') body = renderRenal(m);
   else body = renderObs(m);
 
-  container.innerHTML = `<div class="trends-module">${pickerHtml()}<div id="trendsPanel" role="tabpanel" aria-labelledby="trendsTab-${esc(selectedView)}">${body}</div></div>`;
+  container.innerHTML = `<div class="trends-module">${pickerHtml()}${sourceLineHtml()}<div id="trendsPanel" role="tabpanel" aria-labelledby="trendsTab-${esc(selectedView)}">${body}</div></div>`;
   wirePicker();
+}
+
+// Subtle one-line provenance note ("Data: API feed" / "Data: session"),
+// following the Record tab's idiom (side-panel/modules/record/record.js
+// rec-feed-label). Only shown once a bundle has actually been rendered —
+// omitted in the loading/no-medicus/no-data states, where there is nothing
+// to attribute yet.
+function sourceLineHtml() {
+  if (!lastData) return '';
+  const label = feedSourceLabel(lastData) === 'API' ? 'API feed' : 'session';
+  return `<div class="trends-source">Data: ${esc(label)}</div>`;
 }
 
 // ── BP ─────────────────────────────────────────────────────────────────────────

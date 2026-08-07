@@ -14,6 +14,18 @@
 // crosses the world boundary for JSON-serialisable detail):
 //   • /tasks/data/{slug}/task-list      → 'ch-task-list-data'   (queue monitoring)
 //
+// It also notes WHICH PATIENT the page's embedded Clinical Summary panel was
+// last fetched for (2026-08-03): any request to
+// /clinical/data/clinical-summary/summary/{patientId} stamps that patientId
+// onto a documentElement attribute ('data-ch-summary-patient'). The DOM is
+// shared between worlds, so late-loading isolated-world scripts can read it
+// without event-timing races. This is what lets the record-tidy widgets
+// (problem-bulk-end / problem-nesting / allergy-cleanup) work on ANY page
+// that renders the Clinical Summary panel — appointment views, consultation
+// views, and page shapes Medicus adds later — not just the URL shapes they
+// can parse a patientId out of. Only the URL is read (the patientId is IN
+// the path); the response body is never touched for this.
+//
 // It reads responses only; it never blocks, rewrites, or sends anything. No
 // patient data leaves the browser.
 
@@ -24,6 +36,21 @@
 
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var TL_RE = new RegExp('/tasks/data/([^/?]+)/task-list');
+  var SUMMARY_RE =
+    /\/clinical\/data\/clinical-summary\/summary\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+
+  // ---- Clinical Summary patient note (see header) ----
+  // Stamped at request time — the patientId comes from the page's own routing
+  // of its summary panel, so the URL alone is authoritative for "which patient
+  // is the panel showing". Timestamp included so consumers CAN apply a
+  // staleness policy; the attribute always holds the most recent value.
+  function noteSummaryPatient(u) {
+    var m = String(u || '').match(SUMMARY_RE);
+    if (!m) return;
+    try {
+      document.documentElement.setAttribute('data-ch-summary-patient', m[1].toLowerCase() + '|' + Date.now());
+    } catch (_) {}
+  }
 
   // ---- Queue task-list ----
   function pickUuid(item) {
@@ -60,6 +87,13 @@
           row.overviewURL = typeof item.overviewURL === 'string' ? item.overviewURL : '';
           row.priorityDisplay = typeof item.priorityDisplay === 'string' ? item.priorityDisplay : '';
           row.unmatched = !!item.unmatchedToPatient;
+          // Who last touched this task, straight off the wire (2026-08-04
+          // capture, docs/learnings-task-presence.md): the queue payload
+          // carries actionedBy/actionedDateTime but Medicus's own columnDefs
+          // never display them. task-presence.js renders them as a queue
+          // chip. Staff name + timestamp only — no patient fields are added.
+          row.actionedBy = typeof item.actionedBy === 'string' ? item.actionedBy.slice(0, 80) : '';
+          row.actionedDateTime = typeof item.actionedDateTime === 'string' ? item.actionedDateTime.slice(0, 40) : '';
         }
         return row;
       })
@@ -80,6 +114,7 @@
       var p = origFetch.apply(this, arguments);
       try {
         var u = typeof url === 'string' ? url : (url && url.url) || '';
+        noteSummaryPatient(u);
         if (TL_RE.test(u)) {
           p.then(function (r) {
             try {
@@ -112,6 +147,7 @@
     try {
       var xhr = this;
       var u = xhr.__chUrl || '';
+      noteSummaryPatient(u);
       if (TL_RE.test(u)) {
         xhr.addEventListener('load', function () {
           try {
@@ -124,6 +160,49 @@
     } catch (_) {}
     return origSend.apply(this, arguments);
   };
+
+  // ---- Logged-in staff identity note (2026-08-04) ----
+  // The isolated world has no way to learn WHO is using Medicus, but the
+  // page's own Pusher subscriptions name the logged-in user twice over
+  // (docs/learnings-task-presence.md):
+  //   {site}-staff-task-counters-{staffUuid}   → the staff member's UUID
+  //   update-tenants-{email}                   → their login email
+  // Stamp both onto a documentElement attribute ('data-ch-staff', value
+  // 'staffUuid|email') the same way the summary-patient note works, so
+  // task-presence.js can attribute its advisory presence beacons. This reads
+  // channel NAMES only — no messages, no patient data — and stops polling as
+  // soon as the stamp lands (or after ~60s if Pusher never appears).
+  var STAFF_CH_RE =
+    /^[0-9a-z]{2,}-staff-task-counters-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+  var TENANT_CH_RE = /^update-tenants-(.+)$/;
+  var staffPollCount = 0;
+  function pollStaffIdentity() {
+    staffPollCount++;
+    var found = false;
+    try {
+      var app = document.querySelector('#app') || document.querySelector('[data-v-app]');
+      var gp = app && app.__vue_app__ && app.__vue_app__.config && app.__vue_app__.config.globalProperties;
+      var pusher = gp && gp.$pusher;
+      var map = pusher && pusher.channels && pusher.channels.channels;
+      if (map) {
+        var staffId = '';
+        var email = '';
+        for (var name in map) {
+          if (!Object.prototype.hasOwnProperty.call(map, name)) continue;
+          var sm = name.match(STAFF_CH_RE);
+          if (sm) staffId = sm[1].toLowerCase();
+          var tm = name.match(TENANT_CH_RE);
+          if (tm) email = tm[1].slice(0, 120);
+        }
+        if (staffId) {
+          document.documentElement.setAttribute('data-ch-staff', staffId + '|' + email);
+          found = true;
+        }
+      }
+    } catch (_) {}
+    if (!found && staffPollCount < 30) setTimeout(pollStaffIdentity, 2000);
+  }
+  setTimeout(pollStaffIdentity, 2000);
 
   console.debug('[ClinHUD] page-world interceptors installed (MAIN world)');
 })();

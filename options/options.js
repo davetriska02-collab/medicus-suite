@@ -238,6 +238,337 @@ testConnectionBtn?.addEventListener('click', async () => {
   }
 });
 
+// ── API Integration (Transactional API) settings ──────────────────────────────
+// shared/txn-config.js (TxnConfig) is service-worker only — not loaded on this
+// page — so the two literal defaults below are mirrored from its DEFAULTS and
+// must be kept in sync if that module's defaults ever change.
+const TXN_DEFAULT_MODE = 'session';
+const TXN_DEFAULT_ENVIRONMENT = 'staging';
+
+const txnModeRadios = document.querySelectorAll('input[name="txnMode"]');
+const txnModeWarning = document.getElementById('txnModeWarning');
+const txnEnvironmentSelect = document.getElementById('txnEnvironment');
+const txnProxyUrlInput = document.getElementById('txnProxyUrl');
+const txnCallerKeyInput = document.getElementById('txnCallerKey');
+const txnUserEmailInput = document.getElementById('txnUserEmail');
+const txnTenantValue = document.getElementById('txnTenantValue');
+const saveTxnBtn = document.getElementById('saveTxnBtn');
+const txnSaved = document.getElementById('txnSaved');
+const txnTestConnectionBtn = document.getElementById('txnTestConnectionBtn');
+const txnTestConnectionResult = document.getElementById('txnTestConnectionResult');
+const txnProdConfirmWarning = document.getElementById('txnProdConfirmWarning');
+const txnParityReportBtn = document.getElementById('txnParityReportBtn');
+
+// Production interlock: saving with environment 'prod' and a non-session
+// integration mode points Suite's live patient-record reads at the real
+// Medicus API, so it gets a deliberate double-click confirmation rather than
+// saving on the first click like every other change. Armed by the first
+// Save click below; a second Save click while armed performs the save; the
+// arm expires silently after 10s (TXN_PROD_CONFIRM_WINDOW_MS) if not
+// confirmed.
+const TXN_PROD_CONFIRM_WINDOW_MS = 10000;
+let txnProdConfirmArmed = false;
+let txnProdConfirmTimer = null;
+
+function txnClearProdConfirm() {
+  txnProdConfirmArmed = false;
+  if (txnProdConfirmTimer) {
+    clearTimeout(txnProdConfirmTimer);
+    txnProdConfirmTimer = null;
+  }
+  if (txnProdConfirmWarning) {
+    txnProdConfirmWarning.style.display = 'none';
+    txnProdConfirmWarning.textContent = '';
+  }
+}
+
+function txnUpdateModeWarning() {
+  if (!txnModeWarning) return;
+  const checked = document.querySelector('input[name="txnMode"]:checked');
+  txnModeWarning.style.display = checked && checked.value === 'transactional' ? 'block' : 'none';
+}
+txnModeRadios.forEach((r) => r.addEventListener('change', txnUpdateModeWarning));
+
+(async function initTxnSection() {
+  try {
+    const res = await chrome.storage.local.get([
+      'txn.integrationMode',
+      'txn.environment',
+      'txn.proxyUrl',
+      'txn.callerKey',
+      'txn.userEmail',
+      'suite.practiceCode',
+    ]);
+
+    const mode = res['txn.integrationMode'] || TXN_DEFAULT_MODE;
+    const modeRadio =
+      document.querySelector(`input[name="txnMode"][value="${escAttr(mode)}"]`) ||
+      document.getElementById('txnModeSession');
+    if (modeRadio) modeRadio.checked = true;
+
+    if (txnEnvironmentSelect) txnEnvironmentSelect.value = res['txn.environment'] || TXN_DEFAULT_ENVIRONMENT;
+    if (txnProxyUrlInput) txnProxyUrlInput.value = res['txn.proxyUrl'] || '';
+    if (txnCallerKeyInput) txnCallerKeyInput.value = res['txn.callerKey'] || '';
+    if (txnUserEmailInput) txnUserEmailInput.value = res['txn.userEmail'] || '';
+    if (txnTenantValue) txnTenantValue.textContent = res['suite.practiceCode'] || '(not set — see Suite section)';
+
+    txnUpdateModeWarning();
+  } catch (e) {
+    console.warn('[Txn section init]', e.message);
+  }
+})();
+
+saveTxnBtn?.addEventListener('click', async () => {
+  const checkedMode = document.querySelector('input[name="txnMode"]:checked');
+  const mode = checkedMode ? checkedMode.value : TXN_DEFAULT_MODE;
+  const environment = txnEnvironmentSelect ? txnEnvironmentSelect.value : TXN_DEFAULT_ENVIRONMENT;
+
+  // Deliberate-confirmation interlock: pointing Suite at PRODUCTION while an
+  // integration mode other than 'session' is selected means live reads will
+  // actually hit real patient data, so the first click only arms a warning —
+  // it does not save. A second click within the window confirms and saves.
+  const needsProdConfirm = environment === 'prod' && mode !== 'session';
+  if (needsProdConfirm && !txnProdConfirmArmed) {
+    txnProdConfirmArmed = true;
+    if (txnProdConfirmTimer) clearTimeout(txnProdConfirmTimer);
+    txnProdConfirmTimer = setTimeout(txnClearProdConfirm, TXN_PROD_CONFIRM_WINDOW_MS);
+    if (txnProdConfirmWarning) {
+      txnProdConfirmWarning.textContent =
+        'You are pointing Suite at the PRODUCTION Medicus API for live patient data. Click Save again within 10 seconds to confirm.';
+      txnProdConfirmWarning.style.display = 'block';
+    }
+    return;
+  }
+  // Either this isn't a prod+non-session save (saves as today), or it's a
+  // confirming second click — either way, clear any armed state.
+  txnClearProdConfirm();
+
+  await chrome.storage.local.set({
+    'txn.integrationMode': mode,
+    'txn.environment': environment,
+    // Trimmed; an empty string is a deliberate clear of a previously-saved value.
+    'txn.proxyUrl': (txnProxyUrlInput?.value || '').trim(),
+    'txn.callerKey': (txnCallerKeyInput?.value || '').trim(),
+    'txn.userEmail': (txnUserEmailInput?.value || '').trim(),
+  });
+
+  txnUpdateModeWarning();
+
+  if (txnSaved) {
+    txnSaved.classList.add('show');
+    setTimeout(() => txnSaved.classList.remove('show'), 2000);
+  }
+});
+
+txnTestConnectionBtn?.addEventListener('click', async () => {
+  if (txnTestConnectionResult) {
+    txnTestConnectionResult.textContent = 'Testing…';
+    txnTestConnectionResult.style.color = 'var(--text-3)';
+  }
+  try {
+    const r = await chrome.runtime.sendMessage({ action: 'txn:testConnection' });
+    if (!txnTestConnectionResult) return;
+    if (r && r.ok) {
+      txnTestConnectionResult.textContent = `Connected — proxy and Medicus API reachable (${r.latencyMs} ms)`;
+      txnTestConnectionResult.style.color = 'var(--green)';
+    } else {
+      txnTestConnectionResult.textContent = (r && r.error) || 'Test failed — no response from the service worker.';
+      txnTestConnectionResult.style.color = 'var(--red)';
+    }
+  } catch (e) {
+    if (txnTestConnectionResult) {
+      txnTestConnectionResult.textContent = `Error: ${e.message}`;
+      txnTestConnectionResult.style.color = 'var(--red)';
+    }
+  }
+});
+
+// Generate parity report — one-click assurance evidence pack: reads the
+// Clinical Event Ledger (shared/event-ledger.js, window.EventLedger, loaded
+// before this script), summarises the crossover-related events with
+// shared/txn-parity-report.js (window.TxnParityReport), and downloads a
+// Markdown document. Same client-side Blob + temporary <a download> pattern
+// as the Event Ledger section's own "Export CSV" (see initLedgerSection
+// below) — no server round-trip, nothing leaves this machine.
+txnParityReportBtn?.addEventListener('click', async () => {
+  const EL = typeof window !== 'undefined' ? window.EventLedger : null;
+  const TPR = typeof window !== 'undefined' ? window.TxnParityReport : null;
+  if (!EL || !TPR) return;
+  try {
+    const events = await EL.getEvents();
+    const report = TPR.buildParityReport(events, { nowIso: new Date().toISOString() });
+    const checkedMode = document.querySelector('input[name="txnMode"]:checked');
+    const mode = checkedMode ? checkedMode.value : TXN_DEFAULT_MODE;
+    const tenantText = txnTenantValue ? txnTenantValue.textContent : '';
+    const practiceLabel = tenantText && !tenantText.startsWith('(') && tenantText !== '—' ? tenantText : '';
+    const md = TPR.renderParityReportMarkdown(report, { practiceLabel, modeNote: `Integration mode: ${mode}` });
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'medicus-suite-api-parity-report.md';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.warn('[Txn parity report]', e.message);
+  }
+});
+
+// ── Task Presence settings ────────────────────────────────────────────────────
+// Advisory "someone is on this request" store config (content-scripts/
+// task-presence.js reads these). presence.key is a practice credential:
+// stored locally only, deliberately excluded from Suite backups (same stance
+// as txn.callerKey).
+
+const presencePickFolderBtn = document.getElementById('presencePickFolderBtn');
+const presenceReallowBtn = document.getElementById('presenceReallowBtn');
+const presenceForgetFolderBtn = document.getElementById('presenceForgetFolderBtn');
+const presenceFolderStatus = document.getElementById('presenceFolderStatus');
+const presenceEnabledInput = document.getElementById('presenceEnabled');
+const presenceUrlInput = document.getElementById('presenceUrl');
+const presenceKeyInput = document.getElementById('presenceKey');
+const presenceNameInput = document.getElementById('presenceName');
+const presenceFileStatus = document.getElementById('presenceFileStatus');
+const savePresenceBtn = document.getElementById('savePresenceBtn');
+const presenceSaved = document.getElementById('presenceSaved');
+
+(async function initPresenceSection() {
+  try {
+    // Re-sync the shared-folder file first so the status line reflects the
+    // folder's CURRENT contents, not a stale cache.
+    try {
+      await chrome.runtime.sendMessage({ action: 'presence:syncFileConfig' });
+    } catch (_) {
+      /* SW asleep — cache below still shows last-known state */
+    }
+    const res = await chrome.storage.local.get([
+      'presence.enabled',
+      'presence.url',
+      'presence.key',
+      'presence.name',
+      'presence.fileCache',
+    ]);
+    // "On unless explicitly opted out" — matches task-presence.js's gate.
+    if (presenceEnabledInput) presenceEnabledInput.checked = res['presence.enabled'] !== false;
+    if (presenceUrlInput) presenceUrlInput.value = res['presence.url'] || '';
+    if (presenceKeyInput) presenceKeyInput.value = res['presence.key'] || '';
+    if (presenceNameInput) presenceNameInput.value = res['presence.name'] || '';
+    if (presenceFileStatus) {
+      const fc = res['presence.fileCache'];
+      if (fc && fc.url) {
+        presenceFileStatus.textContent = `detected — ${fc.url}`;
+        presenceFileStatus.style.color = 'var(--green)';
+      } else {
+        presenceFileStatus.textContent = 'not found (drop presence-config.json into the extension folder)';
+        presenceFileStatus.style.color = 'var(--text-3)';
+      }
+    }
+  } catch (e) {
+    console.warn('[Presence section init]', e.message);
+  }
+})();
+
+// ── Folder store: pick / re-allow / disconnect ────────────────────────────────
+// The FSA picker and any permission prompt REQUIRE a user gesture, which is
+// why this lives here and not in the service worker. The handle persists in
+// extension IndexedDB (shared/presence-folder.js) and the worker does all
+// subsequent IO. Chrome's own prompt offers "Allow on every visit" — that is
+// what makes this one-click-forever; the re-allow button covers installs
+// where the grant lapsed instead.
+
+async function presenceRenderFolderStatus() {
+  if (!presenceFolderStatus || typeof PresenceFolder === 'undefined') return;
+  try {
+    const handle = await PresenceFolder.loadHandle();
+    if (!handle) {
+      presenceFolderStatus.textContent = 'not connected';
+      presenceFolderStatus.style.color = 'var(--text-3)';
+      if (presenceReallowBtn) presenceReallowBtn.style.display = 'none';
+      if (presenceForgetFolderBtn) presenceForgetFolderBtn.style.display = 'none';
+      return;
+    }
+    const perm = await PresenceFolder.permissionState(handle);
+    if (presenceForgetFolderBtn) presenceForgetFolderBtn.style.display = '';
+    if (perm === 'granted') {
+      presenceFolderStatus.textContent = `connected — "${handle.name}" (presence files in ${PresenceFolder.DIR_NAME}/)`;
+      presenceFolderStatus.style.color = 'var(--green)';
+      if (presenceReallowBtn) presenceReallowBtn.style.display = 'none';
+    } else {
+      presenceFolderStatus.textContent = `"${handle.name}" needs access re-allowed (Chrome dropped the grant)`;
+      presenceFolderStatus.style.color = 'var(--amber)';
+      if (presenceReallowBtn) presenceReallowBtn.style.display = '';
+    }
+  } catch (e) {
+    presenceFolderStatus.textContent = `status check failed: ${e.message}`;
+    presenceFolderStatus.style.color = 'var(--amber)';
+  }
+}
+presenceRenderFolderStatus();
+
+presencePickFolderBtn?.addEventListener('click', async () => {
+  if (typeof PresenceFolder === 'undefined' || typeof window.showDirectoryPicker !== 'function') {
+    alert('Folder access is not available in this browser.');
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'ms-presence' });
+    await PresenceFolder.saveHandle(handle);
+    await presenceRenderFolderStatus();
+  } catch (e) {
+    if (e && e.name !== 'AbortError') console.warn('[Presence folder pick]', e.message);
+  }
+});
+
+presenceReallowBtn?.addEventListener('click', async () => {
+  try {
+    const handle = await PresenceFolder.loadHandle();
+    if (!handle) return;
+    await handle.requestPermission({ mode: 'readwrite' });
+    await presenceRenderFolderStatus();
+  } catch (e) {
+    console.warn('[Presence folder re-allow]', e.message);
+  }
+});
+
+presenceForgetFolderBtn?.addEventListener('click', async () => {
+  try {
+    await PresenceFolder.clearHandle();
+    await presenceRenderFolderStatus();
+  } catch (e) {
+    console.warn('[Presence folder disconnect]', e.message);
+  }
+});
+
+savePresenceBtn?.addEventListener('click', async () => {
+  const url = (presenceUrlInput?.value || '').trim().replace(/\/+$/, '');
+  // Same gate the content script applies (validPresenceConfig): https on
+  // *.supabase.co, matching the manifest host permission. Reject here so a
+  // typo is a visible error at save time, not a silently-dormant feature.
+  if (url) {
+    let ok = false;
+    try {
+      const u = new URL(url);
+      ok = u.protocol === 'https:' && /^[a-z0-9-]+\.supabase\.co$/i.test(u.hostname);
+    } catch (_) {
+      ok = false;
+    }
+    if (!ok) {
+      alert('Store URL must be https://<project>.supabase.co');
+      return;
+    }
+  }
+  await chrome.storage.local.set({
+    'presence.enabled': presenceEnabledInput ? presenceEnabledInput.checked : false,
+    'presence.url': url,
+    'presence.key': (presenceKeyInput?.value || '').trim(),
+    'presence.name': (presenceNameInput?.value || '').trim(),
+  });
+  if (presenceSaved) {
+    presenceSaved.classList.add('show');
+    setTimeout(() => presenceSaved.classList.remove('show'), 2000);
+  }
+});
+
 // ── Capacity Forecast preset editor ──────────────────────────────────────────
 
 const presetEditor = document.getElementById('capPresetEditor');
@@ -519,7 +850,13 @@ async function doFullExport() {
     condor,
     reception,
     knowledge,
+    labfiling,
     notifications,
+    leaflets,
+    patientAlerts,
+    problemDescriptionCleanup,
+    phrases,
+    rota,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -533,25 +870,41 @@ async function doFullExport() {
     condorExport(),
     receptionExport(),
     knowledgeExport(),
+    labfilingExport(),
     notificationsExport(),
+    leafletsExport(),
+    patientAlertsExport(),
+    problemDescriptionCleanupExport(),
+    phrasesExport(),
+    rotaExport(),
   ]);
   const suite = await suiteExport();
-  return window.SuiteEnvelope.wrap('suite', {
-    sentinel,
-    capacity,
-    triage,
-    triageAlerts,
-    slots,
-    submissions,
-    popout,
-    referrals,
-    requestMonitor,
-    condor,
-    reception,
-    knowledge,
-    notifications,
-    suite,
-  });
+  return window.SuiteEnvelope.wrap(
+    'suite',
+    {
+      sentinel,
+      capacity,
+      triage,
+      triageAlerts,
+      slots,
+      submissions,
+      popout,
+      referrals,
+      requestMonitor,
+      condor,
+      reception,
+      knowledge,
+      labfiling,
+      notifications,
+      leaflets,
+      patientAlerts,
+      problemDescriptionCleanup,
+      phrases,
+      rota,
+      suite,
+    },
+    chrome.runtime.getManifest().version
+  );
 }
 
 async function doModuleExport(scope) {
@@ -568,11 +921,19 @@ async function doModuleExport(scope) {
     condor: () => condorExport(),
     reception: () => receptionExport(),
     knowledge: () => knowledgeExport(),
+    labfiling: () => labfilingExport(),
     notifications: () => notificationsExport(),
+    leaflets: () => leafletsExport(),
+    patientAlerts: () => patientAlertsExport(),
+    problemDescriptionCleanup: () => problemDescriptionCleanupExport(),
+    phrases: () => phrasesExport(),
+    rota: () => rotaExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
-  return window.SuiteEnvelope.wrap(scope, { [scope]: data });
+  // Real manifest version (audit M18: the envelope's fallback stamped every
+  // backup "2.5.0", defeating the preview's provenance line).
+  return window.SuiteEnvelope.wrap(scope, { [scope]: data }, chrome.runtime.getManifest().version);
 }
 
 async function applyEnvelope(envelope) {
@@ -601,7 +962,13 @@ async function applyEnvelope(envelope) {
     mods.condor && (() => condorImport(mods.condor)),
     mods.reception && (() => receptionImport(mods.reception)),
     mods.knowledge && (() => knowledgeImport(mods.knowledge)),
+    mods.labfiling && (() => labfilingImport(mods.labfiling)),
     mods.notifications && (() => notificationsImport(mods.notifications)),
+    mods.leaflets && (() => leafletsImport(mods.leaflets)),
+    mods.patientAlerts && (() => patientAlertsImport(mods.patientAlerts)),
+    mods.problemDescriptionCleanup && (() => problemDescriptionCleanupImport(mods.problemDescriptionCleanup)),
+    mods.phrases && (() => phrasesImport(mods.phrases)),
+    mods.rota && (() => rotaImport(mods.rota)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
@@ -885,6 +1252,13 @@ async function isPracticeAccepted() {
         defaultChecked: true,
         defaultMode: 'merge',
         desc: 'Capacity forecast presets',
+      },
+      {
+        id: 'problemDescriptionCleanup',
+        label: 'Cleanup Code Preferences',
+        defaultChecked: false,
+        defaultMode: 'merge',
+        desc: 'Learned SNOMED replacement-code preferences — tallies always combine; "enforce" makes a pinned override the practice-wide default',
       },
       {
         id: 'referrals',
@@ -1228,12 +1602,99 @@ async function isPracticeAccepted() {
       await writable.close();
     }
 
-    // ── Publish handler ───────────────────────────────────────────────────────
+    // ── OIR test-dictionary key rotation ──────────────────────────────────────
+    // The mechanics (and the three rules that make them safe — built-in keys
+    // are never rotated, the retired ledger is cumulative, rotation never runs
+    // unattended) live in shared/io/oir-key-rotation.js, where they are
+    // directly testable; this file only wires them into the publish. Applies
+    // the rotation result to the envelope AND back to this machine's own
+    // triagelens.config — see applyOirRotation below.
+    async function applyOirRotation(envelope, publishedTriageConfig) {
+      const triageConfig = envelope?.modules?.triage?.config;
+      if (!triageConfig || !window.OirKeyRotation) return null;
+      const published = publishedTriageConfig || {};
+      const builtinKeys = (window.SentinelOutstandingMatch?.TEST_DEFS || []).map((d) => d && d.key).filter(Boolean);
 
-    async function doPublish() {
+      // The ledgers are CUMULATIVE and must be republished on EVERY publish,
+      // rotation or not — a machine that was offline for the one cycle in which
+      // a retirement was published would otherwise never see it. Carry the
+      // currently-published ledgers forward first, so they survive even when
+      // rotation itself doesn't run (nothing published yet, no local
+      // dictionary, no built-in key set); the rotation result then supersedes
+      // them below with its own union.
+      if (Array.isArray(published.retiredOirTests)) triageConfig.retiredOirTests = published.retiredOirTests;
+      if (Array.isArray(published.retiredOirKeys)) triageConfig.retiredOirKeys = published.retiredOirKeys;
+      if (Array.isArray(published.supersededOirTests)) triageConfig.supersededOirTests = published.supersededOirTests;
+
+      const result = window.OirKeyRotation.rotateEditedOirTestKeys(triageConfig.oirTests, published.oirTests, {
+        attended: true, // never reached in auto mode — the helper refuses too
+        builtinKeys,
+        previousRetiredOirTests: published.retiredOirTests,
+        previousRetiredOirKeys: published.retiredOirKeys,
+        previousSupersededOirTests: published.supersededOirTests,
+      });
+      if (!result) return null;
+
+      triageConfig.oirTests = result.oirTests;
+      if (result.retiredOirTests.length > 0) triageConfig.retiredOirTests = result.retiredOirTests;
+      if (result.retiredOirKeys.length > 0) triageConfig.retiredOirKeys = result.retiredOirKeys;
+      if (result.supersededOirTests.length > 0) triageConfig.supersededOirTests = result.supersededOirTests;
+
+      // Publisher self-race: rotation used to mutate only the envelope, so this
+      // machine's own triagelens.config kept the OLD keys. A second edit before
+      // the alarm's self-apply then diffed the (already-rotated) published copy
+      // against unrotated local keys, found no key collision, and published with
+      // no rotation at all — resurrecting the duplicate. Adopt the rotated keys
+      // locally straight away so the next diff is honest.
+      if (result.rotated) {
+        try {
+          const r = await chrome.storage.local.get('triagelens.config');
+          const localCfg = r['triagelens.config'];
+          if (localCfg && typeof localCfg === 'object') {
+            await chrome.storage.local.set({
+              'triagelens.config': Object.assign({}, localCfg, { oirTests: result.oirTests }),
+            });
+          }
+        } catch (_) {}
+      }
+      return result;
+    }
+
+    // ── Publish handler ───────────────────────────────────────────────────────
+    // opts.auto: true when triggered by maybeAutoPublish() (the once-daily,
+    // no-human-involved trigger) rather than a real click. In auto mode we can
+    // NEVER prompt — showSaveFilePicker() and FileSystemFileHandle.requestPermission()
+    // both require a genuine user gesture, which a background/timer trigger
+    // doesn't have. So auto mode only ever uses an ALREADY-remembered handle
+    // whose permission is ALREADY granted (queryPermission only, never
+    // requestPermission), and silently does nothing this cycle otherwise —
+    // same fail-quiet discipline as _checkForCodeUpdate's mid-copy skip in
+    // service-worker.js. It will simply try again next time Options is open.
+    //
+    // AUTO MODE PUBLISHES A DIFFERENT PAYLOAD, and that is the point. A manual
+    // publish is an attended, deliberate act: it says "this machine's settings
+    // are what the practice should have", so a full-profile overwrite is
+    // correct. An unattended daily one says nothing of the sort — it exists
+    // ONLY to circulate Cleanup Code Preferences, the one module that
+    // accumulates independently on every machine and is union-merged rather
+    // than overwritten. Publishing the full profile unattended meant any PC
+    // with a granted handle rewrote sentinel/knowledge/capacity/leaflets/… with
+    // ITS local snapshot every day: two such machines ping-pong the shared
+    // file, and one stale machine silently reverts the curated copy daily. So
+    // in auto mode every OTHER module's section is carried forward VERBATIM
+    // from the fetched shared profile (as are apply.modules and
+    // practiceAttestation — an attestation must never be re-stamped
+    // unattended), and if the shared profile can't be read the publish is
+    // ABORTED rather than falling back to a raw local snapshot, which is
+    // precisely the clobber being avoided.
+
+    async function doPublish(opts) {
+      const auto = !!(opts && opts.auto);
       if (!publishBtn) return;
-      publishBtn.disabled = true;
-      publishBtn.textContent = 'Publishing…';
+      if (!auto) {
+        publishBtn.disabled = true;
+        publishBtn.textContent = 'Publishing…';
+      }
 
       try {
         await savePickerState();
@@ -1241,6 +1702,15 @@ async function isPracticeAccepted() {
         const label = labelInput?.value?.trim() || 'Practice defaults';
         const publishedBy = publishedByInput?.value?.trim() || '';
         const version = await nextProfileVersion();
+
+        // What's currently in the shared folder — read ONCE and reused by every
+        // merge below (pdc union, OIR rotation, auto-mode carry-forward).
+        let sharedProfile = null;
+        try {
+          sharedProfile = await window.PracticeProfile.fetchProfile();
+        } catch (_) {
+          sharedProfile = null;
+        }
 
         // Build apply.modules map
         const applyModules = {};
@@ -1252,13 +1722,70 @@ async function isPracticeAccepted() {
           }
         }
 
+        let profileJson = null;
+        let envelope = null;
+
+        if (auto) {
+          // ── Unattended daily refresh: the merge-safe payload ONLY ──────────
+          // See doPublish's header. Nothing here may reflect a decision this
+          // machine hasn't been told to make on the practice's behalf.
+          const sharedEnvelope = sharedProfile?.envelope;
+          const sharedModules = sharedEnvelope?.modules;
+          const sharedApplyModules =
+            sharedProfile?.apply?.modules && !Array.isArray(sharedProfile.apply.modules)
+              ? sharedProfile.apply.modules
+              : null;
+
+          if (!sharedEnvelope || !sharedModules || !sharedApplyModules) {
+            // Auto-publish aborted: with no readable shared profile there is
+            // nothing to carry forward, and publishing this machine's raw
+            // snapshot instead is exactly the wholesale overwrite this mode
+            // exists to avoid. Try again next time Options is open.
+            console.warn('[Practice Profile] Auto-publish aborted — the shared profile could not be read.');
+            return;
+          }
+          if (!sharedApplyModules.problemDescriptionCleanup) {
+            // Cleanup Code Preferences isn't part of what this practice
+            // publishes, so an unattended run has nothing merge-safe to
+            // refresh. Adding it here would be this machine deciding to
+            // publish a module nobody chose to publish.
+            console.log('[Practice Profile] Auto-publish skipped — Cleanup Code Preferences is not published.');
+            return;
+          }
+
+          // Note what is NOT called here: doFullExport(). Auto mode reads ONLY
+          // this module's local state, so there is no local snapshot of
+          // anything else in scope to publish by accident.
+          const mergedPdc = problemDescriptionCleanupMergeForPublish(
+            sharedModules.problemDescriptionCleanup,
+            await problemDescriptionCleanupExport(),
+            // includeOverride: false — the override (what becomes "enforced for
+            // everyone", and equally its removal) must only ever change as a
+            // result of a conscious, attended publish. An unattended run only
+            // refreshes tallies.
+            { includeOverride: false }
+          );
+
+          // Every other module's section is carried forward VERBATIM from the
+          // shared profile — this machine's own snapshot of them is never
+          // published. apply/practiceAttestation/profileLabel/publishedBy ride
+          // along untouched for the same reason (F10: an attestation must never
+          // be re-stamped unattended).
+          const carriedModules = Object.assign({}, sharedModules, { problemDescriptionCleanup: mergedPdc });
+          profileJson = Object.assign({}, sharedProfile, {
+            profileVersion: version,
+            publishedAt: new Date().toISOString(),
+            envelope: Object.assign({}, sharedEnvelope, { modules: carriedModules }),
+          });
+        }
+
         // ── Request Monitor ↔ practice-code coupling ──────────────────────────
         // Request Monitor needs suite.practiceCode to make API calls on managed
         // installs. If the admin published Request Monitor, ensure the suite
         // module is ALSO included (so suite.practiceCode is applied) and the
         // envelope carries the code. The code lives in ONE place (the suite
         // module) — never duplicated into the requestMonitor section.
-        if (applyModules.requestMonitor) {
+        if (!auto && applyModules.requestMonitor) {
           let localCode = '';
           try {
             const r = await chrome.storage.local.get('suite.practiceCode');
@@ -1276,71 +1803,128 @@ async function isPracticeAccepted() {
           if (!applyModules.suite) applyModules.suite = 'merge';
         }
 
-        // ── Central practice attestation (SAFETY-CRITICAL) ────────────────────
-        // Only gates the admin has accepted locally AND not opted out of are
-        // attested. Only emit the block if at least one gate is true.
-        const gates = {};
-        for (const g of GATE_DEFS) {
-          const accepted = await g.accepted();
-          const chk = document.getElementById(`ppAtt_${g.id}`);
-          // opted-in = checkbox present, checked, and the gate is genuinely
-          // accepted locally (defensive — never attest a gate not locally held).
-          if (accepted && chk && chk.checked) gates[g.id] = true;
-        }
-        let practiceAttestation = null;
-        if (Object.keys(gates).length > 0) {
-          practiceAttestation = {
-            attestedBy: publishedBy,
-            attestedAt: new Date().toISOString(),
-            gates,
+        if (!auto) {
+          envelope = await doFullExport();
+
+          // ── Central practice attestation (SAFETY-CRITICAL) ──────────────────
+          // Only gates the admin has accepted locally AND not opted out of are
+          // attested. Only emit the block if at least one gate is true. This
+          // whole block is attended-only: an attestation is a human act, so an
+          // unattended publish carries the shared file's existing one forward
+          // verbatim instead (see the auto branch above).
+          const gates = {};
+          for (const g of GATE_DEFS) {
+            const accepted = await g.accepted();
+            const chk = document.getElementById(`ppAtt_${g.id}`);
+            // opted-in = checkbox present, checked, and the gate is genuinely
+            // accepted locally (defensive — never attest a gate not locally held).
+            if (accepted && chk && chk.checked) gates[g.id] = true;
+          }
+          let practiceAttestation = null;
+          if (Object.keys(gates).length > 0) {
+            practiceAttestation = {
+              attestedBy: publishedBy,
+              attestedAt: new Date().toISOString(),
+              gates,
+            };
+          }
+
+          // Cleanup Code Preferences: merge with what's CURRENTLY shared rather
+          // than blindly overwriting it — see problem-description-cleanup-io.js's
+          // problemDescriptionCleanupMergeForPublish for why. Unlike every other
+          // module here (admin-curated from one machine, so overwrite-with-local
+          // is correct), this one accumulates from multiple machines' local
+          // usage — a raw overwrite could regress another machine's growth that
+          // hasn't made it back to THIS machine via a pull yet.
+          if (applyModules.problemDescriptionCleanup) {
+            const existingPdc = sharedProfile?.envelope?.modules?.problemDescriptionCleanup;
+            if (existingPdc) {
+              envelope.modules.problemDescriptionCleanup = problemDescriptionCleanupMergeForPublish(
+                existingPdc,
+                envelope.modules.problemDescriptionCleanup,
+                { includeOverride: true }
+              );
+            }
+            // Shared file missing/unreadable — publish this machine's own
+            // snapshot. Safe here (and only here): a manual publish IS the
+            // attended decision that this machine's state is the practice's.
+          }
+
+          // OIR test-dictionary key rotation — attended publishes only (the
+          // helper refuses without attended:true as well, so a future call site
+          // can't reintroduce unattended rotation by omission).
+          if (!auto && applyModules.triage) {
+            try {
+              await applyOirRotation(envelope, sharedProfile?.envelope?.modules?.triage?.config);
+            } catch (e) {
+              console.warn('[Practice Profile] OIR key rotation skipped:', e && e.message);
+            }
+          }
+
+          profileJson = {
+            format: 'medicus-suite-practice-profile',
+            formatVersion: 2,
+            profileVersion: version,
+            profileLabel: label,
+            publishedAt: new Date().toISOString(),
+            publishedBy: publishedBy,
+            apply: {
+              modules: applyModules,
+              autoApplyOnStartup: true,
+              checkEveryMinutes: 15,
+              autoReloadOnNewVersion: true,
+              notifyUserOnApply: false,
+            },
+            ...(practiceAttestation ? { practiceAttestation } : {}),
+            envelope,
           };
         }
 
-        const envelope = await doFullExport();
-
-        const profileJson = {
-          format: 'medicus-suite-practice-profile',
-          formatVersion: 2,
-          profileVersion: version,
-          profileLabel: label,
-          publishedAt: new Date().toISOString(),
-          publishedBy: publishedBy,
-          apply: {
-            modules: applyModules,
-            autoApplyOnStartup: true,
-            checkEveryMinutes: 15,
-            autoReloadOnNewVersion: true,
-            notifyUserOnApply: false,
-          },
-          ...(practiceAttestation ? { practiceAttestation } : {}),
-          envelope,
-        };
+        if (!profileJson) return; // auto mode aborted above
 
         const jsonStr = JSON.stringify(profileJson, null, 2);
 
-        // Try remembered handle first
+        // ACCEPTED LIMITATION — concurrent publishes are last-writer-wins.
+        // There is no lock on a shared network file: two admins publishing
+        // within the same window each read, merge and write, and the later
+        // write silently supersedes the earlier one. Mitigations, deliberately
+        // chosen over a locking scheme nobody would maintain: the one module
+        // that genuinely accumulates per-machine (Cleanup Code Preferences) is
+        // UNION-merged against the fetched shared copy rather than overwritten,
+        // so its content survives either ordering; everything else is
+        // admin-curated from one machine, and the losing publish is recovered
+        // simply by publishing again.
+        //
+        // Try remembered handle first.
         let usedHandle = null;
+        // Only a real write into the shared folder counts as "published today"
+        // for the daily auto-publish gate — see the stamp below.
+        let wroteToSharedFile = false;
         if (typeof showSaveFilePicker === 'function') {
           const remembered = await loadFileHandle();
           if (remembered) {
             try {
               let perm = await remembered.queryPermission({ mode: 'readwrite' });
-              if (perm !== 'granted') {
+              // requestPermission() needs a real user gesture — never call it
+              // in auto mode. queryPermission alone reflects a grant already
+              // made during an earlier manual publish.
+              if (perm !== 'granted' && !auto) {
                 perm = await remembered.requestPermission({ mode: 'readwrite' });
               }
               if (perm === 'granted') {
                 await writeProfileToHandle(remembered, jsonStr);
                 usedHandle = remembered;
+                wroteToSharedFile = true;
                 setPublishStatus(
                   `Published v${version} to ${remembered.name}. Other PCs will pick it up within about 15 minutes, or on their next browser start.`
                 );
               }
             } catch (_) {
-              // Permission denied or stale handle — fall through to picker
+              // Permission denied or stale handle — fall through to picker (manual only)
             }
           }
 
-          if (!usedHandle) {
+          if (!usedHandle && !auto) {
             // Show save picker
             let handle;
             try {
@@ -1358,16 +1942,32 @@ async function isPracticeAccepted() {
             await writeProfileToHandle(handle, jsonStr);
             await saveFileHandle(handle);
             usedHandle = handle;
+            wroteToSharedFile = true;
             setPublishStatus(
               `Published v${version}. Other PCs will pick it up within about 15 minutes, or on their next browser start.`
             );
           }
-        } else {
+          // auto mode + no usable remembered handle: silently do nothing this
+          // cycle (no picker, no prompt) — retried next time Options is open.
+        } else if (!auto) {
           // Fallback: download via blob
+          // Blob fallback: the file lands in the user's Downloads folder and
+          // they still have to move it into the shared folder themselves — which
+          // they may never do. Deliberately does NOT set wroteToSharedFile:
+          // stamping the daily date here would suppress that day's retry and
+          // overstate what actually happened.
           downloadJson(profileJson, 'practice-profile.json');
           setPublishStatus(
             `Profile downloaded as practice-profile.json (v${version}). Move it into the shared extension folder, replacing the old file, and the update will reach everyone within 15 minutes.`
           );
+        }
+
+        if (wroteToSharedFile) {
+          // Gates maybeAutoPublish() — a manual publish today also counts, so
+          // the daily auto-trigger doesn't immediately fire again right after.
+          await chrome.storage.local.set({
+            'suite.practiceProfile.lastAutoPublishAt': new Date().toISOString().slice(0, 10),
+          });
         }
 
         await render();
@@ -1379,11 +1979,36 @@ async function isPracticeAccepted() {
       }
     }
 
+    // ── Once-daily auto-publish ────────────────────────────────────────────────
+    // Fires when the Options page happens to be open and a day has passed
+    // since this machine last published (manually or automatically). Never
+    // starts publishing on a machine that hasn't manually published at least
+    // once before (savedModules empty = no established publish config) —
+    // auto-publish only continues an already-established habit, it never
+    // silently turns a random PC into a publisher. See doPublish's own auto
+    // comment for why it can never prompt.
+    async function maybeAutoPublish() {
+      try {
+        const r = await chrome.storage.local.get(['suite.practiceProfile.lastAutoPublishAt', PUBLISHER_KEY]);
+        const today = new Date().toISOString().slice(0, 10);
+        if (r['suite.practiceProfile.lastAutoPublishAt'] === today) return;
+
+        const saved = r[PUBLISHER_KEY] || {};
+        const hasEstablishedConfig = Object.values(saved.modules || {}).some((m) => m && m.checked);
+        if (!hasEstablishedConfig) return;
+
+        await doPublish({ auto: true });
+      } catch (e) {
+        console.warn('[Practice Profile] auto-publish failed:', e.message);
+      }
+    }
+
     // ── Init ──────────────────────────────────────────────────────────────────
 
     await render();
     await buildModulePicker();
     await buildAttestationRows();
+    maybeAutoPublish(); // fire-and-forget — never blocks page init
 
     // Inline "Accept all for this practice" (so a greyed gate isn't a dead end).
     const ppAcceptTick = document.getElementById('ppAcceptTick');
@@ -1437,7 +2062,7 @@ async function isPracticeAccepted() {
       applyBtn.textContent = 'Apply now';
     });
 
-    publishBtn?.addEventListener('click', doPublish);
+    publishBtn?.addEventListener('click', () => doPublish());
   } catch (e) {
     console.warn('[Practice Profile section]', e.message);
   }
@@ -1730,6 +2355,25 @@ const rmSaveBtn = document.getElementById('saveRm');
 const rmSavedTag = document.getElementById('rmSaved');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Non-anchored variant for pulling a UUID out of a pasted string (URL/fragment).
+const UUID_ANY_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+// Accept a bare UUID, a full Medicus inbox URL, or a `masterAssignee=…` fragment
+// and return the bare assignee UUID. Users naturally copy the whole URL from the
+// task list rather than hand-trimming the 36-char UUID, so normalise it for them.
+// Returns '' if no UUID can be recovered.
+function extractAssigneeId(raw) {
+  const s = (raw || '').trim();
+  if (!s) return '';
+  if (UUID_RE.test(s)) return s.toLowerCase();
+  // Prefer the masterAssignee query param if the paste contains one (avoids
+  // grabbing some other UUID that might appear elsewhere in a URL path).
+  const param = s.match(/masterAssignee=([0-9a-f-]{36})/i);
+  if (param && UUID_RE.test(param[1])) return param[1].toLowerCase();
+  // Otherwise fall back to the first UUID-shaped substring anywhere in the paste.
+  const any = s.match(UUID_ANY_RE);
+  return any ? any[0].toLowerCase() : '';
+}
 
 function toggleRmConditional() {
   if (!rmConditional || !rmEnabled) return;
@@ -1754,14 +2398,21 @@ function toggleRmConditional() {
 rmEnabled?.addEventListener('change', toggleRmConditional);
 
 rmSaveBtn?.addEventListener('click', async () => {
-  const assigneeId = (rmAssigneeId?.value || '').trim();
+  const rawAssignee = rmAssigneeId?.value || '';
+  // Tolerate a pasted inbox URL / `masterAssignee=…` fragment, not just a bare UUID.
+  const assigneeId = extractAssigneeId(rawAssignee);
+  // Reflect the cleaned UUID back into the field so the user sees what was saved.
+  if (rmAssigneeId && assigneeId && rmAssigneeId.value.trim() !== assigneeId) {
+    rmAssigneeId.value = assigneeId;
+  }
   const enabled = !!rmEnabled?.checked;
   let pollSeconds = parseInt(rmPollSeconds?.value, 10);
   if (isNaN(pollSeconds) || pollSeconds < 30) pollSeconds = 60;
   if (pollSeconds > 600) pollSeconds = 600;
 
-  // Validate UUID if enabling
-  if (enabled && assigneeId && !UUID_RE.test(assigneeId)) {
+  // Validate UUID if enabling. `assigneeId` is the extracted value, so this only
+  // fails when the paste contains no recoverable UUID at all.
+  if (enabled && rawAssignee.trim() && !UUID_RE.test(assigneeId)) {
     if (rmSavedTag) {
       rmSavedTag.textContent = 'Invalid UUID — check format';
       rmSavedTag.style.color = '#f87171';
@@ -1799,6 +2450,313 @@ rmSaveBtn?.addEventListener('click', async () => {
     rmSavedTag.classList.add('show');
     setTimeout(() => rmSavedTag.classList.remove('show'), 2000);
   }
+});
+
+// ── Leaflets (NHS Website Content API — optional tier 2) ─────────────────────
+// The API key is deliberately never round-tripped through leafletsExport() —
+// see shared/io/leaflets-io.js header. This section reads/writes
+// chrome.storage.local directly (same as the request-monitor section above)
+// rather than going through the IO file, because the IO file's job is the
+// backup boundary, not the settings-page load/save path.
+
+const lfEnabled = document.getElementById('lfEnabled');
+const lfApiKey = document.getElementById('lfApiKey');
+const lfSaveBtn = document.getElementById('saveLeaflets');
+const lfSavedTag = document.getElementById('leafletsSaved');
+
+(async function initLeafletsSection() {
+  try {
+    const r = await chrome.storage.local.get('leaflets.config');
+    const cfg = r['leaflets.config'] || {};
+    if (lfEnabled) lfEnabled.checked = cfg.enabled === true;
+    if (lfApiKey) lfApiKey.value = typeof cfg.apiKey === 'string' ? cfg.apiKey : '';
+  } catch (e) {
+    console.warn('[Leaflets init]', e.message);
+  }
+})();
+
+lfSaveBtn?.addEventListener('click', async () => {
+  const enabled = !!lfEnabled?.checked;
+  const apiKey = (lfApiKey?.value || '').trim();
+  await chrome.storage.local.set({ 'leaflets.config': { enabled, apiKey } });
+  if (lfSavedTag) {
+    lfSavedTag.classList.add('show');
+    setTimeout(() => lfSavedTag.classList.remove('show'), 2000);
+  }
+});
+
+// ── Cleanup code preferences (pdc.preferredDescriptions + pdc.conceptRemap) ──
+// Reads/writes chrome.storage.local directly, same rationale as the Leaflets
+// section above — this is the settings-page load/save path, not the backup
+// boundary (shared/io/problem-description-cleanup-io.js is that boundary,
+// used only by the Export/Import buttons under Backup & Restore). Business
+// logic (resolving the effective default, tallying, override set/clear) all
+// lives in shared/preferred-descriptions.js (window.MSPreferredDescriptions,
+// loaded before this script) so it's identical to what the content script
+// uses — this panel never re-implements the resolution rule.
+//
+// ONE generic factory, instantiated twice below — the "Preferred wording"
+// and "Code remapping" blocks are structurally identical (tally + override,
+// same cap/sort/filter rules) and differ only in storage key, DOM ids, and
+// how a candidate renders/sorts/matches a filter. Building this once avoids
+// two near-duplicate 200-line blocks silently drifting apart over time.
+function initPdcTallySection(cfg) {
+  const listEl = document.getElementById(cfg.listElId);
+  const filterEl = document.getElementById(cfg.filterElId);
+  const summaryEl = document.getElementById(cfg.summaryElId);
+  const showAllBtn = document.getElementById(cfg.showAllBtnId);
+  const PD = window.MSPreferredDescriptions;
+  if (!listEl || !PD) return;
+
+  // Rendering every tracked key unconditionally doesn't scale — a practice's
+  // tally can grow to hundreds/thousands of entries over time. Default view
+  // is a small capped "most recently used" list (cheap regardless of total
+  // size); the filter box and the explicit "Show all" toggle are the two
+  // ways to see more, both sorted ALPHABETICALLY rather than by recency —
+  // once you're searching or auditing everything, alphabetical is what's
+  // scannable, "recent" only makes sense for the default at-a-glance view.
+  const RECENT_CAP = 20;
+  const FILTER_CAP = 100;
+
+  let _all = {}; // topKey -> entry
+  let _filter = '';
+  let _showAll = false;
+
+  function sortKey(topKey) {
+    const resolved = PD.resolvePreferred(_all[topKey]);
+    if (resolved) return cfg.sortText(resolved.candidate).toLowerCase();
+    const norm = PD.normaliseEntry(_all[topKey]);
+    const firstKey = Object.keys(norm.tally)[0];
+    return firstKey ? cfg.sortText(norm.tally[firstKey].candidate).toLowerCase() : '';
+  }
+
+  async function load() {
+    const r = await chrome.storage.local.get(cfg.storageKey);
+    _all = r[cfg.storageKey] && typeof r[cfg.storageKey] === 'object' ? r[cfg.storageKey] : {};
+    render();
+  }
+
+  async function persist() {
+    await chrome.storage.local.set({ [cfg.storageKey]: _all });
+  }
+
+  function mostRecentTimestamp(entry) {
+    const norm = PD.normaliseEntry(entry);
+    let latest = '';
+    Object.keys(norm.tally).forEach((k) => {
+      const t = norm.tally[k].lastUsed || '';
+      if (t > latest) latest = t;
+    });
+    return latest;
+  }
+
+  function matchesFilter(topKey, entry) {
+    if (!_filter) return true;
+    const needle = _filter.toLowerCase();
+    if (topKey.toLowerCase().includes(needle)) return true;
+    const norm = PD.normaliseEntry(entry);
+    if (norm.override && cfg.filterText(norm.override.candidate).toLowerCase().includes(needle)) return true;
+    return Object.keys(norm.tally).some((k) => cfg.filterText(norm.tally[k].candidate).toLowerCase().includes(needle));
+  }
+
+  function formatWhen(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? escHtml(iso) : d.toLocaleDateString();
+  }
+
+  function renderBlock(topKey) {
+    const norm = PD.normaliseEntry(_all[topKey]);
+    const resolved = PD.resolvePreferred(_all[topKey]);
+    // Rows come from the tally, plus a synthetic row for an override whose
+    // key was never actually tallied on this device (e.g. arrived via an
+    // imported backup) — kept visible/clearable rather than hidden.
+    const rows = Object.keys(norm.tally).map((key) => ({
+      key,
+      candidate: norm.tally[key].candidate,
+      count: norm.tally[key].count,
+      lastUsed: norm.tally[key].lastUsed,
+    }));
+    if (norm.override && !norm.tally[norm.override.key]) {
+      rows.push({ key: norm.override.key, candidate: norm.override.candidate, count: 0, lastUsed: null });
+    }
+    rows.sort((a, b) => b.count - a.count);
+
+    const rowsHtml = rows
+      .map((row) => {
+        const isOverride = norm.override && norm.override.key === row.key;
+        const isEffective = resolved && resolved.key === row.key;
+        const badge = isEffective
+          ? `<span style="color: var(--green, #16a34a); font-size: 10px; font-weight: 600">★ ${isOverride ? 'PRACTICE DEFAULT (MANUAL)' : 'PRACTICE DEFAULT (MOST USED)'}</span>`
+          : '';
+        const actionHtml = isOverride
+          ? `<button class="ghost" style="font-size: 10px; padding: 3px 8px" data-pdc-clear="${escAttr(topKey)}">Clear override</button>`
+          : `<button class="ghost" style="font-size: 10px; padding: 3px 8px" data-pdc-setoverride="${escAttr(topKey)}" data-pdc-row-key="${escAttr(row.key)}">Set as practice default</button>`;
+        return `
+          <tr style="border-bottom: 1px solid var(--border)">
+            <td style="padding: 6px 8px 6px 0; color: var(--text-2)">${cfg.renderCandidate(row.candidate)}${badge ? '<br>' + badge : ''}</td>
+            <td style="padding: 6px 8px; text-align: right; color: var(--text-3); font-family: var(--mono)">${row.count}</td>
+            <td style="padding: 6px 8px; color: var(--text-4); font-size: 11px">${formatWhen(row.lastUsed)}</td>
+            <td style="padding: 6px 0 6px 8px; text-align: right">${actionHtml}</td>
+          </tr>`;
+      })
+      .join('');
+
+    return `
+      <div style="border: 1px solid var(--border); border-radius: var(--r-md); margin-bottom: 12px; overflow: hidden">
+        <div style="padding: 8px 12px; background: var(--bg-mid); font-family: var(--mono); font-size: 11px; color: var(--text-3)">
+          ${cfg.blockLabel(topKey)}
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px">
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function render() {
+    const allKeys = Object.keys(_all);
+    const total = allKeys.length;
+
+    if (!total) {
+      if (summaryEl) summaryEl.textContent = '';
+      if (showAllBtn) showAllBtn.style.display = 'none';
+      listEl.innerHTML = cfg.emptyMessage;
+      return;
+    }
+
+    const overrideCount = allKeys.filter((k) => PD.normaliseEntry(_all[k]).override).length;
+    if (summaryEl) {
+      summaryEl.textContent = `${total} ${cfg.unitLabel(total)} tracked, ${overrideCount} with a manual override.`;
+    }
+    if (showAllBtn) {
+      showAllBtn.style.display = _filter ? 'none' : '';
+      showAllBtn.textContent = _showAll ? 'Show recent only' : `Show all ${total}`;
+    }
+
+    let keys;
+    let capNote = '';
+    if (_filter) {
+      const matched = allKeys
+        .filter((k) => matchesFilter(k, _all[k]))
+        .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+      if (!matched.length) {
+        listEl.innerHTML = 'No matches for that filter.';
+        return;
+      }
+      keys = matched.slice(0, FILTER_CAP);
+      if (matched.length > FILTER_CAP) {
+        capNote = `Showing first ${FILTER_CAP} of ${matched.length} matches — narrow your search to see the rest.`;
+      }
+    } else if (_showAll) {
+      keys = allKeys.slice().sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+    } else {
+      keys = allKeys
+        .slice()
+        .sort((a, b) => mostRecentTimestamp(_all[b]).localeCompare(mostRecentTimestamp(_all[a])))
+        .slice(0, RECENT_CAP);
+      if (total > RECENT_CAP) {
+        capNote = `Showing ${RECENT_CAP} most recently used of ${total} total — search or "Show all" to see the rest.`;
+      }
+    }
+
+    const capNoteHtml = capNote
+      ? `<div style="margin-bottom: 10px; color: var(--text-4); font-size: 11px">${escHtml(capNote)}</div>`
+      : '';
+    listEl.innerHTML = capNoteHtml + keys.map(renderBlock).join('');
+  }
+
+  // Clearing an override is a DECISION, not an absence — so it is timestamped
+  // and stored as a tombstone (`overrideCleared`), and pinning one records
+  // `overrideSetAt`. Without them the practice-profile merge in
+  // shared/io/problem-description-cleanup-io.js has no way to tell "this
+  // machine never had an override" from "someone deliberately removed it", so
+  // the next daily sync simply put the cleared override back and a
+  // practice-wide override could never be removed at all. PD.setOverride /
+  // PD.clearOverride return a fresh {tally, override} entry, which is exactly
+  // what we want: the new decision replaces any previous marker.
+  function withOverrideSet(entry, rowKey, candidate) {
+    const next = PD.setOverride(entry, rowKey, candidate);
+    next.overrideSetAt = new Date().toISOString();
+    return next;
+  }
+  function withOverrideCleared(entry) {
+    const next = PD.clearOverride(entry);
+    next.overrideCleared = new Date().toISOString();
+    return next;
+  }
+
+  listEl.addEventListener('click', async (e) => {
+    const clearBtn = e.target.closest('[data-pdc-clear]');
+    if (clearBtn) {
+      const topKey = clearBtn.getAttribute('data-pdc-clear');
+      _all[topKey] = withOverrideCleared(_all[topKey]);
+      await persist();
+      render();
+      return;
+    }
+    const setBtn = e.target.closest('[data-pdc-setoverride]');
+    if (setBtn) {
+      const topKey = setBtn.getAttribute('data-pdc-setoverride');
+      const rowKey = setBtn.getAttribute('data-pdc-row-key');
+      const norm = PD.normaliseEntry(_all[topKey]);
+      const row = norm.tally[rowKey];
+      if (!row) return;
+      _all[topKey] = withOverrideSet(_all[topKey], rowKey, row.candidate);
+      await persist();
+      render();
+    }
+  });
+
+  filterEl?.addEventListener('input', () => {
+    _filter = filterEl.value.trim();
+    render();
+  });
+
+  showAllBtn?.addEventListener('click', () => {
+    _showAll = !_showAll;
+    render();
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', load);
+  } else {
+    load();
+  }
+  document
+    .querySelectorAll(`.nav-item[data-section="${cfg.navSection}"]`)
+    .forEach((btn) => btn.addEventListener('click', load));
+}
+
+initPdcTallySection({
+  storageKey: 'pdc.preferredDescriptions',
+  listElId: 'pdcPrefsList',
+  filterElId: 'pdcPrefsFilter',
+  summaryElId: 'pdcPrefsSummary',
+  showAllBtnId: 'pdcPrefsShowAll',
+  navSection: 'pdc-prefs',
+  emptyMessage: `No description choices recorded yet — they'll appear here once someone uses "Clean up code" on Clinical Summary.`,
+  unitLabel: (n) => (n === 1 ? 'concept' : 'concepts'),
+  blockLabel: (conceptId) => `SNOMED ${escHtml(conceptId)}`,
+  sortText: (candidate) => (candidate && candidate.description) || '',
+  filterText: (candidate) => (candidate && candidate.description) || '',
+  renderCandidate: (candidate) => escHtml((candidate && candidate.description) || ''),
+});
+
+initPdcTallySection({
+  storageKey: 'pdc.conceptRemap',
+  listElId: 'pdcRemapList',
+  filterElId: 'pdcRemapFilter',
+  summaryElId: 'pdcRemapSummary',
+  showAllBtnId: 'pdcRemapShowAll',
+  navSection: 'pdc-prefs',
+  emptyMessage: `No code remaps recorded yet — they'll appear here once someone manually replaces a code from "Clean up code" on Clinical Summary.`,
+  unitLabel: (n) => (n === 1 ? 'code' : 'codes'),
+  blockLabel: (sourceConceptId) => `SNOMED ${escHtml(sourceConceptId)} replaced with:`,
+  sortText: (candidate) => (candidate && candidate.description) || '',
+  filterText: (candidate) =>
+    `${(candidate && candidate.description) || ''} ${(candidate && candidate.conceptId) || ''}`,
+  renderCandidate: (candidate) =>
+    `${escHtml((candidate && candidate.description) || '')} <span style="color: var(--text-4); font-family: var(--mono); font-size: 10px">(${escHtml((candidate && candidate.conceptId) || '')})</span>`,
 });
 
 // ── Triage capacity alerts ────────────────────────────────────────────────────
@@ -2420,17 +3378,45 @@ rmSaveBtn?.addEventListener('click', async () => {
       'reception.config',
       'reception.customPathways',
       'reception.pathwayOverrides',
+      'reception.routingAttestation',
     ]);
     return {
       config: r['reception.config'] || {},
       custom: r['reception.customPathways'] || [],
       overrides: r['reception.pathwayOverrides'] || {},
+      routingAttestation: r['reception.routingAttestation'] || null,
     };
   }
 
   async function setConfig(patch) {
     const { config } = await getState();
     await chrome.storage.local.set({ 'reception.config': Object.assign({}, config, patch) });
+  }
+
+  // Practice-editable free-text config (safeguarding lead, crisis line). Clamped
+  // to the same 200 chars the backup importer enforces, so a value that survives
+  // a save/export/restore round-trip is always the value the practice typed.
+  const RCPO_TEXT_MAX = 200;
+
+  // ── "NEW" badge on freshly-bundled pathways ─────────────────────────────────
+  // New bundled pathways ship DISABLED (correct for CSO-gated clinical content),
+  // which means a practice would otherwise never learn they arrived. seenBundledIds
+  // records the bundled ids this practice has already been shown; anything bundled,
+  // still off, and not in that list gets a NEW badge. Marked seen when the practice
+  // toggles it, edits it, or dismisses the badge — never automatically on render,
+  // or the badge would vanish before anyone read it.
+  async function markBundledSeen(ids) {
+    const { config } = await getState();
+    const seen = Array.isArray(config.seenBundledIds) ? config.seenBundledIds.slice() : [];
+    let changed = false;
+    for (const id of ids || []) {
+      if (id && seen.indexOf(id) === -1) {
+        seen.push(id);
+        changed = true;
+      }
+    }
+    if (changed) await setConfig({ seenBundledIds: seen });
+    return changed;
   }
 
   async function loadBundled() {
@@ -2515,10 +3501,20 @@ rmSaveBtn?.addEventListener('click', async () => {
   function renderPathwayList(resolved, config) {
     const host = $('rcpoPathwayList');
     if (!host) return;
+    const seenBundled = new Set(Array.isArray(config.seenBundledIds) ? config.seenBundledIds : []);
     host.innerHTML =
       resolved.all
         .map((e) => {
           const p = e.pathway;
+          // Bundled (or practice-edited bundled) pathway the practice has not been
+          // shown yet and has not enabled — flag it as newly arrived.
+          const isNew = e.origin !== 'custom' && !e.enabled && !seenBundled.has(p.id);
+          const newBadge = isNew
+            ? `<span style="font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px; background:rgba(22,163,74,0.15); color:var(--green, #16a34a);">NEW</span>`
+            : '';
+          const newDismiss = isNew
+            ? `<button class="ghost" data-rcpo-seen="${escAttr(p.id)}" title="Stop showing the NEW badge for this pathway" style="font-size:10px; padding:3px 9px;">Dismiss</button>`
+            : '';
           const [label, bg, fg] = ORIGIN_BADGE[e.origin] || ORIGIN_BADGE.bundled;
           const invalid = e.invalid
             ? `<span style="font-size:10px; font-weight:700; color:var(--red, #b91c1c);">INVALID — not shown to reception</span>`
@@ -2526,6 +3522,7 @@ rmSaveBtn?.addEventListener('click', async () => {
               ? `<span style="font-size:10px; font-weight:700; color:var(--amber, #b45309);">EDIT INVALID — bundled version active</span>`
               : '';
           const actions = [
+            newDismiss,
             `<button class="ghost" data-rcpo-edit="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Edit</button>`,
             e.origin === 'edited'
               ? `<button class="ghost" data-rcpo-reset="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Reset to bundled</button>`
@@ -2540,6 +3537,8 @@ rmSaveBtn?.addEventListener('click', async () => {
             <input type="checkbox" data-rcpo-toggle="${escAttr(p.id)}" ${e.enabled ? 'checked' : ''} ${e.invalid ? 'disabled' : ''}>
             <span style="font-weight:600; font-size:12px;">${escHtml(p.title)}</span>
             <span style="font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px; background:${bg}; color:${fg};">${label}</span>
+            ${newBadge}
+            ${p.sensitive === true ? `<span style="font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px; background:rgba(180,83,9,0.15); color:var(--amber, #b45309);" title="Capture drafts are never auto-saved; taker initials required">SENSITIVE</span>` : ''}
             ${invalid}
           </label>
           <div style="display:flex; gap:6px;">${actions}</div>
@@ -2560,11 +3559,22 @@ rmSaveBtn?.addEventListener('click', async () => {
         if (cb.checked) map[id] = true;
         else delete map[id];
         await setConfig({ enabledPathways: map });
+        // Touching a pathway counts as having seen it — clear its NEW badge.
+        await markBundledSeen([id]);
+        refresh();
+      });
+    });
+    host.querySelectorAll('[data-rcpo-seen]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await markBundledSeen([btn.dataset.rcpoSeen]);
         refresh();
       });
     });
     host.querySelectorAll('[data-rcpo-edit]').forEach((btn) => {
-      btn.addEventListener('click', () => openEditor(btn.dataset.rcpoEdit, resolved));
+      btn.addEventListener('click', async () => {
+        await markBundledSeen([btn.dataset.rcpoEdit]);
+        openEditor(btn.dataset.rcpoEdit, resolved);
+      });
     });
     host.querySelectorAll('[data-rcpo-reset]').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -2601,6 +3611,9 @@ rmSaveBtn?.addEventListener('click', async () => {
           <option value="999" ${rf?.escalate === '999' ? 'selected' : ''}>999-level</option>
           <option value="duty" ${rf?.escalate !== '999' ? 'selected' : ''}>Duty clinician</option>
         </select>
+        <label style="display:flex; align-items:center; gap:4px; font-size:11px; color:var(--text-3); white-space:nowrap;" title="A YES also escalates to the practice safeguarding lead and bypasses all routing">
+          <input type="checkbox" class="rcpo-rf-sg" ${rf?.safeguarding === true ? 'checked' : ''}> Safeguarding
+        </label>
         <button type="button" class="ghost rcpo-row-del" style="font-size:10px; padding:3px 8px;">✕</button>
       </div>`;
   }
@@ -2620,6 +3633,95 @@ rmSaveBtn?.addEventListener('click', async () => {
         <input type="text" class="rcpo-q-ask" value="${escAttr(q?.ask || '')}" placeholder="Question as asked on the phone" style="width:100%; box-sizing:border-box; font-size:12px; padding:4px 7px; margin-bottom:5px;">
         <input type="text" class="rcpo-q-opts" value="${escAttr(opts)}" placeholder="Options, comma-separated (choice/multi only)" style="width:100%; box-sizing:border-box; font-size:12px; padding:4px 7px; ${type === 'choice' || type === 'multi' ? '' : 'display:none;'}">
       </div>`;
+  }
+
+  // ── Disposition editor rows (plan E) ────────────────────────────────────────
+  // Labels only — every vocabulary below comes from ReceptionPathwayUtils, so
+  // the editor cannot offer a destination, domain or condition the validator
+  // would reject.
+  const RCPO_DEST_LABELS = {
+    pharmacy_first: 'Pharmacy First',
+    anp: 'ANP / minor-illness nurse',
+    paramedic: 'Paramedic practitioner',
+    gp_routine: 'GP appointment',
+  };
+  const RCPO_DOMAIN_LABELS = {
+    minor_infection: 'Minor infection',
+    msk: 'Musculoskeletal',
+    gu_male: 'Genitourinary (male)',
+    gyn_female: 'Gynaecology (female)',
+    mental_health: 'Mental health',
+    other: 'Other',
+  };
+  const RCPO_WHEN_LABELS = {
+    pharmacyFirstEligible: 'Pharmacy First eligible',
+    ageUnder: 'Age under',
+    ageAtLeast: 'Age at least',
+  };
+
+  function dispRuleRowHtml(rule) {
+    const when = (rule && rule.when) || {};
+    const key = Object.keys(when).find((k) => PU.DISPOSITION_WHEN_KEYS.indexOf(k) !== -1) || 'pharmacyFirstEligible';
+    const isBool = key === 'pharmacyFirstEligible';
+    const boolVal = when.pharmacyFirstEligible === false ? 'false' : 'true';
+    const ageVal = isBool ? '' : when[key];
+    return `
+      <div class="rcpo-disp-row" style="display:flex; gap:6px; align-items:center; margin-bottom:5px; flex-wrap:wrap;">
+        <span style="font-size:11px; color:var(--text-3);">If</span>
+        <select class="rcpo-disp-when" style="font-size:12px; padding:4px;">
+          ${PU.DISPOSITION_WHEN_KEYS.map((k) => `<option value="${k}" ${k === key ? 'selected' : ''}>${escHtml(RCPO_WHEN_LABELS[k] || k)}</option>`).join('')}
+        </select>
+        <select class="rcpo-disp-bool" style="font-size:12px; padding:4px; ${isBool ? '' : 'display:none;'}">
+          <option value="true" ${boolVal === 'true' ? 'selected' : ''}>yes</option>
+          <option value="false" ${boolVal === 'false' ? 'selected' : ''}>no</option>
+        </select>
+        <input type="number" class="rcpo-disp-age" min="0" max="120" step="1" value="${escAttr(ageVal == null ? '' : String(ageVal))}" style="width:70px; font-size:12px; padding:4px 6px; ${isBool ? 'display:none;' : ''}">
+        <span style="font-size:11px; color:var(--text-3);">suggest</span>
+        <select class="rcpo-disp-suggest" style="font-size:12px; padding:4px;">
+          ${PU.DISPOSITION_DESTINATIONS.map((d) => `<option value="${d}" ${rule && rule.suggest === d ? 'selected' : ''}>${escHtml(RCPO_DEST_LABELS[d] || d)}</option>`).join('')}
+        </select>
+        <button type="button" class="ghost rcpo-disp-del" style="font-size:10px; padding:3px 8px;">✕</button>
+      </div>`;
+  }
+
+  function dispositionSectionHtml(pathway) {
+    const d = pathway && pathway.disposition;
+    const domain = d ? d.domain : '';
+    const allowed = (d && Array.isArray(d.allowed) ? d.allowed : []).slice();
+    const rules = d && Array.isArray(d.rules) ? d.rules : [];
+    return `
+      <div style="font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-3); margin:14px 0 5px;">Disposition &mdash; where this patient could safely go</div>
+      <div style="font-size:11px; color:var(--text-3); line-height:1.6; margin-bottom:7px;">
+        Optional. A <strong>suggestion</strong> shown only after every red flag has been answered and none is positive
+        &mdash; nothing is ever booked, and the receptionist always also offers a clinician callback. Leave the domain
+        as &ldquo;No routing&rdquo; for anything that should always go to a clinician. Age under 1 is always
+        clinician-only, and under 5 never reaches a nurse or paramedic, whatever is set here.
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:7px; flex-wrap:wrap;">
+        <label style="font-size:11px; color:var(--text-3); display:flex; gap:5px; align-items:center;">Domain
+          <select id="rcpoEdDispDomain" style="font-size:12px; padding:4px;">
+            <option value="" ${domain ? '' : 'selected'}>No routing (clinician only)</option>
+            ${PU.DISPOSITION_DOMAINS.map((dm) => `<option value="${dm}" ${dm === domain ? 'selected' : ''}>${escHtml(RCPO_DOMAIN_LABELS[dm] || dm)}</option>`).join('')}
+          </select>
+        </label>
+        <label style="font-size:11px; color:var(--text-3); display:flex; gap:5px; align-items:center;">If no rule matches
+          <select id="rcpoEdDispDefault" style="font-size:12px; padding:4px;">
+            ${PU.DISPOSITION_DEFAULTS.map((v) => `<option value="${v}" ${d && d.default === v ? 'selected' : ''}>${v === 'duty' ? 'Duty clinician' : 'GP appointment'}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+      <div id="rcpoEdDispAllowed" style="display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--text-2); margin-bottom:4px;">
+        ${PU.DISPOSITION_DESTINATIONS.map(
+          (dest) => `
+          <label style="display:flex; gap:5px; align-items:center;" data-dest="${dest}">
+            <input type="checkbox" class="rcpo-disp-allowed" value="${dest}" ${allowed.indexOf(dest) !== -1 ? 'checked' : ''}>
+            <span>${escHtml(RCPO_DEST_LABELS[dest] || dest)}</span>
+          </label>`
+        ).join('')}
+      </div>
+      <div id="rcpoEdDispNote" style="font-size:11px; color:var(--amber, #b45309); margin-bottom:6px; display:none;"></div>
+      <div id="rcpoEdDispRules">${rules.map(dispRuleRowHtml).join('')}</div>
+      <button type="button" class="ghost" id="rcpoEdAddDispRule" style="font-size:10px; padding:3px 9px;">+ Add routing rule</button>`;
   }
 
   function openEditor(idOrNull, resolved) {
@@ -2648,12 +3750,17 @@ rmSaveBtn?.addEventListener('click', async () => {
           <input type="text" id="rcpoEdTitle" value="${escAttr(pathway?.title || '')}" placeholder="Pathway title" style="flex:1; font-size:12px; padding:5px 8px;">
           <input type="text" id="rcpoEdApplies" value="${escAttr(pathway?.appliesTo || '')}" placeholder="Applies to (e.g. Adults)" style="flex:1; font-size:12px; padding:5px 8px;">
         </div>
+        <label style="display:flex; align-items:flex-start; gap:7px; font-size:12px; color:var(--text-2); margin-bottom:8px; cursor:pointer;">
+          <input type="checkbox" id="rcpoEdSensitive" ${pathway?.sensitive === true ? 'checked' : ''} style="margin-top:2px;">
+          <span>Sensitive pathway &mdash; capture drafts are <strong>never</strong> auto-saved, and the receptionist's initials are required before a summary can be generated. Use for content that must not sit on a shared front-desk machine (e.g. mental health).</span>
+        </label>
         <div style="font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-3); margin:10px 0 5px;">Red flags — asked first, every one must be answered</div>
         <div id="rcpoEdRf">${rfRows}</div>
         <button type="button" class="ghost" id="rcpoEdAddRf" style="font-size:10px; padding:3px 9px;">+ Add red flag</button>
         <div style="font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-3); margin:14px 0 5px;">History questions</div>
         <div id="rcpoEdQ">${qRows}</div>
         <button type="button" class="ghost" id="rcpoEdAddQ" style="font-size:10px; padding:3px 9px;">+ Add question</button>
+        ${dispositionSectionHtml(pathway)}
         <div id="rcpoEdErrors" style="color:var(--red, #b91c1c); font-size:11px; margin-top:8px; white-space:pre-line;"></div>
         <div style="display:flex; gap:8px; margin-top:10px;">
           <button class="primary" id="rcpoEdSave" style="font-size:11px; padding:5px 14px;">Save pathway</button>
@@ -2673,8 +3780,60 @@ rmSaveBtn?.addEventListener('click', async () => {
           opts.style.display = sel.value === 'choice' || sel.value === 'multi' ? '' : 'none';
         };
       });
+    // Disposition rows: the condition control switches between the yes/no
+    // selector and the age box, and clinician-only domains (or a sensitive
+    // pathway) grey out every non-clinician destination with a note — the
+    // engine refuses them anyway, so the editor must not pretend otherwise.
+    const wireDispRows = () => {
+      host.querySelectorAll('.rcpo-disp-del').forEach((b) => {
+        b.onclick = () => b.closest('.rcpo-disp-row')?.remove();
+      });
+      host.querySelectorAll('.rcpo-disp-when').forEach((sel) => {
+        sel.onchange = () => {
+          const row = sel.closest('.rcpo-disp-row');
+          const isBool = sel.value === 'pharmacyFirstEligible';
+          row.querySelector('.rcpo-disp-bool').style.display = isBool ? '' : 'none';
+          row.querySelector('.rcpo-disp-age').style.display = isBool ? 'none' : '';
+        };
+      });
+    };
+    const syncDispClinicianOnly = () => {
+      const domainSel = $('rcpoEdDispDomain');
+      const note = $('rcpoEdDispNote');
+      if (!domainSel || !note) return;
+      const clinicianOnly =
+        PU.CLINICIAN_ONLY_DOMAINS.indexOf(domainSel.value) !== -1 || !!$('rcpoEdSensitive')?.checked;
+      const frozenId = !!(pathway && PU.CLINICIAN_ONLY_IDS.indexOf(pathway.id) !== -1);
+      host.querySelectorAll('.rcpo-disp-allowed').forEach((cb) => {
+        const block = (clinicianOnly || frozenId) && cb.value !== 'gp_routine';
+        cb.disabled = block;
+        if (block) cb.checked = false;
+        const lbl = cb.closest('label');
+        if (lbl) lbl.style.opacity = block ? '0.45' : '';
+      });
+      if (frozenId) {
+        note.style.display = '';
+        note.textContent =
+          'This pathway is clinician-only in engine code — it can never suggest a non-clinician route, however it is edited here.';
+      } else if (clinicianOnly) {
+        note.style.display = '';
+        note.textContent =
+          'Clinician-only: sensitive pathways and the mental-health / male-GU / gynaecology domains never suggest a non-clinician route.';
+      } else {
+        note.style.display = 'none';
+        note.textContent = '';
+      }
+    };
     wireRowDeletes();
     wireTypeToggles();
+    wireDispRows();
+    syncDispClinicianOnly();
+    $('rcpoEdDispDomain')?.addEventListener('change', syncDispClinicianOnly);
+    $('rcpoEdSensitive')?.addEventListener('change', syncDispClinicianOnly);
+    $('rcpoEdAddDispRule')?.addEventListener('click', () => {
+      $('rcpoEdDispRules').insertAdjacentHTML('beforeend', dispRuleRowHtml(null));
+      wireDispRows();
+    });
     $('rcpoEdAddRf')?.addEventListener('click', () => {
       $('rcpoEdRf').insertAdjacentHTML('beforeend', rfRowHtml(null));
       wireRowDeletes();
@@ -2708,11 +3867,17 @@ rmSaveBtn?.addEventListener('click', async () => {
     const title = $('rcpoEdTitle')?.value.trim() || '';
     const appliesTo = $('rcpoEdApplies')?.value.trim() || '';
 
-    const redFlags = Array.from(host.querySelectorAll('.rcpo-rf-row')).map((row) => ({
-      id: row.dataset.rfid,
-      ask: row.querySelector('.rcpo-rf-ask')?.value.trim() || '',
-      escalate: row.querySelector('.rcpo-rf-esc')?.value || 'duty',
-    }));
+    const redFlags = Array.from(host.querySelectorAll('.rcpo-rf-row')).map((row) => {
+      const rf = {
+        id: row.dataset.rfid,
+        ask: row.querySelector('.rcpo-rf-ask')?.value.trim() || '',
+        escalate: row.querySelector('.rcpo-rf-esc')?.value || 'duty',
+      };
+      // Omitted rather than written false — absence is the schema's "not a
+      // safeguarding flag", and sanitisePathway only keeps a literal true.
+      if (row.querySelector('.rcpo-rf-sg')?.checked) rf.safeguarding = true;
+      return rf;
+    });
     const questions = Array.from(host.querySelectorAll('.rcpo-q-row')).map((row) => {
       const type = row.querySelector('.rcpo-q-type')?.value || 'text';
       const q = {
@@ -2752,6 +3917,41 @@ rmSaveBtn?.addEventListener('click', async () => {
       questions,
       pharmacyFirst: original?.pharmacyFirst, // not editable in v1; preserved on bundled edits
     };
+    if ($('rcpoEdSensitive')?.checked) candidate.sensitive = true;
+
+    // Disposition block. Domain "" means no routing at all — the safe default.
+    // The four frozen clinician-only pathways never get a block written for
+    // them: the engine ignores routing on those ids anyway, and a block in the
+    // stored edit would (correctly) be rejected as a downgrade by
+    // resolveEffectivePathways, leaving the practice with a silently-ignored
+    // edit. Matching the shipped file — those four carry no block — is honest.
+    const domain = PU.CLINICIAN_ONLY_IDS.indexOf(id) !== -1 ? '' : $('rcpoEdDispDomain')?.value || '';
+    if (domain) {
+      const clinicianOnly =
+        PU.CLINICIAN_ONLY_DOMAINS.indexOf(domain) !== -1 ||
+        candidate.sensitive === true ||
+        PU.CLINICIAN_ONLY_IDS.indexOf(id) !== -1;
+      const allowed = clinicianOnly
+        ? ['gp_routine']
+        : Array.from(host.querySelectorAll('.rcpo-disp-allowed'))
+            .filter((cb) => cb.checked)
+            .map((cb) => cb.value);
+      const rules = Array.from(host.querySelectorAll('.rcpo-disp-row')).map((row) => {
+        const key = row.querySelector('.rcpo-disp-when')?.value || 'pharmacyFirstEligible';
+        const when = {};
+        if (key === 'pharmacyFirstEligible') {
+          when[key] = row.querySelector('.rcpo-disp-bool')?.value !== 'false';
+        } else {
+          const raw = (row.querySelector('.rcpo-disp-age')?.value || '').trim();
+          // Left blank / non-numeric stays as NaN so validatePathway rejects it
+          // rather than the editor guessing an age band.
+          when[key] = raw === '' ? null : Number(raw);
+        }
+        const suggest = row.querySelector('.rcpo-disp-suggest')?.value || 'gp_routine';
+        return { when, suggest: clinicianOnly ? 'gp_routine' : suggest };
+      });
+      candidate.disposition = { domain, allowed, rules, default: $('rcpoEdDispDefault')?.value || 'gp_routine' };
+    }
     if (!candidate.pharmacyFirst) delete candidate.pharmacyFirst;
     if (!candidate.appliesTo) delete candidate.appliesTo;
 
@@ -2774,6 +3974,111 @@ rmSaveBtn?.addEventListener('click', async () => {
     if (host) host.innerHTML = '';
     _editing = null;
     refresh();
+  }
+
+  // ── Escalation contacts (safeguarding lead / crisis line) ───────────────────
+  // Free practice text rendered verbatim to reception staff. Stored trimmed and
+  // clamped to RCPO_TEXT_MAX — the same clamp shared/io/reception-io.js applies on
+  // import, so a value cannot change shape by travelling through a backup.
+
+  let _contactsWired = false;
+
+  function renderContacts(config) {
+    const sg = $('rcpoSafeguardingContact');
+    const cl = $('rcpoCrisisLine');
+    if (!sg || !cl) return;
+    // Don't stomp what the admin is mid-way through typing.
+    if (document.activeElement !== sg) sg.value = config.safeguardingContact || '';
+    if (document.activeElement !== cl) cl.value = config.crisisLineText || '';
+    if (_contactsWired) return;
+    _contactsWired = true;
+
+    const status = $('rcpoContactsStatus');
+    const save = async () => {
+      await setConfig({
+        safeguardingContact: (sg.value || '').trim().slice(0, RCPO_TEXT_MAX),
+        crisisLineText: (cl.value || '').trim().slice(0, RCPO_TEXT_MAX),
+      });
+      if (status) {
+        status.textContent = 'Saved.';
+        setTimeout(() => {
+          if (status.textContent === 'Saved.') status.textContent = '';
+        }, 2000);
+      }
+    };
+    sg.addEventListener('change', save);
+    cl.addEventListener('change', save);
+  }
+
+  // ── Custom routing sign-off (plan E guardrail 6) ────────────────────────────
+  // reception.routingAttestation = { attestedBy, role: 'cso'|'partner',
+  //                                  attestedAt (ISO), scope: 'custom-routing' }
+  // Without a valid record, evaluateDisposition treats every custom and
+  // practice-edited pathway as clinician-only. The attester is the CSO or a
+  // partner and nobody else — the role list is closed here and in the validator.
+
+  let _routingWired = false;
+
+  async function renderRouting(attestation) {
+    const state = $('rcpoRoutingState');
+    const nameEl = $('rcpoRoutingName');
+    const roleEl = $('rcpoRoutingRole');
+    if (!state || !nameEl || !roleEl) return;
+
+    const valid = PU.isValidRoutingAttestation(attestation);
+    if (valid) {
+      const roleLabel = attestation.role === 'cso' ? 'clinical safety officer' : 'partner';
+      state.innerHTML = `
+        <div style="border:1px solid rgba(22,163,74,0.4); background:rgba(22,163,74,0.06); border-radius:8px; padding:10px 14px; font-size:12px; color:var(--text-2); display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <span><strong>Routing signed off</strong> by ${escHtml(attestation.attestedBy)} (${escHtml(roleLabel)}) on ${escHtml(String(attestation.attestedAt).slice(0, 10))}. Custom and edited pathways may suggest non-clinician routes.</span>
+          <button class="ghost" id="rcpoRoutingRevoke" style="font-size:11px; padding:4px 10px;">Revoke</button>
+        </div>`;
+      $('rcpoRoutingRevoke')?.addEventListener('click', async () => {
+        if (
+          !confirm(
+            'Revoke the custom routing sign-off? Custom and edited pathways go back to suggesting a clinician only.'
+          )
+        )
+          return;
+        await chrome.storage.local.remove('reception.routingAttestation');
+        refresh();
+      });
+    } else {
+      state.innerHTML = `
+        <div style="border:1px solid var(--border); border-radius:8px; padding:10px 14px; font-size:12px; color:var(--text-3);">
+          <strong>No routing sign-off recorded.</strong> Custom and practice-edited pathways suggest a clinician only.
+          Bundled pathways are unaffected.
+        </div>`;
+    }
+    if (_routingWired) return;
+    _routingWired = true;
+
+    $('rcpoRoutingAttest')?.addEventListener('click', async () => {
+      const status = $('rcpoRoutingStatus');
+      const record = {
+        attestedBy: (nameEl.value || '').trim().slice(0, 120),
+        role: roleEl.value,
+        attestedAt: new Date().toISOString(),
+        scope: 'custom-routing',
+      };
+      // sanitiseRoutingAttestation returns null for anything that is not a
+      // complete, well-formed sign-off — a partial one must never be stored.
+      const clean = PU.sanitiseRoutingAttestation(record);
+      if (!clean) {
+        if (status) {
+          status.style.color = 'var(--red, #b91c1c)';
+          status.textContent = 'Enter the name of the CSO or partner signing off.';
+        }
+        return;
+      }
+      await chrome.storage.local.set({ 'reception.routingAttestation': clean });
+      if (status) {
+        status.style.color = 'var(--text-3)';
+        status.textContent = 'Sign-off recorded.';
+      }
+      nameEl.value = '';
+      refresh();
+    });
   }
 
   // ── Quick-wins chip filter ──────────────────────────────────────────────────
@@ -2836,7 +4141,10 @@ rmSaveBtn?.addEventListener('click', async () => {
 
   async function refresh() {
     try {
-      const [{ config, custom, overrides }, bundled] = await Promise.all([getState(), loadBundled()]);
+      const [{ config, custom, overrides, routingAttestation }, bundled] = await Promise.all([
+        getState(),
+        loadBundled(),
+      ]);
       const resolved = PU.resolveEffectivePathways({
         bundled: bundled.pathways || [],
         overrides,
@@ -2852,6 +4160,8 @@ rmSaveBtn?.addEventListener('click', async () => {
       } catch (_) {}
       renderDisclaimerArea(config, resolved, centralProv);
       renderPathwayList(resolved, config);
+      renderContacts(config);
+      renderRouting(routingAttestation);
       renderChipList(config);
     } catch (e) {
       const host = $('rcpoPathwayList');
@@ -3124,4 +4434,404 @@ rmSaveBtn?.addEventListener('click', async () => {
   document
     .querySelectorAll('.nav-item[data-section="knowledge"]')
     .forEach((btn) => btn.addEventListener('click', refreshStats));
+})();
+
+// ── Event Ledger section (F2) ─────────────────────────────────────────────────
+// Machine-local record of what the suite flagged — filter/table/CSV-export/clear
+// UI over shared/event-ledger.js (window.EventLedger, loaded before this script).
+// The ledger keys (day shards ledger.events.<date> + ledger.shardIndex, plus
+// the legacy ledger.events) are deliberately EXCLUDED from suite backup —
+// same doctrine as labfiling.auditLog; see the disclosure block in options.html
+// and the ALLOWLIST entries in test-backup-coverage.js.
+(function initLedgerSection() {
+  const EL = typeof window !== 'undefined' ? window.EventLedger : null;
+  const wrap = document.getElementById('ledgerTableWrap');
+  if (!EL || !wrap) return;
+
+  // Rows rendered in the table (newest first). The CSV export always includes
+  // EVERY filtered event — the cap is a render guard, not a data cap.
+  const RENDER_CAP = 200;
+
+  let _events = [];
+
+  const $ = (id) => document.getElementById(id);
+
+  function currentFilter() {
+    return {
+      patientRef: ($('ledgerFilterPatient')?.value || '').trim(),
+      from: $('ledgerFilterFrom')?.value || null,
+      to: $('ledgerFilterTo')?.value || null,
+    };
+  }
+
+  function filteredEvents() {
+    return EL.filterEvents(_events, currentFilter());
+  }
+
+  function fmtTs(ts) {
+    const d = new Date(ts);
+    return isNaN(d.getTime())
+      ? String(ts || '')
+      : d.toLocaleString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+  }
+
+  function renderTable() {
+    const rows = filteredEvents();
+    const summary = $('ledgerSummary');
+    if (summary) {
+      summary.textContent =
+        `${rows.length} of ${_events.length} event${_events.length === 1 ? '' : 's'}` +
+        (rows.length > RENDER_CAP ? ` — showing the newest ${RENDER_CAP}; Export CSV includes all filtered rows` : '');
+    }
+    if (rows.length === 0) {
+      wrap.innerHTML = `<div class="ledger-empty">${
+        _events.length ? 'No events match these filters.' : 'No events recorded yet on this machine.'
+      }</div>`;
+      return;
+    }
+    const body = rows
+      .slice(0, RENDER_CAP)
+      .map((e) => {
+        const sevCls = e.severity === 'red' ? 'ledger-sev-red' : e.severity === 'amber' ? 'ledger-sev-amber' : '';
+        const detail = escHtml(e.ruleId || '') + (e.ruleId && e.label ? ' · ' : '') + escHtml(e.label || '');
+        return `<tr>
+          <td>${escHtml(fmtTs(e.ts))}</td>
+          <td>${escHtml(e.source || '')}</td>
+          <td>${escHtml(e.patientRef || '—')}</td>
+          <td class="${sevCls}">${escHtml(e.severity || '')}</td>
+          <td class="ledger-td-label">${detail}</td>
+          <td>${escHtml(e.action || '')}</td>
+        </tr>`;
+      })
+      .join('');
+    wrap.innerHTML =
+      `<table class="ledger-table"><thead><tr>` +
+      `<th>When</th><th>Source</th><th>Patient (UUID)</th><th>Severity</th><th>Rule / detail</th><th>Action</th>` +
+      `</tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  async function refreshLedger() {
+    _events = await EL.getEvents();
+    renderTable();
+  }
+
+  // Filters re-render live (data already in memory — no storage churn).
+  ['ledgerFilterPatient', 'ledgerFilterFrom', 'ledgerFilterTo'].forEach((id) => {
+    $(id)?.addEventListener('input', renderTable);
+  });
+  $('ledgerResetFilter')?.addEventListener('click', () => {
+    ['ledgerFilterPatient', 'ledgerFilterFrom', 'ledgerFilterTo'].forEach((id) => {
+      const el = $(id);
+      if (el) el.value = '';
+    });
+    renderTable();
+  });
+
+  // CSV export — same client-side Blob pattern as the Lab Filing audit export;
+  // eventsCsv applies quote-escaping AND the spreadsheet formula-injection guard.
+  $('ledgerExportCsv')?.addEventListener('click', () => {
+    const csv = EL.eventsCsv(filteredEvents());
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `event-ledger-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // Clear ledger — destructive, so behind a TYPED confirmation ("CLEAR"), not
+  // just a click-through confirm dialog.
+  const clearInput = $('ledgerClearConfirm');
+  const clearBtn = $('ledgerClearBtn');
+  clearInput?.addEventListener('input', () => {
+    if (clearBtn) clearBtn.disabled = clearInput.value.trim() !== 'CLEAR';
+  });
+  clearBtn?.addEventListener('click', async () => {
+    if (!clearInput || clearInput.value.trim() !== 'CLEAR') return;
+    await EL.clearLedger();
+    clearInput.value = '';
+    clearBtn.disabled = true;
+    await refreshLedger();
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refreshLedger);
+  } else {
+    refreshLedger();
+  }
+  document
+    .querySelectorAll('.nav-item[data-section="ledger"]')
+    .forEach((btn) => btn.addEventListener('click', refreshLedger));
+})();
+
+// ── Suite Health section (Horizon-1 H2) ────────────────────────────────────────
+// Read-only table over chrome.storage.local['health.contracts'], written by the
+// runtime canary (shared/contract-canary.js, injected into the live Medicus
+// page — see manifest.json). This page never probes anything itself; it only
+// reads the canary's last result and the registry (shared/dom-contracts.js,
+// loaded before this script) for the plain-English feature/degradation text.
+// health.contracts is machine-local diagnostic state, deliberately EXCLUDED
+// from suite backup (see test-backup-coverage.js ALLOWLIST) — same doctrine as
+// the Event Ledger above.
+(function initHealthSection() {
+  const DC = typeof window !== 'undefined' ? window.DomContracts : null;
+  const wrap = document.getElementById('healthTableWrap');
+  const summaryEl = document.getElementById('healthSummary');
+  if (!DC || !wrap) return;
+
+  function fmtTs(iso) {
+    const d = new Date(iso);
+    if (!iso || isNaN(d.getTime())) return '—';
+    return d.toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  function statusInfo(row, contract) {
+    if (contract.runtime === false) return { label: 'Fixture-tested only', cls: 'health-status--fixture' };
+    if (!row || !row.status) return { label: 'Not checked yet', cls: 'health-status--unchecked' };
+    if (row.status === 'degraded') return { label: 'Degraded', cls: 'health-status--degraded' };
+    if (row.status === 'ok') return { label: 'OK', cls: 'health-status--ok' };
+    return { label: 'Not applicable here', cls: 'health-status--na' };
+  }
+
+  async function refreshHealth() {
+    const r = await chrome.storage.local.get('health.contracts');
+    const health = (r && r['health.contracts']) || {};
+    const contracts = DC.list();
+
+    const degradedCount = contracts.filter((c) => health[c.id]?.status === 'degraded').length;
+    const runtimeCount = contracts.filter((c) => c.runtime === true).length;
+    if (summaryEl) {
+      summaryEl.textContent =
+        degradedCount > 0
+          ? `${degradedCount} of ${contracts.length} feature${contracts.length === 1 ? '' : 's'} currently degraded.`
+          : `All checked features look OK — ${runtimeCount} of ${contracts.length} are live-checked; the rest are fixture-tested only (see the explanation column).`;
+    }
+
+    const rows = contracts
+      .map((c) => {
+        const row = health[c.id];
+        const { label, cls } = statusInfo(row, c);
+        const explanation = c.runtime === false ? c.runtimeNote || '' : '';
+        return `<tr>
+          <td class="health-td-feature">${escHtml(c.feature)}</td>
+          <td class="health-td-degrades">${escHtml(c.degradation)}</td>
+          <td><span class="health-status ${cls}">${escHtml(label)}</span></td>
+          <td class="health-td-checked">${row ? escHtml(fmtTs(row.lastProbe)) : '—'}</td>
+          <td class="health-td-explain">${escHtml(explanation)}</td>
+        </tr>`;
+      })
+      .join('');
+
+    wrap.innerHTML =
+      `<table class="health-table"><thead><tr>` +
+      `<th>Feature</th><th>What degrades</th><th>Status</th><th>Last checked</th><th>Why fixture-only</th>` +
+      `</tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refreshHealth);
+  } else {
+    refreshHealth();
+  }
+  document
+    .querySelectorAll('.nav-item[data-section="health"]')
+    .forEach((btn) => btn.addEventListener('click', refreshHealth));
+
+  // Snappier than a re-open: the canary writes this key directly from the
+  // Medicus tab while Options may already be open in another tab.
+  chrome.storage.onChanged?.addListener((changes) => {
+    if (changes['health.contracts']) refreshHealth();
+  });
+})();
+
+// ── Quick Actions — GP → reception composer lists ──────────────────────────────
+//
+// Practice-wide editor for the four chip lists the injected composer
+// (content-scripts/reception-quick-actions.js) renders above a task's Internal
+// comment box. Same doctrine as the slot-alert-rules editor above: plain rows,
+// save-on-change, no drag. Nothing here is patient data — the GP's free-text
+// note is transient state in the widget and never reaches storage.
+//
+// The live example line is deliberately rendered through the SAME composeLine()
+// the widget uses, so a label that reads badly mid-sentence ("Book F2F appt with
+// Usual GP") is visible while it is being typed, not after it reaches reception.
+
+(async function initQuickActions() {
+  try {
+    const QA = window.QuickActionsCore;
+    const STORE_KEY = 'triagelens.quickActions';
+    const savedTag = document.getElementById('qaSaved');
+    const exampleEl = document.getElementById('qaExample');
+    const LISTS = [
+      { key: 'actions', host: 'qaActionsList', add: 'qaAddActions', max: 28, placeholder: 'e.g. Book F2F appt' },
+      { key: 'who', host: 'qaWhoList', add: 'qaAddWho', max: 28, placeholder: 'e.g. Duty doctor, or a name' },
+      { key: 'when', host: 'qaWhenList', add: 'qaAddWhen', max: 28, placeholder: 'e.g. Within 48h' },
+      {
+        key: 'fallbacks',
+        host: 'qaFallbacksList',
+        add: 'qaAddFallbacks',
+        max: 140,
+        placeholder: 'e.g. if no answer, text booking link',
+      },
+    ];
+    if (!QA || !exampleEl) return;
+
+    // Version-gated shipped-preset migration (mergeShippedPresets sanitises for us).
+    // Kept in LOCK-STEP with the widget's load path in
+    // content-scripts/reception-quick-actions.js: if only the widget migrated, this
+    // editor would save a stale-version config back and un-migrate the practice.
+    function migrate(stored) {
+      const merged = QA.mergeShippedPresets(stored);
+      if (merged.changed) chrome.storage.local.set({ [STORE_KEY]: merged.cfg });
+      return merged.cfg;
+    }
+
+    const r = await chrome.storage.local.get(STORE_KEY);
+    let cfg = migrate(r[STORE_KEY]);
+
+    function activeSet() {
+      return cfg.sets[cfg.activeSet] || cfg.sets.default;
+    }
+
+    // Deleting a SHIPPED entry records a tombstone so mergeShippedPresets never
+    // resurrects it on the next version bump; typing it back in clears the mark.
+    function tombstone(key, label) {
+      if (!QA.isShippedLabel(key, label)) return;
+      const n = QA.normaliseLabel(label);
+      if (n && !cfg.removedShipped.includes(n)) cfg.removedShipped.push(n);
+    }
+
+    function untombstone(label) {
+      const n = QA.normaliseLabel(label);
+      if (!n) return;
+      cfg.removedShipped = cfg.removedShipped.filter((t) => t !== n);
+    }
+
+    function save() {
+      cfg = QA.sanitiseConfig(cfg);
+      chrome.storage.local.set({ [STORE_KEY]: cfg });
+      if (savedTag) {
+        savedTag.classList.add('show');
+        setTimeout(() => savedTag.classList.remove('show'), 2000);
+      }
+    }
+
+    // The example uses the first entry of each list — the composer's own output
+    // for the simplest possible pick.
+    function renderExample() {
+      const set = activeSet();
+      const line = QA.composeLine({
+        action: set.actions[0] || '',
+        who: set.who[0] || '',
+        when: set.when[0] || '',
+        note: set.fallbacks[0] || '',
+      });
+      exampleEl.textContent = line || 'Add at least one action to see the composed sentence.';
+    }
+
+    function renderList(spec) {
+      const host = document.getElementById(spec.host);
+      if (!host) return;
+      const items = activeSet()[spec.key] || [];
+      host.innerHTML = '';
+      items.forEach((value, i) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:6px;';
+        row.innerHTML = `
+          <input type="text" class="qa-item" value="${escAttr(value)}" maxlength="${spec.max}"
+            placeholder="${escAttr(spec.placeholder)}"
+            style="flex:1; min-width:140px; background:var(--bg-elev); border:1px solid var(--border-hi);
+                   color:var(--text-2); font-family:var(--mono); font-size:11px; border-radius:5px; padding:4px 8px;" />
+          <button class="qa-up ghost" style="padding:2px 8px; font-size:11px;" title="Move up"${i === 0 ? ' disabled' : ''}>▲</button>
+          <button class="qa-down ghost" style="padding:2px 8px; font-size:11px;" title="Move down"${i === items.length - 1 ? ' disabled' : ''}>▼</button>
+          <button class="qa-del ghost" style="padding:2px 8px; font-size:11px;" title="Remove">✕</button>
+        `;
+        row.querySelector('.qa-item').addEventListener('change', (e) => {
+          const v = e.target.value.trim().slice(0, spec.max);
+          if (!v) {
+            tombstone(spec.key, value); // emptying the box is a removal
+            items.splice(i, 1);
+          } else {
+            if (v !== value) {
+              tombstone(spec.key, value); // edited away from a shipped label
+              untombstone(v);
+            }
+            items[i] = v;
+          }
+          save();
+          renderAll();
+        });
+        row.querySelector('.qa-up').addEventListener('click', () => {
+          if (i === 0) return;
+          [items[i - 1], items[i]] = [items[i], items[i - 1]];
+          save();
+          renderAll();
+        });
+        row.querySelector('.qa-down').addEventListener('click', () => {
+          if (i >= items.length - 1) return;
+          [items[i + 1], items[i]] = [items[i], items[i + 1]];
+          save();
+          renderAll();
+        });
+        row.querySelector('.qa-del').addEventListener('click', () => {
+          tombstone(spec.key, value);
+          items.splice(i, 1);
+          save();
+          renderAll();
+        });
+        host.appendChild(row);
+      });
+    }
+
+    function renderAll() {
+      LISTS.forEach(renderList);
+      renderExample();
+    }
+
+    LISTS.forEach((spec) => {
+      document.getElementById(spec.add)?.addEventListener('click', () => {
+        const items = activeSet()[spec.key];
+        if (items.length >= 24) return; // QA_LIMITS.list — sanitiseConfig would drop the overflow anyway
+        items.push('');
+        renderAll();
+        const host = document.getElementById(spec.host);
+        host?.querySelector('div:last-child .qa-item')?.focus();
+      });
+    });
+
+    document.getElementById('qaRestoreDefaults')?.addEventListener('click', () => {
+      if (!confirm('Replace all four Quick Actions lists with the shipped defaults? Your edits will be lost.')) return;
+      cfg = QA.sanitiseConfig(JSON.parse(JSON.stringify(QA.DEFAULT_CONFIG)));
+      save();
+      renderAll();
+    });
+
+    renderAll();
+
+    // Render lazily on nav click too, so a change made in another tab (or by a
+    // GP's "+ name" chip on the live page) is reflected when the section opens.
+    document.querySelectorAll('.nav-item').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (btn.dataset.section !== 'quickactions') return;
+        const fresh = await chrome.storage.local.get(STORE_KEY);
+        cfg = migrate(fresh[STORE_KEY]);
+        renderAll();
+      });
+    });
+  } catch (e) {
+    console.warn('[Quick Actions init]', e.message);
+  }
 })();

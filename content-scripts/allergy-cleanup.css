@@ -1,0 +1,785 @@
+/* Medicus Suite — "Clean up allergies?" widget: junk-code removal + duplicate merge, unified. */
+/* All selectors scoped to ms-ac-* classes to avoid Medicus style conflicts. */
+/* Supersedes allergy-junk-code-cleanup.css (ms-ajc-*) + allergy-duplicate-merge.css (ms-adm-*). */
+
+#ms-ac-widget {
+  display: block;
+  margin: 6px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Keyboard focus ring — this file has no :focus-visible rule otherwise
+   (Medicus's page never loads panel.css, so the suite's global ring doesn't
+   reach here). #2563eb matches the suite's --accent light-theme value. */
+button[class*='ms-ac-']:focus-visible,
+input[class*='ms-ac-']:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.ms-ac-toggle {
+  padding: 4px 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #1e40af;
+  cursor: pointer;
+}
+
+.ms-ac-toggle:hover {
+  background: #dbeafe;
+}
+
+.ms-ac-body {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #1a2030;
+}
+
+.ms-ac-loading,
+.ms-ac-empty {
+  font-size: 12px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.ms-ac-error {
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.ms-ac-retry {
+  margin-left: 6px;
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-ac-summary {
+  margin-bottom: 8px;
+  color: #374151;
+}
+
+/* One section per category (junk codes, duplicate groups) within the
+   shared summary panel — a visual divider between them when both are
+   present. */
+.ms-ac-section {
+  margin-bottom: 12px;
+}
+
+.ms-ac-section:last-child {
+  margin-bottom: 0;
+}
+
+.ms-ac-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a2030;
+  margin-bottom: 4px;
+}
+
+/* ── Junk checklist ────────────────────────────────────────────────────── */
+
+.ms-ac-select-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.ms-ac-select-all,
+.ms-ac-select-none,
+.ms-ac-dual-select-all,
+.ms-ac-dual-select-none {
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 11px;
+  font-family: inherit;
+  color: #0d6e5e;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ms-ac-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.ms-ac-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 8px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.ms-ac-row-ended {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* A row carrying real clinical detail (severity/certainty/additional info)
+   under a code that's normally structurally meaningless to carry any —
+   "Select all" skips these, they need individual review. */
+.ms-ac-row-caution {
+  background: #fffbeb;
+  border-color: #fbbf24;
+}
+
+.ms-ac-row-desc {
+  color: #1a2030;
+}
+
+.ms-ac-row-detail {
+  display: block;
+  flex-basis: 100%;
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.ms-ac-row-warn {
+  display: block;
+  flex-basis: 100%;
+  font-size: 11px;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.ms-ac-row-tag {
+  padding: 1px 6px;
+  background: #dcfce7;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #166534;
+}
+
+.ms-ac-row-reason {
+  font-size: 11px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.ms-ac-row-error {
+  font-size: 11px;
+  color: #b91c1c;
+}
+
+.ms-ac-end-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.ms-ac-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ms-ac-date-input {
+  padding: 4px 8px;
+  border: 1px solid #c8cdd6;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1a2030;
+  background: #fff;
+}
+
+.ms-ac-end-btn {
+  padding: 7px 14px;
+  background: #b91c1c;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-ac-end-btn:hover:not(:disabled) {
+  background: #991b1b;
+}
+
+.ms-ac-end-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Optimistic strike-through on the real allergy-list row once its "end
+   allergy" POST succeeds — a later Medicus Vue re-render from stale state
+   could revert this visually, though the actual saved record is correct
+   either way. */
+.ms-ac-anchor-ended {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+/* ── Duplicate group list ──────────────────────────────────────────────── */
+
+.ms-ac-dup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ms-ac-dup-row-btn {
+  text-align: left;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #bfdbfe;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1e40af;
+  cursor: pointer;
+}
+
+.ms-ac-dup-row-btn:hover {
+  background: #eff6ff;
+}
+
+/* ── Convertible-entries list (pre-defined-allergy -> substance) ─────────── */
+
+.ms-ac-convert-row-btn {
+  text-align: left;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #bfdbfe;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1e40af;
+  cursor: pointer;
+}
+
+.ms-ac-convert-row-btn:hover {
+  background: #eff6ff;
+}
+
+/* A "not-an-allergy" match is informational only — no action offered, see
+   rules/allergy-substance-conversion.json's own notes for why. */
+.ms-ac-convert-info-row {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #374151;
+}
+
+.ms-ac-convert-info-note {
+  color: #92400e;
+}
+
+/* ── Modal — per-group duplicate review ───────────────────────────────────
+   The review UI is a fixed-position modal appended to document.body, kept
+   deliberately ON the clinical summary page rather than a separate
+   extension tab or an inline panel (unworkable once a group has more than
+   a couple of copies — a real case had 6). */
+.ms-ac-modal-root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.ms-ac-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 999998;
+}
+
+.ms-ac-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(960px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  z-index: 999999;
+  color: #1a2030;
+}
+
+.ms-ac-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  border-radius: 10px 10px 0 0;
+}
+
+.ms-ac-modal-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a2030;
+}
+
+.ms-ac-modal-subtitle {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.ms-ac-modal-close {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ms-ac-modal-close:hover {
+  background: #f3f4f6;
+}
+
+.ms-ac-modal-body {
+  padding: 14px 16px 16px;
+  font-size: 12px;
+}
+
+.ms-ac-done {
+  font-size: 13px;
+  color: #166534;
+  font-weight: 600;
+}
+
+/* Deliberately amber-toned, not neutral grey — a merge always warrants a
+   conscious clinical decision, never a bulk one. */
+.ms-ac-note {
+  font-size: 11px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fbbf24;
+  border-radius: 5px;
+  padding: 6px 8px;
+  margin-bottom: 10px;
+}
+
+/* ── Per-copy cards ────────────────────────────────────────────────────── */
+.ms-ac-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ms-ac-card {
+  position: relative;
+  flex: 1 1 200px;
+  min-width: 180px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  background: #f9fafb;
+  display: block;
+}
+
+.ms-ac-card:hover {
+  border-color: #bfdbfe;
+}
+
+.ms-ac-card-keeper {
+  border-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.ms-ac-card-radio {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+/* At the top of the card, above the KEEP badge — a real (non-nested) label
+   of its own, since the card itself is a plain <div> now, not a <label>. */
+.ms-ac-card-remove-row {
+  display: block;
+  font-size: 10px;
+  color: #b91c1c;
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+
+.ms-ac-card-remove-row input {
+  vertical-align: middle;
+  margin-right: 3px;
+}
+
+.ms-ac-removed-note {
+  font-size: 11px;
+  color: #6b7280;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  padding: 5px 8px;
+  margin-bottom: 10px;
+}
+
+.ms-ac-restore-btn {
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 11px;
+  font-family: inherit;
+  color: #1e40af;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ms-ac-card-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #166534;
+  margin-bottom: 4px;
+}
+
+.ms-ac-card-badge-other {
+  color: #6b7280;
+}
+
+.ms-ac-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a2030;
+  margin-bottom: 2px;
+}
+
+.ms-ac-card-concept-note {
+  font-size: 10px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fbbf24;
+  border-radius: 4px;
+  padding: 2px 5px;
+  margin-bottom: 4px;
+  display: inline-block;
+}
+
+.ms-ac-card-date {
+  font-size: 11px;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.ms-ac-card-line {
+  font-size: 11px;
+  color: #1a2030;
+  margin-top: 2px;
+}
+
+.ms-ac-card-line-label {
+  font-weight: 700;
+  color: #374151;
+}
+
+.ms-ac-card-muted {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.ms-ac-hint {
+  font-size: 11px;
+  color: #6b7280;
+  margin: 4px 0 10px;
+}
+
+/* ── Field-comparison table ───────────────────────────────────────────── */
+.ms-ac-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 10px;
+  font-size: 11px;
+}
+
+.ms-ac-th {
+  text-align: left;
+  padding: 4px 8px;
+  color: #6b7280;
+  font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ms-ac-th-keep {
+  color: #166534;
+}
+
+.ms-ac-row-label {
+  padding: 5px 8px;
+  color: #374151;
+  font-weight: 700;
+  white-space: nowrap;
+  border-top: 1px solid #f3f4f6;
+  vertical-align: top;
+}
+
+.ms-ac-td {
+  padding: 5px 8px;
+  vertical-align: top;
+  border-top: 1px solid #f3f4f6;
+  color: #1a2030;
+}
+
+.ms-ac-td-keep {
+  border-left: 2px solid #22c55e;
+}
+
+.ms-ac-td-locked {
+  color: #6b7280;
+}
+
+.ms-ac-td-none {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.ms-ac-td-radio {
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.ms-ac-mergeable-mark {
+  color: #2563eb;
+}
+
+.ms-ac-locked-mark {
+  color: #9ca3af;
+}
+
+.ms-ac-ai-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1a2030;
+  background: #fff;
+  border: 1px solid #c8cdd6;
+  border-radius: 5px;
+  resize: vertical;
+}
+
+.ms-ac-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ms-ac-confirm-btn {
+  padding: 7px 14px;
+  background: #1e40af;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-ac-confirm-btn:hover:not(:disabled) {
+  background: #1e3a8a;
+}
+
+.ms-ac-confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ms-ac-cancel-btn {
+  padding: 7px 14px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-ac-cancel-btn:hover {
+  background: #f3f4f6;
+}
+
+/* ── Modal — conversion review (substance/reaction search + confirm) ─────── */
+
+.ms-ac-conv-search-section {
+  margin-bottom: 12px;
+}
+
+.ms-ac-conv-search-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.ms-ac-conv-search-input {
+  flex: 1 1 auto;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1a2030;
+  background: #fff;
+  border: 1px solid #c8cdd6;
+  border-radius: 5px;
+}
+
+.ms-ac-conv-search-btn {
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-ac-conv-search-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.ms-ac-conv-search-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ms-ac-conv-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+  margin-top: 6px;
+}
+
+.ms-ac-conv-result {
+  text-align: left;
+  padding: 5px 8px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1a2030;
+  cursor: pointer;
+}
+
+.ms-ac-conv-result:hover {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.ms-ac-conv-result-id {
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.ms-ac-conv-pending {
+  font-size: 12px;
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #22c55e;
+  border-radius: 5px;
+  padding: 5px 8px;
+  margin: 4px 0;
+}
+
+.ms-ac-conv-pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0;
+}
+
+.ms-ac-conv-pending-list .ms-ac-conv-pending {
+  margin: 0;
+}
+
+.ms-ac-conv-clear-btn {
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 11px;
+  font-family: inherit;
+  color: #166534;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ms-ac-conv-current {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+}
+
+.ms-ac-conv-current-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.ms-ac-conv-confirm-btn {
+  padding: 7px 14px;
+  background: #1e40af;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-ac-conv-confirm-btn:hover:not(:disabled) {
+  background: #1e3a8a;
+}
+
+.ms-ac-conv-confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

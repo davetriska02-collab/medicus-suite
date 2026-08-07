@@ -10,7 +10,7 @@
     <div class="suite-shell">
       <nav class="suite-nav" id="suiteNav">
         <div class="nav-brand">
-          <img class="nav-logo" src="../brand/app-icon.png" alt="" width="16" height="16" />
+          <img class="nav-logo" src="../icons/icon-16.png" alt="" width="16" height="16" />
           <span class="nav-name">Medicus Suite</span>
         </div>
         <button
@@ -194,6 +194,42 @@
             </svg>
             <span>Reception</span>
           </button>
+          <button
+            class="nav-tab"
+            data-module="signing"
+            aria-label="Signing Queue — repeat requests with monitoring context"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z" />
+            </svg>
+            <span>Signing</span>
+          </button>
+          <button class="nav-tab" data-module="followups" aria-label="Follow-ups — personal safety-net reminders">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 3" />
+            </svg>
+            <span>Follow-ups</span>
+          </button>
           <button class="nav-tab" data-module="sweep" aria-label="Pre-clinic Sweep">
             <svg
               width="14"
@@ -224,6 +260,23 @@
             </svg>
             <span>Knowledge</span>
           </button>
+          <button class="nav-tab" data-module="leaflets" aria-label="NHS Patient Leaflets">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            <span>Leaflets</span>
+          </button>
           <button class="nav-tab" data-module="record" aria-label="Patient Record (live)">
             <svg
               width="14"
@@ -239,6 +292,92 @@
               <path d="M9 8h6M9 12h6M9 16h3" />
             </svg>
             <span>Record</span>
+          </button>
+          <button class="nav-tab" data-module="rota" aria-label="Rota">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <rect x="3" y="5" width="18" height="16" rx="2" />
+              <path d="M3 10h18M8 3v4M16 3v4" />
+              <path d="M8 14h3M8 17.5h6" />
+            </svg>
+            <span>Rota</span>
+          </button>
+          <!-- Full-tab opener. Arrow-out-of-box glyph, NOT a second calendar: a
+               near-duplicate calendar beside the compact Rota tab was a daily
+               misclick, and this one leaves the panel for a new browser tab. -->
+          <button class="nav-tab" data-module="rota-app" aria-label="Rota manager (opens in a new tab)">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <path d="M15 3h6v6" />
+              <path d="M10 14 21 3" />
+            </svg>
+            <span>Rota manager</span>
+          </button>
+          <button class="nav-tab" data-module="patient-alerts" aria-label="Patient Alerts — per-patient custom flags">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+              <line x1="4" y1="22" x2="4" y2="15" />
+            </svg>
+            <span>Pt Alerts</span>
+          </button>
+          <button class="nav-tab" data-module="phrases" aria-label="Phrases — reusable message blocks">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              <line x1="8" y1="9" x2="16" y2="9" />
+              <line x1="8" y1="13" x2="13" y2="13" />
+            </svg>
+            <span>Phrases</span>
+          </button>
+          <button class="nav-tab" data-module="duplicate-checker" aria-label="Duplicate Problem Checker">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M10 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" transform="translate(3 -1)" opacity="0.5" />
+              <line x1="9" y1="13" x2="15" y2="13" />
+              <line x1="9" y1="17" x2="13" y2="17" />
+            </svg>
+            <span>Duplicates</span>
           </button>
           <button class="nav-tab" data-module="visualiser" aria-label="Patient Record Visualiser">
             <svg
@@ -334,7 +473,36 @@
             </button>
             <div id="helpPopoverHost"></div>
           </div>
-          <button id="paletteBtn" class="icon-btn" title="Command palette (Ctrl+K)">
+          <div class="nav-disp-wrap">
+            <button
+              id="quickLeafletBtn"
+              class="icon-btn"
+              title="Quick leaflet search — NHS patient info from any tab"
+              aria-label="Quick leaflet search"
+              aria-haspopup="dialog"
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+              </svg>
+            </button>
+            <div id="quickLeafletHost"></div>
+          </div>
+          <button
+            id="paletteBtn"
+            class="icon-btn"
+            title="Command palette (Ctrl+K)"
+            aria-label="Command palette — jump to any tab (Ctrl+K)"
+          >
             <svg
               width="13"
               height="13"
@@ -374,7 +542,7 @@
           </button>
           <button id="quietPill" class="quiet-pill quiet-pill-hidden" title=""></button>
           <div class="nav-disp-wrap">
-            <button id="displayBtn" class="icon-btn" title="Display settings">
+            <button id="displayBtn" class="icon-btn" title="Display settings" aria-label="Display settings">
               <svg
                 width="13"
                 height="13"
@@ -397,7 +565,12 @@
             </button>
             <div id="displayPopoverHost"></div>
           </div>
-          <button id="popoutBtn" class="icon-btn" title="Pop out to floating window">
+          <button
+            id="popoutBtn"
+            class="icon-btn"
+            title="Pop out to floating window"
+            aria-label="Pop out to floating window"
+          >
             <svg
               width="13"
               height="13"
@@ -412,7 +585,7 @@
               <path d="M9 21V9" />
             </svg>
           </button>
-          <button id="settingsBtn" class="icon-btn" title="Settings">
+          <button id="settingsBtn" class="icon-btn" title="Settings" aria-label="Settings">
             <svg
               width="13"
               height="13"
@@ -442,6 +615,9 @@
         <div id="wrStrip" class="wr-strip wr-strip-hidden" role="status" aria-live="polite"></div>
         <div id="rmStrip" class="rm-strip rm-strip-hidden" role="status" aria-live="polite"></div>
         <div id="subRagStrip" class="sub-rag-strip sub-rag-strip-hidden" role="status" aria-live="polite"></div>
+        <div id="healthStrip" class="health-strip health-strip-hidden" role="status" aria-live="polite"></div>
+        <div id="paStrip" class="pa-strip pa-strip-hidden" role="status" aria-live="polite"></div>
+        <div id="slaBreachStrip" class="sla-strip sla-strip-hidden" role="status" aria-live="polite"></div>
       </div>
       <div id="setupHost" aria-live="polite" style="display: none"></div>
       <main class="suite-content" id="suiteContent">
@@ -453,13 +629,16 @@
     <script src="../shared/zen-mode.js"></script>
     <script src="../shared/practice-code.js"></script>
     <script src="../shared/api-diag.js"></script>
+    <script src="../shared/appointments-feed.js"></script>
     <script src="../shared/request-monitor.js"></script>
+    <script src="../shared/sla-breach-core.js"></script>
     <script src="../engine/triage-alert-engine.js"></script>
     <script src="../shared/io/triage-alert-io.js"></script>
     <script src="../shared/popout-manager.js"></script>
     <script src="../shared/activity-api.js"></script>
     <script src="../shared/referrals-api.js"></script>
     <script src="../shared/chip-renderer.js"></script>
+    <script src="../shared/smoking-status.js"></script>
     <script src="../shared/provenance.js"></script>
     <script src="../engine/api-client.js"></script>
     <script src="../engine/normalisers.js"></script>
@@ -467,10 +646,16 @@
     <script src="../engine/stopp-start.js"></script>
     <script src="../engine/ruleset-io.js"></script>
     <script src="../engine/rules-engine.js"></script>
+    <script src="../engine/preflight.js"></script>
     <script src="../shared/rule-currency.js"></script>
     <script src="../shared/extraction-health.js"></script>
+    <script src="../shared/dom-contracts.js"></script>
+    <script src="../shared/event-ledger.js"></script>
     <script src="../shared/reception-pathway-utils.js"></script>
     <script src="../shared/knowledge-utils.js"></script>
+    <script src="../shared/phrases-core.js"></script>
+    <script src="../shared/phrases-presets.js"></script>
+    <script src="../shared/leaflets-utils.js"></script>
     <script src="../shared/update-checker.js"></script>
     <script src="../shared/display-prefs.js"></script>
     <script src="../shared/glossary.js"></script>

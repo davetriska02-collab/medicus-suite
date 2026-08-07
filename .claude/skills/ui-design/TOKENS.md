@@ -20,8 +20,8 @@ extend the canon here _and_ in `panel.css`, then use it.
 | `--text-1`    | `#0f172a` | `#f1f5f9` | headings, primary data            |
 | `--text-2`    | `#1e3a5f` | `#cfe1ff` | secondary, active chrome          |
 | `--text-3`    | `#475569` | `#93a8c5` | tertiary, labels with content     |
-| `--text-4`    | `#64748b` | `#5d7a9d` | muted — supplementary only        |
-| `--text-5`    | `#94a3b8` | `#3d5070` | faintest — decoration-grade       |
+| `--text-4`    | `#556377` | `#7d97b5` | muted — supplementary only        |
+| `--text-5`    | `#5f6f85` | `#6c89ac` | faintest — decoration-grade       |
 
 Legacy aliases `--t1`…`--t5` map to `--text-1`…`--text-5` (older strip CSS
 referenced them before they existed — the aliases make those rules resolve).
@@ -126,14 +126,22 @@ Motion: transitions use `var(--fast) var(--ease)` (color/border/background)
 or `var(--med)` (transform/opacity/layout-adjacent). Any keyframe animation
 gets a `prefers-reduced-motion: reduce` kill switch.
 
-## Typography
+## Typography (revised 2026-06-21 — sans is the voice, mono is data only)
 
-- `--sans` (system stack) — human voice: content, names, prose. 11–13px body,
-  16px module titles, weight 400–600.
-- `--mono` (JetBrains Mono) — machine voice: labels, nav, badges, counts,
-  metadata. 9–11px, weight 500–600, `text-transform: uppercase`,
-  `letter-spacing: .06em–.12em` (smaller text → wider tracking).
-- Aligned numerals: `font-variant-numeric: tabular-nums` on counts/tables.
+- `--sans` (system stack) — **the voice**: module titles, section headers, card
+  labels, prose, names, button text, empty states. Sentence case, never
+  uppercase. Scale and weight carry hierarchy:
+  - Module title: 16px / 600
+  - **Section header / card label: 11–12px / 600, sentence case, `--text-2`**
+    (the new `.section-header` recipe — replaces the old mono-caps eyebrow)
+  - Body / description: 11–13px / 400–500, `--text-2`/`--text-3`
+  - Micro-label: 10px / 600, `--text-3`
+- `--mono` (JetBrains Mono) — the machine voice, pulled back to: **data**
+  (counts, times, durations, indices, percentages, dates, codes/IDs, version,
+  the relative-freshness value), the **nav rail** (wayfinding chrome), and
+  **status micro-tokens** (a kbd hint, a band like `AMBER`). 9–13px, 500–700,
+  `font-variant-numeric: tabular-nums`. Uppercase + letter-spacing survive on
+  those micro-tokens and the nav, never on a **section header or card label**.
 - No new font families. No new weights without updating the Google Fonts
   import in `panel.css` (MV3 CSP — this import is the only sanctioned
   external asset).
@@ -188,8 +196,9 @@ border-radius: var(--r-md); color: var(--text-2);` focus:
 `border-color: var(--accent); background: var(--bg-elev);` (plus the global
 ring).
 
-**Section label** — mono 9px, `letter-spacing:.12em`, uppercase, `--text-4`,
-generous top margin: groups are separated by space first, rules second.
+**Section header** — sans, 11–12px, weight 600, **sentence case**, `--text-2`,
+generous top margin: groups are separated by space first, rules second. (Was
+mono-caps; revised 2026-06-21 — headers earn hierarchy with weight, not caps.)
 
 **Empty state** — centered, mono 10px `--text-4` label over an optional
 14px stroke icon at `--text-5`, ≥24px vertical padding. Never a bare string.

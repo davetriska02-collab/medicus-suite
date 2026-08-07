@@ -12,6 +12,7 @@
 | `engine/` | Business logic (rules engine, extractors, triage engine) |
 | `content-scripts/` | Injected into Medicus pages |
 | `options/` | Settings page |
+| `rota/` | Rota Manager subtree — self-contained ESM app with its own `package.json` (`"type": "module"`). `rota/engine/` is **pure** (no DOM/`chrome.*`/`fetch`), `rota/shared/` is storage + helpers, `rota/app/app.html` is the full app (opens as a full tab). Tests are the root-level `test-rota-*.js` files |
 | `visualiser.html` / `visualiser-core.html` | Patient record visualiser (opens as full tab) |
 
 ## Adding a new side-panel module
@@ -22,7 +23,7 @@
 4. Add `<name>: { js: () => import('./modules/<name>/<name>.js'), css: '...' }` to `MODULES` in `side-panel/panel.js` AND `pop-out/pop-out.js`
 5. Follow the backup convention below
 
-> **Panel-only tabs (intentional exceptions):** `visualiser` and `about` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. `visualiser` is special-cased in `panel.js` (opens a full browser tab, not a module) and `about` renders inline static text — neither makes sense in the floating pop-out, so they are deliberately omitted there. All *real* modules must still appear in both.
+> **Panel-only tabs (intentional exceptions):** `visualiser`, `duplicate-checker`, `rota-app` and `about` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. `visualiser`, `duplicate-checker` and `rota-app` are special-cased in `panel.js`'s nav click handler (each opens a full browser tab, not a module — `visualiser`/`duplicate-checker` via `chrome.tabs.create`, `rota-app` via `openRotaTab()` in `side-panel/modules/rota/rota-open.js`, which focuses an existing tab rather than stacking duplicates), and `about` renders inline static text — none makes sense in the floating pop-out, so they are deliberately omitted there. The full-tab openers are also excluded from `MODULES` (so the boot guard can't restore into them) and from the Ctrl/Cmd+Alt+Arrow tab cycle; the command palette carries an `open:*` fallback command so the pop-out can still reach them. All *real* modules must still appear in both shells — including `rota` (labelled "Rota"), the compact companion to the full-tab "Rota manager" (`rota-app`), which does.
 
 ## chrome.storage.local keys — backup convention
 
@@ -42,12 +43,13 @@
 
 ## Global demand / alert strips
 
-Three permanent strips live in `side-panel/panel.html` outside `<main>`, polled independently by `panel.js`:
+Four permanent strips live in `side-panel/panel.html` outside `<main>`, polled independently by `panel.js`:
 - `#wrStrip` — waiting room patients (`wr-strip-*` CSS)
 - `#rmStrip` — new medical/admin requests (`rm-strip-*` CSS)
 - `#subRagStrip` — submissions RAG threshold alerts (`sub-rag-strip-*` CSS)
+- `#healthStrip` — suite self-diagnosis: >= 1 DOM contract (`shared/dom-contracts.js`) probed `degraded` by the runtime canary (`shared/contract-canary.js`, injected into the live Medicus page) — amber-only, never red (`health-strip-*` CSS)
 
-Pattern: each strip has a hidden class, polls on load + interval, shows amber/red state when threshold crossed. If you add another global alert, follow this same pattern.
+Pattern: each strip has a hidden class, polls on load + interval, shows amber/red state when threshold crossed. If you add another global alert, follow this same pattern. All four are panel-only by convention — `pop-out/pop-out.js`'s `MODULES` comment records this deliberately ("no WR/RM strips — they stay in the docked panel"); a new strip should match unless there's a specific reason to break the pattern.
 
 ## Injecting chips into the live Medicus queue (mechanics — copy the pattern, don't rediscover)
 
@@ -129,6 +131,68 @@ Hard rules learned the slow way:
   unstyled "white rectangle" (`.ch-q-result`/`.ch-q-mon` had this until v3.67.0).
 - **Host-app noise is not us:** `MInput.vue` warnings and `sentry.io` `429`s in the
   console are Medicus's own Vue app + telemetry, not the extension.
+
+## Injecting a WIDGET next to a Medicus form field (not a chip — the composer pattern)
+
+Different problem from queue chips: a chip decorates a cell, a widget (e.g.
+`content-scripts/reception-quick-actions.js`) sits *beside a form control the clinician
+still has to use*. Inserting it as a sibling makes it **compete with that control inside
+whatever layout algorithm the container uses**, and the control loses. It took three
+releases (v3.204.0 → .1 → .2) to stop rediscovering this. Copy the settled pattern:
+
+1. **Never insert as a bare sibling of the field.** Climb out of pure single-child wrapper
+   shells first (`insertionAnchor()`: while the node is its parent's only element child,
+   go up, max 3 hops) and insert *there*, so the page's own block flow stacks the widget
+   above the field the way its label already is. Not competing beats winning the fight.
+2. **Be inert in both layout algorithms**, because you cannot tell which one you are in
+   from a screenshot: `flex: 0 0 100%` inline **and** `grid-column: 1 / -1` in CSS. In a
+   grid, a foreign sibling shifts every auto-placed item over by one cell — that is what
+   dropped the textarea into a narrow track, and no amount of flex-wrap patching touches
+   it.
+3. **`min-width` on the host control is the backstop, and it must be INLINE too.** It
+   beats `flex-shrink` whichever ancestor is shrinking — but a stylesheet
+   `#widget ~ textarea` rule stops matching the moment rule 1 or the hoist moves the
+   widget out of sibling position. Patch the element, not just the selector.
+4. **Measure, don't assume — and keep measuring.** `fixCrushedLayout()` re-checks
+   `getBoundingClientRect().width` after *every* escalation (un-nowrap flex ancestors →
+   patch the control → collapse the grid template → hoist the widget), and
+   `ensureReadableLayout()` re-runs the whole thing on every observed DOM churn. A
+   one-shot fix at inject time is stale the moment Vue re-renders (that was v3.204.0).
+5. **Record and restore every style you set on a host node** (`patchStyle` /
+   `restoreStylePatches`) — never leave permanent mutations in Medicus's DOM after the
+   widget is removed.
+6. **Dead-end diagnostic, not a silent give-up.** If every escalation is exhausted and the
+   control is *still* crushed, dump the evidence the next fix needs behind the
+   `ch-debug` flag: `console.warn('[MSQA] …', chain)` with each ancestor's tag, class,
+   computed `display`/`flexFlow`/`gridTemplateColumns` and width. Three blind fixes were
+   two too many — a widget that cannot self-heal must at least self-diagnose.
+
+**Why this is a safety rule, not styling:** the crushed textarea rendered the internal
+comment one character per line. H-049's control is "the clinician still reads the comment
+before submitting" — which is false if they physically cannot read it. A layout defect on
+a clinical free-text control is a degraded hazard control; log it as field evidence in
+`docs/HAZARD-LOG.md`, don't file it as polish.
+
+### Making a two-step manual flow obvious (the same widget's UX lessons)
+
+The widget writes text; the clinician still presses Medicus's own Submit. Practice
+feedback said nobody realised either step. What actually fixed it — reuse this shape:
+
+- **Echo the result back.** Clearing the form on success reads as an *abort*. Hold the
+  inserted sentence on screen ("Added to the comment below: …") until the next
+  composition starts; that echo is the "it worked" signal, not a small green line.
+- **Number the steps in the UI** ("1. Insert into comment ↓" / "2. Then press
+  "Submit as new" below.") and read the host button's label live off the DOM so it names
+  the real control. Numbering teaches the two-step nature more cheaply than colour.
+- **A warning about an incomplete action must not time out.** The transient flash confirms
+  the write; the *pending* reminder ("Not yet submitted … until you do, reception sees
+  nothing") persists — no timer — until the state stops being real. A GP interrupted for
+  90 seconds is exactly the case the warning exists for.
+- **State the consequence, not the mechanism.** "not yet submitted" describes the system;
+  "reception sees nothing" changes behaviour.
+- **Never claim completion.** No "Done" / "Sent" / "Booked" / "Submitted" — observing a
+  click on Submit is not a successful submit. `test-reception-quick-actions-ui.js`
+  source-greps these strings; extend it rather than trusting review.
 
 ## Editing drug-monitoring rules (`rules/drug-rules.json`)
 

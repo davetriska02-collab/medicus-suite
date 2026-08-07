@@ -2,17 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.126.0] — 2026-08-07
+## [v3.223.0] — 2026-08-07
 
 ### Chrome Web Store readiness
 
-Preparation for formal store distribution alongside the existing
-GitHub-release (unpacked) channel:
+Preparation for formal store distribution alongside the existing unpacked
+(shared-folder / GitHub-release) channel:
 
 - **Privacy policy** — new public `PRIVACY.md` at the repo root (required by
-  the store for any extension handling user data). States the architecture
-  accurately: local-only processing, zero patient-data egress, no analytics
-  or telemetry, Limited Use compliance.
+  the store for any extension handling user data). Describes the actual data
+  flows as of this version: local-first processing, NHS terminology/content
+  lookups (term or concept only, never patient identifiers), the
+  clinician-confirmed record tidy-up writes to Medicus itself, and the two
+  **dormant-by-default, practice-opt-in** paths — task-presence (shared
+  folder primary; optional practice-configured hosted store carrying staff
+  identity only, never patient data) and the Transactional API backend proxy
+  (patient care-record bundles transit the manufacturer-operated proxy only
+  when a practice explicitly enables the integration). No analytics or
+  telemetry; Chrome Web Store Limited Use compliance.
 - **Update checker is now gated off on store installs.** New
   `UpdateChecker.isStoreInstall()` (detects the store-stamped `update_url` in
   the manifest). On a store install: the service worker schedules no GitHub
@@ -24,21 +31,7730 @@ GitHub-release (unpacked) channel:
   documents (`docs/` except the runtime-linked `sentinel-DISCLAIMER.txt`),
   brand sources (except the runtime-loaded `brand/app-icon.png`),
   `design-system/`, `CLAUDE.md`, the keeper report, `CHANGELOG.md`,
-  `SECURITY.md` and `SECURITY-AUDIT.md` from the shipped package. Reviewers unpack what we upload; internal
-  appraisals and plans don't belong in it.
+  `SECURITY.md` and `SECURITY-AUDIT.md` from the shipped package. Reviewers
+  unpack what we upload; internal appraisals and plans don't belong in it.
 - **Submission pack** — new `docs/STORE-LISTING.md` with paste-ready
   dashboard text: single-purpose statement, per-permission and per-host
-  justifications, data-usage answers, listing copy, screenshot rules
-  (synthetic data only), unlisted-visibility recommendation, and the
-  backup-export migration path for existing sideloaded installs (store
-  installs get a new extension ID).
+  justifications (all 8 permissions and all 6 hosts), data-usage
+  disclosures, listing copy, screenshot rules (synthetic data only),
+  unlisted-visibility recommendation, and the backup-export migration path
+  for existing sideloaded installs (store installs get a new extension ID).
 - `SECURITY.md` supported-versions wording updated to cover both channels.
-- **Fix: date-rot in `test-alert-builder.js`.** The file pinned the engine
-  clock to a fixed `NOW` but computed observation/problem dates from the
-  *real* clock, so the "overdue" boundary assertion started failing once
-  enough calendar time passed (red on `main` since early August).
-  `isoDaysAgo()` now anchors on the same fixed `NOW` — the whole file is
-  date-stable.
+
+## [v3.222.0] — 2026-08-04
+
+### Task presence: the practice's shared folder IS the store
+
+Field verdict on v3.221.0: still too complicated — and the data shouldn't leave the practice.
+Both fixed at once. The presence store is now **the shared folder the extension already loads
+from**: while a clinician has a request open (tab visible), the service worker writes one tiny
+self-expiring file — `ms-presence/<site>-<staffId>.json` — into the folder, and every machine
+reads the folder to draw the 👁 chips and the banner. One file per staff member, written only by
+its owner, so there are no write conflicts by construction. **Nothing leaves the practice
+network. No accounts, no cloud, no credentials, no config files.**
+
+Setup collapses to the irreducible minimum Chrome allows — one click per machine, once: Options →
+Task Presence → Choose folder → pick the Medicus Suite folder ("Allow on every visit" when Chrome
+asks). The File System Access directory handle persists in extension IndexedDB; all file IO runs
+in the service worker (`shared/presence-folder.js` + `presence:folder*` handlers); the Options
+page owns the picker and any re-allow prompt (both need a user gesture a worker doesn't have),
+with a live status line and one-click re-allow if Chrome ever drops the grant.
+
+Share contents are treated as untrusted on read (anything on the practice network can write to a
+share): the filename is the authorisation unit, rows are re-validated against it, oversize and
+junk files are skipped, and day-dead files are swept opportunistically. Transport dispatch in
+task-presence.js prefers the folder whenever it's connected and granted; the v3.221.0 hosted
+(Supabase) store survives as the documented fallback for practices without a shared folder.
+New `test-presence-folder.js` (31 checks) on the filename/row round-trip.
+
+## [v3.221.0] — 2026-08-04
+
+### Task presence: fire-and-forget rollout via the shared extension folder
+
+v3.220.0's presence store needed URL + key typed into Options on every machine. Practices load
+the unpacked extension from a shared folder, so now ONE file does the whole rollout: copy
+`presence-config.example.json` to `presence-config.json` in that folder, fill in the practice's
+store URL + anon key, and every machine configures itself — the service worker syncs the packaged
+file into `presence.fileCache` (on install, browser start, and first Medicus page), and
+task-presence.js resolves config as manual-Options-override → shared-file → dormant. Enabled
+semantics are now "on unless this machine explicitly opted out", so a machine that has never
+opened Options runs the moment the file exists. The synced credentials are cached per machine, so
+presence survives a folder update that forgets to carry the file over. `presence-config.json` is
+git-ignored and never in release zips; Options gains a shared-folder status line and the fields
+become a per-machine override. (16 new checks on `resolvePresenceConfig`.)
+
+### Live-check corrections (v3.220.0 field test, same day)
+
+- **"Last actioned by" chip demoted to latent.** On the live queue, Medicus sends
+  `actionedBy`/`actionedDateTime` as empty strings on every row — including `Reply received` ones
+  — so the chip correctly renders nothing and v3.220.0's "works from install" claim was wrong.
+  The wiring stays (it lights up if Medicus ever populates the fields); feature-list and setup
+  doc now say so plainly. The presence store is the real signal.
+- **Queue monitoring resolves against the ROW's task type, not the queue's.** The same live check
+  caught every monitoring resolve on the requests queue 404ing: a `medical_patient_request_task`
+  queue serves `communication-thread` rows, and `_queueMonCache` stored the queue's slug for
+  every row. It now derives each row's true slug from its own validated `overviewURL` (queue slug
+  only as fallback), so `/tasks/data/{slug}/overview/{uuid}` resolves stop dying silently on
+  mixed-type queues.
+
+## [v3.220.0] — 2026-08-04
+
+### Task presence: "is someone already on this request?"
+
+Field request: two clinicians can open the same triage request without either knowing the other
+is in it. The v3.219.2 capture proved Medicus offers nothing to build on — opening a request
+writes nothing, the status enum has no in-progress, and every Pusher channel is public — so the
+signal is now the Suite's own (`content-scripts/task-presence.js`), in two layers:
+
+**Layer 1 — zero setup, on from install.** The queue payload already carries
+`actionedBy`/`actionedDateTime` on every row; Medicus just never displays them. page-world.js now
+forwards both over the existing `ch-task-list-data` bridge (validated as untrusted, same rules as
+content.js's listener) and a "✎ name · time" chip renders in the patient cell — who last touched
+the task, straight off the wire.
+
+**Layer 2 — shared presence, dormant until configured.** While a clinician has a task overview
+open AND visible, an advisory presence row (site, task UUID, staff UUID, display label,
+timestamps — no patient data of any kind) heartbeats every 25s to a practice-configured Supabase
+table (the manifest already carried the host permission). Colleagues then see a "👁 name" chip on
+that queue row, and opening a request someone else has open injects an amber advisory banner
+("opened this N min ago — they may be working on it"). Identity is never typed: page-world.js
+reads the logged-in staff UUID + email from the page's own Pusher channel names and stamps
+`data-ch-staff`, so a shared terminal attributes presence to whoever is actually in Medicus.
+
+Safety posture, stated everywhere it surfaces: advisory, never a lock — and **no chip never means
+no one** (unconfigured machine, colleague without the Suite, offline store). Heartbeats stop when
+the tab is hidden and rows stale out at 90s, so a request left open over lunch releases itself
+rather than warning colleagues off it; store failures are silent to the clinician (debug-logged)
+because a broken advisory layer must not add noise to a clinical queue. New Options → Task
+Presence section (store URL/key/display name; the key is machine-local and excluded from backups,
+same stance as the Transactional API caller key). Practice setup: `docs/task-presence-setup.md`.
+91-check test file (`test-task-presence.js`) covers the bridge-row sanitiser, identity parse,
+config gate, heartbeat payload (opened_at only on the first beat), the active-others filter
+(self/stale/future-dated excluded, store rows treated as untrusted) and the chip/banner text.
+
+## [v3.219.2] — 2026-08-04
+
+### Answered: Medicus does not tag a request as "being worked on"
+
+Capture run on a live triage request (`docs/learnings-task-presence.md`), and the answer is
+no — from three independent directions:
+
+- **Opening a request writes nothing.** The request was opened, left, and opened again:
+  20 network calls, every one a `GET`, zero writes. A claim or lock has to write on open,
+  so Medicus has nothing to show anyone else.
+- **No status for it.** The queue's Status filter offers New / Awaiting recipient response /
+  Reply received / Scheduled for later; the task page's own `taskStatusOptions` offers
+  `new-request` / `reply-received` / `awaiting-recipient-response` / `resolved` (+ `rejected`).
+  There is no `in-progress`.
+- **No presence channel.** 17 Pusher channels on a task page, none of them presence, and all
+  public — so client events are impossible and we cannot publish our own presence onto them.
+
+Useful by-catch: the queue row already carries `actionedBy` / `actionedById` /
+`actionedDateTime`, `assignedTo` / `assignedId` and `status` / `statusValue` / `statusText`,
+none of which `shared/request-monitor.js` reads. That makes "last actioned by X at HH:MM"
+available with no new endpoint — though it is a *last-actioned* signal, empty on an untouched
+task, so it misses the collision case that matters most (opened but not yet actioned).
+Medicus also runs a per-task broadcast channel `{site}-task-{uuid}` → `updated`, which fires
+on change, not on view.
+
+Two fixes to the capture tool itself, both exposed by the run: `apiBaseUrl()` stripped the
+first host label before prefixing `api`, building `{code}.api.medicus.health` (does not
+resolve) instead of `{code}.api.england.medicus.health` — both active probe GETs failed, and
+every finding above came from the passive fetch/XHR wrap catching the app's own traffic. And
+`BODY_KEEP_CAP` was raised 20k → 80k, because a task overview truncated mid-`taskStatusOptions`.
+
+## [v3.219.1] — 2026-08-04
+
+### Discovery tool: is a request tagged as "being worked on"?
+
+Dev tooling only — no runtime change, nothing added to the manifest's content scripts.
+
+Open question from the floor: when you open a triage request, does Medicus record or broadcast
+that anywhere, so a colleague can see someone is already on it? The repo could not answer it.
+What it knew: task-list rows carry only `id`/`patientName`/`summary`/`priority`/`createdAt`
+(`shared/request-monitor.js`); the list API filters on `statuses[]` with just two values ever
+observed (`new-request`, `reply-received`) plus `masterAssignee`; tasks can be re-assigned to a
+team (`routine-rx-button.js`) — but an assignee is who *should* do it, not who *is* doing it; and
+the page runs Pusher (`pusher-relay.js`), which is exactly the transport a presence signal would
+use, never enumerated.
+
+New `scripts/task-presence-capture.js` (`chWork`) answers it from the live page instead of by
+inference, per the capture-first rule. It looks in the four places such a tag could live — the
+task overview payload, the task-LIST row payload (what a queue chip could actually draw from),
+Pusher channels/events, and the page's own status controls — and adds the decisive behavioural
+test: whether merely OPENING a request produces a write. A claim or lock must POST on open; a
+silent open means nothing is being recorded and any indicator has to be ours.
+
+Read-only and reversible, same posture as the existing capture scripts: wraps `fetch`/XHR/
+`WebSocket`/`history` to observe, never blocks, rewrites, replays or POSTs; its own probe GETs
+are endpoints the shipped code already calls; `chWork.stop()` unwraps everything. Bodies go
+through the same key-based redactor (patient name, DOB, NHS number, address, postcode, phone,
+email), with staff names deliberately kept — "which colleague is shown against an open request"
+is the thing being studied. Output stays local and is never committed.
+
+## [v3.219.0] — 2026-08-03
+
+### Organise problems: "Change significance" section (and a trigger rename)
+
+Field request: Major/Minor/Unknown grading is often wrong at import ("Asthma" and "Essential
+hypertension" sitting under Minor), and Medicus's own UI re-grades one problem at a time. New
+"Change significance" section in the problems widget: tick problems (each row shows its current
+grade and onset date), pick the target grade, one explicit confirm listing every move
+("Essential hypertension · Mar 2016 — Minor → Major"), then sequential commits.
+
+No new endpoint knowledge needed: each commit rides the CONFIRMED `edit-problem` full-replace
+contract that "Clean up code" already drives in production — GET the problem's own prefill,
+resolve the target grade from the prefill's OWN `significances` options (a form that doesn't offer
+the grade is a per-row refusal, never an invented enum — only `'major'` has ever been captured on
+the wire), rebuild the full body with only `significance` changed (same option-object and
+recordedByOrganisation unwraps that fixed the two live 400s in the description-cleanup history),
+POST. Rows already at the target grade disable; per-row errors keep their tick for retry; one
+event-ledger record per batch; refresh note as ever.
+
+With four sections (suggested links, duplicate merge, significance, manual linking) the trigger
+label "Nest problems?" was no longer honest — renamed to **"Organise problems?"**. Same widget,
+same position, same everything else.
+
+## [v3.218.0] — 2026-08-03
+
+### Record-tidy widgets now work wherever the Clinical Summary panel renders
+
+Field report (2026-08-03, same day): the tidy widgets were missing from the appointment view and
+the consultation view — both render the embedded Clinical Summary panel, but neither URL carries a
+patientId, and per-shape URL parsing was never going to keep up with Medicus's page inventory.
+
+New approach: the page itself always announces the patient. Whenever any Medicus page fetches
+`/clinical/data/clinical-summary/summary/{patientId}` to render its summary panel, the MAIN-world
+bridge (`triage-lens/page-world.js`) stamps that patientId onto a `documentElement` attribute
+(`data-ch-summary-patient` — the DOM is shared between worlds, so late-loading widgets read it with
+no event-timing races; only the URL is read, never the response body). The three tidy widgets
+(`problem-bulk-end`, `problem-nesting`, `allergy-cleanup`) use it as their third context source
+after the care-record URL and the task-overview resolution — covering appointment views,
+consultation views, and any page shape Medicus adds later, with zero new endpoint knowledge.
+
+Wrong-patient guard: a bridge-derived context must ALSO match at least one on-screen row (problem
+description / allergy row) before a widget injects — a stale attribute after SPA navigation
+produces rows that match nothing, so nothing renders and nothing can act on the wrong patient's
+record. The allergy widget already had this property structurally (it only ever anchors to an
+exact-matched row in the scoped Allergies card); the two problem widgets gained an explicit gate.
+
+## [v3.217.1] — 2026-08-03
+
+### Design-crit polish: Nest problems widget
+
+A three-critic design review (hostile art-direction pass against the suite doctrine, a token/code
+survey, and a fresh-eyes GP persona judging screenshots only) converged on the same defects; all
+settled rulings landed in one pass:
+
+- **Every problem reference now carries its onset date** (mono suffix, from the overview the scan
+  already fetches) — suggestion cards, dropdown options, merge keeper radios, manual checklist rows
+  and confirm lists. Three identical "Anorexia nervosa" rows are no longer indistinguishable, which
+  the fresh-eyes reviewer correctly called a safety defect, not polish.
+- **Accordion layout**: the three sections (Suggested links / Merge duplicate copies / Link
+  manually) open one at a time under compact headers with mono counts, and the body is capped at
+  60vh — an open widget no longer displaces ~700px of the problem list it exists to serve.
+- **Amber now means danger only**: routine nest confirms went neutral; the destructive merge
+  confirm is the sole amber block, gains a warning glyph, and its copy tightened to "this cannot
+  be undone from this tool". (The old identical-amber-for-everything rendering was itself a
+  degraded hazard control — a destructive action styled like a reversible one.)
+- **Scoped canon token block** per the injected-surfaces rule (the stylesheet was raw Tailwind
+  greys); ghost/primary button hierarchy (one filled button per view — the commit action); full
+  hover/active/disabled/focus-visible states incl. radios and checkboxes; focus restored across
+  re-renders; a polite live region announces scan results, links, removals and errors; checklist
+  gains a count line and scroll shadows; copy cut from ~120 words of preamble to one line per
+  section; quiet centred empty states.
+
+Sibling widget stylesheets (bulk-remove, retired-codes) still carry the old raw-hex palette —
+deferred to their own pass so this one stays reviewable.
+
+## [v3.217.0] — 2026-08-03
+
+### Nest problems: in-panel "Merge duplicate copies"
+
+Same-code duplicate problems (the case the nesting suggestion engine deliberately refuses to pair)
+get their own section in the "Nest problems?" panel: each group of 2+ active problems sharing one
+conceptId is offered as a merge — pick the copy to KEEP (default: the earliest, by UUIDv7 id — the
+Duplicate Problem Checker's own convention), review an explicit KEEPING / REMOVING confirm with an
+editable per-group reason, and the other copies are retired through the checker's confirmed
+`mark-incorrect-and-hidden` contract (`{problemId, reason, isConfirmedRemoval: true}`).
+
+Guardrails: a copy with nested children is never removable here (its children would dangle — the
+full Duplicate Checker or Medicus itself is pointed at instead); a copy carrying additional info is
+cautioned (removal loses it; compare in the checker first); a blank reason never reaches the record
+(button state AND payload builder both refuse); removals are sequential with per-copy errors and
+retry; one ledger record per batch (fixed label, batch-local count). The confirm states the real
+consequence plainly: copies are hidden as recorded-in-error, not end-dated, and no undo endpoint is
+known. Merged-away copies retire live from the suggestion cards, the manual builder, and the link
+map. Same-code-only by design — anything fuzzier stays in the full Duplicate Problem Checker.
+
+## [v3.216.0] — 2026-08-03
+
+### Nest problems: manual builder goes parent-first and multi-child
+
+Feedback on v3.215.0 within the hour: several problems usually belong under one "title" problem,
+and one-pair-at-a-time was too slow. The "Link manually" section is now parent-first — choose the
+parent, tick every problem to nest under it (a scrollable checklist replaces the child dropdown),
+and confirm the whole batch once, with every child listed by name and a count of any that will be
+MOVED from an existing parent.
+
+The write path is unchanged and deliberately so: one confirmed `update-parent-problem` POST per
+child, committed sequentially — never `update-child-problems` (the full-replace trap). Each child
+re-passes the commit-time cycle guard individually; a failed link records its error against its own
+row and stays ticked for retry while the rest of the batch carries on. Per-child annotations in the
+checklist ("currently under X — will move", "same code as the parent — duplicate?") replace the old
+confirm-step notes.
+
+## [v3.215.0] — 2026-08-03
+
+### Nest problems: manual "Link manually" builder
+
+First-use feedback on v3.214.0 (a real record with several Anorexia nervosa / Eating disorder /
+Bradycardia entries): the SNOMED-ancestry suggestions only catch strict terminology descendants,
+but the clinician often knows the clinical hierarchy the terminology doesn't state — e.g. anorexia
+nervosa as the parent of its bradycardia and safeguarding entries. New "Link manually" section in
+the same widget: pick any problem to nest, pick its parent, same per-link explicit confirm, same
+confirmed `update-parent-problem` write path and event-ledger audit.
+
+Deliberately looser than the suggestion engine — no SNOMED gate, same-code pairs allowed (with a
+confirm-step pointer to the Duplicate Problem Checker, since nesting keeps both entries active),
+and re-parenting allowed (the confirm calls out that it MOVES the problem from its current parent).
+The cycle guard is the one rule that stays hard, at render and commit time, because it protects
+the record's structure rather than second-guessing a clinical judgement. A suggestion card whose
+child gets manually linked retires itself.
+
+## [v3.214.0] — 2026-08-03
+
+### New: "Nest problems?" — suggested parent/child links on the Clinical Summary
+
+Related problems often sit flat next to each other ("Insertion of coronary artery stent" beside
+"Percutaneous balloon coronary angioplasty") when Medicus can nest one under the other as a child
+problem — but Medicus's own UI is one manual slideover per link. New "Nest problems?" trigger on
+the problem list (`content-scripts/problem-nesting.js`, sharing the Major-heading row with "Bulk
+remove?" and the retired-codes check) scans the active problems and suggests child→parent pairs,
+each confirmed individually. Works on both the care-record page and the task ("split") page.
+
+Built on the contract captured live 2026-08-03 (`scripts/problem-nesting-capture.js` run on a test
+record — full write-up in `docs/learnings-problem-nesting-api.md`):
+
+- **Write path**: `POST /clinical/problem/update-parent-problem` `{patientId, problemId,
+  parentProblemId}` — exactly three fields, confirmed 200. The parent-side sibling
+  (`update-child-problems`) is deliberately NOT used: its `childProblemsToAdd` array is a **full
+  replace** of the child set despite the name (the captured Vue form seeds it with the existing
+  children), so posting one id to a parent that already has children would silently unlink the
+  others.
+- **Suggestion model**: a pair is offered only when the child's conceptId is a genuine SNOMED
+  descendant of another on-record problem's conceptId (the same confirmed constrained-search
+  mechanism as the bulk-remove badge scan). Identical concepts never pair (that's a duplicate, not
+  a hierarchy), and a problem that already has a parent is never re-parented by suggestion. The
+  widget never invents codes and never links anything automatically.
+- **Safety posture**: per-pair explicit confirm with both problems echoed back by name (nesting
+  visually demotes a problem on the list — a wrong link is a visibility change on the live record);
+  cycle guard at render time AND re-checked at commit time against the live link map; failed POSTs
+  surface the server's message per card; every committed link recorded in the Clinical Event Ledger
+  (patient UUID + fixed label only); no auto-reload — "Refresh page" offered instead. Unlink is not
+  offered (the null-parent shape is inferred from the Vue form but has never been captured live).
+
+## [v3.213.1] — 2026-08-03
+
+### Dev tooling: problem parent/child ("nesting") contract capture script
+
+`scripts/problem-nesting-capture.js` — paste-into-page-console instrumentation (adapted from
+`booking-flow-capture.js`: same fetch/XHR wrap, PII redaction, dialog inventory) for capturing how
+Medicus creates/changes a problem parent-child link, which the repo has never captured (the
+confirmed `edit-problem` POST carries no parent field; only `end-problem`'s `activeChildProblems[]`
+read side is known). Adds an active read probe (`chNest.probe()`) that maps the record's existing
+parent→child links and reports every hierarchy-smelling field across `end-problem`,
+`slideover/overview` and `edit-problem` per problem, working on both the care-record and task
+("split") page shapes. Groundwork for a future "nest related problems" widget — no shipped
+behaviour changes.
+
+## [v3.213.0] — 2026-08-03
+
+### Problem "Bulk remove?" + "Clean up allergies?" now work on the task ("split") page
+
+Both record-tidy widgets previously only activated on the full care-record Clinical Summary page —
+their URL detection required the patientId in the path. The task-overview page (e.g. a Patient
+Request with the embedded Clinical Summary panel on the right) renders the same problem list and
+Allergies card, so both widgets now run there too:
+
+- **URL detection** recognises the task-overview shape
+  (`/{siteId}/tasks/data/{typeSlug}/overview/{taskUuid}`) alongside the care-record shape. Both
+  parsers are pure helpers with unit tests (`parseCareRecordPath` / `parseTaskOverviewPath`).
+- **Patient resolution**: the task URL carries no patientId, so it's resolved once per task via the
+  same `/tasks/data/{slug}/overview/{uuid}` endpoint task-inline.js/booking-inline.js already drive,
+  with the same field-fallback chain. Cached per taskUuid: a resolved task (including a genuinely
+  patientless one) is never refetched, while a transient fetch failure stays uncached so the
+  throttled rescan retries. The uuid keying + a post-await URL re-check mean a resolve that lands
+  after navigating to a different task is always discarded — the cross-patient-async discipline from
+  the v3.212.1 epoch fixes carries over unchanged.
+- **Everything downstream is untouched**: the same clinical-summary fetch, scan, checklists, modals,
+  two-step confirms and fail-closed DOM anchoring run against the resolved patient. If the split
+  page's embedded panel ever renders rows differently, the widgets simply don't inject (allergies)
+  or fall back to the panel checklist (problems) — no wrong-row action is possible.
+- The problems widget's Clinical Event Ledger entry now records the resolved patient on both page
+  shapes (it previously re-read the URL, which would have been empty on the split page).
+
+Not included (same pattern available if wanted): the "Check for retired/legacy codes?" widget
+(problem-description-cleanup.js) is still care-record-only.
+
+## [v3.212.1] — 2026-08-02
+
+### Allergy cleanup suite: pre-merge review fixes (PR #253)
+
+Fixes from the pre-merge review of v3.212.0 (code review + Virtual Dave CSO pass), all landed on the same
+PR before the feature ever shipped:
+
+- **Cross-patient async state (critical).** A scan or allergy-list fetch started on patient A could
+  resolve after SPA-navigation to patient B and repopulate B's freshly-reset widget state with A's
+  allergy IDs — every destructive action would then target A's records from B's screen. All async flows
+  now capture a per-patient epoch (bumped on every patient change) and discard their results if it moved;
+  an open review modal is closed on patient change too.
+- **Dual-coded clearing could delete the substance it promised never to touch (major).** The checklist
+  flags entries from the OVERVIEW's `allergyCodeType` but built its payload from the EDIT-FORM prefill's —
+  and for a prefill showing `pre-defined-allergies` (or nothing), the old "symmetric" branch cleared the
+  dm+d SUBSTANCE and kept the legacy code, the exact opposite of the section's own promise. Now: only
+  substances-authoritative entries are flagged at all (pre-defined-authoritative dual-coded entries fall
+  through to the conversion flow, which handles them with a per-entry modal), and the payload builder
+  throws (no write, surfaced as a per-row error) unless the prefill itself confirms the substance is
+  authoritative.
+- **Merge keeper race (major).** The keeper radios stayed clickable while a merge save was in flight, and
+  `confirmMerge` re-read `st.keeperId` after each await — a mid-save click could POST the old keeper's
+  prefill onto the NEW keeper's record and then end the old keeper. All merge inputs (keeper, field
+  choices, end date, free text) are now snapshotted before the first await.
+- **Background regrouping vs open reviews (major).** Concept-ancestry enrichment replaces the duplicate
+  groups array after the scan is done, but per-group review state (and the open modal) were keyed by
+  index — groups could shift/merge underneath them, wedging the modal or silently showing one group's
+  cards over another's index. Review state is now remapped by group identity (entry-id set); an open
+  modal follows its group to the new index or closes if the group was merged away. Covered by new
+  `remapReviewsByGroupIdentity` tests.
+- **"No known allergies" is a positive clinical assertion, not junk** (Virtual Dave must-fix). A coded NKA
+  entry records "asked, answer nil" — clinically different from an empty list ("never asked"), and it's
+  what goes out on GP2GP. It now carries a per-code caution (excluded from "Select all", every removal an
+  individual decision) steering to de-duplication — remove surplus copies, keep one, never delete to zero.
+- **"H/O: non-drug allergy" recategorised import-artefact → too-generic** (Virtual Dave must-fix). Its
+  SNOMED semantics are a positive "has a history of non-drug allergy" finding — possibly the only trace of
+  a real latex/bee-sting allergy — so it now gets the too-generic per-instance caution protection instead
+  of the bulk-safe import-artefact class.
+- **Five salt-ambiguous conversion suggestions demoted to not-convertible** (Virtual Dave must-fix — the
+  suggestion is PRE-selected in the conversion modal, one Convert click from committing). dm+d keeps
+  depot esters as their own VTMs distinct from oral salts, and perindopril as two salt VTMs with no
+  neutral parent: flupentixol decanoate (was → dihydrochloride), fluphenazine decanoate and enanthate
+  (were → hydrochloride), and both perindopril codes (were → erbumine; an ACE-inhibitor pseudoallergy is a
+  class effect, so an erbumine-only record would not alert on a perindopril-arginine prescription). Each
+  now falls to manual live search with an explanatory note shown in the modal, and a test pins all five.
+- **Count-naming confirmations on both bulk actions** ("End N selected allergies…?" / "Remove the stale
+  legacy code from N…?", Cancel default) — the irreversible bulk-end previously fired on a single click
+  while the lower-risk OIR select-all already had a confirm.
+- **Safety documentation** (Virtual Dave must-fix): `docs/CLINICAL-SAFETY-NOTICE.md` §6.1 gains row
+  **W13** (the suite's first allergy-list write surface, with its controls) and `docs/HAZARD-LOG.md` gains
+  **H-060** (allergy record ended/merged/re-coded in error; initial 4×3=12, residual 4×1=4, proposed —
+  pending CSO sign-off on the PR). A data-invariant test now pins every low-prescribing-relevance junk
+  entry to carrying a per-code caution (the "Select all" exclusion keys on the caution's presence).
+
+Known limitation carried forward (deliberate, safe-failure): a duplicate merge whose chosen onset date is
+a partial date (e.g. "Jul 2012") is rejected by Medicus with a 400 before anything is ended — the keeper
+is untouched and the error is shown; partial-date normalisation is left until the accepted payload shape
+has been confirmed live.
+
+## [v3.212.0] — 2026-08-02
+
+### Allergy cleanup suite: junk removal, duplicate merge, dual-coded cleanup, and pre-defined-allergy → substance conversion
+
+New "Clean up allergies?" trigger, one shared `overview-allergy` fetch per active allergy feeding four
+independent review sections in one summary panel, each with its own safety model:
+
+- **Junk / low-relevance codes** — bulk checklist (no clinical judgement needed to remove confirmed
+  import noise), reusing `rules/allergy-junk-codes.json`'s three categories: `import-artefact`,
+  `too-generic`, and a new `low-prescribing-relevance` category (e.g. 300910009 "Allergy to pollen" —
+  a genuine, correctly-coded allergy that's simply near-zero relevance to prescribing safety; carries a
+  static per-code caution, "This code indicates hay fever, so may be more appropriate as a problem code
+  rather than an allergy", shown instead of — never concatenated with — the generic per-instance caution
+  message).
+- **Possible duplicates** — mandatory per-group review modal (a merge always "warrants a conscious
+  clinical decision"); the button shows a free duplicate count from a zero-cost text-only pass before any
+  click, with the expensive part (junk-code matching, SNOMED concept-ancestry duplicate enrichment)
+  staying click-triggered. Every card in the review modal has a "Remove from merge" checkbox that
+  excludes it from the current review immediately — untouched, never ended or modified — with an undo
+  affordance ("N removed from this merge: ... (Restore)"); the keeper and any chosen field values are
+  re-derived from whatever remains. Removing the card backing the free-text "additional info" box
+  re-seeds it from the new default source, same as a manual radio click, but only while the box still
+  shows exactly what it was last loaded from — genuine typed edits are never overwritten.
+- **Legacy code alongside substance** — bulk checklist for dual-coded entries: a real GP2GP-imported
+  entry can carry BOTH `allergyCode` (a legacy pre-defined-allergy code) AND `substance` (an
+  already-authoritative dm+d code) simultaneously, with `allergyCodeType` saying which is actually
+  current (confirmed via a live HAR capture, not hypothetical). Clearing the non-authoritative field
+  never touches any clinical fact or the already-correct code, so it's the same safety class as junk
+  removal. This also exposed and fixed a latent bug in `resolveAllergyConceptId`, which always preferred
+  `allergyCode` whenever populated — silently returning the stale legacy code for a dual-coded entry
+  instead of its real current substance, which would have broken junk-matching and duplicate-grouping
+  against it.
+- **Pre-defined-allergy codes** ("Convert?") — the third stage of the suite: converting legacy
+  "pre-defined-allergies"-coded entries (e.g. "Amoxicillin allergy") to proper dm+d substance-coded
+  entries, the format genuine drug allergies need for reliable prescribing-safety checks. Each entry gets
+  a substance search (dm+d refset scope) pre-seeded with a suggestion from a new
+  `rules/allergy-substance-conversion.json` (314 reviewed legacy conceptIds: straight substance
+  conversions, substance-plus-reaction decompositions e.g. "Chloroquine retinopathy" → substance
+  Chloroquine + reaction hint "retinopathy", entries with no dm+d code available, and miscoded
+  non-allergies flagged for removal instead) when one exists, or from a pattern-recognition fallback
+  (`X-induced Y`, `Allergy/Hypersensitivity/Adverse reaction to X`, `X allergy/reaction/hypersensitivity`)
+  applied to the code's own description when it doesn't — search-seed only, never auto-selects a
+  concept. Live search results are reordered (never discarded) toward VTM-level, non-dose/brand-specific
+  candidates, since a live "iodine" search returns the correct candidate but not first, buried among
+  salt/dose-specific siblings. Reaction picking is multi-select (each pick its own removable chip),
+  seeded in priority order from a curated rule hint, a pattern-extracted hint, or the entry's own
+  `additionalInformation` as a last resort. Severity/certainty/additional info/existing reactions/onset/
+  record date are always carried through unchanged and shown in full before the search boxes — conversion
+  changes only code identity, never clinical fields, the deliberate opposite invariant to the merge
+  stage's own payload builder (which never changes code identity). Every conversion is an explicit
+  confirm, never apply-on-click.
+
+`rules/non-problem-root-codes.json` (now 27 roots): 6 new administrative/import-artefact roots —
+261665006 "Unknown", 33879002 "Vaccination", 127785005 "Imported immunisations", 171302002 "Adult
+screening", 268481000 "Child health checks", 416608005 "Previously active medications imported via
+GP2GP" — read by the existing `problem-bulk-end.js`, no code change needed.
+
+## [v3.211.0] — 2026-08-02
+
+### Rota Manager is now part of the suite
+
+The **Medicus Rota Manager** — until now a separate Chrome extension
+(`davetriska02-collab/medicus-rota-manager`, last released standalone at v1.10.0)
+— is subsumed into Medicus Suite. Practices no longer install and update two
+extensions, and the rota shares the suite's backup, settings and navigation.
+
+**The standalone repository is deprecated.** It receives no further releases; all
+rota development happens here, under `rota/`.
+
+#### The code (landed previously in the port commit)
+
+`rota/` is a self-contained ESM subtree with its own `package.json`
+(`"type": "module"`): `rota/engine/` (pure rules — `rules.js`, `leave.js`,
+`cover.js`, `solver.js`, `fairness.js`, `bradford.js`, `demand.js`, `swaps.js`
+and the rest; no DOM, no `chrome.*`, no `fetch`), `rota/shared/`
+(`store.js`, `time.js`, `model.js`, `esc.js`, `medicus-api.js`) and `rota/app/`
+(the full application shell and its views). Its 17 `test-rota-*.js` suites run
+in the suite's CI on every push.
+
+#### Two ways in
+
+- **Rota manager** (`rota-app`) — a **panel-only** nav tab that opens the full
+  application in a new browser tab, exactly like Visualiser. `side-panel/panel.js`
+  special-cases it in the nav click handler and excludes it from the
+  Ctrl/Cmd+Alt+Arrow tab cycle; it is deliberately absent from `MODULES`, so the
+  boot guard will never try to restore the panel into it. Opening is
+  focus-or-create — `side-panel/modules/rota/rota-open.js` raises an existing
+  rota tab (and its window) instead of stacking duplicates. The same helper backs
+  the command palette's *Open Rota manager* command, which is how the pop-out —
+  which has no `rota-app` tab — reaches the full app.
+- **Rota** (`rota`) — a compact module in **both** shells
+  (`side-panel/modules/rota/rota.js` + `.css`, registered in `panel.js` and
+  `pop-out/pop-out.js`). It reads the eight `rota.*` keys straight from
+  `chrome.storage.local`, runs the pure engine (`checkWeek`, `capacitySummary`,
+  `approvedLeaveFor`) over them and shows: duty cover for today AM/PM with an
+  OK/Gap state, who is on approved leave today, upcoming sessions still needing
+  cover, this week's high-severity safe-staffing warnings, and estimated GP
+  appointments against the ~72-per-1,000 benchmark — plus an *Open full rota*
+  button. Before any staff exist it shows a short pitch and a single button into
+  the full app. It refreshes on `chrome.storage.onChanged` for `rota.*` and polls
+  once a minute so the date rolls over on a panel left open overnight. No network
+  I/O, and no patient-identifiable data is read or persisted.
+
+Both entries are described in `side-panel/tab-catalog.js` (and added to the
+practice-manager preset), carry `TAB_HELP` copy in `panel.js`/`pop-out.js`, and
+are recorded in `test-tour-steps.js`'s `NAV_COVERED_BY_OVERVIEW` — the guided
+tour teaches them via the nav overview rather than dedicated steps.
+
+#### Backups
+
+All eight rota keys — `rota.staff`, `rota.entries`, `rota.leave`, `rota.rooms`,
+`rota.swaps`, `rota.audit`, `rota.demand`, `rota.settings` — are covered by
+`shared/io/rota-io.js` and the suite envelope, so a suite backup now carries the
+whole rota. `test-rota-store.js` asserts set-equality between that key list and
+`rota/shared/store.js`'s own `KEYS`, so a new rota key cannot silently escape.
+
+#### An unavailable check now says so
+
+The compact module used to swallow any rules-engine exception, leaving the
+warnings list empty — which rendered as a green *"High-priority warnings this
+week — None."* A crash was being shown as a clean bill of health. (It was
+reachable: a `rota.settings` with a null `openDays` survives backup validation,
+beats the shipped default in the `{ ...DEFAULT_SETTINGS, ...stored }` merge, and
+then makes `rules.js` throw.)
+
+It now tracks the failure and shows an **amber** *"Safe-staffing checks
+unavailable — open the full rota to investigate"* card instead. Nothing else on
+the panel asserts a positive state off that failed computation either: the duty
+pills degrade from green **OK** to a neutral **Unchecked**, and *"Sessions
+needing cover — None outstanding"* becomes *"Not verified — check the full
+rota"*. A **Gap** is still shown in red — withdrawing reassurance must never
+hide a problem. `rota/shared/store.js` additionally coerces the settings members
+the engine dereferences (`openDays`, `bankHolidays`, `sites`, `peakPeriods`)
+back to their defaults when a stored value is not an array.
+
+#### Shared-folder sync is now validated before it is saved
+
+The shared-drive sync file lives in a folder anyone with practice-share access
+can write, is re-read every 15 seconds and is last-writer-wins — yet it was
+being saved to storage **verbatim**, while the cold backup-restore path
+type-checked everything. New pure module `rota/engine/validate.js`
+(`validateRotaScopes`, returns a rejects list) type-checks all eight `rota.*`
+scopes, and `rota/app/app.js` calls it **before writing anything**. A malformed
+document is **refused whole** — no half-applied rota — the local copy is left
+untouched, and the rejection is surfaced both as the usual sync toast and as a
+sticky banner in Settings naming the version, the author and the reasons (a
+pulled version is only ever returned once, so a 3-second toast could otherwise
+be the only notice).
+
+`shared/io/rota-io.js` keeps its own checks (it is a classic script and cannot
+import an ES module) and gains the matching `rota.settings` shape checks. New
+`test-rota-validate.js` feeds identical malformed fixtures to **both**
+validators and asserts they agree, so the two copies cannot drift apart.
+`test-rota-store.js` now also parses `SYNC_SCOPES` out of `rota/app/app.js` —
+the third parallel copy of the eight keys — and asserts set-equality with the
+other two.
+
+#### Clearer names for the two rota tabs
+
+Two adjacent tabs called *Rota* and *Rota status*, both with near-identical
+calendar icons, were a daily misclick — and one of them silently opens a new
+browser tab. The compact in-panel module is now simply **Rota**; the full-app
+opener is **Rota manager** and carries an arrow-out-of-box glyph instead of a
+second calendar, with an "opens in a new tab" aria-label. The compact module's
+*Open full rota →* button gained a muted *"Opens in a new tab"* hint underneath.
+Tab ids (`rota`, `rota-app`) are unchanged, so stored tab order and visibility
+preferences carry over.
+
+#### Safety documentation
+
+`docs/HAZARD-LOG.md` gains a §2 scope bullet for the rota surface and two
+hazards — **H-058** (staffing decision taken on a stale or degraded rota status
+panel) and **H-059** (malformed shared-drive sync data corrupts rota state) —
+recorded as a v3.22 addendum, not a re-baseline. `docs/DPIA.md` (v1.2) records
+the rota's employee data as a distinct processing purpose, including UK GDPR
+**Article 9 special-category staff health data** (sickness, fit-note flags,
+Bradford Factor scores, parental leave) and the optional shared-drive
+replication of it, with the lawful basis, mitigations and the practice's
+responsibilities as employer. `docs/INTENDED-PURPOSE.md` adds the rota to the
+module table, the frozen statement, the "what this is not" list and the intended
+user.
+
+> **Scope note:** the rota's safe-staffing rules encode BMA/CQC/NHSE *guidance*,
+> not law. They warn; they never block. Thresholds are practice settings, not
+> constants.
+
+## [v3.210.0] — 2026-08-01
+
+### Contacts Management follow-ups: NOK/CC drag-flagging, name derivations, remove-from-tree (PR #250)
+
+Merges Nick's follow-up branch (developed as internal v3.208.2–v3.208.7; renumbered — that
+range was passed on main). All live-tested against real data. Original per-session entries
+below, followed by the pre-merge review fixes applied on merge.
+
+Review fixes applied on merge (two independent pre-merge reviews, engine findings
+verified by execution; 111 new red-first regression assertions — `test-name-derivations.js`
+48→110, `test-contact-match.js` 62→111):
+
+- **Wrong-record flag write via event bubbling** — the NOK/copy-correspondence drop
+  handlers now stop propagation and the slot-zone fallback yields to cards, so a token
+  dropped on a grandparent card no longer *also* writes the flag to the enclosing
+  parent's relationship (a different patient's record, silently). Nearest zone wins.
+- **Remove-from-tree is now confirmed and repairable** — the drag no longer silently
+  overwrites both relationship records to "Family member": an explicit confirm states
+  the two-record consequence first, and the re-drop repair path actually reaches the
+  reciprocal for pre-existing links (downgrade marker + placeholder-text detection
+  drive `reciprocalUpdateId`, with a bounded id re-resolve and an honest summary when
+  the reverse half can't be repaired). The partial-failure message now says which side
+  landed.
+- **Resumable-retry regression fixed** — after a successful reciprocal *update* plus a
+  failed cleanup step, retry re-entered the reverse-*create* branch (duplicate
+  relationship on the off-screen record, or a wedged retry). Branching now follows the
+  operation's shape (`reciprocalUpdateId` presence).
+- **Stale drag payload** — a cancelled token drag no longer leaves a live payload that
+  a later foreign drop could turn into a flag write (`dragend` reset + drops validate
+  the event's own `dataTransfer` payload).
+- **Cross-write interleave guard** (`anyWriteInFlight()`) — a flag write and a confirm
+  on the same record can no longer interleave their read-modify-write sequences; the
+  refresh control now honours the unfinished-merge guard; a no-op flag drop no longer
+  dismisses an unrelated success panel.
+- **Name-derivation false positives closed** — the gendered-surname prefix fallback
+  requires a recognised counterpart ending per language family (disabled for
+  Polish/East-Slavic where both forms always carry a suffix), `-in`/`-ina` needs a
+  5+ character stem, and derivations apply only to the surname-position token:
+  Martin/Martina Brown drops from 85 "strong" to 38 "weak", Colin/Collins,
+  Griffin/Griffiths, George/Georgina etc. all abstain, while Kowalski/Kowalska,
+  Nováková/Novák, Ivanov/Ivanova and the Lithuanian forms still match.
+- **Patronymic father bonus hardened** — capped at 0.9 (never above an exact match),
+  clamped below "strong" without corroboration (address/phone/email/textual name),
+  never fires for a recorded-female candidate, 3-character stems only when
+  consonant-final (Crosson/Classon abstain; Jónsson/Persson/Ivanovich still derive),
+  and the signal carries `derivation`/`corroborated` labels for the UI.
+- **Accent handling actually works now** — fold-equality in token comparison
+  (Nováková vs Novakova and Müller vs Muller score 1.0 instead of 0.33 — the module's
+  own headline GP2GP case) and `normaliseName` normalises to NFC first (decomposed
+  input was still being shredded).
+
+### (internal v3.208.7) — 2026-08-01
+
+#### Contacts Management — a write error could go completely invisible
+
+Live-test report: after v3.208.6's fix, a removed relative still showed the old relationship text
+("Brother") with no visible sign anything had gone wrong. Root cause, found by tracing
+`renderConfirmPanel`'s own render order rather than guessing: that function checks `cs.doneSummary`
+FIRST, unconditionally, before ever looking at `cs.workingError` — so if an earlier confirm this
+session left `doneSummary` set (the normal "done" success panel), a completely unrelated LATER
+action's error would be set correctly in `workingError` but never actually rendered, silently
+masked behind the stale success panel. `tryAssign` (drag-to-a-slot) already knew to clear
+`doneSummary`/`reverseManualMatch`/`reverseManualMatchError` at its own start for exactly this
+reason — `setContactFlag` and `removeCardFromTree` never got the same treatment, so any Medicus
+write failure in either was invisible whenever a prior confirm this session had left a done panel
+showing. Both now clear the same three fields at their own start, matching `tryAssign`'s
+established pattern.
+
+### (internal v3.208.6) — 2026-08-01
+
+#### Contacts Management — remove-from-tree downgrade wasn't actually firing
+
+Live-test bug report: v3.208.5's "downgrade the reciprocal to Family member on removal" didn't
+change either the hub patient's or the relative's own record. Root cause: the previous build only
+downgraded the RECIPROCAL side, and only when `reciprocalRelationshipId` had already been cached
+from a same-session fresh link creation — the far more common real case (an already-linked contact
+dropped in the wrong slot) never created a fresh reverse link this session at all, so nothing was
+ever cached and the whole block was skipped silently.
+
+- `removeCardFromTree` now downgrades BOTH sides. Forward (`lc.relationshipId`, known for
+  essentially any placed card — set at page-load for a pre-existing link, or resolved by a bounded
+  follow-up fetch for one created this session) and reciprocal (resolved ON DEMAND at removal time
+  if not already cached, rather than only ever being learned from a same-session write) both get
+  their relationship text overwritten to "Family member" via the same full-replace
+  `changePatientContact` pattern used everywhere else in this canvas.
+- New shared `updateRelationshipText(apiBase, relationshipId, targetLink, relationshipText)` —
+  extracted rather than tripling the GET-then-full-replace-POST body construction inline a third
+  time (setContactFlag's own copy is left alone — different semantics, changes NOK/CC not text).
+- The forward downgrade also updates the card's own local `baseId`/`modifierId`/`relationshipText`/
+  `colour` in place — since "Family member" doesn't parse to any recognised relationship,
+  `relationshipKnown` correctly becomes false afterward, so a later re-drop shows the picker again
+  rather than silently reapplying the old (removed) classification.
+
+### (internal v3.208.5) — 2026-08-01
+
+#### Contacts Management — remove-from-tree follow-up: styling, reciprocal cleanup, refresh
+
+Live-test follow-up to v3.208.4's remove-from-tree feature, three asks.
+
+- **Styling**: `.ms-cv-remove-zone` restyled to match the tree's own "Drop here" boxes — sized like
+  a single tree-branch-item (150-240px) rather than a full-width bar, dashed border, centred
+  italic text — kept red-tinted as agreed. Label shortened to fit the smaller box ("Drop here to
+  remove from tree"), fuller reassurance ("their link isn't deleted...") moved to a hover tooltip.
+- **Reciprocal relationship handling on removal**: clarified with the user that "remove the
+  reciprocal relationship we just wrote back" meant overwriting its relationship TEXT with a
+  generic placeholder ("Family member") — NOT deleting the relationship record, and NOT
+  unmerging back to a manual contact. `removeCardFromTree` is now async: when a reverse link was
+  created THIS session as part of confirming the card into its (wrong) slot, dragging it to the
+  remove zone also does a real Medicus write, overwriting the reciprocal's relationship text via
+  `changePatientContact` (same full-replace discipline as every other write here — every
+  manual-contact-only field null, `isNextOfKin`/`notes`/`copyCorrespondence` preserved from a fresh
+  GET). Deliberately scoped to only a reciprocal written THIS session
+  (`linkedCards[].reciprocalRelationshipId`, resolved via a bounded follow-up fetch of the
+  candidate's own record after `performLinkAndCleanup` reports a fresh reverse link) — an older,
+  pre-existing reciprocal that predates this canvas session is never touched by a plain removal.
+  New busy-state `cs.reciprocalDowngrading` (Set, same pattern as `phoneDeleting`/`flagUpdating`);
+  a failure here surfaces a clear error but still completes the local unplace.
+- **Redrop correction now also fixes the reciprocal, not just the forward relationship**: without
+  this, a corrected re-drop after a removal would have tried a fresh `linkPatient` create for the
+  reverse direction — which Medicus rejects as a duplicate, since the relationship record still
+  exists (just retitled), not deleted. New `reciprocalUpdateId` param on
+  `performLinkAndCleanup`/`changePatientContact`, mirroring the existing forward-side
+  `relationshipUpdateId` mechanism exactly: when this canvas already knows the reciprocal's own id,
+  route the correction through an update-in-place instead of a doomed-to-collide create.
+  `describeLinkProgress`'s resumable-retry step list updated to match (also fixes a smaller,
+  separately-introduced bug: its `relationshipUpdate` step's `applies` condition had gone stale
+  after v3.208.4's `relationshipUpdateId` fix and no longer matched the real trigger condition).
+- **Explicit "Refresh page" header button**, next to Close — every write this canvas makes only
+  ever updates local state; Close already reloads too, but only once you're done and have gone
+  through the unfinished-merge check, so this gives an always-reachable way to check Medicus's own
+  contacts card reflects a change without leaving the canvas.
+
+### (internal v3.208.4) — 2026-08-01
+
+#### Contacts Management — remove a card dropped in the wrong slot
+
+Asked for, live: no way to undo a card dragged into the wrong tree slot by mistake. Confirmed with
+the user first that the common case is "wrong slot, right person" (re-classify, keep the link),
+not "wrong person entirely" (undo the link) — scoped accordingly.
+
+- New dedicated "drag here to remove" drop zone (`renderRemoveZone`) above the tree. Dragging any
+  locked/tree-placed card onto it calls `removeCardFromTree`, which reuses `engine/contact-tree.js`'s
+  existing `removeFromSlot` primitive (already built, already tested, just never wired to any UI) —
+  LOCAL ONLY, no Medicus write, no confirmation dialog needed for the same reason. The card
+  disappears from its slot and reappears in "Not yet placed in the family tree", draggable again
+  through the normal path.
+- `cardHtml`: a locked card is now draggable again, but only for this purpose — a NEW payload
+  shape (`{removeCardId}`), distinct from the existing card-to-card merge (`{id, kind}`) and
+  flag-token (`{flagKind}`) shapes, gated specifically on `kind === 'linked'` so a merged/blank
+  manual card (nothing to "remove from the tree" — it was never placed there) never becomes a
+  spurious drag source. Every existing merge/slot/flag drop handler now explicitly ignores this
+  new shape rather than falling through to `tryMerge`/`tryAssign` with undefined arguments.
+- **Two real correctness bugs found and fixed while making this actually work**, both specifically
+  about re-classifying an ALREADY-recognised relationship (as opposed to setting one for the first
+  time), which this remove-and-redrop flow is the first thing to ever exercise live:
+  - `doCanvasConfirm`'s `relationshipUpdateId` (the flag that tells `performLinkAndCleanup` to
+    write a corrected relationship label back to Medicus) only ever fired when the ORIGINAL text
+    was unrecognised. A slot-drop correcting an already-recognised-but-wrong classification (e.g.
+    dropped on Siblings by mistake, corrected to Children) silently updated the local tree display
+    only — Medicus's own record kept the wrong label indefinitely. Fixed: `buildConfirmForCard` now
+    also returns `originalBaseId`/`originalModifierId` (what's actually on record, captured before
+    any slot-override), and the write fires whenever the final baseId/modifierId differs from
+    those, not just when nothing was known to begin with.
+  - Separately, the locked tree label was being re-derived from `existingForwardLink`'s own
+    `patientContactRelationship` text — a load-time snapshot, never refreshed after a write made
+    THIS session — which would silently revert a just-written correction back to the stale
+    pre-write text on screen. Removed; the locked label now always trusts `st.confirm.baseId`/
+    `modifierId` directly, which already reflects whatever was correct and whatever was just
+    written.
+  - Also: an already-linked card being re-classified previously never updated its own
+    `cs.linkedCards` entry at all (only a brand-new link got pushed) — badges and future
+    `isPlacedInTree`/`bestManualMatchFor` checks would have kept showing the stale relationship.
+    Now updates `baseId`/`modifierId`/`relationshipText`/`colour` in place.
+  - `buildConfirmForCard`'s `existingForwardLink` lookup also only ever checked the load-time
+    snapshot — missing a card linked earlier THIS session (the exact card most likely to get
+    removed-and-redropped moments after the original mis-drop). Now falls back to constructing an
+    equivalent object from `cs.linkedCards`' own resolved `relationshipId` when the snapshot
+    doesn't have it, so the correction write-back works for a same-session mistake too, not only a
+    pre-existing one.
+- New CSS `.ms-cv-remove-zone`, red-tinted to read as distinct from the purple flag-tokens strip
+  immediately above it.
+
+### (internal v3.208.3) — 2026-08-01
+
+#### Contacts Management — non-British name-derivation matching
+
+`engine/contact-match.js`'s candidate scoring assumed a British same-surname family model
+throughout — this adds two things it was getting wrong for non-British naming systems, plus a
+prerequisite bug fix those systems exposed.
+
+- **Prerequisite fix**: `normaliseName`'s token regex was ASCII-only (`[^a-z0-9\s-]`), silently
+  treating every accented character as a token separator — "Björn Nováková" became "bj rn nov
+  kov" before any comparison ever ran. Widened to Unicode-letter-aware (`\p{L}\p{N}`, `u` flag);
+  `.toLowerCase()` was already Unicode-correct. No change for plain-ASCII names or existing
+  punctuation-folding behaviour (apostrophes, etc.).
+- **New `engine/name-derivations.js`** (dual Node/browser, own test file
+  `test-name-derivations.js`, 48 checks):
+  - **Gendered Balto-Slavic surnames** — `isGenderedSurnameMatch` recognises Polish Kowalski/
+    Kowalska, Czech/Slovak Novák/Nováková and Novotný/Novotná, Russian/Bulgarian Ivanov/Ivanova,
+    and Lithuanian's genuinely three-way system (a married woman always takes -ienė regardless of
+    her own name's ending; an unmarried daughter's suffix depends on her father's own ending) as
+    the same family surname, not a mismatch. Wired into `contact-match.js`'s `nameSimilarity`
+    (both the Jaccard token-overlap and whole-token-containment paths) via a `tokensMatch` helper
+    used everywhere two name tokens are compared.
+  - **Patronymic extraction** — `extractPatronymicFather` derives a father's own first name
+    directly from a name that structurally encodes it: Icelandic surnames (Björnsson/
+    Björnsdóttir — "Björn's son/daughter") and Russian-style patronymic middle names (Ivanovich/
+    Ivanovna — "son/daughter of Ivan"). Wired into `scoreCandidate` as a new opt
+    `indexPatientName`: when the relationship being guessed is specifically `'father'` (patronymics
+    encode the father's name, never the mother's, in either system), the index patient's own name
+    is checked for a patronymic pattern and, if found, the derived first name is compared against
+    the candidate's own first name — a positive-only bonus folded into the existing `nameSignal`
+    via `Math.max`, never lowering a score. Threaded through from `contacts-canvas.js`'s main
+    `rankCandidates` call site as `st.indexPatientDetails.displayName`.
+  - **Collision safety was the dominant design constraint throughout**, since this UK GP tool
+    matches overwhelmingly-British names by default: bare single-s Nordic "-son" is deliberately
+    NEVER stripped (Wilson/Johnson/Jackson/Robinson/Anderson are ordinary inherited English
+    surnames, not fresh per-generation patronymics) — only the doubled-s "-sson" genitive form,
+    which is the REGULAR Icelandic pattern and essentially never occurs in English surnames. Bare
+    Lithuanian male endings (-as/-is/-ys) are never stripped as standalone suffixes for the same
+    reason (Lewis, Douglas, Curtis, Rhys...) — only reached as the unstripped remainder in a
+    prefix-fallback check against an already-stripped female form. The two single-character Czech
+    adjectival markers (ý/á) are accent-strict — folded to ASCII they'd become the extremely common
+    English letters "y"/"a" — while every other suffix folds diacritics before matching, since
+    GP2GP imports and hand-typed manual contacts routinely drop them.
+  - Extended `test-contact-match.js` (new section 8) with integration coverage: a gendered pair
+    scoring as a match, a patronymic bonus raising a father candidate's score, confirmation the
+    bonus never fires for `'mother'`, and the key negative case — an ordinary English family's
+    inherited "-son" surname never triggering a spurious bonus even when a first name would
+    coincidentally line up.
+- Registered `engine/name-derivations.js` in `manifest.json`'s contacts `content_scripts` block,
+  before `contact-match.js` (browser-global load order, same pattern as
+  `contact-relationships.js`).
+
+### (internal v3.208.2) — 2026-08-01
+
+#### Contacts Management — drag-and-drop NOK / copy-correspondence flagging
+
+Rebuilt on `contacts-followups-2026-08-01` (branched from current `main`) after discovering this
+feature had been built in an earlier session on the old `worktree-contacts-management` branch but
+never committed — that branch's committed work (through v3.191.0) had already merged into `main`
+as v3.208.0 via a separate review PR (#246) in the meantime, without this feature, so it needed
+rebuilding against the current, substantially-evolved `contacts-canvas.js` rather than a simple
+reapply.
+
+- Asked for, live: (1) drag an "NOK" or "Copy correspondence" token onto an already-linked
+  contact's card to set that flag directly, without going through the confirm panel (which only
+  ever applies at the moment a NEW link is created); (2) show which contacts already have these
+  flags, labelled "NOK"/"cc"; (3) keep the existing gap warnings ("No next of kin is set for this
+  patient", the under-13 copy-correspondence one) in sync with the new capability.
+- No new endpoint needed — `changePatientContact`/`getEditPatientContact` (already confirmed,
+  already used for the existing relationship-label write-back) already accept
+  `patientContactRelationshipIsNextOfKin`/`patientContactRelationshipCopyCorrespondence` directly.
+  New `setContactFlag(cardId, flagKind, value)`: fetches the current full relationship record,
+  sends it back full-replace with only the one flag changed (every manual-contact-only field sent
+  `null`, confirmed live to have no effect on a real link), and updates the card locally on
+  success. Wrong-patient guard re-verified immediately before the write, same discipline as every
+  other write in this canvas.
+- Interaction: dropping a token always SETS the flag (never toggles) — unsetting is a separate
+  gesture, clicking the badge the flag produces on the card. Multiple contacts can be flagged NOK
+  simultaneously with no side effects on others — deliberately not a single-NOK-at-a-time model
+  (most children genuinely have both parents as NOK, older adults often have several children as
+  NOK; Medicus itself doesn't enforce a single NOK either).
+- New always-visible "Drag onto a contact to flag them (click the flag on a contact card to remove
+  it):" tokens above the tree (`renderFlagTokens`) — not gated behind a gap being detected, so a GP
+  can flag any contact at any time. `cardHtml` now always emits `data-card-id`/`data-card-kind`
+  (previously only when draggable, which a locked/already-placed card never is) so any card —
+  draggable or not — is a valid drop target; the existing card-to-card merge drop and the new
+  flag-token drop share one unified handler, branching on the drag payload's shape. Every occupied
+  tree-branch `<li>` wrapper (grandparents, parents, siblings, partner, children) also carries
+  `data-card-id`, so a flag token can be dropped on a card actually placed in the tree, not only on
+  one in the "below the line" manual/suggested columns — the shared slot/tree-item drop handler
+  routes a flag-shaped payload via that attribute as a fallback, regardless of which of the two
+  nested elements (inner card vs. outer wrapper) the browser's drop event resolves onto.
+- `cardHtml`'s NOK/cc badges are clickable `<button>`s wired to `setContactFlag(..., false)` once a
+  card has a `relationshipId` (needed to write to it). A freshly-created link now resolves its
+  `relationshipId` immediately rather than waiting for a reload: right after a brand-new forward
+  link is created (`doCanvasConfirm`), one bounded follow-up `getPatientDetails` call finds the
+  matching `patientContactsSection` entry (reusing `findExistingForwardLink`'s already-confirmed
+  `patientContactPatientId`/`patientContactId` fields, no new endpoint) and fills it in on the card
+  object in place. Best-effort — if that fetch fails, the card just stays a non-interactive pill
+  until reload, same as the fallback behaviour always was.
+- Step 1.10's copy-correspondence fetch (`viewPatientContact`, one per linked card) now runs
+  unconditionally for every linked card, not only when the patient is under 13 — the per-card
+  badges need `copyCorrespondence` regardless of age, not just the U13 gap check. Also now the
+  single source of truth for BOTH `isNextOfKin`/`copyCorrespondence` per card once it succeeds
+  (overwriting the bulk-list `isNextOfKin` default), rather than reading NOK from one endpoint and
+  CC from another.
+- Gap flags recompute as a cheap local clear/set the moment a flag is set or unset via drag or
+  click — same pattern already used for the confirm-panel-driven case, no re-fetch needed since the
+  write result is already known.
+- **Found live, immediately after the rebuild**: clicking a flag badge to unset it always failed —
+  briefly appeared to work then reverted on a just-matched card, and threw "Refusing to update this
+  contact: it is not a confirmed patient-linked contact…" outright on a fresh canvas reload, even
+  against a genuinely linked contact. Root cause: `changePatientContact` gained a fourth `targetLink`
+  parameter on `main` (v3.208.0's own review pass) — a defensive guard requiring proof the id
+  belongs to a real link before a full-replace write, since the same write against a manual
+  contact's id would wipe its name/phone/email/address. `setContactFlag`'s call predated that
+  guard and never passed it, so the assertion fired unconditionally on every call, regardless of
+  whether the link was real. Fixed by passing `{ patientContactPatientId: lc.id }` — constructed
+  rather than re-fetched, since `lc.relationshipId` is only ever set from a genuine
+  `patientContactPatientId`-bearing entry in the first place (loadCanvas' `findExistingForwardLink`
+  fetch, or the new relationshipId-resolution follow-up above), so `lc.id` already IS that same
+  `patientContactPatientId`. The "briefly appears to work" symptom was the flagUpdating "…" state
+  showing then reverting once the write threw, not an actual optimistic-UI bug.
+
+#### Contacts Management — duplicate-address merge didn't visibly save
+
+`mergeDuplicateAddressGroup` deleted the surplus address(es) then immediately re-fetched via
+`getPatientDetails` to refresh the list — but Medicus's own read-after-write isn't instant, so that
+immediate re-fetch could still show the just-deleted address as present, making the merge look like
+it silently did nothing until some later, unrelated action's own re-fetch happened to catch up.
+Fixed by dropping the re-fetch for this purpose entirely: the delete loop now tracks which address
+IDs it actually deleted, and `st.indexAddresses` is filtered locally against that set instead of
+trusting a fresh GET to already reflect writes that just happened. Applied on top of v3.208.0's own
+separate address-merge fix (correspondence-flag transfer before delete, fail-closed verification),
+which addressed a different failure mode and is unaffected by this change.
+
+## [v3.209.0] — 2026-08-01
+
+### OIR sync fixes + Cleanup Code Preferences shared-folder sync (PR #241)
+
+Merges Nick's `fix/oir-native-checkbox` branch (developed as internal v3.204.0–v3.204.1;
+renumbered here because that range was released on main by other work). Two commits,
+both live-tested on two work PCs against the real shared-folder deployment.
+
+Review fixes applied on merge (two independent pre-merge reviews, every code fix landed
+with red-first regression tests — 86 new assertions across `test-oir-key-rotation.js`
+(new), `test-practice-profile.js` and `test-problem-description-cleanup-io.js`):
+
+- **Auto-publish scope** — the daily unattended publish no longer writes a full
+  `doFullExport()` profile (which wholesale-overwrote all 16 other modules with one
+  machine's local state); it now publishes only the union-merged Cleanup Code
+  Preferences section, carries every other section — including `practiceAttestation` —
+  forward verbatim from the fetched shared copy, and **aborts** (no write, retry next
+  day) if the shared profile can't be read, instead of falling back to a raw local
+  snapshot. Manual attended publish keeps full-profile semantics.
+- **Content-aware OIR retirement** (`shared/io/oir-key-rotation.js`, new) — the profile
+  now carries the superseded published content (`retiredOirTests`), and the apply side
+  removes a local test only when it content-matches that superseded copy: a clinician's
+  local edit under a retired key is preserved (both versions surface for human
+  reconciliation) instead of being silently deleted. A legacy bare `retiredOirKeys`
+  list deletes nothing (fail-safe: a lingering duplicate beats a destroyed edit).
+- **Builtin-key overrides never rotate** — disable/extend entries keyed to a builtin
+  test (where the key IS the semantics) are exempt from rotation; rotating them
+  silently re-enabled the builtin on every machine and landed a bogus standalone test.
+  They update in place only when the local copy matches the previously published copy.
+- **Cumulative retirement ledger** — `retiredOirTests`/`retiredOirKeys` union across
+  publishes (FIFO-capped at 200) instead of being replaced each publish, so a machine
+  that misses a version still retires the stale original; and a rotating publish now
+  updates the publisher's own local keys immediately, closing the double-edit
+  self-race that shipped un-rotated duplicates.
+- **No unattended rotation** — key rotation of clinical config requires an attended
+  publish (`attended: true`, double-guarded).
+- **Ordering-aware version gate** — an older profile version (rolled-back/restored
+  shared file) is now skipped with a logged reason instead of applied, which
+  retirement had made destructive.
+- **Override-clear tombstones** — clearing a Cleanup Code override now writes
+  `overrideCleared`; the merge resolves set-vs-clear by timestamp, so a cleared
+  practice-wide override no longer resurrects on the next daily sync.
+- Minor: `lastUsed` no longer dropped when one side lacks it; the blob-download
+  fallback no longer stamps `lastAutoPublishAt` (the file may never reach the shared
+  folder); the last-writer-wins concurrent-publish limitation is documented at the
+  write site.
+
+### OIR practice-profile sync: fresh-install init race + stale edited-test merge
+
+#### Two OIR practice-profile sync bugs fixed: fresh-install race, stale edited-test merge
+
+Both diagnosed live on two work PCs against the real shared-folder deployment (a
+completely fresh install, and an existing install missing recently-edited OIR test
+content), and both confirmed fixed live afterwards.
+
+- **Fresh-install startup race** (`service-worker.js`). `initialiseTriage()` and
+  `applyPracticeProfile()` both fired unawaited from the same `onInstalled` listener.
+  On a truly fresh install, `initialiseTriage()`'s unconditional seed-from-
+  `defaults.json` write could land *after* `applyPracticeProfile()`'s correct
+  practice-profile merge, silently stomping a freshly-applied `oirTests` list back
+  to the shipped-empty default. Fixed by awaiting `migrateTriageLensConfig()` +
+  `initialiseTriage()` to full completion before `applyPracticeProfile()` runs.
+- **Stale edited OIR test never propagating** (`shared/io/practice-profile.js`,
+  `options/options.js`). The practice-profile merge only ever appends an `oirTests`
+  entry whose key isn't already known locally — so editing an existing published
+  test and republishing was a silent no-op everywhere that key already existed.
+  Fixed with publish-time key rotation: `doPublish()` now diffs local tests against
+  what's currently shared, rotates the key of anything whose content changed, and
+  lists the superseded key in a new `retiredOirKeys` field; the apply-side merge
+  explicitly drops retired keys before appending. Deliberately does NOT do an
+  update-in-place merge — OIR tests are editable per-machine via the same
+  options-page test editor, so blindly overwriting an existing key on republish
+  could silently clobber a clinician's own local edit.
+
+### Cleanup Code Preferences shared-folder sync (multi-PC publish-merge, daily auto-publish)
+
+#### Cleanup Code Preferences joins the shared-folder practice-profile sync, with a daily auto-publish
+
+Previously `problemDescriptionCleanup` (the "Clean up code" preference-learning module —
+`pdc.preferredDescriptions` / `pdc.conceptRemap`) had no path into the shared-folder
+practice-profile sync at all: no case in `applyProfile()`, not selectable in the publish
+module picker. Getting a practice-wide collective view of replacement-code choices required
+manual per-PC file hand-offs via the existing per-module export/import card. This release
+wires it into the live sync properly, with correctness properties specific to a module that
+(unlike every other module here) accumulates from multiple machines' independent local usage
+rather than being curated by one admin from one machine.
+
+- **New `applyProfile()` case for `problemDescriptionCleanup`** (`shared/io/practice-profile.js`).
+  Tally counts reconcile via `max()`, never `add()` — the shared-folder sync re-checks and
+  potentially re-applies on every published version bump, and naive addition would
+  double/triple-count the same published snapshot on every cycle. `max()` adopts the larger
+  of "what this machine already has" vs "what's published," never inflating and never
+  discarding local growth made since the last sync. Override resolution follows the module's
+  merge/replace picker mode (added to `MODULE_DEFS` in `options.js`, unchecked by default):
+  merge preserves "local pin always wins"; replace treats a published override as the
+  practice's authoritative decision, same trust model as Knowledge's replace mode.
+- **Publish no longer blindly overwrites the shared file.** `doPublish()` previously wrote
+  the publishing machine's raw local snapshot straight to `practice-profile.json`, which for
+  a multi-machine-accumulated module risked one machine's publish regressing another
+  machine's not-yet-pulled-back contribution. New `problemDescriptionCleanupMergeForPublish()`
+  (`shared/io/problem-description-cleanup-io.js`) reads what's currently shared and merges
+  this machine's local data into it before writing (same `max()` tally reconciliation).
+- **Daily auto-publish.** `maybeAutoPublish()` fires when the Options page happens to be open
+  and a day has passed since this machine last published. Never activates on a machine that
+  hasn't manually published at least once before (no established `MODULE_DEFS` picker config
+  = no-op). Can never prompt for file-system permission — `showSaveFilePicker()` and
+  `FileSystemFileHandle.requestPermission()` both require a genuine user gesture a background
+  trigger doesn't have — so it only writes via an already-remembered handle with
+  already-granted permission (`queryPermission()` only), silently doing nothing otherwise and
+  retrying next time Options is open. New local-only bookkeeping key
+  `suite.practiceProfile.lastAutoPublishAt` (allowlisted in `test-backup-coverage.js`, not
+  part of user backups).
+- **The enforced override can only ever change via a conscious, attended publish.** The
+  publish-side merge takes an `includeOverride` option (default true); the daily auto-publish
+  passes `includeOverride: false`, so an unattended run only ever refreshes tallies — the
+  practice-wide "preferred" choice is never silently changed by a machine's own incidental
+  local pick riding along on a background sync. Declaring what's enforced for the whole
+  practice stays a deliberate action, gated by the same shared-folder write permissions that
+  already restrict who can publish at all.
+
+New tests in `test-problem-description-cleanup-io.js` and `test-practice-profile.js` cover
+the `max()` reconciliation (including a same-snapshot-applied-twice non-inflation regression
+test), merge-vs-replace override resolution, the publish-merge helper, and the
+`includeOverride:false` protection.
+
+## [v3.208.1] — 2026-08-01
+
+### Hazard log: CSO sign-off of H-055–H-057 (Contacts Management)
+
+Dr Dave Triska (CSO) reviewed and signed off the three Contacts Management hazards
+added at v3.208.0 ("Read and signed", recorded 2026-08-01). H-055 (wrong-person link,
+residual 5), H-056 (demographic data loss via hygiene writes, residual 4) and H-057
+(confidentiality, residual 3) move from Proposed to **Accepted (ALARP)** at their
+proposed scores; the per-hazard review questions recorded at proposal are carried
+forward as open review items, not conditions. `docs/HAZARD-LOG.md` document version
+3.21. No code changes.
+
+## [v3.208.0] — 2026-08-01
+
+### Contacts Management: visual family tree, family cycling, address/contact hygiene (PR #243)
+
+Merges Nick's Contacts Management feature branch (developed 2026-07-23 – 2026-08-01 under
+internal version numbers v3.178.0–v3.191.0, renumbered here because that range was
+released on main by other work). Full development history is in the commits of PR #243.
+All live-tested against real Medicus data; every write path was built against a
+HAR-confirmed endpoint.
+
+- **Visual family tree** (`content-scripts/contacts-canvas.js` + `engine/contact-tree.js`):
+  drag-and-drop canvas converting a patient's manual (free-text) contacts into real
+  patient-to-patient links — parents/partner/siblings/children plus grandparents,
+  aunts/uncles and other branches, transitive suggestion pooling via related patients'
+  own records, grandparent composition, wrong-type-phone detection, deceased badge,
+  step-parent hints. Retires the old single-contact convert flow.
+- **Family-member cycling** — a "Next family member" control that navigates to the next
+  linked contact's own record, persisting session state (`contactsCanvas.familySession`,
+  4h TTL, documented backup exclusion) across the navigation; first slice of relationship
+  composition (grandparent/in-law) restricted to structurally-unambiguous cases
+  (`engine/contact-relationships.js` + `rules/contact-relationships.json`).
+- **Duplicate-address detection and merge** on the hub patient (PDS re-sends the same
+  address differently formatted), including correspondence-address handling confirmed via HAR.
+- **Name-search expansion** (`engine/contact-match.js`) so a manual contact with a middle
+  name or compound surname still matches a real Medicus patient.
+- **Shared-contact-info flagging** — warns when a patient shares a non-Home phone/email
+  with a linked contact (confidentiality risk, often a child's record carrying a parent's
+  own number).
+- **NOK / copy-correspondence gaps and reciprocal flags** — flags missing
+  next-of-kin/copy-correspondence and lets the confirm panel set these on the reciprocal
+  relationship too.
+- **Manifest description updated** — no longer claims "read-only"; the suite has shipped
+  user-confirmed record-editing tools (problem cleanup, bulk-end, and now contacts writes).
+
+Review fixes applied on merge (pre-merge code review; every code fix landed with
+red-first regression tests):
+
+- **Address merge ordering** — the correspondence-address flag is now transferred to the
+  kept address *before* any duplicate is deleted, so a mid-merge failure can no longer
+  leave the patient with no correspondence address; and when an address's correspondence
+  status can't be verified (`getEditAddress` failure) the group's merge is disabled
+  (fail closed) instead of silently treated as not-correspondence.
+- **Write concurrency guards** — in-flight busy guards on "Confirm link", blank-contact
+  delete, reverse-manual "Remove it", merge finalise and address merge; a double-click
+  can no longer fire the non-idempotent reverse `link-patient` twice (duplicate
+  relationship on the other patient's record).
+- **Resumable multi-step link writes** — `performLinkAndCleanup` tracks per-step
+  progress (forward link → re-categorise → reverse link → manual-contact cleanup);
+  after a partial failure, retry skips completed steps instead of being permanently
+  blocked by the server's duplicate rejection, a 400 "already exists" on the forward
+  link is treated as done, and the reciprocal is re-read live before the reverse write.
+- **Family cycling no longer drops members** — new `peekNext`/`commitAdvance` engine API
+  (`engine/contact-tree.js`); a member is consumed from the pool only when the user
+  actually navigates, so Cancel or a transient probe error keeps them queued.
+- **`removeFromSlot` reference-identity bug** — edges are removed by (slotPath, cardId)
+  value identity; a removed relationship's edge no longer lingers in `tree.edges`
+  feeding placement checks and composed suggestions.
+- **Stale resume banner** — the Resume handler re-verifies the live patient before
+  reopening, and the banner removes itself when the SPA navigates to a different patient.
+- **Name matching** — token-granular containment (Ann/Annette and surname-only contacts
+  no longer reach the 0.9 tier / "strong" badge; middle-name and hyphenated-surname
+  matches now do), plus `tied`/`margin` ambiguity signals on the top-ranked candidate.
+- **Address dedup guards** — digit-bearing tokens ("1a"/"1b"), transposed numbers and
+  lone-letter unit designators ("Flat A"/"Flat B") now compare as ordered exact
+  sequences instead of falling into the fuzzy word Jaccard.
+- **Free-text relationships fail closed** — possessive constructions ("Son's wife",
+  "Mother's carer", "Foster mother") drop to needs-review instead of a confident wrong
+  category; the "Other half" partner alias is now reachable.
+- **Write-surface hygiene** — dead `createManualContact` wrapper removed; defensive
+  assertion in `changePatientContact` (refuses a manual contact whose nulled fields
+  would be wiped); wrong-patient guard scope documented and aligned.
+- **Clinical safety** — hazard log gains H-055 (wrong-person link), H-056 (demographic
+  data loss via hygiene writes) and H-057 (confidentiality: cross-patient contact info
+  + persisted family graph), all Proposed pending CSO sign-off (doc v3.20).
+## [v3.207.0] — 2026-08-01
+
+### The Keeper: vaccine eligibility engine fix + mRESVIA false-GIVEN guard + digoxin monitoring scaffold
+
+Automated safety rule maintenance run (The Keeper, 2026-08-01). All changes sourced from
+internal code inspection (external clinical reference hosts returned HTTP 403 this run).
+Three Red findings applied; one Red finding (vax-001 RSV 65-74 expansion) requires an engine
+sprint before it can be encoded.
+
+**vax-002 🔴 (C2-class false-GIVEN risk — applied):** `rules/vaccine-rules.json` — 5 mRESVIA
+declined terms added to vax-rsv statusTerms.declined (`mresvia refused`, `mresvia
+contraindicated`, `mresvia not given`, `mresvia not indicated`, `mresvia declined`). Without
+these, a patient with a "mresvia refused" problem code was classified as `vax_given` because
+the given term `mresvia` substring-matched the negative phrasing. Regression guard extended in
+`test-vaccine-status-terms.js`.
+
+**vax-003 🔴 (eligibility engine bug — applied):** `engine/rules-engine.js` —
+`matchVaccineEligibility()` now enforces `ageMin`/`ageMax` on `problem` and `medication` kind
+eligibility clauses, mirroring the existing check on `age` kind clauses. Previously, the
+`ageMin: 16` on the flu and pneumococcal homelessness cohort clauses was silently ignored —
+a patient under 16 with a homelessness code could be incorrectly flagged as vaccine-eligible.
+
+**alert-C005 🔴 (monitoring gap — applied, disabled pending CSO activation):** `rules/drug-rules.json`
+— disabled digoxin monitoring rule added (`enabled: false`, id `digoxin-renal-monitoring`).
+Digoxin is a high-risk narrow-therapeutic-index drug; annual U&E/eGFR monitoring is required
+but no Sentinel chip existed. Lanoxin is the only UK-licensed brand (dm+d confirmed). Rule
+ships disabled for the CSO to review the interval and activate. Regression guard added in
+`test-drug-brand-coverage.js`. Sources: BNF Digoxin monograph (corroborated; primary 403
+this run) + STOPP v3 B1.
+
+**vax-001 🔴 (open — engine change required):** RSV 65-74 clinical-risk expansion effective
+1 Sept 2026 (NHSE operational letter 2 July 2026). Engine cannot encode combined age-band +
+clinical-risk eligibility. Notes field in vax-rsv documents the gap and instructs manual
+assessment for 65-74 clinical-risk patients from 1 Sept 2026. Engine sprint needed before
+this clause can fire automatically.
+
+**Source gap noted:** All UK clinical reference hosts (gov.uk, nice.org.uk, england.nhs.uk,
+bnf.nice.org.uk, medicines.org.uk, sps.nhs.uk) returned HTTP 403 from the outbound proxy for
+the second consecutive run. Only code-review findings were verifiable this run.
+
+## [v3.206.1] — 2026-07-31
+
+### Phrases: compose-first redesign (multi-critic design review + simulated practice panel)
+
+Full design-crit pass on the day-old Phrases tab, driven by Dave's feedback that the
+59-block list was "VERY long" and his ask to restructure toward the reception-composer
+pattern (labelled rows of clickable chips). Reviewed by four design critics (art director,
+token surveyor, fresh-eyes persona, product/adoption lens) plus a six-clinician simulated
+practice panel (senior partner, salaried duty doctor, registrar, portfolio GP, locum, ANP);
+convergent findings ruled on by the orchestrator and implemented in one pass.
+
+- **Two modes.** *Compose* (default): six labelled slot rows in message order — Opener /
+  Complete message / Message / Safety-net / Next step / Sign-off — each showing the
+  clinician's most-used chips (usage data already collected) with a dashed "+N more"
+  expanding in place; chip labels strip their slot prefix at render (`chipLabel()` in
+  phrases-core, unit-tested) so "Opener — worried about a result" becomes a chip reading
+  "worried about a result". The whole library now fits one panel screen with no scrolling.
+  *Library*: the previous card surface, intact — search, category filters, add/edit,
+  promote, LLM import, remove — re-homed one tap away; nothing deleted.
+- **The compose tray pins** (sticky, preview clamped with "Show all") so the message being
+  built and the rows stay on screen together — previously the composer scrolled away by
+  the third pick.
+- **The preview is now editable** (the panel's most-converged user demand): fill `***`
+  placeholders and tweak wording in-panel before Copy; the amber confirm gate now fires
+  only if `***` genuinely remains in the live text. Manual edits are transient and never
+  persisted; changing the selection recomposes.
+- **Confirm-gate hierarchy fixed:** while the gate shows, "Copy message" is removed from
+  the DOM entirely — the safe exit (Back) carries the primary weight inside the gate;
+  "Copy anyway" stays the amber ghost. Gate salience raised, not reduced.
+- **Colour discipline restored:** red leaves the resting list (Remove/Delete are neutral
+  ghosts that arm red on hover/focus); the constant green PRACTICE badge is replaced by a
+  violet "yours" badge on the minority (personal blocks) plus a "Practice pack vN" mono
+  provenance line on practice cards; audience badges are now differential — 'patient' (the
+  constant default) unbadged, 'note' neutral, 'task' amber — while the tray's For:/mixed-
+  audience control keeps full strength (H-052 control (b) note updated; flagged for the
+  pending CSO review).
+- **Accessibility floor met:** chips and cards are real buttons (the primary pick action
+  previously had no keyboard path at all), `aria-pressed` everywhere, live-regions on the
+  copy status and the `***` gate (which also takes focus), 20px close targets, `:active`
+  states, green status text contrast fixed (✓ glyph carries the colour).
+- **Voice recast per doctrine:** mono-caps leave all human phrases (category pills,
+  slot/category tags) for sans sentence case; mono stays on data (triggers, counts,
+  char/SMS, order indices). Dark theme mapped, not inherited (card borders, preview well,
+  the previously-white LLM details block).
+- **Pack v3:** the four sign-off bodies no longer hard-code "Dr ***" — an ANP or other
+  non-doctor pasting that would mislead patients about who is treating them (practice-
+  panel finding); placeholder now takes the clinician's own name/role. CI pins the ban.
+- Empty states to canon (centred, actionable "Clear search"); one-line safety subtitle;
+  6px/16px spacing rhythm. Full run: 346 tests green.
+
+## [v3.206.0] — 2026-07-31
+
+### Reception: the Patient card now follows the record open in Medicus
+
+Field report: the Reception tab's Patient card (name + NHS number + status pill) kept
+showing the previous patient after switching records in Medicus, "only updating when you
+start typing". Root cause: the card was a one-shot render — its only triggers were module
+entry, a browser-tab switch, a config change and the manual Refresh link. Nothing listened
+for the SPA patient change, so sitting on the Reception tab across a record switch left
+the old identity on screen (H-001 field evidence — hazard log doc v3.19, pending CSO
+review). The "typing fixed it" observation was a red herring: leaving and re-entering the
+tab is what refreshed it, and typing just tends to happen right after.
+
+- **`side-panel/modules/reception/reception.js`** — subscribes to the content script's
+  `sentinel:snapshot-updated` broadcast (the same signal the Monitoring, Record, Trends
+  and Patient Alerts surfaces already use), debounced 400 ms, with a 10 s
+  visibility-gated backstop poll. All listeners/timers torn down in `cleanup()`.
+- **Mid-switch state** — while Sentinel re-evaluates a navigation the card now shows
+  "Record changing in Medicus — refreshing…" instead of flashing the idle "open a
+  record" copy; the previous patient's name is blanked immediately, never held. The
+  transient deliberately does NOT re-gate the booking card, so a same-patient
+  sub-navigation blip can no longer release a held slot reservation (H-051 review q4);
+  a genuinely dead content script still fails the mount check and re-gates.
+- **Pinned capture identity** — with the card now live, the generated summary's
+  name/DOB/NHS header is pinned to the patient open when the capture form OPENED, not
+  whoever is open when Generate is pressed. If the open record changes mid-capture, the
+  output view says so: "if you paste it into the record now open, it goes in the wrong
+  patient's notes."
+- **No-op renders skipped** — the card body only re-renders when its markup actually
+  changed, so the auto-refresh can't drop focus or shift the red-flag questions under a
+  click; the expanded status-pill detail collapses on a genuine patient change instead of
+  silently swapping its rows.
+- **Pop-out** — the Patient card there was permanently blank (the active-tab query can
+  only see the pop-out's own window); it now falls back to any open Medicus tab for
+  display only. Booking identity is untouched: it stays active-tab sourced, and booking
+  remains hard-gated off in the pop-out.
+- **Tests** — new `test-reception-patient-card.js` pins the wiring (listener + sender
+  guard, cleanup symmetry, debounce, visibility gate), the transient-invalidate
+  discipline, the display-only pop-out fallback and the pinned capture identity.
+
+## [v3.205.0] — 2026-07-31
+
+### New tab: Phrases — reusable message blocks (copy-only)
+
+A personal/practice snippet library for the text GPs type twenty times a day: openers,
+results wording, safety-netting, next steps and sign-offs, composed into one message and
+**copied** — pasting into the right Medicus box and pressing send remain the clinician's
+own acts, in Medicus. v1 deliberately performs **no DOM insertion** into Medicus (that is
+a later phase under the reception-quick-actions doctrine); the module's only output is
+the clipboard, on an explicit click. New hazard **H-052** (docs/HAZARD-LOG.md) records
+the canned-text failure modes and controls; the H-049 no-completion-claim doctrine is
+inherited verbatim and CI-pinned.
+
+- **Blocks, not templates** — the atom is a small reusable block with a fixed schema
+  (`id, title, body, trigger, keywords, category, audience, leafletUrl, slot`); blocks
+  compose in fixed slot order (opener → whole → substance → safety-net → next-step →
+  sign-off) regardless of click order, joined with blank lines.
+- **Audience on everything** (H-052 wrong-context-paste control) — every block carries
+  `patient` / `note` / `task`, shown as a word+colour tag on every card and in the
+  compose preview; a mixed-audience selection warns before you paste; an unknown
+  audience fails closed to `note`.
+- **`***` manual-fill placeholders, never auto-filled** — Epic-style wildcards the GP
+  types over every time (hard rule in `shared/phrases-core.js`; Accurx refuses
+  auto-merge for the same reason). They render highlighted, and **Copy refuses a casual
+  copy while `***` remains**: an explicit second click states the consequence ("the
+  patient will see \*\*\* where their details should be").
+- **Two tiers** — personal blocks (freely editable) and practice blocks (shipped pack +
+  promoted personal blocks, removable with tombstones so pack updates never resurrect a
+  deleted block). Shipped pack lives in `shared/phrases-presets.js` with its own integer
+  version gating `mergeShippedPack` (the quick-actions-core migration pattern); the
+  curated content pack is authored separately and drops into that one file — CI
+  (`test-phrases-core.js`) validates the whole pack, so a malformed drop-in fails the
+  build.
+- **Search** — palette-grade ranking plus a `/trigger` fast path (exact trigger beats
+  prefix beats fuzzy); empty search sorts most-used-by-me. Live character count and an
+  approximate SMS-segment figure at compose time.
+- **LLM-assisted authoring on the tab** — a copyable prompt (exact JSON schema, NHS
+  reading-age 9–11 rules for patient-audience blocks, no patient details) and a
+  paste-JSON import with strict per-block validation and visible rejection reasons;
+  imports land personal-tier until deliberately promoted.
+- **Backup wired day one** — `phrases.items` / `phrases.config` ride the suite envelope
+  via `shared/io/phrases-io.js` (whitelist-sanitised on import), with a preview summary
+  line and a per-module export card in Options.
+- Plumbing: nav tab in both shells, `MODULES` entries in panel + pop-out, tab-catalog,
+  tab-help, tour-coverage and backup-coverage guards all updated.
+
+## [v3.204.2] — 2026-07-31
+
+### Reception-instruction composer: crush fix round 3 — the container is a grid, not a flex row
+
+Third field screenshot, same day: still crushed. The evidence now points at a **CSS grid**
+field container — which explains why both prior fixes missed: a sibling inserted into a
+grid shifts every auto-placed item over by one cell (the textarea lands in a narrow
+track), a flex-wrap walk sees nothing to fix, and `min-width` on a grid item overflows a
+fixed track instead of widening it. Strategy change — stop competing in the container's
+layout algorithm at all:
+
+- **Insertion anchor** — `insertionAnchor()` climbs out of pure single-child wrapper
+  shells (≤3 hops) before inserting, so the widget lands where the page's own block flow
+  stacks it above the field (like its label) instead of inside a flex/grid track fight.
+- **Grid-agnostic CSS** — `#ms-qa-widget { grid-column: 1 / -1 }` keeps the widget on a
+  full row of its own in any grid parent, leaving auto-placed siblings in their original
+  tracks. Harmless elsewhere.
+- **Grid escalation step** in `fixCrushedLayout()` — if the box still measures crushed,
+  collapse the fighting grid's `grid-template-columns` (recorded + restored like every
+  host patch) so its children stack full-width.
+- **Inline `min-width` on the textarea** — the stylesheet's sibling rule stops matching
+  once the widget is anchored higher or hoisted; the inline patch travels with the box.
+- **`ch-debug` capture** — if every step is exhausted and the box is *still* crushed,
+  `localStorage.setItem('ch-debug','1')` + reload now logs `[MSQA]` with the textarea's
+  full ancestor chain (tag, class, computed display/flex/grid, widths) so the next fix is
+  evidence-driven, per the repo's capture-first debugging doctrine.
+
+## [v3.204.1] — 2026-07-31
+
+### Reception-instruction composer: comment-box crush fix made continuous (v3.204.0's didn't hold)
+
+Field evidence (screenshot, same day): the v3.204.0 layout fix did **not** hold on the live
+Medicus task page — the Internal-comment textarea was still crushed into a vertical
+one-character-per-line sliver beside the widget. Root-cause assumptions that failed: the
+crushing flex container is not always the textarea's **direct** parent (the v3.204.0 fix
+only wrapped that one level), and the one-shot measure at inject time is stale by the time
+Vue re-applies its layout. Replaced with three layers, none of them one-shot:
+
+- **CSS backstop** — `#ms-qa-widget ~ textarea { min-width: 220px !important; flex: 1 1
+  100% !important; }`. `min-width` beats `flex-shrink` regardless of *which* ancestor is
+  doing the crushing, and `!important` holds across Vue re-renders that rewrite the
+  textarea's inline style between JS re-checks. This rule alone makes the
+  one-character-per-line failure impossible.
+- **Escalating JS self-heal** — `fixCrushedLayout()` runs measured, idempotent steps only
+  while the textarea still measures crushed: un-`nowrap` every flex-row ancestor within 5
+  levels (not just the parent), patch the textarea itself to claim a full row, then hoist
+  the widget out of the fighting container one level at a time (max 3), re-measuring after
+  each lift.
+- **Continuous re-check** — `runInject`'s connected-widget path no longer early-returns:
+  every observed DOM churn now ends in `ensureReadableLayout()` (one
+  `getBoundingClientRect` when healthy), so a host re-render that restores the crush is
+  re-fixed within one 350ms throttle tick rather than never.
+
+All styles set on Medicus's own nodes go through a recorded patch registry and are
+restored on widget removal — no permanent host-DOM mutations. `test-reception-quick-actions-ui.js`
+gains a section pinning all three layers (the CSS min-width rule, the continuous re-check
+in `runInject`, and the patch-restore in `removeWidget`).
+
+## [v3.204.0] — 2026-07-31
+
+### Reception-instruction composer: comment-box crush fix + two-step flow made unmissable (practice feedback)
+
+Practice feedback on the GP → reception quick-actions composer
+(`content-scripts/reception-quick-actions.js`): the "Insert into comment" button was being
+missed, users didn't realise the insert had worked, it wasn't obvious Medicus's own Submit
+still had to be pressed — and on some task layouts the inserted text rendered vertically,
+one character per line, completely illegible.
+
+- **Layout fix (the illegible vertical text) — this was a safety-control failure, not
+  cosmetics.** Medicus renders some field containers as flex-row with no wrap; injected as
+  a plain sibling there, the widget and the Internal-comment textarea fought over the row
+  and the textarea lost — crushed to a few px wide. With the comment box unreadable,
+  hazard **H-049's controls (b)/(e)** ("the clinician still reads the comment before
+  submitting") were materially degraded in live use. `injectWidget` now detects a flex-row
+  parent, sets `flex-wrap: wrap` on it (previous value remembered and restored by
+  `removeWidget`) and claims the full row so the textarea drops to a full-width line below;
+  a self-heal re-hoists the widget above the whole field container if the textarea still
+  measures crushed after injection. The DOM-contract fixture
+  (`fixtures/medicus/quick-actions-internal-comment.html`) now carries the flex-row layout
+  so the fix stays regression-guarded against the real DOM shape.
+- **Pressing Insert no longer looks like an abort.** The insert clears the chip picks for
+  the next instruction — which meant the visible response to pressing the button was the
+  form emptying itself. The preview block now does double duty: "WILL ADD: <sentence>"
+  while composing, and after the insert it holds "ADDED TO THE COMMENT BELOW: <the exact
+  sentence>" in green until the next chip pick. Echoing the sentence back is the primary
+  "it worked" signal.
+- **The two-step flow is now numbered and taught in place.** The insert button is large,
+  full-row and labelled "1. Insert into comment ↓" (with a finite 3-cycle attention pulse
+  when armed, box-shadow only, disabled under `prefers-reduced-motion`); a persistent line
+  beneath reads "2. Then press “Submit as new” below." — the submit label read live off
+  the card's own control (escaped, clamped, `/^submit\b/i`-guarded, falling back to
+  "Submit"). While disabled the button now says why ("Pick an action first").
+- **The un-submitted state no longer times out.** The old single 11.5px notice faded after
+  4s — exactly wrong for the interruption case H-049(i) describes. Now split: a transient
+  green flash banner confirms the write ("Text added to the internal comment below. Read
+  it, then press “Submit as new”."), while a persistent amber reminder — "Not yet
+  submitted — press “Submit as new” below. Until you do, reception sees nothing." — plus a
+  "not yet submitted" pill in the always-visible header strip stay up with **no timer**,
+  clearing only when the clinician clicks the card's own Submit control (observed
+  capture-phase, never prevented, never synthesised — pressing Submit remains entirely the
+  clinician's act, and a click is deliberately not treated as a success claim), the SPA
+  navigates away, or the comment box is emptied by hand.
+- **No more scroll tug-of-war after insert.** `ta.focus()` no longer scrolls
+  (`preventScroll: true`), a brief green ring marks the comment box where the text landed,
+  and the amber ring on Medicus's Submit only scrolls to it when it is off-screen.
+- **New CI guard for the H-049 wording controls.** `test-reception-quick-actions-ui.js`
+  source-greps the widget (nothing in CI loaded this file before) and pins the safety
+  strings ("Insert into comment" contiguous, "writes text only — books nothing", "not yet
+  submitted", "reception sees nothing"), that no UI string literal claims completion
+  (Done/Sent/Booked/Submitted), that no `.click()` ever reaches a submit control, the
+  append-only write path, the `preventScroll` focus, and that no timer clears the pending
+  reminder.
+- Hazard log: H-049 updated — field evidence of the layout defect degrading controls
+  (b)/(e) recorded with this remediation; wording controls updated to the new strings;
+  mechanism otherwise unchanged (text-only append, gated Insert, Submit highlighted never
+  clicked, task UUID re-verified).
+
+## [v3.203.0] — 2026-07-29
+
+### PR #228 remediation: merged main, escAttr + import key validation, deterministic REPLACED BY, scan patient-change guard
+
+Merged `origin/main` into PR #228 (`fix/oir-native-checkbox`) and applied review-remediation
+fixes ahead of merge.
+
+- **Security fix — attribute-position escaping for Clean-up-code preference keys
+  (confirmed exploitable pre-fix).** `options/options.js`'s PDC (preferred-descriptions)
+  tally-row rendering interpolated `topKey`/`row.key` into `data-pdc-clear` /
+  `data-pdc-setoverride` / `data-pdc-row-key` attributes using `escHtml()`, which does not
+  escape quotes — a key containing `"` could break out of the attribute and inject markup
+  into the options page. Switched to `escAttr()` (already defined, escapes quotes on top of
+  `escHtml`). Paired with a source-side fix: `shared/io/problem-description-cleanup-io.js`'s
+  import validator now rejects any top-level key not shaped like a SNOMED conceptId
+  (`/^\d+$/`) and any tally key / `override.key` not shaped like a descriptionId or
+  `conceptId|descriptionId` (`/^\d+(\|\d+)?$/`) — so an imported backup can no longer carry
+  a crafted key through to the attribute sink at all. New cases in
+  `test-problem-description-cleanup-io.js` pin both the rejection and that legitimate
+  axis-2 keys (`123|456`) still pass.
+- **REPLACED BY now deterministically preferred over SAME AS.** `shared/snomed-retirement.js`
+  could carry both associations on one retired concept; which one ended up in `replacement`
+  used to depend on the termbrowser API's `memberships[]` array order. `REPLACEMENT_REFSET_IDS`'
+  own array order is now used as an explicit priority list (REPLACED BY beats SAME AS
+  regardless of which membership the API lists first), while "first wins" is preserved within
+  a single refset. Two new fixtures in `test-snomed-retirement.js` (both associations present,
+  opposite array order) pin that REPLACED BY wins either way.
+- **Clinical-summary scan discards a wrong-patient response.** `content-scripts/
+  problem-description-cleanup.js`'s `scan()` could cache patient A's in-flight
+  `fetchClinicalSummaryProblems` response after the clinician had already switched to
+  patient B — `_scanInFlight` gating meant B's own scan skipped fetching, so A's response
+  landed and got matched against B's DOM. `scan()` now captures the requested patient ID
+  before the `await` and only assigns `_problemsCache` if the current patient still matches
+  when the response lands, discarding silently otherwise (same stale-response discipline as
+  the PR #227 audit fixes' `_evalGen`/`_runToken`). DOM-bound, not exported — no unit test;
+  this entry plus the code comment are the record.
+- **CI patient-data guard allowlist.** `test-snomed-retirement.js` added to
+  `NHS_ADD_ALLOWLIST` in `scripts/check-no-patient-data.js` — it carries SNOMED
+  conceptId/descriptionId values, some of which coincidentally pass the NHS Modulus-11
+  check, same rationale as the existing `test-problem-description-cleanup.js` entry.
+
+## [v3.202.1] — 2026-07-28
+
+### CSO review pass (delegated virtual-Dave review at Dave's instruction) — sign-offs + clinical corrections
+
+- **Intended Purpose re-frozen and SIGNED as v3.202.0** (provenance-honest
+  delegated signature) — after correcting a false blanket no-egress claim:
+  the optional transactional-API integration routes reads via a
+  Graysbrook-operated proxy (dormant by default); a Data flow and egress
+  paragraph now states it. CSN gains the W12 row + egress note (CSN full
+  review deliberately left unsigned — see pending list).
+- **Pathways signed as v1.8 with corrections**: `gyn-female` gains the
+  missing sepsis red flag (999) and the early-pregnancy flag is split
+  (999 heavy bleeding / duty tissue passed, per NG126 and the
+  no-conditional-escalations rule); `gu-male` gains priapism (999) and
+  paraphimosis (duty); retention deliberately stays 999 (reasoning in
+  sources). MH byte-identical duplication with `general` now pinned.
+- **Live matcher bug fixed**: the normaliser stripped apostrophes but not
+  hyphens, so "self-harm", "post-coital bleeding", "shoulder-tip pain"
+  silently matched nothing; fixed + pinned, plus balls/testes/thrush terms.
+- **Disposition**: `rash` loses its automatic Pharmacy First rule (one age
+  gate stood in for three PF conditions and its terms include cellulitis,
+  which PF doesn't cover — receptionist can still choose PF manually).
+- **H-050 + H-051 SIGNED (ALARP)**; H-051 question 4 resolved by code:
+  positive red flags still hide the booking card; *unanswered* flags now
+  show "answer the red flags to unlock" instead of nothing.
+- Plan: jobs-list task-write **parked** (needs a named team queue + a
+  named daily checker first); appointment-type names confirmed as a
+  two-minute live-Medicus lookup, blocking nothing.
+- **Left unsigned, honestly**: CSN full document review, DPIA (no
+  assessment of the proxy transfer exists), transactional-proxy hazard
+  entry (raised, not written). Do not enable txn hybrid/transactional
+  mode until they exist.
+
+## [v3.202.0] — 2026-07-28
+
+### Reception: in-panel appointment search + booking — DRAFT, hazard H-051 PENDING CSO (reception feedback, Phase D2/D3)
+
+- **New booking card** in the reception capture view: appointment-type
+  select (no pre-selection), date modes `Specific day · 1wk · 2wks ·
+  3wks · 4wks` (window search via booking-core's capped
+  `findSlotsInWindow`), slot list grouped by day earliest-first (empty
+  day distinguishable from not-searched), confirm step with **name+DOB
+  read-back gated by an explicit right-patient tick**, reason pre-filled
+  from the pathway title, **visible/editable booking-confirmation
+  channels** (payload = exactly the ticked subset; TODO recorded to
+  capture Medicus's own default), booked line written into the capture
+  text.
+- **Gates (fail-closed truth table, 32 combinations tested):** pop-out →
+  note only (booking is panel-only, recorded ruling); sensitive pathways
+  (mental health) → never shown; no open record with resolvable patient
+  uuid → disabled with instruction; any positive or unanswered red flag
+  → hidden (same single evaluateRedFlags gate as the disposition card).
+- **Identity (H-051):** active-tab snapshot is the single documented
+  identity source; the panel arms only when both resolvers agree; at
+  commit the patient AND site are re-detected fresh and must match the
+  pin and the current context (three-source agreement) or the booking
+  aborts, releases the reservation, and says "nothing was booked".
+- Reservation released on five exit paths + pagehide keepalive; nothing
+  persisted to chrome.storage; no third copy of the booking flow.
+- New shared `booking-panel(-core).js` component (reusable by future
+  surfaces), `test-reception-booking.js` (113 checks); suite total 341.
+- Hazard **H-051** (initial 5×3 → residual 5×1), PENDING CSO REVIEW with
+  four named review questions; Phase 0 governance resync is a stated
+  prerequisite to enabling any of this for live reception use.
+
+## [v3.201.0] — 2026-07-28
+
+### Reception: if-this-then-that disposition engine — DRAFT, suggestion-only (reception feedback, Phase E, hazard H-050)
+
+- **`evaluateDisposition`** (pure, truth-table-tested): after a fully
+  answered, red-flag-clear capture, suggests a route (Pharmacy First /
+  ANP / paramedic / GP routine) from the pathway's `disposition` block.
+  Suggestion-only — a human confirms or overrides, and every suggestion
+  carries "Or a clinician callback if the patient prefers — always offer
+  it." on screen and in the pasted capture text.
+- **Guardrails frozen in engine code, applied after override resolution**
+  (a practice fork cannot edit them away — adversarial fixture tested):
+  mental-health/sensitive pathways render no disposition output at all;
+  gu-male, gyn-female and general are clinician-only; positive OR
+  unanswered red flags withhold; hard age floor (<1 clinician-only, <5
+  strips ANP/paramedic incl. from the override control); age must be
+  explicitly confirmed on the call (never the open record's) and fails
+  closed to GP routine; Pharmacy First suggestions re-use the existing
+  age gates, failing closed. Downgrading overrides are rejected as
+  invalid at resolve time.
+- **Custom routing sign-off: CSO or partner only.** Custom/edited
+  pathways stay clinician-only until a `reception.routingAttestation`
+  (name + role + timestamp, revocable) is recorded in options; backups
+  import it validate-or-drop and the restore preview warns when one is
+  present.
+- **Audit trail in the capture text**: suggested/confirmed/overridden
+  routes AND withheld dispositions (with reason) are recorded, so an SEA
+  can reconstruct what the tool did and didn't say.
+- Nine conservative shipped disposition blocks (DRAFT pending CSO;
+  pathways remain disabled by default); pathway editor gains a
+  Disposition section with clinician-only greying; hazard entry
+  **H-050** (initial 4×2 → residual 4×1, ALARP, PENDING CSO REVIEW).
+- New `test-reception-disposition.js` (214 checks); suite total 340.
+
+## [v3.200.0] — 2026-07-28
+
+### Reception: three new capture pathways — DRAFT, disabled pending CSO sign-off (reception feedback, Phase B)
+
+- **New pathways** (ship OFF; enable in options after CSO review):
+  `gu-male` (torsion/retention/sepsis 999s; loin pain, visible haematuria,
+  testicular lump duty; no Pharmacy First — male UTI excluded by the
+  service spec), `gyn-female` (ectopic cluster + early-pregnancy bleeding
+  + pelvic torsion 999s; PMB, persistent PCB, ovarian symptom cluster
+  duty), `mental-health` (NG225-conformant minimal capture — binary
+  triggers, no scoring; the two `general` MH flags stay in `general` too).
+- **Schema**: red flags may carry `safeguarding: true` (banner + capture
+  text render the practice safeguarding contact; bypasses routing);
+  pathways may carry `sensitive: true` — **drafts are never autosaved,
+  any stored draft is deleted, taker initials become mandatory**, and a
+  practice-editable crisis-route line (default NHS 111 option 2) renders
+  on the form and in the capture text. LLM authoring prompt documents
+  both plus the no-conditional-escalations rule.
+- **New closing question** (all pathways, asked first): am I speaking to
+  the patient or someone on their behalf.
+- **Queue-chip wiring**: synonym + red-flag topic terms for all three
+  pathways (DRAFT-marked for CSO), with the deliberate `urinary`/`gu-male`
+  tie-break (generic UTI wording offers both, never auto-picks).
+- **New regression guard** `test-reception-pathway-coverage.js`: every
+  pathway id must have synonym + topic terms (the silent-no-chip failure
+  mode is now a CI failure), tie-break pinned.
+- Options: NEW badge on unseen bundled pathways, SENSITIVE badge,
+  safeguarding-contact + crisis-line settings, editor checkboxes for the
+  new flags; backup import sanitises the new config fields.
+
+## [v3.199.1] — 2026-07-28
+
+### Governance resync: safety case corrected to describe the real write paths (reception feedback, Phase 0)
+
+- **CLINICAL-SAFETY-NOTICE** (doc v3.14, PENDING CSO REVIEW): §6.2/6.3 no
+  longer claim "no write path to Medicus" — new §6.1 enumerates all eleven
+  write surfaces (W1–W11: both booking flows incl. patient booking-
+  confirmation SMS/email, task creation ×2, inbound-document filing, lab
+  filing, routine-rx commit assist, problem edit/end, duplicate
+  hide/merge) with endpoints, triggers and controls, plus two honestly
+  stated gaps. §2/§5 "passive, read-only" claims corrected.
+- **INTENDED-PURPOSE**: new frozen statement v3.199.1 drafted — **DRAFT,
+  unsigned, not in force** (signature lines empty; v3.16.0 remains the
+  statement in force, now carrying a marked-inaccurate caveat). Adds
+  non-clinical reception/admin staff under practice delegated authority as
+  proposed intended users. A re-freeze convention is now written into the
+  doc.
+- **DPIA** (v1.1 draft): new reception-module section (special-category
+  phone-triage capture, draft persistence, shared-workstation processing,
+  paste-into-Medicus flow), six new risk rows, "writes nothing back"
+  corrected.
+- **cso-review-ledger**: CSN correction recorded as pending;
+  INTENDED-PURPOSE and DPIA added with `last_cso_review_version: null`
+  (never formally reviewed — no review fabricated).
+
+## [v3.199.0] — 2026-07-28
+
+### Booking core extracted to shared/ + slots commit-time patient re-verify (reception feedback, Phase D1)
+
+- **New `shared/booking-core.js`**: the six booking endpoints move out of
+  `slots/booking-api.js` (now a re-export shim keeping tab/patient
+  detection). Dual-mode export (ES + `window.BookingCore`), zero
+  `chrome.tabs` in the core, `createAppointment` throws without an explicit
+  `patientId` — the core can never self-detect the patient.
+- **`findSlotsInWindow`**: pooled multi-day slot search (cap 28 days,
+  concurrency ≤4, weekend skip, abort on 429/5xx, early stop at limit,
+  results sorted + grouped by day). Foundation for the reception 1–4-week
+  window search (D2). TODO recorded to spike the endpoint's native range
+  support.
+- **`releaseReservation` now `keepalive: true`** — panel-close releases
+  were silently dropped before (live bug, fixed for slots too).
+- **slots.js hardening (H-043)**: `doConfirmBooking` now re-resolves the
+  patient (and site) immediately before `createAppointment` and aborts +
+  releases the reservation on any mismatch — the commit-time re-verify the
+  inline widget already had, retrofitted to the panel.
+- First CI coverage for the booking write path: `test-booking-core.js`
+  (86 assertions incl. shim identity and no-tab-detection guarantees).
+
+## [v3.198.0] — 2026-07-28
+
+### Quick actions: new shipped presets + version-gated merge (reception feedback, Phase A)
+
+- **New shipped presets**: actions `Book medication review`, `Book DOAC
+  review`, `Book CVD review`, `Add to jobs list`; roles `Registrar`,
+  `First-contact physio`, `Mental health practitioner` (with mid-sentence
+  `WHO_RENDER` renderings).
+- **Version-gated preset merge** (`DEFAULT_CONFIG.version` 2 +
+  `mergeShippedPresets`): existing installs now receive new shipped presets
+  without losing their own entries. Runs lock-step in both consumers of
+  `triagelens.quickActions` (widget + options editor).
+- **Deletions stick**: removing a shipped preset records a `removedShipped`
+  tombstone so migrations never resurrect it; re-adding the entry clears
+  the tombstone. Options page documents the behaviour.
+- **Fixed a silently-clamped shipped label**: `No appt needed — inform
+  patient` (31 chars, clamped mid-word since ship) is now `No appt —
+  inform patient`. Existing installs keep their stored clamped copy — a
+  one-click delete (which now tombstones) removes it.
+- Tests: label-length/cap assertions over every shipped list + full merge
+  suite (175 checks in `test-quick-actions-core.js`).
+
+## [v3.197.3] — 2026-07-28
+
+### Docs: reception-feedback plan — Dave's decisions folded in
+
+- **Patient messaging (item C) dropped** — replaced by a decision stub
+  recording why (no captured send endpoint; wrong-patient send hazard class)
+  and what survives (D3's booking-confirmation recipient control; inbound
+  photo filing already shipped). Sequencing is now 0 → A → D1 → B → E →
+  D2/D3.
+- **Quick-action presets: user add/remove is a first-class requirement** —
+  one-click per-entry removal in the options editor, and the version-gated
+  merge gains a `removedShipped` tombstone list so deliberately deleted
+  shipped presets are not resurrected on migration.
+- **Custom-routing attestation: CSO or partner signs off** (name + role +
+  timestamp recorded) — resolves the plan's open question 4.
+
+## [v3.197.2] — 2026-07-28
+
+### Docs: reception-feedback plan — virtual-Dave review pass applied
+
+- Reworked `docs/plans/RECEPTION-FEEDBACK-2026-07-28.md` after the review
+  pass. Load-bearing corrections: added **Phase 0 governance resync** (the
+  Clinical Safety Notice / Intended Purpose statement currently assert "no
+  write path" and clinician-only users — both must be re-frozen before
+  reception booking ships); corrected the patient-messaging claim (the
+  booking payload's `bookingConfirmationRecipients` already fires patient
+  SMS/email today — D gains a recipient-channel control); moved E's
+  guardrails out of editable pathway data into **frozen engine constants
+  applied after override resolution**, with an adversarial-fork test, a
+  hard age floor (<1 clinician-only), confirmed-age-only routing, and
+  clinician attestation for custom-pack routing; D gained
+  no-self-detection booking-core identity rules, open-record gating,
+  red-flag suppression, name+DOB read-back, and a panel-only pop-out
+  ruling; B gained `safeguarding`/`sensitive` schema flags (MH drafts skip
+  autosave), split conditional escalations, a caller-vs-patient closing
+  question, and no disposition card at all for mental health;
+  A's preset merge now runs in both storage-key consumers. Sequencing
+  re-ordered: 0 → A → D1 (booking-core refactor) → B → E → D2/D3 → C-spike.
+
+## [v3.197.1] — 2026-07-28
+
+### Docs: reception-feedback build plan
+
+- Added `docs/plans/RECEPTION-FEEDBACK-2026-07-28.md` — the build plan for the
+  reception team's feedback session: GP→Reception preset additions (registrar /
+  first-contact physio / mental health practitioner, medication / DOAC / CVD
+  review, jobs list) with a version-gated preset merge; three new capture
+  pathways (male GU, female GU/gynae, mental health — NG225 no-stratification
+  posture); the honest status of patient messaging (no send primitive exists —
+  spike first, prepare-only v1); embedded slot search/booking in reception on
+  an extracted shared booking-core with 1–4-week window search and H-043
+  commit-time re-verification; and an editable if-this-then-that disposition
+  engine with hard-coded clinician-only guardrails. Docs only — no code change.
+
+## [v3.197.0] — 2026-07-28
+
+### GP → Reception quick-actions composer on the task Internal comment
+
+User request: "What I specifically want as an insert around that internal
+comment box is a quick actions type menu for communication from GP to reception
+team. Specifically, this is about what needs to happen with them, ie do they
+need an appointment or similar. Second, with whom? Third, within what time
+frame? … It needs to be configurable by the GP surgery … probably needs a free
+text thing because we won't add all the members of staff."
+
+- **A collapsed strip now sits directly above the Internal comment box** on task
+  overviews ("▸ Reception instruction — *writes text only — books nothing*").
+  Expanded, it is three chip rows — **Action** ("Book F2F appt", "Phone
+  patient", "Book bloods (HCA/phlebotomy)", …), **With whom** ("Any GP", "Duty
+  doctor", "Practice nurse", … plus a **+ name** chip that saves a name for the
+  whole practice), **Timeframe** ("Today", "Within 48h", "Routine (next
+  available)", …) — plus one free-text "If not / other:" box with tap-to-fill
+  suggestions. Single-select per row, tap again to deselect; only Action is
+  required.
+- **It composes one plain-English sentence, shown live before you insert it.**
+  Verb first, one sentence, full stop, no prefixes, pipes, CAPS or emoji — e.g.
+  picking *Book F2F appt* / *Any GP* / *Within 2 weeks* writes `Book F2F appt
+  with any GP, within 2 weeks.` Shipped role and timeframe labels are rendered
+  so they read mid-sentence ("Usual GP" → "their usual GP", "Routine (next
+  available)" → "routine"); a name a practice adds is used verbatim, so "Nat"
+  stays "Nat". An "FYI" action collapses to `FYI — no action needed.`
+- **It writes text only — it books nothing and submits nothing.** Insert is an
+  explicit button, disabled until an Action is picked; it *appends* to the
+  comment box and never clears or rewrites what you already typed; afterwards it
+  **highlights** the card's own Submit / "Submit as new" control rather than
+  clicking it, and says "Text added to internal comment — **not yet
+  submitted**". The task UUID is pinned when the composer opens and re-verified
+  synchronously at insert, so a mid-flight SPA navigation aborts with "Task
+  changed — reopen and re-pick." instead of writing into the wrong task. The
+  free-text note is transient — it never reaches storage.
+- **All four lists are practice-configurable** in Options → **Quick Actions**
+  (add / edit / reorder / delete, restore shipped defaults, and a live example
+  sentence so wording is checked at edit time). The lists ride
+  `triagelens.quickActions` and are captured in suite backups via the triage
+  scope; the composer's ⚙ button opens that section directly.
+- **New DOM contract `quick-actions.internal-comment`** plus a synthesised
+  fixture (`fixtures/medicus/quick-actions-internal-comment.html`) so a Medicus
+  markup change that hides the comment box shows up as contract drift rather
+  than a widget that silently stops appearing.
+- **New hazard H-049** — "quick-action composer text mistaken for an executed
+  action or a safety net" (initial 9, residual 3, Accepted ALARP pending CSO
+  review), with `test-quick-actions-core.js` pinning every canonical sentence
+  verbatim.
+
+## [v3.196.0] — 2026-07-29
+
+### Fixed: practice-profile push of custom Outstanding Investigation Requests (OIR) test entries never actually reached ANY install
+
+Real bug, confirmed live: a practice published custom OIR test-dictionary entries via the
+shared practice profile, confirmed the publish itself worked, but none of them ever reached
+any install — including a genuinely fresh one. Root cause in `shared/io/practice-profile.js`'s
+Triage Lens section: the "merge" path only ever applied the whole `triagelens.config` blob
+when the local copy was **completely empty** — but it never actually is, on any machine.
+`service-worker.js`'s `initialiseTriage()` seeds `triagelens.config` from the bundled
+`defaults.json` on every `chrome.runtime.onInstalled`, and that local write always wins the
+race against this profile check's own network fetch of `practice-profile.json` — so the
+whole-config "only if empty" gate could never actually fire for practice-authored profile
+content, on any install, fresh or not.
+
+`oirTests` is now merged at the field level — appending only entries whose `key` isn't
+already present locally, the same by-id merge discipline already used elsewhere in this file
+for `sentinel.customRules`/`knowledge.items`/`triageAlerts.rules` — instead of gating the
+whole config on an empty-check that could never be true. `rules`/`thresholds`/`systemChips`/
+`resultRules` are deliberately NOT merged (those are the suite's own shipped clinical logic,
+not practice-authored) — pushing those wholesale even once local config exists would risk
+silently clobbering a clinician's own local rule tweaks; left exactly as before until there's
+a real reported need. `"replace"` mode is unchanged (still applies unconditionally). 10 new
+tests in `test-practice-profile.js` — this module had no existing coverage at all, which is
+presumably why the bug went unnoticed.
+
+### Hardened: SNOMED retirement check's termbrowser.nhs.uk fetch now goes through the service worker, not the content script
+
+A live browser console capture showed a plain `fetch()` from
+`content-scripts/problem-description-cleanup.js` (injected into the Medicus page) to the
+public termbrowser.nhs.uk API blocked by the browser's own CORS check — `Access to fetch at
+'https://termbrowser.nhs.uk/...' from origin 'https://england.medicus.health' has been
+blocked by CORS policy` — despite termbrowser.nhs.uk being correctly declared in
+`manifest.json`'s `host_permissions`. **Not confirmed as a persistent bug** — the same check
+was seen working again shortly after, without the extension even being reloaded, so the
+original block may have been transient (a one-off preflight/network blip) rather than
+content scripts categorically being unable to get the host_permissions CORS bypass. Since
+`fetchRetirementStatus` already fails closed on any error (by design, never guesses
+active/inactive), this was never a crash either way — at worst a silent "skip" on whichever
+requests happened to hit it.
+
+Hardened regardless, since there's no downside: the fetch now relays through the background
+service worker, which has no page/extension origin ambiguity at all — a new
+`termbrowser:fetchConcept` message handler in `service-worker.js` performs the actual
+`fetch()`, restricted to the `termbrowser.nhs.uk` host specifically via a parsed-URL hostname
+check (deliberately NOT a general-purpose cross-origin proxy, even though only
+intra-extension senders can reach it at all — same `sender.id !== chrome.runtime.id` guard as
+every other handler in this file). `fetchRetirementStatus` now calls
+`chrome.runtime.sendMessage(...)` instead of `fetch()` directly. Unit-tested in
+`test-service-worker.js` (the relay itself, host/protocol restriction, malformed-input
+handling, and a check that `fetchRetirementStatus` no longer calls `fetch()` directly at
+all).
+
+### Fixed: "Clean up code" buttons vanished for good after navigating away from Clinical Summary and back
+
+Real bug, reported after running "Check for retired/legacy codes?" then navigating to
+another care-record tab and back to Clinical Summary (same patient): the retirement-scan
+trigger widget reappeared correctly, but any "Clean up code" button it had flagged did not
+— only a hard page refresh restored it. Diagnosed via a timed peak/final DOM-count capture
+spanning the navigate-away-and-back action (not guessed): the widget recovers because
+`scan()`'s recurring rescan loop calls `injectRetiredWidgetTrigger()` unconditionally on
+every tick, but that same loop only re-injects per-row buttons for problems matched by the
+cheap text heuristic (`findOutdatedProblems`) — it never looked at `_rows[problemId]` state
+already set by the opt-in retirement scan (`retiredInfo`/`legacyReadCode`/
+`genericAdditionalInfo`), so a problem flagged ONLY by that scan lost its button for good
+the moment Vue's re-render wiped it. `scan()` now unions the text-heuristic list with every
+problem already flagged by the retirement scan before re-injecting — `injectFixButton`
+itself was already idempotent/de-duping, so this closes the gap.
+
+### Added: "Cleanup code preferences" — per-practice learning for "Clean up code", two axes
+
+Every "Clean up code" apply path (same-concept relabel, descendant, cross-concept,
+hint-expanded, confirmed-replacement, possibly/partially-equivalent, manual search — anywhere
+a clinician confirms a description via `applyCode`) now feeds two local, per-practice learning
+signals, both reviewable and manually overridable on a new **Cleanup code preferences** page
+in Options:
+
+- **Preferred wording** (`pdc.preferredDescriptions`, keyed by conceptId): which WORDING this
+  practice picks among several synonyms Medicus offers for the SAME code. Closes a gap
+  `confirmedReplacementAlternatives`' own comment already flagged (v3.195.0): there is no
+  preferred-term signal in Medicus's own search response to rank synonyms by, so the
+  practice's own actual usage becomes that signal instead of a guess. When none of the
+  automated categories find anything for a concept (a clinician would otherwise have to fall
+  back to manual search every time), this practice's own prior choice is now offered directly
+  — a pure local lookup, no re-search dependency.
+- **Code remapping** (`pdc.conceptRemap`, keyed by the SOURCE conceptId) — new, added after
+  live feedback: which OTHER SNOMED code this practice has actually replaced a given code
+  with (a genuine recode, not a wording tweak). Real motivating case: "Injection into
+  varicose vein of leg" (449705007) manually replaced with "Injection of varicose vein of
+  lower limb" (449708009) — the wording tally above couldn't help here (different concept
+  entirely), and the existing `crossConceptAlternatives` text-match couldn't catch it either
+  (the wordings don't match). This is a materially higher-confidence signal than that
+  text-match category — a real precedent this practice has already applied, not a
+  coincidence — so it renders in its own clearly-labelled, high-confidence green section in
+  the panel, distinct from the cautious orange cross-concept/hint-expanded ones. Still only
+  ever offered as a one-click suggestion; never auto-applied, same discipline as every other
+  category in this file.
+
+Both axes share one generalised mechanism, `shared/preferred-descriptions.js` (pure
+tally/resolve/override logic over an arbitrary key+candidate shape, unit-tested in
+`test-preferred-descriptions.js`) and one IO file,
+`shared/io/problem-description-cleanup-io.js` (both storage keys, wired into the suite
+backup/export system — `test-problem-description-cleanup-io.js`). Deliberately different from
+most IO files in this repo: import **merges** tally counts onto the existing local ones rather
+than replacing them (this data is meant to accumulate across a practice's machines via the
+existing manual export/import mechanism, not be overwritten by whichever backup was imported
+last), and a local manual override always survives an import carrying a conflicting one — both
+rules apply independently to each axis.
+
+A manual override can be set/cleared per concept on the Options page for either axis — the
+override always wins over the tally when both exist, but tallying continues underneath it
+regardless, so a practice can check whether the pinned choice is actually the one being used.
+The page also caps its default view to the 20 most-recently-used entries per axis (with a
+"Show all" toggle and a filter box, both sorted alphabetically) rather than rendering
+everything unconditionally, since a practice's tally can grow large over time.
+
+No change yet to which description is *pre-selected* in the wording pulldowns themselves —
+that remains a deliberately deferred follow-up now that there's a live-verified data-collection
+and review/override layer to build it on.
+
+### Added: "Clean up code" flags GP2GP severity-defaulting contradictions, offers a one-click correction
+
+Real bug found via a HAR capture (SCTID 433144002, "Chronic kidney disease stage 3"):
+Medicus's edit-problem UI only has a plain Major/Minor significance dropdown, so when a
+GP2GP-transferred source record carries no machine-readable significance value, the importer
+defaults the structured field to Minor and writes what it did, plus what the source record's
+own free text actually said, into `additionalInformation` as plain text — e.g. "Unspecified
+Significance: Defaulted to Minor\nProblem severity: Major". The structured field is never
+corrected afterwards even when the source-supplied value disagrees with the default, right
+there in the same field — the motivating patient was stored as `significance:"minor"` when
+their own import text said Major.
+
+"Clean up code"'s opt-in scan now parses this two-fragment template and compares the stated
+value against the problem's own current significance. **ALL known GP2GP-import boilerplate
+now lives in one place**, `rules/generic-additional-info-text.json` — consolidated the
+same day from a second file, `rules/severity-defaulting-pattern.json`, that briefly existed
+alongside it. Each entry carries a `kind`: plain `"literal"` strings (the original schema,
+matched per line) for pure noise with nothing further to check, or `"pattern"` (a regex
+source, matched against the WHOLE field rather than per line) for boilerplate that also
+encodes a captured value — an `action` flag on the entry says what further step to offer
+when that value disagrees with the record. `Problem severity: Major` was also added as a
+literal entry now that it's been observed standalone on a real patient.
+
+Also fixed the same day: a second real layout of the boilerplate turned up —
+"Unspecified Significance: Defaulted to Minor Problem severity: Minor", the two fragments
+run together on **one line, joined by a space, no newline at all** (values agreeing this
+time, so no correction needed, just plain noise) — where the original implementation,
+which required each fragment to be its own whole line, would have missed it entirely and
+left it untouched. The pattern-matching regex now spans whitespace generically (`\s+`
+between the two fragments), so it recognises the boilerplate whichever way GP2GP happens to
+have joined it, without needing a separate literal entry per layout.
+
+`findPatternMatch`/`removeMatchedSpan`/`severityCorrectionNeeded`/`computeAdditionalInfoFindings`
+(the last now the single source of truth used by both the opt-in scan and the panel's own
+re-fetch, so the two can never disagree) are unit-tested in `test-problem-description-cleanup.js`.
+
+### Fixed: "Clean up code" missed a retired concept's SNOMED-confirmed replacement when the association was "SAME AS" rather than "REPLACED BY"
+
+Real gap, reported after a clinician found no suggestion at all for a "Check cystoscopy using
+flexible instrument" problem (176187002). It never reached the automatic text scan
+(`looksOutdated()` has no bracket/NOS/NEC/H-O marker to match here), so it depended entirely
+on the opt-in "Check for retired/legacy codes?" scan — which correctly found the concept
+retired (inactivation reason "Duplicate component") but landed on "no automatic replacement
+is recorded", even though SNOMED does name one: a genuine `ASSOCIATION` membership on refset
+`900000000000527005` ("SAME AS association reference set"), pointing to `301301002` "Flexible
+cystoscopy" — confirmed live via the public NHS termbrowser API. `shared/snomed-retirement.js`
+only ever checked `REPLACEMENT_REFSET_IDS` against the single `900000000000526001` ("REPLACED
+BY") refset; SAME AS was a documented-but-unconfirmed gap in that file's own header comment
+since 2026-07-26, now closed with a real example. Folded into the SAME `replacement` field
+REPLACED BY already populates (not a new hedge-style multi-candidate list like
+possiblyEquivalentTo/partiallyEquivalentTo) — "duplicate component" + "SAME AS" together
+assert these are literally the same clinical concept filed twice, the same one-confirmed-
+successor confidence tier REPLACED BY already has. `REPLACEMENT_REFSET_IDS` was deliberately
+kept as an array from the start for exactly this kind of extension — closing this gap needed
+one line, `test-snomed-retirement.js` gets a new fixture (176187002).
+
+### Fixed: descendant/laterality search on a retired problem targeted the wrong (dead) concept
+
+Real gap, found while investigating why 179304004 "Primary uncemented total hip replacement"
+(retired, additionalInformation containing "right") offered no laterality-specific
+suggestion. The investigation concluded no suggestion SHOULD have been offered for that
+specific case — the candidate a clinician proposed, 430694001 "Prosthetic arthroplasty of
+right hip", genuinely carries no "uncemented"/"total" facet on any of its relationships, and
+no SNOMED concept combines all three (confirmed via two text searches against the public
+terminology API) — so keeping the correct procedure-type code with "right" as free text is
+the clinically correct SNOMED modelling, not a gap.
+
+But a real, separate bug surfaced during that investigation: the descendant/laterality search
+in `openPanel` narrowed under `code.conceptId` — the problem's OWN current conceptId — which
+for a retired problem is the old, retired concept. SNOMED stops growing a retired concept's
+subtree once it's retired (179304004 itself has zero descendants, confirmed live), so this
+search was structurally guaranteed to find nothing for ANY retired-with-replacement problem,
+regardless of whether the live replacement concept actually has laterality-specific children.
+New `descendantSearchTargetConceptId` (`content-scripts/problem-description-cleanup.js`)
+prefers the confirmed replacement's conceptId (`st.retiredInfo.replacement`, already resolved
+by the opt-in retirement scan — no extra fetch) when one exists, falling back to the
+problem's own conceptId otherwise (an active concept, or a retired one with no confirmed
+replacement) — unit-tested in `test-problem-description-cleanup.js`.
+
+### Added: "Clean up code" flags source-system "PRIORITY=n" import text, prompts a manual severity check
+
+Some GP source systems export a problem's severity as a raw `PRIORITY=n` field (n observed
+1-9, exact bounds unconfirmed) instead of anything Medicus can map onto Major/Minor.
+Unlike the severity-defaulting contradiction above, there's **no confirmed, consistent
+mapping** from this scale to Medicus's significance field — different source systems
+plausibly use different scales, and none has been reverse-engineered — so this is
+deliberately **not** an auto-correction. New `sourceSystemPriorityValue` pattern entry in
+`rules/generic-additional-info-text.json` (a new `reviewSeverity` action type, alongside
+the existing `severityCorrection` one) flags the raw `PRIORITY=n` text as junk and shows an
+informational note — *"Import text included a source-system priority value ('PRIORITY=n')
+with no confirmed mapping to Major/Minor — this problem is currently recorded as X; please
+check that's clinically correct"* — with no button attached, since there's nothing safe to
+guess. The raw text is still offered for removal via the ordinary "Remove generic import
+text" strip, coexisting with the note rather than being superseded by it (unlike a genuine
+contradiction, which supersedes the plain strip with the correction action instead).
+`computeAdditionalInfoFindings` now returns a third field, `severityReviewNote`, alongside
+`genericAdditionalInfo`/`severityContradiction` — unit-tested in
+`test-problem-description-cleanup.js`.
+
+**Same day, follow-up:** one value on this scale turned out to be confidently mappable
+after all — `PRIORITY=1` reliably means Major, per this practice's own direct experience of
+the source system this convention came from, holding across every example seen in imported
+data since. Added `valueSeverityMap: {"1": "major"}` to the `reviewSeverity` action (the
+mechanism now supports either style: a plain informational prompt for most values, or a
+confident correction for specific mapped ones) — `PRIORITY=1` now drives the SAME "Correct
+severity + remove junk text" one-click action as the GP2GP defaulting contradiction, with
+its own explanation text (`severityContradictionExplanation`) making clear the value comes
+from a locally-confirmed convention, not the source record spelling out "Major" in plain
+English. Every other value keeps the informational-only behaviour exactly as before.
+
+### Fixed: another severity-defaulting boilerplate layout wasn't being flagged at all
+
+Real gap, reported live: "Defaulted to Minor\nProblem severity: Minor" — the SAME GP2GP
+template as severityDefaultingContradiction above, but missing the leading "Unspecified
+Significance: " prefix — wasn't recognised at all. The pattern's leading fragment is now
+`(?:Unspecified Significance: )?Defaulted to (Major|Minor)` (the prefix is optional), so
+all three confirmed real-world layouts — full prefix + newline, full prefix + single space,
+and no prefix at all — are handled by the one regex, no code change needed, just the data
+file. Added a standalone `"Defaulted to Minor"` literal entry too, mirroring its longer
+sibling, so a solo/unpaired occurrence with no "Problem severity:" line is still recognised.
+
+### Added: "Active Problem, Not Significant (Minor)" boilerplate — and confirmed the span-based strip handles boilerplate mixed with genuine text on one line
+
+Real example (per the user, plausibly a record that's passed through more than one GP
+EPR/GP2GP transfer, each layering its own boilerplate onto the same field): "Defaulted to
+Minor\nProblem severity: Minor grade 1 with small erosion at GOJ\nActive Problem, Not
+Significant (Minor)". Two distinct pieces of noise here — the already-handled
+severityDefaultingContradiction fragment, and a NEW sibling to "Active Problem, Significant":
+`"Active Problem, Not Significant (Minor)"`, the same boilerplate template for the opposite
+significance value, added as its own literal entry.
+
+Worth noting explicitly since it wasn't obvious it would just work: the middle line mixes the
+"Problem severity: Minor" boilerplate prefix with genuine clinical free text ("grade 1 with
+small erosion at GOJ") on the SAME line. Because pattern-entry removal is span-based
+(`removeMatchedSpan`) rather than whole-line, it strips only the exact matched boilerplate
+substring and correctly leaves the genuine clinical text as its own surviving line — no new
+code needed for this case, confirmed via `test-problem-description-cleanup.js` against the
+exact real string.
+
+### Added: "Clean up code" reassures when a problem's SNOMED code itself is fine, flagged only for import-text housekeeping
+
+Real user concern, raised from a screenshot: a problem flagged ONLY because of junk import
+text (or a severity contradiction/review note) — with the code itself perfectly current, not
+retired, not Read-code-derived — still surfaced the SAME wall of alternative-code suggestion
+buttons as a genuinely outdated code, purely because `additionalInformation` happened to
+contain wording (e.g. "grade 1 with small erosion at GOJ") that matched a hint word for the
+unrelated descendant search. Visually indistinguishable from "this code is wrong, pick a
+replacement" — misleading when the code was never actually in question.
+
+The panel now shows a green reassurance note — *"This problem's own SNOMED code hasn't been
+flagged as outdated or retired — it was only flagged here for import-text housekeeping. Any
+suggestions below come from wording in 'Additional info' and are optional, not a sign the
+current code is wrong."* — whenever there's at least one suggestion to show but no genuine
+code-quality signal. New `codeQualityConcernExists` (pure logic, unit-tested) reuses
+`looksOutdated()` (the same cheap check the automatic per-load scan already runs) plus the
+two opt-in-scan-only signals (`retiredInfo`/`legacyReadCode`) already in state — never a new
+heuristic, just surfacing what the tool already knows but wasn't saying out loud.
+
+## [v3.195.0] — 2026-07-28
+
+### Added: "PARTIALLY EQUIVALENT TO" retirement association support
+
+Real case: 199317008 "Twin pregnancy - delivered" is retired ("Classification derived
+component") with a `PARTIALLY EQUIVALENT TO` association (refset `1186924009`) to TWO
+concepts — 65147003 "Twin pregnancy" and 289256000 "Mother delivered" — but
+`shared/snomed-retirement.js` only recognised `REPLACED BY` and `POSSIBLY EQUIVALENT TO`,
+so this association was silently skipped and no replacement was ever offered.
+
+`parseConceptRetirement` now also parses `partiallyEquivalentTo` (same multi-candidate,
+deduped shape as `possiblyEquivalentTo`, kept as its own field — SNOMED's own semantics
+differ: "partially equivalent" means the retired concept's meaning is SPLIT across the
+candidates, not a hedge between alternatives). The "Clean up code" panel renders it as its
+own violet-styled banner with distinct copy ("this record may need reviewing as more than
+one problem"), resolved against Medicus's own search index the same way as
+`possiblyEquivalentTo`.
+
+### Fixed: same-concept alternatives search invisible to codes on the Body structure axis
+
+Real case: "[M]Tubulovillous adenoma" (conceptId 61722000, an ACTIVE concept — not a
+retirement case) never got a same-concept relabel suggestion. `61722000` is a
+`(morphologic abnormality)` concept, and the ordinary same-concept-alternatives search
+scopes to Clinical finding/Procedure/Situation/Social context/Event only — the same root
+cause as v3.193.0's retirement-replacement fix, this time hit on the everyday "Clean up
+code" path that every `[M]`/`[X]`/NOS-flagged problem goes through. `openPanel` now retries
+the current concept's own bare-SCTID search against the Body structure hierarchy when the
+broad-scope search comes back empty, same two-step fallback already proven for retirement
+replacements.
+
+### Fixed: a SNOMED code's own eponymous/technical synonym could silently win over its plain-English one
+
+Real case: 402222007 "Pompholyx of hand" also carries the synonym "Chiropompholyx", and
+201201000 "Pompholyx of foot" also carries "Podopompholyx". `confirmedReplacementAlternative`
+picked whichever synonym happened to sort first in Medicus's own bare-SCTID search response
+— an accident of array order, not a deliberate choice (Medicus's search response carries no
+preferred-term/acceptability flag to rank by). `confirmedReplacementAlternatives` (plural)
+now returns every synonym for a candidate concept instead of just the first, used by
+`resolveSnomedNamedCandidate` for the confirmed-replacement / possibly-equivalent /
+partially-equivalent categories.
+
+### Changed: one lozenge per SNOMED code, not one per synonym
+
+Follow-up to the fix above: showing every synonym as its own button made one real SNOMED
+code look like several different codes when it had multiple wordings. `groupCandidatesByConcept`
+now groups every candidate-list category (same-concept alternatives, descendants,
+cross-concept, hint-expanded, confirmed replacement, possibly/partially equivalent) by
+`conceptId`: a code with one offered synonym keeps its existing single-button lozenge
+unchanged; a code with several renders a `<select>` of the wordings plus one shared "Use"
+button, routed through `applyGroupedCandidate` to whichever category's own apply function
+owns that state.
+
+276/276 tests passing across `test-snomed-retirement.js` (59) and
+`test-problem-description-cleanup.js` (217), lint/format clean.
+
+## [v3.194.0] — 2026-07-26
+
+### Renamed "Fix description" to "Clean up code"
+
+The widget grew well beyond same-concept relabelling — it now also suggests better/more
+specific codes, detects retired and Read-code-derived codes, and removes generic GP2GP
+import noise from `additionalInformation`. Button text and the retirement-scan status
+message updated to match; internal identifiers (`ms-pdc-*` CSS classes, file names) are
+unchanged — display text only.
+
+### Fixed: duplicate-description problems could get the wrong row's "Clean up code" button
+
+Real case: two "Infantile eczema" (90823000) problems on one patient, one Major
+significance, one Minor. `clinical-summary/summary`'s `problems` array groups by
+significance (all Minor entries, then all Major), but the page renders a Major `<ul
+aria-labelledby="problems-major-label">` BEFORE the Minor list — so a flat, whole-document
+duplicate-text row search claimed the wrong list's row for whichever problem was flagged.
+
+Confirmed live (within one significance group, the API's relative order DOES match that
+group's own `<ul>`'s DOM order — the invariant just needed the narrower scope). Fixed:
+`buildAnchorMap` now partitions problems by `significance.value` and resolves each
+partition's own `problems-<value>-label` list before claiming rows, instead of one flat
+whole-page search. (A first attempt — computing one shared anchor map from the full problem
+list regardless of flag status — fixed a related but different collision and was necessary,
+but insufficient on its own for this cross-section case.)
+
+### Fixed: a Read-v2-derived problem flagged for cleanup when there was nothing to fix
+
+A GP2GP import origin (`originalCodes` showing a `read-v2` code) only means the record is
+old — it says nothing about whether the CURRENT description is already the best available
+wording. A patient can have two problems on the same concept, one genuinely needing a
+relabel, one already correctly worded; flagging both read as broken when the already-correct
+one offered no alternatives on click.
+
+Fixed: before flagging the Read-v2 signal, the scan now runs the same same-concept SNOMED
+search "Clean up code" already runs on open (once per distinct conceptId among Read-v2-
+flagged problems, not per problem) and suppresses the flag if there's genuinely no better
+wording to offer. Retirement and generic-import-text flags are independent and unaffected.
+
+### Fixed: removing generic import text 400'd on a GP2GP-imported problem recorded with no defined author
+
+`edit-problem`'s GET can return `recordedByOrganisation` wrapped in a UI-select shape
+(`{label, value:{organisationName, ...}}`) instead of the plain `{organisationName, ...}`
+object the POST validates against — confirmed via a real author-less import, where
+round-tripping the wrapper verbatim 400'd (`recordedByOrganisation.organisationName`
+missing, `.label`/`.value` not expected). `buildEditProblemPayload` now unwraps this shape
+when detected, passing the original already-unwrapped shape through unchanged otherwise
+(both are confirmed real). The generic-text-removal apply path also now rebuilds
+`problemCode` from the same narrow `{description, conceptId, descriptionId}` shape every
+other apply path already uses, instead of round-tripping the raw GET value. `apiFetch`
+now surfaces the API's actual error body (truncated) instead of a bare status code, so a
+future rejection is self-diagnosing without a separate Network-tab capture.
+
+### `rules/generic-additional-info-text.json`: two more confirmed GP2GP boilerplate lines
+
+"Unspecified Significance: Defaulted to Minor" and "Problem severity: Minor" — real example,
+a Read-v2-derived "Infantile eczema" problem whose `additionalInformation` carried both as
+pure import boilerplate restating the `significance` field already captured structurally.
+
+### `rules/non-problem-root-codes.json`: the 18 roots added in v3.191.0 re-confirmed against Medicus's own live API
+
+Previously researched via the public NHS termbrowser API only. Every cited descendant for
+all 18 roots — including the two broad ones, `3457005` Patient referral and `307824009`
+Administrative statuses — now additionally confirmed live against Medicus's own
+`constrainingParentConcepts` search, matching the confidence level of the original 3 roots.
+No code change; end-to-end behaviour on a real patient's coded problem is still unobserved.
+
+193/193 tests passing (7 new), lint/format clean.
+## [v3.196.0] — 2026-07-28
+
+### Monitoring Brief: per-group RAG (Meds / QOF / General) + loud green all-clear
+
+User request: "I want the brief summary box at the top very obviously green if
+there's nothing to do for this person. Can it be split into meds monitoring
+(i.e. bloods, height weight etc), QOF and general things like vaccines so the
+person can at a glance see if the person is safe to prescribe for — i.e. green
+monitoring box but amber QOF and general means I could glance and prescribe
+safely."
+
+- **The Brief card no longer disappears when nothing is due** — it now renders
+  an explicitly green all-clear card ("✓ Nothing to do — meds monitoring, QOF
+  and vaccines all clear"), same green treatment as the "Waiting room clear"
+  strip. An absent card was ambiguous ("did it even check?"); the green card is
+  a positive finding. It only renders in the `data` state — loading/degraded/
+  unreadable-record states still clear the slot, so a half-loaded record can
+  never show a false green.
+- **Chips are split into three RAG groups**, each with its own state:
+  - *Meds monitoring* — everything bearing on prescribing safety: drug-
+    monitoring bloods/checks, interaction combos, allergy flags, composites.
+  - *QOF* — indicators and registers (recall/payment work).
+  - *General* — vaccines, event-count clinical reviews (falls, recurrent UTI),
+    and any unknown/future chip type (deliberate fall-through: a new chip type
+    must never silently inflate the safe-to-prescribe meds group).
+- **Header pills `Meds ✓ / QOF n / Gen n`** (green tick or red/amber count)
+  replace the old aggregate red/amber badges and survive collapsing the card —
+  the "meds green → prescribing checks clear, even though QOF is amber" glance
+  works from the collapsed header alone. Tooltips carry the full breakdown
+  (never colour alone, colour-blind safe).
+- **Expanded body is sectioned** Meds monitoring → QOF → General, each with a
+  state line ("2 red · 1 amber" or green "none due ✓"); signal lines render
+  under their own section. The max-4 signal cap, red-first ordering and
+  "+N more (n red) below" line are unchanged.
+- `buildBrief()` now returns `groups` (per-group red/amber/status), `allClear`,
+  and a `group` on each signal; it returns a brief for an all-green record
+  instead of null. `test-brief-core.js` re-pinned accordingly (95 checks).
+
+## [v3.195.0] — 2026-07-27
+
+### "Bulk remove?" reworked: ungated, boxes inline next to every problem
+
+User feedback on the v3.194.0 pair of triggers, same day it shipped: "I'd
+envisage Bulk remove as click on it, boxes appear next to ALL problems, you
+can tick and retire them. not gated." The two sibling widgets — the SNOMED-
+gated "Bulk remove?" (`problem-junk-code-cleanup.js`) and the panel-checklist
+"Bulk end problems" (`problem-bulk-end.js`) — are now ONE widget, under the
+"Bulk remove?" label, in `problem-bulk-end.js`:
+
+- **Ungated**: clicking "Bulk remove?" puts a checkbox next to **every**
+  active problem — no admin-code scan decides who gets a box any more.
+- **Inline**: the boxes are injected into Medicus's own problem rows (Major /
+  Unknown Significance / Minor alike), not a duplicate list in a panel. The
+  queue-chip injection discipline applies (prepend, re-inject on every
+  mutation tick, all state in JS keyed by problem id, idempotent); any row
+  that can't be matched to the on-screen list falls back to a panel checkbox
+  so it stays reachable.
+- **The SNOMED junk-code detection survives as a badge, not a gate**: after
+  the checklist is already usable, the old scan (combined
+  constrainingParentConcepts query per distinct conceptId, caution
+  attribution, fail-closed on caution-check errors) runs in the background
+  and badges matching rows "admin?" (+ ⚠ with the caution text where
+  applicable). A new **"Select flagged"** button ticks only badged, endable,
+  non-⚠ rows — the successor of the old widget's "Select all", still never a
+  blanket select-all (CSO posture unchanged: nothing pre-ticked, linked
+  problems excluded, two-step ENDING/KEEPING confirm, double-layer
+  date/reason guard, no auto-reload, ledger entry per batch, server error
+  bodies surfaced per row).
+- `problem-junk-code-cleanup.js`/`.css` retired; pure helpers and their tests
+  (including the 21-root rules-file regression locks) moved into
+  `problem-bulk-end.js`/`test-problem-bulk-end.js`. `rules/non-problem-root-
+  codes.json` is unchanged and still the place to add new junk categories.
+
+## [v3.194.0] — 2026-07-27
+
+### New: "Bulk end problems" on the Clinical Summary
+
+User request: busy problem lists carry many problems that plainly need ending,
+and Medicus's own UI is one dialog per problem. New trigger button next to the
+"Major" heading (sharing the row with "Bulk remove?" and the retired-codes
+check) opens a checklist of **every** active problem — the general-purpose
+sibling of the SNOMED-scoped "Bulk remove?" widget, using the identical
+confirmed contract (`GET …/end-problem/{id}` for `activeChildProblems`,
+`POST /clinical/problem/end-problem` `{problemId, endDate, reason}`). No
+SNOMED resolution at all, so the opt-in scan is one cheap form fetch per
+problem.
+
+Because every row here is potentially a REAL clinical problem, the CSO
+guardrails from the 2026-07-26 review of the sibling widget apply from day
+one, several deliberately stricter:
+
+- Nothing pre-ticked and **no "Select all" of any kind** — each problem is
+  individually reviewed and ticked.
+- Problems with active child problems are excluded (disabled), not warned.
+- **Two-step confirm**: "Review N selected…" renders an explicit ENDING /
+  KEEPING summary (the duplicate-checker's house pattern for "about to change
+  the live record") with the end date and batch reason echoed back and a
+  no-bulk-undo warning; only that summary's Confirm button POSTs.
+- End date AND reason (free text, default "Resolved", batch-wide) guarded at
+  both layers — buttons disable without them and `endSelected()` refuses to
+  POST regardless of button state (`canSubmit` is the single guard both
+  consult).
+- **No auto-reload** after success — a "Refresh page" button instead (the
+  CSO-preferred pattern; a reload the clinician didn't ask for can bin a
+  half-typed consultation).
+- Every successful batch writes a machine-local Clinical Event Ledger entry
+  (source `record`, action `committed`, patient UUID + count only — never the
+  free-typed reason, per the ledger's no-free-text rule).
+- Failed POSTs surface the server's response body per row (the v3.193.2
+  lesson) and return to the checklist for retry; successes strike through the
+  live row optimistically.
+
+New `content-scripts/problem-bulk-end.js`/`.css` (registered in
+`manifest.json`), 29 assertions in new `test-problem-bulk-end.js` covering the
+payload contract, selectability, the double-layer `canSubmit` guard, the
+ENDING/KEEPING partition (a ticked-but-linked row can never reach ENDING),
+and error-body extraction. Shared-row CSS exclusion lists in
+`problem-junk-code-cleanup.css` / `problem-description-cleanup.css` extended
+for the third trigger (kept in lock-step). `defaults.json` untouched.
+
+Not yet live-confirmed on a real record — the POST contract is the same
+already-proven one the junk widget ships, but the reason string has only ever
+been live-captured as "not a problem"; if the server rejects another value,
+the per-row error now names the constraint.
+
+## [v3.193.3] — 2026-07-27
+
+### "Fix description": flatten option-object fields in the edit-problem POST (the actual API 400 root cause)
+
+The live capture behind v3.193.2's diagnosability work landed and named the
+culprit: the failing record was the **first ever seen with a non-null
+`episode`**, and the edit-problem GET returns select-backed fields as the
+selected **option object** (`episode: {value:"subsequent",label:"Subsequent"}`)
+while the POST contract takes the bare value (compare `significance` — a plain
+`"major"` string in both directions of the original §3 capture). Every
+previously-confirmed apply happened to be on an `episode: null` problem, so
+round-tripping the whole object never surfaced until now.
+
+- New pure helper `unwrapOptionValue()` flattens a value shaped exactly like a
+  select option (an object with BOTH `value` and `label` keys) to its `value`;
+  everything else passes through untouched — deliberately strict so a real
+  object field (`recordedByOrganisation`'s `{organisationName, …}`) can never
+  be mangled by it.
+- Applied to `significance`, `episode`, `reasonEnded` and `recordedByStaff` in
+  `buildEditProblemPayload`. `problemCode` (replaced wholesale) and the
+  organisation/practitioner fields (round-tripped verbatim) are unchanged.
+- 12 new assertions in `test-problem-description-cleanup.js`, including the
+  full pseudonymised failing prefill as a fixture.
+- `docs/learnings-problem-description-cleanup.md` §3b records the trap, the
+  capture, and the legitimate `recordedByOrganisation: null` +
+  `recordedAtAnotherOrganisation: true` combination seen on the same record.
+
+Pending live confirmation on the motivating record — if the flatten isn't the
+whole story, v3.193.2's error surfacing will name whatever remains.
+
+## [v3.193.2] — 2026-07-27
+
+### "Fix description": API errors now say WHY the server refused
+
+Live report (2026-07-27): applying a suggestion on a Clinical Summary problem
+failed with a bare **"API 400"** — the widget discarded the server's response
+body, which is the one thing that says which field the validation rejected.
+Diagnosing the actual 400 needs a live capture (this release ships the
+diagnosability; the root cause gets fixed once the server's reason is visible).
+
+- `apiFetch` in `content-scripts/problem-description-cleanup.js` now reads the
+  error response body on any non-2xx and surfaces it through a new pure helper
+  `apiErrorMessage(status, bodyText)`: prefers a JSON body's
+  `message`/`error`/`errors` fields, falls back to the raw text, collapses
+  whitespace and truncates to fit the inline panel, and never throws. No body →
+  the old bare `API <status>`, unchanged.
+- The message flows through the existing `st.error` / `esc()` render path, so
+  it appears in the same place the bare "API 400" did — just with the reason.
+- 11 new assertions in `test-problem-description-cleanup.js` pin the extraction
+  rules (message/error/errors preference, non-JSON fallback, truncation,
+  whitespace collapse, null-safety).
+
+The same discard-the-body pattern exists in `problem-junk-code-cleanup.js` and
+`document-file-inline.js` — deliberately not touched here (one focused change);
+worth the same treatment in a follow-up.
+## [v3.193.1] — 2026-07-26
+
+### PR #223 review fixes (CSO review): bulk-remove safety gates + housekeeping
+
+Remediation of the four items from the pre-merge review of PR #223.
+
+- **"Bulk remove?" caution roots (`rules/non-problem-root-codes.json` v2).** Three
+  configured roots are usually GP2GP import noise but can be LIVE clinical flags:
+  `3457005` Patient referral (an in-flight 2WW/urgent referral is a safety-net),
+  `161714006` Estimated date of delivery (an active EDD often flags a current
+  pregnancy — a prescribing-safety cue), and `307824009` Administrative statuses
+  (descendants include "Follow-up arranged"). Each now carries a per-root
+  `caution`; the widget renders it as a ⚠ warning on every flagged row attributed
+  to that root (attribution via a per-caution-root constrained search, since the
+  scan's one combined query can't say which root matched; attribution failure
+  fails CLOSED to cautioned), and **"Select all" never ticks a ⚠ row** — those
+  must be reviewed and ticked individually. Summary copy no longer calls every
+  flagged row "likely import noise". Caution set regression-locked in
+  `test-problem-junk-code-cleanup.js` (new `cautionRootsOf` helper + 7 checks).
+- **Empty end-date guard.** Clearing the end-date field could POST `endDate: ""`
+  to the live record. The "End N selected" button is now disabled with no date,
+  and `endSelected()` refuses to POST without one regardless of button state.
+- **CHANGELOG version collision actually resolved.** The 2026-07-25 merge from
+  `main` left two v3.177.0 and two v3.178.0 entries (each side had assigned the
+  numbers independently). This branch's two entries are renumbered into the free
+  v3.176.12 / v3.176.13 slots with renumber notes; main's already-released
+  entries are untouched. Their follow-ups keep their original v3.177.1–.7 /
+  v3.178.1 numbers.
+- **CI patient-data guard false positives.** `rules/document-types.json` and
+  `test-problem-description-cleanup.js` carry SNOMED descriptionIds — 10-digit
+  terminology identifiers, some of which coincidentally pass the NHS Modulus-11
+  check. Both files added to `NHS_ADD_ALLOWLIST` in
+  `scripts/check-no-patient-data.js` with the reason documented in place.
+
+## [v3.193.0] — 2026-07-26
+
+### Retirement scan's confirmed-replacement search now reaches Body structure / morphologic-abnormality-axis replacements too
+
+Follow-up to v3.192.1's copy fix (which hinted at this without claiming a fix). Real case:
+443897009 "[M]Tubular adenoma NOS" is `REPLACED BY` 1156654007 "Benign tubular adenoma
+(morphologic abnormality)" — SNOMED genuinely records this replacement, but the panel showed
+"could not be matched in Medicus's own search index — search manually" instead of the usual
+one-click confirmed-replacement button.
+
+Root cause: `st.confirmedReplacement` is found via `searchDescriptions(replacementConceptId)`
+— `SEARCH_PATH`'s `constrainingParentConcepts` scopes to Clinical finding/Procedure/
+Situation/Social context/Event. 1156654007 is on an entirely different SNOMED hierarchy
+(Body structure / morphologic abnormality), invisible to that search regardless of query
+text — not a Medicus indexing gap, a scope exclusion by the caller itself.
+
+**Live-verified via the public NHS termbrowser API before building** (six concept lookups,
+no patient data): 1156654007 → 1187375007 → 1187227004 → … → 49755003 "Morphologically
+abnormal structure" → 118956008 → **123037004 "Body structure"** — a genuine, traced IS-A
+descendant chain. `123037004` is the same constraining root already confirmed live for the
+unrelated Rotator Cuff body-structure case (2026-07-17) — though that fix never actually
+needed to *query* body-structure scope (it searched for the disorder-axis target text
+instead), so there was no existing code to reuse the pattern from, only the diagnostic
+precedent.
+
+**Fixed**: when the primary broad-scoped replacement search comes up empty,
+`openPanel()` now falls back to `searchDescendantsNarrowed('123037004', replacementConceptId)`
+— reusing the existing, already-shipped descendant-search fetch verbatim (already used
+elsewhere in this same function for hierarchy-descendant search), just with the replacement's
+bare conceptId as the query instead of a hint word. One extra fetch, only when the primary
+search fails — the common case (most replacements ARE disorder/procedure-axis) is unchanged.
+
+No new unit test (this is orchestration/fetch wiring, not pure logic — `confirmedReplacementAlternative`,
+the pure filter it feeds into, is already covered; consistent with how this file tests
+everything else touching `apiFetch`). 186/186 existing tests still pass. **Not yet
+live-confirmed** — next step if resumed is checking whether the confirmed-replacement button
+now appears for this real patient's tubular-adenoma problem via the retirement-scan-first
+path.
+
+## [v3.192.1] — 2026-07-26
+
+### Fixed v3.192.0 before it ever went live: detectAnatomicalSiteHint was silently picking the wrong word
+
+Live-tested by the user immediately after v3.192.0 landed, on the real motivating patient —
+result: still no anatomy match offered, on either entry path (direct "Fix description" click,
+or via "Check for retired/legacy codes?" first).
+
+Root cause: `detectAnatomicalSiteHint` copied `detectPathologyHint`'s "return only the first
+match" contract, scanning `ANATOMICAL_SITE_HINT_WORDS` in **list order**, not text order. For
+"Descending colon and sigmoid colon - removed", `descending` precedes `colon` in the list, so
+it was picked and returned — but 444898006's actual SNOMED wording is "...of **colon**",
+which never contains "descending" at all. The one search that would have worked (`colon`)
+never ran, because a single-match design is at the mercy of curated-list order, not which
+word the real target concept's own description happens to use — a real risk that doesn't
+apply to `PATHOLOGY_HINT_WORDS` the same way, since pathology words tend to be mutually
+exclusive per real case (a "tear" case doesn't usually also mention "rupture").
+
+**Fixed**: `detectAnatomicalSiteHint` now returns an ARRAY of every matched site word (not
+just the first) — `detectPathologyHint` is untouched, still single-word, since this
+list-order risk doesn't apply there. `openPanel()` now combines the (still-singular)
+pathology hint with every detected site hint into one `expandHints` list, each still getting
+its own separate search (the word-mismatch-avoidance discipline from v3.192.0 is unchanged,
+just now covers more candidate words).
+
+**Also fixed, same session (sidenote from the user)**: the "search manually via Edit Problem"
+copy in `retiredInfoHtml`'s two informational branches was stale — this panel has carried a
+built-in manual search section since 2026-07-25 (v3.189.0), so telling a clinician to leave
+the tool was misleading. Both messages now point at "the manual search below/further down
+this panel" instead. The "could not be matched" message also now hints at the likely real
+cause (a SNOMED hierarchy-scope mismatch) without over-claiming a fix — see the diagnosis in
+the session notes for the separate, not-yet-fixed morphology-axis search gap this points at.
+
+Tests updated for the array-return contract, including a direct regression test pinning the
+real "descending before colon" list-order bug so it can't silently return. 186/186 still
+passing (no new count — existing tests updated in place, not added to, since the site-hint
+test coverage from v3.192.0 was rewritten rather than supplemented).
+
+## [v3.192.0] — 2026-07-26
+
+### "Fix description" hint-expanded suggestions gain anatomical-site words + run alongside cross-concept matches
+
+Real example: a patient's "[M]Tubular adenoma NOS" problem, `additionalInformation`
+"Descending colon and sigmoid colon - removed." User suspected SNOMED 444898006
+("Tubular adenomatous polyp of colon") would be a better code, inferable from the site
+text. Live-verified via the public NHS SNOMED CT termbrowser API (no patient data
+involved) before writing anything: the currently-coded concept, 443897009, is a **retired**
+morphologic-abnormality-axis concept (`REPLACED BY` 1156654007, also morphology-axis) with
+**no IS-A path** to the disorder-axis "Tubular adenoma of colon" family that 444898006
+belongs to — confirmed by walking the ancestor chain (444898006 → 1197339007 → 444408007)
+and finding no intersection with 443897009's own lineage. So `descendantAlternatives`'
+hierarchy-proof mechanism can never reach 444898006 from what's actually coded, and
+correctly doesn't try to.
+
+Two real, separate gaps found in `hintExpandedAlternatives` (the one category that doesn't
+require hierarchy proof) instead:
+
+1. **No site vocabulary.** `PATHOLOGY_HINT_WORDS` (tear, rupture, sprain, stenosis, …) has
+   zero anatomical-site words — "colon"/"sigmoid"/"descending" would never match. New
+   `ANATOMICAL_SITE_HINT_WORDS` in `shared/coding-specificity.js` (caecum/cecum, ascending,
+   transverse, descending, sigmoid, rectosigmoid, rectum, colon) and `detectAnatomicalSiteHint`
+   — same first-clause-scoped, curated-list, "a miss just means no suggestion" safety
+   profile as the existing pathology list, deliberately scoped to the GI segments that
+   motivated it rather than whole-body coverage.
+2. **Wrong trigger gate.** `hintExpandedAlternatives` only ran when same-concept, descendant,
+   AND cross-concept-exact were ALL empty — but this case already has a cross-concept match
+   (444408007, the real "Tubular adenoma (disorder)" replacement), so the fallback never
+   even attempted a site search. **Changed the trigger** (explicit user decision, weighing
+   the tradeoff first): now runs whenever same-concept AND descendant are empty, regardless
+   of cross-concept — mirrors how `descendantAlternatives` already runs alongside
+   same-concept rather than as a last resort. Still the riskiest category (no hierarchy
+   proof, no exact-text guarantee) and still never eligible for future bulk auto-correction.
+
+**`hintExpandedAlternatives` generalised** (`shared/coding-specificity.js`) to accept an
+array of hint words, not just one string — fully backward compatible with every existing
+single-string caller. Pathology and site hints are detected independently and each gets its
+**own** supplementary search rather than one combined query: Medicus's search requires every
+query word to be present in a result, so "Tubular adenoma descending sigmoid colon" as one
+query would silently zero-result against a real match worded just "...of colon" — the same
+word-mismatch failure class already fixed once for the knee-replacement case (v3.179.0). One
+word per query sidesteps that; the filtering pass then accepts a candidate matching ANY of
+the words.
+
+15 new tests in `test-problem-description-cleanup.js` (186 total, up from 171), including the
+real tubular-adenoma/colon case and array-form backward-compatibility checks.
+
+**Not yet confirmed live** — built and unit-tested only; next step if resumed is checking
+whether 444898006 now actually appears in the hint-expanded section for this real patient.
+
+## [v3.191.2] — 2026-07-26
+
+### "Bulk remove?" + "Check for retired/legacy codes?" triggers sit alongside "Major", plus keyboard focus rings
+
+Two cosmetic fixes on the same Active Problems card triggers, live-confirmed.
+
+**Placement.** `#ms-pjc-widget`'s ("Bulk remove?") own `.m-card-v2__content:has(...)` flex
+placement (landed 2026-07-25) forced every OTHER direct child of that card — including
+`#ms-pdc-retired-widget` ("Check for retired/legacy codes?"), a separate widget injected by a
+different content script into the same spot — onto its own full-width row, so only one of the
+two triggers ever actually sat next to "Major" despite looking like a matched pair.
+`problem-description-cleanup.css` gained the mirror-image `:has()` rule, and both files'
+catch-all exclusion lists now name both widget ids, so the container becomes flex and both
+triggers share the top row regardless of which one(s) are present. Each still drops to its own
+full-width row once opened/clicked, same as before.
+
+**Focus rings.** Consulted Atelier on trigger-button colour first (see below) — verdict: keep
+both neutral, don't risk-colour a disclosure trigger for what's behind it. While in these
+files, found neither had a single `:focus-visible` rule on ANY control (Medicus's page never
+loads `panel.css`, so the suite's global ring never reached here — not a regression, just
+never built). One wildcard `button[class*='ms-pjc-']`/`input[class*='ms-pjc-']` rule per file
+(and the `ms-pdc-` equivalent) rather than enumerating every class, `outline: 2px solid
+#2563eb` matching the suite's `--accent` light value (can't consume the token itself here).
+
+**Design consult (Atelier, no code from this part):** should the two trigger buttons be
+colour-differentiated — one gates a destructive bulk-end action, the other a purely cosmetic
+scan? Verdict: no. A trigger isn't the risky moment (the actual destructive action, "End N
+selected problems", is already correctly red); colouring the trigger too would dilute what red
+means at the point that actually matters. Mirrors the same philosophy this feature already
+applies one level deeper — `problem-description-cleanup.js`'s safest fix category is
+deliberately left uncoloured rather than forced into the amber/blue/orange/red/green ramp.
+
+## [v3.191.1] — 2026-07-26
+
+### "Bulk remove?" auto-refreshes the page after a fully-successful end-batch
+
+User-reported: after clicking "End N selected problems," Medicus's own native problem-list
+UI (outside this widget) kept showing the ended problem(s) as still active until a manual
+page refresh — the widget's own checklist correctly showed "Ended," but that's a separate
+DOM tree from Medicus's own Vue-rendered list, which never re-fetches on its own after this
+widget's `POST /clinical/problem/end-problem` call.
+
+- `endSelected()` (`content-scripts/problem-junk-code-cleanup.js`) now calls
+  `location.reload()` automatically, but **only when every targeted end in the batch
+  succeeded** — a 900ms pause first, so the "Ended" tags are actually visible before the
+  reload fires. If any end in the batch failed, no reload happens at all: a failed row must
+  stay on screen with its error message so the clinician can see and retry it, not get wiped
+  by a reload they didn't ask for.
+
+## [v3.191.0] — 2026-07-25
+
+### "Bulk remove?" gains 18 more non-problem roots — beyond pure admin/claim artefacts
+
+Extends `rules/non-problem-root-codes.json` (used by `content-scripts/problem-junk-code-cleanup.js`)
+with a new class of candidate, beyond the original administrative/claim-artefact roots
+(14734007/12821000000103/184063008): genuine clinical DATA or ACTIVITIES that clinicians agreed
+should never sit in the problem list itself, even though they belong in the record.
+
+User's own reasoning, per category:
+- **LMP / EDD** (`21840007`, `161714006`) — real clinical markers, but treating them as
+  "problems" would generate ~12 fake problem entries a year for LMP alone; self-evidently not
+  what the problem list is for.
+- **B12 deficiency monitoring** (`170818005` finding + `243863004` status) — the deficiency
+  itself is a real problem; the ongoing monitoring of it is admin, not the problem.
+- **Wound care** (`225358003`) and **B12 administration** (`709544008`) — treatment FOR a
+  problem, not the problem itself (explicitly NOT a hard rule — clinically significant
+  treatment like chemotherapy would still belong on the problem list; these are minor by
+  comparison).
+- **Influenza vaccination** (`86198006`) — same over-counting logic as LMP (many adults get 2 a
+  year); deliberately scoped to flu only, not all vaccines.
+- **Patient referral** (`3457005`) — a broad root by design: referral status/type entries are
+  admin for a problem, not the problem itself, whichever specialty or urgency.
+- **Medication review** (`182836005` + due/done statuses `314529007`/`314530002`) and **Adult
+  health examination** (`268565007`) — genuine clinical activities that GP2GP source systems
+  sometimes file as problems, even though the activity isn't a diagnosis.
+- **NHS Health Check family** (`523221000000100` completed, `523201000000109` indicated,
+  `763661000000101` annual review, `519961000000106` programme) — administrative
+  programme-status markers; SNOMED models these as separate branches with no shared ancestor
+  narrow enough to use as one root, hence four leaf entries (the "invitation" variant was
+  already covered by the existing 14734007 root).
+- **Administrative statuses** (`307824009`) — a broad, well-precedented "Clinical finding"
+  subtree (not the whole hierarchy) already explicitly excluded elsewhere in this codebase's own
+  SNOMED search scope as "not a real clinical finding"; covers follow-up status/arranged, notes
+  summary on computer, and letter sent to patient in one root.
+- **Diary event recall** (`1239671000000106`) — a system-generated administrative record
+  artefact.
+
+All 18 roots were researched via the PUBLIC no-auth NHS termbrowser API (ancestor-chain lookups
+confirming ROOT-of coverage — e.g. that LMP's two other wordings and EDD's two other wordings
+are genuine descendants of a single concept each), not yet re-confirmed against Medicus's own
+live search on a real patient — same provisional caveat as any rules-file entry added without a
+live capture.
+
+Several candidates raised in the same discussion were deliberately EXCLUDED: "Student"
+(parked — could go either way), and several terms with no confident SNOMED match found via
+public search (Routine Child Health Exam, Elderly Health Assessment, Flu immunisation protocol,
+Health Clinic) — left for a future session with a real patient example.
+
+18 new coverage checks in `test-problem-junk-code-cleanup.js` (58 total, up from 40).
+
+## [v3.190.0] — 2026-07-25
+
+### "Fix description" scan gains two more independent checks: Read-code-derived text, generic import noise
+
+Two more requests from the same live-testing session as v3.188.0/v3.189.0's retirement
+scan and manual search box.
+
+**Legacy Read-code-derived descriptions.** Real example: `359609001` "Acute nonsupp.
+otitis media R" — `problemCode.originalCodes: [{codeSystem:"read-v2", code:"F510.00",
+description:"Acute non suppurative otitis media"}]`. A DIFFERENT, structural signal from
+everything else this tool checks: not a text pattern (no `[X]`/NOS/NEC/H-O marker, so
+`looksOutdated()` never catches it) and not retirement (the concept can be entirely
+current) — the description text still carries the OLD Read code's own abbreviated wording
+verbatim. Per the user: these "almost always need cleaned up even where they've been
+forward-mapped to a valid SNOMED code," so this flags independently of retirement status.
+Only available from `slideover/overview` (confirmed live — NOT confirmed present on
+`edit-problem`'s own shape, so this fetches that endpoint separately rather than assuming),
+so — like retirement — only ever checked by the opt-in scan, one more fetch per active
+problem. Only `codeSystem: "read-v2"` is recognised (confirmed on two real examples now);
+other Read-derived codeSystem values would need their own live confirmation first.
+
+**Generic GP2GP-import "Additional info" text.** Real example: `additionalInformation:
+"ear\nActive Problem, Significant"` — "ear" is a genuine free-text note, the second line
+is pure boilerplate restating `problemStatus`/`significance` metadata already captured
+structurally elsewhere on the problem. New `rules/generic-additional-info-text.json`
+(starting with `"Active Problem, Significant"`) and `stripGenericAdditionalInfoLines()` —
+matching is PER LINE (split, trimmed, case-insensitive), never against the whole field, so
+a genuine note sharing the field with a generic line is always preserved. Offered on
+**every** open panel regardless of trigger (the field is already fetched for any flagged
+row) — new "Remove generic import text" button submits `additionalInformation` with just
+the matched line(s) stripped, `problemCode` completely unchanged (`buildEditProblemPayload`
+gained an optional `overrideAdditionalInformation` third parameter for this, backward
+compatible with every existing 2-argument caller). The safest apply path in this file —
+surgical removal of an exact-matched known-boilerplate string, no coding decision at all —
+styled plainly rather than with any risk-graded colour.
+
+Both checks are folded into the SAME opt-in "Check for retired/legacy codes?" scan as the
+retirement check (button/status text updated to reflect all three), since all three reuse
+data already being fetched per active problem — the generic-text check in particular costs
+nothing extra at all, reusing the SAME edit-problem fetch every row already needed.
+
+24 new tests across `test-problem-description-cleanup.js` (171 total, up from 147).
+
+## [v3.189.0] — 2026-07-25
+
+### "Fix description" gains a manual search box
+
+v3.188.0's retirement scan shipped and was confirmed live the same day — flagging real
+retired codes (`30989003`) and correctly suggesting confirmed replacements (`1003722009`).
+This adds one more panel section, motivated by a real problem on the same patient: "H/O:
+urinary disease-UTI's" is better coded via "UTIs", but that's neither a same-concept
+synonym, a hierarchy descendant, nor an exact text match of the current description — none
+of the four automated categories could ever find it.
+
+New manual search box (`content-scripts/problem-description-cleanup.js`), shown at the
+bottom of every open panel regardless of whether the automated categories found anything.
+Reuses the same broad `SEARCH_PATH` query the automated categories already call, but
+**deliberately unfiltered** — `normalizedSearchResults` returns every result across every
+concept the search finds, not narrowed to one conceptId or one exact text match like every
+other function in this file. This is the ONE category with no automated safety constraint
+at all, functionally identical to typing into Medicus's own Edit Problem search box —
+styled in neutral grey, explicitly separated from the amber/blue/orange/red/green
+risk-graded categories above it, with copy stating plainly there's no automated check.
+
+6 new tests in `test-problem-description-cleanup.js`.
+
+## [v3.188.0] — 2026-07-25
+
+### "Fix description" gains a "Check for retired codes?" scan
+
+Extends `content-scripts/problem-description-cleanup.js` with an opt-in scan that checks
+every ACTIVE problem's own SNOMED conceptId against the public, no-auth NHS SNOMED CT
+UK-edition termbrowser API (`termbrowser.nhs.uk` — a SEPARATE service from the official
+NHS England Terminology Server FHIR API, which requires a system-to-system account that
+can't be safely embedded in a distributed browser extension; new host permission
+`https://termbrowser.nhs.uk/*`). A confirmed-retired problem gets its "Fix description"
+button injected the same way a text-flagged one does — reusing all of that flow's existing
+apply/safety machinery — with a new retirement banner rendered above the usual suggestion
+categories.
+
+**Deliberately routes to "Fix description", never "Bulk remove?"** — an explicit user
+correction during design: retirement of a SNOMED code doesn't by itself mean the clinical
+data entered is invalid or that the problem isn't real; it only means the CODE needs
+attention. Two real examples confirmed live: `184063008` ("Patient signed registration
+form") is retired with NO replacement recorded (`memberships[]` has an inactivation-reason
+entry, "Nonconformance to editorial policy component", but no historical-association
+pointing anywhere); `398307005` (the LSCS code already documented in this repo) is retired
+WITH a confirmed `REPLACED BY` replacement, `788180009`. Both cases feed into the SAME
+existing description-search flow (same-concept/descendant/cross-concept/hint-expanded), so
+even the no-replacement case still gets the clinician a route to an active code via text
+search — plus, when a `REPLACED BY` association exists, a new highest-trust "SNOMED
+confirms the replacement code" suggestion appears above everything else (green, distinct
+from the amber/blue/orange/red risk-ordered categories already there — this one isn't a
+risk category, it's the closest thing to a verified answer this tool offers). That
+suggestion is only offered as a clickable button once Medicus's OWN search index is
+confirmed to recognise the replacement concept (`confirmedReplacementAlternative` in
+`content-scripts/problem-description-cleanup.js`) — a `descriptionId` invented from
+termbrowser's raw SNOMED data wouldn't necessarily match what Medicus's own index expects
+on save, so an unmatched replacement is shown as text only, never a button.
+
+**Only the confirmed `REPLACED BY` association type (refset `900000000000526001`) is
+implemented** — SNOMED's historical-association family also includes SAME AS, POSSIBLY
+EQUIVALENT TO, MOVED TO and others, none of which have a live-confirmed example yet, so
+their refset IDs are deliberately NOT hardcoded (this codebase's standing rule: never
+hardcode a SNOMED metadata ID without live confirmation). Both real captures also carry an
+unrelated `ASSOCIATION`-type membership (`1322291000000109`, "NHS Care Record Element
+association") that is explicitly excluded from replacement detection — confirmed as a
+confusable case, not a replacement pointer.
+
+**Opt-in, not automatic** — checking every active problem costs one Medicus fetch per
+problem (reusing the same edit-problem endpoint "Fix description" already calls) plus one
+external termbrowser fetch per distinct conceptId; real per-patient cost, so this is its
+own "Check for retired codes?" trigger, same class as `problem-junk-code-cleanup.js`'s
+"Bulk remove?" scan, never run automatically on page load. The release-string config
+(`rules/snomed-terminology-server.json`, currently `v20260603`) fails closed to
+"unknown, skip" on any error or the literal `false` this API returns for an unrecognised
+release/edition path (confirmed live) — never guesses active or inactive when the check
+itself didn't cleanly succeed.
+
+New `shared/snomed-retirement.js` (entity-agnostic parsing, mirrors the
+`shared/legacy-coded-description.js` split), new `rules/snomed-terminology-server.json`.
+30 new tests in `test-snomed-retirement.js`, 10 new tests in
+`test-problem-description-cleanup.js`.
+
+## [v3.187.0] — 2026-07-25
+
+### "Bulk remove?" widget: third root added — "Patient signed reg. form"
+
+Added `184063008` ("Patient signed reg. form") as a third root in
+`rules/non-problem-root-codes.json` — a Read-v2-migrated concept (original code `9122.00`)
+recording that a patient signed a registration form, pure administrative record-keeping,
+never a real clinical problem. Found live on a real patient while investigating whether
+Medicus's API exposes SNOMED concept retirement status (see below) — added as its own root
+regardless of the retirement question, since it's unambiguously the same category of
+administrative noise the widget already targets.
+
+**Investigated, not built: automated retired-SNOMED-code detection.** Captured the full
+`slideover/overview`, `edit-problem` prefill, and SNOMED search responses for a real
+`184063008`-coded problem, looking for any `active`/`retired`/`status` field to reuse this
+widget's mechanism for a different purpose. None of the three responses expose one. The
+closest candidate signal, `descriptionId: null` on the problem's own code, is already used
+elsewhere (`problem-description-cleanup.js`'s outdated-description detection) but is NOT
+exclusive to retired concepts — `test-problem-description-cleanup.js`'s own test fixture
+has a `descriptionId: null` example for a presumably normal, current concept ("Adult
+attention deficit hyperactivity disorder"). Building a detector on this would risk flagging
+genuinely active, correctly-coded problems — a patient-safety-relevant false positive, not
+a cosmetic one — so this was deliberately not built. Would need a real API-exposed
+active/inactive field to revisit safely.
+
+2 new tests in `test-problem-junk-code-cleanup.js` covering the new root entry.
+
+## [v3.186.0] — 2026-07-25
+
+### "Bulk remove?" widget: second root added — item-of-service claim-status codes
+
+Added `12821000000103` ("Item of service claim statuses") as a second root in
+`rules/non-problem-root-codes.json` — no code change needed, per the data-file convention
+this widget was built around (v3.183.0). Same rationale as the first root (14734007
+"Administrative procedure"): GP2GP source systems sometimes file item-of-service
+claim-status codes as problems even though they're pure claim-processing artefacts, never
+a real clinical problem. Real example found live 2026-07-25: `"FP/RF - new reg.check to
+FPC"` (a new-registration check submitted to the old Family Practitioner Committee).
+
+2 new tests in `test-problem-junk-code-cleanup.js` covering the new root entry.
+
+## [v3.185.0] — 2026-07-25
+
+### "Fix description" now also catches "H/O" (history of) legacy-prefixed problems
+
+Extends the existing legacy-description detection (`shared/legacy-coded-description.js`,
+used by `content-scripts/problem-description-cleanup.js`'s "Fix description" button) to
+also flag a leading "H/O" ("history of") free-text prefix — either "H/O " (space) or
+"H/O:" (colon, the variant actually found live once the first version of this shipped) —
+alongside the existing ICD-bracket ("[X]"/"[D]"/"[M]") and trailing NOS/NEC patterns.
+
+**Deliberately NOT added to the "Bulk remove?" junk-problem-code widget** (v3.183.0-
+v3.184.0) — that widget ENDS a problem with reason "not a problem", which is only correct
+for genuine non-clinical administrative artefacts. A "H/O stroke" entry is real clinical
+history, not noise, and ending it would delete a genuine past-medical-history fact.
+
+Instead this reuses the SAME-CONCEPT-ONLY safety rule "Fix description" already relies on:
+`sameConceptAlternatives` only ever offers a different synonym of the CURRENT conceptId,
+never a re-code to a different concept — so whatever the flagged problem's concept
+actually means, every offered alternative means the same thing, only the wording changes.
+Per explicit user correction during build (their own real-data experience, not a generic
+assumption): these "H/O"-prefixed problems are USUALLY coded to the plain disease concept
+itself, picked for convenience at the time of writing rather than accuracy — not to a
+dedicated SNOMED "history of X" concept — so the suggested alternatives should almost
+never carry "history of" wording, and that's the intended outcome, not an edge case.
+
+New `LEGACY_HO_PREFIX_RE` in `shared/legacy-coded-description.js`, folded into
+`looksOutdated`/`stripLegacyMarkers`. 13 new tests plus an updated `findOutdatedProblems`
+case, all in `test-problem-description-cleanup.js`.
+
+## [v3.184.0] — 2026-07-25
+
+### "Bulk remove?" widget: moved next to the "Major" heading
+
+Follow-up to v3.183.0's "Bulk remove?" widget. Live DOM capture of the Active Problems
+card confirmed its actual shape: `.m-card-v2__content > h3#problems-major-label ("Major"),
+ul[aria-labelledby="problems-major-label"], …` — "Major" is a section heading for the whole
+major-problems list, not a per-problem badge. The widget already landed in the right DOM
+position (right after that heading, right before the list) but rendered as its own stacked
+block below it.
+
+Two changes: `injectTrigger()` now anchors explicitly on `ul[aria-labelledby=
+"problems-major-label"]` rather than "whichever list holds the first cached problem", so
+it lands next to "Major" specifically even when clinical-summary's own problem order
+starts with a minor one (falls back to the old anchor if no Major section exists on the
+page at all). And new CSS makes the collapsed toggle sit on the same row as the heading —
+scoped via `.m-card-v2__content:has(> #ms-pjc-widget)` so the layout change can't leak
+onto Medicus's other cards that reuse the same generic `.m-card-v2__content` class —
+dropping to its own full-width row only once expanded.
+
+`problems-minor-label` is assumed by naming symmetry, not confirmed live (the capture
+patient had no minor problems) — documented as an assumption in the code, not relied on.
+
+A **text-based visibility pre-check** (only show the trigger button when a problem's free
+text looked like a likely match) was also tried during this same round of follow-up work,
+then reverted before ever shipping: live testing showed it could hide a GENUINE code-based
+match whose free text didn't happen to contain a configured hint (the "FP/RF - new
+reg.check to FPC" case above needed a hint added after the fact just to make the button
+appear). The trigger button always renders whenever a patient has any active problems, same
+as the original v3.183.0 behaviour — the code is the sole source of truth for what this
+widget flags, and it must always be reachable regardless of how unrelated a problem's free
+text looks.
+
+## [v3.183.0] — 2026-07-24
+
+### "Bulk remove?" widget: flag and end administrative-noise problem-list codes
+
+GP2GP-imported records can carry entries in the problem list that were never real clinical
+problems — administrative/claim-processing artefacts some source systems file as problems
+(the motivating real example: FP10 temporary-resident-claim codes, filed under SNOMED
+14734007 "Administrative procedure"). New `content-scripts/problem-junk-code-cleanup.js`
+(+`.css`) adds a small "Bulk remove?" toggle above the Active Problems list on the Clinical
+Summary page.
+
+Clicking it fetches each active problem's own conceptId (one fetch per problem — the cheap
+`clinical-summary/summary` list never carries a conceptId, text only) and checks each
+distinct code against `rules/non-problem-root-codes.json`'s configured root list via
+`clinical/gb/snomed/search/description/constrained?constrainingParentConcepts=<all roots,
+comma-joined>&query=<conceptId>` — flagged if the code exactly matches a root or is a
+DESCENDANT of one at any depth (confirmed live reaching 5 hierarchy levels below 14734007
+for the real FP10 codes that motivated this). Flagged problems render as a checklist,
+unchecked by default, each also checked for active child problems (excluded from bulk
+selection, not just warned, if ending it would affect dependents) via the confirmed
+`clinical/data/problem/end-problem/{problemId}` prefill. A shared, editable end-date field
+(defaulting to today) and the fixed reason `"not a problem"` are submitted per selected
+problem via `POST clinical/problem/end-problem` — confirmed contract, from a real captured
+HAR of a manual "end problem" action, `{problemId, endDate, reason} → 200 {}`.
+
+**Root list is data, not code**: 14734007 is the first entry in
+`rules/non-problem-root-codes.json`, not a hardcoded special case — adding another root
+there (a different import-noise category from a different source system) extends the
+check with no code change and no extra fetch cost per candidate, since every configured
+root is checked in ONE combined `constrainingParentConcepts` query rather than one query
+per root. A blank-query fetch to enumerate a root's full descendant set up front was
+deliberately avoided: 14734007 alone has 103 direct children per the SNOMED CT browser,
+and that endpoint caps at ~20 results with no pagination, so it would have silently missed
+most of the hierarchy — checking each patient's own problem conceptId individually never
+hits that cap.
+
+**Scope decision**: the scan is opt-in only, triggered by the "Bulk remove?" click — never
+proactive on page load, since the per-problem conceptId fetches would add real cost to
+every Clinical Summary view for what's a comparatively rare artefact. The cheap
+clinical-summary fetch (used only to place the trigger button) still runs on page load,
+matching `problem-description-cleanup.js`'s existing precedent.
+
+`test-problem-junk-code-cleanup.js` — 36 tests covering the roots-CSV builder, the
+flagged/descendant check, bulk-selectability rules, per-problem conceptId resolution, and
+the end-problem payload shape.
+
+## [v3.182.0] — 2026-07-23
+
+### "Save attachment as document": per-attachment chip replaces the single anchored widget
+
+Live-tested v3.181.0's priority-chip picker on a real 3-attachment task and found a
+placement regression: the widget anchored near a task-level landmark ("Codes & actions"
+card / task widget / bottom action row) in that priority order, with the attachment's
+own card only a last resort. On a task that DOES have a "Codes & actions" card, that
+landmark sits well below the message thread — so the widget (and the task widget it
+paired side-by-side with) ended up far from the attachment it was actually for. With
+several attachments in one request, that also meant only ONE collapsed widget with an
+attachment dropdown, easy to miss (confirmed live: a user with 3 attachments didn't
+notice the dropdown existed at all).
+
+Replaced the whole anchor-priority chain with a small "Save as document" chip injected
+immediately after EACH eligible attachment's own link/button — every attachment gets its
+own unambiguous entry point right next to the file it's for, no dropdown needed. Clicking
+a chip opens a single shared form (there is only ever one on the page) and relocates it
+to sit right after that chip; clicking a different attachment's chip moves the same form
+there and re-populates it, rather than opening a second form (a design choice — an
+independent form per attachment was considered and deferred as a bigger change for little
+benefit). A chip already saved this page visit shows "✓ Saved as document" and disables
+itself, so progress across several attachments is visible at a glance. The old collapsed
+toggle bar, its "Attachment" dropdown, and the "Save another attachment" flow are gone —
+superseded by the per-attachment chips. (`content-scripts/document-file-inline.js`,
+`.css`; `content-scripts/task-inline.css` — removed a now-dead `.ms-inline-widget-row`
+rule that only ever existed to pair with the removed widget.)
+
+Two more fixes from the same live-test pass, on the chips themselves:
+
+- **Layout**: a chip inserted as a plain next sibling of the attachment's own button
+  dropped onto its own line below it (Medicus's attachment button is block-level), not
+  alongside it as intended. Fixed by wrapping the attachment element and the chip
+  together in a small `inline-flex` span (`.ms-df-chip-wrap`) instead of a plain sibling
+  insert, so they render on one line.
+- **Real bug, confirmed live**: clicking a chip was opening Medicus's own "view care
+  related communication" pane — an unrelated side effect. Root cause: the chip is a DOM
+  sibling inside whatever container Medicus wraps each attachment/message in, and that
+  container has its own click handler; the chip's click was bubbling into it. Fixed with
+  `stopPropagation()` on the chip's click handler, and (defensively, since the form can
+  also end up inside that same container once relocated) one `stopPropagation()` listener
+  on the form's own root rather than on every individual control inside it.
+
+### Document type picker: dropped the priority-tier chip shortlist for a ranked, colour-coded search
+
+Both fixes above confirmed live in the same session, then a bigger rethink: the
+docPriority 1-6 scoring behind v3.181.0's priority-chip shortlist was built with INBOUND
+documents in mind (scanned letters, referrals, discharge summaries), not task
+attachments — the author flagged that the resulting shortlist "isn't right for this
+environment" once seen live. Rather than trust it as a hard shortlist, it's now used as a
+SOFT ranking + colour signal instead:
+
+- The priority/priorityMore chip tiers and the "Show more document types" toggle are
+  gone. The search box (which already shows the current best-guess by default, unlocking
+  into search on typing — unchanged) is now the only thing in the Document type row, no
+  chips above it.
+- `filterDocumentTypes` now ranks matches by docPriority (1 first), alphabetically
+  tiebroken, instead of original list order — typing e.g. "care plan" surfaces the
+  highest-priority matches first rather than whatever order they happen to sit in the
+  1768-entry list.
+- Each search result gets a coloured left border on a fixed 6-step green(1)→red(6) scale
+  (new `priorityColor()`); an entry with no/invalid score gets its own neutral grey
+  rather than being lumped in with a real tier-6 ("junk") score.
+- `rules/document-types.json` now carries `docPriority` directly on every entry (all
+  1768, sourced from the full practice-scored priorities spreadsheet) instead of the two
+  `priority`/`priorityMore` conceptId-array tiers, which are removed.
+- `buildPriorityEntries` (the now-unused shortlist-resolver) is removed along with its
+  tests; `test-document-file-inline.js` gained coverage for the new ranking and colour
+  function instead.
+
+## [v3.181.0] — 2026-07-23
+
+### Document-type quick-pick shortlist: tiered "Show more" chips
+
+`rules/document-types.json`'s `priority` array (the quick-pick chip shortlist in the
+"save attachment as document" widget) had shipped empty since v3.177.4 — the picker only
+ever had full search, no shortlist. Populated from a full docPriority 1-6 usefulness scan
+of all 1768 SNOMED document-type codes in the refset, scored against real practice usage.
+
+`priority` now holds the 22 docPriority-1 ("most useful/commonly selected") codes, shown
+as chips by default. A second `priorityMore` array holds the 84 docPriority-2/3 codes
+("high priority anchor" / "genuinely selected, narrower"), revealed only via a new "Show
+more document types" toggle in `content-scripts/document-file-inline.js` — keeps the
+default chip row short and scannable while still making the wider shortlist reachable in
+one click, without ever falling back to a 106-chip wall or the full 1768-entry search.
+Both tiers sorted alphabetically by description. `buildPriorityEntries` (unchanged) now
+resolves either array; new regression tests confirm every conceptId in both tiers
+resolves to a real entry and that the two tiers don't overlap.
+
+## [v3.180.0] — 2026-07-23
+
+### "Fix description" widget: fourth suggestion category — hint-expanded matches
+
+Follow-up to the "[SO]" codes deferred at the end of v3.179.0. Live-captured a real
+"[SO]Rotator cuff" problem (additional info "-tear") that got NO suggestion of any kind.
+Root cause — a DIFFERENT bug class from the word-mismatch fix in v3.179.0: `7885001` is a
+SNOMED **body structure** concept ("Rotator cuff (structure)"), not a disorder, so it can
+never appear in the disorder/procedure-hierarchy search that same-concept and
+cross-concept-exact matching both depend on. Confirmed live: searching "rotator cuff
+tear" in that hierarchy finds `926335004` "Rotator cuff tear" — exactly what the "-tear"
+free-text note was pointing at.
+
+New fallback category, tried only when same-concept, descendant, and cross-concept-exact
+all come back empty (one extra search in that case, zero extra fetches otherwise):
+combines the base description with a recognised pathology word (tear, sprain, rupture,
+valvular, …) found in the first sentence of `additionalInformation`, and offers the
+result as a cross-concept suggestion. This is the riskiest of the four categories now
+offered — no hierarchy proof, and two combined text fragments rather than one exact
+match — so it renders in its own most-cautious red section, one step past the existing
+warning-orange cross-concept styling.
+
+Explicit scope decision, discussed and agreed: an anatomical-structure concept should
+never really be coded as a "problem" in its own right, which is what makes this safe to
+offer per-problem now. But when/if a whole-record bulk-correction feature is built later,
+this category must NEVER be bulk-auto-applied — unlike same-concept and cross-concept-
+exact matches, which could eventually be "easy" bulk cases, this one must always prompt a
+clinician.
+
+21 new unit tests using the real captured rotator-cuff data. Not yet confirmed live.
+
+### "Fix description" widget: descendant suggestions generalised beyond laterality, ranked by match %
+
+Real example: a patient's "Hysteroscopy NEC" (`233545006`) problem — already correctly
+offered a same-concept relabel — had `additionalInformation` "resection of uterine
+fibroid", and a genuine SNOMED descendant exists: `84064003` "Hysteroscopy with removal of
+uterine fibroid" (confirmed via live capture — its `parentConceptIds` contains
+`233545006`, exactly the same ancestry proof already used for laterality descendants).
+`descendantAlternatives` previously only ever tried a single laterality word (rt/lt/
+bilateral); it now accepts an arbitrary list of hint words (still fully backward
+compatible with a single string), sourced from the laterality word (if any) plus every
+significant word found anywhere in `additionalInformation`.
+
+Two rounds of live-testing feedback refined this further:
+
+- **Retrieval**: rather than guessing individual words to search for (which can silently
+  miss a real descendant worded differently, e.g. "Hysteroscopic myomectomy" never
+  contains "fibroid"/"resection"), a single BLANK-QUERY fetch (`query=` empty, confirmed
+  live) returns the full descendant set of the current concept directly, bypassing text
+  matching at the retrieval stage entirely. One fetch, not one per word. Not provably
+  complete (no total/pagination field in the response), but far more complete than
+  per-word guessing.
+- **Hint scope**: `additionalInformation` is now scanned in FULL, not just its first
+  sentence. A real case — "& laparoscopy. resection of fibroid." — put the clinically
+  relevant detail in the SECOND sentence, past the original first-clause cutoff, so it was
+  silently missed. (The narrower first-clause scope remains correct and unchanged for the
+  separate `hintExpandedAlternatives`/pathology-word category, which has no structural
+  safety net and so stays conservative about how much free text it trusts.)
+- **Ranking, not just filtering**: each candidate now gets a `matchScore` (0-100%, the
+  proportion of hint words found in its own wording), shown next to the button (e.g.
+  "removal of uterine fibroid (67% match)" vs. "removal of uterine myoma (33% match)"), and
+  results are sorted best-match-first. Still literal word-boundary matching, not clinical
+  synonym-awareness — deliberately: catching "myomectomy" as a fibroid-removal synonym
+  would need either a curated synonym dictionary or an actual semantic-similarity call
+  (sending patient free text to an LLM), and the user explicitly chose to keep this pass to
+  keyword overlap rather than open that architecture/data-handling discussion now.
+
+Deliberately offered ALONGSIDE same-concept alternatives, not gated behind "nothing else
+matched" — the same-concept relabel and the more-specific descendant are both valid,
+independent choices for the clinician to pick from.
+
+19 new unit tests (`significantWords`, the generalised + scored `descendantAlternatives`)
+using the real captured Hysteroscopy/fibroid data. Not yet confirmed live.
+
+## [v3.180.1] — 2026-07-23
+
+### "Fix description" widget: fixed cross-concept matching for a retired legacy concept
+
+Investigated why "Lower uterine segment caesarean section (LSCS) NEC" (`398307005`) got
+NO suggestions at all. A different root cause from both the word-mismatch and
+body-structure bugs already fixed: `398307005` is a RETIRED/inactive SNOMED concept
+(confirmed via the SNOMED CT browser — no parents or children), invisible to every search
+regardless of wording. Its real active replacement, `788180009`, has a synonym worded
+exactly like the current description — but only once the trailing "(LSCS)" abbreviation
+is ALSO stripped, alongside the existing "NEC" suffix strip.
+
+`stripLegacyMarkers` now also strips a trailing bracketed abbreviation (2-6 letters)
+exposed once the NOS/NEC suffix is removed, letting `crossConceptAlternatives` find the
+exact match. Accepted, explicitly-flagged risk: this is a simplification that could
+mis-fire if a bracketed suffix is ever integral to a description's meaning rather than a
+legacy artefact — mitigated by `crossConceptAlternatives` already requiring explicit
+clinician confirmation before applying, and by this only ever running on descriptions
+already confirmed outdated. 3 new unit tests using the real captured LSCS/caesarean-section
+data.
+
+## [v3.179.0] — 2026-07-23
+
+### "Fix description" widget: surfaces the raw additional-info text
+
+The panel now shows the problem's raw `additionalInformation` free text (when present),
+regardless of whether the tool found any suggestion — supports the clinician's own
+judgement call even in cases the tool can't yet match (e.g. the "[SO]" codes flagged for
+follow-up). Neutral grey styling, deliberately distinct from the three suggestion
+categories' colours so it doesn't read as an actionable option itself.
+
+### "Fix description" widget: fixed a silent word-mismatch search failure
+
+Found live-testing on a patient with "Primary total knee replacement NEC" (a legacy
+Read-code-migration label): the search returned ZERO results for the whole widget, not
+just the new descendant suggestion. Root cause — Medicus's description search requires
+EVERY word in the query to appear in a result; the real modern descendants ("Total
+replacement of left/right knee joint") don't contain the word "Primary" anywhere, so the
+entire query silently failed. This affected the SAME-CONCEPT alternatives too (the
+original, already-shipped v3.176.13 flow, formerly numbered v3.178.0), not just today's new work — any legacy
+description with a word not echoed in its concept's modern phrasing could silently
+return nothing, with no error, just an empty "no alternative found" panel.
+
+Two supplementary searches fix this, both confirmed live, both additive (never replace
+the existing broad query, only add candidates to it):
+
+- Same-concept alternatives now also query by a bare SCTID (`query=<conceptId>`), which
+  reliably returns that concept's own synonyms regardless of text phrasing.
+- Descendant/laterality suggestions now also run a narrowed search
+  (`constrainingParentConcepts=<current conceptId>` instead of the six broad top-level
+  hierarchies, `query=<just the laterality word>`) — scoped to true descendants only, so
+  a bare "left"/"right" is enough to find them without depending on the parent's own
+  wording at all.
+- 2 new regression tests using the real captured knee-replacement data.
+
+### "Fix description" widget: fixed duplicate-description row collision
+
+Found live-testing the additions below: if a patient has TWO problem entries with the
+IDENTICAL description text, `findProblemRow`'s exact-text DOM match always returned the
+FIRST matching row — so both problems' buttons stacked on the first row, none appeared
+on the second, and (more seriously) the optimistic post-save text update for either
+problem also hit that same shared first anchor. The underlying SAVE was never affected
+(`postEditProblem` always targets the real, correct `problemId`, independent of DOM
+matching) — only button placement and the on-screen update were wrong. Fixed: `scan()`
+now tracks anchors already claimed within a pass (`claimedAnchors`), so the Nth problem
+with matching text claims the Nth matching row in document order — each problemId gets
+its own distinct anchor.
+
+### "Fix description" widget: now also suggests a more specific code (laterality)
+
+Real example that prompted this: a patient's "Fracture of radius NOS" problem had
+free-text additional info "rt distal end" — implying a more specific SNOMED concept
+("Fracture of right radius") than the one currently coded. Unlike the existing
+description-cleanup flow (which only ever offers a different DESCRIPTION of the SAME
+code — a cosmetic relabel), this can suggest a genuinely different, more specific
+concept — a real coding decision. Scoped deliberately narrow for this pass:
+
+- **Laterality only** (right/rt, left/lt, bilateral/bilat) — not full free-text-to-code
+  NLP, which is large and risky (abbreviation ambiguity means a wrong-but-confident
+  suggestion is worse than none).
+- **Descendants only, never a lateral recode** — confirmed via Medicus's own
+  `outputParentConceptIds=1` search param (added to the existing `SEARCH_PATH`, additive
+  and harmless for the existing same-concept search), which returns each result's full
+  SNOMED IS-A ancestor closure. The safety test: does the CURRENT concept's ID appear in
+  a candidate's `parentConceptIds`? If yes, it's a strict specialisation, safe to offer.
+- **Only runs for problems already flagged as outdated** — same trigger population as
+  the existing "Fix description" button, same one click, same edit-form fetch that click
+  already makes. No new proactive per-patient scanning and no new opt-in affordance,
+  because `additionalInformation` (where the laterality hint lives) isn't available
+  without a per-problem fetch, and this reuses the one the clinician already triggered
+  rather than adding new API cost. Running this across the whole record (every problem,
+  other entity types, or hooking into Medicus's own native "Edit Problem" UI) was
+  discussed and explicitly deferred, not built here.
+
+- New `shared/coding-specificity.js`: `detectLateralityHint`,
+  `descriptionAlreadySpecifiesLaterality`, `descendantAlternatives` — entity-agnostic,
+  mirrors the existing `shared/legacy-coded-description.js` split.
+- `content-scripts/problem-description-cleanup.js`: same click that opens the panel now
+  also computes descendant/laterality suggestions from the same search response; the
+  apply path is refactored into a shared `applyCode()` core used by both same-concept
+  and descendant candidates.
+- `content-scripts/problem-description-cleanup.css`: descendant suggestions render in a
+  visually distinct (blue, not amber) section, so a clinician can tell "cosmetic
+  relabel" and "different, more specific code" apart at a glance.
+
+### "Fix description" widget: also flags a same-text match under a DIFFERENT code
+
+Second gap found in testing: "[X]Heroin addiction" (`75544000`) has NO same-concept
+alternative to offer — the modern term lives under a genuinely different concept,
+`231477003` "Heroin addiction". `sameConceptAlternatives` can never surface this by
+design (it's a different `conceptId`), so nothing was offered even though a clean fix
+exists.
+
+- New `crossConceptAlternatives` in `shared/coding-specificity.js`: finds a DIFFERENT
+  concept whose description is textually IDENTICAL to the current one once legacy
+  markers are stripped, reusing the exact same search response — zero new API calls.
+  This is the riskiest of the three categories now offered (no hierarchy proof, unlike
+  descendants — only a text match), so it renders in its own warning-orange section with
+  explicit "⚠ Different SNOMED code, same description — verify before applying" copy,
+  visually distinct from both the amber same-concept and blue descendant sections.
+  **Scope note**: this only catches an EXACT text match — it will not catch a
+  differently-worded modern replacement (e.g. "Opioid dependence" for the same old
+  code), which would need real terminology-mapping data, not a text match.
+- `shared/legacy-coded-description.js`: the outdated-description detector now also
+  treats a trailing **" NEC"** (Not Elsewhere Classified) as a legacy marker, alongside
+  the existing "[X]"/NOS handling.
+- 12 more new tests in `test-problem-description-cleanup.js` (37 new in total for this
+  release, 73 overall), including a fixture built around the real "[X]Heroin addiction"
+  example.
+
+## [v3.178.1] — 2026-07-22
+
+### "Fix description" widget: cleanup from first live test
+
+- **Button now removes itself once the fix is saved**, instead of leaving a
+  lingering "✓ Saved" chip — the corrected on-screen text is confirmation
+  enough. The panel is removed at the same time.
+- **Tightened the button's padding/line-height** — it was taller than
+  Medicus's own tightly-packed problem-list rows, stretching the whole list
+  out. Smaller font, explicit `line-height`, less padding.
+
+## [v3.176.13] — 2026-07-22
+
+> Renumbered from v3.178.0 on 2026-07-26: the 2026-07-25 merge from `main` brought in
+> main's own v3.178.0 (The Keeper rule-set update), which had been assigned the same
+> number independently. This entry keeps its original date and content; its follow-up
+> below retains its original v3.178.1 number.
+
+### New: "Fix description" for outdated SNOMED problem codes
+
+Many older problem/diagnosis entries carry a historic Read-code-migration
+display string (a `[X]`/`[D]`/`[M]`-style ICD cross-map prefix, or a trailing
+`NOS`) even though the underlying SNOMED concept has a perfectly good modern
+plain synonym. New inline widget flags these on a patient's Active Problems
+list (Clinical Summary tab) and offers a one-click fix — same code, cleaner
+description — confirmed end-to-end via a real live capture (see
+`docs/learnings-problem-description-cleanup.md`).
+
+- `content-scripts/problem-description-cleanup.js` + `.css`: detects
+  candidates via `clinical-summary/summary/{patientId}`'s
+  `problemCodeDescription` text, injects a small "Fix description" button
+  next to each flagged row (`li.item > a.item__link`, confirmed live), and on
+  click searches Medicus's own SNOMED description-search endpoint, filtered
+  to alternatives sharing the SAME `conceptId` — this is the safety rule: the
+  tool can only ever offer a different synonym of the current code, never a
+  re-code to a different clinical concept. Saves via the confirmed
+  `clinical/problem/edit-problem/{problemId}` endpoint, resending the FULL
+  edit-form prefill with only `problemCode` swapped (a full replace, not a
+  partial patch).
+- New `shared/legacy-coded-description.js`: the detection heuristic
+  (bracket-prefix/NOS-suffix) and the same-concept safety filter are split
+  out as entity-agnostic, since problems are the test bed for this feature,
+  not the only entity type intended — procedures/referrals/journal entries
+  are expected to follow, each needing its own confirmed edit-endpoint
+  capture before being wired up.
+- 36 new unit tests (`test-problem-description-cleanup.js`) covering
+  detection, marker-stripping, the same-concept safety filter, and the
+  full-payload builder (including the `recordedAtAnotherOrganisation`
+  branch, read straight from the captured `.vue` source, not guessed).
+- Not yet verified live end-to-end as a widget (the underlying API calls were
+  individually confirmed via capture, but the injected button/panel itself
+  hasn't been exercised in the real browser yet).
+
+## [v3.177.7] — 2026-07-22
+
+### Inline task/document widgets: anchor next to the actual attachment, not always the opening message
+
+On a communication-thread task with neither a "Codes & actions" card nor a
+"More actions" button, both `task-inline.js` ("Create task for this patient")
+and `document-file-inline.js` ("Save attachment as document") fell back to
+anchoring right after the "Initial Request" card — even when the real
+attachment was on a LATER reply further down the thread, which put both
+buttons under a message that had no attachment at all.
+
+- New `findAttachmentCard()` (identical copy in both files — both widgets
+  need the same anchor decision): matches a real attachment's filename
+  (`window.__msTriageAttachments`, content.js's accessor) against the page's
+  `<a>`/`<button>` elements and returns the enclosing message card. Tried
+  BEFORE the `findInitialRequestCard()` fallback — when there's no attachment,
+  or its card can't be found, behaviour is unchanged.
+- When the attachment IS on the opening message, this resolves to the same
+  card as before (no behaviour change for the common case).
+
+## [v3.177.6] — 2026-07-22
+
+### "Save attachment as document": missed attachments on later replies in a communication thread
+
+Fixes a real live-test miss: a patient photo attached to a "Reply from
+Requester" message further down a communication thread (not the opening
+message) was invisible to the "save as document" widget. Root cause: `content.js`'s
+attachment scan was scoped to the "Initial Request" card only
+(`findCardByTitle('Initial Request')`) — and confirmed live, a reply card has
+no `h2`/`h3`/`h4` heading at all, so it could never be found that way even in
+principle.
+
+- `extractInitialRequest()`'s attachment detection is now a page-wide scan
+  (new `extractAllAttachments()`) instead of being scoped to one specific
+  card — any `<a>`/`<button>` anywhere on the task page whose text/href ends
+  in a known attachment extension is picked up, deduped by filename. Verified
+  safe against false positives via a full-page link/button text dump on the
+  task that surfaced this bug: exactly one match, the real attachment: nothing
+  in Medicus's own nav/page chrome collided.
+- The "Initial Request" card is still used for the request-text snippet
+  (`ir.text`) — only the attachment scan was widened.
+
+## [v3.177.5] — 2026-07-22
+
+### "Save attachment as document": fixes from first live test of the picker
+
+- **Selection now shows in the search box.** Picking a document type (via a
+  priority chip, a search result, or the extension-based pre-select) used to
+  clear the search box back to empty, so the picker looked unselected even
+  though a type was in fact active — the box now displays the selected type's
+  name, and the results dropdown stays hidden until the clinician actually
+  starts typing again.
+- **Document date now defaults to when the triage request was received**,
+  not the date the clinician happens to action the task. `content.js` now
+  exposes the task's own "Created" date (`window.__msTaskCreatedDate`, reusing
+  the same parse already done for the "days open" chip) and
+  `document-file-inline.js` prefers it over the create-form's own
+  `recordDate` default (today).
+- **Layout: "Create task for this patient" and "Save attachment as document"
+  now sit side by side** instead of stacked, when both are present on the
+  same task — `document-file-inline.js` wraps the two widgets in a shared
+  flex row (`.ms-inline-widget-row`) the first time either is injected; each
+  widget's own body still opens full-width in its own column when expanded.
+
+## [v3.177.4] — 2026-07-20
+
+### "Save attachment as document": full SNOMED document-type picklist (priority shortlist + search)
+
+Replaces the previous 2-code-only assignment (image → "Medical photograph",
+pdf/doc → "Patient/Carer Correspondence") with the full active picklist
+behind Medicus's own "Document type" refset, plus a proper picker.
+
+- New `rules/document-types.json` — 1768 active entries imported from the
+  user's June 2026 SNOMED CT UK Clinical Extension export of the "Record
+  composition type" simple reference set (`1127551000000109`), 140 inactive
+  members excluded. Both previously hard-coded codes were found in it at the
+  expected rows, byte-identical — strong corroboration the import is correct.
+  Carries an editable `priority` array of conceptIds (empty for now) driving
+  a quick-pick shortlist — add ids there to change it, no code change needed.
+- `content-scripts/document-file-inline.js`: the extension-based guess still
+  PRE-SELECTS a default document type (least friction for the common case),
+  but the clinician can now override it via priority-shortlist chips or a
+  live search box (case-insensitive substring match over all 1768 entries,
+  capped at 40 results) before saving — nothing is filed without an explicit
+  documentType set. The full picklist is loaded once per page load from the
+  bundled JSON (a local extension resource, not a Medicus call) and cached.
+- **Ancestor/parent-concept filtering investigated and ruled out**: Medicus
+  does not store a `parentConceptIds`-style hierarchy for Document entities
+  (confirmed via the live "Document type" search endpoint's own response
+  shape, and separately via two HAR-file captures) — there is no SNOMED
+  hierarchy available to prune or group the picklist by. Recorded in
+  `docs/learnings-triage-attachment-to-document.md` §9 so this isn't
+  re-investigated without new evidence.
+- `manifest.json`: `rules/document-types.json` added to
+  `web_accessible_resources` alongside the other bundled rule files.
+- 88/88 tests passing in `test-document-file-inline.js` (34 new, covering the
+  imported data itself, the search/priority-resolution functions, and the
+  updated eligibility rule).
+
+## [v3.177.3] — 2026-07-20
+
+### Inline widgets: fixed the missing anchor point on communication-thread tasks
+
+Follow-up to v3.177.2's attachment-detection fix. That task type has neither
+a "Codes & actions" card nor a "More actions" button — the two anchors
+`task-inline.js` and `document-file-inline.js` rely on — so both widgets had
+nowhere to inject themselves there even after attachment detection was fixed.
+
+- Both files gained a further fallback: anchor after the "Initial Request"
+  card itself, matched by its EXACT heading text (not content.js's own
+  looser starts-with match, so this can never mis-anchor on an unrelated
+  section). Confirmed live: every request/communication task type seen so
+  far has this card, including a task with no attachment at all.
+- `task-inline.js` gets the same fix since it has the identical gap on this
+  task type — one root cause, one fix, applied to both consumers.
+- `docs/learnings-triage-attachment-to-document.md` §8 updated to record the
+  fix (was previously flagged as a known open gap).
+
+## [v3.177.2] — 2026-07-20
+
+### "Save attachment as document": fixed invisible widget — attachments aren't always an `<a>`
+
+Live debugging (page-console DOM/network capture) found the widget never
+appeared on a real communication-thread task with a genuine attachment. Root
+cause: that task type renders the attachment as a plain `<button>` labelled
+with the filename and no href at all — `extractInitialRequest()` only ever
+scanned `<a>` tags, so a real attachment was silently invisible to it.
+
+- `content-scripts/triage-lens/content.js`'s `extractInitialRequest()` now
+  also detects this button pattern, recording `{ href: '', filename }` for it
+  instead of dropping it.
+- `content-scripts/document-file-inline.js` accepts these as eligible (same
+  filename-extension rule as before) and resolves the real download URL
+  lazily — via the SAME `/tasks/data/{slug}/overview/{taskUuid}` fetch already
+  made for patient resolution (one fetch now serves both needs), matched by
+  filename against a live-confirmed `{id, fileName, fileSize, contentType,
+  fileURI}` attachment shape found in that response
+  (`findAttachmentsInOverview` walks the whole response tree rather than a
+  hardcoded path, so it isn't tied to one task type's JSON nesting). The
+  download itself replays the confirmed
+  `GET /communication/data/online-message/download-attachment/{id}` contract
+  — one GET, raw file bytes, no signed-URL indirection. No new eager network
+  call: the fetch already happened when the widget opened, it just also
+  returns attachment metadata now.
+- `docs/learnings-triage-attachment-to-document.md` §8 records the full
+  capture (button markup, download contract, task-overview JSON shape).
+- **Known remaining gap, not fixed here:** this same task type has neither a
+  "Codes & actions" card nor a "More actions" button — the two anchor points
+  every inline widget on this page relies on — so the widget still has
+  nowhere to inject itself there even with attachment detection fixed. Left
+  for a follow-up.
+- `test-document-file-inline.js` extended with coverage for the new
+  resolution functions and the updated eligibility rule (62/62 passing).
+
+## [v3.177.1] — 2026-07-20
+
+### "Save attachment as document" — extended to PDF/Word attachments
+
+A follow-up live capture confirmed a second real SNOMED `documentType` code —
+"Patient/Carer Correspondence" (`163181000000107`) — for non-image
+attachments, obtained by searching Medicus's own "Document type" field
+independently of the attached file (the search-select is unrelated to the
+`file` field, so this didn't need a real submitted PDF). Combined with the
+already-confirmed "Medical photograph" code, every attachment extension
+`content.js`'s `extractInitialRequest()` recognises (pdf/doc/docx and
+jpg/png/gif/tiff/heic) now has a confirmed type, so the widget's previous
+"images only" restriction is lifted — it picks the correct type automatically
+by file extension, still with no live search and no guessed codes.
+
+- `content-scripts/document-file-inline.js`: `documentTypeForFilename()`
+  replaces the old image-only eligibility check; `DOCUMENT_TYPES` holds both
+  confirmed codes.
+- `docs/learnings-triage-attachment-to-document.md` updated with the new
+  capture.
+- `test-document-file-inline.js` now covers both document types (40 tests).
+
+## [v3.176.12] — 2026-07-20
+
+> Renumbered from v3.177.0 on 2026-07-26: the 2026-07-25 merge from `main` brought in
+> main's own v3.177.0 (Triage North Star wave 1), which had been assigned the same
+> number independently. This entry keeps its original date and content; its follow-ups
+> above retain their original v3.177.1–.7 numbers.
+
+### Triage-lens: "Save attachment as document" — one-click filing for patient photos submitted via triage
+
+The suite's first write-capable feature that creates a brand-new Medicus
+record type it has never created before: a clinical **document**. Previously
+the only confirmed writes to a document were edit-existing
+(`clinical/document/edit-details`) and remove-existing
+(`clinical/document/mark-incorrect-and-hidden`) — see
+`engine/record-duplicate-parser.js`. Filing a patient-submitted triage photo
+onto the record required a clinician to manually download it and use
+Medicus's own "Add document" upload feature.
+
+- New inline widget, `content-scripts/document-file-inline.js` +
+  `document-file-inline.css`, injected into triage task-overview pages
+  alongside `task-inline.js`/`booking-inline.js` (same anchor discipline, same
+  credentialed same-origin fetch pattern). Appears only when the task has at
+  least one image attachment (jpg/png/gif/tiff/heic) — see below for why.
+- Drives Medicus's own `POST clinical/document/create` directly (a single
+  multipart request: file bytes + a JSON `formPayload` field) — confirmed via
+  a live capture (`scripts/document-create-capture.js`,
+  `docs/learnings-triage-attachment-to-document.md`), not guessed. A human
+  always presses the explicit "Save as document" button — never auto-submits.
+- **Deliberately scoped to image attachments only.** The create call's
+  `documentType` is a SNOMED-coded picklist populated by a live search-as-
+  you-type endpoint this suite has never captured — the only confirmed real
+  value is "Medical photograph" (`820241000000102`). Rather than guess the
+  search contract for other types (a wrong SNOMED code would silently miscode
+  the record), the widget stays hidden for tasks whose only attachment is a
+  PDF/Word file until a follow-up capture confirms that contract.
+- `content-scripts/triage-lens/content.js`'s `extractInitialRequest()` (see
+  v3.176.11 below) now feeds this widget via `window.__msTriageAttachments`.
+- New `test-document-file-inline.js` (28 tests) covers the pure logic:
+  attachment eligibility filtering, title defaulting, and the create-payload
+  shape against the confirmed contract.
+
+## [v3.176.11] — 2026-07-20
+
+### Triage-lens: capture attachment href/filename, not just a count (groundwork for "save as document")
+
+`extractInitialRequest()` previously only counted `<a>` tags in the Initial
+Request card matching a file-extension regex, discarding the actual href and
+filename. It now returns `{ text, attachmentCount, attachments }` where
+`attachments` is `[{ href, filename }]` per matched anchor — `attachmentCount`
+stays `attachments.length` so the existing `detail.attachments` chip is
+unaffected. The array is also exposed via `window.__msTriageAttachments` on
+every detail render, so a future widget (a one-click "save this attachment as
+a document" action, still pending a live API-discovery pass against Medicus's
+own create-document endpoint) can read it without a second, divergent DOM
+scrape. No user-visible change in this release — the chip and its label are
+unchanged.
+
+## [v3.176.10] — 2026-07-17
+
+### Duplicate-checker: fixed the "Remove 0 duplicate copies" / unresponsive-cards bug for linked-problem groups
+
+A targeted live probe (docs/learnings-vaccination-note-duplicates.md, part
+2) traced the actual root cause of a reported bug — a group's "Remove N
+duplicate copies" button reading "Remove 0" with no entry card individually
+selectable. The group in question was `kind=problem`, not `note` as first
+suspected: 6 entries, all sharing the exact same real problem-list `id`.
+
+- A `problem`-kind journal entry's `id` is the canonical problem-list
+  record's id, not a per-occurrence journal-entry id — and the same real
+  problem can legitimately be linked from more than one
+  encounter/prescription on the same day (confirmed: a real "Immunisations"
+  problem linked from 6 different encounters in one day). Those 6
+  occurrences aren't 6 candidate duplicate records, they're 6 references to
+  one real record — but `groupAndTier` was treating them as a 6-member
+  "duplicate" group. The keeper tie-breaker then picked that one shared id
+  as `keeperEntryId`, so every entry matched it and "N duplicate copies"
+  computed to `0` with nothing left to toggle.
+- `groupAndTier` now dedupes `problem`-kind members by `id` before deciding
+  whether a (date, code) bucket is even a duplicate-record candidate — a
+  bucket is only a real candidate if at least 2 *distinct* problem ids
+  appear in it. Same-record linkage is tracked in a new
+  `suppressedProblemLinkage` diagnostic (surfaced in the analysis summary
+  line) rather than silently dropped.
+- **Fixed a pre-existing test that was asserting the buggy behaviour**: the
+  linked-problems test fixture used the identical problem id across two
+  encounters and asserted the resulting group had 2 entries — that was
+  pinning the exact bug this release fixes. Corrected to assert no group
+  forms for same-record linkage, plus a new control case (two genuinely
+  distinct problem-list records sharing a code/date) confirming real
+  reimport-duplicate detection is unaffected.
+- 6 new/corrected parser tests (336/336 passing).
+
+## [v3.176.9] — 2026-07-17
+
+### Duplicate-checker: note-kind false positives from the generic GP2GP problem-review wrapper
+
+Live-reported by the clinical user: three different vaccinations given the
+same day were tiering "HIGH - identical text" and offered as one-click
+bulk-removable, when they're genuinely different clinical content. Live
+investigation (docs/learnings-vaccination-note-duplicates.md) found the
+`"{Episodicity : code=..., displayName=..., originalText=...}"` wrapper this
+matches on isn't vaccine-specific at all — it's the generic "Problem title"
+review stub GP2GP attaches to essentially every problem across a patient's
+entire history, and it collapses to the same empty string after
+`normText()` regardless of the real underlying content. A real example (Tue
+19 Jun 2007) showed three "Immunisations"-coded entries, three different
+recorders, sharing this same content-free text — and confirmed that
+`consultationTopic.title` (the one plausible disambiguating field) is also
+identical across genuinely different concurrent vaccines, ruling out an
+automatic content-based fix.
+
+- `buildGroupRecord` now caps a `note`-kind group at REVIEW (down from HIGH)
+  when its entire matched text is the content-free wrapper AND its members'
+  `recordedBy` differ — deliberately narrow: the EXACT-tier combination
+  (empty wrapper + SAME author) is left untouched, since that's a
+  live-confirmed genuine GP2GP dual-render duplicate (2026-07-08 "Perianal
+  abscess" pair). New `emptyWrapperOnly` flag on the group record.
+- `duplicate-checker.js` surfaces a warning on any group flagged this way,
+  explaining the match is on a content-free wrapper and to verify
+  independently before removing — same treatment as the existing
+  `attachmentMismatch`/`fileMatched` warnings.
+- 5 new parser tests (333/333 passing), including a regression test pinning
+  the 2026-07-08 EXACT-tier case that a broader first draft of this fix
+  accidentally broke.
+- **Known limitation, not yet fixed**: the REVIEW-tier "These are
+  equivalent — remove duplicates" button still routes into the same
+  removal-button code path as EXACT/HIGH, which has a separate, not-yet-
+  diagnosed bug (reported "Remove 0 duplicate copies", unresponsive entry
+  cards) for at least one real group. A targeted live probe for that
+  specific bug is prepared in docs/learnings-vaccination-note-duplicates.md,
+  pending results.
+
+## [v3.176.8] — 2026-07-17
+
+### Duplicate-checker: accurx URL-attachment false positives in the cross-record file-match pass
+
+Live-reported by the clinical user: accurx delivers a patient message plus
+several photo links as separate `.txt`/"Record Attachment" documents, each
+one just a `"URL: <link>"` wrapper. The previous GP system's export
+templating means these frequently share both `fileType` AND `fileSize` even
+though the actual link — and therefore the real attachment — differs, so
+`findFileMatchedDuplicates` (the opt-in cross-record file-size/type pass)
+was incorrectly clustering genuinely different photo attachments as
+duplicates.
+
+- New `accurxAttachmentUrl(code, title)` in `engine/record-duplicate-parser.js`:
+  extracts the URL from a title matching the exact reported signature (Type
+  "Record Attachment" + title starting "URL:"), case-insensitive, returns
+  `null` for anything else — deliberately narrow so no other document kind
+  is affected.
+- `findFileMatchedDuplicates` now folds the extracted URL into its bucket
+  key for entries carrying this signature: same fileType/fileSize/URL still
+  clusters as a genuine duplicate, a differing URL never does. Zero extra
+  fetch — `title`/`code` are already in memory. New
+  `accurxUrlMismatchAvoided` count returned and surfaced in the analysis
+  summary line.
+- 11 new parser tests (326/326 passing) covering the extraction function,
+  the differing-URL exclusion, the same-URL control case (still a genuine
+  duplicate), and that an unrelated non-accurx same-fileType/fileSize pair
+  is unaffected.
+
+## [v3.176.7] — 2026-07-17
+
+### Duplicate-checker: live-verified prescription/investigation-request journal field names
+
+Continuing the per-patient record-cleansing project
+(`docs/learnings-patient-journal-api.md`), prompted by an observation that
+prescriptions seem to duplicate via GP2GP reimport on some patients where
+lab results don't.
+
+- A PHI-safe field-shape probe (structure only, reuses
+  `duplicate-checker.js`'s `describeShape()` no-values convention) was run
+  live against a real patient's journal. `productName`/`dosageText`/
+  `issueQuantity` (prescription) and `investigationRequestItems`/
+  `requestedBy` (investigation-request) were all confirmed correct as
+  previously guessed.
+- **Fixed:** a prescription entry (flat and nested) has no
+  `recordedBy`/`recordedByOrganisation` field at all — `flattenJournal` was
+  reading two fields that never exist on this entry kind (harmless, always
+  `undefined` → `null`, but wrong). Now passes `null` explicitly, documented
+  as confirmed-absent rather than guessed.
+- **Fixed:** investigation-request entries (flat and nested) carry a real
+  `requestingOrganisation` field that `flattenJournal` was discarding as a
+  hardcoded `null` — now read properly, feeding `recordedByOrganisationVaries`
+  the same way note/document entries already do.
+- Live-evidence hypothesis (not yet a code change): a lab-result
+  (`investigation`) entry carries a `reportIdentifier` and per-comment
+  `createdInOriginalSystemDateTime`/`recordAuthorIsLocal` fields with no
+  prescription equivalent — a plausible mechanism for why results don't
+  reimport-duplicate while prescriptions do, consistent with the existing
+  n=1 finding that lab results carry their own ingestion-time dedup key.
+- 6 new parser tests covering the previously-untested nested prescription/
+  investigation-request branches and the `requestingOrganisation` fix
+  (315/315 passing in `test-record-duplicate-parser.js`).
+
+## [v3.176.6] — 2026-07-13
+
+### Duplicate-checker: catches a note/consultation EXACT match whose attached documents actually differ
+
+Live example: two "Seen in pain clinic" consultations, same date, both
+authored "Mr Docman PCTI", tiered EXACT with a one-click "Remove 1 duplicate
+copy" button — but each consultation had a genuinely different attached
+document, confirmed by the user, even though the attachment's title/label
+rendered identically in the journal UI (so a title-based check alone
+wouldn't have caught this).
+
+- A `note`-kind comparable entry in this tool is often not a freestanding
+  note at all — it's one heading entry inside
+  `consultationTopics[].headings[].entries[]`, and that same heading can
+  also carry a sibling `document`/`fit-note` attachment. `flattenJournal`
+  now captures any sibling attachment id(s) in the same heading onto the
+  note entry as `attachedDocumentIds` (zero-cost — the data was already
+  being walked, just discarded for the note branch before now).
+- New `hasAttachedDocumentMismatch(group, fileTypeByEntryId,
+  fileSizeByEntryId)` in `engine/record-duplicate-parser.js`, alongside the
+  existing `hasQuestionnaireTemplateMismatch`/`hasPrescriptionTimingMismatch`
+  cross-checks: flags a `note`-kind group when >=2 members carry a KNOWN,
+  differing (fileType, fileSize) signature for their attached document(s) —
+  same composite-key shape and "never guess off incomplete data" rule
+  `splitDocumentGroupsByFileType` already uses for top-level documents, just
+  keyed by the attached document's id instead of the note's own id.
+- `duplicate-checker.js`'s `applyOnDemandCrossChecks` now fetches attached-
+  document previews for `note`-kind candidate groups that carry an
+  attachment (sharing the same preview cache the `document`-kind branch
+  already populates — no duplicate fetch if a document happens to be both a
+  top-level entry and an attachment), and downgrades a mismatched group's
+  tier to REVIEW with a new `attachmentMismatch` flag — REVIEW already
+  routes to the manual-review flow instead of the one-click bulk-remove
+  control, so this actually blocks the unsafe removal rather than just
+  relabelling it. New warning line on the group card, and a
+  `noteAttachmentMismatchTotal` summary count.
+- Downgrade, not split: unlike `splitDocumentGroupsByFileType`, a mismatched
+  note group stays together as one candidate (both consultations visible
+  side-by-side) rather than one member silently vanishing from the list.
+- Every note-kind card (in `reviewEntriesHtml`, the side-by-side compare view
+  every note group already uses) now shows a "Download attached document ↗"
+  link per attachment, mirroring the existing "Download original ↗" link
+  already offered on document-kind field comparison — the same closest-thing-
+  to-"click to compare" pattern, now available for a note's attachment too,
+  not just top-level documents. Zero extra fetch: the previews were already
+  pulled by the mismatch check above regardless of its verdict.
+- `fileId` (also present on the document preview payload) was considered and
+  rejected as the disambiguator — a genuine reimport-duplicate legitimately
+  gets a new `fileId` for the same bytes, so it proves nothing about
+  content. fileType+fileSize is the established signal already proven for
+  top-level document matching.
+
+9 new parser tests (310/310 passing).
+
+## [v3.176.5] — 2026-07-13
+
+### Duplicate-checker: cross-document file-match check no longer replays already-removed entries, and is always offered
+
+- **Fixed:** `markEntryRemoved` only ever patched the DOM in place (deliberate,
+  per its own header comment, to avoid a slow full re-analysis after every
+  removal) — it never touched `out.__analysis.entries`/`groups`. Running the
+  cross-record file-match second pass (`runFileMatchSecondPass`) straight off
+  that in-memory analysis after removing some first-pass duplicates meant
+  already-removed documents were still present in `analysis.entries`, so they
+  could resurface as "duplicates" a second time with undefined behaviour if
+  acted on again. The second pass is now always launched via a new
+  `runFreshFileMatchSecondPass`, which forces a genuine live re-fetch/re-analyse
+  of the journal (the same fetch "Re-analyse" performs) before ever running the
+  file-match check, guaranteeing it only ever sees what's actually still in the
+  record.
+- **Changed:** the "Run full cross-document file-match check…" banner was
+  previously gated on `findSuspiciousDocuments` flagging something (a raw
+  filename/GUID title or a same-minute id cluster). Per user feedback that
+  this was too narrow, it's now offered whenever the patient has any document
+  entries at all — the suspicious-document count, when present, is still
+  shown as extra context.
+
+## [v3.178.0] — 2026-07-25
+
+### The Keeper — 2026-07-25 rule-set update (CSO review required before merge)
+
+Automated horizon scan against MHRA DSUs, NICE NG12, QOF PRN02356, NHSE RSV/pneumococcal
+letters, BNF, BSR, NICE TA877, and ACBcalc. All verified by VERIFIER-A and VERIFIER-B subagents.
+Full sourced change-proposal report at `/tmp/the-keeper/the-keeper-report.md`.
+
+#### Medicines monitoring (`rules/drug-rules.json`)
+
+- **Sodium valproate (RED):** Added 4 new UK brands to `drug.match` — Belvo, Dyzantil, Epival,
+  Syonell — per MHRA Drug Safety Update February 2025. Without these, patients dispensed a new
+  brand receive no monitoring chip (silent safety gap). Source: MHRA DSU Feb 2025.
+- **Amiodarone (AMBER / CSO FLAG):** Added U&E/Creatinine as a 6-monthly monitoring test.
+  BNF and SmPC both specify renal monitoring; interval varies (BNF annual, SmPC 6-monthly) — change
+  adopts 6-monthly as the safer default. **CSO to confirm preferred interval before merge.**
+  Source: BNF / MHRA amiodarone SmPC.
+- **GLP-1 (Green):** Added note that lixisenatide (Lyxumia, Sanofi) has been withdrawn from the
+  UK market; terms retained in match[] for legacy records.
+
+#### QOF (`rules/qof-rules.json`)
+
+- **DEM004 CORRECTION (RED):** Previous Keeper run (2026-07-11) encoded DEM004 with wrong values
+  (30 points, 60–90%) because the primary PRN02356 PDF returned 403. Correct QOF 2026/27 values
+  per PRN02356: **14 points, 35–70% payment range**. Source: NHS England PRN02356.
+- **OB register (AMBER):** Re-enabled (was `enabled:false`); `ageMin:18` added per QOF 2026/27
+  business rules. Source: NHS England PRN02356.
+- **LD register (Green):** Notes corrected — annual health check is a DES (£140/patient, CQRS),
+  not a core QOF indicator.
+
+#### Vaccines (`rules/vaccine-rules.json`)
+
+- **RSV 65–74 expansion (AMBER):** Notes updated confirming NHSE operational letter (2 July 2026)
+  — respiratory disease + immunosuppression groups eligible from 1 Sept 2026 (Abrysvo® only).
+  Engine change pending (conditional-age eligibility not yet supported); manual assessment required.
+- **mRESVIA (AMBER):** Added `mresvia` to RSV `statusTerms.given` — MHRA-licensed Feb 2025 for
+  private use; prevents false "unvaccinated" flag for privately vaccinated patients.
+- **PPV23 homelessness cohort (AMBER):** Added eligibility clause for people experiencing
+  homelessness (rough sleeper / no fixed abode / hostel resident, 16+) effective 1 October 2026.
+  Source: GOV.UK letter June 2026; JCVI June 2024 advice.
+- **RSV care home label (Green):** Corrected to "Care-home resident (adult, all ages)" — NHSE
+  policy covers all adult residents, no minimum age.
+
+#### Prescribing-safety alerts (`rules/alert-library.json`) — version 1.5
+
+- **NEW RED alert — domperidone + phaeochromocytoma/paraganglioma:** Absolute contraindication per
+  MHRA DSU July 2026; risk of hypertensive crisis. `alert-domperidone-phaeo`.
+- **NEW RED alert — ACEi + history of angioedema:** Absolute contraindication per MHRA DSU 17 June
+  2026. Full UK ACEi drug set with brands; excludes hereditary angioedema. `alert-acei-angioedema`.
+- **NEW AMBER alert — antipsychotic + dementia:** NICE NG97 / MHRA 2009 / STOPP v3 B11.
+  Ships AMBER with prominent LBD escalation note (engine cannot auto-escalate on secondary problem
+  coding — clinician to treat as RED when Lewy body dementia coded). `alert-antipsychotic-dementia`.
+- **GLP-1 alert notes (AMBER):** Added NAION warning from MHRA DSU 5 Feb 2026 (semaglutide and
+  sudden painless vision loss).
+- **HELD — digoxin + CKD alert:** Citation errors (STOPP B5 vs correct E1) and CKD stage 3
+  RED threshold over-fires. Not shipped — CSO review required.
+
+#### Medication review (`engine/acb-scores.js`, `engine/stopp-start.js`, `visualiser-core.js`)
+
+- **ACB_TABLE (AMBER):** Added alimemazine (score 3), trimeprazine (score 3), brompheniramine
+  (score 3) to first-gen AH section. ACB total was silently under-counted for patients on these.
+  Source: ACBcalc / Boustani scale.
+- **STOPP-START (AMBER):** Added `celebrex` to NSAID_TERMS (brand not substring of celecoxib);
+  `torasemide` to LOOP_DIURETIC_TERMS (BNF 2.2.2 loop diuretic, brand Torem); `brompheniramine`
+  to FIRSTGEN_AH_TERMS. Three silent STOPP misses resolved.
+- **HIGH_RISK_DRUGS (AMBER):** Added 4 new visualiser monitoring entries:
+  - leflunomide (84d, FBC/LFT/U&E) — BNF/BSR
+  - carbamazepine (182d, FBC/LFT/U&E/sodium/drug level) — BNF
+  - sodium valproate (365d, FBC/LFT/U&E, with all MHRA Feb 2025 brands) — BNF/MHRA PPP
+  - finerenone (120d, U&E/potassium/eGFR) — NICE TA877
+
+#### Reception pathways (`rules/reception-pathways.json`) — version 1.5
+
+- **rf-morning-vomit (999):** Added to headache pathway — progressive morning headache waking from
+  sleep with vomiting = raised ICP. Source: NICE CKS Headache assessment.
+- **rf-nasal-unilateral (duty):** Added to sinusitis pathway — unilateral nasal symptoms = NG12
+  ENT 2WW sinonasal cancer referral.
+- **rf-skin-lesion (duty):** Added to rash pathway — new or changing mole = NG12 melanoma 2WW.
+- **rf-haematuria (duty):** Added to general pathway — visible haematuria 45+ without UTI = NG12
+  urology 2WW.
+- **rf-hoarseness (duty):** Added to general pathway — persistent hoarseness ≥3 weeks = NG12 ENT
+  2WW.
+
+#### Test suite
+
+All 16 test files pass. Updated: `test-drug-brand-coverage.js`, `test-qof-indicator-filters.js`,
+`test-acb-scores.js`, `test-stopp-start.js`, `test-visualiser-pincer.js`,
+`test-reception-pathways.js`.
+
+#### Killed candidates
+
+- **qof-002 (AF006 upper):** KILLED — current encoding of 95% is correct for QOF 2026/27 (raised
+  from 90%). Scanner proposal to revert to 90% would have introduced an error.
+- **qof-004/005 (OB003/OB004):** KILLED — wrong descriptions; correct OB004 params noted for next
+  Keeper run.
+
+## [v3.177.0] — 2026-07-22
+
+### Triage North Star — wave 1: the record next to the request
+
+First implementation wave of `docs/plans/TRIAGE-NORTHSTAR-2026-07-22.md`
+(the market-informed successor to TRIAGE-LENS, also added this release):
+the top clinician-impact items from two independent Practice-board review
+panels. Hazard log v3.15 adds H-045–H-048, all **pending CSO review**.
+Defaults config 24→25.
+
+- **Urgent breach-risk strip (A2, H-045).** New `#slaBreachStrip` global
+  panel strip: counts open requests Medicus itself flags urgent and alerts
+  on the oldest one's age — amber ≥2h, red ≥4h (configurable,
+  `suite.requestMonitor.urgentAgeAmberHours/RedHours`, included in suite
+  backups). Reads the Request Monitor's cached bucket state — no new API
+  polling. Fail-visible: items with no readable priority field render
+  "urgency unknown — check queue", never a silent zero. Additive-only, no
+  all-clear state, hidden when nothing is at risk. Pure computation in
+  `shared/sla-breach-core.js` (47-assertion test).
+- **Pending-abnormal-result cross-link chips (B2, H-046).** When this tab
+  session graded a red/amber investigation report for a patient, that
+  patient's rows on *request* queues now chip "⚠ pending urgent result ·
+  graded 12m ago" / "pending abnormal result · 12m" (top analyte in the
+  tooltip when cached) — the request about tiredness now carries the unfiled
+  K⁺ 6.2 with it. Patient-keyed index (`shared/pending-result-index.js`,
+  39-assertion test) is pointer-only: entries die with their source
+  `_queueResultCache` severity on every teardown path, and placement rides
+  the durable row map so the sort canary suppresses rather than misplaces.
+  Escalate-only; every chip carries its data age; request queues only.
+- **Repeat-contact chips (B3, H-047).** The v3.151.0 deferral unblocked by
+  the new shared task→patient resolve substrate (one resolve per task,
+  shared by the monitoring / patient-flag / pending passes under the
+  existing per-pass cap). Tier 2: "3rd contact in 14d" from a rolling
+  28-day local ledger — patientUuid + date only, no names, no free text,
+  bounded and pruned, deliberately never backed up. Tier 1: "2 open
+  requests · this patient" from identities resolved this session. Amber,
+  factual-observational wording, no "1st contact" state ever.
+- **Carry-over chips (B5, H-048).** "carried over 4d" from a task-keyed
+  first-seen ledger — catches the request bounced between holders whose
+  displayed date reset. Complementary by construction: fires only when the
+  extension's first-seen predates the row's displayed date, and defers to
+  the taskAge red chip when the row's own date already tells the stronger
+  story. Reuses `thresholds.taskAgeAmber/Red` (3/7 days).
+- **Verified, not rebuilt:** E-1.1 fail-visible "not assessed" states were
+  already shipped (v3.148.0, H-005 controls) and monitoring chips already
+  run on request queues (the pipeline is queue-agnostic; the global
+  default-off toggle is the only gate) — both plan claims corrected in the
+  plan's status note rather than re-implemented.
+- **Plan additions from the same-day review panels:** C4 next-green-day
+  disposition assist (capacity-preset-linked slot lookahead + prepare-only
+  reception snippet, v2 one-click reception task via the audited
+  `createGeneralTask` path) and C5 curated resource actions pass
+  (twice-a-year lookups on existing chip popovers, leaflet/knowledge action
+  kinds, CI link checking); role-based chip visibility recorded as an
+  unresolved governance item gating B1.
+
+## [v3.176.4] — 2026-07-19
+
+### Audit final tranche — the four deferred refactors + CSO sign-off
+
+Closes out the 2026-07-18 whole-suite audit. Hazard log v3.14 records the
+CSO's sign-off of the audit remediation and promotes the two open questions
+to numbered hazards (H-043 inline booking/task wrong-patient write, H-044
+vaccine false-GIVEN classes), both mitigated in v3.176.1.
+
+- **Queue sort canary (H6).** The rowIndex→taskUuid maps that place every
+  fetch-driven queue chip (result / monitoring / patient-flag) are built from
+  the bridge's task-list payload — a client-side AG-Grid sort reorders rows
+  without a new fetch, which would land chips on the WRONG patient's row.
+  The canary watches the grid's sorted-header state and drops both maps the
+  moment it changes: a server-side sort re-fetches and rebuilds them
+  correctly within a tick; a client-side sort leaves the chips safely absent
+  (no chip is safe; a wrong-row chip is not). The bridge re-baselines the
+  canary on every fresh payload so the fetch-first race cannot eat correct
+  maps. 24 regression tests (test-queue-sort-canary.js).
+- **Event-ledger day-sharding (H12).** `record()` used to re-read and
+  re-write the entire ≤5000-event array on every append — a
+  multi-hundred-KB storage churn per chip render on a busy day. The ledger
+  is now day-sharded (`ledger.events.<date>` + a `ledger.shardIndex`
+  directory): an append touches only today's shard plus the small index.
+  Public API, caps (5000 events / 90 days), dedupe and CSV export are
+  unchanged; the legacy monolithic key migrates into shards on first use
+  (merging, never clobbering, and retrying after a failed attempt). The
+  never-backed-up doctrine carries over to all ledger keys.
+- **Shared my-appointments fetcher (M10).** The panel WR strip, Sentinel
+  module and Today module each polled
+  `/scheduling/data/homepage/my-appointments` independently — two or three
+  identical authenticated GETs per poll window with those tabs open. A
+  shared 15s-TTL memo (`shared/appointments-feed.js`) with in-flight
+  coalescing now serves all three; each keeps its own mapping/rendering and
+  diag label. 30 tests (test-appointments-feed.js).
+- **Dead Sentinel sidebar removed (M5).** ~760 lines of unreachable
+  floating-sidebar UI (mount/render*/chipHtml/nav-watcher and friends)
+  deleted from `content-scripts/sentinel.js` (1594 → 833 lines); the file is
+  now the data pipeline + snapshot bridge only, which is all suite mode ever
+  used. Config keys owned by the old UI are kept for stored-config shape
+  compatibility. The deleted code lives in git history (pre-v3.176.4).
+
+## [v3.176.3] — 2026-07-19
+
+### Audit close-out: attestation preservation, hazard-log sync, vendored font
+
+- **Restores no longer wipe local attestations** (audit M18): reception's
+  `disclaimerAcceptedAt` and knowledge/lab-filing's `noticeAcknowledgedAt`
+  are preserved across an import (incoming values still never written) —
+  previously a restore re-locked features the local admin had accepted.
+- **Hazard log v3.13** incremental sync documenting the full audit
+  remediation (v3.176.1–.2), pending CSO review — including the open
+  question of numbered hazards for the booking write race and vaccine
+  false-GIVEN classes.
+- **Panel font vendored** (audit M16): JetBrains Mono v24 latin variable
+  woff2 ships in `vendor/fonts/` (OFL-1.1, SHA-256-catalogued in
+  vendor-versions.json; verify-vendor now walks subdirectories) — the
+  runtime Google Fonts `@import` is gone, and the extension-pages CSP is
+  tightened with `style-src 'self' 'unsafe-inline'; font-src 'self'` so
+  remote styles/fonts now fail closed.
+
+**Remaining from the audit, deliberately future work** (each needs its own
+reviewed PR): event-ledger day-sharding (H12), dead Sentinel sidebar removal
+(M5), queue rowIndex fingerprint canary (H6), shared my-appointments fetcher
+(M10).
+
+## [v3.176.2] — 2026-07-18
+
+### Audit remediation, second tranche — engine integrity + day-scale efficiency
+
+Completes the small-to-medium remainder of the 2026-07-18 audit (Milestones
+2–3). All fixes verified by the 327-test suite.
+
+**Engine / data integrity:**
+
+- eval-cache input hash now folds in `observationHistory` and `allergies`
+  digests — a backfiled result or new same-day journal point no longer serves
+  stale trend/event-count chips until midnight (M19); the ruleset signature
+  is memoised per rules-array identity (was a deep stringify of every rule on
+  every render tick).
+- `mergeRules` only merges the ALLOWED override fields — an imported org
+  ruleset can no longer silently rewrite safety-critical fields (e.g.
+  `drug.match`) that the validator claimed were "ignored" (M20).
+- Numeric parsing unified: "1,234" no longer parses as 1.234 (thousands
+  separators recognised), comma-decimals limited to 1–2 trailing digits, and
+  the engine's `parseNumeric` now agrees with the normaliser (M21).
+- `evaluatePatient` accepts and propagates `pastProblems`; the HRT
+  hysterectomy context (progestogen-cover check) sees ended problems for the
+  first time — wired through all three sentinel call sites (M22).
+- `triage-io` empty-config early-return no longer drops the routineRx
+  restore; backups are stamped with the REAL manifest version (was a
+  hard-coded "2.5.0"); backup-coverage guard extended with the four missing
+  key prefixes — immediately catching (and allowlisting, per the documented
+  machine-local decision) `labfiling.suppress` (M18).
+
+**Content scripts:**
+
+- pusher-relay retries when `$pusher` attaches late instead of giving up for
+  the tab's lifetime (M3); referrals-discovery now gates per-event, so it
+  works under SPA navigation instead of only on a hard reload (M4).
+- routine-rx macro aborts every waitFor step (and the final commit) the
+  instant the SPA path changes — no step can drive a different task's
+  controls (M7).
+- api-discovery journal capture stores UUID-substituted templates only,
+  capped at 50, in one batched write; the grow-forever raw-URL key is
+  removed (M6). Stale row-id comment corrected (documents the durable-map
+  design, not the v3.69.0 bug it replaced).
+
+**Panel / day-scale efficiency:**
+
+- Request-Monitor single-poller (H10): the strip renders from the service
+  worker's persisted state when fresh (≤2 poll periods) and only falls back
+  to a direct poll when the SW state is stale — halves RM network traffic
+  and removes the racing dual state writes.
+- `submissions.ledger` writes are dirty-checked (five 15–60s pollers were
+  rewriting byte-identical KB every tick) (M9).
+- Sentinel (10s) and Trends (15s) module polls are visibility-gated — each
+  tick carried executeScript + a full observationHistory IPC payload (M13).
+- WR strip and Follow-ups list gain changed-guards (identical innerHTML no
+  longer rebuilt every poll, preserving hover state); roll-up "Hide" works
+  while the always-expanded preference is on; pa-strip labels "OTHER TAB"
+  when its fallback picked a background Medicus tab (M11); "all four strips"
+  comment drift fixed.
+
+**Deferred to a dedicated follow-up PR (larger blast radius):** event-ledger
+day-sharding (H12), dead Sentinel sidebar removal (M5), queue rowIndex
+fingerprint canary (H6), shared my-appointments fetcher (M10), panel font
+vendoring + CSP tightening (M16), and the restore attestation-preservation
+question (M18, needs a design decision).
+
+## [v3.176.1] — 2026-07-18
+
+### Audit remediation — whole-suite bug bash fixes (Milestones 0–2)
+
+Fixes from the 2026-07-18 whole-suite audit (5 parallel specialist reviews;
+every Critical/High verified against source, clinical-logic bugs reproduced
+under Node before fixing). Failing-first regression tests were written for
+each correctness fix.
+
+**Critical:**
+
+- **C1 — wrong-patient booking/task-creation race closed.** `booking-inline`
+  and `task-inline` now pin their per-task state instance across every await
+  (a resolution still in flight when the SPA navigates is discarded, never
+  written into the next task's state) and HARD re-verify task→patient at
+  commit time before creating an appointment/task — the same click-time
+  re-check lab filing already used. An orphaned slot reservation made during
+  a navigation is released, not attached.
+- **C2 — false "vaccination GIVEN" chips.** Every vaccine rule's `declined`
+  list now covers refused/contraindicated/not given/not indicated phrasings
+  (covid lacked even "not given"), and an UNDATED "given" record no longer
+  satisfies a seasonal window (fail-closed; one-off vaccines still accept
+  undated records — their window is all-time). New
+  `test-vaccine-status-terms.js` (28 assertions, red-first).
+- **C3 — Record tab cleanup never ran.** `record.js` init now returns its
+  cleanup (the loader only honours the RETURNED function); every visit had
+  permanently leaked 4 listeners, each firing a background full-record fetch
+  on every tab switch. New `test-module-lifecycle.js` statically enforces the
+  init-returns-cleanup contract for all 17 modules.
+
+**High:**
+
+- **H1** — "Non-smoker" no longer displays as "Current smoker": new 'non'
+  bucket (deliberately not 'never' — SNOMED Non-smoker leaves ex-vs-never
+  unspecified); "Passive smoker" now reads unclear, never current.
+- **H2** — nystatin/sandostatin/cilastatin/pentostatin excluded from the four
+  QOF lipid-lowering `"statin"` matches (false MET off Nystatin).
+- **H3** — problem-negation is now clause-bounded with a 30-char reach:
+  "History of MI; heart failure" no longer kills a heart-failure-gated alert;
+  "No/Query/History of heart failure" still negate.
+- **H4** — `findLatestObservation` gains exclude-term support;
+  alert-hyperkalaemia excludes urine/faecal/etc. specimens (a newer urine
+  potassium fired a red serum alert). New `test-matching-false-signals.js`
+  (16 assertions) covers H2–H4.
+- **H5** — journal-fetch failures now THROW instead of returning [] — the
+  panel's journalAugmentFailed warning was unreachable dead wiring, so a
+  500/timeout silently degraded journal-coded QOF indicators to a false
+  all-clear no_data.
+- **H7** — the detail verdict banner's attempted-set is cleared on leaving
+  the detail page: a task's red "N urgent" banner could previously never
+  recompute after its 5-min cache expired, for the whole session.
+- **H8** — Condor's four delegated click handlers (and Today's card handler)
+  are named and removed in cleanup — they stacked one copy per visit (N
+  visits → one click opened N report tabs).
+- **H9** — module switches are now SERIALISED in the loader (at most one init
+  in flight; a superseded init's cleanup can no longer tear down the live
+  instance's timers — the "Sentinel frozen on the last patient's chips"
+  race), and an init that throws part-way gets a best-effort module cleanup.
+- **H11** — queue result-chip cache TTL 5→30 min with a real invalidation
+  signal (cached severity dropped the moment a row's priorityDisplay changes
+  on the bridge) — removes ~19k/day redundant overview GETs on long queues.
+
+**Medium/low quick wins:** own-mutation filter recognises `.ch-q-pa` (each
+flag-chip injection triggered a full queue refresh cycle); queue/OIR caches
+bounded (ts-less bridge entries now prunable via createdAt; FIFO caps on the
+outstanding-investigation caches that retained every patient's full history
+all day); `event-ledger.js` no longer double-loaded by the manifest (+
+re-entry guard); pa-strip poll visibility-gated, demoted to a 60s backstop,
+and its store cached via onChanged; quote-safe escaping in `escStrip` and the
+condor/tabs-section/setup/module-loader esc helpers (staff-typed free text in
+title attributes could break out of the attribute); `alert-library.json`
+`composite-1` template now ships disabled (placeholder ruleIds silently never
+fired).
+
+Full audit (findings, strategy, remaining Milestone 2–3 tasks) delivered as
+a separate document; hazard-log entries for C1/C2 pending CSO review.
+
+## [v3.176.0] — 2026-07-18
+
+### Patient Alerts everywhere it matters: on-page banner, queue chips, attribution
+
+Three follow-ups to v3.175.0's Patient Alerts, extending the same store
+(`patientAlerts.byPatient`) to the surfaces where flags earn their keep. All
+three are read-only over the store; the Pt Alerts tab remains the only writer.
+
+- **On-page flag banner** (`content-scripts/patient-alerts-banner.js` + CSS):
+  the patient's flags now render as a slim red/amber banner PREPENDED inside
+  Medicus's own patient header — visible to anyone who opens the record,
+  side panel open or not. Identity is re-resolved from the live page on every
+  render (URL patient UUID first, on-screen NHS number as lookup fallback; a
+  name never matches); no identity or no flags → banner removed, never stale.
+  Survives the SPA's re-renders via the shared rAF observer hub + prepend
+  rule; self-contained CSS (no token dependency to go missing).
+- **Queue flag chips** (`.ch-q-pa`, triage-lens content script): flags appear
+  on task-queue rows — "⚑ Interpreter required +1" — so the flag is seen
+  BEFORE the task is opened or the patient phoned. Task→patient resolution
+  reuses the TTL-cached `resolveTaskToPatient`; chips follow all the queue
+  chip rules (prepend, durable rowIndex→taskUuid re-injection on every
+  refresh, de-dupe, hud.css token-scope registration). Matching is by
+  resolved patient UUID only. Chip colour: red if any red flag, else amber.
+  A store edit in the panel updates the queue on the next churn.
+- **Attribution + audit trail** (H-042): every flag now records
+  `createdBy`/`updatedBy` (from the practice letterhead's clinician name;
+  null when unset — never guessed). Edits preserve the original author and
+  date as immutable provenance; the Pt Alerts chip tooltips show
+  "Added <date> by <name> — Updated <date> by <name>". Every add/edit/remove
+  (including whole-patient removal, one event per flag) is recorded in the
+  machine-local Event Ledger under new source `patient-alerts` (actions
+  `flag-added`/`flag-edited`/`flag-removed`) — patient referenced by UUID
+  only, label carries the preset id + severity, never the free-typed text.
+- New `shared/patient-alerts-lookup.js` (classic, dual-mode) provides the
+  read-side lookup to both content-script surfaces;
+  `test-patient-alerts-lookup.js` asserts parity with the panel's ES core on
+  shared fixtures so the two matching implementations cannot drift (27
+  assertions). Core attribution tests added (56 total).
+
+## [v3.175.0] — 2026-07-18
+
+### Patient Alerts — per-patient customisable flags (user-requested)
+
+Requested by a practice user: per-patient alerts (interpreter required,
+medication-seeking behaviour, safeguarding, …) that load with the patient in
+Medicus, fully customisable, persisted locally and shareable practice-wide.
+This is the suite's **first deliberately persisted per-patient store**
+(`patientAlerts.byPatient`, keyed by Medicus patient UUID with NHS-number
+display fallback), so every render path resolves identity from the live
+Sentinel snapshot at render time — a navigation can never leave a previous
+patient's flags on screen, and a bare name is never a match key.
+
+- **New "Pt Alerts" tab** (panel + pop-out): add/edit/remove alerts for the
+  patient currently open (auto-followed via the Sentinel snapshot bridge),
+  search every flagged patient, and edit the quick-add preset palette
+  (`patientAlerts.types`, seeded with interpreter/safeguarding/behaviour/carer
+  defaults — add anything, three severities: RED / AMBER / INFO).
+- **Global patient-alert strip** (`#paStrip`, panel-only like the other
+  strips): the flags appear the moment the flagged patient's record loads,
+  whatever tab the panel is on. Red band if any red alert, else amber.
+  Deliberately NOT folded into the demand roll-up — a safeguarding flag must
+  not collapse into a demand summary. Absence of the strip means "no flags
+  recorded or patient not identified", never a verified all-clear.
+- **Monitoring banner chips**: the same flags render read-only inside the
+  Sentinel "Monitoring for" patient card, beside the clinical context.
+- **Backup + practice-wide sharing**: new `shared/io/patient-alerts-io.js`,
+  scope `patientAlerts` in the suite envelope, Options export/import card.
+  Import is a MERGE (union by patient + alert id; incoming wins on the same
+  id) so a colleague's shared file can never silently delete local alerts.
+  The envelope preview and the Options card both warn loudly that this export
+  contains PATIENT-IDENTIFIABLE DATA. An uncustomised palette exports as
+  null so receiving installs keep tracking shipped defaults.
+- Not written to the clinical record (footer says so in-module); wording
+  guidance surfaced in-UI: flags are visible to all practice users and
+  disclosable to the patient.
+- Tests: `test-patient-alerts-core.js` (50 assertions — identity, lookup
+  fallback, pure transforms, merge), `test-patient-alerts-io.js` (21 —
+  round-trip, merge-not-delete, validation throws, prototype-pollution
+  defence).
+
+## [v3.174.0] — 2026-07-16
+
+### Smoking-status flag in the Sentinel patient banner (user-requested, panel-placed)
+
+Requested by a real GP user ("can we get a smoking status flag?"); placement,
+form and content settled by a scoped Practice-panel run
+(docs/appraisal/PRACTICE-smoking-flag-2026-07-16.md — synthetic panel,
+labelled as such). Before this, smoking status surfaced ONLY as QOF SMOK002
+recording-currency cards: the actual value sat in small caption text three
+screens down, tripled for multimorbid patients, and the absent state was a
+quiet grey "NO DATA" every persona misread.
+
+- **One authoritative line in the "Monitoring for" patient card** (panel +
+  pop-out): `Smoking: Ex-smoker · Nov 2025 (8 mo ago)`. Neutral colour in ALL
+  states — the fact is context, not an alert; red/amber stay reserved for
+  needs-action signals. The word carries the state (colourblind-safe); hard
+  single-line ellipsis at 420px.
+- **Honest absence**: `Smoking: no entry in the last 13 months — check
+  record` — bounded to the extension's real data window (the ~400-day journal
+  augment), never "not recorded" (which reads as never-in-her-life) and never
+  "NO DATA". Tooltip explicitly rejects that misread.
+- **Conservative derivation** (`shared/smoking-status.js`, dual-mode):
+  current/ex/never only on unambiguous terms; "smoking cessation advice",
+  "nicotine dependence", bare "tobacco use" render as "unclear — see record"
+  with the verbatim coded term — never a confident guess. Most-recent entry
+  wins the headline; disagreeing entries append a visible "multiple entries"
+  marker. Verbatim source term + exact date + window caveat in the tooltip.
+- Derived content-script-side from the SAME observations the chips are
+  evaluated on (`snapshot.smoking`), so line and chips can never disagree.
+- Hazard log **H-041** (stale/miscoded/out-of-window over-trust) with controls
+  as above; **pending CSO review of the bucketing term lists**.
+- Tests: `test-smoking-status.js` (44 assertions). QOF SMOK002 cards
+  unchanged. Panel follow-ups recorded in the appraisal doc (SMOK002
+  triplication, Brief no-data inversion, Record/SMR echoes).
+
+## [v3.173.2] — 2026-07-14
+
+### Fix: post-merge-train slowness + frozen Capacity refresh (four coordinated fixes)
+
+Root-caused by four parallel investigations against the v3.160.2 baseline after
+user reports of Sentinel loading slowly, slots not auto-refreshing, the
+routine-rx button being very slow, and queue chips disappearing.
+
+- **Capacity tab frozen ("slots no longer auto refresh")** — the
+  `slots:refresh` runtime→DOM relay in `side-panel/panel.js` and
+  `pop-out/pop-out.js` was gated on `activeModule === 'slots'`, but the
+  Capacity tab listens for the same `suite:slots:refresh` DOM event as its
+  ONLY live-update path — so Capacity never received a single refresh while
+  it was the active tab. Now dispatched unconditionally (module `cleanup()`
+  removes the outgoing module's listener, so it cannot double-fire). This
+  defect pre-dates the merge train; the train's capacity-surface changes put
+  fresh eyes on it.
+- **`content-scripts/api-discovery.js` captured far beyond its stated scope**
+  (a per-page cost on every Medicus page, v3.152.1+): its header scopes it to
+  the patient-listing page and journal tab, but the listing capture ran on
+  EVERY page whose API calls contain `/patient/` — including every care-record
+  page, where the extension's own per-patient fetches (patient-banner,
+  medication-regimen, problems…) each triggered storage round-trips and grew
+  `suite.discoveredAllPatientUrls` unbounded (one entry per patient per
+  endpoint) on every Sentinel boot. Capture is now gated to the
+  patient-listing route, read live per-event (SPA-safe, same pattern as the
+  journal gate). The journal capture is unchanged.
+- **`engine/data-fetcher.js` read `txn.integrationMode` from storage before
+  every patient fetch** (v3.166.0+) — a storage round-trip serialized ahead of
+  `fetchLive()` on every boot and re-eval, even in the default session mode.
+  The mode is now cached module-level; the cache is only trusted when a
+  `chrome.storage.onChanged` listener could be attached to invalidate it
+  (Node tests and contexts without `onChanged` keep per-call reads).
+- **Routine-rx button: leading-token search miss burned a dead 6s**
+  (v3.160.1+): the step-3 query ladder gave every query the full 6s option
+  wait, so when the safe leading token missed, the user sat through 6s of
+  nothing before the full-name query succeeded. Non-final queries now get a
+  1.5s budget; only the final query keeps the full 6s (worst case ~8s, down
+  from ~13.5s; the happy path is unchanged). Pinned in
+  `test-routine-rx-macro.js` (per-query budget assertions).
+
+**Queue chips:** no code defect found — the entire injection chain is
+byte-identical to v3.160.2 and all pinned regression tests pass. All three
+chip families vanishing together is the signature of the content script not
+executing at all, most consistent with orphaned content scripts after the
+extension updated (Chrome does not re-inject into already-open tabs).
+**Reload the Medicus tab after updating the extension.** If chips are still
+missing after a tab reload: `localStorage.setItem('ch-debug','1')` + reload
+and check for `[ClinHUD]` logs per CLAUDE.md's capture-first procedure.
+
+## [v3.173.1] — 2026-07-14
+
+### Fix: restore #208's manifest entries dropped in the PR #209 merge
+
+The PR #209 merge resolved its `manifest.json` conflict by taking the branch's
+copy wholesale, silently dropping three entries PR #208 (v3.166.0) had added:
+
+- `shared/shadow-compare.js`, `shared/event-ledger.js` and
+  `shared/txn-shadow-summary.js` restored to the sentinel content-script block
+  (in #208's original order, before `content-scripts/sentinel.js`) — without
+  them the transactional shadow-comparison path was silently absent
+  (`sentinel.js` null-guards `window.TxnShadowSummary`, so it degraded rather
+  than crashed).
+- `https://*.supabase.co/*` restored to `host_permissions`.
+
+`shared/event-ledger.js` also loads in the triage-lens block; double-loading is
+safe (the script reassigns the same `window.EventLedger` API).
+
+First of a set of post-merge-train regression fixes; further fixes on this
+branch address the reported Sentinel slowness, slots auto-refresh and queue-chip
+regressions as root causes are confirmed.
+
+## [v3.173.0] — 2026-07-08
+
+### Cross-record file-match detection moved to an opt-in second pass
+
+Live timing from the user, always-on v3.172.0 vs the pre-feature baseline
+on the same 63-document test-patient record: **54.5s → 79.3s** — a ~25s
+(~46%) slowdown, confirmed too slow to run unconditionally. The matching
+itself was confirmed accurate (correctly found real duplicates filed years
+apart), so the fix is gating, not the algorithm.
+
+- New `findSuspiciousDocuments(documentEntries)` — the free half of the
+  design: flags a document if its title carries a raw filename/GUID prefix
+  (`hasJunkTitlePrefix`, unchanged from v3.172.0) OR its id-timestamp falls
+  in the same MINUTE as another document's (new — buckets by
+  `Math.floor(idTime / 60000)`, reusing the id-timestamp every entry
+  already carries, the same signal the keeper tie-breaker uses). Wired
+  into `analyzeJournal` itself so it's computed on every analysis at zero
+  cost — `analysis.suspiciousDocuments` / `summary.suspiciousDocumentsTotal`
+  are always populated, whether or not the primary pass found anything.
+- `applyOnDemandCrossChecks` no longer fetches previews for un-grouped
+  documents or calls `findFileMatchedDuplicates` — that expensive half
+  moved to a new, user-triggered `runFileMatchSecondPass(out)`.
+- New opt-in banner, shown whenever `findSuspiciousDocuments` flagged
+  anything and the second pass hasn't run yet — including in the
+  **empty-state** case (zero groups found by the normal pass): "N
+  document(s) show signs of reimport corruption … Run full cross-document
+  file-match check…". This is exactly the scenario that motivated the
+  whole feature — a patient flagged as suspicious with no hits in the
+  normal search.
+- `document` entries now carry their own raw `title` field (added in
+  v3.172.0, unchanged) — still needed for the junk-prefix check regardless
+  of pass timing.
+- No change to `findFileMatchedDuplicates`, `hasJunkTitlePrefix`, or
+  `hasCreatedAfterFiled` themselves — only when they run.
+
+11 new parser tests (301/301 passing).
+
+## [v3.172.0] — 2026-07-08
+
+### Added: cross-record file-match duplicate detection for documents, built into the first pass
+
+Real motivating case (test patient 5, live): documents duplicated across
+DIFFERENT journal dates, which the primary `(kind, date, code)` key can
+never catch no matter how the code/date resolve, because the two copies
+genuinely disagree on date. Built at the user's explicit request as an
+**always-on** part of "Analyse current patient" (not opt-in) for a first,
+honest timing test on a document-heavy record (63 documents) — the user's
+plan is to break it out into an opt-in second pass only if it measurably
+slows the analysis down.
+
+- `engine/record-duplicate-parser.js`: `findFileMatchedDuplicates(documentEntries,
+  existingGroups, fileTypeByEntryId, fileSizeByEntryId, createdDateByEntryId,
+  filedDateTimeByEntryId)` — matches document-kind entries ACROSS THE WHOLE
+  RECORD by `(fileType, fileSize)` (the one signal a reimport relabelling
+  pass can't corrupt), the same composite key `splitDocumentGroupsByFileType`
+  already uses, applied the opposite way (forms new groups instead of
+  splitting one apart). Entries with unknown fileType/fileSize are excluded
+  from matching entirely — never guessed. A cluster whose member set is
+  already exactly one existing group is skipped (no duplicate reporting);
+  a cluster only partially covered by existing grouping IS still surfaced
+  — that's the whole point, catching links the primary pass structurally
+  cannot see. Tier is always REVIEW (strong evidence, not proof), tagged
+  `fileMatched: true`.
+- Two zero-fetch diagnostic markers carried per matched entry: `hasJunkTitlePrefix`
+  (a raw filename/GUID fragment before a genericised title's `Type:`/
+  `Author Org:` segments — live example: `"tiff: 1C60D211-...tiff - Type:
+  Admin Letter Author Org: …"` — reuses `parseGenericDocumentTitle`'s own
+  label regex) and `hasCreatedAfterFiled` (a document's creation time
+  postdating its own filing time — a logical-ordering anomaly, not a
+  timing-proximity heuristic).
+- `duplicate-checker.js`: `applyOnDemandCrossChecks` now fetches
+  `clinical/data/document/modals/preview/{id}` for every document-kind
+  entry that never formed a candidate group under the primary pass (reusing
+  previews already fetched for grouped documents — piggybacked on the
+  existing per-document `document/entries` loop, so no extra pass over the
+  document list). Cost is proportional to how many documents the journal
+  grouping missed, not the whole document population twice over. New
+  summary line: "N/M cross-record file-size/type cluster(s) surfaced as new
+  group(s)". Matched groups get an explicit warning banner and per-card
+  badges (own date, junk-title-prefix, created-after-filed) since a
+  file-matched group can span different journal dates and codes.
+- Document entries now retain their own `title` field (previously only the
+  concatenated `rawText` blob was kept) — needed for the junk-prefix check.
+
+29 new parser tests (290/290 passing).
+
+## [v3.171.0] — 2026-07-08
+
+### Added: links out to Medicus for direct comparison (duplicate-checker)
+
+Two navigation links, both confirmed live via DevTools capture:
+
+- **"Open this patient's record in Medicus ↗"** at the top of every
+  patient's analysis, opening the confirmed care-record journal page in a
+  new tab. Its URL only differs from the API host by moving the site code
+  from subdomain to the first path segment
+  (`https://e38a9f.api.england.medicus.health` →
+  `https://england.medicus.health/e38a9f/patient/patient/care-record/{id}?careRecordTab=journal`)
+  — `buildCareRecordJournalUrl` refuses (returns null, no link rendered)
+  rather than guessing if `apiBase` doesn't match the exact confirmed
+  shape.
+- **"Download original ↗"** on each copy's column header in the document
+  Compare-fields table, via the confirmed
+  `GET clinical/document/download-file/{fileId}?convertToPDF=0` endpoint —
+  the same original bytes this tool's fileType/fileSize matching already
+  compares, not a converted copy. Takes the document's own `fileId`
+  (confirmed distinct from `documentId` in the real capture), read from
+  the preview already fetched for the comparison table — no new fetch.
+  `convertToPDF=1` (PDF export) is a plausible but unconfirmed inference
+  from the parameter name and is deliberately not wired without its own
+  capture.
+- Investigation-only: clicking a document in Medicus's own UI opens an
+  in-page modal (every related call sits under `.../modals/...` and
+  returns JSON) — there is no document-specific browser URL to link to,
+  which is why these two links are the practical ceiling for "click to
+  compare" rather than a direct jump into the document viewer.
+
+8 new parser tests (261/261 passing).
+
+## [v3.170.0] — 2026-07-08
+
+### Duplicate-checker: GP2GP wrapper shown as a guide; single keep cue
+
+Two presentation refinements from live use:
+
+- **GP2GP wrapper text is now shown in place, highlighted amber** (badge
+  "GP2GP wrapper detected"), instead of being silently stripped with a grey
+  "wrapper stripped" note. It's a visual guide to which copy is the reimport
+  artifact to reject. The added/removed diff is still computed on the
+  cleaned content, so the wrapper frames the comparison without polluting
+  it; merge suggestions and grouping still strip it as before (display-only
+  change).
+- **Removal/merge confirm: one keep cue, not three.** The per-card
+  "✓ KEEP / ✗ DISCARD" banners that appeared on button-click are gone —
+  they duplicated the form's KEEPING/REMOVING panels with different wording
+  and misaligned with the columns. The kept copy now carries a single green
+  outline (matching the Compare & merge view); the form's KEEPING/REMOVING
+  panels remain the labelled statement. Clicking a card to switch the
+  keeper still works.
+
+No logic changes; 253/253 parser tests pass.
+
+## [v3.169.1] — 2026-07-08
+
+### Fix: document removal now truly removes (was only striking through)
+
+v3.169.0 wired document removal to the wrong endpoint. Live test showed the
+document was marked incorrect (struck through) but stayed VISIBLE. The user
+captured both Medicus actions and they are near-identical but distinct:
+
+- "mark as incorrect only" (struck through, still visible) →
+  `POST clinical/document/mark-incorrect` with `{reason, inboundDocumentId}`
+  — this is what v3.169.0 wired by mistake.
+- **"remove from record" (removed completely)** →
+  `POST clinical/document/mark-incorrect-and-hidden` with
+  `{reason, isConfirmedRemoval: true, inboundDocumentId}` — the correct
+  target, now wired.
+
+So `document` is the same contract family as problem/note/prescription
+after all (the `-and-hidden` suffix + `isConfirmedRemoval: true` is what
+hides/removes across all four); it differs only in the id field name
+(`inboundDocumentId`). The `noConfirmFlag` special-case added in v3.169.0
+is removed — all four contracts carry `isConfirmedRemoval: true`. Exact-body
+test updated to the captured "remove from record" POST. 253/253 tests.
+
+## [v3.169.0] — 2026-07-08
+
+### Added: duplicate documents can now be removed (duplicate-checker)
+
+The user captured the document removal contract live (2026-07-08). Findings:
+
+- **`POST clinical/document/mark-incorrect`** with body
+  `{reason, inboundDocumentId}` — a DIFFERENT shape from the other three
+  removal contracts: the id field is `inboundDocumentId` (not
+  `documentId`) and there is NO `isConfirmedRemoval` flag. This is the
+  "Remove from record" action (document removed completely). Medicus's
+  separate "mark as incorrect only" (struck-through but still visible)
+  path is a different, uncaptured endpoint and is deliberately not wired —
+  a visible struck-through duplicate doesn't reduce visible duplication.
+- `document` added to `WRITE_CONTRACTS`; `buildRemovalRequest` extended to
+  omit `isConfirmedRemoval` for it (exact-body test pins the request to the
+  captured POST). `isRemovableKind('document')` is now true.
+- `duplicate-checker.js`: document REVIEW groups gain a "Remove a duplicate
+  copy…" button that drops into the existing keeper-choice/removal flow
+  (the standalone-removal gap the user hit when "Compare fields" had
+  nothing to apply). After a successful field-apply, the success state now
+  offers removal of the duplicate copy directly instead of saying it can't.
+  Removal-form wording is document-accurate ("permanently remove N
+  document(s) from this patient's record" vs "hide" for the hidden-contract
+  kinds).
+- 2 new parser tests (253/253 passing).
+
+## [v3.168.0] — 2026-07-08
+
+### Previous-practice notes can now auto-merge (duplicate-checker)
+
+The user captured the missing evidence live (2026-07-08): the GET
+edit-note model AND a successful change-note POST for a real
+previous-practice note ("Patient de-registration",
+`recordedAtAnotherOrganisation: true`, manually-typed org). Findings:
+
+- **The POST body is identical in shape to the local-note capture from
+  2026-07-06** — the same 13 keys. `recordedAtAnotherOrganisation`,
+  `recordedByOrganisationManual` and `organisationEntry` are GET-only and
+  never posted; the organisation posts as the structured
+  `{organisationName, organisationIdentifierType,
+  organisationIdentifierValue}` object (null identifiers for a
+  manually-typed name — same shape as the document contract). The old
+  blanket refusals on those two flags are lifted; a new exact-body test
+  pins the builder to the captured POST byte-for-byte.
+- New `resolveNoteOrganisation` evidence chain (structured object →
+  manual text → caller-supplied name). A previous-practice note with NO
+  org name anywhere still refuses — **Medicus's own form refuses to save
+  that state** (user-confirmed live: the form demands a "previous
+  organisation" value) — and the merge flow now shows the same
+  organisation prompt the document flow has (default "Previous GP")
+  instead of a dead end.
+- **Named refusal reasons** replace the generic "an unconfirmed field was
+  present": linked clinical case (still never live-tested — manual path),
+  empty merged text (junk-only copies — points at the Remove button), and
+  the org prompt above.
+
+4 new/updated parser tests (251/251 passing).
+
+## [v3.167.0] — 2026-07-08
+
+### One consistent compare/merge surface for notes; created-date evidence on every card (duplicate-checker)
+
+Three consistency items from the user's v3.166.0 live test:
+
+- **EXACT note/problem pairs get the side-by-side cards too** (previously
+  stacked snippets that made two "identical" entries look pointlessly
+  identical). Every copy card now shows a `created` timestamp recovered
+  from its UUIDv7 record id — zero fetches, the same signal the keeper
+  tie-breaker already uses — highlighted amber across the group when the
+  copies' creation times differ (the user's real EXACT pair was created
+  years apart: original at registration, duplicate by a later reimport;
+  that evidence was previously invisible). Cards also show the
+  "kept (earliest copy)" badge.
+- **"Compare details…" + "Suggest a merge…" unified into one
+  "Compare & merge…"** for note groups (REVIEW + HIGH): the full-record
+  field table (note/overview — linked problems, created timestamps,
+  differs-highlighting) and the merge editor in ONE view, matching the
+  document Compare-fields pattern. The kept column is headed "✓ KEEP" in
+  green with the cards' fate banners live; clicking a card switches the
+  keeper and re-renders (overviews cached, so instant). Only **Note text**
+  is mergeable (the change-note contract is a text replace; all other
+  fields round-trip unchanged), so only that row carries radios — picking
+  a copy loads its junk-stripped text into the editable merge box. Apply
+  drops into the existing confirm-then-remove flow. Problem-kind groups
+  keep "Suggest a merge…" (no problem overview/edit endpoint captured
+  yet).
+- **KEEPING / REMOVING side by side** in the removal and merge confirm
+  forms (green and red bordered panels in one row) instead of stacked —
+  per the user's request to make the keep/discard pattern the consistent
+  default across every merge/removal operation here.
+
+## [v3.166.0] — 2026-07-08
+
+### Fixed + added: junk-only note pairs, note detail comparison, unmistakable KEEP/DISCARD (duplicate-checker)
+
+Three user-driven items from live testing (2026-07-08):
+
+**Fix: null-note vs junk-only-note pairs mis-tiered REVIEW.** Real pair
+(GP2GP original with `note: null` vs reimport copy whose whole body is
+`{Episodicity : code=255217005, displayName=First}`) showed as "same code,
+different content". The episodicity-suffix regex already stripped the
+block correctly — the actual bug was `normText(null)` returning a bare
+string while every other path returns `{text, wrapped}`;
+`buildGroupRecord` SPREADS the result, and spreading a string contributes
+nothing, so the null-text member got `text: undefined` vs the junk-only
+member's `text: ''`. Fixed the null path's shape; the pair now tiers
+EXACT (identical after junk-strip, same author) with the direct remove
+button.
+
+**Added: "Compare details…" for note groups** (REVIEW + HIGH, not
+documentLinked — those ids were never confirmed against this endpoint).
+Read-only side-by-side of each copy's full note record via
+`GET clinical/data/note/overview/{noteId}` (confirmed 2026-07-08 from two
+real payloads): code, note text, record date, recorded by, created,
+created-in-original-system, linked problems, marked-incorrect. Fetched
+on demand, cached per panel. **Linked-problems keeper safety** rides the
+same data: the reimport copy routinely LOSES the problem linkage the
+original keeps, so the removal form now warns (non-blocking, after the
+form renders) when the copy being removed carries linked problems the
+kept copy lacks.
+
+**Added: unmistakable KEEP/DISCARD (user mockup).** While a removal or
+merge confirm is open, every copy card gets a fate banner — "✓ KEEP"
+(green outline) / "✗ DISCARD" (red, faded) — and **clicking a card makes
+it the kept copy**, re-rendering the form to match. The confirm form's
+text is restructured into explicit KEEPING / REMOVING sections (the old
+"Keeping: (unknown author)" + list-on-next-line read as one flowing
+sentence). Text labels are the primary cue, colour reinforcement only,
+per the suite's colourblind doctrine. Card clicks are ignored while a
+removal is in flight.
+
+13 new parser tests (247/247 passing).
+
+## [v3.165.0] — 2026-07-08
+
+### Added: HIGH-tier note/problem groups get side-by-side comparison + remove + merge (duplicate-checker)
+
+User request. Plain HIGH-tier groups ("identical text, different
+author/org" — the classic GP2GP reimport signature) previously rendered as
+stacked truncated snippets with NO action buttons at all (only EXACT and
+documentLinked-HIGH had the removal gate), despite the tool's own help
+copy promising HIGH bulk removal. For `note` and `problem` HIGH groups:
+
+- **Side-by-side cards** — the same diff-card layout REVIEW and
+  documentLinked groups use. The text is identical by definition, so the
+  cards' real value is putting the differing author/org (what HIGH tier is
+  actually about) directly next to each other.
+- **Remove** — the direct EXACT-style removal flow (keeper pre-picked by
+  the UUIDv7 tie-breaker where decodable, else the choose-keeper step). No
+  "are these equivalent?" judgment gate: HIGH means the text already
+  matched exactly.
+- **Suggest a merge…** — the same merge path REVIEW groups get: automated
+  apply-and-remove for note-kind (existing confirmed change-note
+  contract), copy-paste guidance for problem-kind (no confirmed problem
+  edit endpoint yet). Merge-form guidance now names the right removal
+  button per tier.
+
+Deliberately excluded: documentLinked HIGH groups keep their existing
+forced-keeper removal-only flow (merging would edit a document-linked
+pseudo-entry via the note contract — never live-tested), and prescription
+HIGH groups stay action-less (duplicates there are governed by the
+quantity/timing cross-checks; "merging" two prescription issues has no
+meaning).
+
+**On hold at user request (Medicus bug)**: the uncoded-document-type save
+blocker (v3.164.5) — Medicus has been notified that documents imported
+with an uncoded type are un-editable in their own UI; no further tool
+changes for it until their fix lands, then retest.
+
+## [v3.164.5] — 2026-07-08
+
+### Diagnosed + made actionable: uncoded document type blocks ALL saves (duplicate-checker)
+
+Third live refusal, diagnosed definitively from the user's captured keeper
+edit model + Medicus's own error response. The kept copy's type ("Patient
+Letter") was imported with `code.value.conceptId: null` /
+`descriptionId: null` — a degraded/uncoded type. **Such documents are
+un-editable even in Medicus's own UI**: the user's manual save in Medicus
+failed server-side with
+`{"errors":{"code.conceptId":["This value should not be blank."]}}` (the
+UI surfaces it as a generic "This value should not be blank", pointing at
+the wrong field — raised with Medicus as a bug by the user). Our builder's
+refusal was therefore CORRECT — the POST cannot succeed — but its message
+blamed the wrong fields (linked problems/staff/case/specialty).
+
+- `prepareDocumentFieldApply()` now detects the uncoded-keeper-type state
+  specifically, and in order: uses the keeper's own preview `typeCode` if
+  it carries the full code (with an explicit confirmation-card caveat);
+  otherwise names the real problem and the way out — "the other copy's
+  Type ('X') IS properly coded — select its Type radio and re-apply", or
+  "neither copy carries a coded Type; set a proper type in Medicus first".
+  Never silently substitutes a type the user didn't approve.
+- No parser change — the request builder's refusal on an incomplete code
+  is exactly right (server-confirmed); this is a diagnosis/UX layer over
+  it. 234/234 parser tests still passing.
+
+## [v3.164.4] — 2026-07-08
+
+### Fix: Author/organisation no longer blocks document field apply (duplicate-checker)
+
+Second live refusal from the user, now specifically on the Author pick —
+and a product decision to go with it: GP2GP-imported entries routinely
+arrive with the (form-required) organisation entirely blank, so at the
+scale involved (≥0.7% of records, hundreds of duplicated items each)
+"correct it manually" is the wrong default. Writing an organisation NAME
+with null identifiers is a CONFIRMED-valid stored shape (the first real
+edit model captured stored exactly that for a manually-entered org) and is
+precisely what typing into Medicus's own free-text Organisation field
+produces — data improvement, not identifier fabrication.
+
+- New `resolveDocumentOrganisation(editModel, preview)` evidence chain,
+  used everywhere an org is needed: structured `authoredByOrganisation.value`
+  → `manualAuthoredByOrganisation` text → the preview's displayed
+  `authoredByText` → the "Author Org:" segment GP2GP flattens into the
+  genericised title (user observation: the org data isn't lost on import,
+  just demoted from structured data to freetext inside `title`;
+  `parseGenericDocumentTitle`'s segment is label-bounded, so it's clean of
+  the trailing custodian/date text).
+- A picked Author now applies via that chain; `buildDocumentEditRequest`
+  resolves the KEPT copy's own org through the same chain, so a blank
+  keeper org no longer refuses an edit to unrelated fields.
+- **Organisation prompt** when no name exists anywhere on the record: the
+  user is asked for one — default **"Previous GP"** (what the user types
+  when Medicus blocks a save on imported data) — instead of being told to
+  fix it by hand. The confirmation card states explicitly when a
+  previously-blank org is being filled and with what.
+- 9 new/updated parser tests (234/234 passing).
+
+## [v3.164.3] — 2026-07-08
+
+### Fix: "None of the picked values could be read safely" on document field apply (duplicate-checker)
+
+Live failure from the user: every picked field refused with the blanket
+message. Root cause analysis: the comparison table shows the PREVIEW's
+display encodings, but the write needs the structured identifiers behind
+them from each copy's edit-details model ({conceptId, descriptionId} for
+the code, organisation identifier fields for the author) — and on a
+reimport copy those can genuinely be null (unresolved/degraded code,
+manually-typed organisation) even though the preview displays fine.
+Writing the on-screen string alone would mean FABRICATING clinical-code/
+organisation identifiers, so refusal was correct — but it was both
+undiagnosable (no per-field reason) and stricter than the evidence
+requires for two fields:
+
+- **Two confirmed-shape preview fallbacks** in
+  `buildDocumentEditOverrides` (new optional `previewByEntryId` param,
+  fully backward compatible): a null edit-model `code.value` falls back to
+  the preview's `document.typeCode` — the exact {conceptId, description,
+  descriptionId} posted shape, confirmed on every real payload seen — and
+  a null `recordDate` falls back to the preview's `document.recordDate`
+  (already ISO; the request builder's ISO check still guards a surprise
+  format). documentDate (display-formatted in the preview) and author (no
+  identifiers in the preview) get NO fallback — refused, never fabricated.
+- **Per-field failure reasons**: the status message now names each refused
+  field and why ("Type — the other copy's edit form holds no usable
+  structured value behind the displayed text…") instead of the blanket
+  sentence, and the confirmation card's "not applied" caveat carries the
+  same detail.
+- Confirmation card fix: an applied preview-fallback value now displays
+  correctly in the old → new list (previously re-read from the source edit
+  model, which would have shown "→ (none)" for exactly the fallback case).
+
+4 new parser tests (225/225 passing).
+
+## [v3.164.2] — 2026-07-08
+
+### documentLinked groups: side-by-side layout + chronological placement (duplicate-checker)
+
+documentLinked matching confirmed working live by the user (2026-07-08 —
+codes duplicated out of document tasks now correctly flagged). Two follow-up
+requests from that session:
+
+- **Side-by-side cards** — documentLinked groups (HIGH tier, so they
+  previously got the stacked truncated-snippet layout) now always render
+  via the same side-by-side diff-card layout REVIEW groups use. The copy
+  still linked to its source document is always the diff REFERENCE (it's
+  the genuine original/forced keeper), badged
+  "still linked to source document — kept" (green); the other copy is
+  badged "freestanding copy" (amber).
+- **Chronological placement** — documentLinked groups are produced by a
+  separate pass and were concatenated after the main group list, so they
+  all landed at the very bottom instead of adjacent to the document tasks
+  they relate to. New pure `sortGroupsByJournalOrder(groups, entries)`
+  orders every group by its earliest member's position in the journal
+  itself — a documentLinked pseudo-entry (absent from the journal list)
+  falls back to its source document's position via `linkedDocumentId`,
+  which is exactly what places the group next to its document task. No
+  date-string parsing: the sort inherits the journal payload's own order,
+  so it can't mis-parse a date format; unlocatable groups sort last,
+  stable. 6 new parser tests (221/221 passing).
+
+## [v3.164.1] — 2026-07-08
+
+### Fix: Compare-fields polish after first live test (duplicate-checker)
+
+Three user findings from live-testing v3.164.0's comparison table:
+
+- **"[object Object]" for Clinical specialty** — the preview's
+  `document.clinicalSpecialty` is a plain string on some payloads but an
+  OBJECT on others (the tested document's visible "Dermatology" arrived as
+  an object). New `specialtyText()` unwrap in
+  `engine/record-duplicate-parser.js` — known text keys only
+  (description/label/name, incl. nested `.value`); an unrecognised object
+  shape renders "(present — format not recognised; check in Medicus)"
+  rather than guessing or masquerading as "(none)". NOTE: the write-side
+  refusal on non-null clinicalSpecialty still stands — a document WITH a
+  specialty set will decline auto-apply until a Save capture on such a
+  document confirms the posted encoding.
+- **Misaligned radios/values** — each copy now gets two physical table
+  columns (fixed 24px radio column + left-aligned value column, radios
+  label-linked by id) instead of radio+text sharing one auto-width cell.
+- **Created/Filed/File type/File size are now display-only audit rows**
+  (user product decision): they're read-only even in Medicus's own edit
+  pane (absent from the edit-details model), and the kept copy should
+  retain its own creation date, filing date/user and file type/size for
+  audit purposes. Marked 🔒, no radios, dimmed, excluded from the "your
+  chosen record" summary — shown purely as evidence of which copy is
+  which. `buildDocumentFieldComparison` rows expose `systemManaged` so the
+  distinction lives in the tested parser, not the UI.
+
+6 new parser tests (215/215 passing).
+
+## [v3.164.0] — 2026-07-08
+
+### Added: document edit write contract — "Apply chosen ✎ values to kept copy" (duplicate-checker)
+
+The document write path was discovered live by the user (2026-07-08, DevTools
+capture of a real Save on a test-patient document): `GET
+clinical/data/document/edit-details/{documentId}` returns the edit form's
+prefill model, and **`POST clinical/document/edit-details`** (documentId in
+the BODY, not the URL — the one write contract shaped that way) is the
+full-replace save. Confirmed body: `code` and `authoredByOrganisation` post
+their GET-model `.value` objects, `linkedProblems` posts as
+`linkedProblemIds`, `linkedClinicalCase.defaultClinicalCaseId` posts as
+`clinicalCaseId`, `modelVersionHash` echoes back verbatim (concurrency
+guard), and `manualAuthoredByOrganisation`/
+`shouldEnterAuthoredByOrganisationManually`/`documentType`/`patientId`/
+`versionId` are GET-only, never posted. The same capture settled the earlier
+open question: **Created/Filed/File type/File size are absent from the edit
+model entirely** — system-derived, read-only even in Medicus's own UI — so
+Title/Type/Document date/Author/Record date are the writable set.
+
+- `engine/record-duplicate-parser.js`: new `buildDocumentEditDetailsUrl`,
+  `getDocumentEditValue`, `buildDocumentEditOverrides`,
+  `buildDocumentEditRequest` — same refuse-don't-guess discipline as the
+  note contract: refuses (null, never guesses) on non-null
+  authoredByDepartment/Practitioner/clinicalSpecialty, non-empty
+  selectedStaff/linkedProblems, a real clinical case, drafts,
+  marked-incorrect documents, a missing modelVersionHash, any override key
+  outside the confirmed set, and non-ISO dates.
+  `buildDocumentFieldComparison` rows now expose `editKey` for the five
+  writable fields. 42 new tests (209/209 passing), including an exact
+  17-key body match against the real captured POST.
+- `duplicate-checker.js`: the Compare-fields table now marks writable rows
+  ✎ and gains "Apply chosen ✎ values to kept copy…" — collects every row
+  where a non-keeper copy's value was picked, fetches each copy's
+  edit-details model, reads picked values in posted shape from the SOURCE
+  copy's model (never the display-formatted preview), and shows an
+  old → new confirmation before POSTing. Manual-only picks (Created/Filed/
+  etc.) are listed for hand-correction, never silently dropped.
+- **Still open**: removing the duplicate document afterwards. `document`
+  remains outside WRITE_CONTRACTS — no mark-incorrect capture for documents
+  yet — so the success message says so explicitly. That's the remaining
+  half of the user's fuller ask, needing its own DevTools capture (the
+  "Mark incorrect" flow on a test-patient document).
+- Comment correction (v3.162.1): the `attachment` wrapper on document
+  previews is NOT questionnaire-specific — the same capture showed it on an
+  ordinary inbound XML document, alongside the top-level `fileType`/
+  `fileSize` siblings this tool reads (so the root-level read stays
+  correct).
+
+## [v3.163.0] — 2026-07-08
+
+### Added: field-by-field comparison for document-kind REVIEW groups (duplicate-checker)
+
+User's live observation on the existing merge-suggestion UI: for document-kind
+groups it word-diffs one concatenated blob (`documentTypeLabel + title +
+documentDate + organisationName + additionalInformation`) — since
+`documentDate`/`organisationName` usually already match between copies, the diff
+is dominated by `Title`/`Type` and never surfaces `Record date`/`Created`/`Filed`
+at all, because those fields aren't part of the compared text.
+
+- `engine/record-duplicate-parser.js`: new pure `buildDocumentFieldComparison(group, previewByEntryId)`
+  compares 10 fields independently (Title, Type, Document date, Author, Clinical
+  specialty, Record date, Created, Filed, File type, File size), each flagged
+  `differs` or not. Field paths confirmed live 2026-07-08 against real test-patient-1
+  payloads (`clinical/data/document/modals/preview/{id}`, the same endpoint already
+  fetched for the fileType/fileSize checks — no new endpoint). Values shown are the
+  raw API strings, not reformatted to match Medicus's own display style. 13 new
+  tests (167/167 passing).
+- `duplicate-checker.js`: document-kind REVIEW groups now get a "Compare fields…"
+  button (in place of "Suggest a merge…", which stays unchanged for note/
+  prescription/problem — free text genuinely benefits from word-diff, structured
+  document metadata doesn't). Renders a table (one row per field, one radio per
+  copy, defaulting to the group's computed keeper), with a live-updating "your
+  chosen record" summary and a copy-to-clipboard button. `applyOnDemandCrossChecks()`
+  now retains the full document preview objects on `analysis.documentPreviewsByEntryId`
+  (previously fetched-then-discarded, only fileType/fileSize extracted) so this can
+  read them on demand when the button is clicked.
+- **Scope, explicit**: this is comparison/reference-building only — there is still
+  no confirmed write endpoint for editing a document's own metadata in Medicus
+  (`document` isn't in `WRITE_CONTRACTS`), so there is no "Apply" button. The
+  summary is meant to be actioned manually in Medicus, same scope the document
+  merge-suggestion already had.
+- **User's fuller ask, not yet built**: (1) apply the chosen per-field values to
+  the kept document, (2) then remove the duplicate document via the same
+  mark-incorrect-and-hidden pattern already confirmed for note/problem/
+  prescription. Both need their own live DevTools-network-capture discovery
+  first — neither has ever been confirmed for `document` in this project
+  (explicitly parked earlier for "referral/document type-conversion complexity").
+  It's also not yet known whether Medicus's own UI even exposes an edit action for
+  fields like Record date/Created/Filed, or whether those are system-derived and
+  effectively read-only — worth checking directly before assuming a write path
+  exists at all.
+
+## [v3.162.2] — 2026-07-08
+
+### Fix: document-linked-entry matching (v3.162.0) was built against the wrong endpoint — corrected against real payloads
+
+The user supplied real (anonymised) DevTools payloads for a confirmed test-patient
+duplicate pair (test patient 1, filed/recorded `careRecordEntryDate` "Wed 07 May
+2025" per the payloads — the user referred to it as "12 May 2025", which matches
+the files' own embedded creation timestamps instead; see note below) — an NHS 111
+letter and a skin-lesion letter, each with SNOMED-coded entries, each duplicated.
+They show v3.162.0's
+`careRecordElements`-on-the-document-preview approach was simply wrong — that field
+exists but was empty on every real document checked, and isn't where a document's
+linked entries actually live.
+
+- **Real source confirmed**: `GET clinical/document/entries/{documentId}` — returns
+  `{entries: [{id, type, code, text, onClickUrl, isMarkedIncorrect, ...}]}`. On the
+  duplicate copy of a document, this call returns `{"entries":[]}` — direct evidence
+  the reimport process drops the document-to-entry link on the copy while the
+  original keeps it, exactly matching the "broken out into freestanding entries"
+  theory.
+- No date field exists on these entries at all. `flattenDocumentEntries()` now reuses
+  the CALLER's already-known journal `.date` for the document itself (no extra
+  fetch, no format-mismatch risk — resolves the open question flagged in v3.162.1).
+- `text` is `"{code}: {freetext}"` for note-type entries (confirmed against 3 real
+  examples); the code prefix is stripped to recover what a real freestanding note's
+  `.note` field would contain.
+- Only `type === 'note'` entries are usable — `observation`-type entries (e.g.
+  "Alcohol units consumed per week") have no `code` field and `observation` isn't in
+  this tool's comparable-entries pool at all. Explicitly skipped, a known scope gap.
+- **Keeper asymmetry, fixed**: the two "copies" here are NOT interchangeable like
+  everywhere else in this tool — the document-linked entry is the genuine original,
+  still correctly attached to its source document, and must never be offered for
+  removal. `findDocumentLinkedDuplicates()` now FORCES the document-linked entry as
+  keeper, overriding the generic UUIDv7-timestamp tie-breaker. This also means
+  removal here only ever targets an ordinary freestanding note — the same
+  already-confirmed `patient/note/mark-incorrect-and-hidden` contract used
+  everywhere else, not an untested id path — meaningfully safer than v3.162.0's
+  design.
+- `engine/record-duplicate-parser.js`: `flattenCareRecordElements` replaced with
+  `flattenDocumentEntries(documentId, documentDate, entries)`; `findDocumentLinkedDuplicates`
+  rewritten for the new data shape and the forced-keeper behaviour.
+  `duplicate-checker.js`: `applyOnDemandCrossChecks()` now fetches
+  `clinical/document/entries/{id}` for every document-kind entry (dropped the dead
+  `careRecordElements`-from-preview extraction it replaces). UI warning banner
+  reworded to reflect the safer design.
+- 154/154 parser tests passing (test fixtures rewritten for the real shape).
+- **Still not fully proven**: the `text` prefix-stripping is inferred from 3
+  consistent real examples, not exhaustively verified across every possible note
+  shape.
+- **Next step**: live-test against test patient 1's 07 May 2025 entry (the pair
+  this correction is built from — the user's "12 May 2025" refers to the same
+  documents, see the date-mismatch note below) and confirm a `documentLinked`
+  group actually appears
+  for both the NHS 111 letter and the skin-lesion letter.
+
+## [v3.162.1] — 2026-07-07
+
+### Fix: same-fileType document batches (e.g. multiple NHS 111 letters) wrongly merged
+
+Real-world finding from the user: after a 111 contact, a patient's record can gain
+several genuinely separate referral/discharge letters, all uploaded in one batch —
+same received/record date, often the same generic resolved type and the same
+`fileType` (e.g. all PDFs) — which `splitDocumentGroupsByFileType()` (v3.161.1)
+couldn't tell apart, since it only split on `fileType`, requiring >=2 distinct
+types to even attempt a split.
+
+- `engine/record-duplicate-parser.js`: `splitDocumentGroupsByFileType()` now takes
+  an additional `fileSizeByEntryId` param and buckets document-kind members on the
+  composite `(fileType, fileSize)` pair, not fileType alone. A member with a known
+  fileType but unknown fileSize buckets under `${fileType}::unknown-size` — i.e.
+  when size can't be confirmed, this degrades to the old fileType-only behaviour
+  for that member rather than guessing a size match. Fully backward compatible:
+  callers that don't pass the new third argument get identical behaviour to
+  before. 151/151 parser tests passing (11 new).
+- **`fileSize`'s field name and position CONFIRMED live 2026-07-07**, from a
+  real anonymised payload the user supplied
+  (`clinical/data/document/modals/preview/{id}`): `fileType`/`fileSize`/
+  `fileCanExport`/`fileId`/`fileName` all sit as direct top-level siblings on
+  the response root, exactly where the fix already reads them — no code
+  change needed, this just upgrades the earlier "inferred guess" caveat to
+  confirmed. Same payload also confirms `fileType`/`fileSize` are NOT nested
+  under an `attachment` object on ordinary documents — that wrapper shape
+  (`attachment.fileRoute`/`attachment.fileId`, used by
+  `hasQuestionnaireTemplateMismatch`) is specific to questionnaire-response
+  documents, not a general document shape.
+  `duplicate-checker.js` still surfaces "N/M document preview(s) had a
+  usable file-size field" in the summary line — useful general coverage
+  visibility (not every document type may expose it) even though the field
+  name itself is no longer in doubt.
+- **New open question from the same payload**: this document's own
+  `recordDate` is ISO-formatted (`"2025-03-06"`), distinct from
+  `careRecordEntryDate` (`"Thu 06 Mar 2025"`, matching the journal's
+  `day.title` format). Since `flattenCareRecordElements()` (v3.162.0) reads
+  a `recordDate` field OFF EACH `careRecordElements[]` ITEM and compares it
+  by exact string equality against journal `day.title` strings, if the
+  per-element `recordDate` uses the same ISO convention as this document's
+  own top-level `recordDate` (same field name, same API family — plausible
+  but NOT yet directly evidenced, since this particular document's
+  `careRecordElements` array was empty), the document-linked-entry matching
+  feature would systematically fail to match anything live, exactly the
+  failure mode its own code comment already flagged as a risk. Needs one
+  real example of a document with a NON-empty `careRecordElements` array to
+  confirm the actual per-element date format before deciding whether to
+  normalise it.
+- **Next step**: live-test against a patient with a known same-day,
+  same-fileType, different-document batch (a 111 referral bundle is the
+  concrete example given) to confirm the fix behaves as expected; separately,
+  find a document with populated `careRecordElements` to settle the
+  date-format question above.
+
+## [v3.166.0] — 2026-07-09
+
+### Assurance pack, Record-tab allergy alerts, read-retry, Trends on the API feed
+
+**API parity report (options page).** One click turns the hybrid-mode shadow
+ledger into a Markdown evidence pack: divergence counts and timeline, feed
+failure reasons, honestly worded (parity views record nothing, so a quiet
+report over a long period is the strong signal). Downloads like the ledger's
+CSV export; contains no patient identifiers (asserted by test); clock-free
+and byte-deterministic (`shared/txn-parity-report.js`).
+
+**Record tab: drug-allergy safety prompts.** When the API feed supplies
+allergies, the Prescribing-safety card now evaluates the drug-allergy rule
+pack (same engine, same rules as sentinel/sweep — no re-implemented matching)
+and lists conflicts first. Session-only renders are pixel-identical to
+before; every layer fails soft. Per-section merge re-audited against the
+v3.165.0 enrichment: `problems` now feed-first (all rendered fields covered,
+including significance); medications/observations stay session-fed with the
+exact missing fields documented in-code (bundle `observations` still strip
+`rawValue` — noted for a future normaliser pass).
+
+**Transport read-retry.** One backed-off retry (capped, jittered) for
+transient READ failures only (timeout, network, 502/503/504/429). Writes are
+never retried — asserted by test (exactly one fetch, ever). 500/501 and other
+4xx are deliberately non-retryable. First-try successes are unchanged.
+
+**Trends tab on the API feed.** In transactional mode the BP/renal/HbA1c/
+cholesterol/weight charts can source from the enriched feed — guarded by a
+runtime per-patient coverage check: the feed only takes over if it yields a
+non-empty series for every metric the session feed found, otherwise the whole
+tab stays on session ("never render worse", enforced live). Subtle
+provenance line matches the Record tab.
+
+Tests: 317 passing (was 277) — new `test-txn-parity-report.js` (18),
+`test-record-allergy-prompts.js` (12), `test-txn-transport-retry.js` (10).
+
+## [v3.165.0] — 2026-07-09
+
+### The API feed becomes the richer source + production guardrails
+
+**FHIR normaliser enrichment.** The transactional bundle previously carried
+LESS than the session feed in places — no medication dosage, no
+abnormal-result flags, no problem significance — which is why v3.164.0's
+Record tab deliberately kept those sections session-fed. The normaliser now
+extracts what GP Connect was carrying all along: `dosage` (from
+dosageInstruction/patientInstruction), `isAbove`/`isBelow` (computed from
+referenceRange, including per-component handling for BP-style observations —
+any component breaching its own range flags the observation), the same flags
+through `observationHistory`, and problem `significance` (major/minor from
+the ProblemSignificance extension). All additive; field names verified
+against the session normaliser and Record-tab reads so consumers adopt them
+without translation; every extraction fails soft per-item. This unlocks
+flipping Record sections and the Trends tab to the API feed in a later
+release.
+
+**Production interlock.** Saving API settings with environment `prod` and a
+non-Session mode now requires a deliberate second Save within 10 seconds,
+behind an explicit live-patient-data warning. Every other combination saves
+exactly as before.
+
+**Service-worker request gate.** All transactional network calls (bundle
+fetches, connection tests) now pass through a shared FIFO concurrency gate
+(max 3 in flight) — Sweep batches, the Record tab, sentinel and shadow
+comparisons across multiple tabs can no longer stampede the proxy or
+Medicus's staging environment. Cache hits bypass the gate entirely.
+
+Tests: 277 passing (was 250) — new `test-fhir-enrichment.js` (20) and
+`test-txn-request-gate.js` (7).
+
+## [v3.164.0] — 2026-07-09
+
+### The API feed reaches the panel: Sweep worklist + pre-consultation brief
+
+**Shared feed selector.** `shared/panel-txn-feed.js`: panel modules source the
+same normalised engine bundle from the Transactional API feed when — and only
+when — the practice has switched to `transactional` mode (via the service
+worker + its 60s cache). Session and hybrid modes return null so the panel is
+byte-for-byte unchanged; every failure falls back to the session path.
+
+**Sweep tab.** Each booked patient's bundle can now come from the API feed,
+per-patient fallback to session, with a subtle `API`/`session` provenance
+badge on every row and a run summary ("via API feed: N · via session: M",
+shown only when the feed served anyone). Persisted/resumed runs keep their
+provenance. Also fixes a pre-existing gap: Sweep now threads `allergies` into
+the rules engine (mirroring sentinel.js), so drug-allergy alerts can fire in
+the pre-clinic sweep — previously they never could.
+
+**Record tab → pre-consultation brief.** New "Since last visit" section at the
+top: on each view the record is fingerprinted (hashed keys only — no clinical
+text is ever stored; `brief.fp.*`, pruned beyond 200 patients) and diffed
+against the previous view — "+ allergy: penicillin", "+ medication: apixaban",
+"N item(s) no longer present — review", or "No changes since DATE".
+Medication identity is dose-insensitive (a dose change is not a stop+start).
+Ported from the population-sweep delta engine (`shared/record-delta.js`), with
+a browser-safe hash substitution documented in the file. The tab can also
+draw on the API feed: per-field audit keeps richer session fields
+(dosage/flags/raw values/significance) session-fed so no section ever renders
+worse; `allergies`/`immunisations` — which the session path never had — come
+from the feed. One provenance line ("Data: API feed"/"Data: session").
+A delta failure can never break the tab (section simply omitted).
+
+Tests: 250 passing (was 241) — new `test-panel-txn-feed.js` (3) and ported
+`test-record-delta.js` (6).
+
+## [v3.163.0] — 2026-07-09
+
+### Staging-friendly caching + dormant check-in prompt builder
+
+**Patient-bundle cache (service worker).** Transactional bundles are now
+cached for 60s per `tenant|environment|patientUuid` (`shared/
+txn-bundle-cache.js`, max 50 entries, oldest evicted). The cache is checked
+only after the integration-enabled/config guards, only successful bundles are
+stored, and ANY change to `txn.*` settings or `suite.practiceCode` flushes it.
+Repeat views within a minute stop re-fetching through the proxy — kinder to
+Medicus's staging environment during live testing, and faster for the
+clinician. Cached responses are marked `cached: true`.
+
+**"While you're here" prompt builder (dormant).** `shared/checkin-prompts.js`
+is the pure core of composite feature B (opportunistic case-finding at
+check-in): it turns engine chips into a short, prioritised, reception-safe
+prompt list. Safety prompts (drug-allergy / drug-combo alerts, prefixed
+"URGENT:") always survive the display cap; monitoring (`overdue`/`stale`),
+vaccines due and unmet QOF indicators follow in clinical-priority order.
+Labels are built only from fields already on the chip — nothing invents
+clinical text. NOTHING calls it yet: it ships dormant, ready to wire the
+moment the Medicus appointments spec lands.
+
+Tests: 241 passing (was 216) — new `test-txn-bundle-cache.js` (6) and
+`test-checkin-prompts.js` (19).
+
+## [v3.162.0] — 2026-07-09
+
+### Live-testing readiness: settings UI, true hybrid shadow mode, failure visibility
+
+Everything a practice needs to trial the Transactional API feed safely,
+without touching devtools — and everything the crossover period needs to
+prove parity between the session feed and the API feed.
+
+**API Integration settings (options page).** New "API Integration" section:
+mode (Session / Hybrid / Transactional, with plain-English explanations and a
+soft warning when selecting Transactional), environment (staging/prod), proxy
+URL, caller key (password field; stored locally, read only by the service
+worker, never included in Suite backups), optional clinician email for
+user-restricted attribution, and a read-only view of the tenant
+(`suite.practiceCode`). A **Test connection** button runs a ping through the
+proxy and reports stage-aware, plain-English results — config missing vs
+"Proxy rejected the caller key" vs "Could not reach the proxy" vs "Proxy timed
+out" vs an upstream Medicus error (new `txn:testConnection` SW message; runs
+even in Session mode so config can be validated before switching).
+
+**True hybrid (shadow) mode.** `hybrid` previously behaved identically to
+`transactional`. Now it is a genuine shadow: the session bundle is ALWAYS what
+renders (identical clinical behaviour to Session mode); the API bundle is
+fetched concurrently, the same rules are evaluated against it, and
+`shared/txn-shadow-summary.js` + `shared/shadow-compare.js` diff the two chip
+sets. The status line shows ` · API shadow: parity` or
+` · API shadow: N difference(s)`, and divergences are recorded in the Event
+Ledger (`txn-shadow-divergence`, with severity regression/escalation-only) —
+the ledger's CSV export is the parity evidence pack for assurance. A hard
+shadow budget (6s) guarantees a slow/hung proxy can never delay the
+clinician's render; budget breaches are recorded as `txn-shadow-unavailable`.
+
+**Failure visibility.** In Transactional mode, falling back to session data is
+now visible (` · API feed unavailable — using session data` + `txn-fallback`
+ledger event) instead of silent. All shadow/status logic is wrapped so a
+telemetry bug can never break clinical rendering.
+
+**Proxy transport timeout.** `shared/txn-transport.js` now aborts proxy calls
+after 10s (configurable `timeoutMs`) with `err.isTimeout`; writes keep their
+never-silently-retried semantics. Previously a hung proxy call could stall a
+fetch for the browser default (30s+).
+
+Tests: 216 passing (was 194) — new `test-txn-transport-timeout.js`,
+`test-txn-hybrid-fetch.js` (incl. shadow-budget render-delay proof),
+`test-txn-shadow-status.js`.
+
+## [v3.161.1] — 2026-07-08
+
+### Fix: drug-allergy chips fired but were never shown to the clinician
+
+The new `drug-allergy` rule type (v3.161.0) evaluated correctly and produced a
+`{ type: 'drug-allergy', ... }` chip (see `test-drug-allergy.js`), but the
+rendering side of the pipeline had no idea the type existed:
+
+- `content-scripts/sentinel.js`'s `chipHtml()` dispatch had no case for
+  `drug-allergy`, so it fell through to the generic `<div>Unknown chip
+  type</div>` fallback.
+- The default grouped view (`chipGrouping: 'by-type'`, `renderGroupedChips()`)
+  only ever built sections for `drug-monitoring` and `qof-indicator` — a fired
+  drug-allergy chip was grouped into `groups['drug-allergy']` but that group
+  was never drawn, so the chip stayed invisible even in the flat view fallback.
+
+A patient could have a live drug-allergy contraindication and the panel would
+show nothing.
+
+- Added `ChipRenderer.renderDrugAllergyChip()` (`shared/chip-renderer.js`) —
+  distinct from `renderDrugComboChip` because `chip.matchSummary` is a plain
+  string here (`"Penicillin allergy + Amoxicillin"`), not an array of
+  `{setName, drugs[]}` sets, so reusing the combo renderer would throw.
+  Surfaces the label, match summary, status badge, source/notes tooltip, and
+  the evidence facts (allergy + matched drug set + cross-sensitivity note)
+  inline, plus the click-to-expand evidence panel affordance shared with the
+  other alert-style chips.
+- Wired `chip.type === 'drug-allergy'` into `chipHtml()`.
+- Added a `drug-allergy` section (label "Drug Allergy") to the default grouped
+  view, listed **first** — ahead of Drug Monitoring and QOF Indicators — since
+  it is a red patient-safety contraindication alert and needs top visual
+  priority.
+- No engine or rule changes — rendering only. `test-drug-allergy-render.js`
+  (6 tests) drives the real `evaluateDrugAllergyRule` → `evaluatePatient`
+  output through the real renderer and pins that it no longer returns
+  "Unknown chip type".
+
+## [v3.161.0] — 2026-07-08
+
+### Drug-allergy safety rules (enabled by the Transactional care record)
+
+A new `drug-allergy` rule type fires when a documented **active** allergy
+co-occurs with a contraindicated drug — the first rule to read the allergies
+bundle, which only the Transactional (GP Connect Structured) feed provides.
+
+- **Fail-closed by design:** with no allergy data the rule never fires and never
+  asserts "no allergy", so it is dormant and zero-risk on the legacy session/DOM
+  feed (which has no allergies) and lights up only when a real allergy record is
+  present. Shipped enabled for that reason; term lists marked PENDING CSO REVIEW.
+- **Starter pack (4 rules)** in `rules/drug-rules.json`: penicillin/beta-lactam
+  (red), penicillin→cephalosporin cross-sensitivity (amber caution, not absolute),
+  NSAID/aspirin hypersensitivity (red, topical excluded), sulfonamide-antibiotic
+  (red). Only ACTIVE allergies count; resolved/inactive/refuted are ignored.
+- Engine reads `data.allergies` (threaded through `evaluatePatient` options and
+  both Sentinel call sites). `test-drug-allergy.js` (5 tests): fires, fails
+  closed, drug-absent, status-filtering, and the real pack on representative data.
+
+## [v3.160.0] — 2026-07-08
+
+### Transactional API integration (dormant by default) + feed-swap safety gate
+
+The official Medicus Transactional API (JWT/JWKS, server-to-server) can now
+source the patient bundle, behind `txn.integrationMode` — default `'session'`,
+so nothing changes until a practice opts in. See
+docs/TRANSACTIONAL-API-INTEGRATION.md for the architecture and settings.
+
+- **New shared modules:** `txn-config` / `txn-transport` / `txn-api` (proxy
+  client — the extension never holds the signing key; our backend signs a ≤60s
+  JWT and forwards), `fhir-normaliser` (GP Connect Structured → the exact
+  engine bundle, now including **allergies and immunisations**, which the
+  session feed cannot provide), `fhir-results-adapter`, `fhir-triage-fields`,
+  `immunisation-bridge`, `record-provider`, `shadow-compare`.
+- **Service worker** owns the proxy credential (`txn.callerKey`, read nowhere
+  else, excluded from backups) and serves `txn:fetchPatientBundle` messages;
+  `engine/data-fetcher.js` tries the transactional feed first when enabled and
+  falls back to `fetchLive()` on ANY failure — the new feed can never make the
+  extension show less than today. Reads only; no write endpoint is wired.
+- **Vaccine status upgrade:** structured `Immunization` resources drive
+  given/declined via `immunisation-bridge` (a false "flu due" resolves to
+  "given") — previously inferred from coded text only.
+- **Safety gate in CI:** `test-txn-shadow.js` runs the REAL rules engine,
+  result-severity and triage matcher on the FHIR feed — parity must hold, and
+  a narrower API record (GP Connect exclusion rules) must be FLAGGED as a
+  regression, never silent. 38 new tests across `test-txn-*.js`.
+- `host_permissions` gains the backend-proxy origin (`https://*.supabase.co/*`).
+- Scheduling/capacity/task/reporting modules are untouched: the Transactional
+  API has no equivalent endpoints, so they stay on the session feed.
+
+## [v3.162.0] — 2026-07-07
+
+### Baselines: "is today busy, or does it just feel busy?"
+
+Gauntlet exceed-plan item B3 / dream-panel D3 (third consecutive panel run
+asking for history): today's demand now reads against the same weekday's own
+ledger history, in plain English.
+
+- **Today demand card + Submissions today view** carry a baseline line —
+  "Busier than usual for a Tuesday — ahead of 7 of the last 9 by this time"
+  (amber ink only when genuinely ahead of most of its history; quieter and
+  typical days stay muted).
+- **Compared honestly**: cumulative to the same hour of day (a half-day is
+  never compared against past full days); a viewed past day compares as a
+  complete day. Counts, not percentiles — checkable by hand from the
+  compare view.
+- **Watched days only, minimum 4 samples**: unwatched ledger days are known
+  undercounts and are excluded (they would bias every ordinary day toward
+  "busier than usual"); until four watched same-weekdays exist, the line
+  simply doesn't render — no baseline invented from two points.
+- Pure logic in `submissions-core.js` (`demandBaseline`, regression-tested:
+  weekday isolation, watched-only sampling, half-day honesty, band edges,
+  minimum-history gate).
+
+## [v3.161.0] — 2026-07-07
+
+### Signing Queue: prescribing-safety combinations at the decision moment
+
+Gauntlet exceed-plan item B1, slice 1 (docs/benchmark/GAUNTLET-2026-07-07.md):
+the engine already evaluates the practice's drug-combination rules (the
+CSO-reviewed alert library + practice-authored combos) on every signing
+check — their chips were simply filtered out. They now render on the row:
+
+- **Combination chips** (dashed border, red/amber tiers) alongside the
+  monitoring chips — e.g. "ACEi/ARB + NSAID concurrent" — with the matched
+  drugs verbatim in the tooltip. No new clinical rule content: this
+  re-displays an already-evaluated fact at the point of authorisation.
+- **"In request" flag** when a drug in the request itself is one leg of a
+  flagged combination — the acute-NSAID-completes-the-AKI-cluster case —
+  additive salience only, same doctrine as the requested-drug tag.
+- Red combinations join the riskiest-first sort banding and the hidden-red
+  filter note; the no-eGFR call-out now also fires on combination-flagged
+  rows. The 'noted' awareness tier deliberately stays in Monitoring so
+  signing-time salience is reserved for act-on-it-now combinations.
+- Hazard log: **H-038 controls (j)–(l)** recorded (re-display-only scope,
+  additive salience, awareness-tier exclusion).
+
+## [v3.160.0] — 2026-07-07
+
+### New Follow-ups tab: the personal safety-net ledger
+
+The strongest convergence of the 2026-07-07 Practice dream-feature panel
+(docs/appraisal/PRACTICE-dream-features-2026-07-07.md, item D1 — 7 of 10
+personas independently asked for loop-closure memory): the things a clinician
+is waiting on — "MSU pending, chase Friday" — held locally and resurfaced when
+the due date passes, instead of living in their head all week.
+
+- **Follow-ups tab** (`side-panel/modules/followups/`): add what you're
+  waiting for with a due date; entries band as waiting → due soon → due today
+  → **overdue** (lapsed is the loudest state — the broken chain IS the
+  product), sorted most-lapsed first. Done entries keep a struck-through
+  30-day trail, then auto-prune.
+- **Add from Monitoring**: an "Add follow-up reminder" action on the open
+  patient (overflow menu) creates a patient-linked entry — UUID captured from
+  the record context with the same open/submit wrong-patient re-check as the
+  create-task form. Entries added on the tab itself are explicitly labelled
+  "unlinked note"; a typed name is never treated as identity.
+- **Today line**: "Follow-ups: 2 overdue · 1 due today" under the headline —
+  red when anything has lapsed, hidden entirely when the ledger is empty.
+- **Honest state, fixed**: the ledger is a personal reminder list on this
+  machine only — not the clinical record, never a safety-netting system of
+  record, and nothing in it acts by itself. Stated permanently on the tab and
+  at the point of capture. Patient-identifiable by nature, so the store is
+  **excluded from suite backups** (machine-local by design, enforced by the
+  backup-coverage test) and open entries are **never silently pruned**
+  (regression-tested). Ledger writes are audited to the event ledger by
+  patient UUID. Hazard log: **H-040**.
+
+## [v3.161.0] — 2026-07-14
+
+### Practice-panel wishlist wave 2 (the 1–2-day roadmap items)
+
+Second build wave from `docs/appraisal/PRACTICE-wishlist-whole-suite-2026-07-03.md`.
+
+**Sweep — nurse clinic-prep worklist + QOF £**
+- New collapsible prep view grouping the day's action-needed findings by what
+  the nurse physically preps: bloods to draw, non-blood checks (BP/weight/ECG),
+  vaccines to fetch, reviews to book — a drug needing both bloods and a check
+  appears in both buckets. Printable prep list follows the handout pattern
+  (transient `sweep.worklist`, consume-on-read, never backed up). Absence never
+  reads as all-clear.
+- QOF points-at-risk can now show pounds: enter your practice's own £/point
+  figure once (inline cog, `sweep.qofConfig`, no shipped default — the tool
+  asserts no national price); total and CVD subtotal render in £ alongside
+  points. Non-clinical arithmetic only.
+
+**Manager pack — months and sessions**
+- Submissions: This month / Last month range presets, and a Compare sub-mode
+  "This month vs last month" — always month-to-date vs same-day-of-prior-month,
+  never a partial month against a full one, with the spans shown on-screen.
+- Activity: "Compare vs previous period" toggle (same same-span convention)
+  with per-clinician deltas in the list and CSV; "Per session" toggle divides
+  each clinician's totals by their non-cancelled session count (from the
+  scheduling overview, ≤31-day ranges via the capacity module's fan-out
+  pattern) — session count always shown next to the derived figure; "0
+  sessions — check rota" instead of Infinity; no session data = raw + marker.
+- Condor Pulse: calendar "Month view" line (PPI + demand, month-to-date vs
+  same span last month) over the existing snapshot store, with the honest
+  "N of M possible snapshots" coverage disclosure — gaps are never
+  interpolated.
+- `aggregateSlots` now reports per-clinician non-cancelled `sessions`
+  (additive).
+
+**Referrals — 2WW chase-letter draft**
+- Each safety-net row gains a "Chase draft" button: a prepared, letterheaded
+  chase letter (patient, referral date, days outstanding, specialty/hospital,
+  referral ID) in a readonly textarea with copy-to-clipboard. Prepared draft
+  only — review and edit before sending; never auto-sent; right-patient
+  fineprint included.
+
+**Record — SMR prep pack**
+- "SMR prep pack" button prints a clinician-facing sheet composing problems,
+  dosed medications with overdue/review flags, per-rule monitoring status, ACB
+  and STOPP/START prompts, QOF gaps and latest observations — with the
+  mandatory allergies/immunisations/history gap block and verify-before-
+  prescribing framing top and bottom. Forked from the passport print pattern
+  (transient `record.smrPack`, consume-on-read, never backed up). Empty
+  sections say "none recorded in live view", never implying reviewed-and-clear.
+
+**Panel — keyboard-first navigation**
+- 1–9 jumps to the Nth visible tab; `g` + letter chords (g t today, g m
+  monitoring, …); `/` focuses the active module's search; `?` opens the help
+  popover with a new shortcuts cheat-sheet. Single shared typing guard with
+  the existing Ctrl/Cmd+Alt+←/→ cycler; palette/tour/popovers always win.
+
+## [v3.160.2] — 2026-07-14
+
+### Fix: Suite-health strip false-alarming "Patient UUID resolution … degraded" on the Appointment Book
+
+The amber Suite-health strip (self-diagnosis, `shared/contract-canary.js`) was
+promoting the `api-client.patient-uuid-dom-fallback` contract to **degraded** on
+the **Appointment Book** — and other patient-less screens — while nothing was
+broken. An amber strip that cries wolf trains users to ignore it, which is worse
+than no strip at all.
+
+Root cause: the v3.75.x-era applicability gate treated the probe as meaningful
+whenever *any* anchor on the page carried a bare UUID. A diary row links to an
+**appointment** UUID (satisfying that gate) but carries no `/care-record/` or
+`/patient/` link (the probe's target), so the probe FAILed and two spaced visits
+promoted a false "degraded".
+
+- **Replaced the `anchorHrefRe` gate with a patient-banner-presence gate**
+  (`applicableWhenPresent` in `shared/dom-contracts.js`). The probe now only runs
+  where a patient is actually in context — mirroring the extension's own
+  patient-context detectors (`content.js`, `patient-context.js`). The appointment
+  book, dashboards and the multi-patient queue (no banner) read
+  **not_applicable**, never FAIL.
+- **Genuine drift detection is preserved**: on a real patient page where Medicus
+  renames the `/care-record/` URL shape, the banner is still present but the
+  care-record links vanish → the probe still FAILs (the banner selector doesn't
+  depend on the care-record URL, so it survives the rename). Per this strip's
+  doctrine ("false-positive discipline beats coverage"), an over-strict banner
+  selector under-alarms — the safe direction.
+- **`stateEpoch` bumped 2 → 3** so the canary discards any currently-stuck
+  'degraded' verdict issued under the old gate; the strip clears itself on the
+  next probe round (e.g. the next Appointment Book visit) with no user action.
+- No change to `engine/api-client.js` (`findPatientUuidFromDom` still scans all
+  `a[href]` — `anchor` is unchanged); tests updated in `test-dom-contracts.js`.
+
+## [v3.160.1] — 2026-07-14
+
+### Fix: "Send to Prescribing / Meds Management" button failing with "isn't in the assignee list"
+
+The routine-prescription re-assign button (`routine-rx-button.js`) aborted at
+step 3 — *"Team 'Prescribing / Meds Management' isn't in the assignee list.
+Open the picker to check the exact name…"* — even though the team exists. Same
+symptom as v3.143.2, different trigger.
+
+Root cause: step 3 typed the **entire configured team name** into Medicus's
+debounced, server-driven "Assign to" search and required a matching option to
+render. A name like `Prescribing / Meds Management` carries a `/` and several
+words; that class of query frequently returns **zero rows** from the live
+search even though a shorter query (`Prescribing`) returns the team. Coupling
+*what we type to filter* with *the full name* is exactly what keeps breaking
+when Medicus tweaks the picker's search.
+
+- **Decoupled the search query from the match.** Step 3 now types a **safe
+  leading token** (the team name up to the first character that isn't a
+  letter/digit/space — e.g. `Prescribing`) to surface the team, then matches
+  the option by its **full team text** (exact, else contains) as before. It
+  falls back to typing the full name for any picker where that string genuinely
+  did work, so no practice that worked before regresses. What we *type* and
+  what we *select* are now independent — a broad token still selects the exact
+  team, never the wrong one.
+- **Diagnostic breadcrumb on failure.** When no option matches after every
+  query, a single `console.warn('[ClinHUD:rx] …')` lists the queries tried and
+  the option texts the picker actually rendered — so a page-console capture
+  (CLAUDE.md "capture first") tells apart *search returned nothing / not a
+  search picker* (empty) from *returned options but the configured name doesn't
+  match* (a team-name mismatch, fixable via the ▾ menu).
+- No selector change (the `[id^="select-item-"]` / `[role="option"]` markup is
+  unchanged), no change to the fail-closed safety guards — the macro still
+  matches every control by visible text, aborts rather than clicking the wrong
+  one, and commits only per `commitMode`.
+- Tests: `test-routine-rx-macro.js` updated for the query ladder and a new
+  full-name-fallback scenario (54/54); `test-routine-rx-audit.js` unaffected
+  (23/23).
+
+### Also: unblocked two CI checks left red by the v3.160.0 merge
+
+v3.160.0 shipped with two CI checks already failing on `main`; this branch
+rebased onto it and inherited both. Neither is related to the routine-rx fix;
+both are cleared here so the PR can go green. **The clinical content added
+below still requires CSO review** — CI green attests only that the coverage
+guards pass, not that a Clinical Safety Officer has signed off the new terms.
+
+- **`engine/reception-match.js`** — v3.160.0 added the `sinusitis` pathway and
+  new red-flag ids (`rf-weightloss`, `rf-new50-visual`, `rf-orbital`,
+  `rf-frontal-swelling`, `rf-severe-unwell`, `rf-fontanelle`) to
+  `rules/reception-pathways.json` without the matching `SYNONYM_TERMS` /
+  `RED_FLAG_TOPIC_TERMS`, failing `test-reception-match.js`'s coverage guard.
+  Added conservative topic terms for each, derived directly from each item's
+  `ask` text and following the module's fail-safe direction (a missing term
+  makes a red flag read as a GAP that is re-asked, never a silent suppression).
+  Marked CSO-reviewable inline, per the file's existing clinical-content note.
+- **Safety-doc version pins** — v3.160.0 updated the manifest to 3.160.0 but
+  left `docs/CLINICAL-SAFETY-NOTICE.md`, `docs/HAZARD-LOG.md` and
+  `docs/feature-list.md` pinned at `3.159.0`, failing `check-doc-versions.js`.
+  Synced those three pins to `3.160.1` (the established incremental-sync
+  pattern). The `docs/cso-review-ledger.json` record of the last *full* CSO
+  review (3.115.0 / 3.126.0) is deliberately left unchanged — no CSO review is
+  claimed by this sync; `docs/SOUP.md` stays at its ledger pin (STALE, within
+  threshold).
+
+## [v3.160.0] — 2026-07-11
+
+### The Keeper: clinical rule currency update (2026-07-11)
+
+Automated horizon-scan of all Sentinel rule files against authoritative UK sources.
+All changes are additive or corrective; no monitoring intervals lengthened, no alerts
+removed. Full test suite passes (0 failures). CSO review required before merge.
+
+**Medicines monitoring (`rules/drug-rules.json`)**
+- `ace-arb`: added cilazapril (Vascace), imidapril (Tanatril) — both UK-licensed ACEi brands absent from match list (silent miss; BNF July 2026)
+- `antipsychotic`: added sulpiride (Dolmatil/Sulpitil/Sulpor), zuclopenthixol (Clopixol), flupentixol (Depixol/Fluanxol), fluphenazine (Modecate) — UK-licensed FGA antipsychotics with distinct brands absent from match list
+- `chc-combined-hormonal`: added Logynon, Synphase to match; added Slinda to exclude (POP, false-positive risk)
+- `sodium-valproate`: new monitoring rule (annual FBC/LFT/U&E); match includes "valproic acid" as explicit term (does not substring-match "valproate"); MHRA PPP obligation noted in alert text
+- `finerenone`: new monitoring rule (Kerendia; 4-monthly U&E/K+/eGFR; licensed for CKD+T2DM)
+
+**QOF indicators (`rules/qof-rules.json`)**
+- Added LD register (QOF 2025/26 LD001 reintroduced)
+- Added DEM004 (dementia carer review)
+- Added CKD002 (urine ACR testing) and CKD003 (BP <130/80 in CKD with proteinuria)
+- CHOL003 and CHOL004 cloned to multi-register populations (PAD, STIA; CHOL003 also CKD; CHOL004 excludes CKD per QOF spec)
+
+**Vaccine eligibility (`rules/vaccine-rules.json`)**
+- Flu homelessness cohort: ageMin 16 added
+- Shingles notes: corrected immunosuppressed pathway to 18+
+
+**Alert library (`rules/alert-library.json`)**
+- `pincer-7`: INR interval corrected 90d → 84d (= 12 exact weeks, NPSA/NICE NG196)
+- `prescribing-qtc-combination`: pimozide regression-locked in test
+- `alert-001`: new — NSAID without PPI in GI-risk patient (PINCER 2024; 22 NSAID terms)
+- `alert-002`: new — dual beta-blocker (PINCER 2024; 15 beta-blocker terms)
+- `alert-004`: new — acitretin/alitretinoin PPP in women 12–55 (MHRA)
+- `alert-005`: new — 5-alpha-reductase inhibitor teratogenicity flag (MHRA 2023)
+- `alert-008`: new — dual antiplatelet review (aspirin_ap 8 terms + P2Y12; PINCER 2024)
+- `alert-009`: new — NSAID + anticoagulant (PINCER 2024; 22 NSAID terms)
+
+**Medication review instruments (`engine/acb-scores.js`, `engine/stopp-start.js`, `visualiser-core.js`)**
+- ACB: added trimipramine (Surmontil, score 3), darifenacin (Emselex, score 3), trifluoperazine (score 3)
+- STOPP: added loprazolam, lormetazepam to BENZO_TERMS (criterion 4); alimemazine/trimeprazine to FIRSTGEN_AH_TERMS (criterion 3)
+- START: added pitavastatin to STATIN_TERMS; acebutolol/celiprolol/nadolol/oxprenolol to BETA_BLOCKER_TERMS
+- visualiser-core: aspirin_ap expanded (8 terms); antipsych adds amisulpride/paliperidone; benzo_z adds loprazolam/lormetazepam
+
+**Reception pathways (`rules/reception-pathways.json`)**
+- `backpain` rf-bladder: added "difficulty starting to pass urine" (NICE CKS cauda equina signs)
+- `feverish-child`: added rf-fontanelle (bulging fontanelle → 999; NICE NG143 immediate emergency)
+- `cough`: promoted unexplained weight loss from history question to red flag (duty; NICE NG12)
+- `headache`: split GCA flag into rf-new50-visual (visual symptoms → 999, sight-threatening) and rf-new50 (no visual → duty; NICE CKS GCA / BSR guidelines)
+- `sinusitis`: new pathway, Pharmacy First eligible age 12+, 6 red flags, 6 history questions
+
+**Tests extended:** test-drug-brand-coverage.js, test-qof-indicator-filters.js, test-acb-scores.js, test-stopp-start.js, test-visualiser-pincer.js, test-reception-pathways.js, test-alert-library-coverage.js
+
+**Sources:** BNF (July 2026, corroborated — primary PDFs returned 403); NHS England QOF 2025/26 (PRN02356); NHSE Annual flu letter 2025/26; PHE Green Book ch.19/28a; MHRA DSUs (valproate PPP, pimozide QTc, acitretin/alitretinoin PPP, finasteride/dutasteride); PINCER v2024; NPSA/NICE NG196; STOPP/START v3 (O'Mahony 2023); Boustani ACB/ACBcalc; NICE CKS (backpain, GCA, sinusitis, cough); NICE NG12, NG143; NHSE Pharmacy First spec 2024.
+
+## [v3.159.0] — 2026-07-07
+
+### Signing Queue: one warm line on the genuinely finished pile
+
+The maintainer asked for "a smiley face or something" on clear states; a
+scoped Practice-panel run (docs/appraisal/PRACTICE-clear-state-2026-07-07.md)
+unanimously rejected the smiley — including the consumer-savvy persona — and
+converged on one fixed line of warm, static text instead. Shipped as ruled:
+
+- Signing Queue's empty state now reads **"✓ Pile's clear — nothing waiting
+  on you."** (muted-green tick, sentence case) — acknowledgement and
+  permission to stop, not celebration. No emoji, no animation, no rotating
+  copy, no sound; identical every day so it fades into competence.
+- **Only when genuinely finished** (`emptyStateKind` in signing-core.js,
+  tested): every task type ticked and no location filter active. A narrowed
+  view keeps the neutral "No open repeat requests for the selected types." —
+  warmth on a false all-clear is worse than no warmth at all.
+- Doctrine recorded in the appraisal doc: delight attaches to finished WORK,
+  never to absence of clinical alerts, and never near a caveat.
+
+## [v3.158.0] — 2026-07-07
+
+### Signing Queue: location filter pills + glance glyphs (panel-appraised, user-placed)
+
+The v3.157.0 collection chip, matured through a scoped Practice-panel run
+(docs/appraisal/PRACTICE-signing-chip-2026-07-07.md) and then real-user
+feedback from the practice's own dispensary side:
+
+- **Location filter pills with counts** above the pile ("Dispensary 6 ·
+  Boots Pharmacy, Godalming 1 · No location 3") — derived from the values
+  present, clickable to filter, invisible at practices that never record
+  locations. "No location" is an explicit, countable bucket: a blank can no
+  longer silently read as "not ours" (the panel's sharpest finding).
+- **A narrowed view is never silent**: an active filter shows "N requests
+  hidden by the location filter", and any hidden RED-flagged rows are called
+  out by count in red (H-038 control (j)). The monitoring pass always checks
+  every row regardless of the filter. Filter is session-only, never
+  persisted — a remembered filter could hide rows from a user who forgot it.
+- **Chip placement settled by the real user**, overriding the synthetic
+  panel's meta-line ruling: it stays in the row head after the name, and the
+  SYMBOL now carries the glance category — house glyph (tinted) = practice
+  dispensary, Rx glyph (outline) = community pharmacy — answering the
+  phone-call question ("with our dispenser or your usual chemist?") without
+  reading. Category is a /dispens/i heuristic on the recorded name; the
+  verbatim text always rides alongside so a mis-coded location stays visible.
+
+### Monitoring: "Create task" for the open patient (Sweep's close-the-loop)
+
+Sweep's per-patient "Create recall task" — requested for the Monitoring tab —
+added to the Sentinel action bar. Same machinery (`shared/task-api.js`
+driving Medicus's OWN general-task endpoints; Medicus's validation, access
+control and audit fire as normal), description prefilled from the patient's
+action-needed chips via the shared instruction grouping ("Recall (from
+Monitoring): …"), assignee/priority from the live Medicus form, one explicit
+confirm, EventLedger record on success. **Wrong-patient guards (H-023
+extended):** the form permanently names the patient it was opened for, and
+submit re-checks the currently-followed patient UUID against the one captured
+at form-open — auto-follow moving on mid-form invalidates the submit instead
+of creating a task against the wrong record.
+
+## [v3.157.0] — 2026-07-07
+
+### Signing Queue: collection-location flag (dispensing patients)
+
+Each signing row now carries the request's recorded **collection location**
+verbatim from the task row (`collectionLocationName` — zero extra fetches),
+rendered as a neutral chip beside the patient name. For a dispensing
+practice this is the dispensing-patient flag at signing time: it says where
+the script goes after signing ("Dispensary"), so the dispensing pile is
+scannable at a glance. Routing information, not clinical risk — styled in
+the accent tokens, never red/amber, and absent when Medicus records no
+location. No new storage, no sort changes.
+
+## [v3.156.2] — 2026-07-07
+
+### Fix: Backup & Restore — "Export entire suite", "Import from file", and "Publish to shared folder" all failing
+
+`shared/leaflets-utils.js` and `shared/io/leaflets-io.js` are both loaded as
+classic `<script>` tags on the options page and so share one global scope.
+Both declared top-level `const SLUG_RE` and `const RECENT_MAX` — the second
+declaration threw `SyntaxError: Identifier 'SLUG_RE' has already been
+declared`, which silently aborted all of `leaflets-io.js`. That left
+`leafletsExport`/`leafletsImport` undefined. `require()` in
+`test-leaflets-io.js` never caught it, since CommonJS gives each file its own
+module scope.
+
+This one root cause broke three separate-looking symptoms, because all three
+go through the whole-suite export/import path rather than a single module:
+
+- **"Publish to shared folder"** and **"Export entire suite"** — both call
+  `doFullExport()`, which unconditionally includes `leafletsExport()` while
+  building its `Promise.all` array. Referencing the undefined function threw
+  immediately, aborting the whole export before any file was produced.
+- **"Import from file"** (and "paste JSON") — both call `applyEnvelope()`,
+  which includes a `leafletsImport` task whenever the backup has a `leaflets`
+  section (true for any full-suite backup). `applyWithRollback` rolls back
+  every task if any one throws, so the undefined function aborted and
+  rolled back the entire import, not just the leaflets portion.
+- Per-module (single-scope) export/import was unaffected, since those only
+  call the one requested module's function.
+
+- Renamed `leaflets-io.js`'s internal constants to `LEAFLETS_IO_SLUG_RE` /
+  `LEAFLETS_IO_RECENT_MAX` so they can't collide with `leaflets-utils.js` (or
+  anything else) loaded on the same page
+- No behaviour change to the export/import contract; `test-leaflets-io.js`
+  unaffected
+
+## [v3.156.1] — 2026-07-07
+
+### Fixed: Signing Queue "patient not resolvable" on every live task
+
+First live run showed every row erroring at patient resolution: the module
+constructed the overview path from the TASK-LIST slug
+(`/tasks/data/prescription_request_task_routine/overview/{id}`), but live
+Medicus serves the overview under a different slug than the list. Fix: the
+task row's own `overviewURL` (validated with the same `_OVERVIEW_URL_RE` the
+queue bridge uses — it is the pointer Medicus itself links and the queue
+chips already fetch) is now the authoritative resolution path, with the
+constructed path kept only as a fallback. Verified on a live-mimic fixture
+where the constructed path fails and only the row's overviewURL succeeds.
+
+## [v3.156.0] — 2026-07-07
+
+### Signing Queue: renal context on every checked row (display-only)
+
+The wishlist's "highest patient-safety value" renal join, delivered in the
+conservative display-only slice that fits the intended-purpose statement:
+before signing a renally-cleared repeat (DOAC, metformin, lithium…) the eye
+asks "what's the kidney function, and how old is that number?" — the record
+fetch already returns it, so every checked signing row now shows the
+patient's **latest recorded eGFR verbatim with its age permanently attached**
+("eGFR 38 mL/min/1.73m2 · 11mo ago").
+
+- Value is NEVER rendered without its date/age (out-of-context guard, H-010);
+  unparseable dates fall back to showing the raw recorded date.
+- **Stale (> 12 months) or unparseable-age renal data gets amber salience**;
+  "no eGFR on record" is remarked ONLY on rows already carrying a monitoring
+  flag — a quiet row's missing eGFR would be noise on young healthy patients.
+- No threshold, band, or dose logic is computed — verbatim recorded fact
+  adjacency only. H-038 gains control (i) documenting this.
+- Zero extra network cost: the eGFR comes from the investigation dashboard
+  the monitoring pass already fetches per patient.
+
+Pure logic (`renalContext`, `formatObsAge`) in signing-core.js with tests
+(39 checks total in test-signing-core.js).
+
+## [v3.155.0] — 2026-07-07
+
+### New: Signing Queue — the repeat-prescription pile with monitoring context
+
+The wishlist's top remaining GP minutes-saver (Tom's "safe to sign", 2026-07-03
+appraisal §3b), built to fit the frozen intended-purpose statement: the module
+DISPLAYS recorded monitoring next to each open request and deliberately never
+renders a verdict — no "safe", no ticks, no green. Hazard log: **H-038**.
+
+**What it does.** New Signing tab (panel + pop-out; in the GP role preset)
+lists every open prescription-request task (routine by default; non-routine
+toggleable — the endpoint's open-task view is exactly the outstanding pile),
+resolves each to its patient via the task-overview endpoint
+(`SentinelApiClient.resolveTaskToPatient` — the same panel-proven path
+booking-api uses), runs the patient through the identical monitoring pipeline
+Sweep uses (`fetchAll → normaliseAll → evaluatePatient`, drug rules +
+practice org/custom overlays, sequential with 250ms pacing, 30-patient
+batches with "Check next"), and shows the verdict chips on each request:
+
+- **red** — any monitored drug overdue / stale / no data;
+- **amber** — due soon;
+- **"requested" tag** — the loudest signal: the flagged drug appears in the
+  request text itself (a lithium request while the lithium level is overdue);
+- rows sort riskiest-first, with **unknown above quiet**: a record that could
+  not be read is an amber "check manually" row ranked above "no monitoring
+  flags recorded" — an incomplete read can never masquerade as an all-clear;
+- "no monitoring flags recorded" carries a permanent "≠ all clear" caveat and
+  the header's fixed honest-state line; multiple requests from one patient
+  share a single record fetch.
+
+**Safety framing.** Read-only (no write path exists in the module);
+authorisation happens only in Medicus. Nothing persisted — verdicts are
+in-memory; the only storage is the type-toggle UI pref via shared ui-state.
+New hazard H-038 (automation bias on this surface) with controls documented.
+
+Files: `side-panel/modules/signing/{signing.js,signing-core.js,signing.css}`
+(new), nav/registry entries in `panel.html`, `pop-out/pop-out.html`,
+`panel.js`, `pop-out.js`, `tab-catalog.js` (+ GP preset), tab-help entry.
+Tests: `test-signing-core.js` (30 checks: verdict reduction, requested-drug
+matching, risk-band sorting, patient grouping, request age).
+
+## [v3.154.3] — 2026-07-07
+
+### Fixed: record sections empty on slow loads ("card not found: Observations & Results")
+
+Reported via console warning on a live care-record page where the card list
+showed 'Observations & Results' clearly present. Root cause is a one-shot
+extraction race, not a Medicus rename: pageReady() passes as soon as the
+patient banner or FIRST record card renders, extractAll() runs once, and
+Medicus lazy-renders the lower cards afterwards — the route watcher's
+250ms/1200ms reruns can both land too early on a slow load, leaving those
+sections empty for the whole page visit.
+
+New late-card settle-watch in `content-scripts/triage-lens/content.js`: when
+an extraction pass reports expected-but-absent cards (`_missingCards`), the
+lens polls cheaply (500ms) for up to 12s and re-extracts as soon as any of
+them appears. Applies to record AND detail pages; self-terminates on deadline
+or completion; disarmed on SPA route change. The once-per-load
+"card not found" warning still fires if a card genuinely never renders.
+
+## [v3.154.2] — 2026-07-07
+
+### Fixed: health-strip false positive — patient-UUID fallback probe fired on patient-less pages
+
+Root cause of the "Medicus may have changed — Patient UUID resolution" strip
+found via live-DOM capture: the contract is only probed on pages whose URL
+resolves no id, which includes patient-LESS screens like the appointment book
+and dashboards. A diary grid has no patient links, so the probe FAILed there
+and two spaced visits promoted to a 'degraded' banner while nothing was
+broken. (The capture also confirmed the data-attribute strategy matches
+nothing on current Medicus — the link strategies `/care-record/{uuid}` /
+`/patient/{uuid}` still work and carry the feature.)
+
+- **Applicability gate** (`anchorHrefRe` on the contract, honoured by
+  `DomContracts.probeContract`): if no anchor href on the page carries a bare
+  UUID, there is no patient-resolution evidence to test — the round reads
+  `not_applicable`, never FAIL. UUID-bearing links that match neither shape
+  still FAIL (genuine URL-shape drift stays detectable).
+- **State epochs** (`stateEpoch` on the contract; `applyStateEpochs` /
+  `stampStateEpochs` in contract-canary.js): stored verdicts issued under the
+  old probe semantics are discarded on the next probe round, so the existing
+  false-positive 'degraded' clears itself on the next Medicus visit — no
+  manual dismiss needed.
+- Tour: 'header-controls' step extended to lead with the v3.154.0
+  quick-leaflet button and retagged (TOUR_VERSION 9 → 10) so returning users
+  get a "What's new" pass showing where it lives — shipped and immediately
+  missed by its own requester, so it earns the spotlight.
+
+Tests: probe-gate semantics (patient-less page → not_applicable; UUID links +
+selector miss → FAIL) and epoch discard/stamp covered in
+test-dom-contracts.js / test-contract-canary.js.
+
+## [v3.154.1] — 2026-07-07
+
+### Suite-health strip: acknowledge/dismiss (7-day snooze per degradation set)
+
+The amber "Medicus may have changed — … degraded" strip had no acknowledge
+action, so a known, unchanged degradation nagged on every panel open. The
+strip now carries a ✕ dismiss: hides that EXACT set of degraded contracts for
+7 days, and reappears immediately if the degraded set changes (anything new
+breaks, or a different contract degrades) — new problems always surface.
+Options → Suite health keeps full detail regardless of the snooze. New
+machine-local key `health.stripSnooze` (transient acknowledgement, not backed
+up — a restored backup should re-surface the warning).
+
+Context: the strip was correctly reporting a real Medicus change (the
+patient-UUID DOM fallback probe degraded — the same change that takes out the
+cross-tab monitoring badge on pages where URL detection can't resolve the
+patient). The fix for the underlying selector drift needs a live-DOM capture
+and ships separately; this release just makes the warning politely
+acknowledgeable while it's known-about.
+
+## [v3.154.0] — 2026-07-06
+
+### New: Quick Leaflet popover — NHS leaflet search from any tab
+
+Requested for mid-triage use: leaflets were needed while working the Slots
+screen (and the queue, and Sentinel), and switching to the Leaflets tab loses
+the module you're in. Rather than embed leaflets into Slots specifically, the
+panel header gains a leaflet button (open-book icon, next to the command
+palette) that opens a compact popover on top of whatever tab is active:
+
+- Fuzzy search over the bundled NHS A–Z index (same tier-1 engine as the
+  Leaflets tab, via `shared/leaflets-utils.js`) with keyboard-first flow —
+  type, ↑/↓, Enter opens the leaflet on nhs.uk in a new tab; per-row
+  copy-link; a guaranteed "Search nhs.uk for …" fallback row covers index
+  misses; recents shown when the query is empty.
+- Shares the Leaflets tab's `leaflets.recent` list (both surfaces stay in
+  sync) and hands the current query into the full tab via the existing
+  `leaflets.pendingQuery` mechanism ("Open Leaflets tab →" in the footer).
+  Tier-1 only — no API key use, no in-panel rendering, no new storage keys.
+- Also reachable from the command palette ("NHS leaflet quick search…").
+- Panel-only by the same convention as the global strips; the pop-out window
+  reaches the full Leaflets tab from its own nav.
+
+Files: `side-panel/quick-leaflet/quick-leaflet.js` (new), `panel.html`
+(header button + host), `panel.css` (`.ql-*` styles), `panel.js` (init),
+`palette/palette.js` (command).
+
+## [v3.153.0] — 2026-07-06
+
+### Fixed: Submissions "work received" counts no longer erode as the team completes work (day ledger)
+
+Root cause of the v3.152.1 report, confirmed by live-API probe (2026-07-06):
+the `/tasks/data/{type}/task-list` endpoint **only ever contains open tasks**.
+Its status filter offers `New / Awaiting recipient response / Reply received /
+Snoozed` — there is **no completed state**; completed requests leave the table
+entirely (a probe of the previous Monday returned 2 residual tasks). So a
+`createdAt`-filtered count is "received AND still open", and the number falls
+as the team clears work. The Submissions Tracker, Today demand card, panel
+demand strip and Condor demand/velocity/PPI have therefore all systematically
+**undercounted received work since inception** — worst on busy mornings, when
+27 could show against a true intake 3–4× higher. A demand undercount reads as
+"quiet day" and misinforms capacity decisions.
+
+The API cannot return completed tasks, so the suite now **remembers** them:
+
+- **New received-work day ledger** (`submissions.ledger`,
+  `side-panel/modules/submissions/submissions-ledger.js`, pure logic in
+  `submissions-core.js`). Every poller that already hits the endpoint
+  (Submissions module, Today demand card, panel `#subRagStrip`, Condor — each
+  every 60s while visible) merges the task IDs it sees into per-day, per-
+  category entries. Once seen, a task stays counted after completion.
+- **PHI/data-minimisation**: the ledger stores task UUIDs + creation hour for
+  the current day only; past days are compacted to bare counts + a 24-bucket
+  hourly histogram at the first poll of the next day. No patient identifiers,
+  92-day retention. Backed up via `shared/io/submissions-io.js` (with
+  structural sanitisation on import) so demand history survives reinstalls.
+- **All four consumers now count from the ledger** (falling back to the live
+  open-only count if storage fails): Submissions tiles/charts in all three
+  modes, Today demand card, demand-strip RAG thresholds, Condor
+  demand/velocity/PPI. RAG thresholds in particular no longer un-trip
+  mid-morning because the team is clearing the queue while intake keeps
+  climbing.
+- **Honest history**: days the suite wasn't live-watching can only show
+  residual open tasks. The Submissions module now flags such days in the
+  amber data-health notice instead of presenting undercounts as history —
+  received counts build up from the day the suite starts watching.
+- Known limitation (documented, unfixable client-side): work received and
+  completed while the panel was closed (e.g. before first open of the day) is
+  invisible to the ledger and still undercounts that window.
+
+## [v3.152.1] — 2026-07-06
+
+### Fixed/hardened: Submissions & Today demand counts against silent task-list API changes
+
+Reported: Submissions Tracker (and the Today demand card, which shares the
+endpoint) showing implausibly low "work received" counts on a Monday morning,
+with the same numbers regardless of date — alongside a health-strip warning
+that Medicus may have changed.
+
+The `/tasks/data/{type}/task-list` endpoint **silently ignores query params it
+doesn't recognise** (the v3.35.2 postmortem: `startDate` vs
+`createdAt_startDate` returned the whole backlog). If Medicus renames the
+`createdAt_*` filters, the failure inverts and every consumer quietly counts
+the *default open-task view* — the outstanding queue, not work received.
+Completed work vanishes from the count, every date shows the same numbers, and
+nothing errors. Previously that showed as confidently wrong tiles; a demand
+undercount reads as "quiet Monday" and misinforms capacity decisions.
+
+New `windowTaskList` / `extractTaskArray` / `taskDateISO` in
+`submissions-core.js` (pure, tested), now used by **all four same-day
+consumers** — Submissions module, Today demand card, panel `#subRagStrip`,
+Condor demand/velocity/PPI:
+
+- **Detects an ignored date filter**: tasks created clearly outside the
+  requested window (±1-day tolerance absorbs UTC/BST boundary skew — no false
+  alarms on midnight tasks) trip a `filterIgnored` flag; counts are then
+  re-windowed client-side to the requested dates so they stay honest.
+- **Surfaces it, never hides it**: the Submissions module shows an amber
+  data-health notice ("Counts unreliable — Medicus ignored the date filter…
+  likely an undercount, completed items may be missing"); the Today demand
+  card shows an inline warning. Healthy responses pass through untouched.
+- **Detects truncation**: a body carrying `totalCount`/`total`/`meta.total`
+  larger than the returned array (pagination introduced upstream) flags
+  "partial page — counts may be low".
+- **Tolerates envelope renames**: task arrays are now extracted from
+  `tasks | data | results | rows | bare array` (same shape list page-world.js
+  already tolerates) instead of only `d.tasks` — a renamed envelope becomes a
+  flagged count, not a silent zero.
+- Panel `#subRagStrip` also now uses the **local** calendar date instead of
+  `toISOString()` (which queried yesterday during the first BST hour — same
+  fix condor got in v3.35.2).
+- The Condor report's ranged demand fetch already windows client-side via
+  `bucketDemandByDay` and needed no change.
+
+Note: when the filter is being ignored upstream, client-side windowing cannot
+recover work the API no longer returns (completed tasks). The warning is the
+point — the follow-up fix needs the new filter param names captured from a live
+Medicus page (Debug → API diagnostics, or a page-console capture).
+
+Tests: `test-submissions-core.js` extended to cover envelope tolerance, date
+parsing, boundary tolerance, ignored-filter re-windowing and truncation
+detection.
+
+## [v3.152.0] — 2026-07-03
+
+### Practice-panel wishlist wave 1 (quick wins + half-day items)
+
+First build wave from the whole-suite feature-wishlist appraisal
+(`docs/appraisal/PRACTICE-wishlist-whole-suite-2026-07-03.md`).
+
+**Sweep / Today**
+- QOF points-at-risk patient rows now show each indicator's name next to its
+  code ("DM037 — …"), not bare codes.
+- Skipped appointment entries (no patient UUID) are now *named*: a collapsible
+  amber list shows time · clinician · raw name for every entry the sweep could
+  not check, with an explicit "never checked, not an all-clear" caveat. New
+  `sweep.lastRun.skippedEntries` field (PHI-bearing, same 2h TTL, never backed
+  up); `missingUuidCount` kept for back-compat.
+- Today's Morning Sweep card adds a plain-English line: "N of M booked
+  patients have checks due — open the sweep for names" (neutral zero state;
+  not-run state untouched — never implies all-clear).
+
+**Monitoring visibility from any tab**
+- The open patient's red/amber monitoring count now shows on the header strip's
+  "Monitoring →" button (amber, red if any red chip), falling back to a badge
+  on the Monitoring nav tab when the waiting-room strip is hidden. Panel-only;
+  reuses the content script's already-computed chips via `getSentinelSnapshot`
+  (no rules-engine run in the panel). Unavailable snapshot renders as no badge,
+  never as 0 or an implied all-clear.
+
+**Referrals**
+- 2WW safety-net rows no longer truncate patient names (name wraps on its own
+  line; service/clinician move to a sub-line) and the card carries a threshold
+  legend ("watch ≥ 14d · overdue ≥ 21d", values from the API, not hardcoded).
+
+**Reception → Leaflets**
+- Each pathway tile gains a "Leaflet →" link that jumps to the Leaflets tab
+  with the matching NHS A–Z search pre-run (one-shot `leaflets.pendingQuery`
+  handoff key; transient, never exported).
+
+**Knowledge**
+- Reserved "Locum brief" pinned category: sorts first after "All", styled
+  distinctly, with an empty-state hint and a suggested option in the Add form
+  — the locum's day-one who's-who/escalation card, practice-authored.
+
+**Setup / help**
+- Triage-monitor setup step now uses the canonical "Team / assignee UUID"
+  wording and explains where to find it in plain English.
+- Tab help + tour now surface four features users kept asking for because they
+  couldn't find them: Sentinel auto-follow, the clickable "N unmatched" audit
+  count, and the Practice Pressure cog (weightings/thresholds). TOUR_VERSION
+  8 → 9 so returning users get the "What's new" pass.
+
+## [v3.151.0] — 2026-07-02
+
+### Triage Lens — Workload off the GP (Phase 4)
+
+Phase 4 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: turning the evidence and
+honesty of the earlier phases into consultations that never reach the GP. The
+clinical items (pathway matching, green routine rules) were CSO-reviewed —
+`docs/plans/TRIAGE-LENS-PHASE4-REVIEW.md`.
+
+**Queue workflow (client-side):**
+- **Keyboard triage** — j/k (or arrows) move a cursor through the results
+  queue, Enter opens the cursor row, n jumps to the next red/amber. Ignores
+  keys while typing. Pref `queueKeyboardNav` (default on).
+- **Seen-dimming** (opt-in, default off) — rows whose task was opened this
+  session dim so unworked rows stand out. Visual-only, session-local,
+  suppresses nothing: it **never dims a red/amber row** (gate reads the result
+  cache, so it holds even with row-tint off) and auto-undims the moment a row
+  re-grades to an alert. Hazard log H-037.
+- **"All-normal, fileable" marker** — a green ✓ on rows whose report is
+  confidently all-normal with no filing blockers, so the GP works reds first
+  and batches the easy filings. Reuses the lab-file gate; fail-closed; marks
+  nothing it can't confirm, and files nothing itself.
+
+**Request-queue decision support (CSO-reviewed):**
+- **Pharmacy First divert chip** — a request matching a Pharmacy First pathway
+  (from the CSO-signed `reception-pathways.json`) shows a green chip when the
+  patient is age-eligible (fails closed on unknown age). Clicking offers a
+  prepare-only redirect draft — copy-to-clipboard, never auto-sent.
+- **Missing-info ask-back** — for a matched pathway, the chip menu lists the
+  red-flag questions the request hasn't answered and a prepare-only ask-back
+  draft; a red flag the patient *volunteered* (999/duty) surfaces as a
+  prominent escalation note. Decision support only — offers info and drafts,
+  never triages or auto-advises.
+- **Green routine rules** — requests that are confidently non-clinical
+  (practice-admin details, pharmacy/prescription process queries) now show a
+  green chip so the safe tail can be swept in one pass. Green ranks *below*
+  red/amber/info, so a symptom co-occurring with an admin phrase always keeps
+  its clinical chip on top — green can never mask a signal. defaults config
+  23→24.
+- **`engine/reception-match.js`** — new pure matching engine (Pharmacy First
+  eligibility, red-flag gap detection) over the pathways file, fail-closed on
+  unknown age, conservative gap detection (over-asks rather than assumes).
+
+**Deferred** (in the review doc): repeat-contact (the queue payload carries no
+patient identifier — awaiting a decision on the name+DOB fallback); the
+photo-missing prompt (no attachment field is visible in the data the extension
+reads — needs live-Medicus discovery); and the Phase 3 FIB-4 age-split /
+Hb-K⁺ delta follow-ups.
+
+## [v3.150.0] — 2026-07-02
+
+### Triage Lens — Smarter grading (Phase 3)
+
+Phase 3 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: the first phase to change
+what fires red and amber. Every new/changed shipped threshold was independently
+verified against a named UK source and **CSO-signed-off** before release — see
+`docs/plans/TRIAGE-LENS-PHASE3-REVIEW.md`.
+
+**Engine capabilities** (grading was byte-identical until this release shipped
+content that uses them):
+
+- **Unit-mismatch guard** — a result rule no longer grades a value reported in a
+  unit incompatible with the rule's own (`unitsCompatible()` normalises µ/u,
+  superscript and cell-count notations, `micrograms/L`↔`µg/L`). On a genuine
+  mismatch the rule is skipped and surfaced as a grey "unit?" chip with a
+  plain-language popover line; absent units stay fail-open (Medicus often omits
+  them). IU vs U kept distinct.
+- **Text rules can reach red** — optional `abnormalLevel:'red'` lets a designated
+  positive text finding escalate past the historic amber cap (escalate-only).
+- **Unclassified-positive safety net** — an unmatched non-numeric positive result
+  ("Positive"/"Detected"/…) no longer scores nothing; it surfaces an amber "?"
+  chip. Heavily negation-guarded (incl. a `non-reactive` glued-prefix guard),
+  amber-max, and only when no rule already classified the result.
+- **Negation / past-reference demotion** — request-queue chips visually demote
+  (never suppress) when the trigger phrase is negated ("no chest pain") or
+  historic ("UTI last year"): outline style, "(negated?)"/"(past?)" suffix,
+  ranked below undemoted matches.
+- **Patient-context gates** — result rules accept `context:{minAge,maxAge,sex}`;
+  request rules accept `require:{ageMin,ageMax,sex,medsAny,problemsAny}`. Both
+  AND-gate and **fail closed** — a gate whose data isn't available on the current
+  surface simply doesn't fire, never suppressing a base match.
+- **Delta / trend rule kind** — `kind:'delta'` grades on change over time
+  (direction, absolute or percent, unit-guarded, optional `maxDays`), rendered
+  with the change summary in the chip popover.
+
+**New shipped result-rule coverage** (config version 21→23; each cited to a UK
+source, thresholds in the review doc):
+
+- Hypernatraemia (Na high, amber ≥150 / red ≥160), absolute creatinine/AKI
+  (red ≥354 µmol/L, KDIGO stage 3) plus a creatinine-rise delta (≥26.5 µmol/L in
+  48h, KDIGO stage 1), glucose (high ≥11.1 / ≥30; low ≤4.0 / ≤3.0), ALT & AST
+  transaminitis (≥120 / ≥320 U/L), CRP (≥20 / ≥100, NICE CG191), WCC high (≥12),
+  and a **potassium 6.0–6.4 amber band** below the existing red ≥6.5 (UK Kidney
+  Association).
+- **HbA1c ≥48 demoted red → amber** — 48 is the diagnostic threshold, not an
+  acute-danger value; demotion cuts red alert-fatigue (with a `RETIRED_*`
+  un-stick so it reaches existing installs). New diabetes still flags, at amber.
+
+**Held back after clinical review** (in the review doc, pursued as follow-up):
+the FIB-4 age-adjustment was reverted to status quo (the drafted ≥65 cutoff used
+a hepatitis-C value and the correct age-adjustment needs an engine change the
+escalate-only model can't do yet); the neutrophil-high rule was dropped (a
+lab-range boundary, not a validated action threshold); and Hb-fall / K⁺-rise
+delta rules await a defensible sourced magnitude.
+
+## [v3.149.0] — 2026-07-02
+
+### Triage Lens — Evidence at the chip (Phase 2)
+
+Phase 2 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: every chip can now explain
+itself and carry its next step — all client-side, on data already fetched, with
+no change to clinical grading.
+
+- **Request chips show their evidence.** Clicking a queue rule chip opens a
+  menu showing the exact sentence from the patient's request that triggered
+  the rule (matched term highlighted) plus the rule's attached actions —
+  guidance links, copy-ready snippets, notes — via the scheme-guarded action
+  executor. When several rules match one request, chips rank red < amber <
+  info and collapse to the top chip + "+N" (the overflow menu lists all
+  matched rules, each with its own evidence and actions). Evidence is built
+  with `textContent` only — request text is never rendered as HTML, and
+  Medicus's own DOM is never mutated for highlighting. New matcher API
+  `ruleMatchEvidence()` is built on the same compiled patterns as the boolean
+  matcher and parity-swept across the full 78-rule corpus.
+- **Result chips answer "how bad?" in place.** Red/amber chips gain a trend
+  arrow (↑/↓) when a prior value exists in the report's own history —
+  suppressed on any unit mismatch, never a cross-unit comparison. Clicking a
+  chip opens a detail popover: value, unit, reference range, lab flag, sample
+  date, which rule fired (with its threshold, e.g. "red ≥6.5"), and the prior
+  value with date. The grey "couldn't check" chip explains itself and notes
+  the automatic retry. Engine change is purely additive attribution
+  (`flagged`, `ruleId`, `extractPrior`) — grading behaviour byte-identical,
+  all pre-existing severity tests unchanged.
+- **The verdict follows you into the task.** Opening a task from the queue
+  shows a slim severity-edged banner echoing the evaluation ("2 abnormal:
+  K⁺ 6.2 ↑ · eGFR 38 ↓ — rule: …") from cache with zero extra fetches;
+  directly-opened tasks compute once via the queue's own path. The banner is
+  keyed to the task ID (a slow fetch can never paint the wrong patient's
+  verdict), shows an honest grey variant when the check failed, and stays
+  silent on non-result tasks. Pref `detailVerdictBanner` (default on).
+- **Result rules can carry guidance actions.** The same link/snippet/note
+  actions request rules have — validated (http/https only), editable in the
+  result-rule editor (shared action-editor component), documented in the LLM
+  authoring prompt, and rendered in the chip popover for the rule that fired.
+  Actions resolve from live config at render time, so edits apply instantly.
+  No shipped rule gains actions in this release (user-authored only).
+
+## [v3.148.0] — 2026-07-02
+
+### Triage Lens — Trust: the screen never lies (Phase 1)
+
+Phase 1 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: the queue and HUD now
+distinguish "assessed and clear" from "not assessed" everywhere, alert rows are
+visible at a glance, and every machine-initiated write leaves an audit trail.
+
+- **"Not assessed" never looks like "normal".** The HUD headline says **"Not
+  fully assessed"** (never "No flags") when a clinical card could not be read,
+  with a grey footer naming the missing cards, and a tile whose entire source
+  is unreadable renders a grey not-assessed state instead of implying clear.
+  Card lookup itself is hardened (count-suffix and whitespace/case tolerant,
+  ambiguity-safe) and warns once per page load when an expected card is
+  missing. On the results queue, a row whose check **failed** now shows a grey
+  outline "?" chip and is retried within a minute — previously indistinguishable
+  from an unassessed or normal row. The monitoring-due chip is now conservative:
+  a transient fetch/evaluation failure preserves the last known chip instead of
+  clearing it (only a successful evaluation can clear), while patient/page
+  changes still reset it so a chip can never leak across patients.
+- **Live triage status bar** replaces the passive queue legend: live counts
+  ("3 red · 7 amber · 22 clear · 2 ? · checking 8…"), a **jump-to-next-red**
+  button (amber fallback) that scrolls and flashes the row, and a
+  **Focus alerts** toggle that dims non-alert rows (never hides them). "Clear"
+  counts only results that were actually assessed; tasks with no gradeable
+  report are not claimed as clear. Pref-gated (`queueStatusBar`, default on).
+- **Severity row tint**: alert rows carry a 2–3px red/amber left-edge tint
+  (master and preview rows), wiped and re-derived in the same cycle as the
+  chips so a recycled grid row can never wear a previous patient's colour.
+  Pref-gated (`queueRowTint`, default on).
+- **Machine writes are audited and surfaced.** OIR auto-ticks now write
+  `kind:'auto'` entries to the existing audit log and show a toast listing
+  exactly what was ticked, with a **Review** action (scroll + flash — labelled
+  honestly: ticking writes to Medicus immediately and cannot be reversed from
+  the toast) recorded as `kind:'auto-review'`; a new `oirAutoTick` pref
+  (default on) can disable auto-ticking entirely. The routine-prescriptions
+  button now records every outcome (committed / highlighted / aborted,
+  including the previously-untracked `auto` mode) in a machine-local ring
+  buffer mirrored to the Clinical Event Ledger. Audit logs stay machine-local
+  by design (excluded from backups, matching the lab-filing precedent). Hazard
+  log: new **H-036** (auto-tick wrong-match hazard), H-035 updated.
+- **Fixed in passing:** meta chips (`Under-prioritised`, `Unmatched patient`)
+  rendered filled instead of outline on the live page — the `.ch-chip-meta`
+  rule existed only in the stale PiP CSS copy, now restored to `hud.css`.
+
+## [v3.147.1] — 2026-07-02
+
+### Triage Lens — Phase 0 hardening (guardrails before the improvement plan)
+
+Groundwork from `docs/plans/TRIAGE-LENS-2026-07-02.md` (Phase 0): the tests and
+one-line safety fixes that protect every later phase. No user-visible feature
+change beyond one false-alert fix; the value is regression insurance on the
+suite's most-regressed surface.
+
+- **Blood-culture chip no longer false-ambers negative reports.** Bare
+  substrings `gram positive` / `gram negative` / `candida` in the
+  `base-blood-culture` result rule tripped a "needs review" amber on explicitly
+  *negative* reports ("No gram negative organisms isolated", "Candida species
+  not isolated"). Replaced with morphology-qualified gram-stain terms
+  (`gram negative bacilli`, `gram-positive cocci`, …) and named candida species
+  + `candidaemia`, which keep detecting genuine positives — including interim
+  gram-film-only reports — without colliding with negation phrasing.
+  `defaults.json` config version 20 → 21. The migration un-stick
+  (`revertRetiredResultRuleFields`) was extended to deep-compare **array**
+  fields (it previously handled only scalar labels/thresholds), so existing
+  installs whose stored rule still matches the old shipped array pick up the fix
+  while practice-customised rules are left untouched — mirrored in
+  `content.js` + `options.js` per the lock-step convention. Phrasing set flagged
+  for Keeper source-review in the Phase 3 calibration pass.
+- **Action URLs are scheme-checked.** `executeAction` in
+  `content-scripts/triage-lens/content.js` now permits only `http:` / `https:`
+  before `window.open`; a `javascript:` / `data:` URL from an imported or edited
+  config is rejected and logged, not executed. The same allowlist is enforced in
+  `options.js` at rule-edit / LLM-import time (defence in depth).
+- **Backup imports are validated before they persist.** The file-import and
+  raw-JSON save paths in `options.js` previously accepted anything with a
+  `rules` array. They now run every rule through `validateTriageRule` /
+  `validateResultRule`, shape-check `thresholds` / `prefs` / `systemChips`, and
+  normalise `version` — rejecting the whole import (naming the first offender)
+  rather than half-persisting a malformed or hostile config.
+- **New regression tests.** A live-grid injection smoke harness
+  (`test-queue-injection-smoke.js`, 57 checks) drives the real chip injectors
+  through prepend / de-dupe / SPA-churn-survival / durable-map keying — closing
+  the "needs a live-grid smoke test" gap the changelog has flagged repeatedly.
+  `test-triage-alert-engine.js` (45 checks) covers the previously untested
+  `triage-alert-engine.evaluate()`; `test-routine-rx-macro.js` (49 checks) gives
+  the routine-Rx macro the behavioural coverage lab-file already had;
+  `test-triage-import-validation.js` (68 checks) guards the new import/URL
+  validation. `test-triage-rule-patterns.js` now imports the real
+  `rule-match.js` instead of a re-implementation (no drift was found).
+- **Internal:** the analyte match/exclude/specimen matcher, previously copied
+  three times inside `engine/result-severity.js`, is now one shared
+  `analyteMatches` helper with direct unit tests (`test-analyte-match.js`) —
+  behaviour verified identical before unifying.
+## [v3.147.1] — 2026-07-02
+
+### Suite health — fix two false "degraded" alarms on the health strip
+
+The `#healthStrip` amber banner could read "Queue chips — master/detail row
+linkage (findQueuePreviewRow) degraded" and "Patient UUID resolution … DOM
+fallback degraded" while the queue chips were visibly rendering fine — a
+DOM-contract canary false alarm, not a real break.
+
+- **`queue.preview-row-link`**: the canary tested only whether AG-Grid's
+  master/detail preview row was present, not whether chips actually landed.
+  `queueChipHost()`'s own further fallback (the `patientName` cell) is
+  covered by the separate `queue.chip-host` contract — when that contract
+  reads OK, the narrower preview-row contract is now treated as OK too
+  (`dom-contracts.js`'s new `suppressedByOk` field, applied in
+  `contract-canary.js`'s `runProbeRound`), instead of alarming on a
+  transient/legitimately-absent preview row that a working fallback already
+  covers.
+- **`api-client.patient-uuid-dom-fallback`**: probed on every page
+  (`pageMatch: null`) even though the DOM fallback it backs is only ever
+  consulted when URL-based patient/encounter/task-id resolution
+  (`detectMedicusContext`) fails — on a queue/task-list page (a genuinely
+  multi-patient screen) it FAILed constantly for a fallback that was never
+  going to run. `runProbeRound` now skips this contract for any round where
+  the URL already resolved an id.
+- Both fixes are hysteresis-neutral: an already-degraded contract now
+  auto-recovers the moment its covering signal reads OK, same as any other
+  recovery.
+
+## [v3.147.0] — 2026-07-02
+
+### NHS Patient Leaflets — a new tab, not a Google search
+
+Dave: "I end up sticking it in Google — NHS wart — and it feels disjointed."
+A new side-panel tab puts the right NHS patient leaflet one search away,
+without ever sending patient data anywhere. Plan:
+`docs/plans/NHS-LEAFLETS-2026-07-02.md`.
+
+- **Tier 1 — bundled A-Z, works with zero configuration.** A curated index
+  of 221 entries (166 conditions + 55 medicines) ships in
+  `rules/nhs-az-index.json`, matched by fuzzy search with alias and
+  typo-tolerant prefix matching. Every search also offers a guaranteed
+  "Search nhs.uk for '\<term\>'" fallback row, so the tab never dead-ends on
+  an index miss. Results **open in a new tab** (a normal user-initiated
+  navigation, not an extension fetch) or **copy a link** for the
+  patient-SMS workflow; a Recent list keeps the last 10 for quick reuse.
+  This tier contacts no new endpoint at all.
+- **Tier 2 — optional in-panel rendering via the NHS Website Content API.**
+  Options-gated: a subscription key, entered in Options → Leaflets, lets a
+  search result render the leaflet text right in the panel — headings and
+  paragraphs built from text nodes only (no `innerHTML` of remote content),
+  with a visible "From the NHS website" attribution link back to the
+  source page. Responses are cached for 24h to respect syndication
+  freshness terms and avoid re-fetching on every click. Any fetch failure
+  (401/403/429/network/unexpected shape) fails calmly back to tier-1
+  open-in-tab behaviour with a one-line notice — the module is
+  indistinguishable from tier-1-only when no key is set. The API key is
+  deliberately excluded from suite backups (secrets stay machine-local);
+  everything else (recent list, enabled flag) travels normally.
+- **`scripts/verify-nhs-index.js`** HEAD-checks every bundled slug against
+  the live site from a machine with normal egress (this sandbox couldn't
+  reach nhs.uk to verify the seed index directly) and reports failures —
+  documented in `rules/`.
+- **Honest disclosure.** README and `docs/DPIA.md` now say plainly that
+  `api.github.com` is no longer the *only* external endpoint the extension
+  can contact: with a key configured, selecting a search result sends
+  `api.nhs.uk` the condition or medicine term the user selected — never
+  patient data. Without a key, nothing changes.
+- **Event Ledger.** Every leaflet open is recorded (source `leaflets`,
+  action `opened`, label = slug, `patientRef` always null) — evidence of
+  what was opened, never who for.
+- New module: `side-panel/modules/leaflets/`; backup wiring
+  (`shared/io/leaflets-io.js`, `VALID_SCOPES`, `doFullExport`/
+  `applyEnvelope`/`previewEnvelope`, Options export card); tab help in
+  `shared/tab-help.js`; tour step (`TOUR_VERSION` 7 → 8).
+
+## [v3.146.0] — 2026-07-02
+
+### Unbreakable — the suite knows when Medicus changes
+
+Three of the last six mainline fixes (v3.143.1 OIR checkboxes, v3.143.2
+assignee picker) were regressions caused by Medicus silently changing
+frontend components, discovered by a clinician in clinic — for a safety
+tool that means periods where features silently didn't fire and nobody
+knew. This release makes the next one self-announcing. Landed as two
+batches (`8a5a06f`, `230fc1d`); plan: `docs/plans/HORIZON1-UNBREAKABLE-2026-07-02.md`.
+
+- **DOM-contract registry (`shared/dom-contracts.js`).** All 14 Medicus
+  selector contracts the suite depends on, declared once with
+  anchor/target/legacy-fallback semantics. Consumers outside content.js
+  (routine-rx button, lab-file button, booking/task inline widgets,
+  api-client's UUID fallback) now read their selectors FROM the registry
+  instead of hard-coding them. `content-scripts/triage-lens/content.js`
+  is untouched (tests pin its exact content) — its own contracts (OIR
+  checkboxes, queue-chip hosts) are mirrored in the registry, and a
+  grep-based sync test fails CI if a future content.js selector change
+  drifts from the mirror.
+- **Recorded-fixture tests.** 21 sanitised fixtures covering current
+  `m-*` and legacy `q-*` Medicus markup variants, synthesised from the
+  selector expectations the code demonstrably handles today (fixtures
+  carry provenance headers saying so, not real patient DOM). A 310-check
+  contract test verifies every contract against its fixtures (anchor
+  match, target match, legacy fallback, and FAIL/NOT_APPLICABLE probe
+  semantics never false-alarming), plus a 31-check sync test for the
+  content.js mirror. `scripts/capture-fixture.js` is a paste-into-the-
+  Medicus-console helper that captures and PHI-sanitises real DOM
+  subtrees, to replace synthesised fixtures with real ones over time.
+- **Runtime canaries (`shared/contract-canary.js`).** Probes the 7 of 14
+  contracts that are safe to check at runtime (the rest are fixture-only,
+  with documented reasons) via the existing DOM-observer hub — no new
+  MutationObservers — debounced ≥5s, counts/booleans only, never text
+  content. Two-strike hysteresis (≥2 FAILs at least 30s apart) so SPA
+  churn can't false-alarm; a single OK recovers the contract.
+- **Suite health surfaces.** An amber `#healthStrip` in the side panel
+  (panel-only, following the existing wr/rm/subRag strip convention)
+  appears only when a contract is degraded, pointing to Options. Options
+  gains a "Suite health" table of all 14 contracts — status, plain-English
+  "what degrades", and why fixture-only contracts aren't probed live.
+  ok↔degraded transitions are logged to the Clinical Event Ledger (source
+  `health`, deduped per contract per day). `health.contracts` is
+  machine-local and excluded from suite backups.
+
+No new tour steps — the health strip is exceptional-state UI (only visible
+when something is degraded) and the Suite-health card lives in Options,
+out of tour scope. `TOUR_VERSION` stays at 7.
+
+## [v3.145.0] — 2026-07-01
+
+### Class-leader features — Prescribing Pre-flight, Clinical Event Ledger, Practice Pulse
+
+Three features chosen for best-of-type differentiation
+(`docs/plans/CLASS-LEADERS-2026-07-01.md`), landed as three batches (`fab7081`,
+`158e30a`, `3395739`). Read-only against the clinical record throughout — no new
+record writes.
+
+- **Prescribing Pre-flight (Record tab).** A collapsible "Pre-flight" section lets you
+  type a drug you're considering and see, before it exists in the record: the ACB
+  delta and any band change, STOPP/START prompts newly triggered by the addition (not
+  ones already true of the current regimen), interactions against current meds, and
+  required monitoring — distinguishing a baseline already satisfied by a recent result
+  from one that's missing. The full alert library (interaction/awareness rules,
+  PINCER combos, etc.) is treated as always-on background knowledge for this what-if
+  check, not just the rules a clinician has opted into live — a deliberate design
+  decision, documented in `engine/preflight.js`. An unknown drug is reported as
+  unknown, never implied safe. Every result carries the caveat "Decision aid, not
+  advice — confirm against the BNF and the full record." New pure module
+  `engine/preflight.js` composes the existing ACB, STOPP/START and drug-monitoring/
+  combo engines — no new drug term lists or interaction pairs were added. Also fixes a
+  real latent bug: `alert-library.json`'s library rules carried no `id` of their own,
+  so de-duplication (used to tell "already firing on current meds" apart from "newly
+  introduced by the proposed drug") collided on `ruleId undefined` and silently
+  dropped interaction alerts; rules are now stamped with their library `libId` as
+  `id`. Tests: `test-preflight.js`.
+- **Clinical Event Ledger.** A machine-local, capped record (5000 events, 90-day
+  retention, pruned on every append) of what the suite displayed or did — answering
+  "did the tool flag this?" with evidence instead of a shrug. Instruments: Sentinel
+  red/amber chips shown (deduped per patient+rule+day so it's evidence, not noise) and
+  dismissals; Sweep run summaries and each "Create recall task"; Record "Copy patient
+  summary" and Pre-flight runs; Lab Filing filings mirrored alongside the existing
+  audit log (mirror, not migrate — the lab-filing log itself is untouched). Writes are
+  fire-and-forget and never break the calling surface on a throwing storage layer.
+  Patient references are the Medicus UUID only — never a name — and shape-validated at
+  write time (`sanitisePatientRef`), rejecting anything that doesn't look like a
+  UUID/hex identifier. Options → Event Ledger adds a card with patient-UUID and
+  date-range filters, CSV export (RFC-4180 quoting plus a spreadsheet
+  formula-injection guard), a typed-CLEAR confirmation to wipe the ledger, and a
+  plain-English disclosure of what it is and isn't (not a clinical record; absence of
+  an event is not evidence nothing was shown). Deliberately **excluded from suite
+  backup**, same doctrine as the lab-filing audit log — restoring an event ledger onto
+  another machine would fabricate a misleading "what was shown here" record. New
+  `shared/event-ledger.js`. Tests: `test-event-ledger.js`.
+- **Practice Pulse (Condor).** Condor's daily snapshots become week-on-week
+  operational intelligence. A new Pulse card shows trend rows — pressure index,
+  demand, slots free, waiting room, urgent tasks, task age — over 7d/30d with inline
+  sparklines and a "based on N of 30 possible snapshots" coverage line; gaps (days the
+  extension wasn't open) are disclosed, never interpolated. Historical pressure-index
+  values are shown exactly as recorded on the day, not recomputed under today's custom
+  weightings — restating history under current settings could silently disagree with
+  what a partner actually saw at the time. The Practice Report's Trends section is
+  rebuilt on the same pure core (`pulse-core.js`) with a prior-period comparison per
+  audience profile, so the panel and the printed report can never quietly diverge.
+  Verified-already-fixed rather than newly fixed: live Condor's capacity figures
+  already honoured the `slots.hiddenTypes` filter, and the Practice Report already
+  used the same filter — both now covered by a regression test
+  (`test-pulse-core.js`) rather than left to silently drift back apart. The snapshot
+  store (`practice.reportSnapshots`) was already capped at 90 days
+  (`pruneSnapshots`/`SNAPSHOT_KEEP_DAYS`) — verified, not newly capped — and is now
+  regression-tested too. Tests: `test-pulse-core.js`.
+- Reference: `docs/plans/CLASS-LEADERS-2026-07-01.md`.
+
+Tour: one new step — Record Pre-flight (`#recPreflight`), `TOUR_VERSION` bumped 6 → 7.
+Condor Pulse and Options → Event Ledger were deliberately not added as dedicated
+steps: the tour's 20-step sanity cap was reached, Condor stays taught by the existing
+nav-tabs overview step (as before), and the guided tour only covers the side panel,
+not the Options page. All existing anchor selectors re-verified against current
+markup (`test-tour-steps.js`). `defaults.json` (both copies) intentionally
+untouched — no migration-propagated content changed this release.
+
+## [v3.144.0] — 2026-07-01
+
+### Top-10 user-value set — answer-first Today, discoverability, coverage transparency, filters and tunables
+
+Ten improvements drawn from the practice-panel appraisals and the Dave-council roadmap
+(`docs/plans/TOP10-USER-VALUE-2026-07-01.md`), landed as three batches
+(`b2d9c81`, `d05ec6a`, `c75b304`). Read-only throughout — no new clinical-record writes.
+
+- **Today: "what needs you now" headline.** A plain-English sentence at the top of
+  Today, rolled up from data the module already polls — red states lead, amber next,
+  and a quiet "nothing needs you right now" state carries a "last checked HH:MM"
+  provenance line when all clear. Pure builder (`today-headline.js`) with a 55-case
+  test. Also fixed a bug in `triageClause` where it read wall-clock `Date.now()`
+  instead of the threaded `now` parameter, which could misjudge triage age against
+  the caller's reference time.
+- **Per-tab "?" help.** The two copies of `TAB_HELP` that had drifted apart between
+  `panel.js` and `pop-out.js` are now one shared source, `shared/tab-help.js`; missing
+  entries for Submissions, Visualiser and About were added. A coverage test fails CI
+  if a new tab ships without help copy.
+- **Trends: self-describing resting state.** The empty/no-patient state now explains
+  its own purpose, shows an inline SVG worked example, and states the first step
+  ("open a patient in Medicus, then pick a metric") instead of showing a blank chart.
+- **Sentinel: rule-coverage drill-down.** The rule-currency footer line is now a
+  toggle that expands into every drug-monitoring rule (with its matched terms) and
+  every QOF indicator covered — read-only, renders without a patient loaded so it can
+  be checked ahead of a clinic. Rule/indicator counts are test-locked against
+  `rules/drug-rules.json` and `rules/qof-rules.json`. (The "N meds checked · M matched
+  · K overdue · P unmatched" audit headline was already shipped in the v3.138.0-era
+  work — verified present, not rebuilt.)
+- **Record: "Copy patient summary".** Verified pre-existing with its own tests
+  (`test-record-summary.js`); not rebuilt.
+- **Command palette: patient-scoped actions.** A new "Patient" command group — copy
+  patient summary (via the Record tab's single formatter path), open visualiser, jump
+  to Record/Trends/Sentinel — appears only when patient context exists, hidden
+  otherwise.
+- **Referrals: search and clinician filter.** Patient-name search plus a clinician
+  dropdown, AND-combined with the existing priority/status chips, filtering the list,
+  chart and the 2WW safety-net worklist together. CSV export respects the active
+  filters and discloses them; CSV-injection hardened so CR/LF characters typed into
+  the search box can no longer forge extra rows in the export.
+- **Condor: tunable pressure-index weightings and thresholds.** Practice Pressure
+  Index maths extracted into one shared pure core (`condor-index-core.js`) used by
+  `condor.js`, `ppi.js` and `practice-report.js`. A new cog editor lets a power user
+  adjust component weightings and the AMBER/RED band thresholds, with visible
+  defaults and one-click reset (`condor.indexConfig`, included in the Condor backup
+  scope). The capacity safety floor is applied unconditionally *after* any custom
+  config — proven by an adversarial fuzz test that no combination of weightings can
+  produce a GREEN result while capacity is over limit. "Custom weightings" is
+  disclosed in Copy Figures, CSV export, the headline and the Practice Report.
+- **Slots: proactive alert thresholds.** Alert-rule evaluation extracted into a pure
+  core (`slots-alert-core.js`); a new in-module cog editor replaces the Options-only
+  configuration; breaches now surface on Today's Slots card and in the Today headline.
+  (Evaluation and storage already existed; this delivers the in-module editor, the
+  pure core, and the Today integration.)
+- Reference: `docs/plans/TOP10-USER-VALUE-2026-07-01.md` is the source plan for all ten
+  items, including what was deliberately excluded from this set.
+
+Tour: two new steps (Today headline, Sentinel rule-coverage drill-down),
+`TOUR_VERSION` bumped 5 → 6 so returning users see a short "what's new" pass. All
+other tour anchors re-verified against the current markup (`test-tour-steps.js`).
+## [v3.143.3] — 2026-07-02
+
+### Bug bash — 22 fixes across data-fetch, queue chips, drug rules, backup and modules
+
+A full-repo bug bash surfaced 22 verified defects, ranging from a silent drug-monitoring
+gap to several async races and backup/restore coverage gaps. All 22 are fixed in this
+release.
+
+- **`engine/data-fetcher.js`** — `fetchLive()` now falls back to DOM extraction per
+  data type (medications/problems/observations individually), not only when the
+  patient-banner endpoint fails, and surfaces a `debug.dataFetchFailed` flag when a
+  field's API call and its DOM fallback both come up empty
+- **`content-scripts/triage-lens/content.js`** — `computeMonitoringChip` now treats a
+  `dataFetchFailed` medications signal as a genuine failure (leaves any existing chip
+  in place) instead of silently rendering an all-clear; queue monitoring chips
+  (`.ch-q-mon`) gained a durable `_durableRowMap`-driven re-injector matching the
+  result-chip pattern, so they no longer flash-and-vanish on SPA churn
+- **`content-scripts/triage-lens/hud.css`** — added the missing `.ch-q-legend` rule
+  (and token-block scope entry) so the queue safety-disclaimer banner is actually
+  styled on the live page, not just in the PiP window
+- **`rules/alert-library.json`** — PINCER aspirin combo alerts (pincer-3/8/13) now
+  match real UK aspirin brand names (Nu-Seals, Caprin, Micropirin) and dm+d wording,
+  at parity with `engine/stopp-start.js`'s `ASPIRIN_TERMS`; aligned
+  `mhra-isotretinoin-ppg` severity to red to match the comparable valproate PPP alert
+- **`visualiser-core.js`** — fixed the aspirin-antiplatelet detector regex so it
+  matches real "NNmg" dose labels (was silently never matching); `computeEFI`'s
+  polypharmacy deficit now counts only active drugs, not historic/stopped ones
+- **`engine/stopp-start.js`** — a problem coded literally as bare "MI" now matches
+  the post-MI beta-blocker START check and the aspirin primary-prevention CV check,
+  via a narrowly-scoped exact-match helper (not a change to the generic `hasProblem`
+  matcher, which is shared with unrelated term lists)
+- **`scripts/regen-defaults.js`** — `buildEmbeddedLiteral()` now escapes backticks
+  and template-literal interpolation starts, so a stray backtick in `defaults.json`
+  can no longer corrupt the generated `content.js` into a syntax error
+- **`side-panel/panel.js`** — Request Monitor strip fetch now guarded against
+  concurrent invocation, closing a race that could double-fire desktop triage
+  notifications and duplicate alert-log entries
+- **`pop-out/pop-out.html`** — loads `shared/request-monitor.js` (dropped in v3.21.3
+  before the Today tab existed), fixing the pop-out's Triage Load card
+- **`side-panel/modules/reception/reception.js`** — `refreshPatientCard` now guards
+  against out-of-order async responses with a generation counter, so rapid tab
+  switching can no longer show the wrong patient's status
+- **`side-panel/modules/record/record.js`** — "needing attention" chip count now
+  checks `chip.status` via the canonical helper instead of regex-matching the whole
+  chip object's text (was miscounting achieved indicators whose label contained
+  "due")
+- **`side-panel/modules/sweep/sweep.js`** — switching tabs mid-run no longer
+  persists an emptied result set over `sweep.lastRun`
+- **`side-panel/modules/today/today.js`** — Morning Sweep "all clear" check now
+  includes amber action-needed statuses, matching the real Sweep tab
+- **`side-panel/modules/capacity/capacity.js`** — appointment-type cache now
+  invalidates when the practice code changes
+- **`shared/io/condor-io.js`** — `dayScores` now defaults to (and is validated as)
+  an array, not an object, fixing a backup/restore path that could silently break
+  day-score persistence
+- **`shared/io/suite-envelope.js`** — `previewEnvelope()` now summarises Condor
+  content, closing the one module scope that showed no preview before a restore
+- **`shared/io/suite-io.js`** — `suite.practiceProfile.attestations` now round-trips
+  through suite-wide backup/restore
+- **`side-panel/modules/condor/report/report-data.js`** — `saveSnapshot()` now
+  upserts by date, making concurrent panel+pop-out writes safe
+- **`engine/eval-cache.js`** — `rulesSignature()` now hashes each rule's full
+  content, not just id/enabled, so an in-place rule edit correctly busts the cache
+
+## [v3.143.2] — 2026-07-01
+
+### Fix: "Send to Prescribing" team picker restored after Medicus dropdown component change
+
+Medicus replaced their Quasar `q-select` team/assignee picker with a native
+`m-simple-select` component whose option list is a debounced, server-driven search —
+it only narrows down as you type real keystrokes. The routine-prescription re-assign
+macro (`routine-rx-button.js`) was setting the whole team name in one shot and firing a
+single synthetic keydown, which never triggered that search: the full unfiltered
+Teams/Staff list stayed on screen, the configured team never appeared in it, and the
+button failed with "isn't in the assignee list" even though the team exists.
+
+- `runMacro` now simulates real character-by-character typing (`typeText`) into the
+  "Assign to" field — a `keydown`/native-value-set/`keyup` cycle per character with a
+  short pause between keystrokes — so the live search fires the same way it does for a
+  human typing.
+- The subsequent option-match wait was extended from 4s to 6s to give the debounce +
+  server round trip room, now that it's a live search rather than a local list filter.
+- The `[id^="select-item-"]` / `[role="option"]` selectors themselves were unaffected —
+  Medicus's new component still uses that markup, so no selector fallback was needed
+  here (unlike the OIR checkbox fix in v3.143.1).
+
+## [v3.143.1] — 2026-06-30
+
+### Fix: OIR matching restored after Medicus checkbox component change
+
+Medicus replaced their Quasar checkboxes (`.q-checkbox` / `aria-labelledby`) with
+native HTML checkboxes (`label.m-checkbox` > `input.m-checkbox__native` +
+`span.checkbox-label`). This silently broke the entire Outstanding Investigation
+Requests matching pipeline — auto-tick and the "Tick off results found in record"
+button both disappeared.
+
+- `readOutstandingRows` now detects the new `label.m-checkbox` markup first and
+  falls back to legacy `.q-checkbox`, keeping compatibility with older Medicus
+  instances
+- `tickRows` and `updateBulkBar` updated to check `input.checked` for native
+  checkboxes (rather than `aria-checked`); the don't-untick safety guard is
+  preserved in both paths
+- Badge anchor fallback in `annotateOutstandingRow` extended to cover both
+  component types
+
+## [v3.143.0] — 2026-06-30
+
+### Lab Results Auto-Filing — one-click filing of all-normal results
+
+A confirm-gated, fail-closed "File all normal" action that appears in Medicus only
+when the suite has confirmed every value on an investigation-report task is within
+normal limits. It drives Medicus's own filing controls (marks each panel "Normal
+result, no action required", selects the no-further-action Next Step, files) — never
+full-auto, with Medicus performing its own validation and audit. **This is the suite's
+first feature that drives a clinical-record write**, so it is gated accordingly.
+
+(Developed across the branch as 3.138–3.146; consolidated here as one entry landing
+above the v3.138–v3.142.1 GP-pressures set that merged to main in parallel.)
+
+- **All-normal gate, fail-closed.** Offers only when severity is `none` and nothing the
+  gate can't judge is present (free text/cultures, unmatched report, missing result
+  rules). Clinician-set **per-analyte parameters** cover analytes the lab leaves
+  un-ranged (HbA1c, Calcium); an opt-in **"my range wins"** override accepts a value
+  inside your set range even when the lab over-flags it (e.g. eGFR 89 vs a 90–120 lab
+  range), shown loudly in the confirm dialog and never overriding an urgent flag.
+- **Trend / drug / text / patient guards.** Blocks on a significant move vs the previous
+  value, a monitored drug (meds fetched only when configured, fail-closed on error), a
+  promised-contact phrase, or a per-patient "never auto-file" list.
+- **Multi-panel (combined bloods).** A task carrying Bone + U&E + LFT under one report
+  with one shared File button is handled by merging every matching profile into one
+  effective profile (union of parameters/guards, strictest trend, confirm-wins).
+- **Admin-only configuration.** The authoring/management UI lives in **Options → Lab
+  Filing** (not a side-panel tab — practice-level config, not a per-user tweak), with
+  optional **starter profiles** (FBC/U&E/Bone/LFT) that load **disabled** for review.
+  Every profile arrives disabled until reviewed and the safety notice acknowledged.
+- **In-Medicus card** — one calm card titled to the matched profile, positioned by the
+  filing controls; reasons shown inline when filing is not offered.
+- **Prepare-only patient message**, external-LLM profile builder, per-install **kill
+  switch**, machine-local **audit log** + CSV export, and full backup/restore.
+- Fixes a pre-existing global-scope collision (`_DANGEROUS_KEYS` in `labfiling-io.js`
+  vs `sentinel-io.js`) that was silently breaking lab-filing backup in Options.
+- Tests: `test-lab-filing-utils.js`, `test-labfiling-io.js`, `test-lab-file-macro.js`
+  (fake-DOM harness). Full suite green.
+
+> **Pending CSO review:** as the suite's first record-writing feature, the formal
+> safety docs (INTENDED-PURPOSE, HAZARD-LOG, CLINICAL-SAFETY-NOTICE) warrant a CSO
+> review for Lab Filing. The CSO-review ledger was deliberately not advanced here.
+
+## [v3.142.1] — 2026-06-29
+
+### Verification fixes for the v3.138–v3.142 feature set
+
+Found while headless-rendering the four new surfaces (light + dark) and running the
+real ESLint gate:
+
+- **`sweep.css`:** the QOF panel body referenced an undefined token `var(--bg-1)`
+  (would have rendered as an unstyled surface — the "white rectangle" failure
+  mode); switched to the defined `var(--bg-elev)`. Also simplified
+  `var(--border-dim, …)` to the defined `var(--border)`.
+- **`eslint.config.mjs`:** registered the new `shared/task-api.js` as an ES module
+  (alongside `shared/medicus-api.js`) so `eslint .` parses it; the project lint now
+  passes clean across the whole tree.
+
+Headless Chromium render confirmed all four surfaces (Sentinel high-risk banner,
+Sweep QOF prioritiser, Sweep recall form, Referrals 2WW safety-net) style correctly
+in both themes with every design token resolving.
+
+## [v3.142.0] — 2026-06-29
+
+### Sentinel: ACE-I/ARB post-initiation U&E check (NICE NG136) — PENDING CSO REVIEW
+
+NICE NG136 requires a U&E within ~1–2 weeks of **starting** (or uptitrating) an
+ACE-I/ARB. The `ace-arb` rule documented this in its notes but only enforced the
+*annual* U&E — so a newly-started patient who had a baseline U&E but no
+post-initiation recheck raised no alert (the annual interval reads "in date" off
+the baseline). This closes that gap.
+
+- **New additive engine mechanism** (`engine/rules-engine.js`): a drug-monitoring
+  test may carry `postInitiationDays` / `postInitiationDueSoonDays`. Unlike the
+  rolling-interval check (where a *missing* test is neutral `no_data`), a
+  post-initiation requirement that is unmet after the grace window is
+  **actionable** — `recently_initiated` (≤14d) → `due_soon` amber (≤21d) →
+  `overdue` red. It is satisfied by any qualifying test recorded **on or after**
+  the drug's start date.
+- **Fail-safe against crying wolf:** it fires ONLY when the drug's start date is
+  known (`med.startDate`, derived from issue history) AND no U&E exists since
+  starting. An established patient whose start date isn't visible never trips it.
+  No change to the existing annual U&E/BP intervals or any other rule.
+- **Rule change** (`rules/drug-rules.json`): added the post-initiation U&E test to
+  `ace-arb`; bumped `lastUpdated` and documented the change in `sourceNotes`.
+- New regression test `test-ace-arb-postinit.js` (14 checks), including the exact
+  NG136 gap (baseline-before-start → overdue while the annual reads in-date) and
+  the no-false-alarm case (unknown start date → neutral).
+- **This is a clinical-rule change and is flagged PENDING CSO (Dr Triska) review**
+  before merge, per the suite's clinical-safety governance.
+
+## [v3.141.0] — 2026-06-29
+
+### Sweep: one-click "Create recall task" — close the detection→action loop
+
+Sweep already found tomorrow's patients with overdue monitoring and QOF gaps, but
+the only output was a printable reception handout — the actual recall task still
+had to be made by hand. This closes the loop: a per-row "Create recall task"
+button writes a real task into Medicus.
+
+- **New shared client** `shared/task-api.js` drives Medicus's OWN general-task
+  endpoints (`GET /patient/data/workflow/general-task/create`,
+  `POST /patient/workflow/general-task/create`) with credentialed fetches — the
+  identical, already-shipping pattern `slots/booking-api.js` uses to create
+  appointments from the side panel (the extension holds `host_permissions` for
+  `*.api.england.medicus.health`). Medicus stays the system of record; its
+  validation, access control and audit fire as normal.
+- **Per-row inline confirm form** (assignee + an editable description prefilled
+  from that patient's gaps via the new pure `buildRecallDescription()` in
+  `sweep-core.js`, reusing the same instruction grouping as the handout). One
+  explicit task per click — there is deliberately **no bulk "create all"**, the
+  Create button is disabled until an assignee is chosen, and it disables after
+  success so a double-click can't double-create.
+- Only offered on action-needed rows when a practice code is set and there is a
+  bookable instruction to recall; the assignee/priority options are fetched once
+  per run and reused.
+- **No `defaults.json`, clinical-rule or storage-key change.** New checks added to
+  `test-sweep-core.js` for `buildRecallDescription`.
+
+## [v3.140.0] — 2026-06-29
+
+### Referrals: 2WW / Faster-Diagnosis safety-net worklist
+
+NHS Resolution repeatedly cites absent safety-netting/follow-up as the root cause
+of cancer-delay negligence claims, and the Faster Diagnosis Standard rises to 80%
+(March 2026). The Referrals module already pulled outbound NHS referrals with
+priority and status, but only as aggregate charts — there was no worklist of the
+suspected-cancer referrals that have gone quiet.
+
+- **New pure helpers** `buildSafetyNet()` and `referralAgeDays()`
+  (`shared/referrals-api.js`) classify the already-fetched referrals: an "open
+  loop" is a `TwoWeekWait` referral still showing `displayStatus: Incomplete`
+  (no confirmed outcome). Returns the open rows oldest-first with calendar-day
+  ages and a severity (watch ≥ 14d, overdue ≥ 21d — heuristic, configurable).
+- **New worklist card** at the top of the Referrals view: open 2WW loops with
+  age, patient, service and clinician, plus overdue/watch badges. Reads the RAW
+  referrals, so the priority/status filter chips can never hide an open loop.
+- **No new endpoint** — reuses the outbound-referrals data the module already
+  fetches; no patient-identifiable data leaves the page. Thresholds are labelled
+  as a guide, not a clinical standard.
+- New regression test `test-referrals-safety-net.js` (19 checks).
+
+## [v3.139.0] — 2026-06-29
+
+### Sweep: QOF points-at-risk prioritiser (CVD-prevention income lens)
+
+QOF 25/26 → 26/27 redirected 141 points into a high-stakes CVD-prevention cluster
+(BP control, lipid lowering, antithrombotics) at 85–90% upper thresholds, where a
+small case-finding shortfall directly loses income. Sweep already evaluated every
+booked patient's QOF gaps but surfaced them one patient at a time, severity-sorted,
+with no sense of which gaps are worth the most.
+
+- **New pure helper** `summariseQofPointsAtRisk()` (`sweep-core.js`) re-reads the
+  SAME action-needed `qof-indicator` chips Sweep already produced and weights each
+  by the indicator's own `points` (from the chip, with a `pointsByCode` override
+  built from the loaded QOF rules as a backstop). Returns cohort totals, a
+  CVD-prevention subtotal, patients ranked by points-at-risk, and a per-indicator
+  breakdown.
+- **New `isCvdQofIndicator()`** classifies the CVD-prevention domain by explicit
+  indicator code (HYP/CHD/STIA/CD/CHOL/AF/PAD + DM006/DM034/DM035/DM036) — not a
+  blunt prefix, so DM036 (BP) counts as CVD but DM020 (HbA1c) does not.
+- **New panel** at the top of the Sweep results: "QOF points at risk: Σ N
+  (CVD-prevention M)", patients ranked highest-value-first, and an indicator
+  breakdown — so a practice works the gaps worth the most money first.
+- **No clinical-rule, threshold or `defaults.json` change** — pure aggregation of
+  chips already evaluated. Income is described in points only (national weights);
+  the panel notes actual £ depends on list size and prevalence.
+- New regression test `test-sweep-qof-points.js` (37 checks).
+
+## [v3.138.0] — 2026-06-29
+
+### Sentinel: high-risk "blind-spot" guard for unmonitored drugs
+
+Closes the silent-failure mode the developer guide warns about — a high-risk drug
+under an odd brand, an `exclude`d form, or a disabled rule matches NO monitoring
+rule, so no overdue-blood chip ever fires and nobody notices for months. Sentinel
+already listed every unmatched medicine, but buried in a collapsible "N unmatched"
+list that treated an unmonitored paracetamol the same as an unmonitored amiodarone.
+
+- **New engine helper** `flagHighRiskUnmatched()` (`engine/rules-engine.js`) re-reads
+  the existing `listUnmatchedMedicationsDetailed()` output and elevates the subset
+  whose name matches a monitored high-risk class (DMARDs/immunosuppressants, lithium,
+  amiodarone/digoxin, oral anticoagulants, antithyroids, aldosterone antagonists,
+  level-monitored antiepileptics, clozapine, hydroxychloroquine). Class stems are
+  matched case-insensitively as substrings — the SAME contract as `drugMatchesRule`,
+  so "lithium" covers all salts and "valproate" covers "sodium valproate".
+- **Surfaced** as a red banner near the top of the Sentinel panel (with the other
+  warnings), not hidden in the collapsed list: each drug, its risk class, why it was
+  missed (no rule vs excluded), and "verify monitoring is in place in Medicus".
+- **No new noise:** the flagged set is a strict subset of meds that already passed
+  every enabled rule unmatched. The common drugs here all already carry rules, so on
+  a complete rule set this fires on nothing; it only catches genuine slips.
+- **No clinical-rule, threshold or `defaults.json` change** — pure read of data
+  already in the snapshot. Backstop only, not a monitoring rule.
+- New regression test `test-high-risk-unmatched.js` (18 checks).
+
+## [v3.137.0] — 2026-06-29
+
+### CQC Inspection Readiness: answer-first redesign, honest disclosure, clinician view
+
+A full practice-panel-driven overhaul of the CQC Inspection Readiness surface
+(`cqc-readiness.{html,js,css}`, `cqc-render.js`, `engine/cqc-evidence.js`). Wording,
+layout and disclosure only — no clinical-rule or threshold changes, and the
+read-only / no-cohort-enumeration honesty boundary is unchanged (the suite never
+fabricates a patient count). Consolidates the iterative work previously numbered
+v3.135.0–v3.136.2 on the development branch, renumbered to avoid collision with the
+OIR changes that shipped on main as v3.135.0/v3.136.0.
+
+- **Answer-first layout.** A plain-English headline verdict ("Monitoring-system
+  readiness: GREEN — all rule sets current") leads the page; the multi-screen
+  alphabetical matched-term wall is collapsed behind a counted toggle; the
+  Safe/Well-led evidence and the reconciliation worksheet follow in a sensible
+  hierarchy.
+- **Honesty hardening.** "Verified {date} against BNF/NICE/MHRA via The Keeper"
+  wording; the coded-data "floor not a ceiling" caveat is prominent and de-duplicated;
+  vaccines labelled "surveillance"; developer/spec noise removed from the
+  inspector-facing document.
+- **Fixed the dead CSV export** (the button silently produced nothing — object-vs-string
+  return mismatch), now serialises the `{suffix, sections}` shape correctly.
+- **Per-exclude clinical reasons.** Each disclosed `drug.exclude` term shows why it is
+  dropped (grouped by family), so a pharmacist/nurse can sense-check a silent
+  false-negative line-by-line.
+- **Clinical methods & sources block.** Names the published version of each clinical
+  set — PINCER (Avery et al., BMJ 2012), Boustani ACB scale (ACBcalc.com), STOPP/START
+  v3 (2023) — read from drift-safe `SPEC` constants newly exported by
+  `engine/acb-scores.js` and `engine/stopp-start.js`; engine-method sets flagged as NOT
+  part of the rule-currency check.
+- **Clinician view (new third mode).** Verdict + coverage + collapsed methods only,
+  for a fast clinical glance; the amber coded-data safety caveat stays visible.
+- **Fillable reconciliation worksheet.** The "your count" cells are editable inputs the
+  practice types its own Medicus count into (persisted to `cqc.recon.counts`, printed
+  with the pack), with a live total and a "counts entered by / date / source" provenance
+  line. The suite still supplies no patient number.
+
+Tests: new coverage in `test-cqc-evidence.js` and `test-cqc-render.js`; full suite
+114/114. Method validated by a synthetic practice panel (six personas), recorded in
+`docs/appraisal/PRACTICE-cqc-readiness-2026-06-29.md`.
+
+## [v3.136.0] — 2026-06-29
+
+### Feature: nine new built-in OIR test definitions
+
+Expanded `TEST_DEFS` in `engine/outstanding-match.js` with nine new entries,
+promoted from practice-level custom tests after clinical review. All are
+`singleAnalyte: true` (one result completes the test). Terms are kept to generic
+forms; lab-specific display strings belong in the planned lab database.
+
+New tests: **rheumatoid factor**, **HIV** (combined Ag/Ab screen), **vitamin D**
+(25-hydroxy), **urate** (+ uric acid synonym), **CRP** (+ c reactive protein),
+**hepatitis C**, **hepatitis B surface antigen** (surface-antigen-specific;
+core-antibody requests intentionally uncovered), **syphilis** (+ treponema),
+**faecal calprotectin**.
+
+Safety notes:
+- `"RF"` deliberately not a req synonym (too short; anti-CCP is a different marker
+  and intentionally stays unrecognised so an RF result can never clear it).
+- Hep B def is narrow by design — `"Hepatitis B"` alone does not resolve to it,
+  preventing an HBsAg result from clearing a co-requested core-antibody request.
+- HIV bare `"hiv"` req term added for card-name resolution only, not in analytes
+  (avoids an HIV viral-load analyte row wrongly auto-ticking an Ab-screen request).
+- Cervical screening and histology deliberately excluded (see CHANGELOG v3.136.0
+  notes); HSL Analytics-specific vitamin D string deferred to lab database.
+
+`test-outstanding-match.js` — new sections 15–23 (resolve + auto-tick + negative
+for each); test 10a rewritten to use coeliac screen as the custom-test example
+(vitamin D is now a built-in; the baseline assertion would otherwise fail). Total:
+132 assertions, all passing.
+
+## [v3.135.0] — 2026-06-29
+
+### Feature: OIR test-dictionary merge prompt + alphabetical list
+
+**Merge prompt on overlapping request terms.** When saving a custom test entry
+in the **Outstanding Requests** test dictionary, the editor now detects whether
+any existing custom entry shares a `req` term (case-insensitive). On conflict, a
+merge dialog is shown rather than silently creating a duplicate:
+
+- Displays the proposed merged entry — unioned `req` / `rep` / `analyte` terms
+  from all conflicting entries, deduplicated (first-occurrence order preserved).
+- The merged label is editable; combined terms are shown read-only.
+- `singleAnalyte` is derived conservatively (only set if **all** merged entries
+  agree) and shown as a disabled checkbox — display only, not user-overridable.
+- The merged entry's key defaults to whichever conflicting entry matches a
+  built-in panel; otherwise the first existing (older) entry's key is kept.
+- Three choices: **Merge** (replace all conflicting entries with one merged
+  entry), **Save separately** (proceed despite the overlap), **Cancel**.
+
+Safety: the engine's `mergeTestDefs` floor (`engine/outstanding-match.js:381`)
+never copies `singleAnalyte` onto a built-in regardless of what the editor
+sends — the auto-tick threshold on multi-analyte panels cannot be lowered via
+config.
+
+**Alphabetical sort.** The custom test list is now sorted by label for display
+(stored order is unchanged, so the matcher is unaffected).
+
+`content-scripts/triage-lens/options.js`, `options.html`, `options.css`.
+
+## [v3.134.7] — 2026-06-29
+
+### Fix: newly-issued LNG-IUS under its generic name not recognised as HRT endometrial cover
+
+An HRT (estradiol) chip showed *"IUS expired (>5y) — endometrial cover not
+confirmed"* on a patient who had just had a new Mirena issued — the freshly
+fitted device was not picked up, so the chip fell through to a stale,
+out-of-window coil problem code still on the record.
+
+Root cause: `buildHrtContext` matched `iusTerms` by bare lowercase substring.
+Medicus lists a freshly-issued LNG-IUS under its generic VTM name
+**"Levonorgestrel (Intrauterine device)"**, and the `(` defeated the
+`"levonorgestrel intrauterine"` term (the string stayed
+`levonorgestrel (intrauterine device)`), while `"mirena"` appears only on the
+product sub-line. No `iusTerm` matched → `iusMed` was null → the expired
+problem-coded coil won.
+
+- `engine/rules-engine.js` — the context matcher now collapses any run of
+  non-alphanumerics to a single space before substring matching, so bracketed
+  and hyphenated generic name forms match their space-separated terms. Durable
+  against `(Intrauterine device)`, `-releasing`, etc. without loosening which
+  drugs are recognised.
+- `test-qof-indicator-filters.js` — F11 now covers the reported case: a new
+  "Levonorgestrel (Intrauterine device)" on the medication list counts as cover
+  even with a stale 2017 coil problem still present.
+
+## [v3.134.6] — 2026-06-26
+
+### Fix: "B12 / Folate" not matched to its outstanding request
+
+A combined "B12 / Folate" haematinics request was never matched to its report:
+it resolved to no canonical test (`key: null`) → *"request test not recognised"*
+→ stayed outstanding even with both B12 and folate results on screen.
+`TEST_DEFS` had no B12/folate entry.
+
+- `engine/outstanding-match.js` — added a `b12folate` def. Deliberately a
+  two-analyte panel (NOT single-analyte): a report carrying **both** B12 and
+  folate is a confident auto-tick; a report with only one of them stays tentative
+  (the other half of the combined request may still be pending, so it must not
+  auto-clear). `req`/`rep`/`analytes` cover `b12`, `cobalamin`, `folate`.
+- `test-outstanding-match.js` — new section 14: the request now resolves, a
+  B12 + folate report auto-ticks it, a B12-only report is tentative (never
+  auto-ticked), and the def does not cross-feed the ferritin panel.
+
+## [v3.134.5] — 2026-06-26
+
+### Fix: TSH-only thyroid report not confidently matched to its request
+
+On the **Outstanding Investigation Requests** card, a "Thyroid Testing" request
+was recognised but a TSH-only report only matched it *tentatively*
+("✓? resulted? (this report)"), so it was never auto-ticked. UK labs reflex-test
+thyroid (TSH first; FT4/FT3 only if TSH is abnormal), so a TSH-only report **is**
+the complete thyroid result and should confidently clear the request.
+
+Root cause: `tft` is a multi-analyte panel, and the matcher's analyte signature
+needs ≥2 distinct analytes to be confident — a lone TSH scored only 1.
+
+- `engine/outstanding-match.js` — added an optional **`anchors`** concept to a
+  test definition: an analyte that, on its own, confidently identifies a complete
+  result for the panel (below the usual 2-analyte threshold). Set
+  `anchors: ['tsh', 'thyroid stimulating hormone']` on the `tft` def. A TSH-only
+  report now auto-ticks a predating thyroid request; a lone FT4/FT3 (no TSH) stays
+  tentative.
+- Scoped to **this-report** coverage (`reportCoverage`) only — NOT to
+  resulted-elsewhere history enrichment, where a single analyte from a different
+  past report is weaker evidence and remains tentative (a TSH in this report is
+  direct evidence the request just resulted; a TSH in the record is circumstantial).
+- Strict confidence floor still demotes a TSH-only report (an anchor is an
+  inferred-analyte signal, not a lab-assigned specimen-group title).
+- `test-outstanding-match.js` — new section 13 guards it: TSH-only is confident +
+  auto-ticks, lone FT4 stays tentative, the anchor touches no other panel, strict
+  floor still demotes, and a lone TSH in history is unchanged (still tentative).
+
+## [v3.134.4] — 2026-06-26
+
+### Fix: HbA1c not matched to its outstanding investigation request
+
+On a "Review Investigation Report" task, the **Outstanding Investigation
+Requests** card matches the incoming report to the requests awaiting a result.
+An HbA1c report was never matched to its own request: the request
+"Haemoglobin A1C (HbA1C)" resolved to no canonical test (`key: null`), so it was
+classed as *"request test not recognised — left for manual review"* and stayed
+outstanding even though the very result that satisfied it was on screen.
+
+Root cause: `engine/outstanding-match.js` `TEST_DEFS` had entries for lipids,
+U&E, FBC, LFT, PSA, TFT, FIT, ferritin, bone and the sex-hormone family, but
+**none for HbA1c** — the same unrecognised-request gap previously fixed for
+FSH/LH.
+
+- `engine/outstanding-match.js` — added an `hba1c` test definition (single-analyte;
+  `req`/`rep`/`analytes` mirror the HbA1c result rules in `defaults.json`:
+  `hba1c`, `haemoglobin a1c`, `glycated haemoglobin`, `glycosylated haemoglobin`).
+  One HbA1c result is now a confident match and auto-ticks its predating request.
+- `engine/outstanding-match.js` — hardened the `fbc` def with
+  `exclude: ['a1c', 'glycated', 'glycosylated']` so a lab spelling like
+  "Haemoglobin A1c" (which shares the `haemoglobin` token) cannot feed the FBC
+  analyte signature and tentatively flag a genuinely-outstanding FBC. Mirrors the
+  same exclude on the `base-low-haemoglobin` result rule. Fail-safe: it only
+  narrows FBC, never widens it, and a real FBC report still matches.
+- `test-outstanding-match.js` — new section 12 guards the fix: the request now
+  resolves to `key=hba1c`, an HbA1c report auto-ticks it, an HbA1c report leaves
+  FBC/U&E outstanding, "Haemoglobin A1c" does not feed the FBC signature, and a
+  genuine FBC report still matches.
+
+## [v3.134.3] — 2026-06-25
+
+### Fix: Triage monitor "Invalid UUID" when pasting the inbox URL
+
+The Request Monitor's **Team / assignee UUID** field only accepted a bare 36-char
+UUID, so pasting the whole Medicus task-list URL — or a `masterAssignee=…`
+fragment — was rejected with `Invalid UUID — check format`, even though the URL
+contains a perfectly valid UUID. Copying the full URL is the natural thing to do
+(the help text even points you at the URL), so this read as the feature being
+broken.
+
+- `options/options.js` — new `extractAssigneeId()` normalises the field on save:
+  a bare UUID, a full inbox URL, or a `masterAssignee=…` fragment all resolve to
+  the bare assignee UUID (preferring the `masterAssignee` param, falling back to
+  the first UUID-shaped substring). The cleaned UUID is written back into the
+  field so the user sees what was saved. The "Invalid UUID" error now only fires
+  when the paste contains **no** recoverable UUID at all.
+- `options/options.html` — help text updated: paste the whole task-list URL (the
+  UUID is extracted automatically); the bare UUID still works too.
+
+## [v3.134.2] — 2026-06-23
+
+### Fix: create-task widget missing on prescribing overviews (no "Codes & actions" card)
+
+The inline "Create task for this patient" widget anchored only to the booking
+widget or the "Codes & actions" card. Prescribing task overviews (Routine /
+Non-Routine Repeat Request, Medications for Re-authorisation) have **neither**, so
+`injectWidget` found no anchor and the panel never appeared there.
+
+- Added a universal fallback in `task-inline.js`: when there's no booking widget
+  and no "Codes & actions" card, anchor the panel **above the bottom "More
+  actions" action row** (excluding any inside a dialog/drawer) — every task
+  overview has that row. Anchor preference is now booking widget → Codes &
+  actions card → action row.
+
+## [v3.134.1] — 2026-06-23
+
+### Performance: injected-widget optimisations (task / booking / routine-rx)
+
+Three-agent optimisation pass over the injected surfaces. All three were already
+sound on the SPA hot path (path-gate, own-mutation filter, placed fast-path,
+hidden guard, rAF-deferred heavy scan); these are the targeted wins on top.
+
+- **routine-rx-button.js** — `findByText` / `collectByText` now test the
+  control's TEXT first and call `visible()` (which forces a layout reflow via
+  `offsetParent`/`getClientRects`) **only** on text-matching candidates. The slow
+  path's wide `div/span` fallback sweep can no longer trigger a per-node reflow
+  storm.
+- **booking-inline.js** —
+  - Fixed a **slot-reservation leak**: a held reservation is now released on
+    `pagehide` via a `keepalive` POST, so closing/navigating mid-booking no longer
+    leaves the slot locked for other bookers until the backend TTL expires.
+  - `doOpen` resolves the patient and fetches the appointment finder **in
+    parallel** (independent calls) instead of sequentially — one round-trip of
+    open latency, not two.
+  - Re-opening the panel for the same task **reuses** the already-loaded
+    patient / provider / appointment types instead of re-fetching.
+- **task-inline.js** — re-opening reuses the already-loaded assignee/priority
+  lists instead of re-resolving the patient and re-fetching the form; the
+  per-keystroke handler caches the Create-button reference instead of querying
+  the document on every character.
+
+## [v3.134.0] — 2026-06-23
+
+### New: inline "Create task for this patient" widget (real API wiring)
+
+Replaces the earlier click-path "+ Task" button — which tried to puppet an
+on-page "Create task" control that doesn't exist on the prescribing screen — with
+a proper inline panel built the same way as the booking widget: it drives
+Medicus's own task API directly.
+
+- New `content-scripts/task-inline.js` + `task-inline.css`: a collapsible
+  **"Create task for this patient"** panel injected below the "Codes & actions"
+  card on task overviews (stacks beneath the booking widget when present).
+- On open it resolves the patient from the task UUID and `GET`s
+  `/patient/data/workflow/general-task/create?patientId=…` to populate **Assign
+  to** (teams + staff option-groups) and **Priority**; **Create** `POST`s to
+  `/patient/workflow/general-task/create` with
+  `{ patientId, assigneeId, assigneeType, description, priority, snoozeUntil }`.
+- Same injection discipline as booking-inline (shared observer hub with private
+  fallback, own-mutation filter, throttle + rAF, and remove-on-leave so it can't
+  strand on a non-task page). Credentialed same-origin fetch; no patient-data
+  field values are read.
+- Removed the abandoned `content-scripts/triage-lens/task-button.js` and its
+  `triagelens.taskMacro` backup wiring (the click-path approach is gone).
+
+## [v3.133.5] — 2026-06-23
+
+### "+ Task" button: tidy leftover menu CSS (interim)
+
+Removed the now-unused `.chtk-caret`/`.chtk-menu*`/`.chtk-step` rules left behind
+by the config-menu deletion and squared off the single button's border-radius.
+Cosmetic only; the API-driven task-creation rebuild is still in progress.
+
+## [v3.133.4] — 2026-06-23
+
+### "+ Task" button: removed the config menu (interim)
+
+Stripped the ▾ caret dropdown (captured-steps list, "Edit steps (paste JSON)",
+reset, commit-mode options) — it exposed developer-facing JSON config that has no
+place in the clinical UI. The button is now a single "+ Task" control. Also
+removed a dangling `closeMenu()` reference left by the menu deletion.
+
+This is an interim step: the click-path-replay model is the wrong approach for
+this button (there is no on-page "Create task" control to drive on the prescribing
+screen). It will be rebuilt as direct task-API wiring — an inline create-task
+panel modelled on `booking-inline.js` — once the task-creation API contract is
+captured.
+
+## [v3.133.3] — 2026-06-23
+
+### Fix: "+ Task" button now appears on all prescription overviews
+
+The button was copied from `routine-rx-button.js`, which gates injection on the
+"Save & send to routine requests task list" radio being present. That radio does
+not exist on **Routine Repeat Request** overviews (their Next Steps are "Issue 1
+approved item / Save & re-assign / Save & come back later"), so the anchor scan
+bailed and the button never showed. The task macro clicks the global "Create
+task" control, not that radio, so the dependency was wrong.
+
+- Dropped the routing-control requirement. `findActionAnchor` now anchors to the
+  bottom-most visible **"More actions"** button in the main action row (with the
+  **"Issue"** button as a fallback), excluding any inside a dialog/drawer.
+- Fast-path re-validation keyed on the anchor button's `isConnected` instead of
+  the (now-removed) routing control; dead `sharesPanel`/`findRoutingControl`
+  helpers removed.
+
+## [v3.133.2] — 2026-06-23
+
+### "+ Task" button default click-path matched to live Medicus
+
+Captured the real task-creation flow on live Medicus: a top-level **"Create task"**
+button opens a modal of task-type choices ("Appointment request", "Other", …) from
+which the clinician picks the type. Replaced the placeholder default
+("More actions" → "Add task") with the single durable step that opens that picker:
+
+- Default `steps` is now `[{ kind:'click', text:['Create task'] }]` — opens the
+  task-type modal and stops; the clinician chooses the type. No type is
+  hard-wired and nothing is created automatically (`commitMode: 'open'`).
+- To always jump straight to one type, append e.g.
+  `{ kind:'click', text:['Other'] }` via the button's ▾ → "Edit steps…".
+
+## [v3.133.1] — 2026-06-23
+
+### Fix: booking widget stranded at the bottom of task-LIST pages
+
+The inline "Book appointment for this patient" widget only ever **injected** on a
+task-overview page; it had no removal path. On SPA navigation from an overview
+back to a task-LIST page, `runInject` reset its state and returned early
+**without removing the widget node**, so Vue left the panel parented to a card
+that survived the transition — stranding it at the bottom of the list page, where
+(with no single patient) it re-showed "Could not determine patient ID — try
+navigating away and back".
+
+- Added `removeWidget()` (releases any held slot reservation, then removes
+  `#ms-bk-widget` with the observer paused).
+- `runInject` now calls it on the `!getTaskInfo()` branch — leaving a task
+  overview tears the widget down instead of orphaning it.
+
+## [v3.133.0] — 2026-06-23
+
+### New: "+ Task" button on the prescribing screen (captured click-path replay)
+
+The prescription-request task overview has no "add task" control of its own, even
+though that action exists elsewhere in the record. Added
+`content-scripts/triage-lens/task-button.js`: a floating **"+ Task"** button that
+injects beside the existing routine-prescription button (same H-035 gating —
+prescription overview only, anchored to the "More actions" row that shares a panel
+with the routing control, never inside a dialog/drawer) and, on click, **replays a
+captured click-path by driving the real Medicus UI** to open the new-task workflow.
+
+- **Configurable, not hard-coded.** Task-creation controls differ between Medicus
+  builds, so the replay sequence is captured per install. `scripts/ui-clickpath-recorder.js`
+  gains `chRec.macro()`, which emits the compact replay JSON; paste it into the
+  button's ▾ menu → "Edit steps…". A sensible default ("More actions" → "Add task")
+  ships so it works out of the box on builds using those labels.
+- **Safe by default.** Controls are matched by **visible text** (never per-session
+  ids); any missing step **aborts** and clicks nothing further. The default
+  `commitMode: 'open'` replays only the navigation steps and **stops with the form
+  open** for the clinician to complete — it never creates a record on its own. A
+  step explicitly marked `submit` is gated by mode (`open` / `manual` / `auto`).
+- Makes **no network calls** and reads **no patient-data field values**.
+- Subscribes to the shared `__chObserverHub` (falls back to a private observer),
+  PREPENDs its host and re-validates placement on the fast path — same injection
+  discipline as `routine-rx-button.js`.
+- The captured click-path (`triagelens.taskMacro`) is included in suite backups via
+  `shared/io/triage-io.js`, alongside the routine-prescription prefs.
+
+## [v3.132.6] — 2026-06-22
+
+### Performance: one shared DOM-observer hub for all page-injection features
+
+Follow-up to v3.132.5. The injected features each still ran their **own**
+`MutationObserver` over the whole `document.body` subtree, so every Medicus
+(Vue + AG-Grid) re-render woke three separate observers — three callbacks, three
+rAF gates, three visibility checks, every frame. Introduced
+`content-scripts/dom-observer-hub.js`: a single body-subtree observer (loaded first
+in the manifest, shared via `window.__chObserverHub`) that fans one rAF-coalesced
+mutation batch out to all subscribers and is paused while the tab is backgrounded.
+
+- `routine-rx-button.js`, `booking-inline.js` and `pusher-relay.js` now **subscribe**
+  to the hub instead of each constructing a body observer (3 observers → 1).
+- Each keeps its own self-mutation filter and placement fast-path; under the hub
+  the per-feature disconnect-around-write is unnecessary (the own-mutation filter
+  already ignores our own writes) and is retained only on the fallback path.
+- **Fallback:** if the hub is absent each feature stands up its own private
+  observer exactly as before, so nothing depends on the hub for correctness — only
+  for efficiency.
+
+Covered by `test-dom-observer-hub.js` (one observer for N subscribers, coalesced
+fan-out, hidden-pause, unsubscribe, error isolation, idempotent load). `content.js`
+(scoped queue observer, already optimal) and `sentinel.js` (nav-detection
+semantics) keep their own observers and are untouched.
+
+## [v3.132.5] — 2026-06-22
+
+### Performance: page-injection observers no longer scan on idle SPA re-renders
+
+The injected page features (the "send to routine" button, the inline "Book
+appointment" widget, and the Pusher relay) each ran a `MutationObserver` over the
+whole `document.body` subtree, which fires on every Medicus (Vue + AG-Grid) render.
+On each fired tick they re-ran whole-page DOM scans — and the worst offenders read
+`offsetParent` / `getClientRects` (forced synchronous layout/reflow) on thousands
+of nodes **even when nothing relevant had changed and the control was already
+placed**. That is the UI slowdown. Reworked all three to the same hardened pattern
+that the queue-chip observer in `content.js` already uses:
+
+- **`content-scripts/triage-lens/routine-rx-button.js`** — added a reflow-free
+  fast path: once the button is placed, idle re-renders are dismissed with cheap
+  connectivity checks (`isConnected` / `contains`) and the cached routing-control's
+  `isConnected` (keeps H-035 gate 2 enforced between scans), doing **zero** layout
+  flushes. The expensive `findActionAnchor` scan now runs only on a real placement
+  change, and even then tries the narrow `label`/`[role=radio]` carriers before any
+  `div`/`span` sweep. Added a self-mutation filter + disconnect-around-write so our
+  own inject can't self-trigger a rescan, an rAF hop off the mutation-callback path,
+  and a `document.hidden` pause. PREPEND, re-inject durability, the H-035 visibility
+  gates and text-only control matching are all unchanged.
+- **`content-scripts/booking-inline.js`** — the widget's own `rerender()` (an
+  `innerHTML` swap on every keystroke / slot pick) no longer wakes the observer
+  (own-mutation filter), the `findCard` heading scan searches the realistic
+  `h1`–`h6`/`strong`/`b`/`legend` carriers first and skips reading `.textContent` of
+  large subtrees, and the scan is gated behind a cheap path check, a fast-path skip
+  when already placed, an rAF, and a `document.hidden` pause. Networking/booking
+  flow, HTML-escaping and below-card placement unchanged.
+- **`content-scripts/pusher-relay.js`** — its channel-rebind observer now coalesces
+  bursts to one rAF-aligned check and pauses while backgrounded (the channel check
+  is idempotent, so this changes only *when* it runs, never whether a recreation is
+  detected).
+
+Pure performance pass — no behavioural change. `content.js`'s queue observer was
+already optimal and was left untouched; `sentinel.js`'s nav-detection observer was
+deliberately left as-is (already cheap, and a naive change would risk patient-switch
+detection). Consolidating the remaining body observers into one shared dispatcher is
+noted as a follow-up.
+
+## [v3.132.4] — 2026-06-22
+
+### Bug fix: "send to routine" button restricted to the prescription-routing workflow
+
+The routine-rx button was leaking onto screens that merely share a "More actions"
+button — the "View Prescription" detail modal and, most recently, the
+appointment-booked drawer that overlays the prescription page (same URL, so a URL
+guard alone can't exclude it). Reworked the visibility gate to implement H-035
+control (e) properly — the button now appears only where the routing workflow
+genuinely exists:
+
+1. **URL pre-filter** — slug must contain `prescription`
+   (`/tasks/data/…prescription…/overview/`), confirmed `prescription-requests` in
+   `engine/extractors/patient-context.js`. (Replaces the looser `(?:prescri|medic)`
+   from v3.132.2, which also matched `medical_patient_request_task` etc.)
+2. **Control present** — the "Save & send to routine requests task list" option
+   (the very control the macro clicks first) must be present and visible on screen.
+3. **Same-panel anchor** — the button only mounts beside a "More actions" button
+   that shares a panel with that routing control, and never inside a
+   `role="dialog"`/`aria-modal` overlay. This is what keeps it off an appointment
+   drawer overlaying the prescription page.
+
+Also debounced the mutation-observer re-check (200 ms) since the gate now scans
+for the routing control.
+
+## [v3.132.3] — 2026-06-22
+
+### Bug fix: booking API now targets the correct host (root cause of JSON errors)
+
+The `/scheduling/*` booking endpoints live on the **API subdomain**
+(`{siteId}.api.england.medicus.health`) — the same host the slots-overview call
+already uses — **not** the page host. The page host serves the SPA HTML shell
+for `/scheduling/*`, which is what produced every `Unexpected token '<',
+"<!doctype ..."` error. (The earlier "root-relative path" reading was an artefact
+of `scripts/booking-flow-capture.js`, whose `safeUrl()` strips the host and
+records only the path — so the capture never revealed which host the calls used.)
+
+- **Inline widget** (`booking-inline.js`): `apiFetch` now builds URLs against
+  `{siteId}.api.<host>` instead of `location.origin`. CORS from the page origin
+  is already allowed (Medicus's own SPA calls the API subdomain the same way).
+- **Side panel** (`booking-api.js`): rewritten to fetch the API subdomain
+  directly with credentials — the side panel is an extension page with
+  `host_permissions` for `*.api.england.medicus.health`, so this works exactly
+  like the existing overview call. Dropped the `executeScript`/`booking-bridge.js`
+  relay (no longer needed); `booking-bridge.js` deleted.
+
+### Inline widget: now inserts BELOW the "Codes & actions" card
+
+`findCard()` walks up from the "Codes & actions" heading to the lowest common
+ancestor that also contains the form's "Submit" button — i.e. the whole card —
+and inserts the widget immediately *after* it, so it sits below the section
+rather than inside it.
+
+## [v3.132.2] — 2026-06-22
+
+### Bug fix: "Prescribing / Meds Management" button scoped to prescription tasks only
+
+The routine-rx button was appearing on the "View Prescription" detail panel
+(a modal overlay) because `findActionAnchor()` matched any "More actions" button
+on the page. Fixed with two guards: (1) URL must match a prescription/medication
+task overview path; (2) the matched button must not be inside a `role="dialog"`
+or `aria-modal` overlay.
+
+### Booking: inline widget injected into Medicus page below "Codes & actions"
+
+New `content-scripts/booking-inline.js` injects a collapsible "Book appointment
+for this patient" panel directly into the Medicus task page, below the "Codes &
+actions" section. Unlike the side-panel widget, the inline widget makes direct
+same-origin fetches to `/scheduling/*` (the content script runs on
+`england.medicus.health`, so no bridge is needed). Patient ID is resolved from
+the task UUID via the API subdomain as before.
+
+### Bug fix: side-panel booking connection error
+
+Replaced `chrome.tabs.sendMessage` with `chrome.scripting.executeScript` in
+`bridgeFetch`. The previous approach required `booking-bridge.js` to be
+pre-loaded in the tab (failing with "Receiving end does not exist" on tabs opened
+before the extension reload). `executeScript` injects and runs the fetch inline
+on demand — no pre-loaded content script required. `booking-bridge.js` removed
+from the manifest.
+
+## [v3.132.1] — 2026-06-22
+
+### Bug fix: booking panel now works from any Medicus screen
+
+Two fixes for the v3.132.0 booking panel:
+
+**Fix 1 — JSON error on all booking API calls.** The `/scheduling/*` endpoints
+on `england.medicus.health` return the SPA HTML shell to cross-origin callers
+(the extension side panel), causing `Unexpected token '<'` JSON parse errors.
+Added `content-scripts/booking-bridge.js` — a new content script that runs in
+the isolated world of every Medicus tab and listens for `CH_BOOKING_FETCH`
+messages from the extension. It relays the fetch from inside the tab (same-origin
+context, full session cookies) and returns the response text. SSRF guard: the
+bridge only relays to `/scheduling/` paths on the tab's own hostname; any other
+URL is rejected. Rewrote `booking-api.js` to route all six booking API calls
+through this bridge via `chrome.tabs.sendMessage`.
+
+**Fix 2 — no patient detected on the triage / patient-request screen.** The
+original `detectPatientId()` only matched `/patient/{uuid}` and
+`/care-record/{uuid}` URL patterns. Task screens use
+`/tasks/data/{typeSlug}/overview/{taskUuid}` where the UUID is the *task* ID,
+not the patient ID. The updated `detectPatientId(tab)` now detects this pattern
+and resolves the patient by fetching
+`https://{siteId}.api.england.medicus.health/tasks/data/{typeSlug}/overview/{taskUuid}`
+directly from the extension (the API subdomain is not origin-gated), extracting
+`data.data.patient.id` from the response.
+
+## [v3.132.0] — 2026-06-22
+
+### Slots tab: embedded appointment booking
+
+New collapsible "Book appointment for patient" panel at the bottom of the Slots
+tab. Clicking it auto-detects the current patient record and Medicus origin from
+the open Medicus tab, fetches appointment types from the practice's
+`available-appointment-finder` endpoint, then lets the receptionist pick a type,
+date, and available slot — all without leaving the side panel.
+
+**Flow:** type + date picker → Find slots (calls
+`available-appointment-places-between-range`) → click a slot to reserve it
+(server-side `reserve-slot-and-broadcast-...`) → confirm step with optional
+reason field → POST to `create-appointment` which triggers patient SMS/email
+notifications via the `bookingConfirmationRecipients` the server pre-populates →
+success state with "Book another" reset.
+
+**Safety:** the slot reservation is released via `remove-slot-reservation-...`
+on Back/cancel, on panel close while in the confirm step, and on module teardown
+— so an abandoned booking never locks a slot for other receptionists. The server
+also releases it automatically on a successful create.
+
+Implementation: new `side-panel/modules/slots/booking-api.js` (pure async
+functions, no DOM), all booking state isolated in `state.bk`, no changes to the
+slots overview data path or alert rules.
+
+## [v3.131.5] — 2026-06-22
+
+### Dev tool: fix booking-flow capture console flood; widen default filter
+
+First live run of `scripts/booking-flow-capture.js` flooded the console with
+`Refused to get unsafe header "location"` + a stack trace on every XHR. Cause:
+the XHR handler read the `location` response header, which is CORS-forbidden on
+cross-origin responses — `getResponseHeader` doesn't throw for it (so the
+`try/catch` couldn't suppress it), it logs an uncatchable warning. Removed that
+read; only the CORS-safelisted `content-type` is read now.
+
+Also widened the default capture filter using what the first run's call-stacks
+revealed: booking is a **server-driven-UI drawer** with a **slot-reservation
+lifecycle** (drawer.open → permission check → loadComponent/getUI → search →
+reserve slot → confirm; reservation released on close, coordinated over Pusher).
+The filter now also matches `permission`, `component`, `drawer`, `get-ui`,
+`/ui/`, `reserv` and `search` so those steps aren't missed. Dev-only;
+`scripts/` is excluded from the release zip.
+
+## [v3.131.4] — 2026-06-22
+
+### Dev tool: booking-flow network+DOM capture (recon for embedded booking)
+
+New `scripts/booking-flow-capture.js` — a console-pasteable recorder that maps
+what Medicus does when you click **Actions → Appointment**, so the booking flow
+can be replicated and embedded into the Slots page. It is the network+DOM
+sibling of `scripts/ui-clickpath-recorder.js` (which captures click structure but
+deliberately never touches the network).
+
+Runs in the page's MAIN world (the same axios/XHR-wrap technique as
+`page-world.js`, since Medicus is a Vue + AG-Grid SPA on axios under a strict
+CSP). It records, on one ordered timeline: every scheduling/appointment request
+(and all writes) with method, path, request payload, request headers, response
+shape and timing; booking modal/drawer appearance (control names/labels/types —
+never field values); and SPA route changes. Output via `chBook.summary()`
+(deduped endpoint list), `.dump()`, `.copy()`, `.save()`.
+
+Observation only — never blocks, rewrites, replays or sends anything; nothing
+leaves the browser except the local copy/save you trigger. Bodies are
+PII-redacted by default (names, DOB, NHS number, address, postcode, phone, email
+masked by key; NHS-number/postcode value-detection as a backstop), keeping
+booking-relevant structure (slot / appointment-type / clinician / date ids and
+UUIDs). Dev-only: `scripts/` is excluded from the release zip, so nothing ships
+to users. Use a TEST patient.
+
+## [v3.131.3] — 2026-06-21
+
+### Routine-Rx button: target the dedicated "send to routine requests" option
+
+Medicus now has a dedicated **"Save & send to routine requests task list"**
+radio (distinct from "Save & re-assign to someone else"), with a **"Send to
+routine list"** commit button. The macro now drives those controls instead of
+the generic re-assign path — it still selects the configured team in "Assign
+to" and waits for the commit button to enable. Confirm prompt and hazard H-035
+control names updated to match.
+
+## [v3.131.2] — 2026-06-21
+
+### Routine-Rx button: sit inline with the task actions, not the viewport corner
+
+The button now injects **inline beside the task's action buttons** (anchored to
+the "More actions" button's row, prepended) instead of floating fixed at the
+bottom-right of the window. Follows the queue-chip reconciler rules — PREPEND +
+re-inject on every mutation + idempotent — so Vue doesn't strip it. The ▾ menu
+now opens upward above the button.
+
+## [v3.131.1] — 2026-06-21
+
+### Routine-Rx button: wait for "Re-assign task" to enable before committing
+
+Hardened against the real UI confirmed by on-screen capture: Medicus keeps the
+`Re-assign task` button **disabled until a valid assignee is registered**, so
+the macro now **waits until the button is enabled** before clicking (rather than
+clicking immediately and silently no-op-ing), and reports clearly if it stays
+disabled. Also fires keyboard events alongside the typed team-name filter for
+comboboxes that only open/filter on keydown.
+
+## [v3.131.0] — 2026-06-21
+
+### One-click "send to routine prescriptions" button (prescribing window)
+
+A floating action button on the prescription-request task overview that
+re-assigns the task to a configured team (default "Prescribing / Meds
+Management") in one click. It **drives the real Medicus UI** — clicking the
+same `Save & re-assign to someone else` → `Assign to` → team → `Re-assign task`
+controls a clinician would — so Medicus's own validation, access control and
+audit trail fire exactly as for a manual re-assignment. It makes **no network
+calls** and reads **no patient-data values**.
+
+- **Configurable + remembers last choice:** an inline ▾ menu switches team,
+  adds a team, and sets the commit behaviour; the last team and mode are
+  remembered. Stored under `triagelens.routineRx` (included in suite backups
+  via `triage-io.js`).
+- **Commit gate (default safe):** `confirm` (default) names the destination
+  team and asks before committing; `manual` pre-fills and highlights
+  `Re-assign task` for the clinician to click; `auto` is opt-in.
+- **Safety:** matches controls **only by visible text** (every id on this
+  screen is generated per session) and **aborts, clicking nothing further, if
+  any step's control is not found**. New hazard **H-035** logged.
+
+This is the suite's first control that can *commit* a workflow action rather
+than only display or pre-tick; see `docs/HAZARD-LOG.md` H-035.
+
+## [v3.128.2] — 2026-06-21
+
+### Road to 10 — Phase 2 cont: pill convergence (Vogue 8.3 -> )
+
+Vogue re-scored the Phase 1 + Today recomposition build at 8.3/10 — past the
+flagship threshold. Continuing Phase 2: the triage demand strip pills now adopt
+the canonical capsule grammar (sans label + mono count) so the same counts no
+longer read in two different languages between the top strip and the Triage Load
+card. Held by design: the strip threshold wash (red/amber when the waiting room/
+demand crosses its limit) is the clinical/demand alert and is NOT dimmed; the
+Condor workload mini-charts use the doctrine-sanctioned --cat-* data-viz ramp and
+are left on-doctrine.
+
+## [v3.128.1] — 2026-06-21
+
+### Road to 10 — Phase 2 (Vogue map): Today is a composition
+
+The marquee structural move: Today was six near-identical bordered cards of equal
+weight (an arrangement). Now only the Waiting Room hero is a distinct elevated
+card; Triage Load / Demand / Slots / Morning Sweep / Recent Alerts shed their
+border, shadow and header fill and read as quiet hairline-separated sections
+beneath it. One hero plus a calm supporting stack, light and dark. Verified the
+clinical red on the hero holds full salience.
+
+## [v3.128.0] — 2026-06-21
+
+### Road to 10 — Phase 1 (Vogue map): "stop shouting"
+
+Pure subtraction, the highest-leverage cheap wins toward the 10/10 target
+(docs/appraisal/VOGUE-MAP-TO-10-2026-06-21.md). Both panels flagged buttons as the
+#1 remaining tell.
+
+- **Action buttons recast to sentence-case sans** (21 classes: Choose tabs,
+  Expand, Dismiss, Copy figures, Open full report, Run the pre-clinic sweep, the
+  date/period presets, sentinel/capacity/slots/submissions buttons). Mono stays on
+  data, nav and status. The last shouting register is gone.
+- **Accent palette culled.** The triage pills (Today card + top strip) dropped
+  their decorative amber/blue tint — new-vs-reply is already in the label — so
+  amber/blue stay reserved for real clinical/capacity signals. Today now carries
+  clinical red + neutral only.
+- **"Open to" demoted to a single quiet chevron** on the six Today cards (was six
+  repeated standing labels).
+- **Truncated setup banner fixed** — reads "Practice code set" cleanly.
+
+Suite 113/113; lint and format clean.
+
+## [v3.127.3] — 2026-06-21
+
+### Craft tail — spinner rollout + reticle empty-state glyph
+
+- Rolled the reticle-geometry spinner into the Condor loading state (joins
+  Today).
+- Added a monochrome reticle glyph (the brand mark's geometry — ring, cardinal
+  ticks, centre dot — faint, no brand cyan) to the Record state cards, seeding
+  the reticle motif in the empty-state chrome. Suite 113/113.
+
+## [v3.127.2] — 2026-06-21
+
+### Signature motion + brand-motif seed
+
+- **Overlay entrance motion.** The display, all-tabs and help popovers and the
+  command palette now ease in on open (a 130ms fade + rise, `prefers-reduced-
+  motion` guarded). Motion is deliberately **interaction-driven only** — never on
+  a data poll, since modules re-render on poll and animating their content would
+  twitch every few seconds. With the Condor index-meter fill (v3.127.1), the
+  suite now has one consistent, restrained motion language.
+- **Reticle-geometry spinner.** Added a shared `.ch-spinner` — a ring with one
+  accent arc, echoing the brand mark's rangefinder ring — and wired it into the
+  Today loading state via `::before` (no markup change). The first step of
+  propagating the reticle motif into the chrome.
+
+Remaining craft tail: roll the spinner out to the other modules' loading states
+and add a reticle-derived empty-state glyph. Suite 113/113; lint and format clean.
+
+## [v3.127.1] — 2026-06-21
+
+### Craft pass — owned gauge, pill convergence, type-recast tail
+
+Three road-to-10 craft items, done in parallel:
+
+- **Condor Practice Pressure — owned data-viz (replaces the stock half-doughnut).**
+  Vogue flagged the gauge as the one component that "looks bought, not made". It
+  is now a horizontal 0–100 **index meter** with the GREEN/AMBER/RED band
+  thresholds marked at 40 and 70, so a low index that is floored to AMBER by
+  capacity reads truthfully — you see the fill sit left of the amber tick. Also
+  resolves the daily-driver confusion (a bare "23" on a doughnut). The fill eases
+  in with a single motion beat (`prefers-reduced-motion` guarded) — the suite's
+  first signature motion.
+- **Pill convergence — the two triage styles unified.** The "Triage:" strip and
+  the "Triage Load" card showed the same counts in two different pill styles
+  (sentence-case vs mono-caps). The card pill label is now the same sentence-case
+  sans + mono-count as the strip. One representation, not two.
+- **Type-recast residual tail.** Converted the chart titles (`submissions
+  .chart-hdr`), the record card headers (`record .rec-card-h`) and the options-
+  page section/field labels to sentence-case sans, finishing the v3.127.0 recast.
+  Buttons, tags, badges, status tokens, axis labels and empty/loading states
+  correctly stay mono.
+
+Suite 113/113; lint and format clean. Remaining road-to-10 craft: broader motion
+(number settles, strip easing) and propagating the reticle motif into the chrome.
+
+## [v3.127.0] — 2026-06-21
+
+### Type-system recast — headers in sans, data in mono (hybrid, doctrine #4 revised)
+
+Acting on the Vogue design-house critique ("all-caps monospace doing all the
+work reads as terminal cosplay, not authored") via the hybrid option: the dual
+voice stays, but what each voice owns has moved. **Section headers and card
+labels are now sentence-case sans** (hierarchy by size/weight, not uppercase
+letter-spacing); **mono is pulled back to data** (counts, times, indices, dates,
+codes, version, freshness), the **nav rail**, and **status micro-tokens** (the
+`AMBER` band, kbd hints). This is the deepest "premium/authored" lever from the
+road-to-10 review.
+
+- Canon updated: `DOCTRINE.md` principle #4 and `TOKENS.md` typography +
+  Section-header recipe rewritten to the recast.
+- Converted the shared `.mod-eyebrow` (flips every module eyebrow at once) plus
+  the section-header / card-label classes across Today, Condor, Slots, Sentinel,
+  Submissions, Activity, Referrals, Reception, Trends, Capacity, Knowledge and
+  Sweep. Buttons, tags, counts, the status bands and the nav stay mono.
+- Verified on the hero surfaces (light + dark) and the data-bearing modules.
+- Known residual (next polish pass): a few module-specific chart titles and axis
+  labels still render mono-caps; options pages not yet recast.
+
+Suite 113/113; lint and format clean.
+
+## [v3.126.7] — 2026-06-21
+
+### Road-to-10 review fixes (Practice + Vogue panels)
+
+Ran two panels on the v3.126.6 renders — The Practice (usability, mean ≈7.1/10,
+up from 5.7) and Vogue (design house, ~6.5/10 craft, "not yet a £200m look").
+Both named the same two free wins, fixed here:
+
+- **Clipped "TODA" nav label** — the in-nav wordmark crowded the tab rail in the
+  400px panel, truncating the active tab. Dropped the redundant in-chrome
+  wordmark (the new reticle mark carries the brand; the full wordmark still
+  appears in About / Options / the visualiser); the active tab now reads "TODAY"
+  in full with "SLOTS" beside it. Also tightened the tab-rail overflow fade from
+  8% to 3% so it can never eat a label character.
+- **"v0.5.1" on the Monitoring header** — a literal "pre-release" signal on a
+  clinical tab. Removed.
+
+The full road-to-10 synthesis (both ladders, and the pivotal type-system call
+for Dave) is in `docs/appraisal/ROAD-TO-10-2026-06-21.md`.
+
+## [v3.126.6] — 2026-06-21
+
+### Design-house G5 (legibility floor) + G4 (component convergence)
+
+**G5 — contrast floor, not a size bump.** The doctrine permits mono labels at
+9–11px, so the real floor issue is faint greys carrying load-bearing text. Fixed
+the four sub-floor 8px labels (submissions metric-delta / legend-note, setup
+recommended badge) up to the 9px floor, and lifted the faintest tier `--text-5`
+in both themes (light `#6c7c91`→`#5f6f85`, dark `#5d7a9d`→`#6c89ac`) — only ever
+raising contrast. Synced the stale `TOKENS.md` text-4/5 row to the live values.
+
+**G4 — pills were already substantially converged.** Audit found the canonical
+`.pill` migration has largely happened: `slot-pill` matches the recipe exactly,
+and `condor-pill` / `today-name-chip` already use `--r-pill`. Aligned the two
+real outliers — the AM/PM chips took the pill radius (was squared `--r-sm`), and
+the suite's tightest pill (`condor-pill`) was nudged to the family vertical
+rhythm. No class renames (per TOKENS.md "do not mass-rename in one pass").
+
+This closes the in-house design-house items; G1/G2/G3 shipped in v3.126.3–.5.
+The remaining gap, G1's brand mini-guide aside, is none — the appraisal's
+foundations were already strong.
+
+## [v3.126.5] — 2026-06-21
+
+### Design-house G1 — brand identity refresh (precision-instrument mark)
+
+The placeholder identity (a generic gold guardian shield) was the design-house
+appraisal's headline gap for the £200m bar (G1). New mark: a gold **precision
+reticle** — rangefinder/avionics sight (outer ring, four cardinal index ticks,
+inner ring) — on the deep-navy instrument bezel, with the cyan **live-lock
+beacon** kept at the crosshair centre as the recurring focal element. It reads as
+the clinical instrument the suite actually is (the doctrine's flight-deck /
+rangefinder register, and the "Sentinel" that watches), and recomposes the
+existing navy/gold/cyan equity rather than discarding it.
+
+- Vector is now the source of truth: `brand/app-icon-master.svg` (512) +
+  `brand/app-icon-16.svg` (simplified favicon). `generate-icons.mjs` renders
+  `brand/app-icon.png` and `icons/icon-16/48/128.png` from the SVGs (via sharp).
+- The mark updates everywhere it appears automatically (nav, pop-out, options,
+  about, visualiser drop, README, extension icons). The 16px nav logos point to
+  the crisp simplified favicon rather than downscaling the detailed master.
+- Signature element: the cyan live-lock dot recurs across brand surfaces but is
+  deliberately kept **out of the clinical chrome** — the UI reserves colour for
+  clinical status, so the brand cyan is never mistaken for a signal. Brand guide
+  refreshed (`brand/BRAND.md`).
+
+Remaining design-house items: G4 component convergence, G5 legibility floor.
+
+## [v3.126.4] — 2026-06-21
+
+### Design-house Phase 2 (G3 — one hero per tab: Today)
+
+Today was a flat stack of six equal cards with no focal point (design-house gap
+G3). The live Waiting Room card now floats forward as the page's hero — stronger
+elevation and border, a louder header label, and a larger headline count — while
+the Triage Load / Demand / Slots / Sweep / Alerts cards rest as a calm supporting
+stack. Hierarchy is carried by weight and space, not colour: the hero is
+deliberately neutral so it never reads as an alert (the urgency tint on the
+waiting count remains a separate, real wait-time signal and is untouched).
+Verified in light and dark. Remaining design-house items: G1 identity sprint
+(needs a brand brief), G4 component convergence, G5 legibility floor.
+
+## [v3.126.3] — 2026-06-21
+
+### Design-house Phase 2 (chrome economy) + Sentinel rule refresh
+
+**Design (G2 — "calm field, sharp signal" restored).** The two permanent demand
+strips no longer wear an always-on wash: the waiting-room strip's
+below-threshold state and the triage strip's base now rest on neutral chrome
+(`--bg-mid` / `--border`) instead of a standing green / accent tint. The
+amber/red threshold states are untouched, so a crossed threshold now stands out
+against a calm field rather than competing with a permanent colour wash. This is
+the highest-leverage item from the design-house appraisal
+(`docs/appraisal/DESIGN-HOUSE-2026-06-21.md`, gap G2); the larger items (one
+hero per tab G3, component convergence G4, legibility floor G5, and the identity
+sprint G1) remain queued.
+
+**Sentinel rules (The Keeper — additive only, no interval/match change).** Acted
+on the safe, additive findings from `docs/appraisal/KEEPER-sentinel-2026-06-21.md`:
+- `glp1-receptor-agonist`: added the MHRA DSU 29 Jan 2026 strengthened
+  acute-pancreatitis warning (necrotising/fatal) to notes + source.
+- DMARDs (methotrexate, leflunomide, azathioprine, sulfasalazine,
+  hydroxychloroquine): refreshed the source citation to the 2025 BSR csDMARD
+  guideline (Rheumatology, Nov 2025). No monitoring interval changed.
+- `chc-combined-hormonal`: noted the MHRA tirzepatide → reduced
+  oral-contraceptive absorption interaction.
+
+All corroborated across secondary summaries; primary PDFs were unreachable (403)
+this run, so each is annotated "pending primary-source confirmation". **Held, not
+changed:** the QOF DM036 age-band discrepancy (file ≤70 vs one secondary source
+≤79) — a clinical threshold that could cause a silent chip change either way, so
+it waits for the primary QOF PDF. Coverage guard 314/314, full suite 113/113.
+
+## [v3.126.2] — 2026-06-21
+
+### Slots + Sentinel re-appraisal follow-through (panel, 2026-06-21)
+
+Re-ran the Practice panel on Slots and Sentinel after v3.126.1. Two convergent
+findings acted on; UX only, no clinical-rule or alert-salience change.
+
+- **Sentinel waiting-room minutes no longer mimic an overdue alert (G2, root
+  cause).** v3.126.1 reframed the block's container bar to the informational
+  accent, but four domain personas (nurse, pharmacist, partner, GP) reported the
+  per-row wait-time minutes were still clinical red/amber and read as
+  "overdue/act now" — risking a tired clinician mistaking the idle waiting list
+  for a fired monitoring alert. The minutes now carry their emphasis by weight
+  and a muted neutral tone; within the Monitoring tab, red is reserved for a
+  genuine overdue monitoring check. The wait-time ordering and the "not a
+  monitoring result" caption are unchanged.
+- **Slots headline says what the number is, and as-at when (R1/R2 parity).** The
+  hero label now reads "free slots remaining today" (was "slots remaining
+  today") so the count is unambiguously bookable capacity, and a muted
+  "practice-wide · as at HH:MM" line was added so a manager can quote a
+  defensible point-in-time figure — matching the as-at clock added to Condor in
+  v3.126.1.
+
+## [v3.126.1] — 2026-06-21
+
+### Practice appraisal quick wins (whole-suite panel, 2026-06-21)
+
+Acted on the verified, low-risk findings from the whole-suite Practice appraisal
+(`docs/appraisal/PRACTICE-whole-suite-2026-06-21.md`). UX/accessibility only; no
+clinical-rule or alert-salience changes.
+
+- **Setup banner no longer reads as a warning (U1).** The collapsed setup strip
+  said `Setup: practice code ready · …` which truncated to "…code re…" in the
+  400px panel and read like "re-check / required" — the opposite of its meaning.
+  It now leads with `Practice code set · …` (unambiguous even when truncated) and
+  carries the full text as a `title`.
+- **Header icons named for assistive tech (U2).** Added `aria-label`s to the
+  command-palette, display, pop-out and settings buttons (previously `title`
+  only), and named the palette's tab-count badge so the bare "15" can't be
+  mistaken for an unread count. Mirrored in the pop-out shell.
+- **Condor demand figure now reconciles (R1).** The headline strip labels the
+  figure `Demand N (med + admin)` so it no longer reads as a contradiction
+  against the all-task-types velocity total. Confirmed against `condor.js`
+  (`demandCount = medical + admin`).
+- **Condor shows a defensible cut-off clock (R2).** Added an explicit
+  `as at HH:MM` next to the live-freshness label, for a figure a manager quotes
+  to partners.
+- **Sentinel waiting-room block no longer mimics a clinical alert (G2).** The
+  block is the waiting room, not a monitoring result, yet still wore an amber
+  alert left-bar that three domain personas read as "overdue". Reframed to the
+  informational accent; the per-row wait-time escalation (a duration signal) is
+  unchanged, as is the disambiguating caption.
+
+The capacity safety floor (band raised to AMBER when over capacity, never GREEN)
+and the gauge arc colour were left unchanged — verified already correct, and the
+floor is an alert signal that must not be recommended down.
+
+## [v3.126.0] — 2026-06-20
+
+### Keeper follow-ups — four parallel work items (scoped by virtual-dave)
+
+Consolidated batch of the four open follow-ups from the Phase-1/Phase-2 rules-engine work,
+developed in parallel on isolated branches and integration-tested together (full suite
+112/112).
+
+- **`intervalByBand` engine capability** (`engine/rules-engine.js`, new
+  `resolveEffectiveInterval`) — optional, value-banded monitoring intervals with a hard
+  **escalate-only / shortest-wins / monotonic** invariant asserted in code
+  (`effectiveInterval <= baseline` always) and a 5000-iteration property test. Missing /
+  unparseable / unit-conflicting / stale band-input falls back to the baseline, never longer,
+  never suppressed. **DOAC is deliberately NOT wired** — it must band on CrCl (Cockcroft-Gault),
+  not eGFR, and the inputs (structured dated weight; numeric serum creatinine) aren't reliably
+  available; deferral recorded in `docs/HAZARD-LOG.md`.
+- **CHC monitoring rule enabled** (`rules/drug-rules.json`) — `chc-combined-hormonal` flipped to
+  enabled after disambiguating the `hrt-systemic` overlap by excluding `ethinylestradiol`/
+  `qlaira`/`zoely` from the HRT rule (HRT never uses ethinylestradiol). New
+  `test-contraception-hrt-disambiguation.js` pins the no-double-fire invariant; HRT brand
+  coverage confirmed intact.
+- **levomepromazine / methotrimeprazine / Nozinan added to the ACB scale at score 3**
+  (`engine/acb-scores.js`) — the score-3 gap the Keeper verification surfaced (it had been
+  mis-proposed at score 2 and killed).
+- **Primary-source reconfirmation status** recorded in
+  `the-keeper-source-reconfirmation-2026-06-20.md` for the Phase-2 clinical changes.
 
 ## [v3.125.0] — 2026-06-20
 

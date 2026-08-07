@@ -71,8 +71,10 @@ jobs:
             --include='docs/sentinel-DISCLAIMER.txt' \
             --exclude='docs/*' \
             --exclude='design-system/' \
+            --exclude='fixtures/' \
             --exclude='CLAUDE.md' \
-            --exclude='the-keeper-report-*.md' \
+            --exclude='CONTRIBUTING.md' \
+            --exclude='the-keeper-*.md' \
             --exclude='CHANGELOG.md' \
             --exclude='SECURITY.md' \
             --exclude='SECURITY-AUDIT.md' \

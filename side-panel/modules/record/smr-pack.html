@@ -1,0 +1,361 @@
+<!doctype html>
+<!-- © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. -->
+<!-- Medicus Suite — SMR (Structured Medication Review) prep pack (print-first page).
+     Opened in a full tab by the Record module; reads its data from the
+     transient 'record.smrPack' storage key written just before the tab opens.
+     FORK of side-panel/modules/sentinel/passport.html, not an extension of it —
+     this is a dense, clinician-facing prep sheet (small type, two columns),
+     the opposite audience from the patient-facing passport. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>SMR prep pack — Medicus Suite</title>
+    <style>
+      /* ── Print-first: white paper styling on screen too ── */
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: #fff;
+        color: #111;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+        font-size: 13px;
+        line-height: 1.4;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 24px 28px 40px;
+      }
+
+      /* ── No-print toolbar ── */
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+      .toolbar button {
+        background: #1d4ed8;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .toolbar button:hover {
+        opacity: 0.9;
+      }
+      .toolbar .hint {
+        font-size: 12px;
+        color: #555;
+      }
+
+      /* ── Header ── */
+      h1 {
+        font-size: 19px;
+        font-weight: 700;
+        margin-bottom: 3px;
+        line-height: 1.25;
+      }
+      .smr-meta {
+        font-size: 12.5px;
+        color: #333;
+        margin-bottom: 3px;
+      }
+      .smr-sub-meta {
+        font-size: 11.5px;
+        color: #555;
+        margin-bottom: 10px;
+      }
+
+      /* ── Confidential banner ── */
+      .confidential {
+        border: 2px solid #b91c1c;
+        color: #b91c1c;
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        margin-bottom: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+
+      /* ── Caveat banner — top AND bottom, load-bearing ── */
+      .smr-caveat {
+        border: 1px solid #94a3b8;
+        background: #f1f5f9;
+        color: #1e293b;
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-size: 11.5px;
+        font-weight: 600;
+        line-height: 1.45;
+        margin-bottom: 14px;
+      }
+
+      /* ── Mandatory gap block ── */
+      .smr-gaps {
+        border: 1px solid #f59e0b;
+        background: #fffbeb;
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin-bottom: 14px;
+      }
+      .smr-gaps-h {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: #92400e;
+        margin-bottom: 5px;
+      }
+      .smr-gap-row {
+        font-size: 12px;
+        margin-bottom: 2px;
+      }
+      .smr-gap-label {
+        font-weight: 700;
+      }
+      .smr-gap-note {
+        color: #444;
+      }
+
+      /* ── Section headings ── */
+      h2 {
+        font-size: 13.5px;
+        font-weight: 700;
+        border-bottom: 2px solid #1d4ed8;
+        padding-bottom: 3px;
+        margin: 16px 0 8px;
+        color: #1d4ed8;
+        break-after: avoid;
+      }
+
+      /* ── Two-column layout for the dense sections ── */
+      .smr-cols {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 20px;
+      }
+      .smr-col {
+        min-width: 0;
+      }
+
+      section.smr-card {
+        break-inside: avoid;
+        margin-bottom: 4px;
+      }
+
+      /* ── Lists (problems / medications) ── */
+      .smr-list {
+        list-style: none;
+      }
+      .smr-list li {
+        padding: 4px 0;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .smr-item-name {
+        font-weight: 700;
+        font-size: 12.5px;
+      }
+      .smr-item-sub {
+        font-size: 11.5px;
+        color: #444;
+      }
+      .smr-flag {
+        display: inline-block;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 1px 6px;
+        border-radius: 10px;
+        margin-left: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+      }
+      .smr-flag-overdue {
+        background: #fee2e2;
+        color: #7f1d1d;
+      }
+      .smr-flag-review {
+        background: #fef9c3;
+        color: #713f12;
+      }
+      .smr-flag-major {
+        background: #fee2e2;
+        color: #7f1d1d;
+      }
+
+      /* ── Tables (monitoring / QOF / observations) ── */
+      table.smr-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+      }
+      .smr-table th {
+        text-align: left;
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #555;
+        padding: 3px 6px 3px 0;
+        border-bottom: 2px solid #ddd;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .smr-table td {
+        padding: 5px 6px 5px 0;
+        border-bottom: 1px solid #e5e7eb;
+        vertical-align: top;
+        font-size: 12px;
+      }
+      .smr-status-chip {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-size: 10.5px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .smr-status-red {
+        background: #fee2e2;
+        color: #7f1d1d;
+      }
+      .smr-status-amber {
+        background: #fef9c3;
+        color: #713f12;
+      }
+      .smr-status-green {
+        background: #dcfce7;
+        color: #14532d;
+      }
+      .smr-status-grey {
+        background: #f3f4f6;
+        color: #374151;
+      }
+
+      .smr-subtests {
+        list-style: none;
+        margin-top: 3px;
+      }
+      .smr-subtests li {
+        font-size: 11px;
+        color: #333;
+        padding: 1px 0;
+        border: none;
+      }
+
+      /* ── Empty / honesty lines — never let absence read as "reviewed and clear" ── */
+      .smr-empty {
+        font-size: 12px;
+        font-style: italic;
+        color: #6b7280;
+        padding: 4px 0;
+      }
+
+      /* ── Prescribing safety ── */
+      .smr-safety-block {
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 8px;
+      }
+      .smr-safety-h {
+        font-size: 11.5px;
+        font-weight: 700;
+        margin-bottom: 3px;
+      }
+      .smr-safety-body {
+        font-size: 12px;
+        color: #333;
+      }
+      .smr-prompt-caveat {
+        font-size: 10.5px;
+        color: #6b7280;
+        font-style: italic;
+        margin-top: 3px;
+      }
+
+      /* ── Footer ── */
+      .smr-footer {
+        margin-top: 18px;
+        padding-top: 10px;
+        border-top: 2px solid #bbb;
+        font-size: 11px;
+        color: #555;
+        line-height: 1.5;
+      }
+
+      /* ── Error state ── */
+      .empty-page {
+        padding: 40px 0;
+        color: #555;
+        font-size: 15px;
+      }
+
+      /* ── Print overrides ── */
+      @media print {
+        .no-print {
+          display: none !important;
+        }
+        body {
+          padding: 0;
+          font-size: 10.5pt;
+        }
+        h1 {
+          font-size: 16pt;
+        }
+        h2 {
+          font-size: 11pt;
+        }
+        .smr-cols {
+          grid-template-columns: 1fr 1fr;
+        }
+        .smr-status-red {
+          background: #fee2e2 !important;
+          color: #7f1d1d !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .smr-status-amber {
+          background: #fef9c3 !important;
+          color: #713f12 !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .smr-status-green {
+          background: #dcfce7 !important;
+          color: #14532d !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .smr-status-grey {
+          background: #f3f4f6 !important;
+          color: #374151 !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .smr-gaps {
+          background: #fffbeb !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .smr-caveat {
+          background: #f1f5f9 !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar no-print">
+      <button id="printBtn" type="button">Print / save as PDF</button>
+      <span class="hint">Tip: choose "Save as PDF" in the print window to keep a file.</span>
+    </div>
+    <div id="content"><div class="empty-page">Loading SMR prep pack&hellip;</div></div>
+    <script src="smr-pack.js"></script>
+  </body>
+</html>

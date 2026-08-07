@@ -111,6 +111,78 @@
     return result;
   }
 
+  // === HIGH-RISK UNMATCHED-MED GUARD ===
+  // The silent-failure mode CLAUDE.md warns about: a high-risk drug under an
+  // odd brand / spelling, or one dropped by an `exclude`, matches NO monitoring
+  // rule, so no overdue-blood chip ever fires and nobody notices for months.
+  // listUnmatchedMedicationsDetailed already surfaces ALL unmatched meds, but it
+  // treats an unmonitored paracetamol the same as an unmonitored amiodarone.
+  // This re-reads that list and elevates the ones whose name looks like a class
+  // that genuinely REQUIRES monitoring (BNF / PINCER / shared-care), so the panel
+  // can promote them from a buried "N unmatched" list into a visible "verify
+  // monitoring is in place" alert. It is a backstop, not a clinical rule: every
+  // med it flags is — by construction — one that already passed through every
+  // enabled rule unmatched, so when the matching rules are complete this fires on
+  // nothing (the common drugs here all already carry rules; see drug-rules.json).
+  //
+  // Stems are class/generic terms matched case-insensitively as substrings, the
+  // SAME contract as drugMatchesRule — so "lithium" covers all lithium salts and
+  // "valproate" covers "sodium valproate". Brand-only names that contain no
+  // generic stem are the known limit (they cannot be classified from the name
+  // alone); this is still strictly more than today's flat list.
+  const HIGH_RISK_UNMATCHED_CLASSES = [
+    {
+      label: 'DMARD / immunosuppressant',
+      stems: [
+        'methotrexate', 'azathioprine', 'mercaptopurine', 'leflunomide', 'sulfasalazine',
+        'ciclosporin', 'cyclosporin', 'tacrolimus', 'mycophenolate', 'penicillamine',
+        'sirolimus', 'everolimus', 'hydroxycarbamide', 'cyclophosphamide',
+      ],
+    },
+    { label: 'Antimalarial (retinopathy/marrow monitoring)', stems: ['hydroxychloroquine'] },
+    { label: 'Lithium', stems: ['lithium'] },
+    { label: 'Antiarrhythmic', stems: ['amiodarone', 'dronedarone', 'digoxin'] },
+    {
+      label: 'Oral anticoagulant',
+      stems: ['warfarin', 'acenocoumarol', 'phenindione', 'apixaban', 'rivaroxaban', 'edoxaban', 'dabigatran'],
+    },
+    { label: 'Antithyroid', stems: ['carbimazole', 'propylthiouracil'] },
+    { label: 'Aldosterone antagonist (potassium)', stems: ['spironolactone', 'eplerenone'] },
+    {
+      label: 'Antiepileptic (level / marrow / hepatic monitoring)',
+      stems: ['valproate', 'valproic', 'carbamazepine', 'phenytoin'],
+    },
+    { label: 'Antipsychotic (clozapine)', stems: ['clozapine'] },
+  ];
+
+  // Returns the subset of an unmatched-detail list (the listUnmatchedMedicationsDetailed
+  // shape: [{ name, reason, excludedBy }]) whose name matches a high-risk class,
+  // annotated with { riskClass, matchedStem } and carrying the original reason /
+  // excludedBy through so the UI can explain WHY it was missed (no rule vs excluded).
+  function flagHighRiskUnmatched(unmatchedDetailed) {
+    const list = Array.isArray(unmatchedDetailed) ? unmatchedDetailed : [];
+    const out = [];
+    for (const item of list) {
+      const name = item && item.name;
+      if (!name) continue;
+      const norm = normaliseDrugString(name);
+      for (const cls of HIGH_RISK_UNMATCHED_CLASSES) {
+        const matchedStem = cls.stems.find((stem) => norm.includes(normaliseDrugString(stem)));
+        if (matchedStem) {
+          out.push({
+            name,
+            riskClass: cls.label,
+            matchedStem,
+            reason: (item && item.reason) || null,
+            excludedBy: (item && item.excludedBy) || null,
+          });
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
   // === DATE HELPERS ===
   function daysBetween(isoA, isoB) {
     const a = new Date(isoA);
@@ -144,11 +216,20 @@
   // === OBSERVATION LOOKUP ===
   function findLatestObservation(observations, testSpec) {
     if (!Array.isArray(observations)) return null;
+    // Optional exclude terms (audit H4, 2026-07-18): bare analyte substrings
+    // also match the wrong specimen — "potassium" matched "Urine potassium",
+    // whose latest date then WON the headline and fired a red hyperkalaemia
+    // alert off a urine value. Text matches are rejected when the observation
+    // name contains any exclude term; exact-SNOMED matches bypass excludes
+    // (a code is specimen-specific already).
+    const excludeTerms = Array.isArray(testSpec.exclude) ? testSpec.exclude.map((e) => String(e).toLowerCase()) : null;
     const matches = observations.filter((obs) => {
       if (testSpec.snomed && obs.code && testSpec.snomed.includes(String(obs.code))) return true;
       if (obs.name && Array.isArray(testSpec.match)) {
         const obsLower = String(obs.name).toLowerCase();
-        return testSpec.match.some((m) => obsLower.includes(String(m).toLowerCase()));
+        if (!testSpec.match.some((m) => obsLower.includes(String(m).toLowerCase()))) return false;
+        if (excludeTerms && excludeTerms.some((e) => obsLower.includes(e))) return false;
+        return true;
       }
       return false;
     });
@@ -241,12 +322,121 @@
     return e !== a;
   }
 
+  // === OPTIONAL: interval-by-band resolution ===
+  // A drug-monitoring test may carry an OPTIONAL `intervalByBand` block to SHORTEN
+  // its review interval when a source observation (e.g. renal function) falls into
+  // a worse band. The capability is ESCALATE-ONLY / shortest-wins / monotonic:
+  //
+  //   effectiveInterval = min(baseline, matchedBand.intervalDays)
+  //
+  // where baseline = test.intervalDays || 365. Banding may ONLY shorten the
+  // interval, never lengthen it — see the HARD INVARIANT below.
+  //
+  // Bands are UPPER-BOUNDS: each band's `max` is INCLUSIVE. The first band (in
+  // listed order) whose `max` >= value is selected. List bands ascending by `max`
+  // so e.g. eGFR 28 lands in {max:29} not {max:59}. A value above every band's
+  // `max` matches no band → baseline (no shortening), the safe default for a
+  // healthy / unbanded source value.
+  //
+  // FAIL-SAFE: if the source observation is absent, unparseable, unit-conflicting,
+  // or STALE (older than its freshness window), we return the baseline interval —
+  // NEVER a longer interval, and NEVER a suppression. A missing renal value must
+  // not be allowed to *relax* monitoring; the worst it can do is leave the baseline
+  // interval in place.
+  //
+  // Schema (per test, optional):
+  //   intervalByBand: {
+  //     source: "<observation match key or name>",   // string or string[]
+  //     unit:   "<optional expected unit for conflict guard>",
+  //     freshnessDays: <optional override; default = baseline interval window>,
+  //     bands:  [ { max: 14, intervalDays: 90 }, { max: 29, intervalDays: 90 },
+  //               { max: 59, intervalDays: 182 } ]
+  //   }
+  //
+  // Returns { effectiveInterval, band, sourceValue, sourceObs, reason } where
+  // `reason` documents WHY (for the audit trace): 'banded' | 'no-config' |
+  // 'no-source-obs' | 'unparseable' | 'unit-conflict' | 'stale' | 'no-band-match'.
+  function resolveEffectiveInterval(test, observations, now) {
+    const baseline = test.intervalDays || 365;
+    const cfg = test.intervalByBand;
+    if (!cfg || !Array.isArray(cfg.bands) || cfg.bands.length === 0) {
+      return {
+        effectiveInterval: baseline,
+        band: null,
+        sourceValue: null,
+        sourceObs: null,
+        reason: 'no-config',
+      };
+    }
+    // `source` may be a single string or an array of match terms; normalise to a
+    // `match` array the existing observation lookup understands.
+    const sourceTerms = Array.isArray(cfg.source) ? cfg.source : cfg.source != null ? [cfg.source] : [];
+    const obs = findLatestObservation(observations, { match: sourceTerms, snomed: cfg.snomed });
+    const fail = (reason) => ({
+      effectiveInterval: baseline,
+      band: null,
+      sourceValue: null,
+      sourceObs: obs || null,
+      reason,
+    });
+    if (!obs || !obs.date) return fail('no-source-obs');
+    // Unparseable date → cannot assert freshness → treat as stale → baseline.
+    if (isNaN(new Date(obs.date).getTime())) return fail('stale');
+    const value = parseNumeric(obs.value);
+    if (value == null) return fail('unparseable');
+    // Unit safety: a conflicting unit means the number is not comparable to the
+    // band thresholds — fall back to baseline rather than band on a wrong unit.
+    if (unitsConflict(cfg.unit, obs.unit)) return fail('unit-conflict');
+    // Staleness: default freshness window = the baseline interval itself, so a
+    // renal value older than one review cycle can no longer justify shortening.
+    const freshnessDays = cfg.freshnessDays || baseline;
+    const ageDays = daysBetween(obs.date, now);
+    if (ageDays == null || ageDays > freshnessDays) return fail('stale');
+    // First band (in listed order) whose inclusive upper-bound max >= value.
+    const band = cfg.bands.find((b) => typeof b.max === 'number' && value <= b.max) || null;
+    if (!band || typeof band.intervalDays !== 'number') {
+      return {
+        effectiveInterval: baseline,
+        band: null,
+        sourceValue: value,
+        sourceObs: obs,
+        reason: 'no-band-match',
+      };
+    }
+    // ESCALATE-ONLY / shortest-wins: min(baseline, band) — banding may only shorten.
+    const effectiveInterval = Math.min(baseline, band.intervalDays);
+    // HARD INVARIANT: banding can never LENGTHEN the baseline interval. Math.min
+    // guarantees this; the guard makes the contract explicit and fails safe.
+    if (effectiveInterval > baseline) {
+      return {
+        effectiveInterval: baseline,
+        band: null,
+        sourceValue: value,
+        sourceObs: obs,
+        reason: 'no-band-match',
+      };
+    }
+    return { effectiveInterval, band, sourceValue: value, sourceObs: obs, reason: 'banded' };
+  }
+
   // === HRT PROGESTOGEN CONTEXT ===
   // For oestrogen-triggered HRT chips, annotate with whether the patient has
   // a hysterectomy, an IUS, or oral progestogen — so the clinician can see
   // at a glance whether progestogen coverage is documented or missing.
   function buildHrtContext(hrtConfig, data, now) {
-    const norm = (s) => String(s || '').toLowerCase();
+    // Punctuation-tolerant: collapse any run of non-alphanumerics to a single
+    // space so a bracketed/hyphenated generic name matches a space-separated
+    // term. Medicus shows a freshly-issued LNG-IUS under its generic VTM name
+    // "Levonorgestrel (Intrauterine device)" — the "(" would otherwise defeat
+    // the "levonorgestrel intrauterine" iusTerm (bare .toLowerCase() leaves
+    // "levonorgestrel (intrauterine device)"), so a new Mirena on the
+    // medication list was missed and the chip fell through to a stale
+    // problem-coded coil ("IUS expired — endometrial cover not confirmed").
+    const norm = (s) =>
+      String(s || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
     const meds = data.medications || [];
     const problems = data.problems || [];
     // Hysterectomy may be coded as a past/ended problem — check both active and past
@@ -604,6 +794,44 @@
     return entry;
   }
 
+  // Post-initiation test evaluator (e.g. NICE NG136: a U&E within ~1–2 weeks of
+  // STARTING an ACE-I/ARB). This is the inverse of the ordinary interval check:
+  // an ordinary test with no matching observation is neutral 'no_data', but a
+  // post-initiation requirement that has NOT been met after the grace window is
+  // ACTIONABLE. A test carries this behaviour by setting `postInitiationDays`.
+  //
+  // Fail-safe against crying wolf: it fires ONLY when the drug's start date is
+  // known (med.startDate, derived from issue history) and there is no qualifying
+  // test on or after that start. An established patient whose start date we can't
+  // see, or who has had the test since starting, never trips it.
+  //
+  //   no startDate                          → no_data (neutral; can't assess)
+  //   test recorded on/after startDate       → in_date (requirement met)
+  //   none, ≤ dueSoon window                 → recently_initiated (neutral)
+  //   none, > dueSoon but ≤ postInitiationDays→ due_soon (amber)
+  //   none, > postInitiationDays             → overdue (red)
+  function evalPostInitiationTest(test, obs, startDate, now) {
+    const base = { ...test, latestObs: obs || null, postInitiation: true };
+    if (!startDate) return { ...base, status: 'no_data', days: null };
+    // A qualifying test on or after the start date satisfies the requirement.
+    if (obs && obs.date) {
+      const sinceStartToObs = daysBetween(startDate, obs.date);
+      if (sinceStartToObs != null && sinceStartToObs >= 0) {
+        return { ...base, status: 'in_date', days: daysBetween(obs.date, now) };
+      }
+    }
+    const daysSinceStart = daysBetween(startDate, now);
+    if (daysSinceStart == null) return { ...base, status: 'no_data', days: null };
+    const overdueAt = test.postInitiationDays || 21;
+    const dueSoonAt =
+      test.postInitiationDueSoonDays != null ? test.postInitiationDueSoonDays : Math.max(0, overdueAt - 7);
+    let status;
+    if (daysSinceStart <= dueSoonAt) status = 'recently_initiated';
+    else if (daysSinceStart <= overdueAt) status = 'due_soon';
+    else status = 'overdue';
+    return { ...base, status, days: daysSinceStart };
+  }
+
   // Drug-monitoring rule evaluator
   function evaluateDrugRule(rule, data, now) {
     const traceEntry = _traceBase(data, rule);
@@ -642,6 +870,11 @@
     return matchedMeds.map((med, idx) => {
       const testEvaluations = (rule.tests || []).map((test) => {
         const obs = findLatestObservation(data.observations, test);
+        // Post-initiation requirement (fires if missing after the drug was
+        // started) — evaluated against med.startDate, not the rolling interval.
+        if (test.postInitiationDays != null) {
+          return evalPostInitiationTest(test, obs, med.startDate, now);
+        }
         if (!obs || !obs.date) {
           return { ...test, status: 'no_data', latestObs: null, days: null };
         }
@@ -651,7 +884,17 @@
         if (days == null) {
           return { ...test, status: 'no_data', latestObs: obs, days: null };
         }
-        const intervalDays = test.intervalDays || 365;
+        const baselineDays = test.intervalDays || 365;
+        // OPTIONAL escalate-only banding: may only SHORTEN baselineDays. Absent /
+        // unparseable / unit-conflicting / stale source → baseline (never longer).
+        const banding = resolveEffectiveInterval(test, data.observations, now);
+        const intervalDays = banding.effectiveInterval;
+        // HARD INVARIANT (assert in code): banding may only shorten the baseline.
+        if (intervalDays > baselineDays) {
+          throw new Error(
+            `intervalByBand invariant violated: effective ${intervalDays} > baseline ${baselineDays} for test ${test.name || ''}`
+          );
+        }
         const dueSoonDays = test.dueSoonDays || 30;
         const staleDays = intervalDays * 2;
         let status;
@@ -659,7 +902,9 @@
         else if (days > intervalDays) status = 'overdue';
         else if (days > intervalDays - dueSoonDays) status = 'due_soon';
         else status = 'in_date';
-        return { ...test, status, latestObs: obs, days };
+        // Carry banding audit onto the evaluation so the trace can record WHICH
+        // band fired and the source value. `intervalDays` is the EFFECTIVE value.
+        return { ...test, status, latestObs: obs, days, intervalDays, baselineIntervalDays: baselineDays, banding };
       });
 
       // Recently-initiated: if drug start date is within smallest interval, suppress no_data
@@ -736,13 +981,31 @@
           te.drugMatch = { medName: med.name, matchedTerm: detail.matchedTerm, excludedBy: null };
           te.arithmetic = testEvaluations.slice(0, 15).map((tv) => {
             const lastDate = tv.latestObs ? tv.latestObs.date : null;
+            // tv.intervalDays is the EFFECTIVE (post-banding) interval; due date is
+            // computed off it so a banded shortening shows in the audited due date.
             const intDays = tv.intervalDays || 365;
+            const baselineDays = tv.baselineIntervalDays || tv.intervalDays || 365;
             let dueDate = null;
             if (lastDate) {
               const d = new Date(lastDate);
               d.setDate(d.getDate() + intDays);
               dueDate = d.toISOString().slice(0, 10);
             }
+            // OPTIONAL banding audit: record WHICH band fired and the source value
+            // so a reviewer can see why monitoring was shortened. Only emitted when
+            // an intervalByBand config is present on the test (reason !== 'no-config').
+            const b = tv.banding;
+            const banding =
+              b && b.reason !== 'no-config'
+                ? {
+                    applied: b.reason === 'banded',
+                    reason: b.reason,
+                    baselineIntervalDays: baselineDays,
+                    effectiveIntervalDays: intDays,
+                    sourceValue: b.sourceValue,
+                    band: b.band ? { max: b.band.max, intervalDays: b.band.intervalDays } : null,
+                  }
+                : null;
             return {
               test: tv.testName || tv.name || '',
               observation: tv.latestObs
@@ -755,6 +1018,8 @@
                 : null,
               lastDate,
               intervalDays: intDays,
+              baselineIntervalDays: baselineDays,
+              banding,
               dueSoonDays: tv.dueSoonDays || 30,
               daysSince: tv.days,
               dueDate,
@@ -874,15 +1139,37 @@
     /\bquery\s+/,
     /\b\?/,
   ];
+  // How close (in characters) a negation cue's END must be to the matched term
+  // for it to negate the match. Bounds the cue to the words immediately before
+  // the term ("no heart failure", "no significant heart failure") without
+  // letting an unrelated earlier cue reach across the clause.
+  const PROBLEM_NEGATION_REACH = 30;
+
   function problemLabelMatchesTerm(label, term) {
     const l = String(label || '').toLowerCase();
     const t = String(term || '').toLowerCase();
     if (!t) return false;
     const idx = l.indexOf(t);
     if (idx < 0) return false;
-    // Strip everything from the match onward; check the prefix for negation.
+    // Audit H3 (2026-07-18): the negation scan used to run over the ENTIRE
+    // prefix, so "History of MI; heart failure" failed a requiresProblem:
+    // ["heart failure"] gate — the "history of" belonged to a different
+    // clause, and the gated safety alert silently never fired. Bound the scan
+    // to (a) the same clause as the match (split on ; . :) and (b) cues whose
+    // end sits within PROBLEM_NEGATION_REACH chars of the term.
     const prefix = l.slice(0, idx);
-    return !PROBLEM_NEGATION_PATTERNS.some((rx) => rx.test(prefix));
+    const clauseStart = Math.max(prefix.lastIndexOf(';'), prefix.lastIndexOf('.'), prefix.lastIndexOf(':')) + 1;
+    const clause = prefix.slice(clauseStart);
+    return !PROBLEM_NEGATION_PATTERNS.some((rx) => {
+      const g = new RegExp(rx.source, 'gi');
+      let m;
+      let lastEnd = -1;
+      while ((m = g.exec(clause)) !== null) {
+        lastEnd = m.index + m[0].length;
+        if (m[0].length === 0) g.lastIndex++; // safety vs zero-width match
+      }
+      return lastEnd >= 0 && clause.length - lastEnd <= PROBLEM_NEGATION_REACH;
+    });
   }
 
   // Shared problem-include / problem-exclude filter. Used by drug-monitoring,
@@ -1013,6 +1300,100 @@
         source: rule.source || null,
         notes: rule.notes || null,
         evidence: buildDrugComboEvidence(rule, matchedPerSet, matchedRequiredProblems, data),
+      },
+    ];
+  }
+
+  // === DRUG-ALLERGY EVALUATOR ===
+  // Fires when a documented allergy (data.allergies) co-occurs with a prescribed
+  // drug from the rule's drug set(s). This is the first rule type that reads the
+  // allergies bundle — only available from the Transactional (GP Connect
+  // Structured) feed; the legacy session/DOM feed provides no allergies.
+  //
+  // FAIL-CLOSED: with no allergy data the rule returns [] and never fires, so it
+  // is dormant (and safe) on any feed that lacks allergies, and lights up only
+  // when a real allergy record is present. It never asserts "no allergy".
+  //
+  // Rule shape:
+  //   { type:'drug-allergy', allergyTerms:[...], drugSets:[{name,match,exclude}],
+  //     crossSensitivity?:bool, severity, ageRange?, sex?, source?, notes? }
+  function evaluateDrugAllergyRule(rule, data) {
+    const traceEntry = _traceBase(data, rule);
+    const allergies = data.allergies || [];
+    if (!allergies.length) {
+      // No allergy source (e.g. session feed) — fail closed, do not fire.
+      if (traceEntry) traceEntry.skipReason = 'no-allergy-data';
+      return [];
+    }
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'age-filter';
+      return [];
+    }
+    if (!passesSexFilter(rule.sex, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'sex-filter';
+      return [];
+    }
+
+    // Only consider ACTIVE allergies (never a resolved/inactive/refuted entry).
+    const activeAllergies = allergies.filter((a) => {
+      const s = String(a.status || 'active').toLowerCase();
+      return s !== 'inactive' && s !== 'resolved' && s !== 'refuted' && s !== 'entered-in-error';
+    });
+    const allergyTerms = rule.allergyTerms || [];
+    const matchedAllergies = activeAllergies.filter((a) => matchesAnyTerm(a.label, allergyTerms));
+    if (!matchedAllergies.length) {
+      if (traceEntry) traceEntry.skipReason = 'no-allergy-match';
+      return [];
+    }
+
+    const meds = data.medications || [];
+    const drugSets = rule.drugSets || [];
+    const matchedPerSet = drugSets.map((set) =>
+      meds.filter((m) => drugMatchesRule(m.name, { drug: { match: set.match, exclude: set.exclude } }))
+    );
+    // A drug-allergy rule fires when ANY of its drug sets is present (a single
+    // set is the common case — the allergy and its contraindicated drug class).
+    const anyDrugMatched = matchedPerSet.some((matched) => matched.length > 0);
+    if (!anyDrugMatched) {
+      if (traceEntry) traceEntry.skipReason = 'no-drug-match';
+      return [];
+    }
+
+    const status = severityToStatus(rule.severity);
+    const matchSummary = `${matchedAllergies.map((a) => a.label).join(', ')} + ${matchedPerSet
+      .flat()
+      .map((m) => m.name)
+      .join(', ')}`;
+    if (traceEntry) {
+      traceEntry.fired = true;
+      traceEntry.status = status;
+      traceEntry.chipRef = rule.id;
+      traceEntry.matchSummary = matchSummary;
+    }
+
+    const facts = [
+      { label: 'Allergy', value: matchedAllergies.map((a) => a.label).join(', ') },
+    ];
+    matchedPerSet.forEach((matched, i) => {
+      if (matched.length) {
+        const set = drugSets[i] || {};
+        facts.push({ label: set.name || `Drug set ${i + 1}`, value: matched.map((m) => m.name).join(', ') });
+      }
+    });
+    if (rule.crossSensitivity) {
+      facts.push({ label: 'Note', value: 'cross-sensitivity caution — review, not an absolute contraindication' });
+    }
+
+    return [
+      {
+        type: 'drug-allergy',
+        ruleId: rule.id,
+        status,
+        label: rule.label || rule.id,
+        matchSummary,
+        source: rule.source || null,
+        notes: rule.notes || null,
+        evidence: { summary: matchSummary, facts },
       },
     ];
   }
@@ -1303,7 +1684,7 @@
     // never adds green "MET" noise. comparator 'above' = high values are dangerous
     // (e.g. potassium); 'below' = low values are dangerous.
     if (check.kind === 'observation-alert') {
-      const obs = findLatestObservation(data.observations, { match: check.observation });
+      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
       if (!obs || !obs.date) {
         if (traceEntry) traceEntry.skipReason = 'no-observation';
         return [];
@@ -1388,7 +1769,7 @@
     }
 
     if (check.kind === 'observation-threshold') {
-      const obs = findLatestObservation(data.observations, { match: check.observation });
+      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
       // Reject unparseable dates: NaN < _qofStart is false so an invalid date
       // would bypass the window check and surface a spurious 'achieved'/'not_met'.
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
@@ -1450,7 +1831,7 @@
       if (foundMed) evidenceCtx.matchedMed = foundMed.name;
       status = foundMed ? 'achieved' : 'not_met';
     } else if (check.kind === 'observation-recent') {
-      const obs = findLatestObservation(data.observations, { match: check.observation });
+      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
       // Reject unparseable dates: NaN >= _qofStart is false so an invalid date
       // would produce 'overdue' (conservative but misleading — treat as no data).
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
@@ -1756,8 +2137,16 @@
     // Populated from the investigation dashboard's dataYYYYMMDD keys by the normaliser.
     // Falls back to empty array when not available (DOM fallback, mock, old callers).
     const observationHistory = options.observationHistory || [];
+    // allergies: only present on the Transactional (GP Connect Structured) feed;
+    // empty on the legacy session/DOM feed. drug-allergy rules fail closed on [].
+    const allergies = options.allergies || [];
+    // pastProblems (audit M22, 2026-07-18): buildHrtContext reads
+    // data.pastProblems (hysterectomy is normally coded as an ENDED problem,
+    // which normaliseProblemsAll routes here) — evaluatePatient used to drop
+    // it, so the HRT progestogen-cover context never saw a hysterectomy.
+    const pastProblems = options.pastProblems || [];
 
-    const data = { medications, observations, observationHistory, problems, patientContext };
+    const data = { medications, observations, observationHistory, problems, patientContext, allergies, pastProblems };
 
     // Trace sink: attach only when tracing is requested (never on the hot path).
     const trace = options.trace ? [] : null;
@@ -1808,6 +2197,7 @@
       else if (type === 'qof-register') out = evaluateQofRegisterRule(rule, data);
       else if (type === 'qof-indicator') out = evaluateQofIndicatorRule(rule, data, now);
       else if (type === 'drug-combo') out = evaluateDrugComboRule(rule, data);
+      else if (type === 'drug-allergy') out = evaluateDrugAllergyRule(rule, data);
       else if (type === 'event-count') out = evaluateEventCountRule(rule, data, now);
       else if (type === 'vaccine') out = evaluateVaccineRule(rule, data, now);
       chips.push(...out);
@@ -1881,18 +2271,26 @@
     // IMPORTANT: check declined BEFORE given for each record so that a code
     // like "Flu vaccine declined" (which contains the stem "flu vaccin") is
     // never misclassified as given. This is a clinical-safety requirement.
+    // UNDATED records fail CLOSED against a real season window (audit C2,
+    // 2026-07-18): a dateless historic "given" code used to satisfy EVERY
+    // season forever — a false green for an eligible unvaccinated patient.
+    // One-off vaccines (window start 1900-01-01) still accept undated records:
+    // their window is all-time, so an undated "given" would pass with any date
+    // anyway, and rejecting it would spam false DUE recalls instead.
+    const windowIsSeasonal = seasonStartIso > '1900-01-01';
+    const outOfWindow = (d) => (d ? d < seasonStartIso : windowIsSeasonal);
     // Search problems
     for (const p of data.problems || []) {
       if (!p.label) continue;
       const d = p.codedDate || '';
-      if (d && d < seasonStartIso) continue;
+      if (outOfWindow(d)) continue;
       if (matchesAnyTerm(p.label, declinedTerms)) return { type: 'declined', date: d, source: 'problem' };
       if (matchesAnyTerm(p.label, givenTerms)) return { type: 'given', date: d, source: 'problem' };
     }
     // Search observations (name and value)
     for (const o of data.observations || []) {
       const d = o.date || '';
-      if (d && d < seasonStartIso) continue;
+      if (outOfWindow(d)) continue;
       if (matchesAnyTerm(o.name, declinedTerms)) return { type: 'declined', date: d, source: 'observation' };
       if (matchesAnyTerm(o.name, givenTerms)) return { type: 'given', date: d, source: 'observation' };
     }
@@ -1937,6 +2335,8 @@
 
       if (k === 'problem') {
         if (clause.sex && sex && clause.sex !== sex[0]) continue;
+        if (age != null && clause.ageMin != null && age < clause.ageMin) continue;
+        if (age != null && clause.ageMax != null && age > clause.ageMax) continue;
         const terms = clause.match || [];
         const hit = (data.problems || []).find((p) => p.status !== 'inactive' && matchesAnyTerm(p.label, terms));
         if (hit) return { ...clause, matchedEvidence: `${clause.label}: ${hit.label}` };
@@ -1965,6 +2365,8 @@
       }
 
       if (k === 'medication') {
+        if (age != null && clause.ageMin != null && age < clause.ageMin) continue;
+        if (age != null && clause.ageMax != null && age > clause.ageMax) continue;
         const terms = clause.match || [];
         const hit = (data.medications || []).find((m) => matchesAnyTerm(m.name, terms));
         if (hit) return { ...clause, matchedEvidence: `${clause.label}: ${hit.name}` };
@@ -2153,6 +2555,8 @@
     evaluatePatient,
     listUnmatchedMedications,
     listUnmatchedMedicationsDetailed,
+    flagHighRiskUnmatched,
+    HIGH_RISK_UNMATCHED_CLASSES,
     drugMatchesRule,
     drugMatchDetail,
     buildTraceEnvelope,
@@ -2162,6 +2566,7 @@
     qofYearLabel,
     parseBp,
     parseNumeric,
+    resolveEffectiveInterval,
     patientOnRegister,
     evaluateDrugRule,
     evaluateQofRegisterRule,

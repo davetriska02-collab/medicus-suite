@@ -10,6 +10,21 @@ import { loadUiState, saveUiState } from '../shared/ui-state.js';
 import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
 import { downloadCsv } from '../shared/export-util.js';
 import { SWATCH_KEYS, sanitisePillPrefs, applyPillOrder } from '../shared/pill-prefs.js';
+import {
+  detectMedicusTab,
+  detectPatientId,
+  fetchAppointmentFinder,
+  fetchAvailableSlots,
+  reserveSlot,
+  fetchCreateForm,
+  createAppointment,
+  releaseReservation,
+} from './booking-api.js';
+import {
+  typeAlertLevel as coreTypeAlertLevel,
+  overallAlertLevel as coreOverallAlertLevel,
+  validateAlertRule,
+} from './slots-alert-core.js';
 
 // Practice code resolved from chrome.storage.local['suite.practiceCode'].
 // No hardcoded default — null means the user has not configured a code yet.
@@ -28,12 +43,38 @@ let state = {
   showExcluded: false,
   lastFetched: null,
   alertRules: [],
+  alertEditorOpen: false, // item 9 — minimal in-module rule editor, toggled from the ribbon/hero
   // Pill preferences — USER CONFIG (order + colour per type), persisted to
   // 'slots.pillPrefs' and included in suite backups via slot-counter-io.js.
   pillPrefs: { order: [], colours: {} },
   organisePills: false, // ephemeral: reorder/colour mode
   openColourFor: null, // type whose colour palette is open, or null
   typesOpen: false, // whether the by-type details panel is open
+  bk: {
+    open: false,
+    initLoading: false,
+    initError: null,
+    tabId: null,
+    appOrigin: null,
+    apiBase: null,
+    patientId: null,
+    providerId: null,
+    types: [],
+    selectedTypeId: '',
+    date: null, // set to todayISO() on first open
+    slots: null, // null = no search yet; [] = searched, no results
+    hasSearched: false,
+    slotsLoading: false,
+    slotsError: null,
+    step: 'browse', // 'browse' | 'confirm' | 'booked'
+    selectedSlot: null,
+    reservationId: null,
+    formData: null,
+    confirming: false,
+    confirmError: null,
+    reason: '',
+    bookedId: null,
+  },
 };
 
 // The pill colour palette, prefs validation and ordering rule are shared with
@@ -43,6 +84,52 @@ let state = {
 
 function savePillPrefs() {
   chrome.storage.local.set({ 'slots.pillPrefs': { order: state.pillPrefs.order, colours: state.pillPrefs.colours } });
+}
+
+// Item 9 — alert threshold editor persistence. Writes the full array every
+// time (small, always <20 rows in practice) rather than diffing — mirrors
+// the options.html#sect-slots editor's own save() so both surfaces behave
+// identically and can never drift into a different persistence shape.
+function saveAlertRules() {
+  chrome.storage.local.set({ 'slots.alertRules': state.alertRules }).catch((e) => {
+    // A silent failure here (quota / context invalidated) would otherwise
+    // leave the UI showing an edit that was never actually persisted.
+    console.warn('[Slots] Failed to save alert rules', e);
+  });
+}
+
+// Defensive: back-fill an id on any rule loaded without one (e.g. a
+// hand-edited backup, or data written before ids existed) — the in-module
+// editor keys rows by rule.id (never array index, see updateAlertRule), so
+// every rule must have one before it can be edited/deleted safely.
+function withRuleIds(rules) {
+  return (Array.isArray(rules) ? rules : []).map((r) =>
+    r && r.id ? r : { ...r, id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` }
+  );
+}
+
+// Apply a partial patch to one rule, found by STABLE id (never array index —
+// an index-based lookup would silently retarget a different rule if a second
+// edit/delete lands between a mutation and its re-render/rebind), validating/
+// clamping via the shared core (validateAlertRule) before persisting — so a
+// fat-fingered threshold or an in-progress "no type picked yet" row can never
+// corrupt the stored rule shape that typeAlertLevel()/overallAlertLevel()
+// depend on.
+function updateAlertRule(id, patch) {
+  const idx = state.alertRules.findIndex((r) => r.id === id);
+  if (idx === -1) return;
+  const current = state.alertRules[idx];
+  const merged = { ...current, ...patch };
+  // Allow an in-progress row with no type picked yet to exist in the UI
+  // without being force-validated away — only persist once it has a type.
+  if (!merged.typeName) {
+    state.alertRules[idx] = merged;
+    saveAlertRules();
+    return;
+  }
+  const { rule } = validateAlertRule(merged);
+  state.alertRules[idx] = rule;
+  saveAlertRules();
 }
 
 let container = null;
@@ -61,7 +148,7 @@ export async function init(el) {
     'suite.practiceCode',
   ]);
   if (stored['slots.hiddenTypes']) state.hiddenTypes = new Set(stored['slots.hiddenTypes']);
-  if (stored['slots.alertRules']) state.alertRules = stored['slots.alertRules'];
+  if (stored['slots.alertRules']) state.alertRules = withRuleIds(stored['slots.alertRules']);
   state.pillPrefs = sanitisePillPrefs(stored['slots.pillPrefs']);
   if (stored['suite.practiceCode']) {
     SITE_ID = stored['suite.practiceCode'];
@@ -96,6 +183,9 @@ export async function init(el) {
     document.removeEventListener('suite:slots:refresh', onRefresh);
     chrome.storage.onChanged.removeListener(onStorageChange);
     stopFresh();
+    if (state.bk.reservationId && state.bk.apiBase) {
+      releaseReservation(state.bk.apiBase, state.bk.reservationId).catch(() => {});
+    }
     container = null;
   };
 }
@@ -111,7 +201,7 @@ function onStorageChange(changes) {
     render();
   }
   if (changes['slots.alertRules']) {
-    state.alertRules = changes['slots.alertRules'].newValue || [];
+    state.alertRules = withRuleIds(changes['slots.alertRules'].newValue || []);
     render();
   }
   if (changes['slots.pillPrefs']) {
@@ -283,26 +373,18 @@ function visibleTotal(byType, hiddenTypes) {
 // ── Alert levels ──────────────────────────────────────────────────────────────
 // One source of truth for "is this type running dry?" — consumed by the alert
 // ribbon, the hero label, and the type pills, so they can never disagree.
+// The evaluation itself lives in the pure, Node-testable slots-alert-core.js
+// (item 9 — shared with the Today "Slots Today" card so both surfaces read
+// the exact same threshold logic); these are thin wrappers over module state.
 
 // 'red' (zero left), 'amber' (at/below threshold), or null for a single type.
 function typeAlertLevel(typeName, count) {
-  for (const rule of state.alertRules || []) {
-    if (!rule.enabled || rule.typeName !== typeName) continue;
-    if (count <= rule.threshold) return count === 0 ? 'red' : 'amber';
-  }
-  return null;
+  return coreTypeAlertLevel(state.alertRules, typeName, count);
 }
 
 // Highest triggered level across all enabled rules, or null when all calm.
 function overallAlertLevel(byType) {
-  let level = null;
-  for (const rule of state.alertRules || []) {
-    if (!rule.enabled) continue;
-    const l = typeAlertLevel(rule.typeName, sumAmPm(byType[rule.typeName]));
-    if (l === 'red') return 'red';
-    if (l === 'amber') level = 'amber';
-  }
-  return level;
+  return coreOverallAlertLevel(state.alertRules, byType);
 }
 
 // ── SVG helpers ───────────────────────────────────────────────────────────────
@@ -342,8 +424,10 @@ function render() {
         ${state.error && state.error.startsWith('No practice code') ? ' <button class="ghost-btn setup-now-btn">Set up now</button>' : ''}
       </div>
       ${!state.loading && d ? renderAlertRibbon(d.byType) : ''}
+      ${state.alertEditorOpen ? renderAlertEditor(d) : ''}
       ${!state.loading && d ? renderHeroCard(visible, visibleSum) : ''}
       ${state.loading ? renderSkeleton() : d ? renderData(d, visible, visibleSum) : ''}
+      ${renderBookingSection()}
       <div class="foot">${state.lastFetched ? freshnessHtml(state.lastFetched) : ''}</div>
     </div>
   `;
@@ -365,6 +449,9 @@ function renderHeader() {
       <input type="date" id="slotsDate" value="${state.date}" max="2099-12-31" class="date-input" />
       <button class="ghost-btn date-refresh-btn" id="refreshSlots" title="Refresh">${SVG_REFRESH}</button>
       ${state.data && Object.keys(state.data.byType).length > 0 ? `<button class="ghost-btn" id="slotsCsvBtn">&#x2193; CSV</button>` : ''}
+      <button class="ghost-btn date-refresh-btn${state.alertEditorOpen ? ' active' : ''}${(state.alertRules || []).some((r) => r.enabled) ? ' has-alert-rules' : ''}"
+        id="slotsAlertToggle" aria-expanded="${state.alertEditorOpen}"
+        title="Alert thresholds — get warned when a slot type is running low">${SVG_SLIDERS}</button>
     </div>
   `;
 }
@@ -387,11 +474,12 @@ function renderHeroCard(visible, visibleSum) {
       <div class="slots-hero-main">
         <div class="slots-count-hero">${visibleSum.toLocaleString('en-GB')}</div>
         <div class="slots-hero-right">
-          <div class="slots-count-label${labelCls}">${isToday ? 'slots remaining today' : 'available slots'}</div>
+          <div class="slots-count-label${labelCls}">${isToday ? 'Free slots remaining today' : 'Free slots available'}</div>
           <div class="slots-ampm-split">
             <span class="ampm-chip ampm-am"><span class="ampm-tag">AM</span><span class="ampm-num">${visible.am.toLocaleString('en-GB')}</span></span>
             <span class="ampm-chip ampm-pm"><span class="ampm-tag">PM</span><span class="ampm-num">${visible.pm.toLocaleString('en-GB')}</span></span>
           </div>
+          ${isToday && state.lastFetched ? `<div class="slots-hero-asat">practice-wide · as at ${state.lastFetched.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</div>` : ''}
         </div>
       </div>
       ${renderTypePills(d.byType, visibleSum)}
@@ -492,6 +580,59 @@ function renderAlertRibbon(byType) {
       <span class="slots-alert-icon">${iconSvg}</span>
       <div class="slots-alert-items">${items}</div>
       ${editBtn}
+    </div>
+  `;
+}
+
+// ── Alert threshold editor (item 9 — minimal, in-module) ─────────────────────
+// Per-appointment-type "alert if fewer than N remaining" rules. Rows list the
+// day's known appointment types (from state.data.byType, falling back to any
+// rule referencing a type not seen today so an existing rule is never hidden
+// just because the type has no sessions on the currently-viewed date). The
+// same options.html#sect-slots editor still works — both write the same
+// 'slots.alertRules' key — this is the calm, no-navigation-away alternative.
+function renderAlertEditor(d) {
+  const knownTypes = d ? Object.keys(d.byType || {}) : [];
+  const ruleTypes = (state.alertRules || []).map((r) => r.typeName).filter(Boolean);
+  const typeOptions = [...new Set([...knownTypes, ...ruleTypes])].sort((a, b) => a.localeCompare(b));
+
+  // Keyed by rule.id (stable across renders), NOT array index — an index
+  // would silently retarget a different rule if two edits land between a
+  // mutation and its re-render/rebind (see slots-alert-core.js's id
+  // generation; options.html#sect-slots's editor already keys this way too).
+  const rows = (state.alertRules || [])
+    .map((rule) => {
+      const optionsHtml = typeOptions
+        .map((t) => `<option value="${escHtml(t)}"${rule.typeName === t ? ' selected' : ''}>${escHtml(t)}</option>`)
+        .join('');
+      return `
+      <div class="slots-alert-rule-row" data-rule-id="${escHtml(rule.id)}">
+        <input type="checkbox" class="sar-enabled" ${rule.enabled ? 'checked' : ''} title="Enable this rule" />
+        <select class="sar-type" title="Appointment type">
+          <option value="">— pick type —</option>
+          ${optionsHtml}
+        </select>
+        <span class="sar-lte">&le;</span>
+        <input type="number" class="sar-threshold" value="${rule.threshold}" min="0" max="999" title="Alert when at or below this many slots remain" />
+        <span class="sar-unit">left</span>
+        <button class="sar-delete ghost-btn" title="Remove rule" aria-label="Remove rule for ${escHtml(rule.typeName || 'this type')}">✕</button>
+      </div>`;
+    })
+    .join('');
+
+  return `
+    <div class="slots-alert-editor" id="slotsAlertEditor">
+      <div class="slots-alert-editor-head">
+        <span class="slots-alert-editor-title">Alert thresholds</span>
+        <button class="ghost-btn slots-alert-editor-close" id="slotsAlertEditorClose" aria-label="Close">✕</button>
+      </div>
+      <p class="slots-alert-editor-note">
+        Get an amber/red warning here — and on Today's Slots card — when an appointment type drops
+        to or below a threshold. Set threshold to 0 to alert only when a type is completely gone.
+      </p>
+      <div class="slots-alert-rule-list">${rows}</div>
+      ${rows ? '' : '<div class="slots-alert-editor-empty">No alert rules yet.</div>'}
+      <button class="ghost-btn" id="slotsAlertAddRule">+ Add rule</button>
     </div>
   `;
 }
@@ -632,6 +773,348 @@ function renderData(d, visible, visibleSum) {
   `;
 }
 
+// ── Booking section ───────────────────────────────────────────────────────────
+
+function renderBookingSection() {
+  const { bk } = state;
+  const headerLabel = 'Book appointment for patient';
+  return `
+    <section class="slots-section bk-section">
+      <button class="bk-toggle-row" id="bkToggle" aria-expanded="${bk.open}">
+        <span class="bk-toggle-chevron" aria-hidden="true">${bk.open ? '▾' : '▸'}</span>
+        <span class="bk-toggle-text">${headerLabel}</span>
+        ${bk.open && bk.patientId ? `<span class="bk-pt-badge">patient</span>` : ''}
+      </button>
+      ${bk.open ? renderBookingContent() : ''}
+    </section>
+  `;
+}
+
+function renderBookingContent() {
+  const { bk } = state;
+  if (bk.initLoading) return `<div class="bk-loading">Loading appointment types…</div>`;
+  if (bk.initError) return `<div class="bk-error">${escHtml(bk.initError)}</div>`;
+  if (bk.step === 'booked') return renderBookingSuccess();
+  if (bk.step === 'confirm') return renderBookingConfirm();
+  return renderBookingBrowse();
+}
+
+function renderBookingBrowse() {
+  const { bk } = state;
+  const typesHtml =
+    bk.types.length === 0
+      ? '<option value="" disabled>No appointment types found</option>'
+      : bk.types
+          .map(
+            (t) =>
+              `<option value="${escHtml(t.value)}"${bk.selectedTypeId === t.value ? ' selected' : ''}>${escHtml(t.label)}</option>`
+          )
+          .join('');
+
+  let slotsHtml = '';
+  if (bk.slotsLoading) {
+    slotsHtml = `<div class="bk-loading">Searching for slots…</div>`;
+  } else if (bk.slotsError) {
+    slotsHtml = `<div class="bk-error">${escHtml(bk.slotsError)}</div>`;
+  } else if (bk.hasSearched && bk.slots && bk.slots.length > 0) {
+    slotsHtml = `<div class="bk-slot-list">${bk.slots.map((s, i) => renderSlotRow(s, i)).join('')}</div>`;
+  } else if (bk.hasSearched) {
+    slotsHtml = `<div class="bk-no-slots">No available slots on this date.</div>`;
+  }
+
+  const canSearch = bk.selectedTypeId && bk.date && !bk.slotsLoading && bk.apiBase;
+  const bkDate = bk.date || todayISO();
+
+  return `
+    <div class="bk-browse">
+      ${!bk.appOrigin && !bk.initLoading ? `<div class="bk-warn">Could not detect Medicus — open a Medicus tab and sign in.</div>` : ''}
+      ${!bk.patientId && !bk.initLoading ? `<div class="bk-warn">No patient record open — navigate to a patient in Medicus first.</div>` : ''}
+      <div class="bk-row">
+        <label class="bk-label" for="bkType">Type</label>
+        <select class="bk-select" id="bkType"${bk.types.length === 0 ? ' disabled' : ''}>
+          <option value="">— pick type —</option>
+          ${typesHtml}
+        </select>
+      </div>
+      <div class="bk-row">
+        <label class="bk-label" for="bkDate">Date</label>
+        <input type="date" class="date-input bk-date-input" id="bkDate" value="${escHtml(bkDate)}" max="2099-12-31" />
+      </div>
+      <button class="bk-action-btn" id="bkSearch"${canSearch ? '' : ' disabled'}>Find slots</button>
+      ${slotsHtml}
+    </div>
+  `;
+}
+
+function renderSlotRow(slot, idx) {
+  const time = escHtml(slot.start || slot.startDateTime?.substring(11, 16) || '');
+  const end = escHtml(slot.end || slot.endDateTime?.substring(11, 16) || '');
+  const duration = escHtml(slot.formattedDuration || `${slot.duration} mins`);
+  const site = escHtml(slot.siteName || '');
+  const type = escHtml(slot.appointmentType?.name || '');
+  return `
+    <button class="bk-slot-row" data-slot-idx="${idx}">
+      <span class="bk-slot-time">${time}${end ? `–${end}` : ''}</span>
+      <span class="bk-slot-meta">
+        ${site ? `<span class="bk-slot-site">${site}</span>` : ''}
+        ${type ? `<span class="bk-slot-type">${type}</span>` : ''}
+      </span>
+      <span class="bk-slot-dur">${duration}</span>
+    </button>
+  `;
+}
+
+function renderBookingConfirm() {
+  const { bk } = state;
+  const slot = bk.selectedSlot;
+  if (!slot) return '';
+  const time = escHtml(slot.start || slot.startDateTime?.substring(11, 16) || '');
+  const end = escHtml(slot.end || slot.endDateTime?.substring(11, 16) || '');
+  const duration = escHtml(slot.formattedDuration || `${slot.duration} mins`);
+  const site = escHtml(slot.siteName || '');
+  const type = escHtml(slot.appointmentType?.name || '');
+  const dateStr = escHtml(formatDate(bk.date || todayISO()));
+  return `
+    <div class="bk-confirm">
+      <div class="bk-confirm-summary">
+        <div class="bk-confirm-row"><span class="bk-confirm-label">Date</span><span>${dateStr}</span></div>
+        <div class="bk-confirm-row"><span class="bk-confirm-label">Time</span><span>${time}${end ? `–${end}` : ''} (${duration})</span></div>
+        ${site ? `<div class="bk-confirm-row"><span class="bk-confirm-label">Site</span><span>${site}</span></div>` : ''}
+        ${type ? `<div class="bk-confirm-row"><span class="bk-confirm-label">Type</span><span>${type}</span></div>` : ''}
+      </div>
+      <div class="bk-row">
+        <label class="bk-label" for="bkReason">Reason <span class="bk-optional">(opt.)</span></label>
+        <input type="text" class="bk-text-input" id="bkReason" value="${escHtml(bk.reason)}" placeholder="Reason for appointment" maxlength="255" />
+      </div>
+      ${bk.confirmError ? `<div class="bk-error">${escHtml(bk.confirmError)}</div>` : ''}
+      <div class="bk-confirm-actions">
+        <button class="ghost-btn" id="bkBack"${bk.confirming ? ' disabled' : ''}>Back</button>
+        <button class="bk-action-btn bk-confirm-btn" id="bkConfirm"${bk.confirming ? ' disabled' : ''}>${bk.confirming ? 'Booking…' : 'Confirm booking'}</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderBookingSuccess() {
+  const { bk } = state;
+  const slot = bk.selectedSlot;
+  const time = slot ? escHtml(slot.start || slot.startDateTime?.substring(11, 16) || '') : '';
+  const dateStr = escHtml(formatDate(bk.date || todayISO()));
+  return `
+    <div class="bk-success">
+      <div class="bk-success-icon" aria-hidden="true">✓</div>
+      <div class="bk-success-msg">Appointment booked</div>
+      <div class="bk-success-detail">${dateStr}${time ? ` at ${time}` : ''}</div>
+      <button class="ghost-btn bk-again-btn" id="bkAgain">Book another</button>
+    </div>
+  `;
+}
+
+// ── Booking actions ───────────────────────────────────────────────────────────
+
+async function doInitBooking() {
+  const { bk } = state;
+  bk.initLoading = true;
+  bk.initError = null;
+  if (!bk.date) bk.date = todayISO();
+  render();
+  try {
+    const detected = await detectMedicusTab();
+    bk.tabId = detected?.tabId ?? null;
+    bk.appOrigin = detected?.origin ?? null;
+    bk.apiBase = detected?.apiBase ?? null;
+    bk.patientId = await detectPatientId(detected?.tab ?? null);
+    if (!detected) {
+      bk.initError = 'Could not detect Medicus — open a Medicus tab and sign in.';
+      return;
+    }
+    const finder = await fetchAppointmentFinder(bk.apiBase);
+    bk.providerId = finder.localOrganisationDetails?.id || null;
+    const types = [];
+    for (const svc of finder.localOrganisationDetails?.services || []) {
+      for (const t of svc.appointmentTypes || []) {
+        if (!types.some((e) => e.value === t.value)) types.push({ value: t.value, label: t.label });
+      }
+    }
+    bk.types = types;
+    if (types.length === 1) bk.selectedTypeId = types[0].value;
+  } catch (err) {
+    bk.initError = err.message || 'Failed to load appointment types.';
+  } finally {
+    bk.initLoading = false;
+    render();
+  }
+}
+
+async function doSearchSlots() {
+  const { bk } = state;
+  if (!bk.apiBase || !bk.providerId || !bk.selectedTypeId || !bk.date) return;
+  bk.slotsLoading = true;
+  bk.slotsError = null;
+  bk.slots = null;
+  bk.hasSearched = false;
+  render();
+  try {
+    bk.slots = await fetchAvailableSlots(bk.apiBase, {
+      providerId: bk.providerId,
+      appointmentTypeId: bk.selectedTypeId,
+      date: bk.date,
+    });
+  } catch (err) {
+    bk.slotsError = err.message || 'Failed to fetch available slots.';
+    bk.slots = null;
+  } finally {
+    bk.hasSearched = true;
+    bk.slotsLoading = false;
+    render();
+  }
+}
+
+async function doSelectSlot(slot) {
+  const { bk } = state;
+  if (!bk.apiBase || !slot) return;
+  bk.slotsLoading = true;
+  bk.slotsError = null;
+  render();
+  try {
+    const result = await reserveSlot(bk.apiBase, {
+      diaryId: slot.diaryId,
+      startDateTime: slot.startDateTime,
+      duration: slot.duration,
+      appointmentTypeId: slot.appointmentType?.id,
+    });
+    bk.reservationId = result.slotReservationId;
+    bk.selectedSlot = slot;
+    bk.step = 'confirm';
+    bk.confirmError = null;
+    bk.reason = '';
+  } catch (err) {
+    bk.slotsError = err.message || 'Could not reserve slot — it may have just been taken.';
+  } finally {
+    bk.slotsLoading = false;
+    render();
+  }
+}
+
+function doCancelBooking() {
+  const { bk } = state;
+  if (bk.reservationId && bk.apiBase) {
+    releaseReservation(bk.apiBase, bk.reservationId).catch(() => {});
+  }
+  bk.reservationId = null;
+  bk.selectedSlot = null;
+  bk.step = 'browse';
+  bk.confirmError = null;
+  bk.formData = null;
+  render();
+}
+
+// Commit-time wrong-patient abort (H-043). Releases the held reservation —
+// never leave a slot locked by a booking we refused to make — drops back to the
+// browse step and surfaces the reason there (bk.slotsError is what renders in
+// browse; bk.confirmError is set too so the message survives either view).
+function abortBookingOnIdentityMismatch(message) {
+  const { bk } = state;
+  if (bk.reservationId && bk.apiBase) {
+    releaseReservation(bk.apiBase, bk.reservationId).catch(() => {});
+  }
+  bk.reservationId = null;
+  bk.selectedSlot = null;
+  bk.formData = null;
+  bk.step = 'browse';
+  bk.slots = null;
+  bk.hasSearched = false;
+  bk.slotsError = message;
+  bk.confirmError = message;
+}
+
+async function doConfirmBooking() {
+  // `bk` is the pinned booking-state instance for every write below: `state` is
+  // a module singleton and `state.bk` is never reassigned, so this destructure
+  // is the slots-module equivalent of booking-inline.js's `const st = s` pin —
+  // nothing awaited here can land in a different booking state (H-043).
+  const { bk } = state;
+  if (bk.confirming || !bk.reservationId || !bk.patientId || !bk.selectedSlot) return;
+  bk.confirming = true;
+  bk.confirmError = null;
+  render();
+  try {
+    const formData = await fetchCreateForm(bk.apiBase, {
+      slotReservationId: bk.reservationId,
+      patientId: bk.patientId,
+    });
+    bk.formData = formData;
+    const slot = bk.selectedSlot;
+    const payload = {
+      context: 'create-booked-appointment',
+      appointmentTemporalType: 'timed',
+      appointmentTypeId: slot.appointmentType?.id,
+      patientId: bk.patientId,
+      deliveryMode: formData.deliveryMode || slot.defaultDeliveryMode?.value || 'face-to-face',
+      intendedDuration: slot.duration,
+      diaryId: slot.diaryId,
+      isHighPriority: false,
+      isHiddenFromPatientFacingServices: false,
+      intendedStartDateTime: slot.startDateTime,
+      reasonForAppointment: bk.reason || null,
+      additionalInformation: null,
+      embargoOverrideReason: null,
+      slotReservationId: bk.reservationId,
+      nhsNationalSlotTypeCategory:
+        formData.nhsNationalSlotTypeCategory || slot.nhsNationalSlotTypeCategoryDefault?.value || '10127',
+      allowOverlappingAppointments: 'allow',
+      gpadReportingExceptionReasons: [],
+      clinicalCaseId: null,
+      bookingConfirmationRecipients: (formData.bookingConfirmationRecipientOptions || []).map((o) => o.value),
+      rescheduledAppointmentVersionId: null,
+    };
+
+    // ── COMMIT-TIME WRONG-PATIENT RE-VERIFICATION (plan D1.5, hazard H-043) ──
+    // Until now slots.js captured the patient ONCE, at panel open
+    // (doInitBooking), and then booked against that captured id however much
+    // later — while booking-inline.js has re-verified at commit since the
+    // 2026-07-18 audit. Booking is a clinical WRITE: re-detect the Medicus tab
+    // and re-resolve its patient immediately before createAppointment, and
+    // abort on any mismatch or failure to resolve. Note the apiBase check —
+    // a different practice/site in the tab means the captured id is being sent
+    // to the wrong instance even if the UUIDs happened to match.
+    const verifyTab = await detectMedicusTab();
+    const verifiedPatientId = verifyTab ? await detectPatientId(verifyTab.tab) : null;
+    if (!verifiedPatientId || verifiedPatientId !== bk.patientId || verifyTab.apiBase !== bk.apiBase) {
+      abortBookingOnIdentityMismatch(
+        verifiedPatientId
+          ? 'The patient open in Medicus has changed — booking cancelled, nothing was booked. Open the right record and search again.'
+          : 'Could not re-verify the patient in Medicus — booking cancelled, nothing was booked. Open the patient record and try again.'
+      );
+      return;
+    }
+
+    const result = await createAppointment(bk.apiBase, payload);
+    bk.bookedId = result.appointmentId;
+    bk.reservationId = null; // server releases on create
+    bk.step = 'booked';
+  } catch (err) {
+    bk.confirmError = err.message || 'Booking failed — please try again.';
+  } finally {
+    bk.confirming = false;
+    render();
+  }
+}
+
+function resetBookingToSlots() {
+  const { bk } = state;
+  bk.step = 'browse';
+  bk.selectedSlot = null;
+  bk.reservationId = null;
+  bk.formData = null;
+  bk.bookedId = null;
+  bk.confirmError = null;
+  bk.hasSearched = false;
+  bk.slots = null;
+  bk.slotsError = null;
+  render();
+}
+
 // ── Event binding ─────────────────────────────────────────────────────────────
 
 function bindEvents() {
@@ -675,9 +1158,50 @@ function bindEvents() {
     });
   });
 
-  // Edit thresholds deep-link button in alert ribbon
+  // "Edit thresholds" in the alert ribbon and the header cog both open the
+  // same minimal in-module editor (item 9) — no navigation away from Slots.
   container.querySelector('#slotsRibbonEdit')?.addEventListener('click', () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-slots') });
+    state.alertEditorOpen = true;
+    render();
+  });
+  container.querySelector('#slotsAlertToggle')?.addEventListener('click', () => {
+    state.alertEditorOpen = !state.alertEditorOpen;
+    render();
+  });
+  container.querySelector('#slotsAlertEditorClose')?.addEventListener('click', () => {
+    state.alertEditorOpen = false;
+    render();
+  });
+
+  container.querySelector('#slotsAlertAddRule')?.addEventListener('click', () => {
+    // Same id shape as validateAlertRule()'s auto-generated id (timestamp +
+    // random suffix) — a bare timestamp could collide if "+ Add rule" were
+    // ever triggered twice within the same millisecond.
+    const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    state.alertRules = [...state.alertRules, { id, typeName: '', threshold: 0, enabled: true }];
+    saveAlertRules();
+    render();
+  });
+
+  container.querySelectorAll('.slots-alert-rule-row').forEach((row) => {
+    const ruleId = row.dataset.ruleId;
+    row.querySelector('.sar-enabled')?.addEventListener('change', (e) => {
+      updateAlertRule(ruleId, { enabled: e.target.checked });
+      render();
+    });
+    row.querySelector('.sar-type')?.addEventListener('change', (e) => {
+      updateAlertRule(ruleId, { typeName: e.target.value });
+      render();
+    });
+    row.querySelector('.sar-threshold')?.addEventListener('change', (e) => {
+      updateAlertRule(ruleId, { threshold: e.target.value });
+      render();
+    });
+    row.querySelector('.sar-delete')?.addEventListener('click', () => {
+      state.alertRules = state.alertRules.filter((r) => r.id !== ruleId);
+      saveAlertRules();
+      render();
+    });
   });
 
   container.querySelector('#excludedToggle')?.addEventListener('click', () => {
@@ -836,4 +1360,63 @@ function bindEvents() {
       render();
     });
   });
+
+  // ── Booking panel events ──────────────────────────────────────────────────
+
+  container.querySelector('#bkToggle')?.addEventListener('click', () => {
+    const { bk } = state;
+    if (bk.open) {
+      // Closing — release any held reservation
+      if (bk.reservationId && bk.apiBase) {
+        releaseReservation(bk.apiBase, bk.reservationId).catch(() => {});
+        bk.reservationId = null;
+      }
+      if (bk.step === 'confirm') {
+        bk.step = 'browse';
+        bk.selectedSlot = null;
+      }
+    }
+    bk.open = !bk.open;
+    if (bk.open && !bk.appOrigin && !bk.initLoading) {
+      doInitBooking();
+    } else {
+      render();
+    }
+  });
+
+  container.querySelector('#bkType')?.addEventListener('change', (e) => {
+    state.bk.selectedTypeId = e.target.value;
+    state.bk.hasSearched = false;
+    state.bk.slots = null;
+    state.bk.slotsError = null;
+    render();
+  });
+
+  container.querySelector('#bkDate')?.addEventListener('change', (e) => {
+    state.bk.date = e.target.value;
+    state.bk.hasSearched = false;
+    state.bk.slots = null;
+    state.bk.slotsError = null;
+    render();
+  });
+
+  container.querySelector('#bkSearch')?.addEventListener('click', () => doSearchSlots());
+
+  container.querySelectorAll('.bk-slot-row').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.slotIdx, 10);
+      const slot = state.bk.slots?.[idx];
+      if (slot) doSelectSlot(slot);
+    });
+  });
+
+  container.querySelector('#bkBack')?.addEventListener('click', () => doCancelBooking());
+
+  container.querySelector('#bkReason')?.addEventListener('input', (e) => {
+    state.bk.reason = e.target.value;
+  });
+
+  container.querySelector('#bkConfirm')?.addEventListener('click', () => doConfirmBooking());
+
+  container.querySelector('#bkAgain')?.addEventListener('click', () => resetBookingToSlots());
 }

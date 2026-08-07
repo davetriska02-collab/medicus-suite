@@ -29,7 +29,10 @@ function ensureStyles() {
 }
 
 function esc(s) {
-  return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  return String(s == null ? '' : s).replace(
+    /[&<>"]/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]
+  );
 }
 
 /**
@@ -46,7 +49,14 @@ export function renderTaskAge(data) {
   // problem must never be presented as "not configured" (it sends the user to
   // re-check settings that are fine).
   if (data.requestMonitor.unavailable) {
-    return `<div class="condor-card condor-placeholder">Task inbox unavailable: ${esc(data.requestMonitor.reason || 'unknown')} — check Medicus sign-in.</div>`;
+    const reason = data.requestMonitor.reason || 'unknown';
+    // A benign "warming up" (no poll has completed yet) must not read at the
+    // same loudness as an auth error, nor carry the "check sign-in" alarm — it
+    // resolves itself on the next background poll. Render it quiet. (Vogue map.)
+    if (/no poll data/i.test(reason)) {
+      return `<div class="condor-card condor-placeholder condor-quiet">Task inbox: warming up — ${esc(reason)}.</div>`;
+    }
+    return `<div class="condor-card condor-placeholder">Task inbox unavailable: ${esc(reason)} — check Medicus sign-in.</div>`;
   }
 
   ensureStyles();
@@ -60,22 +70,23 @@ export function renderTaskAge(data) {
 </div>`;
   }
 
-  const lt1h  = Number(byAgeBucket.lt1h)  || 0;
+  const lt1h = Number(byAgeBucket.lt1h) || 0;
   const h1to4 = Number(byAgeBucket.h1to4) || 0;
   const h4to8 = Number(byAgeBucket.h4to8) || 0;
-  const gt8h  = Number(byAgeBucket.gt8h)  || 0;
+  const gt8h = Number(byAgeBucket.gt8h) || 0;
   const total = lt1h + h1to4 + h4to8 + gt8h;
 
   // Guard against division-by-zero if bucket data is inconsistent
-  const pctLt1h  = total > 0 ? (lt1h  / total * 100).toFixed(1) : '0.0';
-  const pctH1to4 = total > 0 ? (h1to4 / total * 100).toFixed(1) : '0.0';
-  const pctH4to8 = total > 0 ? (h4to8 / total * 100).toFixed(1) : '0.0';
-  const pctGt8h  = total > 0 ? (gt8h  / total * 100).toFixed(1) : '0.0';
+  const pctLt1h = total > 0 ? ((lt1h / total) * 100).toFixed(1) : '0.0';
+  const pctH1to4 = total > 0 ? ((h1to4 / total) * 100).toFixed(1) : '0.0';
+  const pctH4to8 = total > 0 ? ((h4to8 / total) * 100).toFixed(1) : '0.0';
+  const pctGt8h = total > 0 ? ((gt8h / total) * 100).toFixed(1) : '0.0';
 
   const titleSuffix = urgentCount > 0 ? ` · ${esc(urgentCount)} urgent` : '';
-  const warnHtml = gt8h > 0
-    ? `\n  <div class="condor-ta-warn">&#x26A0; ${esc(gt8h)} task${gt8h !== 1 ? 's' : ''} older than 8 hours</div>`
-    : '';
+  const warnHtml =
+    gt8h > 0
+      ? `\n  <div class="condor-ta-warn">&#x26A0; ${esc(gt8h)} task${gt8h !== 1 ? 's' : ''} older than 8 hours</div>`
+      : '';
 
   return `<div class="condor-card condor-ta">
   <div class="condor-card-title">Task Age · ${esc(totalCount)} open${titleSuffix}</div>

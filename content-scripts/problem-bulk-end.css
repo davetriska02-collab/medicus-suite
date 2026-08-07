@@ -1,0 +1,432 @@
+/* Medicus Suite — "Bulk remove?" widget for the Clinical Summary problem list */
+/* (ms-pbe-* prefix kept from its "Bulk end problems" origin — see the JS
+   header's merge history; all selectors scoped to avoid Medicus conflicts) */
+
+#ms-pbe-widget {
+  display: block;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Keyboard focus ring — same single wildcard rule (and the same #2563eb
+   --accent stand-in, since Medicus's page never loads panel.css) as
+   problem-description-cleanup.css. */
+button[class*='ms-pbe-']:focus-visible,
+input[class*='ms-pbe-']:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+/* Placement: shares the "Major" heading's row with the retired-codes trigger
+   (#ms-pdc-retired-widget, problem-description-cleanup.css) and the nesting
+   trigger (#ms-pn-widget, problem-nesting.css). Same :has() scoping as those
+   files; keep ALL THREE files' exclusion lists in lock-step.
+   (#ms-pjc-widget was a sharer until the 2026-07-27 merge retired
+   problem-junk-code-cleanup.js — see the JS header.) */
+.m-card-v2__content:has(> #ms-pbe-widget) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+}
+
+.m-card-v2__content:has(> #ms-pbe-widget)
+  > *:not(#problems-major-label):not(#ms-pbe-widget):not(#ms-pdc-retired-widget):not(#ms-pn-widget) {
+  flex-basis: 100%;
+}
+
+/* Collapsed: just the toggle on the heading row. Expanded: full-width row. */
+#ms-pbe-widget:has(.ms-pbe-body) {
+  flex-basis: 100%;
+  margin-top: 6px;
+}
+
+.ms-pbe-toggle {
+  padding: 4px 10px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-pbe-toggle:hover {
+  background: #e5e7eb;
+}
+
+.ms-pbe-body {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #1a2030;
+}
+
+.ms-pbe-loading,
+.ms-pbe-empty {
+  font-size: 12px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.ms-pbe-error {
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.ms-pbe-retry {
+  margin-left: 6px;
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-pbe-summary {
+  margin-bottom: 8px;
+  color: #374151;
+}
+
+.ms-pbe-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.ms-pbe-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 8px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.ms-pbe-row-disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.ms-pbe-row-ended {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ms-pbe-row-desc {
+  color: #1a2030;
+}
+
+.ms-pbe-row-tag {
+  padding: 1px 6px;
+  background: #dcfce7;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #166534;
+}
+
+.ms-pbe-row-warn {
+  font-size: 11px;
+  color: #92400e;
+}
+
+.ms-pbe-row-error {
+  font-size: 11px;
+  color: #b91c1c;
+}
+
+.ms-pbe-field-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.ms-pbe-field-note {
+  font-size: 11px;
+  color: #6b7280;
+  font-style: italic;
+  margin-bottom: 8px;
+}
+
+.ms-pbe-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ms-pbe-date-input,
+.ms-pbe-reason-input {
+  padding: 4px 8px;
+  border: 1px solid #c8cdd6;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1a2030;
+  background: #fff;
+}
+
+.ms-pbe-reason-input {
+  flex: 1 1 160px;
+  min-width: 120px;
+}
+
+.ms-pbe-review-btn {
+  padding: 7px 14px;
+  background: #1d4ed8;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-pbe-review-btn:hover:not(:disabled) {
+  background: #1e40af;
+}
+
+.ms-pbe-review-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Confirm step — the explicit ENDING / KEEPING gate. */
+.ms-pbe-confirm-ending {
+  padding: 8px 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.ms-pbe-confirm-heading {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b91c1c;
+  letter-spacing: 0.04em;
+}
+
+.ms-pbe-confirm-list {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.ms-pbe-confirm-item {
+  margin: 2px 0;
+  color: #1a2030;
+}
+
+.ms-pbe-confirm-keeping {
+  font-size: 12px;
+  color: #166534;
+  margin-bottom: 8px;
+}
+
+.ms-pbe-confirm-meta {
+  font-size: 12px;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.ms-pbe-confirm-warning {
+  font-size: 11px;
+  color: #92400e;
+  margin-bottom: 8px;
+}
+
+.ms-pbe-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ms-pbe-back-btn {
+  padding: 7px 14px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-pbe-end-btn {
+  padding: 7px 14px;
+  background: #b91c1c;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-pbe-end-btn:hover:not(:disabled) {
+  background: #991b1b;
+}
+
+.ms-pbe-end-btn:disabled,
+.ms-pbe-back-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ms-pbe-done {
+  font-size: 12px;
+  color: #166534;
+  margin-bottom: 8px;
+}
+
+.ms-pbe-refresh-btn {
+  padding: 7px 14px;
+  background: #0d6e5e;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-pbe-flag-note {
+  font-size: 11px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+.ms-pbe-select-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ms-pbe-select-flagged,
+.ms-pbe-select-none {
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-pbe-select-flagged:hover,
+.ms-pbe-select-none:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.ms-pbe-select-none:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ms-pbe-fail-list {
+  margin-bottom: 8px;
+}
+
+/* ── Inline checkboxes injected into Medicus's own problem rows ──────────────
+   (2026-07-27 rework: the boxes sit beside every problem in the live list;
+   the panel is just the action bar). Prepended into each <li> — see the JS
+   header's INLINE INJECTION rules. */
+.ms-pbe-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 7px;
+  vertical-align: middle;
+}
+
+.ms-pbe-inline-cb {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #b91c1c;
+}
+
+.ms-pbe-inline-cb:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ms-pbe-inline-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ms-pbe-inline-flag {
+  padding: 1px 6px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #92400e;
+  cursor: help;
+}
+
+.ms-pbe-inline-warn {
+  padding: 1px 6px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: help;
+}
+
+.ms-pbe-inline-caution {
+  font-size: 12px;
+  color: #92400e;
+  cursor: help;
+}
+
+.ms-pbe-inline-error {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b91c1c;
+  cursor: help;
+}
+
+.ms-pbe-inline-tag {
+  padding: 1px 6px;
+  background: #dcfce7;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #166534;
+}
+
+/* Optimistic strike-through on the real problem-list row once its end POST
+   succeeds — same residual-risk caveat as the sibling widgets' optimistic
+   updates. */
+.ms-pbe-anchor-ended {
+  text-decoration: line-through;
+  opacity: 0.55;
+}

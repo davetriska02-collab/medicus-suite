@@ -100,6 +100,362 @@ try {
 } catch (e) {
   console.warn('[Suite] importScripts shared/quiet-mode.js failed:', e && e.message);
 }
+try {
+  importScripts('shared/presence-folder.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/presence-folder.js failed:', e && e.message);
+}
+
+// Transactional API integration (official Medicus API via our backend proxy).
+// The proxy caller credential (txn.callerKey) is only ever read HERE, in the
+// service worker — content scripts request patient bundles by message and
+// never see the credential. See docs/TRANSACTIONAL-API-INTEGRATION.md.
+try {
+  importScripts(
+    'shared/txn-config.js',
+    'shared/txn-transport.js',
+    'shared/txn-api.js',
+    'shared/fhir-normaliser.js',
+    'shared/immunisation-bridge.js',
+    'shared/data-source-transactional.js',
+    'shared/txn-bundle-cache.js',
+    'shared/txn-request-gate.js'
+  );
+} catch (e) {
+  console.warn('[Suite] importScripts txn modules failed:', e && e.message);
+}
+
+// Short-TTL cache for patient bundles (see shared/txn-bundle-cache.js). Clinical
+// trade-off: 60s of possible staleness is acceptable for a chip/summary read —
+// nothing in this integration writes back through the cache, and the
+// shadow/hybrid comparison path benefits equally from not re-fetching on every
+// render. Cleared below whenever txn config changes (see chrome.storage.onChanged).
+const txnBundleCache = TxnBundleCache.createBundleCache({});
+
+// Protects the proxy / Medicus staging from multi-context stampedes — Sweep
+// tab batches, the Record tab, the sentinel content script, and shadow-mode
+// comparisons can all message this service worker at once. Every txn network
+// call (bundle fetch, connection test) runs through this shared gate; cache
+// hits in txnFetchPatientBundle are checked BEFORE the gate so they never
+// queue behind in-flight network calls.
+const txnGate = TxnRequestGate.createRequestGate({});
+
+// ── Transactional feed: patient-bundle fetcher (SW-side; owns the credential) ─
+
+async function txnFetchPatientBundle(patientUuid) {
+  const settings = await TxnConfig.readSettings();
+  if (!TxnConfig.isTransactionalEnabled(settings.integrationMode)) {
+    return { ok: false, error: 'txn integration not enabled' };
+  }
+  const stored = await chrome.storage.local.get('suite.practiceCode');
+  const tenant = stored['suite.practiceCode'] || null;
+  if (!tenant) return { ok: false, error: 'practice code not set' };
+
+  // Cache key includes everything that changes the result: a bundle fetched
+  // for one tenant/environment must never be served for another, and a config
+  // change (e.g. flipping staging <-> prod) must not serve a stale bundle.
+  const cacheKey = `${tenant}|${settings.environment}|${patientUuid}`;
+  const cached = txnBundleCache.get(cacheKey);
+  if (cached) return { ok: true, bundle: cached, cached: true };
+
+  const txnApi = TxnApi.createTxnApi({
+    baseUrl: 'https://proxy.invalid', // unused: the proxy transport forwards {method, path} only
+    fetchFn: TxnTransport.createProxyTransport({
+      proxyUrl: settings.proxyUrl,
+      getCallerCredential: async () => settings.callerKey || null,
+      getTenant: async () => tenant,
+      getEnvironment: async () => settings.environment,
+      getUserEmail: async () => settings.userEmail || null,
+    }),
+  });
+  const fetchFromTransactional = SentinelTransactionalSource.createTransactionalSource({
+    txnApi,
+    normaliseCareRecord: SentinelFhirNormaliser.normaliseCareRecord,
+  });
+  // Cache check above stays outside the gate — only the actual network call
+  // is gated, so a cache hit never waits behind other in-flight requests.
+  const bundle = await txnGate.run(() => fetchFromTransactional({ patientUuid }));
+  const bridged = SentinelImmunisationBridge.bridgeImmunisations(bundle);
+  txnBundleCache.set(cacheKey, bridged); // only successful results are cached — never errors
+  return { ok: true, bundle: bridged };
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return; // F5: intra-extension only
+  if (!msg || msg.action !== 'txn:fetchPatientBundle') return;
+  txnFetchPatientBundle(msg.patientUuid)
+    .then(sendResponse)
+    .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+  return true; // async sendResponse
+});
+
+// Any change to txn.* settings (proxy URL, environment, integration mode,
+// caller key, ...) or suite.practiceCode (tenant) can change what a cached
+// bundle should contain — e.g. flipping environment or re-pointing the proxy
+// must not keep serving a bundle fetched under the old config. Clear the
+// whole cache rather than trying to reason about which entries are affected.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  const changedKeys = Object.keys(changes);
+  if (changedKeys.some((k) => k.startsWith('txn.') || k === 'suite.practiceCode')) {
+    txnBundleCache.clear();
+  }
+});
+
+// ── Transactional feed: connectivity test (SW-side; owns the credential) ────
+// Used by the options page "Test connection" button in the API Integration
+// section. Unlike txnFetchPatientBundle this runs even when integrationMode is
+// 'session' — the whole point is to let a practice validate proxy/caller-key
+// config *before* switching into Hybrid or Transactional.
+//
+// Response shape: { ok: true, latencyMs } | { ok: false, stage, error }
+//   stage: 'config' — proxy URL / caller key / practice code missing
+//          'proxy'  — proxy unreachable, or rejected the caller key (401/403)
+//          'medicus' — proxy reached Medicus but got an upstream error back
+// `error` is always a short, plain-English, caller-key-free string.
+async function txnTestConnection() {
+  const settings = await TxnConfig.readSettings();
+  if (!settings.proxyUrl) return { ok: false, stage: 'config', error: 'Proxy URL not set' };
+  if (!settings.callerKey) return { ok: false, stage: 'config', error: 'Caller key not set' };
+
+  const stored = await chrome.storage.local.get('suite.practiceCode');
+  const tenant = stored['suite.practiceCode'] || null;
+  if (!tenant) return { ok: false, stage: 'config', error: 'Practice code not set (Suite section)' };
+
+  const txnApi = TxnApi.createTxnApi({
+    baseUrl: 'https://proxy.invalid', // unused: the proxy transport forwards {method, path} only
+    fetchFn: TxnTransport.createProxyTransport({
+      proxyUrl: settings.proxyUrl,
+      getCallerCredential: async () => settings.callerKey || null,
+      getTenant: async () => tenant,
+      getEnvironment: async () => settings.environment,
+      getUserEmail: async () => settings.userEmail || null,
+    }),
+  });
+
+  const startedAt = Date.now();
+  try {
+    await txnGate.run(() => txnApi.ping());
+    return { ok: true, latencyMs: Date.now() - startedAt };
+  } catch (e) {
+    const status = e && e.status;
+    if (e && e.isTimeout) {
+      // shared/txn-transport.js aborted the call (default 10s) — the proxy is
+      // resolvable but not answering, which is different from a wrong URL.
+      return { ok: false, stage: 'proxy', error: 'Proxy timed out (no response within 10s)' };
+    }
+    if (status === 401 || status === 403) {
+      return { ok: false, stage: 'proxy', error: 'Proxy rejected the caller key' };
+    }
+    if (!status) {
+      // No HTTP status means we never got a response from the proxy at all
+      // (DNS/connection failure, wrong URL, CORS, etc.) — see the plain
+      // `throw new Error(...)` cases in shared/txn-transport.js.
+      return { ok: false, stage: 'proxy', error: 'Could not reach the proxy (check the URL)' };
+    }
+    // Proxy responded with some other status — it forwarded an upstream
+    // (Medicus) error. Pass through a short, safe message (never the caller key).
+    const message = String((e && e.message) || 'Unknown error')
+      .trim()
+      .slice(0, 200);
+    return { ok: false, stage: 'medicus', error: message };
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return; // F5: intra-extension only
+  if (!msg || msg.action !== 'txn:testConnection') return;
+  txnTestConnection()
+    .then(sendResponse)
+    .catch((e) =>
+      sendResponse({
+        ok: false,
+        stage: 'proxy',
+        error: String((e && e.message) || e)
+          .trim()
+          .slice(0, 200),
+      })
+    );
+  return true; // async sendResponse
+});
+
+// ── Public SNOMED CT termbrowser API relay (2026-07-29) ──────────────────────
+// A plain `fetch()` from content-scripts/problem-description-cleanup.js (the
+// "Clean up code" widget's retirement/REPLACED BY/SAME AS check, injected
+// into the Medicus page) to termbrowser.nhs.uk was found live — reported by
+// the user, real browser console capture — to be blocked by the browser's own
+// CORS check, with the request's origin reported as the MEDICUS PAGE's origin
+// (https://england.medicus.health), NOT the extension's, despite
+// termbrowser.nhs.uk being correctly declared in manifest.json's
+// host_permissions. Content-script-issued fetches to a cross-origin host do
+// not reliably get the extension's host_permissions CORS bypass in practice —
+// a service-worker-issued fetch doesn't have that page/extension origin
+// ambiguity at all, so this relays the exact same request through here
+// instead. Restricted to the termbrowser.nhs.uk host specifically (checked
+// against the PARSED URL's hostname, not a substring/prefix match) — this
+// must never become a general-purpose cross-origin fetch relay for arbitrary
+// URLs, even though only intra-extension senders can reach it at all (see the
+// sender.id guard below, same discipline as every other handler in this file).
+const TERMBROWSER_HOST = 'termbrowser.nhs.uk';
+
+async function fetchTermbrowserConcept(url) {
+  let parsed;
+  try {
+    parsed = new URL(String(url || ''));
+  } catch (e) {
+    return { ok: false, error: 'Invalid URL' };
+  }
+  if (parsed.protocol !== 'https:' || parsed.hostname !== TERMBROWSER_HOST) {
+    return { ok: false, error: 'URL not permitted' };
+  }
+  try {
+    const resp = await fetch(parsed.toString(), { headers: { Accept: 'application/json, text/plain, */*' } });
+    const text = await resp.text();
+    return { ok: true, httpOk: resp.ok, status: resp.status, text };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return; // F5: intra-extension only
+  if (!msg || msg.action !== 'termbrowser:fetchConcept') return;
+  fetchTermbrowserConcept(msg.url)
+    .then(sendResponse)
+    .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+  return true; // async sendResponse
+});
+
+// ── Task-presence shared-folder config (fire-and-forget, 2026-08-04) ─────────
+// Practices load the unpacked extension from a shared folder, so a single
+// `presence-config.json` dropped into that folder configures EVERY machine at
+// once — no per-machine Options entry. This syncs the packaged file (if
+// present) into chrome.storage.local as 'presence.fileCache', which
+// content-scripts/task-presence.js resolves as its config source (manual
+// Options values, when set, take precedence). The storage cache also survives
+// a folder replacement that forgets to re-copy the json: presence keeps
+// running from the last-seen credentials until a new file appears.
+//
+// The file is git-ignored and never in the release zip (it holds the
+// practice's own store credentials) — see presence-config.example.json and
+// docs/task-presence-setup.md. A missing file is the normal case and is
+// silent; an unparseable or shape-invalid file is logged and ignored.
+async function syncPresenceFileConfig() {
+  let text;
+  try {
+    const resp = await fetch(chrome.runtime.getURL('presence-config.json'));
+    if (!resp.ok) return { ok: false, reason: 'no-file' };
+    text = await resp.text();
+  } catch (_) {
+    return { ok: false, reason: 'no-file' }; // not packaged — normal
+  }
+  try {
+    const cfg = JSON.parse(text);
+    const url = typeof cfg.url === 'string' ? cfg.url.trim().replace(/\/+$/, '') : '';
+    const key = typeof cfg.key === 'string' ? cfg.key.trim() : '';
+    let hostOk = false;
+    try {
+      const u = new URL(url);
+      hostOk = u.protocol === 'https:' && /^[a-z0-9-]+\.supabase\.co$/i.test(u.hostname);
+    } catch (_) {
+      hostOk = false;
+    }
+    if (!hostOk || key.length < 30) {
+      console.warn(
+        '[Presence] presence-config.json present but invalid (url must be https://<project>.supabase.co, key looks too short) — ignored'
+      );
+      return { ok: false, reason: 'invalid' };
+    }
+    await chrome.storage.local.set({ 'presence.fileCache': { url, key, syncedAt: Date.now() } });
+    return { ok: true };
+  } catch (e) {
+    console.warn('[Presence] presence-config.json is not valid JSON — ignored:', e.message);
+    return { ok: false, reason: 'parse' };
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  syncPresenceFileConfig();
+});
+chrome.runtime.onStartup.addListener(() => {
+  syncPresenceFileConfig();
+});
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return; // F5: intra-extension only
+  if (!msg || msg.action !== 'presence:syncFileConfig') return;
+  syncPresenceFileConfig()
+    .then(sendResponse)
+    .catch((e) => sendResponse({ ok: false, reason: String((e && e.message) || e) }));
+  return true; // async sendResponse
+});
+
+// ── Task-presence FOLDER store IO (2026-08-04) ────────────────────────────────
+// The practice's shared folder IS the presence store (user decision: data
+// stays on the practice network — see shared/presence-folder.js's header).
+// The folder handle is picked once per machine in Options and persisted in
+// extension IndexedDB; ALL file IO happens here in the service worker, on
+// behalf of the content script, which only ever sends validated beat rows and
+// receives validated rows back. queryPermission never prompts — when the
+// grant has lapsed, status reports 'prompt' and Options shows a re-allow
+// button (a prompt needs a user gesture, which a worker doesn't have).
+
+async function presenceFolderStatus() {
+  if (typeof PresenceFolder === 'undefined') return { configured: false, permission: 'none' };
+  const handle = await PresenceFolder.loadHandle().catch(() => null);
+  if (!handle) return { configured: false, permission: 'none' };
+  const permission = await PresenceFolder.permissionState(handle);
+  return { configured: true, permission, folderName: handle.name || '' };
+}
+
+async function presenceFolderIO(kind, payload) {
+  if (typeof PresenceFolder === 'undefined') return { ok: false, reason: 'module-missing' };
+  const handle = await PresenceFolder.loadHandle().catch(() => null);
+  if (!handle) return { ok: false, reason: 'not-configured' };
+  const permission = await PresenceFolder.permissionState(handle);
+  if (permission !== 'granted') return { ok: false, reason: 'permission-' + permission };
+  try {
+    if (kind === 'beat') {
+      await PresenceFolder.writeBeat(handle, payload && payload.row);
+      return { ok: true };
+    }
+    if (kind === 'clear') {
+      await PresenceFolder.clearBeat(handle, payload && payload.site, payload && payload.staffId);
+      return { ok: true };
+    }
+    if (kind === 'read') {
+      const rows = await PresenceFolder.readAllBeats(handle, payload && payload.site, Date.now(), 90000);
+      return { ok: true, rows };
+    }
+    return { ok: false, reason: 'unknown-kind' };
+  } catch (e) {
+    return { ok: false, reason: String((e && e.message) || e).slice(0, 200) };
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return; // F5: intra-extension only
+  if (!msg || typeof msg.action !== 'string' || msg.action.indexOf('presence:folder') !== 0) return;
+  if (msg.action === 'presence:folderStatus') {
+    presenceFolderStatus()
+      .then(sendResponse)
+      .catch(() => sendResponse({ configured: false, permission: 'none' }));
+    return true;
+  }
+  const kind =
+    msg.action === 'presence:folderBeat'
+      ? 'beat'
+      : msg.action === 'presence:folderClear'
+        ? 'clear'
+        : msg.action === 'presence:folderRead'
+          ? 'read'
+          : null;
+  if (!kind) return;
+  presenceFolderIO(kind, msg)
+    .then(sendResponse)
+    .catch((e) => sendResponse({ ok: false, reason: String((e && e.message) || e).slice(0, 200) }));
+  return true; // async sendResponse
+});
 
 // ── Message router ────────────────────────────────────────────────────────────
 
@@ -117,6 +473,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'openOptionsPage':
       chrome.runtime.openOptionsPage();
       break;
+
+    // Quick-actions composer (content-scripts/reception-quick-actions.js): its ⚙
+    // button opens the options page straight onto the requested section. The
+    // section name is validated against the same shape options.js's
+    // activateSectionFromHash() accepts (#sect-<a-z->) before it is interpolated
+    // into the URL — a content script must never be able to steer this anywhere
+    // other than a section of our own options page.
+    case 'ms-open-options': {
+      const section = String((msg && msg.section) || '');
+      const suffix = /^[a-z-]+$/.test(section) ? `#sect-${section}` : '';
+      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html') + suffix });
+      break;
+    }
 
     // Pusher relay: scheduling channel fired appointments-updated
     case 'pusher:scheduling:appointments-updated':
@@ -176,11 +545,14 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 // Run a startup task without letting a rejection bubble up as an unhandled
 // rejection (which would silently swallow e.g. storage-quota failures).
+// Returns the (error-swallowed) promise so callers that need ordering can
+// `await` it; fire-and-forget callers can ignore the return value as before.
 function runStartupTask(label, fn) {
   try {
-    Promise.resolve(fn()).catch((e) => console.warn(`[Suite] ${label} failed:`, e && e.message));
+    return Promise.resolve(fn()).catch((e) => console.warn(`[Suite] ${label} failed:`, e && e.message));
   } catch (e) {
     console.warn(`[Suite] ${label} threw:`, e && e.message);
+    return Promise.resolve();
   }
 }
 
@@ -319,11 +691,20 @@ async function _maybeShowUpdateNotification(version) {
 const META_KEY = 'suite.practiceProfile';
 
 // Start polling on install/startup
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
   runStartupTask('startPolling', startPolling);
   runStartupTask('runMigration', runMigration);
-  runStartupTask('migrateTriageLensConfig', migrateTriageLensConfig);
-  runStartupTask('initialiseTriage', initialiseTriage);
+  // migrateTriageLensConfig + initialiseTriage must fully settle before
+  // applyPracticeProfile runs: both eventually write 'triagelens.config', and on
+  // a fresh install (nothing in that key yet) initialiseTriage does an
+  // unconditional overwrite from bundled defaults.json once its own fetch
+  // resolves, with no re-check for a concurrent writer. Unawaited, whichever of
+  // it and the practice-profile merge finished last silently won — confirmed
+  // live 2026-07-31: a freshly-applied practice profile's oirTests got stomped
+  // back to the shipped-empty default because initialiseTriage's write landed
+  // after it.
+  await runStartupTask('migrateTriageLensConfig', migrateTriageLensConfig);
+  await runStartupTask('initialiseTriage', initialiseTriage);
   runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
   runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);
   runStartupTask('schedulePpAlarm', _schedulePpAlarm);

@@ -35,6 +35,8 @@
     { term: 'doxepin', score: 3 },
     { term: 'dosulepin', score: 3, note: 'TCA (= dothiepin); Boustani score 3' },
     { term: 'dothiepin', score: 3, note: 'older UK name for dosulepin' },
+    { term: 'trimipramine', score: 3, note: 'TCA; Boustani ACB score 3 (2026-07-11 Keeper addition)' },
+    { term: 'surmontil', score: 3, note: 'brand: trimipramine (2026-07-11 Keeper addition)' },
     // ── Score 2: Tricyclic antidepressant (moderate ACB) ─────────────────────
     // Amoxapine — dibenzoxazepine tricyclic; Boustani/ACBcalc score 2 (medrev-005).
     { term: 'amoxapine', score: 2 },
@@ -60,6 +62,8 @@
     { term: 'vesicare', score: 3, note: 'brand: solifenacin' },
     { term: 'fesoterodine', score: 3 },
     { term: 'toviaz', score: 3, note: 'brand: fesoterodine' },
+    { term: 'darifenacin', score: 3, note: 'M3-selective antimuscarinic (OAB); Boustani ACB score 3 (2026-07-11 Keeper addition)' },
+    { term: 'emselex', score: 3, note: 'brand: darifenacin (2026-07-11 Keeper addition)' },
     // Trospium: quaternary ammonium compound — limited CNS penetration, but
     // ACBcalc assigns score 1; some sources list as score 3. Using score 1
     // (conservative, avoids over-flagging). Included for completeness.
@@ -76,11 +80,18 @@
     { term: 'hydroxyzine', score: 3 },
     { term: 'diphenhydramine', score: 3 },
     { term: 'cyclizine', score: 3 },
+    { term: 'alimemazine', score: 3, note: '2026-07-25 Keeper: sedating first-gen AH (= trimeprazine); ACBcalc score 3; UK brand Vallergan' },
+    { term: 'trimeprazine', score: 3, note: '2026-07-25 Keeper: older name for alimemazine; ACBcalc score 3; not substring of alimemazine so listed separately' },
+    { term: 'brompheniramine', score: 3, note: '2026-07-25 Keeper: first-gen AH; ACBcalc score 3; found in some OTC combination products in UK' },
     // ── Score 3: Antipsychotics with high ACB ────────────────────────────────
     { term: 'olanzapine', score: 3 },
     { term: 'quetiapine', score: 3 },
     { term: 'clozapine', score: 3 },
     { term: 'chlorpromazine', score: 3 },
+    { term: 'levomepromazine', score: 3, note: 'Boustani/Campbell ACB score 3 (phenothiazine; = methotrimeprazine)' },
+    { term: 'methotrimeprazine', score: 3, note: 'older name for levomepromazine; Boustani/Campbell ACB score 3' },
+    { term: 'nozinan', score: 3, note: 'brand: levomepromazine' },
+    { term: 'trifluoperazine', score: 3, note: 'phenothiazine antipsychotic; Boustani ACB score 3; former UK brand Stelazine (discontinued) — no brand term added as no current UK brand (2026-07-11 Keeper addition)' },
     // ── Score 3: Antiparkinson drugs with anticholinergic action ─────────────
     { term: 'procyclidine', score: 3 },
     { term: 'orphenadrine', score: 3 },
@@ -164,7 +175,10 @@
   }
 
   // ── Module export (dual-mode: Node require OR browser global) ───────────────
-  const api = { computeACB, ACB_TABLE };
+  // SPEC is the published identifier of the scale implemented here. Read by the CQC
+  // readiness disclosure so the named version cannot drift from the engine.
+  const SPEC = { name: 'Anticholinergic burden', version: 'Boustani ACB scale (ACBcalc.com)', source: 'Boustani et al. 2008' };
+  const api = { computeACB, ACB_TABLE, SPEC };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {

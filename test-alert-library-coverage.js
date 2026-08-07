@@ -67,7 +67,7 @@ const EXPECTED = {
   'pincer-4': { type: 'drug-combo', severity: 'red', terms: ['ramipril', 'losartan', 'ibuprofen'] },
   'pincer-5': { type: 'drug-combo', severity: 'red', terms: ['bisoprolol', 'verapamil', 'diltiazem'] },
   'pincer-6': { type: 'drug-combo', severity: 'red', terms: ['ibuprofen', 'naproxen'] },
-  'pincer-7': { type: 'drug-monitoring', drugTerms: ['warfarin'], intervals: { inr: 90 } },
+  'pincer-7': { type: 'drug-monitoring', drugTerms: ['warfarin'], intervals: { inr: 84 } },
   'pincer-8': {
     type: 'drug-combo',
     severity: 'amber',
@@ -103,7 +103,7 @@ const EXPECTED = {
   },
   'mhra-isotretinoin-ppg': {
     type: 'drug-combo',
-    severity: 'amber',
+    severity: 'red',
     terms: ['isotretinoin', 'roaccutane'],
     ageMin: 12,
     ageMax: 55,
@@ -112,7 +112,7 @@ const EXPECTED = {
   'prescribing-qtc-combination': {
     type: 'drug-combo',
     severity: 'amber',
-    terms: ['amiodarone', 'citalopram', 'haloperidol'],
+    terms: ['amiodarone', 'citalopram', 'haloperidol', 'pimozide'],
   },
   'event-count-1': { type: 'event-count', severity: 'amber', count: 3, op: '>=', sex: 'F', ageMax: 65 },
   'event-count-2': { type: 'event-count', severity: 'amber', count: 2, op: '>=', ageMin: 65 },
@@ -121,6 +121,23 @@ const EXPECTED = {
   'pincer-mtx-trimethoprim': { type: 'drug-combo', severity: 'red', terms: ['methotrexate', 'maxtrex', 'trimethoprim', 'co-trimoxazole'] },
   'mhra-acei-arb-ksparing-hyperkalaemia': { type: 'drug-combo', severity: 'amber', terms: ['ramipril', 'losartan', 'spironolactone', 'eplerenone', 'amiloride', 'triamterene'] },
   'alert-xoi-thiopurine-myelosuppression': { type: 'drug-combo', severity: 'red', terms: ['allopurinol', 'febuxostat', 'adenuric', 'azathioprine', 'mercaptopurine', 'xaluprine'] },
+  'alert-001': { type: 'drug-combo', severity: 'red', terms: ['ibuprofen', 'naproxen', 'diclofenac'] },
+  'alert-002': { type: 'drug-combo', severity: 'red', terms: ['bisoprolol', 'atenolol', 'propranolol'] },
+  'alert-004': {
+    type: 'drug-combo',
+    severity: 'red',
+    terms: ['acitretin', 'neotigason', 'alitretinoin', 'toctino'],
+    ageMin: 12,
+    ageMax: 55,
+    sex: 'F',
+  },
+  'alert-005': { type: 'drug-combo', severity: 'amber', terms: ['finasteride', 'propecia', 'dutasteride', 'avodart'] },
+  'alert-008': { type: 'drug-combo', severity: 'amber', terms: ['aspirin 75', 'clopidogrel', 'ticagrelor', 'prasugrel'] },
+  'alert-009': { type: 'drug-combo', severity: 'amber', terms: ['ibuprofen', 'naproxen', 'diclofenac'] },
+  // 2026-07-25 Keeper additions: new prescribing-safety alerts (MHRA DSUs + NICE NG97)
+  'alert-domperidone-phaeo': { type: 'drug-combo', severity: 'red', terms: ['domperidone', 'motilium'] },
+  'alert-acei-angioedema': { type: 'drug-combo', severity: 'red', terms: ['ramipril', 'lisinopril', 'perindopril', 'enalapril', 'captopril'] },
+  'alert-antipsychotic-dementia': { type: 'drug-combo', severity: 'amber', terms: ['olanzapine', 'risperidone', 'quetiapine', 'aripiprazole', 'haloperidol'] },
 };
 
 for (const [id, exp] of Object.entries(EXPECTED)) {

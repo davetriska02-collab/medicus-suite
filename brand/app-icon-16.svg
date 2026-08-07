@@ -8,14 +8,15 @@
     </linearGradient>
   </defs>
   <rect x="2" y="2" width="124" height="124" rx="27" fill="url(#bg)"/>
-  <!-- gold shield -->
-  <path d="M64 20 L99 34 L99 64 C99 90 83 108 64 116 C45 108 29 90 29 64 L29 34 Z" fill="url(#gold)"/>
-  <!-- navy interior (thick gold rim) -->
-  <path d="M64 33 L90 44 L90 64 C90 85 77 100 64 106 C51 100 38 85 38 64 L38 44 Z" fill="#0e2342"/>
-  <!-- cyan QRS pulse -->
-  <path d="M45 70 L59 70 L64 52 L69 86 L74 70 L85 70" fill="none" stroke="#43dcec" stroke-width="7"
-        stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- beacon -->
-  <circle cx="64" cy="52" r="9" fill="#43dcec" fill-opacity=".30"/>
-  <circle cx="64" cy="52" r="5.4" fill="#7df0fb"/>
+  <!-- bold reticle ring + cardinal ticks (detail collapses at 16px, keep it heavy) -->
+  <circle cx="64" cy="64" r="37" fill="none" stroke="url(#gold)" stroke-width="9"/>
+  <g stroke="url(#gold)" stroke-width="9" stroke-linecap="round">
+    <line x1="64" y1="16"  x2="64" y2="33"/>
+    <line x1="64" y1="95"  x2="64" y2="112"/>
+    <line x1="16" y1="64"  x2="33" y2="64"/>
+    <line x1="95" y1="64"  x2="112" y2="64"/>
+  </g>
+  <!-- live lock dot -->
+  <circle cx="64" cy="64" r="16" fill="#43dcec" fill-opacity="0.30"/>
+  <circle cx="64" cy="64" r="10" fill="#7df0fb"/>
 </svg>

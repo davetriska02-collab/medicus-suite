@@ -128,6 +128,28 @@ body {
   height: 16px;
   flex: none;
 }
+.cqc-gate-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.cqc-controls-hint {
+  max-width: 900px;
+  margin: 8px auto 0;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.55;
+  background: rgba(0, 94, 184, 0.06);
+  border-left: 3px solid var(--nhs-blue);
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+@media print {
+  .cqc-controls-hint {
+    display: none !important;
+  }
+}
 
 /* ── Output ───────────────────────────────────────────────────────────────── */
 .cqc-output {
@@ -516,5 +538,332 @@ body {
 @media print {
   .cqc-callout {
     background: #fff;
+  }
+}
+
+/* ── Headline verdict (the answer-first block, both modes) ─────────────────── */
+.cqc-verdict {
+  border-top: 4px solid var(--nhs-blue);
+}
+.cqc-verdict-green {
+  border-top-color: var(--green);
+}
+.cqc-verdict-amber {
+  border-top-color: var(--amber);
+}
+.cqc-verdict-red {
+  border-top-color: var(--red);
+}
+.cqc-verdict-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.cqc-verdict-label {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--nhs-dark);
+}
+.cqc-verdict-asat {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text2);
+}
+.cqc-verdict-plain {
+  margin: 8px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+.cqc-rag-legend {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cqc-rag-legend-label {
+  font-weight: 600;
+  color: var(--text2);
+}
+.cqc-verdict-means {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  background: rgba(180, 83, 9, 0.08);
+  border-left: 3px solid var(--amber);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.cqc-verdict-howto {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-left: 3px solid var(--nhs-blue);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* ── Disclosed exclude strings (silent-false-negative transparency) ───────── */
+.cqc-recon-excl {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.cqc-recon-excl-label {
+  font-weight: 600;
+  color: var(--red);
+}
+.cqc-term-excl {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+/* Per-card RAG context label — green here means "rule current", not "pass". */
+.cqc-qs-ragcontext {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text3);
+}
+
+/* Confirm-gate attention flash when "Print inspector copy" needs the tick. */
+.cqc-gate-flash {
+  animation: cqc-gate-pulse 0.8s ease-in-out 2;
+}
+@keyframes cqc-gate-pulse {
+  0%,
+  100% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.45);
+  }
+}
+
+/* ── Reconciliation worksheet (collapsed; demoted below Safe/Well-led) ─────── */
+.cqc-recon-details {
+  margin-top: 12px;
+}
+.cqc-recon-summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--nhs-dark);
+  font-size: 14px;
+  padding: 8px 0;
+}
+
+/* ── Collapsed matched-term list (kills the wall; stays printable) ─────────── */
+.cqc-matched {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  padding: 8px 12px;
+}
+.cqc-matched-summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--nhs-dark);
+  font-size: 13px;
+  list-style-position: inside;
+}
+.cqc-matched-hint {
+  font-weight: 400;
+  color: var(--text3);
+  font-size: 12px;
+}
+.cqc-term-list {
+  list-style: none;
+  margin: 10px 0 2px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cqc-term {
+  font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text2);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+/* ── Coverage stat tiles (were unstyled — rendered as a plain text dump) ───── */
+.cqc-grid {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+.cqc-grid-4 {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.cqc-stat {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.cqc-stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--nhs-dark);
+}
+.cqc-stat-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 2px;
+}
+.cqc-stat-sub {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* ── Key-question plain-language gloss ────────────────────────────────────── */
+.cqc-keyq-note {
+  margin: 2px 0 12px;
+  color: var(--text2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media print {
+  /* Force any collapsed list open so the inspector PDF shows the full evidence. */
+  .cqc-matched > *,
+  .cqc-recon-details > * {
+    display: revert !important;
+  }
+  details.cqc-matched {
+    border: 1px solid #999;
+  }
+  .cqc-verdict-howto,
+  .cqc-verdict-means {
+    background: #fff;
+  }
+}
+
+/* ── Editable reconciliation count (Janet: fillable + printable worksheet) ─── */
+.cqc-recon-countlabel {
+  font-size: 12px;
+  color: var(--text2);
+  white-space: nowrap;
+}
+.cqc-recon-input {
+  width: 64px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  text-align: right;
+}
+.cqc-recon-input:focus {
+  outline: 2px solid var(--nhs-blue);
+  outline-offset: 0;
+}
+
+/* ── Per-exclude reasons grouped by rationale (Eileen) ────────────────────── */
+.cqc-recon-excl-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.cqc-recon-excl-item {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.cqc-recon-excl-reason {
+  color: var(--text2);
+}
+
+/* ── Clinical methods & sources (Raj: named versions) ─────────────────────── */
+.cqc-card-methods {
+  border-top: 3px solid var(--nhs-blue);
+}
+.cqc-methods-table td:first-child {
+  white-space: nowrap;
+}
+
+/* ── Clinician-view mode tag ──────────────────────────────────────────────── */
+.cqc-mode-clinician {
+  background: var(--green);
+}
+
+/* ── Clinician-view collapsed methods table (Tom: keep the glance clean) ───── */
+.cqc-methods-collapse {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 10px 16px;
+}
+.cqc-methods-collapse .cqc-card-methods {
+  border: 0;
+  padding: 10px 0 0;
+}
+
+/* ── Slim clinician verdict footnote (Tom: one line, not four boxes) ──────── */
+.cqc-verdict-foot {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text3);
+  line-height: 1.5;
+}
+
+/* ── Worksheet total + completion provenance (Janet) ──────────────────────── */
+.cqc-recon-totalrow td {
+  border-top: 2px solid var(--border);
+  font-weight: 600;
+  color: var(--text);
+}
+.cqc-recon-totallabel {
+  text-align: right;
+}
+.cqc-recon-total {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--nhs-dark);
+}
+.cqc-recon-completion {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.cqc-recon-completion-field {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 6px;
+  white-space: nowrap;
+}
+.cqc-recon-rule {
+  display: inline-block;
+  min-width: 110px;
+  border-bottom: 1px solid var(--text3);
+}
+
+@media print {
+  /* Print the typed worksheet value as plain underlined text, no input chrome. */
+  .cqc-recon-input {
+    border: 0;
+    border-bottom: 1px solid #000;
+    border-radius: 0;
+    background: transparent;
   }
 }

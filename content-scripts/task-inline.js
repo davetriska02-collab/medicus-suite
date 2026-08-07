@@ -1,0 +1,654 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
+// Medicus Suite — Inline "Create task" widget for task / patient pages.
+//
+// The prescription-request overview (and other task overviews) has no "create
+// task" control of its own. Rather than puppet Medicus's UI, this builds the
+// action as NEW API WIRING — exactly like booking-inline.js — driving Medicus's
+// own create-task endpoints with credentialed same-origin fetches:
+//
+//   GET  /patient/data/workflow/general-task/create?patientId=…
+//        → { assigneeOptions:{teams[],staff[]}, priorityOptions[] }
+//   POST /patient/workflow/general-task/create
+//        { patientId, assigneeId, assigneeType, description, priority, snoozeUntil }
+//
+// This keeps Medicus the system of record (its validation/access/audit fire as
+// normal). The API subdomain ({siteId}.api.<host>) allows CORS from the page
+// origin, so this works from the content-script context (same as booking).
+'use strict';
+
+(function () {
+  if (window.__msTkInline) return;
+  window.__msTkInline = true;
+
+  // DOM-contract registry (Horizon-1) — loaded earlier in the manifest's
+  // content-script list. findHeading/findCard/findActionRow below read their
+  // selectors FROM shared/dom-contracts.js (task-widget.codes-actions-heading /
+  // task-widget.card-submit-button — shared with booking-inline.js, which has
+  // the byte-identical findHeading/findCard implementation — and
+  // task-inline.action-row) rather than duplicating them here.
+  var DC = window.DomContracts;
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── URL detection ─────────────────────────────────────────────────────────────
+
+  function getTaskInfo() {
+    const m = location.pathname.match(
+      /\/([0-9a-f]{4,})\/tasks\/data\/([^/]+)\/overview\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
+    );
+    if (!m) return null;
+    return { siteId: m[1], typeSlug: m[2], taskUuid: m[3] };
+  }
+
+  // ── State ─────────────────────────────────────────────────────────────────────
+
+  function blankState() {
+    return {
+      open: false,
+      loading: false,
+      error: null,
+      taskUuid: null,
+      patientId: null,
+      teams: [],
+      staff: [],
+      priorities: [],
+      assignee: '', // "type|value"
+      priority: 0,
+      description: '',
+      step: 'form', // 'form' | 'created'
+      creating: false,
+      createError: null,
+      createdAssignee: null,
+    };
+  }
+
+  let s = blankState();
+
+  // ── API ───────────────────────────────────────────────────────────────────────
+
+  function apiBaseUrl() {
+    const info = getTaskInfo();
+    const parts = location.pathname.split('/').filter(Boolean);
+    const siteId = (info && info.siteId) || parts[0] || '';
+    return `https://${siteId}.api.${location.hostname}`;
+  }
+
+  async function apiFetch(path, opts) {
+    opts = opts || {};
+    const resp = await fetch(`${apiBaseUrl()}${path}`, {
+      method: opts.method || 'GET',
+      credentials: 'include',
+      headers: Object.assign({ Accept: 'application/json, text/plain, */*' }, opts.headers),
+      body: opts.body,
+    });
+    if (!resp.ok) throw new Error(`API ${resp.status}`);
+    const text = await resp.text();
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      throw new Error('Task API returned an unexpected response.');
+    }
+  }
+
+  // Resolve task UUID → patient UUID via the API subdomain (same as booking).
+  async function resolvePatientId(typeSlug, taskUuid) {
+    const data = await apiFetch(`/tasks/data/${typeSlug}/overview/${taskUuid}`);
+    return data?.data?.patient?.id || data?.data?.patientId || data?.patient?.id || data?.patientId || null;
+  }
+
+  async function apiFetchForm(patientId) {
+    return apiFetch(`/patient/data/workflow/general-task/create?patientId=${encodeURIComponent(patientId)}`);
+  }
+
+  async function apiCreateTask(payload) {
+    return apiFetch('/patient/workflow/general-task/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  // ── DOM injection ─────────────────────────────────────────────────────────────
+  //
+  // Anchor preference, in order:
+  //   1. directly beneath the booking widget when it's present (keeps them paired);
+  //   2. after the "Codes & actions" card (task types that have it);
+  //   3. above the bottom "More actions" action row — prescribing overviews
+  //      (Routine / Non-Routine Repeat Request, Medications for Re-authorisation)
+  //      have NO "Codes & actions" card, so anchoring to it alone meant the widget
+  //      never injected there.
+  //   4. after the "Initial Request" card — confirmed live (2026-07-20):
+  //      communication-thread tasks have NEITHER a Codes & actions card NOR a
+  //      More-actions row, so gates 2/3 both miss. Every request/communication
+  //      task type observed so far DOES have an Initial Request card (the same
+  //      one content.js's extractInitialRequest() reads), so this is the
+  //      universal last-resort fallback.
+  // Heading scan is kept cheap exactly as booking-inline does (narrow heading
+  // carriers first, skip container nodes whose textContent would concatenate a
+  // big subtree).
+
+  const HEADING_RE = /^Codes\s*(?:&|&amp;|and)\s*actions$/i;
+  const INITIAL_REQUEST_RE = /^Initial Request$/i;
+
+  function visible(el) {
+    return !!(el && (el.offsetParent !== null || (el.getClientRects && el.getClientRects().length)));
+  }
+
+  function matchHeading(el) {
+    if (el.closest('#ms-tk-widget')) return false;
+    if (el.firstElementChild) return false;
+    return HEADING_RE.test(el.textContent.trim());
+  }
+
+  function matchInitialRequestHeading(el) {
+    if (el.closest('#ms-tk-widget')) return false;
+    if (el.firstElementChild) return false;
+    return INITIAL_REQUEST_RE.test(el.textContent.trim());
+  }
+
+  var HEADING_CONTRACT = DC && DC.get('task-widget.codes-actions-heading');
+  var HEADING_NARROW_SEL = HEADING_CONTRACT ? HEADING_CONTRACT.target.join(',') : 'h1,h2,h3,h4,h5,h6,strong,b,legend';
+  var HEADING_WIDE_SEL =
+    HEADING_CONTRACT && HEADING_CONTRACT.legacy[0] ? HEADING_CONTRACT.legacy[0].join(',') : 'div,span,p';
+  var SUBMIT_BTN_CONTRACT = DC && DC.get('task-widget.card-submit-button');
+  var SUBMIT_BTN_SEL = SUBMIT_BTN_CONTRACT
+    ? SUBMIT_BTN_CONTRACT.target.join(', ')
+    : 'button, [role="button"], input[type="submit"]';
+  var ACTION_ROW_CONTRACT = DC && DC.get('task-inline.action-row');
+  var ACTION_ROW_SEL = ACTION_ROW_CONTRACT ? ACTION_ROW_CONTRACT.target.join(', ') : 'button, [role="button"]';
+
+  function findHeading() {
+    for (const el of document.querySelectorAll(HEADING_NARROW_SEL)) {
+      if (matchHeading(el)) return el;
+    }
+    for (const el of document.querySelectorAll(HEADING_WIDE_SEL)) {
+      if (matchHeading(el)) return el;
+    }
+    return null;
+  }
+
+  function findCard() {
+    const heading = findHeading();
+    if (!heading) return null;
+    let node = heading.parentElement;
+    let fallback = node;
+    while (node && node !== document.body) {
+      const btns = node.querySelectorAll(SUBMIT_BTN_SEL);
+      for (const b of btns) {
+        if (/^submit$/i.test((b.value || b.textContent || '').trim())) return node;
+      }
+      fallback = node;
+      node = node.parentElement;
+    }
+    return fallback;
+  }
+
+  // Gate 4 fallback — the "Initial Request" card's boundary, same
+  // heading-then-closest-card walk content.js's own findCardByTitle uses (see
+  // that function in content-scripts/triage-lens/content.js), but matching
+  // the heading text EXACTLY ("Initial Request", not a starts-with match) so
+  // this never mis-anchors on an unrelated section that merely begins with
+  // those words.
+  function findInitialRequestCard() {
+    let heading = null;
+    for (const el of document.querySelectorAll(HEADING_NARROW_SEL)) {
+      if (matchInitialRequestHeading(el)) {
+        heading = el;
+        break;
+      }
+    }
+    if (!heading) {
+      for (const el of document.querySelectorAll(HEADING_WIDE_SEL)) {
+        if (matchInitialRequestHeading(el)) {
+          heading = el;
+          break;
+        }
+      }
+    }
+    if (!heading) return null;
+    return (
+      heading.closest('.m-card-v2') || heading.closest('[class*="m-card"]') || heading.parentElement?.parentElement
+    );
+  }
+
+  // Finds the specific message card that actually contains a real
+  // attachment, rather than always assuming it's the "Initial Request" card
+  // — confirmed live 2026-07-22: a communication thread can carry the
+  // attachment on a LATER reply card (a "Reply from Requester" card has no
+  // heading at all, so findInitialRequestCard() could never find it), and
+  // anchoring both inline widgets under an attachment-less opening message
+  // was confusing. Matches by filename against window.__msTriageAttachments
+  // (content.js's read-only accessor) — returns null (falls through to
+  // findInitialRequestCard() at the call site) when there's no attachment or
+  // its card can't be located.
+  function findAttachmentCard() {
+    const atts = window.__msTriageAttachments;
+    if (!Array.isArray(atts) || !atts.length) return null;
+    const els = document.querySelectorAll('a, button');
+    for (const att of atts) {
+      const name = (att && att.filename ? att.filename : '').trim();
+      if (!name) continue;
+      for (const el of els) {
+        if ((el.textContent || '').trim() === name) {
+          const card = el.closest('.m-card-v2') || el.closest('[class*="m-card"]');
+          if (card) return card;
+        }
+      }
+    }
+    return null;
+  }
+
+  // The bottom-most visible "More actions" button's row, excluding any inside a
+  // dialog/drawer. Returns the row element so we can insert the panel above it.
+  function findActionRow() {
+    const btns = document.querySelectorAll(ACTION_ROW_SEL);
+    for (let i = btns.length - 1; i >= 0; i--) {
+      const b = btns[i];
+      if (!/more actions/i.test((b.textContent || '').trim())) continue;
+      if (b.closest('[role="dialog"], [aria-modal="true"]')) continue;
+      if (!visible(b)) continue;
+      return b.parentElement;
+    }
+    return null;
+  }
+
+  function injectWidget() {
+    if (!getTaskInfo()) return;
+    if (document.getElementById('ms-tk-widget')) return;
+    const w = document.createElement('div');
+    w.id = 'ms-tk-widget';
+    renderInto(w);
+    // 1/2: after the booking widget or the "Codes & actions" card.
+    const after = document.getElementById('ms-bk-widget') || findCard();
+    if (after && after.parentElement) {
+      withObserverPaused(() => after.after(w));
+      return;
+    }
+    // 3: above the bottom action row (prescribing overviews have no card).
+    const row = findActionRow();
+    if (row && row.parentElement) {
+      withObserverPaused(() => row.parentElement.insertBefore(w, row));
+      return;
+    }
+    // 4: after the card that actually carries the attachment if there is
+    // one, else after the "Initial Request" card (communication-thread tasks
+    // have neither of the above two anchors — confirmed live 2026-07-20).
+    const irCard = findAttachmentCard() || findInitialRequestCard();
+    if (irCard && irCard.parentElement) {
+      withObserverPaused(() => irCard.after(w));
+      return;
+    }
+    // Nothing to anchor to on this page — leave it for a later mutation tick.
+  }
+
+  // Tear the widget out when we leave a task overview (mirrors booking-inline's
+  // fix — otherwise Vue keeps the node parented to a surviving card and it
+  // strands on the wrong page).
+  function removeWidget() {
+    const w = document.getElementById('ms-tk-widget');
+    if (!w) return;
+    withObserverPaused(() => {
+      const row = w.parentElement;
+      w.remove();
+      // Leave no empty .ms-inline-widget-row litter once nothing shares it
+      // (document-file-inline.js wraps this widget in one to sit side by side).
+      if (row && row.classList.contains('ms-inline-widget-row') && !row.children.length) row.remove();
+    });
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────────
+
+  function renderInto(el) {
+    el.innerHTML = buildHtml();
+    bindEvents(el);
+  }
+
+  function rerender() {
+    const w = document.getElementById('ms-tk-widget');
+    if (w) renderInto(w);
+  }
+
+  function buildHtml() {
+    let body = '';
+    if (s.open) {
+      if (s.loading) {
+        body = `<div class="ms-tk-body"><div class="ms-tk-loading">Loading task form…</div></div>`;
+      } else if (s.error) {
+        body = `<div class="ms-tk-body"><div class="ms-tk-error">${esc(s.error)}</div></div>`;
+      } else if (s.step === 'created') {
+        body = renderCreated();
+      } else {
+        body = renderForm();
+      }
+    }
+    return `
+      <div class="ms-tk-header" id="ms-tk-toggle" role="button" tabindex="0" aria-expanded="${s.open}">
+        <span class="ms-tk-chevron">${s.open ? '▾' : '▸'}</span>
+        <span>Create task for this patient</span>
+      </div>
+      ${body}
+    `;
+  }
+
+  function assigneeOptionsHtml() {
+    function opts(list) {
+      return list
+        .map((o) => {
+          const val = `${o.type}|${o.value}`;
+          return `<option value="${esc(val)}"${s.assignee === val ? ' selected' : ''}>${esc(o.label)}</option>`;
+        })
+        .join('');
+    }
+    let html = '<option value="">— select —</option>';
+    if (s.teams.length) html += `<optgroup label="Teams">${opts(s.teams)}</optgroup>`;
+    if (s.staff.length) html += `<optgroup label="Staff">${opts(s.staff)}</optgroup>`;
+    return html;
+  }
+
+  function priorityOptionsHtml() {
+    return s.priorities
+      .map(
+        (p) =>
+          `<option value="${esc(p.value)}"${String(s.priority) === String(p.value) ? ' selected' : ''}>${esc(p.label)}</option>`
+      )
+      .join('');
+  }
+
+  function renderForm() {
+    const canCreate = s.description.trim() && s.assignee && !s.creating;
+    return `
+      <div class="ms-tk-body">
+        ${!s.patientId ? '<div class="ms-tk-warn">Could not determine patient ID — try navigating away and back.</div>' : ''}
+        <div class="ms-tk-row">
+          <label class="ms-tk-label" for="ms-tk-assignee">Assign to</label>
+          <select class="ms-tk-select" id="ms-tk-assignee">${assigneeOptionsHtml()}</select>
+        </div>
+        <div class="ms-tk-row">
+          <label class="ms-tk-label" for="ms-tk-desc">Details</label>
+          <textarea class="ms-tk-textarea" id="ms-tk-desc" rows="3" placeholder="What needs doing?" maxlength="2000">${esc(s.description)}</textarea>
+        </div>
+        ${
+          s.priorities.length > 1
+            ? `<div class="ms-tk-row">
+                 <label class="ms-tk-label" for="ms-tk-priority">Priority</label>
+                 <select class="ms-tk-select" id="ms-tk-priority">${priorityOptionsHtml()}</select>
+               </div>`
+            : ''
+        }
+        ${s.createError ? `<div class="ms-tk-error">${esc(s.createError)}</div>` : ''}
+        <button class="ms-tk-btn" id="ms-tk-create"${canCreate ? '' : ' disabled'}>${s.creating ? 'Creating…' : 'Create task'}</button>
+      </div>
+    `;
+  }
+
+  function renderCreated() {
+    return `
+      <div class="ms-tk-body ms-tk-success">
+        <div class="ms-tk-success-icon">✓</div>
+        <div><strong>Task created</strong></div>
+        ${s.createdAssignee ? `<div>Assigned to ${esc(s.createdAssignee)}</div>` : ''}
+        <button class="ms-tk-btn-ghost" id="ms-tk-again">Create another</button>
+      </div>
+    `;
+  }
+
+  // ── Actions ───────────────────────────────────────────────────────────────────
+
+  function assigneeLabel(encoded) {
+    const all = s.teams.concat(s.staff);
+    const hit = all.find((o) => `${o.type}|${o.value}` === encoded);
+    return hit ? hit.label : '';
+  }
+
+  async function doOpen() {
+    s.open = true;
+    // Cached for this task — state is reset on SPA navigation (runInject), so if
+    // the assignee/priority lists are already loaded nothing changed; just reveal
+    // the form instead of re-resolving the patient and re-fetching the form data.
+    if (s.patientId && (s.teams.length || s.staff.length)) {
+      s.error = null;
+      rerender();
+      return;
+    }
+    s.loading = true;
+    s.error = null;
+    rerender();
+    // WRONG-PATIENT GUARD (audit C1, 2026-07-18): pin THIS task's state object
+    // and task UUID before awaiting. runInject() replaces `s` on every SPA
+    // navigation — without the pin, task A's patient resolution landed in task
+    // B's state and the created task went on the wrong patient's record. All
+    // writes go to the pinned `st`; stale results are discarded.
+    const st = s;
+    try {
+      const info = getTaskInfo();
+      st.taskUuid = info ? info.taskUuid : null;
+      if (info) st.patientId = await resolvePatientId(info.typeSlug, info.taskUuid);
+      if (st !== s) return; // navigated mid-resolution — discard
+      if (!st.patientId) throw new Error('Could not determine the patient for this task.');
+      const form = await apiFetchForm(st.patientId);
+      if (st !== s) return; // navigated during the form fetch — discard
+      st.teams = (form.assigneeOptions && form.assigneeOptions.teams) || [];
+      st.staff = (form.assigneeOptions && form.assigneeOptions.staff) || [];
+      const pri = Array.isArray(form.priorityOptions)
+        ? form.priorityOptions.map((o) => ({ value: o.value, label: o.label }))
+        : [];
+      st.priorities = pri.length ? pri : [{ value: 0, label: 'Normal' }];
+      const def =
+        st.priorities.find((p) => String(p.label).toLowerCase() === 'normal') ||
+        st.priorities.find((p) => p.value === 0) ||
+        st.priorities[0];
+      st.priority = def ? def.value : 0;
+    } catch (err) {
+      st.error = err.message || 'Failed to load the task form.';
+    } finally {
+      st.loading = false;
+      if (st === s) rerender();
+    }
+  }
+
+  async function doCreate() {
+    if (s.creating || !s.patientId || !s.assignee || !s.description.trim()) return;
+    s.creating = true;
+    s.createError = null;
+    rerender();
+    // WRONG-PATIENT GUARD (audit C1): pin the state and HARD re-verify the
+    // on-screen task still resolves to this patient before the write — task
+    // creation is a clinical write and must never fire off a stale identity.
+    const st = s;
+    try {
+      const info = getTaskInfo();
+      if (!info || (st.taskUuid && info.taskUuid !== st.taskUuid) || st !== s) {
+        throw new Error('Task changed — reopen the panel.');
+      }
+      const verifiedPatientId = await resolvePatientId(info.typeSlug, info.taskUuid);
+      if (st !== s) return; // navigated during verification — abort silently
+      if (!verifiedPatientId || verifiedPatientId !== st.patientId) {
+        throw new Error('Patient could not be re-verified for this task — reopen the panel.');
+      }
+      const sep = st.assignee.indexOf('|');
+      const assigneeType = st.assignee.slice(0, sep);
+      const assigneeId = st.assignee.slice(sep + 1);
+      const payload = {
+        patientId: st.patientId,
+        contextId: null,
+        contextType: null,
+        assigneeId,
+        assigneeType,
+        description: st.description.trim(),
+        priority: Number(st.priority) || 0,
+        snoozeUntil: null,
+      };
+      await apiCreateTask(payload);
+      if (st !== s) return; // task created for the pinned identity; UI state is gone
+      st.createdAssignee = assigneeLabel(st.assignee);
+      st.step = 'created';
+    } catch (err) {
+      st.createError = err.message || 'Failed to create the task — please try again.';
+    } finally {
+      st.creating = false;
+      if (st === s) rerender();
+    }
+  }
+
+  // ── Event binding ─────────────────────────────────────────────────────────────
+
+  function bindEvents(el) {
+    const toggle = el.querySelector('#ms-tk-toggle');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        if (s.open) {
+          s.open = false;
+          rerender();
+        } else {
+          doOpen();
+        }
+      });
+      toggle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggle.click();
+        }
+      });
+    }
+
+    el.querySelector('#ms-tk-assignee')?.addEventListener('change', (e) => {
+      s.assignee = e.target.value;
+      rerender();
+    });
+
+    // Don't rerender on each keystroke (it would drop focus); just keep state and
+    // toggle the Create button's enabled flag live. Capture the button once
+    // rather than re-querying the document on every character.
+    const createBtn = el.querySelector('#ms-tk-create');
+    el.querySelector('#ms-tk-desc')?.addEventListener('input', (e) => {
+      s.description = e.target.value;
+      if (createBtn) createBtn.disabled = !(s.description.trim() && s.assignee && !s.creating);
+    });
+
+    el.querySelector('#ms-tk-priority')?.addEventListener('change', (e) => {
+      s.priority = e.target.value;
+    });
+
+    el.querySelector('#ms-tk-create')?.addEventListener('click', () => doCreate());
+
+    el.querySelector('#ms-tk-again')?.addEventListener('click', () => {
+      const { patientId, teams, staff, priorities, priority } = s;
+      s = blankState();
+      s.open = true;
+      s.patientId = patientId;
+      s.teams = teams;
+      s.staff = staff;
+      s.priorities = priorities;
+      s.priority = priority;
+      rerender();
+    });
+  }
+
+  // ── SPA navigation & re-injection ─────────────────────────────────────────────
+  // Identical discipline to booking-inline.js (own-mutation filter, cheap path
+  // gate, throttle + animation-frame deferral, remove-on-leave).
+
+  let _lastPath = location.pathname;
+  let _throttle = null;
+  let _obs = null;
+
+  function observeBody() {
+    if (_obs) _obs.observe(document.body, { childList: true, subtree: true });
+  }
+
+  function withObserverPaused(fn) {
+    if (!_obs) {
+      fn();
+      return;
+    }
+    _obs.disconnect();
+    try {
+      fn();
+    } finally {
+      observeBody();
+    }
+  }
+
+  function _isOwnWidgetMutation(mutations) {
+    for (const m of mutations) {
+      if (m.target && m.target.nodeType === 1 && m.target.closest && m.target.closest('#ms-tk-widget')) {
+        continue;
+      }
+      for (const nodes of [m.addedNodes, m.removedNodes]) {
+        for (const n of nodes) {
+          if (n.nodeType !== 1) continue;
+          if (n.id === 'ms-tk-widget') continue;
+          if (n.closest && n.closest('#ms-tk-widget')) continue;
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function onMutations(mutations) {
+    if (_isOwnWidgetMutation(mutations)) return;
+    scheduleInject();
+  }
+
+  function scheduleInject() {
+    if (_throttle) return;
+    const onTaskPage = !!getTaskInfo();
+    const pathChanged = location.pathname !== _lastPath;
+    if (!onTaskPage && !pathChanged) return;
+    if (onTaskPage && !pathChanged) {
+      const existing = document.getElementById('ms-tk-widget');
+      if (existing && existing.isConnected) return;
+    }
+    _throttle = setTimeout(runInject, 350);
+  }
+
+  function runInject() {
+    _throttle = null;
+    const currentPath = location.pathname;
+    if (currentPath !== _lastPath) {
+      _lastPath = currentPath;
+      s = blankState();
+    }
+    if (document.hidden) return;
+    if (!getTaskInfo()) {
+      removeWidget();
+      return;
+    }
+    const existing = document.getElementById('ms-tk-widget');
+    if (existing && existing.isConnected) return;
+    requestAnimationFrame(() => {
+      if (document.hidden) return;
+      const w = document.getElementById('ms-tk-widget');
+      if (w && w.isConnected) return;
+      injectWidget();
+    });
+  }
+
+  const _hub = window.__chObserverHub;
+  if (_hub && _hub.subscribe) {
+    _hub.subscribe(onMutations);
+  } else {
+    _obs = new MutationObserver(onMutations);
+    observeBody();
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) scheduleInject();
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', scheduleInject);
+  } else {
+    scheduleInject();
+  }
+})();

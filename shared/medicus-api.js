@@ -14,7 +14,9 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 // If the canonical pattern ever changes, update practice-code.js first, then here.
 // keep in sync with PRACTICE_CODE_RE in shared/request-monitor.js
 const _SITE_CODE_RE = /^[a-f0-9]{4,8}$/i;
-function _isValidSiteId(id) { return typeof id === 'string' && _SITE_CODE_RE.test(id); }
+function _isValidSiteId(id) {
+  return typeof id === 'string' && _SITE_CODE_RE.test(id);
+}
 
 function apiBase(siteId) {
   return `https://${siteId}.api.england.medicus.health`;
@@ -27,7 +29,7 @@ export async function fetchSchedulingOverview(siteId, dateISO, { bypassCache = f
   if (!_isValidSiteId(siteId)) throw new Error(`Invalid practice code format: ${siteId}`);
   const cacheKey = `${siteId}|${dateISO}`;
   const cached = _cache.get(cacheKey);
-  if (!bypassCache && cached && (Date.now() - cached.fetchedAt) < CACHE_TTL_MS) {
+  if (!bypassCache && cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
     return cached.data;
   }
 
@@ -63,7 +65,7 @@ export async function fetchAppointmentTypes(siteId) {
   const data = await fetchSchedulingOverview(siteId, today).catch(() => null);
   if (!data) return [];
   return (data.appointmentTypeOptions || [])
-    .map(t => ({ id: t.value, name: t.label }))
+    .map((t) => ({ id: t.value, name: t.label }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -75,17 +77,23 @@ export function aggregateSlots(raw, { allowedTypes = null, filterPastTimes = fal
   let sessionsCount = 0;
   const now = filterPastTimes ? new Date() : null;
 
-  (raw?.staffSchedules || []).forEach(staff => {
+  (raw?.staffSchedules || []).forEach((staff) => {
     let staffTotal = 0;
     const staffByType = {};
     let staffHasSessions = false;
+    // Per-clinician non-cancelled session count — feeds Activity's "per session"
+    // adjustment (activity.js). Additive alongside the existing whole-payload
+    // sessionsCount below; both count the same isCancelled flag, just scoped
+    // differently (whole result vs this one clinician).
+    let staffSessions = 0;
 
-    (staff.schedule || []).forEach(session => {
+    (staff.schedule || []).forEach((session) => {
       if (!session.summary?.status?.isCancelled) {
         sessionsCount++;
         staffHasSessions = true;
+        staffSessions++;
       }
-      (session.entries || []).forEach(entry => {
+      (session.entries || []).forEach((entry) => {
         if (entry.diaryEntryType?.value !== 'slot') return;
 
         const type = entry.appointmentType?.name || 'Unknown';
@@ -103,7 +111,7 @@ export function aggregateSlots(raw, { allowedTypes = null, filterPastTimes = fal
     });
 
     if (staffHasSessions) {
-      byStaff.push({ name: staff.name || 'Unknown', total: staffTotal, byType: staffByType });
+      byStaff.push({ name: staff.name || 'Unknown', total: staffTotal, byType: staffByType, sessions: staffSessions });
     }
   });
 
@@ -140,7 +148,7 @@ export function computeStatus(count, minimum, thresholds = { tight: 75, low: 50 
   if (count >= minimum) return 'sufficient';
   const pct = minimum > 0 ? (count / minimum) * 100 : 100;
   if (pct >= thresholds.tight) return 'tight';
-  if (pct >= thresholds.low)   return 'low';
+  if (pct >= thresholds.low) return 'low';
   return 'critical';
 }
 
@@ -158,7 +166,9 @@ export function nextWorkingDayISO() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-export function pad(n) { return String(n).padStart(2, '0'); }
+export function pad(n) {
+  return String(n).padStart(2, '0');
+}
 
 export function addDays(iso, n) {
   const d = new Date(iso + 'T12:00:00');

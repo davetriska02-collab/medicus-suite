@@ -105,6 +105,17 @@
   //              here without a `rep` hit is a TENTATIVE match (surfaced, not
   //              auto-ticked). Shared analytes (ALP ∈ LFT & Bone; calcium ∈ Bone)
   //              are deliberately omitted so they can't establish a panel alone.
+  // `anchors`  — OPTIONAL subset of `analytes`. An anchor is an analyte that, on
+  //              its own, CONFIDENTLY identifies a complete result for the panel —
+  //              so a report carrying just the anchor is auto-tick-eligible without
+  //              the usual 2-analyte signature. Use ONLY when one analyte genuinely
+  //              completes the request in routine UK practice. The motivating case
+  //              is THYROID: labs reflex-test (TSH first; FT4/FT3 only if TSH is
+  //              abnormal), so a TSH-only report IS the complete thyroid result,
+  //              whereas a lone FT4/FT3 is unusual and stays tentative. Anchors are
+  //              applied to THIS-report coverage only (reportCoverage) — NOT to
+  //              resulted-elsewhere history enrichment, where a single analyte from
+  //              a different past report is weaker evidence and stays tentative.
   //
   // VALIDATION STATUS: `rep`/`analytes` are seeded from standard UK panel
   // composition and MUST be confirmed against a parsed report (report-side
@@ -137,6 +148,25 @@
       req: ['full blood count', 'fbc'],
       rep: ['fbc', 'full blood count'],
       analytes: ['haemoglobin', 'haematocrit', 'white cell count', 'platelet', 'neutrophil', 'mcv'],
+      // "Haemoglobin A1c" / "Glycated haemoglobin" share the 'haemoglobin' analyte
+      // token but are an HbA1c test, NOT an FBC. Without this exclude an HbA1c result
+      // named "Haemoglobin A1c" would feed the FBC signature and could surface a
+      // genuinely-outstanding FBC as tentatively resulted. (Mirrors the same exclude
+      // on the base-low-haemoglobin result rule in defaults.json.)
+      exclude: ['a1c', 'glycated', 'glycosylated'],
+    },
+    {
+      // HbA1c (glycated haemoglobin) — diabetes diagnosis / monitoring. One HbA1c
+      // result IS the test, so it is single-analyte. Without this def the outstanding
+      // request "Haemoglobin A1C (HbA1C)" resolved to key=null ("not recognised") and
+      // could never be matched to its own incoming result — the request stayed
+      // outstanding forever. Match terms mirror the HbA1c result rules in defaults.json.
+      key: 'hba1c',
+      label: 'HbA1c',
+      req: ['hba1c', 'haemoglobin a1c', 'glycated haemoglobin', 'glycosylated haemoglobin'],
+      rep: ['hba1c', 'haemoglobin a1c', 'glycated haemoglobin', 'glycosylated haemoglobin'],
+      analytes: ['hba1c', 'haemoglobin a1c', 'glycated haemoglobin', 'glycosylated haemoglobin'],
+      singleAnalyte: true,
     },
     {
       key: 'lft',
@@ -159,6 +189,10 @@
       req: ['thyroid', 'tft'],
       rep: ['tft', 'thyroid', 'thyroid function'],
       analytes: ['tsh', 'free t4', 'ft4', 'free t3', 'thyroid stimulating hormone'],
+      // UK labs reflex-test thyroid (TSH first; FT4/FT3 only if TSH abnormal), so a
+      // TSH-only report is the complete thyroid result and confidently clears the
+      // request. A lone FT4/FT3 (no TSH) is unusual and stays tentative.
+      anchors: ['tsh', 'thyroid stimulating hormone'],
     },
     {
       key: 'fit',
@@ -177,11 +211,112 @@
       singleAnalyte: true,
     },
     {
+      // B12 / folate — a combined haematinics request ("B12 / Folate") satisfied by
+      // a report carrying BOTH analytes. Deliberately NOT singleAnalyte: a 2-analyte
+      // threshold means a report with only B12 (or only folate) stays TENTATIVE —
+      // the other half of the combined request may still be pending, so it must not
+      // auto-clear. A report with both is a confident auto-tick. (A standalone B12-only
+      // or folate-only request will therefore tentatively-match a single-analyte
+      // report — safe under-clear, surfaced for a one-click confirm.) Without this def
+      // the request "B12 / Folate" resolved to key=null and never matched at all.
+      key: 'b12folate',
+      label: 'B12 / folate',
+      req: ['b12', 'folate', 'cobalamin'],
+      rep: ['b12', 'folate', 'cobalamin'],
+      analytes: ['b12', 'cobalamin', 'folate'],
+    },
+    {
       key: 'bone',
       label: 'Bone profile',
       req: ['bone profile'],
       rep: ['bone profile'],
       analytes: ['phosphate', 'adjusted calcium', 'corrected calcium'],
+    },
+    // ── Discrete single-result tests (one result IS the test) ──────────────────
+    // Each below is singleAnalyte: a lone result confidently completes the request.
+    // Terms are kept to GENERIC forms; lab-specific display strings (e.g. HSL's
+    // "Serum 25-HO vit D3 level") belong in the lab database, not here.
+    {
+      key: 'rheumatoid_factor',
+      label: 'Rheumatoid factor',
+      // "RF" deliberately NOT a req synonym — too short, would whole-token match a
+      // stray "rf". Anti-CCP is a DIFFERENT marker and intentionally uncovered, so
+      // an RF report can never clear a co-requested CCP antibody (fail-safe).
+      req: ['rheumatoid factor'],
+      rep: ['rheumatoid factor'],
+      analytes: ['rheumatoid factor'],
+      singleAnalyte: true,
+    },
+    {
+      // HIV combined antigen/antibody screen. norm() keeps '&' but spacing differs,
+      // so "1 & 2" and "1&2" normalise to DIFFERENT tokens and BOTH must be listed.
+      // Bare "hiv" lives in req only (broadens which CARDS resolve) — NOT in analytes,
+      // where it could let an HIV RNA/viral-load row wrongly auto-tick an Ab screen.
+      key: 'hiv',
+      label: 'HIV',
+      req: ['hiv'],
+      rep: ['hiv 1 & 2 antigen antibody', 'hiv 1&2 antigen antibody'],
+      analytes: ['hiv 1 & 2 antigen antibody', 'hiv 1&2 antigen antibody'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'vitamin_d',
+      label: 'Vitamin D',
+      req: ['vitamin d', '25 hydroxyvitamin d', '25 oh vitamin d'],
+      rep: ['vitamin d', '25 hydroxyvitamin d'],
+      analytes: ['vitamin d', '25 hydroxyvitamin d', '25 oh vitamin d'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'urate',
+      label: 'Urate',
+      req: ['urate', 'uric acid'],
+      rep: ['urate', 'uric acid'],
+      analytes: ['urate', 'uric acid'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'crp',
+      label: 'C-reactive protein',
+      req: ['c reactive protein', 'crp'],
+      rep: ['crp', 'c reactive protein'],
+      analytes: ['crp', 'c reactive protein'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'hepatitis_c',
+      label: 'Hepatitis C',
+      req: ['hepatitis c', 'hep c'],
+      rep: ['hepatitis c', 'hep c'],
+      analytes: ['hepatitis c', 'hep c'],
+      singleAnalyte: true,
+    },
+    {
+      // Surface-antigen-specific on purpose: a bare "Hepatitis B" or core-antibody
+      // request must NOT resolve here and be cleared by an HBsAg result (different
+      // marker). Narrow = fail-safe under-clear.
+      key: 'hepatitis_b',
+      label: 'Hepatitis B surface antigen',
+      req: ['hepatitis b surface antigen', 'hep b surface antigen', 'hbsag'],
+      rep: ['hepatitis b surface antigen', 'hep b surface antigen', 'hbsag'],
+      analytes: ['hepatitis b surface antigen', 'hep b surface antigen', 'hbsag'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'syphilis',
+      label: 'Syphilis',
+      req: ['syphilis'],
+      rep: ['syphilis', 'treponema'],
+      analytes: ['syphilis', 'treponema'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'calprotectin',
+      label: 'Faecal calprotectin',
+      req: ['faecal calprotectin', 'calprotectin'],
+      rep: ['faecal calprotectin', 'calprotectin'],
+      analytes: ['faecal calprotectin', 'calprotectin'],
+      singleAnalyte: true,
     },
     // Reproductive / sex-hormone profile — each is its own single-analyte test
     // (one result IS the test). These are commonly co-requested on a fertility /
@@ -436,7 +571,11 @@
         }
         const def = defs.find((d) => d.key === key);
         const min = def && def.singleAnalyte ? 1 : 2;
-        if (set.size >= min) confident.add(key);
+        // An anchor analyte (e.g. TSH for a reflex-tested thyroid panel) confidently
+        // identifies the panel on its own, even below the normal signature threshold.
+        const anchors = def && Array.isArray(def.anchors) ? def.anchors.map((t) => norm(t)) : [];
+        const hasAnchor = anchors.length > 0 && [...set].some((t) => anchors.includes(t));
+        if (set.size >= min || hasAnchor) confident.add(key);
         else tentative.add(key);
       });
     }

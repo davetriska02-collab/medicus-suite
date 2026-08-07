@@ -542,6 +542,7 @@ console.log('\n── Drug-table completeness locks ──');
   }
 
   // benzo_z entry (2026-06-11 KD-33 resolution) — parity with content.js BENZO_Z.
+  // 2026-07-11 Keeper: loprazolam and lormetazepam added (BNF-listed UK benzos).
   const benzo = termsOf('benzo_z');
   for (const t of [
     'diazepam',
@@ -552,12 +553,62 @@ console.log('\n── Drug-table completeness locks ──');
     'chlordiazepoxide',
     'clonazepam',
     'alprazolam',
+    'loprazolam',
+    'lormetazepam',
     'zopiclone',
     'zolpidem',
     'zaleplon',
   ]) {
     assert(benzo.includes(t), `benzo_z terms include "${t}"`);
   }
+
+  // aspirin_ap entry — 2026-07-11 Keeper: brand forms added (nu-seals, caprin, micropirin).
+  const aspirinAp = termsOf('aspirin_ap');
+  for (const t of ['aspirin 75', 'aspirin 300', 'aspirin tablet', 'aspirin dispersible', 'aspirin gastro', 'nu-seals', 'caprin', 'micropirin']) {
+    assert(aspirinAp.includes(t), `aspirin_ap terms include "${t}"`);
+  }
+
+  // antipsych entry — 2026-07-11 Keeper: amisulpride and paliperidone added (NICE CG178 monitoring).
+  const antipsych = termsOf('antipsych');
+  for (const t of ['olanzapine', 'risperidone', 'quetiapine', 'aripiprazole', 'haloperidol', 'clozapine', 'chlorpromazine', 'amisulpride', 'paliperidone']) {
+    assert(antipsych.includes(t), `antipsych terms include "${t}"`);
+  }
+}
+
+// ── 2026-07-25 Keeper: new HIGH_RISK_DRUGS entries ────────────────────────
+console.log('\n── 2026-07-25 Keeper: new monitoring drug entries ──');
+{
+  const termsOf = (id) => (HIGH_RISK_DRUGS.find((d) => d.id === id)?.terms || []).map((t) => t.toLowerCase());
+
+  // leflunomide (BNF / BSR: 3-monthly monitoring, FBC/LFT/U&E)
+  const lef = termsOf('leflunomide');
+  assert(lef.includes('leflunomide'), 'leflunomide entry: term "leflunomide" present');
+  assert(lef.includes('arava'), 'leflunomide entry: brand "arava" present');
+  const lefEntry = HIGH_RISK_DRUGS.find(d => d.id === 'leflunomide');
+  assert(lefEntry && lefEntry.interval === 84, 'leflunomide interval is 84 days (3-monthly)');
+
+  // carbamazepine (BNF: 6-monthly FBC/LFT/U&E/sodium/drug level)
+  const cbz = termsOf('carbamazepine');
+  assert(cbz.includes('carbamazepine'), 'carbamazepine entry: term "carbamazepine" present');
+  assert(cbz.includes('tegretol'), 'carbamazepine entry: brand "tegretol" present');
+  assert(cbz.includes('carbagen'), 'carbamazepine entry: brand "carbagen" present');
+  const cbzEntry = HIGH_RISK_DRUGS.find(d => d.id === 'carbamazepine');
+  assert(cbzEntry && cbzEntry.interval === 182, 'carbamazepine interval is 182 days (6-monthly)');
+
+  // valproate (BNF / MHRA Valproate PPP: annual FBC/LFT/U&E; includes MHRA Feb 2025 DSU brands)
+  const val = termsOf('valproate');
+  for (const t of ['sodium valproate', 'valproate', 'valproic acid', 'epilim', 'episenta', 'orlept', 'convulex', 'depakote', 'belvo', 'dyzantil', 'epival', 'syonell']) {
+    assert(val.includes(t), `valproate entry includes term "${t}"`);
+  }
+  const valEntry = HIGH_RISK_DRUGS.find(d => d.id === 'valproate');
+  assert(valEntry && valEntry.interval === 365, 'valproate interval is 365 days (annual)');
+
+  // finerenone (NICE TA877 / SmPC: U&E/potassium/eGFR every 4 months after initiation)
+  const fin = termsOf('finerenone');
+  assert(fin.includes('finerenone'), 'finerenone entry: term "finerenone" present');
+  assert(fin.includes('kerendia'), 'finerenone entry: brand "kerendia" present');
+  const finEntry = HIGH_RISK_DRUGS.find(d => d.id === 'finerenone');
+  assert(finEntry && finEntry.interval === 120, 'finerenone interval is 120 days (4-monthly)');
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────
