@@ -2,6 +2,45 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.223.0] — 2026-08-07
+
+### Chrome Web Store readiness
+
+Preparation for formal store distribution alongside the existing unpacked
+(shared-folder / GitHub-release) channel:
+
+- **Privacy policy** — new public `PRIVACY.md` at the repo root (required by
+  the store for any extension handling user data). Describes the actual data
+  flows as of this version: local-first processing, NHS terminology/content
+  lookups (term or concept only, never patient identifiers), the
+  clinician-confirmed record tidy-up writes to Medicus itself, and the two
+  **dormant-by-default, practice-opt-in** paths — task-presence (shared
+  folder primary; optional practice-configured hosted store carrying staff
+  identity only, never patient data) and the Transactional API backend proxy
+  (patient care-record bundles transit the manufacturer-operated proxy only
+  when a practice explicitly enables the integration). No analytics or
+  telemetry; Chrome Web Store Limited Use compliance.
+- **Update checker is now gated off on store installs.** New
+  `UpdateChecker.isStoreInstall()` (detects the store-stamped `update_url` in
+  the manifest). On a store install: the service worker schedules no GitHub
+  polling alarm, `checkForUpdate()` short-circuits, and the update
+  banner/manual-check controls in Options and the About panel are hidden —
+  the browser owns updates there. Unpacked installs behave exactly as
+  before.
+- **Leaner release zip** — `release.yml` now excludes internal working
+  documents (`docs/` except the runtime-linked `sentinel-DISCLAIMER.txt`),
+  brand sources (except the runtime-loaded `brand/app-icon.png`),
+  `design-system/`, `CLAUDE.md`, the keeper report, `CHANGELOG.md`,
+  `SECURITY.md` and `SECURITY-AUDIT.md` from the shipped package. Reviewers
+  unpack what we upload; internal appraisals and plans don't belong in it.
+- **Submission pack** — new `docs/STORE-LISTING.md` with paste-ready
+  dashboard text: single-purpose statement, per-permission and per-host
+  justifications (all 8 permissions and all 6 hosts), data-usage
+  disclosures, listing copy, screenshot rules (synthetic data only),
+  unlisted-visibility recommendation, and the backup-export migration path
+  for existing sideloaded installs (store installs get a new extension ID).
+- `SECURITY.md` supported-versions wording updated to cover both channels.
+
 ## [v3.222.0] — 2026-08-04
 
 ### Task presence: the practice's shared folder IS the store

@@ -1148,6 +1148,11 @@ async function initialiseUpdateChecker() {
     console.warn('[Update Checker] module not loaded');
     return;
   }
+  if (self.UpdateChecker.isStoreInstall()) {
+    // Chrome Web Store installs are auto-updated by the browser — no GitHub polling.
+    await chrome.alarms.clear(UPDATE_ALARM);
+    return;
+  }
   // Schedule daily check
   await chrome.alarms.clear(UPDATE_ALARM);
   await chrome.alarms.create(UPDATE_ALARM, { periodInMinutes: 60 * 24, delayInMinutes: 1 });

@@ -981,6 +981,12 @@ function renderAbout() {
     </div>
   `;
 
+  // Store installs are auto-updated by the browser — the manual GitHub check
+  // (and its sideload flow) only applies to unpacked installs.
+  if (window.UpdateChecker?.isStoreInstall?.()) {
+    document.getElementById('checkUpdateBtn')?.parentElement?.remove();
+  }
+
   document.getElementById('checkUpdateBtn')?.addEventListener('click', async () => {
     const btn = document.getElementById('checkUpdateBtn');
     const status = document.getElementById('updateStatus');
