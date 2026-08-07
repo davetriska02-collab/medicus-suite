@@ -25,6 +25,7 @@ import {
   overallAlertLevel as coreOverallAlertLevel,
   validateAlertRule,
 } from './slots-alert-core.js';
+import { createFirstAvailablePanel } from '../shared/first-available.js';
 
 // Practice code resolved from chrome.storage.local['suite.practiceCode'].
 // No hardcoded default — null means the user has not configured a code yet.
@@ -134,6 +135,7 @@ function updateAlertRule(id, patch) {
 
 let container = null;
 let _inFlight = false;
+let _firstAvail = null; // createFirstAvailablePanel() instance, or null
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -168,6 +170,11 @@ export async function init(el) {
     if (typeof savedUi.typesOpen === 'boolean') state.typesOpen = savedUi.typesOpen;
   }
 
+  // "First available appointment" section (shared component, also mounted by
+  // Reception) — created once per init; render() re-attaches it after every
+  // innerHTML rebuild, so its search results survive the module's re-renders.
+  _firstAvail = createFirstAvailablePanel();
+
   render();
   fetchAndRender();
   const stopFresh = attachFreshnessTicker(container);
@@ -183,6 +190,8 @@ export async function init(el) {
     document.removeEventListener('suite:slots:refresh', onRefresh);
     chrome.storage.onChanged.removeListener(onStorageChange);
     stopFresh();
+    _firstAvail?.destroy();
+    _firstAvail = null;
     if (state.bk.reservationId && state.bk.apiBase) {
       releaseReservation(state.bk.apiBase, state.bk.reservationId).catch(() => {});
     }
@@ -427,12 +436,15 @@ function render() {
       ${state.alertEditorOpen ? renderAlertEditor(d) : ''}
       ${!state.loading && d ? renderHeroCard(visible, visibleSum) : ''}
       ${state.loading ? renderSkeleton() : d ? renderData(d, visible, visibleSum) : ''}
+      <section class="slots-section" id="faMount"></section>
       ${renderBookingSection()}
       <div class="foot">${state.lastFetched ? freshnessHtml(state.lastFetched) : ''}</div>
     </div>
   `;
 
   bindEvents();
+  // Re-attach after every innerHTML rebuild — the component keeps its own state.
+  _firstAvail?.attach(container.querySelector('#faMount'));
 }
 
 function renderHeader() {

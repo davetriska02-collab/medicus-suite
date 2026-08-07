@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.223.0] — 2026-08-07
+
+### First available appointment — "when's the next FCP?" answered in one click
+
+New collapsible **First available appointment** section on the Slots tab, and the same as a
+card on the Reception tab (one shared component, `side-panel/modules/shared/first-available.js`
+— shared favourites, both shells). Star the appointment types the desk is asked about all day
+(FCP, GP urgent, bloods, …) and each favourite becomes a one-click check: the earliest slot of
+that type in the next 4 weeks, worded for reading out ("Today 14:30", "Tomorrow 09:15",
+"Tue 11 Aug 2026, 10:00 — in 4 days"), with how many more that day and an "as at HH:MM"
+timestamp. Any other type is reachable through a full selector list, starrable from there.
+
+Deliberately **read-only** — no reserve, no create, no patient identity; booking stays in the
+existing panels with their H-043/H-051 controls (and the fine print says exactly that). Rate-safe
+by construction: lazy-armed (no fetches until the section is opened), every search goes through
+`findSlotsInWindow`'s caps (≤28 days, ≤4 concurrent, abort on 429/5xx) and stops fetching further
+days once a slot is found; "Check all favourites" runs sequentially; favourites are capped at 12.
+"None in the next 4 weeks" and "search stopped early — scheduler busy" stay distinguishable, so
+the desk never tells a patient there's nothing for a month when the search simply got cut short.
+
+Favourites persist at `slots.firstAvailFavs`, sync live across panel/pop-out/reception, and are
+included in suite backups (`shared/io/slot-counter-io.js`). New `test-first-available.js`
+(32 checks) covers the pure core (earliest-slot selection across unordered day results,
+Today/Tomorrow wording, favourites sanitisation/cap) and pins the component read-only.
+
 ## [v3.222.0] — 2026-08-04
 
 ### Task presence: the practice's shared folder IS the store

@@ -4,11 +4,17 @@
 'use strict';
 
 async function slotCounterExport() {
-  const r = await chrome.storage.local.get(['slots.hiddenTypes', 'slots.alertRules', 'slots.pillPrefs']);
+  const r = await chrome.storage.local.get([
+    'slots.hiddenTypes',
+    'slots.alertRules',
+    'slots.pillPrefs',
+    'slots.firstAvailFavs',
+  ]);
   return {
     hiddenTypes: r['slots.hiddenTypes'] ?? [],
     alertRules: r['slots.alertRules'] ?? [],
     pillPrefs: r['slots.pillPrefs'] ?? { order: [], colours: {} },
+    firstAvailFavs: r['slots.firstAvailFavs'] ?? [],
   };
 }
 
@@ -26,6 +32,10 @@ async function slotCounterImport(data, _opts = {}) {
     if (!data.pillPrefs || typeof data.pillPrefs !== 'object' || Array.isArray(data.pillPrefs))
       throw new Error('slots.pillPrefs must be an object.');
     await chrome.storage.local.set({ 'slots.pillPrefs': data.pillPrefs });
+  }
+  if (data.firstAvailFavs !== undefined) {
+    if (!Array.isArray(data.firstAvailFavs)) throw new Error('slots.firstAvailFavs must be an array.');
+    await chrome.storage.local.set({ 'slots.firstAvailFavs': data.firstAvailFavs });
   }
 }
 

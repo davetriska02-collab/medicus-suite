@@ -46,6 +46,7 @@ import {
 
 import { createBookingPanel } from '../shared/booking-panel.js';
 import { bookingGateState } from '../shared/booking-panel-core.js';
+import { createFirstAvailablePanel } from '../shared/first-available.js';
 
 // Canonical "no alert ≠ monitoring complete" caveat (shared/provenance.js,
 // loaded as a classic script in panel.html / pop-out.html). Fall back to the
@@ -73,6 +74,7 @@ let _snapshotRefreshing = false; // true while Sentinel has invalidated mid-navi
 let _patientCardHtml = null; // last-rendered card body — skip no-op re-renders (focus/layout)
 let _cardPatientUuid = null; // uuid behind the last render — collapses the pill on patient change
 let _capturePatient = null; // patient identity PINNED when the capture form opened (see generateSummary)
+let _firstAvail = null; // createFirstAvailablePanel() instance (shared with Slots), or null
 
 const SNAPSHOT_POLL_MS = 10 * 1000;
 
@@ -295,8 +297,16 @@ export async function init(el) {
         <span class="rcp-subtitle">Ask the caller a set of standard questions — a clinician always reviews and decides.</span>
       </div>
       <div class="rcp-card" id="rcpPatientCard"><div class="rcp-card-title">Patient</div><div class="rcp-card-body rcp-muted">Looking for an open patient record…</div></div>
+      <div class="rcp-card" id="rcpFirstAvailCard"><div class="rcp-card-body" id="rcpFirstAvailBody"></div></div>
       <div class="rcp-card" id="rcpCaptureCard"><div class="rcp-card-title">Guided capture</div><div class="rcp-card-body" id="rcpCaptureBody"></div></div>
     </div>`;
+
+  // "First available appointment" — the shared read-only lookup component
+  // (also a section on the Slots tab). No patient, no booking, no gate: it
+  // answers "when is the next <type>?" for the phone, nothing more. The
+  // component renders its own collapsed toggle row as the card title.
+  _firstAvail = createFirstAvailablePanel();
+  _firstAvail.attach(container.querySelector('#rcpFirstAvailBody'));
 
   try {
     const r = await fetch(chrome.runtime.getURL('rules/reception-pathways.json'));
@@ -406,6 +416,8 @@ function cleanup() {
   // component's own `pagehide` listener covers a window/panel close; this
   // covers a module switch, where pagehide never fires.
   destroyBookingCard();
+  _firstAvail?.destroy();
+  _firstAvail = null;
   _bookedLines = [];
   _snapshot = null;
   container = null;
