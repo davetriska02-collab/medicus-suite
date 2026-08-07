@@ -1,0 +1,274 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — "First available appointment" component (first-available.js).
+   Injected by the component itself (id ms-first-available-css) because it is
+   mounted by two modules (Slots + Reception) and module CSS loads per-module.
+   Uses the shell design tokens (panel.css / pop-out.css) — always present. */
+
+.fa-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 0 0 4px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition: opacity var(--fast) var(--ease);
+}
+
+.fa-toggle-row:hover {
+  opacity: 0.75;
+}
+
+.fa-toggle-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.fa-toggle-chevron {
+  font-size: 9px;
+  color: var(--text-5);
+  flex-shrink: 0;
+}
+
+.fa-toggle-text {
+  flex: 1;
+}
+
+.fa-toggle-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: var(--text-4);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 1px 6px;
+}
+
+.fa-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0 4px;
+}
+
+.fa-loading,
+.fa-empty {
+  font-size: 11px;
+  color: var(--text-4);
+  padding: 4px 0;
+}
+
+.fa-error {
+  font-size: 11px;
+  color: var(--red);
+  padding: 4px 0;
+}
+
+/* ── Favourite rows ─────────────────────────────────────────────────────── */
+
+.fa-fav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fa-fav-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px dotted var(--border);
+}
+
+.fa-check-btn {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 2px 10px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+
+.fa-check-btn:hover:not(:disabled) {
+  border-color: var(--accent-line);
+  background: var(--bg-hover);
+}
+
+.fa-check-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.fa-fav-result {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.fa-unstar-btn {
+  background: none;
+  border: none;
+  color: var(--amber);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 2px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.fa-unstar-btn:hover {
+  color: var(--text-2);
+}
+
+/* ── Results ────────────────────────────────────────────────────────────── */
+
+.fa-res {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.fa-res-idle,
+.fa-res-loading {
+  color: var(--text-5);
+}
+
+.fa-res-found {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.fa-res-soon {
+  color: var(--green);
+}
+
+.fa-res-none {
+  color: var(--amber);
+}
+
+.fa-res-error {
+  color: var(--red);
+}
+
+.fa-res-note,
+.fa-daycount {
+  font-family: var(--sans);
+  font-size: 10px;
+  color: var(--text-4);
+}
+
+.fa-asat {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-5);
+  margin-left: 4px;
+}
+
+/* ── Picker row ─────────────────────────────────────────────────────────── */
+
+.fa-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fa-select {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-2);
+  font-family: var(--sans);
+  font-size: 11px;
+  padding: 4px 6px;
+}
+
+.fa-find-btn,
+.fa-checkall-btn {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 4px 10px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color var(--fast) var(--ease);
+}
+
+.fa-find-btn:hover:not(:disabled),
+.fa-checkall-btn:hover:not(:disabled) {
+  border-color: var(--accent-line);
+}
+
+.fa-find-btn:disabled,
+.fa-checkall-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.fa-star-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-4);
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 7px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.fa-star-btn.fa-starred {
+  color: var(--amber);
+}
+
+.fa-star-btn:hover:not(:disabled) {
+  border-color: var(--accent-line);
+  color: var(--amber);
+}
+
+.fa-star-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.fa-picker-result {
+  padding: 2px 0 0 2px;
+}
+
+.fa-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.fa-fineprint {
+  font-size: 10px;
+  color: var(--text-5);
+  line-height: 1.5;
+}
