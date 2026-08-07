@@ -66,7 +66,16 @@ jobs:
             --exclude='.prettierrc.json' \
             --exclude='.prettierignore' \
             --exclude='.githooks/' \
-            --exclude='brand/generate-icons.mjs' \
+            --include='brand/app-icon.png' \
+            --exclude='brand/*' \
+            --include='docs/sentinel-DISCLAIMER.txt' \
+            --exclude='docs/*' \
+            --exclude='design-system/' \
+            --exclude='CLAUDE.md' \
+            --exclude='the-keeper-report-*.md' \
+            --exclude='CHANGELOG.md' \
+            --exclude='SECURITY.md' \
+            --exclude='SECURITY-AUDIT.md' \
             ./ _build/medicus-suite-v${{ steps.version.outputs.version }}/
           cd _build
           zip -r ../medicus-suite-v${{ steps.version.outputs.version }}.zip medicus-suite-v${{ steps.version.outputs.version }}/

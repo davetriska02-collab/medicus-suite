@@ -15,7 +15,7 @@
 //
 // Hardcoded for Dave's repo. If you fork this, change REPO_OWNER and REPO_NAME.
 
-(function(global) {
+(function (global) {
   'use strict';
 
   const REPO_OWNER = 'davetriska02-collab';
@@ -28,12 +28,12 @@
 
   const STORAGE_KEYS = {
     latestVersion: 'suite.update.latestVersion',
-    releaseUrl:    'suite.update.releaseUrl',
-    releaseNotes:  'suite.update.releaseNotes',
-    downloadUrl:   'suite.update.downloadUrl',
-    checkedAt:     'suite.update.checkedAt',
-    error:         'suite.update.error',
-    etag:          'suite.update.etag',
+    releaseUrl: 'suite.update.releaseUrl',
+    releaseNotes: 'suite.update.releaseNotes',
+    downloadUrl: 'suite.update.downloadUrl',
+    checkedAt: 'suite.update.checkedAt',
+    error: 'suite.update.error',
+    etag: 'suite.update.etag',
   };
 
   // ── URL allowlist guard ─────────────────────────────────────────────────────
@@ -48,8 +48,23 @@
       if (h === 'github.com' || h === 'api.github.com' || h.endsWith('.githubusercontent.com')) {
         return raw;
       }
-    } catch (_) { /* unparseable */ }
+    } catch (_) {
+      /* unparseable */
+    }
     return '';
+  }
+
+  // ── Store-install detection ─────────────────────────────────────────────────
+  // Chrome stamps `update_url` into the manifest of any extension installed
+  // from the Chrome Web Store; unpacked/sideloaded installs have none. A store
+  // install is auto-updated by the browser, so the GitHub release polling and
+  // the sideload update banner are disabled entirely for those installs.
+  function isStoreInstall() {
+    try {
+      return !!chrome.runtime.getManifest().update_url;
+    } catch (_) {
+      return false;
+    }
   }
 
   // ── Semver comparison ───────────────────────────────────────────────────────
@@ -62,8 +77,12 @@
   }
 
   function compareVersions(a, b) {
-    const pa = normaliseVersion(a).split('.').map(n => parseInt(n, 10) || 0);
-    const pb = normaliseVersion(b).split('.').map(n => parseInt(n, 10) || 0);
+    const pa = normaliseVersion(a)
+      .split('.')
+      .map((n) => parseInt(n, 10) || 0);
+    const pb = normaliseVersion(b)
+      .split('.')
+      .map((n) => parseInt(n, 10) || 0);
     const len = Math.max(pa.length, pb.length);
     for (let i = 0; i < len; i++) {
       const x = pa[i] || 0;
@@ -85,6 +104,10 @@
     const _fetch = fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
     if (!_fetch) return { ok: false, error: 'No fetch impl' };
 
+    if (isStoreInstall()) {
+      return { ok: true, skipped: true, reason: 'Store install — the browser manages updates' };
+    }
+
     // Respect cooldown unless forced
     if (!force) {
       const stored = await chrome.storage.local.get(STORAGE_KEYS.checkedAt);
@@ -97,7 +120,7 @@
     // Build request headers; add If-None-Match if we have a stored ETag
     const stored = await chrome.storage.local.get([STORAGE_KEYS.etag]);
     const storedEtag = stored[STORAGE_KEYS.etag] || null;
-    const reqHeaders = { 'Accept': 'application/vnd.github+json' };
+    const reqHeaders = { Accept: 'application/vnd.github+json' };
     if (storedEtag) reqHeaders['If-None-Match'] = storedEtag;
 
     let raw;
@@ -142,16 +165,16 @@
     const releaseUrl = allowGithubUrl(raw?.html_url || '');
     const releaseNotes = raw?.body || '';
     // Prefer a zip asset if one is attached; fall back to the auto-generated source zip
-    const zipAsset = (raw?.assets || []).find(a => /\.zip$/i.test(a?.name || ''));
+    const zipAsset = (raw?.assets || []).find((a) => /\.zip$/i.test(a?.name || ''));
     const downloadUrl = allowGithubUrl(zipAsset?.browser_download_url || raw?.zipball_url || '');
 
     await chrome.storage.local.set({
       [STORAGE_KEYS.latestVersion]: latestVersion,
-      [STORAGE_KEYS.releaseUrl]:    releaseUrl,
-      [STORAGE_KEYS.releaseNotes]:  releaseNotes,
-      [STORAGE_KEYS.downloadUrl]:   downloadUrl,
-      [STORAGE_KEYS.checkedAt]:     Date.now(),
-      [STORAGE_KEYS.error]:         null,
+      [STORAGE_KEYS.releaseUrl]: releaseUrl,
+      [STORAGE_KEYS.releaseNotes]: releaseNotes,
+      [STORAGE_KEYS.downloadUrl]: downloadUrl,
+      [STORAGE_KEYS.checkedAt]: Date.now(),
+      [STORAGE_KEYS.error]: null,
     });
 
     return { ok: true, latestVersion, releaseUrl, releaseNotes, downloadUrl };
@@ -163,12 +186,12 @@
     const r = await chrome.storage.local.get(Object.values(STORAGE_KEYS));
     return {
       latestVersion: r[STORAGE_KEYS.latestVersion] || null,
-      releaseUrl:    r[STORAGE_KEYS.releaseUrl]    || null,
-      releaseNotes:  r[STORAGE_KEYS.releaseNotes]  || null,
-      downloadUrl:   r[STORAGE_KEYS.downloadUrl]   || null,
-      checkedAt:     r[STORAGE_KEYS.checkedAt]     || null,
-      error:         r[STORAGE_KEYS.error]         || null,
-      etag:          r[STORAGE_KEYS.etag]          || null,
+      releaseUrl: r[STORAGE_KEYS.releaseUrl] || null,
+      releaseNotes: r[STORAGE_KEYS.releaseNotes] || null,
+      downloadUrl: r[STORAGE_KEYS.downloadUrl] || null,
+      checkedAt: r[STORAGE_KEYS.checkedAt] || null,
+      error: r[STORAGE_KEYS.error] || null,
+      etag: r[STORAGE_KEYS.etag] || null,
     };
   }
 
@@ -196,6 +219,7 @@
     RELEASES_URL,
     STORAGE_KEYS,
     allowGithubUrl,
+    isStoreInstall,
     normaliseVersion,
     compareVersions,
     isNewer,

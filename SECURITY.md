@@ -23,9 +23,11 @@ finding recorded in [`SECURITY-AUDIT.md`](SECURITY-AUDIT.md).
 
 ## Supported versions
 
-Only the **latest released version** is supported. The extension checks this
-repository daily and surfaces an update banner; users are expected to keep
-current. Fixes ship in the newest release rather than being back-ported.
+Only the **latest released version** is supported. Fixes ship in the newest
+release rather than being back-ported. Chrome Web Store installs are updated
+automatically by the browser; manually installed (unpacked) copies check this
+repository daily and surface an update banner, and those users are expected to
+keep current.
 
 ## Scope
 
@@ -81,9 +83,9 @@ Rules for the per-module IO files under [`shared/io/`](shared/io/):
   [`shared/io/sentinel-io.js`](shared/io/sentinel-io.js)).
 - **Allowlist, not blocklist.** Export functions enumerate the exact keys they
   emit rather than dumping a storage namespace, so a newly-added storage key is
-  *not* exported until someone deliberately adds it.
+  _not_ exported until someone deliberately adds it.
 - **Adding a new IO module?** Before adding a key to a `*Export()` function, ask
-  the referrals test: *"could a real patient appear in this value?"* If yes, keep
+  the referrals test: _"could a real patient appear in this value?"_ If yes, keep
   it live-only and add the exclusion rationale as a comment next to the key list,
   plus an allowlist entry in `test-backup-coverage.js`.
 - **Import is hardened.** Every import boundary type-validates the payload,

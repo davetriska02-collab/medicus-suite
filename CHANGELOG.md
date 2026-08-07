@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.126.0] — 2026-08-07
+
+### Chrome Web Store readiness
+
+Preparation for formal store distribution alongside the existing
+GitHub-release (unpacked) channel:
+
+- **Privacy policy** — new public `PRIVACY.md` at the repo root (required by
+  the store for any extension handling user data). States the architecture
+  accurately: local-only processing, zero patient-data egress, no analytics
+  or telemetry, Limited Use compliance.
+- **Update checker is now gated off on store installs.** New
+  `UpdateChecker.isStoreInstall()` (detects the store-stamped `update_url` in
+  the manifest). On a store install: the service worker schedules no GitHub
+  polling alarm, `checkForUpdate()` short-circuits, and the update
+  banner/manual-check controls in Options and the About panel are hidden —
+  the browser owns updates there. Unpacked installs behave exactly as
+  before.
+- **Leaner release zip** — `release.yml` now excludes internal working
+  documents (`docs/` except the runtime-linked `sentinel-DISCLAIMER.txt`),
+  brand sources (except the runtime-loaded `brand/app-icon.png`),
+  `design-system/`, `CLAUDE.md`, the keeper report, `CHANGELOG.md`,
+  `SECURITY.md` and `SECURITY-AUDIT.md` from the shipped package. Reviewers unpack what we upload; internal
+  appraisals and plans don't belong in it.
+- **Submission pack** — new `docs/STORE-LISTING.md` with paste-ready
+  dashboard text: single-purpose statement, per-permission and per-host
+  justifications, data-usage answers, listing copy, screenshot rules
+  (synthetic data only), unlisted-visibility recommendation, and the
+  backup-export migration path for existing sideloaded installs (store
+  installs get a new extension ID).
+- `SECURITY.md` supported-versions wording updated to cover both channels.
+
 ## [v3.125.0] — 2026-06-20
 
 ### Fix: urine electrolytes no longer matches a blood U&E request

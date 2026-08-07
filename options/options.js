@@ -2186,6 +2186,11 @@ rmSaveBtn?.addEventListener('click', async () => {
   const btn = document.getElementById('checkUpdateBtn');
   const result = document.getElementById('checkUpdateResult');
   if (!btn || !window.UpdateChecker) return;
+  if (window.UpdateChecker.isStoreInstall && window.UpdateChecker.isStoreInstall()) {
+    // Store installs are auto-updated by the browser — no manual GitHub check.
+    btn.style.display = 'none';
+    return;
+  }
 
   function formatTimeAgo(ts) {
     if (!ts) return 'never';
@@ -2268,6 +2273,10 @@ rmSaveBtn?.addEventListener('click', async () => {
     if (!window.UpdateChecker) return;
     const banner = document.getElementById('updateBanner');
     if (!banner) return;
+    if (window.UpdateChecker.isStoreInstall && window.UpdateChecker.isStoreInstall()) {
+      banner.style.display = 'none';
+      return;
+    }
 
     // Trigger a check (respects internal 23h cooldown — won't hammer GitHub)
     window.UpdateChecker.checkForUpdate().catch(() => {});
