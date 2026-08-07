@@ -281,6 +281,30 @@ export function bookedCaptureLine(summary) {
   return `Booked: ${type} — ${when} — reason: ${reason}`;
 }
 
+// ── Type-ahead filter for appointment-type pickers ────────────────────────────
+
+/**
+ * filterAppointmentTypes(types, query) → filtered [{ value, label }]
+ *
+ * Case-insensitive match of every whitespace-separated query word against the
+ * type LABEL (all words must appear somewhere — "ac gp" matches "GP Acute").
+ * An empty/whitespace query returns every type unchanged. Shared by all three
+ * appointment-type pickers (slots booking, reception booking panel,
+ * first-available) so "type 'acute' to filter" behaves identically everywhere.
+ */
+export function filterAppointmentTypes(types, query) {
+  const list = Array.isArray(types) ? types : [];
+  const words = String(query || '')
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0) return list;
+  return list.filter((t) => {
+    const label = String((t && t.label) || '').toLowerCase();
+    return words.every((w) => label.includes(w));
+  });
+}
+
 export default {
   BOOKING_DATE_MODES,
   BOOKING_GATE_MESSAGES,
@@ -296,4 +320,5 @@ export default {
   formatSlotWhen,
   orderSlotDays,
   bookedCaptureLine,
+  filterAppointmentTypes,
 };

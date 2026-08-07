@@ -194,6 +194,12 @@ const ALLOWLIST = new Set([
   // (see side-panel/modules/reception/reception.js goToLeaflet):
   'leaflets.pendingQuery',
 
+  // Transient cross-module handoff — written by the first-available component's
+  // "Book" button when the Slots module isn't mounted to claim the event, read
+  // once and removed by slots.js init (2-minute freshness window). Not user
+  // config (see side-panel/modules/shared/first-available.js bookHandoff):
+  'slots.pendingBooking',
+
   // Transient print payload — written on "Print reception handout", read by
   // handout.html, overwritten on every print. Not user config (documented in
   // side-panel/modules/sweep/sweep.js):

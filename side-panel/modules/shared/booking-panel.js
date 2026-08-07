@@ -85,6 +85,7 @@ import {
   slotDate,
   orderSlotDays,
   bookedCaptureLine,
+  filterAppointmentTypes,
 } from './booking-panel-core.js';
 
 const SLOT_LIMIT = 30; // plan D3.1 — window searches stop collecting at 30 slots
@@ -135,6 +136,7 @@ export function createBookingPanel(opts) {
     // browse
     step: 'browse', // browse | confirm | booked
     selectedTypeId: '',
+    typeFilter: '', // typable filter over the type list ("acute" → matching types)
     dateMode: 'day',
     date: todayIso(),
     searching: false,
@@ -511,20 +513,40 @@ export function createBookingPanel(opts) {
     return '';
   }
 
-  function renderTypeRow() {
-    const opts = st.types
+  // The type-select's options under the current typable filter. The selected
+  // type always stays in the list (even when it stops matching the filter) so
+  // the select can never show a blank while state still holds a selection.
+  function typeOptionsHtml() {
+    const filtered = filterAppointmentTypes(st.types, st.typeFilter);
+    const list = filtered.slice();
+    if (st.selectedTypeId && !list.some((t) => t.value === st.selectedTypeId)) {
+      const sel = st.types.find((t) => t.value === st.selectedTypeId);
+      if (sel) list.unshift(sel);
+    }
+    const opts = list
       .map(
         (t) =>
           `<option value="${esc(t.value)}"${st.selectedTypeId === t.value ? ' selected' : ''}>${esc(t.label)}</option>`
       )
       .join('');
+    const head =
+      filtered.length === 0
+        ? `<option value="" disabled>No types match &ldquo;${esc(st.typeFilter)}&rdquo;</option>`
+        : `<option value="">${st.typeFilter ? `${filtered.length} match${filtered.length === 1 ? '' : 'es'}&hellip;` : 'Choose appointment type&hellip;'}</option>`;
+    return head + opts;
+  }
+
+  function renderTypeRow() {
     return `
       <div class="rcp-bk-row">
-        <label class="rcp-bk-label" for="rcpBkType">Type</label>
-        <select class="rcp-bk-select" id="rcpBkType"${st.types.length === 0 ? ' disabled' : ''}>
-          <option value="">Choose appointment type&hellip;</option>
-          ${opts}
-        </select>
+        <label class="rcp-bk-label" for="rcpBkTypeFilter">Type</label>
+        <div class="rcp-bk-type-picker">
+          <input type="text" class="rcp-bk-text rcp-bk-type-filter" id="rcpBkTypeFilter" value="${esc(st.typeFilter)}"
+            placeholder="Type to filter &mdash; e.g. acute" autocomplete="off" aria-label="Filter appointment types">
+          <select class="rcp-bk-select" id="rcpBkType"${st.types.length === 0 ? ' disabled' : ''}>
+            ${typeOptionsHtml()}
+          </select>
+        </div>
       </div>`;
   }
 
@@ -703,6 +725,29 @@ export function createBookingPanel(opts) {
 
   function bind() {
     if (!mountEl) return;
+    // Typable type filter. Only the <select>'s options are rebuilt per
+    // keystroke — a full render would recreate and blur the input mid-word.
+    // A single remaining match auto-selects (that state change DOES re-render,
+    // with focus restored) so "acute → Find slots" is two actions, not three.
+    mountEl.querySelector('#rcpBkTypeFilter')?.addEventListener('input', (e) => {
+      st.typeFilter = e.target.value;
+      const filtered = filterAppointmentTypes(st.types, st.typeFilter);
+      if (filtered.length === 1 && filtered[0].value !== st.selectedTypeId) {
+        st.selectedTypeId = filtered[0].value;
+        resetSearch();
+        render();
+        const input = mountEl.querySelector('#rcpBkTypeFilter');
+        if (input) {
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+        return;
+      }
+      const selectEl = mountEl.querySelector('#rcpBkType');
+      if (selectEl) selectEl.innerHTML = typeOptionsHtml();
+      const searchBtn = mountEl.querySelector('#rcpBkSearch');
+      if (searchBtn) searchBtn.disabled = !(st.selectedTypeId && !st.searching && st.phase === 'ready');
+    });
     mountEl.querySelector('#rcpBkType')?.addEventListener('change', (e) => {
       st.selectedTypeId = e.target.value;
       resetSearch();

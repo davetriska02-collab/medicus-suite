@@ -1059,27 +1059,36 @@ html[data-theme='dark'] .staff-split .split-pm {
   margin-top: 8px;
 }
 
+/* A button-shaped bar (matches the first-available opener) — the entry point
+   to a booking must look pressable, not like a text heading. */
 .bk-toggle-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  padding: 0 0 4px;
-  margin-bottom: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  margin-bottom: 8px;
   cursor: pointer;
   text-align: left;
   font-family: var(--sans);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-2);
-  transition: opacity var(--fast) var(--ease);
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
 }
 
 .bk-toggle-row:hover {
-  opacity: 0.75;
+  border-color: var(--accent-line);
+  background: var(--bg-hover);
+}
+
+.bk-toggle-row[aria-expanded='true'] {
+  border-color: var(--accent-line);
 }
 
 .bk-toggle-row:focus-visible {
@@ -1176,6 +1185,21 @@ html[data-theme='dark'] .staff-split .split-pm {
 .bk-text-input:focus-visible {
   border-color: var(--accent);
   outline: none;
+}
+
+/* Typable type picker — filter input stacked over the (filtered) select */
+.bk-type-picker {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bk-type-picker .bk-select,
+.bk-type-filter {
+  width: 100%;
+  flex: none;
 }
 
 /* Primary action button — Find slots / Confirm */

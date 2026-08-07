@@ -957,6 +957,21 @@
   border-color: var(--accent);
 }
 
+/* Typable type picker — filter input stacked over the (filtered) select */
+.rcp-bk-type-picker {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rcp-bk-type-picker .rcp-bk-select,
+.rcp-bk-type-filter {
+  width: 100%;
+  flex: none;
+}
+
 /* Date-mode chips: Specific day · 1 wk · 2 wks · 3 wks · 4 wks */
 .rcp-bk-modes {
   display: flex;
