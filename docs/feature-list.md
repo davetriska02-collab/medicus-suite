@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.222.0
-**Generated:** 2026-08-03 (automated)
+**Version:** v3.223.0
+**Generated:** 2026-08-07 (automated)
 
 ## What it is
 
@@ -182,6 +182,7 @@ The shipped alert library carries 35 starter alerts a practice can enable (32 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.223.0 (2026-08-07)** — Chrome Web Store readiness: a public privacy policy (`PRIVACY.md`), a store submission pack (`docs/STORE-LISTING.md`), a slimmer release package, and the GitHub update check disabled automatically on store-installed copies (the browser handles their updates).
 - **v3.219.0 (2026-08-03)** — "Change significance": batch re-grade problems between Major/Minor/Unknown via Medicus's own edit form, with per-row current-grade display and explicit move-by-move confirm; the problems widget trigger renamed to "Organise problems?".
 - **v3.218.0 (2026-08-03)** — The record-tidy widgets (bulk end, nesting, allergy cleanup) now work on any page that renders the Clinical Summary panel — appointment and consultation views included — via a page-world bridge that reads the patient from the page's own summary fetch, with a wrong-patient row-match guard.
 - **v3.217.0 (2026-08-03)** — Nest problems gains an in-panel "Merge duplicate copies" section: same-code duplicate problems merged down to a chosen keeper using the Duplicate Checker's confirmed removal contract, with children-protected copies excluded and additional-info copies cautioned.
