@@ -297,14 +297,15 @@ export async function init(el) {
         <span class="rcp-subtitle">Ask the caller a set of standard questions — a clinician always reviews and decides.</span>
       </div>
       <div class="rcp-card" id="rcpPatientCard"><div class="rcp-card-title">Patient</div><div class="rcp-card-body rcp-muted">Looking for an open patient record…</div></div>
-      <div class="rcp-card" id="rcpFirstAvailCard"><div class="rcp-card-body" id="rcpFirstAvailBody"></div></div>
+      <div id="rcpFirstAvailBody"></div>
       <div class="rcp-card" id="rcpCaptureCard"><div class="rcp-card-title">Guided capture</div><div class="rcp-card-body" id="rcpCaptureBody"></div></div>
     </div>`;
 
   // "First available appointment" — the shared read-only lookup component
   // (also a section on the Slots tab). No patient, no booking, no gate: it
   // answers "when is the next <type>?" for the phone, nothing more. The
-  // component renders its own collapsed toggle row as the card title.
+  // component renders its own card shell (.fa-shell) — mounted into a plain
+  // div, not a .rcp-card, so there is no card-in-card.
   _firstAvail = createFirstAvailablePanel();
   _firstAvail.attach(container.querySelector('#rcpFirstAvailBody'));
 

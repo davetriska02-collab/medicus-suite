@@ -4,41 +4,46 @@
    mounted by two modules (Slots + Reception) and module CSS loads per-module.
    Uses the shell design tokens (panel.css / pop-out.css) — always present. */
 
-/* Section opener — a proper button-shaped bar, not a text line, so the entry
-   point to the whole flow is visibly clickable. */
+/* The whole component is one card (design-crit Decision F) — the shell IS
+   the card on both hosts, so a host never wraps it in a card of its own. */
+.fa-shell {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  margin-bottom: 10px;
+}
+
+/* Disclosure toggle — borderless full-width row inside the shell; the shell's
+   own border/shadow is the card, so the toggle carries none of its own. */
 .fa-toggle-row {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  background: transparent;
+  border: none;
+  border-radius: 0;
   padding: 8px 10px;
-  margin-bottom: 8px;
   cursor: pointer;
   text-align: left;
   font-family: var(--sans);
   font-size: 12px;
   font-weight: 600;
   color: var(--text-2);
-  transition:
-    border-color var(--fast) var(--ease),
-    background var(--fast) var(--ease);
+  transition: background var(--fast) var(--ease);
 }
 
 .fa-toggle-row:hover {
-  border-color: var(--accent-line);
   background: var(--bg-hover);
 }
 
-.fa-toggle-row:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.fa-toggle-row:active {
+  background: var(--bg-hover);
 }
 
 .fa-toggle-row[aria-expanded='true'] {
-  border-color: var(--accent-line);
+  border-bottom: 1px solid var(--border);
 }
 
 .fa-toggle-chevron {
@@ -62,39 +67,101 @@
   padding: 1px 6px;
 }
 
+/* Freshness, hoisted out of every tile into the ONE stamp in the disclosure
+   header row (design-crit Decision D) — right-aligned via fa-toggle-text's
+   flex:1 pushing everything after it to the edge. */
+.fa-toggle-asat {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-4);
+  flex-shrink: 0;
+}
+
 .fa-body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 2px 0 4px;
+  padding: 10px;
 }
 
-.fa-loading,
-.fa-empty {
+.fa-loading {
+  font-family: var(--sans);
   font-size: 11px;
   color: var(--text-4);
   padding: 4px 0;
 }
 
-.fa-error {
-  font-size: 11px;
-  color: var(--red);
-  padding: 4px 0;
+/* ── Arm-failure banner — the suite's plumbing-warning idiom (Decision E) ─── */
+/* Amber, never red: this is "the tool could not complete", not a clinical
+   alert. Red is used for nothing in this component. */
+.fa-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-md);
+  color: var(--amber);
+  padding: 8px 10px;
 }
 
-/* ── Favourite tiles — big tap targets ──────────────────────────────────── */
+.fa-error-icon {
+  flex-shrink: 0;
+  display: flex;
+}
+
+.fa-error-msg {
+  flex: 1;
+  font-family: var(--sans);
+  font-size: 11px;
+}
+
+.fa-retry-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-sm);
+  color: var(--amber);
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease);
+}
+
+.fa-retry-btn:hover {
+  background: var(--bg-hover);
+}
+
+.fa-retry-btn:active {
+  background: var(--bg-hover);
+}
+
+/* ── Favourites — one card per favourite (design-crit Decision A) ─────────── */
 
 .fa-tile-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-.fa-tile-wrap {
+.fa-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
+  transition:
+    border-color var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
+}
+
+.fa-card:hover {
+  border-color: var(--border-hi);
+  box-shadow: var(--shadow-2);
 }
 
 .fa-tile {
@@ -103,38 +170,34 @@
   align-items: flex-start;
   gap: 5px;
   width: 100%;
-  min-height: 58px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  min-height: 46px;
+  background: transparent;
+  border: none;
   padding: 8px 26px 8px 10px;
   cursor: pointer;
   text-align: left;
   font-family: var(--sans);
-  transition:
-    border-color var(--fast) var(--ease),
-    background var(--fast) var(--ease);
+  transition: background var(--fast) var(--ease);
 }
 
 .fa-tile:hover:not(:disabled) {
-  border-color: var(--accent-line);
   background: var(--bg-hover);
 }
 
-.fa-tile:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.fa-tile:active:not(:disabled) {
+  background: var(--bg-hover);
 }
 
 .fa-tile:disabled {
-  opacity: 0.5;
-  cursor: default;
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
+/* Type name — demoted: a card label, not a headline (Decision B). */
 .fa-tile-name {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-1);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
@@ -150,12 +213,12 @@
   right: 4px;
   background: none;
   border: none;
-  color: var(--text-5);
+  color: var(--text-4);
   font-size: 10px;
   line-height: 1;
   padding: 3px 5px;
   cursor: pointer;
-  border-radius: var(--r-sm, 4px);
+  border-radius: var(--r-sm);
 }
 
 .fa-tile-unstar:hover {
@@ -163,9 +226,126 @@
   background: var(--bg-hover);
 }
 
-/* The accent action — visibly THE button that starts a booking. */
-.fa-book-btn {
+.fa-tile-unstar:active {
+  background: var(--bg-hover);
+}
+
+/* Footer — ALWAYS rendered so grid rows stay flush; content/behaviour change
+   with state (Decision A). */
+.fa-foot {
   width: 100%;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--r-md) var(--r-md);
+  padding: 5px 10px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.fa-foot:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.fa-foot:active:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.fa-foot:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  color: var(--text-4);
+}
+
+/* "Book" — the one accent action in the component. */
+.fa-foot-book {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.fa-foot-book:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--bg-deep);
+}
+
+.fa-foot-book:active:not(:disabled) {
+  background: var(--accent);
+  color: var(--bg-deep);
+}
+
+/* "None found" — quieter than the disabled default. */
+.fa-foot-none:disabled {
+  color: var(--text-5);
+}
+
+/* ── Results — voice recast (Decision B/C) ─────────────────────────────────── */
+
+.fa-res {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.fa-res-idle {
+  font-family: var(--sans);
+  font-size: 10px;
+  color: var(--text-5);
+}
+
+.fa-res-loading {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-4);
+}
+
+/* A found time is the primary read — ink, mono, tabular, regardless of how
+   soon it is. No green anywhere in this component (Decision C). */
+.fa-res-found {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A genuine "nothing found" carries no hue — amber is reserved for "the tool
+   could not complete", never for a clean negative result. */
+.fa-res-none {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-4);
+}
+
+/* Per-type fetch errors — amber ink, never red (Decision C). */
+.fa-res-error {
+  font-family: var(--sans);
+  font-size: 10px;
+  color: var(--amber);
+}
+
+/* "The search was cut short" must outrank the day-count note, not blend with
+   it — weight + amber ink, not just size (Decision C). */
+.fa-res-caveat {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--amber);
+}
+
+.fa-daycount {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Picker-only inline "Book" (the favourites use fa-foot-book instead). */
+.fa-book-btn {
   background: var(--accent-dim);
   border: 1px solid var(--accent-line);
   border-radius: var(--r-md);
@@ -180,14 +360,14 @@
     border-color var(--fast) var(--ease);
 }
 
-.fa-book-btn:hover {
-  background: var(--accent-hover, var(--bg-hover));
+.fa-book-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
   border-color: var(--accent);
 }
 
-.fa-book-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.fa-book-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .fa-book-inline {
@@ -196,60 +376,41 @@
   vertical-align: baseline;
 }
 
-/* ── Results ────────────────────────────────────────────────────────────── */
+/* ── Empty state (Decision H) ──────────────────────────────────────────────── */
 
-.fa-res {
-  font-family: var(--mono);
-  font-size: 11px;
-}
-
-.fa-res-idle,
-.fa-res-loading {
+.fa-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px 10px;
+  text-align: center;
   color: var(--text-5);
+}
+
+.fa-empty span {
   font-family: var(--sans);
-}
-
-.fa-res-found {
-  color: var(--text-1);
-  font-weight: 600;
-}
-
-.fa-res-soon {
-  color: var(--green);
-}
-
-.fa-res-none {
-  color: var(--amber);
-}
-
-.fa-res-error {
-  color: var(--red);
-}
-
-.fa-res-note,
-.fa-daycount {
-  font-family: var(--sans);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-4);
 }
 
-.fa-asat {
-  font-family: var(--mono);
-  font-size: 9px;
-  color: var(--text-5);
-  margin-left: 4px;
+.fa-snapshot-note {
+  font-family: var(--sans);
+  font-size: 10px;
+  color: var(--text-4);
 }
 
 /* ── Picker: typable filter + select ────────────────────────────────────── */
 
+/* Section-header recipe (Decision G) — sentence case, no rule; space
+   separates, not a border. */
 .fa-picker-label {
-  font-size: 10px;
+  font-family: var(--sans);
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-4);
-  border-top: 1px solid var(--border);
-  padding-top: 8px;
+  color: var(--text-2);
+  margin-top: 12px;
 }
 
 .fa-picker {
@@ -267,11 +428,6 @@
   font-family: var(--sans);
   font-size: 11px;
   padding: 6px 8px;
-}
-
-.fa-filter-input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
 }
 
 .fa-select {
@@ -313,10 +469,15 @@
   border-color: var(--accent-line);
 }
 
+.fa-find-btn:active:not(:disabled),
+.fa-checkall-btn:active:not(:disabled) {
+  background: var(--bg-hover);
+}
+
 .fa-find-btn:disabled,
 .fa-checkall-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .fa-star-btn {
@@ -338,7 +499,7 @@
 
 .fa-star-btn.fa-starred {
   color: var(--amber);
-  border-color: var(--amber-line, var(--border-hi));
+  border-color: var(--amber-line);
 }
 
 .fa-star-btn:hover:not(:disabled) {
@@ -346,9 +507,13 @@
   color: var(--amber);
 }
 
+.fa-star-btn:active:not(:disabled) {
+  background: var(--bg-hover);
+}
+
 .fa-star-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .fa-picker-result {

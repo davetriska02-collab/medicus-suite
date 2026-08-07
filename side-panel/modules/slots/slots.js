@@ -889,7 +889,7 @@ function renderBookingBrowse() {
         <div class="bk-type-picker">
           <input type="text" class="bk-text-input bk-type-filter" id="bkTypeFilter" value="${escHtml(bk.typeFilter)}"
             placeholder="Type to filter &mdash; e.g. acute" autocomplete="off" aria-label="Filter appointment types" />
-          <select class="bk-select" id="bkType"${bk.types.length === 0 ? ' disabled' : ''}>
+          <select class="bk-select" id="bkType" aria-label="Appointment type"${bk.types.length === 0 ? ' disabled' : ''}>
             ${bkTypeOptionsHtml()}
           </select>
         </div>
@@ -899,7 +899,7 @@ function renderBookingBrowse() {
         <input type="date" class="date-input bk-date-input" id="bkDate" value="${escHtml(bkDate)}" max="2099-12-31" />
       </div>
       <button class="bk-action-btn" id="bkSearch"${canSearch ? '' : ' disabled'}>Find slots</button>
-      ${slotsHtml}
+      <div aria-live="polite">${slotsHtml}</div>
     </div>
   `;
 }
