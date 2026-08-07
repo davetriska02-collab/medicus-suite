@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.222.0
+**Version:** v3.223.0
 **Generated:** 2026-08-03 (automated)
 
 ## What it is
@@ -29,6 +29,7 @@ Available appointment slots by type for any date, read directly from the Medicus
 - Slot counts by appointment type, with configurable alert thresholds
 - CSV export
 - Live updates via the practice's Pusher feed, without the scheduling page open
+- "First available appointment" lookup: starred favourite types checked in one click, plus a full type selector — earliest slot in the next 4 weeks, read-only (booking stays in the booking panels); the same section appears as a card on the Reception tab
 
 ### Monitoring (Sentinel)
 The clinical context sidebar for whichever patient record is open. Checks active medications, problems, and recent results against drug-monitoring intervals and this year's QOF indicators, showing a plain green/amber/red chip for each. Passive display only — never writes to the record, never orders anything, never tells the clinician what to do.
@@ -76,6 +77,7 @@ A reception-facing view of whichever patient's record is open, plus optional gui
 - Guided capture pathways per presenting problem, red flags surfaced first
 - Structured plain-text output to paste into the triage entry — capture only, never a diagnosis
 - Inline "book an appointment" panel, gated to an open record with no unresolved red flag
+- "First available appointment" card (shared with the Slot Counter tab): one-click "when is the next FCP?" answers for the phone — read-only, no patient record needed
 
 ### Signing Queue
 Every open repeat-prescription request, alongside that patient's recorded drug-monitoring currency, so the end-of-day signing pile can be worked riskiest-first instead of opening each record blind.
