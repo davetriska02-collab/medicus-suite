@@ -7,7 +7,12 @@
 // a child problem. Medicus's own UI does this one slideover at a time with a
 // manual picker. This widget scans the active problem list, uses SNOMED
 // ancestry BETWEEN the problems already on the record to suggest child→parent
-// pairs, and lets the clinician confirm each link individually.
+// pairs, and exposes both the scan and the write path (via window.ProblemNesting,
+// near the bottom of this file) to problem-nesting-canvas.js — the drag-and-drop
+// tree/tray overlay (2026-08-08 request) is where the clinician actually
+// confirms and creates links now. This file itself still owns the scan, the
+// "Merge duplicate copies" and "Change significance" accordion sections, and
+// every write — the canvas never writes to Medicus directly.
 //
 // CONFIRMED CONTRACT (live capture 2026-08-03, scripts/problem-nesting-capture.js —
 // full write-up in docs/learnings-problem-nesting-api.md):
@@ -21,14 +26,18 @@
 //        cheap read per problem.
 //   POST /clinical/problem/update-parent-problem
 //        body: { patientId, problemId, parentProblemId } → 200 {}
-//        — exactly three fields, NOT a full-record replace.
+//        — exactly three fields, NOT a full-record replace. parentProblemId:
+//        null UN-nests the problem — CONFIRMED live 2026-08-08 (two real HAR
+//        captures, docs/learnings-problem-nesting-api.md) — same endpoint,
+//        same payload builder, no separate write path.
 //
 //   The parent-side sibling (POST /clinical/problem/update-child-problems,
-//   childProblemsToAdd) is deliberately NOT used: despite its name its array
-//   is a FULL REPLACE of the child set (the captured Vue form seeds it with
-//   the existing children), so posting one id to a parent that already has
-//   children would silently unlink the others. One child → one parent through
-//   update-parent-problem has no such trap.
+//   childProblemsToAdd) is deliberately NOT used, for EITHER linking or
+//   unlinking: despite its name its array is a FULL REPLACE of the child set
+//   (confirmed again by the 2026-08-08 unlink captures — an empty array
+//   removed a parent's only child, which is fine with one child and silently
+//   wrong with more than one). One child → one parent through
+//   update-parent-problem, in both directions, has no such trap.
 //
 // SUGGESTION MODEL: a pair is suggested only when the candidate child's
 // conceptId is a genuine SNOMED descendant of another on-record problem's
@@ -43,25 +52,24 @@
 //
 // SAFETY POSTURE (same family rules as problem-bulk-end.js, adapted):
 //   - Nesting changes how the problem list READS — a child renders under its
-//     parent, so a wrong link visually demotes a live clinical problem.
-//     Suggestion cards confirm per pair (child and parent echoed back by
-//     name); the manual builder confirms per BATCH under one parent, with
-//     every ticked child listed by name and any re-parents counted — but
-//     nothing is ever pre-ticked, there is no select-all, and each child
-//     still commits (and cycle-checks) individually.
-//   - Cycle guard at BOTH layers: suggestions that would create a loop are
-//     filtered at render time against the LIVE link map (which updates as
-//     links commit), and confirmLink() re-checks before POSTing regardless of
-//     what the UI showed.
+//     parent, so a wrong link visually demotes a live clinical problem (and
+//     a wrong UNLINK promotes one back to top-level unexpectedly). The
+//     canvas confirms every drag-created link, and every connector-click
+//     unlink, individually (child and parent echoed back by name) before it
+//     commits — nothing writes on drop or click alone.
+//   - Cycle guard at BOTH layers for LINKING: wouldCreateCycle() is exported
+//     via the bridge so the canvas can reject an invalid drop before even
+//     offering a confirm, and commitParentLink() re-checks before POSTing
+//     regardless of what the UI showed (a link committed elsewhere between
+//     the check and the confirm click). Unlinking needs no cycle check —
+//     removing a link can never create a loop.
 //   - No auto-reload after success — Medicus's own list shows the change on
 //     the next refresh; a "Refresh page" button is offered instead.
-//   - Every committed link is recorded in the machine-local Clinical Event
-//     Ledger (patient UUID only, fixed label, never problem descriptions).
+//   - Every committed link OR unlink is recorded in the machine-local
+//     Clinical Event Ledger (patient UUID only, fixed label, never problem
+//     descriptions).
 //   - Failed POSTs surface the server's response body per card, never a bare
 //     status.
-//   - Unlink is NOT offered: the null-parent unlink shape is inferred from
-//     the captured Vue form but has never been captured live (see the
-//     learnings doc) — this widget only writes the one confirmed shape.
 //
 // Works on BOTH page shapes (v3.213.0 discipline): the care-record page
 // (patientId in the URL) and the task-overview "split" page (patient resolved
@@ -100,23 +108,131 @@
     return false;
   }
 
+  var ONSET_DATE_RE = /^(\d{1,2}) ([A-Za-z]{3}) (\d{4})$/;
+  var ONSET_MONTH_ABBR = {
+    Jan: '01',
+    Feb: '02',
+    Mar: '03',
+    Apr: '04',
+    May: '05',
+    Jun: '06',
+    Jul: '07',
+    Aug: '08',
+    Sep: '09',
+    Oct: '10',
+    Nov: '11',
+    Dec: '12',
+  };
+  // recordDate comes back from slideover/overview ALREADY in ISO shape
+  // (confirmed live 2026-08-08, HAR 48: "recordDate":"2025-01-15" on the
+  // SAME response as "onsetDate":"20 Apr 2006") — onsetDate and recordDate
+  // are two DIFFERENT formats on the same object, not one format that's
+  // sometimes present. dateSortKey below must recognise both, or the
+  // onset-blank record-date fallback silently returns null (the mis-sorting
+  // Nick found live 2026-08-08 — a chronology check built on a null date
+  // fails open, so this also silently defeated predatesParent below).
+  var ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+  // Parses either the confirmed "DD Mon YYYY" onset-date display shape OR
+  // an already-ISO "YYYY-MM-DD" shape (recordDate) into a zero-padded
+  // 'YYYY-MM-DD' string (lexically comparable). Returns null for
+  // missing/malformed input — never guesses a date. Same regex/table as
+  // problem-nesting-canvas.js's own dateSortKey and allergy-cleanup.js's
+  // normalizeOnsetDateForSubmit — duplicated, not shared, the same way each
+  // content script already carries its own copy of small parsing helpers.
+  function dateSortKey(value) {
+    if (value == null) return null;
+    var s = String(value).trim();
+    var iso = ISO_DATE_RE.exec(s);
+    if (iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
+    var m = ONSET_DATE_RE.exec(s);
+    if (!m) return null;
+    var month = ONSET_MONTH_ABBR[m[2]];
+    if (!month) return null;
+    var day = m[1].length === 1 ? '0' + m[1] : m[1];
+    return m[3] + '-' + month + '-' + day;
+  }
+
+  // Onset date, falling back to record date when onset is blank — same
+  // fallback the canvas already uses for display (2026-08-08), so "which
+  // date counts" stays consistent between what's shown on a tile and what
+  // the chronology check below judges it against.
+  function resolveChronologyDate(info) {
+    if (!info) return null;
+    return dateSortKey(info.onsetDate) || dateSortKey(info.recordDate);
+  }
+
+  // True when childInfo/parentInfo's own dates rule OUT a parent/child
+  // relationship: a child can't chronologically PREDATE the parent
+  // condition it's supposedly part of (2026-08-08 request). Fails OPEN when
+  // either date is unknown — this is a negative/exclusionary check on
+  // positive evidence, not a data-completeness requirement, so missing
+  // dates never block a suggestion that would otherwise have been offered.
+  // Equal dates (e.g. a stent inserted the same day the underlying disease
+  // was recorded) are NOT excluded — only a strictly earlier child is.
+  function predatesParent(childInfo, parentInfo) {
+    var childDate = resolveChronologyDate(childInfo);
+    var parentDate = resolveChronologyDate(parentInfo);
+    if (!childDate || !parentDate) return false;
+    return childDate < parentDate;
+  }
+
+  // Builds the 'childConceptId|parentConceptId' key Set from
+  // rules/problem-nesting-overrides.json's own pairs — the SAME string
+  // shape buildNestingSuggestions' pairHits already uses, so its existing
+  // lookup logic needs no new matching code, only a second Set to check and
+  // a 'source' tag on the resulting option. See that file's own header for
+  // what these pairs are and why they exist (2026-08-08 request): practice-
+  // defined parent/child relationships SNOMED itself doesn't model as a
+  // genuine IS-A hierarchy (first entry: pseudophakia as a child of
+  // cataract — the expected post-op state, but a different SNOMED branch).
+  function buildOverridePairSet(entries) {
+    var set = new Set();
+    (Array.isArray(entries) ? entries : []).forEach(function (e) {
+      if (e && e.childConceptId && e.parentConceptId) {
+        set.add(String(e.childConceptId) + '|' + String(e.parentConceptId));
+      }
+    });
+    return set;
+  }
+
   // Builds the suggestion list from the scan's raw materials:
-  //   problems     — [{id, description}] (the active summary list)
-  //   infoById     — {id: {conceptId, parentProblemId}} from each overview
-  //   pairHits     — Set of 'childConceptId|parentConceptId' strings, one per
-  //                  CONFIRMED SNOMED descendant relationship (built by the
-  //                  scan's attribution queries — this function trusts it).
+  //   problems           — [{id, description}] (the active summary list)
+  //   infoById           — {id: {conceptId, parentProblemId, onsetDate,
+  //                        recordDate}} from each overview
+  //   pairHits           — Set of 'childConceptId|parentConceptId' strings,
+  //                        one per CONFIRMED SNOMED descendant relationship
+  //                        (built by the scan's attribution queries — this
+  //                        function trusts it).
+  //   overridePairHits   — same string shape, from
+  //                        rules/problem-nesting-overrides.json (see
+  //                        buildOverridePairSet above) — practice-defined
+  //                        pairs SNOMED doesn't recognise as a hierarchy.
+  //                        Optional; defaults to empty.
   // Rules (each is a safety decision, not styling):
   //   - a child needs a resolved conceptId and NO existing parent;
   //   - parent options are other problems whose conceptId differs and whose
-  //     (child, parent) concept pair is in pairHits;
+  //     (child, parent) concept pair is in pairHits OR overridePairHits — a
+  //     pair in BOTH is tagged 'snomed' (the stronger evidence), pairHits
+  //     alone 'snomed', overridePairHits alone 'override' — this tag is
+  //     what lets the canvas show accurate provenance copy ("SNOMED marks
+  //     this..." vs "this practice's own reference list marks this...")
+  //     instead of crediting SNOMED for a pairing it never actually made;
   //   - identical-concept pairs never suggest (duplicate ≠ hierarchy);
   //   - options that would create a cycle against the CURRENT link map are
-  //     dropped here AND re-checked at commit time by the caller.
-  function buildNestingSuggestions(problems, infoById, pairHits) {
+  //     dropped here AND re-checked at commit time by the caller;
+  //   - a candidate child that chronologically PREDATES the candidate
+  //     parent is dropped too (predatesParent, 2026-08-08) — a child can't
+  //     have happened before the parent condition it's part of existed.
+  //     Applies equally to override pairs — a practice-defined relationship
+  //     is still subject to the same chronology sense-check.
+  //     SUGGESTION-only: none of this constrains manual/drag-created links,
+  //     where the clinician's own judgement is never overridden.
+  function buildNestingSuggestions(problems, infoById, pairHits, overridePairHits) {
     var list = Array.isArray(problems) ? problems : [];
     var info = infoById || {};
     var hits = pairHits instanceof Set ? pairHits : new Set(pairHits || []);
+    var overrides = overridePairHits instanceof Set ? overridePairHits : new Set(overridePairHits || []);
     var parentIdByProblemId = {};
     list.forEach(function (p) {
       var i = info[p.id];
@@ -133,9 +249,17 @@
         var pi = info[parent.id];
         if (!pi || !pi.conceptId) return;
         if (pi.conceptId === ci.conceptId) return; // duplicate, not hierarchy
-        if (!hits.has(ci.conceptId + '|' + pi.conceptId)) return;
+        var pairKey = ci.conceptId + '|' + pi.conceptId;
+        var isSnomedHit = hits.has(pairKey);
+        var isOverrideHit = overrides.has(pairKey);
+        if (!isSnomedHit && !isOverrideHit) return;
         if (wouldCreateCycle(child.id, parent.id, parentIdByProblemId)) return;
-        options.push({ id: parent.id, description: parent.description });
+        if (predatesParent(ci, pi)) return; // can't have happened before the parent existed
+        options.push({
+          id: parent.id,
+          description: parent.description,
+          source: isSnomedHit ? 'snomed' : 'override',
+        });
       });
       if (options.length) {
         out.push({
@@ -398,6 +522,10 @@
       buildUpdateParentProblemPayload: buildUpdateParentProblemPayload,
       resolveOverviewConceptId: resolveOverviewConceptId,
       wouldCreateCycle: wouldCreateCycle,
+      dateSortKey: dateSortKey,
+      resolveChronologyDate: resolveChronologyDate,
+      predatesParent: predatesParent,
+      buildOverridePairSet: buildOverridePairSet,
       buildNestingSuggestions: buildNestingSuggestions,
       manualChildOptions: manualChildOptions,
       buildDuplicateGroups: buildDuplicateGroups,
@@ -453,13 +581,6 @@
   function dateSuffix(ref) {
     var d = onsetDateFor(ref);
     return d ? ' <span class="ms-pn-date">· ' + esc(d) + '</span>' : '';
-  }
-
-  // Plain-text date suffix for <option> labels (no markup inside options).
-  // Callers esc() the combined string.
-  function dateSuffixText(ref) {
-    var d = onsetDateFor(ref);
-    return d ? ' · ' + d : '';
   }
 
   // Screen-reader announcements — writes into the persistent polite live
@@ -565,6 +686,44 @@
     return apiFetch('/clinical/data/problem/slideover/overview/' + encodeURIComponent(problemId));
   }
 
+  // Confirmed 2026-08-08 (HAR 52/53) — the update-problem-links prefill's
+  // `existingLinkedProblems` is the only confirmed source of linked-problem
+  // IDs (slideover/overview's own `linkedProblems` is display text only, no
+  // ids — can't be used to draw an exact tile-to-tile line without risking
+  // matching the wrong entry when two problems share the same description,
+  // a real documented case elsewhere in this codebase). One extra GET per
+  // active problem, same cost class as the overview fetch already made.
+  function fetchLinkedProblemIds(patientId, problemId) {
+    return apiFetch(
+      '/clinical/data/problem/update-problem-links/' +
+        encodeURIComponent(patientId) +
+        '/' +
+        encodeURIComponent(problemId)
+    );
+  }
+
+  // Loads rules/problem-nesting-overrides.json ONCE per page load — a local
+  // extension resource, not a Medicus call. Never throws; falls back to an
+  // empty list (the scan then simply offers no override-sourced
+  // suggestions) if unavailable — same pattern as allergy-cleanup.js's
+  // ensureAllergyJunkCodesLoaded.
+  var _overridesPromise = null;
+  function ensureNestingOverridesLoaded() {
+    if (_overridesPromise) return _overridesPromise;
+    _overridesPromise = (async function () {
+      try {
+        var url = chrome.runtime.getURL('rules/problem-nesting-overrides.json');
+        var doc = await fetch(url).then(function (r) {
+          return r.json();
+        });
+        return Array.isArray(doc && doc.pairs) ? doc.pairs : [];
+      } catch (e) {
+        return [];
+      }
+    })();
+    return _overridesPromise;
+  }
+
   // Descendant test via the confirmed constrained-search mechanism (see the
   // bulk-remove badge scan): a hit for `conceptId` under `rootsCsv` means the
   // concept is a genuine SNOMED descendant of at least one root.
@@ -646,24 +805,22 @@
   var _scanState = 'idle'; // 'idle' | 'scanning' | 'done' | 'error'
   var _scanError = null;
   // Accordion: which done-view section is expanded (one at a time).
-  var _openSection = null; // 'suggest' | 'merge' | 'manual' | null
+  var _openSection = null; // 'merge' | 'significance' | null
   // [{childId, childDescription, childConceptId, parentOptions, chosenParentId,
-  //   confirming, linking, linked, linkedParentDescription, linkError}]
+  //   confirming, linking, linked, linkedParentDescription, linkError}] — no
+  // longer rendered by this file's own accordion (see the "canvas" section in
+  // buildHtml); read by the canvas overlay via the window.ProblemNesting
+  // bridge below instead.
   var _suggestions = [];
   // Live link map (problemId → parentProblemId) — seeded from the scan's
   // overviews, updated on every committed link so cycle checks and rescans
   // stay honest without refetching.
   var _parentIdByProblemId = {};
-  // Scan products the manual link builder reuses: the active problem list
-  // ({id, description}) and each problem's overview-derived info.
+  // Scan products consumed both by the sections still rendered here (merge,
+  // significance) and, via the bridge, by the canvas overlay: the active
+  // problem list ({id, description}) and each problem's overview-derived info.
   var _problems = [];
   var _infoById = {};
-  // Manual link builder state (parent-first, multi-child) + this-session
-  // committed manual links ([{childDescription, parentDescription}], display
-  // only). childIds is the ticked set; childErrors carries per-child commit
-  // failures so a partial batch shows exactly which links didn't land.
-  var _manual = { parentId: null, childIds: {}, confirming: false, linking: false, childErrors: {} };
-  var _manualLinked = [];
   // Duplicate-merge groups: [{conceptId, description, entries: [{id,
   //   description, hasChildren, additionalInformation}], keeperId, open,
   //   confirming, removing, reason, errors: {id: msg}, removedCount, done}]
@@ -672,6 +829,11 @@
   // errors; _sigChanged is this session's committed re-grades (display only).
   var _sig = { target: null, ids: {}, confirming: false, committing: false, errors: {} };
   var _sigChanged = [];
+  // Subscribers to the bridge's onChange (see window.ProblemNesting below) —
+  // notified at the end of every render() so the canvas overlay
+  // (problem-nesting-canvas.js) stays in sync with state changed from
+  // either surface, without either file duplicating the other's logic.
+  var _subscribers = [];
 
   function resetForPatient() {
     _problemsCache = null;
@@ -683,8 +845,6 @@
     _parentIdByProblemId = {};
     _problems = [];
     _infoById = {};
-    _manual = { parentId: null, childIds: {}, confirming: false, linking: false, childErrors: {} };
-    _manualLinked = [];
     _mergeGroups = [];
     _sig = { target: null, ids: {}, confirming: false, committing: false, errors: {} };
     _sigChanged = [];
@@ -697,16 +857,37 @@
     _scanError = null;
     render();
     try {
+      // Kicked off in parallel with everything else below — doesn't depend
+      // on this patient's own problem data, awaited only once pairHits
+      // itself is ready (right before buildNestingSuggestions).
+      var overridesPromise = ensureNestingOverridesLoaded();
       var problems = (_problemsCache || []).map(function (p) {
         return { id: p.id, description: p.problemCodeDescription };
       });
-      var overviews = await Promise.all(
+      // Both batches kicked off together (independent per-problem fetches,
+      // same cost class) — linked-problem ids (2026-08-08, confirmed via
+      // HAR 52/53) need their OWN prefill fetch, since slideover/overview's
+      // own linkedProblems field is display text only, no ids.
+      var overviewsPromise = Promise.all(
         problems.map(function (p) {
           return fetchProblemOverview(p.id).catch(function () {
             return null;
           });
         })
       );
+      var linkedIdsPromise = Promise.all(
+        problems.map(function (p) {
+          return fetchLinkedProblemIds(scanPatientId, p.id)
+            .then(function (data) {
+              return Array.isArray(data && data.existingLinkedProblems) ? data.existingLinkedProblems : [];
+            })
+            .catch(function () {
+              return []; // fail closed: no line beats a guessed one
+            });
+        })
+      );
+      var overviews = await overviewsPromise;
+      var linkedIdsByIndex = await linkedIdsPromise;
       if (_lastPatientId !== scanPatientId) return; // patient changed mid-scan — discard
       var infoById = {};
       problems.forEach(function (p, i) {
@@ -720,9 +901,25 @@
           // "20 Apr 2020"; shown beside every problem reference so same-named
           // entries stay tellable-apart.
           onsetDate: (ov && ov.onsetDate) || null,
+          // recordDate is CONFIRMED as a real Medicus field (the edit-problem
+          // prefill/POST round-trips it — see docs/learnings-problem-description
+          // -cleanup.md) but NOT confirmed on THIS endpoint (slideover/overview)
+          // specifically — reading it here speculatively costs nothing extra
+          // (no new fetch) and degrades harmlessly to null if it isn't actually
+          // populated on this response. Used by the canvas as the onset-date
+          // fallback (2026-08-08 request) — verify live whether it ever
+          // populates; if it never does, this needs its own edit-problem
+          // prefill fetch instead (a real added cost per problem).
+          recordDate: (ov && ov.recordDate) || null,
           // Confirmed slideover-overview display string ('Major' / 'Minor' /
           // 'Unknown Significance') — the current grade shown per row.
           significance: (ov && ov.significance) || null,
+          // From update-problem-links' own prefill (2026-08-08) — the
+          // CURRENT full linked-problem id set for this problem. Symmetric
+          // (confirmed live) — a problem this record links FROM will also
+          // carry the reverse entry in its own list, so the canvas dedupes
+          // by unordered pair rather than drawing each line twice.
+          linkedProblemIds: linkedIdsByIndex[i] || [],
         };
         if (ov && ov.parentProblemId) _parentIdByProblemId[p.id] = ov.parentProblemId;
       });
@@ -799,19 +996,20 @@
           done: false,
         };
       });
-      _suggestions = buildNestingSuggestions(problems, infoById, pairHits).map(function (s) {
-        return Object.assign({}, s, {
-          chosenParentId: s.parentOptions.length === 1 ? s.parentOptions[0].id : null,
-          confirming: false,
-          linking: false,
-          linked: false,
-          linkedParentDescription: null,
-          linkError: null,
-        });
-      });
+      // Practice-defined pairs (rules/problem-nesting-overrides.json) fold
+      // into the same suggestion builder as the live SNOMED hits — see
+      // buildNestingSuggestions' own comment for how the two are merged and
+      // tagged with 'source' so the canvas can credit each accurately.
+      var overrideEntries = await overridesPromise;
+      var overridePairHits = buildOverridePairSet(overrideEntries);
+      // Raw suggestion list — no per-card UI state, this accordion no longer
+      // renders suggestion cards itself (see the "canvas" section in
+      // buildHtml); the canvas overlay reads this via the bridge and tracks
+      // its own transient drag/confirm state independently.
+      _suggestions = buildNestingSuggestions(problems, infoById, pairHits, overridePairHits);
       _scanState = 'done';
       // Accordion default: first section with something in it.
-      _openSection = _suggestions.length ? 'suggest' : _mergeGroups.length ? 'merge' : 'manual';
+      _openSection = _mergeGroups.length ? 'merge' : 'significance';
       announce(
         _suggestions.length +
           ' suggestion' +
@@ -836,6 +1034,7 @@
   // the live-map update, and the ledger record. Throws on failure with a
   // user-facing message.
   async function commitParentLink(childId, parentId) {
+    if (!parentId) throw new Error('A parent must be chosen.'); // guards misuse — commitUnlink below is the null-parent path
     if (wouldCreateCycle(childId, parentId, _parentIdByProblemId)) {
       throw new Error('Linking these two would create a loop — another link committed first. Rescan to refresh.');
     }
@@ -855,77 +1054,26 @@
     }
   }
 
-  async function confirmLink(s) {
-    if (s.linking || s.linked) return;
-    var parentId = s.chosenParentId;
-    var parent = s.parentOptions.find(function (o) {
-      return o.id === parentId;
-    });
-    if (!parent) return;
-    s.linking = true;
-    s.linkError = null;
-    render();
-    try {
-      await commitParentLink(s.childId, parentId);
-      s.linked = true;
-      s.confirming = false;
-      s.linkedParentDescription = parent.description;
-      announce('Nested ' + s.childDescription + ' under ' + parent.description);
-    } catch (err) {
-      s.linkError = (err && err.message) || 'Failed to link — please try again.';
-      announce('Action failed — see panel');
-    } finally {
-      s.linking = false;
-      render();
-    }
-  }
-
-  function manualSelectedChildIds() {
-    return Object.keys(_manual.childIds).filter(function (id) {
-      return _manual.childIds[id];
-    });
-  }
-
-  // Commits the ticked children under the chosen parent, SEQUENTIALLY — one
-  // confirmed update-parent-problem POST per child, never the
-  // update-child-problems full-replace endpoint (see the header's trap note).
-  // Each child re-passes the commit-time cycle guard inside commitParentLink;
-  // a failure records a per-child error and the batch carries on, so one bad
-  // link never blocks the rest. Successes untick; failures stay ticked for
-  // retry with their error shown against the row.
-  async function confirmManualBatch() {
-    var m = _manual;
-    if (m.linking || !m.parentId) return;
-    var parent = _problems.find(function (p) {
-      return p.id === m.parentId;
-    });
-    var targets = manualSelectedChildIds();
-    if (!parent || !targets.length) return;
-    m.linking = true;
-    m.childErrors = {};
-    render();
-    for (var i = 0; i < targets.length; i++) {
-      var childId = targets[i];
-      var child = _problems.find(function (p) {
-        return p.id === childId;
+  // Un-nests a problem: the SAME three-field update-parent-problem POST,
+  // parentProblemId: null. CONFIRMED live 2026-08-08 via two real HAR
+  // captures Nick recorded (see docs/learnings-problem-nesting-api.md) — no
+  // longer the inferred/unconfirmed shape the original header comment
+  // warned about. No cycle check needed: removing a link can never create a
+  // loop. Throws on failure with a user-facing message, same discipline as
+  // commitParentLink.
+  async function commitUnlink(childId) {
+    await postUpdateParentProblem(buildUpdateParentProblemPayload(_lastPatientId, childId, null));
+    delete _parentIdByProblemId[childId];
+    if (window.EventLedger) {
+      window.EventLedger.record({
+        source: 'record',
+        patientRef: _lastPatientId,
+        severity: null,
+        ruleId: 'problem-nesting',
+        label: 'Un-nest problem: 1 link removed',
+        action: 'committed',
       });
-      if (!child) continue;
-      try {
-        await commitParentLink(childId, m.parentId);
-        _manualLinked.push({ childDescription: child.description, parentDescription: parent.description });
-        // Keep the child's info honest so a suggestion card for it (if any)
-        // retires, and untick it now it's landed.
-        if (_infoById[childId]) _infoById[childId].parentProblemId = m.parentId;
-        delete m.childIds[childId];
-        announce('Nested ' + child.description + ' under ' + parent.description);
-      } catch (err) {
-        m.childErrors[childId] = (err && err.message) || 'Failed to link — please try again.';
-        announce('Action failed — see panel');
-      }
     }
-    m.linking = false;
-    m.confirming = false;
-    render();
   }
 
   var SIG_TARGETS = [
@@ -1024,20 +1172,16 @@
   }
 
   // Removes a merged-away copy from every piece of live widget state so the
-  // other sections stop offering it: the problem list, the info/link maps,
-  // any manual tick or parent pick, and (via the existence checks in
-  // cardHtml) any suggestion card that referenced it.
+  // other sections (and, via the bridge, the canvas overlay's own live-
+  // filtering) stop offering it: the problem list, the info/link maps, and
+  // any significance tick.
   function forgetProblem(problemId) {
     _problems = _problems.filter(function (p) {
       return p.id !== problemId;
     });
     delete _infoById[problemId];
     delete _parentIdByProblemId[problemId];
-    delete _manual.childIds[problemId];
     delete _sig.ids[problemId];
-    if (_manual.parentId === problemId) {
-      _manual = { parentId: null, childIds: {}, confirming: false, linking: false, childErrors: {} };
-    }
   }
 
   // Commits one duplicate group's merge: mark-incorrect-and-hidden on every
@@ -1093,128 +1237,6 @@
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
-  function cardHtml(s, idx) {
-    if (s.linked) {
-      return (
-        '<div class="ms-pn-card ms-pn-card-linked">' +
-        CHECK_SVG +
-        ' <strong>' +
-        esc(s.childDescription) +
-        '</strong> is now nested under <strong>' +
-        esc(s.linkedParentDescription) +
-        '</strong>. Medicus’s own list shows this after a page refresh.</div>'
-      );
-    }
-    // A child removed as a duplicate this session no longer exists to nest.
-    if (
-      !_problems.some(function (p) {
-        return p.id === s.childId;
-      })
-    ) {
-      return (
-        '<div class="ms-pn-card ms-pn-card-stale"><strong>' +
-        esc(s.childDescription) +
-        '</strong> — removed as a duplicate copy this session.</div>'
-      );
-    }
-    // A child linked through the MANUAL builder this session retires its
-    // suggestion card (its map entry exists but s.linked is false).
-    if (_parentIdByProblemId[s.childId]) {
-      return (
-        '<div class="ms-pn-card ms-pn-card-stale"><strong>' +
-        esc(s.childDescription) +
-        '</strong> — already nested this session via a manual link.</div>'
-      );
-    }
-    // Options are re-filtered against the LIVE link map (and the live problem
-    // list — a merged-away parent is gone) on every render, so a link or
-    // merge committed elsewhere can retire an option here.
-    var liveOptions = s.parentOptions.filter(function (o) {
-      return (
-        _problems.some(function (p) {
-          return p.id === o.id;
-        }) && !wouldCreateCycle(s.childId, o.id, _parentIdByProblemId)
-      );
-    });
-    if (!liveOptions.length) {
-      return (
-        '<div class="ms-pn-card ms-pn-card-stale"><strong>' +
-        esc(s.childDescription) +
-        '</strong> — its suggested parent is no longer linkable (a link committed elsewhere). Rescan to refresh.</div>'
-      );
-    }
-    var picker;
-    if (liveOptions.length === 1) {
-      picker = 'child of <strong>' + esc(liveOptions[0].description) + '</strong>' + dateSuffix(liveOptions[0].id);
-      s.chosenParentId = liveOptions[0].id;
-    } else {
-      picker =
-        'child of <select class="ms-pn-parent-select" data-idx="' +
-        idx +
-        '">' +
-        '<option value=""' +
-        (s.chosenParentId ? '' : ' selected') +
-        ' disabled>Choose parent…</option>' +
-        liveOptions
-          .map(function (o) {
-            return (
-              '<option value="' +
-              esc(o.id) +
-              '"' +
-              (s.chosenParentId === o.id ? ' selected' : '') +
-              '>' +
-              esc(o.description + dateSuffixText(o.id)) +
-              '</option>'
-            );
-          })
-          .join('') +
-        '</select>';
-    }
-    var body =
-      '<div class="ms-pn-card-main"><strong>' +
-      esc(s.childDescription) +
-      '</strong>' +
-      dateSuffix(s.childId) +
-      ' — SNOMED marks this as a ' +
-      picker +
-      '</div>';
-    var actions;
-    if (s.confirming) {
-      var chosen = liveOptions.find(function (o) {
-        return o.id === s.chosenParentId;
-      });
-      actions =
-        '<div class="ms-pn-confirm">This will nest <strong>' +
-        esc(s.childDescription) +
-        '</strong> under <strong>' +
-        esc(chosen ? chosen.description : '') +
-        '</strong> — it will display as a child on the problem list, not as a top-level problem. ' +
-        'There is no bulk undo; un-nesting is done in Medicus, one problem at a time.' +
-        '<div class="ms-pn-confirm-actions">' +
-        '<button type="button" class="ms-pn-cancel" data-idx="' +
-        idx +
-        '"' +
-        (s.linking ? ' disabled' : '') +
-        '>Cancel</button>' +
-        '<button type="button" class="ms-pn-confirm-btn" data-idx="' +
-        idx +
-        '"' +
-        (s.linking || !s.chosenParentId ? ' disabled' : '') +
-        '>' +
-        (s.linking ? 'Linking…' : 'Confirm — nest it') +
-        '</button>' +
-        '</div></div>';
-    } else {
-      actions =
-        '<button type="button" class="ms-pn-link-btn" data-idx="' +
-        idx +
-        '"' +
-        (s.chosenParentId ? '' : ' disabled') +
-        '>Nest…</button>';
-    }
-    var error = s.linkError ? '<div class="ms-pn-card-error">' + esc(s.linkError) + '</div>' : '';
-    return '<div class="ms-pn-card">' + body + actions + error + '</div>';
-  }
 
   // One duplicate group's card in the "Merge duplicate copies" section.
   // Collapsed: description + copy count + "Merge…". Expanded: keeper radios
@@ -1357,20 +1379,6 @@
     );
   }
 
-  function suggestSectionContent() {
-    if (!_suggestions.length) {
-      return emptyBlockHtml(
-        'No nesting suggestions',
-        'Nothing on this record is coded as a SNOMED descendant of anything else.'
-      );
-    }
-    return _suggestions
-      .map(function (s, i) {
-        return cardHtml(s, i);
-      })
-      .join('');
-  }
-
   function mergeSectionContent() {
     var live = liveMergeGroups();
     if (!live.length) {
@@ -1391,166 +1399,6 @@
       return x.id === problemId;
     });
     return p ? p.description : null;
-  }
-
-  // The manual link builder — parent-first, multi-child, the clinician's own
-  // grouping, no SNOMED gate. Pick the parent "title", tick every problem to
-  // nest under it, then ONE explicit confirm that lists the whole batch by
-  // name. The confirm copy additionally calls out re-parents (ticked problems
-  // that already have a parent get MOVED) and same-code picks (probably a
-  // duplicate — pointed at the right tool, but not blocked: clinical call).
-  // Commits are still one confirmed POST per child (see confirmManualBatch).
-  function manualSectionContent() {
-    var m = _manual;
-    var parentOptions = _problems
-      .map(function (p) {
-        return (
-          '<option value="' +
-          esc(p.id) +
-          '"' +
-          (m.parentId === p.id ? ' selected' : '') +
-          '>' +
-          esc(p.description + dateSuffixText(p.id)) +
-          '</option>'
-        );
-      })
-      .join('');
-
-    var childListHtml = '';
-    if (m.parentId) {
-      var candidates = manualChildOptions(m.parentId, _problems, _parentIdByProblemId);
-      var pi = _infoById[m.parentId];
-      var tickedCount = manualSelectedChildIds().length;
-      childListHtml =
-        '<div class="ms-pn-man-count">' +
-        candidates.length +
-        ' problem' +
-        (candidates.length === 1 ? '' : 's') +
-        ' · ' +
-        tickedCount +
-        ' selected</div>' +
-        '<div class="ms-pn-man-children">' +
-        candidates
-          .map(function (p) {
-            var currentParentId = _parentIdByProblemId[p.id] || null;
-            var notes = [];
-            if (currentParentId) {
-              notes.push(
-                'currently under ' + (problemDescription(currentParentId) || 'another problem') + ' — will move'
-              );
-            }
-            var ci = _infoById[p.id];
-            if (ci && pi && ci.conceptId && ci.conceptId === pi.conceptId) {
-              notes.push('same code as the parent — duplicate?');
-            }
-            var err = m.childErrors[p.id];
-            return (
-              '<label class="ms-pn-man-child-row">' +
-              '<input type="checkbox" class="ms-pn-man-child-cb" data-child-id="' +
-              esc(p.id) +
-              '"' +
-              (m.childIds[p.id] ? ' checked' : '') +
-              (m.linking ? ' disabled' : '') +
-              '>' +
-              '<span>' +
-              esc(p.description) +
-              dateSuffix(p.id) +
-              (notes.length ? ' <span class="ms-pn-man-child-note">(' + esc(notes.join('; ')) + ')</span>' : '') +
-              '</span>' +
-              (err ? '<span class="ms-pn-card-error">' + esc(err) + '</span>' : '') +
-              '</label>'
-            );
-          })
-          .join('') +
-        '</div>';
-    }
-
-    var linkedHtml = _manualLinked
-      .map(function (l) {
-        return (
-          '<div class="ms-pn-card ms-pn-card-linked">' +
-          CHECK_SVG +
-          ' <strong>' +
-          esc(l.childDescription) +
-          '</strong> is now nested under <strong>' +
-          esc(l.parentDescription) +
-          '</strong>. Medicus’s own list shows this after a page refresh.</div>'
-        );
-      })
-      .join('');
-
-    var selected = manualSelectedChildIds();
-    var confirmHtml = '';
-    if (m.confirming && m.parentId && selected.length) {
-      var parentDesc = problemDescription(m.parentId) || '';
-      var moveCount = selected.filter(function (id) {
-        return !!_parentIdByProblemId[id];
-      }).length;
-      confirmHtml =
-        '<div class="ms-pn-confirm">This will nest ' +
-        selected.length +
-        ' problem' +
-        (selected.length === 1 ? '' : 's') +
-        ' under <strong>' +
-        esc(parentDesc) +
-        '</strong> — each will display as a child on the problem list, not as a top-level problem:' +
-        '<ul class="ms-pn-confirm-list">' +
-        selected
-          .map(function (id) {
-            return '<li>' + esc(problemDescription(id) || id) + dateSuffix(id) + '</li>';
-          })
-          .join('') +
-        '</ul>' +
-        (moveCount > 0
-          ? ' ' +
-            moveCount +
-            ' of these already ' +
-            (moveCount === 1 ? 'has' : 'have') +
-            ' a parent and will be <strong>moved</strong> to the new one.'
-          : '') +
-        ' There is no bulk undo; un-nesting is done in Medicus, one problem at a time.' +
-        '<div class="ms-pn-confirm-actions">' +
-        '<button type="button" class="ms-pn-cancel" id="ms-pn-man-cancel"' +
-        (m.linking ? ' disabled' : '') +
-        '>Cancel</button>' +
-        '<button type="button" class="ms-pn-confirm-btn" id="ms-pn-man-confirm"' +
-        (m.linking ? ' disabled' : '') +
-        '>' +
-        (m.linking
-          ? 'Linking…'
-          : 'Confirm — nest ' + selected.length + ' problem' + (selected.length === 1 ? '' : 's')) +
-        '</button>' +
-        '</div></div>';
-    }
-
-    var failedCount = Object.keys(m.childErrors).length;
-    return (
-      '<div class="ms-pn-sec-note">Your grouping, your call — no SNOMED gate.</div>' +
-      '<div class="ms-pn-manual-row">Under ' +
-      '<select class="ms-pn-parent-select" id="ms-pn-man-parent">' +
-      '<option value=""' +
-      (m.parentId ? '' : ' selected') +
-      ' disabled>Choose parent…</option>' +
-      parentOptions +
-      '</select>' +
-      ' nest:' +
-      ' <button type="button" class="ms-pn-link-btn" id="ms-pn-man-link"' +
-      (m.parentId && selected.length && !m.confirming && !m.linking ? '' : ' disabled') +
-      '>Nest ' +
-      (selected.length || '') +
-      ' selected…</button>' +
-      '</div>' +
-      childListHtml +
-      confirmHtml +
-      (failedCount && !m.confirming
-        ? '<div class="ms-pn-card-error">' +
-          failedCount +
-          ' link' +
-          (failedCount === 1 ? '' : 's') +
-          ' failed — the error is shown against each row; they stay ticked so you can retry.</div>'
-        : '') +
-      linkedHtml
-    );
   }
 
   // The significance re-grade section — tick problems, pick a target grade,
@@ -1726,17 +1574,15 @@
         esc(_scanError) +
         '</span> <button type="button" class="ms-pn-retry" id="ms-pn-retry">Retry</button></div>';
     } else if (_scanState === 'done') {
-      var linkedCount =
-        _suggestions.filter(function (s) {
-          return s.linked;
-        }).length + _manualLinked.length;
-      var selectedCount = manualSelectedChildIds().length;
-      var manualCountText = selectedCount > 0 ? selectedCount + ' selected' : String(_problems.length);
       body =
         '<div class="ms-pn-body">' +
         '<div class="ms-pn-summary">From SNOMED codes already on this record — nothing links without its own confirm.</div>' +
-        sectionHeadHtml('suggest', 'Suggested links', String(_suggestions.length)) +
-        (_openSection === 'suggest' ? '<div class="ms-pn-sec-body">' + suggestSectionContent() + '</div>' : '') +
+        '<div class="ms-pn-canvas-row">' +
+        '<button type="button" class="ms-pn-link-btn" id="ms-pn-open-canvas">Organise on canvas…</button>' +
+        '<span class="ms-pn-sec-count">' +
+        _suggestions.length +
+        ' suggested</span>' +
+        '</div>' +
         sectionHeadHtml('merge', 'Merge duplicate copies', String(liveMergeGroups().length)) +
         (_openSection === 'merge' ? '<div class="ms-pn-sec-body">' + mergeSectionContent() + '</div>' : '') +
         sectionHeadHtml(
@@ -1745,15 +1591,6 @@
           sigSelectedIds().length > 0 ? sigSelectedIds().length + ' selected' : String(_problems.length)
         ) +
         (_openSection === 'significance' ? '<div class="ms-pn-sec-body">' + sigSectionContent() + '</div>' : '') +
-        sectionHeadHtml('manual', 'Link manually', manualCountText) +
-        (_openSection === 'manual' ? '<div class="ms-pn-sec-body">' + manualSectionContent() + '</div>' : '') +
-        (linkedCount > 0
-          ? '<div class="ms-pn-footer"><span class="ms-pn-footer-count">' +
-            linkedCount +
-            ' link' +
-            (linkedCount === 1 ? '' : 's') +
-            ' created</span> <button type="button" class="ms-pn-refresh" id="ms-pn-refresh">Refresh page</button></div>'
-          : '') +
         '</div>';
     } else {
       body = '';
@@ -1788,45 +1625,8 @@
     el.querySelector('#ms-pn-refresh')?.addEventListener('click', function () {
       location.reload();
     });
-    el.querySelectorAll('.ms-pn-parent-select[data-idx]').forEach(function (sel) {
-      sel.addEventListener('change', function () {
-        var s = _suggestions[Number(sel.getAttribute('data-idx'))];
-        if (s) {
-          s.chosenParentId = sel.value || null;
-          render();
-        }
-      });
-    });
-    el.querySelector('#ms-pn-man-parent')?.addEventListener('change', function (e) {
-      _manual.parentId = e.target.value || null;
-      // A new parent invalidates the ticked set (candidates and cycle
-      // filtering both change) and any open confirm.
-      _manual.childIds = {};
-      _manual.confirming = false;
-      _manual.childErrors = {};
-      render();
-    });
-    el.querySelectorAll('.ms-pn-man-child-cb').forEach(function (cb) {
-      cb.addEventListener('change', function () {
-        var id = cb.getAttribute('data-child-id');
-        if (cb.checked) _manual.childIds[id] = true;
-        else delete _manual.childIds[id];
-        _manual.confirming = false;
-        render();
-      });
-    });
-    el.querySelector('#ms-pn-man-link')?.addEventListener('click', function () {
-      if (_manual.parentId && manualSelectedChildIds().length) {
-        _manual.confirming = true;
-        render();
-      }
-    });
-    el.querySelector('#ms-pn-man-cancel')?.addEventListener('click', function () {
-      _manual.confirming = false;
-      render();
-    });
-    el.querySelector('#ms-pn-man-confirm')?.addEventListener('click', function () {
-      confirmManualBatch();
+    el.querySelector('#ms-pn-open-canvas')?.addEventListener('click', function () {
+      if (window.ProblemNestingCanvas) window.ProblemNestingCanvas.open();
     });
     el.querySelector('#ms-pn-sig-target')?.addEventListener('change', function (e) {
       _sig.target = e.target.value || null;
@@ -1913,30 +1713,6 @@
         if (g) confirmMergeGroup(g);
       });
     });
-    el.querySelectorAll('.ms-pn-link-btn[data-idx]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var s = _suggestions[Number(btn.getAttribute('data-idx'))];
-        if (s && s.chosenParentId) {
-          s.confirming = true;
-          render();
-        }
-      });
-    });
-    el.querySelectorAll('.ms-pn-cancel[data-idx]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var s = _suggestions[Number(btn.getAttribute('data-idx'))];
-        if (s) {
-          s.confirming = false;
-          render();
-        }
-      });
-    });
-    el.querySelectorAll('.ms-pn-confirm-btn[data-idx]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var s = _suggestions[Number(btn.getAttribute('data-idx'))];
-        if (s) confirmLink(s);
-      });
-    });
   }
 
   // Rebuilds ONLY .ms-pn-root — the polite live region is a persistent
@@ -1945,14 +1721,72 @@
   // otherwise dumps keyboard users back to <body>).
   function render() {
     var el = document.getElementById('ms-pn-widget');
-    if (!el) return;
-    var root = el.querySelector('.ms-pn-root');
-    if (!root) return;
-    var focusKey = captureFocusKey(el);
-    root.innerHTML = buildHtml();
-    bindEvents(el);
-    restoreFocusKey(el, focusKey);
+    if (el) {
+      var root = el.querySelector('.ms-pn-root');
+      if (root) {
+        var focusKey = captureFocusKey(el);
+        root.innerHTML = buildHtml();
+        bindEvents(el);
+        restoreFocusKey(el, focusKey);
+      }
+    }
+    // Notify the canvas overlay (problem-nesting-canvas.js), if it's
+    // currently subscribed — a link committed from either surface must be
+    // reflected on both, without either file reaching into the other's DOM.
+    _subscribers.forEach(function (cb) {
+      try {
+        cb();
+      } catch (_) {
+        /* a subscriber's own render failing must never break this one */
+      }
+    });
   }
+
+  // ── Bridge to problem-nesting-canvas.js ───────────────────────────────────
+  // The ONLY way the canvas overlay touches this widget's state or writes to
+  // Medicus — no scan/commit/cycle logic is duplicated in the canvas file.
+  // getSnapshot() returns the SAME live objects (not copies), so a mutation
+  // made through commitParentLink is visible to the canvas the moment it next
+  // reads the snapshot; refresh()/onChange exist so a canvas-driven commit
+  // also updates this widget's own (possibly still-mounted, just hidden
+  // behind the overlay) accordion DOM and counts.
+  window.ProblemNesting = {
+    getSnapshot: function () {
+      return {
+        patientId: _lastPatientId,
+        problems: _problems,
+        infoById: _infoById,
+        suggestions: _suggestions,
+        parentIdByProblemId: _parentIdByProblemId,
+        scanState: _scanState,
+      };
+    },
+    ensureScanned: function () {
+      if (_scanState === 'idle') runScan();
+    },
+    commitParentLink: commitParentLink,
+    commitUnlink: commitUnlink,
+    wouldCreateCycle: wouldCreateCycle,
+    // Called by the canvas after a successful "Edit problem" code change
+    // (window.ProblemDescriptionCleanup's own onApplied callback, 2026-08-08
+    // follow-up: "problem code edits refresh within the canvas") — updates
+    // this scan's own cached description so the tile shows the corrected
+    // text immediately, without a full rescan. Calls render() itself (same
+    // as commitParentLink/commitUnlink's callers already do), which also
+    // fires onChange so the canvas re-renders with the fresh text.
+    updateProblemDescription: function (problemId, newDescription) {
+      if (!newDescription) return;
+      var p = _problems.find(function (x) {
+        return x.id === problemId;
+      });
+      if (p) p.description = newDescription;
+      render();
+    },
+    refresh: render,
+    onChange: function (cb) {
+      if (typeof cb === 'function') _subscribers.push(cb);
+    },
+  };
 
   // ── Injection: one "Nest problems?" trigger — same anchor discipline as
   // problem-bulk-end.js (Major-problems list, first-row fallback). ─────────────

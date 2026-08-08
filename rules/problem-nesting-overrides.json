@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "description": "Practice-defined problem parent/child pairs for the 'Organise problems' canvas's suggestion tray, ADDITIONAL to (never a replacement for) the live SNOMED-descendant search. Each entry is a pair Medicus/SNOMED does not model as a genuine IS-A hierarchy, but that this practice considers a real clinical parent/child relationship worth suggesting. childConceptId/parentConceptId are the only fields actually matched (by conceptId, against the patient's own active problem list) -- description/note are for a human reading this file, never displayed verbatim. Never auto-applied: every suggestion built from an entry here still goes through the same explicit per-link confirm as a SNOMED-derived one.",
+  "pairs": [
+    {
+      "childConceptId": "95217000",
+      "childDescription": "Pseudophakia",
+      "parentConceptId": "193570009",
+      "parentDescription": "Cataract",
+      "note": "Pseudophakia (an artificial lens implant) is the expected post-operative state after cataract extraction -- a real clinical sequela, but not a SNOMED IS-A descendant of cataract (different hierarchy branch entirely), so the live descendant search never finds it. Added 2026-08-08 (Nick's first entry on this list)."
+    },
+    {
+      "childConceptId": "53889007",
+      "childDescription": "Nuclear cataract",
+      "parentConceptId": "193570009",
+      "parentDescription": "Cataract",
+      "note": "UNLIKE the pseudophakia entry above, this one IS believed to be a genuine SNOMED IS-A descendant of cataract (Nick confirmed it sits under the cataract hierarchy) -- added here as a pragmatic workaround because problem-nesting.js's own live descendant-search mechanism (the pairHits two-step combined-then-attribute query) was NOT finding it for a real patient. Root cause unconfirmed -- candidates: the combined query's constrainingParentConcepts comma-list (built from every OTHER active problem's own conceptId) may silently truncate/behave unexpectedly at some length; or the specific recorded 'Cataract' problem on that record may carry a different/synonym conceptId than 193570009. Worth a live console probe (constrainingParentConcepts=193570009&query=53889007 directly) if this keeps happening for other genuinely-SNOMED pairs, rather than adding every miss here piecemeal."
+    }
+  ]
+}

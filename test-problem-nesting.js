@@ -16,6 +16,10 @@ const {
   buildUpdateParentProblemPayload,
   resolveOverviewConceptId,
   wouldCreateCycle,
+  dateSortKey,
+  resolveChronologyDate,
+  predatesParent,
+  buildOverridePairSet,
   buildNestingSuggestions,
   manualChildOptions,
   buildDuplicateGroups,
@@ -146,6 +150,154 @@ console.log('--- buildNestingSuggestions: the safety rules ---');
   );
 
   check(buildNestingSuggestions(null, null, null).length === 0, 'null inputs -> empty, never throws');
+
+  // Chronology sense-check (2026-08-08 request): a candidate child dated
+  // BEFORE its candidate parent can't genuinely be part of it — the parent
+  // condition didn't exist yet. Angioplasty (2005) can't be the parent of a
+  // stent inserted in 2001.
+  const infoBackwards = {
+    angio: { conceptId: 'P1', parentProblemId: null, onsetDate: '1 Jan 2005' },
+    stent: { conceptId: 'C1', parentProblemId: null, onsetDate: '1 Jan 2001' },
+    htn: { conceptId: 'H1', parentProblemId: null },
+  };
+  check(
+    buildNestingSuggestions(problems, infoBackwards, hits).length === 0,
+    "a child dated before its candidate parent isn't suggested — can't predate the condition it's part of"
+  );
+  // Same date, or child dated AFTER — not excluded.
+  const infoSameDay = {
+    angio: { conceptId: 'P1', parentProblemId: null, onsetDate: '1 Jan 2005' },
+    stent: { conceptId: 'C1', parentProblemId: null, onsetDate: '1 Jan 2005' },
+    htn: { conceptId: 'H1', parentProblemId: null },
+  };
+  check(buildNestingSuggestions(problems, infoSameDay, hits).length === 1, 'same-day child/parent is not excluded');
+  // Missing dates on either side never block a suggestion that would
+  // otherwise have been offered — this is a check on positive evidence, not
+  // a data-completeness requirement.
+  const infoOneDated = {
+    angio: { conceptId: 'P1', parentProblemId: null, onsetDate: '1 Jan 2005' },
+    stent: { conceptId: 'C1', parentProblemId: null }, // no onset date at all
+    htn: { conceptId: 'H1', parentProblemId: null },
+  };
+  check(
+    buildNestingSuggestions(problems, infoOneDated, hits).length === 1,
+    'a missing date on either side fails open — never blocks the suggestion'
+  );
+
+  // Practice-defined overrides (rules/problem-nesting-overrides.json,
+  // 2026-08-08 request) — first entry: pseudophakia (95217000) as a child
+  // of cataract (193570009), a pairing SNOMED itself doesn't recognise.
+  const overrideProblems = [
+    { id: 'cataract', description: 'Cataract' },
+    { id: 'pseudophakia', description: 'Pseudophakia' },
+  ];
+  const overrideInfo = {
+    cataract: { conceptId: '193570009', parentProblemId: null },
+    pseudophakia: { conceptId: '95217000', parentProblemId: null },
+  };
+  const overridePairs = new Set(['95217000|193570009']);
+  const overrideOut = buildNestingSuggestions(overrideProblems, overrideInfo, new Set(), overridePairs);
+  check(
+    overrideOut.length === 1 && overrideOut[0].parentOptions[0].id === 'cataract',
+    'an override-only pair (no SNOMED hit at all) still suggests, via overridePairHits'
+  );
+  check(
+    overrideOut[0].parentOptions[0].source === 'override',
+    "an override-sourced option is tagged 'override', not 'snomed' — the canvas must never credit SNOMED for a pairing it never made"
+  );
+  check(
+    buildNestingSuggestions(problems, info, hits, overridePairs).length === 1 &&
+      buildNestingSuggestions(problems, info, hits, overridePairs)[0].parentOptions[0].source === 'snomed',
+    'a genuine SNOMED hit is tagged snomed even when an (irrelevant) override set is also passed'
+  );
+  check(
+    buildNestingSuggestions(problems, info, hits).length === 1,
+    'omitting overridePairHits entirely still works — defaults to empty, fully backward compatible'
+  );
+}
+
+console.log('--- buildOverridePairSet ---');
+{
+  const set = buildOverridePairSet([
+    { childConceptId: '95217000', parentConceptId: '193570009' },
+    { childConceptId: 'A', parentConceptId: 'B', note: 'ignored — only the two concept ids are matched' },
+  ]);
+  check(set instanceof Set && set.size === 2, 'one key per well-formed entry');
+  check(set.has('95217000|193570009'), 'the pseudophakia/cataract pair key is built correctly');
+  check(
+    buildOverridePairSet([{ childConceptId: null, parentConceptId: 'B' }]).size === 0,
+    'a missing concept id is skipped, never a malformed key'
+  );
+  check(buildOverridePairSet(null).size === 0, 'null input -> empty set, never throws');
+  check(buildOverridePairSet([]).size === 0, 'empty input -> empty set');
+}
+
+console.log('--- rules/problem-nesting-overrides.json: the shipped list itself ---');
+{
+  const overrides = require('./rules/problem-nesting-overrides.json');
+  check(Array.isArray(overrides.pairs) && overrides.pairs.length >= 2, 'at least the two known entries are present');
+  const pairSet = buildOverridePairSet(overrides.pairs);
+  check(
+    pairSet.has('95217000|193570009'),
+    'pseudophakia (95217000) as a child of cataract (193570009) is still in the shipped file'
+  );
+  check(
+    pairSet.has('53889007|193570009'),
+    'nuclear cataract (53889007) as a child of cataract (193570009) is still in the shipped file'
+  );
+  overrides.pairs.forEach((p) => {
+    check(
+      typeof p.childConceptId === 'string' && typeof p.parentConceptId === 'string',
+      `entry for ${p.childDescription || '?'} has both concept ids as strings, not numbers (a numeric SCTID would silently fail to match a live conceptId, which is always a string)`
+    );
+  });
+}
+
+console.log('--- dateSortKey / resolveChronologyDate / predatesParent ---');
+{
+  check(dateSortKey('1 Jan 2005') === '2005-01-01', 'single-digit day zero-padded');
+  check(dateSortKey('20 Apr 2020') === '2020-04-20', 'two-digit day parsed');
+  check(dateSortKey(null) === null, 'null -> null');
+  check(dateSortKey('garbage') === null, 'garbage -> null, never throws');
+  // recordDate comes back from slideover/overview ALREADY in ISO shape
+  // (confirmed live 2026-08-08, HAR 48: "recordDate":"2025-01-15" on the
+  // SAME response as "onsetDate":"20 Apr 2006") — must parse both formats,
+  // or the onset-blank record-date fallback below silently goes null.
+  check(dateSortKey('2025-01-15') === '2025-01-15', 'already-ISO shape (recordDate) parsed too');
+
+  check(
+    resolveChronologyDate({ onsetDate: '1 Jan 2020', recordDate: '1 Jan 2019' }) === '2020-01-01',
+    'onset date preferred when present'
+  );
+  check(
+    resolveChronologyDate({ onsetDate: null, recordDate: '1 Jan 2019' }) === '2019-01-01',
+    'record date used when onset is blank — same fallback the canvas displays'
+  );
+  check(
+    resolveChronologyDate({ onsetDate: null, recordDate: '2019-01-01' }) === '2019-01-01',
+    'the ISO-shaped recordDate fallback resolves correctly too — the real live bug (2026-08-08): this used to silently return null'
+  );
+  check(resolveChronologyDate(null) === null, 'no info at all -> null, never throws');
+
+  check(
+    predatesParent({ onsetDate: '1 Jan 2001' }, { onsetDate: '1 Jan 2005' }) === true,
+    'an earlier-dated child predates a later-dated parent'
+  );
+  check(
+    predatesParent({ onsetDate: null, recordDate: '2001-01-01' }, { onsetDate: '1 Jan 2005' }) === true,
+    'mixed formats across the pair (ISO recordDate fallback vs UK-style onsetDate) still compare correctly'
+  );
+  check(
+    predatesParent({ onsetDate: '1 Jan 2005' }, { onsetDate: '1 Jan 2001' }) === false,
+    'a child dated AFTER the parent does not predate it'
+  );
+  check(
+    predatesParent({ onsetDate: '1 Jan 2005' }, { onsetDate: '1 Jan 2005' }) === false,
+    'equal dates do not count as predating'
+  );
+  check(predatesParent({}, { onsetDate: '1 Jan 2005' }) === false, 'child date unknown -> fails open, not excluded');
+  check(predatesParent({ onsetDate: '1 Jan 2005' }, {}) === false, 'parent date unknown -> fails open, not excluded');
+  check(predatesParent(null, null) === false, 'null inputs -> false, never throws');
 }
 
 console.log('--- manualChildOptions: the manual builder is looser, except the cycle guard ---');
