@@ -188,6 +188,12 @@
     var _rows = []; // [{...raw API fields..., checked, acted, actError}]
     var _acting = false;
     var _onMatchingPage = false;
+    // Bumped by removeWidget() (SPA navigation away). In-flight async work
+    // (load(), runAction()) captures the value at start and refuses to apply
+    // its results if it changed — otherwise a fetch/batch completing AFTER
+    // navigation resurrects stale rows/_step ('done' with zero fresh rows,
+    // or a task list from the previous visit) on the next page entry.
+    var _generation = 0;
 
     function apiBaseUrl() {
       return 'https://' + _siteId + '.api.' + location.hostname;
@@ -245,24 +251,28 @@
     }
 
     async function load() {
+      var gen = _generation;
+      _step = 'select'; // a fresh fetch always starts a fresh flow
       _loadState = 'loading';
       _loadError = null;
       render();
       try {
         var tasks = await fetchTaskList();
+        if (gen !== _generation) return; // navigated away mid-fetch — stale result
         _rows = tasks.map(function (t) {
           return Object.assign({}, t, { checked: false, acted: false, actError: null });
         });
         _loadState = 'done';
       } catch (err) {
+        if (gen !== _generation) return;
         _loadState = 'error';
         _loadError = (err && err.message) || 'Failed to load the task list.';
-      } finally {
-        render();
       }
+      render();
     }
 
     async function runAction() {
+      var gen = _generation;
       var parts = partitionSelection(_rows);
       if (!canSubmit(parts.acting.length, _acting)) return;
       _acting = true;
@@ -297,6 +307,10 @@
           action: 'committed',
         });
       }
+      // The ledger record above still happens on a stale generation — the
+      // POSTs really were committed — but the UI state must not be touched:
+      // removeWidget() already reset it for the next page entry.
+      if (gen !== _generation) return;
       var anyFailed = results.some(function (res) {
         return res.status !== 'fulfilled';
       });
@@ -327,8 +341,7 @@
       });
       var summary =
         '<div class="ms-tba-summary">Tick the ' +
-        esc(config.itemNounSingular) +
-        (live.length === 1 ? '' : 's') +
+        esc(live.length === 1 ? config.itemNounSingular : config.itemNounPlural) +
         ' you want to ' +
         esc(config.verb).toLowerCase() +
         ' — showing all ' +
@@ -606,6 +619,7 @@
     function removeWidget() {
       var el = document.getElementById(widgetId);
       if (el) el.remove();
+      _generation++; // invalidate any in-flight load()/runAction() completions
       _open = false;
       _step = 'select';
       _loadState = 'idle';

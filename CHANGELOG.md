@@ -137,6 +137,36 @@ to `config.verb`, which produced "Acknowledgeing" for Privacy Officer's
 `verbGerund` config field per instantiation ('Acknowledging' / 'Discarding')
 instead of a spelling heuristic — same "confirm it, don't guess it"
 discipline as the endpoints themselves.
+
+**Fix (pre-merge review):** two classic-script load failures found before release:
+
+- `shared/io/fs-handle-store.js` and `shared/io/pdc-contribute.js` each declared a
+  top-level `const api`. Classic `<script>`s share ONE global lexical environment, so
+  the second (and, in options.html, both — `suite-envelope.js` already declares
+  `const api`) threw "Identifier 'api' has already been declared" and silently never
+  ran: `window.FsHandleStore`/`window.PdcContribute` stayed undefined, the entire
+  contribute feature no-opped, and — worse — options.js's `loadFileHandle` (now
+  delegating to `FsHandleStore`) broke the existing **Publish to shared folder**
+  button. Both files are now wrapped in IIFEs.
+- The `service-worker.js` `importScripts('shared/io/problem-description-cleanup-io.js')`
+  fix was a runtime no-op: that file's top-level `window.MSPreferredDescriptions`
+  throws in a service worker (no `window`), and its dependency
+  `shared/preferred-descriptions.js` was never imported (and itself ended
+  `(typeof window !== 'undefined' ? window : global)` — neither exists in a worker).
+  Now: both files resolve via `globalThis`, and the service worker imports
+  `preferred-descriptions.js` before the io file. `test-service-worker.js` gained a
+  runtime load-check — every importScripts'd file is evaluated in a windowless
+  worker-like vm context and every `_io()` dependency must actually land on `self` —
+  so a file that throws at import time fails CI instead of silently vanishing in the
+  field, which the source-text check alone could not catch.
+
+Also from the same review round: `docs/feature-list.md` synced to v3.225.0 (the
+release commit bumped the manifest without it, so `scripts/check-doc-versions.js`
+failed CI) — the two new features added to the in-page/Settings sections and the
+safety-posture write-path enumeration now names the bulk acknowledge/discard
+actions. Content sync only; no CSO signature claimed, the review ledger is
+untouched.
+
 ## [v3.224.0] — 2026-08-07
 
 ### Typable appointment-type search everywhere + book straight from First available
