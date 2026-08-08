@@ -16,47 +16,55 @@
 
 'use strict';
 
-function openHandleDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('medicus-suite-pp', 1);
-    req.onupgradeneeded = (e) => e.target.result.createObjectStore('handles');
-    req.onsuccess = (e) => resolve(e.target.result);
-    req.onerror = (e) => reject(e.target.error);
-  });
-}
-
-async function loadFileHandle(key) {
-  const storeKey = key || 'profileFile';
-  try {
-    const db = await openHandleDB();
-    return await new Promise((resolve, reject) => {
-      const tx = db.transaction('handles', 'readonly');
-      const req = tx.objectStore('handles').get(storeKey);
-      req.onsuccess = (e) => resolve(e.target.result || null);
+// IIFE, not top-level declarations: this loads as a classic <script> in
+// options.html and panel.html, where top-level const/let land in the ONE
+// global lexical environment shared by every classic script on the page — a
+// second script declaring the same name (e.g. suite-envelope.js's own
+// top-level `const api`) throws "Identifier has already been declared" and
+// the whole file silently fails to run.
+(function () {
+  function openHandleDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('medicus-suite-pp', 1);
+      req.onupgradeneeded = (e) => e.target.result.createObjectStore('handles');
+      req.onsuccess = (e) => resolve(e.target.result);
       req.onerror = (e) => reject(e.target.error);
     });
-  } catch (_) {
-    return null;
   }
-}
 
-async function saveFileHandle(handle, key) {
-  const storeKey = key || 'profileFile';
-  try {
-    const db = await openHandleDB();
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction('handles', 'readwrite');
-      const req = tx.objectStore('handles').put(handle, storeKey);
-      req.onsuccess = () => resolve();
-      req.onerror = (e) => reject(e.target.error);
-    });
-  } catch (_) {}
-}
+  async function loadFileHandle(key) {
+    const storeKey = key || 'profileFile';
+    try {
+      const db = await openHandleDB();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction('handles', 'readonly');
+        const req = tx.objectStore('handles').get(storeKey);
+        req.onsuccess = (e) => resolve(e.target.result || null);
+        req.onerror = (e) => reject(e.target.error);
+      });
+    } catch (_) {
+      return null;
+    }
+  }
 
-const api = { openHandleDB, loadFileHandle, saveFileHandle };
+  async function saveFileHandle(handle, key) {
+    const storeKey = key || 'profileFile';
+    try {
+      const db = await openHandleDB();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('handles', 'readwrite');
+        const req = tx.objectStore('handles').put(handle, storeKey);
+        req.onsuccess = () => resolve();
+        req.onerror = (e) => reject(e.target.error);
+      });
+    } catch (_) {}
+  }
 
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = api;
-} else if (typeof self !== 'undefined') {
-  self.FsHandleStore = api;
-}
+  const api = { openHandleDB, loadFileHandle, saveFileHandle };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = api;
+  } else if (typeof self !== 'undefined') {
+    self.FsHandleStore = api;
+  }
+})();

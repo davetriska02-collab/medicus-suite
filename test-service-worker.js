@@ -85,6 +85,57 @@ check(missingImports.length === 0,
     ? 'every practice-profile _io() dependency is importScripts\'d in service-worker.js'
     : `missing importScripts for: ${missingImports.join(', ')}`);
 
+console.log('\n--- every importScripts\'d file actually LOADS in a windowless SW context ---');
+
+// The source-text check above is necessary but not sufficient: an
+// importScripts line can exist yet still fail at runtime, because the MV3
+// service worker has NO `window` (and no Node `global`) — a file whose
+// top-level code touches either throws at import time, the try/catch warns,
+// and the module is silently absent exactly as if the line were missing.
+// That is how the v3.225.0 problem-description-cleanup-io.js line was a
+// runtime no-op on arrival: the file's own `window.MSPreferredDescriptions`
+// threw before anything was defined (and its preferred-descriptions.js
+// dependency wasn't imported at all). So: evaluate every importScripts'd
+// file, in service-worker.js's own order, in a vm context that deliberately
+// has `self` but neither `window` nor `global` — any top-level throw fails
+// here instead of silently in the field.
+{
+  const importedFiles = [...src.matchAll(/importScripts\(\s*'([^']+)'/g)].map((m) => m[1]);
+  check(importedFiles.length > 0, `found ${importedFiles.length} importScripts'd files to load-check`);
+  const ctx = vm.createContext({});
+  ctx.self = ctx; // like a worker, self IS the global scope — no window, no global
+  ctx.console = { log() {}, warn() {}, error() {} };
+  ctx.chrome = {
+    storage: { local: { get: async () => ({}), set: async () => {} }, onChanged: { addListener() {} } },
+    runtime: { getURL: (p) => p, id: 'test', onMessage: { addListener() {} } },
+    alarms: { create() {}, onAlarm: { addListener() {} } },
+  };
+  ctx.fetch = async () => ({ ok: false });
+  ctx.setTimeout = setTimeout;
+  ctx.clearTimeout = clearTimeout;
+  ctx.setInterval = setInterval;
+  ctx.clearInterval = clearInterval;
+  const loadFailures = [];
+  for (const file of importedFiles) {
+    try {
+      vm.runInContext(fs.readFileSync(path.join(__dirname, file), 'utf8'), ctx, { filename: file });
+    } catch (e) {
+      loadFailures.push(`${file} — ${e.message}`);
+    }
+  }
+  check(loadFailures.length === 0,
+    loadFailures.length === 0
+      ? 'all importScripts\'d files evaluate without throwing in a windowless worker context'
+      : `files that throw at import time in a worker: ${loadFailures.join('; ')}`);
+  // And the _io() dependencies must actually END UP resolvable on self —
+  // loading without throwing isn't enough if the export never lands.
+  const unresolved = uniqueModules.filter((name) => typeof ctx[`${name}Import`] !== 'function');
+  check(unresolved.length === 0,
+    unresolved.length === 0
+      ? 'every _io() dependency resolves to a function on self after loading'
+      : `_io() dependencies not on self after load: ${unresolved.map((n) => `${n}Import`).join(', ')}`);
+}
+
 console.log('\n--- sender identity guard in onMessage --------------------------------');
 
 // The guard `sender.id !== chrome.runtime.id` must exist inside the

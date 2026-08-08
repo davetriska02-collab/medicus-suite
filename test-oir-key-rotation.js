@@ -290,10 +290,10 @@ console.log('\n--- options.js publish path ---');
   );
   check(/attended: true/.test(optionsSrc), 'the rotation call passes attended: true explicitly');
 
-  // v3.225.1: doPublish's unattended "auto" branch was retired — that
+  // v3.225.0: doPublish's unattended "auto" branch was retired — that
   // once-daily unattended refresh (F1/F5/F9 below) is now
   // shared/io/pdc-contribute.js's job, and doPublish is attended-only, always
-  // a real click. See CHANGELOG v3.225.1 and pdc-contribute.js's own header.
+  // a real click. See CHANGELOG v3.225.0 and pdc-contribute.js's own header.
   const doPublish = optionsSrc.match(/async function doPublish\(\) \{[\s\S]*?\r?\n {4}\}\r?\n/);
   check(!!doPublish, 'doPublish() body located for inspection');
   const body = doPublish ? doPublish[0] : '';

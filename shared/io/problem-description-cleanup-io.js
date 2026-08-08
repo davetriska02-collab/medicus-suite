@@ -69,7 +69,12 @@ const TALLY_KEY_RE = /^\d+(\|\d+)?$/;
 const pdcShared =
   typeof module !== 'undefined' && module.exports
     ? require('../preferred-descriptions.js')
-    : window.MSPreferredDescriptions;
+    : // globalThis, not window: this file is also importScripts'd by the MV3
+      // service worker (applyProfile's pdc branch), where `window` does not
+      // exist — a bare `window.` reference throws at import time and the
+      // whole file silently fails to load (the exact class of bug the
+      // service-worker importScripts fix exists to close).
+      globalThis.MSPreferredDescriptions;
 
 // pdcShared.normaliseEntry() knows only {tally, override} — the override
 // set/cleared markers are this file's own concern (see the header), so every
