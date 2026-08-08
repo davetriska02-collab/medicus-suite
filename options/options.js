@@ -1256,7 +1256,7 @@ async function isPracticeAccepted() {
       {
         id: 'problemDescriptionCleanup',
         label: 'Cleanup Code Preferences',
-        defaultChecked: false,
+        defaultChecked: true,
         defaultMode: 'merge',
         desc: 'Learned SNOMED replacement-code preferences — tallies always combine; "enforce" makes a pinned override the practice-wide default',
       },
@@ -1376,41 +1376,18 @@ async function isPracticeAccepted() {
       if (acceptInline) acceptInline.style.display = (await isPracticeAccepted()) ? 'none' : '';
     }
 
-    // ── IndexedDB helpers for FileSystemFileHandle persistence ───────────────
-
-    function openHandleDB() {
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open('medicus-suite-pp', 1);
-        req.onupgradeneeded = (e) => e.target.result.createObjectStore('handles');
-        req.onsuccess = (e) => resolve(e.target.result);
-        req.onerror = (e) => reject(e.target.error);
-      });
-    }
+    // ── FileSystemFileHandle persistence ──────────────────────────────────────
+    // Delegated to shared/io/fs-handle-store.js (extracted so
+    // shared/io/pdc-contribute.js can store its OWN handle under the same
+    // IndexedDB database without reaching into the publisher's). This
+    // section's own handle is keyed 'profileFile', unchanged from before.
 
     async function loadFileHandle() {
-      try {
-        const db = await openHandleDB();
-        return await new Promise((resolve, reject) => {
-          const tx = db.transaction('handles', 'readonly');
-          const req = tx.objectStore('handles').get('profileFile');
-          req.onsuccess = (e) => resolve(e.target.result || null);
-          req.onerror = (e) => reject(e.target.error);
-        });
-      } catch (_) {
-        return null;
-      }
+      return window.FsHandleStore.loadFileHandle('profileFile');
     }
 
     async function saveFileHandle(handle) {
-      try {
-        const db = await openHandleDB();
-        await new Promise((resolve, reject) => {
-          const tx = db.transaction('handles', 'readwrite');
-          const req = tx.objectStore('handles').put(handle, 'profileFile');
-          req.onsuccess = () => resolve();
-          req.onerror = (e) => reject(e.target.error);
-        });
-      } catch (_) {}
+      return window.FsHandleStore.saveFileHandle(handle, 'profileFile');
     }
 
     // ── Status helpers ────────────────────────────────────────────────────────
@@ -1661,40 +1638,18 @@ async function isPracticeAccepted() {
     }
 
     // ── Publish handler ───────────────────────────────────────────────────────
-    // opts.auto: true when triggered by maybeAutoPublish() (the once-daily,
-    // no-human-involved trigger) rather than a real click. In auto mode we can
-    // NEVER prompt — showSaveFilePicker() and FileSystemFileHandle.requestPermission()
-    // both require a genuine user gesture, which a background/timer trigger
-    // doesn't have. So auto mode only ever uses an ALREADY-remembered handle
-    // whose permission is ALREADY granted (queryPermission only, never
-    // requestPermission), and silently does nothing this cycle otherwise —
-    // same fail-quiet discipline as _checkForCodeUpdate's mid-copy skip in
-    // service-worker.js. It will simply try again next time Options is open.
-    //
-    // AUTO MODE PUBLISHES A DIFFERENT PAYLOAD, and that is the point. A manual
-    // publish is an attended, deliberate act: it says "this machine's settings
-    // are what the practice should have", so a full-profile overwrite is
-    // correct. An unattended daily one says nothing of the sort — it exists
-    // ONLY to circulate Cleanup Code Preferences, the one module that
-    // accumulates independently on every machine and is union-merged rather
-    // than overwritten. Publishing the full profile unattended meant any PC
-    // with a granted handle rewrote sentinel/knowledge/capacity/leaflets/… with
-    // ITS local snapshot every day: two such machines ping-pong the shared
-    // file, and one stale machine silently reverts the curated copy daily. So
-    // in auto mode every OTHER module's section is carried forward VERBATIM
-    // from the fetched shared profile (as are apply.modules and
-    // practiceAttestation — an attestation must never be re-stamped
-    // unattended), and if the shared profile can't be read the publish is
-    // ABORTED rather than falling back to a raw local snapshot, which is
-    // precisely the clobber being avoided.
+    // Attended-only: a real click, always. The unattended daily refresh that
+    // used to live here as opts.auto has moved to shared/io/pdc-contribute.js
+    // ("contributing" — see its own header for why that's a materially
+    // smaller, safer operation than fully automating this button ever was).
+    // A publish here is a deliberate, attended act: it says "this machine's
+    // settings are what the practice should have", so a full-profile
+    // overwrite of every module the admin has opted into is correct.
 
-    async function doPublish(opts) {
-      const auto = !!(opts && opts.auto);
+    async function doPublish() {
       if (!publishBtn) return;
-      if (!auto) {
-        publishBtn.disabled = true;
-        publishBtn.textContent = 'Publishing…';
-      }
+      publishBtn.disabled = true;
+      publishBtn.textContent = 'Publishing…';
 
       try {
         await savePickerState();
@@ -1704,7 +1659,7 @@ async function isPracticeAccepted() {
         const version = await nextProfileVersion();
 
         // What's currently in the shared folder — read ONCE and reused by every
-        // merge below (pdc union, OIR rotation, auto-mode carry-forward).
+        // merge below (pdc union, OIR rotation).
         let sharedProfile = null;
         try {
           sharedProfile = await window.PracticeProfile.fetchProfile();
@@ -1725,67 +1680,13 @@ async function isPracticeAccepted() {
         let profileJson = null;
         let envelope = null;
 
-        if (auto) {
-          // ── Unattended daily refresh: the merge-safe payload ONLY ──────────
-          // See doPublish's header. Nothing here may reflect a decision this
-          // machine hasn't been told to make on the practice's behalf.
-          const sharedEnvelope = sharedProfile?.envelope;
-          const sharedModules = sharedEnvelope?.modules;
-          const sharedApplyModules =
-            sharedProfile?.apply?.modules && !Array.isArray(sharedProfile.apply.modules)
-              ? sharedProfile.apply.modules
-              : null;
-
-          if (!sharedEnvelope || !sharedModules || !sharedApplyModules) {
-            // Auto-publish aborted: with no readable shared profile there is
-            // nothing to carry forward, and publishing this machine's raw
-            // snapshot instead is exactly the wholesale overwrite this mode
-            // exists to avoid. Try again next time Options is open.
-            console.warn('[Practice Profile] Auto-publish aborted — the shared profile could not be read.');
-            return;
-          }
-          if (!sharedApplyModules.problemDescriptionCleanup) {
-            // Cleanup Code Preferences isn't part of what this practice
-            // publishes, so an unattended run has nothing merge-safe to
-            // refresh. Adding it here would be this machine deciding to
-            // publish a module nobody chose to publish.
-            console.log('[Practice Profile] Auto-publish skipped — Cleanup Code Preferences is not published.');
-            return;
-          }
-
-          // Note what is NOT called here: doFullExport(). Auto mode reads ONLY
-          // this module's local state, so there is no local snapshot of
-          // anything else in scope to publish by accident.
-          const mergedPdc = problemDescriptionCleanupMergeForPublish(
-            sharedModules.problemDescriptionCleanup,
-            await problemDescriptionCleanupExport(),
-            // includeOverride: false — the override (what becomes "enforced for
-            // everyone", and equally its removal) must only ever change as a
-            // result of a conscious, attended publish. An unattended run only
-            // refreshes tallies.
-            { includeOverride: false }
-          );
-
-          // Every other module's section is carried forward VERBATIM from the
-          // shared profile — this machine's own snapshot of them is never
-          // published. apply/practiceAttestation/profileLabel/publishedBy ride
-          // along untouched for the same reason (F10: an attestation must never
-          // be re-stamped unattended).
-          const carriedModules = Object.assign({}, sharedModules, { problemDescriptionCleanup: mergedPdc });
-          profileJson = Object.assign({}, sharedProfile, {
-            profileVersion: version,
-            publishedAt: new Date().toISOString(),
-            envelope: Object.assign({}, sharedEnvelope, { modules: carriedModules }),
-          });
-        }
-
         // ── Request Monitor ↔ practice-code coupling ──────────────────────────
         // Request Monitor needs suite.practiceCode to make API calls on managed
         // installs. If the admin published Request Monitor, ensure the suite
         // module is ALSO included (so suite.practiceCode is applied) and the
         // envelope carries the code. The code lives in ONE place (the suite
         // module) — never duplicated into the requestMonitor section.
-        if (!auto && applyModules.requestMonitor) {
+        if (applyModules.requestMonitor) {
           let localCode = '';
           try {
             const r = await chrome.storage.local.get('suite.practiceCode');
@@ -1803,15 +1704,12 @@ async function isPracticeAccepted() {
           if (!applyModules.suite) applyModules.suite = 'merge';
         }
 
-        if (!auto) {
+        {
           envelope = await doFullExport();
 
           // ── Central practice attestation (SAFETY-CRITICAL) ──────────────────
           // Only gates the admin has accepted locally AND not opted out of are
-          // attested. Only emit the block if at least one gate is true. This
-          // whole block is attended-only: an attestation is a human act, so an
-          // unattended publish carries the shared file's existing one forward
-          // verbatim instead (see the auto branch above).
+          // attested. Only emit the block if at least one gate is true.
           const gates = {};
           for (const g of GATE_DEFS) {
             const accepted = await g.accepted();
@@ -1853,7 +1751,7 @@ async function isPracticeAccepted() {
           // OIR test-dictionary key rotation — attended publishes only (the
           // helper refuses without attended:true as well, so a future call site
           // can't reintroduce unattended rotation by omission).
-          if (!auto && applyModules.triage) {
+          if (applyModules.triage) {
             try {
               await applyOirRotation(envelope, sharedProfile?.envelope?.modules?.triage?.config);
             } catch (e) {
@@ -1880,8 +1778,6 @@ async function isPracticeAccepted() {
           };
         }
 
-        if (!profileJson) return; // auto mode aborted above
-
         const jsonStr = JSON.stringify(profileJson, null, 2);
 
         // ACCEPTED LIMITATION — concurrent publishes are last-writer-wins.
@@ -1897,34 +1793,27 @@ async function isPracticeAccepted() {
         //
         // Try remembered handle first.
         let usedHandle = null;
-        // Only a real write into the shared folder counts as "published today"
-        // for the daily auto-publish gate — see the stamp below.
-        let wroteToSharedFile = false;
         if (typeof showSaveFilePicker === 'function') {
           const remembered = await loadFileHandle();
           if (remembered) {
             try {
               let perm = await remembered.queryPermission({ mode: 'readwrite' });
-              // requestPermission() needs a real user gesture — never call it
-              // in auto mode. queryPermission alone reflects a grant already
-              // made during an earlier manual publish.
-              if (perm !== 'granted' && !auto) {
+              if (perm !== 'granted') {
                 perm = await remembered.requestPermission({ mode: 'readwrite' });
               }
               if (perm === 'granted') {
                 await writeProfileToHandle(remembered, jsonStr);
                 usedHandle = remembered;
-                wroteToSharedFile = true;
                 setPublishStatus(
                   `Published v${version} to ${remembered.name}. Other PCs will pick it up within about 15 minutes, or on their next browser start.`
                 );
               }
             } catch (_) {
-              // Permission denied or stale handle — fall through to picker (manual only)
+              // Permission denied or stale handle — fall through to picker.
             }
           }
 
-          if (!usedHandle && !auto) {
+          if (!usedHandle) {
             // Show save picker
             let handle;
             try {
@@ -1942,32 +1831,18 @@ async function isPracticeAccepted() {
             await writeProfileToHandle(handle, jsonStr);
             await saveFileHandle(handle);
             usedHandle = handle;
-            wroteToSharedFile = true;
             setPublishStatus(
               `Published v${version}. Other PCs will pick it up within about 15 minutes, or on their next browser start.`
             );
           }
-          // auto mode + no usable remembered handle: silently do nothing this
-          // cycle (no picker, no prompt) — retried next time Options is open.
-        } else if (!auto) {
-          // Fallback: download via blob
-          // Blob fallback: the file lands in the user's Downloads folder and
-          // they still have to move it into the shared folder themselves — which
-          // they may never do. Deliberately does NOT set wroteToSharedFile:
-          // stamping the daily date here would suppress that day's retry and
-          // overstate what actually happened.
+        } else {
+          // Fallback: download via blob. The file lands in the user's Downloads
+          // folder and they still have to move it into the shared folder
+          // themselves — which they may never do.
           downloadJson(profileJson, 'practice-profile.json');
           setPublishStatus(
             `Profile downloaded as practice-profile.json (v${version}). Move it into the shared extension folder, replacing the old file, and the update will reach everyone within 15 minutes.`
           );
-        }
-
-        if (wroteToSharedFile) {
-          // Gates maybeAutoPublish() — a manual publish today also counts, so
-          // the daily auto-trigger doesn't immediately fire again right after.
-          await chrome.storage.local.set({
-            'suite.practiceProfile.lastAutoPublishAt': new Date().toISOString().slice(0, 10),
-          });
         }
 
         await render();
@@ -1979,36 +1854,16 @@ async function isPracticeAccepted() {
       }
     }
 
-    // ── Once-daily auto-publish ────────────────────────────────────────────────
-    // Fires when the Options page happens to be open and a day has passed
-    // since this machine last published (manually or automatically). Never
-    // starts publishing on a machine that hasn't manually published at least
-    // once before (savedModules empty = no established publish config) —
-    // auto-publish only continues an already-established habit, it never
-    // silently turns a random PC into a publisher. See doPublish's own auto
-    // comment for why it can never prompt.
-    async function maybeAutoPublish() {
-      try {
-        const r = await chrome.storage.local.get(['suite.practiceProfile.lastAutoPublishAt', PUBLISHER_KEY]);
-        const today = new Date().toISOString().slice(0, 10);
-        if (r['suite.practiceProfile.lastAutoPublishAt'] === today) return;
-
-        const saved = r[PUBLISHER_KEY] || {};
-        const hasEstablishedConfig = Object.values(saved.modules || {}).some((m) => m && m.checked);
-        if (!hasEstablishedConfig) return;
-
-        await doPublish({ auto: true });
-      } catch (e) {
-        console.warn('[Practice Profile] auto-publish failed:', e.message);
-      }
-    }
-
     // ── Init ──────────────────────────────────────────────────────────────────
+    // The once-daily unattended refresh that used to live here as
+    // maybeAutoPublish()/doPublish({auto:true}) has moved to
+    // shared/io/pdc-contribute.js's runPdcContribution() (see
+    // initPdcContributeSection below) — a materially smaller, pdc-only
+    // operation that doesn't require this machine to have ever published.
 
     await render();
     await buildModulePicker();
     await buildAttestationRows();
-    maybeAutoPublish(); // fire-and-forget — never blocks page init
 
     // Inline "Accept all for this practice" (so a greyed gate isn't a dead end).
     const ppAcceptTick = document.getElementById('ppAcceptTick');
@@ -2065,6 +1920,188 @@ async function isPracticeAccepted() {
     publishBtn?.addEventListener('click', () => doPublish());
   } catch (e) {
     console.warn('[Practice Profile section]', e.message);
+  }
+})();
+
+// ── Cleanup Code Preferences: automatic practice-pool contribution ───────────
+// Distinct from the Practice Profile publish flow above — see
+// shared/io/pdc-contribute.js's header for exactly what a "contributor" is
+// and isn't allowed to do, and why it's safe to run without ever completing
+// the full Publish flow. This section owns the enable toggle + connect
+// button; the side panel (side-panel/panel.js) fires the same
+// runPdcContribution() silently on its own init, so contribution doesn't
+// depend on anyone ever opening Options.
+(async function initPdcContributeSection() {
+  try {
+    if (!window.PdcContribute || !window.FsHandleStore) return;
+
+    const enabledTick = document.getElementById('pdcContribEnabled');
+    const connectBtn = document.getElementById('pdcContribConnectBtn');
+    const statusEl = document.getElementById('pdcContribStatus');
+    if (!enabledTick) return;
+
+    const STATE_KEY = window.PdcContribute.PDC_CONTRIBUTE_STATE_KEY;
+    const CONTRIB_HANDLE_KEY = 'pdcContribFile';
+
+    async function getState() {
+      const r = await chrome.storage.local.get(STATE_KEY);
+      return r[STATE_KEY] || null;
+    }
+    async function setState(patch) {
+      const current = (await getState()) || {};
+      await chrome.storage.local.set({ [STATE_KEY]: Object.assign({}, current, patch) });
+    }
+
+    // Reuse an already-established publisher handle when this machine has
+    // one — a machine that already publishes needs no second file grant to
+    // also contribute. Falls back to this section's own handle otherwise.
+    async function resolveHandle() {
+      return (
+        (await window.FsHandleStore.loadFileHandle(CONTRIB_HANDLE_KEY)) ||
+        (await window.FsHandleStore.loadFileHandle('profileFile'))
+      );
+    }
+
+    function setStatus(msg, isError) {
+      if (!statusEl) return;
+      statusEl.textContent = msg;
+      statusEl.style.color = isError ? '#ef4444' : 'var(--text-3)';
+    }
+
+    async function runOnce() {
+      const handle = await resolveHandle();
+      if (!handle) return;
+      try {
+        const result = await window.PdcContribute.runPdcContribution({
+          getState,
+          setState,
+          loadHandle: resolveHandle,
+          readHandleText: async (h) => (await h.getFile()).text(),
+          writeHandleText: async (h, text) => {
+            const w = await h.createWritable();
+            await w.write(text);
+            await w.close();
+          },
+          fetchProfile: () => window.PracticeProfile.fetchProfile(),
+          getLocalPdc: () => problemDescriptionCleanupExport(),
+          mergePdc: problemDescriptionCleanupMergeForPublish,
+        });
+        if (result.ran && result.wrote) setStatus('Contributed your cleanup choices to the practice today.');
+      } catch (_) {
+        // Silent by contract — see pdc-contribute.js's runPdcContribution header.
+      }
+    }
+
+    async function refreshUI() {
+      const state = await getState();
+      enabledTick.checked = !!(state && state.enabled);
+      const handle = await resolveHandle();
+      if (!handle) {
+        if (connectBtn) {
+          connectBtn.textContent = 'Connect shared file';
+          connectBtn.style.display = '';
+        }
+        setStatus('');
+        return;
+      }
+      let perm = 'prompt';
+      try {
+        perm = await handle.queryPermission({ mode: 'readwrite' });
+      } catch (_) {}
+      if (connectBtn) {
+        connectBtn.style.display = perm === 'granted' ? 'none' : '';
+        connectBtn.textContent = 'Reconnect shared file';
+      }
+      if (state && state.lastContributedAt) {
+        setStatus(
+          state.lastResult === 'contributed'
+            ? `Last contributed ${state.lastContributedAt}.`
+            : `Last checked ${state.lastContributedAt} — nothing new to share.`
+        );
+      }
+    }
+
+    enabledTick.addEventListener('change', async () => {
+      if (!enabledTick.checked) {
+        await setState({ enabled: false });
+        return;
+      }
+      const handle = await resolveHandle();
+      if (!handle) {
+        // No handle at all on this machine yet — enabling requires connecting
+        // one first. Revert the tick rather than opening a picker off a
+        // checkbox click (keeps "what grants file access" limited to one
+        // obvious button).
+        enabledTick.checked = false;
+        setStatus('Connect a shared file first.', true);
+        return;
+      }
+      let perm;
+      try {
+        perm = await handle.queryPermission({ mode: 'readwrite' });
+        if (perm !== 'granted') perm = await handle.requestPermission({ mode: 'readwrite' });
+      } catch (_) {
+        perm = 'denied';
+      }
+      if (perm !== 'granted') {
+        enabledTick.checked = false;
+        setStatus('Permission not granted.', true);
+        return;
+      }
+      await setState({ enabled: true });
+      setStatus('Enabled — checking now…');
+      await runOnce();
+      await refreshUI();
+    });
+
+    connectBtn?.addEventListener('click', async () => {
+      if (typeof showOpenFilePicker !== 'function') {
+        setStatus('This browser does not support connecting a shared file directly.', true);
+        return;
+      }
+      // Reconnect case: a handle already exists, only its permission lapsed
+      // (e.g. after a browser restart) — re-request rather than picking again.
+      const existing = await resolveHandle();
+      if (existing) {
+        try {
+          const perm = await existing.requestPermission({ mode: 'readwrite' });
+          if (perm === 'granted') {
+            setStatus('Reconnected.');
+            await refreshUI();
+            return;
+          }
+        } catch (_) {}
+      }
+      try {
+        const [handle] = await showOpenFilePicker({
+          types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+        });
+        const file = await handle.getFile();
+        const text = await file.text();
+        const fetched = await window.PracticeProfile.fetchProfile().catch(() => null);
+        const verify = window.PdcContribute.verifyProfileFile(text, fetched);
+        if (!verify.ok) {
+          setStatus(verify.reason, true);
+          return;
+        }
+        const perm = await handle.requestPermission({ mode: 'readwrite' });
+        if (perm !== 'granted') {
+          setStatus('Write permission not granted.', true);
+          return;
+        }
+        await window.FsHandleStore.saveFileHandle(handle, CONTRIB_HANDLE_KEY);
+        setStatus('Connected.');
+        await refreshUI();
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+        setStatus('Could not connect file: ' + err.message, true);
+      }
+    });
+
+    await refreshUI();
+    runOnce(); // fire-and-forget — never blocks page init
+  } catch (e) {
+    console.warn('[Pdc Contribute section]', e.message);
   }
 })();
 

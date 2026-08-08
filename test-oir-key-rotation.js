@@ -290,34 +290,47 @@ console.log('\n--- options.js publish path ---');
   );
   check(/attended: true/.test(optionsSrc), 'the rotation call passes attended: true explicitly');
 
-  const doPublish = optionsSrc.match(/async function doPublish\(opts\) \{[\s\S]*?\n {4}\}\n/);
+  // v3.225.1: doPublish's unattended "auto" branch was retired — that
+  // once-daily unattended refresh (F1/F5/F9 below) is now
+  // shared/io/pdc-contribute.js's job, and doPublish is attended-only, always
+  // a real click. See CHANGELOG v3.225.1 and pdc-contribute.js's own header.
+  const doPublish = optionsSrc.match(/async function doPublish\(\) \{[\s\S]*?\r?\n {4}\}\r?\n/);
   check(!!doPublish, 'doPublish() body located for inspection');
   const body = doPublish ? doPublish[0] : '';
 
-  // F1 — auto mode publishes ONLY the merge-safe payload, carrying every other
-  // module forward verbatim from the fetched shared profile.
-  check(/if \(auto\)/.test(body), 'doPublish branches explicitly on auto mode');
+  check(!/opts\.auto|const auto =/.test(body), 'doPublish no longer takes an auto/opts parameter — attended-only now');
+
+  const pdcContributeSrc = fs.readFileSync(path.join(__dirname, 'shared', 'io', 'pdc-contribute.js'), 'utf8');
+
+  // F1 — the (now relocated) unattended refresh publishes ONLY the merge-safe
+  // pdc payload, carrying every other module forward verbatim from the
+  // fetched shared profile.
   check(
-    /carriedModules|carried forward VERBATIM|carry-forward/i.test(body),
-    'auto mode carries the other modules forward verbatim rather than republishing this machine’s snapshot'
+    /carriedModules|carried forward VERBATIM|carry-forward/i.test(pdcContributeSrc),
+    'pdc-contribute.js carries the other modules forward verbatim rather than republishing this machine’s snapshot'
   );
-  // F1 — and ABORTS rather than falling back to a raw local snapshot.
+  // F1 — and skips writing rather than falling back to a raw local snapshot.
   check(
-    /Auto-publish aborted/.test(body),
-    'auto mode aborts when the shared profile cannot be fetched (no raw-local-snapshot fallback)'
+    /no-shared-profile/.test(pdcContributeSrc),
+    'pdc-contribute.js skips writing when the shared profile cannot be read (no raw-local-snapshot fallback)'
   );
-  // F5 — rotation is fenced off from auto mode at the call site as well as in
-  // the helper.
+  // F5 — rotation is structurally impossible from the contribute path: it has
+  // no reference to OIR/triage rotation at all, unlike doPublish which is now
+  // unconditionally attended (no auto-mode fencing needed any more there).
   check(
-    /!auto && applyModules\.triage|applyModules\.triage && !auto/.test(body),
-    'OIR rotation is fenced to attended publishes at the call site too'
+    /applyOirRotation\(envelope, sharedProfile\?\.envelope\?\.modules\?\.triage\?\.config\)/.test(body) &&
+      /if \(applyModules\.triage\)/.test(body),
+    'doPublish still calls OIR rotation for triage (now unconditional — the whole function is attended)'
   );
-  // F9 — the blob-download fallback must not stamp the daily auto-publish date.
-  check(/wroteToSharedFile/.test(body), 'the daily auto-publish stamp is gated on an actual write to the shared file');
-  const blobBranch = body.match(/downloadJson\(profileJson[\s\S]{0,600}/);
   check(
-    !!blobBranch && !/wroteToSharedFile = true/.test(blobBranch[0]),
-    'the blob-download fallback does NOT mark the profile as written to the shared folder'
+    !/OirKeyRotation|applyOirRotation|triagelens\.config/.test(pdcContributeSrc),
+    'pdc-contribute.js has no path to OIR key rotation at all — a contribution can never trigger it'
+  );
+  // F9 — the relocated refresh must not rewrite the shared file when nothing
+  // new was learned (the equivalent of the old wroteToSharedFile gate).
+  check(
+    /no-change/.test(pdcContributeSrc) && /_stableStringify/.test(pdcContributeSrc),
+    'pdc-contribute.js skips writing (and re-stamping profileVersion) when the merge produces no change'
   );
   // F10 — the accepted concurrency limitation is recorded next to the write.
   check(
@@ -327,7 +340,7 @@ console.log('\n--- options.js publish path ---');
   // F4 — the publisher updates its own local config after a rotating publish,
   // or a second edit before the alarm's self-apply diffs against stale keys and
   // publishes with no rotation at all, resurrecting the duplicate.
-  const applyRotation = optionsSrc.match(/async function applyOirRotation\([\s\S]*?\n {4}\}\n/);
+  const applyRotation = optionsSrc.match(/async function applyOirRotation\([\s\S]*?\r?\n {4}\}\r?\n/);
   check(!!applyRotation, 'applyOirRotation() body located for inspection');
   check(
     !!applyRotation && /result\.rotated/.test(applyRotation[0]) && /'triagelens\.config'/.test(applyRotation[0]),

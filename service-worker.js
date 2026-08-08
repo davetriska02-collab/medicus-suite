@@ -96,6 +96,11 @@ try {
   console.warn('[Suite] importScripts shared/io/suite-io.js failed:', e && e.message);
 }
 try {
+  importScripts('shared/io/problem-description-cleanup-io.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/io/problem-description-cleanup-io.js failed:', e && e.message);
+}
+try {
   importScripts('shared/quiet-mode.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/quiet-mode.js failed:', e && e.message);

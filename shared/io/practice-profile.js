@@ -93,6 +93,20 @@ const PracticeProfile = (() => {
   // Default v1 module set, applied when apply.modules is absent.
   const V1_DEFAULT_MODULES = ['sentinel', 'triage', 'submissions', 'slots', 'capacity'];
 
+  // Modules that apply in merge mode whenever the envelope carries them, even
+  // if a v2 apply.modules object omits them entirely (an admin never ticked
+  // the picker, or an older profile predates the module). Deliberately a
+  // SHORT list, not a general escape hatch: Cleanup Code Preferences is the
+  // one module whose merge is provably non-destructive regardless of a
+  // profile's own config — tallies only ever combine via max() and a local
+  // override always wins (see applyProfile's pdc branch below) — so a
+  // forgotten checkbox can never again silently stop new machines from
+  // receiving the practice's accumulated learning. This is a deliberate,
+  // narrow exception to "the profile declares what it applies": every other
+  // module stays strictly opt-in because replace-mode or admin-curated data
+  // could otherwise be pushed onto a machine nobody asked to receive it.
+  const ALWAYS_MERGE_MODULES = ['problemDescriptionCleanup'];
+
   // ── IO function resolution ────────────────────────────────────────────────────
   // In a service worker these are on `self`; in the options page also on `self`
   // (which equals `window`); in Node tests they are globals injected by the test.
@@ -139,22 +153,29 @@ const PracticeProfile = (() => {
   function _resolveModuleMap(applyCfg) {
     const mods = applyCfg.modules;
     const mode = applyCfg.mode || 'mergeMissing';
+    let map;
 
     // v2: modules is a plain object { <name>: 'merge'|'replace' }
     if (mods && !Array.isArray(mods) && typeof mods === 'object') {
-      const map = new Map();
+      map = new Map();
       for (const [k, v] of Object.entries(mods)) {
         // Guard: only accept the known per-module strings
         if (v === 'merge' || v === 'replace') map.set(k, v);
       }
-      return map;
+    } else {
+      // v1: modules is an array (explicit module list) or absent (default list)
+      const list = Array.isArray(mods) ? mods : V1_DEFAULT_MODULES;
+      const derived = mode === 'forceOverride' ? 'replace' : 'merge';
+      map = new Map();
+      for (const name of list) map.set(name, derived);
     }
 
-    // v1: modules is an array (explicit module list) or absent (default list)
-    const list = Array.isArray(mods) ? mods : V1_DEFAULT_MODULES;
-    const derived = mode === 'forceOverride' ? 'replace' : 'merge';
-    const map = new Map();
-    for (const name of list) map.set(name, derived);
+    // ALWAYS_MERGE_MODULES: fill in only if the config left them unmentioned —
+    // an explicit entry (either mode) always wins, so a profile can still
+    // apply pdc in 'replace' mode deliberately if ever needed.
+    for (const name of ALWAYS_MERGE_MODULES) {
+      if (!map.has(name)) map.set(name, 'merge');
+    }
     return map;
   }
 

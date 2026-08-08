@@ -1,0 +1,307 @@
+/* Medicus Suite — shared "Bulk <verb>?" widget for AG-Grid task-list pages */
+/* (ms-tba-* prefix — "Task Bulk Action". Scoped to avoid Medicus conflicts,
+   same discipline as ms-pbe-*/problem-bulk-end.css, whose visual language
+   this deliberately matches for consistency across the suite's bulk-action
+   widgets.) */
+
+.ms-tba-widget {
+  display: block;
+  margin: 0 0 10px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+button[class*='ms-tba-']:focus-visible,
+input[class*='ms-tba-']:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.ms-tba-toggle {
+  padding: 5px 12px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-tba-toggle:hover {
+  background: #e5e7eb;
+}
+
+.ms-tba-body {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #1a2030;
+  /* The panel as a WHOLE scrolls within the viewport — a big "select all"
+     must never push the action button below the visible screen with no way
+     to reach it. The action buttons themselves are pinned via
+     position:sticky (see .ms-tba-review-btn / .ms-tba-confirm-actions
+     below) so they stay visible without extra scrolling once opened. */
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.ms-tba-loading,
+.ms-tba-empty {
+  font-size: 12px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.ms-tba-error {
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.ms-tba-retry {
+  margin-left: 6px;
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-tba-summary {
+  margin-bottom: 8px;
+  color: #374151;
+}
+
+.ms-tba-select-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ms-tba-select-all,
+.ms-tba-select-none {
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-tba-select-all:hover,
+.ms-tba-select-none:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.ms-tba-select-none:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ms-tba-list {
+  /* No max-height/overflow of its own — .ms-tba-body is the single scroll
+     container (nesting two independent scrollbars here was confusing and
+     didn't even solve the real problem: the action button below this list
+     is a SIBLING, not a child, so a scrollable list alone never brought it
+     back into view). */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.ms-tba-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.ms-tba-row-acted {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ms-tba-row-field {
+  color: #1a2030;
+}
+
+.ms-tba-row-field-muted {
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.ms-tba-row-tag {
+  padding: 1px 6px;
+  background: #dcfce7;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #166534;
+}
+
+.ms-tba-row-error {
+  font-size: 11px;
+  color: #b91c1c;
+  flex-basis: 100%;
+}
+
+.ms-tba-checkbox {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.ms-tba-checkbox:disabled {
+  cursor: not-allowed;
+}
+
+.ms-tba-review-btn {
+  /* Sticky to the bottom of .ms-tba-body's own scroll area — see that
+     class's comment. A long "select all" list must never require scrolling
+     PAST the button to find it; this keeps it in view throughout. Its own
+     opaque background means it never needs the full-bleed treatment a
+     transparent sticky element would — content simply scrolls behind it. */
+  position: sticky;
+  bottom: 0;
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  background: #1d4ed8;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  box-shadow: 0 -3px 5px -3px rgba(0, 0, 0, 0.15);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-tba-review-btn:hover:not(:disabled) {
+  background: #1e40af;
+}
+
+.ms-tba-review-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Confirm step */
+.ms-tba-confirm-acting {
+  padding: 8px 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.ms-tba-confirm-heading {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b91c1c;
+  letter-spacing: 0.04em;
+}
+
+.ms-tba-confirm-list {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.ms-tba-confirm-item {
+  margin: 2px 0;
+  color: #1a2030;
+}
+
+.ms-tba-confirm-keeping {
+  font-size: 12px;
+  color: #166534;
+  margin-bottom: 8px;
+}
+
+.ms-tba-confirm-warning {
+  font-size: 11px;
+  color: #92400e;
+  margin-bottom: 8px;
+}
+
+.ms-tba-confirm-actions {
+  /* Same sticky-footer reasoning as .ms-tba-review-btn — the confirm step's
+     ACTING list can also be long after a "select all", and the done step's
+     Refresh/Close buttons (which reuse this class) must stay reachable too. */
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  padding: 6px 0 2px;
+  background: #f9fafb;
+}
+
+.ms-tba-back-btn {
+  padding: 7px 14px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-tba-confirm-btn {
+  padding: 7px 14px;
+  background: #b91c1c;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-tba-confirm-btn:hover:not(:disabled) {
+  background: #991b1b;
+}
+
+.ms-tba-confirm-btn:disabled,
+.ms-tba-back-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ms-tba-done {
+  font-size: 12px;
+  color: #166534;
+  margin-bottom: 8px;
+}
+
+.ms-tba-refresh-btn {
+  padding: 7px 14px;
+  background: #0d6e5e;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-tba-fail-list {
+  margin-bottom: 8px;
+}

@@ -2410,3 +2410,65 @@ wireKeyboardNav();
 
 // ── Command palette (Ctrl+K) ─────────────────────────────────────────────────
 initPalette();
+
+// ── Cleanup Code Preferences: silent practice-pool contribution ─────────────
+// Fire-and-forget on every panel open — never blocks anything above, never
+// prompts. See shared/io/pdc-contribute.js for what this does and why it's
+// safe to run without the machine ever completing the full "Publish to
+// shared folder" flow in Options (that flow's own enable toggle + connect
+// button live there; this just supplies the periodic trigger that doesn't
+// depend on anyone opening Options). A machine that has never enabled
+// contribution (suite.pdcContribute.enabled !== true) is a same-cycle no-op.
+(async () => {
+  try {
+    if (!window.PdcContribute || !window.FsHandleStore) return;
+
+    async function resolveHandle() {
+      return (
+        (await window.FsHandleStore.loadFileHandle('pdcContribFile')) ||
+        (await window.FsHandleStore.loadFileHandle('profileFile'))
+      );
+    }
+
+    // Minimal standalone read of practice-profile.json — deliberately NOT
+    // shared/io/practice-profile.js (59 KB, and pulls in every module's IO
+    // file via _io() lookups this surface never needs); this is the same
+    // ~10-line fetch that file's own fetchProfile() does.
+    async function fetchProfile() {
+      try {
+        const resp = await fetch(chrome.runtime.getURL('practice-profile.json'), { cache: 'no-store' });
+        if (!resp.ok) return null;
+        const profile = await resp.json();
+        if (profile.format !== 'medicus-suite-practice-profile') return null;
+        if (!profile.profileVersion || !profile.envelope) return null;
+        return profile;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    await window.PdcContribute.runPdcContribution({
+      getState: async () => {
+        const r = await chrome.storage.local.get(window.PdcContribute.PDC_CONTRIBUTE_STATE_KEY);
+        return r[window.PdcContribute.PDC_CONTRIBUTE_STATE_KEY] || null;
+      },
+      setState: async (patch) => {
+        const key = window.PdcContribute.PDC_CONTRIBUTE_STATE_KEY;
+        const r = await chrome.storage.local.get(key);
+        await chrome.storage.local.set({ [key]: Object.assign({}, r[key] || {}, patch) });
+      },
+      loadHandle: resolveHandle,
+      readHandleText: async (h) => (await h.getFile()).text(),
+      writeHandleText: async (h, text) => {
+        const w = await h.createWritable();
+        await w.write(text);
+        await w.close();
+      },
+      fetchProfile,
+      getLocalPdc: () => problemDescriptionCleanupExport(),
+      mergePdc: problemDescriptionCleanupMergeForPublish,
+    });
+  } catch (_) {
+    // Silent by contract — see pdc-contribute.js's runPdcContribution header.
+  }
+})();

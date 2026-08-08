@@ -2870,6 +2870,31 @@
                   style="font-family: var(--mono); font-size: 10px; color: var(--text-3)"
                 ></span>
               </div>
+
+              <!-- Contribute (distinct from Publish above — see shared/io/pdc-contribute.js) -->
+              <div style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border)">
+                <div style="font-weight: 600; font-size: 12px; color: var(--text-1); margin-bottom: 4px">
+                  Contribute cleanup choices
+                </div>
+                <p class="field-help" style="margin: 0 0 8px">
+                  Share this machine's own "Clean up code" tallies with the practice pool automatically, without
+                  going through the full publish flow above. Only Cleanup Code Preferences data is ever written
+                  this way — nothing else this machine has configured is ever published.
+                </p>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 11px; cursor: pointer; margin-bottom: 8px">
+                  <input type="checkbox" id="pdcContribEnabled" style="width: 14px; height: 14px; cursor: pointer" />
+                  <span>Contribute this machine's cleanup choices to the practice automatically</span>
+                </label>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+                  <button class="ghost" id="pdcContribConnectBtn" style="font-size: 11px; padding: 5px 14px">
+                    Connect shared file
+                  </button>
+                  <span
+                    id="pdcContribStatus"
+                    style="font-family: var(--mono); font-size: 10px; color: var(--text-3)"
+                  ></span>
+                </div>
+              </div>
             </div>
 
             <!-- Collapsible setup guide -->
@@ -3372,6 +3397,8 @@
     <script src="../shared/io/patient-alerts-io.js"></script>
     <script src="../shared/preferred-descriptions.js"></script>
     <script src="../shared/io/problem-description-cleanup-io.js"></script>
+    <script src="../shared/io/fs-handle-store.js"></script>
+    <script src="../shared/io/pdc-contribute.js"></script>
     <script src="../shared/io/rota-io.js"></script>
     <script src="../shared/quiet-mode.js"></script>
     <script src="../shared/practice-code.js"></script>
