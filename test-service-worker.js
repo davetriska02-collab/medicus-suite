@@ -92,7 +92,7 @@ console.log('\n--- every importScripts\'d file actually LOADS in a windowless SW
 // service worker has NO `window` (and no Node `global`) — a file whose
 // top-level code touches either throws at import time, the try/catch warns,
 // and the module is silently absent exactly as if the line were missing.
-// That is how the v3.225.0 problem-description-cleanup-io.js line was a
+// That is how the v3.226.0 problem-description-cleanup-io.js line was a
 // runtime no-op on arrival: the file's own `window.MSPreferredDescriptions`
 // threw before anything was defined (and its preferred-descriptions.js
 // dependency wasn't imported at all). So: evaluate every importScripts'd
