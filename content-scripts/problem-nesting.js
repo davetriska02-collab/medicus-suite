@@ -821,6 +821,14 @@
   // problem list ({id, description}) and each problem's overview-derived info.
   var _problems = [];
   var _infoById = {};
+  // Lazy linked-problem-id prefill state ('idle' | 'loading' | 'done') —
+  // the per-problem update-problem-links GETs only ever run once the canvas
+  // actually opens (ensureLinkedIdsLoaded), never as part of the scan
+  // itself: the accordion's own merge/significance/suggestion features
+  // don't use linked ids, and paying one extra GET per problem on every
+  // scan doubled the scan's API fan-out for data most sessions never look
+  // at (review finding on the canvas PR).
+  var _linkedIdsState = 'idle';
   // Duplicate-merge groups: [{conceptId, description, entries: [{id,
   //   description, hasChildren, additionalInformation}], keeperId, open,
   //   confirming, removing, reason, errors: {id: msg}, removedCount, done}]
@@ -845,9 +853,17 @@
     _parentIdByProblemId = {};
     _problems = [];
     _infoById = {};
+    _linkedIdsState = 'idle';
     _mergeGroups = [];
     _sig = { target: null, ids: {}, confirming: false, committing: false, errors: {} };
     _sigChanged = [];
+    // Notify subscribers (the canvas overlay) even though our own widget DOM
+    // is about to be rebuilt by injectTrigger — the canvas is a fixed overlay
+    // nothing else closes on an SPA patient navigation, and it decides
+    // whether to shut itself by comparing the snapshot's patientId on each
+    // notification. Without this call it could sit open on the old patient's
+    // tree with a live confirm bar until some later render happens to fire.
+    render();
   }
 
   // ── Scan (opt-in — only ever runs from the "Nest problems?" click) ───────────
@@ -864,32 +880,20 @@
       var problems = (_problemsCache || []).map(function (p) {
         return { id: p.id, description: p.problemCodeDescription };
       });
-      // Both batches kicked off together (independent per-problem fetches,
-      // same cost class) — linked-problem ids (2026-08-08, confirmed via
-      // HAR 52/53) need their OWN prefill fetch, since slideover/overview's
-      // own linkedProblems field is display text only, no ids.
-      var overviewsPromise = Promise.all(
+      var overviews = await Promise.all(
         problems.map(function (p) {
           return fetchProblemOverview(p.id).catch(function () {
             return null;
           });
         })
       );
-      var linkedIdsPromise = Promise.all(
-        problems.map(function (p) {
-          return fetchLinkedProblemIds(scanPatientId, p.id)
-            .then(function (data) {
-              return Array.isArray(data && data.existingLinkedProblems) ? data.existingLinkedProblems : [];
-            })
-            .catch(function () {
-              return []; // fail closed: no line beats a guessed one
-            });
-        })
-      );
-      var overviews = await overviewsPromise;
-      var linkedIdsByIndex = await linkedIdsPromise;
       if (_lastPatientId !== scanPatientId) return; // patient changed mid-scan — discard
       var infoById = {};
+      // Rebuilt fresh from the overviews below on EVERY scan — scans can now
+      // re-run mid-session (updateProblemDescription's rescan-after-edit), and
+      // carrying old entries forward would keep a parent link that was
+      // removed outside this extension looking alive.
+      _parentIdByProblemId = {};
       problems.forEach(function (p, i) {
         var ov = overviews[i];
         infoById[p.id] = {
@@ -918,8 +922,13 @@
           // CURRENT full linked-problem id set for this problem. Symmetric
           // (confirmed live) — a problem this record links FROM will also
           // carry the reverse entry in its own list, so the canvas dedupes
-          // by unordered pair rather than drawing each line twice.
-          linkedProblemIds: linkedIdsByIndex[i] || [],
+          // by unordered pair rather than drawing each line twice. Fetched
+          // LAZILY by ensureLinkedIdsLoaded (only the canvas consumes these
+          // — the plain accordion never draws linked-problem lines, so the
+          // scan itself must not pay one extra GET per problem for them); a
+          // rescan carries the already-loaded set forward rather than
+          // refetching (a code edit never changes linked relationships).
+          linkedProblemIds: (_infoById[p.id] && _infoById[p.id].linkedProblemIds) || [],
         };
         if (ov && ov.parentProblemId) _parentIdByProblemId[p.id] = ov.parentProblemId;
       });
@@ -1026,6 +1035,40 @@
     } finally {
       if (_lastPatientId === scanPatientId) render();
     }
+  }
+
+  // Lazily fetches every problem's linked-problem id set (one
+  // update-problem-links prefill GET per problem — confirmed 2026-08-08,
+  // HAR 52/53: slideover/overview's own linkedProblems field is display
+  // text only, no ids). Called by the canvas overlay once its tree is
+  // actually on screen — the sole consumer of these ids — so a session
+  // that never opens the canvas never pays for them. Runs in bounded
+  // batches rather than one unbounded parallel burst, and re-renders once
+  // at the end so the canvas draws the lines when they're ready.
+  var LINKED_IDS_BATCH = 5;
+  async function ensureLinkedIdsLoaded() {
+    if (_linkedIdsState !== 'idle' || _scanState !== 'done') return;
+    _linkedIdsState = 'loading';
+    var scanPatientId = _lastPatientId;
+    var problems = _problems.slice();
+    for (var i = 0; i < problems.length; i += LINKED_IDS_BATCH) {
+      if (_lastPatientId !== scanPatientId) return; // patient changed mid-fetch — discard; reset already set state back to 'idle'
+      await Promise.all(
+        problems.slice(i, i + LINKED_IDS_BATCH).map(function (p) {
+          return fetchLinkedProblemIds(scanPatientId, p.id)
+            .then(function (data) {
+              var ids = Array.isArray(data && data.existingLinkedProblems) ? data.existingLinkedProblems : [];
+              if (_lastPatientId === scanPatientId && _infoById[p.id]) _infoById[p.id].linkedProblemIds = ids;
+            })
+            .catch(function () {
+              /* fail closed per problem: no line beats a guessed one */
+            });
+        })
+      );
+    }
+    if (_lastPatientId !== scanPatientId) return;
+    _linkedIdsState = 'done';
+    render();
   }
 
   // Shared commit path for BOTH the suggestion cards and the manual builder:
@@ -1764,23 +1807,44 @@
     ensureScanned: function () {
       if (_scanState === 'idle') runScan();
     },
+    ensureLinkedIdsLoaded: ensureLinkedIdsLoaded,
     commitParentLink: commitParentLink,
     commitUnlink: commitUnlink,
     wouldCreateCycle: wouldCreateCycle,
     // Called by the canvas after a successful "Edit problem" code change
     // (window.ProblemDescriptionCleanup's own onApplied callback, 2026-08-08
     // follow-up: "problem code edits refresh within the canvas") — updates
-    // this scan's own cached description so the tile shows the corrected
-    // text immediately, without a full rescan. Calls render() itself (same
-    // as commitParentLink/commitUnlink's callers already do), which also
-    // fires onChange so the canvas re-renders with the fresh text.
+    // the cached description so the tile shows the corrected text
+    // immediately, then RESCANS. The description alone is not enough
+    // (review finding): a code change invalidates every scan-derived fact
+    // about this problem — _infoById's conceptId and every suggestion built
+    // from the old concept's SNOMED/override pair hits. Without the rescan,
+    // suggestions the NEW code earns (the very reason the code was fixed —
+    // the live "Cataracts"→"Cataract" case) never appear until a page
+    // reload, and a stale "SNOMED marks this as a child of X" claim about
+    // the OLD code stays in the tray, still confirmable. The rescan's
+    // overview fetches re-read everything fresh from the server; the
+    // already-loaded linked-problem ids carry over (a code edit never
+    // changes linked relationships — see runScan).
     updateProblemDescription: function (problemId, newDescription) {
       if (!newDescription) return;
       var p = _problems.find(function (x) {
         return x.id === problemId;
       });
       if (p) p.description = newDescription;
-      render();
+      var cached = (_problemsCache || []).find(function (x) {
+        return x.id === problemId;
+      });
+      if (cached) cached.problemCodeDescription = newDescription;
+      // Only from a settled state — 'scanning' means a scan is already in
+      // flight (runScan has no reentrancy guard; racing two would let the
+      // stale one finish last and win).
+      if (_scanState === 'done' || _scanState === 'error') {
+        _scanState = 'idle';
+        runScan();
+      } else {
+        render();
+      }
     },
     refresh: render,
     onChange: function (cb) {

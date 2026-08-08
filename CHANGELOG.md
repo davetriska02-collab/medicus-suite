@@ -2,6 +2,61 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.225.1] — 2026-08-08
+
+### "Organise problems" canvas — review fixes (safety, a11y, correctness)
+
+Fixes from the PR review of the v3.225.0 canvas, before merge. Three write-safety fixes first:
+
+- **Patient-change guard.** The canvas overlay is `position: fixed` and nothing in Medicus's SPA
+  closes it on a patient navigation — a pending "nest X under Y" confirm built on patient A could
+  survive into patient B's context and commit against B's `patientId` (the bridge POSTs with its
+  *current* patient id). The canvas now pins the patientId it opened against, hard-closes the
+  moment a snapshot reports a different patient (`resetForPatient` now notifies subscribers for
+  exactly this), and re-checks the patient at commit time as a last line of defence. Also fixes the
+  related wedge where a reset scan state left the canvas on a permanent "Checking SNOMED
+  relationships…" screen with nothing ever re-running the scan.
+- **Stale "Edit problem…" reopen.** Reopening the embedded Clean-up-code panel after a successful
+  save rendered the pre-save state (old description shown as current, pre-save candidate list) —
+  and a second apply would POST a full-record-replace payload built from the *pre-save* prefill.
+  `openInContainer` now discards the row's saved state entirely, forcing a fresh fetch against the
+  live record. (The inline flow was never affected — its button removes itself on save.)
+- **Re-parent disclosure.** Dropping a tile that already has a parent silently moved it — the
+  confirm bar said only "This will nest X under Y", never mentioning the existing link being
+  replaced (the deleted manual builder always named it). The confirm now discloses "currently
+  nested under Z — confirming will move it out of there", on both the drag and keyboard paths
+  (shared `buildPendingLink`, regression-tested).
+
+And four more from the same review:
+
+- **Rescan after a code edit.** An "Edit problem" code change now triggers a full rescan (fresh
+  overviews, fresh SNOMED/override pair search), not just a tile-text patch — previously the new
+  code's own suggestions (the very reason the code was fixed — the live "Cataracts"→"Cataract"
+  case) never appeared until a page reload, while stale "SNOMED marks this as a child of X" claims
+  about the old code stayed in the tray, still confirmable. The scan's parent map is also rebuilt
+  fresh on every scan now that scans can re-run mid-session.
+- **Keyboard operability.** Linking was drag-and-drop only — unreachable without a pointer, a
+  regression from the deleted accordion's native form controls. Enter/Space on a focused tile now
+  picks it up (announced via the live region, shown with a dashed outline), Enter/Space on another
+  tile proposes exactly the link a drop would (same cycle guard, same confirm bar, same move
+  disclosure), Escape cancels the pick-up before it closes anything else.
+- **Parent-map cycles render.** Server data *can* contain a parent cycle (Medicus's own parent
+  picker isn't cycle-guarded — only this extension's writes are); every member has a live parent,
+  so the tree builder skipped them all as roots yet none was reachable from any root — they
+  silently vanished from the rendered problem list. One member of each cycle is now promoted to a
+  root (its own parent edge cut) so the whole component stays visible; `flattenTreeIds` gained a
+  belt-and-braces guard against ever walking a cyclic structure forever.
+- **Linked-problem prefill is now lazy.** The per-problem `update-problem-links` GETs (one per
+  active problem — they doubled every scan's API fan-out) moved out of the scan into
+  `ensureLinkedIdsLoaded`, fired only when the canvas actually renders a scanned tree (its sole
+  consumer), in bounded batches of 5 instead of one unbounded burst. A rescan carries
+  already-loaded ids forward rather than refetching. Also fixed the confirm-bar copy that still
+  told users to remove links "by clicking their connector on the tree" — an interaction removed
+  in v3.225.0 itself (it's the tile's "Remove link" button).
+
+Tests: `test-problem-nesting-canvas.js` grown to 126 checks (cycle rescue, keyboard/drag shared
+link-action shape, move disclosure); full suite green.
+
 ## [v3.225.0] — 2026-08-08
 
 ### "Organise problems" canvas — drag-and-drop tree + suggestion tray

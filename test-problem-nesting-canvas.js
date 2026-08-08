@@ -31,6 +31,7 @@ const {
   computeLinkBusX,
   relativeRect,
   readDropPayload,
+  buildPendingLink,
 } = require('./content-scripts/problem-nesting-canvas.js');
 
 let passed = 0,
@@ -512,6 +513,82 @@ console.log('--- readDropPayload: proves the drag actually originated on this ca
     }) === null,
     'a throwing getData (e.g. unavailable outside a real drop event) -> null, never throws'
   );
+}
+
+console.log('--- buildProblemTree: parent-map CYCLES render instead of silently vanishing ---');
+{
+  // Server data CAN contain a cycle (Medicus's own parent picker isn't
+  // cycle-guarded — only this extension's writes are). Every cycle member
+  // has a live parent, so the naive roots pass skips them all; without the
+  // rescue pass they'd disappear from the rendered problem list entirely.
+  const problems = [{ id: 'a' }, { id: 'b' }];
+  const infoById = { a: { onsetDate: '20 Apr 2020' }, b: { onsetDate: '5 Jul 2009' } };
+  const cycleTree = buildProblemTree(problems, infoById, { a: 'b', b: 'a' }, new Set());
+  const cycleIds = flattenTreeIds(cycleTree);
+  check(cycleIds.has('a') && cycleIds.has('b'), 'both members of a 2-cycle still render');
+  check(cycleTree.length === 1, 'one cycle member is promoted to a root, not both');
+  check(cycleTree[0].children.length === 1, 'the other member renders beneath it as an ordinary child');
+  check(cycleTree[0].parentId === null, 'the promoted member no longer claims a parent (its edge was cut)');
+  check(cycleTree[0].children[0].parentId === cycleTree[0].id, 'the kept edge still records its real parent');
+
+  // A 3-cycle with an innocent child hanging off it — the whole component
+  // must survive, and the hanger-on keeps its real parent.
+  const bigger = [{ id: 'p' }, { id: 'q' }, { id: 'r' }, { id: 'kid' }];
+  const biggerTree = buildProblemTree(bigger, {}, { p: 'q', q: 'r', r: 'p', kid: 'p' }, new Set());
+  const biggerIds = flattenTreeIds(biggerTree);
+  check(
+    ['p', 'q', 'r', 'kid'].every((id) => biggerIds.has(id)),
+    'a 3-cycle plus its hanger-on child all still render'
+  );
+  check(biggerTree.length === 1, 'the 3-cycle collapses to a single promoted root');
+
+  // A cycle NEXT TO healthy data must not disturb the healthy part.
+  const mixed = [{ id: 'root' }, { id: 'child' }, { id: 'c1' }, { id: 'c2' }];
+  const mixedTree = buildProblemTree(mixed, {}, { child: 'root', c1: 'c2', c2: 'c1' }, new Set());
+  const mixedIds = flattenTreeIds(mixedTree);
+  check(mixedIds.size === 4, 'healthy root+child AND both cycle members all render');
+  const healthyRoot = mixedTree.find((n) => n.id === 'root');
+  check(healthyRoot && healthyRoot.children.length === 1, 'the healthy branch is untouched by the cycle rescue');
+}
+
+console.log('--- flattenTreeIds: never recurses forever on a cyclic structure ---');
+{
+  // Belt-and-braces: buildProblemTree now guarantees an acyclic result, but
+  // the walker must survive a cyclic input anyway rather than blowing the
+  // stack.
+  const a = { id: 'a', children: [] };
+  const b = { id: 'b', children: [a] };
+  a.children.push(b);
+  const ids = flattenTreeIds([a]);
+  check(ids.has('a') && ids.has('b') && ids.size === 2, 'cyclic node structure walked once, no infinite recursion');
+}
+
+console.log('--- buildPendingLink: re-parent disclosure (silent moves were the review finding) ---');
+{
+  const descById = { child: 'Angina', newParent: 'Diabetes', oldParent: 'Ischaemic heart disease' };
+  const fresh = buildPendingLink('child', 'newParent', descById, {});
+  check(fresh.kind === 'link' && fresh.childId === 'child' && fresh.parentId === 'newParent', 'plain link shape');
+  check(fresh.previousParentId === null, 'no existing parent -> no move disclosure');
+  check(fresh.childDescription === 'Angina' && fresh.parentDescription === 'Diabetes', 'descriptions resolved');
+
+  const move = buildPendingLink('child', 'newParent', descById, { child: 'oldParent' });
+  check(move.previousParentId === 'oldParent', 'existing parent is carried on the action');
+  check(
+    move.previousParentDescription === 'Ischaemic heart disease',
+    'existing parent NAMED so the confirm bar can disclose the move'
+  );
+
+  // A dangling parent-map entry (parent merged away this session — not in
+  // descById any more) is not a real move to warn about.
+  const dangling = buildPendingLink('child', 'newParent', descById, { child: 'goneParent' });
+  check(dangling.previousParentId === null, 'dangling previous parent (no longer a live problem) -> no disclosure');
+
+  const unknownIds = buildPendingLink('x1', 'x2', {}, {});
+  check(
+    unknownIds.childDescription === 'x1' && unknownIds.parentDescription === 'x2',
+    'unknown ids fall back to the raw id, never undefined'
+  );
+  check(fresh.linking === false && fresh.error === null, 'starts unconfirmed with no error');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

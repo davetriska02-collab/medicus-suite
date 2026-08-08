@@ -202,11 +202,37 @@
       }
     });
     var roots = [];
+    var reachable = new Set();
+    function markReachable(node) {
+      if (reachable.has(node.id)) return;
+      reachable.add(node.id);
+      node.children.forEach(markReachable);
+    }
     Object.keys(byId).forEach(function (id) {
       var parentId = parentMap[id];
       if (parentId && byId[parentId]) return; // already placed as a real child, above
       if (suggested.has(id) && !byId[id].children.length) return; // tray-only, no orphaned children to house
       roots.push(byId[id]);
+      markReachable(byId[id]);
+    });
+    // Cycle rescue: server data CAN contain a parent-map cycle (Medicus's
+    // own parent picker isn't cycle-guarded — only this extension's writes
+    // are). Every member of a cycle has a live parent, so the roots loop
+    // above skips them all — yet none is reachable from any real root, and
+    // without this pass they'd silently VANISH from the rendered problem
+    // list (review finding). Promote the first-listed unreachable member of
+    // each cycle to a root, cutting only its own parent edge — the rest of
+    // the cycle then renders beneath it as ordinary children.
+    list.forEach(function (p) {
+      if (!p || !p.id || !byId[p.id] || reachable.has(p.id)) return;
+      var node = byId[p.id];
+      var parentNode = byId[node.parentId];
+      if (!parentNode) return; // not a cycle member — already handled above
+      var idx = parentNode.children.indexOf(node);
+      if (idx !== -1) parentNode.children.splice(idx, 1);
+      node.parentId = null;
+      roots.push(node);
+      markReachable(node);
     });
     function sortRecursive(nodes) {
       nodes.sort(function (a, b) {
@@ -227,6 +253,7 @@
     var ids = new Set();
     function walk(nodes) {
       (Array.isArray(nodes) ? nodes : []).forEach(function (n) {
+        if (ids.has(n.id)) return; // belt-and-braces vs a cyclic structure — never recurse forever
         ids.add(n.id);
         walk(n.children);
       });
@@ -492,6 +519,35 @@
     }
   }
 
+  // Builds the pending 'link' action a drop (or keyboard drop) proposes —
+  // shared by both input paths so neither can skip the re-parent check. When
+  // the child ALREADY has a live parent, the returned action carries
+  // previousParentId/previousParentDescription so the confirm bar can
+  // disclose the move (review finding: the deleted manual builder always
+  // named the existing parent before a re-parent; a silent move visually
+  // demotes a live clinical problem out of a hierarchy the clinician chose).
+  // Only a parent that still exists in descById counts — a dangling
+  // parentMap entry pointing at a merged-away problem is not a move the
+  // confirm needs to warn about.
+  function buildPendingLink(childId, parentId, descById, parentIdByProblemId) {
+    var byId = descById || {};
+    var previousParentId = (parentIdByProblemId || {})[childId] || null;
+    if (!(previousParentId && Object.prototype.hasOwnProperty.call(byId, previousParentId))) {
+      previousParentId = null;
+    }
+    return {
+      kind: 'link',
+      childId: childId,
+      parentId: parentId,
+      childDescription: byId[childId] || childId,
+      parentDescription: byId[parentId] || parentId,
+      previousParentId: previousParentId,
+      previousParentDescription: previousParentId ? byId[previousParentId] : null,
+      linking: false,
+      error: null,
+    };
+  }
+
   // ── Node test hook ────────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -513,6 +569,7 @@
       computeLinkBusX: computeLinkBusX,
       relativeRect: relativeRect,
       readDropPayload: readDropPayload,
+      buildPendingLink: buildPendingLink,
     };
     return;
   }
@@ -553,6 +610,18 @@
   // The one tile currently showing its action buttons (click to select,
   // click again — or select another — to deselect). Tree-pane tiles only.
   var _selectedTileId = null;
+  // Keyboard equivalent of the drag payload (review finding: dragging was
+  // the ONLY way to create a link — unreachable without a pointer). Enter/
+  // Space on a focused tile "picks it up"; Enter/Space on another tile
+  // proposes the same link a drop would; Escape cancels the pick-up.
+  var _kbPickedId = null;
+  // The patientId this canvas was opened against. The overlay is
+  // position:fixed and nothing in the host SPA closes it on a patient
+  // navigation — render() compares this against every snapshot and
+  // hard-closes on a mismatch, and confirmPendingAction re-checks it right
+  // before committing, so a confirm queued on patient A can never write
+  // against patient B's id (review finding).
+  var _openedPatientId = null;
   // The problemId currently open in the "Edit problem" panel, or null.
   // Tracked so close() can tell problem-description-cleanup.js's own state
   // to close too (window.ProblemDescriptionCleanup.close), not just hide
@@ -627,6 +696,7 @@
       '<div class="ms-pnc-tile-row">' +
       '<div class="ms-pnc-tile' +
       (selected ? ' ms-pnc-tile-selected' : '') +
+      (_kbPickedId === node.id ? ' ms-pnc-tile-picked' : '') +
       '" draggable="true" tabindex="0" data-problem-id="' +
       esc(node.id) +
       '"' +
@@ -696,6 +766,7 @@
     return (
       '<div class="ms-pnc-tray-tile ' +
       groupClass +
+      (_kbPickedId === s.childId ? ' ms-pnc-tile-picked' : '') +
       '" draggable="true" tabindex="0" data-problem-id="' +
       esc(s.childId) +
       '" data-candidate-ids="' +
@@ -766,7 +837,15 @@
           '</strong> under <strong>' +
           esc(d.parentDescription) +
           '</strong> — it will display as a child on the problem list, not as a top-level problem. ' +
-          'There is no bulk undo; links are removed individually, by clicking their connector on the tree.';
+          // Re-parent disclosure (see buildPendingLink): moving a problem
+          // out of a hierarchy the clinician chose must be named, never
+          // implied — confirming this is a MOVE, not an addition.
+          (d.previousParentId
+            ? 'It is <strong>currently nested under ' +
+              esc(d.previousParentDescription) +
+              '</strong> — confirming will move it out of there. '
+            : '') +
+          'There is no bulk undo; links are removed individually — click the child tile, then "Remove link".';
     var confirmLabel = d.kind === 'unlink' ? 'Confirm — remove link' : 'Confirm — nest it';
     var busyLabel = d.kind === 'unlink' ? 'Removing…' : 'Linking…';
     return (
@@ -812,7 +891,8 @@
 
   function bodyHtml(tree, groups, infoById) {
     return (
-      '<div class="ms-pnc-explainer">Drag and drop problems to create parent-child relationships. ' +
+      '<div class="ms-pnc-explainer">Drag and drop problems to create parent-child relationships — ' +
+      'or press Enter on a tile to pick it up, then Enter on its new parent. ' +
       'Suggested options are on the right. Click on a problem tile to remove a link, or to search ' +
       'for better codes based on free-text.</div>' +
       '<div class="ms-pnc-body">' +
@@ -916,6 +996,14 @@
   async function confirmPendingAction() {
     var d = _pendingAction;
     if (!d || d.linking || !window.ProblemNesting) return;
+    // Commit-time patient re-check — the last line of defence behind
+    // render()'s own mismatch guard: the bridge's commit functions POST with
+    // ITS current _lastPatientId, so a confirm built while patient A was
+    // loaded must never fire once the SPA has navigated to patient B.
+    if (window.ProblemNesting.getSnapshot().patientId !== _openedPatientId) {
+      close();
+      return;
+    }
     d.linking = true;
     d.error = null;
     render();
@@ -941,6 +1029,20 @@
       d.linking = false;
       render();
     }
+  }
+
+  // Shared endpoint of BOTH link gestures (pointer drop and keyboard drop) —
+  // one cycle guard, one re-parent disclosure (buildPendingLink), one
+  // confirm bar, whichever input proposed it.
+  function proposeLink(childId, parentId, snap, descById) {
+    if (!childId || !parentId || childId === parentId || !window.ProblemNesting) return;
+    if (window.ProblemNesting.wouldCreateCycle(childId, parentId, snap.parentIdByProblemId)) {
+      _cycleError = 'Linking these two would create a loop — pick a different pair.';
+      render();
+      return;
+    }
+    _pendingAction = buildPendingLink(childId, parentId, descById, snap.parentIdByProblemId);
+    render();
   }
 
   function bindCommonEvents(root) {
@@ -1060,24 +1162,46 @@
         var payload = readDropPayload(e);
         _dragPayload = null;
         if (!payload) return;
-        var childId = payload.problemId;
-        var parentId = tile.getAttribute('data-problem-id');
-        if (!childId || !parentId || childId === parentId || !window.ProblemNesting) return;
-        if (window.ProblemNesting.wouldCreateCycle(childId, parentId, snap.parentIdByProblemId)) {
-          _cycleError = 'Linking these two would create a loop — pick a different pair.';
+        proposeLink(payload.problemId, tile.getAttribute('data-problem-id'), snap, descById);
+      });
+    });
+
+    // Keyboard path to the same link gesture (review finding: drag-and-drop
+    // was the ONLY way to link — the widget's core function was unreachable
+    // without a pointer, a regression from the deleted accordion's native
+    // form controls). Enter/Space on a focused tile picks it up (announced
+    // via the live region and shown via .ms-pnc-tile-picked); Enter/Space on
+    // another tile proposes exactly the link a drop would — same
+    // proposeLink, same cycle guard, same confirm bar. Escape cancels the
+    // pick-up (see onKeydown). keydown, not click: these tiles are plain
+    // divs, so Enter/Space never synthesise clicks the way buttons do — the
+    // tree tiles' click-to-select behaviour is untouched.
+    root.querySelectorAll('.ms-pnc-tile[data-problem-id], .ms-pnc-tray-tile[data-problem-id]').forEach(function (tile) {
+      tile.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        e.stopPropagation();
+        var id = tile.getAttribute('data-problem-id');
+        if (!id) return;
+        if (!_kbPickedId) {
+          _kbPickedId = id;
+          announce(
+            'Picked up ' +
+              (descById[id] || 'problem') +
+              '. Move focus to the problem to nest it under and press Enter. Press Escape to cancel.'
+          );
           render();
           return;
         }
-        _pendingAction = {
-          kind: 'link',
-          childId: childId,
-          parentId: parentId,
-          childDescription: descById[childId] || childId,
-          parentDescription: descById[parentId] || parentId,
-          linking: false,
-          error: null,
-        };
-        render();
+        if (_kbPickedId === id) {
+          _kbPickedId = null;
+          announce('Cancelled — nothing picked up.');
+          render();
+          return;
+        }
+        var childId = _kbPickedId;
+        _kbPickedId = null;
+        proposeLink(childId, id, snap, descById);
       });
     });
 
@@ -1091,11 +1215,18 @@
   function onKeydown(e) {
     if (e.key !== 'Escape') return;
     // Escape closes whichever is on top first — the edit panel if it's
-    // open, otherwise the whole canvas — never both at once.
+    // open, then a keyboard pick-up if one is in progress, otherwise the
+    // whole canvas — never more than one at once.
     var el = document.getElementById(OVERLAY_ID);
     var overlay = el && el.querySelector('#ms-pnc-edit-overlay');
     if (overlay && !overlay.hidden) {
       closeEditPanel();
+      return;
+    }
+    if (_kbPickedId) {
+      _kbPickedId = null;
+      announce('Cancelled — nothing picked up.');
+      render();
       return;
     }
     close();
@@ -1107,7 +1238,11 @@
     window.ProblemNesting.ensureScanned();
     _pendingAction = null;
     _cycleError = null;
+    _kbPickedId = null;
     _linkedCount = 0;
+    // Pin this canvas to the patient it opened against — see render()'s
+    // mismatch guard and confirmPendingAction's commit-time re-check.
+    _openedPatientId = window.ProblemNesting.getSnapshot().patientId;
     var el = document.createElement('div');
     el.id = OVERLAY_ID;
     // .ms-pnc-edit-overlay is a PERSISTENT sibling of .ms-pnc-root, same
@@ -1201,6 +1336,8 @@
     _pendingAction = null;
     _cycleError = null;
     _selectedTileId = null;
+    _kbPickedId = null;
+    _openedPatientId = null;
   }
 
   function render() {
@@ -1216,8 +1353,23 @@
       return;
     }
     var snap = window.ProblemNesting.getSnapshot();
+    // Patient changed under the open overlay (SPA navigation — nothing in
+    // the host page closes a fixed overlay): hard-close rather than render
+    // patient B's data under a canvas whose transient state (_pendingAction,
+    // _kbPickedId, the edit panel) was all built against patient A.
+    // resetForPatient in problem-nesting.js fires onChange for exactly this
+    // guard to run on.
+    if (_openedPatientId !== null && snap.patientId !== _openedPatientId) {
+      close();
+      return;
+    }
     var focusId = captureFocusedProblemId(root);
     if (snap.scanState === 'scanning' || snap.scanState === 'idle') {
+      // 'idle' with the canvas open means the bridge's scan state was reset
+      // under us (same patient — a change of patient closes above): kick the
+      // scan off again rather than showing a loading message nothing will
+      // ever resolve (ensureScanned no-ops unless genuinely idle).
+      if (snap.scanState === 'idle') window.ProblemNesting.ensureScanned();
       root.innerHTML = wrapPanel(
         '<div class="ms-pnc-body-msg ms-pnc-loading">Checking SNOMED relationships between the active problems…</div>'
       );
@@ -1235,6 +1387,12 @@
       });
       return;
     }
+    // Linked-problem ids load lazily, first time a scanned tree actually
+    // renders (this canvas is their sole consumer — see
+    // ensureLinkedIdsLoaded in problem-nesting.js). Fire-and-forget: the
+    // bridge re-renders when they arrive and the lines appear then; every
+    // later call is a state-guarded no-op.
+    if (window.ProblemNesting.ensureLinkedIdsLoaded) window.ProblemNesting.ensureLinkedIdsLoaded();
     var liveSuggestions = filterLiveSuggestions(
       snap.suggestions,
       snap.problems,

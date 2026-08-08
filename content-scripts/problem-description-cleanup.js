@@ -2207,6 +2207,23 @@
   // be findable right now.
   function openInContainer(problemId, containerEl, onApplied) {
     var st = rowState(problemId);
+    // Re-opening AFTER a successful save (st.saved): every fetched/derived
+    // field in this row's state — prefill, conceptId, currentDescription,
+    // the candidate lists — describes the record as it was BEFORE that save,
+    // and openPanel's `st.alternatives || st.saved` short-circuit would
+    // render it all as current. Worse than cosmetic: a second apply would
+    // build its full-record-replace payload from the PRE-save prefill
+    // (buildEditProblemPayload(st.prefill, …)). The inline flow never hits
+    // this (its button removes itself on save), but the canvas's "Edit
+    // problem…" button is always offered — so discard the whole row state
+    // and start factory-fresh, forcing openPanel to refetch everything
+    // against the live record. (anchorEl is re-resolved below; hostContainer/
+    // onApplied are re-set below; panelEl was already removed on the save.)
+    if (st.saved) {
+      if (st.panelEl) st.panelEl.remove();
+      delete _rows[problemId];
+      st = rowState(problemId);
+    }
     // A stale panelEl (detached from any host, e.g. the caller's own
     // container was torn down and rebuilt since the last time this problem's
     // panel was opened here) must be discarded, or renderPanel would silently
