@@ -160,6 +160,13 @@ discipline as the endpoints themselves.
   so a file that throws at import time fails CI instead of silently vanishing in the
   field, which the source-text check alone could not catch.
 
+Also from the same review round: `docs/feature-list.md` synced to v3.225.0 (the
+release commit bumped the manifest without it, so `scripts/check-doc-versions.js`
+failed CI) — the two new features added to the in-page/Settings sections and the
+safety-posture write-path enumeration now names the bulk acknowledge/discard
+actions. Content sync only; no CSO signature claimed, the review ledger is
+untouched.
+
 ## [v3.224.0] — 2026-08-07
 
 ### Typable appointment-type search everywhere + book straight from First available
