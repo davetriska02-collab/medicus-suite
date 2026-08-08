@@ -1159,6 +1159,19 @@
         anchorEl: null,
         btnEl: null,
         panelEl: null,
+        // Set only by openInContainer (window.ProblemDescriptionCleanup
+        // bridge, 2026-08-08) — when present, renderPanel appends panelEl
+        // here instead of inline next to the Medicus row, so an external
+        // caller (e.g. the "Organise problems" canvas) can embed the panel
+        // in its own surface without needing anchorEl's row to be visible.
+        hostContainer: null,
+        // Set only by openInContainer, alongside hostContainer — called by
+        // applyCode on a successful save (2026-08-08 follow-up: "problem
+        // code edits refresh within the canvas") so the caller can update
+        // its own copy of this problem's description instead of only the
+        // Medicus row's own text (st.anchorEl.textContent, updated
+        // unconditionally by applyCode regardless of this callback).
+        onApplied: null,
         open: false,
         loading: false,
         error: null,
@@ -1687,7 +1700,11 @@
 
   function renderPanel(problemId) {
     var st = rowState(problemId);
-    if (!st.anchorEl || !st.anchorEl.parentElement) return;
+    // hostContainer (set by openInContainer) takes priority over the default
+    // inline-next-to-the-row insertion — falls back to the original
+    // anchorEl.parentElement behaviour untouched when hostContainer is unset,
+    // so the accordion-triggered flow this file already shipped is unchanged.
+    var host = st.hostContainer || (st.anchorEl && st.anchorEl.parentElement);
     if (!st.open) {
       if (st.panelEl) {
         st.panelEl.remove();
@@ -1695,10 +1712,11 @@
       }
       return;
     }
+    if (!host) return;
     if (!st.panelEl) {
       st.panelEl = document.createElement('div');
       st.panelEl.className = 'ms-pdc-panel-wrap';
-      st.anchorEl.parentElement.appendChild(st.panelEl);
+      host.appendChild(st.panelEl);
     }
     st.panelEl.innerHTML = panelHtml(problemId);
     bindPanelEvents(st.panelEl, problemId);
@@ -2157,8 +2175,83 @@
   function closePanel(problemId) {
     var st = rowState(problemId);
     st.open = false;
+    // Reset the two openInContainer-only fields on every close, whichever
+    // path closed it — so a problem opened once via the canvas, closed
+    // without saving, then later opened again via the ordinary inline
+    // button never fires a stale caller callback into a container that may
+    // no longer exist.
+    st.hostContainer = null;
+    st.onApplied = null;
     renderPanel(problemId);
   }
+
+  // ── Bridge for external callers (problem-nesting-canvas.js's "Edit
+  // problem" trigger, 2026-08-08 request) ──────────────────────────────────
+  // Runs the SAME check openPanel always runs for any problem — same-concept
+  // alternatives, descendant/laterality suggestions, cross-concept
+  // alternatives, generic-import-text cleanup, severity-contradiction
+  // detection — for ANY problemId, not just one already flagged by the
+  // automatic text-pattern scan. Deliberately does NOT run retirement or
+  // legacy-Read-code detection (Nick's explicit call, 2026-08-08: that's
+  // already available via the separate opt-in "Check for retired/legacy
+  // codes?" scan — no need to duplicate it here).
+  //
+  // Renders into `containerEl` (supplied by the caller) instead of inline
+  // next to the Medicus row — see renderPanel's hostContainer support above
+  // — so this can be embedded inside another surface (the canvas overlay)
+  // without needing to close it or leave it first. `onApplied(newDescription)`
+  // — optional — fires from applyCode's success path (2026-08-08 follow-up:
+  // "problem code edits refresh within the canvas") so the caller can update
+  // its OWN copy of this problem's description instead of relying solely on
+  // st.anchorEl.textContent, which only helps if the Medicus row happens to
+  // be findable right now.
+  function openInContainer(problemId, containerEl, onApplied) {
+    var st = rowState(problemId);
+    // Re-opening AFTER a successful save (st.saved): every fetched/derived
+    // field in this row's state — prefill, conceptId, currentDescription,
+    // the candidate lists — describes the record as it was BEFORE that save,
+    // and openPanel's `st.alternatives || st.saved` short-circuit would
+    // render it all as current. Worse than cosmetic: a second apply would
+    // build its full-record-replace payload from the PRE-save prefill
+    // (buildEditProblemPayload(st.prefill, …)). The inline flow never hits
+    // this (its button removes itself on save), but the canvas's "Edit
+    // problem…" button is always offered — so discard the whole row state
+    // and start factory-fresh, forcing openPanel to refetch everything
+    // against the live record. (anchorEl is re-resolved below; hostContainer/
+    // onApplied are re-set below; panelEl was already removed on the save.)
+    if (st.saved) {
+      if (st.panelEl) st.panelEl.remove();
+      delete _rows[problemId];
+      st = rowState(problemId);
+    }
+    // A stale panelEl (detached from any host, e.g. the caller's own
+    // container was torn down and rebuilt since the last time this problem's
+    // panel was opened here) must be discarded, or renderPanel would silently
+    // update a node nobody can see instead of creating a fresh one in the
+    // new container.
+    if (st.panelEl && !(containerEl && containerEl.contains(st.panelEl))) {
+      st.panelEl.remove();
+      st.panelEl = null;
+    }
+    st.hostContainer = containerEl || null;
+    st.onApplied = typeof onApplied === 'function' ? onApplied : null;
+    // Best-effort anchor lookup for the live-list-text-update nicety only
+    // (st.anchorEl.textContent, set on a successful apply — see applyCode)
+    // — uses the SAME whole-list claiming discipline as buildAnchorMap to
+    // avoid the documented duplicate-description wrong-row bug (2026-07-26).
+    // Never blocks opening: a missing anchor (row not currently rendered,
+    // e.g. a different page shape) just means that one nicety doesn't fire.
+    if (!st.anchorEl && _problemsCache) {
+      var anchors = buildAnchorMap(_problemsCache);
+      if (anchors[problemId]) st.anchorEl = anchors[problemId];
+    }
+    return openPanel(problemId);
+  }
+
+  window.ProblemDescriptionCleanup = {
+    openInContainer: openInContainer,
+    close: closePanel,
+  };
 
   // Core apply path, shared by both the same-concept alternatives (a cosmetic
   // relabel) and the descendant/laterality suggestions (a real code change) —
@@ -2240,6 +2333,19 @@
       // has no hook into). A later natural page re-render/reload picks up
       // the same corrected value fresh from the server either way.
       if (st.anchorEl) st.anchorEl.textContent = chosen.description;
+      // Same optimistic update, for whichever external caller opened this
+      // via openInContainer (2026-08-08) — st.anchorEl only helps when the
+      // Medicus row is actually findable right now, so a caller keeping its
+      // own copy of the description (the canvas's tile text) needs its own
+      // notification. Never lets a caller's own callback failing affect the
+      // already-successful save.
+      if (st.onApplied) {
+        try {
+          st.onApplied(chosen.description);
+        } catch (_) {
+          /* caller's own refresh failing must never affect this save */
+        }
+      }
       // Fixed — remove the "Fix description" button and panel entirely
       // rather than leaving a lingering "Saved" chip; the corrected text
       // itself is the confirmation.

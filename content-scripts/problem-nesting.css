@@ -142,6 +142,19 @@ select[class*='ms-pn-']:focus-visible,
   line-height: 1.45;
 }
 
+/* "Organise on canvas…" trigger row — button + suggestion-count badge, sits
+   above the Merge/Change-significance accordion sections (not one of them:
+   it opens the canvas overlay, problem-nesting-canvas.js, rather than
+   expanding inline). */
+.ms-pn-canvas-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
 /* Accordion section headers — sans 12px/600 sentence case, text chevron
    left, mono count right. Sections are separated by space, not boxes. */
 .ms-pn-sec-head {
@@ -283,13 +296,6 @@ select[class*='ms-pn-']:focus-visible,
   color: var(--green);
 }
 
-/* Stale cards — amber triad (wash/line/ink). */
-.ms-pn-card-stale {
-  background: var(--amber-dim);
-  border-color: var(--amber-line);
-  color: var(--amber);
-}
-
 .ms-pn-card-main {
   margin-bottom: 4px;
 }
@@ -389,15 +395,6 @@ select[class*='ms-pn-']:focus-visible,
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-}
-
-/* Live count line above the manual checklist. */
-.ms-pn-man-count {
-  margin-top: 8px;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 10px;
-  color: var(--text-3);
 }
 
 /* Scrollable checklist with scroll-shadow affordance (shadows appear only
