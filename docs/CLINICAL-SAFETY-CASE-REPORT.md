@@ -15,6 +15,22 @@ standard. Conformance is therefore claimed as *alignment*, not certification.
 
 ---
 
+> **Currency note (added 2026-08-08, automated weekly review — not a CSO re-baseline).** This
+> report was last issued 2026-06-14 against v3.84.2 and 30 recorded hazards (H-001–H-030). The
+> living hazard log (`docs/HAZARD-LOG.md`) has since moved well beyond this snapshot: it is at
+> document version 3.24, records 31 further hazards (H-031–H-063; H-053 and H-054 are not used —
+> a pre-existing numbering gap, not assessed further this run), and covers releases up to
+> v3.224.0. Code merged in the past week (2026-08-01–2026-08-07 — Contacts Management follow-ups,
+> the "Organise problems?" problem-nesting widget, a retrospective hazard entry for the
+> pre-existing "Bulk remove?"/"Clean up code?" problem-list widgets, Task Presence, and the
+> First-available appointment lookup) was reviewed this run and recorded as new hazards
+> H-061–H-063 plus control-update notes on H-055/H-056/H-060 in the hazard log, all **pending
+> CSO sign-off** — see `HAZARD-LOG.md` §5–6 and `docs/cso-review-ledger.json`. This report's §4
+> table and hazard count are **not updated by this note** (that is a CSO judgement call, not an
+> automated one) — treat the figures below as historical and the hazard log as the current source
+> of truth until the CSO carries out a full re-baseline of this document. **No change is made to
+> this report's conclusion, sign-off status, or any risk figure by this note.**
+
 ## 1. Purpose and scope
 
 This Clinical Safety Case Report (CSCR) presents the argument and supporting
