@@ -2,6 +2,165 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.225.0] — 2026-08-08
+
+### "Organise problems" canvas — drag-and-drop tree + suggestion tray
+
+Replaces the "Suggested links" and "Link manually" accordion sections in the Clinical Summary's
+"Organise problems?" widget with a full-screen visual canvas (`content-scripts/problem-nesting-canvas.js`/
+`.css`, opened from a new "Organise on canvas…" trigger in `problem-nesting.js`):
+
+- **Left pane — the tree.** Every problem on the record, auto-laid-out: root problems sorted by
+  onset date descending, each one's real children nested beneath it (sorted the same way), to
+  whatever depth the record actually has. Tiles have no persisted position — the tree is always
+  recomputed from the live parent map; a confirmed link re-renders it from scratch.
+- **Compact tiles.** Description and date sit on one line (padding cut roughly in half from the
+  first cut, which was taking noticeably more vertical space than Medicus's own native list) —
+  falls back to record date when onset date is blank, so a problem with a real recorded date never
+  shows as undated purely because it lacks an onset. `additionalInformation` renders as a second,
+  truncated line only when present, on both tree tiles and tray tiles — most problems stay
+  single-line.
+- **Right pane — the suggestion tray.** SNOMED-suggested-but-unconfirmed children, each labelled
+  "SNOMED marks this as a child of X" and connected to its candidate parent(s) in the tree by an
+  always-on dotted line (an SVG overlay computing real coordinates between the two independently-
+  sorted panes). Sorted actionable-before-blocked (a suggestion whose candidate is itself still an
+  unconfirmed tray item sorts lower, and re-sorts up once that other suggestion is confirmed), then
+  by date within each group.
+- **Drag any tile onto any other tile, either pane** — SNOMED candidates are a visual hint, never a
+  constraint; the clinician's own judgement about what belongs where is never overridden. A cycle
+  is rejected immediately (no confirm shown); otherwise an explicit confirm ("This will nest X under
+  Y…") is required before anything writes — matching the discipline the deleted accordion cards
+  already followed.
+- **Tile actions, replacing the connector click (2026-08-08 revision — clicking the line wasn't
+  intuitive enough as the only way to unlink).** Clicking a tree-pane tile now reveals two buttons
+  beside it: **"Remove link"** (only shown when the tile has a parent — same explicit confirm as
+  before, un-nests via `window.ProblemNesting.commitUnlink`) and **"Edit problem…"**. Connectors are
+  purely visual again.
+- **"Edit problem…" — every problem, not just flagged ones.** Opens `problem-description-cleanup.js`'s
+  full review (same-concept alternatives, descendant/laterality, cross-concept, generic-import-text,
+  severity-contradiction) for the clicked problem directly — bypassing the text-pattern pre-filter
+  that normally gates when that widget's own button appears. Deliberately does NOT run
+  retirement/legacy-Read-code detection (Nick's call: already covered by that widget's own separate
+  "Check for retired/legacy codes?" scan). Renders as a modal ON TOP of the canvas via a new
+  `window.ProblemDescriptionCleanup.openInContainer` bridge and a `hostContainer` override on that
+  file's `renderPanel` (previously hard-wired to insert inline next to the Medicus row) — the canvas
+  never closes to show it ("I would prefer not to close the canvas — this is helpful precisely
+  because it gives a genuine view of the whole problem page"). The panel's own container is a
+  persistent DOM node `render()` never rebuilds, so it survives every canvas re-render.
+- **A root tile (nothing to unlink) opens "Edit problem…" on a single click** — no
+  select-then-click-the-only-button round trip. Judged the same way the tile's own action buttons
+  are (a real, still-live parent, not just a raw entry in the link map), so this and the two-button
+  reveal for a nested tile never disagree.
+- **Corrected descriptions refresh on the tile immediately.** A successful "Edit problem" save now
+  calls back into `window.ProblemNesting.updateProblemDescription`, updating the scan's own cached
+  description and closing the modal — previously the canvas kept showing the pre-edit text until a
+  full close-and-reopen. Matches the same "the corrected text is the confirmation, no lingering
+  saved chip" philosophy `problem-description-cleanup.js`'s own inline panel already follows (its
+  panel removes itself on save regardless of caller; the canvas closes its wrapper the same way
+  rather than leaving an empty modal open).
+- **Un-nesting confirmed live 2026-08-08** via two real HAR captures Nick recorded
+  (`docs/learnings-problem-nesting-api.md`) — the SAME `update-parent-problem` endpoint and payload
+  builder as creating a link, just `parentProblemId: null`, no longer the inferred/deferred shape
+  this feature first shipped with. The same captures also confirmed a real trap to keep avoiding:
+  the parent-side `update-child-problems` endpoint's `childProblemsToAdd` is a full replace of the
+  child set even for removal (an empty array cleared a parent's only child in the capture — fine
+  with one child, silently wrong with more than one) — the child-side endpoint used here has no
+  such trap. The same captures also confirmed `recordDate` populates on `slideover/overview`
+  (`"recordDate":"2025-01-15"`), resolving the "read speculatively, unconfirmed on this endpoint"
+  caveat the date-fallback carried a few hours earlier the same day.
+- **No new write path.** The canvas makes zero API calls of its own — every read and write goes
+  through the `window.ProblemNesting` bridge (`problem-nesting.js`) and the
+  `window.ProblemDescriptionCleanup` bridge (`problem-description-cleanup.js`), reusing every piece
+  of already-tested scan/commit/cycle-guard/alternative-search logic unchanged. "Merge duplicate
+  copies" and "Change significance" are untouched.
+- **An explainer strip** now sits above the two panes: "Drag and drop problems to create
+  parent-child relationships. Suggested options are on the right. Click on a problem tile to remove
+  a link, or to search for better codes based on free-text."
+- **The canvas actually scrolls now.** A long problem list couldn't be linked end-to-end before —
+  the classic flex-child scrolling gotcha (a flex item's `min-height` defaults to `auto`, meaning
+  "at least as tall as my content," which overrides `overflow: auto` regardless of the container's
+  own fixed height). `min-height: 0` on `.ms-pnc-body` alone wasn't enough; each pane needed its own
+  override too.
+- **Chronology sense-check for suggestions.** A candidate child dated (onset, falling back to
+  record date) BEFORE its candidate parent is no longer suggested — it can't chronologically be
+  part of a condition that didn't exist yet (a stent inserted in 2001 can't be a child of
+  angioplasty first recorded in 2005). New `predatesParent`/`resolveChronologyDate` in
+  `problem-nesting.js`'s `buildNestingSuggestions`; fails OPEN when either date is unknown (a
+  negative check on positive evidence, not a data-completeness requirement) and never constrains
+  manual/drag-created links, where the clinician's own judgement is never overridden.
+- **Real live bug fixed: `onsetDate` and `recordDate` are two DIFFERENT date formats on the SAME
+  problem, not one format that's sometimes absent.** `slideover/overview` returns `onsetDate` as
+  the UK display shape ("20 Apr 2006") but `recordDate` already in ISO ("2025-01-15") — confirmed
+  in the very HAR captures that confirmed unlink. Every `dateSortKey` in this feature (both
+  `problem-nesting.js` and `problem-nesting-canvas.js`) only recognised the UK shape, so the
+  onset-blank record-date fallback silently returned null wherever it fired — mis-sorting tiles,
+  and silently defeating the new chronology check above (a null date always fails open). Now
+  recognises both shapes.
+- **Practice-defined parent/child pairs, additional to SNOMED's own.** New
+  `rules/problem-nesting-overrides.json` — curated pairs the practice considers a genuine
+  clinical hierarchy even though SNOMED doesn't model them as one (first entry: pseudophakia,
+  95217000, as a child of cataract, 193570009 — the expected post-op state, but a different SNOMED
+  branch entirely, invisible to the live descendant search). Folded into the SAME suggestion
+  builder as the live SNOMED hits (`buildNestingSuggestions`' new `overridePairHits` parameter),
+  subject to the SAME cycle guard and chronology check — not a separate, looser path. Every option
+  is now tagged `source: 'snomed'|'override'` so the tray's copy is always accurate: "SNOMED marks
+  this as a child of X" only when SNOMED actually said so; "this practice's own reference list
+  marks this as a child of X" otherwise — crediting SNOMED for a pairing it never made would have
+  been misleading. **Second entry added same day**: nuclear cataract (53889007) as a child of
+  cataract (193570009) — UNLIKE pseudophakia, this one is believed to be a genuine SNOMED
+  descendant that the live two-step descendant-search query simply wasn't finding on a real
+  patient (root cause unconfirmed — the comma-joined `constrainingParentConcepts` list length is
+  the leading suspect; see the entry's own note in the rules file); added here as a pragmatic
+  workaround rather than left broken while that's investigated.
+- **Linked problems — now visualised in the left pane, elbow/bus routing.** Two further HAR
+  captures Nick recorded (`52-linktomultiple.har`, `53-remove-one-from-multiple.har`) fully closed
+  the two gaps flagged a few hours earlier: a third prefill GET exists
+  (`/clinical/data/problem/update-problem-links/{patientId}/{problemId}`, alongside the
+  parent/child ones) whose `existingLinkedProblems` field is a plain array of ids — the
+  ids-not-descriptions source that was missing — and HAR 53 conclusively proves the write really is
+  full-replace (removing one of a problem's three links required POSTing the *other two* ids back,
+  not `[]`). `problem-nesting.js`'s scan now fetches this prefill per active problem (same cost
+  class as the existing overview fetch) and stores `linkedProblemIds`. First cut drew straight
+  diagonal lines between linked tiles; revised same day — a straight-line cut wasn't clear enough
+  with more than one or two links on screen — to elbow/bus routing: every link's horizontal arm
+  reaches out from its own tile's right edge to a vertical bus (`computeLinkBusX`, positioned clear
+  of every tile on screen, capped at the tree pane's own boundary), bolder than the original attempt
+  (2.5px, 0.85 opacity, rounded joins). **Revised AGAIN the same day**: separate, unrelated SETS of
+  linked problems were sharing that one bus and one colour, indistinguishable from a single
+  connected group. Each connected set (`groupLinkedPairsIntoSets` — two pairs sharing a problem,
+  directly or via a chain, are one set; a union-find over the pair graph) now gets its own lane
+  (`linkSetLaneX`, a small rightward step per set) and its own colour (`linkSetColor`, a 5-hue
+  palette deliberately spaced away from every colour already meaningful elsewhere in the canvas —
+  the suggestion lines' accent blue, the error confirm bar's red and amber), so two genuinely
+  separate sets can never be mistaken for one. Deliberately distinct from both the dotted
+  SNOMED/override suggestion lines and the plain grey parent/child connector stubs throughout, so
+  all three relationship types stay traceable at a glance. **Display only, by explicit scope
+  decision** — creating/removing links from the canvas is a deliberate follow-up, not built here;
+  the confirmed read-modify-write contract (fetch a fresh prefill immediately before every write,
+  since the set can have changed) is fully documented in `docs/learnings-problem-nesting-api.md`
+  for whenever that gets built. New pure `buildLinkedProblemPairs` (dedupes the symmetric
+  relationship — a link that both sides' own records reference must draw as ONE line, not two),
+  `groupLinkedPairsIntoSets`, `linkSetLaneX`, `linkSetColor`, `buildElbowConnectorPath` (the
+  orthogonal arm-bus-arm path), and `computeLinkBusX` (the shared base bus position).
+- **Nuclear-cataract miss — run and resolved.** Nick ran `scripts/problem-nesting-descendant-probe.js`
+  and confirmed the trivial cause: the actual coded problem on that record was "cataracts" (plural),
+  a different concept than the assumed 193570009 "Cataract" — the descendant-search mechanism itself
+  was working correctly all along, nothing to fix in `problem-nesting.js`. The script stays in the
+  repo as a reusable diagnostic for any future suspected miss.
+
+`test-problem-nesting-canvas.js` (108 assertions, up from 71): date-key parsing/sorting across BOTH
+real onset formats, additional-information truncation, tree building (including the edge case
+where a suggested-but-unconfirmed child is ALSO the real parent of other on-record problems, and
+the new `linkedProblemIds` field carrying through), the tray's live-filtering and
+actionable/blocked partition, the SVG connector-path math for both suggestion AND linked-problem
+lines, the symmetric-pair deduplication, and the drag-payload provenance check, and the
+source-grouping used for accurate tray copy. `test-problem-nesting.js` (107 assertions) adds
+coverage for the new chronology check, the mixed onset/record-date format fix, and the overrides
+list (including a direct check against the SHIPPED `rules/problem-nesting-overrides.json`, not
+just synthetic fixtures) — the scan/commit/cycle-guard logic itself remains untested directly (one
+added `commitUnlink` alongside the existing `commitParentLink`, both async/side-effecting,
+consistent with this file's existing convention of only unit-testing pure payload builders).
+
 ## [v3.224.0] — 2026-08-07
 
 ### Typable appointment-type search everywhere + book straight from First available

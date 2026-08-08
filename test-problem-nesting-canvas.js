@@ -1,0 +1,518 @@
+// Medicus Suite — problem-nesting-canvas ("Organise problems" canvas overlay)
+// tests
+// Run with: node test-problem-nesting-canvas.js
+//
+// Live Medicus and the DOM aren't available here, so only the pure logic is
+// exercised: date-key parsing/sorting, the left-pane tree builder (including
+// the "suggested-but-already-a-real-parent" edge case), the tray's live
+// filtering and actionable/blocked partition, the SVG connector-path math,
+// and the drag-payload provenance check. See test-problem-nesting.js for the
+// scan/commit/cycle-guard logic this file's window.ProblemNesting bridge
+// wraps — none of that is re-tested here.
+
+'use strict';
+
+const {
+  dateSortKey,
+  compareDatesDesc,
+  resolveDisplayDate,
+  truncateText,
+  buildProblemTree,
+  flattenTreeIds,
+  filterLiveSuggestions,
+  groupOptionsBySource,
+  partitionSuggestionTray,
+  buildConnectorPath,
+  buildLinkedProblemPairs,
+  groupLinkedPairsIntoSets,
+  linkSetLaneX,
+  linkSetColor,
+  buildElbowConnectorPath,
+  computeLinkBusX,
+  relativeRect,
+  readDropPayload,
+} = require('./content-scripts/problem-nesting-canvas.js');
+
+let passed = 0,
+  failed = 0;
+function check(cond, msg) {
+  if (cond) {
+    console.log(`  OK  ${msg}`);
+    passed++;
+  } else {
+    console.error(`  FAIL  ${msg}`);
+    failed++;
+  }
+}
+
+console.log('--- dateSortKey: "DD Mon YYYY" (onsetDate) AND ISO "YYYY-MM-DD" (recordDate) ---');
+{
+  check(dateSortKey('20 Apr 2020') === '2020-04-20', 'two-digit day parsed');
+  check(dateSortKey('5 Jul 2009') === '2009-07-05', 'single-digit day zero-padded');
+  check(dateSortKey(null) === null, 'null -> null');
+  check(dateSortKey(undefined) === null, 'undefined -> null');
+  check(dateSortKey('') === null, 'empty string -> null');
+  // recordDate comes back from slideover/overview ALREADY in ISO shape
+  // (confirmed live 2026-08-08, HAR 48: "recordDate":"2025-01-15" on the
+  // SAME response as "onsetDate":"20 Apr 2006") — both formats must parse,
+  // since a real problem's two date fields use two different formats.
+  check(dateSortKey('2025-01-15') === '2025-01-15', 'already-ISO shape (recordDate) parsed too, unchanged');
+  check(dateSortKey('2020-04-20') === '2020-04-20', 'ISO shape passes through as its own sort key');
+  check(dateSortKey('20 Foo 2020') === null, 'unrecognised month abbreviation -> null');
+  check(dateSortKey('garbage') === null, 'garbage -> null, never throws');
+}
+
+console.log('--- compareDatesDesc: descending, undated always last ---');
+{
+  check(compareDatesDesc('20 Apr 2020', '5 Jul 2009') < 0, 'later date sorts first (descending)');
+  check(compareDatesDesc('5 Jul 2009', '20 Apr 2020') > 0, 'earlier date sorts after');
+  check(compareDatesDesc('20 Apr 2020', '20 Apr 2020') === 0, 'identical dates tie');
+  check(compareDatesDesc(null, '20 Apr 2020') > 0, 'undated sorts after a dated entry');
+  check(compareDatesDesc('20 Apr 2020', null) < 0, 'dated entry sorts before an undated one');
+  check(compareDatesDesc(null, null) === 0, 'two undated entries tie');
+  // The real bug Nick found live 2026-08-08: onsetDate and recordDate come
+  // back from Medicus in TWO DIFFERENT formats on the SAME problem — a
+  // straight string comparison (or a parser that only recognised one shape)
+  // silently mis-sorted these against each other.
+  check(
+    compareDatesDesc('2025-01-15', '20 Apr 2020') < 0,
+    'ISO-format date (2025) correctly sorts before a mixed-format-compared UK-style date (2020) — no longer both forced through one parser shape'
+  );
+  check(
+    compareDatesDesc('1 Jan 2019', '2025-01-15') > 0,
+    'a UK-style date correctly sorts after an ISO date from the same comparison, regardless of which side is which format'
+  );
+}
+
+console.log('--- resolveDisplayDate: onset, falling back to record date when onset is blank ---');
+{
+  check(
+    resolveDisplayDate({ onsetDate: '1 Jan 2020', recordDate: '1 Jan 2019' }) === '1 Jan 2020',
+    'onset date preferred when present'
+  );
+  check(
+    resolveDisplayDate({ onsetDate: null, recordDate: '1 Jan 2019' }) === '1 Jan 2019',
+    'record date used when onset is blank'
+  );
+  check(resolveDisplayDate({ onsetDate: null, recordDate: null }) === null, 'both blank -> null');
+  check(resolveDisplayDate(null) === null, 'no info at all -> null, never throws');
+}
+
+console.log('--- truncateText: single-line tile hint, keeps tiles compact ---');
+{
+  check(truncateText('short note', 70) === 'short note', 'short text passes through unchanged');
+  check(truncateText('a'.repeat(80), 70).length === 70, 'long text truncated to the limit (including the ellipsis)');
+  check(truncateText('a'.repeat(80), 70).endsWith('…'), 'truncated text ends with an ellipsis');
+  check(truncateText('  ', 70) === null, 'whitespace-only text -> null, not an empty bubble');
+  check(truncateText(null, 70) === null, 'null -> null');
+  check(truncateText('exact', 5) === 'exact', 'text exactly at the limit is not truncated');
+}
+
+console.log('--- buildProblemTree: roots, nesting, sort order ---');
+{
+  const problems = [
+    { id: 'ihd', description: 'Ischaemic heart disease' },
+    { id: 'aspirin', description: 'Over the counter aspirin therapy' },
+    { id: 'beta', description: 'Beta blocker not indicated' },
+    { id: 'stent', description: 'Insertion of coronary artery stent' },
+    { id: 'cancer', description: 'Breast cancer' },
+  ];
+  const infoById = {
+    ihd: { onsetDate: '1 Jul 2009' },
+    aspirin: { onsetDate: '1 Mar 2012' },
+    beta: { onsetDate: null, recordDate: '1 Nov 2010', additionalInformation: '  Not currently indicated  ' },
+    stent: { onsetDate: '1 Jul 2009' },
+    cancer: { onsetDate: '1 Jan 2021', linkedProblemIds: ['ihd'] },
+  };
+  const parentMap = { aspirin: 'ihd', beta: 'ihd', stent: 'ihd' };
+  const tree = buildProblemTree(problems, infoById, parentMap, new Set());
+  check(tree.length === 2, 'two roots: cancer (no parent) and ihd (has children, no parent of its own)');
+  check(
+    tree[1].children.find((c) => c.id === 'beta').displayDate === '1 Nov 2010',
+    'a child with no onset date falls back to record date for both display and sort'
+  );
+  check(
+    tree[1].children.find((c) => c.id === 'beta').additionalInformation === '  Not currently indicated  ',
+    "additionalInformation carried through onto the tree node untrimmed (trimming is the render layer's job, via truncateText)"
+  );
+  check(
+    tree[0].additionalInformation === null,
+    'a problem with no additionalInformation on record -> null, not undefined or empty string'
+  );
+  check(tree[0].id === 'cancer', 'roots sorted descending by date — 2021 cancer before 2009 ihd');
+  check(tree[1].id === 'ihd', 'ihd is the second root');
+  check(tree[1].children.length === 3, 'ihd has all three children attached');
+  check(
+    tree[1].children.map((c) => c.id).join(',') === 'aspirin,beta,stent',
+    'children sorted descending by date (Mar 2012, Nov 2010, Jul 2009) — ties (stent) keep insertion order'
+  );
+  check(tree[0].parentId === null, 'a root node carries parentId: null — nothing to unlink');
+  check(
+    Array.isArray(tree[0].linkedProblemIds) && tree[0].linkedProblemIds[0] === 'ihd',
+    'linkedProblemIds carried through onto the tree node from infoById'
+  );
+  check(
+    Array.isArray(tree[1].linkedProblemIds) && tree[1].linkedProblemIds.length === 0,
+    'a problem with no linkedProblemIds on record defaults to an empty array, never undefined'
+  );
+  check(
+    tree[1].children.every((c) => c.parentId === 'ihd'),
+    "every child node's own parentId points at its real, rendered parent — the field the tile's Remove-link button reads"
+  );
+
+  console.log('--- buildProblemTree: 3-deep nesting (mastectomy -> capsular contracture example) ---');
+  const deep = [
+    { id: 'cancer2', description: 'Malignant neoplasm of female breast' },
+    { id: 'mastectomy', description: 'Total mastectomy' },
+    { id: 'capsular', description: 'Capsular contracture of breast' },
+  ];
+  const deepInfo = {
+    cancer2: { onsetDate: '1 Jan 2013' },
+    mastectomy: { onsetDate: '1 Feb 2013' },
+    capsular: { onsetDate: '1 Jan 2018' },
+  };
+  const deepParents = { mastectomy: 'cancer2', capsular: 'mastectomy' };
+  const deepTree = buildProblemTree(deep, deepInfo, deepParents, new Set());
+  check(deepTree.length === 1 && deepTree[0].id === 'cancer2', 'single root at depth 0');
+  check(deepTree[0].children[0].id === 'mastectomy', 'mastectomy nested at depth 1');
+  check(deepTree[0].children[0].children[0].id === 'capsular', 'capsular contracture nested at depth 2');
+
+  console.log('--- buildProblemTree: a suggested-tray item that already has real children stays a root ---');
+  const edge = [
+    { id: 'x', description: 'X' },
+    { id: 'c1', description: 'Child of X' },
+  ];
+  const edgeInfo = { x: { onsetDate: '1 Jan 2020' }, c1: { onsetDate: '1 Jan 2019' } };
+  const edgeParents = { c1: 'x' };
+  const withRealChildren = buildProblemTree(edge, edgeInfo, edgeParents, new Set(['x']));
+  check(
+    withRealChildren.length === 1 && withRealChildren[0].id === 'x' && withRealChildren[0].children.length === 1,
+    'X still renders as a root (with its real child) even though it is ALSO an unconfirmed tray suggestion — hiding it would orphan c1'
+  );
+  const noRealChildren = buildProblemTree(
+    [{ id: 'y', description: 'Y' }],
+    { y: { onsetDate: '1 Jan 2020' } },
+    {},
+    new Set(['y'])
+  );
+  check(
+    noRealChildren.length === 0,
+    'a childless tray item is excluded from the tree entirely (lives only in the tray)'
+  );
+}
+
+console.log('--- flattenTreeIds ---');
+{
+  const tree = buildProblemTree(
+    [
+      { id: 'a', description: 'A' },
+      { id: 'b', description: 'B' },
+    ],
+    {},
+    { b: 'a' },
+    new Set()
+  );
+  const ids = flattenTreeIds(tree);
+  check(ids instanceof Set && ids.size === 2 && ids.has('a') && ids.has('b'), 'both root and nested child flattened');
+  check(flattenTreeIds([]).size === 0, 'empty tree -> empty set, never throws');
+}
+
+console.log('--- filterLiveSuggestions: mirrors the old per-card filtering, once for the whole tray ---');
+{
+  const problems = [
+    { id: 'child1', description: 'Child 1' },
+    { id: 'parentA', description: 'Parent A' },
+  ];
+  const base = [
+    { childId: 'child1', childDescription: 'Child 1', parentOptions: [{ id: 'parentA', description: 'Parent A' }] },
+  ];
+  check(
+    filterLiveSuggestions(base, problems, {}, () => false).length === 1,
+    'a valid, still-live suggestion passes through'
+  );
+  check(
+    filterLiveSuggestions(base, [{ id: 'parentA', description: 'Parent A' }], {}, () => false).length === 0,
+    'child removed as a duplicate this session (no longer in problems) -> dropped'
+  );
+  check(
+    filterLiveSuggestions(base, problems, { child1: 'someoneElse' }, () => false).length === 0,
+    'child already linked elsewhere this session (has a live parent) -> dropped'
+  );
+  check(
+    filterLiveSuggestions(base, problems, {}, () => true).length === 0,
+    'every candidate would create a cycle -> suggestion dropped entirely'
+  );
+  const multi = [
+    {
+      childId: 'child1',
+      childDescription: 'Child 1',
+      parentOptions: [
+        { id: 'parentA', description: 'Parent A' },
+        { id: 'parentB', description: 'Parent B' },
+      ],
+    },
+  ];
+  const narrowed = filterLiveSuggestions(
+    multi,
+    [
+      { id: 'child1', description: 'Child 1' },
+      { id: 'parentA', description: 'Parent A' },
+      { id: 'parentB', description: 'Parent B' },
+    ],
+    {},
+    (childId, parentId) => parentId === 'parentB'
+  );
+  check(
+    narrowed.length === 1 && narrowed[0].parentOptions.length === 1 && narrowed[0].parentOptions[0].id === 'parentA',
+    'parentOptions narrowed to only the still-live, non-cycle candidates — parentB dropped, parentA kept'
+  );
+}
+
+console.log('--- groupOptionsBySource: accurate provenance copy (2026-08-08 overrides list) ---');
+{
+  const mixed = [
+    { id: 'cataract', description: 'Cataract', source: 'override' },
+    { id: 'angio', description: 'Angioplasty', source: 'snomed' },
+    { id: 'legacy', description: 'No source field at all' },
+  ];
+  const groups = groupOptionsBySource(mixed);
+  check(
+    groups.override.length === 1 && groups.override[0].id === 'cataract',
+    'override-sourced option grouped correctly'
+  );
+  check(
+    groups.snomed.length === 2,
+    'snomed-sourced AND an option with no source field at all group as snomed (defensive default)'
+  );
+  check(
+    groups.snomed.some((o) => o.id === 'legacy'),
+    'a missing source field is never mistaken for an override'
+  );
+  check(
+    groupOptionsBySource([]).snomed.length === 0 && groupOptionsBySource([]).override.length === 0,
+    'empty input -> both groups empty'
+  );
+  check(
+    groupOptionsBySource(null).snomed.length === 0 && groupOptionsBySource(null).override.length === 0,
+    'null input -> both groups empty, never throws'
+  );
+}
+
+console.log('--- partitionSuggestionTray: actionable-before-blocked, sorted by date within each group ---');
+{
+  const infoById = {
+    early: { onsetDate: '1 Jan 2018' },
+    late: { onsetDate: '1 Jan 2022' },
+    chained: { onsetDate: '1 Jan 2020' },
+  };
+  const suggestions = [
+    { childId: 'early', childDescription: 'Early', parentOptions: [{ id: 'inTree', description: 'In tree' }] },
+    { childId: 'late', childDescription: 'Late', parentOptions: [{ id: 'inTree', description: 'In tree' }] },
+    {
+      childId: 'chained',
+      childDescription: 'Chained',
+      parentOptions: [{ id: 'notInTreeYet', description: 'Not in tree yet' }],
+    },
+  ];
+  const treeIds = new Set(['inTree']);
+  const { actionable, blocked } = partitionSuggestionTray(suggestions, treeIds, infoById);
+  check(actionable.length === 2 && blocked.length === 1, 'two actionable (candidate already in tree), one blocked');
+  check(
+    actionable[0].childId === 'late' && actionable[1].childId === 'early',
+    'actionable group sorted by date descending'
+  );
+  check(
+    blocked[0].childId === 'chained',
+    'the chained/blocked suggestion is the one whose candidate is itself unconfirmed'
+  );
+
+  console.log('--- partitionSuggestionTray: re-partition after a simulated confirm ---');
+  const treeIdsAfterConfirm = new Set(['inTree', 'notInTreeYet']); // 'notInTreeYet' just got confirmed into the tree
+  const after = partitionSuggestionTray(suggestions, treeIdsAfterConfirm, infoById);
+  check(
+    after.actionable.some((s) => s.childId === 'chained'),
+    'the previously-blocked suggestion flips to actionable once its candidate is confirmed into the tree'
+  );
+  check(after.blocked.length === 0, 'nothing left blocked once every candidate is in the tree');
+}
+
+console.log('--- buildConnectorPath: pure cubic-bezier path from a tray tile to its candidate parent ---');
+{
+  const fromRect = { left: 500, right: 600, top: 100, bottom: 130, width: 100, height: 30 };
+  const toRect = { left: 50, right: 200, top: 300, bottom: 330, width: 150, height: 30 };
+  const d = buildConnectorPath(fromRect, toRect);
+  check(typeof d === 'string' && d.startsWith('M 500 115'), "starts at the tray tile's left-middle edge");
+  check(d.includes('200 315'), "ends at the target tile's right-middle edge");
+  check(buildConnectorPath(null, toRect) === null, 'missing fromRect -> null, never throws');
+  check(buildConnectorPath(fromRect, null) === null, 'missing toRect -> null, never throws');
+}
+
+console.log('--- buildElbowConnectorPath: elbow/bus routing for linked problems (2026-08-08 revision) ---');
+{
+  const rectA = { left: 0, right: 100, top: 0, width: 100, height: 20 };
+  const rectB = { left: 20, right: 120, top: 100, width: 100, height: 20 };
+  const d = buildElbowConnectorPath(rectA, rectB, 200);
+  check(
+    typeof d === 'string' && d === 'M 100 10 L 200 10 L 200 110 L 120 110',
+    "arm out from A's right edge to the shared bus, down the bus, arm in to B's right edge"
+  );
+  check(buildElbowConnectorPath(null, rectB, 200) === null, 'missing rectA -> null, never throws');
+  check(buildElbowConnectorPath(rectA, null, 200) === null, 'missing rectB -> null, never throws');
+  check(buildElbowConnectorPath(rectA, rectB, null) === null, 'missing busX -> null, never throws');
+  check(buildElbowConnectorPath(rectA, rectB, 'not a number') === null, 'non-numeric busX -> null, never throws');
+}
+
+console.log('--- computeLinkBusX: the shared vertical bus, clear of every tile, capped at the pane edge ---');
+{
+  const rects = [
+    { right: 100 },
+    { right: 340 }, // the widest tile — including one that isn't itself linked
+    { right: 200 },
+  ];
+  check(
+    computeLinkBusX(rects, 16) === 356,
+    'clear of the WIDEST tile on screen, not just linked ones, plus the margin'
+  );
+  check(computeLinkBusX(rects) === 356, 'margin defaults to 16 when omitted');
+  check(
+    computeLinkBusX(rects, 16, 350) === 346,
+    "capped at the tree pane's own right edge (minus a small buffer) so it never bleeds into the tray pane"
+  );
+  check(
+    computeLinkBusX(rects, 16, 500) === 356,
+    "a pane edge FAR to the right of the natural position doesn't push the bus out artificially"
+  );
+  check(computeLinkBusX([], 16) === null, 'no tiles at all -> null, never throws');
+  check(computeLinkBusX(null, 16) === null, 'null input -> null, never throws');
+}
+
+console.log('--- buildLinkedProblemPairs: symmetric relationship, one line per link not two ---');
+{
+  // A and B both list each other (the confirmed live symmetric shape) —
+  // must produce exactly ONE pair, not two.
+  const symmetric = [
+    { id: 'a', linkedIds: ['b'] },
+    { id: 'b', linkedIds: ['a'] },
+  ];
+  const pairs = buildLinkedProblemPairs(symmetric);
+  check(pairs.length === 1, 'a symmetric pair (both sides list each other) dedupes to ONE line, not two');
+  check(
+    (pairs[0].a === 'a' && pairs[0].b === 'b') || (pairs[0].a === 'b' && pairs[0].b === 'a'),
+    'the single pair connects the right two ids, whichever order'
+  );
+
+  // A links to BOTH b and c — two distinct real links.
+  const fanOut = [{ id: 'a', linkedIds: ['b', 'c'] }];
+  check(buildLinkedProblemPairs(fanOut).length === 2, 'a problem linked to two different others produces two pairs');
+
+  check(
+    buildLinkedProblemPairs([{ id: 'a', linkedIds: ['a'] }]).length === 0,
+    'a problem can never be linked to itself — self-reference dropped'
+  );
+  check(buildLinkedProblemPairs([{ id: 'a', linkedIds: [] }]).length === 0, 'no linked ids -> no pairs');
+  check(buildLinkedProblemPairs([{ linkedIds: ['b'] }]).length === 0, 'an entry with no id of its own is skipped');
+  check(buildLinkedProblemPairs(null).length === 0, 'null input -> empty, never throws');
+  check(buildLinkedProblemPairs([]).length === 0, 'empty input -> empty, never throws');
+}
+
+console.log('--- groupLinkedPairsIntoSets: connected components, one lane/colour per genuine set ---');
+{
+  // Two COMPLETELY SEPARATE pairs (no shared problem) — the real bug Nick
+  // found live: these were sharing one bus AND one colour, indistinguishable
+  // from a single connected group.
+  const disjoint = [
+    { a: 'stemi', b: 'htn' },
+    { a: 'hydroxy', b: 'ra' },
+  ];
+  const disjointSets = groupLinkedPairsIntoSets(disjoint);
+  check(disjointSets.length === 2, 'two unrelated pairs -> two separate sets, each gets its own lane/colour');
+
+  // A chain (A–B, B–C) IS one genuinely connected set, even though A and C
+  // never appear in the same pair together.
+  const chain = [
+    { a: 'a', b: 'b' },
+    { a: 'b', b: 'c' },
+  ];
+  check(groupLinkedPairsIntoSets(chain).length === 1, 'a chain (A-B, B-C) is ONE connected set, not two');
+  check(groupLinkedPairsIntoSets(chain)[0].length === 2, 'the one set contains both edges of the chain');
+
+  // A hub (A linked to both B and C, unrelated to the disjoint pair) — still
+  // one set, plus the disjoint pair stays its own separate set.
+  const mixed = [
+    { a: 'hub', b: 'x' },
+    { a: 'hub', b: 'y' },
+    { a: 'p', b: 'q' },
+  ];
+  const mixedSets = groupLinkedPairsIntoSets(mixed);
+  check(mixedSets.length === 2, 'a 3-edge hub set plus one unrelated pair -> two sets total');
+  check(
+    mixedSets.some((s) => s.length === 2) && mixedSets.some((s) => s.length === 1),
+    'set sizes match: the hub set has both its edges, the unrelated pair is its own lone-edge set'
+  );
+
+  check(groupLinkedPairsIntoSets(null).length === 0, 'null input -> empty, never throws');
+  check(groupLinkedPairsIntoSets([]).length === 0, 'empty input -> empty, never throws');
+}
+
+console.log('--- linkSetLaneX / linkSetColor: distinct lane and colour per set ---');
+{
+  check(linkSetLaneX(400, 0, 14) === 400, 'set 0 sits at the base position, no offset');
+  check(linkSetLaneX(400, 1, 14) === 414, 'set 1 steps right by one lane width');
+  check(linkSetLaneX(400, 3, 14) === 442, 'set 3 steps right by three lane widths');
+  check(linkSetLaneX(400, 1) === 414, 'lane width defaults to 14 when omitted');
+  check(linkSetLaneX(null, 1, 14) === null, 'missing baseX -> null, never throws');
+
+  const c0 = linkSetColor(0);
+  const c1 = linkSetColor(1);
+  check(typeof c0 === 'string' && c0 !== c1, 'different set indices produce different colours');
+  check(linkSetColor(0) === linkSetColor(0), 'the same index always produces the same colour (deterministic)');
+  check(
+    linkSetColor(5) === linkSetColor(0),
+    'colours cycle once the palette is exhausted, rather than throwing or returning undefined'
+  );
+  check(typeof linkSetColor(-1) === 'string', 'a negative/invalid index never throws — falls back to a real colour');
+}
+
+console.log('--- relativeRect: subtracts the container origin ---');
+{
+  const rect = { left: 150, right: 250, top: 60, bottom: 90, width: 100, height: 30 };
+  const container = { left: 50, top: 20 };
+  const rel = relativeRect(rect, container);
+  check(rel.left === 100 && rel.right === 200 && rel.top === 40 && rel.bottom === 70, 'origin subtracted correctly');
+  check(rel.width === 100 && rel.height === 30, 'width/height pass through unchanged');
+}
+
+console.log('--- readDropPayload: proves the drag actually originated on this canvas ---');
+{
+  function fakeEvent(raw) {
+    return {
+      dataTransfer: {
+        getData: () => raw,
+      },
+    };
+  }
+  check(
+    readDropPayload(fakeEvent(JSON.stringify({ problemId: 'p1' })))?.problemId === 'p1',
+    'valid same-shape payload reads through'
+  );
+  check(readDropPayload(fakeEvent('')) === null, 'empty string -> null');
+  check(
+    readDropPayload(fakeEvent('not json')) === null,
+    'malformed JSON (e.g. foreign dragged text) -> null, never throws'
+  );
+  check(readDropPayload(fakeEvent(JSON.stringify({ somethingElse: 1 }))) === null, 'JSON missing problemId -> null');
+  check(readDropPayload({ dataTransfer: null }) === null, 'no dataTransfer -> null, never throws');
+  check(
+    readDropPayload({
+      dataTransfer: {
+        getData: () => {
+          throw new Error('boom');
+        },
+      },
+    }) === null,
+    'a throwing getData (e.g. unavailable outside a real drop event) -> null, never throws'
+  );
+}
+
+console.log(`\n${passed} passed, ${failed} failed`);
+process.exit(failed > 0 ? 1 : 0);
