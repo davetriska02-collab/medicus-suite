@@ -96,6 +96,20 @@ try {
   console.warn('[Suite] importScripts shared/io/suite-io.js failed:', e && e.message);
 }
 try {
+  // Dependency order matters: problem-description-cleanup-io.js resolves
+  // MSPreferredDescriptions at import time, so preferred-descriptions.js must
+  // be imported first or the io file fails to load (and applyProfile's pdc
+  // branch silently loses problemDescriptionCleanupImport again).
+  importScripts('shared/preferred-descriptions.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/preferred-descriptions.js failed:', e && e.message);
+}
+try {
+  importScripts('shared/io/problem-description-cleanup-io.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/io/problem-description-cleanup-io.js failed:', e && e.message);
+}
+try {
   importScripts('shared/quiet-mode.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/quiet-mode.js failed:', e && e.message);

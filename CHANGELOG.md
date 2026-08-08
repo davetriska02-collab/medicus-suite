@@ -2,6 +2,175 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.226.0] — 2026-08-08
+
+### Cleanup Code Preferences: automatic practice-pool contribution
+
+Includes the fix originally opened as a standalone PR (#255, still unmerged as
+of this PR — folding it in here so this lands correctly regardless of merge
+order): `service-worker.js` was missing
+`importScripts('shared/io/problem-description-cleanup-io.js')`, so
+`applyProfile()`'s pdc branch silently failed to find
+`problemDescriptionCleanupImport` — a published profile's tallies never
+actually reached any machine despite `profileVersion` advancing normally on
+every one of them (see the new regression test in `test-service-worker.js`).
+That fix closes the READ side. This change closes most of the WRITE side: a
+machine no longer has to complete the full "Publish to shared folder" flow
+before its own "Clean up code" usage can feed back into the practice pool.
+
+**New concept: contributor, distinct from publisher.** A publisher (the existing
+"Publish to shared folder" button) curates and overwrites every module an admin
+has opted into — an attended, deliberate act. A contributor
+(`shared/io/pdc-contribute.js`, new) only ever:
+- writes THIS machine's own pdc tallies, merged against what's currently shared
+  (tallies via `max()`, never overwritten);
+- carries every other module, `apply.modules` and `practiceAttestation` forward
+  byte-for-byte;
+- never writes `suite.practiceProfile.publisher` — it can never turn a machine
+  into a publisher of anything else;
+- requires the shared profile to already list `problemDescriptionCleanup` in
+  `apply.modules` — a contributor adds data, it never decides to publish a
+  module nobody chose to publish;
+- strips any local override before merging (belt-and-braces beyond
+  `includeOverride:false` — see `_stripOverrides` in pdc-contribute.js): a
+  contribution can never seed or change the practice-wide enforced choice;
+- no-ops (records the attempt, writes nothing) when the merge produces no
+  change, and re-reads the shared file immediately before writing, aborting if
+  it moved since the last fetch (optimistic-concurrency guard).
+
+**Apply side is now forget-proof for pdc.** `shared/io/practice-profile.js`'s
+`_resolveModuleMap` gained `ALWAYS_MERGE_MODULES = ['problemDescriptionCleanup']`:
+pdc now applies in merge mode whenever the envelope carries it, even if a v2
+`apply.modules` config omits it — safe because pdc merges are provably
+non-destructive (additive tallies, local override always wins). The Options
+module picker's "Cleanup Code Preferences" checkbox now also defaults to
+checked (`options.js` MODULE_DEFS).
+
+**Where the one-time file grant happens.** Obtaining write access to the shared
+file still needs one human click per machine — a real platform limit (File
+System Access API requires a page context and a user gesture, never the MV3
+service worker). Options → Practice Profile gained a "Contribute cleanup
+choices" toggle + "Connect shared file" button (reuses an existing publisher's
+handle automatically when present, so an already-publishing machine needs no
+second grant). Once connected, the actual periodic run no longer depends on
+anyone opening Options: the side panel (`side-panel/panel.js`) fires the same
+`runPdcContribution()` silently on every open.
+
+**Retired:** `doPublish({auto:true})` and `maybeAutoPublish()` in `options.js`
+— the once-daily unattended refresh they implemented is now
+`pdc-contribute.js`'s job, done without requiring `hasEstablishedConfig`
+(a prior manual publish) first. `doPublish` is attended-only now. The
+`suite.practiceProfile.lastAutoPublishAt` gate is gone with it; contribution
+timing lives in the new `suite.pdcContribute` key instead.
+
+**New files:** `shared/io/fs-handle-store.js` (FileSystemFileHandle persistence,
+extracted from options.js so pdc-contribute.js can store its own handle under
+the same IndexedDB database without touching the publisher's), `shared/io/pdc-contribute.js`.
+
+**Tests:** new `test-pdc-contribute.js` (34 cases — verifyProfileFile,
+buildPdcContribution's carry-forward/no-op/override-stripping, and
+runPdcContribution's full orchestration via injected deps). `test-practice-profile.js`
+gained 6 cases for `ALWAYS_MERGE_MODULES` (v2 object omission, explicit mode
+not overridden, v1 array back-compat). `test-backup-coverage.js`'s allowlist
+swapped `suite.practiceProfile.lastAutoPublishAt` for `suite.pdcContribute`. `test-service-worker.js` gained a regression check that every module `practice-profile.js` resolves via `_io()` has a matching `importScripts` call, so this class of bug (a module silently unreachable in the service worker) cannot recur unnoticed.
+
+### Bulk-action widgets for Privacy Officer Alerts and EPS Cancellation Failures
+
+Medicus's own task-queue UI makes clearing a backlog of these two routine,
+low-risk task types one dialog per row. Adds a "Bulk acknowledge?" / "Bulk
+discard?" checklist to each, in one shared generic engine
+(`content-scripts/task-bulk-action.js`) instantiated twice
+(`privacy-officer-bulk-acknowledge.js`, `eps-cancellation-bulk-discard.js`) —
+not two near-duplicate files, same rationale as `options.js`'s
+`initPdcTallySection` factory.
+
+**Why EPS Cancellation Failures needs a bulk-discard at all:** the intended
+workflow is clinician cancels an EPS prescription → EPS is supposed to
+auto-cancel the dispense at the pharmacy → in practice EPS fails to do this
+almost universally, generating a task asking the practice to get the
+pharmacy to "return the prescription issue to the Spine" → the practice has
+never managed to get a pharmacy to complete that step in a way EPS accepts →
+the task never auto-resolves. Practices are left contacting the pharmacy
+anyway (which only changes the task's status to "pharmacy contacted", not a
+real resolution) or discarding it outright. This widget is for the discard
+path, across both statuses — neither ever leads to genuine EPS resolution,
+which is why a backlog worth bulk-clearing accumulates in the first place.
+
+**Deliberately NOT inline-injected into the grid**, unlike `problem-bulk-end.js`'s
+checkboxes in Medicus's own `<li>` rows: the task-list page is AG Grid, which
+virtualises rows, and `triage-lens/content.js`'s own documented "sort canary"
+(audit H6) exists specifically because a client-side column sort makes AG
+Grid silently reassign `row-index` to a *different* task with no new fetch —
+a wrong-patient hazard for any row-index-keyed UI. Rather than replicate that
+canary, this widget renders a standalone checklist panel above the grid,
+built from its own fetch of the list endpoint, keyed by the task's stable
+UUID — immune to grid sort/scroll by construction rather than by vigilance.
+
+**Contracts confirmed live (never guessed), 2026-08-08:**
+- Privacy Officer Alerts: `GET /tasks/data/patient_privacy_officer_alert_task/task-list?statuses[]=pending&viewContext=homepage&masterAssignee={staffId}` → `{tasks:[...]}`; `POST /tasks/patient-privacy-officer/complete` body `{taskId}` → `{}`. The assignee id is read live from the same `data-ch-staff` documentElement stamp `task-presence.js` already uses (page-world.js, from the page's own Pusher channel names) — never a hardcoded UUID, which would only ever have worked for the one account it was captured from.
+- EPS Cancellation Failures: `GET /tasks/data/eps_subsequent_cancellation_task/task-list?statuses[]=incomplete&statuses[]=pharmacy-contacted&viewContext=workflow` → `{tasks:[...]}`; `POST /tasks/eps-prescription-order-item/cancellation/mark-as-no-longer-needed` body `{taskId}` → `{}` (a genuinely different endpoint slug family from the task type itself — confirmed live specifically because guessing by analogy with Privacy Officer would have been wrong).
+
+**Design decisions (Nick, 2026-08-08):** select-all enabled for both (unlike
+`problem-bulk-end.js`'s deliberate none — these are audit/compliance actions,
+not clinical record changes); one ledger event per BATCH with `patientRef`
+null (spans multiple patients, unlike `problem-bulk-end.js`'s single-patient
+scope) and the count in `label`, no free text.
+
+**Tests:** new `test-task-bulk-action.js` — the shared engine's pure helpers,
+plus source-level regression locks on both instantiation files pinning the
+literal confirmed contract values (same discipline `test-oir-key-rotation.js`
+already applies to `options.js`), and a manifest-wiring check.
+
+**Fix (same day, confirmed live):** the panel's own scroll container only
+capped the row list's height, not the panel as a whole — after "select all"
+on a long queue, the action button ended up below the visible screen with no
+reachable scrollbar (the list scrolled internally; the button below it is a
+sibling, not something that scroll ever brought into view). `.ms-tba-body`
+is now the single scroll container (`max-height: 70vh`), and the action
+buttons (`.ms-tba-review-btn`, `.ms-tba-confirm-actions`) are pinned via
+`position: sticky; bottom: 0` so they stay visible without further scrolling
+once the panel is open, however many rows are selected.
+
+**Fix (same day):** the confirm step derived its gerund by appending `'ing'`
+to `config.verb`, which produced "Acknowledgeing" for Privacy Officer's
+"Acknowledge" (any verb ending in a silent e breaks this). Added an explicit
+`verbGerund` config field per instantiation ('Acknowledging' / 'Discarding')
+instead of a spelling heuristic — same "confirm it, don't guess it"
+discipline as the endpoints themselves.
+
+**Fix (pre-merge review):** two classic-script load failures found before release:
+
+- `shared/io/fs-handle-store.js` and `shared/io/pdc-contribute.js` each declared a
+  top-level `const api`. Classic `<script>`s share ONE global lexical environment, so
+  the second (and, in options.html, both — `suite-envelope.js` already declares
+  `const api`) threw "Identifier 'api' has already been declared" and silently never
+  ran: `window.FsHandleStore`/`window.PdcContribute` stayed undefined, the entire
+  contribute feature no-opped, and — worse — options.js's `loadFileHandle` (now
+  delegating to `FsHandleStore`) broke the existing **Publish to shared folder**
+  button. Both files are now wrapped in IIFEs.
+- The `service-worker.js` `importScripts('shared/io/problem-description-cleanup-io.js')`
+  fix was a runtime no-op: that file's top-level `window.MSPreferredDescriptions`
+  throws in a service worker (no `window`), and its dependency
+  `shared/preferred-descriptions.js` was never imported (and itself ended
+  `(typeof window !== 'undefined' ? window : global)` — neither exists in a worker).
+  Now: both files resolve via `globalThis`, and the service worker imports
+  `preferred-descriptions.js` before the io file. `test-service-worker.js` gained a
+  runtime load-check — every importScripts'd file is evaluated in a windowless
+  worker-like vm context and every `_io()` dependency must actually land on `self` —
+  so a file that throws at import time fails CI instead of silently vanishing in the
+  field, which the source-text check alone could not catch.
+
+Also from the same review round: `docs/feature-list.md` synced (the
+release commit bumped the manifest without it, so `scripts/check-doc-versions.js`
+failed CI) — the two new features added to the in-page/Settings sections and the
+safety-posture write-path enumeration now names the bulk acknowledge/discard
+actions. Content sync only; no CSO signature claimed, the review ledger is
+untouched.
+
+Renumbered v3.225.0 → v3.226.0 at merge time: main took v3.225.0/.1 for the
+"Organise problems" canvas while this branch was in review, so this release
+ships as v3.226.0 (the features are unchanged).
+
 ## [v3.225.1] — 2026-08-08
 
 ### "Organise problems" canvas — review fixes (safety, a11y, correctness)

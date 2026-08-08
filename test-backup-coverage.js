@@ -238,7 +238,7 @@ const ALLOWLIST = new Set([
   'suite.practiceProfile', // applied-profile metadata (version etc.)
   'suite.practiceProfile.notifiedVersions', // which profile versions have been notified
   'suite.practiceProfile.publisher', // Publisher-PC UI state for the practice-profile publish flow — not user config
-  'suite.practiceProfile.lastAutoPublishAt', // this machine's daily auto-publish gate — timing bookkeeping, not user config
+  'suite.pdcContribute', // this machine's Cleanup Code Preferences contributor state (enabled flag + timing bookkeeping) — see shared/io/pdc-contribute.js, not user config
 
   // Transient release metadata (update-checker — expires after 24h, not user config):
   'suite.update.latestVersion',

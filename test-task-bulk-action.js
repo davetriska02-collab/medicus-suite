@@ -1,0 +1,193 @@
+// Medicus Suite — task-bulk-action (generic "Bulk <verb>?" engine) tests
+// Run with: node test-task-bulk-action.js
+//
+// Live Medicus, AG Grid and the DOM aren't available here, so this exercises:
+//   (a) the pure engine helpers (task-bulk-action.js) — the {taskId} POST
+//       payload, page-path detection, the select/keep partition, the submit
+//       guard;
+//   (b) source-level regression locks on both instantiation files
+//       (privacy-officer-bulk-acknowledge.js / eps-cancellation-bulk-discard.js)
+//       pinning the literal confirmed contract values (task-list slug,
+//       action endpoint, list query) — these were each confirmed live via a
+//       real HAR/copy-as-fetch capture (see CHANGELOG), so a source-text
+//       regression here catches an accidental edit drifting away from what
+//       was actually confirmed, the same discipline test-oir-key-rotation.js
+//       already applies to options.js.
+
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+const {
+  apiErrorMessage,
+  parseQueuePagePath,
+  partitionSelection,
+  canSubmit,
+  buildActionPayload,
+} = require('./content-scripts/task-bulk-action.js');
+
+let passed = 0,
+  failed = 0;
+function check(cond, msg) {
+  if (cond) {
+    console.log(`  OK  ${msg}`);
+    passed++;
+  } else {
+    console.error(`  FAIL  ${msg}`);
+    failed++;
+  }
+}
+
+console.log('--- buildActionPayload: the confirmed {taskId} contract shared by both task types ---');
+{
+  const payload = buildActionPayload('task-1');
+  check(payload.taskId === 'task-1', 'taskId passed through');
+  check(Object.keys(payload).join(',') === 'taskId', 'exactly one field, nothing extra');
+}
+
+console.log('\n--- apiErrorMessage: status + best-effort body detail ---');
+{
+  check(apiErrorMessage(400, '') === 'API 400', 'no body -> bare status');
+  check(apiErrorMessage(400, '{"message":"Bad thing"}') === 'API 400 — Bad thing', 'JSON message field extracted');
+  check(apiErrorMessage(400, '{"error":"Nope"}') === 'API 400 — Nope', 'JSON error field extracted');
+  check(apiErrorMessage(500, 'plain text failure') === 'API 500 — plain text failure', 'non-JSON body used as-is');
+  const longBody = 'x'.repeat(300);
+  check(apiErrorMessage(400, longBody).length < 250, 'long detail is clipped');
+}
+
+console.log('\n--- parseQueuePagePath: /{site}/tasks/{slug}/task-list detection ---');
+{
+  check(
+    JSON.stringify(
+      parseQueuePagePath(
+        '/e38a9f/tasks/patient_privacy_officer_alert_task/task-list',
+        'patient_privacy_officer_alert_task'
+      )
+    ) === JSON.stringify({ siteId: 'e38a9f' }),
+    'matches the confirmed Privacy Officer task-list path'
+  );
+  check(
+    JSON.stringify(
+      parseQueuePagePath('/e38a9f/tasks/eps_subsequent_cancellation_task/task-list', 'eps_subsequent_cancellation_task')
+    ) === JSON.stringify({ siteId: 'e38a9f' }),
+    'matches the confirmed EPS task-list path'
+  );
+  check(
+    parseQueuePagePath('/e38a9f/tasks/some_other_task/task-list', 'patient_privacy_officer_alert_task') === null,
+    "a DIFFERENT task type's list page does not match — each instantiation only reacts to its own slug"
+  );
+  check(
+    parseQueuePagePath(
+      '/e38a9f/tasks/patient_privacy_officer_alert_task/overview/abc',
+      'patient_privacy_officer_alert_task'
+    ) === null,
+    'an overview page (not task-list) does not match'
+  );
+  check(parseQueuePagePath(null, 'patient_privacy_officer_alert_task') === null, 'null pathname -> null, never throws');
+  check(parseQueuePagePath('/e38a9f/tasks/x/task-list', '') === null, 'empty slug -> null, never a wildcard match');
+}
+
+console.log('\n--- partitionSelection: acting vs keeping, already-acted rows excluded from both being re-acted ---');
+{
+  const rows = [
+    { id: '1', checked: true, acted: false },
+    { id: '2', checked: false, acted: false },
+    { id: '3', checked: true, acted: true }, // already acted this session — must not re-fire
+  ];
+  const parts = partitionSelection(rows);
+  check(parts.acting.length === 1 && parts.acting[0].id === '1', 'only the checked, not-yet-acted row is in "acting"');
+  check(parts.keeping.length === 1 && parts.keeping[0].id === '2', 'the unchecked row is "keeping"');
+  check(
+    !parts.acting.some((r) => r.id === '3') && !parts.keeping.some((r) => r.id === '3'),
+    'an already-acted row appears in NEITHER partition — it is done, not pending either way'
+  );
+}
+
+console.log('\n--- canSubmit: the one guard behind both the buttons and runAction() ---');
+{
+  check(canSubmit(1, false) === true, 'selected + not mid-batch -> submittable');
+  check(canSubmit(0, false) === false, 'nothing selected -> not submittable');
+  check(canSubmit(1, true) === false, 'a batch already in flight -> not submittable (no double-fire)');
+}
+
+console.log('\n--- Privacy Officer Alerts instantiation: confirmed contract regression lock ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'privacy-officer-bulk-acknowledge.js'), 'utf8');
+  check(src.includes("taskListSlug: 'patient_privacy_officer_alert_task'"), 'confirmed task-list slug present');
+  check(
+    src.includes("actionPath: '/tasks/patient-privacy-officer/complete'"),
+    'confirmed acknowledge endpoint present'
+  );
+  check(src.includes('statuses%5B%5D=pending&viewContext=homepage'), 'confirmed list query present');
+  check(src.includes('data-ch-staff'), 'reads the live staff-identity stamp rather than a hardcoded assignee UUID');
+  check(!/masterAssignee=0[0-9a-f-]{30,}/.test(src), 'no hardcoded staff UUID baked into the source');
+  check(src.includes('selectAllAllowed: true'), 'select-all enabled per the 2026-08-08 decision');
+  check(src.includes("verbGerund: 'Acknowledging'"), 'explicit correct gerund spelling, not derived from verb + "ing"');
+}
+
+console.log('\n--- EPS Cancellation Failures instantiation: confirmed contract regression lock ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'eps-cancellation-bulk-discard.js'), 'utf8');
+  check(src.includes("taskListSlug: 'eps_subsequent_cancellation_task'"), 'confirmed task-list slug present');
+  check(
+    src.includes("actionPath: '/tasks/eps-prescription-order-item/cancellation/mark-as-no-longer-needed'"),
+    'confirmed discard endpoint present — the DIFFERENT slug family from the task type itself'
+  );
+  check(
+    src.includes('statuses%5B%5D=incomplete&statuses%5B%5D=pharmacy-contacted&viewContext=workflow'),
+    'confirmed list query present, including BOTH statuses'
+  );
+  const listQueryLine = src.match(/listQueryString:\s*'[^']*'/);
+  check(
+    !!listQueryLine && !listQueryLine[0].includes('masterAssignee'),
+    'the actual list query value has no assignee scoping — the confirmed EPS query never had one'
+  );
+  check(src.includes('selectAllAllowed: true'), 'select-all enabled per the 2026-08-08 decision');
+  check(
+    src.includes("verbGerund: 'Discarding'"),
+    'explicit gerund spelling present (Discard has no silent-e issue, but the field is still required)'
+  );
+}
+
+console.log('\n--- Gerund spelling: the engine never derives it by concatenation ---');
+{
+  const engineSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
+  check(
+    !/config\.verb\s*\+\s*['"]ing/.test(engineSrc),
+    'the engine no longer appends "ing" to config.verb (that produced "Acknowledgeing")'
+  );
+  check(engineSrc.includes('config.verbGerund'), 'the engine uses the explicit verbGerund field instead');
+}
+
+console.log('\n--- Both instantiations register through the shared engine, not a duplicated copy ---');
+{
+  const poSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'privacy-officer-bulk-acknowledge.js'), 'utf8');
+  const epsSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'eps-cancellation-bulk-discard.js'), 'utf8');
+  check(poSrc.includes('window.TaskBulkAction.create('), 'Privacy Officer instantiates the shared engine');
+  check(epsSrc.includes('window.TaskBulkAction.create('), 'EPS instantiates the shared engine');
+  check(
+    !/function\s+buildHtml|function\s+renderSelectStep/.test(poSrc),
+    'Privacy Officer does not reimplement rendering logic'
+  );
+  check(!/function\s+buildHtml|function\s+renderSelectStep/.test(epsSrc), 'EPS does not reimplement rendering logic');
+}
+
+console.log('\n--- manifest.json wiring ---');
+{
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8'));
+  const medicusBlock = manifest.content_scripts.find(
+    (b) => Array.isArray(b.js) && b.js.some((f) => f.includes('problem-bulk-end.js'))
+  );
+  check(!!medicusBlock, 'found the medicus.health content-scripts block that other record-tidy widgets share');
+  const js = medicusBlock.js;
+  const engineIdx = js.indexOf('content-scripts/task-bulk-action.js');
+  const poIdx = js.indexOf('content-scripts/privacy-officer-bulk-acknowledge.js');
+  const epsIdx = js.indexOf('content-scripts/eps-cancellation-bulk-discard.js');
+  check(engineIdx !== -1 && poIdx !== -1 && epsIdx !== -1, 'all three files are registered');
+  check(engineIdx < poIdx && engineIdx < epsIdx, 'the shared engine loads BEFORE either instantiation');
+  check(medicusBlock.css.includes('content-scripts/task-bulk-action.css'), 'shared CSS is registered');
+}
+
+console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
+process.exit(failed === 0 ? 0 : 1);

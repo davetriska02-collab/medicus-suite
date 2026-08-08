@@ -137,4 +137,9 @@
   } else {
     global.MSPreferredDescriptions = api;
   }
-})(typeof window !== 'undefined' ? window : global);
+  // globalThis, not `window : global`: this file also loads via importScripts
+  // in the MV3 service worker, where neither `window` nor Node's `global`
+  // exists — either bare identifier would throw a ReferenceError at import
+  // time and silently take shared/io/problem-description-cleanup-io.js (which
+  // needs MSPreferredDescriptions) down with it.
+})(globalThis);

@@ -889,6 +889,65 @@ function makeProfile(over = {}) {
   check(!rPdcEmpty.modulesApplied.includes('problemDescriptionCleanup'),
     'an empty preferredDescriptions/conceptRemap payload is not recorded as applied');
 
+  // ── ALWAYS_MERGE_MODULES: pdc applies even when apply.modules omits it ──────
+  console.log('\n--- ALWAYS_MERGE_MODULES: pdc merges even when the admin never ticked its checkbox ---');
+  reset();
+  const pdcForgottenProfile = makeProfile({
+    profileVersion: 'pdc-always-1',
+    // apply.modules explicitly present (v2 object) but does NOT mention
+    // problemDescriptionCleanup — simulates an admin who published without
+    // ever ticking the "Cleanup Code Preferences" box.
+    apply: { modules: { sentinel: 'merge' } },
+    envelope: {
+      modules: {
+        problemDescriptionCleanup: {
+          preferredDescriptions: { '123': { tally: { '456': { candidate: { description: 'Foo', descriptionId: '456' }, count: 1, lastUsed: '2026-01-01T00:00:00Z' } }, override: null } },
+          conceptRemap: {},
+        },
+      },
+    },
+  });
+  const rPdcForgotten = await PP.applyProfile(pdcForgottenProfile);
+  check(rPdcForgotten.modulesApplied.includes('problemDescriptionCleanup'),
+    'pdc still applies when apply.modules is a v2 object that omits it entirely');
+
+  console.log('\n--- ALWAYS_MERGE_MODULES: an explicit mode in apply.modules is not overridden ---');
+  reset();
+  const pdcExplicitReplaceProfile = makeProfile({
+    profileVersion: 'pdc-always-2',
+    apply: { modules: { problemDescriptionCleanup: 'replace' } },
+    envelope: {
+      modules: {
+        problemDescriptionCleanup: {
+          preferredDescriptions: {},
+          conceptRemap: { '789': { tally: {}, override: { key: '1|2', candidate: { conceptId: '2', descriptionId: '1', description: 'Bar' } } } },
+        },
+      },
+    },
+  });
+  store['pdc.conceptRemap'] = { '789': { tally: {}, override: { key: '9|9', candidate: { conceptId: '9', descriptionId: '9', description: 'LocalPin' } } } };
+  const rPdcExplicitReplace = await PP.applyProfile(pdcExplicitReplaceProfile);
+  check(rPdcExplicitReplace.modulesApplied.includes('problemDescriptionCleanup'), 'pdc applied under an explicit mode');
+  check(store['pdc.conceptRemap']['789'].override.candidate.description === 'Bar',
+    'explicit "replace" in apply.modules is honoured, not silently forced to merge by the always-merge fallback');
+
+  console.log('\n--- ALWAYS_MERGE_MODULES: v1 array config also gets pdc filled in ---');
+  reset();
+  const pdcV1Profile = makeProfile({
+    profileVersion: 'pdc-always-3',
+    apply: { mode: 'mergeMissing', modules: ['sentinel'] }, // v1 array shape, pdc absent
+    envelope: {
+      modules: {
+        problemDescriptionCleanup: {
+          preferredDescriptions: { '111': { tally: { '222': { candidate: { description: 'Baz', descriptionId: '222' }, count: 1, lastUsed: '2026-01-01T00:00:00Z' } }, override: null } },
+          conceptRemap: {},
+        },
+      },
+    },
+  });
+  const rPdcV1 = await PP.applyProfile(pdcV1Profile);
+  check(rPdcV1.modulesApplied.includes('problemDescriptionCleanup'), 'pdc still applies under a v1 array apply.modules config');
+
   // ── Malformed module section: records error, other modules still apply ─────
   console.log('\n--- malformed module section: per-module error isolation ---');
   reset();

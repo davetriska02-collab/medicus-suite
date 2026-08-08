@@ -54,6 +54,88 @@ const stripped = src.replace(/try\s*\{[^{}]*importScripts[^{}]*\}\s*catch\s*\([^
 check(!stripped.includes('importScripts('),
   'no importScripts call exists outside a try/catch block');
 
+console.log('\n--- every practice-profile _io() dependency is importScripts\'d ---');
+
+// applyProfile() (shared/io/practice-profile.js) resolves several modules'
+// import functions dynamically via self.<name> (the _io() helper), which
+// only exists if service-worker.js actually importScripts'd that module's
+// IO file. A missing entry fails silently — the per-module try/catch
+// swallows the "not available in this context" error into an `errors`
+// array while the overall apply still "succeeds" (profileVersion advances,
+// other modules apply normally). This is exactly how
+// problem-description-cleanup-io.js went missing for an unknown period
+// (fixed in v3.211.1): Cleanup Code Preferences never applied from a
+// published profile despite every machine showing the new version applied.
+//
+// Derive the exact module list from practice-profile.js's own _io('xImport')
+// call sites (not "every -io.js file in shared/io" — several, e.g. condor,
+// labfiling, leaflets, notifications, patient-alerts, phrases, popout, rota,
+// are legitimately never resolved this way and correctly absent here) and
+// assert each has a matching importScripts call.
+const ppSrc = fs.readFileSync(path.join(__dirname, 'shared', 'io', 'practice-profile.js'), 'utf8');
+const ioModuleNames = [...ppSrc.matchAll(/_io\('(\w+)Import'\)/g)].map((m) => m[1]);
+const uniqueModules = [...new Set(ioModuleNames)];
+const toKebab = (name) => name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+check(uniqueModules.length > 0, `found ${uniqueModules.length} _io('...Import') dependencies in practice-profile.js`);
+const missingImports = uniqueModules
+  .map((name) => `shared/io/${toKebab(name)}-io.js`)
+  .filter((file) => !src.includes(file));
+check(missingImports.length === 0,
+  missingImports.length === 0
+    ? 'every practice-profile _io() dependency is importScripts\'d in service-worker.js'
+    : `missing importScripts for: ${missingImports.join(', ')}`);
+
+console.log('\n--- every importScripts\'d file actually LOADS in a windowless SW context ---');
+
+// The source-text check above is necessary but not sufficient: an
+// importScripts line can exist yet still fail at runtime, because the MV3
+// service worker has NO `window` (and no Node `global`) — a file whose
+// top-level code touches either throws at import time, the try/catch warns,
+// and the module is silently absent exactly as if the line were missing.
+// That is how the v3.226.0 problem-description-cleanup-io.js line was a
+// runtime no-op on arrival: the file's own `window.MSPreferredDescriptions`
+// threw before anything was defined (and its preferred-descriptions.js
+// dependency wasn't imported at all). So: evaluate every importScripts'd
+// file, in service-worker.js's own order, in a vm context that deliberately
+// has `self` but neither `window` nor `global` — any top-level throw fails
+// here instead of silently in the field.
+{
+  const importedFiles = [...src.matchAll(/importScripts\(\s*'([^']+)'/g)].map((m) => m[1]);
+  check(importedFiles.length > 0, `found ${importedFiles.length} importScripts'd files to load-check`);
+  const ctx = vm.createContext({});
+  ctx.self = ctx; // like a worker, self IS the global scope — no window, no global
+  ctx.console = { log() {}, warn() {}, error() {} };
+  ctx.chrome = {
+    storage: { local: { get: async () => ({}), set: async () => {} }, onChanged: { addListener() {} } },
+    runtime: { getURL: (p) => p, id: 'test', onMessage: { addListener() {} } },
+    alarms: { create() {}, onAlarm: { addListener() {} } },
+  };
+  ctx.fetch = async () => ({ ok: false });
+  ctx.setTimeout = setTimeout;
+  ctx.clearTimeout = clearTimeout;
+  ctx.setInterval = setInterval;
+  ctx.clearInterval = clearInterval;
+  const loadFailures = [];
+  for (const file of importedFiles) {
+    try {
+      vm.runInContext(fs.readFileSync(path.join(__dirname, file), 'utf8'), ctx, { filename: file });
+    } catch (e) {
+      loadFailures.push(`${file} — ${e.message}`);
+    }
+  }
+  check(loadFailures.length === 0,
+    loadFailures.length === 0
+      ? 'all importScripts\'d files evaluate without throwing in a windowless worker context'
+      : `files that throw at import time in a worker: ${loadFailures.join('; ')}`);
+  // And the _io() dependencies must actually END UP resolvable on self —
+  // loading without throwing isn't enough if the export never lands.
+  const unresolved = uniqueModules.filter((name) => typeof ctx[`${name}Import`] !== 'function');
+  check(unresolved.length === 0,
+    unresolved.length === 0
+      ? 'every _io() dependency resolves to a function on self after loading'
+      : `_io() dependencies not on self after load: ${unresolved.map((n) => `${n}Import`).join(', ')}`);
+}
+
 console.log('\n--- sender identity guard in onMessage --------------------------------');
 
 // The guard `sender.id !== chrome.runtime.id` must exist inside the
