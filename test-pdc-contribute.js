@@ -307,6 +307,107 @@ function makeFakeHandle({ text, permission = 'granted' } = {}) {
     'the written file carries every other module forward untouched'
   );
 
+  // ── migrateLegacyAutoPublisher: pre-v3.226.0 auto-publishers keep flowing ──
+  // Retiring maybeAutoPublish() must not silently stop an established
+  // publisher machine's daily pdc circulation — the exact regression this
+  // migration exists to prevent (post-merge review of #272, finding 1).
+  console.log('\n--- migrateLegacyAutoPublisher ---');
+
+  function migrationDeps({ state = null, publisher = null } = {}) {
+    let stored = state;
+    const patches = [];
+    return {
+      deps: {
+        getState: async () => stored,
+        setState: async (patch) => {
+          stored = Object.assign({}, stored || {}, patch);
+          patches.push(patch);
+        },
+        getPublisherState: async () => publisher,
+      },
+      patches,
+      getStored: () => stored,
+    };
+  }
+
+  const legacyPublisher = { modules: { problemDescriptionCleanup: { checked: true }, sentinel: { checked: false } } };
+
+  {
+    const m = migrationDeps({ publisher: legacyPublisher });
+    const r = await PdcContribute.migrateLegacyAutoPublisher(m.deps);
+    check(r.migrated === true, 'no contribute choice + established publish config -> migrated');
+    check(m.getStored().enabled === true, 'migration stores enabled:true');
+    check(m.getStored().enabledVia === 'auto-publish-migration', 'migration marks how enabled was set');
+  }
+  {
+    const m = migrationDeps({ state: { enabled: false }, publisher: legacyPublisher });
+    const r = await PdcContribute.migrateLegacyAutoPublisher(m.deps);
+    check(
+      r.migrated === false && m.patches.length === 0,
+      'an explicit enabled:false (admin turned it off) is NEVER overwritten by the migration'
+    );
+  }
+  {
+    const m = migrationDeps({ state: { enabled: true }, publisher: legacyPublisher });
+    const r = await PdcContribute.migrateLegacyAutoPublisher(m.deps);
+    check(r.migrated === false && m.patches.length === 0, 'already enabled -> nothing to migrate, no write');
+  }
+  {
+    const m = migrationDeps({ publisher: null });
+    const r = await PdcContribute.migrateLegacyAutoPublisher(m.deps);
+    check(
+      r.migrated === false && m.patches.length === 0,
+      'no publisher state at all -> never turns a random PC into a contributor'
+    );
+  }
+  {
+    const m = migrationDeps({ publisher: { modules: { sentinel: { checked: false } } } });
+    const r = await PdcContribute.migrateLegacyAutoPublisher(m.deps);
+    check(
+      r.migrated === false,
+      'publisher state with NO checked module (never actually publishing) -> not migrated — same gate maybeAutoPublish used'
+    );
+  }
+
+  // And through runPdcContribution itself — the migration must fire inline on
+  // an ordinary contribution cycle, since the side panel is the trigger that
+  // does not depend on anyone ever opening Options.
+  {
+    let state = null;
+    const rMigratedRun = await PdcContribute.runPdcContribution(
+      baseDeps({
+        getState: async () => state,
+        setState: async (patch) => {
+          state = Object.assign({}, state || {}, patch);
+        },
+        getPublisherState: async () => legacyPublisher,
+      })
+    );
+    check(
+      rMigratedRun.ran === true,
+      'legacy publisher with no contribute state -> migration fires inline and the cycle proceeds'
+    );
+    check(state && state.enabled === true, 'the migrated enabled:true is persisted for every later cycle');
+  }
+  {
+    const rNoConfigRun = await PdcContribute.runPdcContribution(
+      baseDeps({ getState: async () => null, getPublisherState: async () => null })
+    );
+    check(
+      rNoConfigRun.ran === false && rNoConfigRun.reason === 'not-enabled',
+      'no publisher config -> still not-enabled (migration does not loosen the opt-in for anyone else)'
+    );
+  }
+  {
+    const rExplicitOff = await PdcContribute.runPdcContribution(
+      baseDeps({ getState: async () => ({ enabled: false }), getPublisherState: async () => legacyPublisher })
+    );
+    check(
+      rExplicitOff.ran === false && rExplicitOff.reason === 'not-enabled',
+      'explicit enabled:false beats the migration inside runPdcContribution too'
+    );
+  }
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
   process.exit(failed > 0 ? 1 : 0);
 })();

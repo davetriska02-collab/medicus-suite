@@ -1975,6 +1975,10 @@ async function isPracticeAccepted() {
         const result = await window.PdcContribute.runPdcContribution({
           getState,
           setState,
+          getPublisherState: async () => {
+            const r = await chrome.storage.local.get('suite.practiceProfile.publisher');
+            return r['suite.practiceProfile.publisher'] || null;
+          },
           loadHandle: resolveHandle,
           readHandleText: async (h) => (await h.getFile()).text(),
           writeHandleText: async (h, text) => {
@@ -2099,7 +2103,11 @@ async function isPracticeAccepted() {
     });
 
     await refreshUI();
-    runOnce(); // fire-and-forget — never blocks page init
+    // Fire-and-forget — never blocks page init. Re-render afterwards: the run
+    // may have just migrated a legacy auto-publisher to enabled:true (see
+    // pdc-contribute.js's migrateLegacyAutoPublisher), and the toggle should
+    // show that without a page reopen.
+    runOnce().then(() => refreshUI());
   } catch (e) {
     console.warn('[Pdc Contribute section]', e.message);
   }

@@ -123,6 +123,25 @@
     return { taskId: taskId };
   }
 
+  // config.listQueryString may resolve to a plain (already-encoded) string,
+  // or to an object { qs, scopeWarning } when the instantiation could not
+  // scope the list the way its confirmed contract intends — privacy-officer's
+  // masterAssignee filter needs the staff-identity stamp, which can lag page
+  // load. A non-null scopeWarning makes the widened scope VISIBLE: the engine
+  // renders it as a banner on both the select and confirm steps and disables
+  // select-all for that load. A silently widened list rendering identically
+  // to a correctly scoped one is how a bulk compliance action gets applied to
+  // someone else's queue without anyone noticing.
+  function normaliseListQuery(value) {
+    if (value && typeof value === 'object') {
+      return {
+        qs: String(value.qs == null ? '' : value.qs),
+        scopeWarning: value.scopeWarning ? String(value.scopeWarning) : null,
+      };
+    }
+    return { qs: String(value == null ? '' : value), scopeWarning: null };
+  }
+
   // ── Node test hook ────────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -131,6 +150,7 @@
       partitionSelection: partitionSelection,
       canSubmit: canSubmit,
       buildActionPayload: buildActionPayload,
+      normaliseListQuery: normaliseListQuery,
     };
   }
 
@@ -160,7 +180,11 @@
   //                      spirit as never guessing an endpoint.
   //   verbedAdjective    e.g. 'acknowledged' (past-participle, for tags/done text)
   //   taskListSlug       e.g. 'patient_privacy_officer_alert_task'
-  //   listQueryString    already-encoded query string appended to the list fetch
+  //   listQueryString    already-encoded query string appended to the list
+  //                      fetch — a static string, or a (possibly async)
+  //                      function evaluated fresh at fetch time; either may
+  //                      resolve to { qs, scopeWarning } instead of a bare
+  //                      string (see normaliseListQuery)
   //   actionPath         e.g. '/tasks/patient-privacy-officer/complete'
   //   itemNounSingular   e.g. 'privacy officer alert'
   //   itemNounPlural     e.g. 'privacy officer alerts'
@@ -186,6 +210,7 @@
     var _loadState = 'idle'; // 'idle' | 'loading' | 'done' | 'error'
     var _loadError = null;
     var _rows = []; // [{...raw API fields..., checked, acted, actError}]
+    var _scopeWarning = null; // non-null = this load's list is wider than the contract intends
     var _acting = false;
     var _onMatchingPage = false;
     // Bumped by removeWidget() (SPA navigation away). In-flight async work
@@ -225,15 +250,21 @@
       }
     }
 
-    function fetchTaskList() {
+    async function fetchTaskList() {
       // listQueryString may be a static string (EPS — no assignee scoping,
-      // matches its confirmed workflow-view query) or a function evaluated
-      // fresh at fetch time (Privacy Officer — needs the CURRENT user's own
-      // staff id; see that instantiation's header for why).
-      var qs = typeof config.listQueryString === 'function' ? config.listQueryString() : config.listQueryString;
-      return apiFetch('/tasks/data/' + config.taskListSlug + '/task-list?' + qs).then(function (data) {
-        return (data && data.tasks) || [];
-      });
+      // matches its confirmed workflow-view query) or a possibly-async
+      // function evaluated fresh at fetch time (Privacy Officer — needs the
+      // CURRENT user's own staff id, and waits briefly for the identity
+      // stamp; see that instantiation's header for why). Either may resolve
+      // to { qs, scopeWarning } — see normaliseListQuery.
+      var resolved =
+        typeof config.listQueryString === 'function' ? await config.listQueryString() : config.listQueryString;
+      var norm = normaliseListQuery(resolved);
+      var data = await apiFetch('/tasks/data/' + config.taskListSlug + '/task-list?' + norm.qs);
+      // Returned (not written to _scopeWarning here) so load() can apply it
+      // only after its own generation check — a fetch completing after SPA
+      // navigation must not pollute the next page entry's state.
+      return { tasks: (data && data.tasks) || [], scopeWarning: norm.scopeWarning };
     }
 
     function postAction(taskId) {
@@ -257,9 +288,10 @@
       _loadError = null;
       render();
       try {
-        var tasks = await fetchTaskList();
+        var result = await fetchTaskList();
         if (gen !== _generation) return; // navigated away mid-fetch — stale result
-        _rows = tasks.map(function (t) {
+        _scopeWarning = result.scopeWarning;
+        _rows = result.tasks.map(function (t) {
           return Object.assign({}, t, { checked: false, acted: false, actError: null });
         });
         _loadState = 'done';
@@ -334,6 +366,11 @@
       return fields;
     }
 
+    function scopeWarningHtml() {
+      if (!_scopeWarning) return '';
+      return '<div class="ms-tba-scope-warning">⚠ ' + esc(_scopeWarning) + '</div>';
+    }
+
     function renderSelectStep() {
       var count = selectedCount();
       var live = _rows.filter(function (r) {
@@ -350,9 +387,15 @@
         (live.length === 1 ? esc(config.itemNounSingular) : esc(config.itemNounPlural)) +
         '.</div>';
 
+      // select-all is withheld (not just visually hidden — the button is
+      // never in the DOM) while a scope warning is active: "Select all" on a
+      // list that may span OTHER staff's queues is exactly the one-click
+      // mistake the warning exists to prevent. Row-by-row ticking stays
+      // available — each row names its patient, so per-row selection is a
+      // considered act in a way select-all is not.
       var selectRow =
         '<div class="ms-tba-select-row">' +
-        (config.selectAllAllowed
+        (config.selectAllAllowed && !_scopeWarning
           ? '<button type="button" class="ms-tba-select-all" id="ms-tba-select-all-' +
             esc(config.id) +
             '">Select all (' +
@@ -411,6 +454,7 @@
 
       return (
         '<div class="ms-tba-body">' +
+        scopeWarningHtml() +
         summary +
         selectRow +
         failedHtml +
@@ -438,6 +482,7 @@
         .join('');
       return (
         '<div class="ms-tba-body">' +
+        scopeWarningHtml() +
         '<div class="ms-tba-confirm-acting"><span class="ms-tba-confirm-heading">' +
         esc(config.verbGerund.toUpperCase()) +
         ' (' +
@@ -625,6 +670,7 @@
       _loadState = 'idle';
       _loadError = null;
       _rows = [];
+      _scopeWarning = null;
       _acting = false;
     }
 

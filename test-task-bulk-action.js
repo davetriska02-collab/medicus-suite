@@ -25,6 +25,7 @@ const {
   partitionSelection,
   canSubmit,
   buildActionPayload,
+  normaliseListQuery,
 } = require('./content-scripts/task-bulk-action.js');
 
 let passed = 0,
@@ -111,6 +112,42 @@ console.log('\n--- canSubmit: the one guard behind both the buttons and runActio
   check(canSubmit(1, true) === false, 'a batch already in flight -> not submittable (no double-fire)');
 }
 
+console.log('\n--- normaliseListQuery: string vs { qs, scopeWarning } resolution ---');
+{
+  const plain = normaliseListQuery('a=1&b=2');
+  check(plain.qs === 'a=1&b=2' && plain.scopeWarning === null, 'plain string -> qs as-is, no warning');
+  const scoped = normaliseListQuery({ qs: 'a=1', scopeWarning: 'list is wider than yours' });
+  check(scoped.qs === 'a=1' && scoped.scopeWarning === 'list is wider than yours', 'object shape carries both parts');
+  const noWarn = normaliseListQuery({ qs: 'a=1' });
+  check(noWarn.scopeWarning === null, 'object without scopeWarning -> null, not undefined');
+  const empty = normaliseListQuery(null);
+  check(empty.qs === '' && empty.scopeWarning === null, 'null input degrades to an empty query, never throws');
+}
+
+console.log('\n--- Engine source lock: a widened scope must be VISIBLE and select-all withheld ---');
+{
+  // Post-merge review of #272, finding 2: the unscoped privacy-officer
+  // fallback used to render identically to the correctly-scoped case, so
+  // "Select all + Confirm" could acknowledge OTHER officers' alerts with no
+  // sign anything was different. These pins hold the two controls in place.
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
+  check(src.includes('ms-tba-scope-warning'), 'engine renders a dedicated scope-warning element');
+  check(
+    /config\.selectAllAllowed && !_scopeWarning/.test(src),
+    'select-all is withheld while a scope warning is active — never rendered, not just disabled'
+  );
+  const selectStep = src.slice(src.indexOf('function renderSelectStep'), src.indexOf('function renderConfirmStep'));
+  const confirmStep = src.slice(src.indexOf('function renderConfirmStep'), src.indexOf('function renderDoneStep'));
+  check(selectStep.includes('scopeWarningHtml()'), 'select step shows the warning');
+  check(confirmStep.includes('scopeWarningHtml()'), 'confirm step repeats the warning at the point of commitment');
+  check(
+    src.includes('_scopeWarning = result.scopeWarning') &&
+      src.indexOf('_scopeWarning = result.scopeWarning') > src.indexOf('gen !== _generation) return; // navigated'),
+    'the warning is applied only after the load generation check (stale fetch cannot pollute the next page entry)'
+  );
+  check(src.includes('_scopeWarning = null'), 'removeWidget resets the warning with the rest of the state');
+}
+
 console.log('\n--- Privacy Officer Alerts instantiation: confirmed contract regression lock ---');
 {
   const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'privacy-officer-bulk-acknowledge.js'), 'utf8');
@@ -122,6 +159,12 @@ console.log('\n--- Privacy Officer Alerts instantiation: confirmed contract regr
   check(src.includes('statuses%5B%5D=pending&viewContext=homepage'), 'confirmed list query present');
   check(src.includes('data-ch-staff'), 'reads the live staff-identity stamp rather than a hardcoded assignee UUID');
   check(!/masterAssignee=0[0-9a-f-]{30,}/.test(src), 'no hardcoded staff UUID baked into the source');
+  check(src.includes('scopeWarning:'), 'the unscoped fallback carries a scopeWarning — never a silent widening');
+  check(
+    src.includes('ALL staff'),
+    'the warning states the consequence (whose alerts are on screen), not just the mechanism'
+  );
+  check(/waited < 5000/.test(src), 'waits for the identity stamp before falling back to an unscoped fetch');
   check(src.includes('selectAllAllowed: true'), 'select-all enabled per the 2026-08-08 decision');
   check(src.includes("verbGerund: 'Acknowledging'"), 'explicit correct gerund spelling, not derived from verb + "ing"');
 }
