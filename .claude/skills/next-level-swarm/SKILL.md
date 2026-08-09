@@ -53,11 +53,10 @@ Workflow({scriptPath: "<repo>/.claude/workflows/medicus-expert-swarm.js",
 
 Six expert personas (platform architect, clinical UX designer, AI engineer,
 clinical safety engineer, data engineer, product strategist) each propose 4–6
-repo-grounded developments; then a two-judge challenge panel (ruthless skeptic
-
-- time-poor working GP) grades every proposal strong/keep/weak/kill. Wait for
-  completion; the full result lands in the task output file (typically ~120k
-  chars — summarise it with a script before reading details).
+repo-grounded developments; then a two-judge challenge panel (a ruthless skeptic
+and a time-poor working GP) grades every proposal strong/keep/weak/kill. Wait for
+completion; the full result lands in the task output file (typically ~120k
+chars — summarise it with a script before reading details).
 
 ## Stage 4 — Synthesis (you)
 
