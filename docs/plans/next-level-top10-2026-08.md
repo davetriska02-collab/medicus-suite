@@ -47,8 +47,15 @@ tier is what pays off today; keep `test-drug-brand-coverage.js`'s hand-maintaine
 EXPECTED map independent of the generator (CI fails when the index knows a brand the
 rule doesn't — never generate the guard from the thing it guards).
 **Why:** CLAUDE.md names the silent brand-miss as a patient-safety risk; this closes it
-with zero AI, zero egress, zero intended-purpose change. **Impact: transformative ·
-Effort: medium.**
+with zero AI, zero egress, zero intended-purpose change.
+_Virtual Dave's split:_ the **VTM tier alone is days, not weeks** — `normalisers.js:91`
+already captures `vtmProductName`, and it diverges from `description` exactly in the
+brand case (`"Priadel 400mg m/r tablets"` vs `"Lithium carbonate"`), which is the whole
+silent-miss failure mode; it converts CLAUDE.md's "enumerate the complete UK brand set"
+standing obligation into something the payload hands you free. Ship the VTM tier in
+**wave 1**, then _measure_ the residual gap over real payloads before committing to the
+generated dm+d index — the cheap fix may eat 90% of it. **Impact: transformative ·
+Effort: VTM tier small; index medium, contingent on measurement.**
 
 ### 2. Recall Loop v1 — a stateful worklist behind Sweep and Sentinel
 
@@ -68,7 +75,14 @@ is the default on ambiguity; fail visible on fetch errors; the store is a report
 over the rules engine, never an input to it; new HAZARD-LOG entry + CLINICAL-SAFETY-NOTICE
 section before it ships (which is why item 5 lands first). Start machine-local with the
 Follow-ups honest-state header doctrine; add cross-machine sharing (presence-folder
-pattern) only once the state machine is proven. **Impact: transformative · Effort: large.**
+pattern) only once the state machine is proven.
+_Virtual Dave's added non-negotiable:_ the suite cannot enumerate patients, so this
+worklist knows only about patients whose records someone happened to open — a partial
+register that looks like a complete one (the HAZARD-LOG:732 hazard shape). The surface
+must carry, permanently and un-dismissibly: _"covers N patients whose records were opened
+since \<date\> — this is not your recall register."_ Into the hazard entry before a line
+of code; it's the highest-consequence requirement here and the easiest to lose, because
+it's a sentence rather than a mechanism. **Impact: transformative · Effort: large.**
 
 ### 3. Pre-merge injection canary — replay real Medicus fixtures against the actual inject path
 
@@ -103,24 +117,32 @@ recorded reason; feed `engine/cqc-evidence.js` so it doubles as inspection evide
 answers Nick's real question: does a quiet Monitoring tab mean "nothing due" or "nothing
 matched"? **Impact: high · Effort: medium.**
 
-### 5. Safety-claim conformance gate — and delete the Supabase host permission
+### 5. Safety-claim conformance gate — declare the _live_ Supabase egress path, then make CI enforce the claims
 
-**Skeptic: strong — "the only variant that proposes the actual fix."** The project's own
-review ledger records that CLINICAL-SAFETY-NOTICE §6 asserts unqualified "no external
-transmission" while `https://*.supabase.co/*` ships in `host_permissions` and
-`shared/txn-transport.js` exists (dormant, no DPIA, no hazard entry). Three moves, in
-order: (a) **drop the Supabase host permission** — the transactional path defaults to
-'session' and no practice is meant to enable hybrid, so the permission buys nothing and
-makes the signed notice false today; make `shared/txn-config.js` hard-refuse
-hybrid/transactional until a shipped allowlist names the covering HAZARD-LOG id.
-(b) Ship `scripts/check-safety-claims.js` in CI: every host permission must appear in the
-CSN §6 egress table, every shipped write-path content script must have a W-row, derived
-from a grep over real call sites rather than a hand-maintained list. (c) Clear the CSN
-backlog in one review, then lower `HARD_FAIL_MINORS_BEHIND` from its deliberately-inert
-60 to a number that bites (~15). Sequence report-only → fail-closed so CI never trains
-people to ignore red. This gate is also the encoded answer to what _not_ to build:
-GP Connect, MESH, and any on-device LLM chip each fail closed until someone does the
-safety-case work. **Impact: high · Effort: small-medium.**
+**Skeptic: strong; corrected by Virtual Dave's fact-check, which made it _more_ urgent.**
+The swarm proposed deleting `https://*.supabase.co/*` from `host_permissions` as "buying
+nothing" — **that is wrong and would break a live feature**: `content-scripts/task-presence.js`
+does credentialed `fetch` to a practice-configured Supabase REST endpoint (`storeUpsert`
+at `task-presence.js:399`), transmitting `{site, task_uuid, staff_id, staff_label,
+last_seen}` — a patient-linked task UUID plus a named staff member to a third-party cloud
+database, enabled-by-default-when-configured. Grep the safety docs: **zero** hits for
+presence in DPIA.md or HAZARD-LOG.md, and the signed, frozen INTENDED-PURPOSE.md asserts
+"**one** optional path by which patient data leaves the browser" and "no cloud storage."
+Two clauses of a signed document are false about a _live_ path, not the dormant txn one.
+So: (a) **keep the permission; declare the path** — CSN §6 egress row, HAZARD-LOG entry,
+DPIA processor analysis for presence; correct the frozen IP statement at its next
+re-freeze; make `shared/txn-config.js` hard-refuse hybrid/transactional until a shipped
+allowlist names its covering HAZARD-LOG id. (b) Ship `scripts/check-safety-claims.js` in
+CI: every host permission must appear in the CSN §6 egress table, every shipped
+write-path content script must have a W-row — **derived from a grep over real call
+sites**, which this episode just validated: a 12-agent swarm read the codebase and still
+missed a shipped egress path; a grep doesn't. (c) Clear the CSN backlog in one review,
+then lower `HARD_FAIL_MINORS_BEHIND` from its deliberately-inert 60 to ~15. Sequence
+report-only → fail-closed. Bonus: the seven dormant `shared/txn-*.js` files are permanent
+safety-case surface for zero users — commit to the integration or delete it. This gate is
+also the encoded answer to what _not_ to build: GP Connect, MESH, and any on-device LLM
+chip each fail closed until someone does the safety-case work. **Impact: high · Effort:
+small-medium.**
 
 ### 6. Post-deployment safety surveillance — alert-burden and dismissal analytics
 
@@ -141,17 +163,17 @@ the skeptic: the two flags and the never-fired list, not a metrics dashboard; sh
 
 **GP judge: strong — "an unreviewed agent edit to rules/\*.json is the scariest thing in
 the codebase. I'd sleep better."** The review ledger records CSO sign-offs "performed by
-delegated virtual-Dave agent," and The Keeper authors drug-rule content. Require a
-`Clinical-Reviewed-By:` commit trailer matched against an allowlist of named human
-clinicians on any diff touching `rules/*.json`, `engine/rules-engine.js`,
-`engine/result-severity.js`, `engine/stopp-start.js`, `engine/acb-scores.js`, or the
-clinical blocks of `defaults.json` — enforced in `scripts/defaults-config-lock.js` (the
-muscle that already refuses unbumped clinical changes) plus a CODEOWNERS entry with
-branch protection requiring a human reviewer, so the trailer is the audit artefact and
-the platform is the enforcement. Teach `cso-review-ledger.json` a structured
-human-vs-agent signature field and surface agent-only sign-offs as open actions. Scope
-narrowly to genuine clinical content or a 2-release/day team will route around it.
-**Impact: high · Effort: small.**
+delegated virtual-Dave agent," and The Keeper authors drug-rule content.
+_Virtual Dave's correction, adopted:_ **the trailer is not the gate — an agent can type
+the string** `Clinical-Reviewed-By: Dave Triska` as easily as a human, and self-attested
+provenance manufacturing audit evidence of human review "reads very badly in a serious
+incident review." The enforcement is **CODEOWNERS + branch protection requiring a human
+reviewer**; the trailer is kept purely as the ledger artefact. And the file list narrows:
+gate `rules/*.json` and the clinical blocks of `defaults.json` (the _content_) — **not**
+`engine/rules-engine.js` (the _mechanism_, touched by items 1 and 4 and any refactor;
+gating it blocks engineering on clinical review and the team will route around it).
+Teach `cso-review-ledger.json` a structured human-vs-agent signature field and surface
+agent-only sign-offs as open actions. **Impact: high · Effort: small.**
 
 ### 8. Storage integrity — quota headroom, `unlimitedStorage`, and a storage-key contract
 
@@ -166,7 +188,11 @@ per key: owning module, PHI class (none / UUID-only / free-text), retention, bac
 — with `scripts/check-storage-keys.js` failing CI on unregistered keys and verifying
 declared retention against each module's actual prune constant. That PHI register is half
 a DPIA and must exist _before_ items 2 and 9 add new UUID-keyed stores. Seed v1
-mechanically so the gate starts green. **Impact: high · Effort: small.**
+mechanically so the gate starts green.
+_Virtual Dave:_ (a) is a **30-second manifest line — ship it in the next commit made for
+any reason**; don't couple it to the two-day halves (b) and (c). (Confirmed: exactly one
+hit for quota handling in the whole tree, and it's a simulated error in a test.)
+**Impact: high · Effort: small.**
 
 ### 9. Practice metrics warehouse — alarm-driven daily capture with honest provenance
 
@@ -205,14 +231,18 @@ Effort: medium.**
 
 ## Fix-now bugs the swarm surfaced (not roadmap items — just do them)
 
-- **`V1_DEFAULT_MODULES` in `shared/io/practice-profile.js` covers 5 scopes while
-  `VALID_SCOPES` has grown past 20** — applying a practice profile silently skips most
-  modules. Both judges: fix today, independent of any roadmap decision.
+- **`unlimitedStorage` manifest permission** — one line, no user prompt, closes the
+  silent-quota-loss failure mode. Next commit, any commit.
 - **QOF 2026/27 content fast-follow** — the published contract changes (two
   obesity/weight-loss-injection referral indicators, the 8-process diabetes composite,
   MMRV alignment) are a `rules/qof-rules.json` + `defaults.json`-version-bump content
-  chore the shipped-config migration machinery was built for. Not a "development"; a
-  currency obligation.
+  chore the shipped-config migration machinery was built for. Virtual Dave: genuinely
+  do-it-this-week — "a stale QOF rule is a wrong answer delivered confidently."
+- **`V1_DEFAULT_MODULES` in `shared/io/practice-profile.js` covers 5 scopes while
+  `VALID_SCOPES` has grown past 20.** Virtual Dave's nuance: profiles published by the
+  current UI carry a full v2 `apply.modules` map (`options.js:1670`), so this bites only
+  legacy or hand-authored profiles omitting `modules` — still a one-line fix, just don't
+  let it jump the queue ahead of `unlimitedStorage`.
 
 ## Judged and deliberately not in the Top 10
 
@@ -232,13 +262,29 @@ Effort: medium.**
 
 ## Suggested sequencing
 
-**Wave 1 (small, this month):** 5 (gate + Supabase permission removal) → 8 (storage) →
-7 (sign-off gate) → fix-now bugs. These are days each and everything else builds on them.
-**Wave 2 (the two big safety builds):** 1 (coded matching) and 3 (injection canary) in
-parallel lanes; 6 (surveillance) alongside as a small win; 9 starts its baseline clock.
+**Wave 1 (small, this month):** 5 (declare the presence egress path + conformance gate) →
+1a (the VTM matching tier) → 8a (`unlimitedStorage`) + rest of 8 → 7 (sign-off gate) →
+6 (surveillance — `getEvents` already exists; it's the evidence that makes every later
+claim checkable) → fix-now bugs. Days each, and everything else builds on them.
+**Wave 2 (the big safety builds):** 3 (injection canary), 1b (dm+d index — only if the
+wave-1 measurement shows a real residual), 4 (Coverage Observatory); 9 starts its
+baseline clock.
 **Wave 3 (the strategic build):** 2 (Recall Loop v1) once 5's hazard-log discipline is in
-place — it's the largest item and the one that answers the competitive scan. 4 and 10
-slot in as the UX lanes between waves.
+place — the largest item and the one that answers the competitive scan. 10 slots in as
+the UX lane between waves.
+
+## Virtual Dave's verdict
+
+The full plan was fact-checked against the codebase by the virtual-dave agent:
+**"Yes, I'd run this — after two corrections"** (both now applied above: item 5's
+Supabase reversal, item 7's trailer-is-not-enforcement). His summary judgement: the
+ranking is broadly right, the sequencing "genuinely sane for a 2-person team at
+2+ releases/day," and the swarm "correctly refused the three things that would have
+wrecked the product (on-device LLM, population scanner, MESH/GP Connect) and correctly
+identified that the suite's moat is _not doing inference_." His sharpest observation
+stands as a caution for every future plan: the flagship safety item contained exactly
+the class of error it proposed to catch — which is the argument for deriving safety
+claims from greps over real call sites, not from anyone's reading, human or agent.
 
 ---
 
