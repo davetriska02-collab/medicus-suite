@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.226.0
-**Generated:** 2026-08-08 (automated)
+**Version:** v3.227.1
+**Generated:** 2026-08-09 (automated)
 
 ## What it is
 
@@ -18,14 +18,18 @@ Medicus Suite is a Chrome extension that sits alongside the Medicus electronic p
 ## Side-panel modules
 
 ### Today
+
 One morning screen: a headline sentence plus waiting-room count, triage queue load, today's medical/admin demand, today's available slots, and the last pre-clinic Sweep status — answering "what needs me right now?" without opening five other tabs.
+
 - Headline sentence rolled up from the cards below
 - Waiting-room count with amber/red wait thresholds
 - Triage load and today's demand, both with threshold colouring
 - Today's available slot count and a link into the last Sweep
 
 ### Slot Counter
+
 Available appointment slots by type for any date, read directly from the Medicus scheduling API. Updates live while a Medicus tab is open.
+
 - Slot counts by appointment type, with configurable alert thresholds
 - CSV export
 - Live updates via the practice's Pusher feed, without the scheduling page open
@@ -33,7 +37,9 @@ Available appointment slots by type for any date, read directly from the Medicus
 - Typable appointment-type filter on the booking section's picker (type "acute" to narrow the list; a single match auto-selects)
 
 ### Monitoring (Sentinel)
+
 The clinical context sidebar for whichever patient record is open. Checks active medications, problems, and recent results against drug-monitoring intervals and this year's QOF indicators, showing a plain green/amber/red chip for each. Passive display only — never writes to the record, never orders anything, never tells the clinician what to do.
+
 - Drug-monitoring interval chips (overdue / due soon / in date)
 - QOF register and indicator achievement chips
 - Prescribing-safety scores (ACB, STOPP/START-style)
@@ -42,38 +48,52 @@ The clinical context sidebar for whichever patient record is open. Checks active
 - One-click "create task" / "add to Follow-ups" from an action chip
 
 ### Trends
+
 Charts a patient's blood pressure, renal function, HbA1c, cholesterol and weight over time, from the same live data Monitoring uses.
+
 - Line charts for BP, eGFR/ACR, HbA1c, cholesterol, weight, with clinical zone bands
 - CSV export of the underlying series
 
 ### Capacity Forecast
+
 A calendar comparing available appointment capacity against the practice's own configured daily minimums, so a slot gap is visible days or weeks ahead rather than discovered on the day.
+
 - Day/week/month calendar views with per-day red/amber/green status
 - Per-day minimum presets, editable per weekday, and a per-session-type breakdown
 
 ### Submissions Tracker
+
 Counts inbound requests (medical, admin, investigation, prescription) arriving each day, compared against a rolling baseline so a genuinely unusual day stands out.
+
 - Daily counts by task category, date-range and day-vs-day comparison
 - RAG-threshold alert strip when a category runs hot; CSV export
 
 ### Activity Report
+
 Practice activity per staff member over a configurable date range — consultations, prescription requests, medication reviews, document tasks, investigation results — as a stacked bar chart and period totals.
+
 - Per-staff-member breakdown, configurable date range
 - Optional "per session" adjustment for fair comparison; CSV export
 
 ### Referrals Tracker
+
 Referral audit data over a configurable date range: totals, priority mix (Routine/Urgent/2WW), and status, broken down by clinician, specialty, and receiving hospital.
+
 - Bar charts by clinician, specialty, hospital
 - Configurable date presets and letterhead-aware export
 
 ### Condor
+
 A single live "practice pressure" gauge combining waiting-room load, queue backlog, urgent-task count, and remaining capacity into one score with an amber/red threshold — a busy morning as one number, not four tabs.
+
 - Composite Practice Pressure Index with configurable weightings/thresholds
 - A capacity safety floor: never shows green while demand already exceeds capacity
 - Daily snapshot history feeding the Practice Report tool; 7-/30-day pulse view
 
 ### Reception
+
 A reception-facing view of whichever patient's record is open, plus optional guided-capture question sets for common presenting problems and an inline appointment-booking panel. Guided pathways ship switched off until a practice administrator accepts the disclaimer; booking is only offered when no red flag has been raised.
+
 - Single-glance patient status pill (practice-configurable which chips show)
 - Guided capture pathways per presenting problem, red flags surfaced first
 - Structured plain-text output to paste into the triage entry — capture only, never a diagnosis
@@ -82,46 +102,62 @@ A reception-facing view of whichever patient's record is open, plus optional gui
 - Typable appointment-type filter on the booking panel's picker (type "acute" to narrow the list; a single match auto-selects)
 
 ### Signing Queue
+
 Every open repeat-prescription request, alongside that patient's recorded drug-monitoring currency, so the end-of-day signing pile can be worked riskiest-first instead of opening each record blind.
+
 - Monitoring-currency verdict and renal context per queued request
 - Location/collection filter pills
 - A closing "nothing outstanding" line that never implies a request is safe to sign, only that no flag was found
 
 ### Follow-ups
+
 A personal safety-net reminder list — "chase Friday" logged in seconds, resurfacing when the due date passes. Explicitly a personal reminder, not the clinical safety-netting record; the header says so every time it's open.
+
 - Quick-add reminders, optionally linked to the patient open in Monitoring
 - Due/overdue sorting and counts; entries stay device-local, not part of suite backups, by design
 
 ### Pre-clinic Sweep
+
 Runs the Monitoring rules across every patient booked in today's clinic (or one clinician's list), producing a morning-huddle worklist of overdue monitoring before, not during, the consultation.
+
 - Practice-wide or per-clinician run, in batches to avoid hammering the API
 - Printable reception handout of the day's action list
 - Deliberately ignores per-workstation dismissed-rule settings — a recall list must not inherit one user's suppressions
 
 ### Practice Knowledge
+
 A practice-owned reference base — referral criteria, contacts, pathways, template text — searchable from the panel, with near-duplicate detection when adding new entries.
+
 - Add/edit/search, categorised browsing, optional starter-pack import
 
 ### NHS Patient Leaflets
+
 Search of the NHS conditions/medicines leaflet index, with an "Open on nhs.uk" link for every result and, if a practice has configured an API key, the leaflet text rendered in-panel.
+
 - Fuzzy search over the bundled NHS A-Z index, "Open"/"Copy link" per result
 - Optional in-panel leaflet rendering (text only, practice opt-in) and a recent-searches list
 
 ### Patient Record (live)
+
 A live snapshot of the patient currently open — demographics, coded problems, current medications, recent results, and the same prescribing-safety scores and monitoring/QOF chips Monitoring computes — sourced from the API rather than an exported PDF. Explicitly incomplete (no allergies or immunisations live) and says so on screen; the deep multi-year view stays in the full PDF visualiser.
+
 - Demographics, problems, medications, recent results in one screen
 - Gap-markers (not silent blanks) where data isn't available live
 - Copy-to-clipboard summary, watermarked as a live snapshot to verify against the record
 
 ### Patient Alerts
+
 Per-patient custom flags a practice defines itself (interpreter required, safeguarding concern, etc.) that surface automatically whenever that patient's record is open — in the panel, an on-page banner, and queue chips.
+
 - Add/edit/remove flags, browse every flagged patient, customisable quick-add palette
 - Flags follow patient identity, not a name — nothing shows if identity can't be confirmed
 
 ### Phrases
+
 A personal library of reusable message text blocks (opener, substance, safety-net, next step, sign-off) that combine into one message the clinician copies into Medicus's own message/comment box. Copy-only: nothing is sent or written by the extension itself.
+
 - Compose mode: quick slot-chip rows build one message fast; Library mode: full search/categories/edit
-- Placeholder text (***) must be manually filled before copying — the Copy button blocks a careless copy
+- Placeholder text (\*\*\*) must be manually filled before copying — the Copy button blocks a careless copy
 
 ### Rota (Practice rota)
 
@@ -147,7 +183,7 @@ The **full Rota Manager** (its own browser tab) covers working patterns and mult
 - **Reception quick-actions composer** — three chip rows (Action / With whom / Timeframe) above a task's Internal Comment box; inserts plain-English text only, the clinician still presses Medicus's own Submit
 - **Clean up code** — flags outdated/retired SNOMED problem-list codes and suggests a cleaner description or replacement code
 - **Bulk end problems** — inline checkboxes next to every active problem on the Clinical Summary (wherever the summary panel renders: care-record page, task view, appointment view, consultation view), for ending several entries in one batch
-- **Organise problems** — an "Organise problems?" trigger on the Clinical Summary (wherever the summary panel renders): a "Merge duplicate copies" flow (keeper chosen, others retired via the Duplicate Checker's confirmed removal write), a "Change significance" batch re-grader riding Medicus's own edit form, and an "Organise on canvas…" full-screen drag-and-drop canvas replacing the former suggestion/manual-link accordion sections — problem list as a date-sorted parent/child tree, a SNOMED/practice-override suggestion tray with connector lines, drag (or keyboard pick-up/drop) any tile onto any other to propose a link, per-tile "Remove link" / "Edit problem…" actions, read-only linked-problems visualisation; cycle-guarded, every write individually confirmed (with an explicit "will move" disclosure when a link is being replaced)
+- **Organise problems** — an "Organise problems?" trigger on the Clinical Summary (wherever the summary panel renders): a "Merge duplicate copies" flow (keeper chosen, others retired via the Duplicate Checker's confirmed removal write), a "Change significance" batch re-grader riding Medicus's own edit form, and an "Organise on canvas…" full-screen drag-and-drop canvas replacing the former suggestion/manual-link accordion sections — problem list as a date-sorted parent/child tree, a SNOMED/practice-override suggestion tray with connector lines, drag (or keyboard pick-up/drop) any tile onto any other to propose a link (a drop offers both nesting and a flat "related problems" link), per-tile "Remove link" / "Edit problem…" actions, read-only linked-problems visualisation; cycle-guarded, every write individually confirmed (with an explicit "will move" disclosure when a nest replaces an existing link). The tray also surfaces "(Grouped with X)" GP2GP import-text references resolved against the patient's own problem list (exact/word-overlap matching only, ties never guessed) as link/nest offers with automatic import-text cleanup after commit, and flags Unknown-significance problems for an explicit Major/Minor choice; the same "(Grouped with X)" offer appears inline in the Clean-up-code panel with its own two-step confirm
 - **Allergy cleanup suite** — one "Clean up allergies?" trigger on the Clinical Summary (care-record page and the task view's embedded summary panel alike) covering junk/import-artefact code removal, duplicate-entry merge (with per-card exclude and an explicit clinical-decision review step), clearing a stale legacy code alongside an already-correct one, and converting a legacy pre-defined-allergy code to a proper coded substance — every action requires explicit confirmation, nothing is auto-applied
 - **Bulk task actions** — "Bulk acknowledge?" / "Bulk discard?" checklists on two routine, low-risk task queues (Privacy Officer Alerts and EPS Cancellation Failures), where Medicus's own UI is one dialog per row; tasks are ticked from a standalone checklist keyed by each task's stable identifier (never grid-row position), reviewed on an explicit confirm step listing exactly what will be acted on and what is kept, then committed through Medicus's own task endpoints
 - **Task presence** — stops two clinicians unknowingly working the same triage request: a "👁 name" chip on any queue row a colleague currently has open, and an advisory banner when you open a request they're already in. The store is the practice's own shared folder — presence files on your own network, nothing sent anywhere else; setup is one click per machine (Options → Task Presence → Choose folder, docs/task-presence-setup.md). Advisory only, never a lock; absence of a chip never means nobody is there. (Hosted-store alternative remains for practices without a shared folder.)
@@ -155,6 +191,7 @@ The **full Rota Manager** (its own browser tab) covers working patterns and mult
 - **Referrals discovery** — watches the referrals audit-report page and feeds discovered data to the Referrals Tracker tab
 
 **Full-tab tools:**
+
 - **Patient Record Visualiser** — analyses an exported Medicus PDF locally to build a multi-tab clinical dashboard: continuity indices, investigation trends, medication-monitoring compliance, frailty index, prescribing-safety flags, QOF register status, and an event timeline. Nothing leaves the browser.
 - **Duplicate Problem Checker** — finds likely duplicate problems, notes, and documents (including ones carried over via GP2GP) and offers a guided compare/merge/remove workflow, always requiring explicit confirmation before anything is removed.
 - **Contacts Management** — a drag-and-drop family-tree canvas for a patient's next-of-kin and other contacts, opened from a button on Medicus's own contacts page: places candidate contacts visually, flags next-of-kin/copy-correspondence status, matches contacts across GP2GP-merged records by name (including non-English naming patterns), and lets a wrongly-placed contact be removed from the tree.
@@ -187,6 +224,7 @@ The shipped alert library carries 35 starter alerts a practice can enable (32 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.227.0–.1 (2026-08-09)** — "(Grouped with X)" GP2GP import text now resolves to a real relationship offer (flat link or nest in either direction) in both the Clean-up-code panel and the Organise-problems canvas tray, with existing-relationship detection, automatic import-text cleanup on commit, canvas locator lines, drag-and-drop flat links, and Unknown-significance flagging. v3.227.1 adds the review fixes: an authoritative fail-closed cycle guard on the no-scan surface, a two-step confirm on the inline relationship buttons, ambiguous-match refusal, truthful strip feedback, per-choice confirm copy, and scan-race/card-lifecycle corrections.
 - **v3.226.0 (2026-08-08)** — Cleanup Code Preferences gain automatic practice-pool contribution (a machine's own tallies merge back to the shared profile without a full publish; additive-only, never touches the practice-wide enforced choice), and "Bulk acknowledge?" / "Bulk discard?" checklists arrive on the Privacy Officer Alerts and EPS Cancellation Failures task queues, each batch explicitly confirmed.
 - **v3.225.0–.1 (2026-08-08)** — "Organise problems" canvas: the suggestion/manual-link accordion sections replaced by a full-screen drag-and-drop canvas (date-sorted parent/child tree, SNOMED + practice-override suggestion tray with connector lines, per-tile Remove link / Edit problem… actions embedding the Clean-up-code panel, read-only linked-problems visualisation with per-set lanes/colours). v3.225.1 adds the review fixes: patient-change guard on the open canvas, post-save Edit-problem state reset, re-parent "will move" disclosure, rescan after a code edit, full keyboard operability, parent-map cycle rescue, and lazy linked-problem prefill.
 - **v3.219.0 (2026-08-03)** — "Change significance": batch re-grade problems between Major/Minor/Unknown via Medicus's own edit form, with per-row current-grade display and explicit move-by-move confirm; the problems widget trigger renamed to "Organise problems?".
