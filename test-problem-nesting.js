@@ -598,5 +598,47 @@ console.log('--- page-shape parsing: care-record vs task-overview ("split") page
   );
 }
 
+console.log('\n--- v3.227.1 review-fix source locks (cycle guard / scan races / children coverage) ---');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'problem-nesting.js'), 'utf8');
+  // Finding 1: a nest commit arriving over the bridge before any scan must
+  // never pass the cycle guard vacuously on an empty parent map.
+  check(
+    src.includes('_parentMapComplete'),
+    'commitParentLink distinguishes a known-complete map from an unpopulated one'
+  );
+  check(
+    src.includes('wouldCreateCycleAuthoritative'),
+    'an authoritative fetch-walking cycle check exists for the no-scan path'
+  );
+  check(
+    /wouldCreateCycleAuthoritative[\s\S]{0,1200}?throw new Error\(\s*'Could not verify the existing hierarchy/.test(
+      src
+    ),
+    'the authoritative walk FAILS CLOSED when the chain cannot be verified'
+  );
+  // Finding 3: the late awaits in runScan (override rules, generic-info
+  // rules, the per-suggestion relationship checks) must each re-check the
+  // patient before touching state — especially before _scanState = 'done'.
+  const doneIdx = src.indexOf("_scanState = 'done'");
+  const guardBeforeDone = src.lastIndexOf('if (_lastPatientId !== scanPatientId) return', doneIdx);
+  const lastAwaitBeforeDone = src.lastIndexOf('await Promise.all', doneIdx);
+  check(
+    doneIdx !== -1 && guardBeforeDone !== -1 && guardBeforeDone > lastAwaitBeforeDone,
+    "a patient re-check sits between the final awaited batch and _scanState = 'done'"
+  );
+  // Finding 7: checkExistingRelationship must read childProblems off the
+  // fallback overview fetch instead of defaulting children to "none" on the
+  // surface that has no scan cache.
+  const cerIdx = src.indexOf('async function checkExistingRelationship');
+  const cerBody = src.slice(cerIdx, src.indexOf('var SIG_TARGETS'));
+  check(
+    cerBody.includes('childProblems'),
+    'checkExistingRelationship resolves children from the overview fetch when the scan cache is empty'
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

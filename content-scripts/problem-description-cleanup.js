@@ -1595,6 +1595,60 @@
         '</div>'
       );
     }
+    // Two-step confirm for the three RELATIONSHIP writes (review finding:
+    // the canvas gained a confirm bar for these identical choices, this
+    // inline widget was committing update-parent-problem/update-problem-
+    // links on a single click — a misclick between the two adjacent inverse
+    // nest buttons wrote an inverted hierarchy with no confirm and no undo).
+    // The text-only actions above ('alreadyRelated'/'leaveAsIs') stay
+    // single-click, consistent with this widget's other text-cleanup
+    // buttons — they never write a relationship.
+    if (st.linkSuggestionPending) {
+      var pendingMsg;
+      var pendingConfirmLabel;
+      if (st.linkSuggestionPending === 'linked') {
+        pendingMsg =
+          'This will create a flat (non-hierarchical) link between this problem and <strong>' +
+          esc(m.description) +
+          '</strong> — neither becomes a child of the other.';
+        pendingConfirmLabel = 'Confirm — link them';
+      } else if (st.linkSuggestionPending === 'thisChildOfMatch') {
+        pendingMsg =
+          'This will nest this problem under <strong>' +
+          esc(m.description) +
+          '</strong> — it will display as a child on the problem list, not as a top-level problem.';
+        pendingConfirmLabel = 'Confirm — nest it';
+      } else {
+        pendingMsg =
+          'This will nest <strong>' +
+          esc(m.description) +
+          '</strong> under this problem — it will display as a child on the problem list, not as a top-level problem.';
+        pendingConfirmLabel = 'Confirm — nest it';
+      }
+      return (
+        '<div class="ms-pdc-link-section">' +
+        '<div class="ms-pdc-link-confirm">' +
+        '<div class="ms-pdc-link-confirm-msg">' +
+        pendingMsg +
+        '</div>' +
+        '<div class="ms-pdc-link-actions">' +
+        '<button type="button" class="ms-pdc-link-cancel-btn" data-problem-id="' +
+        esc(problemId) +
+        '"' +
+        (st.linkSuggestionActing ? ' disabled' : '') +
+        '>Cancel</button>' +
+        '<button type="button" class="ms-pdc-link-confirm-btn" data-problem-id="' +
+        esc(problemId) +
+        '"' +
+        (st.linkSuggestionActing ? ' disabled' : '') +
+        '>' +
+        (st.linkSuggestionActing ? 'Creating…' : pendingConfirmLabel) +
+        '</button>' +
+        '</div>' +
+        '</div>' +
+        '</div>'
+      );
+    }
     return (
       '<div class="ms-pdc-link-section">' +
       '<div class="ms-pdc-link-note">🔗 Import text suggests a relationship with <strong>' +
@@ -1954,7 +2008,28 @@
     });
     root.querySelectorAll('.ms-pdc-link-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        applyLinkSuggestion(problemId, btn.getAttribute('data-relationship'));
+        var relationship = btn.getAttribute('data-relationship');
+        if (relationship === 'alreadyRelated' || relationship === 'leaveAsIs') {
+          // Text-only cleanup — single click, same as the widget's other
+          // text-cleanup buttons; no relationship write happens here.
+          applyLinkSuggestion(problemId, relationship);
+          return;
+        }
+        // Relationship writes arm the confirm step (see linkSuggestionHtml's
+        // own comment) — only the Confirm button below actually commits.
+        rowState(problemId).linkSuggestionPending = relationship;
+        renderPanel(problemId);
+      });
+    });
+    root.querySelectorAll('.ms-pdc-link-confirm-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyLinkSuggestion(problemId, rowState(problemId).linkSuggestionPending);
+      });
+    });
+    root.querySelectorAll('.ms-pdc-link-cancel-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        rowState(problemId).linkSuggestionPending = null;
+        renderPanel(problemId);
       });
     });
     // Grouped multi-synonym "Use" button (see candidateGroupsHtml) — reads
@@ -2808,11 +2883,14 @@
   async function applyLinkSuggestion(problemId, relationshipType) {
     var st = rowState(problemId);
     if (!st.linkSuggestion || !st.linkSuggestion.match || st.linkSuggestionActing || !st.prefill) return;
+    if (!relationshipType) return; // no armed choice (confirm clicked with nothing pending)
+    var isTextOnly = relationshipType === 'alreadyRelated' || relationshipType === 'leaveAsIs';
     var otherId = st.linkSuggestion.match.problemId;
     st.linkSuggestionActing = true;
+    st.error = null;
     renderPanel(problemId);
     try {
-      if (relationshipType === 'alreadyRelated' || relationshipType === 'leaveAsIs') {
+      if (isTextOnly) {
         // 'alreadyRelated': the relationship the text described is already
         // real. 'leaveAsIs': a DIFFERENT relationship already exists and
         // the clinician is satisfied with it, not the text's guess (both
@@ -2830,36 +2908,59 @@
       } else {
         throw new Error('Unknown relationship type.');
       }
-      // Relationship created — now the "(Grouped with X)" text is genuinely
-      // redundant with what's now structurally captured, same "structural
-      // fix supersedes the free text" reasoning as
-      // applyCorrectSeverityAndRemoveJunk. A failure past this point does
-      // NOT roll back the relationship (already real) — only the cosmetic
-      // strip didn't complete.
+      // Relationship created (or, for the text-only actions, nothing to
+      // create) — now the "(Grouped with X)" text is genuinely redundant
+      // with what's structurally captured, same "structural fix supersedes
+      // the free text" reasoning as applyCorrectSeverityAndRemoveJunk. A
+      // failure past this point does NOT roll back the relationship
+      // (already real) — only the cosmetic strip didn't complete.
+      //
+      // st.linkSuggestion is nulled ONLY on the paths that consume it
+      // (review finding: nulling it up front left a failed text-only strip
+      // with a "please try again" error and no button left to retry with —
+      // the canvas keeps its card offered on this exact failure, this
+      // widget now matches). After a successful RELATIONSHIP write the
+      // suggestion is always consumed — leaving it offered would invite
+      // re-creating the just-created relationship.
       var cleaned = st.linkSuggestion.cleaned;
-      st.linkSuggestion = null;
       var codeValue = st.prefill.problemCode && st.prefill.problemCode.value;
       var code = codeValue && {
         description: codeValue.description,
         conceptId: codeValue.conceptId,
         descriptionId: codeValue.descriptionId,
       };
-      if (code) {
+      if (!code) {
+        // No code in the prefill = the text edit cannot be built. For the
+        // text-only actions that IS the whole action — a visible failure,
+        // never a silently-disappearing suggestion that reads as success.
+        if (isTextOnly) {
+          st.error = 'Could not load this problem’s current code — the import text was not removed. Try again.';
+        } else {
+          st.linkSuggestion = null;
+          st.error = 'Link created, but the import text could not be removed — remove it separately.';
+        }
+      } else {
         try {
           var payload = buildEditProblemPayload(st.prefill, code, cleaned);
           await postEditProblem(problemId, payload);
           st.additionalInformation = cleaned;
           st.prefill = Object.assign({}, st.prefill, { additionalInformation: cleaned });
+          st.linkSuggestion = null; // fully done — relationship (if any) and text both settled
         } catch (textErr) {
-          st.error =
-            relationshipType === 'alreadyRelated' || relationshipType === 'leaveAsIs'
-              ? 'Failed to remove the import text — please try again.'
-              : 'Link created, but failed to remove the import text — you can remove it separately.';
+          if (isTextOnly) {
+            // Removing the text was the whole action and it failed —
+            // keep the suggestion so the button is still there to retry.
+            st.error = 'Failed to remove the import text — please try again.';
+          } else {
+            st.linkSuggestion = null;
+            st.error = 'Link created, but failed to remove the import text — you can remove it separately.';
+          }
         }
       }
     } catch (err) {
       st.error = (err && err.message) || 'Failed to create the link — please try again.';
     } finally {
+      st.linkSuggestionPending = null;
       st.linkSuggestionActing = false;
       renderPanel(problemId);
     }
@@ -2895,10 +2996,18 @@
       prefill.significance,
       genericInfoEntries
     );
-    var cleaned =
-      (findings.severityContradiction && findings.severityContradiction.cleaned) ||
-      (findings.linkSuggestion && findings.linkSuggestion.cleaned) ||
-      (findings.genericAdditionalInfo && findings.genericAdditionalInfo.cleaned);
+    // First finding that CARRIES a cleaned value — explicitly != null, never
+    // a || chain (review finding): a legitimate cleaned === '' (the text was
+    // entirely boilerplate) is falsy, and the old chain skipped past it to
+    // null, silently no-opping the strip while the caller announced success.
+    var findingWithCleaned = [
+      findings.severityContradiction,
+      findings.linkSuggestion,
+      findings.genericAdditionalInfo,
+    ].find(function (f) {
+      return f && f.cleaned != null;
+    });
+    var cleaned = findingWithCleaned ? findingWithCleaned.cleaned : null;
     if (cleaned == null || cleaned === (prefill.additionalInformation || '')) return false;
     var code = {
       description: codeValue.description,
@@ -2971,6 +3080,12 @@
   var _retiredFlaggedCount = 0;
 
   async function runRetiredCodesScan() {
+    // Captured before the first await (review finding): scan() resets
+    // _rows/_retiredScanState to a fresh 'idle' on an SPA patient
+    // navigation, and every continuation below must stop writing state the
+    // moment that happens — otherwise this scan's completion clobbers the
+    // NEW patient's reset state ('done' over empty rows, no offer to scan).
+    var scanPatientId = _lastPatientId;
     _retiredScanState = 'scanning';
     _retiredScanError = null;
     renderRetiredWidget();
@@ -3003,6 +3118,7 @@
           ]);
         })
       );
+      if (_lastPatientId !== scanPatientId) return; // patient changed mid-fetch — the reset owns the state now
       // One retirement-status fetch per DISTINCT conceptId, never one per
       // problem — same discipline as problem-bulk-end.js's badge scan.
       var conceptIdByProblemId = Object.create(null);
@@ -3029,6 +3145,7 @@
       // reason costs only one local resource load (cached after the first
       // call), same as it does inside openPanel.
       var genericInfoEntries = await ensureGenericAdditionalInfoTextLoaded();
+      if (_lastPatientId !== scanPatientId) return;
 
       // Compute the Read-v2-origin signal for every problem up front (no
       // fetch — reads overview data already in hand) so we know which
@@ -3091,6 +3208,10 @@
             });
         })
       );
+
+      // Everything fetched — last stop before per-row state writes into
+      // _rows, which a patient change has by now replaced (see scan()).
+      if (_lastPatientId !== scanPatientId) return;
 
       // Built once for the whole scan — every problem's own {id, description},
       // filtered per-row below to exclude the one being scanned. Feeds
@@ -3184,13 +3305,18 @@
             })
         );
       }
+      // Final patient re-check (review finding): the relationship-check
+      // batch above is one network round-trip per confident match — plenty
+      // of time for an SPA patient navigation to have reset this widget.
+      if (_lastPatientId !== scanPatientId) return;
       _retiredFlaggedCount = flaggedCount;
       _retiredScanState = 'done';
     } catch (err) {
+      if (_lastPatientId !== scanPatientId) return;
       _retiredScanState = 'error';
       _retiredScanError = (err && err.message) || 'Failed to check for retired/legacy codes.';
     } finally {
-      renderRetiredWidget();
+      if (_lastPatientId === scanPatientId) renderRetiredWidget();
     }
   }
 

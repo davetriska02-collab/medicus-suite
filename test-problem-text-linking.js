@@ -135,5 +135,50 @@ console.log('\n--- extractGroupedWithReference: single source of truth with the 
   );
 }
 
+console.log('\n--- matchProblemByName: ambiguity is a non-match (v3.227.1 review fix) ---');
+{
+  const { matchProblemByName } = require('./shared/problem-text-linking.js');
+  // The review's own case: the captured name qualifies BOTH diabetes types
+  // at 'partial' — the old first-hit implementation returned whichever was
+  // first in the list, presented as a confident "best match".
+  const diabetes = [
+    { id: 'p1', description: 'Type 1 diabetes mellitus' },
+    { id: 'p2', description: 'Type 2 diabetes mellitus' },
+  ];
+  check(
+    matchProblemByName('Diabetes mellitus', diabetes) === null,
+    'several equally-qualifying partial candidates -> null, never an arbitrary pick'
+  );
+  check(
+    matchProblemByName('Type 1 diabetes mellitus', diabetes) !== null &&
+      matchProblemByName('Type 1 diabetes mellitus', diabetes).problemId === 'p1',
+    'a reference that uniquely qualifies one of them still matches it'
+  );
+  // Duplicate problem entries (the duplicate-merge tool exists because these
+  // are common) tie at the EXACT tier — same rule.
+  const dupes = [
+    { id: 'd1', description: 'Asthma' },
+    { id: 'd2', description: 'Asthma' },
+    { id: 'other', description: 'Hypertension' },
+  ];
+  check(matchProblemByName('Asthma', dupes) === null, 'duplicate exact-tier candidates -> null, never picks a copy');
+  check(
+    matchProblemByName('Hypertension', dupes) !== null &&
+      matchProblemByName('Hypertension', dupes).problemId === 'other',
+    'a unique exact match on the same record still resolves'
+  );
+  // An exact-tier tie must NOT fall through to partial and "win" there —
+  // ambiguity at the winning tier ends the search.
+  const mixed = [
+    { id: 'e1', description: 'Eczema' },
+    { id: 'e2', description: 'Eczema' },
+    { id: 'e3', description: 'Infantile eczema' },
+  ];
+  check(
+    matchProblemByName('Eczema', mixed) === null,
+    'an exact-tier tie returns null rather than falling through to a partial candidate'
+  );
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
 process.exit(failed === 0 ? 0 : 1);

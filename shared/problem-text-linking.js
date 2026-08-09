@@ -81,16 +81,30 @@
 
   // candidates: [{id, description}]. Returns
   // {problemId, description, confidence:'exact'|'partial'} or null.
+  //
+  // AMBIGUITY IS A NON-MATCH (review finding on the original first-hit
+  // implementation): when MORE THAN ONE candidate qualifies at the winning
+  // tier, whichever happened to be first in the list would have been
+  // presented as a confident "best match" — e.g. captured "Diabetes
+  // mellitus" against a record carrying BOTH "Type 1 diabetes mellitus" and
+  // "Type 2 diabetes mellitus" qualifies both at 'partial', and duplicate
+  // problem entries (common enough that the suite ships a duplicate-merge
+  // tool) tie at 'exact'. An arbitrary pick dressed as confidence is exactly
+  // the guessing this module's header forswears, and the offered
+  // relationship write would target a possibly-wrong problem — so a tie at
+  // the winning tier returns null, falling back to the caller's existing
+  // "check manually" informational note, same as any other non-match.
   function matchProblemByName(name, candidates) {
     var target = normaliseText(name);
     if (!target || !Array.isArray(candidates) || !candidates.length) return null;
 
-    for (var i = 0; i < candidates.length; i++) {
-      var c = candidates[i];
-      if (c && normaliseText(c.description) === target) {
-        return { problemId: c.id, description: c.description, confidence: 'exact' };
-      }
+    var exactMatches = candidates.filter(function (c) {
+      return c && normaliseText(c.description) === target;
+    });
+    if (exactMatches.length === 1) {
+      return { problemId: exactMatches[0].id, description: exactMatches[0].description, confidence: 'exact' };
     }
+    if (exactMatches.length > 1) return null; // duplicate entries — no arbitrary pick
 
     var words = significantWords(name);
     if (!words.length) return null;
@@ -98,18 +112,17 @@
       return new RegExp('\\b' + escapeRegExp(w) + '\\b', 'i');
     });
 
-    for (var j = 0; j < candidates.length; j++) {
-      var cand = candidates[j];
-      if (!cand || !cand.description) continue;
+    var partialMatches = candidates.filter(function (cand) {
+      if (!cand || !cand.description) return false;
       var desc = String(cand.description);
-      var allPresent = wordRes.every(function (re) {
+      return wordRes.every(function (re) {
         return re.test(desc);
       });
-      if (allPresent) {
-        return { problemId: cand.id, description: cand.description, confidence: 'partial' };
-      }
+    });
+    if (partialMatches.length === 1) {
+      return { problemId: partialMatches[0].id, description: partialMatches[0].description, confidence: 'partial' };
     }
-    return null;
+    return null; // zero qualifying, or several equally-qualifying — never guess between them
   }
 
   // Finds the ONE configured `linkSuggestion`-actioned pattern entry (there

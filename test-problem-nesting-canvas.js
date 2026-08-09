@@ -591,5 +591,59 @@ console.log('--- buildPendingLink: re-parent disclosure (silent moves were the r
   check(fresh.linking === false && fresh.error === null, 'starts unconfirmed with no error');
 }
 
+console.log('--- buildPendingLink: nestAllowed (loop-blocked pairs still get the flat-link offer) ---');
+{
+  const pending = buildPendingLink('child', 'parent', { child: 'A', parent: 'B' }, {});
+  check(pending.nestAllowed === true, 'nesting is allowed by default');
+}
+
+console.log(
+  '\n--- v3.227.1 review-fix source locks (feedback truthfulness / per-choice consequences / card lifecycle) ---'
+);
+{
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'problem-nesting-canvas.js'), 'utf8');
+  // Finding 6: the strip wrapper reports four distinct outcomes, and the
+  // text-only confirm branch handles each — no more success announcements
+  // over a no-op, no silent dead click when the bridge is missing.
+  ['stripped', 'nothing-to-strip', 'unavailable', 'failed'].forEach(function (status) {
+    check(src.includes("'" + status + "'"), 'stripTextLinkBoilerplate outcome "' + status + '" is distinguished');
+  });
+  check(
+    src.includes('The import text was already removed'),
+    'a no-op strip is announced as what it is, never as a fresh removal'
+  );
+  check(
+    src.includes('The text-editing tool isn’t available on this page'),
+    'a missing bridge is a visible error on the card, not a silent dead click'
+  );
+  // Finding 8: each confirm choice states its own consequence, and a
+  // loop-blocked pair still gets the flat link (nest choice withheld).
+  check(
+    src.includes('would create a loop in the hierarchy, so only a flat link is offered'),
+    'the loop-blocked drop offers the flat link with its own explanation instead of blocking the gesture'
+  );
+  check(
+    /commitAs === 'flatlink' \|\| d\.nestAllowed === false/.test(src),
+    'the commit path can never nest a pair whose confirm bar only offered the flat link'
+  );
+  check(
+    src.includes('nesting will move it out of there'),
+    'the re-parent disclosure is attached to the NEST choice, not to both buttons'
+  );
+  // Finding 10: an actioned card settles the SOURCE suggestion list via the
+  // bridge — reopening the canvas must not resurrect it.
+  check(
+    src.includes('consumeTextLinkSuggestion') && src.includes('markTextLinkAlreadyRelated'),
+    'actioned cards consume/convert the shared suggestion, surviving the per-open dismissed-set reset'
+  );
+  const nestingSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'problem-nesting.js'), 'utf8');
+  check(
+    nestingSrc.includes('consumeTextLinkSuggestion:') && nestingSrc.includes('markTextLinkAlreadyRelated:'),
+    'the bridge actually exposes both lifecycle functions the canvas calls'
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

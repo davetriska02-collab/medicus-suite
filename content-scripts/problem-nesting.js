@@ -915,6 +915,13 @@
   // overviews, updated on every committed link so cycle checks and rescans
   // stay honest without refetching.
   var _parentIdByProblemId = {};
+  // True only once runScan has populated _parentIdByProblemId from every
+  // problem's overview for the CURRENT patient. While false, the sync
+  // wouldCreateCycle(_parentIdByProblemId) check would pass vacuously on an
+  // empty map — commitParentLink falls back to the fetch-walking
+  // wouldCreateCycleAuthoritative instead (review finding: the cleanup
+  // surface's bridge calls arrive without any scan having run).
+  var _parentMapComplete = false;
   // Scan products consumed both by the sections still rendered here (merge,
   // significance) and, via the bridge, by the canvas overlay: the active
   // problem list ({id, description}) and each problem's overview-derived info.
@@ -951,6 +958,7 @@
     _suggestions = [];
     _textLinkSuggestions = [];
     _parentIdByProblemId = {};
+    _parentMapComplete = false;
     _problems = [];
     _infoById = {};
     _linkedIdsState = 'idle';
@@ -1081,6 +1089,10 @@
 
       _problems = problems;
       _infoById = infoById;
+      // Every problem's overview has been read into _parentIdByProblemId by
+      // this point — commitParentLink's sync cycle guard can trust the map
+      // from here on (see _parentMapComplete's own comment).
+      _parentMapComplete = true;
       _mergeGroups = buildDuplicateGroups(problems, infoById).map(function (g) {
         var entries = g.entries.map(function (p) {
           var ci = infoById[p.id] || {};
@@ -1111,6 +1123,7 @@
       // buildNestingSuggestions' own comment for how the two are merged and
       // tagged with 'source' so the canvas can credit each accurately.
       var overrideEntries = await overridesPromise;
+      if (_lastPatientId !== scanPatientId) return; // patient changed while awaiting — resetForPatient owns the state now
       var overridePairHits = buildOverridePairSet(overrideEntries);
       // Raw suggestion list — no per-card UI state, this accordion no longer
       // renders suggestion cards itself (see the "canvas" section in
@@ -1118,6 +1131,7 @@
       // its own transient drag/confirm state independently.
       _suggestions = buildNestingSuggestions(problems, infoById, pairHits, overridePairHits);
       var genericInfoEntries = await genericInfoPromise;
+      if (_lastPatientId !== scanPatientId) return;
       _textLinkSuggestions = buildTextLinkSuggestions(
         problems,
         infoById,
@@ -1141,6 +1155,13 @@
           });
         })
       );
+      // Final patient re-check before flipping to 'done' (review finding):
+      // the relationship-check batch above is one network round-trip per
+      // confident suggestion, plenty of time for an SPA patient navigation.
+      // resetForPatient set _scanState back to 'idle' for the NEW patient —
+      // writing 'done' (and _openSection) here would present a completed
+      // scan over cleared data instead of offering to scan.
+      if (_lastPatientId !== scanPatientId) return;
       _scanState = 'done';
       // Accordion default: first section with something in it.
       _openSection = _mergeGroups.length ? 'merge' : 'significance';
@@ -1196,6 +1217,47 @@
     render();
   }
 
+  // Commit-time cycle walk that does NOT trust an unpopulated map (review
+  // finding): _parentIdByProblemId is only complete after THIS file's own
+  // runScan, but commitParentLink is also called through the bridge by
+  // content-scripts/problem-description-cleanup.js's "(Grouped with X)"
+  // offer, on a page where the nesting scan may never have run — there the
+  // sync wouldCreateCycle(childId, parentId, {}) passes vacuously and a
+  // nest of A under its own descendant creates a real loop on the record.
+  // So: when the map is not known-complete (_parentMapComplete), walk the
+  // ancestor chain by fetching each node's overview (parentProblemId) —
+  // the same authoritative source runScan itself uses — caching what it
+  // learns into the map. FAIL CLOSED: if any fetch on the chain fails, the
+  // hierarchy cannot be verified, so the nest is refused rather than risked.
+  async function wouldCreateCycleAuthoritative(childId, parentId) {
+    if (!childId || !parentId) return false;
+    if (childId === parentId) return true;
+    var seen = {};
+    var cur = parentId;
+    while (cur) {
+      if (cur === childId) return true;
+      if (seen[cur]) return false; // pre-existing server-side loop — don't hang
+      seen[cur] = true;
+      var next;
+      if (Object.prototype.hasOwnProperty.call(_parentIdByProblemId, cur)) {
+        next = _parentIdByProblemId[cur] || null;
+      } else {
+        var ov;
+        try {
+          ov = await fetchProblemOverview(cur);
+        } catch (e) {
+          throw new Error(
+            'Could not verify the existing hierarchy — not nesting, to avoid creating a loop. Try again.'
+          );
+        }
+        next = (ov && ov.parentProblemId) || null;
+        _parentIdByProblemId[cur] = next; // cache what the walk learned (null = confirmed parentless)
+      }
+      cur = next;
+    }
+    return false;
+  }
+
   // Shared commit path for BOTH the suggestion cards and the manual builder:
   // commit-time cycle hard-guard (independent of what the UI showed — the
   // live map may have changed since render), the confirmed three-field POST,
@@ -1203,8 +1265,12 @@
   // user-facing message.
   async function commitParentLink(childId, parentId) {
     if (!parentId) throw new Error('A parent must be chosen.'); // guards misuse — commitUnlink below is the null-parent path
-    if (wouldCreateCycle(childId, parentId, _parentIdByProblemId)) {
-      throw new Error('Linking these two would create a loop — another link committed first. Rescan to refresh.');
+    if (_parentMapComplete) {
+      if (wouldCreateCycle(childId, parentId, _parentIdByProblemId)) {
+        throw new Error('Linking these two would create a loop — another link committed first. Rescan to refresh.');
+      }
+    } else if (await wouldCreateCycleAuthoritative(childId, parentId)) {
+      throw new Error('Linking these two would create a loop in the problem hierarchy — not nesting.');
     }
     await postUpdateParentProblem(buildUpdateParentProblemPayload(_lastPatientId, childId, parentId));
     _parentIdByProblemId[childId] = parentId;
@@ -1323,7 +1389,13 @@
   async function checkExistingRelationship(problemId, otherProblemId) {
     var aParent = _infoById[problemId] ? _infoById[problemId].parentProblemId : undefined;
     var bParent = _infoById[otherProblemId] ? _infoById[otherProblemId].parentProblemId : undefined;
-    var aHasChildren = !!(_infoById[problemId] && _infoById[problemId].hasChildren);
+    // undefined = not known yet (no scan cache) — resolved from the same
+    // overview fetch as the parent below, NOT defaulted to false: from the
+    // cleanup surface _infoById is empty, and discarding the overview's
+    // childProblems here made hasAnyRelationship blind to children on that
+    // surface only (review finding — the canvas offered the "leave as-is"
+    // escape hatch on the same patient, this path didn't).
+    var aHasChildren = _infoById[problemId] ? !!_infoById[problemId].hasChildren : undefined;
     if (aParent === undefined || bParent === undefined) {
       var overviews = await Promise.all([
         aParent === undefined
@@ -1337,9 +1409,17 @@
             })
           : null,
       ]);
-      if (aParent === undefined) aParent = (overviews[0] && overviews[0].parentProblemId) || null;
+      if (aParent === undefined) {
+        aParent = (overviews[0] && overviews[0].parentProblemId) || null;
+        aHasChildren = !!(
+          overviews[0] &&
+          Array.isArray(overviews[0].childProblems) &&
+          overviews[0].childProblems.length
+        );
+      }
       if (bParent === undefined) bParent = (overviews[1] && overviews[1].parentProblemId) || null;
     }
+    if (aHasChildren === undefined) aHasChildren = false;
     var relatedToMatch = aParent === otherProblemId || bParent === problemId;
     var linkedIds = [];
     try {
@@ -2115,6 +2195,28 @@
     checkExistingRelationship: checkExistingRelationship,
     commitSignificanceChange: commitSignificanceChange,
     wouldCreateCycle: wouldCreateCycle,
+    // Text-link suggestion lifecycle, called by the canvas after it actions
+    // a card (review finding: the canvas's own dismissed-ids Set is reset on
+    // every open() while _textLinkSuggestions persists until a rescan, so a
+    // committed card came back on reopen still offering to create the
+    // just-created relationship). The canvas mutates the SOURCE list here:
+    // consume removes the suggestion outright (relationship created AND text
+    // stripped — nothing left to offer); markAlreadyRelated flips it to the
+    // single "remove import text" offer (relationship created but the strip
+    // failed — the leftover text is the only remaining work).
+    consumeTextLinkSuggestion: function (problemId) {
+      _textLinkSuggestions = _textLinkSuggestions.filter(function (s) {
+        return s.problemId !== problemId;
+      });
+    },
+    markTextLinkAlreadyRelated: function (problemId) {
+      _textLinkSuggestions.forEach(function (s) {
+        if (s.problemId === problemId) {
+          s.alreadyRelated = true;
+          s.hasOtherRelationship = false;
+        }
+      });
+    },
     // Called by the canvas after a successful "Edit problem" code change
     // (window.ProblemDescriptionCleanup's own onApplied callback, 2026-08-08
     // follow-up: "problem code edits refresh within the canvas") — updates

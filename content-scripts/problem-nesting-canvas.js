@@ -543,6 +543,13 @@
       parentDescription: byId[parentId] || parentId,
       previousParentId: previousParentId,
       previousParentDescription: previousParentId ? byId[previousParentId] : null,
+      // false when nesting this pair would create a hierarchy loop
+      // (proposeLink's cycle check). The FLAT link is still legitimate for
+      // such a pair — flat links are non-hierarchical and can never loop —
+      // so instead of blocking the whole drop (review note: a pair that
+      // couldn't nest could never be flat-linked by drag either), the
+      // confirm bar drops the nest choice and offers only the flat link.
+      nestAllowed: true,
       linking: false,
       error: null,
     };
@@ -1002,25 +1009,43 @@
       confirmLabel = 'Confirm — remove link';
       busyLabel = 'Removing…';
     } else if (d.kind === 'link') {
-      message =
-        'This will nest <strong>' +
-        esc(d.childDescription) +
-        '</strong> under <strong>' +
-        esc(d.parentDescription) +
-        '</strong> — it will display as a child on the problem list, not as a top-level problem. ' +
-        // Re-parent disclosure (see buildPendingLink): moving a problem
-        // out of a hierarchy the clinician chose must be named, never
-        // implied — confirming this is a MOVE, not an addition.
-        (d.previousParentId
-          ? 'It is <strong>currently nested under ' +
-            esc(d.previousParentDescription) +
-            '</strong> — confirming will move it out of there. '
-          : '') +
-        'There is no bulk undo; links are removed individually — click the child tile, then "Remove link".';
-      confirmLabel = 'Confirm — nest it';
-      busyLabel = 'Linking…';
-      secondaryConfirmLabel = 'Confirm — link problems';
-      secondaryBusyLabel = 'Linking…';
+      // Each choice states ITS OWN consequence (review finding: the nest
+      // copy — including the re-parent "will move it out of there"
+      // disclosure — sat above BOTH buttons, describing the opposite of
+      // what "Confirm — link problems" actually does).
+      if (d.nestAllowed === false) {
+        message =
+          'Nesting <strong>' +
+          esc(d.childDescription) +
+          '</strong> under <strong>' +
+          esc(d.parentDescription) +
+          '</strong> would create a loop in the hierarchy, so only a flat link is offered: ' +
+          '"Confirm — link problems" records them as related problems — no nesting, neither becomes a child of the other.';
+        confirmLabel = 'Confirm — link problems';
+        busyLabel = 'Linking…';
+      } else {
+        message =
+          '"Confirm — nest it" will nest <strong>' +
+          esc(d.childDescription) +
+          '</strong> under <strong>' +
+          esc(d.parentDescription) +
+          '</strong> — it will display as a child on the problem list, not as a top-level problem. ' +
+          // Re-parent disclosure (see buildPendingLink): moving a problem
+          // out of a hierarchy the clinician chose must be named, never
+          // implied — confirming the NEST is a MOVE, not an addition.
+          (d.previousParentId
+            ? 'It is <strong>currently nested under ' +
+              esc(d.previousParentDescription) +
+              '</strong> — nesting will move it out of there. '
+            : '') +
+          '"Confirm — link problems" instead records a flat "related problems" link — no nesting changes' +
+          (d.previousParentId ? ' (it stays under ' + esc(d.previousParentDescription) + ')' : '') +
+          '. There is no bulk undo; links are removed individually — click the child tile, then "Remove link".';
+        confirmLabel = 'Confirm — nest it';
+        busyLabel = 'Linking…';
+        secondaryConfirmLabel = 'Confirm — link problems';
+        secondaryBusyLabel = 'Linking…';
+      }
     } else if (d.kind === 'textlink-linked') {
       message =
         'This will create a flat (non-hierarchical) link between <strong>' +
@@ -1257,7 +1282,11 @@
         await window.ProblemNesting.commitUnlink(d.childId);
         announce(d.childDescription + ' is no longer nested under ' + d.parentDescription);
       } else if (d.kind === 'link') {
-        if (commitAs === 'flatlink') {
+        // nestAllowed === false means the bar's ONE button is the flat
+        // link (see buildPendingLink) — the primary confirm handler passes
+        // no commitAs, so without this a loop-blocked pair would fall into
+        // the nest branch it was never offered.
+        if (commitAs === 'flatlink' || d.nestAllowed === false) {
           await window.ProblemNesting.commitFlatLink(d.childId, d.parentId);
           announce('Linked ' + d.childDescription + ' with ' + d.parentDescription);
         } else {
@@ -1267,18 +1296,15 @@
       } else if (d.kind === 'textlink-linked') {
         await window.ProblemNesting.commitFlatLink(d.problemId, d.matchedId);
         announce('Linked ' + d.problemDescription + ' with ' + d.matchedDescription);
-        _dismissedTextLinkProblemIds.add(d.problemId);
-        await stripTextLinkBoilerplate(d.problemId);
+        await settleTextLinkAfterRelationship(d.problemId);
       } else if (d.kind === 'textlink-thisChildOfMatch') {
         await window.ProblemNesting.commitParentLink(d.problemId, d.matchedId);
         announce('Nested ' + d.problemDescription + ' under ' + d.matchedDescription);
-        _dismissedTextLinkProblemIds.add(d.problemId);
-        await stripTextLinkBoilerplate(d.problemId);
+        await settleTextLinkAfterRelationship(d.problemId);
       } else if (d.kind === 'textlink-matchChildOfThis') {
         await window.ProblemNesting.commitParentLink(d.matchedId, d.problemId);
         announce('Nested ' + d.matchedDescription + ' under ' + d.problemDescription);
-        _dismissedTextLinkProblemIds.add(d.problemId);
-        await stripTextLinkBoilerplate(d.problemId);
+        await settleTextLinkAfterRelationship(d.problemId);
       } else if (d.kind === 'textlink-alreadyRelated' || d.kind === 'textlink-leaveAsIs') {
         // 'textlink-alreadyRelated': the relationship the text described is
         // already real. 'textlink-leaveAsIs': a DIFFERENT relationship
@@ -1287,15 +1313,30 @@
         // time). Either way — no write here, just the text cleanup. Unlike
         // the three commit branches above (which already have a real
         // relationship write to count/dismiss even if this fails), removing
-        // the text IS the whole action here — a failure means NOTHING
-        // changed, so return early rather than falling through to
-        // _linkedCount++/dismiss below: the card stays offered (d.linking
-        // still resets via finally) so the clinician can retry, and the
-        // failure message already came from stripTextLinkBoilerplate itself.
-        var stripped = await stripTextLinkBoilerplate(d.problemId);
-        if (!stripped) return;
-        announce('Removed the import text for ' + d.problemDescription);
+        // the text IS the whole action here — every outcome must be told
+        // apart (review finding: the old code announced success on a no-op
+        // and did nothing visible at all when the bridge was missing).
+        var stripResult = await stripTextLinkBoilerplate(d.problemId);
+        if (stripResult === 'failed') {
+          d.error = 'Failed to remove the import text — please try again.';
+          return; // card stays offered; d.linking resets via finally
+        }
+        if (stripResult === 'unavailable') {
+          d.error = 'The text-editing tool isn’t available on this page — the import text was not removed.';
+          return;
+        }
         _dismissedTextLinkProblemIds.add(d.problemId);
+        window.ProblemNesting.consumeTextLinkSuggestion(d.problemId);
+        if (stripResult === 'nothing-to-strip') {
+          // The text is already gone (removed elsewhere since the scan) —
+          // nothing was written just now, so don't count a change: dismiss
+          // the stale card, say what actually happened, and stop.
+          announce('The import text was already removed — nothing left to do.');
+          _pendingAction = null;
+          window.ProblemNesting.refresh();
+          return;
+        }
+        announce('Removed the import text for ' + d.problemDescription);
       } else if (d.kind === 'sig-major' || d.kind === 'sig-minor') {
         var sigTargetKey = d.kind === 'sig-major' ? 'major' : 'minor';
         await window.ProblemNesting.commitSignificanceChange(d.problemId, sigTargetKey);
@@ -1330,15 +1371,52 @@
   // real) — surfaced as its own distinct announcement rather than implying
   // the whole action failed, same non-fatal discipline problem-description-
   // cleanup.js's own applyLinkSuggestion uses for its identical step.
+  // Returns a distinct status per outcome rather than a bare boolean
+  // (review finding: the old true/false collapsed "stripped", "nothing to
+  // strip", "bridge missing" and "failed" into two values — a no-op strip
+  // was announced as "Removed the import text", a missing bridge was a
+  // silent dead click, and the failure announcement claimed "the
+  // relationship was created" even for the text-only actions that create
+  // none). The CALLER decides what each outcome means for its own action —
+  // no announcements happen in here.
+  //   'stripped'         — the text edit was posted and the text removed
+  //   'nothing-to-strip' — the edit form no longer carries recognisable
+  //                        boilerplate (someone already removed it)
+  //   'unavailable'      — the ProblemDescriptionCleanup bridge isn't on
+  //                        this page, so no text edit is possible
+  //   'failed'           — a real fetch/post error
   async function stripTextLinkBoilerplate(problemId) {
-    if (!window.ProblemDescriptionCleanup || !window.ProblemDescriptionCleanup.stripGenericAdditionalInfoText)
-      return false;
+    if (!window.ProblemDescriptionCleanup || !window.ProblemDescriptionCleanup.stripGenericAdditionalInfoText) {
+      return 'unavailable';
+    }
     try {
-      await window.ProblemDescriptionCleanup.stripGenericAdditionalInfoText(problemId);
-      return true;
+      var did = await window.ProblemDescriptionCleanup.stripGenericAdditionalInfoText(problemId);
+      return did ? 'stripped' : 'nothing-to-strip';
     } catch (err) {
-      announce('The relationship was created, but the import text could not be removed automatically.');
-      return false;
+      return 'failed';
+    }
+  }
+
+  // Shared tail of the three relationship-commit branches below: the
+  // relationship write has ALREADY succeeded; try the best-effort text
+  // strip, then settle the suggestion's lifecycle in problem-nesting.js's
+  // own list (review finding: the canvas-local dismissed Set is reset on
+  // every open(), so without consuming the SOURCE suggestion the same card
+  // came back on reopen offering to re-create the just-created
+  // relationship). Strip ok/no-op -> the suggestion is fully consumed;
+  // strip failed/unavailable -> the leftover text is the only remaining
+  // work, so the suggestion converts to the single "remove import text"
+  // offer instead of vanishing with the text still on the record.
+  async function settleTextLinkAfterRelationship(problemId) {
+    var stripResult = await stripTextLinkBoilerplate(problemId);
+    _dismissedTextLinkProblemIds.add(problemId);
+    if (stripResult === 'stripped' || stripResult === 'nothing-to-strip') {
+      window.ProblemNesting.consumeTextLinkSuggestion(problemId);
+    } else {
+      window.ProblemNesting.markTextLinkAlreadyRelated(problemId);
+      announce(
+        'The relationship was created, but the import text could not be removed automatically — reopen this canvas to try removing it again.'
+      );
     }
   }
 
@@ -1347,12 +1425,16 @@
   // confirm bar, whichever input proposed it.
   function proposeLink(childId, parentId, snap, descById) {
     if (!childId || !parentId || childId === parentId || !window.ProblemNesting) return;
+    var pending = buildPendingLink(childId, parentId, descById, snap.parentIdByProblemId);
     if (window.ProblemNesting.wouldCreateCycle(childId, parentId, snap.parentIdByProblemId)) {
-      _cycleError = 'Linking these two would create a loop — pick a different pair.';
-      render();
-      return;
+      // Nesting would loop — but a FLAT link between the same pair is
+      // non-hierarchical and always safe, so offer that instead of
+      // blocking the whole gesture (see buildPendingLink's nestAllowed
+      // comment). commitParentLink re-checks the cycle at commit time
+      // regardless, so this stays advisory, not the only line of defence.
+      pending.nestAllowed = false;
     }
-    _pendingAction = buildPendingLink(childId, parentId, descById, snap.parentIdByProblemId);
+    _pendingAction = pending;
     render();
   }
 

@@ -1878,5 +1878,50 @@ console.log('--- apiErrorMessage: non-2xx responses surface the server reason, n
   );
 }
 
+console.log('\n--- v3.227.1 review-fix source locks (two-step confirm / retry survival / empty-string strip) ---');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'problem-description-cleanup.js'), 'utf8');
+  // Finding 5: the three relationship-creating buttons arm a confirm step;
+  // only the confirm button commits. (The PR's own CHANGELOG claimed this
+  // discipline existed — now it does.)
+  check(src.includes('linkSuggestionPending'), 'relationship buttons arm a pending choice instead of committing');
+  check(
+    src.includes('ms-pdc-link-confirm-btn') && src.includes('ms-pdc-link-cancel-btn'),
+    'the confirm step renders explicit Confirm and Cancel controls'
+  );
+  check(
+    /relationship === 'alreadyRelated' \|\| relationship === 'leaveAsIs'/.test(src),
+    'only the text-only actions stay single-click; every relationship write goes through the confirm'
+  );
+  // Finding 9: a failed TEXT-ONLY strip keeps the suggestion offered so the
+  // retry button still exists, and a missing prefill code is a visible
+  // failure rather than a silently-vanishing suggestion.
+  check(
+    src.includes('keep the suggestion so the button is still there to retry'),
+    'text-only strip failure keeps st.linkSuggestion for retry'
+  );
+  check(
+    src.includes('the import text was not removed. Try again.'),
+    'a missing prefill code on a text-only action reads as a failure, never as success'
+  );
+  // Finding 4: the cleaned-value selection must accept a legitimate empty
+  // string — an || chain here silently no-ops the strip when the whole
+  // additionalInformation was boilerplate.
+  const stripIdx = src.indexOf('async function stripGenericAdditionalInfoText');
+  const stripBody = src.slice(stripIdx, stripIdx + 2200);
+  check(
+    stripBody.includes('f.cleaned != null'),
+    'stripGenericAdditionalInfoText picks the first finding with cleaned != null'
+  );
+  check(
+    !/var cleaned =\s*\(findings\.severityContradiction && findings\.severityContradiction\.cleaned\) \|\|/.test(
+      stripBody
+    ),
+    'the falsy || chain over cleaned values is gone'
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

@@ -215,6 +215,61 @@ input[class*='ms-pdc-']:focus-visible {
   color: #6b7280;
 }
 
+/* Two-step confirm for the three relationship-creating buttons (v3.227.1
+   review fix — the canvas already confirmed these writes; the inline widget
+   was single-click). Amber block, same "about to change the record" visual
+   language as the canvas's own confirm bar. */
+.ms-pdc-link-confirm {
+  padding: 8px 10px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+}
+
+.ms-pdc-link-confirm-msg {
+  font-size: 11px;
+  color: #78350f;
+  margin-bottom: 6px;
+}
+
+.ms-pdc-link-confirm-btn {
+  padding: 3px 8px;
+  background: #1d4ed8;
+  border: 1px solid #1d4ed8;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #fff;
+  cursor: pointer;
+}
+
+.ms-pdc-link-confirm-btn:hover:not(:disabled) {
+  background: #1e40af;
+}
+
+.ms-pdc-link-confirm-btn:disabled,
+.ms-pdc-link-cancel-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ms-pdc-link-cancel-btn {
+  padding: 3px 8px;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.ms-pdc-link-cancel-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
 .ms-pdc-panel {
   display: flex;
   flex-wrap: wrap;

@@ -2,6 +2,75 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.227.1] — 2026-08-09
+
+Review fixes for all 10 findings of the #276 review, before merge. The three
+write-path blockers first:
+
+- **Cycle guard no longer vacuous from the cleanup surface.** `commitParentLink`'s
+  cycle check ran against `_parentIdByProblemId`, which is only populated by the
+  nesting scan — a "Nest this under X" clicked in the "Check for retired/legacy
+  codes?" widget (where that scan never runs) passed the guard on an empty map
+  and could write a real hierarchy loop. The map is now flagged
+  `_parentMapComplete` only once the scan has filled it; before that,
+  `wouldCreateCycleAuthoritative()` walks the ancestor chain by fetching each
+  node's overview (caching what it learns) and **fails closed** — an unverifiable
+  chain refuses the nest rather than risking the loop.
+- **Two-step confirm on the inline widget's relationship buttons.** The canvas
+  confirmed these writes; the inline widget committed on a single click (and the
+  v3.227.0 CHANGELOG claimed otherwise). The three relationship buttons now arm
+  a confirm step stating the exact consequence ("will nest this problem under X —
+  displayed as a child…"), and only its Confirm commits. The text-only actions
+  (remove import text) stay single-click, consistent with the widget's other
+  text-cleanup buttons.
+- **Ambiguous matches are non-matches.** `matchProblemByName` returned the first
+  qualifying candidate — "(Grouped with Diabetes mellitus)" on a record with
+  Type 1 AND Type 2 diabetes presented an arbitrary pick as a confident "best
+  match" (duplicate problem entries tied the same way at the exact tier). A tie
+  at the winning tier now returns null, falling back to the existing "check
+  manually" note. No guessed link, ever — now including guesses between equals.
+
+And the rest:
+
+- **Empty-string strip bug**: `stripGenericAdditionalInfoText`'s `||` chain
+  treated a legitimate `cleaned === ''` (the text was entirely boilerplate) as
+  missing, silently no-opping the strip while the canvas announced success. Now
+  picks the first finding with `cleaned != null`.
+- **Canvas strip feedback is truthful**: the wrapper distinguishes
+  stripped / nothing-to-strip / bridge-unavailable / failed. A no-op is announced
+  as "already removed", a missing bridge is a visible card error (was a silent
+  dead click), and the "relationship was created, but…" message no longer
+  appears on text-only actions that create no relationship.
+- **Mid-scan patient-navigation races**: both `runScan` and
+  `runRetiredCodesScan` re-check the patient after every awaited batch
+  (including the new per-suggestion relationship checks) before touching state —
+  a scan completing after an SPA navigation can no longer clobber the new
+  patient's reset state with a 'done' over empty data.
+- **`checkExistingRelationship` children coverage**: the fallback overview fetch
+  now reads `childProblems` instead of discarding it, so the "leave as-is,
+  remove import text" escape hatch appears on the cleanup surface for a problem
+  whose only relationship is its children — matching the canvas.
+- **Per-choice confirm copy on the drop gesture**: the nest consequence (and the
+  re-parent "will move it out of there" disclosure) no longer sits over both
+  buttons; "Confirm — link problems" states its own flat-link consequence
+  (including "it stays under Z"). A pair whose nest would create a loop now
+  still gets the flat-link offer (with the loop named) instead of the whole
+  gesture being blocked — and the commit path can't nest a pair whose bar only
+  offered the flat link.
+- **Failed text-only strip keeps its button**: `applyLinkSuggestion` no longer
+  nulls the suggestion before the strip, so "please try again" actually has a
+  button to retry with; a missing prefill code reads as a visible failure, never
+  a silently-vanishing suggestion.
+- **Actioned canvas cards stay actioned**: committing a card now settles the
+  shared suggestion list via the bridge (consumed outright, or converted to the
+  single "remove import text" offer when only the strip failed) — reopening the
+  canvas no longer resurrects a card offering to re-create the just-created
+  relationship.
+
+Regression tests: +19 across `test-problem-text-linking.js` (ambiguity),
+`test-problem-nesting.js`, `test-problem-nesting-canvas.js` and
+`test-problem-description-cleanup.js` (source locks on every fix above).
+
 ## [v3.227.0] — 2026-08-09
 
 ### "Grouped with X" import text now suggests a real problem link
