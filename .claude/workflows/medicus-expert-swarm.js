@@ -10,10 +10,16 @@ export const meta = {
   ],
 };
 
-const research = typeof args === 'string' ? args : JSON.stringify(args, null, 2);
-if (!research || research === 'undefined') {
-  throw new Error('medicus-expert-swarm requires the research digest passed as args');
+// args may be the digest itself (string/object) or an absolute path to a JSON
+// digest file — a path keeps the orchestrator's prompt small; agents read it.
+const rawArgs = typeof args === 'string' ? args : JSON.stringify(args, null, 2);
+if (!rawArgs || rawArgs === 'undefined') {
+  throw new Error('medicus-expert-swarm requires the research digest (or a path to it) passed as args');
 }
+const isPath = typeof args === 'string' && args.startsWith('/') && args.endsWith('.json');
+const research = isPath
+  ? `The digest is stored as JSON at: ${args}\nYour FIRST action must be to Read that file in full.`
+  : rawArgs;
 
 const PROPOSALS_SCHEMA = {
   type: 'object',
