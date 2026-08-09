@@ -1,8 +1,10 @@
 /* Medicus Suite — shared "Bulk <verb>?" widget for AG-Grid task-list pages */
 /* (ms-tba-* prefix — "Task Bulk Action". Scoped to avoid Medicus conflicts,
-   same discipline as ms-pbe-*/problem-bulk-end.css, whose visual language
-   this deliberately matches for consistency across the suite's bulk-action
-   widgets.) */
+   same discipline as the ms-pbe- prefix in problem-bulk-end.css, whose
+   visual language this deliberately matches for consistency across the
+   suite's bulk-action widgets. NB: the "*" + "/" sequence a glob would put
+   here is exactly a comment terminator — the original header did that and
+   ended THIS comment early, leaving the next line as invalid CSS.) */
 
 .ms-tba-widget {
   display: block;
@@ -236,6 +238,21 @@ input[class*='ms-tba-']:focus-visible {
 .ms-tba-confirm-warning {
   font-size: 11px;
   color: #92400e;
+  margin-bottom: 8px;
+}
+
+/* Widened-scope banner (privacy-officer's unscoped fallback — see that
+   file's header). A boxed amber block, deliberately louder than
+   .ms-tba-confirm-warning's plain text: this one changes WHOSE tasks are on
+   screen, not just what the action does. */
+.ms-tba-scope-warning {
+  font-size: 12px;
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 6px;
+  padding: 8px 10px;
   margin-bottom: 8px;
 }
 

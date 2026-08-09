@@ -20,8 +20,15 @@
 //        channel names — never guessed, never typed per-machine). If the
 //        stamp isn't there yet (a click within the first second or two of
 //        page load, before page-world.js's staff-identity poll resolves),
-//        the assignee filter is simply omitted — a broader-than-"just mine"
-//        result set is a far smaller harm than the widget being unusable.
+//        the fetch WAITS for it — up to ~5s — before falling back to an
+//        unscoped fetch. The fallback keeps the widget usable, but it must
+//        never look identical to the scoped case: an unscoped list includes
+//        OTHER staff's pending alerts, and "Select all + Confirm" on it
+//        would acknowledge alerts assigned to other privacy officers,
+//        misattributing a compliance action. So the fallback carries a
+//        scopeWarning the engine renders as a banner on the select AND
+//        confirm steps and uses to withhold select-all for that load
+//        (row-by-row ticking stays available — each row names its patient).
 //   POST /tasks/patient-privacy-officer/complete
 //        body: { taskId } → 200 {}
 //
@@ -59,10 +66,29 @@
     verbGerund: 'Acknowledging',
     verbedAdjective: 'acknowledged',
     taskListSlug: 'patient_privacy_officer_alert_task',
-    listQueryString: function () {
+    listQueryString: async function () {
+      // The stamp can lag page load by a second or two (page-world.js's
+      // staff-identity poll) — wait for it rather than instantly widening
+      // the fetch, so the common early-click case still gets a correctly
+      // scoped "just mine" list.
       var staffId = currentStaffId();
+      for (var waited = 0; !staffId && waited < 5000; waited += 250) {
+        await new Promise(function (resolve) {
+          setTimeout(resolve, 250);
+        });
+        staffId = currentStaffId();
+      }
       var qs = 'statuses%5B%5D=pending&viewContext=homepage';
-      return staffId ? qs + '&masterAssignee=' + encodeURIComponent(staffId) : qs;
+      if (staffId) return qs + '&masterAssignee=' + encodeURIComponent(staffId);
+      // Unscoped fallback — MUST be visibly different from the scoped case;
+      // see this file's header. Consequence first, mechanism second.
+      return {
+        qs: qs,
+        scopeWarning:
+          'Could not confirm which alerts are yours — this list shows pending alerts for ALL staff, ' +
+          'not just you, and Select all is unavailable. Only tick alerts you know are yours, ' +
+          'or close and reopen this panel to try again.',
+      };
     },
     actionPath: '/tasks/patient-privacy-officer/complete',
     itemNounSingular: 'privacy officer alert',

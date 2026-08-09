@@ -2,6 +2,73 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.226.1] — 2026-08-09
+
+Fixes the two priority findings from the post-merge review of #272 (v3.226.0).
+
+### Legacy auto-publishers keep contributing pdc tallies (silent upgrade regression)
+
+v3.226.0 retired the once-daily unattended `maybeAutoPublish()` refresh in
+favour of the new contributor path — but the contributor is gated on
+`suite.pdcContribute.enabled`, which nothing set by default. An established
+publisher PC upgrading to v3.226.0 therefore silently stopped circulating its
+daily "Clean up code" tallies: `runPdcContribution` returned `not-enabled` on
+every panel/Options open, with no error anywhere, until a human found the new
+Options toggle on that machine.
+
+`shared/io/pdc-contribute.js` gains `migrateLegacyAutoPublisher()`: when a
+machine has **no explicit contribute choice stored** and has an **established
+publish config** — the exact `suite.practiceProfile.publisher` any-module-
+checked gate the retired `maybeAutoPublish()` itself used — it is migrated to
+`enabled: true` (stamped `enabledVia: 'auto-publish-migration'`) on its next
+contribution cycle, from either trigger (side panel open or Options). The
+migration only ever continues an already-established habit: it never enables a
+machine that wasn't publishing before, and an explicit `enabled: false` (the
+admin turned the toggle off) always wins and is never overwritten. Options now
+re-renders the section after the first run so a just-migrated machine's toggle
+shows ticked without a reopen. Regression-locked in `test-pdc-contribute.js`
+(11 new checks).
+
+### Privacy Officer bulk-acknowledge: a widened list is now visible, never silent
+
+The `masterAssignee` scoping on the Privacy Officer Alerts list fetch depends
+on the `data-ch-staff` identity stamp, which can lag page load. v3.226.0's
+fallback simply omitted the filter — and the resulting **all-staff** list
+rendered pixel-identical to the correctly-scoped "just mine" case, so
+"Select all + Confirm" within the first seconds of a page load could
+acknowledge alerts assigned to **other** privacy officers with no sign
+anything was different (a misattributed compliance action).
+
+Three changes, engine (`content-scripts/task-bulk-action.js`) +
+instantiation (`privacy-officer-bulk-acknowledge.js`):
+
+- **Wait before widening.** `listQueryString` may now be async; the privacy-
+  officer instantiation polls the identity stamp for up to 5s before falling
+  back, so the common early-click case still gets a correctly scoped list.
+- **The fallback announces itself.** `listQueryString` may resolve to
+  `{ qs, scopeWarning }`; a non-null `scopeWarning` renders as a boxed amber
+  banner on **both** the select and confirm steps, stating the consequence
+  first ("this list shows pending alerts for ALL staff, not just you").
+- **Select-all is withheld while the scope is unconfirmed** — the button is
+  never rendered, not just disabled. Row-by-row ticking stays available (each
+  row names its patient, so per-row selection remains a considered act).
+
+The warning state is applied only after the SPA-navigation generation check
+and reset with the rest of the widget state, so a stale fetch can't pollute
+the next page entry. EPS Cancellation Failures is unaffected (its confirmed
+query never had assignee scoping). Regression-locked in
+`test-task-bulk-action.js` (12 new checks: `normaliseListQuery` unit tests +
+source pins on both controls).
+
+### Also fixed
+
+`task-bulk-action.css`'s header comment contained the literal glob
+`ms-pbe-*/`, whose `*/` terminated the comment three lines early — the stray
+prose after it was invalid CSS, and the parser's error recovery consumed the
+adjacent `.ms-tba-widget` rule along with it (dropping that block's margin/
+font styling in the live page). Reworded the comment; the file now parses
+clean (`prettier --check` passes, where before it reported a CssSyntaxError).
+
 ## [v3.226.0] — 2026-08-08
 
 ### Cleanup Code Preferences: automatic practice-pool contribution

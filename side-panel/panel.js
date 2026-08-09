@@ -352,9 +352,7 @@ function isTypingTarget(el) {
 function jumpableTabs() {
   return Array.from(document.querySelectorAll('.nav-tab')).filter(
     (t) =>
-      !t.classList.contains('nav-tab-hidden') &&
-      t.dataset.module !== 'visualiser' &&
-      t.dataset.module !== 'rota-app'
+      !t.classList.contains('nav-tab-hidden') && t.dataset.module !== 'visualiser' && t.dataset.module !== 'rota-app'
   );
 }
 
@@ -2270,8 +2268,7 @@ async function fetchAndRenderSlaStrip() {
   } else {
     const oldest = window.SlaBreachCore.formatAge(result.oldestAgeMs);
     const plural = result.urgentCount === 1 ? '' : 's';
-    text =
-      `${result.urgentCount} urgent request${plural} unactioned` + (oldest ? ` · oldest ${oldest}` : '');
+    text = `${result.urgentCount} urgent request${plural} unactioned` + (oldest ? ` · oldest ${oldest}` : '');
   }
 
   slaStripEl.className = `sla-strip sla-strip--${result.level}`;
@@ -2418,7 +2415,10 @@ initPalette();
 // shared folder" flow in Options (that flow's own enable toggle + connect
 // button live there; this just supplies the periodic trigger that doesn't
 // depend on anyone opening Options). A machine that has never enabled
-// contribution (suite.pdcContribute.enabled !== true) is a same-cycle no-op.
+// contribution (suite.pdcContribute.enabled !== true) is a same-cycle no-op —
+// except an established pre-v3.226.0 auto-publisher, which is migrated to
+// enabled:true on first run so retiring maybeAutoPublish() doesn't silently
+// stop its daily tally circulation (see migrateLegacyAutoPublisher).
 (async () => {
   try {
     if (!window.PdcContribute || !window.FsHandleStore) return;
@@ -2456,6 +2456,10 @@ initPalette();
         const key = window.PdcContribute.PDC_CONTRIBUTE_STATE_KEY;
         const r = await chrome.storage.local.get(key);
         await chrome.storage.local.set({ [key]: Object.assign({}, r[key] || {}, patch) });
+      },
+      getPublisherState: async () => {
+        const r = await chrome.storage.local.get('suite.practiceProfile.publisher');
+        return r['suite.practiceProfile.publisher'] || null;
       },
       loadHandle: resolveHandle,
       readHandleText: async (h) => (await h.getFile()).text(),

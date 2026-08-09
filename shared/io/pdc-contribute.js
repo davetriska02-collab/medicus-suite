@@ -175,6 +175,28 @@
     return { json, changed: true };
   }
 
+  // One-time migration for machines that were unattended daily publishers
+  // before the contributor existed. Retiring maybeAutoPublish()/
+  // doPublish({auto:true}) without this would silently stop those machines'
+  // daily pdc tally circulation on upgrade: the replacement is gated on
+  // suite.pdcContribute.enabled, which nothing set by default, so an
+  // established publisher PC would quietly go dark until a human found the
+  // new Options toggle. The gate here is EXACTLY the one the retired
+  // maybeAutoPublish used (an established publish config: any saved
+  // publisher module checked) — so this only ever continues an
+  // already-established habit, never turns a random PC into a contributor.
+  // An explicit enabled true/false already stored (the admin touched the
+  // toggle) always wins and is never overwritten.
+  async function migrateLegacyAutoPublisher(deps) {
+    const state = await deps.getState();
+    if (state && typeof state.enabled === 'boolean') return { migrated: false, reason: 'explicit-choice-exists' };
+    const saved = await deps.getPublisherState();
+    const hasEstablishedConfig = Object.values((saved && saved.modules) || {}).some((m) => m && m.checked);
+    if (!hasEstablishedConfig) return { migrated: false, reason: 'no-publisher-config' };
+    await deps.setState({ enabled: true, enabledVia: 'auto-publish-migration' });
+    return { migrated: true };
+  }
+
   // Orchestrates one full contribution cycle. Silent and fire-and-forget by
   // contract — every caller must treat every returned `reason` as routine, not
   // as an error to surface; a quiet retry next cycle is always correct. The
@@ -184,6 +206,11 @@
   // deps:
   //   getState()                  -> { enabled, lastContributedAt, lastResult } | null
   //   setState(patch)              -> merge patch into stored state
+  //   getPublisherState()          -> stored suite.practiceProfile.publisher | null
+  //                                    (optional — when present, machines with an
+  //                                    established publish config and no explicit
+  //                                    contribute choice are migrated to
+  //                                    enabled:true; see migrateLegacyAutoPublisher)
   //   loadHandle()                 -> FileSystemFileHandle | null (already
   //                                    resolved to whichever handle this
   //                                    machine should use)
@@ -199,7 +226,11 @@
     const now = deps.now ? deps.now() : new Date();
     const todayISO = _todayStr(now);
 
-    const state = await deps.getState();
+    let state = await deps.getState();
+    if ((!state || typeof state.enabled !== 'boolean') && deps.getPublisherState) {
+      const migration = await migrateLegacyAutoPublisher(deps);
+      if (migration.migrated) state = await deps.getState();
+    }
     if (!state || state.enabled !== true) return { ran: false, reason: 'not-enabled' };
     if (!shouldContributeToday(state, todayISO)) return { ran: false, reason: 'already-today' };
 
@@ -264,6 +295,7 @@
     shouldContributeToday,
     verifyProfileFile,
     buildPdcContribution,
+    migrateLegacyAutoPublisher,
     runPdcContribution,
   };
 
