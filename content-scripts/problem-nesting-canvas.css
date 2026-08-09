@@ -428,6 +428,105 @@
   color: var(--text-2);
 }
 
+/* "(Grouped with X)" text-derived suggestions (2026-08-09) — deliberately
+   NOT draggable (solid border, default cursor) unlike .ms-pnc-tray-tile
+   above: this is already a specific resolved pair, offering a relationship-
+   TYPE choice via buttons instead of a drop target. */
+.ms-pnc-tray-group-textlink {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.ms-pnc-textlink-tile {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-sm);
+  margin-bottom: 4px;
+}
+
+.ms-pnc-textlink-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.ms-pnc-textlink-btn {
+  padding: 3px 7px;
+  background: var(--bg-mid);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.ms-pnc-textlink-btn:hover {
+  background: var(--accent-dim);
+}
+
+/* "Leave as-is, remove text" (2026-08-09) — a DECLINE action (no
+   relationship write), styled neutral/muted to read as distinct from the
+   accent-coloured relationship-creating buttons above. */
+.ms-pnc-textlink-btn-leave {
+  background: var(--bg-mid);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+
+.ms-pnc-textlink-btn-leave:hover {
+  background: var(--border);
+}
+
+/* "Unknown significance" tray suggestions (2026-08-09) — amber, the SAME
+   warning colour already used for the cycle-error confirm bar, since
+   neither is a confident auto-suggestion the way SNOMED/text-link cards are
+   (both grades are offered, the clinician always decides). */
+.ms-pnc-tray-group-sig {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.ms-pnc-sig-tile {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-sm);
+  margin-bottom: 4px;
+}
+
+.ms-pnc-sig-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.ms-pnc-sig-btn {
+  padding: 3px 7px;
+  background: var(--bg-mid);
+  border: 1px solid var(--amber);
+  border-radius: var(--r-sm);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--amber);
+  cursor: pointer;
+}
+
+.ms-pnc-sig-btn:hover {
+  background: var(--amber-dim);
+}
+
 /* ── Confirm bar / footer ─────────────────────────────────────────────────── */
 
 .ms-pnc-confirmbar {
@@ -483,6 +582,22 @@
 
 .ms-pnc-confirm-btn:hover {
   background: var(--accent-hover);
+}
+
+/* Secondary confirm choice (2026-08-09) — only rendered alongside the
+   primary "nest it" button for a drag/keyboard drop, offering the flat-link
+   alternative. Outlined in the SAME green already used for existing
+   flat-link connector lines (.ms-pnc-link-line), so the colour itself
+   signals "this creates a flat link", distinct from the solid accent-filled
+   primary "nest it" button. */
+.ms-pnc-confirm-btn-secondary {
+  background: transparent;
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.ms-pnc-confirm-btn-secondary:hover {
+  background: var(--green-dim, rgba(34, 197, 94, 0.12));
 }
 
 .ms-pnc-cancel:disabled,

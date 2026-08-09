@@ -53,6 +53,14 @@ const {
   codeQualityConcernExists,
 } = require('./content-scripts/problem-description-cleanup.js');
 const genericAdditionalInfoText = require('./rules/generic-additional-info-text.json');
+const MSProblemTextLinking = require('./shared/problem-text-linking.js');
+// computeAdditionalInfoFindings's linkSuggestion action reads
+// window.MSProblemTextLinking at call time (browser classic-script global) —
+// stubbed here so the matching logic is exercised for real rather than
+// silently no-op'd because `window` doesn't exist in Node. Safe: this file's
+// own browser-boot section (bottom of problem-description-cleanup.js) has
+// already returned via `module.exports` above by the time this runs.
+global.window = { MSProblemTextLinking: MSProblemTextLinking };
 
 let passed = 0,
   failed = 0;
@@ -1286,10 +1294,11 @@ console.log('--- literalTextsFromEntries / patternEntriesFromEntries: splitting 
     'the pattern entry (no `.text` field) never leaks an undefined into the literal list'
   );
   check(
-    patterns.length === 2 &&
+    patterns.length === 3 &&
       patterns.some((p) => p.id === 'severityDefaultingContradiction') &&
-      patterns.some((p) => p.id === 'sourceSystemPriorityValue'),
-    'both configured pattern entries are returned (got ' + patterns.map((p) => p.id).join(', ') + ')'
+      patterns.some((p) => p.id === 'sourceSystemPriorityValue') &&
+      patterns.some((p) => p.id === 'groupedWithReference'),
+    'all three configured pattern entries are returned (got ' + patterns.map((p) => p.id).join(', ') + ')'
   );
   check(literalTextsFromEntries(null).length === 0, 'null entries -> empty literal list, never throws');
   check(patternEntriesFromEntries(null).length === 0, 'null entries -> empty pattern list, never throws');
@@ -1632,6 +1641,92 @@ console.log('--- computeAdditionalInfoFindings: genuine free text, other edge ca
       findings.genericAdditionalInfo &&
       findings.genericAdditionalInfo.cleaned === '',
     'a solo "Problem severity: Major" line with no paired defaulting line -> plain literal strip, no correction attempted'
+  );
+}
+
+console.log('--- computeAdditionalInfoFindings: linkSuggestion action (2026-08-09, "(Grouped with X)") ---');
+{
+  // Synthetic entry — the real rules/generic-additional-info-text.json entry
+  // is pending Nick's verbatim confirmation of the exact live text (this
+  // codebase's own "confirm before adding" discipline — see that file's
+  // header). Exercising the CODE PATH here does not require the shipped
+  // entry to exist yet; the feature is entirely inert in production until
+  // that entry is actually added (patternEntriesFromEntries never sees it).
+  const linkEntries = [
+    {
+      kind: 'pattern',
+      id: 'groupedWithReference',
+      pattern: '\\(Grouped with ([^)]+)\\)',
+      flags: 'i',
+      action: { type: 'linkSuggestion', capturesProblemName: 1 },
+    },
+  ];
+  const otherProblems = [
+    { id: 'p2', description: 'Anxiety with depression' },
+    { id: 'p3', description: 'Type 2 diabetes mellitus' },
+  ];
+
+  const exactFindings = computeAdditionalInfoFindings(
+    '(Grouped with Anxiety with depression)',
+    'minor',
+    linkEntries,
+    otherProblems
+  );
+  check(
+    !!exactFindings.linkSuggestion && exactFindings.linkSuggestion.problemName === 'Anxiety with depression',
+    'captures the referenced problem name from the parenthesised text'
+  );
+  check(
+    !!exactFindings.linkSuggestion.match &&
+      exactFindings.linkSuggestion.match.problemId === 'p2' &&
+      exactFindings.linkSuggestion.match.confidence === 'exact',
+    'resolves to the exact matching problem on the record'
+  );
+  check(
+    exactFindings.linkSuggestion.cleaned === '',
+    'the boilerplate text is removed from `cleaned` regardless of match outcome'
+  );
+  check(
+    exactFindings.genericAdditionalInfo === null,
+    'linkSuggestion does not ALSO produce a redundant plain generic-strip offer for the same text'
+  );
+
+  const noMatchFindings = computeAdditionalInfoFindings(
+    '(Grouped with Some unrelated condition)',
+    'minor',
+    linkEntries,
+    otherProblems
+  );
+  check(
+    !!noMatchFindings.linkSuggestion && noMatchFindings.linkSuggestion.match === null,
+    'no candidate on the record -> match is null (informational only), never a guessed link'
+  );
+  check(
+    !!noMatchFindings.genericAdditionalInfo,
+    'an UNMATCHED linkSuggestion coexists with the plain strip offer (same as reviewSeverity) — there is no confident action to supersede it with'
+  );
+
+  const noOtherProblemsFindings = computeAdditionalInfoFindings(
+    '(Grouped with Anxiety with depression)',
+    'minor',
+    linkEntries
+    // otherProblems omitted entirely — existing callers that haven't been
+    // updated must still work, degrading to "no match" rather than throwing.
+  );
+  check(
+    !!noOtherProblemsFindings.linkSuggestion && noOtherProblemsFindings.linkSuggestion.match === null,
+    'otherProblems omitted -> degrades to no-match, never throws (backward compatible with any caller not yet passing it)'
+  );
+
+  const genuineTextFindings = computeAdditionalInfoFindings(
+    'Patient reports ongoing symptoms.',
+    'minor',
+    linkEntries,
+    otherProblems
+  );
+  check(
+    genuineTextFindings.linkSuggestion === null,
+    'no "(Grouped with X)" text present -> linkSuggestion stays null, genuine free text untouched'
   );
 }
 

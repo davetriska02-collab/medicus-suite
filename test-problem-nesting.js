@@ -14,6 +14,7 @@
 
 const {
   buildUpdateParentProblemPayload,
+  buildUpdateProblemLinksPayload,
   resolveOverviewConceptId,
   wouldCreateCycle,
   dateSortKey,
@@ -21,6 +22,8 @@ const {
   predatesParent,
   buildOverridePairSet,
   buildNestingSuggestions,
+  buildTextLinkSuggestions,
+  buildUnknownSignificanceSuggestions,
   manualChildOptions,
   buildDuplicateGroups,
   pickEarliestCopyId,
@@ -57,6 +60,21 @@ console.log('--- buildUpdateParentProblemPayload: the confirmed three-field cont
   check(
     Object.keys(payload).sort().join(',') === 'parentProblemId,patientId,problemId',
     'exactly the three confirmed fields, nothing extra — NOT a full-record replace'
+  );
+}
+
+console.log('--- buildUpdateProblemLinksPayload: the confirmed update-problem-links contract ---');
+{
+  const payload = buildUpdateProblemLinksPayload('pat-1', 'prob-1', ['a', 'b']);
+  check(payload.patientId === 'pat-1', 'patientId passed through');
+  check(payload.problemId === 'prob-1', 'problemId passed through');
+  check(
+    JSON.stringify(payload.problemIdsToLink) === JSON.stringify(['a', 'b']),
+    'problemIdsToLink passed through as-is (a FULL array, never a single id — see commitFlatLink)'
+  );
+  check(
+    Object.keys(payload).sort().join(',') === 'patientId,problemId,problemIdsToLink',
+    'exactly the three confirmed fields'
   );
 }
 
@@ -213,6 +231,76 @@ console.log('--- buildNestingSuggestions: the safety rules ---');
   check(
     buildNestingSuggestions(problems, info, hits).length === 1,
     'omitting overridePairHits entirely still works — defaults to empty, fully backward compatible'
+  );
+}
+
+console.log('--- buildTextLinkSuggestions: "(Grouped with X)" text-derived suggestions (2026-08-09) ---');
+{
+  const MSProblemTextLinking = require('./shared/problem-text-linking.js');
+  const problems = [
+    { id: 'p1', description: 'Depression, unspecified' },
+    { id: 'p2', description: 'Anxiety with depression' },
+    { id: 'p3', description: 'Type 2 diabetes mellitus' },
+  ];
+  const linkEntries = [
+    {
+      kind: 'pattern',
+      id: 'groupedWithReference',
+      pattern: '\\(Grouped with ([^)]+)\\)',
+      flags: 'i',
+      action: { type: 'linkSuggestion', capturesProblemName: 1 },
+    },
+  ];
+  const info = {
+    p1: { additionalInformation: '(Grouped with Anxiety with depression)' },
+    p2: { additionalInformation: null },
+    p3: { additionalInformation: 'Genuine free text, nothing generic here.' },
+  };
+  const out = buildTextLinkSuggestions(problems, info, linkEntries, MSProblemTextLinking);
+  check(out.length === 1, 'exactly one problem carries a resolvable reference (got ' + out.length + ')');
+  check(
+    out[0].problemId === 'p1' && out[0].matchedProblemId === 'p2' && out[0].confidence === 'exact',
+    "resolves p1's reference to p2, the exact-matching problem on the record"
+  );
+  check(
+    buildTextLinkSuggestions(problems, info, linkEntries, null).length === 0,
+    'no matcher injected -> empty list, never throws (defensive — the browser call site always injects one)'
+  );
+  check(buildTextLinkSuggestions([], {}, linkEntries, MSProblemTextLinking).length === 0, 'no problems -> empty list');
+  const infoNoMatch = { p1: { additionalInformation: '(Grouped with Some unrelated condition)' } };
+  check(
+    buildTextLinkSuggestions([problems[0]], infoNoMatch, linkEntries, MSProblemTextLinking).length === 0,
+    'a reference with no confident match on the record produces NO suggestion here (that case is informational-only, handled by problem-description-cleanup.js instead)'
+  );
+}
+
+console.log('--- buildUnknownSignificanceSuggestions: "flag unknown, offer major/minor" (2026-08-09) ---');
+{
+  const problems = [
+    { id: 'p1', description: 'Chronic kidney disease stage 3' },
+    { id: 'p2', description: 'Type 2 diabetes mellitus' },
+    { id: 'p3', description: 'Hypertension' },
+  ];
+  const info = {
+    p1: { significance: 'Unknown Significance' },
+    p2: { significance: 'Major' },
+    p3: { significance: 'Minor' },
+  };
+  const out = buildUnknownSignificanceSuggestions(problems, info);
+  check(out.length === 1, 'exactly one problem is currently Unknown Significance (got ' + out.length + ')');
+  check(
+    out[0].problemId === 'p1' && out[0].currentSignificance === 'Unknown Significance',
+    'flags p1 with its current significance label carried through'
+  );
+  check(
+    buildUnknownSignificanceSuggestions(problems, { p1: {}, p2: {}, p3: {} }).length === 3,
+    'a missing significance field defaults to "Unknown" and is flagged too (Medicus itself defaults an ungraded problem this way)'
+  );
+  check(buildUnknownSignificanceSuggestions([], {}).length === 0, 'no problems -> empty list');
+  check(buildUnknownSignificanceSuggestions(null, null).length === 0, 'null inputs -> empty list, never throws');
+  check(
+    buildUnknownSignificanceSuggestions(problems, {}).length === 3,
+    'null infoById entries -> defaults to "Unknown" per problem, same as a missing significance field'
   );
 }
 

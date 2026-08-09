@@ -2,6 +2,108 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.227.0] — 2026-08-09
+
+### "Grouped with X" import text now suggests a real problem link
+
+Some GP2GP-imported problems carry a `(Grouped with X)` free-text fragment —
+a structured relationship from the source system, flattened into text on
+import, naming another problem on the same record by description. This was
+previously invisible to both the "Check for retired/legacy codes?" scan and
+the "Organise problems" canvas; it's now detected and offered as an actual
+Medicus relationship instead of just noise to strip.
+
+`rules/generic-additional-info-text.json` gains a new `groupedWithReference`
+pattern entry with a `linkSuggestion` action type. The referenced name is
+resolved against the patient's own other active problems via the new
+`shared/problem-text-linking.js` (word-overlap matching only — no fuzzy/
+semantic guessing, same discipline as `shared/coding-specificity.js`'s
+`normaliseText`/`descendantAlternatives`): an **exact** match, a **partial**
+match (every significant word in the reference present in a candidate's
+description), or no match at all, in which case the text is surfaced as a
+plain review note rather than a guessed link.
+
+A confident match offers all three relationship choices Nick asked for —
+flat link (the new `commitFlatLink`, exercising the previously display-only
+`update-problem-links` write for the first time), or nesting in either
+direction (reusing `commitParentLink`) — both **inline in the retired-codes
+widget** (`content-scripts/problem-description-cleanup.js`) and **in the
+Organise-problems canvas tray** (`content-scripts/problem-nesting-canvas.js`),
+sharing the one matching module so both surfaces can never disagree about
+which problem a reference resolves to. Every write goes through the existing
+two-step confirm-bar discipline; none commits directly on click. Regression-
+locked in `test-problem-text-linking.js` (23 checks) plus additions to
+`test-problem-nesting.js`, `test-problem-description-cleanup.js`, and
+`test-problem-nesting-canvas.js`.
+
+Several same-day follow-ups (Nick, 2026-08-09):
+
+- **Text cleanup on link.** Both surfaces now offer to remove the
+  "(Grouped with X)" boilerplate as part of the linking action itself,
+  matching the discipline already established elsewhere in this widget for
+  other generic import text — the inline widget already did this
+  automatically; the canvas tray now matches it (new
+  `window.ProblemDescriptionCleanup.stripGenericAdditionalInfoText`, reused
+  by the canvas via bridge rather than duplicating the fetch-prefill/build-
+  payload/post sequence a second time).
+- **Existing-relationship check.** Before offering to create a relationship,
+  both surfaces now check whether the two problems are ALREADY linked or
+  nested (either direction) — someone may have already fixed this manually
+  in Medicus. When they are, the 3-way relationship offer is replaced with a
+  single "Remove import text" action instead of a redundant write. The new
+  `checkExistingRelationship` (`content-scripts/problem-nesting.js`) always
+  fetches linked-problem ids fresh (no cheaper confirmed source exists) but
+  only ever runs for the rare confidently-matched suggestion, never per
+  problem on the list — reusing already-scanned parent/child data where
+  available and falling back to a fresh overview fetch only when it isn't.
+- **Locating a text-link suggestion in the tree.** A "(Grouped with X)"
+  suggestion card is a duplicate of a REAL problem already visible in the
+  tree (unlike a SNOMED suggestion's child, which the tree hides while it's
+  suggestion-only) — every text-link tray tile (not just the already-related
+  ones) now draws the same dotted connector a SNOMED candidate does, but as
+  a SELF-pointer back to its own tree tile rather than to a relationship
+  target (which is already named in the card's own text) — 2026-08-09
+  follow-up: "a dotted line between the two identical tiles." Deliberately
+  different from the SNOMED tray's own line semantics (candidate → parent
+  option, never itself), noted inline as a justified departure.
+- **Drag-and-drop can now create a flat link, not just a nest.** Dropping
+  one problem onto another (or the keyboard pick-up-and-drop equivalent)
+  previously only ever proposed nesting. The confirm bar now offers a
+  second choice alongside "Confirm — nest it" — "Confirm — link problems"
+  — creating a flat, non-hierarchical link via the same `commitFlatLink`
+  the text-derived suggestions already use, so the drag gesture covers
+  both relationship types Medicus supports, not just one.
+- **"Unknown significance" now flagged in the canvas.** The old accordion
+  widget already had a bulk significance re-grade tool (`SIG_TARGETS`,
+  `confirmSignificanceBatch`), but it was never surfaced in the "Organise
+  problems" canvas — a clinician had to know the old widget existed to find
+  it. The canvas tray now flags every problem whose current significance
+  reads as "Unknown" (new pure `buildUnknownSignificanceSuggestions`,
+  reusing the same prefix-match logic the old tool's own dropdown already
+  used) and offers both "Set Major" and "Set Minor" side by side — unlike
+  every other suggestion type in this tray, there's no confident auto-pick,
+  the clinician always chooses. New single-problem `commitSignificanceChange`
+  reuses the OLD tool's exact confirmed full-replace write rather than a
+  second copy of it. Computed fresh on every snapshot read (not cached at
+  scan time, unlike the SNOMED/text-link suggestions) — cheap and pure, so a
+  just-committed change stops being offered immediately with no extra
+  dismissed-ids bookkeeping needed.
+- **"Leave as-is, remove text" for a wrongly-guessed match.** Real case
+  found live: a "(Grouped with X)" text resolved to a plausible problem via
+  word-overlap matching, but the clinician had actually already sorted the
+  problem out by linking/nesting it with a DIFFERENT problem entirely — so
+  `checkExistingRelationship`'s original check (specifically against the
+  text's guess) correctly reported "not related," even though the problem
+  wasn't actually unaddressed. `checkExistingRelationship` now returns
+  `{relatedToMatch, hasAnyRelationship}` instead of a single boolean —
+  `hasAnyRelationship` covers a parent, any children, or any flat link with
+  ANYONE, not just the specific matched problem. When true but
+  `relatedToMatch` is false, both surfaces now show a 4th "Leave as-is,
+  remove import text" button alongside the original 3-way offer (which
+  still stands — the text's guess might be right in addition to the
+  existing relationship), styled neutral/grey as a decline action distinct
+  from the relationship-creating buttons.
+
 ## [v3.226.1] — 2026-08-09
 
 Fixes the two priority findings from the post-merge review of #272 (v3.226.0).
