@@ -41,7 +41,10 @@ From a Claude Code session in this repo:
    (`args` is the Stage 1 return value — string or object both work.)
 3. The orchestrator synthesises the graded proposals into the top-10 plan.
 
-Or just ask: _"run the next-level swarm"_ — the orchestrator drives all stages.
+Or just ask: _"run the next-level swarm"_ — the project skill
+(`.claude/skills/next-level-swarm/SKILL.md`) triggers on that phrase and drives
+all stages, including the virtual-dave fact-check and the `docs/plans/` filing
+convention.
 
 ## Design notes
 

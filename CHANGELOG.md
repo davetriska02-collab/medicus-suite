@@ -14,7 +14,11 @@ buildable developments, stress-tested by a two-judge challenge panel: ruthless s
 time-poor working GP). The orchestrating session synthesises the graded proposals into a
 Top-10 next-best-developments plan, filed under `docs/plans/`. Architecture and run
 instructions in `docs/AGENT-SWARM.md`. First run's output:
-`docs/plans/next-level-top10-2026-08.md`.
+`docs/plans/next-level-top10-2026-08.md`. The whole pipeline is invokable as a project
+skill — `.claude/skills/next-level-swarm/` — triggered by "run the next-level swarm"
+(or `/next-level-swarm`), which also encodes the mandatory virtual-dave fact-check
+before a plan lands (the first run's fact-check caught a would-break-production error
+in the flagship safety item).
 
 ## [v3.226.0] — 2026-08-08
 
