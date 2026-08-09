@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.226.1] — 2026-08-09
+
+### Dev tooling: the Next-Level Swarm (multi-agent planning pipeline)
+
+New re-runnable agent-swarm pipeline for roadmap planning — no extension code changes.
+`.claude/workflows/medicus-research-swarm.js` (4 parallel Sonnet analysts: market scan,
+tech-trends scan, hands-on engineering review, hands-on product/UX review) feeds
+`.claude/workflows/medicus-expert-swarm.js` (6 parallel Opus expert personas proposing
+buildable developments, stress-tested by a two-judge challenge panel: ruthless skeptic +
+time-poor working GP). The orchestrating session synthesises the graded proposals into a
+Top-10 next-best-developments plan, filed under `docs/plans/`. Architecture and run
+instructions in `docs/AGENT-SWARM.md`. First run's output:
+`docs/plans/next-level-top10-2026-08.md`. The whole pipeline is invokable as a project
+skill — `.claude/skills/next-level-swarm/` — triggered by "run the next-level swarm"
+(or `/next-level-swarm`), which also encodes the mandatory virtual-dave fact-check
+before a plan lands (the first run's fact-check caught a would-break-production error
+in the flagship safety item).
+
 ## [v3.226.0] — 2026-08-08
 
 ### Cleanup Code Preferences: automatic practice-pool contribution
