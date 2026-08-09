@@ -543,6 +543,13 @@
       parentDescription: byId[parentId] || parentId,
       previousParentId: previousParentId,
       previousParentDescription: previousParentId ? byId[previousParentId] : null,
+      // false when nesting this pair would create a hierarchy loop
+      // (proposeLink's cycle check). The FLAT link is still legitimate for
+      // such a pair — flat links are non-hierarchical and can never loop —
+      // so instead of blocking the whole drop (review note: a pair that
+      // couldn't nest could never be flat-linked by drag either), the
+      // confirm bar drops the nest choice and offers only the flat link.
+      nestAllowed: true,
       linking: false,
       error: null,
     };
@@ -604,6 +611,18 @@
   // tile's own action buttons; only the confirm copy and which bridge
   // function fires on confirm differ.
   var _pendingAction = null;
+  // Session-local, canvas-only (never touches problem-nesting.js's own
+  // state/bridge): problemIds whose text-derived suggestion has just been
+  // successfully actioned. Unlike the SNOMED tray (filterLiveSuggestions
+  // re-checks the live parent map fresh every render, so an actioned
+  // suggestion disappears automatically), _textLinkSuggestions has no
+  // equivalent live-state check — the underlying "(Grouped with X)" text
+  // stays on the record until problem-description-cleanup.js's OWN apply
+  // path strips it (a write this canvas never makes), so without this the
+  // same card would keep reappearing after every render even though the
+  // writes themselves are safely idempotent (commitFlatLink/commitParentLink
+  // both no-op harmlessly on a relationship that already exists).
+  var _dismissedTextLinkProblemIds = new Set();
   var _cycleError = null;
   var _dragPayload = null;
   var _lineUpdateScheduled = false;
@@ -786,9 +805,151 @@
     );
   }
 
-  function trayHtml(groups, infoById) {
+  // "(Grouped with X)" text-derived suggestion card (2026-08-09) — NOT
+  // draggable, unlike trayTileHtml above: this is already a specific
+  // resolved pair (see shared/problem-text-linking.js's matching), so there
+  // is nothing to drop it ONTO — the three buttons offer the relationship-
+  // TYPE choice instead (same three-way choice content-scripts/problem-
+  // description-cleanup.js's own linkSuggestionHtml offers, so a clinician
+  // sees identical wording whichever surface they act from). Each click sets
+  // _pendingAction, same two-step confirm-bar discipline as every other
+  // write in this canvas — never commits directly on click.
+  function textLinkTileHtml(s) {
+    // data-candidate-ids is self-referencing here (s.problemId, not
+    // s.matchedProblemId) — deliberately different from trayTileHtml's own
+    // use of the SAME attribute above (there it points at CANDIDATE
+    // targets). A "(Grouped with X)" suggestion's subject is a REAL problem
+    // that already renders normally in the tree (unlike a SNOMED
+    // suggestion's child, which buildProblemTree hides from the tree while
+    // it's suggestion-only) — so this card is a genuine duplicate of a tile
+    // already visible on the left. The dotted line is a locator back to
+    // that tile, not a relationship indicator (the relationship is already
+    // named in the card's own text below) — 2026-08-09 follow-up: "I would
+    // like a dotted line between the two identical tiles."
+    var selfPointerAttrs = ' data-problem-id="' + esc(s.problemId) + '" data-candidate-ids="' + esc(s.problemId) + '"';
+    // Someone already created this relationship manually in Medicus
+    // (checkExistingRelationship, run at scan time) — offering to
+    // (re)create it would be redundant; only the leftover import text is
+    // still a genuine action here (2026-08-09 request).
+    if (s.alreadyRelated) {
+      return (
+        '<div class="ms-pnc-textlink-tile"' +
+        selfPointerAttrs +
+        '>' +
+        '<div class="ms-pnc-tile-desc">' +
+        esc(s.problemDescription) +
+        '</div>' +
+        '<div class="ms-pnc-tray-hint">🔗 Already linked/nested with <strong>' +
+        esc(s.matchedDescription) +
+        '</strong> — the import text is now redundant.</div>' +
+        '<div class="ms-pnc-textlink-actions">' +
+        '<button type="button" class="ms-pnc-textlink-btn" data-textlink-action="alreadyRelated" data-problem-id="' +
+        esc(s.problemId) +
+        '" data-matched-id="' +
+        esc(s.matchedProblemId) +
+        '">Remove import text</button>' +
+        '</div>' +
+        '</div>'
+      );
+    }
+    return (
+      '<div class="ms-pnc-textlink-tile"' +
+      selfPointerAttrs +
+      '>' +
+      '<div class="ms-pnc-tile-desc">' +
+      esc(s.problemDescription) +
+      '</div>' +
+      '<div class="ms-pnc-tray-hint">🔗 "Grouped with' +
+      (s.confidence === 'partial' ? '" (best match)' : '"') +
+      ' — <strong>' +
+      esc(s.matchedDescription) +
+      '</strong></div>' +
+      // A relationship with someone ELSE already exists (checkExistingRelationship,
+      // 2026-08-09 follow-up — real case: the text named a plausible-but-wrong
+      // problem, the clinician had actually already sorted this one out with a
+      // DIFFERENT problem). The 3-way offer below still stands, but a "Leave
+      // as-is" escape hatch avoids forcing a redundant/conflicting write.
+      (s.hasOtherRelationship
+        ? '<div class="ms-pnc-tray-hint">This problem already has another relationship recorded.</div>'
+        : '') +
+      '<div class="ms-pnc-textlink-actions">' +
+      '<button type="button" class="ms-pnc-textlink-btn" data-textlink-action="linked" data-problem-id="' +
+      esc(s.problemId) +
+      '" data-matched-id="' +
+      esc(s.matchedProblemId) +
+      '">Link as related</button>' +
+      '<button type="button" class="ms-pnc-textlink-btn" data-textlink-action="thisChildOfMatch" data-problem-id="' +
+      esc(s.problemId) +
+      '" data-matched-id="' +
+      esc(s.matchedProblemId) +
+      '">Nest this under it</button>' +
+      '<button type="button" class="ms-pnc-textlink-btn" data-textlink-action="matchChildOfThis" data-problem-id="' +
+      esc(s.problemId) +
+      '" data-matched-id="' +
+      esc(s.matchedProblemId) +
+      '">Nest it under this</button>' +
+      (s.hasOtherRelationship
+        ? '<button type="button" class="ms-pnc-textlink-btn ms-pnc-textlink-btn-leave" data-textlink-action="leaveAsIs" data-problem-id="' +
+          esc(s.problemId) +
+          '" data-matched-id="' +
+          esc(s.matchedProblemId) +
+          '">Leave as-is, remove text</button>'
+        : '') +
+      '</div>' +
+      '</div>'
+    );
+  }
+
+  // "Unknown significance" suggestion card (2026-08-09 request: "flag any
+  // problems with 'unknown' severity, and offer to promote them to major or
+  // minor"). Unlike every other suggestion type in this tray, there is no
+  // confident auto-pick — both grades are offered side by side, and the
+  // clinician chooses; this card only surfaces that a decision is
+  // outstanding. Reuses the SAME confirmed full-replace write the old
+  // accordion's bulk re-grade tool already uses (commitSignificanceChange),
+  // exposed here as a per-problem tray action instead.
+  function unknownSignificanceTileHtml(s) {
+    return (
+      '<div class="ms-pnc-sig-tile" data-problem-id="' +
+      esc(s.problemId) +
+      '">' +
+      '<div class="ms-pnc-tile-desc">' +
+      esc(s.problemDescription) +
+      '</div>' +
+      '<div class="ms-pnc-tray-hint">⚠ Significance is currently <strong>' +
+      esc(s.currentSignificance) +
+      '</strong> — pick a grade:</div>' +
+      '<div class="ms-pnc-sig-actions">' +
+      '<button type="button" class="ms-pnc-sig-btn" data-sig-target="major" data-problem-id="' +
+      esc(s.problemId) +
+      '">Set Major</button>' +
+      '<button type="button" class="ms-pnc-sig-btn" data-sig-target="minor" data-problem-id="' +
+      esc(s.problemId) +
+      '">Set Minor</button>' +
+      '</div>' +
+      '</div>'
+    );
+  }
+
+  function trayHtml(groups, infoById, textLinkSuggestions, unknownSignificanceSuggestions) {
+    var textLinkHtml = (Array.isArray(textLinkSuggestions) ? textLinkSuggestions : []).map(textLinkTileHtml).join('');
+    var textLinkSection = textLinkHtml
+      ? '<div class="ms-pnc-tray-group ms-pnc-tray-group-textlink">' +
+        '<div class="ms-pnc-tray-group-label">Suggested from import text</div>' +
+        textLinkHtml +
+        '</div>'
+      : '';
+    var sigHtml = (Array.isArray(unknownSignificanceSuggestions) ? unknownSignificanceSuggestions : [])
+      .map(unknownSignificanceTileHtml)
+      .join('');
+    var sigSection = sigHtml
+      ? '<div class="ms-pnc-tray-group ms-pnc-tray-group-sig">' +
+        '<div class="ms-pnc-tray-group-label">Unknown significance</div>' +
+        sigHtml +
+        '</div>'
+      : '';
     if (!groups.actionable.length && !groups.blocked.length) {
-      return '<div class="ms-pnc-empty">No SNOMED-suggested links right now.</div>';
+      return textLinkSection + sigSection || '<div class="ms-pnc-empty">No SNOMED-suggested links right now.</div>';
     }
     var actionableHtml = groups.actionable
       .map(function (s) {
@@ -807,7 +968,9 @@
           '<div class="ms-pnc-tray-group-label">Waiting on another suggestion first</div>' +
           blockedHtml +
           '</div>'
-        : '')
+        : '') +
+      textLinkSection +
+      sigSection
     );
   }
 
@@ -821,33 +984,116 @@
     }
     if (!_pendingAction) return '';
     var d = _pendingAction;
-    var message =
-      d.kind === 'unlink'
-        ? 'This will remove the link between <strong>' +
+    var message;
+    var confirmLabel;
+    var busyLabel;
+    // Only the drag/keyboard drop gesture (kind 'link') offers a second
+    // choice — see the 'link' branch below and confirmPendingAction's own
+    // commitAs parameter (2026-08-09: "now we have the option of linking
+    // problems rather than/as well as nesting them" via drag-and-drop, not
+    // just the text-derived suggestions, which already offered this choice
+    // as three separate tray buttons instead of one drop gesture).
+    var secondaryConfirmLabel = null;
+    var secondaryBusyLabel = null;
+    if (d.kind === 'unlink') {
+      message =
+        'This will remove the link between <strong>' +
+        esc(d.childDescription) +
+        '</strong> and <strong>' +
+        esc(d.parentDescription) +
+        '</strong> — <strong>' +
+        esc(d.childDescription) +
+        '</strong> will become a top-level problem again. There is no undo; re-link it by dragging it onto ' +
+        esc(d.parentDescription) +
+        ' again.';
+      confirmLabel = 'Confirm — remove link';
+      busyLabel = 'Removing…';
+    } else if (d.kind === 'link') {
+      // Each choice states ITS OWN consequence (review finding: the nest
+      // copy — including the re-parent "will move it out of there"
+      // disclosure — sat above BOTH buttons, describing the opposite of
+      // what "Confirm — link problems" actually does).
+      if (d.nestAllowed === false) {
+        message =
+          'Nesting <strong>' +
           esc(d.childDescription) +
-          '</strong> and <strong>' +
+          '</strong> under <strong>' +
           esc(d.parentDescription) +
-          '</strong> — <strong>' +
-          esc(d.childDescription) +
-          '</strong> will become a top-level problem again. There is no undo; re-link it by dragging it onto ' +
-          esc(d.parentDescription) +
-          ' again.'
-        : 'This will nest <strong>' +
+          '</strong> would create a loop in the hierarchy, so only a flat link is offered: ' +
+          '"Confirm — link problems" records them as related problems — no nesting, neither becomes a child of the other.';
+        confirmLabel = 'Confirm — link problems';
+        busyLabel = 'Linking…';
+      } else {
+        message =
+          '"Confirm — nest it" will nest <strong>' +
           esc(d.childDescription) +
           '</strong> under <strong>' +
           esc(d.parentDescription) +
           '</strong> — it will display as a child on the problem list, not as a top-level problem. ' +
           // Re-parent disclosure (see buildPendingLink): moving a problem
           // out of a hierarchy the clinician chose must be named, never
-          // implied — confirming this is a MOVE, not an addition.
+          // implied — confirming the NEST is a MOVE, not an addition.
           (d.previousParentId
             ? 'It is <strong>currently nested under ' +
               esc(d.previousParentDescription) +
-              '</strong> — confirming will move it out of there. '
+              '</strong> — nesting will move it out of there. '
             : '') +
-          'There is no bulk undo; links are removed individually — click the child tile, then "Remove link".';
-    var confirmLabel = d.kind === 'unlink' ? 'Confirm — remove link' : 'Confirm — nest it';
-    var busyLabel = d.kind === 'unlink' ? 'Removing…' : 'Linking…';
+          '"Confirm — link problems" instead records a flat "related problems" link — no nesting changes' +
+          (d.previousParentId ? ' (it stays under ' + esc(d.previousParentDescription) + ')' : '') +
+          '. There is no bulk undo; links are removed individually — click the child tile, then "Remove link".';
+        confirmLabel = 'Confirm — nest it';
+        busyLabel = 'Linking…';
+        secondaryConfirmLabel = 'Confirm — link problems';
+        secondaryBusyLabel = 'Linking…';
+      }
+    } else if (d.kind === 'textlink-linked') {
+      message =
+        'This will create a flat (non-hierarchical) link between <strong>' +
+        esc(d.problemDescription) +
+        '</strong> and <strong>' +
+        esc(d.matchedDescription) +
+        '</strong> — neither becomes a child of the other.';
+      confirmLabel = 'Confirm — link them';
+      busyLabel = 'Linking…';
+    } else if (d.kind === 'textlink-thisChildOfMatch' || d.kind === 'textlink-matchChildOfThis') {
+      var childDesc = d.kind === 'textlink-thisChildOfMatch' ? d.problemDescription : d.matchedDescription;
+      var parentDesc = d.kind === 'textlink-thisChildOfMatch' ? d.matchedDescription : d.problemDescription;
+      message =
+        'This will nest <strong>' +
+        esc(childDesc) +
+        '</strong> under <strong>' +
+        esc(parentDesc) +
+        '</strong> — it will display as a child on the problem list, not as a top-level problem.';
+      confirmLabel = 'Confirm — nest it';
+      busyLabel = 'Linking…';
+    } else if (d.kind === 'textlink-alreadyRelated') {
+      message =
+        'This problem is already linked/nested with <strong>' +
+        esc(d.matchedDescription) +
+        '</strong> — this will just remove the now-redundant import text.';
+      confirmLabel = 'Confirm — remove text';
+      busyLabel = 'Removing…';
+    } else if (d.kind === 'textlink-leaveAsIs') {
+      message =
+        'This problem already has another relationship recorded — this will just remove the ' +
+        'now-redundant import text, leaving that relationship as-is.';
+      confirmLabel = 'Confirm — remove text';
+      busyLabel = 'Removing…';
+    } else if (d.kind === 'sig-major' || d.kind === 'sig-minor') {
+      var sigTarget = d.kind === 'sig-major' ? 'Major' : 'Minor';
+      message =
+        'This will change the significance of <strong>' +
+        esc(d.problemDescription) +
+        '</strong> from <strong>' +
+        esc(d.currentSignificance) +
+        '</strong> to <strong>' +
+        sigTarget +
+        '</strong> via Medicus’s own edit form — every other field is resent unchanged.';
+      confirmLabel = 'Confirm — set ' + sigTarget;
+      busyLabel = 'Updating…';
+    } else {
+      return '';
+    }
     return (
       '<div class="ms-pnc-confirmbar">' +
       message +
@@ -855,6 +1101,13 @@
       '<button type="button" class="ms-pnc-cancel" id="ms-pnc-action-cancel"' +
       (d.linking ? ' disabled' : '') +
       '>Cancel</button>' +
+      (secondaryConfirmLabel
+        ? '<button type="button" class="ms-pnc-confirm-btn ms-pnc-confirm-btn-secondary" id="ms-pnc-action-confirm-alt"' +
+          (d.linking ? ' disabled' : '') +
+          '>' +
+          (d.linking ? secondaryBusyLabel : secondaryConfirmLabel) +
+          '</button>'
+        : '') +
       '<button type="button" class="ms-pnc-confirm-btn" id="ms-pnc-action-confirm"' +
       (d.linking ? ' disabled' : '') +
       '>' +
@@ -889,7 +1142,7 @@
     );
   }
 
-  function bodyHtml(tree, groups, infoById) {
+  function bodyHtml(tree, groups, infoById, textLinkSuggestions, unknownSignificanceSuggestions) {
     return (
       '<div class="ms-pnc-explainer">Drag and drop problems to create parent-child relationships — ' +
       'or press Enter on a tile to pick it up, then Enter on its new parent. ' +
@@ -902,7 +1155,7 @@
       '</div>' +
       '<div class="ms-pnc-pane ms-pnc-pane-tray" id="ms-pnc-tray-pane">' +
       '<div class="ms-pnc-pane-heading">Suggested links</div>' +
-      trayHtml(groups, infoById) +
+      trayHtml(groups, infoById, textLinkSuggestions, unknownSignificanceSuggestions) +
       '</div>' +
       '</div>'
     );
@@ -918,18 +1171,29 @@
     svg.setAttribute('width', String(containerRect.width));
     svg.setAttribute('height', String(containerRect.height));
     var markup = [];
-    root.querySelectorAll('.ms-pnc-tray-tile[data-candidate-ids]').forEach(function (trayTile) {
-      var idsAttr = trayTile.getAttribute('data-candidate-ids') || '';
-      var ids = idsAttr.split(',').filter(Boolean);
-      var fromRect = relativeRect(trayTile.getBoundingClientRect(), containerRect);
-      ids.forEach(function (id) {
-        var target = root.querySelector('.ms-pnc-pane-tree .ms-pnc-tile[data-problem-id="' + cssEscapeId(id) + '"]');
-        if (!target) return; // candidate not currently rendered in the tree — no line to draw
-        var toRect = relativeRect(target.getBoundingClientRect(), containerRect);
-        var d = buildConnectorPath(fromRect, toRect);
-        if (d) markup.push('<path d="' + d + '" class="ms-pnc-line"></path>');
+    // .ms-pnc-textlink-tile[data-candidate-ids] (2026-08-09) — a
+    // "(Grouped with X)" suggestion card is a duplicate of a tile already
+    // visible in the tree (see textLinkTileHtml's own comment on why this
+    // differs from a SNOMED suggestion, which the tree hides while it's
+    // suggestion-only) — draws the SAME dotted line a SNOMED candidate does,
+    // but as a SELF-pointer back to its own tree tile rather than to a
+    // relationship target, so a clinician can locate it. Reuses this exact
+    // mechanism (data-candidate-ids read straight off the DOM) rather than a
+    // second line-drawing code path.
+    root
+      .querySelectorAll('.ms-pnc-tray-tile[data-candidate-ids], .ms-pnc-textlink-tile[data-candidate-ids]')
+      .forEach(function (trayTile) {
+        var idsAttr = trayTile.getAttribute('data-candidate-ids') || '';
+        var ids = idsAttr.split(',').filter(Boolean);
+        var fromRect = relativeRect(trayTile.getBoundingClientRect(), containerRect);
+        ids.forEach(function (id) {
+          var target = root.querySelector('.ms-pnc-pane-tree .ms-pnc-tile[data-problem-id="' + cssEscapeId(id) + '"]');
+          if (!target) return; // candidate not currently rendered in the tree — no line to draw
+          var toRect = relativeRect(target.getBoundingClientRect(), containerRect);
+          var d = buildConnectorPath(fromRect, toRect);
+          if (d) markup.push('<path d="' + d + '" class="ms-pnc-line"></path>');
+        });
       });
-    });
     // Linked problems (2026-08-08, revised same day to elbow/bus routing —
     // see buildElbowConnectorPath's own comment for why) — display-only,
     // tree-tile to tree-tile, symmetric. Reads data-linked-ids straight off
@@ -993,7 +1257,13 @@
 
   // ── Drag / drop / connector-click / confirm ───────────────────────────────
 
-  async function confirmPendingAction() {
+  // commitAs (2026-08-09) — only meaningful for kind 'link' (the drag/
+  // keyboard drop gesture), which now offers TWO relationship types from
+  // the SAME drop instead of always nesting: pass 'flatlink' (from the
+  // confirm bar's secondary button) to create a flat, non-hierarchical
+  // link via commitFlatLink instead of the default commitParentLink. Every
+  // other kind ignores this parameter entirely.
+  async function confirmPendingAction(commitAs) {
     var d = _pendingAction;
     if (!d || d.linking || !window.ProblemNesting) return;
     // Commit-time patient re-check — the last line of defence behind
@@ -1011,9 +1281,68 @@
       if (d.kind === 'unlink') {
         await window.ProblemNesting.commitUnlink(d.childId);
         announce(d.childDescription + ' is no longer nested under ' + d.parentDescription);
+      } else if (d.kind === 'link') {
+        // nestAllowed === false means the bar's ONE button is the flat
+        // link (see buildPendingLink) — the primary confirm handler passes
+        // no commitAs, so without this a loop-blocked pair would fall into
+        // the nest branch it was never offered.
+        if (commitAs === 'flatlink' || d.nestAllowed === false) {
+          await window.ProblemNesting.commitFlatLink(d.childId, d.parentId);
+          announce('Linked ' + d.childDescription + ' with ' + d.parentDescription);
+        } else {
+          await window.ProblemNesting.commitParentLink(d.childId, d.parentId);
+          announce('Nested ' + d.childDescription + ' under ' + d.parentDescription);
+        }
+      } else if (d.kind === 'textlink-linked') {
+        await window.ProblemNesting.commitFlatLink(d.problemId, d.matchedId);
+        announce('Linked ' + d.problemDescription + ' with ' + d.matchedDescription);
+        await settleTextLinkAfterRelationship(d.problemId);
+      } else if (d.kind === 'textlink-thisChildOfMatch') {
+        await window.ProblemNesting.commitParentLink(d.problemId, d.matchedId);
+        announce('Nested ' + d.problemDescription + ' under ' + d.matchedDescription);
+        await settleTextLinkAfterRelationship(d.problemId);
+      } else if (d.kind === 'textlink-matchChildOfThis') {
+        await window.ProblemNesting.commitParentLink(d.matchedId, d.problemId);
+        announce('Nested ' + d.matchedDescription + ' under ' + d.problemDescription);
+        await settleTextLinkAfterRelationship(d.problemId);
+      } else if (d.kind === 'textlink-alreadyRelated' || d.kind === 'textlink-leaveAsIs') {
+        // 'textlink-alreadyRelated': the relationship the text described is
+        // already real. 'textlink-leaveAsIs': a DIFFERENT relationship
+        // already exists and the clinician is satisfied with it, not the
+        // text's guess (both via checkExistingRelationship, run at scan
+        // time). Either way — no write here, just the text cleanup. Unlike
+        // the three commit branches above (which already have a real
+        // relationship write to count/dismiss even if this fails), removing
+        // the text IS the whole action here — every outcome must be told
+        // apart (review finding: the old code announced success on a no-op
+        // and did nothing visible at all when the bridge was missing).
+        var stripResult = await stripTextLinkBoilerplate(d.problemId);
+        if (stripResult === 'failed') {
+          d.error = 'Failed to remove the import text — please try again.';
+          return; // card stays offered; d.linking resets via finally
+        }
+        if (stripResult === 'unavailable') {
+          d.error = 'The text-editing tool isn’t available on this page — the import text was not removed.';
+          return;
+        }
+        _dismissedTextLinkProblemIds.add(d.problemId);
+        window.ProblemNesting.consumeTextLinkSuggestion(d.problemId);
+        if (stripResult === 'nothing-to-strip') {
+          // The text is already gone (removed elsewhere since the scan) —
+          // nothing was written just now, so don't count a change: dismiss
+          // the stale card, say what actually happened, and stop.
+          announce('The import text was already removed — nothing left to do.');
+          _pendingAction = null;
+          window.ProblemNesting.refresh();
+          return;
+        }
+        announce('Removed the import text for ' + d.problemDescription);
+      } else if (d.kind === 'sig-major' || d.kind === 'sig-minor') {
+        var sigTargetKey = d.kind === 'sig-major' ? 'major' : 'minor';
+        await window.ProblemNesting.commitSignificanceChange(d.problemId, sigTargetKey);
+        announce('Set ' + d.problemDescription + ' to ' + (sigTargetKey === 'major' ? 'Major' : 'Minor'));
       } else {
-        await window.ProblemNesting.commitParentLink(d.childId, d.parentId);
-        announce('Nested ' + d.childDescription + ' under ' + d.parentDescription);
+        return;
       }
       _linkedCount++;
       _pendingAction = null;
@@ -1022,12 +1351,72 @@
       // the bridge in problem-nesting.js.
       window.ProblemNesting.refresh();
     } catch (err) {
-      d.error =
-        (err && err.message) ||
-        (d.kind === 'unlink' ? 'Failed to remove the link — please try again.' : 'Failed to link — please try again.');
+      d.error = (err && err.message) || 'Failed to save this change — please try again.';
     } finally {
       d.linking = false;
       render();
+    }
+  }
+
+  // Best-effort follow-up after a successful "(Grouped with X)" relationship
+  // commit (or, for the already-related case, on its own) — delegates the
+  // actual text edit to problem-description-cleanup.js's own bridge (this
+  // file owns no text-editing write path of its own; see
+  // window.ProblemDescriptionCleanup.stripGenericAdditionalInfoText's own
+  // header for why the implementation lives there, not duplicated here).
+  // 2026-08-09 follow-up: "offer to remove the generic text as part of the
+  // linking process" — this file's own inline widget already does this
+  // automatically after a successful link; the canvas now matches it. A
+  // failure here does NOT roll back or fail the relationship (already
+  // real) — surfaced as its own distinct announcement rather than implying
+  // the whole action failed, same non-fatal discipline problem-description-
+  // cleanup.js's own applyLinkSuggestion uses for its identical step.
+  // Returns a distinct status per outcome rather than a bare boolean
+  // (review finding: the old true/false collapsed "stripped", "nothing to
+  // strip", "bridge missing" and "failed" into two values — a no-op strip
+  // was announced as "Removed the import text", a missing bridge was a
+  // silent dead click, and the failure announcement claimed "the
+  // relationship was created" even for the text-only actions that create
+  // none). The CALLER decides what each outcome means for its own action —
+  // no announcements happen in here.
+  //   'stripped'         — the text edit was posted and the text removed
+  //   'nothing-to-strip' — the edit form no longer carries recognisable
+  //                        boilerplate (someone already removed it)
+  //   'unavailable'      — the ProblemDescriptionCleanup bridge isn't on
+  //                        this page, so no text edit is possible
+  //   'failed'           — a real fetch/post error
+  async function stripTextLinkBoilerplate(problemId) {
+    if (!window.ProblemDescriptionCleanup || !window.ProblemDescriptionCleanup.stripGenericAdditionalInfoText) {
+      return 'unavailable';
+    }
+    try {
+      var did = await window.ProblemDescriptionCleanup.stripGenericAdditionalInfoText(problemId);
+      return did ? 'stripped' : 'nothing-to-strip';
+    } catch (err) {
+      return 'failed';
+    }
+  }
+
+  // Shared tail of the three relationship-commit branches below: the
+  // relationship write has ALREADY succeeded; try the best-effort text
+  // strip, then settle the suggestion's lifecycle in problem-nesting.js's
+  // own list (review finding: the canvas-local dismissed Set is reset on
+  // every open(), so without consuming the SOURCE suggestion the same card
+  // came back on reopen offering to re-create the just-created
+  // relationship). Strip ok/no-op -> the suggestion is fully consumed;
+  // strip failed/unavailable -> the leftover text is the only remaining
+  // work, so the suggestion converts to the single "remove import text"
+  // offer instead of vanishing with the text still on the record.
+  async function settleTextLinkAfterRelationship(problemId) {
+    var stripResult = await stripTextLinkBoilerplate(problemId);
+    _dismissedTextLinkProblemIds.add(problemId);
+    if (stripResult === 'stripped' || stripResult === 'nothing-to-strip') {
+      window.ProblemNesting.consumeTextLinkSuggestion(problemId);
+    } else {
+      window.ProblemNesting.markTextLinkAlreadyRelated(problemId);
+      announce(
+        'The relationship was created, but the import text could not be removed automatically — reopen this canvas to try removing it again.'
+      );
     }
   }
 
@@ -1036,12 +1425,16 @@
   // confirm bar, whichever input proposed it.
   function proposeLink(childId, parentId, snap, descById) {
     if (!childId || !parentId || childId === parentId || !window.ProblemNesting) return;
+    var pending = buildPendingLink(childId, parentId, descById, snap.parentIdByProblemId);
     if (window.ProblemNesting.wouldCreateCycle(childId, parentId, snap.parentIdByProblemId)) {
-      _cycleError = 'Linking these two would create a loop — pick a different pair.';
-      render();
-      return;
+      // Nesting would loop — but a FLAT link between the same pair is
+      // non-hierarchical and always safe, so offer that instead of
+      // blocking the whole gesture (see buildPendingLink's nestAllowed
+      // comment). commitParentLink re-checks the cycle at commit time
+      // regardless, so this stays advisory, not the only line of defence.
+      pending.nestAllowed = false;
     }
-    _pendingAction = buildPendingLink(childId, parentId, descById, snap.parentIdByProblemId);
+    _pendingAction = pending;
     render();
   }
 
@@ -1067,6 +1460,9 @@
     });
     root.querySelector('#ms-pnc-action-confirm')?.addEventListener('click', function () {
       confirmPendingAction();
+    });
+    root.querySelector('#ms-pnc-action-confirm-alt')?.addEventListener('click', function () {
+      confirmPendingAction('flatlink');
     });
 
     var descById = {};
@@ -1132,6 +1528,51 @@
         var id = btn.getAttribute('data-target-id');
         if (!id) return;
         openEditPanel(id, descById[id]);
+      });
+    });
+
+    // "(Grouped with X)" text-link suggestion buttons (2026-08-09) — same
+    // set-_pendingAction-then-confirm flow as unlink/link above, never a
+    // direct commit on click.
+    root.querySelectorAll('.ms-pnc-textlink-btn').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var problemId = btn.getAttribute('data-problem-id');
+        var matchedId = btn.getAttribute('data-matched-id');
+        var action = btn.getAttribute('data-textlink-action');
+        if (!problemId || !matchedId || !action) return;
+        _pendingAction = {
+          kind: 'textlink-' + action,
+          problemId: problemId,
+          matchedId: matchedId,
+          problemDescription: descById[problemId] || problemId,
+          matchedDescription: descById[matchedId] || matchedId,
+          linking: false,
+          error: null,
+        };
+        render();
+      });
+    });
+
+    // "Unknown significance" tray buttons (2026-08-09) — same
+    // set-_pendingAction-then-confirm flow as every other write in this
+    // canvas, never a direct commit on click.
+    root.querySelectorAll('.ms-pnc-sig-btn').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var problemId = btn.getAttribute('data-problem-id');
+        var target = btn.getAttribute('data-sig-target');
+        if (!problemId || !target) return;
+        var current = (snap.infoById[problemId] && snap.infoById[problemId].significance) || 'Unknown';
+        _pendingAction = {
+          kind: 'sig-' + target,
+          problemId: problemId,
+          problemDescription: descById[problemId] || problemId,
+          currentSignificance: current,
+          linking: false,
+          error: null,
+        };
+        render();
       });
     });
 
@@ -1240,6 +1681,7 @@
     _cycleError = null;
     _kbPickedId = null;
     _linkedCount = 0;
+    _dismissedTextLinkProblemIds = new Set();
     // Pin this canvas to the patient it opened against — see render()'s
     // mismatch guard and confirmPendingAction's commit-time re-check.
     _openedPatientId = window.ProblemNesting.getSnapshot().patientId;
@@ -1407,7 +1849,20 @@
     var tree = buildProblemTree(snap.problems, snap.infoById, snap.parentIdByProblemId, traySuggestedIds);
     var treeIds = flattenTreeIds(tree);
     var groups = partitionSuggestionTray(liveSuggestions, treeIds, snap.infoById);
-    root.innerHTML = wrapPanel(bodyHtml(tree, groups, snap.infoById) + confirmBarHtml() + footerHtml());
+    // See _dismissedTextLinkProblemIds' own comment — filters out a
+    // suggestion just actioned this session, since nothing in the scan data
+    // itself changes to make it disappear on its own (the underlying text
+    // is still there until the OTHER surface's own apply path strips it).
+    var liveTextLinkSuggestions = (Array.isArray(snap.textLinkSuggestions) ? snap.textLinkSuggestions : []).filter(
+      function (s) {
+        return s && !_dismissedTextLinkProblemIds.has(s.problemId);
+      }
+    );
+    root.innerHTML = wrapPanel(
+      bodyHtml(tree, groups, snap.infoById, liveTextLinkSuggestions, snap.unknownSignificanceSuggestions) +
+        confirmBarHtml() +
+        footerHtml()
+    );
     bindEvents(root, snap);
     updateConnectorLines(root);
     restoreFocusedProblemId(root, focusId);

@@ -84,6 +84,16 @@
     return { patientId: patientId, problemId: problemId, parentProblemId: parentProblemId };
   }
 
+  // The confirmed update-problem-links POST body (docs/learnings-problem-
+  // nesting-api.md, HAR 50/51/53) — problemIdsToLink is a FULL REPLACE of
+  // this problem's entire linked-problem set, never a single id to add.
+  // Callers must build `problemIdsToLink` from a FRESH prefill read
+  // (existingLinkedProblems) plus/minus exactly the one id changing — see
+  // commitFlatLink below, which is the only confirmed-safe way to do that.
+  function buildUpdateProblemLinksPayload(patientId, problemId, problemIdsToLink) {
+    return { patientId: patientId, problemId: problemId, problemIdsToLink: problemIdsToLink };
+  }
+
   function resolveOverviewConceptId(overview) {
     var code = overview && overview.problemCode;
     return code && code.conceptId ? String(code.conceptId) : null;
@@ -269,6 +279,53 @@
           parentOptions: options,
         });
       }
+    });
+    return out;
+  }
+
+  // "(Grouped with X)" text-derived suggestions (2026-08-09) — see
+  // shared/problem-text-linking.js's header for the full architecture.
+  // Deliberately a SEPARATE list from buildNestingSuggestions above, not
+  // merged into it: these aren't "a child needing a parent from a list of
+  // candidates" (the shape every existing suggestion/tray assumes) — each
+  // one is already a SPECIFIC resolved pair, offering a relationship-TYPE
+  // choice instead (flat link, or nest either direction; see
+  // content-scripts/problem-description-cleanup.js's own linkSuggestionHtml
+  // for the identical three-way choice offered there). Only pairs with a
+  // CONFIDENT match are included — an unmatched reference has nothing
+  // actionable to suggest here (it still surfaces as an informational note
+  // in the "Check for retired/legacy codes?" panel instead).
+  //
+  // `matcher` is dependency-injected (shared/problem-text-linking.js's
+  // exports) rather than read from `window` directly, so this stays a pure,
+  // unit-testable function like everything else in this section — the
+  // browser call site passes window.MSProblemTextLinking.
+  function buildTextLinkSuggestions(problems, infoById, entries, matcher) {
+    if (!matcher) return [];
+    var list = Array.isArray(problems) ? problems : [];
+    var info = infoById || {};
+    var out = [];
+    list.forEach(function (p) {
+      var text = info[p.id] && info[p.id].additionalInformation;
+      if (!text) return;
+      var ref = matcher.extractGroupedWithReference(text, entries);
+      if (!ref) return;
+      var others = list
+        .filter(function (op) {
+          return op.id !== p.id;
+        })
+        .map(function (op) {
+          return { id: op.id, description: op.description };
+        });
+      var match = matcher.matchProblemByName(ref.problemName, others);
+      if (!match) return;
+      out.push({
+        problemId: p.id,
+        problemDescription: p.description,
+        matchedProblemId: match.problemId,
+        matchedDescription: match.description,
+        confidence: match.confidence,
+      });
     });
     return out;
   }
@@ -520,6 +577,7 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       buildUpdateParentProblemPayload: buildUpdateParentProblemPayload,
+      buildUpdateProblemLinksPayload: buildUpdateProblemLinksPayload,
       resolveOverviewConceptId: resolveOverviewConceptId,
       wouldCreateCycle: wouldCreateCycle,
       dateSortKey: dateSortKey,
@@ -527,6 +585,8 @@
       predatesParent: predatesParent,
       buildOverridePairSet: buildOverridePairSet,
       buildNestingSuggestions: buildNestingSuggestions,
+      buildTextLinkSuggestions: buildTextLinkSuggestions,
+      buildUnknownSignificanceSuggestions: buildUnknownSignificanceSuggestions,
       manualChildOptions: manualChildOptions,
       buildDuplicateGroups: buildDuplicateGroups,
       pickEarliestCopyId: pickEarliestCopyId,
@@ -724,6 +784,31 @@
     return _overridesPromise;
   }
 
+  // Loads rules/generic-additional-info-text.json ONCE per page load — same
+  // pattern as ensureNestingOverridesLoaded above. This is the SAME rules
+  // file content-scripts/problem-description-cleanup.js already loads for
+  // its own "(Grouped with X)" detection (2026-08-09) — loaded independently
+  // here (not bridged from that file) so this scan has no load-order
+  // dependency on the other content script, but both read the identical
+  // configured entry via shared/problem-text-linking.js's
+  // extractGroupedWithReference, so the regex itself is never duplicated.
+  var _genericAdditionalInfoPromise = null;
+  function ensureGenericAdditionalInfoTextLoaded() {
+    if (_genericAdditionalInfoPromise) return _genericAdditionalInfoPromise;
+    _genericAdditionalInfoPromise = (async function () {
+      try {
+        var url = chrome.runtime.getURL('rules/generic-additional-info-text.json');
+        var doc = await fetch(url).then(function (r) {
+          return r.json();
+        });
+        return Array.isArray(doc && doc.entries) ? doc.entries : [];
+      } catch (e) {
+        return [];
+      }
+    })();
+    return _genericAdditionalInfoPromise;
+  }
+
   // Descendant test via the confirmed constrained-search mechanism (see the
   // bulk-remove badge scan): a hit for `conceptId` under `rootsCsv` means the
   // concept is a genuine SNOMED descendant of at least one root.
@@ -740,6 +825,14 @@
 
   function postUpdateParentProblem(payload) {
     return apiFetch('/clinical/problem/update-parent-problem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  function postUpdateProblemLinks(payload) {
+    return apiFetch('/clinical/problem/update-problem-links', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -812,10 +905,23 @@
   // buildHtml); read by the canvas overlay via the window.ProblemNesting
   // bridge below instead.
   var _suggestions = [];
+  // [{problemId, problemDescription, matchedProblemId, matchedDescription,
+  //   confidence}] — "(Grouped with X)" text-derived suggestions (2026-08-09),
+  // deliberately separate from _suggestions above (see
+  // buildTextLinkSuggestions' own comment for why). Read by the canvas via
+  // the bridge below.
+  var _textLinkSuggestions = [];
   // Live link map (problemId → parentProblemId) — seeded from the scan's
   // overviews, updated on every committed link so cycle checks and rescans
   // stay honest without refetching.
   var _parentIdByProblemId = {};
+  // True only once runScan has populated _parentIdByProblemId from every
+  // problem's overview for the CURRENT patient. While false, the sync
+  // wouldCreateCycle(_parentIdByProblemId) check would pass vacuously on an
+  // empty map — commitParentLink falls back to the fetch-walking
+  // wouldCreateCycleAuthoritative instead (review finding: the cleanup
+  // surface's bridge calls arrive without any scan having run).
+  var _parentMapComplete = false;
   // Scan products consumed both by the sections still rendered here (merge,
   // significance) and, via the bridge, by the canvas overlay: the active
   // problem list ({id, description}) and each problem's overview-derived info.
@@ -850,7 +956,9 @@
     _scanError = null;
     _openSection = null;
     _suggestions = [];
+    _textLinkSuggestions = [];
     _parentIdByProblemId = {};
+    _parentMapComplete = false;
     _problems = [];
     _infoById = {};
     _linkedIdsState = 'idle';
@@ -877,6 +985,7 @@
       // on this patient's own problem data, awaited only once pairHits
       // itself is ready (right before buildNestingSuggestions).
       var overridesPromise = ensureNestingOverridesLoaded();
+      var genericInfoPromise = ensureGenericAdditionalInfoTextLoaded();
       var problems = (_problemsCache || []).map(function (p) {
         return { id: p.id, description: p.problemCodeDescription };
       });
@@ -980,6 +1089,10 @@
 
       _problems = problems;
       _infoById = infoById;
+      // Every problem's overview has been read into _parentIdByProblemId by
+      // this point — commitParentLink's sync cycle guard can trust the map
+      // from here on (see _parentMapComplete's own comment).
+      _parentMapComplete = true;
       _mergeGroups = buildDuplicateGroups(problems, infoById).map(function (g) {
         var entries = g.entries.map(function (p) {
           var ci = infoById[p.id] || {};
@@ -1010,12 +1123,45 @@
       // buildNestingSuggestions' own comment for how the two are merged and
       // tagged with 'source' so the canvas can credit each accurately.
       var overrideEntries = await overridesPromise;
+      if (_lastPatientId !== scanPatientId) return; // patient changed while awaiting — resetForPatient owns the state now
       var overridePairHits = buildOverridePairSet(overrideEntries);
       // Raw suggestion list — no per-card UI state, this accordion no longer
       // renders suggestion cards itself (see the "canvas" section in
       // buildHtml); the canvas overlay reads this via the bridge and tracks
       // its own transient drag/confirm state independently.
       _suggestions = buildNestingSuggestions(problems, infoById, pairHits, overridePairHits);
+      var genericInfoEntries = await genericInfoPromise;
+      if (_lastPatientId !== scanPatientId) return;
+      _textLinkSuggestions = buildTextLinkSuggestions(
+        problems,
+        infoById,
+        genericInfoEntries,
+        typeof window !== 'undefined' ? window.MSProblemTextLinking : null
+      );
+      // Settled BEFORE scanState flips to 'done' (so the canvas's first
+      // render of a scanned tree already has a definitive true/false, never
+      // a flash of the 3-way offer that then disappears) — see
+      // checkExistingRelationship's own header for why this is safe to pay
+      // for here specifically (bounded by how many text-link suggestions
+      // actually resolved, not by list size).
+      await Promise.all(
+        _textLinkSuggestions.map(function (s) {
+          return checkExistingRelationship(s.problemId, s.matchedProblemId).then(function (result) {
+            s.alreadyRelated = result.relatedToMatch;
+            // A relationship with someone ELSE, not the text's guess — see
+            // checkExistingRelationship's own header for the real case that
+            // motivated this distinction.
+            s.hasOtherRelationship = !result.relatedToMatch && result.hasAnyRelationship;
+          });
+        })
+      );
+      // Final patient re-check before flipping to 'done' (review finding):
+      // the relationship-check batch above is one network round-trip per
+      // confident suggestion, plenty of time for an SPA patient navigation.
+      // resetForPatient set _scanState back to 'idle' for the NEW patient —
+      // writing 'done' (and _openSection) here would present a completed
+      // scan over cleared data instead of offering to scan.
+      if (_lastPatientId !== scanPatientId) return;
       _scanState = 'done';
       // Accordion default: first section with something in it.
       _openSection = _mergeGroups.length ? 'merge' : 'significance';
@@ -1071,6 +1217,47 @@
     render();
   }
 
+  // Commit-time cycle walk that does NOT trust an unpopulated map (review
+  // finding): _parentIdByProblemId is only complete after THIS file's own
+  // runScan, but commitParentLink is also called through the bridge by
+  // content-scripts/problem-description-cleanup.js's "(Grouped with X)"
+  // offer, on a page where the nesting scan may never have run — there the
+  // sync wouldCreateCycle(childId, parentId, {}) passes vacuously and a
+  // nest of A under its own descendant creates a real loop on the record.
+  // So: when the map is not known-complete (_parentMapComplete), walk the
+  // ancestor chain by fetching each node's overview (parentProblemId) —
+  // the same authoritative source runScan itself uses — caching what it
+  // learns into the map. FAIL CLOSED: if any fetch on the chain fails, the
+  // hierarchy cannot be verified, so the nest is refused rather than risked.
+  async function wouldCreateCycleAuthoritative(childId, parentId) {
+    if (!childId || !parentId) return false;
+    if (childId === parentId) return true;
+    var seen = {};
+    var cur = parentId;
+    while (cur) {
+      if (cur === childId) return true;
+      if (seen[cur]) return false; // pre-existing server-side loop — don't hang
+      seen[cur] = true;
+      var next;
+      if (Object.prototype.hasOwnProperty.call(_parentIdByProblemId, cur)) {
+        next = _parentIdByProblemId[cur] || null;
+      } else {
+        var ov;
+        try {
+          ov = await fetchProblemOverview(cur);
+        } catch (e) {
+          throw new Error(
+            'Could not verify the existing hierarchy — not nesting, to avoid creating a loop. Try again.'
+          );
+        }
+        next = (ov && ov.parentProblemId) || null;
+        _parentIdByProblemId[cur] = next; // cache what the walk learned (null = confirmed parentless)
+      }
+      cur = next;
+    }
+    return false;
+  }
+
   // Shared commit path for BOTH the suggestion cards and the manual builder:
   // commit-time cycle hard-guard (independent of what the UI showed — the
   // live map may have changed since render), the confirmed three-field POST,
@@ -1078,8 +1265,12 @@
   // user-facing message.
   async function commitParentLink(childId, parentId) {
     if (!parentId) throw new Error('A parent must be chosen.'); // guards misuse — commitUnlink below is the null-parent path
-    if (wouldCreateCycle(childId, parentId, _parentIdByProblemId)) {
-      throw new Error('Linking these two would create a loop — another link committed first. Rescan to refresh.');
+    if (_parentMapComplete) {
+      if (wouldCreateCycle(childId, parentId, _parentIdByProblemId)) {
+        throw new Error('Linking these two would create a loop — another link committed first. Rescan to refresh.');
+      }
+    } else if (await wouldCreateCycleAuthoritative(childId, parentId)) {
+      throw new Error('Linking these two would create a loop in the problem hierarchy — not nesting.');
     }
     await postUpdateParentProblem(buildUpdateParentProblemPayload(_lastPatientId, childId, parentId));
     _parentIdByProblemId[childId] = parentId;
@@ -1119,6 +1310,131 @@
     }
   }
 
+  // Creates a flat (non-hierarchical) link between two problems via the
+  // update-problem-links endpoint — confirmed 2026-08-08, CONFIRMED FULL
+  // REPLACE (docs/learnings-problem-nesting-api.md, HAR 53): unlike
+  // commitParentLink/commitUnlink above, there is no single-field endpoint
+  // to sidestep the trap, so this MUST read-modify-write every time:
+  //   1. fetch a FRESH prefill right now (never _infoById's scan-time
+  //      cache — the set may genuinely have changed since, e.g. linked from
+  //      the other side by someone else mid-session);
+  //   2. add the one id if it isn't already present (a no-op POST is not
+  //      just wasteful — it would needlessly re-trigger EventLedger/onChange
+  //      for a link that already existed);
+  //   3. POST the resulting FULL array back.
+  // No cycle check: this relationship is flat, not hierarchical — linking
+  // A↔B can never create a loop the way nesting can.
+  async function commitFlatLink(problemId, otherProblemId) {
+    if (!otherProblemId) throw new Error('A problem to link must be chosen.');
+    if (problemId === otherProblemId) throw new Error('A problem cannot be linked to itself.');
+    var prefill = await fetchLinkedProblemIds(_lastPatientId, problemId);
+    var existing = Array.isArray(prefill && prefill.existingLinkedProblems) ? prefill.existingLinkedProblems : [];
+    if (existing.indexOf(otherProblemId) === -1) {
+      var next = existing.concat([otherProblemId]);
+      await postUpdateProblemLinks(buildUpdateProblemLinksPayload(_lastPatientId, problemId, next));
+      if (_infoById[problemId]) _infoById[problemId].linkedProblemIds = next;
+    }
+    // Symmetric (confirmed live — linking from one side is readable from the
+    // other): update the OTHER side's own local cache too, so the canvas's
+    // dedupe-by-unordered-pair logic sees the reverse entry immediately
+    // without needing a full rescan. This is a local-state courtesy only —
+    // the next real read of THAT problem's own linked-problem set still goes
+    // through the same fresh-fetch discipline above, never trusts this copy.
+    if (_infoById[otherProblemId] && _infoById[otherProblemId].linkedProblemIds.indexOf(problemId) === -1) {
+      _infoById[otherProblemId].linkedProblemIds = _infoById[otherProblemId].linkedProblemIds.concat([problemId]);
+    }
+    if (window.EventLedger) {
+      window.EventLedger.record({
+        source: 'record',
+        patientRef: _lastPatientId,
+        severity: null,
+        ruleId: 'problem-nesting',
+        label: 'Link problems: 1 link created',
+        action: 'committed',
+      });
+    }
+  }
+
+  // Confirms whether problemId and otherProblemId are ALREADY related on the
+  // record — either a flat link (update-problem-links) or a parent/child
+  // nesting in EITHER direction — so a confident "(Grouped with X)" text
+  // match can offer just a text cleanup instead of a redundant relationship
+  // button when the relationship the text describes has already been
+  // created (2026-08-09 request: "check for existing relationships... has
+  // someone already manually fixed this"). Deliberately self-contained
+  // rather than assuming a prior scan has run: content-scripts/problem-
+  // description-cleanup.js's own "Check for retired/legacy codes?" scan
+  // never calls this file's runScan, so _infoById may be empty when this is
+  // called from there — falls back to a fresh overview fetch per problem
+  // only when the cached parentProblemId isn't already known (the canvas's
+  // own scan-time call pays nothing extra here, since _infoById is already
+  // populated by the time text-link suggestions are built). The
+  // linkedProblemIds check ALWAYS fetches fresh regardless of cache state —
+  // no cheaper confirmed source exists (2026-08-08) — but this function only
+  // ever runs for the rare confidently-matched suggestion, never per problem
+  // on the list, so the cost is bounded by how many "(Grouped with X)"
+  // references actually resolve, not by list size.
+  //
+  // Returns {relatedToMatch, hasAnyRelationship} rather than a single
+  // boolean (2026-08-09 follow-up — real case found live: the text named a
+  // plausible-but-wrong problem, the clinician had actually already nested
+  // this one under a DIFFERENT problem entirely). relatedToMatch is the
+  // ORIGINAL check — specifically to otherProblemId. hasAnyRelationship is
+  // broader — a parent, at least one child, or at least one flat link with
+  // ANYONE — so the caller can distinguish "already sorted, just not with
+  // who the text guessed" from "genuinely has nothing yet" and offer a
+  // "leave as-is, remove the text" choice in the former case without
+  // silently discarding the 3-way create-relationship offer either (the
+  // text's guess might still be right in addition to the existing one).
+  async function checkExistingRelationship(problemId, otherProblemId) {
+    var aParent = _infoById[problemId] ? _infoById[problemId].parentProblemId : undefined;
+    var bParent = _infoById[otherProblemId] ? _infoById[otherProblemId].parentProblemId : undefined;
+    // undefined = not known yet (no scan cache) — resolved from the same
+    // overview fetch as the parent below, NOT defaulted to false: from the
+    // cleanup surface _infoById is empty, and discarding the overview's
+    // childProblems here made hasAnyRelationship blind to children on that
+    // surface only (review finding — the canvas offered the "leave as-is"
+    // escape hatch on the same patient, this path didn't).
+    var aHasChildren = _infoById[problemId] ? !!_infoById[problemId].hasChildren : undefined;
+    if (aParent === undefined || bParent === undefined) {
+      var overviews = await Promise.all([
+        aParent === undefined
+          ? fetchProblemOverview(problemId).catch(function () {
+              return null;
+            })
+          : null,
+        bParent === undefined
+          ? fetchProblemOverview(otherProblemId).catch(function () {
+              return null;
+            })
+          : null,
+      ]);
+      if (aParent === undefined) {
+        aParent = (overviews[0] && overviews[0].parentProblemId) || null;
+        aHasChildren = !!(
+          overviews[0] &&
+          Array.isArray(overviews[0].childProblems) &&
+          overviews[0].childProblems.length
+        );
+      }
+      if (bParent === undefined) bParent = (overviews[1] && overviews[1].parentProblemId) || null;
+    }
+    if (aHasChildren === undefined) aHasChildren = false;
+    var relatedToMatch = aParent === otherProblemId || bParent === problemId;
+    var linkedIds = [];
+    try {
+      var linked = await fetchLinkedProblemIds(_lastPatientId, problemId);
+      linkedIds = Array.isArray(linked && linked.existingLinkedProblems) ? linked.existingLinkedProblems : [];
+    } catch (e) {
+      // fail closed: can't confirm either way -> treat as NOT already
+      // related, so the ordinary 3-way create-relationship offer still
+      // appears rather than silently hiding a real option.
+    }
+    if (!relatedToMatch && linkedIds.indexOf(otherProblemId) !== -1) relatedToMatch = true;
+    var hasAnyRelationship = relatedToMatch || !!aParent || aHasChildren || linkedIds.length > 0;
+    return { relatedToMatch: relatedToMatch, hasAnyRelationship: hasAnyRelationship };
+  }
+
   var SIG_TARGETS = [
     { key: 'major', label: 'Major' },
     { key: 'minor', label: 'Minor' },
@@ -1143,10 +1459,67 @@
     );
   }
 
+  // Flags every problem whose CURRENT significance reads as "Unknown" (same
+  // prefix match as sigCurrentMatchesTarget, which already drives the
+  // existing bulk re-grade tool above) for the canvas's own tray (2026-08-09
+  // request: "flag any problems with 'unknown' severity, and offer to
+  // promote them to major or minor"). Deliberately never auto-picks a
+  // target — unlike the confident SNOMED/text-link matches above, there is
+  // no signal here for WHICH grade is correct, only that a decision is
+  // outstanding; the clinician always chooses. Pure and cheap (no fetch —
+  // significance is already in infoById from the scan's own overview
+  // fetch), so the canvas recomputes this fresh on every snapshot read
+  // rather than caching it at scan time — see getSnapshot's own comment.
+  function buildUnknownSignificanceSuggestions(problems, infoById) {
+    var list = Array.isArray(problems) ? problems : [];
+    var info = infoById || {};
+    var out = [];
+    list.forEach(function (p) {
+      var current = (info[p.id] && info[p.id].significance) || 'Unknown';
+      if (sigCurrentMatchesTarget(current, 'unknown')) {
+        out.push({ problemId: p.id, problemDescription: p.description, currentSignificance: current });
+      }
+    });
+    return out;
+  }
+
   function sigSelectedIds() {
     return Object.keys(_sig.ids).filter(function (id) {
       return _sig.ids[id];
     });
+  }
+
+  // Single-problem significance change — the SAME confirmed full-replace
+  // write confirmSignificanceBatch's own per-row body uses (GET the
+  // problem's own edit-problem prefill, resolve the target grade from the
+  // prefill's OWN significances options, rebuild with ONLY significance
+  // changed, POST), exposed standalone for the canvas's own "Unknown
+  // significance" tray suggestions (2026-08-09) rather than routing through
+  // the old accordion's manual tick-and-batch UI. Throws on failure (a
+  // per-row refusal or a real API error) with a user-facing message, same
+  // discipline as commitFlatLink/commitParentLink.
+  async function commitSignificanceChange(problemId, targetKey) {
+    var prefill = await fetchEditProblemPrefill(problemId);
+    var value = resolveSignificanceOption(prefill && prefill.significances, targetKey);
+    if (!value) {
+      throw new Error(
+        "Medicus's own edit form doesn't offer that significance for this problem — change it in Medicus."
+      );
+    }
+    var payload = buildSignificancePayload(prefill, value);
+    if (!payload) throw new Error('Could not build a safe update for this problem — skipped.');
+    await postEditProblem(problemId, payload);
+    if (_infoById[problemId]) _infoById[problemId].significance = sigTargetLabel(targetKey);
+    if (window.EventLedger) {
+      window.EventLedger.record({
+        source: 'record',
+        patientRef: _lastPatientId,
+        severity: null,
+        ruleId: 'problem-significance',
+        label: 'Change significance: 1 problem re-graded',
+        action: 'committed',
+      });
+    }
   }
 
   // Commits the ticked re-grades SEQUENTIALLY: per row, GET the problem's
@@ -1800,6 +2173,14 @@
         problems: _problems,
         infoById: _infoById,
         suggestions: _suggestions,
+        textLinkSuggestions: _textLinkSuggestions,
+        // Recomputed fresh on EVERY snapshot read, unlike _suggestions/
+        // _textLinkSuggestions above (which are cached once per scan) —
+        // this is pure and cheap (no fetch, significance is already in
+        // infoById), and a just-committed change (commitSignificanceChange)
+        // must stop being offered immediately without needing its own
+        // dismissed-ids bookkeeping the way the text-link suggestions do.
+        unknownSignificanceSuggestions: buildUnknownSignificanceSuggestions(_problems, _infoById),
         parentIdByProblemId: _parentIdByProblemId,
         scanState: _scanState,
       };
@@ -1810,7 +2191,32 @@
     ensureLinkedIdsLoaded: ensureLinkedIdsLoaded,
     commitParentLink: commitParentLink,
     commitUnlink: commitUnlink,
+    commitFlatLink: commitFlatLink,
+    checkExistingRelationship: checkExistingRelationship,
+    commitSignificanceChange: commitSignificanceChange,
     wouldCreateCycle: wouldCreateCycle,
+    // Text-link suggestion lifecycle, called by the canvas after it actions
+    // a card (review finding: the canvas's own dismissed-ids Set is reset on
+    // every open() while _textLinkSuggestions persists until a rescan, so a
+    // committed card came back on reopen still offering to create the
+    // just-created relationship). The canvas mutates the SOURCE list here:
+    // consume removes the suggestion outright (relationship created AND text
+    // stripped — nothing left to offer); markAlreadyRelated flips it to the
+    // single "remove import text" offer (relationship created but the strip
+    // failed — the leftover text is the only remaining work).
+    consumeTextLinkSuggestion: function (problemId) {
+      _textLinkSuggestions = _textLinkSuggestions.filter(function (s) {
+        return s.problemId !== problemId;
+      });
+    },
+    markTextLinkAlreadyRelated: function (problemId) {
+      _textLinkSuggestions.forEach(function (s) {
+        if (s.problemId === problemId) {
+          s.alreadyRelated = true;
+          s.hasOtherRelationship = false;
+        }
+      });
+    },
     // Called by the canvas after a successful "Edit problem" code change
     // (window.ProblemDescriptionCleanup's own onApplied callback, 2026-08-08
     // follow-up: "problem code edits refresh within the canvas") — updates

@@ -670,11 +670,24 @@
   // action type, so whichever combination of actions/offers ends up shown,
   // none of them is ever less thorough about what gets removed than a plain
   // strip would have been.
-  function computeAdditionalInfoFindings(additionalInformation, currentSignificance, entries) {
+  // otherProblems (2026-08-09, optional — existing callers work unchanged
+  // when omitted): [{id, description}] for every OTHER active problem on
+  // this patient's record, excluding the one this additionalInformation
+  // belongs to. Used ONLY by the new `linkSuggestion` action type (see
+  // rules/generic-additional-info-text.json's own note on it, and
+  // shared/problem-text-linking.js for the matching rules) — a captured
+  // problem-name reference ("(Grouped with X)") is resolved against this
+  // list via window.MSProblemTextLinking.matchProblemByName. When
+  // otherProblems is omitted or the match module isn't loaded, a
+  // linkSuggestion entry degrades to a plain reviewSeverity-style
+  // informational note (never silently dropped, never guessed).
+  function computeAdditionalInfoFindings(additionalInformation, currentSignificance, entries, otherProblems) {
     var workingText = additionalInformation == null ? '' : String(additionalInformation);
     var patternRemoved = [];
     var severityContradiction = null;
     var severityReviewNote = null;
+    var linkSuggestion = null;
+    var matcher = typeof window !== 'undefined' && window.MSProblemTextLinking;
     patternEntriesFromEntries(entries).forEach(function (entry) {
       var match = findPatternMatch(workingText, entry);
       if (!match) return;
@@ -697,21 +710,51 @@
         } else {
           severityReviewNote = { priorityValue: priorityValue };
         }
+      } else if (entry.action.type === 'linkSuggestion') {
+        var nameIdx = entry.action.capturesProblemName;
+        var problemName = nameIdx ? match.groups[nameIdx - 1] : null;
+        if (!problemName) return;
+        var found = matcher ? matcher.matchProblemByName(problemName, otherProblems || []) : null;
+        linkSuggestion = {
+          problemName: problemName,
+          match: found, // {problemId, description, confidence} | null
+          source: entry.id || null,
+        };
       }
     });
     var literalStrip = stripGenericAdditionalInfoLines(workingText, literalTextsFromEntries(entries));
     var removed = patternRemoved.concat(literalStrip.removed);
     var current = (currentSignificance == null ? '' : String(currentSignificance)).toLowerCase();
     if (severityReviewNote) severityReviewNote.current = current;
+    // linkSuggestion's `cleaned` text is offered whether or not a candidate
+    // match was found — the "(Grouped with X)" boilerplate is recognised
+    // either way, same "always removed once recognised" discipline as every
+    // other pattern entry (see this function's own header note).
+    if (linkSuggestion) linkSuggestion.cleaned = literalStrip.cleaned;
     if (severityContradiction) {
       severityContradiction.current = current;
       severityContradiction.cleaned = literalStrip.cleaned;
-      return { genericAdditionalInfo: null, severityContradiction: severityContradiction, severityReviewNote: severityReviewNote };
+      return {
+        genericAdditionalInfo: null,
+        severityContradiction: severityContradiction,
+        severityReviewNote: severityReviewNote,
+        linkSuggestion: linkSuggestion,
+      };
     }
+    // A CONFIDENT linkSuggestion (a match was found) supersedes the plain
+    // strip offer the same way severityContradiction does — three dedicated
+    // relationship buttons already cover "remove this text" as part of
+    // whichever one is clicked, so a redundant plain-strip button alongside
+    // them would just be confusing. An UNMATCHED linkSuggestion has no
+    // confident action to offer, so it coexists with the plain strip —
+    // same as reviewSeverity's own informational-only behaviour.
+    var linkSuggestionSupersedesStrip = !!(linkSuggestion && linkSuggestion.match);
     return {
-      genericAdditionalInfo: removed.length ? { cleaned: literalStrip.cleaned, removed: removed } : null,
+      genericAdditionalInfo:
+        !linkSuggestionSupersedesStrip && removed.length ? { cleaned: literalStrip.cleaned, removed: removed } : null,
       severityContradiction: null,
       severityReviewNote: severityReviewNote,
+      linkSuggestion: linkSuggestion,
     };
   }
 
@@ -1194,6 +1237,8 @@
         severityContradiction: null, // {stated, current, cleaned} — set when the GP2GP severity-defaulting text contradicts the stored significance (see computeAdditionalInfoFindings)
         severityContradictionSaving: false,
         severityReviewNote: null, // {priorityValue, current} — set when a source-system "PRIORITY=n" value with no confirmed Major/Minor mapping was found (see computeAdditionalInfoFindings) — informational only, no correction offered
+        linkSuggestion: null, // {problemName, match:{problemId,description,confidence}|null, source, cleaned} — set when a "(Grouped with X)" reference was found (see computeAdditionalInfoFindings / shared/problem-text-linking.js)
+        linkSuggestionActing: false, // true while a create-link POST for this row is in flight (any of the three relationship choices)
         manualSearchQuery: '',
         manualSearchResults: null,
         manualSearchLoading: false,
@@ -1504,7 +1549,153 @@
       esc(note.priorityValue) +
       '") with no confirmed mapping to Major/Minor — this problem is currently recorded as <strong>' +
       esc(capitalize(note.current)) +
-      '</strong>; please check that\'s clinically correct.</div>'
+      "</strong>; please check that's clinically correct.</div>"
+    );
+  }
+
+  // "(Grouped with X)" reference (2026-08-09) — see shared/problem-text-
+  // linking.js's header for the full story. Two states: no confident match
+  // (informational only, same "ask the clinician to check" philosophy as
+  // severityReviewNoteHtml above) vs a confident match, offering all THREE
+  // relationship choices Nick asked for (2026-08-09: "the safest thing to
+  // assume is a 'linked problem' relationship... but I would like us to
+  // offer both that and a child/parent relationship in either direction") —
+  // deliberately never pre-selecting one, since the text alone gives no
+  // reliable signal about hierarchy direction.
+  function linkSuggestionHtml(problemId, st) {
+    if (!st.linkSuggestion) return '';
+    var ls = st.linkSuggestion;
+    if (!ls.match) {
+      return (
+        '<div class="ms-pdc-link-review-note">ℹ Import text mentions "Grouped with ' +
+        esc(ls.problemName) +
+        '" but no clearly matching problem was found on this record — check manually whether a link should be created.</div>'
+      );
+    }
+    var m = ls.match;
+    // Someone already created this relationship manually in Medicus
+    // (checkExistingRelationship, run when this suggestion was flagged) —
+    // offering to (re)create it would be redundant at best and confusing at
+    // worst; the only genuinely useful action left is cleaning up the now-
+    // stale import text (2026-08-09 request).
+    if (ls.alreadyRelated) {
+      return (
+        '<div class="ms-pdc-link-section">' +
+        '<div class="ms-pdc-link-note">🔗 Already linked/nested with <strong>' +
+        esc(m.description) +
+        '</strong> — the import text is now redundant.</div>' +
+        '<div class="ms-pdc-link-actions">' +
+        '<button type="button" class="ms-pdc-link-btn" data-problem-id="' +
+        esc(problemId) +
+        '" data-relationship="alreadyRelated"' +
+        (st.linkSuggestionActing ? ' disabled' : '') +
+        '>Remove import text</button>' +
+        '</div>' +
+        (st.linkSuggestionActing ? '<div class="ms-pdc-link-saving">Removing…</div>' : '') +
+        '</div>'
+      );
+    }
+    // Two-step confirm for the three RELATIONSHIP writes (review finding:
+    // the canvas gained a confirm bar for these identical choices, this
+    // inline widget was committing update-parent-problem/update-problem-
+    // links on a single click — a misclick between the two adjacent inverse
+    // nest buttons wrote an inverted hierarchy with no confirm and no undo).
+    // The text-only actions above ('alreadyRelated'/'leaveAsIs') stay
+    // single-click, consistent with this widget's other text-cleanup
+    // buttons — they never write a relationship.
+    if (st.linkSuggestionPending) {
+      var pendingMsg;
+      var pendingConfirmLabel;
+      if (st.linkSuggestionPending === 'linked') {
+        pendingMsg =
+          'This will create a flat (non-hierarchical) link between this problem and <strong>' +
+          esc(m.description) +
+          '</strong> — neither becomes a child of the other.';
+        pendingConfirmLabel = 'Confirm — link them';
+      } else if (st.linkSuggestionPending === 'thisChildOfMatch') {
+        pendingMsg =
+          'This will nest this problem under <strong>' +
+          esc(m.description) +
+          '</strong> — it will display as a child on the problem list, not as a top-level problem.';
+        pendingConfirmLabel = 'Confirm — nest it';
+      } else {
+        pendingMsg =
+          'This will nest <strong>' +
+          esc(m.description) +
+          '</strong> under this problem — it will display as a child on the problem list, not as a top-level problem.';
+        pendingConfirmLabel = 'Confirm — nest it';
+      }
+      return (
+        '<div class="ms-pdc-link-section">' +
+        '<div class="ms-pdc-link-confirm">' +
+        '<div class="ms-pdc-link-confirm-msg">' +
+        pendingMsg +
+        '</div>' +
+        '<div class="ms-pdc-link-actions">' +
+        '<button type="button" class="ms-pdc-link-cancel-btn" data-problem-id="' +
+        esc(problemId) +
+        '"' +
+        (st.linkSuggestionActing ? ' disabled' : '') +
+        '>Cancel</button>' +
+        '<button type="button" class="ms-pdc-link-confirm-btn" data-problem-id="' +
+        esc(problemId) +
+        '"' +
+        (st.linkSuggestionActing ? ' disabled' : '') +
+        '>' +
+        (st.linkSuggestionActing ? 'Creating…' : pendingConfirmLabel) +
+        '</button>' +
+        '</div>' +
+        '</div>' +
+        '</div>'
+      );
+    }
+    return (
+      '<div class="ms-pdc-link-section">' +
+      '<div class="ms-pdc-link-note">🔗 Import text suggests a relationship with <strong>' +
+      esc(m.description) +
+      '</strong>' +
+      (m.confidence === 'partial' ? ' (best match for "' + esc(ls.problemName) + '")' : '') +
+      ':</div>' +
+      // A relationship with someone ELSE already exists (checkExistingRelationship,
+      // 2026-08-09 follow-up — real case: the text named a plausible-but-wrong
+      // problem, the clinician had actually already sorted this one out with a
+      // DIFFERENT problem). The 3-way offer below still stands (the text's guess
+      // might be right in ADDITION to the existing one), but a clinician who's
+      // already satisfied needs an escape hatch that doesn't force a redundant
+      // or conflicting write.
+      (ls.hasOtherRelationship
+        ? '<div class="ms-pdc-link-review-note">This problem already has another relationship recorded.</div>'
+        : '') +
+      '<div class="ms-pdc-link-actions">' +
+      '<button type="button" class="ms-pdc-link-btn" data-problem-id="' +
+      esc(problemId) +
+      '" data-relationship="linked"' +
+      (st.linkSuggestionActing ? ' disabled' : '') +
+      '>Link as related problem</button>' +
+      '<button type="button" class="ms-pdc-link-btn" data-problem-id="' +
+      esc(problemId) +
+      '" data-relationship="thisChildOfMatch"' +
+      (st.linkSuggestionActing ? ' disabled' : '') +
+      '>Nest this under ' +
+      esc(m.description) +
+      '</button>' +
+      '<button type="button" class="ms-pdc-link-btn" data-problem-id="' +
+      esc(problemId) +
+      '" data-relationship="matchChildOfThis"' +
+      (st.linkSuggestionActing ? ' disabled' : '') +
+      '>Nest ' +
+      esc(m.description) +
+      ' under this</button>' +
+      (ls.hasOtherRelationship
+        ? '<button type="button" class="ms-pdc-link-btn ms-pdc-link-btn-leave" data-problem-id="' +
+          esc(problemId) +
+          '" data-relationship="leaveAsIs"' +
+          (st.linkSuggestionActing ? ' disabled' : '') +
+          '>Leave as-is, remove import text</button>'
+        : '') +
+      '</div>' +
+      (st.linkSuggestionActing ? '<div class="ms-pdc-link-saving">Creating…</div>' : '') +
+      '</div>'
     );
   }
 
@@ -1632,6 +1823,7 @@
         : '') +
       severityContradictionHtml(problemId, st) +
       severityReviewNoteHtml(st) +
+      linkSuggestionHtml(problemId, st) +
       genericAdditionalInfoHtml(problemId, st) +
       retiredInfoHtml(problemId, st) +
       legacyReadCodeHtml(st);
@@ -1643,7 +1835,13 @@
         manualSearchHtml(problemId, st)
       );
     }
-    var hasAnySuggestion = !!(alts.length || descendants.length || crossConcept.length || hintExpanded.length || remapHtml);
+    var hasAnySuggestion = !!(
+      alts.length ||
+      descendants.length ||
+      crossConcept.length ||
+      hintExpanded.length ||
+      remapHtml
+    );
     var html = infoHtml + codeLooksOkNoteHtml(st, hasAnySuggestion) + remapHtml;
     if (alts.length) {
       html +=
@@ -1808,6 +2006,32 @@
         applyCorrectSeverityAndRemoveJunk(problemId);
       });
     });
+    root.querySelectorAll('.ms-pdc-link-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var relationship = btn.getAttribute('data-relationship');
+        if (relationship === 'alreadyRelated' || relationship === 'leaveAsIs') {
+          // Text-only cleanup — single click, same as the widget's other
+          // text-cleanup buttons; no relationship write happens here.
+          applyLinkSuggestion(problemId, relationship);
+          return;
+        }
+        // Relationship writes arm the confirm step (see linkSuggestionHtml's
+        // own comment) — only the Confirm button below actually commits.
+        rowState(problemId).linkSuggestionPending = relationship;
+        renderPanel(problemId);
+      });
+    });
+    root.querySelectorAll('.ms-pdc-link-confirm-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyLinkSuggestion(problemId, rowState(problemId).linkSuggestionPending);
+      });
+    });
+    root.querySelectorAll('.ms-pdc-link-cancel-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        rowState(problemId).linkSuggestionPending = null;
+        renderPanel(problemId);
+      });
+    });
     // Grouped multi-synonym "Use" button (see candidateGroupsHtml) — reads
     // the sibling <select>'s current value, not a fixed data attribute,
     // since the whole point is the clinician picks the wording at click time.
@@ -1853,14 +2077,45 @@
       // scan's own cache, so this costs nothing extra (one local extension
       // resource load, cached after the first panel opens).
       var genericInfoEntries = await ensureGenericAdditionalInfoTextLoaded();
+      var otherProblemsForLinking = (_problemsCache || [])
+        .filter(function (p) {
+          return p.id !== problemId;
+        })
+        .map(function (p) {
+          return { id: p.id, description: p.problemCodeDescription };
+        });
       var findings = computeAdditionalInfoFindings(
         prefill.additionalInformation,
         prefill.significance,
-        genericInfoEntries
+        genericInfoEntries,
+        otherProblemsForLinking
       );
       st.genericAdditionalInfo = findings.genericAdditionalInfo;
       st.severityContradiction = findings.severityContradiction;
       st.severityReviewNote = findings.severityReviewNote;
+      st.linkSuggestion = findings.linkSuggestion;
+      // A confident match might already be a real relationship on the
+      // record (someone fixed it manually in Medicus) — checked here so the
+      // panel never offers a redundant "create this link" button for a
+      // relationship that already exists (2026-08-09 request). Best-effort:
+      // a failed check leaves alreadyRelated unset, which reads as "not
+      // known to be related" — the ordinary 3-way offer still appears
+      // rather than the panel silently showing nothing.
+      if (st.linkSuggestion && st.linkSuggestion.match && window.ProblemNesting) {
+        try {
+          var relResult = await window.ProblemNesting.checkExistingRelationship(
+            problemId,
+            st.linkSuggestion.match.problemId
+          );
+          st.linkSuggestion.alreadyRelated = relResult.relatedToMatch;
+          // A relationship with someone ELSE, not the text's guess — see
+          // checkExistingRelationship's own header for the real case that
+          // motivated this distinction.
+          st.linkSuggestion.hasOtherRelationship = !relResult.relatedToMatch && relResult.hasAnyRelationship;
+        } catch (e) {
+          /* left unset — see comment above */
+        }
+      }
       var queryText = stripLegacyMarkers(code.description);
       var results = await searchDescriptions(queryText);
       // Supplement with an SCTID-keyed search for the current concept's own
@@ -2251,6 +2506,7 @@
   window.ProblemDescriptionCleanup = {
     openInContainer: openInContainer,
     close: closePanel,
+    stripGenericAdditionalInfoText: stripGenericAdditionalInfoText,
   };
 
   // Core apply path, shared by both the same-concept alternatives (a cosmetic
@@ -2606,6 +2862,166 @@
     }
   }
 
+  // Creates the relationship the "(Grouped with X)" text suggested, via
+  // content-scripts/problem-nesting.js's bridge (this file owns no write
+  // path of its own for problem-to-problem relationships — see
+  // shared/problem-text-linking.js's header for the full architecture).
+  // relationshipType is one of:
+  //   'linked'          — flat, non-hierarchical (commitFlatLink)
+  //   'thisChildOfMatch' — this problem becomes a child of the matched one
+  //   'matchChildOfThis' — the matched problem becomes a child of this one
+  // Unlike applyCorrectSeverityAndRemoveJunk, the relationship write and the
+  // text-cleanup write are to TWO DIFFERENT ENDPOINTS (Medicus has no single
+  // combined call for "create this relationship AND edit that problem's
+  // text") — sequential, not bundled. If the relationship write fails,
+  // nothing else happens (the suggestion stays offered, retry-safe — both
+  // commitFlatLink and commitParentLink are no-ops/idempotent-safe against
+  // an already-current relationship). If it succeeds but the follow-up
+  // text-strip fails, the relationship is still real and kept — only the
+  // cosmetic cleanup didn't complete, surfaced as its own distinct message
+  // rather than implying the whole action failed.
+  async function applyLinkSuggestion(problemId, relationshipType) {
+    var st = rowState(problemId);
+    if (!st.linkSuggestion || !st.linkSuggestion.match || st.linkSuggestionActing || !st.prefill) return;
+    if (!relationshipType) return; // no armed choice (confirm clicked with nothing pending)
+    var isTextOnly = relationshipType === 'alreadyRelated' || relationshipType === 'leaveAsIs';
+    var otherId = st.linkSuggestion.match.problemId;
+    st.linkSuggestionActing = true;
+    st.error = null;
+    renderPanel(problemId);
+    try {
+      if (isTextOnly) {
+        // 'alreadyRelated': the relationship the text described is already
+        // real. 'leaveAsIs': a DIFFERENT relationship already exists and
+        // the clinician is satisfied with it, not the text's guess (both
+        // via checkExistingRelationship, run when this suggestion was
+        // flagged). Either way — no write here, just the text cleanup
+        // below.
+      } else if (!window.ProblemNesting) {
+        throw new Error('The problem-linking tool is unavailable on this page.');
+      } else if (relationshipType === 'linked') {
+        await window.ProblemNesting.commitFlatLink(problemId, otherId);
+      } else if (relationshipType === 'thisChildOfMatch') {
+        await window.ProblemNesting.commitParentLink(problemId, otherId);
+      } else if (relationshipType === 'matchChildOfThis') {
+        await window.ProblemNesting.commitParentLink(otherId, problemId);
+      } else {
+        throw new Error('Unknown relationship type.');
+      }
+      // Relationship created (or, for the text-only actions, nothing to
+      // create) — now the "(Grouped with X)" text is genuinely redundant
+      // with what's structurally captured, same "structural fix supersedes
+      // the free text" reasoning as applyCorrectSeverityAndRemoveJunk. A
+      // failure past this point does NOT roll back the relationship
+      // (already real) — only the cosmetic strip didn't complete.
+      //
+      // st.linkSuggestion is nulled ONLY on the paths that consume it
+      // (review finding: nulling it up front left a failed text-only strip
+      // with a "please try again" error and no button left to retry with —
+      // the canvas keeps its card offered on this exact failure, this
+      // widget now matches). After a successful RELATIONSHIP write the
+      // suggestion is always consumed — leaving it offered would invite
+      // re-creating the just-created relationship.
+      var cleaned = st.linkSuggestion.cleaned;
+      var codeValue = st.prefill.problemCode && st.prefill.problemCode.value;
+      var code = codeValue && {
+        description: codeValue.description,
+        conceptId: codeValue.conceptId,
+        descriptionId: codeValue.descriptionId,
+      };
+      if (!code) {
+        // No code in the prefill = the text edit cannot be built. For the
+        // text-only actions that IS the whole action — a visible failure,
+        // never a silently-disappearing suggestion that reads as success.
+        if (isTextOnly) {
+          st.error = 'Could not load this problem’s current code — the import text was not removed. Try again.';
+        } else {
+          st.linkSuggestion = null;
+          st.error = 'Link created, but the import text could not be removed — remove it separately.';
+        }
+      } else {
+        try {
+          var payload = buildEditProblemPayload(st.prefill, code, cleaned);
+          await postEditProblem(problemId, payload);
+          st.additionalInformation = cleaned;
+          st.prefill = Object.assign({}, st.prefill, { additionalInformation: cleaned });
+          st.linkSuggestion = null; // fully done — relationship (if any) and text both settled
+        } catch (textErr) {
+          if (isTextOnly) {
+            // Removing the text was the whole action and it failed —
+            // keep the suggestion so the button is still there to retry.
+            st.error = 'Failed to remove the import text — please try again.';
+          } else {
+            st.linkSuggestion = null;
+            st.error = 'Link created, but failed to remove the import text — you can remove it separately.';
+          }
+        }
+      }
+    } catch (err) {
+      st.error = (err && err.message) || 'Failed to create the link — please try again.';
+    } finally {
+      st.linkSuggestionPending = null;
+      st.linkSuggestionActing = false;
+      renderPanel(problemId);
+    }
+  }
+
+  // Strips whatever generic/boilerplate additionalInformation text is
+  // currently recognised (see computeAdditionalInfoFindings — this reuses
+  // the SAME text-cleanup applyLinkSuggestion above already applies inline,
+  // never a second copy of it) for a problem this file's own row state has
+  // NOT necessarily touched yet — exposed via window.ProblemDescriptionCleanup
+  // so content-scripts/problem-nesting-canvas.js's own "(Grouped with X)"
+  // tray can reuse the ONE real text-editing implementation after ITS OWN
+  // relationship commit, rather than duplicating fetch-prefill/build-
+  // payload/post here a second time (2026-08-09: "offer to remove the
+  // generic text as part of the linking process", extended to the canvas to
+  // match what this file's own inline flow already does). otherProblems is
+  // deliberately omitted from the computeAdditionalInfoFindings call below
+  // — the caller has ALREADY resolved whichever relationship/match mattered;
+  // this call exists purely to recover the same `cleaned` text every action
+  // type derives from (severityContradiction/linkSuggestion/
+  // genericAdditionalInfo all resolve to the identical literalStrip.cleaned
+  // value — see that function's own header). Returns false (a no-op, not an
+  // error) when there's genuinely nothing to clean; throws on a real fetch/
+  // post failure so the caller can show its OWN "relationship created, but
+  // text removal failed" message.
+  async function stripGenericAdditionalInfoText(problemId) {
+    var prefill = await fetchEditProblemForm(problemId);
+    var codeValue = prefill && prefill.problemCode && prefill.problemCode.value;
+    if (!codeValue) return false;
+    var genericInfoEntries = await ensureGenericAdditionalInfoTextLoaded();
+    var findings = computeAdditionalInfoFindings(
+      prefill.additionalInformation,
+      prefill.significance,
+      genericInfoEntries
+    );
+    // First finding that CARRIES a cleaned value — explicitly != null, never
+    // a || chain (review finding): a legitimate cleaned === '' (the text was
+    // entirely boilerplate) is falsy, and the old chain skipped past it to
+    // null, silently no-opping the strip while the caller announced success.
+    var findingWithCleaned = [
+      findings.severityContradiction,
+      findings.linkSuggestion,
+      findings.genericAdditionalInfo,
+    ].find(function (f) {
+      return f && f.cleaned != null;
+    });
+    var cleaned = findingWithCleaned ? findingWithCleaned.cleaned : null;
+    if (cleaned == null || cleaned === (prefill.additionalInformation || '')) return false;
+    var code = {
+      description: codeValue.description,
+      conceptId: codeValue.conceptId,
+      descriptionId: codeValue.descriptionId,
+    };
+    var payload = buildEditProblemPayload(prefill, code, cleaned);
+    await postEditProblem(problemId, payload);
+    var st = rowState(problemId);
+    st.additionalInformation = cleaned;
+    st.prefill = Object.assign({}, st.prefill || prefill, { additionalInformation: cleaned });
+    return true;
+  }
+
   // ── Injection: one "Fix description" button per flagged row ─────────────────
 
   function injectFixButton(problemId, anchorEl) {
@@ -2664,6 +3080,12 @@
   var _retiredFlaggedCount = 0;
 
   async function runRetiredCodesScan() {
+    // Captured before the first await (review finding): scan() resets
+    // _rows/_retiredScanState to a fresh 'idle' on an SPA patient
+    // navigation, and every continuation below must stop writing state the
+    // moment that happens — otherwise this scan's completion clobbers the
+    // NEW patient's reset state ('done' over empty rows, no offer to scan).
+    var scanPatientId = _lastPatientId;
     _retiredScanState = 'scanning';
     _retiredScanError = null;
     renderRetiredWidget();
@@ -2696,6 +3118,7 @@
           ]);
         })
       );
+      if (_lastPatientId !== scanPatientId) return; // patient changed mid-fetch — the reset owns the state now
       // One retirement-status fetch per DISTINCT conceptId, never one per
       // problem — same discipline as problem-bulk-end.js's badge scan.
       var conceptIdByProblemId = Object.create(null);
@@ -2722,6 +3145,7 @@
       // reason costs only one local resource load (cached after the first
       // call), same as it does inside openPanel.
       var genericInfoEntries = await ensureGenericAdditionalInfoTextLoaded();
+      if (_lastPatientId !== scanPatientId) return;
 
       // Compute the Read-v2-origin signal for every problem up front (no
       // fetch — reads overview data already in hand) so we know which
@@ -2785,6 +3209,18 @@
         })
       );
 
+      // Everything fetched — last stop before per-row state writes into
+      // _rows, which a patient change has by now replaced (see scan()).
+      if (_lastPatientId !== scanPatientId) return;
+
+      // Built once for the whole scan — every problem's own {id, description},
+      // filtered per-row below to exclude the one being scanned. Feeds
+      // linkSuggestion's candidate matching (see computeAdditionalInfoFindings's
+      // own comment on otherProblems / shared/problem-text-linking.js).
+      var allProblemsForLinking = _problemsCache.map(function (p) {
+        return { id: p.id, description: p.problemCodeDescription };
+      });
+
       var flaggedCount = 0;
       _problemsCache.forEach(function (p) {
         var conceptId = conceptIdByProblemId[p.id];
@@ -2801,15 +3237,27 @@
           var hasBetterWording = sameConceptAlternatives(sameConceptResults, conceptId, currentDescription).length > 0;
           if (!hasBetterWording) legacyReadCode = null;
         }
+        var otherProblemsForLinking = allProblemsForLinking.filter(function (op) {
+          return op.id !== p.id;
+        });
         var findings = computeAdditionalInfoFindings(
           prefill && prefill.additionalInformation,
           prefill && prefill.significance,
-          genericInfoEntries
+          genericInfoEntries,
+          otherProblemsForLinking
         );
         var hasGenericInfo = !!findings.genericAdditionalInfo;
         var hasSeverityContradiction = !!findings.severityContradiction;
         var hasSeverityReviewNote = !!findings.severityReviewNote;
-        if (!isRetired && !legacyReadCode && !hasGenericInfo && !hasSeverityContradiction && !hasSeverityReviewNote) {
+        var hasLinkSuggestion = !!findings.linkSuggestion;
+        if (
+          !isRetired &&
+          !legacyReadCode &&
+          !hasGenericInfo &&
+          !hasSeverityContradiction &&
+          !hasSeverityReviewNote &&
+          !hasLinkSuggestion
+        ) {
           return;
         }
         flaggedCount++;
@@ -2827,16 +3275,48 @@
         if (hasGenericInfo) st.genericAdditionalInfo = findings.genericAdditionalInfo;
         if (hasSeverityContradiction) st.severityContradiction = findings.severityContradiction;
         if (hasSeverityReviewNote) st.severityReviewNote = findings.severityReviewNote;
+        if (hasLinkSuggestion) st.linkSuggestion = findings.linkSuggestion;
         var row = anchorsByProblemId[p.id];
         if (row) injectFixButton(p.id, row);
       });
+      // Settled BEFORE _retiredScanState flips to 'done' (so the widget's
+      // first render of a flagged row already has a definitive true/false,
+      // never a flash of the 3-way offer that then disappears) — same
+      // "check before someone already fixed this manually" as
+      // problem-nesting.js's own scan-time check (2026-08-09 request).
+      // Bounded by how many confident matches actually resolved, never by
+      // list size — see checkExistingRelationship's own header.
+      if (window.ProblemNesting) {
+        await Promise.all(
+          Object.keys(_rows)
+            .filter(function (id) {
+              var st = _rows[id];
+              return st.linkSuggestion && st.linkSuggestion.match;
+            })
+            .map(function (id) {
+              return window.ProblemNesting.checkExistingRelationship(id, _rows[id].linkSuggestion.match.problemId)
+                .then(function (result) {
+                  _rows[id].linkSuggestion.alreadyRelated = result.relatedToMatch;
+                  _rows[id].linkSuggestion.hasOtherRelationship = !result.relatedToMatch && result.hasAnyRelationship;
+                })
+                .catch(function () {
+                  /* left unset — reads as "not known to be related" */
+                });
+            })
+        );
+      }
+      // Final patient re-check (review finding): the relationship-check
+      // batch above is one network round-trip per confident match — plenty
+      // of time for an SPA patient navigation to have reset this widget.
+      if (_lastPatientId !== scanPatientId) return;
       _retiredFlaggedCount = flaggedCount;
       _retiredScanState = 'done';
     } catch (err) {
+      if (_lastPatientId !== scanPatientId) return;
       _retiredScanState = 'error';
       _retiredScanError = (err && err.message) || 'Failed to check for retired/legacy codes.';
     } finally {
-      renderRetiredWidget();
+      if (_lastPatientId === scanPatientId) renderRetiredWidget();
     }
   }
 
@@ -2858,7 +3338,7 @@
           ? _retiredFlaggedCount +
             ' problem' +
             (_retiredFlaggedCount === 1 ? '' : 's') +
-            ' flagged (retired code, Read-code-derived description, generic import text, a GP2GP severity-defaulting contradiction, and/or an unmapped source-system priority value) — see "Clean up code" on the flagged problem(s) above.'
+            ' flagged (retired code, Read-code-derived description, generic import text, a GP2GP severity-defaulting contradiction, an unmapped source-system priority value, and/or a "Grouped with" reference suggesting a link to another problem) — see "Clean up code" on the flagged problem(s) above.'
           : 'Nothing flagged.') +
         '</span>'
       );

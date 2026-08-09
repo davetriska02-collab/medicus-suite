@@ -53,6 +53,14 @@ const {
   codeQualityConcernExists,
 } = require('./content-scripts/problem-description-cleanup.js');
 const genericAdditionalInfoText = require('./rules/generic-additional-info-text.json');
+const MSProblemTextLinking = require('./shared/problem-text-linking.js');
+// computeAdditionalInfoFindings's linkSuggestion action reads
+// window.MSProblemTextLinking at call time (browser classic-script global) —
+// stubbed here so the matching logic is exercised for real rather than
+// silently no-op'd because `window` doesn't exist in Node. Safe: this file's
+// own browser-boot section (bottom of problem-description-cleanup.js) has
+// already returned via `module.exports` above by the time this runs.
+global.window = { MSProblemTextLinking: MSProblemTextLinking };
 
 let passed = 0,
   failed = 0;
@@ -1286,10 +1294,11 @@ console.log('--- literalTextsFromEntries / patternEntriesFromEntries: splitting 
     'the pattern entry (no `.text` field) never leaks an undefined into the literal list'
   );
   check(
-    patterns.length === 2 &&
+    patterns.length === 3 &&
       patterns.some((p) => p.id === 'severityDefaultingContradiction') &&
-      patterns.some((p) => p.id === 'sourceSystemPriorityValue'),
-    'both configured pattern entries are returned (got ' + patterns.map((p) => p.id).join(', ') + ')'
+      patterns.some((p) => p.id === 'sourceSystemPriorityValue') &&
+      patterns.some((p) => p.id === 'groupedWithReference'),
+    'all three configured pattern entries are returned (got ' + patterns.map((p) => p.id).join(', ') + ')'
   );
   check(literalTextsFromEntries(null).length === 0, 'null entries -> empty literal list, never throws');
   check(patternEntriesFromEntries(null).length === 0, 'null entries -> empty pattern list, never throws');
@@ -1635,6 +1644,92 @@ console.log('--- computeAdditionalInfoFindings: genuine free text, other edge ca
   );
 }
 
+console.log('--- computeAdditionalInfoFindings: linkSuggestion action (2026-08-09, "(Grouped with X)") ---');
+{
+  // Synthetic entry — the real rules/generic-additional-info-text.json entry
+  // is pending Nick's verbatim confirmation of the exact live text (this
+  // codebase's own "confirm before adding" discipline — see that file's
+  // header). Exercising the CODE PATH here does not require the shipped
+  // entry to exist yet; the feature is entirely inert in production until
+  // that entry is actually added (patternEntriesFromEntries never sees it).
+  const linkEntries = [
+    {
+      kind: 'pattern',
+      id: 'groupedWithReference',
+      pattern: '\\(Grouped with ([^)]+)\\)',
+      flags: 'i',
+      action: { type: 'linkSuggestion', capturesProblemName: 1 },
+    },
+  ];
+  const otherProblems = [
+    { id: 'p2', description: 'Anxiety with depression' },
+    { id: 'p3', description: 'Type 2 diabetes mellitus' },
+  ];
+
+  const exactFindings = computeAdditionalInfoFindings(
+    '(Grouped with Anxiety with depression)',
+    'minor',
+    linkEntries,
+    otherProblems
+  );
+  check(
+    !!exactFindings.linkSuggestion && exactFindings.linkSuggestion.problemName === 'Anxiety with depression',
+    'captures the referenced problem name from the parenthesised text'
+  );
+  check(
+    !!exactFindings.linkSuggestion.match &&
+      exactFindings.linkSuggestion.match.problemId === 'p2' &&
+      exactFindings.linkSuggestion.match.confidence === 'exact',
+    'resolves to the exact matching problem on the record'
+  );
+  check(
+    exactFindings.linkSuggestion.cleaned === '',
+    'the boilerplate text is removed from `cleaned` regardless of match outcome'
+  );
+  check(
+    exactFindings.genericAdditionalInfo === null,
+    'linkSuggestion does not ALSO produce a redundant plain generic-strip offer for the same text'
+  );
+
+  const noMatchFindings = computeAdditionalInfoFindings(
+    '(Grouped with Some unrelated condition)',
+    'minor',
+    linkEntries,
+    otherProblems
+  );
+  check(
+    !!noMatchFindings.linkSuggestion && noMatchFindings.linkSuggestion.match === null,
+    'no candidate on the record -> match is null (informational only), never a guessed link'
+  );
+  check(
+    !!noMatchFindings.genericAdditionalInfo,
+    'an UNMATCHED linkSuggestion coexists with the plain strip offer (same as reviewSeverity) — there is no confident action to supersede it with'
+  );
+
+  const noOtherProblemsFindings = computeAdditionalInfoFindings(
+    '(Grouped with Anxiety with depression)',
+    'minor',
+    linkEntries
+    // otherProblems omitted entirely — existing callers that haven't been
+    // updated must still work, degrading to "no match" rather than throwing.
+  );
+  check(
+    !!noOtherProblemsFindings.linkSuggestion && noOtherProblemsFindings.linkSuggestion.match === null,
+    'otherProblems omitted -> degrades to no-match, never throws (backward compatible with any caller not yet passing it)'
+  );
+
+  const genuineTextFindings = computeAdditionalInfoFindings(
+    'Patient reports ongoing symptoms.',
+    'minor',
+    linkEntries,
+    otherProblems
+  );
+  check(
+    genuineTextFindings.linkSuggestion === null,
+    'no "(Grouped with X)" text present -> linkSuggestion stays null, genuine free text untouched'
+  );
+}
+
 console.log(
   '--- codeQualityConcernExists: distinguishes "code itself needs review" from "flagged only for text housekeeping" (2026-07-29) ---'
 );
@@ -1780,6 +1875,51 @@ console.log('--- apiErrorMessage: non-2xx responses surface the server reason, n
   check(
     apiErrorMessage(400, 'line1\n   line2\t\tline3') === 'API 400 — line1 line2 line3',
     'internal whitespace/newlines are collapsed for the inline panel'
+  );
+}
+
+console.log('\n--- v3.227.1 review-fix source locks (two-step confirm / retry survival / empty-string strip) ---');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'problem-description-cleanup.js'), 'utf8');
+  // Finding 5: the three relationship-creating buttons arm a confirm step;
+  // only the confirm button commits. (The PR's own CHANGELOG claimed this
+  // discipline existed — now it does.)
+  check(src.includes('linkSuggestionPending'), 'relationship buttons arm a pending choice instead of committing');
+  check(
+    src.includes('ms-pdc-link-confirm-btn') && src.includes('ms-pdc-link-cancel-btn'),
+    'the confirm step renders explicit Confirm and Cancel controls'
+  );
+  check(
+    /relationship === 'alreadyRelated' \|\| relationship === 'leaveAsIs'/.test(src),
+    'only the text-only actions stay single-click; every relationship write goes through the confirm'
+  );
+  // Finding 9: a failed TEXT-ONLY strip keeps the suggestion offered so the
+  // retry button still exists, and a missing prefill code is a visible
+  // failure rather than a silently-vanishing suggestion.
+  check(
+    src.includes('keep the suggestion so the button is still there to retry'),
+    'text-only strip failure keeps st.linkSuggestion for retry'
+  );
+  check(
+    src.includes('the import text was not removed. Try again.'),
+    'a missing prefill code on a text-only action reads as a failure, never as success'
+  );
+  // Finding 4: the cleaned-value selection must accept a legitimate empty
+  // string — an || chain here silently no-ops the strip when the whole
+  // additionalInformation was boilerplate.
+  const stripIdx = src.indexOf('async function stripGenericAdditionalInfoText');
+  const stripBody = src.slice(stripIdx, stripIdx + 2200);
+  check(
+    stripBody.includes('f.cleaned != null'),
+    'stripGenericAdditionalInfoText picks the first finding with cleaned != null'
+  );
+  check(
+    !/var cleaned =\s*\(findings\.severityContradiction && findings\.severityContradiction\.cleaned\) \|\|/.test(
+      stripBody
+    ),
+    'the falsy || chain over cleaned values is gone'
   );
 }
 
