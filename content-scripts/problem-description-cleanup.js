@@ -299,6 +299,34 @@
     return org != null ? org : null;
   }
 
+  // Builds the POST /clinical/note/change-note body from a FRESH
+  // GET /clinical/data/note/edit-note/{noteId} prefill — confirmed live via
+  // 3 HAR captures 2026-08-13 (see fetchEditNoteForm/postChangeNote's own
+  // header comment for the full contract). A WRITABLE-SUBSET full replace —
+  // narrower than edit-problem's "resend literally everything" contract,
+  // but every field below is still resent even when unchanged, confirmed
+  // identical across all 3 captures. newCode: {description, conceptId,
+  // descriptionId} — the code to write (the PROBLEM's current code, not
+  // searched/picked per journal entry).
+  function buildChangeNotePayload(notePrefill, newCode) {
+    var p = notePrefill || {};
+    return {
+      noteId: p.noteId,
+      note: p.note,
+      noteSNOMEDct: newCode,
+      hiddenFromPatientFacingServices: !!p.hiddenFromPatientFacingServices,
+      confidentialFromThirdParties: !!p.confidentialFromThirdParties,
+      flagOnPatientBanner: !!p.flagOnPatientBanner,
+      recordedByOrganisation: p.recordedByOrganisation != null ? p.recordedByOrganisation : null,
+      recordedByPractitioner: p.recordedByPractitioner != null ? p.recordedByPractitioner : null,
+      recordedByStaff: p.recordedByStaff != null ? p.recordedByStaff : null,
+      recordDate: p.recordDate != null ? p.recordDate : null,
+      flags: Array.isArray(p.flags) ? p.flags : [],
+      clinicalCaseId: (p.linkedClinicalCase && p.linkedClinicalCase.defaultClinicalCaseId) || null,
+      linkedProblemIds: Array.isArray(p.linkedProblemIds) ? p.linkedProblemIds : [],
+    };
+  }
+
   // Turns a non-2xx API response into an error message that actually says
   // WHY the server refused. A bare "API 400" cost a live round (2026-07-27,
   // an edit-problem apply rejected on a real patient with nothing to act
@@ -758,6 +786,45 @@
     };
   }
 
+  // Strips EVERY known generic-import-text pattern from `text` — deliberately
+  // NOT computeAdditionalInfoFindings, and not a thin wrapper around it.
+  // Found live 2026-08-14 (real journal note, text " PRIORITY=1"): calling
+  // computeAdditionalInfoFindings(text, null, ...) for a journal note (which
+  // has no `significance` field at all, unlike a problem) makes
+  // sourceSystemPriorityValue's reviewSeverity action ALWAYS look like a
+  // contradiction — severityCorrectionNeeded('major', null) never matches
+  // "already agrees with what's stored", because nothing IS stored — so
+  // computeAdditionalInfoFindings routes into its severityContradiction
+  // branch and returns genericAdditionalInfo: null, silently discarding a
+  // pattern match that WAS found and WAS removable. That branching is
+  // CORRECT for a problem (a severity mismatch deserves the combined
+  // correct+remove action, superseding a plain strip) — the bug was reusing
+  // that same function for a context (a journal note) where the concept it's
+  // branching on doesn't exist. Journal notes have no significance to
+  // correct and no "other problems" to link against, so this function skips
+  // ALL action interpretation (severityCorrection/reviewSeverity/
+  // linkSuggestion) entirely — every pattern match is stripped
+  // unconditionally, same as a literal entry. Small, deliberate duplication
+  // of the pattern-walking loop above rather than a shared helper — the two
+  // loop bodies genuinely diverge (one interprets actions, one doesn't), and
+  // computeAdditionalInfoFindings is load-bearing, tested, PROBLEM-facing
+  // code not worth the risk of restructuring for this. Returns {cleaned,
+  // removed} — removed empty (never truthy-but-empty) when nothing matched,
+  // same "check .length, not truthiness" convention as
+  // stripGenericAdditionalInfoLines.
+  function stripAllKnownGenericText(text, entries) {
+    var workingText = text == null ? '' : String(text);
+    var patternRemoved = [];
+    patternEntriesFromEntries(entries).forEach(function (entry) {
+      var match = findPatternMatch(workingText, entry);
+      if (!match) return;
+      patternRemoved.push(match.raw);
+      workingText = removeMatchedSpan(workingText, match.raw);
+    });
+    var literalStrip = stripGenericAdditionalInfoLines(workingText, literalTextsFromEntries(entries));
+    return { cleaned: literalStrip.cleaned, removed: patternRemoved.concat(literalStrip.removed) };
+  }
+
   // Whether there's an actual reason to believe THIS problem's own SNOMED
   // code needs review — as opposed to the problem row merely having a
   // "Clean up code" button because of import-text housekeeping (junk
@@ -806,6 +873,7 @@
       // Problem-specific.
       buildEditProblemPayload,
       unwrapOptionValue,
+      buildChangeNotePayload,
       apiErrorMessage,
       findOutdatedProblems,
       confirmedReplacementAlternative,
@@ -821,6 +889,7 @@
       removeMatchedSpan,
       severityCorrectionNeeded,
       computeAdditionalInfoFindings,
+      stripAllKnownGenericText,
       codeQualityConcernExists,
     };
     return;
@@ -988,6 +1057,62 @@
 
   function postEditProblem(problemId, payload) {
     return apiFetch('/clinical/problem/edit-problem/' + encodeURIComponent(problemId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  // JOURNAL NOTE WRITE PATH (2026-08-13) — confirmed live via 3 HAR
+  // captures on a real patient (editing a note's free text, editing its
+  // code via search, and editing an "orphan" note not inside a
+  // consultation). All three confirmed the SAME endpoint and payload shape
+  // — no special-casing for consultation-nested vs orphan notes.
+  //
+  //   GET  /clinical/data/note/edit-note/{noteId}
+  //        → the edit-form prefill: { noteId, note, noteSNOMEDct:
+  //          {conceptId,description,descriptionId}, recordDate,
+  //          recordedByPractitioner, recordedByStaff, recordedByOrganisation,
+  //          hiddenFromPatientFacingServices, confidentialFromThirdParties,
+  //          flagOnPatientBanner, flags, linkedProblemIds (plain id array —
+  //          NOT {id,problemCodeDescription} objects, a DIFFERENT shape from
+  //          the bulk patient-journal/overview payload's linkedProblems),
+  //          linkedClinicalCase: {options, defaultClinicalCaseId,
+  //          requiresClinicalCase}, contextType/contextId (null for an
+  //          orphan note, "consultation-topic-heading"+id when nested —
+  //          confirmed IRRELEVANT to the write, see below), plus UI-only
+  //          fields (linkableProblems, staff, riskContextIds, flagOptions,
+  //          excludeConsentCodes, isDraft, isMarkedAsIncorrect,
+  //          allowEditLinkedProblems, organisationEntry,
+  //          recordedByOrganisationManual, patientId,
+  //          recordedAtAnotherOrganisation, localOrganisation) never resent. }
+  //   POST /clinical/note/change-note
+  //        body: see buildChangeNotePayload below — a WRITABLE-SUBSET full
+  //        replace, confirmed identical shape across all 3 captures
+  //        regardless of what changed. Confirmed via the orphan-note capture
+  //        that NO contextType/contextId/patientId is needed in the POST —
+  //        resolved server-side purely from noteId.
+  //        → 200 {}
+  //
+  // NOT YET CONFIRMED (flag, don't guess): a non-null recordedByOrganisation
+  // shape (every capture had recordedAtAnotherOrganisation:false and
+  // recordedByOrganisation:null) and a non-null clinicalCaseId/
+  // defaultClinicalCaseId case. buildChangeNotePayload passes both through
+  // verbatim from the fresh GET rather than reshaping — safe either way
+  // since nothing here tries to interpret or change them.
+  //
+  // SAFETY SCOPE, DELIBERATELY DIFFERENT FROM "Clean up code": that flow
+  // only ever offers a same-concept relabel (never changes conceptId). This
+  // write is different by design — its purpose is making a journal note's
+  // code equal the PROBLEM's current code, which may be a different concept
+  // than what the note currently has (that's the divergence being fixed).
+  // No same-concept constraint here — confirmed intended by Nick.
+  function fetchEditNoteForm(noteId) {
+    return apiFetch('/clinical/data/note/edit-note/' + encodeURIComponent(noteId));
+  }
+
+  function postChangeNote(noteId, payload) {
+    return apiFetch('/clinical/note/change-note', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -1232,6 +1357,9 @@
         confirmedPartiallyEquivalents: null, // [{description, conceptId, descriptionId}, …] — same shape as confirmedPossibleEquivalents but for PARTIALLY EQUIVALENT TO, a distinct SNOMED association (see partiallyEquivalentHtml)
         practiceRemap: null, // {conceptId, descriptionId, description} — resolved from pdc.conceptRemap, keyed by this problem's OWN current conceptId (the source), or null. See openPanel's own comment.
         legacyReadCode: null, // {code, description} — set by the opt-in scan when originalCodes shows a read-v2 origin
+        journalMatches: null, // [{entryId, encounterId, date, clinicalCodeDescription, tier}] — set by openPanel's best-effort journal duplicate check (shared/journal-problem-matching.js). null = not yet checked or the check failed; [] = checked, none found.
+        journalApply: {}, // entryId -> {saving, saved, error, appliedDescription} — per-journal-match write state (applyToJournal). Nested by entryId, unlike every other flag on this row, because one problem can have several journal matches, each an independent write target.
+        journalInfoApply: {}, // entryId -> {saving, saved, error, appliedText} — SEPARATE per-journal-match state for the "remove generic import text" sync (applyGenericAdditionalInfoToJournal), kept apart from journalApply so a code-sync and a text-sync on the same entry don't conflate their saved/error state.
         genericAdditionalInfo: null, // {cleaned, removed} — computed in openPanel from prefill.additionalInformation, ANY row
         genericAdditionalInfoSaving: false,
         severityContradiction: null, // {stated, current, cleaned} — set when the GP2GP severity-defaulting text contradicts the stored significance (see computeAdditionalInfoFindings)
@@ -1441,6 +1569,137 @@
       ' “' +
       esc(st.legacyReadCode.description) +
       '”) — even if the SNOMED code itself is current, review the suggestions below for a clearer modern wording.</div>'
+    );
+  }
+
+  // Shared by journalMatchesHtml (display) and applyToJournal (confirm()
+  // dialog text) so the two never disagree on wording — module-scope `var`,
+  // hoisted, safe to reference from either location regardless of source
+  // order.
+  var JOURNAL_MATCH_LABELS = {
+    linked: 'Linked to this problem in the journal',
+    'linked-exact-text': 'Linked to this problem, matching wording',
+    'linked-partial-text': 'Linked to this problem, similar wording',
+    'verified-date-exact-text': "Matching wording, confirmed against the note's own date",
+    'verified-date-partial-text': "Similar wording, confirmed against the note's own date",
+    'date-exact-text': 'Same date, matching wording',
+    'date-partial-text': 'Same date, similar wording',
+    'fuzzy-code-text-exact': 'Approximate date, code text found in note',
+    'fuzzy-code-text-partial': 'Approximate date, code text similar to note',
+    'fuzzy-additional-info-exact': 'Approximate date, matching additional details',
+    'fuzzy-additional-info-partial': 'Approximate date, similar additional details',
+  };
+
+  // Journal duplicate detection (2026-08-12) — see
+  // shared/journal-problem-matching.js header for the full detection story.
+  // Lists journal note entries that look like the same clinical event as
+  // this problem. Silent (returns '') when nothing was found, so the
+  // common no-duplicate case adds no noise to the panel.
+  //
+  // MULTIPLE-MATCH WARNING (2026-08-12, Nick's request): GP2GP import can
+  // duplicate whole records, not just individual codes, so more than one
+  // genuine journal match for a single problem is itself a signal worth
+  // surfacing — rather than us guessing which of several is the "real" one
+  // to sync, point the clinician at the purpose-built tool
+  // (duplicate-checker.html's "Analyse full record for duplicates") first.
+  // Shown ABOVE the match list, not instead of it — the individual matches
+  // are still useful context either way.
+  //
+  // WRITE ACTION (2026-08-13) — see applyToJournal's own comment for the
+  // confirmed POST /clinical/note/change-note contract. Each row gets an
+  // "Apply to journal" button UNLESS its own clinicalCodeDescription
+  // already normalises the same as st.currentDescription (nothing to
+  // sync), mirroring the "never offered if it's already the current
+  // description" rule used elsewhere in this file for preferredDescriptions.
+  // Per-row write state lives in st.journalApply[entryId], not the
+  // problem-level st.saving/st.saved (see rowState's own comment on why).
+  function journalMatchesHtml(problemId, st) {
+    if (!st.journalMatches || !st.journalMatches.length) return '';
+    var normalise = (window.MSProblemTextLinking && window.MSProblemTextLinking.normaliseText) || String;
+    var currentNormalised = normalise(st.currentDescription);
+    var hasDateConfirmed = st.journalMatches.some(function (m) {
+      return m.dateConfirmed;
+    });
+    // MULTI-MATCH DISAMBIGUATION (2026-08-14) — see
+    // shared/journal-problem-matching.js's applyDateConfirmation for the
+    // full story. When one match's own true recordDate exactly confirms
+    // against the problem, say so in the warning itself — the clinician
+    // shouldn't have to work out which highlighted row it refers to.
+    var warningHtml =
+      st.journalMatches.length > 1
+        ? '<div class="ms-pdc-journal-matches-warning">⚠ ' +
+          st.journalMatches.length +
+          ' journal entries matched this problem. GP2GP import can duplicate whole records, not just codes — consider running "Analyse full record for duplicates" (Duplicate Checker) before syncing these individually.' +
+          (hasDateConfirmed
+            ? ' The entry marked ✓ below has its own recordDate confirmed against this problem’s recordDate/onsetDate — the most likely genuine match.'
+            : '') +
+          '</div>'
+        : '';
+    return (
+      '<div class="ms-pdc-journal-matches-section">' +
+      warningHtml +
+      '<span class="ms-pdc-journal-matches-label">Also found in the journal — review and update these separately in the Journal tab:</span>' +
+      '<ul class="ms-pdc-journal-matches-list">' +
+      st.journalMatches
+        .map(function (m) {
+          var jst = st.journalApply[m.entryId];
+          var alreadyMatches = normalise(m.clinicalCodeDescription) === currentNormalised;
+          var actionHtml;
+          if (jst && jst.saved) {
+            actionHtml =
+              '<div class="ms-pdc-journal-apply-success">✓ Journal entry updated to “' +
+              esc(jst.appliedDescription) +
+              '”</div>';
+          } else if (alreadyMatches) {
+            actionHtml = '';
+          } else {
+            actionHtml =
+              '<div class="ms-pdc-journal-apply-row">' +
+              '<button type="button" class="ms-pdc-journal-apply-btn" data-entry-id="' +
+              esc(m.entryId) +
+              '"' +
+              (jst && jst.saving ? ' disabled' : '') +
+              '>' +
+              (jst && jst.saving ? 'Applying…' : 'Apply to journal') +
+              '</button>' +
+              (jst && jst.error ? '<span class="ms-pdc-journal-apply-error">' + esc(jst.error) + '</span>' : '') +
+              '</div>';
+          }
+          // Separate state map (journalInfoApply, not journalApply) — see
+          // that field's own comment on rowState. No button here: this
+          // sync only ever happens as a prompt chained after "Remove
+          // generic import text" succeeds (applyGenericAdditionalInfoToJournal),
+          // never a standalone action, so there's nothing to click — just
+          // the resulting saved/error state to echo, same "never claim
+          // completion silently" discipline as the code-sync action above.
+          var infoJst = st.journalInfoApply[m.entryId];
+          var infoHtml = '';
+          if (infoJst && infoJst.saved) {
+            infoHtml =
+              '<div class="ms-pdc-journal-apply-success">✓ Additional details also cleaned in this entry</div>';
+          } else if (infoJst && infoJst.error) {
+            infoHtml = '<div class="ms-pdc-journal-apply-error">' + esc(infoJst.error) + '</div>';
+          }
+          return (
+            '<li class="ms-pdc-journal-match ms-pdc-journal-match-' +
+            m.tier +
+            (m.dateConfirmed ? ' ms-pdc-journal-match-date-confirmed' : '') +
+            '"><span class="ms-pdc-journal-match-date">' +
+            esc(m.date || '') +
+            '</span> <span class="ms-pdc-journal-match-desc">' +
+            esc(m.clinicalCodeDescription) +
+            '</span> <span class="ms-pdc-journal-match-confidence">' +
+            (m.dateConfirmed
+              ? '✓ Confirmed — recordDate matches this problem exactly'
+              : esc(JOURNAL_MATCH_LABELS[m.tier] || m.tier)) +
+            '</span>' +
+            actionHtml +
+            infoHtml +
+            '</li>'
+          );
+        })
+        .join('') +
+      '</ul></div>'
     );
   }
 
@@ -1826,7 +2085,8 @@
       linkSuggestionHtml(problemId, st) +
       genericAdditionalInfoHtml(problemId, st) +
       retiredInfoHtml(problemId, st) +
-      legacyReadCodeHtml(st);
+      legacyReadCodeHtml(st) +
+      journalMatchesHtml(problemId, st);
     var remapHtml = practiceRemapHtml(problemId, st);
     if (!alts.length && !descendants.length && !crossConcept.length && !hintExpanded.length && !remapHtml) {
       return (
@@ -2032,6 +2292,11 @@
         renderPanel(problemId);
       });
     });
+    root.querySelectorAll('.ms-pdc-journal-apply-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyToJournal(problemId, btn.getAttribute('data-entry-id'));
+      });
+    });
     // Grouped multi-synonym "Use" button (see candidateGroupsHtml) — reads
     // the sibling <select>'s current value, not a fixed data attribute,
     // since the whole point is the clinician picks the wording at click time.
@@ -2070,6 +2335,7 @@
       st.prefill = prefill;
       st.conceptId = code.conceptId;
       st.currentDescription = code.description;
+      st.currentDescriptionId = code.descriptionId; // needed to build a correct noteSNOMEDct for applyToJournal — not used by any existing apply path, which only ever needs conceptId/description
       st.additionalInformation = prefill.additionalInformation || '';
       // Computed for EVERY open panel, regardless of why this row was
       // flagged — additionalInformation is already in hand here whether the
@@ -2115,6 +2381,104 @@
         } catch (e) {
           /* left unset — see comment above */
         }
+      }
+      // JOURNAL DUPLICATE DETECTION — see shared/journal-problem-matching.js
+      // header for the detection story; see applyToJournal/
+      // buildChangeNotePayload's own comments for the write path (confirmed
+      // live 2026-08-13, POST /clinical/note/change-note). Best-effort, own
+      // try/catch — a slow or failed journal fetch must never block the
+      // rest of the panel, same discipline as the relationship check just
+      // above.
+      st.journalMatches = null;
+      try {
+        var journalPatientId = prefill.patientId || _lastPatientId || (getPatientInfo() || {}).patientId;
+        if (journalPatientId && window.MSJournalProblemMatching && window.MSProblemTextLinking) {
+          var journalPayload = await apiFetch(
+            '/clinical/data/patient-journal/overview/' + encodeURIComponent(journalPatientId)
+          );
+          var dayGroups = (journalPayload && journalPayload.patientJournalRecords) || [];
+          var journalProblem = {
+            id: problemId,
+            description: code.description,
+            recordDate: prefill.recordDate || null,
+            onsetDate: prefill.onsetDate || null,
+            additionalInformation: prefill.additionalInformation || null,
+          };
+          st.journalMatches = window.MSJournalProblemMatching.findJournalMatchesForProblem(
+            journalProblem,
+            dayGroups,
+            window.MSProblemTextLinking.matchProblemByName
+          );
+
+          // DATE VERIFICATION (2026-08-13, Nick's request): the day-group
+          // title used above is confirmed sometimes wrong (see
+          // shared/journal-problem-matching.js header) — a candidate whose
+          // OWN clinicalCodeDescription already matches this problem's code,
+          // but whose day-group date didn't line up, might just be a
+          // day-group artifact. Only spend the extra per-note fetch on
+          // candidates that would otherwise be silently dropped (not
+          // already structurally linked, not already date-matched) —
+          // narrows this to a small set, not the whole journal.
+          var codeTextCandidates = window.MSJournalProblemMatching.findCodeTextMatches(
+            journalProblem,
+            dayGroups,
+            window.MSProblemTextLinking.matchProblemByName
+          );
+          var needsVerification = codeTextCandidates.filter(function (c) {
+            return !c.alreadyStructurallyLinked && !c.alreadyDateMatched;
+          });
+          if (needsVerification.length) {
+            var verifiedResults = await Promise.all(
+              needsVerification.map(async function (c) {
+                try {
+                  var noteDetail = await apiFetch('/clinical/data/note/overview/' + encodeURIComponent(c.entryId));
+                  return window.MSJournalProblemMatching.resolveVerifiedDateMatch(
+                    journalProblem,
+                    c,
+                    noteDetail && noteDetail.recordDate
+                  );
+                } catch (e) {
+                  return null; // best-effort per candidate — one failed lookup must not affect the others
+                }
+              })
+            );
+            var verifiedMatches = verifiedResults.filter(Boolean);
+            if (verifiedMatches.length) {
+              st.journalMatches = window.MSJournalProblemMatching.sortJournalMatches(
+                st.journalMatches.concat(verifiedMatches)
+              );
+            }
+          }
+
+          // MULTI-MATCH DISAMBIGUATION (2026-08-14, Nick's real test case —
+          // see shared/journal-problem-matching.js's applyDateConfirmation
+          // for the full story: a paediatric-surveillance problem with 4
+          // structurally-linked, identically-worded journal entries, only
+          // ONE of which had a recordDate exactly matching the problem's
+          // own recordDate/onsetDate). Only worth the extra per-entry
+          // fetches when there's actually more than one match to tell
+          // apart — a single match has nothing to disambiguate.
+          if (st.journalMatches.length > 1) {
+            var verifiedDatesByEntryId = {};
+            await Promise.all(
+              st.journalMatches.map(async function (m) {
+                try {
+                  var detail = await apiFetch('/clinical/data/note/overview/' + encodeURIComponent(m.entryId));
+                  if (detail && detail.recordDate) verifiedDatesByEntryId[m.entryId] = detail.recordDate;
+                } catch (e) {
+                  /* best-effort per entry — one failed lookup must not affect the others */
+                }
+              })
+            );
+            st.journalMatches = window.MSJournalProblemMatching.applyDateConfirmation(
+              journalProblem,
+              st.journalMatches,
+              verifiedDatesByEntryId
+            );
+          }
+        }
+      } catch (e) {
+        console.warn('[Clean up code] journal duplicate check failed (non-fatal):', e && e.message);
       }
       var queryText = stripLegacyMarkers(code.description);
       var results = await searchDescriptions(queryText);
@@ -2578,6 +2942,18 @@
       var payload = buildEditProblemPayload(st.prefill, newCode);
       await postEditProblem(problemId, payload);
       st.saved = true;
+      // Reflect the newly-applied code on st itself (2026-08-13) — until
+      // now nothing here did this, only st.anchorEl.textContent/onApplied
+      // got the new description, because nothing downstream ever needed
+      // st.currentDescription/conceptId/currentDescriptionId to be current
+      // after a save (the panel closes immediately below). Now something
+      // does: offerJournalSyncAfterCodeApply below (and applyToJournal,
+      // which it calls) reads exactly these three fields to know WHAT code
+      // to write to a matched journal entry — without this update they'd
+      // still hold the pre-save values.
+      st.currentDescription = chosen.description;
+      st.conceptId = chosen.conceptId;
+      st.currentDescriptionId = chosen.descriptionId;
       // Learn from this choice — see recordPreferenceChoices' own comment
       // for why this is fire-and-forget and never awaited/surfaced.
       recordPreferenceChoices(st.conceptId, newCode).catch(function (e) {
@@ -2602,6 +2978,15 @@
           /* caller's own refresh failing must never affect this save */
         }
       }
+      // JOURNAL SYNC PROMPT (2026-08-13, Nick's request): fires on EVERY
+      // code-selection path — every one of the 9 apply* wrapper functions
+      // above this file's applyCode call funnels through here, so this is
+      // the single choke point, not something duplicated per-wrapper. Runs
+      // BEFORE the panel-close sequence below, deliberately — it calls
+      // applyToJournal, which does its own renderPanel() calls to show
+      // saving/saved/error state on the journal-match rows, and those only
+      // work while the panel is still live in the DOM.
+      await offerJournalSyncAfterCodeApply(problemId);
       // Fixed — remove the "Fix description" button and panel entirely
       // rather than leaving a lingering "Saved" chip; the corrected text
       // itself is the confirmation.
@@ -2619,6 +3004,173 @@
       st.error = (err && err.message) || 'Failed to save — please try again.';
     } finally {
       st.saving = false;
+      renderPanel(problemId);
+    }
+  }
+
+  // Shared by offerJournalSyncAfterCodeApply and
+  // offerJournalTextSyncAfterInfoCleanup (2026-08-14) — both need the same
+  // "which matches should an AUTOMATIC prompt actually target" decision,
+  // now that applyDateConfirmation exists. Returns the array of matches to
+  // target, or null if nothing should happen (an alert has already
+  // explained why — the caller just returns in that case). No prompt at
+  // all when st.journalMatches is null (check never ran/failed — genuinely
+  // unknown, say nothing). A single match: itself. SEVERAL matches: only
+  // the date-confirmed one(s) — auto-prompting for every ambiguous
+  // candidate (e.g. all 4 identically-worded "Paediatric surveillance
+  // admin" entries in the real case that motivated applyDateConfirmation)
+  // would mean several back-to-back confirm() dialogs for entries we
+  // cannot actually tell apart. When NONE of several matches is
+  // date-confirmed, this deliberately does NOT guess by prompting for all
+  // of them anyway — it alerts instead and leaves it to the standalone
+  // "Apply to journal" button (or the Duplicate Checker) for the clinician
+  // to resolve by hand. buildNoMatchMessage/buildAmbiguousMessage are
+  // functions, not strings — st.journalMatches.length is only safe to read
+  // once we've already confirmed the array isn't null/empty, so the
+  // message text is built lazily, inside here, not by the caller upfront.
+  function resolveJournalSyncTargets(st, buildNoMatchMessage, buildAmbiguousMessage) {
+    if (!Array.isArray(st.journalMatches)) {
+      console.log(
+        '[Clean up code] journal sync: st.journalMatches is not an array (check never ran or failed) — nothing to target',
+        st.journalMatches
+      );
+      return null;
+    }
+    if (!st.journalMatches.length) {
+      window.alert(buildNoMatchMessage());
+      return null;
+    }
+    if (st.journalMatches.length === 1) return st.journalMatches;
+    var confirmed = st.journalMatches.filter(function (m) {
+      return m.dateConfirmed;
+    });
+    if (confirmed.length) return confirmed;
+    window.alert(buildAmbiguousMessage(st.journalMatches.length));
+    return null;
+  }
+
+  // Called by applyCode, right after a successful problem-code save, for
+  // EVERY code-selection path (see applyCode's own comment — this is the
+  // single choke point all 9 apply* wrappers funnel through, so this only
+  // needs to exist once). Each TARGETED match (see resolveJournalSyncTargets
+  // above) gets its own confirm()-gated prompt via applyToJournal (already
+  // built, unmodified here) — sequential, not batched into one dialog, so
+  // the clinician can accept or decline each one individually; the
+  // existing multiple-match warning banner is still visible in the
+  // (still-open) panel while these fire.
+  async function offerJournalSyncAfterCodeApply(problemId) {
+    var st = rowState(problemId);
+    var targets = resolveJournalSyncTargets(
+      st,
+      function () {
+        return (
+          'No matching journal entry was found for this problem, so nothing was synced automatically. ' +
+          'If a journal duplicate exists, you may need to update it in the Journal tab yourself.'
+        );
+      },
+      function (count) {
+        return (
+          count +
+          ' journal entries matched this problem, but none could be confirmed as the right one by date. ' +
+          'Nothing was synced automatically — review them below (or run "Analyse full record for duplicates") and use "Apply to journal" on the right one yourself.'
+        );
+      }
+    );
+    if (!targets) return;
+    var anyApplied = false;
+    for (var i = 0; i < targets.length; i++) {
+      var entryId = targets[i].entryId;
+      var jst = st.journalApply[entryId];
+      if (jst && (jst.saving || jst.saved)) continue; // already applied (e.g. via the standalone button) or mid-flight
+      await applyToJournal(problemId, entryId);
+      if (st.journalApply[entryId] && st.journalApply[entryId].saved) anyApplied = true;
+    }
+    // applyCode's own panel-close sequence runs immediately after this
+    // function returns — without a beat here, a successful "✓ Journal
+    // entry updated…" render (set inside applyToJournal's own renderPanel
+    // call, above) and the panel's removal could both happen within the
+    // same JS turn, with the browser never actually PAINTING the
+    // confirmation before it's torn down. Only pauses when a write
+    // genuinely succeeded — declining every prompt, or there being nothing
+    // to apply, closes exactly as before.
+    if (anyApplied) {
+      await new Promise(function (resolve) {
+        setTimeout(resolve, 1400);
+      });
+    }
+  }
+
+  // Writes the PROBLEM's current code into a matched journal entry — see
+  // buildChangeNotePayload/fetchEditNoteForm/postChangeNote's own header
+  // comment for the confirmed POST /clinical/note/change-note contract
+  // (3 live HAR captures, 2026-08-13). Deliberately NOT constrained to a
+  // same-concept relabel the way applyCode is — this write's whole purpose
+  // is making the note match the problem's CURRENT code, whatever that is.
+  //
+  // Per-entry state (st.journalApply[entryId]), not the row-level
+  // st.saving/st.saved applyCode uses — a single problem can have several
+  // journal matches, each an independent write target (see rowState's own
+  // comment).
+  //
+  // window.confirm() naming the exact before/after text and match
+  // confidence — same established pattern as
+  // content-scripts/allergy-cleanup.js's bulk-action gates ("End N selected
+  // allergies…", cancel by default) — lets the clinician judge a low-
+  // confidence fuzzy-tier match before committing, since this write (unlike
+  // applyCode's same-concept relabel) can genuinely change the concept.
+  //
+  // On success: echoes the actual description written (jst.appliedDescription),
+  // never a bare "Saved"/"Done" claim — same discipline CLAUDE.md documents
+  // for content-scripts/reception-quick-actions.js. No re-fetch/read-back
+  // to re-verify — trusts a non-throwing POST, same standard applyCode
+  // already uses for problem-code writes.
+  async function applyToJournal(problemId, entryId) {
+    var st = rowState(problemId);
+    if (!st.journalApply) st.journalApply = {};
+    var jst = st.journalApply[entryId];
+    if (!jst) {
+      jst = { saving: false, saved: false, error: null, appliedDescription: null };
+      st.journalApply[entryId] = jst;
+    }
+    if (jst.saving || jst.saved) return;
+
+    var match = (st.journalMatches || []).find(function (m) {
+      return m.entryId === entryId;
+    });
+    if (!match) return;
+
+    var newCode = {
+      description: st.currentDescription,
+      conceptId: st.conceptId,
+      descriptionId: st.currentDescriptionId,
+    };
+    var confirmed = window.confirm(
+      'Apply "' +
+        st.currentDescription +
+        '" to this journal entry?\n\n' +
+        'Current entry text: "' +
+        match.clinicalCodeDescription +
+        '"\n' +
+        'Match confidence: ' +
+        (JOURNAL_MATCH_LABELS[match.tier] || match.tier) +
+        '\n\n' +
+        "This replaces the entry's current code with the problem's current code."
+    );
+    if (!confirmed) return;
+
+    jst.error = null;
+    jst.saving = true;
+    renderPanel(problemId);
+    try {
+      var notePrefill = await fetchEditNoteForm(entryId);
+      var payload = buildChangeNotePayload(notePrefill, newCode);
+      await postChangeNote(entryId, payload);
+      jst.saved = true;
+      jst.appliedDescription = st.currentDescription;
+    } catch (err) {
+      jst.error = (err && err.message) || 'Failed to update the journal entry — please try again.';
+    } finally {
+      jst.saving = false;
       renderPanel(problemId);
     }
   }
@@ -2805,10 +3357,129 @@
       st.additionalInformation = st.genericAdditionalInfo.cleaned;
       st.prefill = Object.assign({}, st.prefill, { additionalInformation: st.genericAdditionalInfo.cleaned });
       st.genericAdditionalInfo = null;
+      // JOURNAL TEXT-SYNC PROMPT (2026-08-13, Nick's request — "the same
+      // thing" as the code-apply prompt above, for this text cleanup path
+      // instead). This panel doesn't close on success (unlike applyCode),
+      // so no ordering concern — offerJournalTextSyncAfterInfoCleanup's own
+      // renderPanel() calls are safe to run here.
+      await offerJournalTextSyncAfterInfoCleanup(problemId);
     } catch (err) {
       st.error = (err && err.message) || 'Failed to remove generic text — please try again.';
     } finally {
       st.genericAdditionalInfoSaving = false;
+      renderPanel(problemId);
+    }
+  }
+
+  // Companion to offerJournalSyncAfterCodeApply, for the "Remove generic
+  // import text" path instead of a code change. A journal note has its OWN
+  // free-text `note` field (fetched fresh per candidate, not cached
+  // anywhere — journalMatches only carries clinicalCodeDescription, not
+  // note text) — this checks THAT text for the same known GP2GP boilerplate
+  // via stripAllKnownGenericText (see that function's own header for why
+  // it's a SEPARATE, simpler function from computeAdditionalInfoFindings —
+  // a journal note has no `significance` field, so the severity-comparison
+  // side effect that function applies for problems doesn't apply here and
+  // was silently swallowing genuine matches), not by copying the PROBLEM's
+  // own cleaned text over verbatim — the note's own text may have entry-
+  // specific content alongside the same boilerplate (the confirmed hernia
+  // capture, docs/learnings-journal-note-edit-api.md, had exactly this: a
+  // coded line plus its own separate "(para umbilicAL)" note text). Same
+  // resolveJournalSyncTargets narrowing as the code-apply path — several
+  // ambiguous matches with none date-confirmed means this checks NONE of
+  // them automatically, not all of them.
+  async function offerJournalTextSyncAfterInfoCleanup(problemId) {
+    var st = rowState(problemId);
+    var targets = resolveJournalSyncTargets(
+      st,
+      function () {
+        return 'No matching journal entry was found for this problem, so its additional details were not checked for the same import text.';
+      },
+      function (count) {
+        return (
+          count +
+          ' journal entries matched this problem, but none could be confirmed as the right one by date. ' +
+          'Their additional details were not checked automatically — review them in the Journal tab yourself.'
+        );
+      }
+    );
+    if (!targets) return;
+    var genericInfoEntries = await ensureGenericAdditionalInfoTextLoaded();
+    for (var i = 0; i < targets.length; i++) {
+      await applyGenericAdditionalInfoToJournal(problemId, targets[i].entryId, genericInfoEntries);
+    }
+  }
+
+  // entryId: the journal note to check/clean. genericInfoEntries: the
+  // SAME loaded rules/generic-additional-info-text.json entries the
+  // problem-side detection uses (ensureGenericAdditionalInfoTextLoaded is
+  // cached after its first load, so this costs nothing extra to call
+  // again). Silent (no prompt at all) when the note's own text has no
+  // matching boilerplate — that's the common, unremarkable case, distinct
+  // from "no journal match at all", which offerJournalTextSyncAfterInfoCleanup
+  // already notes separately.
+  async function applyGenericAdditionalInfoToJournal(problemId, entryId, genericInfoEntries) {
+    var st = rowState(problemId);
+    if (!st.journalInfoApply) st.journalInfoApply = {};
+    var jst = st.journalInfoApply[entryId];
+    if (!jst) {
+      jst = { saving: false, saved: false, error: null, appliedText: null };
+      st.journalInfoApply[entryId] = jst;
+    }
+    if (jst.saving || jst.saved) return;
+
+    var notePrefill;
+    try {
+      notePrefill = await fetchEditNoteForm(entryId);
+    } catch (e) {
+      console.warn('[Clean up code] journal text-sync: fetchEditNoteForm failed for', entryId, '—', e && e.message);
+      return; // best-effort — if we can't even check, skip silently rather than erroring the whole flow
+    }
+    // stripAllKnownGenericText, NOT computeAdditionalInfoFindings — see that
+    // function's own header for why: computeAdditionalInfoFindings's
+    // severity-comparison side effect silently discarded a genuine match
+    // here (found live 2026-08-14, a bare " PRIORITY=1" note text) because
+    // a journal note has no `significance` field to compare against at all.
+    var stripped = stripAllKnownGenericText(notePrefill.note, genericInfoEntries);
+    if (!stripped.removed.length) {
+      console.log(
+        '[Clean up code] journal text-sync: no known generic import text found in this entry’s own note field —',
+        entryId,
+        JSON.stringify(notePrefill.note)
+      );
+      return;
+    }
+
+    // Names the specific removed fragment(s), not the full current/cleaned
+    // text — a note's genuine free text can be much longer than the
+    // boilerplate buried in it, and asking the clinician to diff two full
+    // paragraphs in a plain OS dialog (no bold, no strikethrough, nothing
+    // to anchor on) is the wrong shape for this. What's actually leaving
+    // the record is the only thing worth naming (design review, 2026-08-14).
+    var removedList = stripped.removed.map(function (r) {
+      return '"' + r + '"';
+    });
+    var removedText =
+      removedList.length > 1
+        ? removedList.slice(0, -1).join(', ') + ' and ' + removedList[removedList.length - 1]
+        : removedList[0];
+    var confirmed = window.confirm('This journal entry also has generic import text: ' + removedText + '. Remove it?');
+    if (!confirmed) return;
+
+    jst.saving = true;
+    renderPanel(problemId);
+    try {
+      var payload = buildChangeNotePayload(
+        Object.assign({}, notePrefill, { note: stripped.cleaned }),
+        notePrefill.noteSNOMEDct
+      );
+      await postChangeNote(entryId, payload);
+      jst.saved = true;
+      jst.appliedText = stripped.cleaned;
+    } catch (err) {
+      jst.error = (err && err.message) || 'Failed to update the journal entry — please try again.';
+    } finally {
+      jst.saving = false;
       renderPanel(problemId);
     }
   }

@@ -183,10 +183,24 @@ appears at three separate levels**, all structurally real:
    real example: `{ id: "string", problemCodeDescription: "string" }` (only
    two keys on that object — nothing else present).
 2. `consultationTopics[].linkedProblems` (topic level) — present as a key,
-   empty (`[]`) in every example seen so far, not yet seen populated.
+   empty (`[]`) in every example seen at the time this doc was first
+   written. **CORRECTED 2026-08-12** (HAR capture, real patient, an
+   umbilical-hernia note+problem pair, feature: journal-duplicate detection
+   for "Clean up code" — see `shared/journal-problem-matching.js`): this
+   level CAN be populated, and can be the ONLY level populated for a given
+   entry (encounter- and entry-level both empty on that same note while
+   topic-level correctly named the linked problem). "Empty in every sample
+   so far" was true only of the samples looked at then — not a structural
+   guarantee. Any code reading `linkedProblems` must union all three levels,
+   never trust encounter-level alone.
 3. `consultationTopics[].headings[].entries[].linkedProblems` (individual
    entry level, i.e. per-note/per-prescription) — also present as a key,
-   also only seen empty so far.
+   empty in every sample seen via the BULK `patient-journal/overview`
+   endpoint so far. Note the separate per-note detail endpoint below can
+   disagree with this field for the same note (see "Per-note detail
+   endpoint" section) — the bulk endpoint's entry-level `linkedProblems`
+   appears to not always be reliable/complete even when populated data
+   exists elsewhere for the same note.
 
 So the parser's existing `topic.linkedProblems` read isn't wrong, it's
 **incomplete** — a problem can apparently be linked at the encounter, the
@@ -226,7 +240,122 @@ encounter) had 2 entries, each shaped:
 }
 ```
 
-Also worth noting: the `consultationTopics[]` item itself carries
+### Per-note detail endpoint — `GET /clinical/data/note/overview/{noteId}` (new, 2026-08-12)
+
+Discovered via HAR capture while debugging the journal-duplicate-detection
+feature (`shared/journal-problem-matching.js`) — a live user report that a
+genuinely-linked note wasn't being surfaced. **This is a DIFFERENT endpoint
+from the bulk `patient-journal/overview` this doc otherwise covers** — one
+request per note, not part of the day-grouped payload. Real captured
+response (patient/problem-identifying values redacted, structure/field
+names real):
+
+```json
+{
+  "noteId": "...",
+  "patientId": "...",
+  "consultationTopicHeading": "Intervention",
+  "noteSNOMEDctCode": {
+    "conceptId": "428649003",
+    "description": "Primary repair of umbilical hernia NOS",
+    "descriptionId": null,
+    "originalCodes": []
+  },
+  "note": "(para umbilicAL)",
+  "recordDate": "2009-07-17",
+  "created": "2024-09-28 04:27:01",
+  "isMarkedAsIncorrect": false,
+  "linkedProblems": [{ "id": "...", "problemCodeDescription": "...", "isMarkedIncorrect": false, "hasEnded": false, "hiddenFromPatientFacingServices": false, "confidentialFromThirdParties": false, "significance": "Major" }],
+  "allowEditLinkedProblems": false,
+  "hiddenFromPatientFacingServices": false,
+  "confidentialFromThirdParties": false,
+  "inRcgpExclusionList": false,
+  "recordedBy": "...",
+  "includedExcludedLabel": "Included (additional item)",
+  "patientBannerFlags": [],
+  "isExplicitlyIncludedInSCR": false,
+  "hasUnresolvedDegradedCode": false,
+  "unresolvedDegradedCodeId": null,
+  "contextType": "consultation-topic-heading",
+  "createdInOriginalSystemDateTime": "2009-07-29 16:07:06",
+  "clinicalCase": null
+}
+```
+
+Notable, all confirmed live:
+
+- **`noteSNOMEDctCode: {conceptId, description, descriptionId, originalCodes}`
+  — a journal note DOES carry a full structured code, just not via the bulk
+  journal endpoint.** This directly matters for the future journal-code
+  write path (currently blocked, see `shared/journal-problem-matching.js`'s
+  header) — the shape is structurally identical to a problem's
+  `problemCode.value` (`content-scripts/problem-description-cleanup.js`'s
+  own documented contract), suggesting an analogous edit endpoint may exist,
+  though **no write/POST counterpart has been captured yet** — this is a
+  read-only GET capture only, don't assume a write contract from it.
+- **`linkedProblems` here was POPULATED for a note whose entry-level
+  `linkedProblems` in the bulk `patient-journal/overview` payload was
+  empty** (`[]`) for that exact same note id. The bulk endpoint's
+  entry-level field cannot be trusted as complete — see the topic-level
+  correction above.
+- **`recordDate` (`"2009-07-17"`) differs from the day-group `title` this
+  note was filed under in the bulk payload (`"Wed 29 Jul 2009"`)** — the
+  day-group date lines up with this response's
+  `createdInOriginalSystemDateTime` (`"2009-07-29 16:07:06"`), not
+  `recordDate`. **Open question, not yet resolved:** any code that compares
+  a problem's `recordDate` against a bulk-journal day-group's `title` (as
+  `shared/journal-problem-matching.js`'s date-tier matching currently does)
+  may be comparing the wrong pair of dates for older/GP2GP-migrated
+  records, where the two can differ by days to weeks. Not yet fixed —
+  flagging for whoever picks this up next; the 2026-08-12 live bug this
+  note was captured for was fixed via the topic-linkedProblems correction
+  above and didn't require resolving this date question, but a future
+  false-negative on date-tier matching alone (no linkedProblems hit at any
+  level) should look here first.
+
+  **Why this drift happens at all (Nick, 2026-08-12):** it isn't a Medicus
+  quirk specifically — it's a structural feature of how UK GP clinical
+  systems handle information coded from an incoming document (e.g. a
+  hospital discharge letter). The system routinely dates that information
+  against when the document was RECEIVED or CODED at the practice, not the
+  date the clinical event actually happened. A single real episode can
+  therefore carry up to five genuinely different dates, any pair of which
+  might end up on the two sides of a duplicate-detection comparison:
+  1. the actual event date (e.g. when the patient had the heart attack),
+  2. the document date (e.g. when they were discharged after treatment for
+     it),
+  3. the document SEND date (when the hospital posted/transmitted the
+     letter),
+  4. the document RECEIPT date (when it reached the practice), and
+  5. the CODING date (when practice staff actually entered it against the
+     record).
+
+  A problem and its journal duplicate can each have been dated against a
+  DIFFERENT one of these five, independently of each other — which is why
+  `shared/journal-problem-matching.js`'s fuzzy fallback tolerates a ±30-day
+  window (`FUZZY_DATE_TOLERANCE_DAYS`) rather than requiring exact-day
+  equality: Nick's judgement call on a window wide enough to reasonably span
+  this cross-system drift without being unbounded, not a measured optimum.
+
+- **`created` is a bulk-migration timestamp, NOT clinically meaningful —
+  confirmed live 2026-08-14** on a real patient's paediatric surveillance
+  history: 8 journal entries spanning 1994-1997 (all descendants of a GP2GP
+  import) ALL shared the exact same `created` value
+  (`"2026-04-30 14:40:06"`) — the moment that patient's whole record was
+  migrated/imported into Medicus, not anything about any individual entry.
+  Confirms this field must never be used for duplicate-matching or
+  disambiguation (`shared/journal-problem-matching.js`'s
+  `applyDateConfirmation` deliberately does not read it — only the entry's
+  own `recordDate`). `createdInOriginalSystemDateTime`, by contrast, DID
+  vary per entry in this same sample and tracked each entry's own
+  `recordDate` closely (`recordDate + " 01:00:00"` in every case observed)
+  — genuinely entry-specific, just not an independent signal beyond
+  `recordDate` in this particular sample; not yet seen a case where the two
+  diverge.
+
+### `topicCode`
+
+The `consultationTopics[]` item itself carries
 `topicCode: { topicCode: object }` — an odd doubly-nested key name, not yet
 inspected further (unclear if this is a copy-paste field name in the API or
 if `topicCode.topicCode` is itself a `{code, displayName}`-style sub-object).

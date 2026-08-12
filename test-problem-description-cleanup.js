@@ -21,6 +21,7 @@ const {
   sameConceptAlternatives,
   buildEditProblemPayload,
   unwrapOptionValue,
+  buildChangeNotePayload,
   apiErrorMessage,
   findOutdatedProblems,
   detectLateralityHint,
@@ -50,6 +51,7 @@ const {
   removeMatchedSpan,
   severityCorrectionNeeded,
   computeAdditionalInfoFindings,
+  stripAllKnownGenericText,
   codeQualityConcernExists,
 } = require('./content-scripts/problem-description-cleanup.js');
 const genericAdditionalInfoText = require('./rules/generic-additional-info-text.json');
@@ -297,6 +299,110 @@ console.log('--- buildEditProblemPayload: overrideAdditionalInformation (2026-07
   check(
     buildEditProblemPayload(prefill, newCode, '').additionalInformation === '',
     'an explicit empty string override is respected (all generic lines removed, nothing left) — not treated as "no override"'
+  );
+}
+
+console.log(
+  '--- buildChangeNotePayload: POST /clinical/note/change-note (confirmed live via 3 HAR captures, 2026-08-13) ---'
+);
+{
+  // Modelled on the real "editing additional details" capture — a note
+  // nested inside a consultation (contextType present on the GET, but
+  // confirmed NOT part of the POST body at all).
+  const nestedNotePrefill = {
+    noteId: '0192dcca-b742-7000-95f9-864602e9e715',
+    note: 'classic visual symptoms with subsequent headache',
+    noteSNOMEDct: { conceptId: '4473006', description: 'Migraine with aura', descriptionId: '7595017' },
+    isDraft: false,
+    hiddenFromPatientFacingServices: false,
+    confidentialFromThirdParties: false,
+    isMarkedAsIncorrect: false,
+    allowEditLinkedProblems: false,
+    patientId: '01924260-6af1-73e5-a6da-3c1b058b28e8',
+    recordDate: '2024-10-30',
+    recordedAtAnotherOrganisation: false,
+    recordedByOrganisation: null,
+    recordedByPractitioner: 'Dr Nicholas Grundy',
+    recordedByStaff: '0192351f-fd7f-725c-a267-2120c486b6be',
+    linkedProblemIds: [],
+    linkableProblems: [{ value: 'p1', label: 'Something (2020 - )', conceptId: '999' }],
+    contextType: 'consultation-topic-heading',
+    contextId: '0192dcca-b267-72fc-934b-530318585171',
+    flagOnPatientBanner: false,
+    staff: [{ label: 'Someone', value: 'x' }],
+    flags: [],
+    linkedClinicalCase: { options: [], defaultClinicalCaseId: null, requiresClinicalCase: false },
+  };
+  const sameConceptRelabel = { description: 'Classical migraine', conceptId: '4473006', descriptionId: '7596016' };
+  const payload = buildChangeNotePayload(nestedNotePrefill, sameConceptRelabel);
+
+  check(
+    JSON.stringify(payload) ===
+      JSON.stringify({
+        noteId: '0192dcca-b742-7000-95f9-864602e9e715',
+        note: 'classic visual symptoms with subsequent headache',
+        noteSNOMEDct: sameConceptRelabel,
+        hiddenFromPatientFacingServices: false,
+        confidentialFromThirdParties: false,
+        flagOnPatientBanner: false,
+        recordedByOrganisation: null,
+        recordedByPractitioner: 'Dr Nicholas Grundy',
+        recordedByStaff: '0192351f-fd7f-725c-a267-2120c486b6be',
+        recordDate: '2024-10-30',
+        flags: [],
+        clinicalCaseId: null,
+        linkedProblemIds: [],
+      }),
+    'exact field-for-field match against the real confirmed POST body shape'
+  );
+  check(
+    !('contextType' in payload) && !('contextId' in payload) && !('patientId' in payload),
+    'contextType/contextId/patientId are GET-only fields — confirmed NOT part of the POST (this is a writable-SUBSET replace, not a full round-trip)'
+  );
+  check(
+    !('linkableProblems' in payload) && !('staff' in payload) && !('isDraft' in payload),
+    'UI-only prefill fields (linkableProblems, staff, isDraft, …) are never resent'
+  );
+
+  const differentConceptCode = { description: 'Obesity', conceptId: '414916001', descriptionId: 'abc123' };
+  check(
+    buildChangeNotePayload(nestedNotePrefill, differentConceptCode).noteSNOMEDct === differentConceptCode,
+    "newCode is passed through as-is, including a DIFFERENT conceptId — deliberately NOT constrained to a same-concept relabel the way buildEditProblemPayload is (this write syncs to the problem's current code, whatever it is)"
+  );
+
+  // Modelled on the real "orphan note" capture — no consultation context at
+  // all (contextType/contextId both null on the GET).
+  const orphanNotePrefill = Object.assign({}, nestedNotePrefill, {
+    noteId: '01998559-2f40-7019-8e69-8a08408ac820',
+    hiddenFromPatientFacingServices: true,
+    allowEditLinkedProblems: true,
+    contextType: null,
+    contextId: null,
+  });
+  const orphanPayload = buildChangeNotePayload(orphanNotePrefill, sameConceptRelabel);
+  check(
+    orphanPayload.hiddenFromPatientFacingServices === true && !('contextType' in orphanPayload),
+    'orphan note (no consultation) produces the IDENTICAL payload shape as the nested case — confirmed live, no special-casing needed'
+  );
+
+  console.log('--- buildChangeNotePayload: defensive against missing fields ---');
+  check(
+    JSON.stringify(buildChangeNotePayload(null, sameConceptRelabel).flags) === '[]',
+    'null prefill -> [] flags, never throws'
+  );
+  check(
+    buildChangeNotePayload({}, sameConceptRelabel).clinicalCaseId === null,
+    'missing linkedClinicalCase -> clinicalCaseId null, never throws'
+  );
+  check(
+    buildChangeNotePayload({ linkedClinicalCase: { defaultClinicalCaseId: 'case-1' } }, sameConceptRelabel)
+      .clinicalCaseId === 'case-1',
+    'clinicalCaseId derived from linkedClinicalCase.defaultClinicalCaseId when present'
+  );
+  check(
+    JSON.stringify(buildChangeNotePayload({ linkedProblemIds: undefined }, sameConceptRelabel).linkedProblemIds) ===
+      '[]',
+    'missing linkedProblemIds -> [], never throws'
   );
 }
 
@@ -1294,14 +1400,117 @@ console.log('--- literalTextsFromEntries / patternEntriesFromEntries: splitting 
     'the pattern entry (no `.text` field) never leaks an undefined into the literal list'
   );
   check(
-    patterns.length === 3 &&
+    patterns.length === 5 &&
       patterns.some((p) => p.id === 'severityDefaultingContradiction') &&
       patterns.some((p) => p.id === 'sourceSystemPriorityValue') &&
-      patterns.some((p) => p.id === 'groupedWithReference'),
-    'all three configured pattern entries are returned (got ' + patterns.map((p) => p.id).join(', ') + ')'
+      patterns.some((p) => p.id === 'groupedWithReference') &&
+      patterns.some((p) => p.id === 'episodicitySuffix') &&
+      patterns.some((p) => p.id === 'gp2gpProblemNotesPrefix'),
+    'all five configured pattern entries are returned (got ' + patterns.map((p) => p.id).join(', ') + ')'
   );
   check(literalTextsFromEntries(null).length === 0, 'null entries -> empty literal list, never throws');
   check(patternEntriesFromEntries(null).length === 0, 'null entries -> empty pattern list, never throws');
+}
+
+console.log(
+  '--- episodicitySuffix / gp2gpProblemNotesPrefix (2026-08-14, REAL journal-note capture that motivated adding these) ---'
+);
+{
+  // The exact real journal note text (entryId 019dde9e-42b1-7194-8964-
+  // 289e4da0ea7c) whose ENTIRE body was this wrapper and nothing else —
+  // the case that surfaced these two rules were missing at all.
+  const realNoteText = '{Episodicity : code=255217005, displayName=First}';
+  const suffixOnly = computeAdditionalInfoFindings(realNoteText, null, genericAdditionalInfoText.entries, []);
+  check(
+    !!suffixOnly.genericAdditionalInfo && suffixOnly.genericAdditionalInfo.removed.includes(realNoteText),
+    'REAL CASE: the exact captured note text is now recognised and offered for removal'
+  );
+  check(
+    suffixOnly.genericAdditionalInfo.cleaned === '',
+    'a note whose ENTIRE body is the wrapper cleans down to empty'
+  );
+
+  const prefixOnly = computeAdditionalInfoFindings(
+    'Problem Info: Problem Notes: patient reports improvement',
+    null,
+    genericAdditionalInfoText.entries,
+    []
+  );
+  check(
+    prefixOnly.genericAdditionalInfo.cleaned === 'patient reports improvement',
+    'the prefix wrapper strips on its own, leaving genuine free text intact'
+  );
+
+  const both = computeAdditionalInfoFindings(
+    'Problem Info: Problem Notes: genuine clinical content {Episodicity : code=1, displayName=First}',
+    null,
+    genericAdditionalInfoText.entries,
+    []
+  );
+  check(
+    both.genericAdditionalInfo.cleaned === 'genuine clinical content' &&
+      both.genericAdditionalInfo.removed.length === 2,
+    'prefix AND suffix both present -> both stripped independently, genuine text between them survives'
+  );
+
+  const neither = computeAdditionalInfoFindings(
+    'just a genuine clinical note',
+    null,
+    genericAdditionalInfoText.entries,
+    []
+  );
+  check(neither.genericAdditionalInfo === null, 'text with neither wrapper -> nothing flagged, left untouched');
+}
+
+console.log(
+  '--- stripAllKnownGenericText (2026-08-14, REAL bug: computeAdditionalInfoFindings silently discarded this exact case) ---'
+);
+{
+  // The exact real journal note text (entryId 019f5b57-dd67-71b8-9ea3-
+  // ef7e8d7633aa) that exposed the bug: computeAdditionalInfoFindings(' PRIORITY=1', null, ...)
+  // finds the pattern, but because currentSignificance is null (a journal
+  // note has no significance field), sourceSystemPriorityValue's
+  // reviewSeverity action ALWAYS reads as a contradiction needing
+  // correction — routing into severityContradiction and returning
+  // genericAdditionalInfo: null, discarding a genuine, removable match.
+  const realNoteText = ' PRIORITY=1';
+  const viaComputeFindings = computeAdditionalInfoFindings(realNoteText, null, genericAdditionalInfoText.entries, []);
+  check(
+    viaComputeFindings.genericAdditionalInfo === null && !!viaComputeFindings.severityContradiction,
+    'REGRESSION DOCUMENTED: computeAdditionalInfoFindings genuinely returns genericAdditionalInfo: null for this exact text when currentSignificance is null — confirms stripAllKnownGenericText exists for a real reason, not a hypothetical one'
+  );
+
+  const stripped = stripAllKnownGenericText(realNoteText, genericAdditionalInfoText.entries);
+  check(
+    stripped.removed.includes('PRIORITY=1') && stripped.cleaned === '',
+    'FIX: stripAllKnownGenericText correctly strips the exact same text, unaffected by the severity-comparison side effect'
+  );
+
+  const bothFragments = stripAllKnownGenericText(
+    ' PRIORITY=1 Active Problem, Significant',
+    genericAdditionalInfoText.entries
+  );
+  check(
+    bothFragments.removed.length === 2 && bothFragments.cleaned === '',
+    'a problem-style text with BOTH fragments still strips both, same as before — this function is a superset, not a narrower replacement'
+  );
+
+  check(
+    JSON.stringify(
+      stripAllKnownGenericText('genuine clinical text, nothing generic', genericAdditionalInfoText.entries)
+    ) === JSON.stringify({ cleaned: 'genuine clinical text, nothing generic', removed: [] }),
+    'no known generic text -> cleaned unchanged, removed empty (not merely falsy)'
+  );
+  check(
+    JSON.stringify(stripAllKnownGenericText(null, genericAdditionalInfoText.entries)) ===
+      JSON.stringify({ cleaned: '', removed: [] }),
+    'null text -> empty result, never throws'
+  );
+  check(
+    JSON.stringify(stripAllKnownGenericText('PRIORITY=1', null)) ===
+      JSON.stringify({ cleaned: 'PRIORITY=1', removed: [] }),
+    'null entries -> nothing matched, never throws'
+  );
 }
 
 console.log(

@@ -171,9 +171,14 @@ console.log('--- rules/non-problem-root-codes.json: the imported roots list itse
     const root = nonProblemRootCodes.roots.find((r) => r.conceptId === conceptId);
     check(!!root && root.description === description, `${conceptId} "${description}" is present (added 2026-08-02)`);
   }
+  const dateRecordsHeldFrom = nonProblemRootCodes.roots.find((r) => r.conceptId === '185980000');
   check(
-    nonProblemRootCodes.roots.length === 27,
-    'exactly 27 roots configured (got ' + nonProblemRootCodes.roots.length + ')'
+    !!dateRecordsHeldFrom && dateRecordsHeldFrom.description === 'Date records held from',
+    '185980000 "Date records held from" is present (added 2026-08-14, user-identified)'
+  );
+  check(
+    nonProblemRootCodes.roots.length === 28,
+    'exactly 28 roots configured (got ' + nonProblemRootCodes.roots.length + ')'
   );
 }
 
