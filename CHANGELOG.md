@@ -64,6 +64,20 @@ trusted tier — so a typo'd/future tier would have jumped the queue.
 Unknown tiers now sink to the bottom (rank 99), where an unrecognised
 signal belongs.
 
+### Fixed: CI red on the feature branch was NOT the autocrlf issue
+
+The branch's `test` job failure was attributed to a known machine-local
+`core.autocrlf` quirk — it wasn't. `scripts/check-doc-versions.js` was
+failing (correctly): the branch bumped `manifest.json` to 3.230.x without
+syncing `docs/feature-list.md`'s pinned `**Version:**`, which must track
+the manifest at major.minor level. Feature list synced to v3.231.0 with
+the journal-sync feature documented (a content sync, not a CSO review —
+the `cso-review-ledger.json` entry is deliberately untouched, same as
+every prior weekly refresh). The actual `node --test` suite passes clean
+(379/379) — the two tests the branch flagged as machine-local failures
+(`test-evaluation-trace.js`, `test-routine-rx-macro.js`) pass in CI's
+environment too.
+
 ## [v3.230.6] — 2026-08-14
 
 ### Journal text-strip confirm() dialog: tightened wording (Atelier review)
