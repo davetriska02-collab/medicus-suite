@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.227.2] — 2026-08-12
+
+- **Task/booking inline widgets no longer strand off-screen on document-filing
+  task pages.** `findCard()` in `task-inline.js` and `booking-inline.js`
+  (byte-identical copies) walked up from the "Codes & actions" heading looking
+  for an ancestor containing a button whose text is exactly "Submit", to find
+  the card's boundary. Confirmed live 2026-08-14: a document-filing task page
+  (`/tasks/data/document/overview/{taskUuid}`) has NO "Submit" button anywhere
+  on the page — that card there is a plain read-only list — so the walk fell
+  all the way through to `document.body`'s own child, and `after.after(w)`
+  landed `#ms-tk-widget` (and `#ms-bk-widget`) as a stray body-level sibling
+  ~1545px down the page: invisible without scrolling, easy to mistake for "the
+  widget isn't injecting" when it actually was. Both files now use the same
+  closest-recognisable-card-wrapper heuristic `task-inline.js`'s own
+  `findInitialRequestCard()` already used
+  (`heading.closest('.m-card-v2') || heading.closest('[class*="m-card"]') ||
+  heading.parentElement?.parentElement`), which doesn't depend on a Submit
+  button existing anywhere on the page. The `task-widget.card-submit-button`
+  DOM contract is retargeted to its one remaining genuine consumer —
+  `reception-quick-actions.js`'s `findSubmitControl()`, which highlights (never
+  clicks) the real Submit control near the internal-comment box on task types
+  that do have one — since that's a different purpose from card-boundary
+  detection and still needs a real submit-button walk.
+
 ## [v3.227.1] — 2026-08-09
 
 Review fixes for all 10 findings of the #276 review, before merge. The three

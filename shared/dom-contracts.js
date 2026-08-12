@@ -282,14 +282,26 @@
       runtime: true,
       mirrorOf: null,
     },
+    // NOTE: booking-inline.js/task-inline.js's own findCard() stopped reading
+    // this contract (confirmed live 2026-08-14: a document-filing task page,
+    // /tasks/data/document/overview/{taskUuid}, has NO "Submit" button
+    // anywhere on the page, so the old submit-button walk fell through to
+    // document.body and stranded the widget as a stray body-level sibling).
+    // findCard() now climbs to the nearest recognisable card wrapper instead
+    // (heading.closest('.m-card-v2') || heading.closest('[class*="m-card"]') ||
+    // heading.parentElement?.parentElement) and no longer needs this contract.
+    // reception-quick-actions.js's findSubmitControl() is the sole remaining
+    // consumer — a genuinely different purpose (finding and highlighting the
+    // real Submit control near the internal-comment box, on task types that
+    // DO have one), so the contract itself stays.
     {
       id: 'task-widget.card-submit-button',
       description:
-        'findCard() walks up from the "Codes & actions" heading looking for the smallest ancestor that also contains a button/[role="button"]/input[type="submit"] whose text is exactly "Submit" — the lowest common ancestor of heading and Submit button is the bounding card the widgets insert after.',
-      feature: 'Booking-inline / task-inline widget placement — card boundary',
+        'findSubmitControl() walks up from the internal-comment textarea looking for the nearest ancestor containing a button/[role="button"]/input[type="submit"] whose text starts with "Submit" — the real Submit control the widget highlights (never clicks) after an insert.',
+      feature: 'Reception quick-actions widget — Submit-control highlight',
       degradation:
-        "findCard() falls back to the heading's immediate parent (a much smaller ancestor than the real card), so the widget can render inside or awkwardly close to the Codes & actions form instead of cleanly below it.",
-      source: 'content-scripts/booking-inline.js:238-252, content-scripts/task-inline.js:147-161 (findCard)',
+        "findSubmitControl() finds no control to highlight, so the widget's post-insert guidance can't point at the real Submit button — the two-step nature (insert, then press Submit) becomes harder to notice.",
+      source: 'content-scripts/reception-quick-actions.js:213-276 (findSubmitControl)',
       pageMatch:
         /\/([0-9a-f]{4,})\/tasks\/data\/([^/]+)\/overview\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
       anchor: 'h1, h2, h3, h4, h5, h6, strong, b, legend',

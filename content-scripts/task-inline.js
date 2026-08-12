@@ -21,11 +21,11 @@
   window.__msTkInline = true;
 
   // DOM-contract registry (Horizon-1) — loaded earlier in the manifest's
-  // content-script list. findHeading/findCard/findActionRow below read their
-  // selectors FROM shared/dom-contracts.js (task-widget.codes-actions-heading /
-  // task-widget.card-submit-button — shared with booking-inline.js, which has
-  // the byte-identical findHeading/findCard implementation — and
-  // task-inline.action-row) rather than duplicating them here.
+  // content-script list. findHeading/findActionRow below read their
+  // selectors FROM shared/dom-contracts.js (task-widget.codes-actions-heading —
+  // shared with booking-inline.js, which has the byte-identical findHeading
+  // implementation — and task-inline.action-row) rather than duplicating them
+  // here. findCard() itself no longer reads a contract (see its own comment).
   var DC = window.DomContracts;
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -159,10 +159,6 @@
   var HEADING_NARROW_SEL = HEADING_CONTRACT ? HEADING_CONTRACT.target.join(',') : 'h1,h2,h3,h4,h5,h6,strong,b,legend';
   var HEADING_WIDE_SEL =
     HEADING_CONTRACT && HEADING_CONTRACT.legacy[0] ? HEADING_CONTRACT.legacy[0].join(',') : 'div,span,p';
-  var SUBMIT_BTN_CONTRACT = DC && DC.get('task-widget.card-submit-button');
-  var SUBMIT_BTN_SEL = SUBMIT_BTN_CONTRACT
-    ? SUBMIT_BTN_CONTRACT.target.join(', ')
-    : 'button, [role="button"], input[type="submit"]';
   var ACTION_ROW_CONTRACT = DC && DC.get('task-inline.action-row');
   var ACTION_ROW_SEL = ACTION_ROW_CONTRACT ? ACTION_ROW_CONTRACT.target.join(', ') : 'button, [role="button"]';
 
@@ -176,20 +172,23 @@
     return null;
   }
 
+  // Confirmed live 2026-08-14: a document-filing task page (URL pattern
+  // /tasks/data/document/overview/{taskUuid}) has NO "Submit" button anywhere
+  // on the page — the "Codes & actions" card there is a plain read-only list.
+  // The old submit-button walk fell all the way through to document.body's own
+  // child, so `after.after(w)` in injectWidget() stranded the widget as a
+  // stray body-level sibling far down the page (getBoundingClientRect() showed
+  // top ~1545px, parent BODY) — invisible without scrolling, and easy to
+  // mistake for "the widget isn't injecting" when it actually was. Use the
+  // same closest-recognisable-card-wrapper heuristic findInitialRequestCard()
+  // already uses instead — it doesn't depend on a Submit button existing
+  // anywhere on the page.
   function findCard() {
     const heading = findHeading();
     if (!heading) return null;
-    let node = heading.parentElement;
-    let fallback = node;
-    while (node && node !== document.body) {
-      const btns = node.querySelectorAll(SUBMIT_BTN_SEL);
-      for (const b of btns) {
-        if (/^submit$/i.test((b.value || b.textContent || '').trim())) return node;
-      }
-      fallback = node;
-      node = node.parentElement;
-    }
-    return fallback;
+    return (
+      heading.closest('.m-card-v2') || heading.closest('[class*="m-card"]') || heading.parentElement?.parentElement
+    );
   }
 
   // Gate 4 fallback — the "Initial Request" card's boundary, same

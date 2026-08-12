@@ -12,10 +12,11 @@
   window.__msBkInline = true;
 
   // DOM-contract registry (Horizon-1) — loaded earlier in the manifest's
-  // content-script list. findHeading/findCard below read their selectors FROM
-  // shared/dom-contracts.js (task-widget.codes-actions-heading /
-  // task-widget.card-submit-button — shared with task-inline.js, which has the
-  // byte-identical implementation) rather than duplicating them here.
+  // content-script list. findHeading below reads its selectors FROM
+  // shared/dom-contracts.js (task-widget.codes-actions-heading — shared with
+  // task-inline.js, which has the byte-identical implementation) rather than
+  // duplicating them here. findCard() itself no longer reads a contract (see
+  // its own comment).
   var DC = window.DomContracts;
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -207,10 +208,9 @@
   // ── DOM injection ─────────────────────────────────────────────────────────────
 
   // Find the whole "Codes & actions" CARD so we can insert our widget directly
-  // after it (below the section, not inside it). The card is the smallest
-  // ancestor of the section heading that ALSO contains the form's "Submit"
-  // button — i.e. the lowest common ancestor of the heading and the Submit
-  // button, which is exactly the bounding card.
+  // after it (below the section, not inside it). findCard() below climbs from
+  // the heading to the nearest recognisable card wrapper — see its own
+  // comment for why it no longer walks for a "Submit" button.
   //
   // PERF: the heading scan is the expensive part on this heavy Vue+AG-Grid SPA
   // (thousands of nodes). Two guards keep it cheap:
@@ -235,11 +235,6 @@
   var HEADING_NARROW_SEL = HEADING_CONTRACT ? HEADING_CONTRACT.target.join(',') : 'h1,h2,h3,h4,h5,h6,strong,b,legend';
   var HEADING_WIDE_SEL =
     HEADING_CONTRACT && HEADING_CONTRACT.legacy[0] ? HEADING_CONTRACT.legacy[0].join(',') : 'div,span,p';
-  var SUBMIT_BTN_CONTRACT = DC && DC.get('task-widget.card-submit-button');
-  var SUBMIT_BTN_SEL = SUBMIT_BTN_CONTRACT
-    ? SUBMIT_BTN_CONTRACT.target.join(', ')
-    : 'button, [role="button"], input[type="submit"]';
-
   function findHeading() {
     // Narrow pass: real heading elements only — a tiny node set.
     for (const el of document.querySelectorAll(HEADING_NARROW_SEL)) {
@@ -252,20 +247,22 @@
     return null;
   }
 
+  // Confirmed live 2026-08-14: a document-filing task page (URL pattern
+  // /tasks/data/document/overview/{taskUuid}) has NO "Submit" button anywhere
+  // on the page — the "Codes & actions" card there is a plain read-only list.
+  // The old submit-button walk fell all the way through to document.body's own
+  // child, stranding the widget as a stray body-level sibling far down the
+  // page — invisible without scrolling, and easy to mistake for "the widget
+  // isn't injecting" when it actually was. Use the same
+  // closest-recognisable-card-wrapper heuristic task-inline.js's
+  // findInitialRequestCard() uses instead — it doesn't depend on a Submit
+  // button existing anywhere on the page.
   function findCard() {
     const heading = findHeading();
     if (!heading) return null;
-    let node = heading.parentElement;
-    let fallback = node;
-    while (node && node !== document.body) {
-      const btns = node.querySelectorAll(SUBMIT_BTN_SEL);
-      for (const b of btns) {
-        if (/^submit$/i.test((b.value || b.textContent || '').trim())) return node;
-      }
-      fallback = node;
-      node = node.parentElement;
-    }
-    return fallback;
+    return (
+      heading.closest('.m-card-v2') || heading.closest('[class*="m-card"]') || heading.parentElement?.parentElement
+    );
   }
 
   function injectWidget() {
