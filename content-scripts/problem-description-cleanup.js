@@ -1358,8 +1358,8 @@
         practiceRemap: null, // {conceptId, descriptionId, description} — resolved from pdc.conceptRemap, keyed by this problem's OWN current conceptId (the source), or null. See openPanel's own comment.
         legacyReadCode: null, // {code, description} — set by the opt-in scan when originalCodes shows a read-v2 origin
         journalMatches: null, // [{entryId, encounterId, date, clinicalCodeDescription, tier}] — set by openPanel's best-effort journal duplicate check (shared/journal-problem-matching.js). null = not yet checked or the check failed; [] = checked, none found.
-        journalApply: {}, // entryId -> {saving, saved, error, appliedDescription} — per-journal-match write state (applyToJournal). Nested by entryId, unlike every other flag on this row, because one problem can have several journal matches, each an independent write target.
-        journalInfoApply: {}, // entryId -> {saving, saved, error, appliedText} — SEPARATE per-journal-match state for the "remove generic import text" sync (applyGenericAdditionalInfoToJournal), kept apart from journalApply so a code-sync and a text-sync on the same entry don't conflate their saved/error state.
+        journalApply: {}, // entryId -> {saving, saved, error, appliedDescription, prevCode, undoing, undone, restoredDescription} — per-journal-match write state (applyToJournal) plus its one-click revert (undoJournalCodeSync; prevCode is the pre-sync noteSNOMEDct captured from the write's own prefill). Nested by entryId, unlike every other flag on this row, because one problem can have several journal matches, each an independent write target.
+        journalInfoApply: {}, // entryId -> {saving, saved, error, appliedText, prevNote, undoing, undone} — SEPARATE per-journal-match state for the "remove generic import text" sync (applyGenericAdditionalInfoToJournal) plus its revert (undoJournalTextSync; prevNote is the pre-strip note text, '' allowed), kept apart from journalApply so a code-sync and a text-sync on the same entry don't conflate their saved/error state.
         genericAdditionalInfo: null, // {cleaned, removed} — computed in openPanel from prefill.additionalInformation, ANY row
         genericAdditionalInfoSaving: false,
         severityContradiction: null, // {stated, current, cleaned} — set when the GP2GP severity-defaulting text contradicts the stored significance (see computeAdditionalInfoFindings)
@@ -1646,15 +1646,40 @@
           var alreadyMatches = normalise(m.clinicalCodeDescription) === currentNormalised;
           var actionHtml;
           if (jst && jst.saved) {
+            // UNDO (2026-08-14) — see undoJournalCodeSync's own comment.
+            // Only offered while the previous code is actually in hand
+            // (prevCode captured from the pre-write prefill) — a success
+            // with nothing to restore renders the plain confirmation only.
             actionHtml =
+              '<div class="ms-pdc-journal-apply-row">' +
               '<div class="ms-pdc-journal-apply-success">✓ Journal entry updated to “' +
               esc(jst.appliedDescription) +
-              '”</div>';
+              '”</div>' +
+              (jst.prevCode && jst.prevCode.description
+                ? '<button type="button" class="ms-pdc-journal-undo-btn" data-entry-id="' +
+                  esc(m.entryId) +
+                  '" data-undo-kind="code"' +
+                  (jst.undoing ? ' disabled' : '') +
+                  '>' +
+                  (jst.undoing ? 'Undoing…' : 'Undo') +
+                  '</button>'
+                : '') +
+              (jst.error ? '<span class="ms-pdc-journal-apply-error">' + esc(jst.error) + '</span>' : '') +
+              '</div>';
           } else if (alreadyMatches) {
+            // A revert leaves the entry back on its old code, which no
+            // longer normalises to the current description — so this
+            // branch is only reachable pre-sync or when there was nothing
+            // to sync; jst.undone never needs handling here.
             actionHtml = '';
           } else {
             actionHtml =
               '<div class="ms-pdc-journal-apply-row">' +
+              (jst && jst.undone
+                ? '<span class="ms-pdc-journal-undo-note">↩ Sync undone — “' +
+                  esc(jst.restoredDescription) +
+                  '” restored</span>'
+                : '') +
               '<button type="button" class="ms-pdc-journal-apply-btn" data-entry-id="' +
               esc(m.entryId) +
               '"' +
@@ -1675,8 +1700,28 @@
           var infoJst = st.journalInfoApply[m.entryId];
           var infoHtml = '';
           if (infoJst && infoJst.saved) {
+            // UNDO (2026-08-14) — text-sync twin of the code-sync Undo
+            // above; see undoJournalTextSync's own comment. prevNote is ''
+            // for a note whose text was ENTIRELY boilerplate (the confirmed
+            // live "{Episodicity…}"-only case), which is still a real
+            // previous state worth restoring — hence != null, not truthy.
             infoHtml =
-              '<div class="ms-pdc-journal-apply-success">✓ Additional details also cleaned in this entry</div>';
+              '<div class="ms-pdc-journal-apply-row">' +
+              '<div class="ms-pdc-journal-apply-success">✓ Additional details also cleaned in this entry</div>' +
+              (infoJst.prevNote != null
+                ? '<button type="button" class="ms-pdc-journal-undo-btn" data-entry-id="' +
+                  esc(m.entryId) +
+                  '" data-undo-kind="text"' +
+                  (infoJst.undoing ? ' disabled' : '') +
+                  '>' +
+                  (infoJst.undoing ? 'Undoing…' : 'Undo') +
+                  '</button>'
+                : '') +
+              (infoJst.error ? '<span class="ms-pdc-journal-apply-error">' + esc(infoJst.error) + '</span>' : '') +
+              '</div>';
+          } else if (infoJst && infoJst.undone) {
+            infoHtml =
+              '<div class="ms-pdc-journal-undo-note">↩ Text cleanup undone — the entry’s previous details were restored</div>';
           } else if (infoJst && infoJst.error) {
             infoHtml = '<div class="ms-pdc-journal-apply-error">' + esc(infoJst.error) + '</div>';
           }
@@ -2297,6 +2342,20 @@
         applyToJournal(problemId, btn.getAttribute('data-entry-id'));
       });
     });
+    // Undo buttons for both journal-sync write paths (2026-08-14) — one
+    // class, discriminated by data-undo-kind, since the two undos are
+    // rendered by the same journalMatchesHtml rows but revert different
+    // fields (code vs note text) held in different state maps.
+    root.querySelectorAll('.ms-pdc-journal-undo-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var entryId = btn.getAttribute('data-entry-id');
+        if (btn.getAttribute('data-undo-kind') === 'text') {
+          undoJournalTextSync(problemId, entryId);
+        } else {
+          undoJournalCodeSync(problemId, entryId);
+        }
+      });
+    });
     // Grouped multi-synonym "Use" button (see candidateGroupsHtml) — reads
     // the sibling <select>'s current value, not a fixed data attribute,
     // since the whole point is the clinician picks the wording at click time.
@@ -2444,7 +2503,16 @@
             );
             var verifiedMatches = verifiedResults.filter(Boolean);
             if (verifiedMatches.length) {
-              st.journalMatches = window.MSJournalProblemMatching.sortJournalMatches(
+              // dedupeJournalMatches, NOT sortJournalMatches (fix,
+              // 2026-08-14 post-review): the fuzzy fallback inside
+              // findJournalMatchesForProblem and this verified-date pass
+              // can BOTH surface the same entryId — see that module
+              // function's own header for the full story. A plain sorted
+              // concat rendered one real journal note as two match rows
+              // (two "Apply to journal" buttons) and made
+              // resolveJournalSyncTargets alert "2 matched, none
+              // confirmed" instead of auto-prompting the sync.
+              st.journalMatches = window.MSJournalProblemMatching.dedupeJournalMatches(
                 st.journalMatches.concat(verifiedMatches)
               );
             }
@@ -3167,10 +3235,108 @@
       await postChangeNote(entryId, payload);
       jst.saved = true;
       jst.appliedDescription = st.currentDescription;
+      // UNDO support (2026-08-14): the pre-write code is already in hand
+      // from the prefill just fetched — captured ONLY after the POST
+      // succeeded (a failed write changed nothing, so there's nothing to
+      // undo) and only when the prefill actually carried one. See
+      // undoJournalCodeSync for the revert itself.
+      jst.prevCode = notePrefill.noteSNOMEDct || null;
+      jst.undone = false;
     } catch (err) {
       jst.error = (err && err.message) || 'Failed to update the journal entry — please try again.';
     } finally {
       jst.saving = false;
+      renderPanel(problemId);
+    }
+  }
+
+  // Reverts a code sync applied by applyToJournal above — writes the
+  // note's pre-sync code (jst.prevCode, captured from the write's own
+  // prefill) back via the exact same confirmed contract
+  // (fresh GET edit-note prefill → POST change-note), so every other field
+  // is resent from the note's CURRENT server state, never from anything
+  // cached at sync time. Same confirm() gate and same "echo what was
+  // actually written" discipline as the forward write. WHY THIS EXISTS
+  // (2026-08-14): this write is the one action in this panel that can
+  // genuinely change a note's CONCEPT (see applyToJournal's own comment on
+  // its deliberately-unconstrained scope), gated only by a confirm() — a
+  // clinician who realises a beat too late that they synced the WRONG
+  // entry (the multi-match cases that motivated applyDateConfirmation are
+  // exactly where that mistake is easiest) previously had to reconstruct
+  // the old code by hand in the Journal tab. One click now restores it.
+  async function undoJournalCodeSync(problemId, entryId) {
+    var st = rowState(problemId);
+    var jst = st.journalApply && st.journalApply[entryId];
+    if (!jst || !jst.saved || jst.undoing || !jst.prevCode || !jst.prevCode.description) return;
+
+    var confirmed = window.confirm(
+      'Undo this sync?\n\n' +
+        'The journal entry will be set back to its previous code: "' +
+        jst.prevCode.description +
+        '"\n' +
+        '(currently "' +
+        jst.appliedDescription +
+        '").'
+    );
+    if (!confirmed) return;
+
+    jst.error = null;
+    jst.undoing = true;
+    renderPanel(problemId);
+    try {
+      var notePrefill = await fetchEditNoteForm(entryId);
+      var payload = buildChangeNotePayload(notePrefill, jst.prevCode);
+      await postChangeNote(entryId, payload);
+      jst.restoredDescription = jst.prevCode.description;
+      jst.saved = false;
+      jst.appliedDescription = null;
+      jst.prevCode = null;
+      jst.undone = true;
+    } catch (err) {
+      jst.error = (err && err.message) || 'Failed to undo — the journal entry was left as it is.';
+    } finally {
+      jst.undoing = false;
+      renderPanel(problemId);
+    }
+  }
+
+  // Text-sync twin of undoJournalCodeSync — restores the note's pre-strip
+  // free text (jst.prevNote, captured by applyGenericAdditionalInfoToJournal
+  // from the write's own prefill). The code field is passed through from
+  // the FRESH prefill, not from anything remembered — if the entry's code
+  // was also synced (and possibly undone) since, this revert touches ONLY
+  // the note text, leaving the code exactly as the server currently has it.
+  async function undoJournalTextSync(problemId, entryId) {
+    var st = rowState(problemId);
+    var jst = st.journalInfoApply && st.journalInfoApply[entryId];
+    // prevNote can legitimately be '' (a note whose text was ENTIRELY
+    // boilerplate) — that's still a real previous state, so != null, not
+    // truthy, same convention as the render side.
+    if (!jst || !jst.saved || jst.undoing || jst.prevNote == null) return;
+
+    var confirmed = window.confirm(
+      'Undo this cleanup?\n\n' + 'The removed import text will be restored to this journal entry.'
+    );
+    if (!confirmed) return;
+
+    jst.error = null;
+    jst.undoing = true;
+    renderPanel(problemId);
+    try {
+      var notePrefill = await fetchEditNoteForm(entryId);
+      var payload = buildChangeNotePayload(
+        Object.assign({}, notePrefill, { note: jst.prevNote }),
+        notePrefill.noteSNOMEDct
+      );
+      await postChangeNote(entryId, payload);
+      jst.saved = false;
+      jst.appliedText = null;
+      jst.prevNote = null;
+      jst.undone = true;
+    } catch (err) {
+      jst.error = (err && err.message) || 'Failed to undo — the journal entry was left as it is.';
+    } finally {
+      jst.undoing = false;
       renderPanel(problemId);
     }
   }
@@ -3476,6 +3642,13 @@
       await postChangeNote(entryId, payload);
       jst.saved = true;
       jst.appliedText = stripped.cleaned;
+      // UNDO support (2026-08-14) — see undoJournalTextSync. The pre-strip
+      // text is normalised to '' rather than left null/undefined so the
+      // "was there a previous state to restore" check stays a clean
+      // != null test (an all-boilerplate note genuinely had '' left after
+      // the strip, and its pre-strip text is still worth restoring).
+      jst.prevNote = notePrefill.note != null ? notePrefill.note : '';
+      jst.undone = false;
     } catch (err) {
       jst.error = (err && err.message) || 'Failed to update the journal entry — please try again.';
     } finally {

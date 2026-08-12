@@ -2,6 +2,68 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.231.0] — 2026-08-14
+
+### Journal sync: one-click Undo for both write paths
+
+The journal code-sync (and its text-strip sibling) is the one action in
+the "Clean up code" panel that can genuinely change a note's CONCEPT,
+gated only by a `confirm()` — and the multi-match cases that motivated
+`applyDateConfirmation` are exactly where syncing the WRONG entry is
+easiest. Previously a clinician who realised a beat too late had to
+reconstruct the old code by hand in the Journal tab.
+
+Now every successful sync renders a quiet **Undo** button next to its
+green confirmation line:
+
+- **Code sync** (`undoJournalCodeSync`): the pre-sync `noteSNOMEDct` is
+  captured from the write's own edit-note prefill (only AFTER the POST
+  succeeded — a failed write changed nothing, so there's nothing to undo)
+  and written back via the exact same confirmed contract (fresh GET
+  edit-note prefill → POST change-note), so every other field is resent
+  from the note's CURRENT server state, never from anything cached at
+  sync time. The confirm() names the exact code being restored. On
+  success the row shows "↩ Sync undone — “X” restored" and the "Apply to
+  journal" button returns.
+- **Text strip** (`undoJournalTextSync`): restores the pre-strip `note`
+  text (`''` allowed — a note whose text was ENTIRELY boilerplate, the
+  confirmed live `{Episodicity…}`-only case, is still a real previous
+  state). The code field passes through from the FRESH prefill — if the
+  entry's code was also synced (or undone) since, this revert touches
+  ONLY the note text.
+
+Same disciplines as the forward writes throughout: per-entry state
+(`journalApply[entryId].prevCode/undoing/undone`,
+`journalInfoApply[entryId].prevNote/…`), confirm()-gated, echoes what was
+actually restored, never a bare "Done".
+
+### Fixed: the same journal entry could render as TWO match rows
+
+Found in post-merge-review of the journal-sync feature itself: the fuzzy
+fallback inside `findJournalMatchesForProblem` (problem's code text found
+in the note's own free text, day-group date within ±30 days) and the
+caller-orchestrated verified-date pass (`findCodeTextMatches` →
+`resolveVerifiedDateMatch`) can BOTH surface the same `entryId` — a
+candidate that is neither structurally linked nor exact-date matched is
+exactly what both nets are cast for. The plain sorted concat in
+`openPanel` then rendered one real journal note as two separate match
+rows (two "Apply to journal" buttons for one note) and — worse — made
+`resolveJournalSyncTargets` see "2 matches, none date-confirmed" for a
+patient with only ONE real journal entry, alerting "cannot tell them
+apart" instead of auto-prompting the sync it was built to offer.
+
+New `dedupeJournalMatches` in `shared/journal-problem-matching.js`: one
+row per `entryId`, keeping the best-ranked duplicate (dateConfirmed
+first, then tier rank — the same comparator `sortJournalMatches` already
+uses). Reproduced end-to-end and regression-tested
+(`test-journal-problem-matching.js`, now 88/88).
+
+Also fixed while in there: `sortJournalMatches` ranked an UNKNOWN tier as
+0 via `TIER_RANK[tier] || 0` — the same rank as `linked`, the single most
+trusted tier — so a typo'd/future tier would have jumped the queue.
+Unknown tiers now sink to the bottom (rank 99), where an unrecognised
+signal belongs.
+
 ## [v3.230.6] — 2026-08-14
 
 ### Journal text-strip confirm() dialog: tightened wording (Atelier review)

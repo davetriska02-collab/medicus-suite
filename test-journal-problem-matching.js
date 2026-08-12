@@ -18,6 +18,7 @@ const {
   findCodeTextMatches,
   resolveVerifiedDateMatch,
   sortJournalMatches,
+  dedupeJournalMatches,
   applyDateConfirmation,
 } = require('./shared/journal-problem-matching.js');
 const { matchProblemByName } = require('./shared/problem-text-linking.js');
@@ -855,6 +856,98 @@ console.log('\n--- findJournalMatchesForProblem: edge cases never throw ---');
   check(
     JSON.stringify(findJournalMatchesForProblem(problem, dayGroups, null)) !== undefined,
     'missing matchProblemByName function -> does not throw'
+  );
+}
+
+console.log('\n--- dedupeJournalMatches: one row per journal entry (2026-08-14 post-review fix) ---');
+{
+  // THE REAL FAILURE SHAPE this guards against: the fuzzy fallback inside
+  // findJournalMatchesForProblem and the caller-orchestrated verified-date
+  // pass (findCodeTextMatches → resolveVerifiedDateMatch) can BOTH surface
+  // the same entryId — a candidate that is neither structurally linked nor
+  // exact-date matched is exactly what both nets are cast for. Reproduced
+  // end-to-end: one journal note, matching code text, day-group date 20
+  // days off the problem's recordDate.
+  const dupProblem = {
+    id: 'p-dup',
+    description: 'Umbilical hernia',
+    recordDate: '2026-01-01',
+    onsetDate: null,
+    additionalInformation: null,
+  };
+  const dupDayGroups = [
+    {
+      title: 'Wed 21 Jan 2026',
+      items: [
+        {
+          type: 'note',
+          id: 'n-dup',
+          data: {
+            id: 'n-dup',
+            clinicalCodeDescription: 'Umbilical hernia',
+            note: 'Umbilical hernia discussed',
+            linkedProblems: [],
+          },
+        },
+      ],
+    },
+  ];
+  const primary = findJournalMatchesForProblem(dupProblem, dupDayGroups, matchProblemByName);
+  check(primary.length === 1 && primary[0].tier === 'fuzzy-code-text-partial', 'fuzzy fallback finds the note');
+  const codeText = findCodeTextMatches(dupProblem, dupDayGroups, matchProblemByName);
+  check(
+    codeText.length === 1 && !codeText[0].alreadyStructurallyLinked && !codeText[0].alreadyDateMatched,
+    'the SAME note is also a verified-date candidate (neither linked nor exact-date matched)'
+  );
+  const verified = resolveVerifiedDateMatch(dupProblem, codeText[0], '2026-01-02');
+  check(verified !== null && verified.tier === 'verified-date-exact-text', 'and the verified-date pass matches it too');
+  const combined = dedupeJournalMatches(primary.concat([verified]));
+  check(
+    combined.length === 1,
+    'dedupeJournalMatches keeps ONE row for the entry (a plain sorted concat kept 2 — two "Apply to journal" buttons for one note, and a spurious "2 matched, none confirmed" ambiguity alert)'
+  );
+  check(
+    combined[0].tier === 'verified-date-exact-text',
+    'the BETTER-ranked duplicate wins (verified-date-exact-text beats fuzzy-code-text-partial)'
+  );
+
+  // dateConfirmed outranks tier rank in the winner choice too — same rule
+  // sortJournalMatches already applies to ordering.
+  const confirmedWins = dedupeJournalMatches([
+    { entryId: 'e', tier: 'linked', date: '2026-01-01' },
+    { entryId: 'e', tier: 'fuzzy-code-text-partial', date: '2026-01-01', dateConfirmed: true },
+  ]);
+  check(
+    confirmedWins.length === 1 && confirmedWins[0].dateConfirmed === true,
+    'a dateConfirmed duplicate beats a higher-ranked unconfirmed one'
+  );
+
+  const distinct = dedupeJournalMatches([
+    { entryId: 'a', tier: 'linked', date: '2026-01-01' },
+    { entryId: 'b', tier: 'date-exact-text', date: '2026-01-01' },
+  ]);
+  check(distinct.length === 2, 'distinct entryIds are never collapsed');
+  check(JSON.stringify(dedupeJournalMatches(null)) === '[]', 'null input -> empty array, never throws');
+  const dedupeInput = [
+    { entryId: 'x', tier: 'linked', date: '2026-01-01' },
+    { entryId: 'x', tier: 'date-exact-text', date: '2026-01-01' },
+  ];
+  dedupeJournalMatches(dedupeInput);
+  check(dedupeInput.length === 2, 'does not mutate the input array');
+}
+
+console.log('\n--- sortJournalMatches: unknown tiers rank LAST, not first ---');
+{
+  // TIER_RANK[tier] || 0 would have given an unrecognised tier rank 0 —
+  // the same rank as 'linked', the single most trusted tier — so a typo'd
+  // or future tier would have jumped the queue instead of sinking.
+  const withUnknown = sortJournalMatches([
+    { entryId: 'u', tier: 'mystery-tier', date: '2026-01-01' },
+    { entryId: 'k', tier: 'date-exact-text', date: '2026-01-01' },
+  ]);
+  check(
+    withUnknown[0].entryId === 'k' && withUnknown[1].entryId === 'u',
+    'an unknown tier sorts BELOW every known tier'
   );
 }
 

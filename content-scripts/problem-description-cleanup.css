@@ -620,6 +620,40 @@ input[class*='ms-pdc-']:focus-visible {
   color: #b91c1c;
 }
 
+/* Undo (2026-08-14) — reverts a journal-sync write (code or text), see
+   undoJournalCodeSync/undoJournalTextSync. Deliberately QUIETER than the
+   apply pill (plain grey text-button, no fill, no border-blue): it sits
+   right next to a green success line and must read as an escape hatch,
+   not a suggested next step. */
+.ms-pdc-journal-undo-btn {
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 10px;
+  font-family: inherit;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.ms-pdc-journal-undo-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.ms-pdc-journal-undo-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Post-undo note — neutral grey, not the success green or error red:
+   an undone sync is a return to the status quo, neither good news nor a
+   failure. */
+.ms-pdc-journal-undo-note {
+  font-size: 11px;
+  color: #6b7280;
+}
+
 /* Tiers with a Medicus structural back-reference (linkedProblems) behind
    them — 'linked' (pure entry-level fact) and the 'linked-*-text' tiers
    (topic/encounter-level fact, corroborated by a text match) — get a subtle

@@ -405,12 +405,46 @@
       var aConfirmed = a.dateConfirmed ? 0 : 1;
       var bConfirmed = b.dateConfirmed ? 0 : 1;
       if (aConfirmed !== bConfirmed) return aConfirmed - bConfirmed;
-      var rankDiff = (TIER_RANK[a.tier] || 0) - (TIER_RANK[b.tier] || 0);
+      // Unknown tiers rank LAST (99), not first — `TIER_RANK[tier] || 0`
+      // would silently give an unrecognised tier the same rank as 'linked'
+      // (the single most trusted tier), so a typo'd/future tier would jump
+      // the queue instead of sinking to the bottom where an unknown signal
+      // belongs.
+      var aRank = TIER_RANK[a.tier] != null ? TIER_RANK[a.tier] : 99;
+      var bRank = TIER_RANK[b.tier] != null ? TIER_RANK[b.tier] : 99;
+      var rankDiff = aRank - bRank;
       if (rankDiff !== 0) return rankDiff;
       if (a.date !== b.date) return a.date < b.date ? 1 : -1;
       return a.entryId < b.entryId ? -1 : a.entryId > b.entryId ? 1 : 0;
     });
     return out;
+  }
+
+  // ONE ROW PER JOURNAL ENTRY (fix, 2026-08-14 post-review): the same
+  // entryId can genuinely be produced by TWO separate passes — the fuzzy
+  // fallback inside findJournalMatchesForProblem (problem's code text found
+  // in the note's own free text, day-group date within ±30 days) AND the
+  // caller-orchestrated verified-date pass (findCodeTextMatches →
+  // resolveVerifiedDateMatch), because a candidate that is neither
+  // structurally linked nor exact-date matched is exactly what BOTH of
+  // those nets are cast for. Concatenating the two result sets without
+  // deduplication rendered the same journal note as two separate match
+  // rows (two "Apply to journal" buttons for one note), and — worse — made
+  // resolveJournalSyncTargets in the content script see "2 matches, none
+  // date-confirmed" for a patient with only ONE real journal entry,
+  // alerting "cannot tell them apart" instead of auto-prompting the sync.
+  // Keeps the single BEST row per entryId: sorted first (dateConfirmed,
+  // then tier rank — same comparator as everything else), then first-seen
+  // wins, so a 'verified-date-exact-text' duplicate beats its
+  // 'fuzzy-code-text-partial' sibling. Never mutates the input.
+  function dedupeJournalMatches(matches) {
+    var sorted = sortJournalMatches(matches);
+    var seen = {};
+    return sorted.filter(function (m) {
+      if (seen[m.entryId]) return false;
+      seen[m.entryId] = true;
+      return true;
+    });
   }
 
   // MULTI-MATCH DISAMBIGUATION (added 2026-08-14, Nick's real test case): a
@@ -599,6 +633,7 @@
     findCodeTextMatches: findCodeTextMatches,
     resolveVerifiedDateMatch: resolveVerifiedDateMatch,
     sortJournalMatches: sortJournalMatches,
+    dedupeJournalMatches: dedupeJournalMatches,
     applyDateConfirmation: applyDateConfirmation,
   };
 
