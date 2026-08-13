@@ -901,8 +901,8 @@ console.log('\n--- applyWithRollback rollback ---');
   }
 
   // ── Rota IO round-trip + validation ─────────────────────────────────────────
-  // The Rota module (ported rota/ subtree) owns eight rota.* keys. Guards that
-  // the io file round-trips all eight and rejects malformed shapes.
+  // The Rota module (ported rota/ subtree) owns nine rota.* keys. Guards that
+  // the io file round-trips all nine and rejects malformed shapes.
 
   console.log('\n--- Rota IO ---');
 
@@ -942,16 +942,32 @@ console.log('\n--- applyWithRollback rollback ---');
       audit: [{ at: '2026-06-08T09:00:00.000Z', by: 'PM', summary: 'Approved leave' }],
       demand: { days: { '2026-06-08': { am: 40, pm: 30 } }, pulledAt: '2026-06-08T09:00:00.000Z' },
       settings: { listSize: 9000, userRole: 'manager' },
+      // The passcode gate: a hashed record, never the passcode itself.
+      access: {
+        enabled: true,
+        strict: false,
+        kdf: 'PBKDF2-SHA256',
+        iterations: 150000,
+        salt: 'c2FsdHktc2FsdC0xMjM0',
+        hash: 'aGFzaC1nb2VzLWhlcmUtNDQtY2hhcnMtb2YtYmFzZTY0LXBhZA==',
+        hint: '',
+        updatedAt: '2026-06-08T09:00:00.000Z',
+      },
     };
     await rotaIo.rotaImport(payload);
     assert(
       rotaIo.ROTA_KEYS.every((k) => Object.prototype.hasOwnProperty.call(rotaStore, k)),
-      'rotaImport: writes all eight rota.* keys'
+      'rotaImport: writes all nine rota.* keys'
     );
     const back = await rotaIo.rotaExport();
     assert(back.staff[0].name === 'Dr A', 'rotaExport: round-trips staff');
     assert(back.demand.days['2026-06-08'].am === 40, 'rotaExport: round-trips the demand day map');
     assert(back.settings.listSize === 9000, 'rotaExport: round-trips settings');
+    assert(back.access && back.access.salt === payload.access.salt, 'rotaExport: round-trips the access record');
+    assert(
+      !JSON.stringify(back.access).includes('passcode'),
+      'rotaExport: the access record carries no plaintext passcode field'
+    );
 
     async function tryRotaImport(data) {
       try {

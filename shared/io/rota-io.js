@@ -16,6 +16,11 @@
 //   rota.staff / entries / leave / rooms / swaps / audit → arrays
 //   rota.demand   → { days: {…}, pulledAt: '' }
 //   rota.settings → plain object (merged over DEFAULT_SETTINGS on load)
+//   rota.access   → passcode-gate config, or null when none was ever set
+//
+// rota.access holds a PBKDF2 salt + hash, never the passcode itself — but note
+// that it does travel in the backup, so restoring a backup restores whatever
+// lock it was taken with. The Rota settings page says so in as many words.
 //
 // No PHI is persisted by the rota product, so nothing here is patient data.
 
@@ -31,6 +36,7 @@
     'rota.audit',
     'rota.demand',
     'rota.settings',
+    'rota.access',
   ];
 
   // Backup-field name → storage key. Field names mirror rota/shared/store.js.
@@ -46,6 +52,12 @@
   // agree, so the two copies cannot drift. rota-io.js deliberately keeps its
   // own checks rather than importing the ESM validator — this is a classic
   // script loaded by a bare <script src> and cannot import.
+  // rota.access members — kept in the same lock-step with validate.js. salt,
+  // hash and iterations are required on a non-null record; a config missing its
+  // salt is one no correct passcode can ever unlock.
+  const ACCESS_BOOLEAN_FIELDS = ['enabled', 'strict'];
+  const ACCESS_STRING_FIELDS = ['kdf', 'hint', 'updatedAt'];
+
   const SETTINGS_ARRAY_FIELDS = ['openDays', 'bankHolidays', 'sites', 'peakPeriods'];
   const SETTINGS_OBJECT_FIELDS = [
     'dutyRequired',
@@ -71,6 +83,7 @@
       audit: r['rota.audit'] ?? [],
       demand: r['rota.demand'] ?? { days: {}, pulledAt: '' },
       settings: r['rota.settings'] ?? {},
+      access: r['rota.access'] ?? null,
     };
   }
 
@@ -99,6 +112,35 @@
         throw new Error(`${storageKey(field)} must be an object.`);
       }
       toSet[storageKey(field)] = data[field];
+    }
+
+    // rota.access is object-OR-null: null is the real value for "no passcode
+    // has ever been set", so it is written through rather than skipped. Mirrors
+    // rota/engine/validate.js.
+    if (data.access !== undefined) {
+      if (data.access === null) {
+        toSet['rota.access'] = null;
+      } else if (!isPlainObject(data.access)) {
+        throw new Error('rota.access must be an object or null.');
+      } else {
+        const a = data.access;
+        if (typeof a.salt !== 'string') throw new Error('rota.access.salt must be a string.');
+        if (typeof a.hash !== 'string') throw new Error('rota.access.hash must be a string.');
+        if (typeof a.iterations !== 'number' || !Number.isFinite(a.iterations)) {
+          throw new Error('rota.access.iterations must be a number.');
+        }
+        for (const field of ACCESS_BOOLEAN_FIELDS) {
+          if (a[field] !== undefined && typeof a[field] !== 'boolean') {
+            throw new Error(`rota.access.${field} must be a boolean.`);
+          }
+        }
+        for (const field of ACCESS_STRING_FIELDS) {
+          if (a[field] !== undefined && typeof a[field] !== 'string') {
+            throw new Error(`rota.access.${field} must be a string.`);
+          }
+        }
+        toSet['rota.access'] = a;
+      }
     }
 
     // rota.demand carries a days map keyed by ISO date — reject an array or a

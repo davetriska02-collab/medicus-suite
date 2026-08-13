@@ -29,12 +29,12 @@ export default {
 
     root.innerHTML = `
       <h1>Templates</h1>
-      <div class=”card mb8”>
-        <p class=”sub” style=”margin:0”>Repeating week patterns per staff member. “Generate from templates” on the Rota page rolls them forward,
+      <div class="card mb8">
+        <p class="sub" style="margin:0">Repeating week patterns per staff member. “Generate from templates” on the Rota page rolls them forward,
         skipping anything already rostered and punching out approved leave. Pattern weeks count from the anchor Monday
         (${esc(state.settings.templateAnchorMonday || 'set on first generation')}).</p>
       </div>
-      <div class=”toolbar”>
+      <div class="toolbar">
         <select id="who">
           ${people.map((p) => `<option value="${esc(p.id)}" ${person && p.id === person.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
         </select>

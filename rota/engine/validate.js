@@ -1,4 +1,4 @@
-// Shape validation for the eight rota.* scopes.
+// Shape validation for the nine rota.* scopes.
 //
 // WHY THIS EXISTS: the shared-drive sync file is the hot path. It lives in a
 // folder anyone with practice-share access can write, is re-read every 15s and
@@ -24,7 +24,10 @@
 // rota/shared/store.js (loadAll).
 export const ARRAY_SCOPES = ['staff', 'entries', 'leave', 'rooms', 'swaps', 'audit'];
 export const OBJECT_SCOPES = ['demand', 'settings'];
-export const ROTA_SCOPES = [...ARRAY_SCOPES, ...OBJECT_SCOPES];
+// rota.access is an object OR null — null is the real, meaningful value for
+// "no passcode has ever been set", so it cannot live in OBJECT_SCOPES.
+export const NULLABLE_OBJECT_SCOPES = ['access'];
+export const ROTA_SCOPES = [...ARRAY_SCOPES, ...OBJECT_SCOPES, ...NULLABLE_OBJECT_SCOPES];
 
 // Settings members the engine indexes into without guarding. openDays is the
 // one that bit us: rules.js does settings.openDays.includes(...) directly.
@@ -37,6 +40,12 @@ export const SETTINGS_OBJECT_FIELDS = [
   'extraPeriods',
   'demand',
 ];
+
+// rota.access members. salt/hash/iterations are REQUIRED on a non-null record
+// (a config missing its salt can never be unlocked); the rest are optional but
+// typed.
+export const ACCESS_BOOLEAN_FIELDS = ['enabled', 'strict'];
+export const ACCESS_STRING_FIELDS = ['kdf', 'hint', 'updatedAt'];
 
 const isPlainObject = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 
@@ -74,6 +83,34 @@ export function validateRotaScopes(scopes) {
   // rota.settings is merged over DEFAULT_SETTINGS, so a stored null BEATS the
   // default (spread, not fallback) and reaches the engine. Check the members
   // the engine dereferences.
+  // rota.access is the passcode gate (rota/engine/access.js). A malformed one
+  // is not cosmetic: rota/app/app.js decides whether the app is locked from
+  // `enabled`/`strict`, and verifyPasscode() refuses anything whose salt, hash
+  // or iteration count is the wrong type — which would leave a machine showing
+  // an unlock screen no correct passcode can satisfy.
+  const access = scopes.access;
+  if (access !== undefined && access !== null) {
+    if (!isPlainObject(access)) {
+      rejects.push('rota.access must be an object or null.');
+    } else {
+      if (typeof access.salt !== 'string') rejects.push('rota.access.salt must be a string.');
+      if (typeof access.hash !== 'string') rejects.push('rota.access.hash must be a string.');
+      if (typeof access.iterations !== 'number' || !Number.isFinite(access.iterations)) {
+        rejects.push('rota.access.iterations must be a number.');
+      }
+      for (const field of ACCESS_BOOLEAN_FIELDS) {
+        if (access[field] !== undefined && typeof access[field] !== 'boolean') {
+          rejects.push(`rota.access.${field} must be a boolean.`);
+        }
+      }
+      for (const field of ACCESS_STRING_FIELDS) {
+        if (access[field] !== undefined && typeof access[field] !== 'string') {
+          rejects.push(`rota.access.${field} must be a string.`);
+        }
+      }
+    }
+  }
+
   const settings = scopes.settings;
   if (isPlainObject(settings)) {
     for (const field of SETTINGS_ARRAY_FIELDS) {

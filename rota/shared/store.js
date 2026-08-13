@@ -13,6 +13,7 @@ const KEYS = {
   audit: 'rota.audit',
   demand: 'rota.demand',
   settings: 'rota.settings',
+  access: 'rota.access',
 };
 
 const hasChrome = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local;
@@ -71,6 +72,10 @@ export async function loadAll() {
     audit: got[KEYS.audit] || [],
     demand: got[KEYS.demand] || { days: {}, pulledAt: '' },
     settings: coerceSettings(got[KEYS.settings]),
+    // Passcode gate (rota/engine/access.js). Absent === never set === no
+    // protection, so null passes straight through with no coercion: there is
+    // no meaningful "default access config" to merge over.
+    access: got[KEYS.access] || null,
   };
 }
 
@@ -100,6 +105,7 @@ export async function exportEnvelope() {
       audit: data.audit,
       demand: data.demand,
       settings: data.settings,
+      access: data.access,
     },
   };
 }
@@ -118,5 +124,11 @@ export async function importEnvelope(envelope) {
   if (s.demand && typeof s.demand === 'object') await save('demand', s.demand);
   if (s.settings && typeof s.settings === 'object') {
     await save('settings', coerceSettings(s.settings));
+  }
+  // null is a real value here ("protection removed"), so only an ABSENT key is
+  // skipped — restoring a backup taken before the passcode was set must not
+  // silently leave the current lock in place.
+  if (s.access === null || (s.access && typeof s.access === 'object' && !Array.isArray(s.access))) {
+    await save('access', s.access);
   }
 }

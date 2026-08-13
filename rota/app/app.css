@@ -158,6 +158,33 @@ body {
   background: linear-gradient(90deg, rgba(59, 130, 246, 0.28), rgba(99, 102, 241, 0.14));
   color: #fff;
 }
+/* Passcode gate: sits in the nav flow, reads as a nav item rather than a
+   floating control, but stays a <button> because it is an action. */
+#nav .navbtn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 8px;
+  padding: 10px 14px;
+  font-weight: 600;
+  color: #cfd8e6;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+#nav .navbtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  transform: translateX(2px);
+  box-shadow: none;
+}
+#nav .navbtn[hidden] {
+  display: none;
+}
+#nav a[hidden] {
+  display: none;
+}
 #nav .navfoot {
   margin-top: auto;
   padding: 12px 14px;
@@ -554,9 +581,74 @@ table.rota td.cell[draggable='true']:active {
   box-shadow: inset 0 0 0 2px var(--accent) !important;
   background: rgba(59, 130, 246, 0.18) !important;
 }
+/* Ctrl/Alt held over a valid empty cell: this drop will copy, not move. */
+.cell.dragover-copy {
+  box-shadow: inset 0 0 0 2px var(--ok) !important;
+  background: rgba(52, 211, 153, 0.16) !important;
+}
+/* Cells this session can never land on — greyed for the whole drag. */
+.cell.drop-invalid {
+  opacity: 0.34;
+  cursor: not-allowed;
+}
+.cell.drop-invalid .chip {
+  transform: none;
+}
+.cell.dragover-bad {
+  box-shadow: inset 0 0 0 2px var(--high) !important;
+  background: rgba(248, 113, 113, 0.16) !important;
+}
 td.cell.selected {
   box-shadow: inset 0 0 0 2px var(--accent2);
   background: rgba(99, 102, 241, 0.16);
+}
+/* live rectangle-sweep preview: the same language as .selected, one step down */
+td.cell.selecting {
+  box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.55);
+  background: rgba(99, 102, 241, 0.1);
+}
+table.rota td.cell .roomchip {
+  cursor: grab;
+}
+table.rota td.cell .roomchip:active {
+  cursor: grabbing;
+}
+
+/* shortcuts strip */
+.rota-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 10px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 12px;
+  color: var(--muted);
+  animation: fadeUp 0.18s ease both;
+}
+.rota-shortcuts i {
+  font-style: normal;
+  color: rgba(255, 255, 255, 0.25);
+}
+.rota-shortcuts kbd {
+  font: inherit;
+  font-weight: 700;
+  color: var(--ink);
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.07);
+}
+.rota-shortcuts #shortcuts-dismiss {
+  margin-left: auto;
+  padding: 2px 9px;
+  font-size: 13px;
+  line-height: 1.3;
 }
 td.cell:focus {
   outline: none;
@@ -755,6 +847,27 @@ details.actions .actions-panel .actions-row {
   padding: 7px 4px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
+/* ---- passcode gate ---- */
+.unlockcard {
+  max-width: 560px;
+}
+.warn-line {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--high);
+}
+.warn-line[hidden] {
+  display: none;
+}
+.accessnote {
+  border-left: 2px solid var(--line);
+  padding-left: 12px;
+  margin: 12px 0 0;
+}
+.accessnote li {
+  margin-bottom: 4px;
+}
 .warn:last-child {
   border-bottom: none;
 }
@@ -880,6 +993,35 @@ details.actions .actions-panel .actions-row {
   animation: toastUp 0.25s cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
 
+/* Undo toast: what #toast is, plus a real button. Anchored above the grid
+   (positioned in JS) so the action and its undo sit where the eye already is. */
+#rota-actiontoast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(15, 21, 45, 0.9);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  padding: 8px 10px 8px 16px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 12px 40px rgba(2, 6, 23, 0.6);
+  z-index: 98;
+  animation: popIn 0.16s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+#rota-actiontoast button {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
 /* scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
@@ -896,6 +1038,104 @@ details.actions .actions-panel .actions-row {
   background: transparent;
 }
 
+/* ---- setup wizard + post-setup checklist ---- */
+.wiz-progress {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 12px;
+}
+.wiz-dots {
+  display: flex;
+  gap: 6px;
+}
+.wiz-dot {
+  width: 34px;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.wiz-dot.on {
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+}
+.wiz-path {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  padding: 14px 0 4px;
+}
+.wiz-path > div {
+  max-width: 62ch;
+}
+.wiz-path p {
+  margin-bottom: 0;
+}
+.wiz-path > button {
+  flex-shrink: 0;
+}
+.linkbtn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: underline;
+}
+.linkbtn:hover {
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+  color: var(--ink);
+}
+a.btnlink {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--glass-strong);
+  color: var(--ink);
+  text-decoration: none;
+}
+a.btnlink:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+a.btnlink.primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 18px rgba(59, 130, 246, 0.4);
+}
+.checklist h2 {
+  font-size: 16px;
+}
+.cl-item {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 5px 2px;
+  font-size: 13px;
+}
+.cl-item.done {
+  color: var(--muted);
+}
+.cl-mark {
+  width: 14px;
+  flex-shrink: 0;
+  text-align: center;
+  font-weight: 700;
+  color: var(--accent);
+}
+.cl-item.done .cl-mark {
+  color: var(--ok);
+}
+
 /* ---- print: plain paper, no glass ---- */
 .printhead {
   display: none;
@@ -909,6 +1149,8 @@ details.actions .actions-panel .actions-row {
   #nav,
   .toolbar .sub,
   #toast,
+  #rota-actiontoast,
+  .rota-shortcuts,
   #cellmenu,
   button {
     display: none !important;

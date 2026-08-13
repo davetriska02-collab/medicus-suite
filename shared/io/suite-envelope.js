@@ -491,9 +491,14 @@ function previewEnvelope(envelope) {
     const staffCount = (mods.rota.staff || []).length;
     const entryCount = (mods.rota.entries || []).length;
     const leaveCount = (mods.rota.leave || []).length;
+    // The passcode config travels in the backup (hashed, never the passcode
+    // itself) — so restoring one can lock or unlock a machine. Say so here,
+    // where the user is deciding whether to restore.
+    const locked = mods.rota.access && mods.rota.access.enabled;
     lines.push(
       `Rota: ${staffCount} staff, ${entryCount} rostered session${entryCount === 1 ? '' : 's'}, ` +
-        `${leaveCount} leave record${leaveCount === 1 ? '' : 's'}`
+        `${leaveCount} leave record${leaveCount === 1 ? '' : 's'}` +
+        (locked ? `, passcode set (${mods.rota.access.strict ? 'strict' : 'staff view'})` : '')
     );
   } else {
     const m = missing('Rota');
