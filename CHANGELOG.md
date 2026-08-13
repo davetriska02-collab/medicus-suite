@@ -2,6 +2,75 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.232.0] — 2026-08-14
+
+### Rota Manager: passcode protection, setup assistant, grid UX pack, Solver v2, live drift
+
+Five packages landed together, closing the top open items from the
+2026-08-02 Gauntlet benchmark (event-driven reconciliation, Solver v2,
+access control) plus the practice-owner asks (passcode gate, doddle
+setup, intuitive drag-and-drop).
+
+**Passcode access gate** (`rota.access`, new storage key wired through
+store KEYS / SYNC_SCOPES / rota-io / engine validate, parity-pinned):
+optional PBKDF2-SHA-256-hashed passcode set from Settings. Staff view
+(default) renders the rota grid read-only and keeps My week fully
+functional — leave requests and swap proposals remain self-service —
+while everything managerial redirects to the unlock screen; strict mode
+locks the whole app, and the side-panel module stops fetching and shows
+a locked card. Read-only is enforced at event time in the grid's
+module-scope listeners and backstopped in pushUndo/persist (allowed
+set: leave, swaps, audit). Honest framing in the UI: a workflow gate
+against accidental/casual editing, not encryption. Per-tab session
+unlock; soft rate-limit on failures; an older sync document without the
+access scope cannot clobber a local lock.
+
+**First-run setup assistant** (`#setup`): stepped, resumable wizard —
+welcome ("about 3 minutes"; connect to Medicus / sample data / by hand)
+→ practice code inline with a live connection check → review-before-
+commit import table (per-clinician role, contracted sessions, duty
+flag, include/exclude; nothing persists until confirmed) → generate 4
+weeks and land on the working grid. The sample path now generates
+sessions on load (the demo previously shipped an empty grid) and never
+writes to the shared sync folder. Import matching/dedupe extracted to
+pure `rota/engine/setup-plan.js`. The dashboard gains a dismissible
+"Finish setting up" checklist with live done-detection.
+
+**Grid UX pack** (market-standard interactions): drag-time validity
+greying with a shared blocked-cell predicate, red invalid-target and
+green copy-modifier drag states; Excel-style rectangle selection;
+Ctrl/Cmd+C/V copy/paste of selections (blank source cells clear their
+target, Excel semantics, one-click undoable); redo stack
+(Ctrl+Shift+Z / Ctrl+Y); an Undo action toast after drops, pastes and
+bulk actions; right-click cell menu with Copy/Paste; a discoverable
+shortcuts strip; and an interactive rooms view (click to reassign,
+drag chips between rooms within a date+period column). Fixes the
+curly-quote class-attribute bug that left three templates-page
+elements unstyled.
+
+**Solver v2** (`rota/engine/solver.js`): enhanced-access sessions
+allocated per Mon–Sun week against the eaSummary target (weighted to
+never outbid duty cover); the greedy fill's avoid-duty blindness fixed
+and surviving violations reported instead of silent; room-clash-aware
+proposals with a deterministic repair pass returning additive
+roomChanges; and an explain[] per-dimension score breakdown rendered
+in the solve panel. Backward compatible: v1 fixtures produce
+bit-identical results when EA and rooms are absent.
+
+**Live drift card** (side-panel Rota module): reconciles today's rota
+against the live appointment book each poll cycle. Green is unreachable
+except via a completed zero-finding check; fetch failure, missing
+preconditions and never-checked are distinct non-green states with
+stated reasons. Missing/ghost clinics render red with an opt-in,
+de-duplicated notification; unplanned or unknown-clinician findings
+amber. `openRotaTab()` gains hash deep-links; the drift card opens
+straight into Live sync.
+
+Tests: suite grows 381 → 383 files-worth of assertions with new
+coverage for grid logic, drift badge states, access crypto/validators
+(88 checks), and the import planner; the three-way storage-key
+anti-drift test now pins nine `rota.*` keys.
+
 ## [v3.231.0] — 2026-08-14
 
 ### Journal sync: one-click Undo for both write paths
