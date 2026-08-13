@@ -534,6 +534,439 @@ const R = (p) => import(new URL('rota/' + p, `file://${path.resolve(__dirname)}/
     assert.ok(!lockedInChanges, 'Bonus locked: locked duty entry must not be in changes');
   }
 
+  /* ---- v2: enhanced access, avoid-duty, rooms, score transparency ---- */
+
+  const { eaSummary } = await R('engine/rules.js');
+
+  // Apply a solver result's type changes to a copy of the entries.
+  const applyChanges = (entries, res) =>
+    entries.map((e) => {
+      const change = res.changes.find((c) => c.entryId === e.id);
+      const room = (res.roomChanges || []).find((c) => c.entryId === e.id);
+      return { ...e, ...(change ? { typeId: change.to } : {}), ...(room ? { roomId: room.to } : {}) };
+    });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Test 11: Enhanced access — happy path: an evening session is allocated to
+  // meet the EA DES target, and the target counts the same way rules.js does
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    // list 1,500 ⇒ target 90 min/week; one EVE session (90 min) meets it exactly
+    const eaSettings = {
+      ...DEFAULT_SETTINGS,
+      openDays: ['mon'],
+      bankHolidays: [],
+      extraPeriods: { early: false, eve: true },
+      listSize: 1500,
+    };
+    const gp = newStaff({ id: uid(), name: 'Dr Eve', dutyEligible: true, contractedSessions: 8 });
+
+    const eveEntry = mkEntry(uid(), gp.id, MON, 'eve', 'admin');
+    const entries = [
+      mkEntry(uid(), gp.id, MON, 'am', 'surgery'),
+      mkEntry(uid(), gp.id, MON, 'pm', 'surgery'),
+      eveEntry,
+    ];
+
+    const res = solveRota({
+      dates: WEEK,
+      entries,
+      staff: [gp],
+      leaveList: [],
+      settings: eaSettings,
+      options: { seed: 1, iterations: 4000 },
+    });
+
+    const eaChange = res.changes.find((c) => c.entryId === eveEntry.id);
+    assert.ok(eaChange, 'Test 11: EA entry not allocated');
+    assert.equal(eaChange.to, 'enhanced', 'Test 11: EVE session should become enhanced access');
+    assert.equal(res.breakdown.ea, 0, 'Test 11: EA target should be met (no ea penalty)');
+    assert.equal(
+      res.unresolved.filter((u) => u.kind === 'ea').length,
+      0,
+      'Test 11: no EA shortfall should be reported when the target is met'
+    );
+
+    // The solver's EA measure must agree with rules.js eaSummary on the applied rota
+    const applied = applyChanges(entries, res);
+    const summary = eaSummary({ dates: WEEK, entries: applied, staff: [gp], leaveList: [], settings: eaSettings });
+    assert.equal(summary.target, 90, 'Test 11: eaSummary target');
+    assert.ok(summary.minutes >= summary.target, `Test 11: eaSummary minutes ${summary.minutes} < target`);
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Test 12: Enhanced access — shortfall is scored and reported, never blocked;
+  // nonclinical staff are never given an EA clinical session
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    // list 10,000 ⇒ target 600 min/week; only one EVE session (90 min) exists
+    const eaSettings = {
+      ...DEFAULT_SETTINGS,
+      openDays: ['mon'],
+      bankHolidays: [],
+      extraPeriods: { early: false, eve: true },
+      listSize: 10000,
+    };
+    const gp = newStaff({ id: uid(), name: 'Dr Short', dutyEligible: true, contractedSessions: 8 });
+    const receptionist = newStaff({
+      id: uid(),
+      name: 'Rita Reception',
+      role: 'reception',
+      employmentType: 'employed',
+      dutyEligible: false,
+      contractedSessions: 8,
+    });
+
+    const eveGp = mkEntry(uid(), gp.id, MON, 'eve', 'admin');
+    const eveRec = mkEntry(uid(), receptionist.id, MON, 'eve', 'admin');
+    const entries = [
+      mkEntry(uid(), gp.id, MON, 'am', 'surgery'),
+      mkEntry(uid(), gp.id, MON, 'pm', 'surgery'),
+      eveGp,
+      eveRec,
+    ];
+
+    const res = solveRota({
+      dates: WEEK,
+      entries,
+      staff: [gp, receptionist],
+      leaveList: [],
+      settings: eaSettings,
+      options: { seed: 1, iterations: 4000 },
+    });
+
+    // 600 target − 90 rostered = 510 min short
+    const eaLine = res.explain.find((x) => x.key === 'ea');
+    assert.ok(eaLine, 'Test 12: explain should carry an ea dimension');
+    assert.equal(eaLine.measure, 510, `Test 12: expected 510 min short, got ${eaLine.measure}`);
+    assert.equal(
+      res.breakdown.ea,
+      DEFAULT_WEIGHTS.eaGap * (510 / 60),
+      'Test 12: ea score should be weight × hours short'
+    );
+
+    const eaUnresolved = res.unresolved.filter((u) => u.kind === 'ea');
+    assert.equal(eaUnresolved.length, 1, 'Test 12: expected one EA shortfall note');
+    assert.ok(eaUnresolved[0].message.includes('510 min short'), 'Test 12: EA note should state the shortfall');
+
+    // The shortfall is a warning, not a block: the solver still returns a result
+    assert.ok(Array.isArray(res.changes), 'Test 12: changes must still be returned');
+    // The receptionist is never given a clinical EA session
+    const recChange = res.changes.find((c) => c.entryId === eveRec.id);
+    assert.ok(!recChange, 'Test 12: nonclinical staff must not be given an enhanced-access session');
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Test 13a: avoid-duty — the greedy initial fill breaks ties away from
+  // someone who asked to avoid that slot (iterations: 0 ⇒ greedy only)
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    const avoider = newStaff({
+      id: uid(),
+      name: 'Dr Ada', // sorts FIRST by name — only the avoid-duty tie-break saves them
+      dutyEligible: true,
+      contractedSessions: 8,
+      avoidDuty: ['mon-am'],
+    });
+    const other = newStaff({ id: uid(), name: 'Dr Zoe', dutyEligible: true, contractedSessions: 8 });
+
+    const avoiderAm = mkEntry(uid(), avoider.id, MON, 'am', 'surgery');
+    const entries = [
+      avoiderAm,
+      mkEntry(uid(), other.id, MON, 'am', 'surgery'),
+      mkEntry(uid(), avoider.id, MON, 'pm', 'surgery'),
+      mkEntry(uid(), other.id, MON, 'pm', 'surgery'),
+    ];
+
+    const res = solveRota({
+      dates: WEEK,
+      entries,
+      staff: [avoider, other],
+      leaveList: [],
+      settings: MON_ONLY,
+      options: { seed: 1, iterations: 0 },
+    });
+
+    assert.equal(res.breakdown.preference, 0, 'Test 13a: greedy should avoid the avoid-duty slot when a peer is free');
+    const avoiderAmDuty = res.changes.find((c) => c.entryId === avoiderAm.id && c.to === 'duty');
+    assert.ok(!avoiderAmDuty, 'Test 13a: avoider given duty on their avoided slot despite an alternative');
+    assert.equal(res.breakdown.dutyGap, 0, 'Test 13a: cover must still be complete');
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Test 13b: avoid-duty — last resort: with nobody else, duty is still
+  // assigned (cover wins) but the score and unresolved say so out loud
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    const solo = newStaff({
+      id: uid(),
+      name: 'Dr Only',
+      dutyEligible: true,
+      contractedSessions: 8,
+      avoidDuty: ['mon-am', 'mon-pm'],
+    });
+    const entries = [mkEntry(uid(), solo.id, MON, 'am', 'surgery'), mkEntry(uid(), solo.id, MON, 'pm', 'surgery')];
+
+    const res = solveRota({
+      dates: WEEK,
+      entries,
+      staff: [solo],
+      leaveList: [],
+      settings: MON_ONLY,
+      options: { seed: 1, iterations: 4000 },
+    });
+
+    // Cover still wins — avoid-duty never hard-blocks
+    assert.equal(res.breakdown.dutyGap, 0, 'Test 13b: duty cover must win over the avoid-duty preference');
+    assert.equal(res.breakdown.preference, DEFAULT_WEIGHTS.preference * 2, 'Test 13b: both duties should be penalised');
+
+    const prefNotes = res.unresolved.filter((u) => u.kind === 'preference');
+    assert.equal(prefNotes.length, 2, `Test 13b: expected 2 avoid-duty notes, got ${prefNotes.length}`);
+    assert.ok(
+      prefNotes.every((n) => n.message.includes('no other eligible GP was available')),
+      'Test 13b: avoid-duty note should explain it was a last resort'
+    );
+    const prefLine = res.explain.find((x) => x.key === 'preference');
+    assert.equal(prefLine.measure, 2, 'Test 13b: explain should count 2 avoided-slot duties');
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Test 14a: rooms — a clash the solver cannot resolve is scored and reported
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    const gp1 = newStaff({ id: uid(), name: 'Dr R1', dutyEligible: true, contractedSessions: 8 });
+    const gp2 = newStaff({ id: uid(), name: 'Dr R2', dutyEligible: true, contractedSessions: 8 });
+    const rooms = [{ id: 'r1', name: 'Room 1' }];
+
+    const entries = [
+      mkEntry(uid(), gp1.id, MON, 'am', 'surgery', { roomId: 'r1' }),
+      mkEntry(uid(), gp2.id, MON, 'am', 'surgery', { roomId: 'r1' }),
+      mkEntry(uid(), gp1.id, MON, 'pm', 'surgery', { roomId: 'r1' }),
+    ];
+
+    const res = solveRota({
+      dates: WEEK,
+      entries,
+      staff: [gp1, gp2],
+      leaveList: [],
+      settings: MON_ONLY,
+      rooms,
+      options: { seed: 1, iterations: 4000 },
+    });
+
+    assert.equal(res.breakdown.rooms, DEFAULT_WEIGHTS.roomClash, 'Test 14a: one surplus session sharing a room');
+    assert.equal(res.explain.find((x) => x.key === 'rooms').measure, 1, 'Test 14a: explain should count 1 clash');
+    const roomNotes = res.unresolved.filter((u) => u.kind === 'room');
+    assert.equal(roomNotes.length, 1, 'Test 14a: expected one unresolved room clash');
+    assert.ok(roomNotes[0].message.includes('Room 1'), 'Test 14a: room note should name the room');
+    assert.ok(roomNotes[0].message.includes('no free room'), 'Test 14a: room note should say why it is unresolved');
+    assert.equal(res.roomChanges.length, 0, 'Test 14a: nothing to move when no room is free');
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Test 14b: rooms — where a room is free the proposal moves the movable
+  // session into it; locked sessions stay put
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    const gp1 = newStaff({ id: uid(), name: 'Dr Fixed', dutyEligible: true, contractedSessions: 8 });
+    const gp2 = newStaff({ id: uid(), name: 'Dr Movable', dutyEligible: true, contractedSessions: 8 });
+    const rooms = [
+      { id: 'r1', name: 'Room 1' },
+      { id: 'r2', name: 'Room 2' },
+    ];
+
+    const lockedEntry = mkEntry(uid(), gp1.id, MON, 'am', 'surgery', { roomId: 'r1', status: 'confirmed' });
+    const movableEntry = mkEntry(uid(), gp2.id, MON, 'am', 'surgery', { roomId: 'r1' });
+    const entries = [lockedEntry, movableEntry, mkEntry(uid(), gp1.id, MON, 'pm', 'surgery', { roomId: 'r1' })];
+
+    const res = solveRota({
+      dates: WEEK,
+      entries,
+      staff: [gp1, gp2],
+      leaveList: [],
+      settings: MON_ONLY,
+      rooms,
+      options: { seed: 1, iterations: 4000 },
+    });
+
+    assert.equal(res.roomChanges.length, 1, 'Test 14b: expected one proposed room move');
+    assert.equal(res.roomChanges[0].entryId, movableEntry.id, 'Test 14b: the locked session must not be moved');
+    assert.equal(res.roomChanges[0].from, 'r1', 'Test 14b: room move from');
+    assert.equal(res.roomChanges[0].to, 'r2', 'Test 14b: room move to the free room');
+    assert.equal(res.breakdown.rooms, 0, 'Test 14b: clash resolved by the proposal');
+    assert.equal(res.unresolved.filter((u) => u.kind === 'room').length, 0, 'Test 14b: no unresolved room clash');
+
+    // Applying the proposal really does clear the clash
+    const applied = applyChanges(entries, res);
+    const amRooms = applied.filter((e) => e.date === MON && e.period === 'am').map((e) => e.roomId);
+    assert.equal(new Set(amRooms).size, amRooms.length, 'Test 14b: applied rota still has a room clash');
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Test 14c: rooms — EA allocation prefers sessions that do not share a room
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    // list 3,000 ⇒ target 180 min = two EVE sessions; three candidates, two of
+    // which share Room 1. The room-aware score should pick a non-clashing pair.
+    const eaSettings = {
+      ...DEFAULT_SETTINGS,
+      openDays: ['mon'],
+      bankHolidays: [],
+      extraPeriods: { early: false, eve: true },
+      listSize: 3000,
+    };
+    const rooms = [
+      { id: 'r1', name: 'Room 1' },
+      { id: 'r2', name: 'Room 2' },
+    ];
+    const gpA = newStaff({ id: uid(), name: 'Dr EA1', dutyEligible: true, contractedSessions: 8 });
+    const gpB = newStaff({ id: uid(), name: 'Dr EA2', dutyEligible: true, contractedSessions: 8 });
+    const gpC = newStaff({ id: uid(), name: 'Dr EA3', dutyEligible: true, contractedSessions: 8 });
+
+    const entries = [
+      mkEntry(uid(), gpA.id, MON, 'am', 'surgery'),
+      mkEntry(uid(), gpB.id, MON, 'pm', 'surgery'),
+      mkEntry(uid(), gpA.id, MON, 'eve', 'admin', { roomId: 'r1' }),
+      mkEntry(uid(), gpB.id, MON, 'eve', 'admin', { roomId: 'r1' }),
+      mkEntry(uid(), gpC.id, MON, 'eve', 'admin', { roomId: 'r2' }),
+    ];
+
+    const res = solveRota({
+      dates: WEEK,
+      entries,
+      staff: [gpA, gpB, gpC],
+      leaveList: [],
+      settings: eaSettings,
+      rooms,
+      options: { seed: 4, iterations: 6000 },
+    });
+
+    assert.equal(res.breakdown.ea, 0, 'Test 14c: EA target should be met');
+    assert.equal(res.breakdown.rooms, 0, 'Test 14c: EA allocation should not leave a room clash');
+
+    // The allocation itself must dodge the clash — not lean on a room shuffle
+    assert.equal(res.roomChanges.length, 0, 'Test 14c: EA allocation should not need a room reassignment');
+    const eveRooms = res.changes
+      .filter((c) => c.to === 'enhanced')
+      .map((c) => entries.find((e) => e.id === c.entryId).roomId);
+    assert.equal(eveRooms.length, 2, 'Test 14c: expected two enhanced-access sessions');
+    assert.equal(new Set(eveRooms).size, 2, 'Test 14c: the two EA sessions must be in different rooms');
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Test 15: Determinism across the new dimensions (EA + rooms + avoid-duty)
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    const eaSettings = {
+      ...DEFAULT_SETTINGS,
+      openDays: ['mon', 'tue'],
+      bankHolidays: [],
+      extraPeriods: { early: true, eve: true },
+      listSize: 6000,
+    };
+    const rooms = [
+      { id: 'r1', name: 'Room 1' },
+      { id: 'r2', name: 'Room 2' },
+    ];
+    const gp1 = newStaff({
+      id: uid(),
+      name: 'Dr Det1',
+      dutyEligible: true,
+      contractedSessions: 8,
+      avoidDuty: ['mon-am'],
+      usualRoomId: 'r1',
+    });
+    const gp2 = newStaff({ id: uid(), name: 'Dr Det2', dutyEligible: true, contractedSessions: 6, usualRoomId: 'r2' });
+    const nurse = newStaff({ id: uid(), name: 'Nurse Det', role: 'nurse', dutyEligible: false, contractedSessions: 8 });
+
+    const dates2 = [MON, addDays(MON, 1)];
+    const entries = [];
+    for (const date of dates2) {
+      for (const period of ['early', 'am', 'pm', 'eve']) {
+        entries.push(mkEntry(uid(), gp1.id, date, period, period === 'am' || period === 'pm' ? 'surgery' : 'admin'));
+        entries.push(mkEntry(uid(), gp2.id, date, period, period === 'am' || period === 'pm' ? 'surgery' : 'admin'));
+        entries.push(mkEntry(uid(), nurse.id, date, period, 'admin', { roomId: 'r1' }));
+      }
+    }
+
+    const run = (seed) =>
+      solveRota({
+        dates: dates2,
+        entries,
+        staff: [gp1, gp2, nurse],
+        leaveList: [],
+        settings: eaSettings,
+        rooms,
+        options: { seed, iterations: 5000 },
+      });
+
+    const a = run(11);
+    const b = run(11);
+    const c = run(12);
+
+    assert.deepEqual(a.changes, b.changes, 'Test 15: same seed should produce identical changes');
+    assert.deepEqual(a.roomChanges, b.roomChanges, 'Test 15: same seed should produce identical room changes');
+    assert.deepEqual(a.breakdown, b.breakdown, 'Test 15: same seed should produce an identical breakdown');
+    assert.deepEqual(a.explain, b.explain, 'Test 15: same seed should produce an identical explain');
+    assert.deepEqual(a.unresolved, b.unresolved, 'Test 15: same seed should produce identical unresolved notes');
+    assert.ok(c.score.after >= 0, 'Test 15: different seed score must be non-negative');
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Test 16: Result shape — v1 contract intact, v2 additions are additive
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    const gp = newStaff({ id: uid(), name: 'Dr Shape', dutyEligible: true, contractedSessions: 8 });
+    const entries = [mkEntry(uid(), gp.id, MON, 'am', 'surgery'), mkEntry(uid(), gp.id, MON, 'pm', 'surgery')];
+
+    const res = solveRota({
+      dates: WEEK,
+      entries,
+      staff: [gp],
+      leaveList: [],
+      settings: MON_ONLY,
+      options: { seed: 1, iterations: 2000 },
+    });
+
+    // v1 contract
+    assert.ok(Array.isArray(res.changes), 'Test 16: changes[]');
+    assert.equal(typeof res.score.before, 'number', 'Test 16: score.before');
+    assert.equal(typeof res.score.after, 'number', 'Test 16: score.after');
+    assert.ok(Array.isArray(res.unresolved), 'Test 16: unresolved[]');
+    assert.equal(typeof res.iterations, 'number', 'Test 16: iterations');
+    for (const key of ['dutyGap', 'vts', 'fairness', 'sameDay', 'weeklyCap', 'locumDuty', 'preference', 'churn']) {
+      assert.equal(typeof res.breakdown[key], 'number', `Test 16: breakdown.${key} missing`);
+    }
+    for (const c of res.changes) {
+      for (const key of ['entryId', 'staffId', 'date', 'period', 'from', 'to']) {
+        assert.ok(key in c, `Test 16: change.${key} missing`);
+      }
+    }
+
+    // v2 additions
+    assert.equal(typeof res.breakdown.ea, 'number', 'Test 16: breakdown.ea');
+    assert.equal(typeof res.breakdown.rooms, 'number', 'Test 16: breakdown.rooms');
+    assert.ok(Array.isArray(res.roomChanges), 'Test 16: roomChanges[]');
+    assert.ok(Array.isArray(res.explain), 'Test 16: explain[]');
+    assert.equal(res.explain.length, 10, 'Test 16: explain should cover all 10 dimensions');
+    for (const dim of ['dutyGap', 'ea', 'fairness', 'vts', 'preference', 'rooms']) {
+      const line = res.explain.find((x) => x.key === dim);
+      assert.ok(line, `Test 16: explain missing ${dim}`);
+      assert.equal(typeof line.label, 'string', `Test 16: explain.${dim}.label`);
+      assert.equal(typeof line.weight, 'number', `Test 16: explain.${dim}.weight`);
+      assert.equal(typeof line.measure, 'number', `Test 16: explain.${dim}.measure`);
+      assert.equal(line.score, res.breakdown[dim], `Test 16: explain.${dim}.score should match the breakdown`);
+    }
+
+    // score.after is exactly the sum of the breakdown
+    const sum = Object.values(res.breakdown).reduce((a, b) => a + b, 0);
+    assert.equal(res.score.after, sum, 'Test 16: score.after must equal the sum of the breakdown');
+
+    // EA and room dimensions are inert for a practice with neither
+    assert.equal(res.breakdown.ea, 0, 'Test 16: no EA periods ⇒ no EA penalty');
+    assert.equal(res.breakdown.rooms, 0, 'Test 16: no rooms ⇒ no room penalty');
+  }
+
   console.log('test-solver: OK');
 })().catch((e) => {
   console.error(e);

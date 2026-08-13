@@ -1,9 +1,18 @@
-// Auto-rota solver: optimises session-type assignment over a fixed presence
+// Auto-rota solver (v2): optimises session-type assignment over a fixed presence
 // matrix using greedy initialisation followed by simulated annealing.
 // Returns a change-set and diagnostics; the UI previews and the user applies.
+//
+// v2 adds three dimensions on top of v1's duty/VTS/fairness core:
+//   - enhanced-access allocation against the EA DES target (extraPeriods only),
+//   - avoid-duty as an explicit last-resort with reporting, not a silent penalty,
+//   - room awareness: type moves are scored against room clashes and the proposal
+//     carries room reassignments where a free room exists.
+// Every dimension is a weighted term — the solver proposes, the rules warn; nothing
+// here hard-blocks.
 // Pure module: no DOM, no chrome.*, no fetch.
 
 import { dayKey, mondayOf, addDays, templateWeekIndex } from '../shared/time.js';
+import { typeById, roleById, PERIOD_INFO } from '../shared/model.js';
 import { approvedLeaveFor } from './leave.js';
 import { checkWeek } from './rules.js';
 
@@ -16,6 +25,48 @@ export const DEFAULT_WEIGHTS = {
   locumDuty: 40, // per duty session given to a locum (prefer employed GPs)
   preference: 30, // per duty session on a slot in that person's staff.avoidDuty
   churn: 1, // per entry whose final type differs from its original type
+  eaGap: 300, // per HOUR of enhanced-access shortfall vs the DES target, per week
+  roomClash: 150, // per surplus session sharing one room in one slot
+};
+
+// Types that occupy a consulting room, and types that count as clinical.
+// Kept as explicit sets so the scoring never drifts with the model's cosmetics.
+const SESSION_TYPES_CLINICAL = new Set(['surgery', 'triage', 'duty', 'visits', 'enhanced']);
+const ACTIVE_STATUS = new Set(['planned', 'confirmed', 'covered']);
+const isActive = (entry) => ACTIVE_STATUS.has(entry.status);
+
+// A session occupies a physical room when it is clinical AND builds a clinic
+// (home visits do not; admin/CPD/tutorial/meeting do not) — same rule as
+// engine/room-infer.js's fillRooms.
+function occupiesRoom(typeId) {
+  const t = typeById(typeId);
+  return Boolean(t && t.clinical && t.buildsClinic);
+}
+
+// Enhanced-access reporting labels for the score breakdown.
+const EXPLAIN_ORDER = [
+  'dutyGap',
+  'ea',
+  'fairness',
+  'vts',
+  'preference',
+  'rooms',
+  'sameDay',
+  'weeklyCap',
+  'locumDuty',
+  'churn',
+];
+const EXPLAIN_META = {
+  dutyGap: { label: 'Duty cover', weightKey: 'dutyGap', unit: 'duty slot(s) uncovered' },
+  ea: { label: 'Enhanced access', weightKey: 'eaGap', unit: 'minute(s) short of the EA target' },
+  fairness: { label: 'Duty fairness', weightKey: 'fairness', unit: 'duty-share variance' },
+  vts: { label: 'VTS protection', weightKey: 'vts', unit: 'registrar clinical session(s) on a VTS half-day' },
+  preference: { label: 'Avoid-duty', weightKey: 'preference', unit: 'duty session(s) on an avoided slot' },
+  rooms: { label: 'Room clashes', weightKey: 'roomClash', unit: 'session(s) sharing a room' },
+  sameDay: { label: 'Same-day double duty', weightKey: 'sameDay', unit: 'extra duty session(s) on one day' },
+  weeklyCap: { label: 'Weekly duty cap', weightKey: 'weeklyCap', unit: 'duty session(s) over the cap' },
+  locumDuty: { label: 'Locum duty', weightKey: 'locumDuty', unit: 'duty session(s) given to a locum' },
+  churn: { label: 'Churn', weightKey: 'churn', unit: 'session(s) changed' },
 };
 
 // --- mulberry32: a fast, deterministic 32-bit PRNG ---
@@ -46,23 +97,37 @@ function isLocked(entry) {
 // Allowed session types for a flexible entry given the entry's original type,
 // the person's eligibility, and the pattern revert type for duty→non-duty moves.
 // revertType: the type the person would have had (from pattern/template), fallback 'surgery'.
-function allowedTypes(originalType, person, isEligible, revertType) {
-  if (person.employmentType === 'registrar' && person.vtsDay) {
-    // VTS forced-fix slots are handled before this function is called
-  }
+// eaCapable: the entry sits in an enabled extended-hours period and the person may
+// deliver a clinical EA session — it may take (or give up) 'enhanced'.
+// isCore: the entry is in a core AM/PM period — duty only ever exists in core hours.
+function allowedTypes(originalType, isEligible, revertType, { eaCapable = false, isCore = true } = {}) {
   const types = new Set([originalType]);
-  // duty can be assigned when eligible and original type is surgery/triage/duty
-  if (isEligible && (originalType === 'surgery' || originalType === 'triage' || originalType === 'duty')) {
+  // duty can be assigned when eligible, in core hours, and original type is surgery/triage/duty
+  if (isEligible && isCore && (originalType === 'surgery' || originalType === 'triage' || originalType === 'duty')) {
     types.add('duty');
   }
   // an original-duty entry may also revert to the pattern type (to shed excess duty)
   if (originalType === 'duty') {
     types.add(revertType);
   }
+  // extended-hours entries may be turned into (or out of) enhanced access
+  if (eaCapable) {
+    types.add('enhanced');
+    if (originalType === 'enhanced') types.add(revertType);
+  }
   return [...types];
 }
 
-export function solveRota({ dates, entries, staff, leaveList, settings, historyEntries = [], options = {} }) {
+export function solveRota({
+  dates,
+  entries,
+  staff,
+  leaveList,
+  settings,
+  rooms = [],
+  historyEntries = [],
+  options = {},
+}) {
   const { maxDutyPerWeek = 2, iterations = 8000, seed = 1, weights: weightOverrides = {} } = options;
 
   const W = { ...DEFAULT_WEIGHTS, ...weightOverrides };
@@ -75,6 +140,14 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
   const sites = (settings.sites || []).filter(Boolean);
   const dutyRequired = settings.dutyRequired || { am: 1, pm: 1 };
   const anchor = settings.templateAnchorMonday || dates[0];
+  const roomList = (rooms || []).filter((r) => r && r.id);
+
+  // Extended-access (enhanced access) periods the practice actually runs.
+  const extraPeriods = settings.extraPeriods || {};
+  const eaPeriods = new Set(['early', 'eve'].filter((p) => extraPeriods[p]));
+  // EA DES: 60 minutes of appointments per 1,000 patients per week (mirrors
+  // rules.js eaSummary — same definition of "enough EA").
+  const eaTargetMinutes = Math.round(((settings.listSize || 0) / 1000) * 60);
 
   // horizon: only entries falling within the supplied dates
   const dateSet = new Set(dates);
@@ -82,17 +155,33 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
 
   const staffById = Object.fromEntries(staff.map((s) => [s.id, s]));
 
+  // Leave is static across the solve — memoise it once.
+  const leaveMemo = new Map();
+  function onLeave(staffId, date) {
+    const key = `${staffId}|${date}`;
+    let v = leaveMemo.get(key);
+    if (v === undefined) {
+      v = Boolean(approvedLeaveFor(leaveList, staffId, date));
+      leaveMemo.set(key, v);
+    }
+    return v;
+  }
+
   // Open slots: (date, period) pairs where duty may be required
   const openSlots = [];
+  const eaSlots = [];
   for (const date of dates) {
     if (!openDays.has(dayKey(date))) continue;
     if (bankHolidays.has(date)) continue;
     for (const period of ['am', 'pm']) {
       openSlots.push({ date, period });
     }
+    for (const period of eaPeriods) {
+      eaSlots.push({ date, period });
+    }
   }
 
-  // Mon–Sun week boundaries for weeklyCap
+  // Mon–Sun week boundaries for weeklyCap and the weekly EA target
   const weekMondays = [...new Set(dates.map((d) => mondayOf(d)))];
 
   // For each flexible entry, compute its original type and revert type.
@@ -110,23 +199,33 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
     return daySlot[entry.period] || 'surgery';
   }
 
+  // Someone who can deliver a clinical enhanced-access session: a clinician
+  // (never a nonclinical role, never a directory lane).
+  function canDeliverEA(person) {
+    if (!person || person.notAPerson) return false;
+    const role = roleById(person.role);
+    return Boolean(role && role.group !== 'nonclinical');
+  }
+
   // Classify entries once
   // Each entry gets: locked (bool), originalType, revertType, allowedTypes[]
-  const entryMeta = new Map(); // entryId -> { locked, originalType, revertType, allowed, isVtsForced }
+  const entryMeta = new Map(); // entryId -> { locked, originalType, revertType, allowed, isVtsForced, eligible, eaCapable }
   for (const entry of horizonEntries) {
     const person = staffById[entry.staffId];
     const locked = isLocked(entry);
     const originalType = entry.typeId;
     const rt = revertTypeFor(entry);
+    const isCore = entry.period === 'am' || entry.period === 'pm';
 
     // Duty eligibility at this slot: GP + dutyEligible + no leave + present (has an entry)
     // We check leave dynamically; presence is implied by having an entry in the horizon.
     let eligible = false;
     let isVtsForced = false;
+    let eaCapable = false;
 
     if (person) {
-      const onLeave = approvedLeaveFor(leaveList, person.id, entry.date);
-      eligible = person.role === 'gp' && Boolean(person.dutyEligible) && !onLeave;
+      eligible = person.role === 'gp' && Boolean(person.dutyEligible) && !onLeave(person.id, entry.date);
+      eaCapable = eaPeriods.has(entry.period) && canDeliverEA(person) && !onLeave(person.id, entry.date);
 
       // VTS forced: registrar clinical on their VTS slot -> must become 'tutorial'
       if (
@@ -135,16 +234,15 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
         person.vtsDay === `${dayKey(entry.date)}-${entry.period}` &&
         originalType !== 'tutorial'
       ) {
-        const SESSION_TYPES_CLINICAL = new Set(['surgery', 'triage', 'duty', 'visits', 'enhanced']);
         if (SESSION_TYPES_CLINICAL.has(originalType)) {
           isVtsForced = true;
         }
       }
     }
 
-    const allowed = isVtsForced ? ['tutorial'] : allowedTypes(originalType, person || {}, eligible, rt);
+    const allowed = isVtsForced ? ['tutorial'] : allowedTypes(originalType, eligible, rt, { eaCapable, isCore });
 
-    entryMeta.set(entry.id, { locked, originalType, revertType: rt, allowed, isVtsForced, eligible });
+    entryMeta.set(entry.id, { locked, originalType, revertType: rt, allowed, isVtsForced, eligible, eaCapable });
   }
 
   // Flexible entries: not locked, inside horizon
@@ -155,6 +253,17 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
     const p = staffById[e.staffId];
     return p && p.role === 'gp';
   });
+
+  // Flexible entries that can carry an enhanced-access session
+  const flexEaEntries = flexEntries.filter((e) => {
+    const meta = entryMeta.get(e.id);
+    return meta && meta.eaCapable && meta.allowed.includes('enhanced');
+  });
+
+  // EA is only a live dimension when the practice runs extended periods and has
+  // a list size to size the DES target against. When it is not, the move ladder
+  // and the score are byte-for-byte the v1 ones.
+  const eaActive = eaPeriods.size > 0 && eaTargetMinutes > 0;
 
   // History duty counts per eligible GP (status not vacancy/cancelled)
   const histDutyCount = {};
@@ -170,38 +279,69 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
     (s) => s.role === 'gp' && Boolean(s.dutyEligible) && (s.contractedSessions || 0) > 0
   );
 
-  // --- Score function ---
-  // Takes currentTypes: Map<entryId -> typeId> and returns numeric score.
-  // O(entries) per evaluation.
-  function score(currentTypes) {
-    // Build per-slot/site duty counts and per-person duty counts
-    // We need: dutyGap, vts, fairness, sameDay, weeklyCap, locumDuty, preference, churn
+  // Entries indexed by slot, preserving horizon order (used by greedy fill,
+  // gap detection and the transfer move).
+  const slotEntries = new Map(); // `${date}|${period}` -> Entry[]
+  for (const entry of horizonEntries) {
+    const key = `${entry.date}|${entry.period}`;
+    const list = slotEntries.get(key);
+    if (list) list.push(entry);
+    else slotEntries.set(key, [entry]);
+  }
+  const entriesAt = (date, period) => slotEntries.get(`${date}|${period}`) || [];
 
-    let dutyGapScore = 0;
-    let vtsScore = 0;
-    let sameDayScore = 0;
-    let weeklyCapScore = 0;
-    let locumDutyScore = 0;
-    let preferenceScore = 0;
-    let churnScore = 0;
+  // Does this person's avoidDuty list cover this slot?
+  function avoidsDuty(person, date, period) {
+    return Boolean(person && (person.avoidDuty || []).includes(`${dayKey(date)}-${period}`));
+  }
 
-    // Count duty per person (for fairness, sameDay, weeklyCap)
-    // duty per person per date (for sameDay), per week (for weeklyCap)
+  const siteOf = (person) => person.site || sites[0];
+
+  // Duty cover on a slot for the given assignment (optionally per site).
+  function dutyCoverAt(types, date, period, site) {
+    let count = 0;
+    for (const entry of entriesAt(date, period)) {
+      const p = staffById[entry.staffId];
+      if (!p || p.role !== 'gp' || !p.dutyEligible) continue;
+      if (site && siteOf(p) !== site) continue;
+      if (onLeave(p.id, date)) continue;
+      if ((types.get(entry.id) || entry.typeId) === 'duty') count++;
+    }
+    return count;
+  }
+
+  // --- Score ---
+  // One evaluation function feeds both the annealing loop and the reported
+  // breakdown, so the two can never drift. O(entries) per call.
+  // roomOf: optional Map(entryId -> roomId) overriding the entries' own rooms
+  // (the post-solve room repair proposes new ones).
+  function evaluate(types, roomOf) {
+    const m = {
+      dutyGap: 0,
+      vts: 0,
+      fairness: 0,
+      sameDay: 0,
+      weeklyCap: 0,
+      locumDuty: 0,
+      preference: 0,
+      churn: 0,
+      ea: 0,
+      rooms: 0,
+    };
+
     const personDutyTotal = {}; // staffId -> total duty sessions in horizon
     const personDutyDate = {}; // staffId|date -> count
     const personDutyWeek = {}; // staffId|mondayISO -> count
+    const slotDuty = {}; // date|period[|site] -> count
+    const eaMinutes = {}; // mondayISO -> minutes of clinical EA rostered
+    const roomUse = {}; // date|period|roomId -> room-occupying sessions
 
-    // Per-slot duty coverage (date|period[|site] -> count)
-    const slotDuty = {};
-
-    // iterate all horizon entries (locked + flexible) with their effective type
     for (const entry of horizonEntries) {
-      const t = currentTypes.get(entry.id) || entry.typeId;
+      const t = types.get(entry.id) || entry.typeId;
       const person = staffById[entry.staffId];
       if (!person) continue;
 
       if (t === 'duty') {
-        // count for locumDuty, sameDay, weeklyCap, fairness
         personDutyTotal[person.id] = (personDutyTotal[person.id] || 0) + 1;
         const dk = `${person.id}|${entry.date}`;
         personDutyDate[dk] = (personDutyDate[dk] || 0) + 1;
@@ -209,194 +349,117 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
         personDutyWeek[wk] = (personDutyWeek[wk] || 0) + 1;
 
         // slot duty count — only count duty-eligible GPs toward coverage
-        if (person.role === 'gp' && person.dutyEligible) {
-          const onLeave = approvedLeaveFor(leaveList, person.id, entry.date);
-          if (!onLeave) {
-            if (sites.length > 1) {
-              const site = person.site || sites[0];
-              const sk = `${entry.date}|${entry.period}|${site}`;
-              slotDuty[sk] = (slotDuty[sk] || 0) + 1;
-            } else {
-              const sk = `${entry.date}|${entry.period}`;
-              slotDuty[sk] = (slotDuty[sk] || 0) + 1;
-            }
-          }
+        if (person.role === 'gp' && person.dutyEligible && !onLeave(person.id, entry.date)) {
+          const sk =
+            sites.length > 1 ? `${entry.date}|${entry.period}|${siteOf(person)}` : `${entry.date}|${entry.period}`;
+          slotDuty[sk] = (slotDuty[sk] || 0) + 1;
         }
 
-        // locumDuty
-        if (person.employmentType === 'locum') {
-          locumDutyScore += W.locumDuty;
-        }
-
-        // preference: avoidDuty check
-        const avoidDuty = person.avoidDuty || [];
-        if (avoidDuty.includes(`${dayKey(entry.date)}-${entry.period}`)) {
-          preferenceScore += W.preference;
-        }
+        if (person.employmentType === 'locum') m.locumDuty += 1;
+        if (avoidsDuty(person, entry.date, entry.period)) m.preference += 1;
       }
 
       // VTS penalty: registrar clinical on VTS slot
       if (person.employmentType === 'registrar' && person.vtsDay) {
-        const SESSION_TYPES_CLINICAL = new Set(['surgery', 'triage', 'duty', 'visits', 'enhanced']);
         if (SESSION_TYPES_CLINICAL.has(t) && person.vtsDay === `${dayKey(entry.date)}-${entry.period}`) {
-          vtsScore += W.vts;
+          m.vts += 1;
         }
+      }
+
+      // Enhanced access: clinical minutes actually rostered in the extended
+      // periods (mirrors rules.js eaSummary).
+      if (eaActive && eaPeriods.has(entry.period) && isActive(entry) && !onLeave(person.id, entry.date)) {
+        if (SESSION_TYPES_CLINICAL.has(t)) {
+          const mon = mondayOf(entry.date);
+          eaMinutes[mon] = (eaMinutes[mon] || 0) + ((PERIOD_INFO[entry.period] || {}).minutes || 0);
+        }
+      }
+
+      // Rooms: two room-occupying sessions in one room in one slot clash.
+      const roomId = (roomOf && roomOf.get(entry.id)) || entry.roomId;
+      if (roomId && isActive(entry) && occupiesRoom(t)) {
+        const rk = `${entry.date}|${entry.period}|${roomId}`;
+        roomUse[rk] = (roomUse[rk] || 0) + 1;
       }
 
       // churn: final type != original type (only for entries with a meta record)
       const meta = entryMeta.get(entry.id);
-      if (meta && t !== meta.originalType) {
-        churnScore += W.churn;
-      }
+      if (meta && t !== meta.originalType) m.churn += 1;
     }
 
     // dutyGap: per open slot/site
     for (const { date, period } of openSlots) {
       const required = dutyRequired[period] ?? 1;
-      if (sites.length > 1) {
-        for (const site of sites) {
-          const sk = `${date}|${period}|${site}`;
-          const count = slotDuty[sk] || 0;
-          dutyGapScore += W.dutyGap * Math.max(0, required - count);
-        }
-      } else {
-        const sk = `${date}|${period}`;
-        const count = slotDuty[sk] || 0;
-        dutyGapScore += W.dutyGap * Math.max(0, required - count);
+      const siteGroups = sites.length > 1 ? sites : [null];
+      for (const site of siteGroups) {
+        const sk = site ? `${date}|${period}|${site}` : `${date}|${period}`;
+        m.dutyGap += Math.max(0, required - (slotDuty[sk] || 0));
       }
     }
 
     // sameDay: per person with duty both AM and PM on the same date
-    for (const [key, count] of Object.entries(personDutyDate)) {
-      if (count >= 2) {
-        sameDayScore += W.sameDay * (count - 1);
-      }
+    for (const count of Object.values(personDutyDate)) {
+      if (count >= 2) m.sameDay += count - 1;
     }
 
     // weeklyCap: per excess duty over maxDutyPerWeek per person per week
-    for (const [key, count] of Object.entries(personDutyWeek)) {
-      if (count > maxDutyPerWeek) {
-        weeklyCapScore += W.weeklyCap * (count - maxDutyPerWeek);
-      }
+    for (const count of Object.values(personDutyWeek)) {
+      if (count > maxDutyPerWeek) m.weeklyCap += count - maxDutyPerWeek;
     }
 
-    // fairness: Σ(share_i - mean)² × W.fairness
+    // fairness: Σ(share_i - mean)²
     // Locums (contracted 0) excluded; only eligible GPs with contractedSessions > 0
     const shares = eligibleGPs.map((person) => {
       const hist = histDutyCount[person.id] || 0;
       const planned = personDutyTotal[person.id] || 0;
       return (hist + planned) / person.contractedSessions;
     });
-    let fairnessScore = 0;
     if (shares.length > 0) {
       const mean = shares.reduce((a, b) => a + b, 0) / shares.length;
-      for (const s of shares) fairnessScore += (s - mean) * (s - mean);
-      fairnessScore *= W.fairness;
+      for (const s of shares) m.fairness += (s - mean) * (s - mean);
     }
 
-    return (
-      dutyGapScore +
-      vtsScore +
-      fairnessScore +
-      sameDayScore +
-      weeklyCapScore +
-      locumDutyScore +
-      preferenceScore +
-      churnScore
-    );
+    // EA shortfall in minutes, per Mon–Sun week in the horizon
+    if (eaActive) {
+      for (const mon of weekMondays) {
+        m.ea += Math.max(0, eaTargetMinutes - (eaMinutes[mon] || 0));
+      }
+    }
+
+    // Room clashes: surplus sessions sharing a room
+    for (const count of Object.values(roomUse)) {
+      if (count > 1) m.rooms += count - 1;
+    }
+
+    const breakdown = {
+      dutyGap: W.dutyGap * m.dutyGap,
+      vts: W.vts * m.vts,
+      fairness: W.fairness * m.fairness,
+      sameDay: W.sameDay * m.sameDay,
+      weeklyCap: W.weeklyCap * m.weeklyCap,
+      locumDuty: W.locumDuty * m.locumDuty,
+      preference: W.preference * m.preference,
+      churn: W.churn * m.churn,
+      ea: W.eaGap * (m.ea / 60),
+      rooms: W.roomClash * m.rooms,
+    };
+
+    const total =
+      breakdown.dutyGap +
+      breakdown.vts +
+      breakdown.fairness +
+      breakdown.sameDay +
+      breakdown.weeklyCap +
+      breakdown.locumDuty +
+      breakdown.preference +
+      breakdown.churn +
+      breakdown.ea +
+      breakdown.rooms;
+
+    return { total, breakdown, measures: m };
   }
 
-  // Score breakdown for final reporting
-  function scoreBreakdown(currentTypes) {
-    let dutyGap = 0,
-      vts = 0,
-      fairness = 0,
-      sameDay = 0,
-      weeklyCap = 0,
-      locumDuty = 0,
-      preference = 0,
-      churn = 0;
-
-    const personDutyTotal = {};
-    const personDutyDate = {};
-    const personDutyWeek = {};
-    const slotDuty = {};
-
-    for (const entry of horizonEntries) {
-      const t = currentTypes.get(entry.id) || entry.typeId;
-      const person = staffById[entry.staffId];
-      if (!person) continue;
-
-      if (t === 'duty') {
-        personDutyTotal[person.id] = (personDutyTotal[person.id] || 0) + 1;
-        const dk = `${person.id}|${entry.date}`;
-        personDutyDate[dk] = (personDutyDate[dk] || 0) + 1;
-        const wk = `${person.id}|${mondayOf(entry.date)}`;
-        personDutyWeek[wk] = (personDutyWeek[wk] || 0) + 1;
-
-        if (person.role === 'gp' && person.dutyEligible) {
-          const onLeave = approvedLeaveFor(leaveList, person.id, entry.date);
-          if (!onLeave) {
-            if (sites.length > 1) {
-              const site = person.site || sites[0];
-              const sk = `${entry.date}|${entry.period}|${site}`;
-              slotDuty[sk] = (slotDuty[sk] || 0) + 1;
-            } else {
-              const sk = `${entry.date}|${entry.period}`;
-              slotDuty[sk] = (slotDuty[sk] || 0) + 1;
-            }
-          }
-        }
-        if (person.employmentType === 'locum') locumDuty += W.locumDuty;
-        const avoidDuty = person.avoidDuty || [];
-        if (avoidDuty.includes(`${dayKey(entry.date)}-${entry.period}`)) preference += W.preference;
-      }
-
-      if (person.employmentType === 'registrar' && person.vtsDay) {
-        const SESSION_TYPES_CLINICAL = new Set(['surgery', 'triage', 'duty', 'visits', 'enhanced']);
-        if (SESSION_TYPES_CLINICAL.has(t) && person.vtsDay === `${dayKey(entry.date)}-${entry.period}`) {
-          vts += W.vts;
-        }
-      }
-
-      const meta = entryMeta.get(entry.id);
-      if (meta && t !== meta.originalType) churn += W.churn;
-    }
-
-    for (const { date, period } of openSlots) {
-      const required = dutyRequired[period] ?? 1;
-      if (sites.length > 1) {
-        for (const site of sites) {
-          const sk = `${date}|${period}|${site}`;
-          dutyGap += W.dutyGap * Math.max(0, required - (slotDuty[sk] || 0));
-        }
-      } else {
-        const sk = `${date}|${period}`;
-        dutyGap += W.dutyGap * Math.max(0, required - (slotDuty[sk] || 0));
-      }
-    }
-
-    for (const [, count] of Object.entries(personDutyDate)) {
-      if (count >= 2) sameDay += W.sameDay * (count - 1);
-    }
-    for (const [, count] of Object.entries(personDutyWeek)) {
-      if (count > maxDutyPerWeek) weeklyCap += W.weeklyCap * (count - maxDutyPerWeek);
-    }
-
-    const shares = eligibleGPs.map((person) => {
-      const hist = histDutyCount[person.id] || 0;
-      const planned = personDutyTotal[person.id] || 0;
-      return (hist + planned) / person.contractedSessions;
-    });
-    if (shares.length > 0) {
-      const mean = shares.reduce((a, b) => a + b, 0) / shares.length;
-      let sq = 0;
-      for (const s of shares) sq += (s - mean) * (s - mean);
-      fairness = sq * W.fairness;
-    }
-
-    return { dutyGap, vts, fairness, sameDay, weeklyCap, locumDuty, preference, churn };
-  }
+  const score = (types) => evaluate(types).total;
 
   // --- Initial solution: original types ---
   // currentTypes maps entryId -> current typeId (only for entries we track)
@@ -418,32 +481,26 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
 
   // Step 1b: Greedy duty fill
   // For each open slot with a gap, assign the present, eligible, flexible GP
-  // with the lowest duty share (history + current). Deterministic tie-break by name.
-  // We track duty counts incrementally during greedy fill.
+  // with the lowest duty share (history + current). Ties break toward someone
+  // who has NOT asked to avoid duty on that slot, then by name.
   const greedyDutyCount = Object.fromEntries(eligibleGPs.map((p) => [p.id, histDutyCount[p.id] || 0]));
-
-  // Also track current duty for sameDay / weeklyCap awareness during greedy
-  // (greedy just fills gaps; it doesn't try to rebalance excess)
 
   for (const { date, period } of openSlots) {
     const required = dutyRequired[period] ?? 1;
 
-    // Count current duty on this slot (locked + flexible already set)
     const siteGroups = sites.length > 1 ? sites : [null];
     for (const site of siteGroups) {
       let dutyCount = 0;
       const candidates = [];
 
-      for (const entry of horizonEntries) {
-        if (entry.date !== date || entry.period !== period) continue;
+      for (const entry of entriesAt(date, period)) {
         const person = staffById[entry.staffId];
         if (!person) continue;
-        if (site && (person.site || sites[0]) !== site) continue;
+        if (site && siteOf(person) !== site) continue;
 
         const t = currentTypes.get(entry.id);
-        if (t === 'duty' && person.role === 'gp' && person.dutyEligible) {
-          const onLeave = approvedLeaveFor(leaveList, person.id, date);
-          if (!onLeave) dutyCount++;
+        if (t === 'duty' && person.role === 'gp' && person.dutyEligible && !onLeave(person.id, date)) {
+          dutyCount++;
         }
 
         // Candidate: flexible, eligible GP, allowed to take duty
@@ -452,17 +509,16 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
         if (!meta.eligible) continue;
         if (!meta.allowed.includes('duty')) continue;
         if (t === 'duty') continue; // already duty
-        // duty eligibility re-check (leave checked in eligible flag at build time, which is static)
-        // meta.eligible already accounts for leave at build time; we trust it
-        candidates.push({ entry, person });
+        candidates.push({ entry, person, avoids: avoidsDuty(person, date, period) ? 1 : 0 });
       }
 
       while (dutyCount < required && candidates.length > 0) {
-        // Sort by duty share, tie-break by name
+        // Sort by duty share, then avoid-duty preference, then name
         candidates.sort((a, b) => {
           const sa = greedyDutyCount[a.person.id] / a.person.contractedSessions;
           const sb = greedyDutyCount[b.person.id] / b.person.contractedSessions;
           if (sa !== sb) return sa - sb;
+          if (a.avoids !== b.avoids) return a.avoids - b.avoids;
           return (a.person.name || '').localeCompare(b.person.name || '');
         });
 
@@ -470,6 +526,51 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
         currentTypes.set(pick.entry.id, 'duty');
         greedyDutyCount[pick.person.id] = (greedyDutyCount[pick.person.id] || 0) + 1;
         dutyCount++;
+      }
+    }
+  }
+
+  // Step 1c: Greedy enhanced-access fill (only when the practice runs extended
+  // periods). Each week short of the EA DES target takes flexible extended-hours
+  // sessions, GPs first (the DES needs a GP physically present), until the target
+  // is met or nobody is left. Deterministic order: date, period, GP-first, name, id.
+  if (eaActive && flexEaEntries.length) {
+    const eaByWeek = new Map(); // monday -> { minutes, candidates[] }
+    for (const mon of weekMondays) eaByWeek.set(mon, { minutes: 0, candidates: [] });
+    for (const entry of horizonEntries) {
+      if (!eaPeriods.has(entry.period)) continue;
+      const person = staffById[entry.staffId];
+      if (!person) continue;
+      const bucket = eaByWeek.get(mondayOf(entry.date));
+      if (!bucket) continue;
+      const t = currentTypes.get(entry.id) || entry.typeId;
+      if (isActive(entry) && !onLeave(person.id, entry.date) && SESSION_TYPES_CLINICAL.has(t)) {
+        bucket.minutes += (PERIOD_INFO[entry.period] || {}).minutes || 0;
+      }
+    }
+    for (const entry of flexEaEntries) {
+      const bucket = eaByWeek.get(mondayOf(entry.date));
+      if (!bucket) continue;
+      if (SESSION_TYPES_CLINICAL.has(currentTypes.get(entry.id) || entry.typeId)) continue;
+      bucket.candidates.push(entry);
+    }
+    for (const mon of weekMondays) {
+      const bucket = eaByWeek.get(mon);
+      if (!bucket || bucket.minutes >= eaTargetMinutes) continue;
+      bucket.candidates.sort((a, b) => {
+        if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+        if (a.period !== b.period) return a.period < b.period ? -1 : 1;
+        const pa = staffById[a.staffId] || {};
+        const pb = staffById[b.staffId] || {};
+        const ga = pa.role === 'gp' ? 0 : 1;
+        const gb = pb.role === 'gp' ? 0 : 1;
+        if (ga !== gb) return ga - gb;
+        return (pa.name || '').localeCompare(pb.name || '') || String(a.id).localeCompare(String(b.id));
+      });
+      for (const entry of bucket.candidates) {
+        if (bucket.minutes >= eaTargetMinutes) break;
+        currentTypes.set(entry.id, 'enhanced');
+        bucket.minutes += (PERIOD_INFO[entry.period] || {}).minutes || 0;
       }
     }
   }
@@ -492,11 +593,11 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
     (slotFlex[key] ||= []).push(entry);
   }
 
-  // flexGpDutyEligible: entries for GPs who are duty-eligible and flexible
-  const flexEligibleGpEntries = flexEntries.filter((e) => {
-    const meta = entryMeta.get(e.id);
-    return meta && meta.eligible && meta.allowed.includes('duty');
-  });
+  // Move ladder. When EA is not in play the bands are v1's exactly (the EA band
+  // is empty), so the same seed reproduces v1's search verbatim.
+  const BANDS = eaActive
+    ? { gap: 0.34, toggle: 0.55, transfer: 0.72, ea: 0.87 }
+    : { gap: 0.4, toggle: 0.65, transfer: 0.85, ea: 0.85 };
 
   for (let i = 0; i < iterations; i++) {
     // Temperature: T = 25 × (0.02)^(i/iterations)  (≈25 → 0.5)
@@ -505,35 +606,14 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
     const move = rng();
     let changed = null; // { entryId, newType } or { entryId, newType, entryId2, newType2 }
 
-    if (move < 0.4) {
+    if (move < BANDS.gap) {
       // fix-gap: random gap slot → random eligible flexible entry → duty
-      // Pick a random open slot that has a gap
       const gappedSlots = [];
       for (const { date, period } of openSlots) {
         const required = dutyRequired[period] ?? 1;
-        if (sites.length > 1) {
-          for (const site of sites) {
-            let cnt = 0;
-            for (const entry of horizonEntries) {
-              if (entry.date !== date || entry.period !== period) continue;
-              const p = staffById[entry.staffId];
-              if (!p || !p.dutyEligible || p.role !== 'gp') continue;
-              if (site && (p.site || sites[0]) !== site) continue;
-              const onLeave = approvedLeaveFor(leaveList, p.id, date);
-              if (!onLeave && (currentTypes.get(entry.id) || entry.typeId) === 'duty') cnt++;
-            }
-            if (cnt < required) gappedSlots.push({ date, period, site });
-          }
-        } else {
-          let cnt = 0;
-          for (const entry of horizonEntries) {
-            if (entry.date !== date || entry.period !== period) continue;
-            const p = staffById[entry.staffId];
-            if (!p || !p.dutyEligible || p.role !== 'gp') continue;
-            const onLeave = approvedLeaveFor(leaveList, p.id, date);
-            if (!onLeave && (currentTypes.get(entry.id) || entry.typeId) === 'duty') cnt++;
-          }
-          if (cnt < required) gappedSlots.push({ date, period, site: null });
+        const siteGroups = sites.length > 1 ? sites : [null];
+        for (const site of siteGroups) {
+          if (dutyCoverAt(currentTypes, date, period, site) < required) gappedSlots.push({ date, period, site });
         }
       }
       if (gappedSlots.length > 0) {
@@ -544,7 +624,7 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
           if (!meta || !meta.eligible || !meta.allowed.includes('duty')) return false;
           if (slot.site) {
             const p = staffById[e.staffId];
-            if (!p || (p.site || sites[0]) !== slot.site) return false;
+            if (!p || siteOf(p) !== slot.site) return false;
           }
           return (currentTypes.get(e.id) || e.typeId) !== 'duty';
         });
@@ -553,7 +633,7 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
           changed = { entryId: entry.id, newType: 'duty' };
         }
       }
-    } else if (move < 0.65) {
+    } else if (move < BANDS.toggle) {
       // toggle: random flexible GP entry: duty⇄revert
       if (flexGpEntries.length > 0) {
         const entry = flexGpEntries[Math.floor(rng() * flexGpEntries.length)];
@@ -569,13 +649,13 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
           }
         }
       }
-    } else if (move < 0.85) {
+    } else if (move < BANDS.transfer) {
       // transfer: within one slot, swap types of a duty entry and a non-duty eligible entry
       if (openSlots.length > 0) {
         const slot = openSlots[Math.floor(rng() * openSlots.length)];
-        const slotEntries = slotFlex[`${slot.date}|${slot.period}`] || [];
-        const dutyOnes = slotEntries.filter((e) => (currentTypes.get(e.id) || e.typeId) === 'duty');
-        const nonDutyElig = slotEntries.filter((e) => {
+        const slotList = slotFlex[`${slot.date}|${slot.period}`] || [];
+        const dutyOnes = slotList.filter((e) => (currentTypes.get(e.id) || e.typeId) === 'duty');
+        const nonDutyElig = slotList.filter((e) => {
           const meta = entryMeta.get(e.id);
           return (
             meta && meta.eligible && meta.allowed.includes('duty') && (currentTypes.get(e.id) || e.typeId) !== 'duty'
@@ -598,6 +678,21 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
             entryId2: toEntry.id,
             newType2: 'duty',
           };
+        }
+      }
+    } else if (move < BANDS.ea) {
+      // enhanced access: random flexible extended-hours entry → enhanced ⇄ revert
+      if (flexEaEntries.length > 0) {
+        const entry = flexEaEntries[Math.floor(rng() * flexEaEntries.length)];
+        const meta = entryMeta.get(entry.id);
+        if (meta) {
+          const cur = currentTypes.get(entry.id) || entry.typeId;
+          if (cur === 'enhanced') {
+            const target = meta.allowed.includes(meta.revertType) ? meta.revertType : meta.originalType;
+            if (target !== 'enhanced') changed = { entryId: entry.id, newType: target };
+          } else {
+            changed = { entryId: entry.id, newType: 'enhanced' };
+          }
         }
       }
     } else {
@@ -647,6 +742,77 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
 
   return buildResult(bestTypes, scoreBefore, iterations);
 
+  // --- Room repair ---
+  // Type moves can leave two room-occupying sessions in one room. Where a free
+  // room exists in that slot we propose moving the later occupant into it
+  // (its owner's usual room first, else the lowest free room — the same
+  // preference order as engine/room-infer.js fillRooms). Locked entries are
+  // never moved. Deterministic: slots and rooms in sorted order.
+  function repairRooms(finalTypes) {
+    const roomChanges = [];
+    const roomOf = new Map();
+    for (const e of horizonEntries) if (e.roomId) roomOf.set(e.id, e.roomId);
+    if (!roomList.length) return { roomChanges, roomOf };
+
+    const slots = new Map(); // `${date}|${period}` -> Map(roomId -> Entry[])
+    for (const e of horizonEntries) {
+      const roomId = roomOf.get(e.id);
+      if (!roomId || !isActive(e)) continue;
+      if (!occupiesRoom(finalTypes.get(e.id) || e.typeId)) continue;
+      const key = `${e.date}|${e.period}`;
+      let byRoom = slots.get(key);
+      if (!byRoom) slots.set(key, (byRoom = new Map()));
+      const list = byRoom.get(roomId);
+      if (list) list.push(e);
+      else byRoom.set(roomId, [e]);
+    }
+
+    for (const key of [...slots.keys()].sort()) {
+      const byRoom = slots.get(key);
+      const occupied = new Set(byRoom.keys());
+      for (const roomId of [...byRoom.keys()].sort()) {
+        const list = byRoom.get(roomId);
+        if (list.length < 2) continue;
+        // Keep: a locked session first (it cannot move), then whoever calls this
+        // room home, then the lowest entry id. Everyone else looks for a room.
+        const rank = (e) => {
+          if ((entryMeta.get(e.id) || {}).locked) return 0;
+          const p = staffById[e.staffId];
+          return p && p.usualRoomId === roomId ? 1 : 2;
+        };
+        const ordered = [...list].sort((a, b) => rank(a) - rank(b) || String(a.id).localeCompare(String(b.id)));
+        for (const e of ordered.slice(1)) {
+          if ((entryMeta.get(e.id) || {}).locked) continue;
+          const person = staffById[e.staffId];
+          let target = null;
+          if (
+            person &&
+            person.usualRoomId &&
+            !occupied.has(person.usualRoomId) &&
+            roomList.some((r) => r.id === person.usualRoomId)
+          ) {
+            target = person.usualRoomId;
+          } else {
+            const free = roomList.find((r) => !occupied.has(r.id));
+            if (free) target = free.id;
+          }
+          if (!target) continue;
+          occupied.add(target);
+          roomOf.set(e.id, target);
+          roomChanges.push({
+            entryId: e.id,
+            staffId: e.staffId,
+            date: e.date,
+            period: e.period,
+            from: roomId,
+            to: target,
+          });
+        }
+      }
+    }
+    return { roomChanges, roomOf };
+  }
+
   // --- Build the result object ---
   function buildResult(finalTypes, before, iters) {
     // changes[]: entries whose FINAL type differs from their ORIGINAL type
@@ -667,56 +833,111 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
       }
     }
 
-    const bd = scoreBreakdownWith(finalTypes);
+    // Room reassignments proposed alongside the type changes
+    const { roomChanges, roomOf } = repairRooms(finalTypes);
+
+    const ev = evaluate(finalTypes, roomOf);
+    const bd = ev.breakdown;
     const after = Object.values(bd).reduce((a, b) => a + b, 0);
 
-    // Diagnostics: remaining duty gaps + supervision pass-through
+    // Diagnostics: what the proposal could not fix
     const unresolved = [];
 
-    // Duty gaps that couldn't be filled
+    // 1. Duty gaps that couldn't be filled
     for (const { date, period } of openSlots) {
       const required = dutyRequired[period] ?? 1;
-      if (sites.length > 1) {
-        for (const site of sites) {
-          let cnt = 0;
-          for (const entry of horizonEntries) {
-            if (entry.date !== date || entry.period !== period) continue;
-            const p = staffById[entry.staffId];
-            if (!p || !p.dutyEligible || p.role !== 'gp') continue;
-            if ((p.site || sites[0]) !== site) continue;
-            const onLeave = approvedLeaveFor(leaveList, p.id, date);
-            if (!onLeave && (finalTypes.get(entry.id) || entry.typeId) === 'duty') cnt++;
-          }
-          if (cnt < required) {
-            unresolved.push({
-              kind: 'duty',
-              message: `${date} ${period.toUpperCase()}${site ? ` (${site})` : ''}: no eligible GP present for duty (${cnt}/${required} filled)`,
-            });
-          }
-        }
-      } else {
-        let cnt = 0;
-        for (const entry of horizonEntries) {
-          if (entry.date !== date || entry.period !== period) continue;
-          const p = staffById[entry.staffId];
-          if (!p || !p.dutyEligible || p.role !== 'gp') continue;
-          const onLeave = approvedLeaveFor(leaveList, p.id, date);
-          if (!onLeave && (finalTypes.get(entry.id) || entry.typeId) === 'duty') cnt++;
-        }
+      const siteGroups = sites.length > 1 ? sites : [null];
+      for (const site of siteGroups) {
+        const cnt = dutyCoverAt(finalTypes, date, period, site);
         if (cnt < required) {
           unresolved.push({
             kind: 'duty',
-            message: `${date} ${period.toUpperCase()}: no eligible GP present for duty (${cnt}/${required} filled)`,
+            message: `${date} ${period.toUpperCase()}${site ? ` (${site})` : ''}: no eligible GP present for duty (${cnt}/${required} filled)`,
           });
         }
       }
     }
 
-    // Supervision pass-through: run checkWeek per week and forward supervision warnings
-    // Build final entries with solved types for checkWeek
+    // 2. Enhanced-access shortfall per week (warn-level — the DES target is a
+    // commissioning expectation, not a rostering hard stop)
+    if (eaActive) {
+      for (const mon of weekMondays) {
+        let minutes = 0;
+        for (const entry of horizonEntries) {
+          if (!eaPeriods.has(entry.period) || mondayOf(entry.date) !== mon) continue;
+          const person = staffById[entry.staffId];
+          if (!person || !isActive(entry) || onLeave(person.id, entry.date)) continue;
+          if (SESSION_TYPES_CLINICAL.has(finalTypes.get(entry.id) || entry.typeId)) {
+            minutes += (PERIOD_INFO[entry.period] || {}).minutes || 0;
+          }
+        }
+        if (minutes < eaTargetMinutes) {
+          unresolved.push({
+            kind: 'ea',
+            message: `Week of ${mon}: enhanced access ${minutes}/${eaTargetMinutes} min rostered — ${eaTargetMinutes - minutes} min short of the DES target and no further extended-hours session could be allocated`,
+          });
+        }
+      }
+    }
+
+    // 3. Avoid-duty assignments that survived — duty on an avoided slot is a
+    // last resort, so say so rather than let the penalty vanish into the score.
+    for (const entry of horizonEntries) {
+      if ((finalTypes.get(entry.id) || entry.typeId) !== 'duty') continue;
+      const person = staffById[entry.staffId];
+      if (!person || !avoidsDuty(person, entry.date, entry.period)) continue;
+      const site = sites.length > 1 ? siteOf(person) : null;
+      const alternatives = entriesAt(entry.date, entry.period).filter((other) => {
+        if (other.id === entry.id) return false;
+        const meta = entryMeta.get(other.id);
+        if (!meta || meta.locked || !meta.eligible || !meta.allowed.includes('duty')) return false;
+        const p = staffById[other.staffId];
+        if (!p || p.id === person.id) return false;
+        if (site && siteOf(p) !== site) return false;
+        if (avoidsDuty(p, other.date, other.period)) return false;
+        return (finalTypes.get(other.id) || other.typeId) !== 'duty';
+      }).length;
+      unresolved.push({
+        kind: 'preference',
+        message: `${entry.date} ${entry.period.toUpperCase()}: ${person.name} is on duty on a slot they asked to avoid — ${
+          alternatives
+            ? `taken as a last resort to keep cover/fairness (${alternatives} other eligible GP${alternatives > 1 ? 's' : ''} present)`
+            : 'no other eligible GP was available'
+        }`,
+      });
+    }
+
+    // 4. Room clashes the repair could not resolve
+    const clashes = new Map(); // `${date}|${period}|${roomId}` -> Entry[]
+    for (const entry of horizonEntries) {
+      const roomId = roomOf.get(entry.id);
+      if (!roomId || !isActive(entry)) continue;
+      if (!occupiesRoom(finalTypes.get(entry.id) || entry.typeId)) continue;
+      const key = `${entry.date}|${entry.period}|${roomId}`;
+      const list = clashes.get(key);
+      if (list) list.push(entry);
+      else clashes.set(key, [entry]);
+    }
+    for (const key of [...clashes.keys()].sort()) {
+      const list = clashes.get(key);
+      if (list.length < 2) continue;
+      const [date, period, roomId] = key.split('|');
+      const room = roomList.find((r) => r.id === roomId);
+      const names = list.map((e) => (staffById[e.staffId] || {}).name).filter(Boolean);
+      unresolved.push({
+        kind: 'room',
+        message: `${date} ${period.toUpperCase()}: ${room ? room.name : 'room'} double-booked (${names.join(', ')}) — ${
+          roomList.length ? 'no free room in that slot' : 'no rooms configured'
+        }`,
+      });
+    }
+
+    // 5. Rules pass-through: gaps that depend on PRESENCE, which the solver
+    // cannot change — supervision and enhanced-access GP presence.
     const finalEntries = horizonEntries.map((e) => ({
       ...e,
       typeId: finalTypes.get(e.id) || e.typeId,
+      ...(roomOf.has(e.id) ? { roomId: roomOf.get(e.id) } : {}),
     }));
     const weeksSeen = new Set();
     for (const date of dates) {
@@ -725,13 +946,33 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
       weeksSeen.add(mon);
       const weekDates = [];
       for (let d = 0; d < 7; d++) weekDates.push(addDays(mon, d));
-      const warnings = checkWeek({ dates: weekDates, entries: finalEntries, staff, leaveList, settings });
+      const warnings = checkWeek({
+        dates: weekDates,
+        entries: finalEntries,
+        staff,
+        leaveList,
+        settings,
+        rooms: roomList,
+      });
       for (const w of warnings) {
-        if (w.kind === 'supervision') {
-          unresolved.push({ kind: 'supervision', message: w.message });
+        if (w.kind === 'supervision' || w.kind === 'enhanced') {
+          unresolved.push({ kind: w.kind, message: w.message });
         }
       }
     }
+
+    // Per-dimension explanation for the UI ("why this proposal")
+    const explain = EXPLAIN_ORDER.map((key) => {
+      const meta = EXPLAIN_META[key];
+      return {
+        key,
+        label: meta.label,
+        weight: W[meta.weightKey],
+        measure: ev.measures[key],
+        unit: meta.unit,
+        score: bd[key],
+      };
+    });
 
     return {
       changes,
@@ -739,97 +980,8 @@ export function solveRota({ dates, entries, staff, leaveList, settings, historyE
       breakdown: bd,
       unresolved,
       iterations: iters,
+      roomChanges,
+      explain,
     };
-  }
-
-  function scoreBreakdownWith(types) {
-    let dutyGap = 0,
-      vts = 0,
-      fairness = 0,
-      sameDay = 0,
-      weeklyCap = 0,
-      locumDuty = 0,
-      preference = 0,
-      churn = 0;
-
-    const personDutyTotal = {};
-    const personDutyDate = {};
-    const personDutyWeek = {};
-    const slotDuty = {};
-
-    for (const entry of horizonEntries) {
-      const t = types.get(entry.id) || entry.typeId;
-      const person = staffById[entry.staffId];
-      if (!person) continue;
-
-      if (t === 'duty') {
-        personDutyTotal[person.id] = (personDutyTotal[person.id] || 0) + 1;
-        const dk = `${person.id}|${entry.date}`;
-        personDutyDate[dk] = (personDutyDate[dk] || 0) + 1;
-        const wk = `${person.id}|${mondayOf(entry.date)}`;
-        personDutyWeek[wk] = (personDutyWeek[wk] || 0) + 1;
-
-        if (person.role === 'gp' && person.dutyEligible) {
-          const onLeave = approvedLeaveFor(leaveList, person.id, entry.date);
-          if (!onLeave) {
-            if (sites.length > 1) {
-              const site = person.site || sites[0];
-              const sk = `${entry.date}|${entry.period}|${site}`;
-              slotDuty[sk] = (slotDuty[sk] || 0) + 1;
-            } else {
-              const sk = `${entry.date}|${entry.period}`;
-              slotDuty[sk] = (slotDuty[sk] || 0) + 1;
-            }
-          }
-        }
-        if (person.employmentType === 'locum') locumDuty += W.locumDuty;
-        const avoidDuty = person.avoidDuty || [];
-        if (avoidDuty.includes(`${dayKey(entry.date)}-${entry.period}`)) preference += W.preference;
-      }
-
-      if (person.employmentType === 'registrar' && person.vtsDay) {
-        const SESSION_TYPES_CLINICAL = new Set(['surgery', 'triage', 'duty', 'visits', 'enhanced']);
-        if (SESSION_TYPES_CLINICAL.has(t) && person.vtsDay === `${dayKey(entry.date)}-${entry.period}`) {
-          vts += W.vts;
-        }
-      }
-
-      const meta = entryMeta.get(entry.id);
-      if (meta && t !== meta.originalType) churn += W.churn;
-    }
-
-    for (const { date, period } of openSlots) {
-      const required = dutyRequired[period] ?? 1;
-      if (sites.length > 1) {
-        for (const site of sites) {
-          const sk = `${date}|${period}|${site}`;
-          dutyGap += W.dutyGap * Math.max(0, required - (slotDuty[sk] || 0));
-        }
-      } else {
-        const sk = `${date}|${period}`;
-        dutyGap += W.dutyGap * Math.max(0, required - (slotDuty[sk] || 0));
-      }
-    }
-
-    for (const [, count] of Object.entries(personDutyDate)) {
-      if (count >= 2) sameDay += W.sameDay * (count - 1);
-    }
-    for (const [, count] of Object.entries(personDutyWeek)) {
-      if (count > maxDutyPerWeek) weeklyCap += W.weeklyCap * (count - maxDutyPerWeek);
-    }
-
-    const shares = eligibleGPs.map((person) => {
-      const hist = histDutyCount[person.id] || 0;
-      const planned = personDutyTotal[person.id] || 0;
-      return (hist + planned) / person.contractedSessions;
-    });
-    if (shares.length > 0) {
-      const mean = shares.reduce((a, b) => a + b, 0) / shares.length;
-      let sq = 0;
-      for (const s of shares) sq += (s - mean) * (s - mean);
-      fairness = sq * W.fairness;
-    }
-
-    return { dutyGap, vts, fairness, sameDay, weeklyCap, locumDuty, preference, churn };
   }
 }
