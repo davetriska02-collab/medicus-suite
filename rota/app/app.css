@@ -1038,6 +1038,104 @@ details.actions .actions-panel .actions-row {
   background: transparent;
 }
 
+/* ---- setup wizard + post-setup checklist ---- */
+.wiz-progress {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 12px;
+}
+.wiz-dots {
+  display: flex;
+  gap: 6px;
+}
+.wiz-dot {
+  width: 34px;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.wiz-dot.on {
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+}
+.wiz-path {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  padding: 14px 0 4px;
+}
+.wiz-path > div {
+  max-width: 62ch;
+}
+.wiz-path p {
+  margin-bottom: 0;
+}
+.wiz-path > button {
+  flex-shrink: 0;
+}
+.linkbtn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: underline;
+}
+.linkbtn:hover {
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+  color: var(--ink);
+}
+a.btnlink {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--glass-strong);
+  color: var(--ink);
+  text-decoration: none;
+}
+a.btnlink:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+a.btnlink.primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 18px rgba(59, 130, 246, 0.4);
+}
+.checklist h2 {
+  font-size: 16px;
+}
+.cl-item {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 5px 2px;
+  font-size: 13px;
+}
+.cl-item.done {
+  color: var(--muted);
+}
+.cl-mark {
+  width: 14px;
+  flex-shrink: 0;
+  text-align: center;
+  font-weight: 700;
+  color: var(--accent);
+}
+.cl-item.done .cl-mark {
+  color: var(--ok);
+}
+
 /* ---- print: plain paper, no glass ---- */
 .printhead {
   display: none;

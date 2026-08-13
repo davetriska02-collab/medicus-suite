@@ -188,4 +188,13 @@ export const DEFAULT_SETTINGS = {
   userStaffId: null,
   userRole: 'manager', // 'manager' | 'staff'
   templateAnchorMonday: null,
+  // First-run experience. setupDismissed stops the router sending an empty
+  // practice to the setup wizard; checklistDismissed hides the dashboard's
+  // "Finish setting up" card. Plain booleans — nothing in engine/validate.js or
+  // shared/io/rota-io.js needs to know about them (settings validation only
+  // pins the array/object members the engine dereferences), and the
+  // coerceSettings merge supplies them when an older stored settings blob
+  // has neither.
+  setupDismissed: false,
+  checklistDismissed: false,
 };

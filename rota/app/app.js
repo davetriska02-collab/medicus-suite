@@ -18,8 +18,11 @@ import demand from './views/demand.js';
 import syncView from './views/sync.js';
 import settings from './views/settings.js';
 import unlock from './views/unlock.js';
+import setup from './views/setup.js';
 
-const VIEWS = { dashboard, me, rota, staff, templates, leave, demand, sync: syncView, settings, unlock };
+// `unlock` and `setup` are deliberately absent from the nav in app.html: both
+// are routes the app sends you to, not places you browse to.
+const VIEWS = { dashboard, me, rota, staff, templates, leave, demand, sync: syncView, settings, unlock, setup };
 const SYNC_SCOPES = ['staff', 'entries', 'leave', 'rooms', 'swaps', 'audit', 'demand', 'settings', 'access'];
 
 // ── Passcode gate ────────────────────────────────────────────────────────────
@@ -119,9 +122,19 @@ async function log(summary) {
   await persist('audit');
 }
 
+// A practice with nobody in it has nothing for the dashboard to show, so the
+// default (and any unknown) route lands on the setup wizard instead — until
+// the wizard is dismissed, or somebody exists. A locked machine is by
+// definition already set up, so the gate wins: effectiveRoute() sends #setup
+// to the unlock screen like any other admin route.
+function needsSetup() {
+  return state.staff.length === 0 && !state.settings.setupDismissed && !lockState().locked;
+}
+
 function currentRoute() {
-  const r = (location.hash || '#dashboard').slice(1);
-  return VIEWS[r] ? r : 'dashboard';
+  const r = (location.hash || '').slice(1);
+  if (VIEWS[r]) return r;
+  return needsSetup() ? 'setup' : 'dashboard';
 }
 
 // The route actually rendered, which is not always the route in the hash. The
