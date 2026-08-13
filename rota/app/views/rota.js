@@ -14,15 +14,34 @@ import { autoAssignDuty, applyDutyChanges } from '../../engine/fairness.js';
 import { solveRota } from '../../engine/solver.js';
 import { approvedLeaveFor } from '../../engine/leave.js';
 import { staffSorted, staffLabel, typeChip, leaveChip, warnHTML } from './ui.js';
+import { rectKeys, buildClipboard, pasteOps, parseCellKey } from './grid-logic.js';
 
 const ACTIVE = ['planned', 'confirmed', 'covered'];
+const HISTORY_CAP = 30;
 let activeCtx = null;
 
-/* ---- undo ---- */
+// The shape of the grid currently on screen, captured on every staff-mode
+// render. The module-scope keyboard/mouse listeners live outside render(), so
+// this is how they know the row/column order the user is looking at.
+let gridShape = { rowIds: [], colKeys: [] };
+let gridRoot = null;
+// Copy/paste buffer — session layout only, deliberately session-scoped (never
+// persisted): a rota clipboard that survived a reload would paste stale weeks.
+let clipboard = null;
+let lastFocusedKey = null;
+
+/* ---- undo / redo ---- */
+function pushHistory(stack, entries) {
+  stack.push(JSON.stringify(entries));
+  if (stack.length > HISTORY_CAP) stack.shift();
+}
+
 function pushUndo(state) {
   const stack = state.ui.undoStack || (state.ui.undoStack = []);
-  stack.push(JSON.stringify(state.entries));
-  if (stack.length > 30) stack.shift();
+  pushHistory(stack, state.entries);
+  // Any new mutation invalidates the redo branch — redoing onto a rota that has
+  // moved on since would resurrect sessions nobody asked for.
+  state.ui.redoStack = [];
 }
 
 async function undo(ctx) {
@@ -32,16 +51,195 @@ async function undo(ctx) {
     ctx.toast('Nothing to undo');
     return;
   }
+  pushHistory(ctx.state.ui.redoStack || (ctx.state.ui.redoStack = []), ctx.state.entries);
   ctx.state.entries = JSON.parse(snapshot);
   await ctx.persist('entries');
   ctx.toast('Undone');
   ctx.rerender();
 }
 
+async function redo(ctx) {
+  const stack = ctx.state.ui.redoStack || [];
+  const snapshot = stack.pop();
+  if (!snapshot) {
+    ctx.toast('Nothing to redo');
+    return;
+  }
+  // Straight onto the undo stack: pushUndo() would clear the redo branch we are
+  // half way through walking back up.
+  pushHistory(ctx.state.ui.undoStack || (ctx.state.ui.undoStack = []), ctx.state.entries);
+  ctx.state.entries = JSON.parse(snapshot);
+  await ctx.persist('entries');
+  ctx.toast('Redone');
+  ctx.rerender();
+}
+
+/* ---- undo toast (a toast with a real button, anchored above the grid) ---- */
+let actionToastTimer = null;
+
+function closeActionToast() {
+  clearTimeout(actionToastTimer);
+  const el = document.getElementById('rota-actiontoast');
+  if (el) el.remove();
+}
+
+// Called AFTER ctx.rerender(), so it measures the grid that is actually on
+// screen and survives the re-render (it lives on document.body, not #main).
+function actionToast(ctx, message) {
+  closeActionToast();
+  const el = document.createElement('div');
+  el.id = 'rota-actiontoast';
+  el.innerHTML = `<span>${esc(message)}</span><button type="button" id="rota-actiontoast-undo">Undo</button>`;
+  document.body.appendChild(el);
+  const wrap = document.querySelector('.rotawrap');
+  if (wrap) {
+    const r = wrap.getBoundingClientRect();
+    el.style.left = `${Math.round(r.left + r.width / 2)}px`;
+    el.style.top = `${Math.max(12, Math.round(r.top - el.offsetHeight - 8))}px`;
+  }
+  el.querySelector('#rota-actiontoast-undo').onclick = async () => {
+    closeActionToast();
+    await undo(ctx);
+  };
+  actionToastTimer = setTimeout(closeActionToast, 6000);
+}
+
+/* ---- copy / paste ---- */
+function entryAt(state, staffId, date, period) {
+  return state.entries.find((e) => e.staffId === staffId && e.date === date && e.period === period) || null;
+}
+
+// One predicate for "you cannot put a session here", shared by the drag
+// greying, the drop handler and paste, so they can never disagree.
+function blockedReason(state, staffId, date) {
+  const person = state.staff.find((p) => p.id === staffId);
+  if (!person) return 'no such staff member';
+  if (person.notAPerson) return `${person.name} is not a person`;
+  if (approvedLeaveFor(state.leave, staffId, date)) return `${person.name} is on approved leave that day`;
+  return '';
+}
+
+function copyCells(ctx, fallbackKey) {
+  const { state } = ctx;
+  const selected = state.ui.selected || [];
+  const keys = selected.length ? selected : fallbackKey ? [fallbackKey] : [];
+  if (!keys.length) {
+    ctx.toast('Nothing to copy — click a cell or select a block first');
+    return;
+  }
+  const clip = buildClipboard({
+    rowIds: gridShape.rowIds,
+    colKeys: gridShape.colKeys,
+    keys,
+    entryFor: (key) => {
+      const { staffId, date, period } = parseCellKey(key);
+      return entryAt(state, staffId, date, period);
+    },
+  });
+  if (!clip) {
+    ctx.toast('Nothing to copy');
+    return;
+  }
+  clipboard = clip;
+  const filled = clip.cells.filter((c) => c.typeId).length;
+  ctx.toast(`Copied ${clip.rows}×${clip.cols} block (${filled} session${filled === 1 ? '' : 's'}) — Ctrl+V to paste`);
+}
+
+async function pasteAt(ctx, anchorKey) {
+  const { state } = ctx;
+  if (!clipboard) {
+    ctx.toast('Clipboard is empty — copy a cell or block first (Ctrl+C)');
+    return;
+  }
+  if (!anchorKey) {
+    ctx.toast('Click the cell to paste into first');
+    return;
+  }
+  const { ops, skipped, offGrid } = pasteOps({
+    rowIds: gridShape.rowIds,
+    colKeys: gridShape.colKeys,
+    clipboard,
+    anchorKey,
+    isBlocked: ({ staffId, date }) => Boolean(blockedReason(state, staffId, date)),
+  });
+  // A "clear" onto an already-empty cell is not a change: filtering those out
+  // first keeps the undo stack free of no-op snapshots.
+  const effective = ops.filter((op) => op.action === 'set' || entryAt(state, op.staffId, op.date, op.period));
+  if (!effective.length) {
+    ctx.toast(skipped ? `Nothing pasted — ${skipped} cell(s) on leave or not a person` : 'Nothing to paste here');
+    return;
+  }
+  pushUndo(state);
+  let written = 0;
+  let cleared = 0;
+  for (const op of effective) {
+    const existing = entryAt(state, op.staffId, op.date, op.period);
+    // A blank cell in the copied block blanks its target, so a pasted rectangle
+    // reproduces the rectangle. Counted separately: deleting somebody's session
+    // is not the same event as writing one, and the toast must say so.
+    if (op.action === 'clear') {
+      if (existing) {
+        state.entries = state.entries.filter((e) => e.id !== existing.id);
+        cleared += 1;
+      }
+      continue;
+    }
+    if (existing) {
+      Object.assign(existing, { typeId: op.typeId, status: 'planned', source: 'manual', note: op.note });
+    } else {
+      state.entries.push({
+        id: uid(),
+        staffId: op.staffId,
+        date: op.date,
+        period: op.period,
+        typeId: op.typeId,
+        status: 'planned',
+        source: 'manual',
+        note: op.note,
+        roomId: null,
+      });
+    }
+    written += 1;
+  }
+  await ctx.persist('entries');
+  ctx.rerender();
+  const notes = [];
+  if (cleared) notes.push(`${cleared} cell(s) cleared`);
+  if (skipped) notes.push(`${skipped} skipped (leave / not a person)`);
+  if (offGrid) notes.push(`${offGrid} off the grid`);
+  actionToast(
+    ctx,
+    `Pasted ${written} session${written === 1 ? '' : 's'}${notes.length ? ` — ${notes.join(', ')}` : ''}`
+  );
+}
+
+/* ---- drag-time validity feedback ---- */
+function clearDragMarks() {
+  if (!gridRoot) return;
+  for (const td of gridRoot.querySelectorAll('td.cell')) {
+    td.classList.remove('drop-invalid', 'dragover', 'dragover-bad', 'dragover-copy');
+  }
+}
+
+// Grey out every cell this entry could not legally land on, for the duration of
+// the drag. The drop handler still refuses independently — this is the
+// affordance, not the guard.
+function markInvalidTargets(root, state) {
+  for (const td of root.querySelectorAll('td.cell')) {
+    if (blockedReason(state, td.dataset.staff, td.dataset.date)) td.classList.add('drop-invalid');
+  }
+}
+
 /* ---- cell editor menu ---- */
 function closeMenu() {
   const m = document.getElementById('cellmenu');
   if (m) m.remove();
+}
+
+function positionMenu(menu, anchorEl) {
+  const r = anchorEl.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 12))}px`;
+  menu.style.top = `${Math.min(r.bottom + 4, window.innerHeight - menu.offsetHeight - 12)}px`;
 }
 
 function openCellMenu(ctx, cell, person, date, period) {
@@ -68,17 +266,29 @@ function openCellMenu(ctx, cell, person, date, period) {
         : ''
     }
     ${entry ? '<button data-act="note"><span class="chip" style="background:#64748b">…</span>Edit note</button>' : ''}
+    <button data-act="copy"><span class="chip" style="background:#64748b">⧉</span>Copy${(state.ui.selected || []).length > 1 ? ` ${(state.ui.selected || []).length} cells` : ''}</button>
+    ${clipboard ? `<button data-act="paste"><span class="chip" style="background:#0ea5e9">⤓</span>Paste ${esc(`${clipboard.rows}×${clipboard.cols}`)} here</button>` : ''}
     ${entry && entry.status === 'vacancy' ? '<button data-act="covered"><span class="chip covered" style="background:#059669">LOC</span>Mark covered (locum)</button>' : ''}
     ${entry ? '<button data-act="clear"><span class="chip" style="background:#94a3b8">×</span>Clear session</button>' : ''}
   `;
   document.body.appendChild(menu);
-  const r = cell.getBoundingClientRect();
-  menu.style.left = `${Math.min(r.left, window.innerWidth - menu.offsetWidth - 12)}px`;
-  menu.style.top = `${Math.min(r.bottom + 4, window.innerHeight - menu.offsetHeight - 12)}px`;
+  positionMenu(menu, cell);
 
   menu.addEventListener('click', async (ev) => {
     const btn = ev.target.closest('button');
     if (!btn) return;
+    // Copy/paste run their own persist+rerender (or none at all), so they leave
+    // before the shared tail below.
+    if (btn.dataset.act === 'copy') {
+      closeMenu();
+      copyCells(ctx, `${person.id}|${date}|${period}`);
+      return;
+    }
+    if (btn.dataset.act === 'paste') {
+      closeMenu();
+      await pasteAt(ctx, `${person.id}|${date}|${period}`);
+      return;
+    }
     if (btn.dataset.type) {
       pushUndo(state);
       if (entry) {
@@ -120,19 +330,132 @@ function openCellMenu(ctx, cell, person, date, period) {
   });
 }
 
+/* ---- room re-assignment menu (rooms pivot) ---- */
+function openRoomMenu(ctx, anchorEl, entry) {
+  closeMenu();
+  const { state } = ctx;
+  const rooms = state.rooms || [];
+  const person = state.staff.find((p) => p.id === entry.staffId);
+  const menu = document.createElement('div');
+  menu.id = 'cellmenu';
+  menu.innerHTML = `
+    <div class="who">${esc(person ? person.name : entry.staffId)} — ${esc(fmtDay(entry.date))} ${esc(String(entry.period).toUpperCase())}</div>
+    ${rooms
+      .map(
+        (r) =>
+          `<button data-room="${esc(r.id)}"><span class="chip" style="background:${entry.roomId === r.id ? '#0d9488' : '#64748b'}">RM</span>${esc(r.name)}${entry.roomId === r.id ? ' ✓' : ''}</button>`
+      )
+      .join('')}
+    ${entry.roomId ? '<button data-room=""><span class="chip" style="background:#94a3b8">×</span>No room</button>' : ''}
+  `;
+  document.body.appendChild(menu);
+  positionMenu(menu, anchorEl);
+
+  menu.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('button');
+    if (!btn || !('room' in btn.dataset)) return;
+    const roomId = btn.dataset.room || null;
+    closeMenu();
+    if ((entry.roomId || null) === roomId) return;
+    pushUndo(state);
+    entry.roomId = roomId;
+    await ctx.persist('entries');
+    ctx.rerender();
+    const room = rooms.find((r) => r.id === roomId);
+    actionToast(ctx, room ? `Moved to ${room.name} ✓` : 'Room cleared ✓');
+  });
+}
+
 document.addEventListener('click', (ev) => {
   if (!ev.target.closest('#cellmenu') && !ev.target.closest('td.cell')) closeMenu();
 });
 
+/* ---- keyboard shortcuts (grid-wide, so they live outside render) ---- */
+const onRotaPage = (ev) =>
+  Boolean(activeCtx) &&
+  location.hash === '#rota' &&
+  !(ev.target.closest && ev.target.closest('input, select, textarea'));
+
 document.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Escape') closeMenu();
-  if (!activeCtx) return;
-  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z') {
-    if (location.hash !== '#rota') return;
-    if (ev.target.closest('input, select, textarea')) return;
+  if (ev.key === 'Escape') {
+    closeMenu();
+    closeActionToast();
+  }
+  if (!onRotaPage(ev)) return;
+  if (!(ev.ctrlKey || ev.metaKey)) return;
+  const key = ev.key.toLowerCase();
+  if (key === 'z' && !ev.shiftKey) {
     ev.preventDefault();
     undo(activeCtx);
+  } else if ((key === 'z' && ev.shiftKey) || key === 'y') {
+    ev.preventDefault();
+    redo(activeCtx);
+  } else if (key === 'c' && (activeCtx.state.ui.rotaMode || 'staff') === 'staff') {
+    // Only hijack Ctrl+C when there is actually a grid target, and never over a
+    // live text selection — copying selected prose must keep working.
+    if (!(activeCtx.state.ui.selected || []).length && !lastFocusedKey) return;
+    if (String(window.getSelection() || '')) return;
+    ev.preventDefault();
+    copyCells(activeCtx, lastFocusedKey);
+  } else if (key === 'v' && (activeCtx.state.ui.rotaMode || 'staff') === 'staff') {
+    ev.preventDefault();
+    pasteAt(activeCtx, lastFocusedKey || (activeCtx.state.ui.selected || [])[0]);
   }
+});
+
+/* ---- Excel-style rectangle selection (mouse sweep) ----
+   Cells holding an entry are draggable=true so HTML5 drag keeps working, so a
+   sweep may only START from an empty cell — or from any cell with Shift held,
+   where the mousedown handler suppresses the native drag for that one gesture.
+   The sweep paints .selecting straight onto the DOM; state.ui.selected and the
+   re-render happen once, on mouseup. */
+let sweep = null;
+let suppressClick = false;
+
+function paintSweep() {
+  if (!sweep || !gridRoot) return;
+  const covered = new Set(rectKeys(gridShape.rowIds, gridShape.colKeys, sweep.anchor, sweep.last));
+  for (const td of gridRoot.querySelectorAll('td.cell')) {
+    td.classList.toggle('selecting', covered.has(cellKey(td)));
+  }
+}
+
+document.addEventListener('mousemove', (ev) => {
+  if (!sweep) return;
+  const td = ev.target.closest && ev.target.closest('td.cell');
+  if (!td || !gridRoot || !gridRoot.contains(td)) return;
+  const key = cellKey(td);
+  if (key === sweep.last) return;
+  sweep.last = key;
+  sweep.moved = true;
+  paintSweep();
+});
+
+document.addEventListener('mouseup', () => {
+  if (!sweep) return;
+  const done = sweep;
+  sweep = null;
+  if (done.restoreDrag) done.restoreDrag.draggable = true;
+  if (gridRoot) for (const td of gridRoot.querySelectorAll('td.cell')) td.classList.remove('selecting');
+  // A sweep that never left its anchor is an ordinary click — let the click
+  // handler deal with it (shift-click toggle, plain click opens the menu).
+  if (!done.moved || !activeCtx) return;
+  const keys = rectKeys(gridShape.rowIds, gridShape.colKeys, done.anchor, done.last);
+  const state = activeCtx.state;
+  if (done.additive) {
+    const merged = new Set(state.ui.selected || []);
+    for (const k of keys) merged.add(k);
+    state.ui.selected = [...merged];
+  } else {
+    state.ui.selected = keys;
+  }
+  suppressClick = true;
+  // The click event fires synchronously after this mouseup; clear the flag once
+  // that has happened, whether or not a click actually landed on a cell.
+  setTimeout(() => {
+    suppressClick = false;
+  }, 0);
+  activeCtx.rerender();
 });
 
 /* ---- keyboard grid navigation ---- */
@@ -169,6 +492,7 @@ export default {
     const mode = state.ui.rotaMode || 'staff';
     const selected = state.ui.selected || (state.ui.selected = []);
     const undoStack = state.ui.undoStack || [];
+    const redoStack = state.ui.redoStack || [];
     const rooms = state.rooms || [];
     const dates = weekDates(state.weekMonday);
     const today = todayISO();
@@ -178,6 +502,20 @@ export default {
     const people = staffSorted(state.staff).filter(
       (p) => !p.notAPerson && (!siteFilter || (p.site || sites[0]) === siteFilter)
     );
+    const P = periodsFor(s);
+
+    // What the module-scope mouse/keyboard listeners need to know about the
+    // grid on screen: its row order and its column order.
+    gridRoot = root;
+    gridShape = {
+      rowIds: people.map((p) => p.id),
+      colKeys: showDates.flatMap((d) => P.map((period) => `${d}|${period}`)),
+    };
+    if (lastFocusedKey) {
+      const { staffId, date, period } = parseCellKey(lastFocusedKey);
+      if (!gridShape.rowIds.includes(staffId) || !gridShape.colKeys.includes(`${date}|${period}`))
+        lastFocusedKey = null;
+    }
 
     const warnings = checkWeek({
       dates,
@@ -232,7 +570,9 @@ export default {
             : ''
         }
         <span class="spacer"></span>
+        <button id="shortcutsbtn" class="${state.ui.showShortcuts ? 'primary' : ''}" title="Show the drag, select and clipboard gestures" aria-pressed="${state.ui.showShortcuts ? 'true' : 'false'}">⌨ Shortcuts</button>
         <button id="undobtn" ${undoStack.length ? '' : 'disabled'} title="Ctrl+Z">↶ Undo</button>
+        <button id="redobtn" ${redoStack.length ? '' : 'disabled'} title="Ctrl+Shift+Z or Ctrl+Y">↷ Redo</button>
         <button id="solvebtn" class="primary">Solve rota</button>
         <details class="actions">
           <summary>Actions</summary>
@@ -250,6 +590,7 @@ export default {
           </div>
         </details>
       </div>
+      ${state.ui.showShortcuts ? shortcutsStrip(mode) : ''}
       ${
         mode === 'staff' && selected.length
           ? `
@@ -276,11 +617,8 @@ export default {
       <div class="sub" style="margin:6px 0 14px">
         ${
           mode === 'staff'
-            ? `Click to edit · Shift-click to multi-select · drag to move · Ctrl+Z to undo.
-             <details style="display:inline"><summary>More shortcuts</summary>
-               Drop on occupied = swap · Ctrl-drop = copy · arrows + Enter to navigate · Delete to clear
-             </details>`
-            : 'Rooms view: who is in each room per session. Assign rooms from the Staff view cell menu. The Unassigned row shows clinical sessions with no room.'
+            ? 'Click to edit · drag to move · drag across empty cells to select a block · Ctrl+Z to undo. Press ⌨ Shortcuts above for the full set.'
+            : 'Rooms view: who is in each room per session. Click a name chip to reassign it, or drag it to another room in the same day and session column. The Unassigned row shows clinical sessions with no room.'
         }
       </div>
       <div class="card">
@@ -329,6 +667,17 @@ export default {
       };
     root.querySelector('#printbtn').onclick = () => window.print();
     root.querySelector('#undobtn').onclick = () => undo(ctx);
+    root.querySelector('#redobtn').onclick = () => redo(ctx);
+    root.querySelector('#shortcutsbtn').onclick = () => {
+      state.ui.showShortcuts = !state.ui.showShortcuts;
+      ctx.rerender();
+    };
+    const shortcutsClose = root.querySelector('#shortcuts-dismiss');
+    if (shortcutsClose)
+      shortcutsClose.onclick = () => {
+        state.ui.showShortcuts = false;
+        ctx.rerender();
+      };
 
     const fillBtn = root.querySelector('#fillrooms');
     if (fillBtn)
@@ -508,9 +857,13 @@ export default {
       const typeId = root.querySelector('#bulktype').value;
       pushUndo(state);
       let changed = 0;
+      let skipped = 0;
       for (const key of selected) {
         const { staffId, date, period } = parseKey(key);
-        if (approvedLeaveFor(state.leave, staffId, date)) continue;
+        if (blockedReason(state, staffId, date)) {
+          skipped += 1;
+          continue;
+        }
         const entry = state.entries.find((e) => e.staffId === staffId && e.date === date && e.period === period);
         if (entry) {
           Object.assign(entry, { typeId, status: 'planned', source: 'manual' });
@@ -529,8 +882,11 @@ export default {
         changed += 1;
       }
       await ctx.persist('entries');
-      ctx.toast(`Set ${changed} session(s) to ${typeById(typeId).name}`);
       ctx.rerender();
+      actionToast(
+        ctx,
+        `Set ${changed} session(s) to ${typeById(typeId).name}${skipped ? ` — ${skipped} skipped (leave / not a person)` : ''}`
+      );
     });
 
     bulkBtn('#bulkroomapply', async () => {
@@ -546,8 +902,8 @@ export default {
         }
       }
       await ctx.persist('entries');
-      ctx.toast(`Room updated on ${changed} session(s)`);
       ctx.rerender();
+      actionToast(ctx, `Room updated on ${changed} session(s)`);
     });
 
     bulkBtn('#bulkclear', async () => {
@@ -557,8 +913,8 @@ export default {
       state.entries = state.entries.filter((e) => !keys.has(`${e.staffId}|${e.date}|${e.period}`));
       state.ui.selected = [];
       await ctx.persist('entries');
-      ctx.toast(`Cleared ${before - state.entries.length} session(s)`);
       ctx.rerender();
+      actionToast(ctx, `Cleared ${before - state.entries.length} session(s)`);
     });
 
     bulkBtn('#bulkdeselect', () => {
@@ -566,15 +922,31 @@ export default {
       ctx.rerender();
     });
 
+    /* ---- rooms pivot wiring ---- */
+    if (mode === 'rooms') {
+      wireRoomGrid(root, ctx);
+      return;
+    }
+
     /* ---- cell wiring (staff mode only) ---- */
     if (mode !== 'staff') return;
     const cells = [...root.querySelectorAll('td.cell')];
     cells.forEach((cell, i) => {
       cell.tabIndex = i === 0 ? 0 : -1;
 
+      cell.addEventListener('focus', () => {
+        lastFocusedKey = cellKey(cell);
+      });
+
       cell.addEventListener('click', (ev) => {
+        // A rectangle sweep ends in a click; that click is not an edit.
+        if (suppressClick) {
+          suppressClick = false;
+          return;
+        }
         const person = state.staff.find((p) => p.id === cell.dataset.staff);
         if (!person) return;
+        lastFocusedKey = cellKey(cell);
         if (ev.shiftKey) {
           const key = cellKey(cell);
           const idx = selected.indexOf(key);
@@ -584,6 +956,33 @@ export default {
           return;
         }
         openCellMenu(ctx, cell, person, cell.dataset.date, cell.dataset.period);
+      });
+
+      cell.addEventListener('contextmenu', (ev) => {
+        const person = state.staff.find((p) => p.id === cell.dataset.staff);
+        if (!person) return;
+        ev.preventDefault();
+        lastFocusedKey = cellKey(cell);
+        cell.focus();
+        openCellMenu(ctx, cell, person, cell.dataset.date, cell.dataset.period);
+      });
+
+      // Rectangle selection. Cells holding an entry stay draggable, so a sweep
+      // may only start on an empty cell — unless Shift is held, in which case
+      // the native drag is suppressed for this one gesture.
+      cell.addEventListener('mousedown', (ev) => {
+        if (ev.button !== 0) return;
+        const hasEntry = Boolean(cell.dataset.entry);
+        if (hasEntry && !ev.shiftKey) return;
+        sweep = { anchor: cellKey(cell), last: cellKey(cell), moved: false, additive: ev.shiftKey, restoreDrag: null };
+        if (hasEntry) {
+          cell.draggable = false;
+          sweep.restoreDrag = cell;
+        }
+        // Stops the browser turning the sweep into a text selection; focus is
+        // then set by hand so the roving tabindex and paste anchor still follow.
+        ev.preventDefault();
+        cell.focus();
       });
 
       cell.addEventListener('keydown', async (ev) => {
@@ -631,9 +1030,7 @@ export default {
       // Drag & drop: move a session; drop on an occupied cell to swap;
       // Ctrl/Alt-drop copies the session type into an empty cell.
       cell.addEventListener('dragstart', (ev) => {
-        const entry = state.entries.find(
-          (e) => e.staffId === cell.dataset.staff && e.date === cell.dataset.date && e.period === cell.dataset.period
-        );
+        const entry = state.entries.find((e) => e.id === cell.dataset.entry);
         if (!entry) {
           ev.preventDefault();
           return;
@@ -641,26 +1038,40 @@ export default {
         closeMenu();
         ev.dataTransfer.setData('text/plain', entry.id);
         ev.dataTransfer.effectAllowed = 'copyMove';
+        // Grey the cells this session could never land on, for the whole drag.
+        markInvalidTargets(root, state);
       });
+      cell.addEventListener('dragend', clearDragMarks);
       cell.addEventListener('dragover', (ev) => {
         ev.preventDefault();
+        if (cell.classList.contains('drop-invalid')) {
+          ev.dataTransfer.dropEffect = 'none';
+          cell.classList.add('dragover-bad');
+          return;
+        }
+        const copying = ev.ctrlKey || ev.altKey || ev.metaKey;
+        ev.dataTransfer.dropEffect = copying ? 'copy' : 'move';
         cell.classList.add('dragover');
+        cell.classList.toggle('dragover-copy', copying);
       });
-      cell.addEventListener('dragleave', () => cell.classList.remove('dragover'));
+      cell.addEventListener('dragleave', () => cell.classList.remove('dragover', 'dragover-bad', 'dragover-copy'));
       cell.addEventListener('drop', async (ev) => {
         ev.preventDefault();
-        cell.classList.remove('dragover');
+        clearDragMarks();
         const src = state.entries.find((e) => e.id === ev.dataTransfer.getData('text/plain'));
         if (!src) return;
         const { staff: staffId, date, period } = cell.dataset;
         if (src.staffId === staffId && src.date === date && src.period === period) return;
         const person = state.staff.find((p) => p.id === staffId);
         if (!person) return;
-        if (approvedLeaveFor(state.leave, staffId, date)) {
-          ctx.toast(`${person.name} is on approved leave that day`);
+        // Backstop: the greying is only an affordance — this is the rule.
+        const blocked = blockedReason(state, staffId, date);
+        if (blocked) {
+          ctx.toast(blocked);
           return;
         }
         const target = state.entries.find((e) => e.staffId === staffId && e.date === date && e.period === period);
+        let what = 'Moved';
         if (ev.ctrlKey || ev.altKey || ev.metaKey) {
           if (target) {
             ctx.toast('Cannot copy onto an occupied session');
@@ -678,21 +1089,123 @@ export default {
             note: '',
             roomId: null,
           });
+          what = 'Copied';
         } else if (target) {
           pushUndo(state);
           const pos = { staffId: src.staffId, date: src.date, period: src.period };
           Object.assign(src, { staffId, date, period });
           Object.assign(target, pos);
+          what = 'Swapped';
         } else {
           pushUndo(state);
           Object.assign(src, { staffId, date, period });
         }
         await ctx.persist('entries');
         ctx.rerender();
+        actionToast(ctx, `${what} ✓`);
       });
     });
   },
 };
+
+/* ---- rooms pivot: click to reassign, drag within a column to move room ---- */
+function wireRoomGrid(root, ctx) {
+  const { state } = ctx;
+  const entryOf = (el) => state.entries.find((e) => e.id === el.dataset.entry) || null;
+  const sameColumn = (a, b) => a.dataset.date === b.dataset.date && a.dataset.period === b.dataset.period;
+
+  const clearRoomMarks = () => {
+    for (const td of root.querySelectorAll('td.cell')) {
+      td.classList.remove('drop-invalid', 'dragover', 'dragover-bad');
+    }
+  };
+
+  for (const chip of root.querySelectorAll('.roomchip')) {
+    chip.addEventListener('click', (ev) => {
+      const entry = entryOf(chip);
+      if (!entry) return;
+      ev.stopPropagation();
+      openRoomMenu(ctx, chip, entry);
+    });
+    chip.addEventListener('dragstart', (ev) => {
+      const entry = entryOf(chip);
+      if (!entry) {
+        ev.preventDefault();
+        return;
+      }
+      closeMenu();
+      ev.dataTransfer.setData('text/plain', entry.id);
+      ev.dataTransfer.effectAllowed = 'move';
+      // A session cannot change day or period by changing room, so every cell
+      // outside its own column is greyed for the duration of the drag.
+      const home = chip.closest('td.cell');
+      for (const td of root.querySelectorAll('td.cell')) {
+        if (!home || !sameColumn(home, td)) td.classList.add('drop-invalid');
+      }
+    });
+    chip.addEventListener('dragend', clearRoomMarks);
+  }
+
+  for (const td of root.querySelectorAll('td.cell')) {
+    td.addEventListener('dragover', (ev) => {
+      ev.preventDefault();
+      if (td.classList.contains('drop-invalid')) {
+        ev.dataTransfer.dropEffect = 'none';
+        td.classList.add('dragover-bad');
+        return;
+      }
+      ev.dataTransfer.dropEffect = 'move';
+      td.classList.add('dragover');
+    });
+    td.addEventListener('dragleave', () => td.classList.remove('dragover', 'dragover-bad'));
+    td.addEventListener('drop', async (ev) => {
+      ev.preventDefault();
+      clearRoomMarks();
+      const entry = state.entries.find((e) => e.id === ev.dataTransfer.getData('text/plain'));
+      if (!entry) return;
+      if (entry.date !== td.dataset.date || entry.period !== td.dataset.period) {
+        ctx.toast('Drop into the same day and session — changing room cannot move a session in time');
+        return;
+      }
+      const roomId = td.dataset.room || null;
+      if ((entry.roomId || null) === roomId) return;
+      pushUndo(state);
+      entry.roomId = roomId;
+      await ctx.persist('entries');
+      ctx.rerender();
+      const room = (state.rooms || []).find((r) => r.id === roomId);
+      actionToast(ctx, room ? `Moved to ${room.name} ✓` : 'Room cleared ✓');
+    });
+  }
+}
+
+/* ---- shortcuts strip ---- */
+function shortcutsStrip(mode) {
+  const gestures =
+    mode === 'staff'
+      ? [
+          ['drag', 'move session'],
+          ['Ctrl + drag', 'copy'],
+          ['drag empty cell', 'select block'],
+          ['Shift + click', 'add to selection'],
+          ['Ctrl + C / V', 'copy / paste block'],
+          ['Ctrl + Z / Y', 'undo / redo'],
+          ['Del', 'clear session'],
+          ['← ↑ → ↓', 'navigate'],
+          ['right-click', 'cell menu'],
+        ]
+      : [
+          ['click chip', 'reassign room'],
+          ['drag chip', 'move room (same day + session)'],
+          ['Ctrl + Z / Y', 'undo / redo'],
+        ];
+  return `
+    <div class="rota-shortcuts">
+      ${gestures.map(([k, what]) => `<span><kbd>${esc(k)}</kbd> ${esc(what)}</span>`).join('<i aria-hidden="true">·</i>')}
+      <button id="shortcuts-dismiss" class="small" title="Hide shortcuts" aria-label="Hide shortcuts">×</button>
+    </div>
+  `;
+}
 
 /* ---- staff × day grid ---- */
 function staffGrid(state, people, showDates, dates, today, selected) {
@@ -735,7 +1248,7 @@ function staffGrid(state, people, showDates, dates, today, selected) {
                     inner += `<div class="roomtag">${esc(room ? room.name : '')}${entry.note ? (room ? ' ' : '') + '✎' : ''}</div>`;
                   }
                   const isSelected = selected.includes(`${p.id}|${d}|${period}`);
-                  return `<td class="cell${d === today ? ' today' : ''}${isSelected ? ' selected' : ''}"${entry ? ' draggable="true"' : ''} data-staff="${esc(p.id)}" data-date="${esc(d)}" data-period="${period}">${inner}</td>`;
+                  return `<td class="cell${d === today ? ' today' : ''}${isSelected ? ' selected' : ''}"${entry ? ` draggable="true" data-entry="${esc(entry.id)}"` : ''} data-staff="${esc(p.id)}" data-date="${esc(d)}" data-period="${period}">${inner}</td>`;
                 }).join('');
               })
               .join('')}
@@ -816,11 +1329,11 @@ function roomGrid(state, rooms, showDates, today) {
                       const person = state.staff.find((p) => p.id === e.staffId);
                       const t = typeById(e.typeId);
                       if (!person || !t) return '';
-                      return `<span class="chip" style="background:${esc(t.colour)}" title="${esc(`${person.name} — ${t.name}`)}">${esc(shortName(person.name))}</span>`;
+                      return `<span class="chip roomchip" draggable="true" data-entry="${esc(e.id)}" style="background:${esc(t.colour)}" title="${esc(`${person.name} — ${t.name} — click to reassign, drag to another room`)}">${esc(shortName(person.name))}</span>`;
                     })
                     .join(' ');
                   const clash = room.id && here.length > 1;
-                  return `<td class="${d === today ? 'today' : ''}" style="text-align:center;${clash ? 'box-shadow:inset 0 0 0 2px var(--high)' : ''}">${chips || '<span class="empty">·</span>'}</td>`;
+                  return `<td class="cell${d === today ? ' today' : ''}" data-room="${esc(room.id || '')}" data-date="${esc(d)}" data-period="${esc(period)}" style="text-align:center;${clash ? 'box-shadow:inset 0 0 0 2px var(--high)' : ''}">${chips || '<span class="empty">·</span>'}</td>`;
                 }).join('')
               )
               .join('')}
