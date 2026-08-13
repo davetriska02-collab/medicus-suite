@@ -2,6 +2,453 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.231.0] — 2026-08-14
+
+### Journal sync: one-click Undo for both write paths
+
+The journal code-sync (and its text-strip sibling) is the one action in
+the "Clean up code" panel that can genuinely change a note's CONCEPT,
+gated only by a `confirm()` — and the multi-match cases that motivated
+`applyDateConfirmation` are exactly where syncing the WRONG entry is
+easiest. Previously a clinician who realised a beat too late had to
+reconstruct the old code by hand in the Journal tab.
+
+Now every successful sync renders a quiet **Undo** button next to its
+green confirmation line:
+
+- **Code sync** (`undoJournalCodeSync`): the pre-sync `noteSNOMEDct` is
+  captured from the write's own edit-note prefill (only AFTER the POST
+  succeeded — a failed write changed nothing, so there's nothing to undo)
+  and written back via the exact same confirmed contract (fresh GET
+  edit-note prefill → POST change-note), so every other field is resent
+  from the note's CURRENT server state, never from anything cached at
+  sync time. The confirm() names the exact code being restored. On
+  success the row shows "↩ Sync undone — “X” restored" and the "Apply to
+  journal" button returns.
+- **Text strip** (`undoJournalTextSync`): restores the pre-strip `note`
+  text (`''` allowed — a note whose text was ENTIRELY boilerplate, the
+  confirmed live `{Episodicity…}`-only case, is still a real previous
+  state). The code field passes through from the FRESH prefill — if the
+  entry's code was also synced (or undone) since, this revert touches
+  ONLY the note text.
+
+Same disciplines as the forward writes throughout: per-entry state
+(`journalApply[entryId].prevCode/undoing/undone`,
+`journalInfoApply[entryId].prevNote/…`), confirm()-gated, echoes what was
+actually restored, never a bare "Done".
+
+### Fixed: the same journal entry could render as TWO match rows
+
+Found in post-merge-review of the journal-sync feature itself: the fuzzy
+fallback inside `findJournalMatchesForProblem` (problem's code text found
+in the note's own free text, day-group date within ±30 days) and the
+caller-orchestrated verified-date pass (`findCodeTextMatches` →
+`resolveVerifiedDateMatch`) can BOTH surface the same `entryId` — a
+candidate that is neither structurally linked nor exact-date matched is
+exactly what both nets are cast for. The plain sorted concat in
+`openPanel` then rendered one real journal note as two separate match
+rows (two "Apply to journal" buttons for one note) and — worse — made
+`resolveJournalSyncTargets` see "2 matches, none date-confirmed" for a
+patient with only ONE real journal entry, alerting "cannot tell them
+apart" instead of auto-prompting the sync it was built to offer.
+
+New `dedupeJournalMatches` in `shared/journal-problem-matching.js`: one
+row per `entryId`, keeping the best-ranked duplicate (dateConfirmed
+first, then tier rank — the same comparator `sortJournalMatches` already
+uses). Reproduced end-to-end and regression-tested
+(`test-journal-problem-matching.js`, now 88/88).
+
+Also fixed while in there: `sortJournalMatches` ranked an UNKNOWN tier as
+0 via `TIER_RANK[tier] || 0` — the same rank as `linked`, the single most
+trusted tier — so a typo'd/future tier would have jumped the queue.
+Unknown tiers now sink to the bottom (rank 99), where an unrecognised
+signal belongs.
+
+### Fixed: CI red on the feature branch was NOT the autocrlf issue
+
+The branch's `test` job failure was attributed to a known machine-local
+`core.autocrlf` quirk — it wasn't. `scripts/check-doc-versions.js` was
+failing (correctly): the branch bumped `manifest.json` to 3.230.x without
+syncing `docs/feature-list.md`'s pinned `**Version:**`, which must track
+the manifest at major.minor level. Feature list synced to v3.231.0 with
+the journal-sync feature documented (a content sync, not a CSO review —
+the `cso-review-ledger.json` entry is deliberately untouched, same as
+every prior weekly refresh). The actual `node --test` suite passes clean
+(379/379) — the two tests the branch flagged as machine-local failures
+(`test-evaluation-trace.js`, `test-routine-rx-macro.js`) pass in CI's
+environment too.
+
+## [v3.230.6] — 2026-08-14
+
+### Journal text-strip confirm() dialog: tightened wording (Atelier review)
+
+Asked Atelier (the suite's design skill) to critique the journal
+text-strip confirm() dialog specifically. Verdict: no CSS surface applies —
+it's a native `window.confirm()`, entirely OS/browser chrome — but the
+wording itself had two real issues. The opening sentence doubled up the
+same signal ("also... too"), and showing the FULL current text alongside
+the FULL cleaned text asked the clinician to manually diff two paragraphs
+of plain, unstyled text to spot what actually changed — the wrong shape
+when a note's genuine free text can be much longer than the boilerplate
+fragment buried in it.
+
+Now names the specific removed fragment(s) directly: `This journal entry
+also has generic import text: "PRIORITY=1". Remove it?` — shorter, and
+answers the only question the dialog exists to ask (what's leaving the
+record) without requiring a manual diff. Handles multiple removed
+fragments too (`"X" and "Y"`). Native `confirm()` itself stays — kept
+deliberately, for the same reliability reasons the rest of this codebase
+already leans on it (immune to Medicus's own Vue DOM re-renders, consistent
+with the sibling code-sync dialog and `allergy-cleanup.js`'s established
+precedent) rather than building a one-off custom-styled alternative.
+
+## [v3.230.5] — 2026-08-14
+
+### "Bulk remove?" gains a 28th administrative root code
+
+Added "Date records held from" (SNOMED `185980000`, user-identified) to
+`rules/non-problem-root-codes.json` — a purely administrative marker
+recording when the practice's held records for a patient begin (e.g. after
+a registration/transfer-in), same category as the existing "Patient signed
+reg. form" (`184063008`) entry. No code change needed — the "Bulk remove?"
+widget (`content-scripts/problem-bulk-end.js`) reads this file at runtime.
+Regression test updated (`test-problem-bulk-end.js`, 112/112 passing).
+
+## [v3.230.4] — 2026-08-14
+
+### Journal text-sync still silently skipped a genuine match — a second bug, in a different function
+
+v3.230.3 fixed the rules file gap; live-testing immediately after found a
+second, unrelated silent-skip on a different journal note (text
+`" PRIORITY=1"`). The pattern genuinely matched this time (confirmed
+directly), but `computeAdditionalInfoFindings` still returned
+`genericAdditionalInfo: null`. Root cause: `sourceSystemPriorityValue`
+carries a `reviewSeverity` action that compares the captured priority
+against a `currentSignificance` value — a concept that only exists on
+problems. Called with `currentSignificance: null` (there's nothing else to
+pass for a journal note, which has no significance field at all),
+`severityCorrectionNeeded` can never conclude "already agrees with what's
+stored", so it always looks like a contradiction — routing into
+`computeAdditionalInfoFindings`'s `severityContradiction` branch, which
+returns `genericAdditionalInfo: null` **by design for a problem** (a real
+mismatch there deserves the combined correct+remove action) but which is
+simply wrong applied to a note with no significance concept to contradict.
+
+New `stripAllKnownGenericText(text, entries)` — a separate, simpler
+function used only for the journal-note path, which skips ALL
+severity/review/link-suggestion action interpretation and just
+unconditionally strips every known pattern/literal match.
+`computeAdditionalInfoFindings` itself is untouched (its current behaviour
+is correct for problems, which do have a real significance to compare
+against). 6 new regression assertions, including one that documents the
+original bug still reproducing in `computeAdditionalInfoFindings` for this
+exact input, so this can't silently regress back. 339/339 total in
+`test-problem-description-cleanup.js`.
+
+## [v3.230.3] — 2026-08-14
+
+### Journal text-sync silently did nothing — the rules file was missing an entry, not a bug
+
+Live-tested the journal text-sync (v3.230.0) for the first time and it did
+nothing, with no dialog and no error — added diagnostic logging at both
+silent-exit points in `applyGenericAdditionalInfoToJournal` to find out why,
+rather than guessing. Turned out to be neither exit point failing: the
+journal note's own text (`"{Episodicity : code=255217005,
+displayName=First}"`) genuinely wasn't recognised as known boilerplate by
+`rules/generic-additional-info-text.json` — because it never had an entry
+for this pattern at all. The pattern itself was already well known
+elsewhere in this codebase (`engine/record-duplicate-parser.js`'s
+`EPISODICITY_SUFFIX_RE`/`GP2GP_WRAPPER_RE`, confirmed live back in
+2026-07-08 and 2026-07-17) — used there for duplicate-detection text
+normalisation, a different purpose, and never carried over to the rules
+file the code-cleanup/journal-sync features actually read from.
+
+Added two new `kind: "pattern"` entries — `episodicitySuffix` (the
+`{Episodicity : code=..., displayName=...}` block, confirmed live on the
+exact real journal note that surfaced this) and `gp2gpProblemNotesPrefix`
+(the `"Problem Info: Problem Notes: "` prefix, the other half of the same
+signature, independently confirmed in `record-duplicate-parser.js`'s own
+history) — as two separate entries, not one combined pattern, since the
+real example had the suffix with no prefix at all. Neither carries an
+`action` — per Nick, the episodicity code (SNOMED for "first ever") has
+nowhere structured to go in Medicus on either a problem or a journal entry,
+so it's treated as pure noise, same as the file's existing literal entries.
+
+`rules/generic-additional-info-text.json` bumped to version 3 (its own
+internal tracking field — this file is fetched fresh from the bundle on
+every load, no `chrome.storage` migration path, unlike `defaults.json`).
+5 new regression assertions against the exact real capture (333/333 total
+in `test-problem-description-cleanup.js`). The diagnostic logging added to
+find this stays in place for next time.
+
+## [v3.230.2] — 2026-08-14
+
+### The auto-sync prompts now use the date-confirmed match, not every ambiguous one
+
+Found before shipping v3.230.1 got a chance to be tested live: the
+automatic sync prompts (added in v3.230.0, right after a code apply or the
+generic-import-text cleanup) looped over EVERY journal match, unaware that
+`applyDateConfirmation` (v3.230.1) could now identify which one is actually
+the right one. For a problem with several ambiguous matches — the real
+"Paediatric surveillance admin" case, 4 identically-worded entries — this
+meant up to 4 separate confirm() dialogs would fire automatically, one per
+entry, instead of just the confirmed one.
+
+Both auto-prompt paths now share a new `resolveJournalSyncTargets` helper:
+a single match still prompts as before; several matches with exactly one
+(or more) date-confirmed narrows the prompt to just those; several matches
+with NONE confirmed no longer guesses by prompting for all of them — it
+alerts that nothing was checked automatically and leaves it to the
+standalone "Apply to journal" button (or the Duplicate Checker) for the
+clinician to resolve by hand.
+
+## [v3.230.1] — 2026-08-14
+
+### Journal-match disambiguation: pick the right one out of several
+
+Found via live testing (a real "Paediatric surveillance admin" problem with
+4 journal entries all sharing identical wording, all structurally linked to
+the same problem, all tied on every existing tier signal): when a problem
+has several matches, there's often no way to tell which one is the genuine
+duplicate versus which are separate legitimate entries that just happen to
+look the same. One clear signal existed in the real data: exactly one
+entry's own true `recordDate` (fetched via `note/overview`, not the
+sometimes-wrong journal day-group title) matched the problem's `recordDate`
+**and** `onsetDate` precisely, while the other three didn't match either.
+
+When a problem has more than one journal match, each one's true `recordDate`
+is now fetched and checked against the problem's `recordDate`/`onsetDate` —
+**exact equality**, not the ±30-day fuzzy tolerance used elsewhere (that
+tolerance exists to rescue candidates that would otherwise be dropped
+entirely; here the goal is the opposite — picking ONE winner out of several
+already-included, near-identical siblings, where a wide window would
+typically match multiple of them and discriminate nothing). A confirmed
+match sorts to the top of the list, is visually highlighted, and the
+existing multiple-match warning now names it directly ("The entry marked ✓
+below has its own recordDate confirmed...").
+
+Confirmed live in the same test case: `created` (on the per-note detail
+endpoint) is a **bulk-migration timestamp**, identical across all 8
+candidate entries regardless of their actual dates — not usable for
+matching, and deliberately not read by this. Documented in
+`docs/learnings-patient-journal-api.md`.
+
+New: `applyDateConfirmation` in `shared/journal-problem-matching.js`, unit
+tested directly against the real case's data (10 new assertions).
+
+## [v3.230.0] — 2026-08-13
+
+### Journal sync now prompts automatically on every code/text apply
+
+The "Apply to journal" button (v3.229.0) required a separate, manual click
+after fixing a problem's code — easy to miss, since it lived in its own
+section below the code-fix buttons. Both this panel's write paths now offer
+the sync automatically, right after they succeed:
+
+- **Any code selection** — every one of this panel's 9 code-apply paths
+  (same-concept alternatives, descendant/laterality, cross-concept,
+  hint-expanded, a retired-code confirmed replacement, confirmed
+  possible/partially-equivalent candidates, a practice-remap suggestion, or
+  a manual search result) funnels through the single `applyCode` function,
+  so the prompt only needed to land in one place. After a successful save,
+  if the problem has journal matches, each one gets its own
+  `window.confirm()` (same wording `applyToJournal` already used) asking
+  whether to write the same code there too — sequential, not batched, so
+  each can be accepted or declined independently. If there are **no**
+  journal matches, a single `alert()` says so explicitly, rather than
+  silently doing nothing the clinician might assume happened.
+- **"Remove generic import text"** gets the same treatment for the journal
+  note's own free text — but checks the note's OWN text for the same known
+  GP2GP boilerplate (via the full `computeAdditionalInfoFindings`
+  detection, not just a literal-line strip, so pattern-based entries are
+  caught too) rather than blindly overwriting it with the problem's cleaned
+  text — a note can carry entry-specific content alongside the same
+  boilerplate line. Silent when the note's own text has nothing matching
+  (the common case); a separate `alert()` covers "no journal match at all",
+  same as the code path.
+
+**Fixed along the way**: `applyCode` never actually updated
+`st.currentDescription`/`st.conceptId`/`st.currentDescriptionId` after a
+successful save (only the on-screen DOM text) — harmless before, since
+nothing downstream read those fields post-save, but the new journal-sync
+step does (via `applyToJournal`). Also added a short pause after a
+successful journal write, before `applyCode`'s own panel-close runs — the
+"✓ Journal entry updated…" confirmation and the panel's removal could
+otherwise land in the same JS turn, with the browser never actually
+painting the confirmation before it disappeared.
+
+New per-row state: `st.journalInfoApply[entryId]` (separate from
+`st.journalApply`, so a code-sync and a text-sync on the same entry don't
+conflate their saved/error state).
+
+## [v3.229.0] — 2026-08-13
+
+### "Clean up code" can now apply a problem's code to a matched journal entry
+
+The journal-duplicate detection shipped in v3.228.0 was read-only — it told
+the clinician a journal entry needed the same fix, but they had to go make
+it manually. That write path was blocked on discovering the real Medicus
+API for editing a journal entry's code, which needed a live capture. That
+capture is now done (three real HAR captures: editing a note's free text,
+editing its code via search, and editing an "orphan" note not inside a
+consultation) — all three confirmed the **same** endpoint and payload
+shape, including for the orphan-note case, so no special-casing was needed.
+
+Each journal match in the panel now gets an "Apply to journal" button
+(skipped when the entry's text already matches, nothing to sync). Clicking
+it shows a `window.confirm()` naming the exact before/after text and the
+match's confidence tier — same established pattern as
+`content-scripts/allergy-cleanup.js`'s bulk-action gates — before firing
+`POST /clinical/note/change-note`. On success, the row echoes the actual
+description written (never a bare "Saved"/"Done" claim, per this
+codebase's own rule against silently claiming completion). Per-entry write
+state (`st.journalApply[entryId]`) is new territory for this panel — every
+previous apply action here was scoped to one problem; this is the first
+where a single row can have several independent write targets.
+
+**Deliberately NOT constrained to a same-concept relabel** the way
+"Clean up code" itself is — this write's whole purpose is making a journal
+note's code match the problem's CURRENT code, which may genuinely be a
+different concept than what the note currently has. No re-fetch/read-back
+verification after the write either — trusts a non-throwing POST, same
+standard the existing problem-code write (`applyCode`) already uses.
+
+New: `fetchEditNoteForm`, `postChangeNote`, `buildChangeNotePayload` in
+`content-scripts/problem-description-cleanup.js`; `applyToJournal` (the
+write action itself). Full contract documented in
+`docs/learnings-journal-note-edit-api.md`, following this repo's own
+`docs/learnings-*.md` convention. `buildChangeNotePayload` unit-tested
+against fixtures modelled on the 3 real captures.
+
+## [v3.228.0] — 2026-08-12
+
+### "Clean up code" now flags matching journal duplicates (read-only)
+
+A problem's clinical event is often duplicated as a separate journal
+(consultation) note with its own stale coded description — cleaning up the
+problem's code previously left that journal duplicate untouched, with
+nothing telling the clinician it existed. Works from anywhere "Clean up
+code" opens, including embedded in the "Organise problems?" canvas — same
+underlying panel/`openPanel` call either way.
+
+Opening "Clean up code" for a problem now also checks that patient's journal
+for `note` entries that look like the same event, in five tiers (highest
+trust first):
+
+- `linked` — the note's OWN `linkedProblems` names this problem (a true
+  per-entry structural fact from Medicus, not a guess) — trusted regardless
+  of wording or date.
+- `linked-exact-text` / `linked-partial-text` — the CONSULTATION TOPIC (or
+  encounter) the note sits in is linked to this problem, AND the note's own
+  wording exactly/partially matches the problem's description (reusing
+  `shared/problem-text-linking.js`'s existing word-overlap matcher). Date
+  not required for these two — topic-level linkage is a Medicus fact, text
+  match confirms which specific note in that topic is the real duplicate.
+- `date-exact-text` / `date-partial-text` — no structural link at all, but
+  same day (day-granularity) and matching wording.
+
+Matches are listed in a new panel section with a confidence label so the
+clinician knows to go fix them too.
+
+**Why topic/encounter-level linkage alone isn't a standalone tier** (found
+via live testing before ship, real patient, an "Obesity" problem): a
+consultation topic's `linkedProblems` tags the WHOLE topic, not one specific
+entry. A single visit that also touched on alcohol use, smoking status,
+aspirin, and drug therapy — alongside genuinely re-coding Obesity — surfaced
+all 11 notes from that topic as "linked" under an earlier version of this
+feature, when only 1 was a real duplicate. Topic/encounter-level linkage now
+only counts when the note's own text also matches — this is what the
+`linked-exact-text`/`linked-partial-text` split fixes. (An earlier same-day
+fix, HAR capture on an umbilical-hernia note+problem pair, established that
+topic-level linkage is real and must be read at all — this fix refines how
+much weight it's given, not whether to read it.)
+
+This is **detection and display only** — there is no confirmed Medicus API
+for editing a journal entry's code, so no write/apply action is offered.
+That's deferred to a follow-up once the real endpoint is captured live.
+Also known and documented, not yet fixed: once a problem's code has already
+been cleaned up, its description no longer matches the journal duplicate's
+stale wording, so the text-matched tiers typically miss it post-cleanup —
+see `shared/journal-problem-matching.js`'s header comment.
+
+New: `shared/journal-problem-matching.js` (pure matching logic, unit-tested
+by `test-journal-problem-matching.js`). Deliberately narrower than
+`engine/record-duplicate-parser.js`'s `flattenJournal` — only walks `note`
+entries, since prescriptions/documents/etc. carry unrelated text shapes not
+comparable to a problem's coded description.
+
+### Two more additions, same day
+
+**Multiple-match warning.** GP2GP import can duplicate whole records, not
+just individual codes, so more than one genuine journal match for a single
+problem is itself worth flagging rather than silently listed as if it were
+routine. When a problem has more than one journal match, the panel now shows
+an amber warning above the list recommending "Analyse full record for
+duplicates" (Duplicate Checker) first, rather than syncing them individually.
+
+**Fuzzy fallback, only when the primary tiers found nothing** — two
+different field pairings, tried in order, per candidate within the ±30-day
+window (`FUZZY_DATE_TOLERANCE_DAYS`, Nick's judgement call, easily tuned):
+
+1. `fuzzy-code-text-exact`/`fuzzy-code-text-partial` — does the candidate
+   note's own free-text `note` field CONTAIN the problem's own code text
+   (`problem.description`)? Tried first — a code's text is normally a
+   short, fairly distinctive phrase, less likely to coincidentally overlap
+   than free-form prose.
+2. `fuzzy-additional-info-exact`/`fuzzy-additional-info-partial` — only if
+   (1) didn't match: the problem's own `additionalInformation` against that
+   same `note` field.
+
+A journal duplicate's `clinicalCodeDescription` might not textually resemble
+the problem's description at all — especially once the problem has already
+been cleaned up (see the known limitation above) — so these are a last
+resort, surfaced as the lowest-confidence tiers. Still the same non-fuzzy
+word-overlap matcher as every other tier — "fuzzy" here means loosened date
++ different field pairs, not a different comparison algorithm (this
+codebase deliberately avoids edit-distance/stemming matching elsewhere and
+this follows suit).
+
+**Why the date tolerance exists at all:** UK GP clinical systems routinely
+code information from an incoming document (e.g. a hospital discharge
+letter) against when the document was received/coded at the practice, not
+the date the clinical event itself happened. A single episode can carry up
+to five genuinely different dates — the event, the document, the
+document's send date, its receipt date, and the practice's coding date —
+and a problem and its journal duplicate can each be dated against a
+different one of these, independently. Documented in full in
+`docs/learnings-patient-journal-api.md` and `shared/journal-problem-matching.js`'s
+`FUZZY_DATE_TOLERANCE_DAYS` comment.
+
+### Verified-date tiers (2026-08-13)
+
+The date this module compares a problem against is the journal day-group's
+`title` — confirmed to actually be `createdInOriginalSystemDateTime`, not a
+note's own `recordDate`, which can differ by days to weeks. So a candidate
+whose own `clinicalCodeDescription` already matches the problem's code, but
+whose day-group date doesn't line up, might just be a day-group artifact,
+not a real non-match.
+
+Getting a note's genuine `recordDate` means a separate request per note
+(`GET /clinical/data/note/overview/{noteId}`, not part of the bulk journal
+fetch) — too costly to do for every candidate. Narrowed instead to only
+candidates that already text-match the problem's code but aren't already
+covered by a cheaper tier (not structurally linked, day-group date didn't
+already match) — bounds the extra fetches to a small, already-plausible set
+(the two live examples this session had exactly one such candidate each).
+For those, the note's true `recordDate` is checked against **both** the
+problem's `recordDate` and `onsetDate` (either matching counts) — "chiefly
+recordDate and onsetDate", per Nick's framing. Matches surface as
+`verified-date-exact-text`/`verified-date-partial-text`, ranked above the
+day-group-title-based `date-exact-text`/`date-partial-text` since a
+confirmed date is more trustworthy than a proxy one. `createdDate` (on
+either problem or note) was checked for availability but deliberately not
+used for matching — more a migration/system timestamp than a clinical one.
+
+New exports on `shared/journal-problem-matching.js`: `findCodeTextMatches`
+(pure — flags which candidates need verification), `resolveVerifiedDateMatch`
+(pure — given a fetched date, decides the tier), `sortJournalMatches` (pure —
+reusable so the caller can merge verified results back in and re-sort).
+
 ## [v3.227.1] — 2026-08-09
 
 Review fixes for all 10 findings of the #276 review, before merge. The three

@@ -518,6 +518,183 @@ input[class*='ms-pdc-']:focus-visible {
   color: #4b5563;
 }
 
+/* Journal duplicate detection (2026-08-12) — read-only surfacing, see
+   shared/journal-problem-matching.js. Same neutral grey "FYI" family as
+   .ms-pdc-legacy-readcode-note/.ms-pdc-priority-review-note above — this is
+   information for the clinician to action manually in the Journal tab, not
+   one of this panel's own actionable suggestion buttons. */
+.ms-pdc-journal-matches-section {
+  display: block;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: #f9fafb;
+  border-left: 2px solid #d1d5db;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #4b5563;
+}
+
+/* Multiple-match warning (2026-08-12) — amber, same palette as
+   .ms-pdc-retired-note: this is a "stop and check" signal (possible GP2GP
+   whole-record duplication), not just an FYI, so it needs to read as
+   distinct from the neutral grey section it sits inside. */
+.ms-pdc-journal-matches-warning {
+  display: block;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: #fffbeb;
+  border-left: 2px solid #fbbf24;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.ms-pdc-journal-matches-label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.ms-pdc-journal-matches-list {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.ms-pdc-journal-match {
+  margin-bottom: 2px;
+}
+
+.ms-pdc-journal-match-date {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.ms-pdc-journal-match-confidence {
+  margin-left: 6px;
+  font-style: italic;
+  color: #6b7280;
+}
+
+/* "Apply to journal" write action (2026-08-13) — small pill button in the
+   same shape as .ms-pdc-alt below, but a neutral blue rather than amber:
+   amber elsewhere in this panel means "pick a code label", this is a
+   different kind of action (writes to a DIFFERENT part of the record). */
+.ms-pdc-journal-apply-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.ms-pdc-journal-apply-btn {
+  padding: 3px 10px;
+  background: #fff;
+  border: 1px solid #93c5fd;
+  border-radius: 999px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #1d4ed8;
+  cursor: pointer;
+}
+
+.ms-pdc-journal-apply-btn:hover:not(:disabled) {
+  background: #eff6ff;
+}
+
+.ms-pdc-journal-apply-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Success — echoes the actual value written (see applyToJournal's own
+   comment on why this is never a bare "Saved"/"Done" claim), soft green
+   matching .ms-pdc-code-ok-note's established "good news" palette. */
+.ms-pdc-journal-apply-success {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #15803d;
+}
+
+.ms-pdc-journal-apply-error {
+  font-size: 11px;
+  color: #b91c1c;
+}
+
+/* Undo (2026-08-14) — reverts a journal-sync write (code or text), see
+   undoJournalCodeSync/undoJournalTextSync. Deliberately QUIETER than the
+   apply pill (plain grey text-button, no fill, no border-blue): it sits
+   right next to a green success line and must read as an escape hatch,
+   not a suggested next step. */
+.ms-pdc-journal-undo-btn {
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 10px;
+  font-family: inherit;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.ms-pdc-journal-undo-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.ms-pdc-journal-undo-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Post-undo note — neutral grey, not the success green or error red:
+   an undone sync is a return to the status quo, neither good news nor a
+   failure. */
+.ms-pdc-journal-undo-note {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+/* Tiers with a Medicus structural back-reference (linkedProblems) behind
+   them — 'linked' (pure entry-level fact) and the 'linked-*-text' tiers
+   (topic/encounter-level fact, corroborated by a text match) — get a subtle
+   blue accent, distinguishing them from the two 'date-*-text' tiers, which
+   have no structural signal at all, only date+wording. */
+.ms-pdc-journal-match-linked .ms-pdc-journal-match-confidence,
+.ms-pdc-journal-match-linked-exact-text .ms-pdc-journal-match-confidence,
+.ms-pdc-journal-match-linked-partial-text .ms-pdc-journal-match-confidence {
+  color: #1d4ed8;
+}
+
+/* 'verified-date-*-text' tiers (2026-08-13) — the note's OWN true recordDate
+   was fetched and confirmed against the problem's recordDate/onsetDate,
+   rather than relying on the (sometimes-wrong) journal day-group title.
+   A distinct teal, not blue — this is a confirmed DATE, not Medicus's own
+   structural linkedProblems fact, a different kind of trust worth telling
+   apart from the linked-* family above. */
+.ms-pdc-journal-match-verified-date-exact-text .ms-pdc-journal-match-confidence,
+.ms-pdc-journal-match-verified-date-partial-text .ms-pdc-journal-match-confidence {
+  color: #0f766e;
+}
+
+/* Multi-match disambiguation (2026-08-14) — see
+   shared/journal-problem-matching.js's applyDateConfirmation. Needs to
+   stand out from SIBLING rows that can share identical text/tier (the
+   confirmed real case: 4 identically-worded entries under the same tier),
+   so this highlights the WHOLE row, not just the confidence text the way
+   the tier-colour rules above do. */
+.ms-pdc-journal-match-date-confirmed {
+  background: #ecfdf5;
+  border-radius: 3px;
+  padding: 2px 4px;
+  margin: 0 -4px 2px -4px;
+}
+
+.ms-pdc-journal-match-date-confirmed .ms-pdc-journal-match-confidence {
+  color: #047857;
+  font-weight: 600;
+  font-style: normal;
+}
+
 /* Reassurance note (2026-07-29) — deliberately a soft GREEN, not the neutral
    grey used above: this is good news ("the code itself is fine"), not just
    an FYI, and should read as visually distinct from the suggestion buttons
