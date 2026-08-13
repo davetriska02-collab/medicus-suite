@@ -93,6 +93,67 @@
   border: 1px solid var(--red-line);
 }
 
+.rota-count-amber {
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+}
+
+/* ── Live drift (rota vs the Medicus appointment book) ──────────────────────
+   Five states, each with its own word as well as its own hue:
+     In step (green)  Drift (amber/red)  Unavailable (amber)  Not checked (grey)
+   The card chrome is shared with the rest of the module — rota-card-alert for
+   red, rota-card-degraded for both amber states — so an unavailable check can
+   never be mistaken for a clean one. */
+
+.rota-drift-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rota-drift-head .rota-line {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.rota-drift-detail {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+}
+
+.rota-drift-lines {
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.rota-drift-lines li {
+  border-left: 2px solid var(--border-hi);
+  padding-left: 7px;
+  color: var(--text-3);
+}
+
+.rota-card-alert .rota-drift-lines li {
+  border-left-color: var(--red-line);
+}
+
+.rota-card-degraded .rota-drift-lines li {
+  border-left-color: var(--amber-line);
+}
+
+.rota-drift-open {
+  width: 100%;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.rota-drift-hint {
+  margin: 4px 0 0;
+}
+
 /* ── Duty rows ──────────────────────────────────────────────────────────── */
 
 .rota-duty-row {
@@ -139,6 +200,12 @@
   border: 1px solid var(--red-line);
 }
 
+.rota-pill-amber {
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+}
+
 /* "Unchecked" — used when the rules engine could not evaluate the stored rota,
    so neither OK nor Gap can be asserted for a staffed session. */
 .rota-pill-neutral {
@@ -167,6 +234,11 @@
 
 .rota-line-warn {
   color: var(--amber);
+  font-weight: 600;
+}
+
+.rota-line-bad {
+  color: var(--red);
   font-weight: 600;
 }
 
