@@ -804,6 +804,7 @@ export default {
           staff: state.staff,
           leaveList: state.leave,
           settings: state.settings,
+          rooms: state.rooms,
           historyEntries,
           options: { maxDutyPerWeek, iterations, seed: 1 },
         });
@@ -816,7 +817,8 @@ export default {
     if (svApply) {
       svApply.onclick = async () => {
         const result = state.ui.solveResult;
-        if (!result || !result.changes.length) return;
+        const roomMoves = (result && result.roomChanges) || [];
+        if (!result || (!result.changes.length && !roomMoves.length)) return;
         const weeks = Number(root.querySelector('#sv-weeks').value) || 4;
         pushUndo(state);
         for (const change of result.changes) {
@@ -826,9 +828,17 @@ export default {
             entry.source = 'solver';
           }
         }
+        for (const move of roomMoves) {
+          const entry = state.entries.find((e) => e.id === move.entryId);
+          if (entry) entry.roomId = move.to;
+        }
         await ctx.persist('entries');
-        await ctx.log(`Solver applied ${result.changes.length} change(s) over ${weeks} week(s)`);
-        ctx.toast(`Solver applied ${result.changes.length} change(s) over ${weeks} week(s)`);
+        const summary =
+          `Solver applied ${result.changes.length} change(s)` +
+          (roomMoves.length ? ` and ${roomMoves.length} room move(s)` : '') +
+          ` over ${weeks} week(s)`;
+        await ctx.log(summary);
+        ctx.toast(summary);
         state.ui.solvePanel = false;
         state.ui.solveResult = null;
         ctx.rerender();
@@ -1400,6 +1410,43 @@ function solvePanel(state) {
               : '<div class="muted">No changes — rota is already optimal.</div>'
           }
           ${
+            result.roomChanges && result.roomChanges.length
+              ? `
+            <div class="sub mt8 mb8">Room moves to resolve clashes</div>
+            <table>
+              <thead><tr><th>Staff</th><th>Day</th><th>Period</th><th>Room</th></tr></thead>
+              <tbody>
+                ${result.roomChanges
+                  .map((c) => {
+                    const person = state.staff.find((p) => p.id === c.staffId);
+                    const roomName = (id) => {
+                      const r = (state.rooms || []).find((x) => x.id === id);
+                      return r ? r.name : id || '—';
+                    };
+                    return `<tr>
+                    <td>${esc(person ? person.name : c.staffId)}</td>
+                    <td>${esc(fmtDay(c.date))}</td>
+                    <td>${esc(c.period.toUpperCase())}</td>
+                    <td>${esc(roomName(c.from))} ⇢ ${esc(roomName(c.to))}</td>
+                  </tr>`;
+                  })
+                  .join('')}
+              </tbody>
+            </table>
+          `
+              : ''
+          }
+          ${
+            result.explain && result.explain.some((d) => d.score > 0)
+              ? `
+            <div class="sub mt8">Remaining score by dimension: ${result.explain
+              .filter((d) => d.score > 0)
+              .map((d) => `${esc(d.label)} ${esc(String(d.score))}`)
+              .join(' · ')}</div>
+          `
+              : ''
+          }
+          ${
             result.unresolved && result.unresolved.length
               ? `
             <div class="mt8">
@@ -1409,7 +1456,7 @@ function solvePanel(state) {
               : ''
           }
           <div class="toolbar mt8">
-            <button id="sv-apply" class="primary" ${result.changes.length ? '' : 'disabled'}>Apply</button>
+            <button id="sv-apply" class="primary" ${result.changes.length || (result.roomChanges && result.roomChanges.length) ? '' : 'disabled'}>Apply</button>
             <button id="sv-discard">Discard</button>
           </div>
         </div>
