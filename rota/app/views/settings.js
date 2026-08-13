@@ -2,6 +2,7 @@
 // backup/restore and demo data.
 
 import { esc } from '../../shared/esc.js';
+import { makeAccess, verifyPasscode, accessSummary } from '../../engine/access.js';
 import { DAY_KEYS, DEFAULT_SETTINGS } from '../../shared/model.js';
 import { isValidPracticeCode } from '../../shared/medicus-api.js';
 import { exportEnvelope, importEnvelope, wipe, save, uid } from '../../shared/store.js';
@@ -59,6 +60,8 @@ export default {
             : ''
         }
       </div>
+
+      ${accessCard(state)}
 
       <div class="card">
         <h2 class="mt0">Practice</h2>
@@ -196,9 +199,13 @@ export default {
           <button id="s-demo">Load demo dataset</button>
           <button id="s-wipe" class="danger">Wipe all data</button>
         </div>
-        <p class="sub">Backups contain staff, rota entries, leave and settings — no patient data is ever stored by this product.</p>
+        <p class="sub">Backups contain staff, rota entries, leave, settings and the (hashed) passcode
+        configuration — no patient data is ever stored by this product. Wiping clears the passcode too,
+        which is the way back in if it has been forgotten.</p>
       </div>
     `;
+
+    wireAccessCard(root, ctx);
 
     root.querySelector('#s-save').onclick = async () => {
       const code = root.querySelector('#s-code').value.trim().toLowerCase();
@@ -462,6 +469,193 @@ export default {
     };
   },
 };
+
+/* ---- passcode access gate ---- */
+
+// The honest framing, in one place so both states of the card carry it. It is
+// deliberately blunt: this is a workflow gate in a Chrome extension, and a
+// settings page that implied otherwise would be the actual harm.
+const ACCESS_HONESTY = `
+  <ul class="sub accessnote">
+    <li>This stops casual and accidental editing by staff who should not be changing the rota. It is
+      not security: anyone who can open this browser profile's extension storage can still read
+      everything, and a determined person can bypass the gate.</li>
+    <li>The passcode itself is never stored — only a one-way hash of it — so it cannot be read back
+      out of storage, a backup or the shared sync folder.</li>
+    <li>The setting travels: practice backups and the shared-folder sync both carry this (hashed)
+      configuration, so restoring a backup restores the passcode it was taken with, and connecting
+      the shared folder applies the practice's lock to this machine too.</li>
+    <li>Forgotten it? It cannot be recovered. Wiping the rota data in the Data section below clears
+      the passcode along with everything else.</li>
+  </ul>
+`;
+
+const MODE_EXPLAINER = `
+  <p class="sub mt8">
+    <strong>Staff view (default)</strong> — without the passcode the app is read-only: the rota and
+    My week still open, so staff can check their week, request leave, propose swaps and export their
+    calendar, but nothing can be edited and the admin pages are hidden.
+    <br>
+    <strong>Strict</strong> — without the passcode nothing opens at all.
+  </p>
+`;
+
+function accessCard(state) {
+  const summary = accessSummary(state.access);
+  const hint = state.access && typeof state.access.hint === 'string' ? state.access.hint : '';
+  const updated = state.access && state.access.updatedAt ? state.access.updatedAt : '';
+
+  if (!summary.enabled) {
+    return `
+      <div class="card">
+        <h2 class="mt0">Passcode protection <span class="pill requested">off</span></h2>
+        <p class="sub">
+          Optional. Set a passcode so only the people who should be changing the rota — partners and
+          managers — can edit it.
+        </p>
+        ${MODE_EXPLAINER}
+        <div class="formgrid mt8">
+          <label class="field">New passcode<input id="ac-new" type="password" autocomplete="new-password"></label>
+          <label class="field">Repeat passcode<input id="ac-confirm" type="password" autocomplete="new-password"></label>
+          <label class="field">Hint (optional, shown on the unlock screen)
+            <input id="ac-hint" value="${esc(hint)}" placeholder="e.g. the usual practice one">
+          </label>
+        </div>
+        <div class="mt8">
+          <label class="check"><input type="checkbox" id="ac-strict">Strict mode — lock the whole app, not just editing</label>
+        </div>
+        <div class="toolbar mt8">
+          <button id="ac-set" class="primary">Turn on passcode protection</button>
+        </div>
+        ${ACCESS_HONESTY}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="card">
+      <h2 class="mt0">Passcode protection <span class="pill approved">on</span></h2>
+      <p class="sub">
+        Mode: <strong>${summary.strict ? 'strict — the whole app is locked' : 'staff view — the app is read-only without the passcode'}</strong>.
+        ${summary.hasHint ? `Hint shown on the unlock screen: "${esc(hint)}".` : 'No hint is shown.'}
+        ${updated ? `Last changed ${esc(new Date(updated).toLocaleString('en-GB'))}.` : ''}
+      </p>
+      ${MODE_EXPLAINER}
+      <div class="card-section">Change something</div>
+      <p class="sub">Every change below needs the current passcode.</p>
+      <label class="field">Current passcode<input id="ac-current" type="password" autocomplete="current-password"></label>
+      <div class="formgrid mt8">
+        <label class="field">New passcode<input id="ac-new" type="password" autocomplete="new-password"></label>
+        <label class="field">Repeat new passcode<input id="ac-confirm" type="password" autocomplete="new-password"></label>
+      </div>
+      <div class="toolbar">
+        <button id="ac-change">Change passcode</button>
+      </div>
+      <div class="formgrid mt12">
+        <label class="field">Hint<input id="ac-hint" value="${esc(hint)}" placeholder="leave empty for no hint"></label>
+      </div>
+      <div class="mt8">
+        <label class="check"><input type="checkbox" id="ac-strict" ${summary.strict ? 'checked' : ''}>Strict mode — lock the whole app, not just editing</label>
+      </div>
+      <div class="toolbar mt8">
+        <button id="ac-mode">Save mode &amp; hint</button>
+        <span class="spacer"></span>
+        <button id="ac-remove" class="danger">Remove passcode protection</button>
+      </div>
+      ${ACCESS_HONESTY}
+    </div>
+  `;
+}
+
+// Access config is NOT part of the pushUndo → persist → rerender mutation
+// pattern: it is not a rota edit and must never be undoable back into an
+// unlocked state. It persists directly, and every CHANGE is audited (unlocks
+// and failed attempts deliberately are not — see views/unlock.js).
+function wireAccessCard(root, ctx) {
+  const { state } = ctx;
+  const val = (sel) => {
+    const el = root.querySelector(sel);
+    return el ? el.value : '';
+  };
+  const checked = (sel) => {
+    const el = root.querySelector(sel);
+    return Boolean(el && el.checked);
+  };
+  const currentOk = async () => {
+    const ok = await verifyPasscode(val('#ac-current'), state.access);
+    if (!ok) ctx.toast('Current passcode is not correct');
+    return ok;
+  };
+  const commit = async (access, summary) => {
+    state.access = access;
+    await ctx.persist('access');
+    await ctx.log(summary);
+    ctx.toast(summary);
+    ctx.rerender();
+  };
+
+  const setBtn = root.querySelector('#ac-set');
+  if (setBtn)
+    setBtn.onclick = async () => {
+      const code = val('#ac-new');
+      if (code.length < 4) {
+        ctx.toast('Use at least 4 characters');
+        return;
+      }
+      if (code !== val('#ac-confirm')) {
+        ctx.toast('The two passcodes do not match');
+        return;
+      }
+      const strict = checked('#ac-strict');
+      await commit(
+        await makeAccess(code, { strict, hint: val('#ac-hint').trim() }),
+        `Passcode protection turned on (${strict ? 'strict' : 'staff view'})`
+      );
+    };
+
+  const changeBtn = root.querySelector('#ac-change');
+  if (changeBtn)
+    changeBtn.onclick = async () => {
+      if (!(await currentOk())) return;
+      const code = val('#ac-new');
+      if (code.length < 4) {
+        ctx.toast('Use at least 4 characters');
+        return;
+      }
+      if (code !== val('#ac-confirm')) {
+        ctx.toast('The two passcodes do not match');
+        return;
+      }
+      // A change re-derives salt and hash from scratch; mode and hint are
+      // carried across from the form so one press cannot silently revert them.
+      await commit(
+        await makeAccess(code, { strict: checked('#ac-strict'), hint: val('#ac-hint').trim() }),
+        'Passcode changed'
+      );
+    };
+
+  const modeBtn = root.querySelector('#ac-mode');
+  if (modeBtn)
+    modeBtn.onclick = async () => {
+      if (!(await currentOk())) return;
+      const strict = checked('#ac-strict');
+      const hint = val('#ac-hint').trim();
+      await commit(
+        { ...state.access, strict, hint, updatedAt: new Date().toISOString() },
+        `Passcode mode set to ${strict ? 'strict' : 'staff view'}${hint ? ' with a hint' : ''}`
+      );
+    };
+
+  const removeBtn = root.querySelector('#ac-remove');
+  if (removeBtn)
+    removeBtn.onclick = async () => {
+      if (!(await currentOk())) return;
+      if (!confirm('Remove passcode protection? Anyone with this browser profile will be able to edit the rota.'))
+        return;
+      // null, not a disabled record: nothing is kept once protection is off.
+      await commit(null, 'Passcode protection removed');
+    };
+}
 
 function roomInferHTML(result, state) {
   return `

@@ -40,9 +40,11 @@ export default {
         btn.onclick = async () => {
           const person = state.staff.find((p) => p.id === root.querySelector('#whoami').value);
           if (!person) return;
-          state.settings.userStaffId = person.id;
-          if (!state.settings.userName) state.settings.userName = person.name;
-          await ctx.persist('settings');
+          // ctx.identify, not persist('settings'): "who am I on this machine"
+          // is a staff self-service write, and My week must keep working on a
+          // read-only (passcode-locked, non-strict) machine, where persist()
+          // refuses the settings scope wholesale.
+          await ctx.identify(person.id, person.name);
           ctx.rerender();
         };
       return;
@@ -167,8 +169,7 @@ export default {
     `;
 
     root.querySelector('#notme').onclick = async () => {
-      state.settings.userStaffId = null;
-      await ctx.persist('settings');
+      await ctx.identify(null);
       ctx.rerender();
     };
 

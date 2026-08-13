@@ -57,6 +57,7 @@ const STORAGE_KEYS = [
   'rota.audit',
   'rota.demand',
   'rota.settings',
+  'rota.access',
 ];
 
 // The subset of those keys that changes the answer to "does the book match the
@@ -106,7 +107,10 @@ export async function init(el) {
 
   // Delegated, wired once — refresh() replaces innerHTML wholesale.
   onClick = (e) => {
-    if (e.target.closest('.rota-open-btn')) openRotaTab();
+    // The drift card's button deep-links straight to Live sync — checked first
+    // because it also carries .rota-open-btn.
+    if (e.target.closest('.rota-drift-open')) openRotaTab('sync');
+    else if (e.target.closest('.rota-open-btn')) openRotaTab();
   };
   container.addEventListener('click', onClick);
 
@@ -160,7 +164,16 @@ async function loadState() {
     leave: arr(got['rota.leave']),
     rooms: arr(got['rota.rooms']),
     settings: { ...DEFAULT_SETTINGS, ...(got['rota.settings'] || {}) },
+    access: got['rota.access'] || null,
   };
+}
+
+// Strict passcode mode means "nothing opens without the passcode" — and this
+// module is part of that nothing. Non-strict (staff view) is unaffected: the
+// module is read-only by nature, which IS what staff view grants.
+function strictLocked(state) {
+  const a = state.access;
+  return Boolean(a && a.enabled && a.strict);
 }
 
 // Mirrors rota/app/views/dashboard.js so the panel and the full app never
@@ -376,6 +389,17 @@ async function refresh(opts) {
   }
   if (!container) return; // unmounted while awaiting
 
+  // Strict lock: render the locked card and stop BEFORE summarise() and before
+  // updateDrift(). No engine run, no appointment-book fetch — a passcode-locked
+  // rota must not keep quietly reporting on itself in the side panel.
+  if (strictLocked(state)) {
+    driftResult = null;
+    driftKey = '';
+    lastRedKey = null;
+    container.innerHTML = renderLocked();
+    return;
+  }
+
   if (!state.staff.length) {
     container.innerHTML = renderEmpty();
     return;
@@ -393,6 +417,22 @@ async function refresh(opts) {
 
 function openBtn(label, extraClass) {
   return `<button class="ghost-btn rota-open-btn${extraClass ? ` ${esc(extraClass)}` : ''}" type="button">${esc(label)}</button>`;
+}
+
+function renderLocked() {
+  return `
+    <div class="rota-module">
+      <div class="rota-empty">
+        <h3>Rota</h3>
+        <p>This practice's rota is passcode-protected — open the full app to unlock it.</p>
+        <p class="rota-empty-note">
+          Duty cover, leave and drift checks stay hidden here until it is unlocked there.
+        </p>
+        ${openBtn('Open the rota manager')}
+        <p class="rota-hint">Opens in a new tab</p>
+      </div>
+    </div>
+  `;
 }
 
 function renderEmpty() {
@@ -480,8 +520,8 @@ function renderDrift(result) {
           : ''
       }
       ${badge.checkedAt && badge.level !== 'ok' ? `<p class="rota-sub">Last checked ${esc(badge.checkedAt)}.</p>` : ''}
-      ${openBtn('Open full rota → Live sync', 'rota-drift-open')}
-      <p class="rota-hint rota-drift-hint">Opens in a new tab — then pick "Live sync"</p>
+      ${openBtn('Open Live sync →', 'rota-drift-open')}
+      <p class="rota-hint rota-drift-hint">Opens the rota manager's Live sync page in a new tab</p>
     </section>
   `;
 }

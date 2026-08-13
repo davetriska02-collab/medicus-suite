@@ -1,7 +1,7 @@
 // Medicus Suite — rota scope-validation parity guard
 // Run with: node test-rota-validate.js
 //
-// Two validators guard the eight rota.* scopes, and they must agree:
+// Two validators guard the nine rota.* scopes, and they must agree:
 //
 //   rota/engine/validate.js  validateRotaScopes()  — the HOT path. The
 //     shared-drive sync file (rota/shared/sync.js) is re-read every 15s, is
@@ -54,6 +54,19 @@ function healthyScopes() {
       peakPeriods: [],
       dutyRequired: { am: 1, pm: 1 },
       extraPeriods: { early: false, eve: false },
+    },
+    // The passcode gate (rota/engine/access.js). Object OR null — null is the
+    // real value for "no passcode has ever been set", so it is exercised
+    // separately below rather than being the healthy fixture's value.
+    access: {
+      enabled: true,
+      strict: false,
+      kdf: 'PBKDF2-SHA256',
+      iterations: 150000,
+      salt: 'c2FsdHktc2FsdC0xMjM0',
+      hash: 'aGFzaC1nb2VzLWhlcmUtNDQtY2hhcnMtb2YtYmFzZTY0LXBhZA==',
+      hint: 'the usual one',
+      updatedAt: '2026-06-08T09:00:00.000Z',
     },
   };
 }
@@ -199,6 +212,83 @@ const MALFORMED = [
       s.demand.days = null;
     },
   },
+  // ── rota.access (the passcode gate) ──────────────────────────────────────
+  // A malformed access record is not cosmetic: app.js reads enabled/strict to
+  // decide whether the app is locked, and verifyPasscode() refuses anything
+  // whose salt/hash/iterations are the wrong type — so a bad record can leave a
+  // machine showing an unlock screen that NO correct passcode can satisfy.
+  {
+    name: 'access.hash is the wrong type (a number)',
+    mutate: (s) => {
+      s.access.hash = 12345;
+    },
+  },
+  {
+    name: 'access.hash is an array',
+    mutate: (s) => {
+      s.access.hash = ['nope'];
+    },
+  },
+  {
+    name: 'access.iterations is a string',
+    mutate: (s) => {
+      s.access.iterations = '150000';
+    },
+  },
+  {
+    name: 'access.iterations is null',
+    mutate: (s) => {
+      s.access.iterations = null;
+    },
+  },
+  {
+    name: 'access.salt is missing',
+    mutate: (s) => {
+      delete s.access.salt;
+    },
+  },
+  {
+    name: 'access.salt is the wrong type (a number)',
+    mutate: (s) => {
+      s.access.salt = 42;
+    },
+  },
+  {
+    name: 'access itself is an array',
+    mutate: (s) => {
+      s.access = [];
+    },
+  },
+  {
+    name: 'access itself is a string',
+    mutate: (s) => {
+      s.access = 'locked';
+    },
+  },
+  {
+    name: 'access.enabled is a string, not a boolean',
+    mutate: (s) => {
+      s.access.enabled = 'yes';
+    },
+  },
+  {
+    name: 'access.strict is a number, not a boolean',
+    mutate: (s) => {
+      s.access.strict = 1;
+    },
+  },
+  {
+    name: 'access.hint is an object, not a string',
+    mutate: (s) => {
+      s.access.hint = { text: 'the usual one' };
+    },
+  },
+  {
+    name: 'access.kdf is a number',
+    mutate: (s) => {
+      s.access.kdf = 256;
+    },
+  },
 ];
 
 // rotaImport() writes through chrome.storage.local on success. Stub it so the
@@ -268,8 +358,39 @@ async function rotaImportRejects(rotaImport, scopes) {
 
   check(
     ROTA_SCOPES.length === ROTA_KEYS.length && ROTA_SCOPES.every((s) => ROTA_KEYS.includes(`rota.${s}`)),
-    'validate.js ROTA_SCOPES and rota-io.js ROTA_KEYS describe the same eight scopes'
+    'validate.js ROTA_SCOPES and rota-io.js ROTA_KEYS describe the same nine scopes'
   );
+
+  // rota.access is the one scope where null is a REAL value ("no passcode has
+  // ever been set"), not an absent one. Both validators must take it, and both
+  // must write it through — a backup taken before the passcode existed has to
+  // be able to clear a lock, not silently leave it in place.
+  console.log('\n--- Rota scope validation: rota.access is object-OR-null ---');
+
+  const nulled = healthyScopes();
+  nulled.access = null;
+  check(validateRotaScopes(nulled).length === 0, 'validateRotaScopes accepts access: null');
+  check((await rotaImportRejects(rotaImport, nulled)) === false, 'rotaImport accepts access: null');
+  {
+    const { result: r2, written: w2 } = withChromeStub(() => rotaImport(nulled));
+    await r2;
+    check(
+      w2.length > 0 && Object.prototype.hasOwnProperty.call(w2[0], 'rota.access') && w2[0]['rota.access'] === null,
+      'rotaImport WRITES access: null through (it does not skip it as if absent)'
+    );
+  }
+
+  const omitted = healthyScopes();
+  delete omitted.access;
+  check(validateRotaScopes(omitted).length === 0, 'validateRotaScopes accepts a document with no access scope at all');
+  {
+    const { result: r3, written: w3 } = withChromeStub(() => rotaImport(omitted));
+    await r3;
+    check(
+      w3.length > 0 && !Object.prototype.hasOwnProperty.call(w3[0], 'rota.access'),
+      'rotaImport does NOT write access when the scope is absent (an older backup cannot clobber a local lock)'
+    );
+  }
 
   console.log('\n--- Rota scope validation: both validators must reject each malformed fixture ---');
 

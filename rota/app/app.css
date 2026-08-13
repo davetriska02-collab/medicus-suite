@@ -158,6 +158,33 @@ body {
   background: linear-gradient(90deg, rgba(59, 130, 246, 0.28), rgba(99, 102, 241, 0.14));
   color: #fff;
 }
+/* Passcode gate: sits in the nav flow, reads as a nav item rather than a
+   floating control, but stays a <button> because it is an action. */
+#nav .navbtn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 8px;
+  padding: 10px 14px;
+  font-weight: 600;
+  color: #cfd8e6;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+#nav .navbtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  transform: translateX(2px);
+  box-shadow: none;
+}
+#nav .navbtn[hidden] {
+  display: none;
+}
+#nav a[hidden] {
+  display: none;
+}
 #nav .navfoot {
   margin-top: auto;
   padding: 12px 14px;
@@ -819,6 +846,27 @@ details.actions .actions-panel .actions-row {
   align-items: baseline;
   padding: 7px 4px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+/* ---- passcode gate ---- */
+.unlockcard {
+  max-width: 560px;
+}
+.warn-line {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--high);
+}
+.warn-line[hidden] {
+  display: none;
+}
+.accessnote {
+  border-left: 2px solid var(--line);
+  padding-left: 12px;
+  margin: 12px 0 0;
+}
+.accessnote li {
+  margin-bottom: 4px;
 }
 .warn:last-child {
   border-bottom: none;
