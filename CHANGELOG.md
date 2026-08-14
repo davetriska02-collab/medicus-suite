@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.232.1] — 2026-08-14
+
+### Medicus-native integration workspace (docs only, no code change)
+
+New `docs/medicus-integration/` directory for the collaboration with Medicus
+(Tim Gray) on bringing the Sentinel engine into the platform natively:
+
+- `README.md` — orientation and reading order for Medicus-side engineers and
+  their AI assistants.
+- `SENTINEL-PORTING-GUIDE.md` — what the engine is (pure JS, feed-agnostic,
+  `evaluatePatient` contract), the exact input-bundle shapes, the rule schema
+  and status vocabulary, the text-substring → coded-data (dm+d / SNOMED / QOF
+  refset) migration map per matching surface, today's session/FHIR endpoints
+  vs candidate Resource Publishing vehicles (Future Action Rules, Custom
+  Dashboards, Code Lists, Content Packages), three integration architectures
+  with the shadow-parity acceptance gate, the safety invariants that must
+  survive any port, and the open questions for Medicus.
+- `RESOURCE-PUBLISHING-API.md` — embedded reference for the Medicus Resource
+  Publishing API (base URLs, ≤60s RS256 JWT auth, the draft→publish→`active`
+  lifecycle, full endpoint catalogue per resource type, error envelope,
+  payload caveats), so client code can be written without scraping the docs
+  site.
+
+`CLAUDE.md` gains a pointer section ("Medicus-native integration — start
+here") so any Claude session in this repo routes external collaborators to
+the workspace, and records that `rules/` content stays under the Keeper/CSO
+review process regardless of author.
+
 ## [v3.232.0] — 2026-08-14
 
 ### Rota Manager: passcode protection, setup assistant, grid UX pack, Solver v2, live drift
