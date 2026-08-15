@@ -1,58 +1,30 @@
 {
-  "runDate": "2026-08-01",
-  "previousRunDate": "2026-07-25",
-  "manifestVersion": "3.207.0",
+  "lastRunDate": "2026-08-15",
   "ruleFileLastUpdated": {
-    "rules/drug-rules.json": "2026-07-25",
-    "rules/qof-rules.json": "2026-07-25",
-    "rules/vaccine-rules.json": "2026-08-01",
-    "rules/alert-library.json": "2026-07-25",
-    "rules/reception-pathways.json": "2026-07-25",
-    "engine/acb-scores.js": "2026-07-25",
-    "engine/stopp-start.js": "2026-07-25",
-    "engine/rules-engine.js": "2026-08-01"
+    "drug-rules.json": "2026-07-25",
+    "qof-rules.json": "2026-07-25",
+    "vaccine-rules.json": "2026-08-01",
+    "alert-library.json": "2026-07-25",
+    "reception-pathways.json": "2026-08-15"
   },
   "sourcesChecked": [
-    "internal://rules/vaccine-rules.json",
-    "internal://engine/rules-engine.js",
-    "internal://rules/drug-rules.json",
-    "internal://engine/stopp-start.js"
+    "BNF (proxy-blocked)",
+    "MHRA Drug Safety Update (proxy-blocked)",
+    "NICE NG12 (clinical knowledge corroboration)",
+    "JCVI / Green Book (proxy-blocked)",
+    "NHS England QOF PRN02356 2026/27 (proxy-blocked)",
+    "BSR (proxy-blocked)",
+    "emc (proxy-blocked)",
+    "ACBcalc/Boustani (clinical knowledge corroboration)",
+    "STOPP/START v3 O'Mahony 2023 (clinical knowledge corroboration)",
+    "PINCER indicators PRIMIS (clinical knowledge corroboration)"
   ],
-  "heldForNextRun": [
-    {
-      "id": "ob004-qof",
-      "description": "OB004 indicator values — PRN02356 July 2026 amendment inaccessible (HTTP 403, second consecutive run). Held pending egress restoration.",
-      "heldSince": "2026-07-25"
-    },
-    {
-      "id": "vax-001",
-      "description": "RSV 65-74 clinical-risk expansion (effective 1 Sept 2026, NHSE letter 2 July 2026). Engine cannot encode conditional-age eligibility — matchVaccineEligibility() has no combined age-band + clinical-risk handler. Engine sprint required. Assess manually from 1 Sept 2026.",
-      "heldSince": "2026-07-25",
-      "effectiveDate": "2026-09-01"
-    }
+  "openFlagsFromThisRun": [
+    "drug-GAP-001: digoxin-renal-monitoring enabled:false — CSO activation required (RED)",
+    "drug-SOURCE-GAP-001: brand backlog unresolvable until proxy-blocking resolved (AMBER)",
+    "qof-004: OB004 PRN02356 July 2026 amendment unverified (AMBER)",
+    "qof-005: OB005 GLP-1 brands — tirzepatide/mounjaro to confirm in amendment (AMBER)",
+    "pathways-001: rf-rectal-bleeding added, general pathway still disabled pending CSO (AMBER)"
   ],
-  "sourceGaps": [
-    "All UK clinical reference pages (gov.uk, nice.org.uk, england.nhs.uk, bnf.nice.org.uk, medicines.org.uk, sps.nhs.uk) — HTTP 403 from outbound proxy; widened since 2026-07-25 (was PDF-specific; now all pages). Second consecutive run with egress blocked.",
-    "PRN02356 July 2026 QOF amendment (NHSE) — HTTP 403, second consecutive run."
-  ],
-  "changesAppliedThisRun": [
-    {
-      "id": "vax-002",
-      "rag": "Red",
-      "description": "mRESVIA declined variants (5 terms) added to vax-rsv statusTerms.declined — fixes C2-class false-GIVEN risk",
-      "appliedDate": "2026-08-01"
-    },
-    {
-      "id": "vax-003",
-      "rag": "Red",
-      "description": "engine/rules-engine.js matchVaccineEligibility() — ageMin/ageMax check added to problem and medication clause handlers",
-      "appliedDate": "2026-08-01"
-    },
-    {
-      "id": "alert-C005",
-      "rag": "Red",
-      "description": "Disabled digoxin-renal-monitoring rule added to drug-rules.json (enabled:false, pending CSO activation)",
-      "appliedDate": "2026-08-01"
-    }
-  ]
+  "proxyGapNote": "Third consecutive Keeper run with all UK authoritative web sources proxy-blocked. Brand backlog and QOF amendment verification outstanding until resolved."
 }
