@@ -4475,6 +4475,10 @@ initPdcTallySection({
 // ── Event Ledger section (F2) ─────────────────────────────────────────────────
 // Machine-local record of what the suite flagged — filter/table/CSV-export/clear
 // UI over shared/event-ledger.js (window.EventLedger, loaded before this script).
+// The "Bulk actions only" checkbox (H-063) narrows the table to bulk task-queue
+// BATCH events — source 'bulk-action' plus the pre-split legacy shape; see
+// EventLedger.isBulkActionEvent. Those events carry patientRef null, so without
+// this filter the only way to find them is to read every row.
 // The ledger keys (day shards ledger.events.<date> + ledger.shardIndex, plus
 // the legacy ledger.events) are deliberately EXCLUDED from suite backup —
 // same doctrine as labfiling.auditLog; see the disclosure block in options.html
@@ -4497,6 +4501,11 @@ initPdcTallySection({
       patientRef: ($('ledgerFilterPatient')?.value || '').trim(),
       from: $('ledgerFilterFrom')?.value || null,
       to: $('ledgerFilterTo')?.value || null,
+      // H-063 audit affordance: bulk task-queue batches (source 'bulk-action',
+      // plus the pre-split 'record' + 'bulk-…' shape) carry patientRef null, so
+      // the patient filter can never surface them — this is how a reviewer asks
+      // "was any bulk-acknowledge committed on this machine in that window?".
+      bulkOnly: !!$('ledgerFilterBulk')?.checked,
     };
   }
 
@@ -4523,12 +4532,18 @@ initPdcTallySection({
     if (summary) {
       summary.textContent =
         `${rows.length} of ${_events.length} event${_events.length === 1 ? '' : 's'}` +
+        (currentFilter().bulkOnly ? ' — bulk task-queue batches recorded on this machine' : '') +
         (rows.length > RENDER_CAP ? ` — showing the newest ${RENDER_CAP}; Export CSV includes all filtered rows` : '');
     }
     if (rows.length === 0) {
-      wrap.innerHTML = `<div class="ledger-empty">${
-        _events.length ? 'No events match these filters.' : 'No events recorded yet on this machine.'
-      }</div>`;
+      // Honest absence: the ledger can only ever say what it RECORDED here.
+      // "None recorded on this machine" — never "none happened".
+      const emptyMsg = currentFilter().bulkOnly
+        ? 'No bulk actions recorded on this machine for these filters. This shows only what was recorded here — it is not evidence that no bulk action was performed.'
+        : _events.length
+          ? 'No events match these filters.'
+          : 'No events recorded yet on this machine.';
+      wrap.innerHTML = `<div class="ledger-empty">${escHtml(emptyMsg)}</div>`;
       return;
     }
     const body = rows
@@ -4561,11 +4576,14 @@ initPdcTallySection({
   ['ledgerFilterPatient', 'ledgerFilterFrom', 'ledgerFilterTo'].forEach((id) => {
     $(id)?.addEventListener('input', renderTable);
   });
+  $('ledgerFilterBulk')?.addEventListener('change', renderTable);
   $('ledgerResetFilter')?.addEventListener('click', () => {
     ['ledgerFilterPatient', 'ledgerFilterFrom', 'ledgerFilterTo'].forEach((id) => {
       const el = $(id);
       if (el) el.value = '';
     });
+    const bulk = $('ledgerFilterBulk');
+    if (bulk) bulk.checked = false;
     renderTable();
   });
 

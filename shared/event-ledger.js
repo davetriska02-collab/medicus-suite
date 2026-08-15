@@ -3,7 +3,8 @@
 //
 // A machine-local, append-only ring buffer of what THIS extension displayed or
 // did on THIS machine: alerts shown, dismissals, recall tasks created, patient
-// summaries copied, pre-flight checks run, results filed via Lab Filing, and
+// summaries copied, pre-flight checks run, results filed via Lab Filing,
+// bulk task-queue batches committed (source 'bulk-action' — see H-063), and
 // (Horizon-1 H2) DOM-contract canary transitions — a runtime probe of the
 // suite's OWN integration points going degraded/recovered (source 'health',
 // see shared/contract-canary.js; always patientRef null — self-diagnosis, not
@@ -91,6 +92,18 @@
   // including the clinician declining the confirm dialog — the FULL reason
   // string lives only in the module's own machine-local ring buffer,
   // triagelens.routinerx.auditLog, not in this ledger's fixed shape).
+  // 'bulk-action' — the task-queue bulk-action widgets
+  // (content-scripts/task-bulk-action.js, instantiated as Privacy Officer
+  // "Bulk acknowledge?" and EPS Cancellation "Bulk discard?"). ONE event per
+  // BATCH, patientRef always null (a batch spans multiple patients, so there
+  // is no one patient to attribute it to); `ruleId` carries the WIDGET
+  // IDENTITY ('bulk-acknowledge-privacy-officer' / 'bulk-discard-eps-
+  // cancellation') and `label` a fixed template + the success count. Action:
+  // 'committed'. Split out of 'record' at v3.233 so H-063's question — "was
+  // any bulk-acknowledge performed on this machine in the exposure window?" —
+  // is answerable by filtering, not by eyeballing every record event.
+  // Pre-split batches were written with source 'record'; isBulkActionEvent()
+  // below still recognises them, so old events remain findable.
   // 'patient-alerts' — the Pt Alerts tab (side-panel/modules/patient-alerts/)
   // records every mutation of the persisted per-patient flag store (H-042
   // audit trail): 'flag-added' / 'flag-edited' / 'flag-removed'. patientRef is
@@ -98,7 +111,18 @@
   // `label` the alert's PRESET type id (or 'custom') plus severity — NEVER the
   // free-typed alert text, per the no-free-text rule above. The author initials
   // ride on the stored alert itself (createdBy/updatedBy), not in this ledger.
-  const SOURCES = ['sentinel', 'sweep', 'labfiling', 'record', 'preflight', 'health', 'leaflets', 'routinerx', 'patient-alerts'];
+  const SOURCES = [
+    'sentinel',
+    'sweep',
+    'labfiling',
+    'record',
+    'preflight',
+    'health',
+    'leaflets',
+    'routinerx',
+    'patient-alerts',
+    'bulk-action',
+  ];
   const ACTIONS = [
     'shown',
     'dismissed',
@@ -208,16 +232,38 @@
   }
 
   /**
-   * Filter events by patient UUID (exact or prefix, case-insensitive) and/or
-   * an inclusive YYYY-MM-DD date range. Order is preserved (newest-first in).
+   * True for a bulk-action BATCH event (one per batch, patientRef null).
+   *
+   * Two shapes are recognised, deliberately:
+   *   - current: source 'bulk-action'.
+   *   - legacy:  source 'record' + action 'committed' + a 'bulk-…' ruleId —
+   *     how every batch event was written before the source split (the
+   *     v3.226.0–v3.232.x task-bulk-action widgets, and problem-bulk-end.js,
+   *     which still writes that way because its batch IS single-patient
+   *     record activity). Events already on disk must stay findable: this is
+   *     the audit affordance H-063 asks for, so it must cover the exposure
+   *     window's OWN events, which predate the new source.
+   */
+  function isBulkActionEvent(evt) {
+    if (!evt) return false;
+    if (evt.source === 'bulk-action') return true;
+    return evt.source === 'record' && evt.action === 'committed' && /^bulk-/.test(String(evt.ruleId || ''));
+  }
+
+  /**
+   * Filter events by patient UUID (exact or prefix, case-insensitive), an
+   * inclusive YYYY-MM-DD date range, and/or bulkOnly (batch events only —
+   * see isBulkActionEvent). Order is preserved (newest-first in).
    */
   function filterEvents(events, query) {
     const q = query || {};
     const ref = q.patientRef ? String(q.patientRef).trim().toLowerCase() : '';
     const from = q.from ? String(q.from).slice(0, 10) : null;
     const to = q.to ? String(q.to).slice(0, 10) : null;
+    const bulkOnly = !!q.bulkOnly;
     return (Array.isArray(events) ? events : []).filter((e) => {
       if (!e) return false;
+      if (bulkOnly && !isBulkActionEvent(e)) return false;
       if (
         ref &&
         !String(e.patientRef || '')
@@ -284,9 +330,7 @@
   /** Merge two newest-first arrays into one newest-first array (by ts desc). */
   function mergeNewestFirst(a, b) {
     const all = [].concat(Array.isArray(a) ? a : [], Array.isArray(b) ? b : []);
-    return all
-      .filter((e) => e && typeof e.ts === 'string')
-      .sort((x, y) => (x.ts < y.ts ? 1 : x.ts > y.ts ? -1 : 0));
+    return all.filter((e) => e && typeof e.ts === 'string').sort((x, y) => (x.ts < y.ts ? 1 : x.ts > y.ts ? -1 : 0));
   }
 
   /**
@@ -504,6 +548,7 @@
     pruneEvents,
     dedupeKey,
     hasSameDayDuplicate,
+    isBulkActionEvent,
     filterEvents,
     eventsCsv,
     csvCell,
