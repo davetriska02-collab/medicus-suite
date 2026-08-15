@@ -42,7 +42,9 @@
 //     option-object/API-400 lesson) — never a bare status.
 //   - No auto-reload after success — a "Refresh page" button instead, so a
 //     half-typed consultation elsewhere in Medicus is never binned.
-//   - One ledger event per BATCH (not per row), `patientRef: null` — this
+//   - One ledger event per BATCH (not per row), source 'bulk-action' so the
+//     Options → Event ledger view can filter batches out of everything else
+//     (H-063), `patientRef: null` — this
 //     spans MULTIPLE patients, unlike problem-bulk-end.js's single-patient
 //     scope, so there is no one patient to attribute it to; the count lives
 //     in `label` instead (same aggregate-batch style problem-bulk-end.js
@@ -142,6 +144,33 @@
     return { qs: String(value == null ? '' : value), scopeWarning: null };
   }
 
+  // The ONE ledger event a committed batch writes (see this file's header
+  // SAFETY POSTURE note). Pure so its shape is unit-testable — H-063's open
+  // item is that the practice must be able to answer "was any bulk-acknowledge
+  // performed on this machine during the exposure window?", which needs three
+  // things pinned, not assumed:
+  //   ts      — stamped here explicitly rather than left to the ledger's
+  //             default, so the batch carries the moment it was committed.
+  //   source  — 'bulk-action', its own ledger source (NOT 'record'), so the
+  //             Options → Event ledger "Bulk actions only" filter can find
+  //             every batch without eyeballing every record event.
+  //   ruleId  — the WIDGET identity (config.ledgerRuleId), which is what
+  //             distinguishes a Privacy Officer bulk-acknowledge from an EPS
+  //             bulk-discard.
+  // patientRef stays null (a batch spans multiple patients) and label carries
+  // the fixed template + count only — never row content.
+  function buildBatchLedgerEvent(config, successCount, nowIso) {
+    return {
+      ts: nowIso || new Date().toISOString(),
+      source: 'bulk-action',
+      patientRef: null,
+      severity: null,
+      ruleId: config.ledgerRuleId,
+      label: config.ledgerLabel(successCount),
+      action: 'committed',
+    };
+  }
+
   // ── Node test hook ────────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -151,6 +180,7 @@
       canSubmit: canSubmit,
       buildActionPayload: buildActionPayload,
       normaliseListQuery: normaliseListQuery,
+      buildBatchLedgerEvent: buildBatchLedgerEvent,
     };
   }
 
@@ -328,16 +358,10 @@
       });
       _acting = false;
       // One event per BATCH, patientRef null (spans multiple patients) — see
-      // this file's header SAFETY POSTURE note.
+      // buildBatchLedgerEvent above and this file's header SAFETY POSTURE note.
+      // Visible to a human at Options → Event ledger → "Bulk actions only".
       if (succeeded > 0 && typeof window !== 'undefined' && window.EventLedger) {
-        window.EventLedger.record({
-          source: 'record',
-          patientRef: null,
-          severity: null,
-          ruleId: config.ledgerRuleId,
-          label: config.ledgerLabel(succeeded),
-          action: 'committed',
-        });
+        window.EventLedger.record(buildBatchLedgerEvent(config, succeeded));
       }
       // The ledger record above still happens on a stale generation — the
       // POSTs really were committed — but the UI state must not be touched:

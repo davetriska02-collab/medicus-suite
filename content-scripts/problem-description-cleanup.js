@@ -840,6 +840,97 @@
     return !!((st && looksOutdated(st.currentDescription)) || (st && st.retiredInfo) || (st && st.legacyReadCode));
   }
 
+  // 'YYYY-MM-DD' -> '12 Mar 2025' for display. Anything else (including the
+  // raw day-group title "Thu 02 Jul 2026", which findJournalMatchesForProblem
+  // falls back to when normaliseJournalDayTitle can't parse it) passes
+  // through verbatim rather than being reformatted on a guess.
+  var JOURNAL_DATE_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function formatJournalDate(date) {
+    var s = date == null ? '' : String(date);
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (!m) return s;
+    var mon = JOURNAL_DATE_MONTHS[Number(m[2]) - 1];
+    if (!mon) return s;
+    return String(Number(m[3])) + ' ' + mon + ' ' + m[1];
+  }
+
+  // H-061 (2026-08-15): the journal-sync confirm() gates named the
+  // before/after text and the match-confidence tier but NOT the entry's own
+  // DATE — the single field most implicated in a FALSE match, since the
+  // fuzzy fallback tier matches within ±30 days and a day-group heading can
+  // itself sit 12+ days away from the note's true recordDate (confirmed
+  // live, docs/learnings-patient-journal-api.md). Naming the date is only
+  // half the fix: presenting a DAY-GROUP heading date as if it were the
+  // note's own recorded date would manufacture exactly the false confidence
+  // this exists to prevent, so the phrase says WHICH kind of date it is.
+  //   - 'dated 12 Mar 2025' — the note's OWN recordDate, actually fetched
+  //     and verified (the verified-date-* tiers carry it as `date`;
+  //     applyDateConfirmation carries it as `confirmedDate`).
+  //   - 'listed under 12 Mar 2025' — the journal DAY-GROUP heading only,
+  //     which is what every other tier's `date` is.
+  //   - 'date unknown' — said out loud, never omitted: a missing date must
+  //     be visible in the dialog, not an absent line the clinician can't
+  //     notice.
+  // Shared by journalMatchesHtml (the panel row) and all four journal
+  // write/undo confirm() dialogs, so the row and the gate can never
+  // disagree about what date is being acted on.
+  function journalMatchDateLabel(match) {
+    var m = match || {};
+    var verifiedTier = m.tier === 'verified-date-exact-text' || m.tier === 'verified-date-partial-text';
+    var verified = m.dateConfirmed ? m.confirmedDate || m.date : verifiedTier ? m.date : null;
+    if (verified) return 'dated ' + formatJournalDate(verified) + " (the note's own recorded date)";
+    if (m.date) return 'listed under ' + formatJournalDate(m.date) + " (journal day heading, not the note's own date)";
+    return 'date unknown';
+  }
+
+  // Shared by offerJournalSyncAfterCodeApply and
+  // offerJournalTextSyncAfterInfoCleanup (2026-08-14) — both need the same
+  // "which matches should an AUTOMATIC prompt actually target" decision,
+  // now that applyDateConfirmation exists. Returns the array of matches to
+  // target, or null if nothing should happen (an alert has already
+  // explained why — the caller just returns in that case). No prompt at
+  // all when st.journalMatches is null (check never ran/failed — genuinely
+  // unknown, say nothing). A single match: itself. SEVERAL matches: only
+  // the date-confirmed one(s) — auto-prompting for every ambiguous
+  // candidate (e.g. all 4 identically-worded "Paediatric surveillance
+  // admin" entries in the real case that motivated applyDateConfirmation)
+  // would mean several back-to-back confirm() dialogs for entries we
+  // cannot actually tell apart. When NONE of several matches is
+  // date-confirmed, this deliberately does NOT guess by prompting for all
+  // of them anyway — it alerts instead and leaves it to the standalone
+  // "Apply to journal" button (or the Duplicate Checker) for the clinician
+  // to resolve by hand. buildNoMatchMessage/buildAmbiguousMessage are
+  // functions, not strings — st.journalMatches.length is only safe to read
+  // once we've already confirmed the array isn't null/empty, so the
+  // message text is built lazily, inside here, not by the caller upfront.
+  //
+  // Lives ABOVE the Node test hook (unlike its two browser-only callers) so
+  // it is reachable from require() — this is the narrowing that decides
+  // whether an automatic write is offered at all, so it is regression-
+  // tested directly rather than only source-locked. Uses window.alert, so
+  // callers/tests must have a window; behaviour is otherwise unchanged from
+  // where it previously sat.
+  function resolveJournalSyncTargets(st, buildNoMatchMessage, buildAmbiguousMessage) {
+    if (!Array.isArray(st.journalMatches)) {
+      console.log(
+        '[Clean up code] journal sync: st.journalMatches is not an array (check never ran or failed) — nothing to target',
+        st.journalMatches
+      );
+      return null;
+    }
+    if (!st.journalMatches.length) {
+      window.alert(buildNoMatchMessage());
+      return null;
+    }
+    if (st.journalMatches.length === 1) return st.journalMatches;
+    var confirmed = st.journalMatches.filter(function (m) {
+      return m.dateConfirmed;
+    });
+    if (confirmed.length) return confirmed;
+    window.alert(buildAmbiguousMessage(st.journalMatches.length));
+    return null;
+  }
+
   // ── Node test hook ────────────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -891,6 +982,9 @@
       computeAdditionalInfoFindings,
       stripAllKnownGenericText,
       codeQualityConcernExists,
+      formatJournalDate,
+      journalMatchDateLabel,
+      resolveJournalSyncTargets,
     };
     return;
   }
@@ -1725,12 +1819,19 @@
           } else if (infoJst && infoJst.error) {
             infoHtml = '<div class="ms-pdc-journal-apply-error">' + esc(infoJst.error) + '</div>';
           }
+          // H-061: the row carries the SAME honestly-labelled date phrase
+          // the confirm() gate will show (journalMatchDateLabel), so the
+          // clinician sees whether it's the note's own recorded date or
+          // just the day heading it's listed under BEFORE ever reaching a
+          // dialog. Capitalised for its sentence-initial position in the
+          // row; the dialogs use it mid-sentence.
+          var dateLabel = journalMatchDateLabel(m);
           return (
             '<li class="ms-pdc-journal-match ms-pdc-journal-match-' +
             m.tier +
             (m.dateConfirmed ? ' ms-pdc-journal-match-date-confirmed' : '') +
             '"><span class="ms-pdc-journal-match-date">' +
-            esc(m.date || '') +
+            esc(dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1)) +
             '</span> <span class="ms-pdc-journal-match-desc">' +
             esc(m.clinicalCodeDescription) +
             '</span> <span class="ms-pdc-journal-match-confidence">' +
@@ -3076,46 +3177,13 @@
     }
   }
 
-  // Shared by offerJournalSyncAfterCodeApply and
-  // offerJournalTextSyncAfterInfoCleanup (2026-08-14) — both need the same
-  // "which matches should an AUTOMATIC prompt actually target" decision,
-  // now that applyDateConfirmation exists. Returns the array of matches to
-  // target, or null if nothing should happen (an alert has already
-  // explained why — the caller just returns in that case). No prompt at
-  // all when st.journalMatches is null (check never ran/failed — genuinely
-  // unknown, say nothing). A single match: itself. SEVERAL matches: only
-  // the date-confirmed one(s) — auto-prompting for every ambiguous
-  // candidate (e.g. all 4 identically-worded "Paediatric surveillance
-  // admin" entries in the real case that motivated applyDateConfirmation)
-  // would mean several back-to-back confirm() dialogs for entries we
-  // cannot actually tell apart. When NONE of several matches is
-  // date-confirmed, this deliberately does NOT guess by prompting for all
-  // of them anyway — it alerts instead and leaves it to the standalone
-  // "Apply to journal" button (or the Duplicate Checker) for the clinician
-  // to resolve by hand. buildNoMatchMessage/buildAmbiguousMessage are
-  // functions, not strings — st.journalMatches.length is only safe to read
-  // once we've already confirmed the array isn't null/empty, so the
-  // message text is built lazily, inside here, not by the caller upfront.
-  function resolveJournalSyncTargets(st, buildNoMatchMessage, buildAmbiguousMessage) {
-    if (!Array.isArray(st.journalMatches)) {
-      console.log(
-        '[Clean up code] journal sync: st.journalMatches is not an array (check never ran or failed) — nothing to target',
-        st.journalMatches
-      );
-      return null;
-    }
-    if (!st.journalMatches.length) {
-      window.alert(buildNoMatchMessage());
-      return null;
-    }
-    if (st.journalMatches.length === 1) return st.journalMatches;
-    var confirmed = st.journalMatches.filter(function (m) {
-      return m.dateConfirmed;
-    });
-    if (confirmed.length) return confirmed;
-    window.alert(buildAmbiguousMessage(st.journalMatches.length));
-    return null;
-  }
+  // resolveJournalSyncTargets — the shared "which matches should an
+  // AUTOMATIC prompt actually target" narrowing used by both
+  // offerJournalSyncAfterCodeApply and offerJournalTextSyncAfterInfoCleanup
+  // — now lives ABOVE the Node test hook so it can be unit-tested; see its
+  // own comment there. Referenced here unchanged (function declarations in
+  // this IIFE are hoisted, so source order between the two sections doesn't
+  // matter).
 
   // Called by applyCode, right after a successful problem-code save, for
   // EVERY code-selection path (see applyCode's own comment — this is the
@@ -3180,7 +3248,8 @@
   // journal matches, each an independent write target (see rowState's own
   // comment).
   //
-  // window.confirm() naming the exact before/after text and match
+  // window.confirm() naming the exact before/after text, the entry's own
+  // date (H-061 — see journalMatchDateLabel) and match
   // confidence — same established pattern as
   // content-scripts/allergy-cleanup.js's bulk-action gates ("End N selected
   // allergies…", cancel by default) — lets the clinician judge a low-
@@ -3216,6 +3285,12 @@
       'Apply "' +
         st.currentDescription +
         '" to this journal entry?\n\n' +
+        // H-061: the entry's own date, honestly labelled as either the
+        // note's verified recorded date or merely the day heading it's
+        // listed under — see journalMatchDateLabel.
+        'Journal entry ' +
+        journalMatchDateLabel(match) +
+        '\n' +
         'Current entry text: "' +
         match.clinicalCodeDescription +
         '"\n' +
@@ -3269,8 +3344,19 @@
     var jst = st.journalApply && st.journalApply[entryId];
     if (!jst || !jst.saved || jst.undoing || !jst.prevCode || !jst.prevCode.description) return;
 
+    // H-061: an undo writes to a journal entry too, so it names the same
+    // honestly-labelled date as the forward write. The match is looked up
+    // rather than passed in (the Undo button only carries an entryId); a
+    // match that has since gone from st.journalMatches yields 'date
+    // unknown', which is said out loud rather than silently omitted.
+    var undoMatch = (st.journalMatches || []).find(function (m) {
+      return m.entryId === entryId;
+    });
     var confirmed = window.confirm(
       'Undo this sync?\n\n' +
+        'Journal entry ' +
+        journalMatchDateLabel(undoMatch) +
+        '\n' +
         'The journal entry will be set back to its previous code: "' +
         jst.prevCode.description +
         '"\n' +
@@ -3314,8 +3400,17 @@
     // truthy, same convention as the render side.
     if (!jst || !jst.saved || jst.undoing || jst.prevNote == null) return;
 
+    // H-061 — same date line as every other journal write/undo gate; see
+    // undoJournalCodeSync's own note on the lookup.
+    var undoMatch = (st.journalMatches || []).find(function (m) {
+      return m.entryId === entryId;
+    });
     var confirmed = window.confirm(
-      'Undo this cleanup?\n\n' + 'The removed import text will be restored to this journal entry.'
+      'Undo this cleanup?\n\n' +
+        'Journal entry ' +
+        journalMatchDateLabel(undoMatch) +
+        '\n' +
+        'The removed import text will be restored to this journal entry.'
     );
     if (!confirmed) return;
 
@@ -3629,7 +3724,19 @@
       removedList.length > 1
         ? removedList.slice(0, -1).join(', ') + ' and ' + removedList[removedList.length - 1]
         : removedList[0];
-    var confirmed = window.confirm('This journal entry also has generic import text: ' + removedText + '. Remove it?');
+    // H-061: this gates a journal WRITE as much as the code sync does, so
+    // it names the entry's own date on the same honest label — see
+    // journalMatchDateLabel.
+    var textMatch = (st.journalMatches || []).find(function (m) {
+      return m.entryId === entryId;
+    });
+    var confirmed = window.confirm(
+      'This journal entry also has generic import text: ' +
+        removedText +
+        '. Remove it?\n\n' +
+        'Journal entry ' +
+        journalMatchDateLabel(textMatch)
+    );
     if (!confirmed) return;
 
     jst.saving = true;

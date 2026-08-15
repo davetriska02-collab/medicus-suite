@@ -2,7 +2,15 @@
 // backup/restore and demo data.
 
 import { esc } from '../../shared/esc.js';
-import { makeAccess, verifyPasscode, accessSummary } from '../../engine/access.js';
+import {
+  makeAccess,
+  verifyPasscode,
+  accessSummary,
+  newRecoveryCode,
+  withRecoveryCode,
+  carryRecoveryCode,
+  hasRecoveryCode,
+} from '../../engine/access.js';
 import { DAY_KEYS, DEFAULT_SETTINGS } from '../../shared/model.js';
 import { isValidPracticeCode } from '../../shared/medicus-api.js';
 import { exportEnvelope, importEnvelope, wipe, save, uid } from '../../shared/store.js';
@@ -485,8 +493,12 @@ const ACCESS_HONESTY = `
     <li>The setting travels: practice backups and the shared-folder sync both carry this (hashed)
       configuration, so restoring a backup restores the passcode it was taken with, and connecting
       the shared folder applies the practice's lock to this machine too.</li>
-    <li>Forgotten it? It cannot be recovered. Wiping the rota data in the Data section below clears
-      the passcode along with everything else.</li>
+    <li>Forgotten it? The passcode itself cannot be recovered. The one-time recovery code shown when
+      it is set is the way back in: entering it on the unlock screen removes the passcode so a new
+      one can be set. Without that code, only wiping the rota data in the Data section below clears
+      the passcode, and that clears everything else with it.</li>
+    <li>The recovery code is a way back in, not a second lock. It is held as a one-way hash in the
+      same travelling configuration, and anyone holding the written code can take the gate off.</li>
   </ul>
 `;
 
@@ -500,10 +512,47 @@ const MODE_EXPLAINER = `
   </p>
 `;
 
+// Shown ONCE per issued code, and never again: only the hash is stored, so this
+// really is the only chance to read it. It lives in state.ui (per-view scratch,
+// never persisted, never synced, gone when the tab closes) and is cleared the
+// moment the manager says they have recorded it.
+//
+// It deliberately SURVIVES navigating around the app in the meantime: a manager
+// who clicks away before writing it down should find it still here, not have
+// lost the only copy to a stray click.
+function recoveryOnceCard(state) {
+  const code = state.ui.recoveryOnce;
+  if (!code) return '';
+  return `
+    <div class="card">
+      <h2 class="mt0">Recovery code <span class="pill requested">write this down now</span></h2>
+      <p class="sub">
+        This is the only time it can be shown. Only a one-way hash of it is stored, so nobody,
+        including this app, can show it again.
+      </p>
+      <p class="reccode">${esc(code)}</p>
+      <p class="sub">
+        Record it somewhere a second manager can reach it — the practice safe, the partners' folder,
+        wherever the other things nobody may lose are kept. Do not keep it only on this machine:
+        it exists for the day the person who set the passcode is not here.
+      </p>
+      <p class="sub">
+        If the passcode is forgotten, entering this code on the unlock screen removes the passcode
+        so a new one can be set. It does not show the old passcode, and it does not make the gate
+        secure: this is still a workflow gate against casual editing, not encryption.
+      </p>
+      <div class="toolbar mt8">
+        <button id="ac-recdone" class="primary">I have recorded it</button>
+      </div>
+    </div>
+  `;
+}
+
 function accessCard(state) {
   const summary = accessSummary(state.access);
   const hint = state.access && typeof state.access.hint === 'string' ? state.access.hint : '';
   const updated = state.access && state.access.updatedAt ? state.access.updatedAt : '';
+  const recoverySet = state.access && state.access.recoverySetAt ? state.access.recoverySetAt : '';
 
   if (!summary.enabled) {
     return `
@@ -512,6 +561,11 @@ function accessCard(state) {
         <p class="sub">
           Optional. Set a passcode so only the people who should be changing the rota — partners and
           managers — can edit it.
+        </p>
+        <p class="sub">
+          Turning it on shows a one-time recovery code. Write it down and keep it where a second
+          manager can reach it: without it, a forgotten passcode can only be cleared by wiping all
+          the rota data.
         </p>
         ${MODE_EXPLAINER}
         <div class="formgrid mt8">
@@ -533,6 +587,7 @@ function accessCard(state) {
   }
 
   return `
+    ${recoveryOnceCard(state)}
     <div class="card">
       <h2 class="mt0">Passcode protection <span class="pill approved">on</span></h2>
       <p class="sub">
@@ -562,6 +617,29 @@ function accessCard(state) {
         <span class="spacer"></span>
         <button id="ac-remove" class="danger">Remove passcode protection</button>
       </div>
+      <div class="card-section">Recovery code</div>
+      <p class="sub">
+        ${
+          summary.hasRecovery
+            ? `A recovery code is set${recoverySet ? ` (issued ${esc(new Date(recoverySet).toLocaleString('en-GB'))})` : ''}.
+               It was shown once when it was created and cannot be shown again — only a one-way hash
+               of it is stored. Entering it on the unlock screen removes the passcode so a new one
+               can be set.`
+            : `No recovery code is set for this passcode. Until one is, a forgotten passcode can only
+               be cleared by wiping all the rota data. Issue one now and keep it where a second
+               manager can reach it.`
+        }
+      </p>
+      <div class="toolbar mt8">
+        <button id="ac-regen">${summary.hasRecovery ? 'Issue a new recovery code' : 'Issue a recovery code'}</button>
+      </div>
+      <p class="sub">
+        ${
+          summary.hasRecovery
+            ? 'Issuing a new code stops the old one working straight away, so replace the written copy.'
+            : 'The new code is shown once, here, as soon as it is issued.'
+        }
+      </p>
       ${ACCESS_HONESTY}
     </div>
   `;
@@ -586,9 +664,14 @@ function wireAccessCard(root, ctx) {
     if (!ok) ctx.toast('Current passcode is not correct');
     return ok;
   };
-  const commit = async (access, summary) => {
+  // recoveryOnce is the plaintext recovery code to display once. It is handed
+  // to the manager only AFTER the record carrying its hash has actually been
+  // written — a code written on paper that never reached storage is worse than
+  // no code at all.
+  const commit = async (access, summary, recoveryOnce) => {
     state.access = access;
     await ctx.persist('access');
+    if (recoveryOnce) state.ui.recoveryOnce = recoveryOnce;
     await ctx.log(summary);
     ctx.toast(summary);
     ctx.rerender();
@@ -607,9 +690,13 @@ function wireAccessCard(root, ctx) {
         return;
       }
       const strict = checked('#ac-strict');
+      // Every new passcode is issued with a recovery code: a gate with no way
+      // back in is the hazard (H-064), not a safer default.
+      const recovery = newRecoveryCode();
       await commit(
-        await makeAccess(code, { strict, hint: val('#ac-hint').trim() }),
-        `Passcode protection turned on (${strict ? 'strict' : 'staff view'})`
+        await makeAccess(code, { strict, hint: val('#ac-hint').trim(), recoveryCode: recovery }),
+        `Passcode protection turned on (${strict ? 'strict' : 'staff view'})`,
+        recovery
       );
     };
 
@@ -628,10 +715,17 @@ function wireAccessCard(root, ctx) {
       }
       // A change re-derives salt and hash from scratch; mode and hint are
       // carried across from the form so one press cannot silently revert them.
-      await commit(
-        await makeAccess(code, { strict: checked('#ac-strict'), hint: val('#ac-hint').trim() }),
-        'Passcode changed'
-      );
+      const next = await makeAccess(code, { strict: checked('#ac-strict'), hint: val('#ac-hint').trim() });
+      // The recovery code is independent of the passcode, so an existing one is
+      // carried across untouched — the copy in the safe keeps working. A record
+      // from before recovery codes existed gets one here, shown once, which is
+      // how an already-protected practice acquires one without being wiped.
+      if (hasRecoveryCode(state.access)) {
+        await commit(carryRecoveryCode(next, state.access), 'Passcode changed');
+        return;
+      }
+      const recovery = newRecoveryCode();
+      await commit(await withRecoveryCode(next, recovery), 'Passcode changed', recovery);
     };
 
   const modeBtn = root.querySelector('#ac-mode');
@@ -646,13 +740,52 @@ function wireAccessCard(root, ctx) {
       );
     };
 
+  // Issue (or re-issue) a recovery code for a passcode that is already set.
+  // Only reachable from Settings, which a locked machine cannot open at all
+  // (app.js effectiveRoute sends it to the unlock screen), so the gate is
+  // already unlocked here; the current passcode is asked for on top, exactly
+  // like every other change on this card.
+  const regenBtn = root.querySelector('#ac-regen');
+  if (regenBtn)
+    regenBtn.onclick = async () => {
+      if (!(await currentOk())) return;
+      const replacing = hasRecoveryCode(state.access);
+      if (
+        replacing &&
+        !confirm(
+          'Issue a new recovery code? The one written down now stops working, so it must be replaced wherever it is kept.'
+        )
+      ) {
+        return;
+      }
+      // updatedAt is deliberately left alone: it means "the passcode last
+      // changed", which this does not do.
+      const recovery = newRecoveryCode();
+      await commit(
+        await withRecoveryCode(state.access, recovery),
+        replacing ? 'New recovery code issued (the previous one no longer works)' : 'Recovery code issued',
+        recovery
+      );
+    };
+
+  // Dismissing the one-time display is the ONLY thing that clears it, and it
+  // clears it from memory only — nothing plaintext was ever written anywhere.
+  const recDoneBtn = root.querySelector('#ac-recdone');
+  if (recDoneBtn)
+    recDoneBtn.onclick = () => {
+      state.ui.recoveryOnce = null;
+      ctx.rerender();
+    };
+
   const removeBtn = root.querySelector('#ac-remove');
   if (removeBtn)
     removeBtn.onclick = async () => {
       if (!(await currentOk())) return;
       if (!confirm('Remove passcode protection? Anyone with this browser profile will be able to edit the rota.'))
         return;
-      // null, not a disabled record: nothing is kept once protection is off.
+      // null, not a disabled record: nothing is kept once protection is off —
+      // including the recovery code, which has nothing left to recover.
+      state.ui.recoveryOnce = null;
       await commit(null, 'Passcode protection removed');
     };
 }

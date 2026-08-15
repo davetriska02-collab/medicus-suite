@@ -53,6 +53,9 @@ const {
   computeAdditionalInfoFindings,
   stripAllKnownGenericText,
   codeQualityConcernExists,
+  formatJournalDate,
+  journalMatchDateLabel,
+  resolveJournalSyncTargets,
 } = require('./content-scripts/problem-description-cleanup.js');
 const genericAdditionalInfoText = require('./rules/generic-additional-info-text.json');
 const MSProblemTextLinking = require('./shared/problem-text-linking.js');
@@ -2129,6 +2132,231 @@ console.log('\n--- v3.227.1 review-fix source locks (two-step confirm / retry su
       stripBody
     ),
     'the falsy || chain over cleaned values is gone'
+  );
+}
+
+console.log('\n--- H-061: journal-entry date labelling (formatJournalDate / journalMatchDateLabel) ---');
+{
+  check(formatJournalDate('2025-03-12') === '12 Mar 2025', 'an ISO date renders as a plain-English day/month/year');
+  check(formatJournalDate('2025-03-01') === '1 Mar 2025', 'a leading zero on the day is dropped');
+  check(
+    formatJournalDate('Thu 02 Jul 2026') === 'Thu 02 Jul 2026',
+    'an unparseable raw day-group title passes through verbatim, never reformatted on a guess'
+  );
+  check(formatJournalDate(null) === '', 'a missing date formats to empty, never "null"');
+
+  // The whole point of H-061: a day-group heading date and a note's own
+  // verified recordDate must NEVER be presented with the same words — the
+  // heading can sit 12+ days from the note's true date, so labelling it as
+  // the note's date would manufacture exactly the false confidence this
+  // fix exists to remove.
+  check(
+    journalMatchDateLabel({ tier: 'verified-date-exact-text', date: '2025-03-12' }) ===
+      "dated 12 Mar 2025 (the note's own recorded date)",
+    'a verified-date tier is labelled "dated …" — the note\'s own recorded date'
+  );
+  check(
+    journalMatchDateLabel({ tier: 'verified-date-partial-text', date: '2025-03-12' }) ===
+      "dated 12 Mar 2025 (the note's own recorded date)",
+    'the partial-text verified tier is labelled the same way'
+  );
+  check(
+    journalMatchDateLabel({ tier: 'date-exact-text', date: '2025-03-12' }) ===
+      "listed under 12 Mar 2025 (journal day heading, not the note's own date)",
+    'a day-group date is labelled "listed under …" and says it is NOT the note\'s own date'
+  );
+  check(
+    journalMatchDateLabel({ tier: 'linked', date: '2025-03-12' }) ===
+      "listed under 12 Mar 2025 (journal day heading, not the note's own date)",
+    'the structural "linked" tier carries a day-group date too, and is labelled as such'
+  );
+  check(
+    journalMatchDateLabel({ tier: 'fuzzy-code-text-partial', date: '2025-03-12' }).indexOf('listed under') === 0,
+    'the ±30-day fuzzy tier — the one most implicated in a false match — is never presented as a verified date'
+  );
+  check(
+    journalMatchDateLabel({ tier: 'linked', date: '2025-03-12', dateConfirmed: true, confirmedDate: '2025-03-01' }) ===
+      "dated 1 Mar 2025 (the note's own recorded date)",
+    'applyDateConfirmation\'s confirmedDate is a genuinely fetched recordDate -> "dated …", and it wins over m.date'
+  );
+  check(journalMatchDateLabel({ tier: 'linked' }) === 'date unknown', 'a match with no date says so out loud');
+  check(journalMatchDateLabel(null) === 'date unknown', 'a missing match object says "date unknown", never throws');
+  check(
+    journalMatchDateLabel({ tier: 'linked' }).length > 0,
+    'the no-date case is a visible line, not an omitted one (absence must be visible in the dialog)'
+  );
+}
+
+console.log('\n--- H-061: resolveJournalSyncTargets (which matches an AUTOMATIC prompt may target) ---');
+{
+  const alerts = [];
+  const prevAlert = global.window.alert;
+  global.window.alert = (msg) => alerts.push(msg);
+  const noMatch = () => 'NO-MATCH-MESSAGE';
+  const ambiguous = (n) => `AMBIGUOUS-${n}`;
+
+  check(
+    resolveJournalSyncTargets({ journalMatches: null }, noMatch, ambiguous) === null && alerts.length === 0,
+    'a null journalMatches (check never ran/failed) targets nothing and says nothing — genuinely unknown'
+  );
+  check(
+    resolveJournalSyncTargets({}, noMatch, ambiguous) === null && alerts.length === 0,
+    'a missing journalMatches behaves the same way'
+  );
+
+  check(
+    resolveJournalSyncTargets({ journalMatches: [] }, noMatch, ambiguous) === null &&
+      alerts[alerts.length - 1] === 'NO-MATCH-MESSAGE',
+    'zero matches targets nothing and explains why'
+  );
+
+  const single = [{ entryId: 'a', tier: 'fuzzy-code-text-partial', date: '2025-03-12' }];
+  const singleTargets = resolveJournalSyncTargets({ journalMatches: single }, noMatch, ambiguous);
+  check(
+    Array.isArray(singleTargets) && singleTargets.length === 1 && singleTargets[0].entryId === 'a',
+    'a single match is prompted for (the confirm() gate is what protects a low-confidence tier here)'
+  );
+
+  const mixed = [
+    { entryId: 'a', tier: 'date-exact-text', date: '2025-03-12' },
+    { entryId: 'b', tier: 'linked', date: '2025-03-12', dateConfirmed: true, confirmedDate: '2025-03-12' },
+    { entryId: 'c', tier: 'date-partial-text', date: '2025-03-12' },
+  ];
+  const narrowed = resolveJournalSyncTargets({ journalMatches: mixed }, noMatch, ambiguous);
+  check(
+    Array.isArray(narrowed) && narrowed.length === 1 && narrowed[0].entryId === 'b',
+    'several matches with exactly ONE date-confirmed narrows to that one — never a dialog per candidate'
+  );
+
+  const alertsBefore = alerts.length;
+  const unconfirmed = [
+    { entryId: 'a', tier: 'linked-exact-text', date: '2025-03-12' },
+    { entryId: 'b', tier: 'linked-exact-text', date: '2025-06-01' },
+  ];
+  check(
+    resolveJournalSyncTargets({ journalMatches: unconfirmed }, noMatch, ambiguous) === null &&
+      alerts.length === alertsBefore + 1 &&
+      alerts[alerts.length - 1] === 'AMBIGUOUS-2',
+    'several matches with NONE date-confirmed refuses to guess — alerts with the count and writes nothing'
+  );
+
+  const bothConfirmed = [
+    { entryId: 'a', tier: 'linked', dateConfirmed: true, confirmedDate: '2025-03-12' },
+    { entryId: 'b', tier: 'linked', dateConfirmed: true, confirmedDate: '2025-03-12' },
+    { entryId: 'c', tier: 'linked' },
+  ];
+  const twoConfirmed = resolveJournalSyncTargets({ journalMatches: bothConfirmed }, noMatch, ambiguous);
+  check(
+    twoConfirmed.length === 2 && twoConfirmed.every((m) => m.dateConfirmed),
+    'only the date-confirmed matches are targeted when more than one is confirmed'
+  );
+
+  global.window.alert = prevAlert;
+}
+
+console.log('\n--- H-061 source locks: journal write/undo paths (confirm gate, fresh prefill, dated dialog) ---');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'problem-description-cleanup.js'), 'utf8');
+  // Slices one function's body out of the content script — these four are
+  // DOM/network-bound (fetch + window.confirm + renderPanel), so they're
+  // pinned by source lock rather than executed, the same technique the
+  // v3.227.1 review-fix block above uses.
+  const fnBody = (name) => {
+    const start = src.indexOf('function ' + name + '(');
+    if (start === -1) return '';
+    const end = src.indexOf('\n  }\n', start);
+    return end === -1 ? '' : src.slice(start, end);
+  };
+
+  // The exact label strings Fix A introduced — pinned verbatim so the
+  // day-group/verified distinction can't silently regress into one shared
+  // wording (which is the misread H-061 is about).
+  check(
+    src.includes("'dated ' + formatJournalDate(verified) + \" (the note's own recorded date)\""),
+    'the verified-date label reads "dated <date> (the note\'s own recorded date)"'
+  );
+  check(
+    src.includes("'listed under ' + formatJournalDate(m.date) + \" (journal day heading, not the note's own date)\""),
+    'the day-group label reads "listed under <date> (journal day heading, not the note\'s own date)"'
+  );
+  check(src.includes("return 'date unknown';"), 'a dateless match yields the literal "date unknown"');
+
+  const writePaths = [
+    'applyToJournal',
+    'undoJournalCodeSync',
+    'undoJournalTextSync',
+    'applyGenericAdditionalInfoToJournal',
+  ];
+  writePaths.forEach((name) => {
+    const body = fnBody(name);
+    check(body.length > 0, `${name}: source located`);
+    const confirmAt = body.indexOf('window.confirm(');
+    const postAt = body.indexOf('await postChangeNote(');
+    const prefillAt = body.indexOf('await fetchEditNoteForm(entryId)');
+    check(confirmAt !== -1 && postAt !== -1 && confirmAt < postAt, `${name}: the POST is confirm()-gated`);
+    check(body.includes('if (!confirmed) return;'), `${name}: a declined confirm() returns without writing anything`);
+    check(
+      prefillAt !== -1 && prefillAt < postAt,
+      `${name}: fetches a FRESH edit-note prefill before POSTing (never a cached one)`
+    );
+    check(
+      body.indexOf('journalMatchDateLabel(') !== -1 && body.indexOf('journalMatchDateLabel(') < postAt,
+      `${name}: the confirm() dialog names the entry's date (H-061)`
+    );
+    check(body.includes("'Journal entry ' +"), `${name}: the date line is introduced as "Journal entry <label>"`);
+  });
+
+  // Undo is only reachable once a write actually succeeded: the previous
+  // state is captured AFTER the POST resolves (a failed write changed
+  // nothing, so there is nothing to undo), and both undo paths bail unless
+  // the forward write is flagged saved.
+  const applyBody = fnBody('applyToJournal');
+  check(
+    applyBody.indexOf('jst.prevCode = notePrefill.noteSNOMEDct') > applyBody.indexOf('await postChangeNote('),
+    'applyToJournal captures the pre-write code only AFTER the POST succeeded'
+  );
+  const infoBody = fnBody('applyGenericAdditionalInfoToJournal');
+  check(
+    infoBody.indexOf('jst.prevNote =') > infoBody.indexOf('await postChangeNote('),
+    'applyGenericAdditionalInfoToJournal captures the pre-strip text only AFTER the POST succeeded'
+  );
+  check(
+    fnBody('undoJournalCodeSync').includes('!jst.saved'),
+    'undoJournalCodeSync refuses to run unless the forward sync is flagged saved'
+  );
+  check(
+    fnBody('undoJournalTextSync').includes('!jst.saved'),
+    'undoJournalTextSync refuses to run unless the forward cleanup is flagged saved'
+  );
+  check(
+    src.includes('jst && jst.saved') && src.includes('data-undo-kind="code"'),
+    'the Undo control is only rendered on a saved sync'
+  );
+
+  // An all-boilerplate note legitimately leaves '' behind — the restore
+  // guards must be != null, never truthiness, or that note can never be
+  // put back.
+  check(
+    fnBody('undoJournalTextSync').includes('jst.prevNote == null'),
+    'undoJournalTextSync allows an empty-string restore (!= null, not truthiness)'
+  );
+  check(
+    infoBody.includes("jst.prevNote = notePrefill.note != null ? notePrefill.note : ''"),
+    "the pre-strip text is normalised to '' rather than left null, so an all-boilerplate note stays restorable"
+  );
+  check(
+    src.includes('infoJst.prevNote != null'),
+    'the text-undo button renders on prevNote != null, so an empty-string previous state still offers Undo'
+  );
+
+  // The panel row shows the same honest date phrase, so the clinician sees
+  // it before ever reaching a confirm().
+  check(
+    src.includes('var dateLabel = journalMatchDateLabel(m);') &&
+      src.includes('esc(dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1))'),
+    'the journal match row renders the same labelled date, escaped for the DOM'
   );
 }
 

@@ -853,6 +853,15 @@
         font-size: 12px;
         padding: 8px 10px;
       }
+      .ledger-bulk-filter {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text-2);
+        cursor: pointer;
+        user-select: none;
+      }
       .ledger-summary {
         font-size: 11px;
         color: var(--text-4);
@@ -2621,8 +2630,16 @@
           <h1>Event ledger <span class="module-badge">machine-local</span></h1>
           <p class="section-desc">
             A record of what this extension <strong>displayed or did on this computer</strong> — alerts shown,
-            dismissals, recall tasks created, patient summaries copied, pre-flight checks run, and results filed via Lab
-            Filing. It exists to answer &ldquo;did the tool flag this?&rdquo; with evidence.
+            dismissals, recall tasks created, patient summaries copied, pre-flight checks run, results filed via Lab
+            Filing, and bulk task-queue batches committed. It exists to answer &ldquo;did the tool flag this?&rdquo;
+            with evidence.
+          </p>
+          <p class="section-desc">
+            <strong>Bulk actions:</strong> tick <em>Bulk actions only</em> to see just the bulk task-queue batches
+            &mdash; Privacy Officer &ldquo;Bulk acknowledge?&rdquo; and EPS Cancellation &ldquo;Bulk discard?&rdquo;.
+            One row per batch: when it was committed, which widget, and how many tasks. Combine it with the date range
+            to review a particular window. This lists what was <strong>recorded on this machine</strong>; it cannot show
+            batches performed on any other machine.
           </p>
 
           <div class="ledger-disclosure">
@@ -2648,6 +2665,13 @@
             />
             <input type="date" id="ledgerFilterFrom" title="From date (inclusive)" />
             <input type="date" id="ledgerFilterTo" title="To date (inclusive)" />
+            <label
+              class="ledger-bulk-filter"
+              title="Show only bulk task-queue batches recorded on this machine — Privacy Officer &ldquo;Bulk acknowledge?&rdquo; and EPS Cancellation &ldquo;Bulk discard?&rdquo;. Each row is one batch: when it was committed, which widget, and how many tasks."
+            >
+              <input type="checkbox" id="ledgerFilterBulk" />
+              Bulk actions only
+            </label>
             <button class="ghost" id="ledgerResetFilter" type="button">Reset filters</button>
             <button class="ghost" id="ledgerExportCsv" type="button" title="Download the filtered events as CSV.">
               Export CSV

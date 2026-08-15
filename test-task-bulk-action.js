@@ -26,7 +26,9 @@ const {
   canSubmit,
   buildActionPayload,
   normaliseListQuery,
+  buildBatchLedgerEvent,
 } = require('./content-scripts/task-bulk-action.js');
+const Ledger = require('./shared/event-ledger.js');
 
 let passed = 0,
   failed = 0;
@@ -214,6 +216,151 @@ console.log('\n--- Both instantiations register through the shared engine, not a
     'Privacy Officer does not reimplement rendering logic'
   );
   check(!/function\s+buildHtml|function\s+renderSelectStep/.test(epsSrc), 'EPS does not reimplement rendering logic');
+}
+
+// ── H-063: the batch ledger event, and finding it again months later ────────
+// The CSO's open item on H-063 is "was any bulk-acknowledge performed on this
+// machine during the 2026-08-08 → 2026-08-09 exposure window?". Answering that
+// needs the event to carry WHEN and WHICH WIDGET, and needs a human-readable
+// way to pull batches out of a ledger of thousands of chip renders.
+const PO_CONFIG = {
+  ledgerRuleId: 'bulk-acknowledge-privacy-officer',
+  ledgerLabel: (n) => 'Bulk acknowledge: ' + n + ' privacy officer alert' + (n === 1 ? '' : 's') + ' acknowledged',
+};
+const EPS_CONFIG = {
+  ledgerRuleId: 'bulk-discard-eps-cancellation',
+  ledgerLabel: (n) => 'Bulk discard: ' + n + ' EPS cancellation task' + (n === 1 ? '' : 's') + ' discarded',
+};
+
+console.log('\n--- buildBatchLedgerEvent: one event per batch, timestamped, widget-identified (H-063) ---');
+{
+  const evt = buildBatchLedgerEvent(PO_CONFIG, 3, '2026-08-08T09:15:00.000Z');
+  check(evt.ts === '2026-08-08T09:15:00.000Z', 'the batch carries its own commit timestamp');
+  check(evt.source === 'bulk-action', "source is 'bulk-action' — its own ledger source, not lumped in with 'record'");
+  check(evt.action === 'committed', "action is 'committed'");
+  check(evt.patientRef === null, 'patientRef is null — a batch spans multiple patients');
+  check(evt.severity === null, 'no severity on a batch event');
+  check(evt.ruleId === 'bulk-acknowledge-privacy-officer', 'ruleId carries the WIDGET identity');
+  check(/\b3\b/.test(evt.label) && /acknowledge/i.test(evt.label), 'label carries the action and the count');
+  const eps = buildBatchLedgerEvent(EPS_CONFIG, 1, '2026-08-08T09:15:00.000Z');
+  check(
+    eps.ruleId !== evt.ruleId,
+    'the EPS discard widget is distinguishable from the Privacy Officer acknowledge widget'
+  );
+  check(
+    /EPS/.test(eps.label) && /discard/i.test(eps.label),
+    "the EPS batch label names its own action, not 'acknowledge'"
+  );
+  check(
+    typeof buildBatchLedgerEvent(PO_CONFIG, 2).ts === 'string' && buildBatchLedgerEvent(PO_CONFIG, 2).ts.length > 0,
+    'ts defaults to now when the caller passes none — never unstamped'
+  );
+  check(
+    !/\d{2}\/\d{2}\/\d{4}/.test(evt.label) && !/patient/i.test(evt.label),
+    'the label is a fixed template + count — no row content, no patient identifiers'
+  );
+}
+
+console.log('\n--- The ledger accepts the batch event unchanged (source enum + field survival) ---');
+{
+  const raw = buildBatchLedgerEvent(PO_CONFIG, 5, '2026-08-08T09:15:00.000Z');
+  const stored = Ledger.makeEvent(raw, '2026-08-09T00:00:00.000Z');
+  check(!!stored, "makeEvent accepts source 'bulk-action' — it is in the ledger's SOURCES enum");
+  check(stored.ts === '2026-08-08T09:15:00.000Z', 'the commit timestamp survives storage normalisation');
+  check(stored.ruleId === 'bulk-acknowledge-privacy-officer', 'the widget identity survives storage normalisation');
+  check(stored.label === raw.label && stored.action === 'committed', 'label and action survive unchanged');
+  check(Ledger.constants.SOURCES.includes('bulk-action'), "'bulk-action' is a declared ledger source");
+}
+
+console.log('\n--- isBulkActionEvent: current AND pre-split events stay findable ---');
+{
+  const current = buildBatchLedgerEvent(EPS_CONFIG, 2, '2026-08-20T10:00:00.000Z');
+  check(Ledger.isBulkActionEvent(current), 'a current bulk-action event matches');
+  // Every batch committed DURING the H-063 exposure window was written with
+  // source 'record' — if the filter missed those it would answer the CSO's
+  // question with a confident, wrong "nothing recorded".
+  const legacy = {
+    ts: '2026-08-08T11:00:00.000Z',
+    source: 'record',
+    patientRef: null,
+    severity: null,
+    ruleId: 'bulk-acknowledge-privacy-officer',
+    label: 'Bulk acknowledge: 7 privacy officer alerts acknowledged',
+    action: 'committed',
+  };
+  check(Ledger.isBulkActionEvent(legacy), "a pre-split 'record' + 'bulk-…' batch event still matches");
+  check(
+    !Ledger.isBulkActionEvent({ source: 'record', action: 'summary-copied', ruleId: null }),
+    'an ordinary record event does not match'
+  );
+  check(
+    !Ledger.isBulkActionEvent({ source: 'sentinel', action: 'shown', ruleId: 'bulk-ish' }),
+    'a chip render does not match'
+  );
+  check(!Ledger.isBulkActionEvent(null), 'null degrades to false, never throws');
+}
+
+console.log('\n--- filterEvents({ bulkOnly }): the exposure-window question, answered by filter ---');
+{
+  const events = [
+    buildBatchLedgerEvent(PO_CONFIG, 4, '2026-08-08T09:00:00.000Z'),
+    { ts: '2026-08-09T09:00:00.000Z', source: 'sentinel', patientRef: null, ruleId: 'r1', label: 'x', action: 'shown' },
+    buildBatchLedgerEvent(EPS_CONFIG, 2, '2026-08-20T09:00:00.000Z'),
+  ];
+  const bulk = Ledger.filterEvents(events, { bulkOnly: true });
+  check(bulk.length === 2, 'bulkOnly keeps only the batch events');
+  const window = Ledger.filterEvents(events, { bulkOnly: true, from: '2026-08-08', to: '2026-08-09' });
+  check(
+    window.length === 1 && window[0].ruleId === 'bulk-acknowledge-privacy-officer',
+    'bulkOnly composes with the date range — the H-063 exposure window in one query'
+  );
+  check(Ledger.filterEvents(events, {}).length === 3, 'no bulkOnly -> the filter is unchanged for every other user');
+}
+
+console.log('\n--- Options → Event ledger: the batches are visible to a human ---');
+{
+  const html = fs.readFileSync(path.join(__dirname, 'options', 'options.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, 'options', 'options.js'), 'utf8');
+  check(html.includes('id="ledgerFilterBulk"'), 'the ledger section has a bulk-actions filter control');
+  check(html.includes('Bulk actions only'), 'the control is labelled in plain English');
+  check(/recorded on this machine/i.test(html), 'the section copy says machine-local in so many words');
+  check(js.includes("bulkOnly: !!$('ledgerFilterBulk')?.checked"), 'the checkbox feeds the ledger filter');
+  check(js.includes("$('ledgerFilterBulk')?.addEventListener('change', renderTable)"), 're-renders when toggled');
+  check(/bulk\.checked = false/.test(js), '"Reset filters" clears it with the rest');
+  // Honest absence (repo rule): the ledger reports what it RECORDED here.
+  check(
+    js.includes('No bulk actions recorded on this machine'),
+    'the empty state says "none recorded on this machine", not "none happened"'
+  );
+  check(
+    /it is not evidence that no bulk action was performed/.test(js),
+    'the empty state explicitly refuses the stronger claim'
+  );
+  const forbidden = [
+    'No bulk actions were performed',
+    'no bulk actions happened',
+    'No bulk actions have taken place',
+    'Nothing was acknowledged',
+  ];
+  forbidden.forEach((s) => {
+    check(!js.toLowerCase().includes(s.toLowerCase()), `the viewer never claims "${s}"`);
+  });
+  // The table already renders ts / source / ruleId+label / action, which is
+  // the date-time, widget and count a reviewer needs.
+  check(js.includes('<th>When</th>'), 'each row shows when the batch was committed');
+  check(/escHtml\(e\.ruleId \|\| ''\)/.test(js), 'each row shows the widget identity (ruleId)');
+  check(/escHtml\(e\.label \|\| ''\)/.test(js), 'each row shows the label carrying the count');
+}
+
+console.log('\n--- The engine writes the batch event through the shared builder ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
+  check(
+    src.includes('window.EventLedger.record(buildBatchLedgerEvent(config, succeeded))'),
+    'runAction records the built event — one code path, the one the tests above pin'
+  );
+  check(!/source: 'record'/.test(src), "the engine no longer writes batches under the 'record' source");
+  check(/if \(succeeded > 0 &&/.test(src), 'still only recorded when at least one task actually succeeded');
 }
 
 console.log('\n--- manifest.json wiring ---');

@@ -18,9 +18,11 @@
 //   rota.settings → plain object (merged over DEFAULT_SETTINGS on load)
 //   rota.access   → passcode-gate config, or null when none was ever set
 //
-// rota.access holds a PBKDF2 salt + hash, never the passcode itself — but note
-// that it does travel in the backup, so restoring a backup restores whatever
-// lock it was taken with. The Rota settings page says so in as many words.
+// rota.access holds a PBKDF2 salt + hash (and, since v3.233.0, a second salt +
+// hash for the one-time recovery code), never the passcode or the recovery code
+// itself — but note that it does travel in the backup, so restoring a backup
+// restores whatever lock it was taken with. The Rota settings page says so in
+// as many words.
 //
 // No PHI is persisted by the rota product, so nothing here is patient data.
 
@@ -55,8 +57,11 @@
   // rota.access members — kept in the same lock-step with validate.js. salt,
   // hash and iterations are required on a non-null record; a config missing its
   // salt is one no correct passcode can ever unlock.
+  // recoverySalt/recoveryHash/recoverySetAt are the recovery code (H-064):
+  // optional (records written before it existed have none) and typed, never
+  // required. See rota/engine/validate.js for why the pair is not enforced.
   const ACCESS_BOOLEAN_FIELDS = ['enabled', 'strict'];
-  const ACCESS_STRING_FIELDS = ['kdf', 'hint', 'updatedAt'];
+  const ACCESS_STRING_FIELDS = ['kdf', 'hint', 'updatedAt', 'recoverySalt', 'recoveryHash', 'recoverySetAt'];
 
   const SETTINGS_ARRAY_FIELDS = ['openDays', 'bankHolidays', 'sites', 'peakPeriods'];
   const SETTINGS_OBJECT_FIELDS = [

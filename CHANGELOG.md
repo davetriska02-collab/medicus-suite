@@ -2,6 +2,124 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.234.0] — 2026-08-15
+
+### Rota passcode: non-destructive recovery code (H-064 remediation, part 3 of the weekly safety-review fix pack)
+
+H-064 (hazard log v3.24, PR #282) recorded that a forgotten Rota passcode
+had no recovery path other than wiping all rota data. The CSO directed a
+fix; this release lands it.
+
+**Recovery code, issued once, hashed forever** (`rota/engine/access.js` —
+all crypto stays in the pure engine, same PBKDF2/WebCrypto pattern as the
+passcode itself):
+
+- Setting (or changing) a passcode now issues a 10-character recovery code
+  from an unambiguous alphabet (no 0/O/1/I/L; rejection sampling so the
+  distribution is uniform), shown ONCE in a "write this down now" card —
+  the plaintext lives only in tab-local UI state, is never persisted or
+  synced, and is only displayed after its hash has safely reached storage
+  (so a code can never be on paper without being redeemable).
+- The unlock screen gains "Forgotten the passcode?": a verified recovery
+  code removes the passcode gate (after a confirm naming the consequence)
+  so a new one can be set from Settings. It never reveals the old passcode.
+  Wrong codes fail visibly under the same soft rate limit as the passcode
+  input. The removal goes through the same persist path as Settings →
+  Remove — not a bypass of the read-only backstop.
+- Honest framing throughout, consistent with the gate's own doctrine: the
+  code is "a way back in, not a second lock"; the gate remains a workflow
+  deterrent, not encryption, and the UI copy says so.
+- **Legacy installs unchanged:** an existing `rota.access` without a
+  recovery hash behaves exactly as before (no recovery button, wipe-only
+  guidance) and acquires a code on the next passcode change or via a new
+  "Issue a new recovery code" button (requires the current passcode while
+  unlocked; re-issue invalidates the old code). The recovery fields are
+  optional in both validators (lock-step `rota/engine/validate.js` +
+  `shared/io/rota-io.js`); a malformed half-pair reads as "no recovery
+  code" rather than refusing the whole practice rota (H-059 refuse-whole
+  semantics for genuinely malformed types unchanged). No new storage key —
+  the three-way anti-drift test still pins nine `rota.*` keys.
+
+Tests: `test-rota-access.js` 88 → 204 checks (alphabet/distribution,
+round-trip, 17 tampered-record fail-closed cases, legacy/half-pair,
+re-issue invalidation, carry-across-passcode-change);
+`test-rota-validate.js` → 99. Full suite green.
+
+Hazard log H-064 controls updated (entry remains Proposed — pending CSO
+sign-off); CSN limitation 50 no longer states wipe-only recovery. The
+deploying-organisation half of the control stands: the code only helps if
+it is actually recorded where a second manager can reach it, and the
+one-time card says exactly that.
+
+## [v3.233.0] — 2026-08-15
+
+### Weekly safety-review fix pack, parts 1–2 (H-061, H-063)
+
+The weekly clinical-safety review (hazard log v3.24, PR #282) opened four
+hazards and flagged open items on three of them; the CSO reviewed and
+directed the fixes. This release lands the first two; the rota passcode
+recovery (H-064) follows separately.
+
+### Journal-sync dialogs now name the entry's date (H-061 remediation)
+
+- **Every journal write/undo confirm() now names the entry's date**, honestly
+  labelled by source: `dated 12 Mar 2025 (the note's own recorded date)` when
+  the match carries a verified per-note recordDate, `listed under 12 Mar 2025
+  (journal day heading, not the note's own date)` when only the day-group
+  heading is known (they can drift 12+ days apart — see
+  `docs/learnings-patient-journal-api.md`), and an explicit `date unknown`
+  when neither exists — absence is visible, never omitted. Presenting a
+  day-group date as the note's own date would recreate the exact misread the
+  fix exists to prevent, hence the two distinct labels. The panel's journal
+  match rows render the same phrase, so the date is visible before the
+  confirm is ever reached. Applies to `applyToJournal`,
+  `undoJournalCodeSync`, `undoJournalTextSync` and
+  `applyGenericAdditionalInfoToJournal`.
+- **The journal write/undo paths gain direct regression coverage** (the
+  second H-061 gap): `resolveJournalSyncTargets` (the auto-prompt narrowing)
+  is now exported and tested directly — single match prompts, exactly-one
+  date-confirmed narrows to it, none-confirmed refuses to guess; new pure
+  helpers `formatJournalDate`/`journalMatchDateLabel` are tested directly;
+  and source locks pin every write/undo path's confirm() gate, fresh
+  `fetchEditNoteForm` before each POST, the three date-label strings
+  verbatim, undo-only-after-successful-POST, and the empty-string text
+  restore. `test-problem-description-cleanup.js` grows 346 → 402 checks
+  (mutation-checked: deleting the date line or softening its label fails
+  multiple locks).
+
+### Bulk-action batches are now auditable in the Event ledger (H-063 remediation, part 2)
+
+H-063 recorded a ~24h window (2026-08-08–09) in which the Privacy Officer
+Alerts bulk-acknowledge could act on an unscoped list, and left one open
+item: the practice needs to be able to answer "was any bulk action performed
+on this machine in that window?" Now it can:
+
+- Batch ledger events carry an **explicit commit timestamp** and a
+  **widget-distinguishing identity** (`source: 'bulk-action'`; `ruleId`
+  separates the Privacy Officer acknowledge from the EPS discard) via a new
+  pure `buildBatchLedgerEvent` builder — previously they were stamped
+  `source: 'record'` with `patientRef: null`, unreachable by any existing
+  ledger filter.
+- Options → **Event ledger** gains a **"Bulk actions only"** filter;
+  combined with the existing date range it answers the exposure-window
+  question in one query. The filter deliberately also matches the **legacy**
+  pre-v3.233.0 event shape (`source: 'record'` + `bulk-` ruleId) — the shape
+  every batch in the actual exposure window was written in — so the answer
+  can never be a confident false "nothing recorded".
+- Honest-absence discipline: the empty state reads "No bulk actions recorded
+  on this machine for these filters. This shows only what was recorded here —
+  it is not evidence that no bulk action was performed." (the ledger is
+  machine-local; each workstation must be checked on that workstation), and
+  a forbidden-claims source-lock pins the wording.
+- `test-task-bulk-action.js` grows to 97 checks (event shape round-trip
+  through `EventLedger.makeEvent`, current + legacy `isBulkActionEvent`
+  shapes, the one-query window filter, viewer wiring and wording locks).
+
+Hazard log H-061 and H-063 controls updated accordingly (both entries remain
+Proposed — pending CSO sign-off); `CLINICAL-SAFETY-NOTICE.md` limitation 47
+no longer reports the confirm step omitting the date. Part 3 of the fix pack
+(H-064 rota passcode recovery) follows in the next release on this branch.
+
 ## [v3.232.0] — 2026-08-14
 
 ### Rota Manager: passcode protection, setup assistant, grid UX pack, Solver v2, live drift

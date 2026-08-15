@@ -33,8 +33,24 @@ const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
   // fails first and says why.
   check(Boolean(globalThis.crypto && globalThis.crypto.subtle), 'globalThis.crypto.subtle exists in this node');
 
-  const { hashPasscode, verifyPasscode, newSalt, makeAccess, accessSummary, KDF, DEFAULT_ITERATIONS } =
-    await R('engine/access.js');
+  const {
+    hashPasscode,
+    verifyPasscode,
+    newSalt,
+    makeAccess,
+    accessSummary,
+    KDF,
+    DEFAULT_ITERATIONS,
+    newRecoveryCode,
+    normaliseRecoveryCode,
+    hashRecoveryCode,
+    verifyRecoveryCode,
+    hasRecoveryCode,
+    withRecoveryCode,
+    carryRecoveryCode,
+    RECOVERY_ALPHABET,
+    RECOVERY_LENGTH,
+  } = await R('engine/access.js');
 
   console.log('\n--- Salt ---');
 
@@ -151,6 +167,214 @@ const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
     );
   }
 
+  console.log('\n--- Recovery code: generation ---');
+
+  // A forgotten passcode used to mean wiping every rota.* key (H-064). The
+  // recovery code is the non-destructive way back: generated once, hashed like
+  // the passcode, and able only to REMOVE the gate — never to reveal it.
+  const r1 = newRecoveryCode();
+  const r2 = newRecoveryCode();
+  check(typeof r1 === 'string' && r1 !== r2, `newRecoveryCode returns a fresh string each call (${r1})`);
+  check(normaliseRecoveryCode(r1).length === RECOVERY_LENGTH, `a code carries ${RECOVERY_LENGTH} characters`);
+  check(RECOVERY_LENGTH >= 8, `codes are at least 8 characters (got ${RECOVERY_LENGTH})`);
+  check(
+    [...normaliseRecoveryCode(r1)].every((c) => RECOVERY_ALPHABET.includes(c)),
+    'every character comes from the declared alphabet'
+  );
+  // Human transcription is the whole point: these are the pairs people misread
+  // off a handwritten sheet.
+  check(
+    !/[0O1IL]/.test(RECOVERY_ALPHABET),
+    `the alphabet excludes the look-alikes 0/O and 1/I/L (${RECOVERY_ALPHABET})`
+  );
+  check(/^[A-Z0-9]+(-[A-Z0-9]+)+$/.test(r1), `the displayed code is grouped for reading aloud (${r1})`);
+
+  const codes = new Set();
+  for (let i = 0; i < 500; i++) codes.add(newRecoveryCode());
+  check(codes.size === 500, '500 codes are all distinct');
+  // Rejection sampling, not `% alphabet.length` on a raw byte: with 30 letters
+  // the naive modulo would over-pick the first 16. A skew that gross shows up
+  // in a few thousand characters.
+  {
+    const counts = new Map();
+    for (const c of [...codes].map(normaliseRecoveryCode).join('')) counts.set(c, (counts.get(c) || 0) + 1);
+    const total = 500 * RECOVERY_LENGTH;
+    const expected = total / RECOVERY_ALPHABET.length;
+    const worst = Math.max(...[...RECOVERY_ALPHABET].map((c) => Math.abs((counts.get(c) || 0) - expected) / expected));
+    check(counts.size === RECOVERY_ALPHABET.length, 'every letter of the alphabet is reachable');
+    check(worst < 0.5, `no letter is grossly over- or under-drawn (worst deviation ${(worst * 100).toFixed(0)}%)`);
+  }
+
+  console.log('\n--- Recovery code: normalisation ---');
+
+  // Somebody reads the code off a sheet: their capitals, spaces and dashes must
+  // not be the reason a practice stays locked out.
+  check(normaliseRecoveryCode('abcde-fghjk') === 'ABCDEFGHJK', 'lower case is folded up');
+  check(normaliseRecoveryCode('  ABCDE FGHJK  ') === 'ABCDEFGHJK', 'spaces are ignored');
+  check(normaliseRecoveryCode('AB-CD--EFGHJK') === 'ABCDEFGHJK', 'dashes are ignored wherever they fall');
+  for (const bad of [null, undefined, 42, {}, ['ABCDE']]) {
+    check(normaliseRecoveryCode(bad) === '', `a non-string normalises to '' (${JSON.stringify(bad) ?? 'undefined'})`);
+  }
+
+  console.log('\n--- Recovery code: make → verify round trip ---');
+
+  const recCode = newRecoveryCode();
+  const withRec = await makeAccess('Partners0nly!', { strict: false, hint: 'the usual one', recoveryCode: recCode });
+  check(hasRecoveryCode(withRec), 'makeAccess with a recoveryCode produces a record that has one');
+  check(
+    typeof withRec.recoverySalt === 'string' && B64.test(withRec.recoverySalt),
+    'the recovery salt is a base64 string'
+  );
+  check(
+    typeof withRec.recoveryHash === 'string' && B64.test(withRec.recoveryHash) && withRec.recoveryHash.length === 44,
+    'the recovery hash is 44 base64 chars = 256 bits'
+  );
+  check(withRec.recoverySalt !== withRec.salt, 'the recovery code gets its OWN salt, not the passcode salt');
+  check(
+    typeof withRec.recoverySetAt === 'string' && !Number.isNaN(Date.parse(withRec.recoverySetAt)),
+    'recoverySetAt is an ISO date'
+  );
+  check(
+    !JSON.stringify(withRec).includes(normaliseRecoveryCode(recCode)),
+    'the recovery code itself appears NOWHERE in the stored record'
+  );
+  check(await verifyPasscode('Partners0nly!', withRec), 'the passcode still verifies on a record carrying a recovery');
+
+  check(await verifyRecoveryCode(recCode, withRec), 'the right recovery code verifies');
+  check(await verifyRecoveryCode(recCode.toLowerCase(), withRec), 'a lower-cased recovery code verifies');
+  check(await verifyRecoveryCode(normaliseRecoveryCode(recCode), withRec), 'the ungrouped form verifies');
+  check(await verifyRecoveryCode(` ${recCode} `, withRec), 'surrounding whitespace does not stop it verifying');
+  check(!(await verifyRecoveryCode(newRecoveryCode(), withRec)), 'a different recovery code does not verify');
+  check(!(await verifyRecoveryCode('', withRec)), 'an empty recovery code does not verify');
+  check(!(await verifyRecoveryCode('   ', withRec)), 'a whitespace-only recovery code does not verify');
+  check(!(await verifyRecoveryCode('Partners0nly!', withRec)), 'the PASSCODE does not verify as the recovery code');
+  check(!(await verifyPasscode(recCode, withRec)), 'the recovery code does not verify as the passcode');
+  check(
+    !(await verifyRecoveryCode(normaliseRecoveryCode(recCode).slice(0, -1), withRec)),
+    'a truncated recovery code does not verify'
+  );
+
+  console.log('\n--- Recovery code: legacy records (no recovery hash) keep working ---');
+
+  // The whole back-compatibility contract in one block: a record written before
+  // recovery codes existed must behave EXACTLY as it did — the passcode gate
+  // works, and there is simply no recovery route to offer.
+  const legacy = await makeAccess('Partners0nly!', { strict: false, hint: 'the usual one' });
+  check(
+    legacy.recoverySalt === undefined && legacy.recoveryHash === undefined,
+    'makeAccess adds no recovery by default'
+  );
+  check(hasRecoveryCode(legacy) === false, 'hasRecoveryCode is false for a legacy record');
+  check(accessSummary(legacy).hasRecovery === false, 'accessSummary reports no recovery for a legacy record');
+  check(await verifyPasscode('Partners0nly!', legacy), 'a legacy record still unlocks with its passcode');
+  check(!(await verifyPasscode('wrong', legacy)), 'a legacy record still refuses a wrong passcode');
+  check(!(await verifyRecoveryCode(recCode, legacy)), 'no code verifies against a legacy record');
+  check(!(await verifyRecoveryCode(newRecoveryCode(), legacy)), 'a freshly generated code does not verify either');
+  // Half a pair is not a recovery route: offering one would be a dead end.
+  for (const [name, rec] of [
+    ['only a recovery salt', { ...legacy, recoverySalt: newSalt() }],
+    ['only a recovery hash', { ...legacy, recoveryHash: 'A'.repeat(44) }],
+    ['an empty recovery salt', { ...withRec, recoverySalt: '' }],
+    ['an empty recovery hash', { ...withRec, recoveryHash: '' }],
+  ]) {
+    check(hasRecoveryCode(rec) === false, `hasRecoveryCode is false with ${name}`);
+    check((await verifyRecoveryCode(recCode, rec)) === false, `verifyRecoveryCode is false with ${name}`);
+    check(await verifyPasscode('Partners0nly!', rec), `the passcode still verifies with ${name}`);
+  }
+
+  console.log('\n--- Recovery code: attaching, replacing and carrying ---');
+
+  const reissueCode = newRecoveryCode();
+  const reissued = await withRecoveryCode(withRec, reissueCode);
+  check(await verifyRecoveryCode(reissueCode, reissued), 'a re-issued code verifies');
+  check(!(await verifyRecoveryCode(recCode, reissued)), 'the PREVIOUS code stops working once a new one is issued');
+  check(reissued.recoverySalt !== withRec.recoverySalt, 're-issuing draws a fresh recovery salt');
+  check(await verifyPasscode('Partners0nly!', reissued), 're-issuing leaves the passcode untouched');
+
+  const upgraded = await withRecoveryCode(legacy, reissueCode);
+  check(hasRecoveryCode(upgraded), 'a legacy record can be given a recovery code without changing its passcode');
+  check(await verifyPasscode('Partners0nly!', upgraded), 'the upgraded record still verifies its original passcode');
+
+  // Changing the passcode must not invalidate a code the practice has already
+  // written down and filed.
+  const changed = carryRecoveryCode(await makeAccess('NewPass!23', { strict: true }), withRec);
+  check(await verifyPasscode('NewPass!23', changed), 'the changed record verifies the NEW passcode');
+  check(!(await verifyPasscode('Partners0nly!', changed)), 'the changed record refuses the old passcode');
+  check(await verifyRecoveryCode(recCode, changed), 'the already-issued recovery code survives a passcode change');
+  check(
+    carryRecoveryCode(legacy, null) === legacy && !hasRecoveryCode(carryRecoveryCode(legacy, legacy)),
+    'carryRecoveryCode is a no-op when there is nothing to carry'
+  );
+
+  console.log('\n--- Recovery code: tampered / malformed records return false, never throw ---');
+
+  const REC_TAMPERED = [
+    ['null', null],
+    ['undefined', undefined],
+    ['an array', []],
+    ['a string', 'not-an-access-record'],
+    ['a number', 42],
+    ['{}', {}],
+    ['recoveryHash wrong type', { ...withRec, recoveryHash: 12345 }],
+    ['recoveryHash replaced with a plausible-looking one', { ...withRec, recoveryHash: 'A'.repeat(44) }],
+    ['recoverySalt wrong type', { ...withRec, recoverySalt: ['nope'] }],
+    ['recoverySalt is not valid base64', { ...withRec, recoverySalt: '!!!!not base64!!!!' }],
+    ['recovery fields swapped for the passcode ones', { ...withRec, recoverySalt: withRec.salt }],
+    ['iterations as a string', { ...withRec, iterations: '150000' }],
+    ['iterations zero', { ...withRec, iterations: 0 }],
+    ['iterations negative', { ...withRec, iterations: -1 }],
+    ['iterations NaN', { ...withRec, iterations: NaN }],
+    ['iterations removed', { ...withRec, iterations: undefined }],
+    ['unknown kdf', { ...withRec, kdf: 'md5-lol' }],
+  ];
+  for (const [name, rec] of REC_TAMPERED) {
+    let threw = null;
+    let result = null;
+    try {
+      result = await verifyRecoveryCode(recCode, rec);
+    } catch (e) {
+      threw = e;
+    }
+    check(threw === null, `verifyRecoveryCode does not throw on ${name}`);
+    check(result === false, `verifyRecoveryCode returns false on ${name}`);
+  }
+  for (const bad of [null, undefined, 42, {}, [recCode]]) {
+    check(
+      (await verifyRecoveryCode(bad, withRec)) === false,
+      `a non-string recovery code (${JSON.stringify(bad) ?? 'undefined'}) does not verify`
+    );
+  }
+  // hasRecoveryCode is what the unlock screen asks before offering the route,
+  // so it must answer for junk rather than throw.
+  for (const [name, value] of [
+    ['null', null],
+    ['undefined', undefined],
+    ['{}', {}],
+    ['an array', []],
+    ['a string', 'nope'],
+  ]) {
+    check(hasRecoveryCode(value) === false, `hasRecoveryCode(${name}) is false, not a throw`);
+  }
+  // Empty input must never be hashable into a stored credential.
+  for (const bad of ['', '   ', '---', null, 42]) {
+    let threw = false;
+    try {
+      await hashRecoveryCode(bad, newSalt(), 1000);
+    } catch {
+      threw = true;
+    }
+    check(threw, `hashRecoveryCode refuses to hash ${JSON.stringify(bad) ?? 'undefined'}`);
+  }
+  // Same primitive as the passcode, so the same properties have to hold.
+  {
+    const salt = newSalt();
+    const h1 = await hashRecoveryCode('ABCDE-FGHJK', salt, 1000);
+    const h2 = await hashRecoveryCode('abcde fghjk', salt, 1000);
+    check(h1 === h2, 'hashRecoveryCode hashes the NORMALISED code (grouping and case are not part of it)');
+    check((await hashRecoveryCode('ABCDE-FGHJM', salt, 1000)) !== h1, 'a one-character change gives a different hash');
+    check((await hashRecoveryCode('ABCDE-FGHJK', newSalt(), 1000)) !== h1, 'a different salt gives a different hash');
+  }
+
   console.log('\n--- accessSummary ---');
 
   const sum = accessSummary(access);
@@ -159,8 +383,12 @@ const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
     'summary of a staff-view record with a hint'
   );
   check(
-    JSON.stringify(Object.keys(sum).sort()) === JSON.stringify(['enabled', 'hasHint', 'strict']),
-    'summary carries only enabled/strict/hasHint — never salt, hash or iterations'
+    JSON.stringify(Object.keys(sum).sort()) === JSON.stringify(['enabled', 'hasHint', 'hasRecovery', 'strict']),
+    'summary carries only enabled/strict/hasHint/hasRecovery — never salt, hash or iterations'
+  );
+  check(
+    accessSummary(withRec).hasRecovery === true && accessSummary(access).hasRecovery === false,
+    'summary reports whether a recovery code exists (which is what the unlock screen offers on)'
   );
   const strictSum = accessSummary(strictAccess);
   check(
@@ -182,7 +410,7 @@ const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
   ]) {
     const s = accessSummary(value);
     check(
-      s.enabled === false && s.strict === false && s.hasHint === false,
+      s.enabled === false && s.strict === false && s.hasHint === false && s.hasRecovery === false,
       `accessSummary(${name}) is all-false, not a throw`
     );
   }
