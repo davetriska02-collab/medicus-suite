@@ -1,0 +1,4517 @@
+{
+  "generatedBy": "scripts/gen-sentinel-reference.js",
+  "suiteVersion": "3.232.1",
+  "scope": "Sentinel clinical rules excluding QOF (rules/qof-rules.json)",
+  "sources": {
+    "drugRules": {
+      "file": "rules/drug-rules.json",
+      "lastUpdated": "2026-07-25",
+      "specVersion": "Sentinel drug rules - July 2026 review (The Keeper)"
+    },
+    "vaccineRules": {
+      "file": "rules/vaccine-rules.json",
+      "lastUpdated": "2026-08-01",
+      "specVersion": "JCVI/UKHSA 2026/27 season (2026-06-17 CSO-approved: RSV 75+/care-home expansion, flu homelessness cohort, pneumococcal PCV20 relabel — verify against source letters; applied this run without page-verification due to WebFetch 403). 2026-07-11 (The Keeper): flu homelessness clause corrected to ageMin:16 per gov.uk flu programme amendment letter 9 June 2026; shingles notes corrected to immunosuppressed 18+ (was 50+, expanded from 1 Sept 2025); RSV notes updated re 65-74 clinical-risk future eligibility. 2026-07-25 (The Keeper): RSV notes updated — 65-74 clinical-risk expansion confirmed published 2 July 2026 (NHSE operational letter), effective 1 Sept 2026; mRESVIA (mRNA RSV vaccine, Moderna, MHRA authorised Feb 2025) added to statusTerms.given; RSV care-home note corrected to 'all adult residents (no minimum age)'; pneumococcal homelessness cohort (age 16+, effective 1 Oct 2026) added. 2026-08-01 (The Keeper, vax-002 RED): mRESVIA declined variants added to vax-rsv statusTerms.declined — gap confirmed by code inspection (no mresvia declined terms existed; 'mresvia refused' substring-matches the given term 'mresvia' → C2-class false-GIVEN risk); 5 declined terms added: mresvia refused/contraindicated/not given/not indicated/declined. 2026-08-01 (The Keeper, vax-003 RED): engine/rules-engine.js matchVaccineEligibility() fixed — problem and medication handlers now enforce ageMin/ageMax, mirroring the age handler; ageMin:16 on the flu and pneumococcal homelessness clauses was silently unenforced before this fix."
+    },
+    "alertLibrary": {
+      "file": "rules/alert-library.json",
+      "version": "1.5",
+      "lastUpdated": "2026-07-25",
+      "specVersion": "PINCER/NICE prescribing-safety alert library v1.4"
+    }
+  },
+  "matchingSemantics": {
+    "matching": "case-insensitive substring against drug/observation name",
+    "exclude": "any name containing an exclude string is dropped entirely",
+    "statuses": [
+      "in_date",
+      "due_soon",
+      "overdue",
+      "stale",
+      "no_data",
+      "recently_initiated"
+    ],
+    "severities": {
+      "red": "alert/actionable",
+      "amber": "caution",
+      "info": "awareness only"
+    }
+  },
+  "drugMonitoring": [
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "methotrexate-maintenance",
+      "drugClass": "DMARD",
+      "drug": {
+        "match": [
+          "methotrexate",
+          "maxtrex",
+          "metoject",
+          "jylamvo",
+          "nordimet",
+          "zlatal",
+          "methofill"
+        ],
+        "snomed": [
+          "387381009"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "FBC",
+          "match": [
+            "fbc",
+            "full blood count"
+          ],
+          "snomed": [
+            "26604007"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "U&E",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "LFT",
+          "match": [
+            "lft",
+            "liver function"
+          ],
+          "snomed": [
+            "26958001"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        }
+      ],
+      "source": "BNF / 2025 BSR guideline for prescription & monitoring of csDMARDs (Rheumatology, Nov 2025)",
+      "notes": "Intensive monitoring (every 2 weeks) for first 6 weeks, then 4-weekly until stable, then 12-weekly. BSR 2025 guideline now permits 6-monthly monitoring after 12 months of stable treatment with normal results — Sentinel keeps the 12-week baseline as the safer default; clinicians may extend intervals via Options if local shared care permits.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "leflunomide-maintenance",
+      "drugClass": "DMARD",
+      "drug": {
+        "match": [
+          "leflunomide",
+          "arava"
+        ],
+        "snomed": [
+          "386982008"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "FBC",
+          "match": [
+            "fbc",
+            "full blood count"
+          ],
+          "snomed": [
+            "26604007"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "U&E",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "LFT",
+          "match": [
+            "lft",
+            "liver function"
+          ],
+          "snomed": [
+            "26958001"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "BP",
+          "match": [
+            "blood pressure",
+            "bp"
+          ],
+          "snomed": [
+            "75367002"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "Weight",
+          "match": [
+            "weight",
+            "body weight"
+          ],
+          "snomed": [
+            "27113001"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        }
+      ],
+      "source": "BNF / 2025 BSR guideline for prescription & monitoring of csDMARDs (Rheumatology, Nov 2025)",
+      "notes": "Monthly FBC/U&E/LFT/BP/weight for first 6 months on initiation, then 12-weekly when stable. Hypertension is a recognised adverse effect. Long half-life (washout with cholestyramine if severe toxicity).",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "hydroxychloroquine-maintenance",
+      "drugClass": "DMARD",
+      "drug": {
+        "match": [
+          "hydroxychloroquine",
+          "chloroquine",
+          "quinoric",
+          "plaquenil",
+          "avloclor"
+        ],
+        "snomed": [
+          "387397007"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "FBC",
+          "match": [
+            "fbc",
+            "full blood count"
+          ],
+          "snomed": [
+            "26604007"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "LFT",
+          "match": [
+            "lft",
+            "liver function"
+          ],
+          "snomed": [
+            "26958001"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "U&E",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "BNF / 2025 BSR guideline for prescription & monitoring of csDMARDs (Rheumatology, Nov 2025) / RCOphth retinopathy screening guidelines (2020, reviewed 2024)",
+      "notes": "Annual FBC/LFT/U&E plus annual review. RCOphth recommends baseline ophthalmology assessment within 6-12 months of starting and annual screening from 5 years cumulative use, or earlier if dose >5 mg/kg/day, eGFR <60, concurrent tamoxifen, or pre-existing retinal disease. Eye check is not a blood test so not enforced here.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "azathioprine-maintenance",
+      "drugClass": "DMARD",
+      "drug": {
+        "match": [
+          "azathioprine",
+          "imuran",
+          "azapress",
+          "jayempi"
+        ],
+        "snomed": [
+          "372574004"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "FBC",
+          "match": [
+            "fbc",
+            "full blood count"
+          ],
+          "snomed": [
+            "26604007"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "LFT",
+          "match": [
+            "lft",
+            "liver function"
+          ],
+          "snomed": [
+            "26958001"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "U&E",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        }
+      ],
+      "source": "BNF / 2025 BSR guideline for prescription & monitoring of csDMARDs (Rheumatology, Nov 2025)",
+      "notes": "TPMT activity should be checked before initiation. Intensive monitoring in first 8 weeks.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "sulfasalazine-maintenance",
+      "drugClass": "DMARD",
+      "drug": {
+        "match": [
+          "sulfasalazine",
+          "sulphasalazine",
+          "salazopyrin",
+          "sulazine"
+        ],
+        "snomed": [
+          "387308006"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "FBC",
+          "match": [
+            "fbc",
+            "full blood count"
+          ],
+          "snomed": [
+            "26604007"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "LFT",
+          "match": [
+            "lft",
+            "liver function"
+          ],
+          "snomed": [
+            "26958001"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        }
+      ],
+      "source": "BNF / 2025 BSR guideline for prescription & monitoring of csDMARDs (Rheumatology, Nov 2025)",
+      "notes": "Monitoring may be discontinued after 12 months of stable treatment per some shared care protocols. Check local guidance.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "carbamazepine-maintenance",
+      "drugClass": "Antiepileptic",
+      "drug": {
+        "match": [
+          "carbamazepine",
+          "tegretol",
+          "carbagen"
+        ],
+        "snomed": [
+          "387222003"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "FBC",
+          "match": [
+            "fbc",
+            "full blood count"
+          ],
+          "snomed": [
+            "26604007"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "LFT",
+          "match": [
+            "lft",
+            "liver function"
+          ],
+          "snomed": [
+            "26958001"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "U&E / Sodium",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile",
+            "sodium"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Carbamazepine level",
+          "match": [
+            "carbamazepine level",
+            "carbamazepine concentration",
+            "serum carbamazepine"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Lipid profile",
+          "match": [
+            "lipid profile",
+            "cholesterol",
+            "lipids"
+          ],
+          "snomed": [
+            "27171005"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "BNF / MHRA / NICE CG137 / shared care",
+      "notes": "FBC: haematological toxicity risk (aplastic anaemia, agranulocytosis — rare but serious; check at baseline, 4 weeks, 6 months, then 6-monthly). LFT: hepatotoxicity risk; check same schedule. U&E/Sodium: enzyme-induction can cause SIADH and hyponatraemia — sodium should be monitored 6-monthly; risk heightened in the elderly and on concurrent diuretics. Carbamazepine level: narrow therapeutic index (target typically 4–12 mg/L); useful if toxicity suspected, poor seizure control, or dose change. Lipid profile: CYP enzyme induction raises LDL and total cholesterol — annual check. For women of childbearing age, ensure adequate contraception (enzyme inducer reduces hormonal contraceptive efficacy) and consider folic acid supplementation (teratogenicity risk — neural tube defects); refer to specialist before conception.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "lithium-maintenance",
+      "drugClass": "Mood stabiliser",
+      "drug": {
+        "match": [
+          "lithium",
+          "priadel",
+          "camcolit",
+          "liskonum",
+          "li-liquid"
+        ],
+        "snomed": [
+          "73572009"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "Lithium level",
+          "match": [
+            "lithium level",
+            "serum lithium"
+          ],
+          "snomed": [
+            "166833002"
+          ],
+          "intervalDays": 90,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "U&E",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 180,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "TFT",
+          "match": [
+            "tft",
+            "thyroid function"
+          ],
+          "snomed": [
+            "166842003"
+          ],
+          "intervalDays": 180,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Calcium",
+          "match": [
+            "calcium",
+            "ca2+",
+            "corrected calcium"
+          ],
+          "snomed": [
+            "390967006"
+          ],
+          "intervalDays": 180,
+          "dueSoonDays": 21
+        }
+      ],
+      "source": "BNF / NICE CG185 / shared care",
+      "notes": "Level should be 12 hours post-dose. Take sample before next dose if compliance unclear.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "amiodarone-maintenance",
+      "drugClass": "Antiarrhythmic",
+      "drug": {
+        "match": [
+          "amiodarone",
+          "cordarone"
+        ],
+        "snomed": [
+          "372813003"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "TFT",
+          "match": [
+            "tft",
+            "thyroid function"
+          ],
+          "snomed": [
+            "166842003"
+          ],
+          "intervalDays": 180,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "LFT",
+          "match": [
+            "lft",
+            "liver function"
+          ],
+          "snomed": [
+            "26958001"
+          ],
+          "intervalDays": 180,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "CXR",
+          "match": [
+            "chest x-ray",
+            "cxr",
+            "chest xray"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "U&E / Creatinine",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile",
+            "urea",
+            "electrolytes",
+            "creatinine"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        }
+      ],
+      "source": "BNF / MHRA Drug Safety Update / NICE CG185 (amiodarone monitoring) / BSR shared care",
+      "notes": "Pulmonary toxicity is the principal monitoring concern. Patient should report new cough or breathlessness. CSO FLAG (drugs-002, 2026-07-25 Keeper, PLAUSIBLE/apply): U&E monitoring at 6-monthly intervals added per BNF/NICE CG185 (amiodarone can cause hypothyroidism-associated hyponatraemia and has occasional direct renal effects; 6-monthly U&E is standard shared-care practice). VERIFIER-A confirmed the clinical rationale from BNF and shared-care protocol summaries; primary-source PDF 403 this run. CSO to review this addition before next PR merge — if local shared-care protocol omits U&E, notes can be updated to reflect that.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "carbimazole-propylthiouracil",
+      "drugClass": "Antithyroid",
+      "drug": {
+        "match": [
+          "carbimazole",
+          "propylthiouracil",
+          "neo-mercazole",
+          "neomercazole"
+        ],
+        "snomed": [
+          "387534003"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "TFT",
+          "match": [
+            "tft",
+            "thyroid function",
+            "tsh",
+            "free t4"
+          ],
+          "snomed": [
+            "166842003"
+          ],
+          "intervalDays": 90,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "FBC",
+          "match": [
+            "fbc",
+            "full blood count"
+          ],
+          "snomed": [
+            "26604007"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "LFT",
+          "match": [
+            "lft",
+            "liver function"
+          ],
+          "snomed": [
+            "26958001"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "BNF / MHRA Drug Safety Update / British Thyroid Association",
+      "notes": "Agranulocytosis is a rare but life-threatening adverse effect — counsel patient to report sore throat, fever, mouth ulcers urgently. PTU carries hepatotoxicity risk. TFT every 4-6 weeks during titration, then 3-monthly when stable.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "ace-arb",
+      "drugClass": "RAAS blocker",
+      "drug": {
+        "match": [
+          "ramipril",
+          "tritace",
+          "triapin",
+          "lisinopril",
+          "zestril",
+          "carace",
+          "zestoretic",
+          "perindopril",
+          "coversyl",
+          "enalapril",
+          "innovace",
+          "innozide",
+          "captopril",
+          "capoten",
+          "noyada",
+          "trandolapril",
+          "gopten",
+          "fosinopril",
+          "staril",
+          "losartan",
+          "cozaar",
+          "hyzaar",
+          "arbli",
+          "candesartan",
+          "amias",
+          "valsartan",
+          "diovan",
+          "exforge",
+          "irbesartan",
+          "aprovel",
+          "karvea",
+          "telmisartan",
+          "micardis",
+          "pritor",
+          "tolura",
+          "olmesartan",
+          "olmetec",
+          "sevikar",
+          "azilsartan",
+          "edarbi",
+          "sacubitril",
+          "entresto",
+          "cilazapril",
+          "vascace",
+          "imidapril",
+          "tanatril"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "U&E",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "BP",
+          "match": [
+            "blood pressure",
+            "bp"
+          ],
+          "snomed": [
+            "75367002"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "U&E (within ~2 weeks of starting)",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "postInitiationDays": 21,
+          "postInitiationDueSoonDays": 14
+        }
+      ],
+      "source": "NICE NG136 / BNF",
+      "notes": "U&E within 1-2 weeks of initiation or dose change, then annual review thereafter unless eGFR <60. The post-initiation U&E test fires only when the drug's start date is known and no U&E has been recorded since starting (it cannot cry wolf on an established patient whose start date is not visible). Sacubitril/valsartan (Entresto) added to match list for HFrEF use. Cilazapril (brand Vascace) and imidapril (brand Tanatril) are legacy UK ACE inhibitors, no longer widely initiated but may appear on older repeat prescriptions — added 2026-07-11 to close silent-failure gap (BNF/dm+d corroborated; primary-source PDFs 403 this run).",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "spironolactone",
+      "drugClass": "Aldosterone antagonist",
+      "drug": {
+        "match": [
+          "spironolactone",
+          "aldactone",
+          "eplerenone",
+          "inspra"
+        ],
+        "snomed": [
+          "387078006"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "U&E",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 120,
+          "dueSoonDays": 21
+        }
+      ],
+      "source": "BNF / NICE NG106 heart failure",
+      "notes": "Hyperkalaemia is the principal monitoring concern. Staged monitoring schedule (1 week, 4 weeks, 8 weeks, 12 weeks, then 4-monthly) for new starts. Now part of HF four-pillar therapy (QOF HF009).",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "sglt2-inhibitor",
+      "drugClass": "SGLT2 inhibitor",
+      "drug": {
+        "match": [
+          "dapagliflozin",
+          "forxiga",
+          "xigduo",
+          "qtern",
+          "empagliflozin",
+          "jardiance",
+          "synjardy",
+          "glyxambi",
+          "canagliflozin",
+          "invokana",
+          "vokanamet",
+          "ertugliflozin",
+          "steglatro",
+          "segluromet",
+          "steglujan"
+        ],
+        "snomed": [
+          "703674001"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "U&E",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile",
+            "egfr"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "NICE NG28 (T2DM), NG203 (CKD), NG106 (HF) / BNF / MHRA Drug Safety Updates 2020-2024",
+      "notes": "Baseline and annual eGFR. Increased risk of DKA (including euglycaemic DKA) — counsel patient on sick-day rules and to stop before major surgery/illness. Increased risk of Fournier's gangrene and lower-limb amputation (canagliflozin). Volume depletion risk in elderly or on diuretics.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "glp1-receptor-agonist",
+      "drugClass": "GLP-1 receptor agonist",
+      "drug": {
+        "match": [
+          "semaglutide",
+          "ozempic",
+          "wegovy",
+          "rybelsus",
+          "tirzepatide",
+          "mounjaro",
+          "zepbound",
+          "dulaglutide",
+          "trulicity",
+          "liraglutide",
+          "victoza",
+          "saxenda",
+          "xultophy",
+          "lixisenatide",
+          "lyxumia",
+          "exenatide",
+          "byetta",
+          "bydureon"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "Annual review",
+          "match": [
+            "glp-1 review",
+            "weight management review",
+            "diabetes annual review",
+            "obesity review"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "U&E",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile",
+            "egfr"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "BNF / NICE TA1026 (semaglutide for weight), TA1004 (tirzepatide) / SPCs / MHRA Drug Safety Update Jan 2024 / MHRA DSU 29 Jan 2026 (GLP-1 & GIP/GLP-1 pancreatitis)",
+      "notes": "No mandatory blood monitoring schedule but annual review (renal function, treatment response, side-effect screening) is appropriate. Counsel on pancreatitis warning signs, dehydration risk from GI side effects, gallbladder disease, and (for T2DM) accelerated diabetic retinopathy when HbA1c drops rapidly. Tirzepatide specifically requires renal function assessment pre-initiation. SafePrescriber/MHRA repeatedly highlights non-medical use risks for weight-loss formulations. MHRA DSU 29 Jan 2026 strengthened the acute-pancreatitis warning across all GLP-1 and dual GIP/GLP-1 agonists (rare necrotising/fatal cases reported) — counsel patients to seek urgent help for severe persistent abdominal pain radiating to the back with vomiting, and to report via Yellow Card (corroborated 2026-06-21; primary DSU PDF pending confirmation). MHRA Jan 2025 aspiration risk during surgical procedures: GLP-1 agonists delay gastric emptying; pre-operative fasting periods may be inadequate — patients should inform anaesthetist/surgeon of GLP-1 use; consider withholding the weekly injection on the week of planned surgery per RCOA/MHRA guidance (corroborated 2026-07-11; primary PDF 403 this run). LIXISENATIDE WITHDRAWAL (drugs-003, 2026-07-25 Keeper, CONFIRMED): Lyxumia (lixisenatide, Sanofi) was withdrawn from the UK market; 'lixisenatide' and 'lyxumia' terms retained in match[] so that existing patients on repeat (or legacy records) still receive monitoring flags — confirm with dispensary that no new supplies are being issued. Patients still prescribed lixisenatide should be switched to an alternative GLP-1 agonist at next medication review.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "doac",
+      "drugClass": "DOAC",
+      "drug": {
+        "match": [
+          "apixaban",
+          "eliquis",
+          "rivaroxaban",
+          "xarelto",
+          "edoxaban",
+          "lixiana",
+          "dabigatran",
+          "pradaxa"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "FBC",
+          "match": [
+            "fbc",
+            "full blood count"
+          ],
+          "snomed": [
+            "26604007"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "U&E",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile",
+            "egfr"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "LFT",
+          "match": [
+            "lft",
+            "liver function"
+          ],
+          "snomed": [
+            "26958001"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "BNF / NICE NG196 / EHRA guideline (2024 update)",
+      "notes": "Renal function for DOAC monitoring must be calculated as CrCl (Cockcroft-Gault), NOT eGFR — eGFR overestimates clearance (especially in low-weight elderly patients) and its use raises bleeding risk (MHRA/SPS). Monitoring frequency by CrCl: ≥60 mL/min → annual; 30–59 → 6-monthly; 15–29 → 3-monthly; <15 → all DOACs contraindicated (refer). EHRA rule-of-thumb for CrCl ≤60: recheck interval (months) = CrCl ÷ 10. Elderly (>75) or frail: at least 4–6 monthly regardless of band. Drug-specific renal handling: dabigatran ~80% renally cleared (contraindicated CrCl <30), edoxaban dose-adjusted <50, rivaroxaban ~35%, apixaban ~27% (least renal dependence). Sentinel enforces only the annual 365-day baseline (the schema cannot encode CrCl-conditional intervals — flagged for an engine extension); the clinician must intensify per CrCl band, age and frailty. Source: NHS SPS DOACs monitoring; EHRA practical guidance; 2024–2025 NHS ICB DOAC guidelines (corroborated; primary pages 403, pending confirmation).",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "statin",
+      "drugClass": "Statin",
+      "drug": {
+        "match": [
+          "atorvastatin",
+          "lipitor",
+          "atozet",
+          "simvastatin",
+          "inegy",
+          "rosuvastatin",
+          "crestor",
+          "enebium",
+          "pravastatin",
+          "lipostat",
+          "fluvastatin",
+          "lescol",
+          "pitavastatin",
+          "livazo"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "LFT",
+          "match": [
+            "lft",
+            "liver function"
+          ],
+          "snomed": [
+            "26958001"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "NICE NG181 (Lipids) / BNF",
+      "notes": "NICE NG181: LFT baseline, at 3 months, and at 12 months only. Routine ongoing monitoring not required after 12 months on stable dose; do not check unless clinically indicated. CK only if muscle symptoms. Rule retained as a one-off prompt for new starts; consider disabling in Options once initial monitoring is complete on a given patient.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "allopurinol",
+      "drugClass": "Xanthine oxidase inhibitor",
+      "drug": {
+        "match": [
+          "allopurinol",
+          "zyloric",
+          "caplenal",
+          "uricto",
+          "febuxostat",
+          "adenuric"
+        ],
+        "snomed": [
+          "387481004"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "U&E",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "Urate",
+          "match": [
+            "urate",
+            "uric acid",
+            "serum urate"
+          ],
+          "snomed": [
+            "302393005"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "NICE NG219 (Gout, 2022) / BSR guideline",
+      "notes": "Target serum urate <360 micromol/L (or <300 micromol/L in tophaceous gout, chronic arthropathy, or frequent flares). Annual review once stable. Febuxostat added to match list; carries cardiovascular warning per MHRA — use with caution in established CVD.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "antipsychotic",
+      "drugClass": "Antipsychotic",
+      "drug": {
+        "match": [
+          "olanzapine",
+          "zyprexa",
+          "zalasta",
+          "zypadhera",
+          "risperidone",
+          "risperdal",
+          "okedi",
+          "quetiapine",
+          "seroquel",
+          "atrolak",
+          "biquelle",
+          "zaluron",
+          "aripiprazole",
+          "abilify",
+          "haloperidol",
+          "serenace",
+          "dozic",
+          "haldol",
+          "chlorpromazine",
+          "largactil",
+          "amisulpride",
+          "solian",
+          "paliperidone",
+          "invega",
+          "xeplion",
+          "trevicta",
+          "byannli",
+          "lurasidone",
+          "latuda",
+          "asenapine",
+          "sycrest",
+          "cariprazine",
+          "reagila",
+          "sulpiride",
+          "dolmatil",
+          "sulpitil",
+          "sulpor",
+          "zuclopenthixol",
+          "clopixol",
+          "flupentixol",
+          "depixol",
+          "fluanxol",
+          "fluphenazine",
+          "modecate"
+        ],
+        "exclude": [
+          "clozapine"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "HbA1c",
+          "match": [
+            "hba1c",
+            "haemoglobin a1c",
+            "glycated"
+          ],
+          "snomed": [
+            "43396009"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "Lipids",
+          "match": [
+            "lipid profile",
+            "cholesterol",
+            "lipids"
+          ],
+          "snomed": [
+            "166830004"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "Weight",
+          "match": [
+            "weight",
+            "body weight"
+          ],
+          "snomed": [
+            "27113001"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "BP",
+          "match": [
+            "blood pressure",
+            "bp"
+          ],
+          "snomed": [
+            "75367002"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "ECG",
+          "match": [
+            "ecg",
+            "electrocardiogram"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "NICE CG178 / Maudsley Prescribing Guidelines 14th ed / QOF MH002-MH012 / BNF",
+      "notes": "Metabolic syndrome screening. ECG recommended at baseline and annually if cardiovascular risk factors or QTc-prolonging concomitant drugs. Clozapine EXCLUDED here — monitored under separate national protocol (CPMS/ZTAS) with weekly FBC for 18 weeks, then 2-weekly to 1 year, then 4-weekly indefinitely; mandatorily clozapine-clinic led, not amenable to primary-care rule firing. 2026-07-11: added sulpiride (brands Dolmatil, Sulpitil, Sulpor), zuclopenthixol (brand Clopixol), flupentixol (brands Depixol, Fluanxol) and fluphenazine (brand Modecate) — depot antipsychotics frequently managed in primary care under shared-care; omission would silently fail metabolic monitoring for these patients (BNF/dm+d corroborated; primary-source PDFs 403 this run).",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "mirabegron",
+      "drugClass": "Beta-3 agonist",
+      "drug": {
+        "match": [
+          "mirabegron",
+          "betmiga"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "BP",
+          "match": [
+            "blood pressure",
+            "bp"
+          ],
+          "snomed": [
+            "75367002"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "BNF / MHRA Drug Safety Update 2015 (severe hypertension warning) / SPC",
+      "notes": "Causes hypertension — measure BP before starting and periodically during treatment, particularly in patients with pre-existing hypertension. Contraindicated in severe uncontrolled hypertension (≥180/110). BP rise typically modest (mean 1-3 mmHg) but case reports of severe hypertension and hypertensive crisis. Annual BP is a reasonable baseline for stable patients.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "levothyroxine",
+      "drugClass": "Thyroid hormone",
+      "drug": {
+        "match": [
+          "levothyroxine",
+          "eltroxin",
+          "euthyrox",
+          "liothyronine",
+          "tertroxin"
+        ],
+        "snomed": [
+          "10049011000001109"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "TSH",
+          "match": [
+            "tsh",
+            "thyroid stimulating hormone",
+            "thyroid function",
+            "tft"
+          ],
+          "snomed": [
+            "1022791000000101",
+            "166842003"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "NICE NG145 / BTA guidance",
+      "notes": "Annual TSH once stable on levothyroxine. More frequent during dose titration or in pregnancy. TSH alone is sufficient for monitoring stable replacement; full TFTs only needed if TSH abnormal or symptoms.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "hrt-systemic",
+      "drugClass": "HRT",
+      "drug": {
+        "match": [
+          "estradiol",
+          "oestradiol",
+          "conjugated oestrogens",
+          "conjugated estrogens",
+          "tibolone",
+          "femoston",
+          "kliovance",
+          "kliofem",
+          "kliogest",
+          "elleste duet",
+          "elleste solo",
+          "indivina",
+          "premique",
+          "premarin",
+          "evorel",
+          "femseven",
+          "estradot",
+          "sandrena",
+          "oestrogel",
+          "livial",
+          "lenzetto",
+          "progynova",
+          "zumenon",
+          "climaval",
+          "estraderm",
+          "nuvelle",
+          "norethisterone",
+          "medroxyprogesterone",
+          "micronised progesterone",
+          "utrogestan",
+          "bijuve",
+          "mirena",
+          "levonorgestrel intrauterine",
+          "levonorgestrel ius",
+          "levosert",
+          "jaydess",
+          "kyleena",
+          "lng-ius"
+        ],
+        "exclude": [
+          "vagifem",
+          "imvaggis",
+          "ovestin",
+          "estring",
+          "vagirux",
+          "blissel",
+          "intrarosa",
+          "vaginal cream",
+          "vaginal tablet",
+          "vaginal ring",
+          "vaginal pessary",
+          "vaginal gel",
+          "pessary",
+          "ethinylestradiol",
+          "ethinyloestradiol",
+          "qlaira",
+          "zoely"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "BP",
+          "match": [
+            "blood pressure",
+            "bp"
+          ],
+          "snomed": [
+            "75367002"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "Weight",
+          "match": [
+            "weight",
+            "body weight"
+          ],
+          "snomed": [
+            "27113001"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "NICE NG23 (review 2024) / BNF / British Menopause Society",
+      "notes": "Annual HRT review: BP, weight, symptom control, risks/benefits, breast awareness. No routine bloods required for standard HRT. Mammography per national screening. Excludes local vaginal preparations which have no systemic effects (vaginal pessaries, creams, tablets, rings, gels). The chip fires ONLY when a systemic oestrogen / HRT agent (estradiol, conjugated oestrogens, tibolone, etc.) is prescribed: a progestogen or LNG-IUS (Mirena, Levosert, Jaydess, Kyleena) on its own is contraception, not HRT, so it does not raise this review. When oestrogen IS prescribed, a co-prescribed LNG-IUS/progestogen is reported as the progestogen (endometrial-protection) component via hrtContext. A problem-coded IUS insertion only counts as cover if coded within iusValidityYears (5y, the licensed endometrial-protection life of the 52mg LNG-IUS); an older/undated coil code is flagged 'expired' so cover falls through to the patient's actual progestogen rather than a removed device silently asserting protection.",
+      "sharedCare": false,
+      "hrtContext": {
+        "oestrogenTerms": [
+          "estradiol",
+          "oestradiol",
+          "conjugated oestrogens",
+          "conjugated estrogens",
+          "tibolone",
+          "femoston",
+          "kliovance",
+          "kliofem",
+          "kliogest",
+          "elleste duet",
+          "elleste solo",
+          "indivina",
+          "premique",
+          "premarin",
+          "evorel",
+          "femseven",
+          "estradot",
+          "sandrena",
+          "oestrogel",
+          "livial",
+          "lenzetto",
+          "bijuve",
+          "progynova",
+          "zumenon",
+          "climaval",
+          "estraderm",
+          "nuvelle"
+        ],
+        "iusTerms": [
+          "mirena",
+          "levonorgestrel intrauterine",
+          "levonorgestrel ius",
+          "levosert",
+          "jaydess",
+          "kyleena",
+          "lng-ius"
+        ],
+        "iusProblemTerms": [
+          "intrauterine system",
+          "intrauterine device",
+          "mirena coil",
+          "insertion of mirena",
+          "introduction of mirena",
+          "replacement of intrauterine",
+          "fitting of intrauterine",
+          "iud fitted",
+          "ius fitted",
+          "coil fitted",
+          "coil inserted",
+          "hormone releasing intrauterine",
+          "insertion of hormone releasing"
+        ],
+        "progestogenTerms": [
+          "utrogestan",
+          "micronised progesterone",
+          "norethisterone",
+          "medroxyprogesterone",
+          "dydrogesterone",
+          "progesterone"
+        ],
+        "hysterectomyTerms": [
+          "hysterectomy",
+          "hysterectomised",
+          "hysterectomized"
+        ],
+        "iusValidityYears": 5
+      }
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "adhd-stimulant-paediatric",
+      "drugClass": "ADHD stimulant",
+      "ageRange": {
+        "max": 17
+      },
+      "sex": "any",
+      "drug": {
+        "match": [
+          "methylphenidate",
+          "ritalin",
+          "concerta",
+          "equasym",
+          "medikinet",
+          "xenidate",
+          "delmosart",
+          "tranquilyn",
+          "affenid",
+          "atenza",
+          "kixel",
+          "matoride",
+          "xaggitin",
+          "focusim",
+          "meflynate",
+          "metyrol",
+          "lisdexamfetamine",
+          "elvanse",
+          "vyvanse",
+          "dexamfetamine",
+          "dexedrine",
+          "amfexa",
+          "amphetamine"
+        ],
+        "snomed": [
+          "372574004",
+          "387340002",
+          "31994002"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "Blood pressure",
+          "match": [
+            "blood pressure",
+            "bp"
+          ],
+          "snomed": [
+            "75367002"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Pulse / heart rate",
+          "match": [
+            "pulse",
+            "heart rate",
+            "hr",
+            "resting heart rate"
+          ],
+          "snomed": [
+            "78564009"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Weight",
+          "match": [
+            "weight",
+            "body weight"
+          ],
+          "snomed": [
+            "27113001"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Height",
+          "match": [
+            "height",
+            "body height"
+          ],
+          "snomed": [
+            "248335003"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        }
+      ],
+      "source": "NICE NG87 (ADHD diagnosis and management, 2018 updated 2019); BNF for Children; NHS shared care protocols",
+      "notes": "Post-stabilisation shared-care monitoring for ADHD stimulants in under-18s: BP, pulse, weight and height every 6 months. Consider 3-monthly in children under 10. Plot height and weight on centile charts — Sentinel confirms the measurement was taken but cannot verify centile position or growth velocity; the clinician must interpret the result. Action if >10% weight loss over weeks or height tracking significantly below the expected centile (consider planned treatment breaks over school holidays). Withhold/refer if sustained resting HR >130 bpm or BP >95th centile for age/height; review if HR >120 bpm. Refer to cardiology on unexplained syncope, palpitations with dizziness, or QT prolongation. Contraindicated in structural heart disease, uncontrolled hypertension or arrhythmia. Annual formal review of ongoing need. No routine bloods required by NG87; ECG only if cardiac risk factors at baseline.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "adhd-stimulant-adult",
+      "drugClass": "ADHD stimulant",
+      "ageRange": {
+        "min": 18
+      },
+      "sex": "any",
+      "drug": {
+        "match": [
+          "methylphenidate",
+          "ritalin",
+          "concerta",
+          "equasym",
+          "medikinet",
+          "xenidate",
+          "delmosart",
+          "tranquilyn",
+          "affenid",
+          "atenza",
+          "kixel",
+          "matoride",
+          "xaggitin",
+          "focusim",
+          "meflynate",
+          "metyrol",
+          "lisdexamfetamine",
+          "elvanse",
+          "vyvanse",
+          "dexamfetamine",
+          "dexedrine",
+          "amfexa",
+          "amphetamine"
+        ],
+        "snomed": [
+          "372574004",
+          "387340002",
+          "31994002"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "Blood pressure",
+          "match": [
+            "blood pressure",
+            "bp"
+          ],
+          "snomed": [
+            "75367002"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Pulse / heart rate",
+          "match": [
+            "pulse",
+            "heart rate",
+            "hr",
+            "resting heart rate"
+          ],
+          "snomed": [
+            "78564009"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Weight",
+          "match": [
+            "weight",
+            "body weight"
+          ],
+          "snomed": [
+            "27113001"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        }
+      ],
+      "source": "NICE NG87 (ADHD diagnosis and management, 2018 updated 2019); BNF; NHS shared care protocols",
+      "notes": "Post-stabilisation shared-care monitoring for ADHD stimulants in adults (18+): BP, pulse and weight every 6 months. Height is not monitored in adults. Withhold/refer if sustained resting HR >130 bpm or BP >140/90 mmHg; review if HR >120 bpm. Refer to cardiology on unexplained syncope, palpitations with dizziness, or QT prolongation. Contraindicated in structural heart disease, uncontrolled hypertension or arrhythmia. Annual formal review of ongoing need. No routine bloods required by NG87; ECG only if cardiac risk factors at baseline.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "atomoxetine-maintenance",
+      "drugClass": "ADHD non-stimulant",
+      "sex": "any",
+      "drug": {
+        "match": [
+          "atomoxetine",
+          "strattera"
+        ],
+        "snomed": [
+          "407146000"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "Blood pressure",
+          "match": [
+            "blood pressure",
+            "bp"
+          ],
+          "snomed": [
+            "75367002"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Pulse / heart rate",
+          "match": [
+            "pulse",
+            "heart rate",
+            "hr",
+            "resting heart rate"
+          ],
+          "snomed": [
+            "78564009"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "Weight",
+          "match": [
+            "weight",
+            "body weight"
+          ],
+          "snomed": [
+            "27113001"
+          ],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "LFT",
+          "match": [
+            "lft",
+            "liver function"
+          ],
+          "snomed": [
+            "26958001"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "NICE NG87; BNF / atomoxetine SmPC; MHRA hepatic and suicidality warnings",
+      "notes": "Non-stimulant. BP, pulse and weight 6-monthly; annual LFT (hepatotoxicity risk — advise patient to report jaundice, dark urine or unexplained upper abdominal pain; discontinue and refer urgently if liver injury confirmed). Monitor closely for suicidal ideation, agitation or irritability in the first month and after any dose change — this is a clinical review responsibility not enforceable by Sentinel. In children, plot height and weight on centile charts 3-monthly (Sentinel does not enforce height to avoid false alerts in adults). Withhold/refer if resting HR sustained >130 bpm or significant BP rise (6-12% of patients experience clinically significant BP or HR increases). Contraindicated in narrow-angle glaucoma and concurrent MAOI use.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "guanfacine-maintenance",
+      "drugClass": "ADHD non-stimulant",
+      "sex": "any",
+      "drug": {
+        "match": [
+          "guanfacine",
+          "intuniv"
+        ],
+        "snomed": [
+          "96308008"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "Blood pressure",
+          "match": [
+            "blood pressure",
+            "bp"
+          ],
+          "snomed": [
+            "75367002"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "Pulse / heart rate",
+          "match": [
+            "pulse",
+            "heart rate",
+            "hr",
+            "resting heart rate"
+          ],
+          "snomed": [
+            "78564009"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "Weight",
+          "match": [
+            "weight",
+            "body weight"
+          ],
+          "snomed": [
+            "27113001"
+          ],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        }
+      ],
+      "source": "NICE NG87; BNF / guanfacine (Intuniv) SmPC; Sussex ICS shared care protocol",
+      "notes": "Non-stimulant alpha-2A agonist with stricter cardiovascular monitoring than stimulants. BP and pulse 3-monthly (Sentinel enforces 84-day interval as the safer default for year 1; local shared care may permit 6-monthly once stable beyond year 1). Risks: hypotension, bradycardia, syncope, and AV block — check lying and standing BP. Dose must be tapered on discontinuation to avoid rebound hypertension; never abruptly stop. In children, plot height and weight on centile charts 3-monthly (Sentinel confirms measurement recency but cannot verify centile). Contraindicated in significant cardiovascular or cerebrovascular disease and concurrent strong CYP3A4 inhibitors (e.g. ketoconazole, clarithromycin).",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "sodium-valproate",
+      "drugClass": "Antiepileptic / mood stabiliser",
+      "drug": {
+        "match": [
+          "sodium valproate",
+          "valproate",
+          "valproic acid",
+          "epilim",
+          "episenta",
+          "orlept",
+          "convulex",
+          "depakote",
+          "belvo",
+          "dyzantil",
+          "epival",
+          "syonell"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "FBC",
+          "match": [
+            "fbc",
+            "full blood count"
+          ],
+          "snomed": [
+            "26604007"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "LFT",
+          "match": [
+            "lft",
+            "liver function"
+          ],
+          "snomed": [
+            "26958001"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "U&E / Ammonia",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile",
+            "ammonia"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "BNF / NICE CG137 / Valproate Pregnancy Prevention Programme (MHRA 2018, updated 2024) / MHRA Drug Safety Update Feb 2025 (new branded formulations: Belvo, Dyzantil, Epival, Syonell)",
+      "notes": "Annual FBC, LFT, U&E for patients on long-term valproate. More frequent monitoring during the first 6 months and after any dose change. VALPROATE PREGNANCY PREVENTION PROGRAMME (PPP): women and girls of childbearing potential must NOT be prescribed valproate without a signed annual Risk Acknowledgement Form — this is a regulatory requirement (MHRA 2018). Prescribers must confirm each year that: the patient understands the teratogenic risk (spina bifida, other birth defects, neurodevelopmental disorders); effective contraception is being used; and the patient has a specialist review annually. Sentinel cannot enforce the PPP form — check manually for all female patients of childbearing age. 'Epilim Chrono' (valproate semisodium controlled release) is matched by 'epilim'. Convulex = valproic acid (essentially the same drug). Depakote = valproate semisodium. 2026-07-25 Keeper (drugs-001 RED): Added four new UK valproate brands named in MHRA Feb 2025 Drug Safety Update — Belvo (Atnahs Pharma), Dyzantil (Pfizer UK), Epival (Abbott), Syonell (Zentiva) — to plug a patient-safety monitoring gap confirmed by VERIFIER-A. Added 2026-07-11: BNF/MHRA corroborated; primary-source PDFs 403 that run.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "finerenone",
+      "drugClass": "Non-steroidal MRA",
+      "drug": {
+        "match": [
+          "finerenone",
+          "kerendia"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "U&E (serum potassium + eGFR)",
+          "match": [
+            "u&e",
+            "urea and electrolytes",
+            "renal profile",
+            "potassium",
+            "egfr"
+          ],
+          "snomed": [
+            "1019331000000106"
+          ],
+          "intervalDays": 120,
+          "dueSoonDays": 21
+        }
+      ],
+      "source": "BNF / NICE TA877 (finerenone for CKD in T2DM, 2023) / finerenone SmPC (Kerendia, Bayer) / MHRA",
+      "notes": "Finerenone (Kerendia) is a non-steroidal mineralocorticoid receptor antagonist licensed for CKD in T2DM (NICE TA877). Primary monitoring concern is hyperkalaemia — serum potassium and eGFR at baseline, at 4 weeks after initiation, and then every 4 months (120d) during maintenance. Withhold if serum K+ >5.5 mmol/L before starting; restart only when K+ <5.0 mmol/L. Reduce or withhold if eGFR falls to <25 mL/min/1.73m² or K+ consistently >5.5 mmol/L. Contraindicated with strong CYP3A4 inhibitors (itraconazole, ketoconazole, clarithromycin, ritonavir). Dispensing-practice note: ensure patients receive branded Kerendia (not generic preparations of spironolactone etc.) — finerenone is structurally distinct from spironolactone and eplerenone. Added 2026-07-11: BNF/NICE TA877 corroborated; primary SmPC PDF 403 this run.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "dmpa-injectable",
+      "drugClass": "Progestogen-only injectable contraception",
+      "sex": "F",
+      "drug": {
+        "match": [
+          "depo-provera",
+          "depo provera",
+          "sayana press",
+          "sayana",
+          "dmpa"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "Blood pressure",
+          "match": [
+            "blood pressure",
+            "bp"
+          ],
+          "snomed": [
+            "75367002"
+          ],
+          "intervalDays": 730,
+          "dueSoonDays": 60
+        },
+        {
+          "name": "Weight",
+          "match": [
+            "weight",
+            "body weight"
+          ],
+          "snomed": [
+            "27113001"
+          ],
+          "intervalDays": 730,
+          "dueSoonDays": 60
+        }
+      ],
+      "source": "FSRH Clinical Guideline: Progestogen-only Injectables (Dec 2014, amended Jul 2023)",
+      "notes": "DMPA = Depo-Provera (medroxyprogesterone acetate 150mg/1ml IM) and Sayana Press (104mg/0.65ml SC). FSRH: review at least every 2 years (730d) to reassess risk/benefit — particularly bone mineral density (small, largely reversible loss; heightened under-18 and over-40 and with osteoporosis risk factors). Review weight at the 2-yearly assessment (weight gain is a recognised effect). BP does not rise with progestogen-only injectables (unlike CHC) but is checked as a UKMEC eligibility criterion at each visit (UKMEC 4 if BP ≥160/100). Return to fertility may be delayed up to ~1 year after the last injection. MATCH is brand-only by design: the bare generic 'medroxyprogesterone' is deliberately NOT used because it appears in the hrt-systemic rule (oral MPA), so a generic-string injectable record would double-fire — flagged for engine disambiguation. Noristerat (norethisterone enantate, 8-weekly, short-term only) is a different depot and is out of scope. SOURCE GAP: FSRH primary PDF 403 — corroborated via NHS formulary reproductions; pending primary-source confirmation.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "chc-combined-hormonal",
+      "drugClass": "Combined hormonal contraception",
+      "sex": "F",
+      "drug": {
+        "match": [
+          "microgynon",
+          "ovranette",
+          "rigevidon",
+          "levest",
+          "maexeni",
+          "cilique",
+          "lizinna",
+          "marvelon",
+          "mercilon",
+          "gedarel",
+          "cimizt",
+          "femodene",
+          "femodette",
+          "millinette",
+          "yasmin",
+          "lucette",
+          "eloine",
+          "dianette",
+          "brevinor",
+          "norimin",
+          "ovysmen",
+          "loestrin",
+          "qlaira",
+          "zoely",
+          "evra",
+          "nuvaring",
+          "syreniring",
+          "ethinylestradiol",
+          "ethinyloestradiol",
+          "logynon",
+          "synphase"
+        ],
+        "exclude": [
+          "cerazette",
+          "cerelle",
+          "zelleta",
+          "lovima",
+          "hana",
+          "nacrez",
+          "slinda"
+        ]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "Blood pressure",
+          "match": [
+            "blood pressure",
+            "bp"
+          ],
+          "snomed": [
+            "75367002"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "BMI / Weight",
+          "match": [
+            "bmi",
+            "body mass index",
+            "weight",
+            "body weight"
+          ],
+          "snomed": [
+            "60621009",
+            "27113001"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "FSRH Guideline: Combined Hormonal Contraception (Jan 2019, amended Oct 2023); NICE CKS Contraception",
+      "notes": "FSRH/NICE mandate BP+BMI at initiation, a 3-month review, then at least annually — this rule enforces the annual recurring BP+BMI check. CHC = combined pills + Evra patch + NuvaRing/SyreniRing. Contraindicated in uncontrolled hypertension (UKMEC 4 ≥160/100; UKMEC 3 ≥140/90 or BMI ≥35); reassess VTE/CVD risk at each review. DISAMBIGUATION (enabled 2026-06-20): the hrt-systemic rule matches the bare term 'estradiol', which is a SUBSTRING of the contraceptive oestrogen 'ethinylestradiol' and of the natural-oestrogen pills' 'estradiol valerate' (Qlaira) / 'estradiol hemihydrate' (Zoely). To stop CHC patients double-firing the HRT review, hrt-systemic now EXCLUDES 'ethinylestradiol'/'ethinyloestradiol'/'qlaira'/'zoely' (none of which are HRT). CHC matches by brand plus the contraceptive-only oestrogen 'ethinylestradiol'/'ethinyloestradiol' (so generic ethinylestradiol+progestogen combos fire here, never as HRT). POPs (Cerazette/Cerelle/Zelleta/Lovima/Hana/Nacrez — desogestrel) are excluded. Slinda (drospirenone 4 mg POP) added to exclude list 2026-07-11 — it is a POP, not a CHC, but 'slinda' contains no CHC-like substring that would auto-fire; excluded explicitly to future-proof against any prescribing-system records that render it alongside ethinylestradiol component names (BNF/FSRH corroborated; primary PDFs 403 this run). Logynon and Synphase (triphasic ethinylestradiol+levonorgestrel) added to match list 2026-07-11 — both are actively dispensed in the UK (BNF/dm+d corroborated). SOURCE: FSRH Combined Hormonal Contraception (2019, amended 2023); corroborated via NHS formulary/NICE CKS. MHRA: co-prescribed tirzepatide (Mounjaro) may reduce absorption of oral contraceptives, especially in overweight/obese patients — advise an additional barrier method or a non-oral method for 4 weeks after starting tirzepatide and after each dose increase (corroborated 2026-06-21; primary MHRA wording pending confirmation).",
+      "sharedCare": false
+    },
+    {
+      "id": "digoxin-renal-monitoring",
+      "type": "drug-monitoring",
+      "enabled": false,
+      "drug": {
+        "match": [
+          "digoxin",
+          "lanoxin"
+        ],
+        "exclude": []
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "U&E / eGFR",
+          "match": [
+            "urea",
+            "electrolytes",
+            "egfr",
+            "creatinine",
+            "renal function",
+            "u&e"
+          ],
+          "snomed": [
+            "166717003",
+            "80274001"
+          ],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "BNF Digoxin monograph (monitoring: U&E/eGFR at least annually; dose reduction required if eGFR <30 per STOPP v3 B1). 2026-08-01 (The Keeper, alert-C005 RED): gap identified by direct code inspection — no digoxin monitoring rule existed in drug-rules.json; stopp-start.js encodes the STOPP v3 B1 eGFR<30 dose-criterion (fail-closed when eGFR unknown) but provides no proactive annual monitoring chip. Lanoxin confirmed only UK-licensed brand (dm+d/BNF).",
+      "notes": "DISABLED PENDING CSO ACTIVATION (enabled:false). The Keeper identified this gap on 2026-08-01 (alert-C005, RED): digoxin is a high-risk drug with a narrow therapeutic index and renal-dose sensitivity but had no entry in Sentinel drug-monitoring rules. Lanoxin (GlaxoSmithKline/Aspen) is the only UK-licensed brand (Lanoxin-PG is the 25 mcg/5 ml paediatric liquid, same brand family). Annual U&E/eGFR monitoring is required to detect toxicity risk from renal impairment. CSO must review the monitoring interval and confirm this rule is appropriate for this practice before enabling. STOPP v3 B1 separately flags digoxin use when eGFR<30 — that criterion is in engine/stopp-start.js and fires independently of this rule.",
+      "sharedCare": false
+    }
+  ],
+  "drugAllergy": [
+    {
+      "id": "allergy-penicillin",
+      "type": "drug-allergy",
+      "enabled": true,
+      "label": "Penicillin allergy + penicillin/beta-lactam",
+      "severity": "red",
+      "allergyTerms": [
+        "penicillin",
+        "amoxicillin allerg",
+        "flucloxacillin allerg",
+        "co-amoxiclav allerg",
+        "beta-lactam allerg",
+        "betalactam allerg",
+        "phenoxymethylpenicillin allerg",
+        "benzylpenicillin allerg"
+      ],
+      "drugSets": [
+        {
+          "name": "Penicillins",
+          "match": [
+            "penicillin",
+            "amoxicillin",
+            "ampicillin",
+            "flucloxacillin",
+            "co-amoxiclav",
+            "co amoxiclav",
+            "phenoxymethylpenicillin",
+            "benzylpenicillin",
+            "pivmecillinam",
+            "piperacillin",
+            "temocillin"
+          ],
+          "exclude": []
+        }
+      ],
+      "source": "BNF/NICE CKS drug allergy; MHRA. PENDING CSO REVIEW.",
+      "notes": "Fires when an active penicillin/beta-lactam allergy co-occurs with a penicillin-class drug. Cross-reactivity with cephalosporins/carbapenems is handled by the separate cross-sensitivity rule."
+    },
+    {
+      "id": "allergy-penicillin-cephalosporin-xs",
+      "type": "drug-allergy",
+      "enabled": true,
+      "label": "Penicillin allergy + cephalosporin (cross-sensitivity)",
+      "severity": "amber",
+      "crossSensitivity": true,
+      "allergyTerms": [
+        "penicillin",
+        "beta-lactam allerg",
+        "betalactam allerg"
+      ],
+      "drugSets": [
+        {
+          "name": "Cephalosporins/carbapenems",
+          "match": [
+            "cefalexin",
+            "cephalexin",
+            "cefaclor",
+            "cefadroxil",
+            "cefuroxime",
+            "cefixime",
+            "cefotaxime",
+            "ceftriaxone",
+            "ceftazidime",
+            "cefepime",
+            "meropenem",
+            "imipenem",
+            "ertapenem",
+            "aztreonam"
+          ],
+          "exclude": []
+        }
+      ],
+      "source": "BNF/NICE CKS: ~1-3% cephalosporin cross-reactivity in penicillin allergy; lower with 3rd-gen. PENDING CSO REVIEW.",
+      "notes": "Cross-sensitivity CAUTION (amber), not an absolute contraindication — review documented reaction severity."
+    },
+    {
+      "id": "allergy-nsaid",
+      "type": "drug-allergy",
+      "enabled": true,
+      "label": "NSAID/aspirin hypersensitivity + NSAID",
+      "severity": "red",
+      "allergyTerms": [
+        "nsaid",
+        "non-steroidal anti-inflammatory",
+        "aspirin allerg",
+        "ibuprofen allerg",
+        "naproxen allerg",
+        "diclofenac allerg",
+        "salicylate allerg"
+      ],
+      "drugSets": [
+        {
+          "name": "NSAIDs",
+          "match": [
+            "ibuprofen",
+            "naproxen",
+            "diclofenac",
+            "aceclofenac",
+            "celecoxib",
+            "etoricoxib",
+            "meloxicam",
+            "piroxicam",
+            "indometacin",
+            "indomethacin",
+            "ketoprofen",
+            "mefenamic acid",
+            "nabumetone",
+            "etodolac",
+            "aspirin",
+            "acetylsalicylic"
+          ],
+          "exclude": [
+            "topical",
+            "gel",
+            "cream",
+            "patch",
+            "spray",
+            "eye drop"
+          ]
+        }
+      ],
+      "source": "BNF/NICE CKS NSAID hypersensitivity; cross-reactivity across NSAID class. PENDING CSO REVIEW.",
+      "notes": "Fires when active NSAID/aspirin/salicylate hypersensitivity co-occurs with a systemic NSAID. Topical formulations excluded. Aspirin-exacerbated respiratory disease is a class effect."
+    },
+    {
+      "id": "allergy-sulfonamide",
+      "type": "drug-allergy",
+      "enabled": true,
+      "label": "Sulfonamide allergy + sulfonamide antibiotic",
+      "severity": "red",
+      "allergyTerms": [
+        "sulfonamide",
+        "sulphonamide",
+        "sulfa allerg",
+        "co-trimoxazole allerg",
+        "trimethoprim-sulfamethoxazole allerg",
+        "sulfamethoxazole allerg"
+      ],
+      "drugSets": [
+        {
+          "name": "Sulfonamide antibiotics",
+          "match": [
+            "co-trimoxazole",
+            "co trimoxazole",
+            "sulfamethoxazole",
+            "sulfadiazine",
+            "sulfasalazine"
+          ],
+          "exclude": []
+        }
+      ],
+      "source": "BNF/NICE CKS sulfonamide allergy. PENDING CSO REVIEW.",
+      "notes": "Fires when an active sulfonamide-antibiotic allergy co-occurs with a sulfonamide antibiotic. Non-antibiotic sulfonamide cross-reactivity (e.g. thiazides, sulfonylureas) is contested and NOT encoded."
+    }
+  ],
+  "noMonitoring": [
+    {
+      "type": "drug-no-monitoring",
+      "enabled": true,
+      "id": "no-monitoring-common",
+      "notes": "Common drugs with no BNF/NICE-mandated routine primary-care blood monitoring protocol. Matched drugs are excluded from the 'Meds without a monitoring rule' diagnostic list to suppress noise. No monitoring chips are generated for these drugs.",
+      "drug": {
+        "match": [
+          "aspirin",
+          "clopidogrel",
+          "dipyridamole",
+          "prasugrel",
+          "amlodipine",
+          "felodipine",
+          "lercanidipine",
+          "nifedipine",
+          "verapamil",
+          "diltiazem",
+          "bisoprolol",
+          "atenolol",
+          "metoprolol",
+          "nebivolol",
+          "propranolol",
+          "carvedilol",
+          "tamsulosin",
+          "alfuzosin",
+          "doxazosin",
+          "terazosin",
+          "finasteride",
+          "dutasteride",
+          "omeprazole",
+          "lansoprazole",
+          "esomeprazole",
+          "pantoprazole",
+          "rabeprazole",
+          "salbutamol",
+          "salmeterol",
+          "formoterol",
+          "indacaterol",
+          "vilanterol",
+          "olodaterol",
+          "beclometasone",
+          "budesonide",
+          "ciclesonide",
+          "mometasone",
+          "fluticasone",
+          "azelastine",
+          "ipratropium",
+          "tiotropium",
+          "aclidinium",
+          "glycopyrronium",
+          "umeclidinium",
+          "montelukast",
+          "zafirlukast",
+          "cetirizine",
+          "loratadine",
+          "fexofenadine",
+          "chlorphenamine",
+          "promethazine",
+          "acrivastine",
+          "bilastine",
+          "desloratadine",
+          "levocetirizine",
+          "rupatadine",
+          "cholecalciferol",
+          "colecalciferol",
+          "calcium carbonate",
+          "calcium citrate",
+          "folic acid",
+          "ferrous sulfate",
+          "ferrous fumarate",
+          "ferrous gluconate"
+        ]
+      }
+    }
+  ],
+  "vaccines": [
+    {
+      "id": "vax-flu",
+      "type": "vaccine",
+      "enabled": true,
+      "vaccine": "flu",
+      "displayName": "Flu vaccine",
+      "season": {
+        "startMonth": 9,
+        "startDay": 1,
+        "endMonth": 3,
+        "endDay": 31
+      },
+      "source": "JCVI/UKHSA Green Book Chapter 19 (Influenza). 2026/27 programme carries forward the 2025/26 eligible groups, age bands and risk groups; a people-experiencing-homelessness cohort is added from 1 Oct 2026 (CSO-approved 2026-06-17; confirm against the flu letter).",
+      "notes": "DOUBLE-CHECK ELIGIBILITY: Status inferred from coded records only — vaccination given elsewhere may not appear. Asthma sub-criterion requires inhaled/systemic steroids or prior hospital admission (proxy via medication check). Carers and care home residents are not detected. Homelessness is rarely coded in GP records, so the homelessness cohort flags only patients with an explicit code — not the broader population; operational outreach remains the primary route. BMI reading may be out of date.",
+      "eligibility": {
+        "anyOf": [
+          {
+            "kind": "age",
+            "ageMin": 65,
+            "label": "Age 65+"
+          },
+          {
+            "kind": "age",
+            "ageMin": 2,
+            "ageMax": 17,
+            "label": "Child (2–17 years)"
+          },
+          {
+            "kind": "problem",
+            "match": [
+              "pregnan"
+            ],
+            "sex": "F",
+            "label": "Pregnancy"
+          },
+          {
+            "kind": "problem",
+            "match": [
+              "homeless",
+              "rough sleeper",
+              "no fixed abode",
+              "night shelter resident",
+              "hostel resident"
+            ],
+            "ageMin": 16,
+            "label": "Experiencing homelessness (age 16+)"
+          },
+          {
+            "kind": "register",
+            "registers": [
+              "DM",
+              "CKD",
+              "COPD",
+              "CHD",
+              "HF",
+              "STIA",
+              "AF",
+              "PAD"
+            ],
+            "label": "Clinical risk group (QOF register)"
+          },
+          {
+            "kind": "problem",
+            "match": [
+              "cirrhosis",
+              "chronic hepatitis b",
+              "chronic hepatitis c",
+              "chronic liver disease",
+              "primary biliary",
+              "primary sclerosing cholangitis",
+              "biliary atresia",
+              "epilepsy",
+              "multiple sclerosis",
+              "parkinson",
+              "cerebral palsy",
+              "motor neurone",
+              "huntington",
+              "splenectomy",
+              "asplenia",
+              "hyposplenism",
+              "sickle cell",
+              "thalassaemia major",
+              "hereditary spherocytosis",
+              "hiv",
+              "aids",
+              "transplant",
+              "leukaemia",
+              "lymphoma",
+              "myeloma",
+              "bronchiectasis",
+              "cystic fibrosis",
+              "pulmonary fibrosis",
+              "interstitial lung",
+              "learning disabilit",
+              "downs syndrome",
+              "down syndrome"
+            ],
+            "label": "Clinical risk group (problem)"
+          },
+          {
+            "kind": "medication",
+            "match": [
+              "rituximab",
+              "adalimumab",
+              "infliximab",
+              "etanercept",
+              "abatacept",
+              "tocilizumab",
+              "secukinumab",
+              "ustekinumab",
+              "baricitinib",
+              "tofacitinib",
+              "azathioprine",
+              "ciclosporin",
+              "mycophenolate",
+              "tacrolimus",
+              "sirolimus",
+              "methotrexate",
+              "cyclophosphamide",
+              "chlorambucil",
+              "prednisolone",
+              "dexamethasone",
+              "chemotherapy"
+            ],
+            "label": "Immunosuppressive medication"
+          },
+          {
+            "kind": "observation-threshold",
+            "observation": [
+              "bmi",
+              "body mass index"
+            ],
+            "operator": ">=",
+            "value": 40,
+            "label": "BMI ≥40 kg/m²"
+          },
+          {
+            "kind": "conditional-register",
+            "register": "ASTHMA",
+            "andAnyOf": [
+              {
+                "medication": [
+                  "beclometasone",
+                  "budesonide",
+                  "fluticasone",
+                  "mometasone",
+                  "ciclesonide",
+                  "seretide",
+                  "symbicort",
+                  "fostair",
+                  "clenil",
+                  "relvar",
+                  "trimbow"
+                ]
+              },
+              {
+                "problem": [
+                  "brittle asthma",
+                  "severe asthma",
+                  "admission for asthma",
+                  "hospitalisation for asthma"
+                ]
+              }
+            ],
+            "label": "Asthma on inhaled/systemic steroids"
+          }
+        ]
+      },
+      "statusTerms": {
+        "given": [
+          "influenza vaccination given",
+          "influenza vaccine given",
+          "flu vaccin",
+          "seasonal influenza vaccin",
+          "influenza immunisation given"
+        ],
+        "declined": [
+          "influenza vaccination declined",
+          "flu vaccine declined",
+          "influenza immunisation declined",
+          "influenza vaccination not given",
+          "flu vaccination not given",
+          "flu vaccin refused",
+          "flu vaccin contraindicated",
+          "flu vaccin not given",
+          "flu vaccin not indicated",
+          "flu vaccin declined",
+          "influenza immunisation refused",
+          "influenza immunisation contraindicated",
+          "influenza immunisation not given",
+          "influenza immunisation not indicated",
+          "influenza vaccination refused",
+          "influenza vaccination contraindicated",
+          "influenza vaccination not indicated",
+          "influenza vaccine refused",
+          "influenza vaccine contraindicated",
+          "influenza vaccine not given",
+          "influenza vaccine not indicated",
+          "influenza vaccine declined",
+          "seasonal influenza vaccin refused",
+          "seasonal influenza vaccin contraindicated",
+          "seasonal influenza vaccin not given",
+          "seasonal influenza vaccin not indicated",
+          "seasonal influenza vaccin declined"
+        ]
+      }
+    },
+    {
+      "id": "vax-covid",
+      "type": "vaccine",
+      "enabled": true,
+      "vaccine": "covid",
+      "displayName": "COVID vaccine",
+      "season": {
+        "startMonth": 10,
+        "startDay": 1,
+        "endMonth": 3,
+        "endDay": 31
+      },
+      "source": "JCVI COVID-19 autumn 2026/27 eligibility statement — confirmed NO eligible-cohort changes from autumn 2025: only age 75+, care home residents, and the immunosuppressed remain eligible.",
+      "notes": "DOUBLE-CHECK ELIGIBILITY: As of 2025/26, clinical risk groups (diabetes, CHD, CKD, asthma) are NO LONGER eligible for COVID booster — only age 75+, care home residents, and immunosuppressed. Status inferred from coded records only — vaccination given elsewhere may not appear.",
+      "eligibility": {
+        "anyOf": [
+          {
+            "kind": "age",
+            "ageMin": 75,
+            "label": "Age 75+"
+          },
+          {
+            "kind": "problem",
+            "match": [
+              "care home resident",
+              "nursing home resident",
+              "residential care"
+            ],
+            "label": "Care home resident"
+          },
+          {
+            "kind": "problem",
+            "match": [
+              "transplant",
+              "stem cell",
+              "bone marrow",
+              "leukaemia",
+              "lymphoma",
+              "myeloma",
+              "hiv",
+              "aids",
+              "primary immunodeficiency",
+              "severe combined immunodeficiency",
+              "scid",
+              "chronic leukaemia",
+              "hodgkin"
+            ],
+            "label": "Immunosuppressed (problem)"
+          },
+          {
+            "kind": "medication",
+            "match": [
+              "rituximab",
+              "ciclosporin",
+              "mycophenolate",
+              "tacrolimus",
+              "azathioprine",
+              "methotrexate",
+              "cyclophosphamide",
+              "chemotherapy",
+              "alemtuzumab",
+              "ofatumumab",
+              "ibrutinib",
+              "venetoclax"
+            ],
+            "label": "Immunosuppressed (medication)"
+          }
+        ]
+      },
+      "statusTerms": {
+        "given": [
+          "covid-19 vaccination",
+          "covid vaccination",
+          "sars-cov-2 vaccin",
+          "covid booster",
+          "covid-19 booster",
+          "covid vaccine given"
+        ],
+        "declined": [
+          "covid-19 vaccination declined",
+          "covid vaccine declined",
+          "covid vaccination declined",
+          "covid booster refused",
+          "covid booster contraindicated",
+          "covid booster not given",
+          "covid booster not indicated",
+          "covid booster declined",
+          "covid vaccination refused",
+          "covid vaccination contraindicated",
+          "covid vaccination not given",
+          "covid vaccination not indicated",
+          "covid vaccine refused",
+          "covid vaccine contraindicated",
+          "covid vaccine not given",
+          "covid vaccine not indicated",
+          "covid-19 booster refused",
+          "covid-19 booster contraindicated",
+          "covid-19 booster not given",
+          "covid-19 booster not indicated",
+          "covid-19 booster declined",
+          "covid-19 vaccination refused",
+          "covid-19 vaccination contraindicated",
+          "covid-19 vaccination not given",
+          "covid-19 vaccination not indicated",
+          "sars-cov-2 vaccin refused",
+          "sars-cov-2 vaccin contraindicated",
+          "sars-cov-2 vaccin not given",
+          "sars-cov-2 vaccin not indicated",
+          "sars-cov-2 vaccin declined"
+        ]
+      }
+    },
+    {
+      "id": "vax-pneumo-ppv23",
+      "type": "vaccine",
+      "enabled": true,
+      "vaccine": "pneumococcal",
+      "displayName": "Pneumococcal vaccine (PCV20)",
+      "schedule": "once",
+      "source": "UKHSA Green Book Chapter 25 (Pneumococcal) — single dose at age 65+; the routine adult vaccine changed from PPV23 to PCV20 (Apexxnar) in early 2026 (CSO-approved 2026-06-17; confirm against the change-of-vaccine letter). No routine revaccination. 2026-07-25 (vacc-003, VERIFIER-B AMBER): People experiencing homelessness (PEH) aged 16+ confirmed as a new eligible cohort from 1 October 2026, per GOV.UK published commissioning letter (JCVI advice June 2024, policy confirmed July 2026).",
+      "notes": "DOUBLE-CHECK ELIGIBILITY: One-off dose from age 65 (routine vaccine is now PCV20; a previously-recorded PPV23 dose still counts as given). Status inferred from coded records only — vaccination given elsewhere (or pre-registration) may not appear. Revaccination every 5 years applies ONLY to asplenia/splenic dysfunction/CKD and is NOT encoded here — check manually for those patients. At-risk under-65 cohort (Green Book ch 25 risk groups) intentionally not encoded EXCEPT the homelessness cohort below. Rule id retained as 'vax-pneumo-ppv23' so existing user snoozes/overrides are preserved. HOMELESSNESS COHORT (vacc-003, effective 1 Oct 2026): people experiencing homelessness aged 16+ become eligible — rough sleepers and those using hostels for the homeless or night shelters. Match terms proxy the coding used in Medicus; homelessness is rarely coded so this will flag only patients with an explicit code. Operational outreach remains the primary delivery route. Source: GOV.UK pneumococcal vaccination expansion letter, JCVI advice June 2024.",
+      "eligibility": {
+        "anyOf": [
+          {
+            "kind": "age",
+            "ageMin": 65,
+            "label": "Age 65+"
+          },
+          {
+            "kind": "problem",
+            "match": [
+              "homeless",
+              "rough sleeper",
+              "no fixed abode",
+              "night shelter resident",
+              "hostel resident"
+            ],
+            "ageMin": 16,
+            "label": "Experiencing homelessness (age 16+, from 1 Oct 2026)"
+          }
+        ]
+      },
+      "statusTerms": {
+        "given": [
+          "pneumococcal vaccination",
+          "pneumococcal vaccine",
+          "pneumococcal polysaccharide vaccin",
+          "pneumovax",
+          "ppv23",
+          "23-valent pneumococcal",
+          "pcv20",
+          "20-valent pneumococcal",
+          "apexxnar",
+          "prevenar 20",
+          "pneumococcal conjugate vaccin",
+          "pneumococcal immunisation"
+        ],
+        "declined": [
+          "pneumococcal vaccination declined",
+          "pneumococcal vaccine declined",
+          "pneumococcal immunisation declined",
+          "pneumococcal vaccination not given",
+          "20-valent pneumococcal refused",
+          "20-valent pneumococcal contraindicated",
+          "20-valent pneumococcal not given",
+          "20-valent pneumococcal not indicated",
+          "20-valent pneumococcal declined",
+          "23-valent pneumococcal refused",
+          "23-valent pneumococcal contraindicated",
+          "23-valent pneumococcal not given",
+          "23-valent pneumococcal not indicated",
+          "23-valent pneumococcal declined",
+          "apexxnar refused",
+          "apexxnar contraindicated",
+          "apexxnar not given",
+          "apexxnar not indicated",
+          "apexxnar declined",
+          "pcv20 refused",
+          "pcv20 contraindicated",
+          "pcv20 not given",
+          "pcv20 not indicated",
+          "pcv20 declined",
+          "pneumococcal conjugate vaccin refused",
+          "pneumococcal conjugate vaccin contraindicated",
+          "pneumococcal conjugate vaccin not given",
+          "pneumococcal conjugate vaccin not indicated",
+          "pneumococcal conjugate vaccin declined",
+          "pneumococcal immunisation refused",
+          "pneumococcal immunisation contraindicated",
+          "pneumococcal immunisation not given",
+          "pneumococcal immunisation not indicated",
+          "pneumococcal polysaccharide vaccin refused",
+          "pneumococcal polysaccharide vaccin contraindicated",
+          "pneumococcal polysaccharide vaccin not given",
+          "pneumococcal polysaccharide vaccin not indicated",
+          "pneumococcal polysaccharide vaccin declined",
+          "pneumococcal vaccination refused",
+          "pneumococcal vaccination contraindicated",
+          "pneumococcal vaccination not indicated",
+          "pneumococcal vaccine refused",
+          "pneumococcal vaccine contraindicated",
+          "pneumococcal vaccine not given",
+          "pneumococcal vaccine not indicated",
+          "pneumovax refused",
+          "pneumovax contraindicated",
+          "pneumovax not given",
+          "pneumovax not indicated",
+          "pneumovax declined",
+          "ppv23 refused",
+          "ppv23 contraindicated",
+          "ppv23 not given",
+          "ppv23 not indicated",
+          "ppv23 declined",
+          "prevenar 20 refused",
+          "prevenar 20 contraindicated",
+          "prevenar 20 not given",
+          "prevenar 20 not indicated",
+          "prevenar 20 declined"
+        ]
+      }
+    },
+    {
+      "id": "vax-shingles",
+      "type": "vaccine",
+      "enabled": true,
+      "vaccine": "shingles",
+      "displayName": "Shingles vaccine (Shingrix)",
+      "schedule": "once",
+      "source": "UKHSA Green Book Chapter 28a (Shingles) — phased programme from 1 Sept 2023: routine offer on turning 65 (cohort born on/after 1 Sept 1958) plus existing 70–79 cohort; Shingrix 2 doses 6–12 months apart",
+      "notes": "DOUBLE-CHECK ELIGIBILITY AND DOSES: Shingrix is a 2-dose course (6–12 months apart) — this chip shows GIVEN on ANY recorded shingles/zoster vaccination and CANNOT verify 2-dose completion; check dose count manually. People aged 68–69 who turned 65 before 1 Sept 2023 are NOT yet eligible and are correctly not flagged. Severely immunosuppressed adults aged 18+ pathway (from 1 Sept 2025) is NOT encoded (engine cannot combine age + clinical criteria in one clause) — assess manually for immunosuppressed patients from age 18. Historic Zostavax counts as given. 2026-07-11: corrected notes age for immunosuppressed pathway from '50+' to '18+' per UKHSA expansion from 1 Sept 2025 (corroborated via UKHSA Green Book Ch 28a search; primary PDF 403).",
+      "eligibility": {
+        "anyOf": [
+          {
+            "kind": "age",
+            "ageMin": 70,
+            "ageMax": 79,
+            "label": "Age 70–79 (routine shingles cohort)"
+          },
+          {
+            "kind": "age",
+            "ageMin": 65,
+            "ageMax": 69,
+            "bornOnOrAfter": "1958-09-01",
+            "label": "Turned 65 on/after 1 Sept 2023 (phased cohort)"
+          }
+        ]
+      },
+      "statusTerms": {
+        "given": [
+          "shingles vaccination",
+          "shingles vaccine",
+          "herpes zoster vaccin",
+          "shingrix",
+          "zostavax",
+          "zoster vaccination"
+        ],
+        "declined": [
+          "shingles vaccination declined",
+          "shingles vaccine declined",
+          "herpes zoster vaccination declined",
+          "shingles vaccination not given",
+          "herpes zoster vaccin refused",
+          "herpes zoster vaccin contraindicated",
+          "herpes zoster vaccin not given",
+          "herpes zoster vaccin not indicated",
+          "herpes zoster vaccin declined",
+          "shingles vaccination refused",
+          "shingles vaccination contraindicated",
+          "shingles vaccination not indicated",
+          "shingles vaccine refused",
+          "shingles vaccine contraindicated",
+          "shingles vaccine not given",
+          "shingles vaccine not indicated",
+          "shingrix refused",
+          "shingrix contraindicated",
+          "shingrix not given",
+          "shingrix not indicated",
+          "shingrix declined",
+          "zostavax refused",
+          "zostavax contraindicated",
+          "zostavax not given",
+          "zostavax not indicated",
+          "zostavax declined",
+          "zoster vaccination refused",
+          "zoster vaccination contraindicated",
+          "zoster vaccination not given",
+          "zoster vaccination not indicated",
+          "zoster vaccination declined"
+        ]
+      }
+    },
+    {
+      "id": "vax-rsv",
+      "type": "vaccine",
+      "enabled": true,
+      "vaccine": "rsv",
+      "displayName": "RSV vaccine",
+      "schedule": "once",
+      "source": "UKHSA Green Book Chapter 27a (RSV) / JCVI advice / NHSE operational letter July 2026 (65-74 clinical-risk expansion, effective 1 Sept 2026) / MHRA marketing authorisation (mRESVIA, Feb 2025).",
+      "notes": "DOUBLE-CHECK ELIGIBILITY: Single dose, no booster currently recommended. Eligibility expanded 1 April 2026 to remove the upper age bound (now age 75+) and to include ALL adult care-home residents (no minimum age) — applied on CSO direction; verify against the JCVI/NHSE letter. RSV-in-pregnancy pathway (from 28 weeks) is intentionally NOT encoded — see pertussis omission note. FUTURE ELIGIBILITY — 65-74 CLINICAL RISK (vacc-001, 2026-07-25): NHSE operational letter confirmed published 2 July 2026. From 1 September 2026, adults aged 65-74 in TWO specific clinical-risk groups become eligible: (1) chronic respiratory disease including poorly controlled asthma, chronic bronchitis, or cystic fibrosis; (2) immunosuppression due to disease or treatment (e.g. blood cancer, chemotherapy). NOT included in this September 2026 wave: cardiovascular disease, liver disease, kidney disease. NHS programme vaccine remains Abrysvo® only (not mRESVIA). An engine change is needed to encode conditional-age eligibility (age band + clinical-risk) before this clause can go live in the extension — eligibility not yet encoded in the anyOf clause; assess manually for 65-74 clinical-risk patients from 1 Sept 2026. CARE-HOME NOTES (vacc-004, 2026-07-25): all adult residents of care homes for older adults are eligible — no minimum age, following JCVI advice that eligibility extends to all adults regardless of age in that setting. NOTE re mRESVIA (vacc-002): MHRA authorised mRESVIA (Moderna mRNA RSV vaccine) February 2025 for adults 60+; it is NOT the NHS programme vaccine (NHS uses Abrysvo only) but may appear in records for patients vaccinated privately — 'mresvia' added to statusTerms.given to prevent false 'unvaccinated' flags for those patients.",
+      "eligibility": {
+        "anyOf": [
+          {
+            "kind": "age",
+            "ageMin": 75,
+            "label": "Age 75+"
+          },
+          {
+            "kind": "problem",
+            "match": [
+              "care home resident",
+              "nursing home resident",
+              "residential care"
+            ],
+            "label": "Care-home resident (adult, all ages)"
+          }
+        ]
+      },
+      "statusTerms": {
+        "given": [
+          "respiratory syncytial virus vaccin",
+          "rsv vaccination",
+          "rsv vaccine",
+          "abrysvo",
+          "arexvy",
+          "mresvia"
+        ],
+        "declined": [
+          "rsv vaccination declined",
+          "rsv vaccine declined",
+          "respiratory syncytial virus vaccination declined",
+          "rsv vaccination not given",
+          "abrysvo refused",
+          "abrysvo contraindicated",
+          "abrysvo not given",
+          "abrysvo not indicated",
+          "abrysvo declined",
+          "arexvy refused",
+          "arexvy contraindicated",
+          "arexvy not given",
+          "arexvy not indicated",
+          "arexvy declined",
+          "respiratory syncytial virus vaccin refused",
+          "respiratory syncytial virus vaccin contraindicated",
+          "respiratory syncytial virus vaccin not given",
+          "respiratory syncytial virus vaccin not indicated",
+          "respiratory syncytial virus vaccin declined",
+          "rsv vaccination refused",
+          "rsv vaccination contraindicated",
+          "rsv vaccination not indicated",
+          "rsv vaccine refused",
+          "rsv vaccine contraindicated",
+          "rsv vaccine not given",
+          "rsv vaccine not indicated",
+          "mresvia refused",
+          "mresvia contraindicated",
+          "mresvia not given",
+          "mresvia not indicated",
+          "mresvia declined"
+        ]
+      }
+    }
+  ],
+  "alertLibrary": [
+    {
+      "libId": "pincer-1",
+      "category": "Prescribing safety",
+      "subcategory": "GI bleed",
+      "title": "NSAID without gastroprotection (≥65)",
+      "description": "PINCER #1: patient aged ≥65 prescribed a systemic NSAID without a co-prescribed PPI or H2-blocker. The absence-of-gastroprotection half cannot be fully expressed with a single drug-combo set; this rule fires on NSAID presence in ≥65s and flags review. Enable the mustNotBePresent variant below if your formulary is consistent.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "NSAID without gastroprotection (≥65)",
+        "drugSets": [
+          {
+            "name": "NSAID",
+            "match": [
+              "ibuprofen",
+              "dexibuprofen",
+              "naproxen",
+              "diclofenac",
+              "aceclofenac",
+              "celecoxib",
+              "etoricoxib",
+              "meloxicam",
+              "piroxicam",
+              "tenoxicam",
+              "indomethacin",
+              "indometacin",
+              "etodolac",
+              "flurbiprofen",
+              "sulindac",
+              "ketoprofen",
+              "dexketoprofen",
+              "tiaprofenic acid",
+              "mefenamic acid",
+              "tolfenamic acid",
+              "fenoprofen",
+              "nabumetone"
+            ],
+            "exclude": [
+              "topical",
+              "gel",
+              "cream",
+              "patch",
+              "spray"
+            ]
+          }
+        ],
+        "mustNotBePresent": [
+          "omeprazole",
+          "lansoprazole",
+          "esomeprazole",
+          "pantoprazole",
+          "rabeprazole",
+          "ranitidine",
+          "famotidine",
+          "cimetidine"
+        ],
+        "ageRange": {
+          "min": 65
+        },
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #1. Co-prescribe PPI (first line) or H2-blocker if NSAID must be continued. Consider whether NSAID can be stopped. mustNotBePresent list covers PPIs and H2-blockers — rule fires only when NONE of these are co-prescribed.",
+        "source": "PINCER #1"
+      }
+    },
+    {
+      "libId": "pincer-2",
+      "category": "Prescribing safety",
+      "subcategory": "GI bleed",
+      "title": "Anticoagulant + NSAID concurrent",
+      "description": "PINCER #2: patient prescribed an oral anticoagulant (warfarin or DOAC) AND a systemic NSAID — major GI bleed risk.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Anticoagulant + NSAID concurrent",
+        "drugSets": [
+          {
+            "name": "Anticoagulant",
+            "match": [
+              "warfarin",
+              "acenocoumarol",
+              "phenindione",
+              "apixaban",
+              "rivaroxaban",
+              "dabigatran",
+              "edoxaban"
+            ]
+          },
+          {
+            "name": "NSAID",
+            "match": [
+              "ibuprofen",
+              "dexibuprofen",
+              "naproxen",
+              "diclofenac",
+              "aceclofenac",
+              "celecoxib",
+              "etoricoxib",
+              "meloxicam",
+              "piroxicam",
+              "tenoxicam",
+              "indomethacin",
+              "indometacin",
+              "etodolac",
+              "flurbiprofen",
+              "sulindac",
+              "ketoprofen",
+              "dexketoprofen",
+              "tiaprofenic acid",
+              "mefenamic acid",
+              "tolfenamic acid",
+              "fenoprofen",
+              "nabumetone"
+            ],
+            "exclude": [
+              "topical",
+              "gel",
+              "cream",
+              "patch",
+              "spray"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #2. Concurrent anticoagulant + systemic NSAID markedly increases GI bleed risk. Consider stopping NSAID; ensure PPI co-prescribed if continuation unavoidable.",
+        "source": "PINCER #2"
+      }
+    },
+    {
+      "libId": "pincer-3",
+      "category": "Prescribing safety",
+      "subcategory": "GI bleed",
+      "title": "Aspirin + NSAID concurrent (no PPI)",
+      "description": "PINCER #3: concurrent aspirin and systemic NSAID without gastroprotection — additive GI bleed risk.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Aspirin + NSAID concurrent (no PPI)",
+        "drugSets": [
+          {
+            "name": "Aspirin",
+            "match": [
+              "aspirin 75",
+              "aspirin 300",
+              "aspirin tablet",
+              "aspirin dispersible",
+              "aspirin gastro",
+              "nu-seals",
+              "caprin",
+              "micropirin"
+            ],
+            "exclude": [
+              "aspirin 500",
+              "aspirin 600",
+              "migraleve",
+              "anadin"
+            ]
+          },
+          {
+            "name": "NSAID",
+            "match": [
+              "ibuprofen",
+              "dexibuprofen",
+              "naproxen",
+              "diclofenac",
+              "aceclofenac",
+              "celecoxib",
+              "etoricoxib",
+              "meloxicam",
+              "piroxicam",
+              "tenoxicam",
+              "indomethacin",
+              "indometacin",
+              "etodolac",
+              "flurbiprofen",
+              "sulindac",
+              "ketoprofen",
+              "dexketoprofen",
+              "tiaprofenic acid",
+              "mefenamic acid",
+              "tolfenamic acid",
+              "fenoprofen",
+              "nabumetone"
+            ],
+            "exclude": [
+              "topical",
+              "gel",
+              "cream",
+              "patch",
+              "spray"
+            ]
+          }
+        ],
+        "mustNotBePresent": [
+          "omeprazole",
+          "lansoprazole",
+          "esomeprazole",
+          "pantoprazole",
+          "rabeprazole",
+          "ranitidine",
+          "famotidine"
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #3. Aspirin + NSAID combination carries significantly elevated GI bleed risk. Co-prescription of PPI is strongly recommended if both drugs must be continued. Review indication for NSAID.",
+        "source": "PINCER #3"
+      }
+    },
+    {
+      "libId": "pincer-4",
+      "category": "Prescribing safety",
+      "subcategory": "Renal",
+      "title": "ACE inhibitor or ARB + NSAID concurrent",
+      "description": "PINCER #4: concurrent RAAS blocker (ACEi/ARB) + systemic NSAID — risk of acute kidney injury.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "ACEi/ARB + NSAID concurrent",
+        "drugSets": [
+          {
+            "name": "ACEi/ARB",
+            "match": [
+              "ramipril",
+              "lisinopril",
+              "perindopril",
+              "enalapril",
+              "captopril",
+              "trandolapril",
+              "fosinopril",
+              "quinapril",
+              "imidapril",
+              "cilazapril",
+              "losartan",
+              "candesartan",
+              "valsartan",
+              "irbesartan",
+              "telmisartan",
+              "olmesartan",
+              "azilsartan",
+              "eprosartan",
+              "sacubitril"
+            ]
+          },
+          {
+            "name": "NSAID",
+            "match": [
+              "ibuprofen",
+              "dexibuprofen",
+              "naproxen",
+              "diclofenac",
+              "aceclofenac",
+              "celecoxib",
+              "etoricoxib",
+              "meloxicam",
+              "piroxicam",
+              "tenoxicam",
+              "indomethacin",
+              "indometacin",
+              "etodolac",
+              "flurbiprofen",
+              "sulindac",
+              "ketoprofen",
+              "dexketoprofen",
+              "tiaprofenic acid",
+              "mefenamic acid",
+              "tolfenamic acid",
+              "fenoprofen",
+              "nabumetone"
+            ],
+            "exclude": [
+              "topical",
+              "gel",
+              "cream",
+              "patch",
+              "spray"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #4. 'Triple whammy' risk if diuretic also present. NSAIDs reduce renal perfusion synergistically with RAAS blockade. Counsel sick-day rules; review NSAID indication.",
+        "source": "PINCER #4"
+      }
+    },
+    {
+      "libId": "pincer-5",
+      "category": "Prescribing safety",
+      "subcategory": "Cardiovascular",
+      "title": "Beta-blocker + verapamil or diltiazem concurrent",
+      "description": "PINCER #5: concurrent beta-blocker and rate-limiting calcium channel blocker — risk of bradycardia and heart block.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Beta-blocker + rate-limiting CCB",
+        "drugSets": [
+          {
+            "name": "Beta-blocker",
+            "match": [
+              "bisoprolol",
+              "atenolol",
+              "metoprolol",
+              "carvedilol",
+              "nebivolol",
+              "propranolol",
+              "sotalol",
+              "nadolol",
+              "labetalol"
+            ]
+          },
+          {
+            "name": "Rate-limiting CCB",
+            "match": [
+              "verapamil",
+              "diltiazem"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #5. Combination causes additive negative chronotropic and dromotropic effects. Risk of severe bradycardia, AV block, and asystole. Usually contraindicated unless under specialist supervision (e.g. refractory angina).",
+        "source": "PINCER #5"
+      }
+    },
+    {
+      "libId": "pincer-6",
+      "category": "Prescribing safety",
+      "subcategory": "Heart failure",
+      "title": "NSAID in heart failure",
+      "description": "PINCER #6: systemic NSAID prescribed in a patient with a heart failure diagnosis — fluid retention worsens HF.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "NSAID in heart failure",
+        "drugSets": [
+          {
+            "name": "NSAID",
+            "match": [
+              "ibuprofen",
+              "dexibuprofen",
+              "naproxen",
+              "diclofenac",
+              "aceclofenac",
+              "celecoxib",
+              "etoricoxib",
+              "meloxicam",
+              "piroxicam",
+              "tenoxicam",
+              "indomethacin",
+              "indometacin",
+              "etodolac",
+              "flurbiprofen",
+              "sulindac",
+              "ketoprofen",
+              "dexketoprofen",
+              "tiaprofenic acid",
+              "mefenamic acid",
+              "tolfenamic acid",
+              "fenoprofen",
+              "nabumetone"
+            ],
+            "exclude": [
+              "topical",
+              "gel",
+              "cream",
+              "patch",
+              "spray"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [
+          "heart failure"
+        ],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #6. NSAIDs cause sodium and water retention, worsen cardiac function, and antagonise the effect of loop diuretics. Avoid in heart failure; paracetamol is preferred for analgesia.",
+        "source": "PINCER #6"
+      }
+    },
+    {
+      "libId": "pincer-7",
+      "category": "Prescribing safety",
+      "subcategory": "Anticoagulation",
+      "title": "Warfarin without recent INR (90 days)",
+      "description": "PINCER #7: patient on warfarin with no INR recorded in the last 90 days — INR monitoring overdue.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-monitoring",
+        "enabled": true,
+        "id": "custom-pincer-7-warfarin-inr",
+        "label": "Warfarin without recent INR",
+        "drug": {
+          "match": [
+            "warfarin"
+          ],
+          "exclude": []
+        },
+        "tests": [
+          {
+            "name": "INR",
+            "match": [
+              "inr",
+              "international normalised ratio",
+              "prothrombin time"
+            ],
+            "intervalDays": 84,
+            "dueSoonDays": 14
+          }
+        ],
+        "notes": "PINCER #7. INR must be within therapeutic range for warfarin to be safe. Monitoring frequency: NHS SPS specifies 12 weeks (84 days) as the maximum gap for stable patients (BCSH guideline). Corrected from 90d to 84d 2026-07-11 (The Keeper, NHS SPS corroborated; primary PDF 403).",
+        "source": "PINCER #7"
+      }
+    },
+    {
+      "libId": "pincer-8",
+      "category": "Prescribing safety",
+      "subcategory": "Bleeding",
+      "title": "Aspirin + clopidogrel without PPI (dual antiplatelet)",
+      "description": "PINCER #8: dual antiplatelet therapy (aspirin + clopidogrel/ticagrelor/prasugrel) without PPI gastroprotection.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Dual antiplatelet without PPI",
+        "drugSets": [
+          {
+            "name": "Aspirin",
+            "match": [
+              "aspirin 75",
+              "aspirin 300",
+              "aspirin tablet",
+              "aspirin dispersible",
+              "aspirin gastro",
+              "nu-seals",
+              "caprin",
+              "micropirin"
+            ],
+            "exclude": [
+              "aspirin 500",
+              "anadin",
+              "migraleve"
+            ]
+          },
+          {
+            "name": "P2Y12",
+            "match": [
+              "clopidogrel",
+              "ticagrelor",
+              "prasugrel"
+            ]
+          }
+        ],
+        "mustNotBePresent": [
+          "omeprazole",
+          "lansoprazole",
+          "esomeprazole",
+          "pantoprazole",
+          "rabeprazole"
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "amber",
+        "notes": "PINCER #8. NICE recommends PPI co-prescription with dual antiplatelet therapy. Review after 12 months — dual antiplatelet is usually time-limited post-ACS or PCI.",
+        "source": "PINCER #8"
+      }
+    },
+    {
+      "libId": "pincer-9",
+      "category": "Prescribing safety",
+      "subcategory": "Renal",
+      "title": "Metformin without recent renal function check",
+      "description": "PINCER #9: patient on metformin with no U&E/eGFR in the last 12 months — lactic acidosis risk if eGFR <30.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-monitoring",
+        "enabled": true,
+        "id": "custom-pincer-9-metformin-renal",
+        "label": "Metformin — annual eGFR overdue",
+        "drug": {
+          "match": [
+            "metformin",
+            "glucophage",
+            "janumet",
+            "komboglyze",
+            "eucreas",
+            "xigduo",
+            "synjardy",
+            "vipdomet",
+            "jentadueto"
+          ],
+          "exclude": []
+        },
+        "tests": [
+          {
+            "name": "U&E / eGFR",
+            "match": [
+              "u&e",
+              "urea and electrolytes",
+              "renal profile",
+              "egfr",
+              "creatinine"
+            ],
+            "intervalDays": 365,
+            "dueSoonDays": 30
+          }
+        ],
+        "notes": "PINCER #9. Metformin is contraindicated when eGFR <30 mL/min/1.73m² and should be used with caution <45. Annual renal function monitoring is essential. Stop/withhold during acute illness, dehydration, or before iodinated contrast.",
+        "source": "PINCER #9"
+      }
+    },
+    {
+      "libId": "pincer-10",
+      "category": "Prescribing safety",
+      "subcategory": "Electrolytes",
+      "title": "Loop diuretic without recent U&E (6 months)",
+      "description": "PINCER #10: patient on a loop diuretic (furosemide/bumetanide) without U&E check in 6 months — hypokalaemia and electrolyte disturbance risk.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-monitoring",
+        "enabled": true,
+        "id": "custom-pincer-10-loop-diuretic-ue",
+        "label": "Loop diuretic — 6-monthly U&E overdue",
+        "drug": {
+          "match": [
+            "furosemide",
+            "frusemide",
+            "bumetanide",
+            "torasemide"
+          ],
+          "exclude": []
+        },
+        "tests": [
+          {
+            "name": "U&E",
+            "match": [
+              "u&e",
+              "urea and electrolytes",
+              "renal profile",
+              "electrolytes"
+            ],
+            "intervalDays": 180,
+            "dueSoonDays": 21
+          }
+        ],
+        "notes": "PINCER #10. Loop diuretics cause electrolyte loss — especially hypokalaemia and hyponatraemia. 6-monthly U&E is the minimum; more frequent if frail, high dose, or renal impairment.",
+        "source": "PINCER #10"
+      }
+    },
+    {
+      "libId": "pincer-11",
+      "category": "Prescribing safety",
+      "subcategory": "Electrolytes",
+      "title": "Amiodarone without 6-monthly TFT/LFT",
+      "description": "PINCER #11: patient on amiodarone without thyroid and liver function tests in 6 months — amiodarone-induced thyroid and hepatic toxicity.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-monitoring",
+        "enabled": true,
+        "id": "custom-pincer-11-amiodarone-monitoring",
+        "label": "Amiodarone — 6-monthly TFT/LFT overdue",
+        "drug": {
+          "match": [
+            "amiodarone"
+          ],
+          "exclude": []
+        },
+        "tests": [
+          {
+            "name": "TFT",
+            "match": [
+              "tft",
+              "thyroid function",
+              "tsh"
+            ],
+            "intervalDays": 180,
+            "dueSoonDays": 21
+          },
+          {
+            "name": "LFT",
+            "match": [
+              "lft",
+              "liver function"
+            ],
+            "intervalDays": 180,
+            "dueSoonDays": 21
+          }
+        ],
+        "notes": "PINCER #11. Amiodarone causes both hypo- and hyperthyroidism and hepatotoxicity. 6-monthly TFT and LFT are mandatory. CXR annually for pulmonary toxicity.",
+        "source": "PINCER #11"
+      }
+    },
+    {
+      "libId": "pincer-12",
+      "category": "Prescribing safety",
+      "subcategory": "Lithium safety",
+      "title": "Lithium + NSAID concurrent",
+      "description": "PINCER #12: concurrent lithium and systemic NSAID — NSAIDs reduce renal lithium clearance causing toxicity.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Lithium + NSAID concurrent",
+        "drugSets": [
+          {
+            "name": "Lithium",
+            "match": [
+              "lithium"
+            ],
+            "exclude": [
+              "shampoo",
+              "topical",
+              "gel",
+              "cream"
+            ]
+          },
+          {
+            "name": "NSAID",
+            "match": [
+              "ibuprofen",
+              "dexibuprofen",
+              "naproxen",
+              "diclofenac",
+              "aceclofenac",
+              "celecoxib",
+              "etoricoxib",
+              "meloxicam",
+              "piroxicam",
+              "tenoxicam",
+              "indomethacin",
+              "indometacin",
+              "etodolac",
+              "flurbiprofen",
+              "sulindac",
+              "ketoprofen",
+              "dexketoprofen",
+              "tiaprofenic acid",
+              "mefenamic acid",
+              "tolfenamic acid",
+              "fenoprofen",
+              "nabumetone"
+            ],
+            "exclude": [
+              "topical",
+              "gel",
+              "cream",
+              "patch",
+              "spray"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #12. NSAIDs reduce renal lithium excretion by up to 25%, raising levels into the toxic range (>1.5 mmol/L). Recommend paracetamol as first-line analgesia for patients on lithium. If NSAID unavoidable, check lithium level urgently and reduce dose.",
+        "source": "PINCER #12"
+      }
+    },
+    {
+      "libId": "pincer-13",
+      "category": "Prescribing safety",
+      "subcategory": "Anticoagulation",
+      "title": "Anticoagulant + antiplatelet (triple therapy) in ≥75s",
+      "description": "PINCER #13: triple therapy (anticoagulant + dual antiplatelet) in patients aged ≥75 — very high bleeding risk.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Triple antithrombotic therapy (≥75)",
+        "drugSets": [
+          {
+            "name": "Anticoagulant",
+            "match": [
+              "warfarin",
+              "acenocoumarol",
+              "phenindione",
+              "apixaban",
+              "rivaroxaban",
+              "dabigatran",
+              "edoxaban"
+            ]
+          },
+          {
+            "name": "Antiplatelet 1",
+            "match": [
+              "aspirin 75",
+              "aspirin 300",
+              "aspirin tablet",
+              "aspirin dispersible",
+              "aspirin gastro",
+              "nu-seals",
+              "caprin",
+              "micropirin"
+            ],
+            "exclude": [
+              "aspirin 500",
+              "anadin",
+              "migraleve"
+            ]
+          },
+          {
+            "name": "Antiplatelet 2",
+            "match": [
+              "clopidogrel",
+              "ticagrelor",
+              "prasugrel"
+            ]
+          }
+        ],
+        "ageRange": {
+          "min": 75
+        },
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #13. Triple antithrombotic therapy in ≥75s carries very high bleeding risk. NICE recommends limiting dual antiplatelet + anticoagulant therapy duration (typically 1–4 weeks post-ACS/PCI) then stepping down to single agent. Review indication and duration urgently.",
+        "source": "PINCER #13"
+      }
+    },
+    {
+      "libId": "mhra-valproate-ppg",
+      "category": "Prescribing safety",
+      "subcategory": "Teratogenicity",
+      "title": "Valproate in female of childbearing age",
+      "description": "Valproate (sodium valproate / valproic acid) in female aged 12–55 — MHRA Pregnancy Prevention Programme (PPP) mandatory.",
+      "source": "MHRA",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Valproate — female childbearing age",
+        "drugSets": [
+          {
+            "name": "Valproate",
+            "match": [
+              "sodium valproate",
+              "valproic acid",
+              "valproate",
+              "epilim",
+              "depakote",
+              "convulex"
+            ]
+          }
+        ],
+        "ageRange": {
+          "min": 12,
+          "max": 55
+        },
+        "sex": "F",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "MHRA Pregnancy Prevention Programme (PPP): valproate must not be prescribed to women/girls of childbearing potential without annual specialist review, confirmed effective contraception, and a signed PPP form (MHRA 2024 update). Check PPP compliance annually. Valproate causes major congenital malformations (10%) and neurodevelopmental disorders (30–40%) in children exposed in utero.",
+        "source": "MHRA Drug Safety Update"
+      }
+    },
+    {
+      "libId": "nice-lithium-monitoring",
+      "category": "Prescribing safety",
+      "subcategory": "Lithium safety",
+      "title": "Lithium without 3-monthly level + 6-monthly U&E/TFT",
+      "description": "Lithium monitoring overdue — serum level every 3 months, U&E and TFT every 6 months.",
+      "source": "NICE CG185",
+      "rule": {
+        "type": "drug-monitoring",
+        "enabled": true,
+        "id": "custom-nice-lithium-monitoring",
+        "label": "Lithium — monitoring overdue",
+        "drug": {
+          "match": [
+            "lithium"
+          ],
+          "exclude": []
+        },
+        "tests": [
+          {
+            "name": "Lithium level",
+            "match": [
+              "lithium level",
+              "serum lithium"
+            ],
+            "intervalDays": 90,
+            "dueSoonDays": 14
+          },
+          {
+            "name": "U&E",
+            "match": [
+              "u&e",
+              "urea and electrolytes",
+              "renal profile"
+            ],
+            "intervalDays": 180,
+            "dueSoonDays": 21
+          },
+          {
+            "name": "TFT",
+            "match": [
+              "tft",
+              "thyroid function"
+            ],
+            "intervalDays": 180,
+            "dueSoonDays": 21
+          },
+          {
+            "name": "Calcium",
+            "match": [
+              "calcium",
+              "corrected calcium"
+            ],
+            "intervalDays": 180,
+            "dueSoonDays": 21
+          }
+        ],
+        "notes": "NICE CG185. Level should be taken 12 hours post-dose. Target 0.6–1.0 mmol/L (or 0.4–0.8 mmol/L in elderly). Symptoms of toxicity: coarse tremor, polyuria, vomiting, confusion.",
+        "source": "NICE CG185"
+      }
+    },
+    {
+      "libId": "mhra-sglt2-dka",
+      "category": "Prescribing safety",
+      "subcategory": "Renal",
+      "title": "SGLT2 inhibitor — DKA awareness reminder",
+      "description": "Patient on SGLT2 inhibitor: reminder to check sick-day rules and DKA risk awareness (including euglycaemic DKA).",
+      "source": "MHRA",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "SGLT2 inhibitor — DKA risk reminder",
+        "drugSets": [
+          {
+            "name": "SGLT2 inhibitor",
+            "match": [
+              "dapagliflozin",
+              "empagliflozin",
+              "canagliflozin",
+              "ertugliflozin"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "info",
+        "notes": "MHRA Drug Safety Updates 2020–2024. SGLT2 inhibitors carry risk of euglycaemic DKA (blood glucose may be near-normal). Sick-day rules: withhold during acute illness, dehydration, surgery, or prolonged fasting. Counsel on symptoms of DKA. Annual eGFR monitoring via drug-monitoring rule (sglt2-inhibitor). This alert is an informational prompt — review sick-day rule education at each medication review. Note: aspiration risk during surgical procedures is a separate MHRA concern for GLP-1 agonists (January 2025) — see the mhra-glp1-acute-pancreatitis alert note and the glp1-receptor-agonist drug-monitoring rule for the surgical aspiration counselling point.",
+        "source": "MHRA"
+      }
+    },
+    {
+      "libId": "mhra-glp1-acute-pancreatitis",
+      "category": "Prescribing safety",
+      "subcategory": "GI",
+      "title": "GLP-1 / GIP agonist — acute pancreatitis awareness reminder",
+      "description": "Patient on a GLP-1 or dual GLP-1/GIP receptor agonist: counselling reminder to watch for severe persistent abdominal pain radiating to the back (acute pancreatitis, including necrotising and fatal cases).",
+      "source": "MHRA",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "GLP-1 / GIP agonist — acute pancreatitis reminder",
+        "drugSets": [
+          {
+            "name": "GLP-1 / GIP agonist",
+            "match": [
+              "semaglutide",
+              "ozempic",
+              "wegovy",
+              "rybelsus",
+              "tirzepatide",
+              "mounjaro",
+              "zepbound",
+              "dulaglutide",
+              "trulicity",
+              "liraglutide",
+              "victoza",
+              "saxenda",
+              "xultophy",
+              "lixisenatide",
+              "lyxumia",
+              "exenatide",
+              "byetta",
+              "bydureon"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "amber",
+        "notes": "MHRA Drug Safety Update — GLP-1/GIP receptor agonists: strengthened warnings on acute pancreatitis (including necrotising and fatal cases), following Yellow Card reports. Counsel patients to seek urgent medical attention for severe, persistent abdominal pain that may radiate to the back, with or without vomiting — a red-flag symptom of acute pancreatitis. Discontinue the GLP-1/GIP agonist if pancreatitis is suspected and do not restart if confirmed. ASPIRATION RISK (MHRA January 2025): GLP-1 agonists delay gastric emptying; patients having surgical or endoscopic procedures must inform their anaesthetist/surgeon that they are taking a GLP-1 agonist — standard fasting periods may be insufficient to ensure an empty stomach. For weekly injections, withhold the dose on the week of a planned procedure per RCOA/MHRA guidance. Review this counselling point at each medication review. Sources corroborated 2026-07-11; primary MHRA January 2025 DSU PDF 403 this run. NAION WARNING (alert-C002, MHRA DSU Feb 5 2026, CONFIRMED 2026-07-25): MHRA Drug Safety Update (5 February 2026) warned of a possible association between semaglutide (Ozempic, Wegovy, Rybelsus) and non-arteritic anterior ischaemic optic neuropathy (NAION — sudden painless vision loss). Signal is under investigation; MHRA advises: (1) counsel all semaglutide patients on sudden, painless loss of vision as a red-flag symptom requiring immediate referral to ophthalmology; (2) report any case via Yellow Card; (3) benefit–risk assessment ongoing. Association with other GLP-1 agonists not yet established; caution is appropriate. VERIFIER-A confirmed this DSU from MHRA sources.",
+        "source": "MHRA Drug Safety Update — GLP-1/GIP receptor agonists: strengthened warnings on acute pancreatitis (including necrotising and fatal cases) — https://www.gov.uk/drug-safety-update/glp-1-receptor-agonists-and-dual-glp-1-slash-gip-receptor-agonists-strengthened-warnings-on-acute-pancreatitis-including-necrotising-and-fatal-cases"
+      }
+    },
+    {
+      "libId": "mhra-isotretinoin-ppg",
+      "category": "Prescribing safety",
+      "subcategory": "Teratogenicity",
+      "title": "Isotretinoin in female of childbearing age",
+      "description": "Isotretinoin (Roaccutane) in female aged 12–55 — Pregnancy Prevention Programme mandatory, initiated and managed by dermatology but GP must be aware.",
+      "source": "MHRA",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Isotretinoin — female childbearing age",
+        "drugSets": [
+          {
+            "name": "Isotretinoin",
+            "match": [
+              "isotretinoin",
+              "roaccutane"
+            ],
+            "exclude": [
+              "topical",
+              "gel",
+              "cream"
+            ]
+          }
+        ],
+        "ageRange": {
+          "min": 12,
+          "max": 55
+        },
+        "sex": "F",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "Isotretinoin is highly teratogenic (Category X). The MHRA Pregnancy Prevention Programme requires two forms of contraception and monthly pregnancy tests. Prescribing is via specialist only. GP role: be aware the patient is on isotretinoin and that PPP compliance is being maintained.",
+        "source": "MHRA Pregnancy Prevention Programme"
+      }
+    },
+    {
+      "libId": "prescribing-qtc-combination",
+      "category": "Prescribing safety",
+      "subcategory": "QTc prolongation",
+      "title": "Two or more QTc-prolonging drugs concurrent",
+      "description": "Concurrent use of two or more drugs known to prolong the QT interval — additive risk of torsades de pointes.",
+      "source": "UK Prescribing Safety",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "QTc-prolonging drug combination",
+        "drugSets": [
+          {
+            "name": "QTc drug A",
+            "match": [
+              "amiodarone",
+              "sotalol",
+              "quinidine",
+              "disopyramide",
+              "domperidone",
+              "methadone",
+              "haloperidol",
+              "chlorpromazine",
+              "quetiapine",
+              "citalopram",
+              "escitalopram",
+              "azithromycin",
+              "erythromycin",
+              "clarithromycin",
+              "fluconazole",
+              "hydroxychloroquine",
+              "pimozide"
+            ]
+          },
+          {
+            "name": "QTc drug B",
+            "match": [
+              "amiodarone",
+              "sotalol",
+              "quinidine",
+              "disopyramide",
+              "domperidone",
+              "methadone",
+              "haloperidol",
+              "chlorpromazine",
+              "quetiapine",
+              "citalopram",
+              "escitalopram",
+              "azithromycin",
+              "erythromycin",
+              "clarithromycin",
+              "fluconazole",
+              "hydroxychloroquine",
+              "pimozide"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "amber",
+        "notes": "Note: this rule will fire when any two drugs from the QTc list are co-prescribed, including the same drug in different formulations. Review the matchSummary in the chip to confirm these are genuinely two different QTc-prolonging agents. Consider ECG monitoring, especially if patient has hypokalaemia, bradycardia, or prior QTc prolongation. Pimozide added 2026-07-11 — known high-risk QTc-prolonger (MHRA DSU; BNF has explicit contraindication with other QTc drugs; corroborated). Ondansetron is on the CredibleMeds CQTDB list but the 2012 MHRA DSU was for IV use at high doses; low-dose oral ondansetron has a lower risk profile and has been deliberately omitted to avoid over-alerting in common antiemetic use — reassess if prescribing practices change. DOMPERIDONE — PHAEOCHROMOCYTOMA (alert-C004, CONFIRMED 2026-07-25): domperidone is included in this QTc rule. See also the separate alert 'alert-domperidone-phaeo' (RED): domperidone is absolutely contraindicated in phaeochromocytoma/paraganglioma — it stimulates catecholamine release and can precipitate a hypertensive crisis. If domperidone appears in the QTc chip alongside a phaeo diagnosis, treat as RED rather than AMBER.",
+        "source": "crediblemeds.org"
+      }
+    },
+    {
+      "libId": "event-count-1",
+      "category": "Clinical review",
+      "subcategory": "Infections",
+      "title": "Recurrent UTI (≥3 in 12 months, female <65)",
+      "description": "Female patient aged under 65 with 3 or more UTI / cystitis problems coded in the last 12 months — consider recurrent UTI workup.",
+      "source": "NICE NG112",
+      "rule": {
+        "type": "event-count",
+        "enabled": true,
+        "label": "Recurrent UTI (≥3 in 12 months)",
+        "sourceKind": "problems",
+        "match": [
+          "urinary tract infection",
+          "uti",
+          "cystitis",
+          "lower urinary tract"
+        ],
+        "exclude": [
+          "history of",
+          "chronic",
+          "interstitial",
+          "radiation",
+          "previous",
+          "old",
+          "symptoms",
+          "luts",
+          "outflow"
+        ],
+        "windowMonths": 12,
+        "countThreshold": 3,
+        "operator": ">=",
+        "ageRange": {
+          "max": 65
+        },
+        "sex": "F",
+        "severity": "amber",
+        "notes": "NICE NG112: consider recurrent UTI if ≥2 in 6 months or ≥3 in 12 months. Workup: MSU culture, urine dipstick, consider renal USS and referral. Low-dose antibiotic prophylaxis or vaginal oestrogen may be appropriate post-menopausally.",
+        "source": "NICE NG112"
+      }
+    },
+    {
+      "libId": "event-count-2",
+      "category": "Clinical review",
+      "subcategory": "Falls",
+      "title": "Recurrent falls (≥2 in 12 months, ≥65)",
+      "description": "Patient aged ≥65 with 2 or more falls coded in the last 12 months — consider multifactorial falls assessment.",
+      "source": "NICE CG161",
+      "rule": {
+        "type": "event-count",
+        "enabled": true,
+        "label": "Recurrent falls (≥2 in 12 months)",
+        "sourceKind": "problems",
+        "match": [
+          "fall",
+          "fallen",
+          "falling",
+          "trip and fall"
+        ],
+        "exclude": [
+          "risk of fall",
+          "fear of fall",
+          "history of fall"
+        ],
+        "windowMonths": 12,
+        "countThreshold": 2,
+        "operator": ">=",
+        "ageRange": {
+          "min": 65
+        },
+        "sex": "any",
+        "severity": "amber",
+        "notes": "NICE CG161: offer multifactorial falls assessment to older people with ≥2 falls or one fall with injury in 12 months. Review medications (particularly those causing hypotension, sedation), vision, balance, home hazards. Consider medication review, physiotherapy, and home assessment.",
+        "source": "NICE CG161"
+      }
+    },
+    {
+      "libId": "composite-1",
+      "category": "Prescribing safety",
+      "subcategory": "GI bleed",
+      "title": "High-risk GI bleed combination (NSAID + anticoagulant, ≥65, HF)",
+      "description": "Example composite: fires when BOTH pincer-2 (anticoagulant + NSAID) AND pincer-6 (NSAID in HF) are active — i.e. the patient has all three risk factors simultaneously. Shows how composite rules combine others.",
+      "source": "Composite example",
+      "rule": {
+        "type": "composite",
+        "enabled": false,
+        "label": "NSAID + anticoagulant + HF — extreme GI bleed risk",
+        "operator": "AND",
+        "ruleIds": [
+          "custom-replace-with-pincer-2-id",
+          "custom-replace-with-pincer-6-id"
+        ],
+        "severity": "red",
+        "notes": "Composite rule example. Replace the placeholder ruleIds above with the actual saved IDs of the pincer-2 (anticoagulant+NSAID) and pincer-6 (NSAID in HF) rules in your custom rules list after importing them. When both fire simultaneously this composite surfaces a consolidated high-severity alert."
+      }
+    },
+    {
+      "libId": "trend-1",
+      "category": "Clinical review",
+      "subcategory": "Cancer screening",
+      "title": "Rising PSA trend (≥3 readings, 24 months)",
+      "description": "PSA values showing a rising trend across ≥3 readings in 24 months with a minimum delta of 1.0 ng/mL — consider urology referral.",
+      "source": "NICE NG12",
+      "rule": {
+        "type": "qof-indicator",
+        "enabled": true,
+        "indicatorCode": "TREND-PSA",
+        "indicatorName": "Rising PSA trend",
+        "sex": "M",
+        "ageRange": {
+          "min": 40
+        },
+        "useQofYearFloor": false,
+        "check": {
+          "kind": "observation-trend",
+          "observation": [
+            "psa",
+            "prostate specific antigen"
+          ],
+          "direction": "rising",
+          "minPoints": 3,
+          "withinMonths": 24,
+          "minDelta": 1
+        },
+        "notes": "Observation history is required for trend analysis. Currently, only the latest PSA value is available via the investigation dashboard API. This rule will show no_data until multi-point history is available. When history is available: a PSA rise >1 ng/mL/year or PSA velocity >0.75 ng/mL/year warrants urology referral (NICE NG12).",
+        "source": "NICE NG12"
+      }
+    },
+    {
+      "libId": "pincer-mtx-trimethoprim",
+      "category": "Prescribing safety",
+      "subcategory": "Bone marrow suppression",
+      "title": "Methotrexate + trimethoprim / co-trimoxazole — severe bone marrow suppression",
+      "description": "Concurrent (or recent) methotrexate with trimethoprim or co-trimoxazole — additive antifolate effect causes potentially fatal bone-marrow suppression. NHS SPS: avoid; consult microbiology for an alternative antibiotic.",
+      "source": "NHS SPS 'Managing interactions with methotrexate'; MHRA/Medsafe",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Methotrexate + trimethoprim/co-trimoxazole — bone marrow suppression",
+        "drugSets": [
+          {
+            "name": "Methotrexate",
+            "match": [
+              "methotrexate",
+              "maxtrex",
+              "metoject",
+              "jylamvo",
+              "nordimet",
+              "zlatal",
+              "methofill"
+            ],
+            "exclude": [
+              "topical",
+              "cream",
+              "gel"
+            ]
+          },
+          {
+            "name": "Trimethoprim/Co-trimoxazole",
+            "match": [
+              "trimethoprim",
+              "co-trimoxazole",
+              "septrin"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "NHS SPS: avoid co-trimoxazole or trimethoprim with methotrexate — risk of severe, potentially fatal bone-marrow suppression (pancytopenia) via additive dihydrofolate-reductase inhibition plus increased free methotrexate (sulfamethoxazole protein-binding displacement). The interaction may be DELAYED — cases have occurred when trimethoprim/co-trimoxazole was given after recently stopping methotrexate. Consult microbiology for an alternative; if unavoidable, warn the patient to report sore throat, mouth ulcers, fever, bruising or bleeding urgently and monitor FBC. SOURCE GAP: BNF/SPS/MHRA primary pages 403 — corroborated (NHS SPS article, Medsafe alert, emc SmPCs); pending primary-source confirmation.",
+        "source": "NHS SPS 'Managing interactions with methotrexate' (corroborated; primary page 403, pending confirmation)"
+      }
+    },
+    {
+      "libId": "mhra-acei-arb-ksparing-hyperkalaemia",
+      "category": "Prescribing safety",
+      "subcategory": "Electrolytes",
+      "title": "ACEi/ARB + potassium-sparing diuretic/aldosterone antagonist — hyperkalaemia",
+      "description": "Concurrent ACE inhibitor or ARB with spironolactone, eplerenone, amiloride, triamterene or their combination products — risk of severe, potentially fatal hyperkalaemia (MHRA DSU Feb 2016). Guideline-endorsed in heart failure under monitoring; this alert prompts a potassium/U&E check, not a contraindication.",
+      "source": "MHRA Drug Safety Update February 2016",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "ACEi/ARB + K+-sparing diuretic — check potassium",
+        "drugSets": [
+          {
+            "name": "ACEi/ARB",
+            "match": [
+              "ramipril",
+              "lisinopril",
+              "perindopril",
+              "enalapril",
+              "captopril",
+              "trandolapril",
+              "fosinopril",
+              "quinapril",
+              "imidapril",
+              "cilazapril",
+              "losartan",
+              "candesartan",
+              "valsartan",
+              "irbesartan",
+              "telmisartan",
+              "olmesartan",
+              "azilsartan",
+              "eprosartan",
+              "sacubitril"
+            ]
+          },
+          {
+            "name": "Potassium-sparing diuretic / aldosterone antagonist",
+            "match": [
+              "spironolactone",
+              "eplerenone",
+              "amiloride",
+              "triamterene",
+              "co-amilofruse",
+              "co-amilozide",
+              "co-triamterzide"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "amber",
+        "notes": "MHRA DSU Feb 2016: spironolactone (or eplerenone, amiloride, triamterene) + ACE inhibitor/ARB risks severe, potentially fatal hyperkalaemia — especially with renal impairment, diabetes, or in the elderly. Deliberately AMBER not red: spironolactone + ACEi/ARB is guideline-endorsed four-pillar heart-failure therapy (NICE NG106); a red would fire on much of the HF register and drown actionable alerts. Amber prompts a serum K+/U&E check: before co-prescribing, at ~1 and ~4 weeks, then 3–6 monthly; reduce/stop if K+ ≥5.5 mmol/L. co-amilofruse = amiloride+furosemide; co-amilozide = amiloride+hydrochlorothiazide; co-triamterzide = triamterene+hydrochlorothiazide. SOURCE GAP: MHRA primary page 403 — corroborated via secondary NHS/regulatory sources; pending primary-source confirmation.",
+        "source": "MHRA Drug Safety Update 17 February 2016 (corroborated; primary page 403, pending confirmation)"
+      }
+    },
+    {
+      "libId": "alert-001",
+      "category": "Prescribing safety",
+      "subcategory": "GI bleed",
+      "title": "NSAID + peptic ulcer history without PPI (PINCER primary outcome)",
+      "description": "PINCER primary outcome #1: patient with a coded history of peptic ulcer, gastric ulcer, or duodenal ulcer prescribed a systemic NSAID without a co-prescribed PPI — very high GI bleed risk.",
+      "source": "PRIMIS PINCER (BMJ 2012, doi:10.1136/bmj.e6501) — primary outcome 1",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "NSAID + peptic ulcer history — without PPI",
+        "drugSets": [
+          {
+            "name": "NSAID",
+            "match": [
+              "ibuprofen",
+              "dexibuprofen",
+              "naproxen",
+              "diclofenac",
+              "aceclofenac",
+              "celecoxib",
+              "etoricoxib",
+              "meloxicam",
+              "piroxicam",
+              "tenoxicam",
+              "indomethacin",
+              "indometacin",
+              "etodolac",
+              "flurbiprofen",
+              "sulindac",
+              "ketoprofen",
+              "dexketoprofen",
+              "tiaprofenic acid",
+              "mefenamic acid",
+              "tolfenamic acid",
+              "fenoprofen",
+              "nabumetone"
+            ],
+            "exclude": [
+              "topical",
+              "gel",
+              "cream",
+              "patch",
+              "spray"
+            ]
+          }
+        ],
+        "mustNotBePresent": [
+          "omeprazole",
+          "lansoprazole",
+          "esomeprazole",
+          "pantoprazole",
+          "rabeprazole",
+          "ranitidine",
+          "famotidine",
+          "cimetidine"
+        ],
+        "requiresProblem": [
+          "peptic ulcer",
+          "gastric ulcer",
+          "duodenal ulcer",
+          "gastroduodenal ulcer",
+          "peptic ulcer disease"
+        ],
+        "excludesProblem": [],
+        "sex": "any",
+        "severity": "red",
+        "notes": "PINCER primary outcome 1 (Avery et al., BMJ 2012). Prescribing an NSAID to a patient with a coded peptic ulcer without PPI gastroprotection is a primary preventable prescribing error. This is distinct from pincer-1 (age ≥65 + NSAID, no PPI) — this rule fires on the combination of ulcer history + NSAID, regardless of age. Action: stop NSAID and/or start PPI immediately; review NSAID indication. Source: PRIMIS PINCER primary indicators (corroborated 2026-07-11; primary PDF 403 this run).",
+        "source": "PRIMIS PINCER primary outcome 1 (Avery et al., BMJ 2012; corroborated; primary PDF 403)"
+      }
+    },
+    {
+      "libId": "alert-002",
+      "category": "Prescribing safety",
+      "subcategory": "Respiratory",
+      "title": "Beta-blocker + asthma (PINCER primary outcome)",
+      "description": "PINCER primary outcome #2: patient with a coded asthma diagnosis prescribed a systemic beta-blocker — risk of severe bronchospasm.",
+      "source": "PRIMIS PINCER (BMJ 2012, doi:10.1136/bmj.e6501) — primary outcome 2",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Beta-blocker in asthma",
+        "drugSets": [
+          {
+            "name": "Beta-blocker",
+            "match": [
+              "bisoprolol",
+              "atenolol",
+              "metoprolol",
+              "carvedilol",
+              "nebivolol",
+              "propranolol",
+              "sotalol",
+              "nadolol",
+              "labetalol",
+              "acebutolol",
+              "celiprolol",
+              "oxprenolol",
+              "pindolol",
+              "betaxolol",
+              "timolol"
+            ],
+            "exclude": [
+              "timolol eye drops",
+              "eye drop",
+              "ophthalmic",
+              "topical",
+              "latanoprost",
+              "bimatoprost"
+            ]
+          }
+        ],
+        "requiresProblem": [
+          "asthma"
+        ],
+        "excludesProblem": [
+          "resolved asthma",
+          "no asthma",
+          "copd",
+          "chronic obstructive"
+        ],
+        "sex": "any",
+        "severity": "red",
+        "notes": "PINCER primary outcome 2 (Avery et al., BMJ 2012). Beta-blockers are contraindicated in asthma: can cause life-threatening bronchospasm. Note: COPD is NOT a contraindication (bisoprolol and carvedilol are used in HF+COPD under specialist supervision); excludesProblem removes COPD-coded patients from this alert. Cardioselective beta-blockers (bisoprolol, atenolol) carry a lower but still present risk in asthma — still contraindicated per BNF. If in doubt about the asthma diagnosis (vs COPD or resolved childhood asthma), this alert should prompt confirmation. Source: PRIMIS PINCER primary indicators (corroborated 2026-07-11; primary PDF 403 this run).",
+        "source": "PRIMIS PINCER primary outcome 2 (Avery et al., BMJ 2012; corroborated; primary PDF 403)"
+      }
+    },
+    {
+      "libId": "alert-004",
+      "category": "Prescribing safety",
+      "subcategory": "Teratogenicity",
+      "title": "Acitretin or alitretinoin in female of childbearing age (oral retinoids)",
+      "description": "Acitretin or alitretinoin (oral retinoids) in female aged 12–55 — Pregnancy Prevention Programme mandatory. Acitretin has an exceptionally long washout (2 years after stopping).",
+      "source": "MHRA Pregnancy Prevention Programme (oral retinoids — acitretin and alitretinoin); MHRA Drug Safety Update 2024",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Acitretin/alitretinoin — female childbearing age (PPP)",
+        "drugSets": [
+          {
+            "name": "Oral retinoid (non-isotretinoin)",
+            "match": [
+              "acitretin",
+              "neotigason",
+              "alitretinoin",
+              "toctino"
+            ],
+            "exclude": [
+              "topical",
+              "gel",
+              "cream"
+            ]
+          }
+        ],
+        "ageRange": {
+          "min": 12,
+          "max": 55
+        },
+        "sex": "F",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "MHRA PPP applies to all oral retinoids — acitretin (Neotigason, for psoriasis) and alitretinoin (Toctino, for chronic hand eczema) as well as isotretinoin (already covered by mhra-isotretinoin-ppg). Acitretin requires TWO forms of contraception during treatment and for 2 YEARS after stopping (etretinate can form from acitretin in the presence of alcohol). Alitretinoin requires contraception during treatment and for 1 month after stopping. Both require monthly pregnancy testing and a signed PPP form. Prescribing is by specialist only; GP role is awareness and ensuring PPP compliance is maintained. Added 2026-07-11 (The Keeper): MHRA 2024 DSU extending PPP to all oral retinoids confirmed this gap — corroborated; primary PDF 403 this run.",
+        "source": "MHRA Pregnancy Prevention Programme — oral retinoids; MHRA Drug Safety Update 2024 (corroborated; primary PDF 403)"
+      }
+    },
+    {
+      "libId": "alert-005",
+      "category": "Prescribing safety",
+      "subcategory": "Psychiatric adverse effects",
+      "title": "Finasteride or dutasteride — psychiatric adverse effects (MHRA May 2026)",
+      "description": "Patient on finasteride or dutasteride: MHRA May 2026 Drug Safety Update citing 19 fatal suicide reports — review psychiatric symptoms at each contact.",
+      "source": "MHRA Drug Safety Update May 2026 (5-alpha reductase inhibitors and psychiatric adverse effects)",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Finasteride/dutasteride — psychiatric adverse effects",
+        "drugSets": [
+          {
+            "name": "5-ARI",
+            "match": [
+              "finasteride",
+              "propecia",
+              "proscar",
+              "dutasteride",
+              "avodart",
+              "combodart",
+              "duodart"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "amber",
+        "notes": "MHRA Drug Safety Update May 2026: 19 fatal suicide reports associated with finasteride/dutasteride in the Yellow Card database. Known psychiatric adverse effects include depression, anxiety, suicidal ideation, insomnia, and sexual dysfunction (libido, erectile dysfunction, ejaculation disorders). Post-finasteride syndrome (PFS): a subset of patients report persistent adverse effects after stopping. Review psychiatric symptoms at each contact; advise patient to report mood changes, low mood, or suicidal thoughts promptly. Review ongoing need for 5-ARI regularly. Added 2026-07-11 (The Keeper, MHRA May 2026 DSU corroborated; primary PDF 403 this run).",
+        "source": "MHRA Drug Safety Update May 2026 — 5-alpha reductase inhibitors (corroborated; primary PDF 403)"
+      }
+    },
+    {
+      "libId": "alert-008",
+      "category": "Prescribing safety",
+      "subcategory": "GI bleed",
+      "title": "Antiplatelet + peptic ulcer history without PPI (PRIMIS secondary)",
+      "description": "Patient with coded peptic ulcer history on antiplatelet therapy (aspirin/clopidogrel/ticagrelor/prasugrel) without a co-prescribed PPI — preventable GI bleed risk (PRIMIS secondary outcome).",
+      "source": "PRIMIS PINCER secondary indicators; NICE NG111 (GI bleed)",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Antiplatelet + peptic ulcer history — without PPI",
+        "drugSets": [
+          {
+            "name": "Antiplatelet",
+            "match": [
+              "aspirin 75",
+              "aspirin 300",
+              "aspirin tablet",
+              "aspirin dispersible",
+              "aspirin gastro",
+              "nu-seals",
+              "caprin",
+              "micropirin",
+              "clopidogrel",
+              "ticagrelor",
+              "prasugrel",
+              "dipyridamole"
+            ],
+            "exclude": [
+              "aspirin 500",
+              "anadin",
+              "migraleve"
+            ]
+          }
+        ],
+        "mustNotBePresent": [
+          "omeprazole",
+          "lansoprazole",
+          "esomeprazole",
+          "pantoprazole",
+          "rabeprazole",
+          "ranitidine",
+          "famotidine",
+          "cimetidine"
+        ],
+        "requiresProblem": [
+          "peptic ulcer",
+          "gastric ulcer",
+          "duodenal ulcer",
+          "gastroduodenal ulcer",
+          "peptic ulcer disease"
+        ],
+        "excludesProblem": [],
+        "sex": "any",
+        "severity": "amber",
+        "notes": "PRIMIS secondary indicator: antiplatelet + peptic ulcer history without PPI is a preventable prescribing risk. NICE recommends PPI co-prescription when aspirin or antiplatelet is prescribed in patients with peptic ulcer disease history. Amber (rather than red) as the risk is lower than NSAID+ulcer+no-PPI (alert-001) but still significant. Action: add PPI gastroprotection. Complements alert-001 (NSAID variant). Added 2026-07-11 (The Keeper, PRIMIS/NICE NG111 corroborated; primary PDF 403).",
+        "source": "PRIMIS PINCER secondary indicators; NICE NG111 (corroborated; primary PDF 403)"
+      }
+    },
+    {
+      "libId": "alert-009",
+      "category": "Prescribing safety",
+      "subcategory": "Renal",
+      "title": "Systemic NSAID in coded CKD",
+      "description": "Patient with a coded CKD (stage 3–5) diagnosis on a systemic NSAID — NSAIDs further impair renal perfusion and accelerate CKD progression.",
+      "source": "NICE NG203 (CKD); BNF / STOPP criteria v3 criterion E2",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "NSAID in CKD",
+        "drugSets": [
+          {
+            "name": "NSAID",
+            "match": [
+              "ibuprofen",
+              "dexibuprofen",
+              "naproxen",
+              "diclofenac",
+              "aceclofenac",
+              "celecoxib",
+              "etoricoxib",
+              "meloxicam",
+              "piroxicam",
+              "tenoxicam",
+              "indomethacin",
+              "indometacin",
+              "etodolac",
+              "flurbiprofen",
+              "sulindac",
+              "ketoprofen",
+              "dexketoprofen",
+              "tiaprofenic acid",
+              "mefenamic acid",
+              "tolfenamic acid",
+              "fenoprofen",
+              "nabumetone"
+            ],
+            "exclude": [
+              "topical",
+              "gel",
+              "cream",
+              "patch",
+              "spray"
+            ]
+          }
+        ],
+        "requiresProblem": [
+          "chronic kidney disease",
+          "ckd stage 3",
+          "ckd stage 4",
+          "ckd stage 5"
+        ],
+        "excludesProblem": [
+          "ckd stage 1",
+          "ckd stage 2"
+        ],
+        "sex": "any",
+        "severity": "amber",
+        "notes": "NSAIDs inhibit prostaglandin-mediated afferent arteriolar dilation, reducing GFR — particularly harmful in CKD where renal perfusion is already compromised. Risk of AKI on CKD and accelerated progression. STOPP v3 criterion E2 (NSAID contraindicated in eGFR <45). Amber rather than red: not all NSAIDs are equally nephrotoxic and short-course topical alternatives may be appropriate; clinical context determines urgency. Action: review NSAID indication; consider paracetamol or topical NSAID for musculoskeletal pain; check eGFR trend. Added 2026-07-11 (The Keeper, NICE NG203/STOPP v3 corroborated; primary PDF 403). Complementary to stopp_nsaid_ckd in stopp-start.js (which fires at eGFR<45 via observation; this alert fires on the coded CKD problem — both may fire for the same patient, which is intended as belt-and-braces).",
+        "source": "NICE NG203; BNF; STOPP v3 criterion E2 (O'Mahony et al., Age Ageing 2023; corroborated; primary PDF 403)"
+      }
+    },
+    {
+      "libId": "alert-domperidone-phaeo",
+      "category": "Prescribing safety",
+      "subcategory": "Endocrine / catecholamine crisis",
+      "title": "Domperidone — CONTRAINDICATED in phaeochromocytoma / paraganglioma",
+      "description": "Domperidone prescribed to a patient with a coded phaeochromocytoma or paraganglioma. Domperidone stimulates catecholamine release and can precipitate a life-threatening hypertensive crisis in these patients — absolute contraindication per UK SmPC.",
+      "source": "MHRA Drug Safety Update July 2026 (DSU, gov.uk) — domperidone contraindicated in phaeochromocytoma; UK SmPC (Motilium/domperidone). CONFIRMED 2026-07-25 (The Keeper, alert-C001 RED, VERIFIER-A). CSO note: if paraganglioma is also coded in this practice, include 'paraganglioma' in requiresProblem.",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Domperidone + phaeochromocytoma — CONTRAINDICATED",
+        "drugSets": [
+          {
+            "name": "Domperidone",
+            "match": [
+              "domperidone",
+              "motilium"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [
+          "phaeochromocytoma",
+          "paraganglioma"
+        ],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "Domperidone stimulates catecholamine release and is absolutely contraindicated in phaeochromocytoma (and by extension paraganglioma, a closely related catecholamine-secreting tumour). Co-prescription can precipitate a hypertensive crisis. Source: MHRA Drug Safety Update July 2026; UK SmPC (Motilium). 'Motilium' added as UK brand term. Paraganglioma included in requiresProblem — if only phaeochromocytoma is coded in this practice, the rule will fail-closed for paraganglioma (correct behaviour; add 'paraganglioma' to coded terms when a case presents). CSO flag: this rule requires phaeochromocytoma/paraganglioma to be actively coded as a problem in Medicus — if the diagnosis is in free text or a letter only, it will not fire. Added 2026-07-25 (The Keeper, alert-C001).",
+        "source": "MHRA Drug Safety Update July 2026; domperidone UK SmPC (Motilium, Sanofi)"
+      }
+    },
+    {
+      "libId": "alert-acei-angioedema",
+      "category": "Prescribing safety",
+      "subcategory": "Angioedema / airway risk",
+      "title": "ACEi — recurrent or severe angioedema (absolute contraindication to re-prescribing)",
+      "description": "Patient with a coded history of ACEi-induced angioedema currently prescribed an ACE inhibitor. ACEi-induced angioedema can be life-threatening (laryngeal oedema, airway obstruction). Re-prescribing after documented angioedema is an absolute contraindication per BNF/MHRA.",
+      "source": "MHRA Drug Safety Update June 17 2026 — ACE inhibitors and angioedema; BNF 2.5.5.1. CONFIRMED 2026-07-25 (The Keeper, alert-C003 RED, VERIFIER-A).",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "ACEi + angioedema history — absolute contraindication",
+        "drugSets": [
+          {
+            "name": "ACE inhibitor",
+            "match": [
+              "ramipril",
+              "lisinopril",
+              "perindopril",
+              "enalapril",
+              "captopril",
+              "trandolapril",
+              "fosinopril",
+              "quinapril",
+              "imidapril",
+              "cilazapril",
+              "accupro",
+              "tanatril",
+              "vascace"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [
+          "angioedema"
+        ],
+        "excludesProblem": [
+          "hereditary angioedema"
+        ],
+        "severity": "red",
+        "notes": "ACE inhibitor-induced angioedema is a class-effect adverse reaction that occurs in 0.1-0.7% of patients, with Black patients at 2-4x higher risk. Angioedema after ACEi can be life-threatening due to laryngeal involvement. MHRA DSU June 17 2026 reinforced the absolute contraindication: once ACEi-induced angioedema is documented, the entire class must be avoided permanently. ARBs (sartans) carry a much lower risk of angioedema (~10-fold less than ACEi) and are the preferred RAAS alternative after ACEi angioedema; their use in this context is under specialist guidance. excludesProblem: hereditary angioedema — patients with HAE have angioedema for a different reason (C1-inhibitor deficiency); their angioedema history should not trigger an ACEi contraindication unless the angioedema was ACEi-induced. Verify the angioedema coding (some ACEi-angioedema patients are coded as 'allergic reaction' — the sensitivity of this rule depends on coding quality). ARBs (losartan, candesartan, etc.) are NOT included in match: they are the recommended switch, not the contraindicated class. Added 2026-07-25 (The Keeper, alert-C003). CSO note: confirm problem term 'angioedema' is the coding convention used in this practice before relying on this rule.",
+        "source": "MHRA Drug Safety Update 17 June 2026 — ACE inhibitors and angioedema; BNF section 2.5.5.1; NICE CG127; BNF drug interactions (ACEi, adverse reactions)"
+      }
+    },
+    {
+      "libId": "alert-antipsychotic-dementia",
+      "category": "Prescribing safety",
+      "subcategory": "Dementia / sedation risk",
+      "title": "Antipsychotic in dementia — increased mortality and stroke risk (AMBER); CONTRAINDICATED in Lewy body dementia (RED — see notes)",
+      "description": "Antipsychotic prescribed to a patient with coded dementia. MHRA 2004/updated 2023: antipsychotics approximately double the risk of stroke and increase mortality in people with dementia (all types). They should be used only when non-pharmacological approaches have failed, at the lowest dose, for the shortest time, with documented risk-benefit discussion. SPECIAL HAZARD — LEWY BODY DEMENTIA (LBD): antipsychotics are effectively contraindicated in LBD and related conditions (DLB, PDD, LBD with parkinsonism) — severe antipsychotic sensitivity reactions including irreversible parkinsonism and death have been reported. If 'Lewy body' or 'DLB' or 'Parkinson disease dementia' appears in the problem list, escalate to RED immediately.",
+      "source": "MHRA Drug Safety Update 2004 (antipsychotics in dementia); NICE NG97 (Dementia, 2018 updated 2023); MHRA/CSM advice on antipsychotics and dementia. CONFIRMED 2026-07-25 (The Keeper, alert-C006 AMBER+LBD note, VERIFIER-A PLAUSIBLE/apply-modified).",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Antipsychotic + dementia — mortality/stroke risk",
+        "drugSets": [
+          {
+            "name": "Antipsychotic",
+            "match": [
+              "olanzapine",
+              "risperidone",
+              "quetiapine",
+              "aripiprazole",
+              "haloperidol",
+              "clozapine",
+              "chlorpromazine",
+              "amisulpride",
+              "paliperidone",
+              "levomepromazine",
+              "methotrimeprazine",
+              "trifluoperazine",
+              "fluphenazine",
+              "zuclopenthixol",
+              "flupentixol",
+              "prochlorperazine",
+              "asenapine",
+              "lurasidone"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [
+          "dementia",
+          "alzheimer",
+          "vascular dementia",
+          "frontotemporal dementia",
+          "lewy body",
+          "dlb",
+          "parkinson disease dementia",
+          "mixed dementia"
+        ],
+        "excludesProblem": [],
+        "severity": "amber",
+        "notes": "MHRA/CSM advice (2004, reinforced 2009, updated NICE NG97 2023): antipsychotic use in dementia is associated with approximately doubled stroke risk and increased all-cause mortality. Use only when: (1) non-pharmacological approaches have been tried and failed; (2) the patient is at risk of harm to self or others; (3) documented risk-benefit discussion has taken place with patient/carer. At the lowest effective dose, for the shortest time (typically no more than 6 weeks), with regular review for discontinuation. Risperidone is the only antipsychotic with a UK licence for short-term management of aggression in Alzheimer's dementia; use off-licence for other dementias is a specific risk that warrants discussion. LEWY BODY DEMENTIA — ESCALATE TO RED: If the patient also has 'Lewy body dementia', 'DLB' (dementia with Lewy bodies), 'Parkinson disease dementia', or 'PDD' coded, antipsychotics are effectively contraindicated. Severe antipsychotic sensitivity (neuroleptic malignancy-like syndrome, irreversible worsening of parkinsonism, extreme sedation, sudden death) has been reported. Even 'atypical' antipsychotics carry this risk in LBD. If LBD/DLB is coded and an antipsychotic is present, this chip should be treated as RED by the reviewing clinician regardless of the AMBER severity shown — the engine cannot currently auto-escalate based on secondary problem coding. Added 2026-07-25 (The Keeper, alert-C006).",
+        "source": "MHRA Drug Safety Update 2004, reinforced 2009; NICE NG97 (Dementia care) 2018/2023; BNF antipsychotics adverse-effects section; Alzheimer's Society / RCPsych guidance on antipsychotics in dementia"
+      }
+    },
+    {
+      "libId": "alert-xoi-thiopurine-myelosuppression",
+      "category": "Prescribing safety",
+      "subcategory": "Bone marrow suppression",
+      "title": "Allopurinol/febuxostat + azathioprine/mercaptopurine — life-threatening myelosuppression",
+      "description": "Concurrent xanthine-oxidase inhibitor (allopurinol or febuxostat) with azathioprine or mercaptopurine — raises active thiopurine metabolite levels several-fold, causing life-threatening myelosuppression. Allopurinol: only with specialist-directed thiopurine dose reduction (~25%); febuxostat: contraindicated.",
+      "source": "emc SmPCs (allopurinol/mercaptopurine/Adenuric); NHS shared-care guidance; Medsafe",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Allopurinol/febuxostat + azathioprine/mercaptopurine — myelosuppression",
+        "drugSets": [
+          {
+            "name": "Xanthine oxidase inhibitor",
+            "match": [
+              "allopurinol",
+              "zyloric",
+              "caplenal",
+              "uricto",
+              "febuxostat",
+              "adenuric"
+            ]
+          },
+          {
+            "name": "Thiopurine",
+            "match": [
+              "azathioprine",
+              "mercaptopurine",
+              "imuran",
+              "azapress",
+              "jayempi",
+              "xaluprine"
+            ]
+          }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "Allopurinol and febuxostat both inhibit xanthine oxidase, which clears azathioprine's active metabolite 6-mercaptopurine; co-prescription raises 6-MP ~3–4 fold → life-threatening myelosuppression (leucopenia, thrombocytopenia, anaemia). Do NOT co-prescribe allopurinol with azathioprine/mercaptopurine except on explicit specialist instruction with the thiopurine reduced to ~25% and frequent FBC. Febuxostat is CONTRAINDICATED with azathioprine/mercaptopurine (UK SmPC). Brand terms (zyloric/caplenal/uricto/adenuric for the XOI set; azapress/jayempi/xaluprine for the thiopurine set) are listed explicitly because substring matching means a brand-only record otherwise never fires. SOURCE GAP: BNF/emc primary pages 403 — corroborated across NHS shared-care guidance, emc SmPC text and Medsafe; pending primary-source confirmation.",
+        "source": "emc allopurinol/mercaptopurine & Adenuric SmPCs; NHS shared-care guidance (corroborated; primary pages 403, pending confirmation)"
+      }
+    }
+  ]
+}
