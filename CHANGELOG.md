@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.232.1] — 2026-08-15
+
+### Sentinel non-QOF alert reference (generated)
+
+New `scripts/gen-sentinel-reference.js` emits a portable reference of every
+Sentinel clinical rule **except QOF**, for reuse in reports and downstream
+tooling:
+
+- `docs/SENTINEL-ALERT-REFERENCE.md` — narrative reference (~1,480 lines):
+  29 drug-monitoring rules with full match/exclude term lists, SNOMED codes,
+  per-test intervals and due-soon windows; 4 drug–allergy cross-checks;
+  5 vaccine rules with every eligibility clause and given/declined status
+  term; 35 prescribing-safety alerts (PINCER / MHRA / NICE) with their
+  complete trigger logic; and the `no-monitoring-common` suppression list.
+- `docs/sentinel-alert-reference.json` — the same content machine-readable.
+
+Both are generated from the shipped rule files, so they cannot drift by
+hand-transcription. `--check` mode fails if they are stale relative to
+`rules/*.json`. The document carries the engine's matching semantics
+(case-insensitive substring, sharp `exclude`, status thresholds,
+`postInitiationDays`) and a known-limitations section, so a consumer that
+never sees the code cannot mistake "no alert" for "no risk".
+
+QOF (`rules/qof-rules.json`) is excluded by design — contractual
+achievement, not patient-safety monitoring.
+
+No product-code or rule-content changes.
+
 ## [v3.232.0] — 2026-08-14
 
 ### Rota Manager: passcode protection, setup assistant, grid UX pack, Solver v2, live drift
