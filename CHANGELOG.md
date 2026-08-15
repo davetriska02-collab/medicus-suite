@@ -2,6 +2,57 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.233.0] — 2026-08-15
+
+### The Keeper: rules currency run — 2026-08-15
+
+Automated rule-currency run against all Sentinel monitoring, QOF, vaccine,
+alert-library, reception-pathway, and medreview rule sets. All 16 regression
+tests passed (1,825 assertions). Three conservative, additive changes applied.
+Seven candidates held for CSO review.
+
+**Applied changes:**
+
+- `rules/reception-pathways.json` v1.9: added `rf-rectal-bleeding` to the
+  general pathway red-flag list (NICE NG12 2WW criterion — unexplained rectal
+  bleeding without obvious benign anal cause; escalation: duty). The general
+  pathway remains `enabled:false` pending CSO sign-off, as with all prior
+  Keeper additions to this pathway. (pathways-001, AMBER)
+
+- `rules/alert-library.json`: corrected `specVersion` label from v1.4 to v1.5
+  to match the `version` field. Cosmetic only — no clinical content changed.
+  (alerts-specversion-label, GREEN)
+
+- `rules/qof-rules.json`: removed stale historical note at the OB register
+  summary (said OB004/OB005 were "killed by VERIFIER-B" — predated their
+  encoding in June 2026). Replaced with accurate description of current state:
+  both encoded as DRAFT 2026/27 indicators (`enabled:false`), pending CSO
+  sign-off and PRN02356 July 2026 amendment verification. (qof-004/qof-005
+  AMBER housekeeping)
+
+**Held for CSO sign-off (not applied):**
+
+- RED: `digoxin-renal-monitoring` rule in `drug-rules.json` remains
+  `enabled:false` pending CSO activation. Rule content (match, test, interval)
+  is verified correct. CSO must flip `enabled:true` — see rule id
+  `digoxin-renal-monitoring` and alert-C005 (2026-08-01).
+
+- AMBER: OB004/OB005 obesity indicators remain `enabled:false`. PRN02356
+  July 2026 amendment unverifiable (proxy-blocked). CSO to verify thresholds
+  and enable when confirmed.
+
+- AMBER: Brand-completeness backlog for monitored drugs — BNF/emc proxy-blocked
+  again this run (third consecutive). No brand changes applied without primary
+  source verification.
+
+**Source gaps:** All UK authoritative web sources (BNF, MHRA, NICE, JCVI, NHS
+England QOF, BSR, emc) returned 403 from the managed proxy — third consecutive
+Keeper run affected. All clinical changes corroborated from knowledge; confidence
+reduced accordingly. Full source-gap log in the Keeper change-proposal report.
+
+Sources: NICE NG12 (suspected cancer recognition, 2WW red flags — clinical
+knowledge corroboration). All other primary sources proxy-blocked.
+
 ## [v3.232.0] — 2026-08-14
 
 ### Rota Manager: passcode protection, setup assistant, grid UX pack, Solver v2, live drift
