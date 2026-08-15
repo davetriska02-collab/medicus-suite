@@ -3044,8 +3044,15 @@
           <div class="field">
             <label class="field-label">Suite-wide backup</label>
             <p class="field-help">
-              Exports Sentinel rules and custom rules, Capacity presets, Triage Lens config, Slot Counter hidden types,
-              Submissions config, and practice code.
+              Exports every module in one file: Sentinel, Capacity, Triage Lens, Triage alerts, Slot Counter,
+              Submissions, Pop-out, Referrals, Request Monitor, Condor, Reception, Knowledge, Lab filing,
+              Notifications, Leaflets, Patient Alerts, code-cleanup preferences, Phrases, Rota, and the practice
+              code and other suite-level settings.
+            </p>
+            <p class="field-help" style="color: var(--amber)">
+              This is not a config-only file: it includes patient-identifiable data (Patient Alerts — names, NHS
+              numbers, alert text) and staff absence records (Rota — sickness and leave). Handle the downloaded
+              file as a patient-identifiable document.
             </p>
             <div class="actions" style="margin-top: 10px">
               <button class="primary" id="exportSuite">Export entire suite</button>

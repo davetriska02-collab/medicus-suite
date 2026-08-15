@@ -3051,7 +3051,8 @@
   // taskUuid → patientUuid (resolved once by fetchOutstandingHistory, used by
   // annotateOutstandingRow to make elsewhere badges clickable — item 8).
   const _oirPatientCache = new Map();
-  let _oirObserver = null;
+  let _oirObserver = null; // private-observer fallback only (hub absent)
+  let _oirHubUnsub = null; // unsubscribe handle when riding window.__chObserverHub
   let _oirRaf = false;
 
   // Date formatter for verdict dates. Absolute "DD Mon YYYY" by default; switches
@@ -3595,9 +3596,13 @@
 
   // Scoped observer: re-apply annotations when Quasar re-renders the card. Annotation
   // is idempotent; auto-tick is guarded by _oirAutoTicked so it never re-fires.
+  // Rides the shared observer hub (window.__chObserverHub — rAF-coalesced,
+  // paused while the tab is hidden) rather than adding another private
+  // body-subtree observer; falls back to a private observer if the hub is
+  // absent. The internal _oirRaf gate stays so fallback behaviour is identical.
   const setupOutstandingObserver = () => {
-    if (_oirObserver) return;
-    _oirObserver = new MutationObserver(() => {
+    if (_oirObserver || _oirHubUnsub) return;
+    const onChurn = () => {
       if (_oirRaf) return;
       _oirRaf = true;
       requestAnimationFrame(() => {
@@ -3610,11 +3615,21 @@
         const history = ctx && ctx.taskUuid ? _oirHistoryCache.get(ctx.taskUuid) : null;
         if (card && report) applyOutstandingMatch(card, report, ctx.taskUuid, history);
       });
-    });
+    };
+    const hub = window.__chObserverHub;
+    if (hub && hub.subscribe) {
+      _oirHubUnsub = hub.subscribe(onChurn);
+      return;
+    }
+    _oirObserver = new MutationObserver(onChurn);
     _oirObserver.observe(document.body, { childList: true, subtree: true });
   };
 
   const teardownOutstandingObserver = () => {
+    if (_oirHubUnsub) {
+      _oirHubUnsub();
+      _oirHubUnsub = null;
+    }
     if (_oirObserver) {
       _oirObserver.disconnect();
       _oirObserver = null;
@@ -7457,14 +7472,24 @@
     window.addEventListener('popstate', onRoute);
     window.addEventListener('hashchange', onRoute);
 
-    // 3. URL change via body mutations (catch SPA frameworks that bypass history.X)
+    // 3. URL change via body mutations (catch SPA frameworks that bypass history.X).
+    // Rides the shared observer hub (rAF-coalesced, paused while hidden) — signals
+    // 1 and 2 above still fire while the tab is hidden, so a background navigation
+    // is caught by them; the first foreground mutation re-checks here regardless.
+    // Private-observer fallback if the hub is absent.
     let lastUrl = location.href;
-    new MutationObserver(() => {
+    const onBodyChurnRoute = () => {
       if (location.href !== lastUrl) {
         lastUrl = location.href;
         onRoute();
       }
-    }).observe(document.body, { childList: true, subtree: true });
+    };
+    const routeHub = window.__chObserverHub;
+    if (routeHub && routeHub.subscribe) {
+      routeHub.subscribe(onBodyChurnRoute);
+    } else {
+      new MutationObserver(onBodyChurnRoute).observe(document.body, { childList: true, subtree: true });
+    }
   };
 
   // Wait for the page to populate (Medicus likely renders async)

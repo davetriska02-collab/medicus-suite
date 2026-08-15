@@ -2206,6 +2206,7 @@ async function executeDocumentFieldApply(out, gIdx) {
     return;
   }
   delete out.__pendingDocumentEdits[gIdx];
+  const g = out.__analysis.groups[gIdx];
   // Document removal is now a confirmed contract (2026-07-08), so offer it
   // right here — the field edit landed on the KEPT copy, and removableSlotHtml
   // targets the non-keepers for removal.
