@@ -868,6 +868,19 @@ details.actions .actions-panel .actions-row {
 .accessnote li {
   margin-bottom: 4px;
 }
+/* The one-time recovery code: shown once, read aloud, written on paper — so it
+   is set large, monospaced and letter-spaced, and stays selectable. */
+.reccode {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  user-select: all;
+}
 .warn:last-child {
   border-bottom: none;
 }

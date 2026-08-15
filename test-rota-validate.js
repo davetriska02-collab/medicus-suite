@@ -67,6 +67,12 @@ function healthyScopes() {
       hash: 'aGFzaC1nb2VzLWhlcmUtNDQtY2hhcnMtb2YtYmFzZTY0LXBhZA==',
       hint: 'the usual one',
       updatedAt: '2026-06-08T09:00:00.000Z',
+      // The one-time recovery code (H-064). Optional — a record written before
+      // it existed carries none, exercised separately below — but typed when
+      // present, in both validators.
+      recoverySalt: 'cmVjb3Zlcnktc2FsdC0xMg==',
+      recoveryHash: 'cmVjb3ZlcnktaGFzaC1nb2VzLWhlcmUtNDQtY2hhcnMtcGFk',
+      recoverySetAt: '2026-06-08T09:00:00.000Z',
     },
   };
 }
@@ -289,6 +295,30 @@ const MALFORMED = [
       s.access.kdf = 256;
     },
   },
+  {
+    name: 'access.recoverySalt is a number, not a string',
+    mutate: (s) => {
+      s.access.recoverySalt = 12345;
+    },
+  },
+  {
+    name: 'access.recoveryHash is an array',
+    mutate: (s) => {
+      s.access.recoveryHash = ['nope'];
+    },
+  },
+  {
+    name: 'access.recoveryHash is null',
+    mutate: (s) => {
+      s.access.recoveryHash = null;
+    },
+  },
+  {
+    name: 'access.recoverySetAt is an object',
+    mutate: (s) => {
+      s.access.recoverySetAt = { at: '2026-06-08' };
+    },
+  },
 ];
 
 // rotaImport() writes through chrome.storage.local on success. Stub it so the
@@ -391,6 +421,54 @@ async function rotaImportRejects(rotaImport, scopes) {
       'rotaImport does NOT write access when the scope is absent (an older backup cannot clobber a local lock)'
     );
   }
+
+  // The recovery code (H-064) is an OPTIONAL extension of the same scope. The
+  // contract both validators owe it: a record that predates it validates
+  // exactly as it always did, and a malformed recovery field is reported like
+  // any other field — the document is refused whole, but the rest of it is
+  // still checked, so one bad field cannot mask a second problem.
+  console.log('\n--- Rota scope validation: rota.access recovery fields are optional ---');
+
+  const legacyAccess = healthyScopes();
+  delete legacyAccess.access.recoverySalt;
+  delete legacyAccess.access.recoveryHash;
+  delete legacyAccess.access.recoverySetAt;
+  check(
+    validateRotaScopes(legacyAccess).length === 0,
+    'validateRotaScopes accepts an access record with no recovery fields (pre-recovery install)'
+  );
+  check(
+    (await rotaImportRejects(rotaImport, legacyAccess)) === false,
+    'rotaImport accepts an access record with no recovery fields'
+  );
+  {
+    const { result: r4, written: w4 } = withChromeStub(() => rotaImport(legacyAccess));
+    await r4;
+    check(
+      w4.length > 0 && w4[0]['rota.access'] && w4[0]['rota.access'].recoveryHash === undefined,
+      'a legacy access record is written through unchanged (no recovery fields invented for it)'
+    );
+  }
+
+  const halfPair = healthyScopes();
+  delete halfPair.access.recoveryHash;
+  check(
+    validateRotaScopes(halfPair).length === 0,
+    'a half-written recovery pair is not malformed data — the engine reports it as no recovery code, ' +
+      'so it must not take the whole practice rota out'
+  );
+  check((await rotaImportRejects(rotaImport, halfPair)) === false, 'rotaImport also accepts a half-written pair');
+
+  const twoProblems = healthyScopes();
+  twoProblems.access.recoveryHash = 42;
+  twoProblems.settings.openDays = null;
+  const twoRejects = validateRotaScopes(twoProblems);
+  check(
+    twoRejects.length === 2 &&
+      twoRejects.some((r) => r.includes('recoveryHash')) &&
+      twoRejects.some((r) => r.includes('openDays')),
+    `a malformed recovery field does not stop the rest of the document being checked (${JSON.stringify(twoRejects)})`
+  );
 
   console.log('\n--- Rota scope validation: both validators must reject each malformed fixture ---');
 

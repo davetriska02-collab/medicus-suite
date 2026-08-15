@@ -44,8 +44,17 @@ export const SETTINGS_OBJECT_FIELDS = [
 // rota.access members. salt/hash/iterations are REQUIRED on a non-null record
 // (a config missing its salt can never be unlocked); the rest are optional but
 // typed.
+//
+// recoverySalt/recoveryHash/recoverySetAt are the recovery code (H-064) and are
+// OPTIONAL BY DESIGN: every record written before recovery codes existed has
+// none, and must keep validating exactly as it always did. They are typed but
+// not paired here — a record carrying only one half is not malformed data, it
+// is a record engine/access.js hasRecoveryCode() reports as having no recovery
+// code, which falls back to the pre-recovery behaviour. Refusing the whole
+// shared rota over a half-written recovery field would take the practice's
+// entire rota out for a field nothing renders.
 export const ACCESS_BOOLEAN_FIELDS = ['enabled', 'strict'];
-export const ACCESS_STRING_FIELDS = ['kdf', 'hint', 'updatedAt'];
+export const ACCESS_STRING_FIELDS = ['kdf', 'hint', 'updatedAt', 'recoverySalt', 'recoveryHash', 'recoverySetAt'];
 
 const isPlainObject = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 

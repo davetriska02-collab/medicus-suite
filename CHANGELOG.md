@@ -2,6 +2,55 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.234.0] — 2026-08-15
+
+### Rota passcode: non-destructive recovery code (H-064 remediation, part 3 of the weekly safety-review fix pack)
+
+H-064 (hazard log v3.24, PR #282) recorded that a forgotten Rota passcode
+had no recovery path other than wiping all rota data. The CSO directed a
+fix; this release lands it.
+
+**Recovery code, issued once, hashed forever** (`rota/engine/access.js` —
+all crypto stays in the pure engine, same PBKDF2/WebCrypto pattern as the
+passcode itself):
+
+- Setting (or changing) a passcode now issues a 10-character recovery code
+  from an unambiguous alphabet (no 0/O/1/I/L; rejection sampling so the
+  distribution is uniform), shown ONCE in a "write this down now" card —
+  the plaintext lives only in tab-local UI state, is never persisted or
+  synced, and is only displayed after its hash has safely reached storage
+  (so a code can never be on paper without being redeemable).
+- The unlock screen gains "Forgotten the passcode?": a verified recovery
+  code removes the passcode gate (after a confirm naming the consequence)
+  so a new one can be set from Settings. It never reveals the old passcode.
+  Wrong codes fail visibly under the same soft rate limit as the passcode
+  input. The removal goes through the same persist path as Settings →
+  Remove — not a bypass of the read-only backstop.
+- Honest framing throughout, consistent with the gate's own doctrine: the
+  code is "a way back in, not a second lock"; the gate remains a workflow
+  deterrent, not encryption, and the UI copy says so.
+- **Legacy installs unchanged:** an existing `rota.access` without a
+  recovery hash behaves exactly as before (no recovery button, wipe-only
+  guidance) and acquires a code on the next passcode change or via a new
+  "Issue a new recovery code" button (requires the current passcode while
+  unlocked; re-issue invalidates the old code). The recovery fields are
+  optional in both validators (lock-step `rota/engine/validate.js` +
+  `shared/io/rota-io.js`); a malformed half-pair reads as "no recovery
+  code" rather than refusing the whole practice rota (H-059 refuse-whole
+  semantics for genuinely malformed types unchanged). No new storage key —
+  the three-way anti-drift test still pins nine `rota.*` keys.
+
+Tests: `test-rota-access.js` 88 → 204 checks (alphabet/distribution,
+round-trip, 17 tampered-record fail-closed cases, legacy/half-pair,
+re-issue invalidation, carry-across-passcode-change);
+`test-rota-validate.js` → 99. Full suite green.
+
+Hazard log H-064 controls updated (entry remains Proposed — pending CSO
+sign-off); CSN limitation 50 no longer states wipe-only recovery. The
+deploying-organisation half of the control stands: the code only helps if
+it is actually recorded where a second manager can reach it, and the
+one-time card says exactly that.
+
 ## [v3.233.0] — 2026-08-15
 
 ### Weekly safety-review fix pack, parts 1–2 (H-061, H-063)

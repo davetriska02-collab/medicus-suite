@@ -284,6 +284,28 @@ const ctx = {
     }
     render();
   },
+  // A verified recovery code on the unlock screen (views/unlock.js). Clearing
+  // the gate IS the recovery: the passcode is a one-way hash and is never
+  // revealed, so the way back in is to take the lock off and let the manager
+  // set a new one.
+  //
+  // state.access is cleared FIRST and only then persisted, so persist()'s
+  // backstop sees exactly the same "no gate" state that Settings → Remove
+  // protection reaches. This is not a route around the lock, it is the lock
+  // being removed — and it propagates to the practice shared folder for the
+  // same reason removing it in Settings does.
+  //
+  // Audited, unlike unlocks and failed attempts: this is a CHANGE to the
+  // practice's configuration, and a manager arriving to a rota with no passcode
+  // should be able to see why.
+  async recoverAccess() {
+    state.access = null;
+    await persist('access');
+    await log('Passcode protection removed using the recovery code');
+    // Mark the tab unlocked as well, so setting a fresh passcode from Settings
+    // does not immediately bounce the manager back to the unlock screen.
+    ctx.unlock();
+  },
   // "Who am I on this machine" is a staff self-service write that happens to
   // live inside rota.settings, which persist() refuses when locked. This is the
   // ONE narrow exception: it can only ever write the two identity fields, never
