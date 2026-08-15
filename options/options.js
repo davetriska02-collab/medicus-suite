@@ -1000,6 +1000,19 @@ let pendingEnvelope = null;
 
 // --- Suite-wide export ---
 document.getElementById('exportSuite')?.addEventListener('click', async () => {
+  // The suite backup is NOT config-only — it carries patient-identifiable data
+  // (Patient Alerts) and staff absence records (Rota). The import side already
+  // warns (suite-envelope.js previewEnvelope); this is the same warning at the
+  // point the file is actually created, BEFORE it exists on disk.
+  if (
+    !confirm(
+      'This backup will contain PATIENT-IDENTIFIABLE DATA (Patient Alerts: names, NHS numbers, alert text) ' +
+        'and staff absence records (Rota: sickness and leave).\n\n' +
+        'Handle the downloaded file as a patient-identifiable document. Continue?'
+    )
+  ) {
+    return;
+  }
   try {
     const env = await doFullExport();
     const stamp = new Date().toISOString().slice(0, 10);

@@ -63,21 +63,31 @@ installed extension's update banner will surface the new version.
 The extension only reads from Medicus. It does not create, modify, assign,
 or delete clinical or administrative records. It uses the user's existing
 Medicus login (session cookies on `*.api.england.medicus.health`) and does
-not transmit patient information to any external server. By default the only
-external endpoint the extension contacts is `api.github.com` for update
-checks; no patient data is included in those requests.
+not transmit patient information to any external server.
 
-The **Leaflets** tab (NHS patient information) is a second, optional
-exception, and it is off by default. With no API key configured in
-Options → Leaflets, the tab works entirely from a bundled local index and
-`chrome.tabs.create` (a normal browser navigation the user initiates by
-clicking "Open") — no new endpoint is contacted. If a user registers for the
-free NHS Website Content API and pastes a key into Options → Leaflets, then
-selecting a search result additionally sends a plain GET request to
-`api.nhs.uk` containing only the condition or medicine name the user
-selected — never patient data — to fetch and display the leaflet text in the
-panel. The API key itself is stored locally on that device only and is
-deliberately excluded from suite backups.
+Beyond Medicus itself, the extension can contact exactly four external
+endpoints — each tied to one feature, and none carrying patient data:
+
+- **`api.github.com`** — always on: a version check against this repository's
+  releases, powering the update banner. No patient data is included.
+- **`api.nhs.uk`** — the **Leaflets** tab, opt-in and off by default. With no
+  API key configured in Options → Leaflets, the tab works entirely from a
+  bundled local index and `chrome.tabs.create` (a normal browser navigation
+  the user initiates by clicking "Open") — no endpoint is contacted. If a
+  user registers for the free NHS Website Content API and pastes a key into
+  Options → Leaflets, selecting a search result sends a plain GET containing
+  only the condition or medicine name the user selected — never patient
+  data — to fetch the leaflet text. The API key is stored locally on that
+  device only and is deliberately excluded from suite backups.
+- **`termbrowser.nhs.uk`** — the "Clean up code" widget's SNOMED CT currency
+  check (retired / REPLACED BY / SAME AS), relayed through the service worker.
+  Requests carry only SNOMED concept identifiers, never patient identity.
+- **`*.supabase.co`** — the optional **task presence** feature ("who else has
+  this task open"), active only where a practice administrator has deployed a
+  `presence-config.json` alongside the extension. Heartbeats carry the staff
+  member's display label, a pseudonymous task UUID, and timestamps — staff
+  workflow data, not patient data. Practices using it should cover it in
+  their own staff privacy notice; see `docs/task-presence-setup.md`.
 
 ## Licence
 

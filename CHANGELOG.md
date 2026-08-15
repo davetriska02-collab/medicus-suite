@@ -2,6 +2,64 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.232.1] — 2026-08-15
+
+### Audit quick wins: two live bugs, backup disclosure, `no-undef` restored
+
+The 2026-08-15 repo audit's quick-win set (QW1–QW6), landed together.
+
+**Two live ReferenceErrors fixed — both found by re-enabling `no-undef`:**
+
+- `content-scripts/triage-lens/routine-rx-button.js`: the mid-run
+  task-change guard called a nonexistent `fail()` instead of `abort()`.
+  The safety property held by accident (the throw still prevented the
+  commit click), but the clinician got a silent failure instead of the
+  intended "Task changed mid-run — nothing was clicked on the new task"
+  toast and audit entry.
+- `duplicate-checker.js` (`executeDocumentFieldApply`): after a
+  successful document-field save, rendering the "now remove the
+  duplicate copy" slot referenced an undefined `g` — the success UI
+  threw instead of rendering. Now derives `g` from
+  `out.__analysis.groups[gIdx]` like every sibling function.
+
+**Suite backup now discloses what it actually contains** (audit H1):
+the Options description claimed six config-only scopes while
+`doFullExport()` exports twenty — including Patient Alerts
+(patient names, NHS numbers, alert text) and Rota staff absence
+records. The description now names every scope and carries the
+patient-identifiable warning, and the export button shows a confirm
+dialog (mirroring the import-side warning) before the file is created.
+New `test-export-scope-contract.js` (111 checks) locks UI text,
+`doFullExport()`, `VALID_SCOPES`, and `previewEnvelope()` in step —
+adding a scope without updating the disclosure now fails CI.
+
+**`no-undef` re-enabled repo-wide** (audit H3): was `'off'` for one
+file's stale needs. Cross-script `window.*` globals are now declared
+per-file in `eslint.config.mjs` overrides (options page IO functions,
+service-worker importScripts'd modules, sentinel-options, panel.js,
+visualiser-core.js vendored libs), so a typo'd bare global — the
+silent-missing-chip failure class — is a lint error again. Zero
+remaining suppressions.
+
+**Doc drift** (audit M3/QW5): CLAUDE.md's strip inventory corrected
+from four to six (`#paStrip`, `#slaBreachStrip` added); README's
+external-endpoint section now enumerates all four hosts —
+`api.github.com`, `api.nhs.uk`, `termbrowser.nhs.uk`, `*.supabase.co` —
+with what each carries and when.
+
+**Grep-invisible source file fixed** (audit M5):
+`shared/io/oir-key-rotation.js` used a raw NUL byte as an in-memory
+dedup delimiter, making `file` classify the source as binary and every
+`grep -r` source guard silently skip it. Now the written escape
+`\u0001` (same semantics — the id is never persisted), plus a comment
+pinning why.
+
+**Observer-hub migration completed for `content.js`** (audit QW6): the
+OIR card observer and the SPA route-detection fallback observer now
+ride `window.__chObserverHub` (rAF-coalesced, paused while hidden) with
+the standard private-observer fallback, instead of running two extra
+body-subtree observers on the hottest page in the product.
+
 ## [v3.232.0] — 2026-08-14
 
 ### Rota Manager: passcode protection, setup assistant, grid UX pack, Solver v2, live drift

@@ -528,7 +528,7 @@
       }
       // Belt-and-braces: never commit against a task the run didn't start on.
       if (location.pathname !== _macroPath) {
-        fail(team, mode, 'Task changed mid-run — nothing was clicked on the new task.');
+        abort('Task changed mid-run — nothing was clicked on the new task.', team, mode);
         return;
       }
       commitAndAudit(commit, team, mode);
