@@ -129,6 +129,19 @@ check(!!rfMorningVomit, 'headache rf-morning-vomit red flag exists');
 check(rfMorningVomit && rfMorningVomit.escalate === '999', 'rf-morning-vomit escalates to 999');
 check(rfMorningVomit && /morning|sleep|worsening/i.test(rfMorningVomit.ask), 'rf-morning-vomit ask mentions morning/sleep/worsening');
 
+// ── 2026-08-18 Keeper: sore-throat unwell-child → 999; headache household CO ──
+console.log('\n--- 2026-08-18 Keeper: pathway red-flag updates ---');
+const soreThroat = doc.pathways.find(p => p.id === 'sore-throat');
+const rfUnwellChild = soreThroat && (soreThroat.redFlags || []).find(rf => rf.id === 'rf-unwell-child');
+check(!!rfUnwellChild, 'sore-throat rf-unwell-child red flag exists');
+check(rfUnwellChild && rfUnwellChild.escalate === '999', 'sore-throat rf-unwell-child escalates to 999 (CKS May 2026 floppy/not drinking)');
+check(rfUnwellChild && /floppy|not drinking/i.test(rfUnwellChild.ask), 'sore-throat rf-unwell-child ask mentions floppy / not drinking');
+
+const rfHouseholdCo = headache && (headache.redFlags || []).find(rf => rf.id === 'rf-household-co');
+check(!!rfHouseholdCo, 'headache rf-household-co red flag exists');
+check(rfHouseholdCo && rfHouseholdCo.escalate === '999', 'headache rf-household-co escalates to 999');
+check(rfHouseholdCo && /household|carbon monoxide/i.test(rfHouseholdCo.ask), 'headache rf-household-co ask mentions household / carbon monoxide');
+
 // rf-nasal-unilateral: sinusitis pathway, duty — unilateral nasal obstruction (NICE NG12 ENT 2WW)
 const sinusitisP = doc.pathways.find(p => p.id === 'sinusitis');
 const rfNasalUnilateral = sinusitisP && (sinusitisP.redFlags || []).find(rf => rf.id === 'rf-nasal-unilateral');

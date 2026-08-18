@@ -49,7 +49,8 @@ const EXPECTED = {
     'Sulazine EC 500mg tablets'
   ],
   'carbamazepine-maintenance': [
-    'Carbamazepine 200mg tablets', 'Tegretol Prolonged Release 200mg', 'Carbagen SR 200mg'
+    'Carbamazepine 200mg tablets', 'Tegretol Prolonged Release 200mg', 'Carbagen SR 200mg',
+    'Curatil PR 400mg tablets'
   ],
   'lithium-maintenance': [
     'lithium', 'Lithium carbonate 250mg tablets', 'Lithium citrate liquid',
@@ -76,7 +77,8 @@ const EXPECTED = {
     'Co-Aprovel 150/12.5', 'Karvea 150mg', 'Telmisartan 40mg', 'Micardis 40mg',
     'Micardis Plus 40/12.5', 'Pritor 40mg', 'Tolura 40mg', 'Olmesartan 20mg',
     'Olmetec 20mg', 'Sevikar 20mg/5mg', 'Azilsartan 40mg', 'Edarbi 40mg',
-    'Sacubitril/valsartan 49mg/51mg', 'Entresto 49mg/51mg'
+    'Sacubitril/valsartan 49mg/51mg', 'Entresto 49mg/51mg',
+    'Eprosartan 600mg tablets', 'Teveten 600mg tablets'
   ],
   'spironolactone': [
     'Spironolactone 25mg tablets', 'Aldactone 25mg', 'Eplerenone 25mg', 'Inspra 25mg'
@@ -121,7 +123,9 @@ const EXPECTED = {
     'Sulpiride 200mg tablets', 'Dolmatil 200mg tablets', 'Sulpitil 200mg tablets', 'Sulpor 200mg/5ml oral solution',
     'Zuclopenthixol 25mg tablets', 'Clopixol 25mg tablets', 'Clopixol Acuphase 50mg/ml injection', 'Clopixol Depot 200mg/ml injection',
     'Flupentixol 0.5mg tablets', 'Depixol 20mg/ml injection', 'Fluanxol 0.5mg tablets',
-    'Fluphenazine 1mg tablets', 'Modecate 25mg/ml injection'
+    'Fluphenazine 1mg tablets', 'Modecate 25mg/ml injection',
+    // 2026-08-18 Keeper — BNF quetiapine MR brands
+    'Mintreleq XL 200mg tablets', 'Sondate XL 300mg tablets'
   ],
   'mirabegron': ['Mirabegron 50mg', 'Betmiga 50mg'],
   'levothyroxine': [
@@ -169,6 +173,20 @@ const EXPECTED = {
   'digoxin-renal-monitoring': [
     'Digoxin 62.5mcg tablets', 'Digoxin 125mcg tablets', 'Digoxin 250mcg tablets',
     'Lanoxin 125mcg tablets', 'Lanoxin-PG 62.5mcg/5ml oral solution'
+  ],
+  // 2026-08-18 Keeper — new monitoring rules
+  'warfarin-vka': [
+    'Warfarin 3mg tablets', 'Marevan 5mg tablets',
+    'Acenocoumarol 1mg tablets', 'Sinthrome 1mg tablets',
+    'Phenindione 10mg tablets', 'Dindevan 10mg tablets'
+  ],
+  'mycophenolate-maintenance': [
+    'Mycophenolate mofetil 500mg tablets', 'CellCept 500mg tablets',
+    'Myfenax 250mg capsules', 'Mycophenolic acid 180mg tablets',
+    'Myfortic 360mg tablets', 'Ceptava 180mg tablets'
+  ],
+  'fezolinetant-lft': [
+    'Fezolinetant 45mg tablets', 'Veoza 45mg tablets'
   ]
 };
 

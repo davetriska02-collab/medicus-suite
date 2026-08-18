@@ -67,7 +67,7 @@ const EXPECTED = {
   'pincer-4': { type: 'drug-combo', severity: 'red', terms: ['ramipril', 'losartan', 'ibuprofen'] },
   'pincer-5': { type: 'drug-combo', severity: 'red', terms: ['bisoprolol', 'verapamil', 'diltiazem'] },
   'pincer-6': { type: 'drug-combo', severity: 'red', terms: ['ibuprofen', 'naproxen'] },
-  'pincer-7': { type: 'drug-monitoring', drugTerms: ['warfarin'], intervals: { inr: 84 } },
+  'pincer-7': { type: 'drug-monitoring', drugTerms: ['warfarin', 'marevan'], intervals: { inr: 84 } },
   'pincer-8': {
     type: 'drug-combo',
     severity: 'amber',
@@ -138,6 +138,20 @@ const EXPECTED = {
   'alert-domperidone-phaeo': { type: 'drug-combo', severity: 'red', terms: ['domperidone', 'motilium'] },
   'alert-acei-angioedema': { type: 'drug-combo', severity: 'red', terms: ['ramipril', 'lisinopril', 'perindopril', 'enalapril', 'captopril'] },
   'alert-antipsychotic-dementia': { type: 'drug-combo', severity: 'amber', terms: ['olanzapine', 'risperidone', 'quetiapine', 'aripiprazole', 'haloperidol'] },
+  // 2026-08-18 Keeper: MHRA topiramate PPP + warfarin/tramadol
+  'mhra-topiramate-ppp': {
+    type: 'drug-combo',
+    severity: 'red',
+    terms: ['topiramate', 'topamax'],
+    ageMin: 12,
+    ageMax: 55,
+    sex: 'F',
+  },
+  'mhra-warfarin-tramadol': {
+    type: 'drug-combo',
+    severity: 'red',
+    terms: ['warfarin', 'marevan', 'tramadol', 'zydol'],
+  },
 };
 
 for (const [id, exp] of Object.entries(EXPECTED)) {
@@ -222,6 +236,22 @@ check(!comboFires('mhra-acei-arb-ksparing-hyperkalaemia', ['Ramipril 5mg capsule
 check(comboFires('alert-xoi-thiopurine-myelosuppression', ['Allopurinol 100mg tablets', 'Azathioprine 50mg tablets'], {}), 'allopurinol + azathioprine fires');
 check(comboFires('alert-xoi-thiopurine-myelosuppression', ['Adenuric 80mg tablets', 'Mercaptopurine 50mg tablets'], {}), 'febuxostat (Adenuric brand) + mercaptopurine fires');
 check(!comboFires('alert-xoi-thiopurine-myelosuppression', ['Allopurinol 100mg tablets'], {}), 'allopurinol alone does NOT fire');
+check(
+  comboFires('mhra-topiramate-ppp', ['Topamax 50mg tablets'], { ageYears: 28, sex: 'F' }),
+  'topiramate PPP fires: Topamax in a 28yo female'
+);
+check(
+  !comboFires('mhra-topiramate-ppp', ['Topamax 50mg tablets'], { ageYears: 28, sex: 'M' }),
+  'topiramate PPP does NOT fire for a male (sex gate holds)'
+);
+check(
+  comboFires('mhra-warfarin-tramadol', ['Marevan 5mg tablets', 'Zydol 50mg capsules'], {}),
+  'warfarin+tramadol fires: Marevan + Zydol'
+);
+check(
+  !comboFires('mhra-warfarin-tramadol', ['Marevan 5mg tablets'], {}),
+  'Marevan alone does NOT fire warfarin+tramadol'
+);
 
 // === INVERSE COVERAGE: every library entry has an EXPECTED entry ===
 console.log('\n--- inverse coverage: every alert-library entry is pinned ---');

@@ -2,6 +2,55 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [Unreleased]
+
+### The Keeper — 18 Aug 2026 currency check (CSO review)
+
+Additive Sentinel rule refresh against BNF, SPS, MHRA, UKHSA and NICE CKS
+pages fetched this run. No interval was lengthened; nothing was disabled.
+
+**New monitoring rules** (`rules/drug-rules.json`): warfarin / oral VKA INR
+every 84 days (BNF — max 12-weekly when stable; Marevan, Sinthrome,
+Dindevan); mycophenolate FBC/LFT/U&E every 84 days (SPS 7 Jan 2026);
+fezolinetant / Veoza LFT every 90 days (MHRA DSU 10 Apr 2025; monthly×3
+initiation described in notes).
+
+**Brand gaps closed:** eprosartan / Teveten on ace-arb; Curatil on
+carbamazepine; Mintreleq XL / Sondate XL on antipsychotic; Marevan on
+PINCER #7.
+
+**New alerts:** topiramate Pregnancy Prevention Programme (MHRA 20 Jun
+2024, F 12–55); warfarin/VKA + tramadol raised-INR (BNF / MHRA Jun 2024).
+
+**RSV 65–74 clinical-risk** (effective 1 Sept 2026): COPD / chronic
+respiratory and immunosuppression problem + medication clauses, age-gated
+65–74. Bare asthma is deliberately omitted (engine cannot encode poorly
+controlled). Care-home `ageMin: 18` held for CSO — it would narrow
+alerting.
+
+**Reception:** sore-throat unwell-child floppy / not drinking promoted
+duty → 999 (CKS May 2026); headache household-same-time headache added
+as 999 carbon-monoxide flag (CKS Headache).
+
+Held for CSO (not applied): QOF CKD002/003 disable, AST ID rename, NDH
+register, RSV care-home under-18 exclusion. MEDREVIEW (ACB / STOPP) was
+not scanned this run.
+
+### Organise problems canvas — significance lanes + End bin
+
+The "Organise on canvas…" overlay is now a unified problem organiser, not
+just a nesting tree. Active problems sit in **Major / Minor / Unresolved**
+columns (Unknown significance). Drag onto another tile still nests or
+flat-links; drag onto a column heading or empty space changes significance;
+drag onto the **End** bin proposes ending the problem as Resolved (today's
+date). Nothing writes until the existing confirm bar. A parent with live
+children cannot be ended from the bin — same rule as Bulk remove?.
+
+**Bulk remove?**, **Change significance**, **Merge duplicates**, and
+**Clean up code** stay on the page. Recode is still **Edit problem…** on a
+tile. Writes go through `window.ProblemNesting` (`commitSignificanceChange`,
+new `commitEndProblem`) — the canvas still owns no API.
+
 ## [v3.232.0] — 2026-08-14
 
 ### Rota Manager: passcode protection, setup assistant, grid UX pack, Solver v2, live drift
