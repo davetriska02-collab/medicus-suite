@@ -89,9 +89,9 @@
     },
     {
       "file": "docs/feature-list.md",
-      "last_cso_review_version": "3.178.0",
-      "last_cso_review_date": "2026-07-25",
-      "notes": "Feature list v3.178.0 reviewed by CSO (Dr Dave Triska) on 2026-07-25 as part of the v3.178.0 Keeper clinical-rule change proposal (PR #221), which he reviewed and approved for merge. Scope of this review is the rule-set currency changes and the corresponding feature-list count/summary refresh (starter alerts 32 -> 35; new reception red flags; DEM004 correction) — it is not a full re-baseline of the whole document. Ledger continuity note: the doc was bumped 3.126.0 -> 3.177.0 in commit 8455ab1 (safety-doc sync) without a matching ledger update, so this entry also reconciles that gap; the intervening weekly feature-list refreshes were content syncs, not CSO reviews. Prior recorded review was 3.126.0 on 2026-06-21."
+      "last_cso_review_version": "3.233.0",
+      "last_cso_review_date": "2026-08-18",
+      "notes": "Feature list v3.233.0 reviewed by CSO (Dr Dave Triska) on 2026-08-18 as part of the v3.233.0 Keeper clinical-rule change proposal (the-keeper-report-2026-08-18.md), which he reviewed and approved in session. Scope is the applied additive rule-set currency changes and the corresponding feature-list count refresh (starter alerts 35 -> 37; 32 built-in drug-monitoring rules of which 31 are enabled). It is not a full re-baseline of the whole document. Held items (CKD002/003 disable, AST ID rename, NDH, RSV care-home ageMin 18) were NOT signed. Prior recorded Keeper review was 3.178.0 on 2026-07-25 (PR #221)."
     }
   ]
 }

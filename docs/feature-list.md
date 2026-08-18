@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.232.0
-**Generated:** 2026-08-16 (automated)
+**Version:** v3.233.0
+**Generated:** 2026-08-18 (Keeper CSO sign-off)
 
 ## What it is
 
@@ -13,7 +13,7 @@ Medicus Suite is a Chrome extension that sits alongside the Medicus electronic p
 - 6 full-tab-style tools: three opened from the panel (Patient Record Visualiser, Duplicate Problem Checker, Rota manager), one triggered from Medicus's own contacts page (Contacts Management), and two reached from Options/Condor (Practice Report, CQC Inspection Readiness)
 - roughly 16 in-page content-script features layered onto live Medicus screens (queue chips, inline booking/task/document widgets, code-cleanup tools)
 - 8 rule types in the clinical alert engine (drug-monitoring, drug-combo, drug/allergy conflict, qof-register, qof-indicator, event-count, vaccine, composite)
-- 34 drug-monitoring rules, 74 QOF rules (14 register + 60 indicator), 5 vaccine rules, 44 investigation-result rules, and 35 starter alerts in the practice alert library (32 prescribing-safety, 3 clinical-review)
+- 32 drug-monitoring rules (31 enabled), 74 QOF rules (14 register + 60 indicator), 5 vaccine rules, 44 investigation-result rules, and 37 starter alerts in the practice alert library (34 prescribing-safety, 3 clinical-review)
 
 ## Side-panel modules
 
@@ -213,7 +213,7 @@ The Monitoring tab and Sweep both run patient data through the same rules engine
 - **Vaccine** — eligibility and due/given/declined status against seasonal or one-off vaccination schedules
 - **Composite** — combines the results of several other rules into one higher-level flag
 
-The shipped alert library carries 35 starter alerts a practice can enable (32 prescribing-safety, largely sourced from the PINCER prescribing-safety indicator set, plus 3 clinical-review alerts), alongside 34 built-in drug-monitoring rules, 74 QOF rules (14 register, 60 indicator), 5 vaccine rules, and 44 investigation-result threshold rules for the results queue. Practices can also author their own rules of any type from Options, which arrive disabled by default and must be reviewed and switched on by a clinician before they fire.
+The shipped alert library carries 37 starter alerts a practice can enable (34 prescribing-safety, largely sourced from the PINCER prescribing-safety indicator set, plus 3 clinical-review alerts), alongside 32 built-in drug-monitoring rules (31 enabled; digoxin remains disabled pending a separate activation review), 74 QOF rules (14 register, 60 indicator), 5 vaccine rules, and 44 investigation-result threshold rules for the results queue. Practices can also author their own rules of any type from Options, which arrive disabled by default and must be reviewed and switched on by a clinician before they fire.
 
 ## Settings & customisation
 
@@ -226,6 +226,7 @@ The shipped alert library carries 35 starter alerts a practice can enable (32 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.233.0 (2026-08-18)** — The Keeper currency check, CSO-signed: new warfarin/VKA INR, mycophenolate and fezolinetant monitoring rules; eprosartan/Teveten, Curatil, Mintreleq XL/Sondate XL and Marevan brand gaps closed; RSV 65–74 COPD and immunosuppression eligibility from 1 Sept 2026 (bare asthma omitted); topiramate PPP and warfarin+tramadol alerts; sore-throat unwell-child promoted to 999; headache household carbon-monoxide flag. Held (not applied): CKD002/003 disable, AST ID rename, NDH, RSV care-home under-18 exclusion.
 - **v3.232.0 (2026-08-14)** — Rota Manager major upgrade: optional passcode protection (staff read-only view with self-service leave/swap requests, or strict full lock; hashed config, synced and backed up with the practice data); a first-run setup assistant (connect to Medicus with review-before-import, sample practice, or by-hand — install to working rota in about three minutes) plus a "Finish setting up" dashboard checklist; grid drag-and-drop upgrades (live validity greying, Excel-style rectangle selection, copy/paste, redo, undo toasts, right-click menu, shortcuts strip, interactive rooms view); Solver v2 (enhanced-access allocation, avoid-duty preference repair, room-clash-aware proposals with per-dimension score explanation); and a live drift card in the compact Rota module reconciling today's rota against the Medicus appointment book each minute with an opt-in alert on serious drift.
 - **v3.230.0–v3.231.0 (2026-08-12–14)** — Journal–code sync: the Clean-up-code panel now finds journal entries duplicating the problem's clinical event (nine confidence tiers: structural linked-problems references, verified true record dates, day-group date + wording, and two fuzzy fallbacks), warns when several match (GP2GP can duplicate whole records) and flags the one whose own record date exactly confirms against the problem, and can write the problem's current code — and separately its cleaned "additional info" text — into the matching entry, per-match or auto-prompted right after a fix. v3.231.0 adds the post-review fixes (one row per journal entry even when two detection passes find the same note; unknown confidence tiers rank last) and a one-click Undo for both journal writes, restoring the entry's previous code or text via the same confirmed contract. Also new: the `{Episodicity…}` / `Problem Info: Problem Notes:` GP2GP wrapper patterns join the generic-import-text rules, and "Date records held from" joins the Bulk-remove admin-code roots.
 - **v3.227.0–.1 (2026-08-09)** — "(Grouped with X)" GP2GP import text now resolves to a real relationship offer (flat link or nest in either direction) in both the Clean-up-code panel and the Organise-problems canvas tray, with existing-relationship detection, automatic import-text cleanup on commit, canvas locator lines, drag-and-drop flat links, and Unknown-significance flagging. v3.227.1 adds the review fixes: an authoritative fail-closed cycle guard on the no-scan surface, a two-step confirm on the inline relationship buttons, ambiguous-match refusal, truthful strip feedback, per-choice confirm copy, and scan-race/card-lifecycle corrections.

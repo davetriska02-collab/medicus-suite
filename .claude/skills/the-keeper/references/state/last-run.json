@@ -2,6 +2,11 @@
   "runDate": "2026-08-18",
   "previousRunDate": "2026-08-01",
   "manifestVersion": "3.233.0",
+  "csoSignedOff": {
+    "date": "2026-08-18",
+    "by": "Dr D. Triska",
+    "scope": "Applied additive set only (12 changes). Held items remain unsigned."
+  },
   "ruleFileLastUpdated": {
     "rules/drug-rules.json": "2026-08-18",
     "rules/qof-rules.json": "2026-07-25",

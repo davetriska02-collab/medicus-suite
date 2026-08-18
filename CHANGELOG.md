@@ -4,7 +4,7 @@ All notable changes to Medicus Suite are documented here.
 
 ## [Unreleased]
 
-### The Keeper — 18 Aug 2026 currency check (CSO review)
+### The Keeper — 18 Aug 2026 currency check (CSO signed off)
 
 Additive Sentinel rule refresh against BNF, SPS, MHRA, UKHSA and NICE CKS
 pages fetched this run. No interval was lengthened; nothing was disabled.
@@ -32,9 +32,11 @@ alerting.
 duty → 999 (CKS May 2026); headache household-same-time headache added
 as 999 carbon-monoxide flag (CKS Headache).
 
-Held for CSO (not applied): QOF CKD002/003 disable, AST ID rename, NDH
-register, RSV care-home under-18 exclusion. MEDREVIEW (ACB / STOPP) was
-not scanned this run.
+**CSO sign-off 2026-08-18:** Dr D. Triska approved the applied additive
+set (new rules, brand additions, RSV 65–74 clauses, two alerts, two
+reception red-flag changes). Held items stay held — QOF CKD002/003
+disable, AST ID rename, NDH register, RSV care-home under-18 exclusion.
+MEDREVIEW (ACB / STOPP) was not scanned this run.
 
 ### Organise problems canvas — significance lanes + End bin
 

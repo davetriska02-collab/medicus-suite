@@ -6,6 +6,8 @@
 **Rule files touched:** rules/drug-rules.json, rules/vaccine-rules.json, rules/alert-library.json, rules/reception-pathways.json  
 **Tests:** ✅ passing (test-drug-brand-coverage.js, test-alert-library-coverage.js, test-vaccine-rules.js, test-reception-pathways.js, test-rule-schema.js)
 
+> **CSO SIGNED OFF 2026-08-18.** Dr D. Triska (CSO, GMC 6159481) approved the twelve applied additive changes below in session. Held / killed items (CKD002/003 disable, AST ID rename, NDH, RSV care-home `ageMin: 18`, CHC brand sweep, MEDREVIEW) remain **not applied**. This is not a full hazard-log or CSN re-baseline.
+
 > **How to read this.** The Keeper compares the suite’s clinical rule sets against their authoritative UK sources and proposes only verified, sourced changes. Every change links to the source it was checked against. Changes are rated 🔴 Red (a current patient-safety drift — usually a silent monitoring/alerting gap), 🟠 Amber (update to stay current) or 🟢 Green (housekeeping). **This is a proposal for the Clinical Safety Officer to review — clinical rule changes are not auto-merged.** Anything that could *reduce* alerting is collected in the sign-off box below.
 
 ## ⚠️ Changes needing CSO sign-off
