@@ -216,13 +216,30 @@
 }
 
 .ms-pnc-bin {
-  flex: 0 0 132px;
+  flex: 0 0 200px;
   min-height: 0;
   padding: 12px 10px;
   background: rgba(220, 38, 38, 0.05);
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  overflow: auto;
+}
+
+.ms-pnc-bin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.ms-pnc-bin-tile {
+  background: var(--bg-elev);
+}
+
+.ms-pnc-tile-staged {
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
 }
 
 .ms-pnc-bin-heading {
@@ -684,12 +701,38 @@
 .ms-pnc-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   padding: 10px 18px;
   border-top: 1px solid var(--border);
   background: var(--bg-mid);
   font-size: 12px;
   color: var(--text-3);
+}
+
+.ms-pnc-draft-summary {
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.ms-pnc-footer-gap {
+  flex: 1 1 8px;
+}
+
+.ms-pnc-footer .ms-pnc-finalise {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.ms-pnc-footer .ms-pnc-finalise:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.ms-pnc-footer .ms-pnc-discard {
+  color: var(--red);
+  border-color: var(--red);
 }
 
 .ms-pnc-footer button {

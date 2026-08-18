@@ -38,6 +38,18 @@ const {
   flattenLaneTreeIds,
   classifyDrop,
   canProposeEnd,
+  canStageEnd,
+  emptyDraft,
+  hasDraftChanges,
+  stageEnd,
+  unstageEnd,
+  stageSignificance,
+  overlayInfoById,
+  problemsNotEnded,
+  endedProblemList,
+  orderEndsForCommit,
+  summariseDraft,
+  effectiveLaneKey,
 } = require('./content-scripts/problem-nesting-canvas.js');
 
 let passed = 0,
@@ -622,6 +634,61 @@ console.log('--- significance lanes / classifyDrop / canProposeEnd ---');
   check(canProposeEnd('maj', { child: 'maj' }) === false, 'a parent with a live child cannot be ended');
 }
 
+console.log('--- draft workspace: stage End + significance, then summarise ---');
+{
+  const parentMap = { child: 'parent' };
+  const empty = emptyDraft();
+  check(hasDraftChanges(empty) === false, 'empty draft has no changes');
+
+  const leaf = stageEnd(empty, 'child', parentMap);
+  check(leaf.error === null && leaf.draft.endIds.join() === 'child', 'a leaf stages into End');
+  check(hasDraftChanges(leaf.draft) === true, 'a staged end is a draft change');
+
+  const parentTooSoon = stageEnd(empty, 'parent', parentMap);
+  check(parentTooSoon.error === 'has-children', 'a parent cannot stage until its children are also in End');
+
+  const parentAfter = stageEnd(leaf.draft, 'parent', parentMap);
+  check(parentAfter.error === null && parentAfter.draft.endIds.join() === 'child,parent', 'parent stages once its child is already in End');
+
+  const unstageChild = unstageEnd(parentAfter.draft, 'child', parentMap);
+  check(
+    unstageChild.endIds.indexOf('child') === -1 && unstageChild.endIds.indexOf('parent') === -1,
+    'unstaging a child also unstages the parent that depended on it'
+  );
+
+  const two = stageEnd(stageEnd(empty, 'a', {}).draft, 'b', {});
+  check(two.draft.endIds.join() === 'a,b', 'several problems can sit in End at once');
+
+  const info = { a: { significance: 'Minor' }, b: { significance: 'Major' } };
+  const moved = stageSignificance(empty, 'a', 'major', 'minor', {});
+  check(moved.sigById.a === 'major', 'significance stages without writing');
+  check(effectiveLaneKey(info, moved, 'a') === 'major', 'effective lane follows the draft');
+  check(effectiveLaneKey(info, empty, 'a') === 'minor', 'live lane is unchanged when nothing is staged');
+
+  const back = stageSignificance(moved, 'a', 'minor', 'minor', {});
+  check(!back.sigById.a, 'dropping back on the live lane clears the staged significance');
+
+  const endThenSig = stageSignificance(two.draft, 'a', 'unknown', 'minor', {});
+  check(endThenSig.endIds.indexOf('a') === -1, 'dragging an End tile onto a lane unstages the end');
+  check(endThenSig.sigById.a === 'unknown', '…and stages the new significance');
+
+  const overlay = overlayInfoById(info, moved);
+  check(overlay.a.significance === 'Major', 'overlay info reports the staged grade');
+  check(info.a.significance === 'Minor', 'the live snapshot is not mutated');
+
+  const visible = problemsNotEnded([{ id: 'a' }, { id: 'b' }], two.draft);
+  check(visible.length === 0, 'staged-end problems leave the lanes');
+  const inBin = endedProblemList([{ id: 'a', description: 'A' }, { id: 'b', description: 'B' }], two.draft);
+  check(inBin.map((p) => p.id).join() === 'a,b', 'End bin lists staged problems in drop order');
+
+  const ordered = orderEndsForCommit(['parent', 'child'], { child: 'parent' });
+  check(ordered.join() === 'child,parent', 'commit order is children before parents');
+
+  const summary = summariseDraft(parentAfter.draft, { child: 'Stent', parent: 'IHD' });
+  check(summary.count === 2 && summary.ends.length === 2, 'summary counts staged ends');
+  check(summary.ends[0].description === 'Stent', 'summary carries descriptions');
+}
+
 console.log('--- flattenTreeIds: never recurses forever on a cyclic structure ---');
 {
   // Belt-and-braces: buildProblemTree now guarantees an acyclic result, but
@@ -719,7 +786,8 @@ console.log(
     'the bridge exposes commitEndProblem for the End bin'
   );
   check(src.includes('data-sig-lane') && src.includes('data-end-bin'), 'lanes and the End bin are drop targets');
-  check(src.includes("kind === 'end'"), 'the confirm path can commit an end');
+  check(src.includes("kind === 'finalise'"), 'the confirm path finalises the staged canvas draft');
+  check(src.includes('orderEndsForCommit'), 'finalise commits ends children-first');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

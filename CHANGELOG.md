@@ -4,6 +4,18 @@ All notable changes to Medicus Suite are documented here.
 
 ## [Unreleased]
 
+## [v3.234.1] — 2026-08-18
+
+### Organise-problems canvas — stage then Finalise
+
+End and significance changes no longer write one drop at a time. Drop as
+many problems as you like into **End**, or onto **Major / Minor /
+Unresolved**; the tiles move on the canvas and nothing is written until
+**Finalise**. Drag a staged tile back out to undo it. A parent can only
+go into End once its live children are also staged (commit order is
+children first). Nesting and linking still confirm one pair at a time.
+Closing with unwritten staged changes asks before discarding.
+
 ## [v3.234.0] — 2026-08-18
 
 ### Organise problems canvas — significance lanes + End bin
