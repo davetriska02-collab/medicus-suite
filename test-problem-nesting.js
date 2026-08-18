@@ -37,6 +37,8 @@ const {
   parseTaskOverviewPath,
   parseSummaryBridgeAttr,
   extractPatientIdFromTaskOverview,
+  buildEndProblemPayload,
+  hasActiveChildren,
 } = require('./content-scripts/problem-nesting.js');
 
 let passed = 0,
@@ -562,6 +564,18 @@ console.log('--- significance re-grade: the edit-problem full-replace discipline
   check(resolveSignificanceOption([], 'major') === null, 'a form offering no options -> null (per-row refusal)');
   check(resolveSignificanceOption(null, 'major') === null, 'null options -> null, never throws');
   check(resolveSignificanceOption(opts, null) === null, 'null target -> null, never throws');
+}
+
+console.log('--- end-problem payload / hasActiveChildren ---');
+{
+  const ended = buildEndProblemPayload('prob-1', '2026-08-17', 'Resolved');
+  check(ended.problemId === 'prob-1', 'end payload carries the problem id');
+  check(ended.endDate === '2026-08-17', 'end payload carries the date');
+  check(ended.reason === 'Resolved', 'end payload defaults to the Bulk remove? reason');
+  check(Object.keys(ended).sort().join(',') === 'endDate,problemId,reason', 'exactly the three-field Bulk remove? contract');
+  check(hasActiveChildren('parent', { child: 'parent' }) === true, 'a parent with a live child is flagged');
+  check(hasActiveChildren('leaf', { child: 'parent' }) === false, 'a leaf is not flagged');
+  check(hasActiveChildren(null, { child: 'parent' }) === false, 'null id is not a parent');
 }
 
 console.log('--- parseSummaryBridgeAttr: the page-world bridge context source ---');

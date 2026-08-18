@@ -66,7 +66,7 @@
   background: var(--bg-elev);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-2);
-  width: min(1180px, 100%);
+  width: min(1320px, 100%);
   height: min(820px, 100%);
   display: flex;
   flex-direction: column;
@@ -184,6 +184,75 @@
   min-height: 0;
 }
 
+.ms-pnc-lanes {
+  flex: 3 1 0;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+}
+
+.ms-pnc-lane {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 10px;
+  border-right: 1px solid var(--border);
+}
+
+.ms-pnc-lane:last-of-type {
+  border-right: none;
+}
+
+.ms-pnc-lane-heading,
+.ms-pnc-bin-heading {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+
+.ms-pnc-bin {
+  flex: 0 0 132px;
+  min-height: 0;
+  padding: 12px 10px;
+  background: rgba(220, 38, 38, 0.05);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.ms-pnc-bin-heading {
+  color: var(--red);
+}
+
+.ms-pnc-bin-hint {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+.ms-pnc-lane.ms-pnc-drop-hover,
+.ms-pnc-bin.ms-pnc-drop-hover {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--accent-dim);
+}
+
+.ms-pnc-bin.ms-pnc-drop-hover {
+  outline-color: var(--red);
+  background: rgba(220, 38, 38, 0.12);
+}
+
+.ms-pnc-tile-hint {
+  font-size: 10.5px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+
 .ms-pnc-pane-tree {
   flex: 2 1 0;
   border-right: 1px solid var(--border);
@@ -237,7 +306,7 @@
 .ms-pnc-tile {
   display: inline-flex;
   flex-direction: column;
-  max-width: 340px;
+  max-width: 100%;
   padding: 3px 8px;
   background: var(--bg-elev);
   border: 1px solid var(--border);

@@ -9,10 +9,11 @@
 // ancestry BETWEEN the problems already on the record to suggest child→parent
 // pairs, and exposes both the scan and the write path (via window.ProblemNesting,
 // near the bottom of this file) to problem-nesting-canvas.js — the drag-and-drop
-// tree/tray overlay (2026-08-08 request) is where the clinician actually
-// confirms and creates links now. This file itself still owns the scan, the
-// "Merge duplicate copies" and "Change significance" accordion sections, and
-// every write — the canvas never writes to Medicus directly.
+// organiser (2026-08-08, significance lanes + End bin 2026-08-17) is where the
+// clinician confirms nest/link, significance, and single-problem end. This file
+// itself still owns the scan, the "Merge duplicate copies" and "Change
+// significance" accordion sections, Bulk remove?'s sibling writes, and every
+// write — the canvas never writes to Medicus directly.
 //
 // CONFIRMED CONTRACT (live capture 2026-08-03, scripts/problem-nesting-capture.js —
 // full write-up in docs/learnings-problem-nesting-api.md):
@@ -92,6 +93,24 @@
   // commitFlatLink below, which is the only confirmed-safe way to do that.
   function buildUpdateProblemLinksPayload(patientId, problemId, problemIdsToLink) {
     return { patientId: patientId, problemId: problemId, problemIdsToLink: problemIdsToLink };
+  }
+
+  // Same three-field end-problem POST as problem-bulk-end.js — duplicated,
+  // not shared, the same way each content script already carries its own
+  // tiny payload builder. reason defaults to 'Resolved' at the commit site.
+  function buildEndProblemPayload(problemId, endDate, reason) {
+    return { problemId: problemId, endDate: endDate, reason: reason };
+  }
+
+  // True when some other live problem lists this id as its parent.
+  function hasActiveChildren(problemId, parentIdByProblemId) {
+    if (!problemId) return false;
+    var map = parentIdByProblemId || {};
+    var keys = Object.keys(map);
+    for (var i = 0; i < keys.length; i++) {
+      if (map[keys[i]] === problemId) return true;
+    }
+    return false;
   }
 
   function resolveOverviewConceptId(overview) {
@@ -602,6 +621,8 @@
       parseTaskOverviewPath: parseTaskOverviewPath,
       parseSummaryBridgeAttr: parseSummaryBridgeAttr,
       extractPatientIdFromTaskOverview: extractPatientIdFromTaskOverview,
+      buildEndProblemPayload: buildEndProblemPayload,
+      hasActiveChildren: hasActiveChildren,
     };
     return;
   }
@@ -865,6 +886,25 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+  }
+
+  function fetchEndProblemForm(problemId) {
+    return apiFetch('/clinical/data/problem/end-problem/' + encodeURIComponent(problemId));
+  }
+
+  function postEndProblem(payload) {
+    return apiFetch('/clinical/problem/end-problem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  function todayISO() {
+    var d = new Date();
+    return (
+      d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+    );
   }
 
   var _taskPatientIdByUuid = Object.create(null);
@@ -1517,6 +1557,45 @@
         severity: null,
         ruleId: 'problem-significance',
         label: 'Change significance: 1 problem re-graded',
+        action: 'committed',
+      });
+    }
+  }
+
+  // Single-problem end from the canvas bin — same endpoint and default
+  // reason as Bulk remove?, but one problem at a time, with a commit-time
+  // child re-check (parent map first, then Medicus's own end-problem form).
+  // Removes the ended id from the live scan lists so the canvas tile
+  // disappears without a rescan.
+  async function commitEndProblem(problemId) {
+    if (!problemId) throw new Error('A problem must be chosen.');
+    if (!_lastPatientId) throw new Error('Patient context was lost — not ending.');
+    if (hasActiveChildren(problemId, _parentIdByProblemId)) {
+      throw new Error(
+        'This problem still has active children — end or un-nest them first, or use Bulk remove?.'
+      );
+    }
+    var form = await fetchEndProblemForm(problemId);
+    var childCount =
+      (form && Array.isArray(form.activeChildProblems) && form.activeChildProblems.length) || 0;
+    if (childCount > 0) {
+      throw new Error(
+        'This problem still has active children — end or un-nest them first, or use Bulk remove?.'
+      );
+    }
+    await postEndProblem(buildEndProblemPayload(problemId, todayISO(), 'Resolved'));
+    _problems = (_problems || []).filter(function (p) {
+      return !p || p.id !== problemId;
+    });
+    delete _infoById[problemId];
+    delete _parentIdByProblemId[problemId];
+    if (window.EventLedger) {
+      window.EventLedger.record({
+        source: 'record',
+        patientRef: _lastPatientId,
+        severity: null,
+        ruleId: 'bulk-end-problems',
+        label: 'End problem: 1 problem ended',
         action: 'committed',
       });
     }
@@ -2194,6 +2273,7 @@
     commitFlatLink: commitFlatLink,
     checkExistingRelationship: checkExistingRelationship,
     commitSignificanceChange: commitSignificanceChange,
+    commitEndProblem: commitEndProblem,
     wouldCreateCycle: wouldCreateCycle,
     // Text-link suggestion lifecycle, called by the canvas after it actions
     // a card (review finding: the canvas's own dismissed-ids Set is reset on

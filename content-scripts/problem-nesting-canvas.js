@@ -1,18 +1,15 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — "Organise problems" canvas overlay
 //
-// PURPOSE (user request 2026-08-08): a visual, drag-and-drop alternative to
-// the "Suggested links" / "Link manually" accordion sections that used to
-// live in content-scripts/problem-nesting.js — a left pane renders the
-// problem list as an auto-laid-out tree (root problems sorted by onset date
-// [falling back to record date when onset is blank] descending, each one's
-// real children nested and sorted the same way beneath it, to whatever depth
-// the record actually has); a right pane holds SNOMED-suggested-but-
-// unconfirmed children as a draggable tray, each labelled with its candidate
-// parent(s) and connected to them by an always-on dotted line. Dragging ANY
-// tile onto ANY other tile (either pane — SNOMED candidates are a hint,
-// never a constraint) proposes a link; nothing writes without an explicit
-// confirm.
+// PURPOSE (user request 2026-08-08, expanded 2026-08-17): a visual,
+// drag-and-drop organiser for the problem list. Three significance lanes
+// (Major / Minor / Unresolved) each hold their own nest tree; an End bin
+// resolves a problem; the right pane is still the SNOMED/import-text
+// suggestion tray. Dragging a tile onto another tile proposes nest/link;
+// dropping on lane chrome proposes a significance change; dropping on End
+// proposes ending as Resolved. Nothing writes without an explicit confirm.
+// Existing single-action buttons (Bulk remove?, Change significance,
+// Clean up code) stay on the page.
 //
 // TILE ACTIONS (revised 2026-08-08 — clicking the connector line to unlink
 // wasn't intuitive enough): clicking a tree-pane tile reveals two buttons
@@ -555,6 +552,114 @@
     };
   }
 
+  // Significance lane for a Medicus display label. Same prefix match as
+  // problem-nesting.js's sigCurrentMatchesTarget — "Major", "Minor",
+  // "Unknown" / "Unknown significance" / missing all land in a bucket.
+  // Anything that isn't major/minor is unresolved (unknown).
+  function significanceLaneKey(label) {
+    var s = String(label == null ? '' : label)
+      .trim()
+      .toLowerCase();
+    if (s.indexOf('major') === 0) return 'major';
+    if (s.indexOf('minor') === 0) return 'minor';
+    return 'unknown';
+  }
+
+  var SIGNIFICANCE_LANES = ['major', 'minor', 'unknown'];
+
+  function partitionProblemsBySignificance(problems, infoById) {
+    var out = { major: [], minor: [], unknown: [] };
+    var info = infoById || {};
+    (Array.isArray(problems) ? problems : []).forEach(function (p) {
+      if (!p || !p.id) return;
+      var current = (info[p.id] && info[p.id].significance) || 'Unknown';
+      out[significanceLaneKey(current)].push(p);
+    });
+    return out;
+  }
+
+  // After a per-lane buildProblemTree, mark roots whose live parent sits in
+  // a *different* lane so the tile can say "nested under X" without pulling
+  // that parent into this column.
+  function annotateCrossLaneParents(tree, problems, parentIdByProblemId) {
+    var descById = {};
+    (Array.isArray(problems) ? problems : []).forEach(function (p) {
+      if (p && p.id) descById[p.id] = p.description;
+    });
+    var parentMap = parentIdByProblemId || {};
+    function walk(nodes) {
+      (Array.isArray(nodes) ? nodes : []).forEach(function (n) {
+        if (!n) return;
+        var pid = parentMap[n.id];
+        if (pid && !n.parentId && descById[pid]) {
+          n.crossLaneParentId = pid;
+          n.crossLaneParentDescription = descById[pid];
+        }
+        walk(n.children);
+      });
+    }
+    walk(tree);
+    return tree;
+  }
+
+  function buildLaneTrees(problems, infoById, parentIdByProblemId, traySuggestedIds) {
+    var parts = partitionProblemsBySignificance(problems, infoById);
+    var trees = {};
+    SIGNIFICANCE_LANES.forEach(function (key) {
+      var tree = buildProblemTree(parts[key], infoById, parentIdByProblemId, traySuggestedIds);
+      trees[key] = annotateCrossLaneParents(tree, problems, parentIdByProblemId);
+    });
+    return trees;
+  }
+
+  // Union of every lane's rendered ids — tray actionable/blocked and the
+  // SVG line-drawer still need one set of "currently on the canvas" tiles.
+  function flattenLaneTreeIds(laneTrees) {
+    var ids = new Set();
+    SIGNIFICANCE_LANES.forEach(function (key) {
+      flattenTreeIds((laneTrees && laneTrees[key]) || []).forEach(function (id) {
+        ids.add(id);
+      });
+    });
+    return ids;
+  }
+
+  // Classifies a drop (or keyboard drop) against a target. Tile→tile is a
+  // nest/link; tile→lane chrome is a significance change; tile→bin is an
+  // end. Returns null for no-ops (same lane, self-drop, unknown target).
+  // currentLaneKey is the dragged problem's current significance lane.
+  function classifyDrop(payload, dropTarget, currentLaneKey) {
+    if (!payload || !payload.problemId || !dropTarget || !dropTarget.type) return null;
+    if (dropTarget.type === 'tile') {
+      if (!dropTarget.id || dropTarget.id === payload.problemId) return null;
+      return { kind: 'link', childId: payload.problemId, parentId: dropTarget.id };
+    }
+    if (dropTarget.type === 'lane') {
+      var key = dropTarget.key;
+      if (SIGNIFICANCE_LANES.indexOf(key) === -1) return null;
+      if (currentLaneKey === key) return null;
+      return { kind: 'sig-' + key, problemId: payload.problemId, targetKey: key };
+    }
+    if (dropTarget.type === 'bin') {
+      return { kind: 'end', problemId: payload.problemId };
+    }
+    return null;
+  }
+
+  // True when no other live problem lists this id as its parent. Same
+  // "can't end a parent while children are active" rule as
+  // problem-bulk-end.js's isEndable — the commit path re-checks against
+  // Medicus's own end-problem form.
+  function canProposeEnd(problemId, parentIdByProblemId) {
+    if (!problemId) return false;
+    var map = parentIdByProblemId || {};
+    var keys = Object.keys(map);
+    for (var i = 0; i < keys.length; i++) {
+      if (map[keys[i]] === problemId) return false;
+    }
+    return true;
+  }
+
   // ── Node test hook ────────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -577,6 +682,13 @@
       relativeRect: relativeRect,
       readDropPayload: readDropPayload,
       buildPendingLink: buildPendingLink,
+      significanceLaneKey: significanceLaneKey,
+      partitionProblemsBySignificance: partitionProblemsBySignificance,
+      annotateCrossLaneParents: annotateCrossLaneParents,
+      buildLaneTrees: buildLaneTrees,
+      flattenLaneTreeIds: flattenLaneTreeIds,
+      classifyDrop: classifyDrop,
+      canProposeEnd: canProposeEnd,
     };
     return;
   }
@@ -728,6 +840,9 @@
       (node.displayDate ? '<div class="ms-pnc-tile-date">' + esc(node.displayDate) + '</div>' : '') +
       '</div>' +
       (addInfo ? '<div class="ms-pnc-tile-info">' + esc(addInfo) + '</div>' : '') +
+      (node.crossLaneParentDescription
+        ? '<div class="ms-pnc-tile-hint">nested under ' + esc(node.crossLaneParentDescription) + '</div>'
+        : '') +
       '</div>' +
       (selected ? tileActionsHtml(node) : '') +
       '</div>' +
@@ -1079,8 +1194,9 @@
         'now-redundant import text, leaving that relationship as-is.';
       confirmLabel = 'Confirm — remove text';
       busyLabel = 'Removing…';
-    } else if (d.kind === 'sig-major' || d.kind === 'sig-minor') {
-      var sigTarget = d.kind === 'sig-major' ? 'Major' : 'Minor';
+    } else if (d.kind === 'sig-major' || d.kind === 'sig-minor' || d.kind === 'sig-unknown') {
+      var sigTarget =
+        d.kind === 'sig-major' ? 'Major' : d.kind === 'sig-minor' ? 'Minor' : 'Unknown significance';
       message =
         'This will change the significance of <strong>' +
         esc(d.problemDescription) +
@@ -1091,6 +1207,15 @@
         '</strong> via Medicus’s own edit form — every other field is resent unchanged.';
       confirmLabel = 'Confirm — set ' + sigTarget;
       busyLabel = 'Updating…';
+    } else if (d.kind === 'end') {
+      message =
+        'This will end <strong>' +
+        esc(d.problemDescription) +
+        '</strong> as <strong>Resolved</strong> with today’s date, via Medicus’s own end-problem form. ' +
+        'There is no undo from this canvas — use Medicus if you need to reopen it. ' +
+        'To end several problems at once, keep using <strong>Bulk remove?</strong>.';
+      confirmLabel = 'Confirm — end as Resolved';
+      busyLabel = 'Ending…';
     } else {
       return '';
     }
@@ -1142,21 +1267,50 @@
     );
   }
 
-  function bodyHtml(tree, groups, infoById, textLinkSuggestions, unknownSignificanceSuggestions) {
+  function bodyHtml(laneTrees, groups, infoById, textLinkSuggestions, unknownSignificanceSuggestions) {
     return (
-      '<div class="ms-pnc-explainer">Drag and drop problems to create parent-child relationships — ' +
-      'or press Enter on a tile to pick it up, then Enter on its new parent. ' +
-      'Suggested options are on the right. Click on a problem tile to remove a link, or to search ' +
-      'for better codes based on free-text.</div>' +
+      '<div class="ms-pnc-explainer">Drag a problem onto another to nest or link it. ' +
+      'Drop it on a <strong>Major / Minor / Unresolved</strong> column to change significance, ' +
+      'or on <strong>End</strong> to resolve it. Press Enter to pick a tile up, then Enter on ' +
+      'its target. Nothing writes until you confirm. Click a tile to recode it or remove a nest. ' +
+      '<strong>Bulk remove?</strong> is still there for ending several at once.</div>' +
       '<div class="ms-pnc-body">' +
       '<svg class="ms-pnc-lines" aria-hidden="true"></svg>' +
-      '<div class="ms-pnc-pane ms-pnc-pane-tree" id="ms-pnc-tree-pane">' +
-      treeHtml(tree) +
+      '<div class="ms-pnc-lanes" id="ms-pnc-lanes">' +
+      laneHtml('major', 'Major', laneTrees.major) +
+      laneHtml('minor', 'Minor', laneTrees.minor) +
+      laneHtml('unknown', 'Unresolved', laneTrees.unknown) +
+      binHtml() +
       '</div>' +
       '<div class="ms-pnc-pane ms-pnc-pane-tray" id="ms-pnc-tray-pane">' +
       '<div class="ms-pnc-pane-heading">Suggested links</div>' +
       trayHtml(groups, infoById, textLinkSuggestions, unknownSignificanceSuggestions) +
       '</div>' +
+      '</div>'
+    );
+  }
+
+  function laneHtml(key, label, tree) {
+    var empty = !tree || !tree.length;
+    return (
+      '<div class="ms-pnc-lane" data-sig-lane="' +
+      esc(key) +
+      '" tabindex="0" aria-label="' +
+      esc(label) +
+      ' problems">' +
+      '<div class="ms-pnc-lane-heading">' +
+      esc(label) +
+      '</div>' +
+      (empty ? '<div class="ms-pnc-empty">None</div>' : treeHtml(tree)) +
+      '</div>'
+    );
+  }
+
+  function binHtml() {
+    return (
+      '<div class="ms-pnc-bin" data-end-bin tabindex="0" aria-label="End problem">' +
+      '<div class="ms-pnc-bin-heading">End</div>' +
+      '<div class="ms-pnc-bin-hint">Drop here to resolve</div>' +
       '</div>'
     );
   }
@@ -1187,7 +1341,7 @@
         var ids = idsAttr.split(',').filter(Boolean);
         var fromRect = relativeRect(trayTile.getBoundingClientRect(), containerRect);
         ids.forEach(function (id) {
-          var target = root.querySelector('.ms-pnc-pane-tree .ms-pnc-tile[data-problem-id="' + cssEscapeId(id) + '"]');
+          var target = root.querySelector('.ms-pnc-lane .ms-pnc-tile[data-problem-id="' + cssEscapeId(id) + '"]');
           if (!target) return; // candidate not currently rendered in the tree — no line to draw
           var toRect = relativeRect(target.getBoundingClientRect(), containerRect);
           var d = buildConnectorPath(fromRect, toRect);
@@ -1202,10 +1356,10 @@
     // scheduleLineUpdate's scroll/resize recomputes without needing to
     // thread render()'s own data through.
     var treeTileRects = [];
-    root.querySelectorAll('.ms-pnc-pane-tree .ms-pnc-tile[data-problem-id]').forEach(function (tile) {
+    root.querySelectorAll('.ms-pnc-lane .ms-pnc-tile[data-problem-id]').forEach(function (tile) {
       treeTileRects.push(relativeRect(tile.getBoundingClientRect(), containerRect));
     });
-    var treePaneEl = root.querySelector('.ms-pnc-pane-tree');
+    var treePaneEl = root.querySelector('#ms-pnc-lanes');
     var treePaneRightEdge = treePaneEl
       ? relativeRect(treePaneEl.getBoundingClientRect(), containerRect).right
       : undefined;
@@ -1213,7 +1367,7 @@
 
     if (busX !== null) {
       var linkEntries = [];
-      root.querySelectorAll('.ms-pnc-pane-tree .ms-pnc-tile[data-linked-ids]').forEach(function (tile) {
+      root.querySelectorAll('.ms-pnc-lane .ms-pnc-tile[data-linked-ids]').forEach(function (tile) {
         linkEntries.push({
           id: tile.getAttribute('data-problem-id'),
           linkedIds: (tile.getAttribute('data-linked-ids') || '').split(',').filter(Boolean),
@@ -1228,10 +1382,10 @@
         var color = linkSetColor(setIndex);
         setPairs.forEach(function (pair) {
           var tileA = root.querySelector(
-            '.ms-pnc-pane-tree .ms-pnc-tile[data-problem-id="' + cssEscapeId(pair.a) + '"]'
+            '.ms-pnc-lane .ms-pnc-tile[data-problem-id="' + cssEscapeId(pair.a) + '"]'
           );
           var tileB = root.querySelector(
-            '.ms-pnc-pane-tree .ms-pnc-tile[data-problem-id="' + cssEscapeId(pair.b) + '"]'
+            '.ms-pnc-lane .ms-pnc-tile[data-problem-id="' + cssEscapeId(pair.b) + '"]'
           );
           if (!tileA || !tileB) return; // one side not currently rendered — no line to draw
           var rectA = relativeRect(tileA.getBoundingClientRect(), containerRect);
@@ -1337,10 +1491,18 @@
           return;
         }
         announce('Removed the import text for ' + d.problemDescription);
-      } else if (d.kind === 'sig-major' || d.kind === 'sig-minor') {
-        var sigTargetKey = d.kind === 'sig-major' ? 'major' : 'minor';
+      } else if (d.kind === 'sig-major' || d.kind === 'sig-minor' || d.kind === 'sig-unknown') {
+        var sigTargetKey = d.kind === 'sig-major' ? 'major' : d.kind === 'sig-minor' ? 'minor' : 'unknown';
         await window.ProblemNesting.commitSignificanceChange(d.problemId, sigTargetKey);
-        announce('Set ' + d.problemDescription + ' to ' + (sigTargetKey === 'major' ? 'Major' : 'Minor'));
+        var sigSpoken =
+          sigTargetKey === 'major' ? 'Major' : sigTargetKey === 'minor' ? 'Minor' : 'Unresolved';
+        announce('Set ' + d.problemDescription + ' to ' + sigSpoken);
+      } else if (d.kind === 'end') {
+        if (!window.ProblemNesting.commitEndProblem) {
+          throw new Error('Ending a problem isn’t available on this page.');
+        }
+        await window.ProblemNesting.commitEndProblem(d.problemId);
+        announce('Ended ' + d.problemDescription + ' as Resolved');
       } else {
         return;
       }
@@ -1438,6 +1600,43 @@
     render();
   }
 
+  function proposeSignificance(problemId, targetKey, snap, descById) {
+    if (!problemId || !targetKey || !snap) return;
+    var current = (snap.infoById[problemId] && snap.infoById[problemId].significance) || 'Unknown';
+    if (significanceLaneKey(current) === targetKey) return;
+    _pendingAction = {
+      kind: 'sig-' + targetKey,
+      problemId: problemId,
+      problemDescription: (descById && descById[problemId]) || problemId,
+      currentSignificance: current,
+      linking: false,
+      error: null,
+    };
+    render();
+  }
+
+  function proposeEnd(problemId, snap, descById) {
+    if (!problemId || !snap) return;
+    var description = (descById && descById[problemId]) || problemId;
+    if (!canProposeEnd(problemId, snap.parentIdByProblemId)) {
+      _cycleError =
+        description +
+        ' still has active child problems, so it cannot be ended from here. End or un-nest the children first, or use Bulk remove?.';
+      _pendingAction = null;
+      render();
+      return;
+    }
+    _cycleError = null;
+    _pendingAction = {
+      kind: 'end',
+      problemId: problemId,
+      problemDescription: description,
+      linking: false,
+      error: null,
+    };
+    render();
+  }
+
   function bindCommonEvents(root) {
     root.querySelector('#ms-pnc-close')?.addEventListener('click', close);
     root.querySelector('.ms-pnc-backdrop')?.addEventListener('click', function (e) {
@@ -1487,7 +1686,7 @@
     // live problem list), not the raw parentIdByProblemId value alone, so
     // this never disagrees with what the tile's own action buttons would
     // have shown.
-    root.querySelectorAll('.ms-pnc-pane-tree .ms-pnc-tile[data-problem-id]').forEach(function (tile) {
+    root.querySelectorAll('.ms-pnc-lane .ms-pnc-tile[data-problem-id]').forEach(function (tile) {
       tile.addEventListener('click', function () {
         var id = tile.getAttribute('data-problem-id');
         var parentId = snap.parentIdByProblemId[id];
@@ -1607,6 +1806,67 @@
       });
     });
 
+    function currentLaneOf(problemId) {
+      var current = (snap.infoById[problemId] && snap.infoById[problemId].significance) || 'Unknown';
+      return significanceLaneKey(current);
+    }
+
+    function applyClassifiedDrop(payload, dropTarget) {
+      var classified = classifyDrop(payload, dropTarget, currentLaneOf(payload.problemId));
+      if (!classified) return;
+      if (classified.kind === 'link') {
+        proposeLink(classified.childId, classified.parentId, snap, descById);
+      } else if (classified.kind === 'end') {
+        proposeEnd(classified.problemId, snap, descById);
+      } else if (classified.targetKey) {
+        proposeSignificance(classified.problemId, classified.targetKey, snap, descById);
+      }
+    }
+
+    root.querySelectorAll('[data-sig-lane]').forEach(function (lane) {
+      lane.addEventListener('dragover', function (e) {
+        if (!_dragPayload) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        lane.classList.add('ms-pnc-drop-hover');
+      });
+      lane.addEventListener('dragleave', function (e) {
+        if (lane.contains(e.relatedTarget)) return;
+        lane.classList.remove('ms-pnc-drop-hover');
+      });
+      lane.addEventListener('drop', function (e) {
+        e.preventDefault();
+        lane.classList.remove('ms-pnc-drop-hover');
+        var payload = readDropPayload(e);
+        _dragPayload = null;
+        if (!payload) return;
+        applyClassifiedDrop(payload, { type: 'lane', key: lane.getAttribute('data-sig-lane') });
+      });
+    });
+
+    var bin = root.querySelector('[data-end-bin]');
+    if (bin) {
+      bin.addEventListener('dragover', function (e) {
+        if (!_dragPayload) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        bin.classList.add('ms-pnc-drop-hover');
+      });
+      bin.addEventListener('dragleave', function (e) {
+        if (bin.contains(e.relatedTarget)) return;
+        bin.classList.remove('ms-pnc-drop-hover');
+      });
+      bin.addEventListener('drop', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        bin.classList.remove('ms-pnc-drop-hover');
+        var payload = readDropPayload(e);
+        _dragPayload = null;
+        if (!payload) return;
+        applyClassifiedDrop(payload, { type: 'bin' });
+      });
+    }
+
     // Keyboard path to the same link gesture (review finding: drag-and-drop
     // was the ONLY way to link — the widget's core function was unreachable
     // without a pointer, a regression from the deleted accordion's native
@@ -1646,8 +1906,30 @@
       });
     });
 
-    ['#ms-pnc-tree-pane', '#ms-pnc-tray-pane'].forEach(function (sel) {
-      root.querySelector(sel)?.addEventListener('scroll', scheduleLineUpdate);
+    root.querySelectorAll('[data-sig-lane]').forEach(function (lane) {
+      lane.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (!_kbPickedId) return;
+        if (e.target !== lane) return; // a focused tile inside the lane handles its own Enter
+        e.preventDefault();
+        e.stopPropagation();
+        var childId = _kbPickedId;
+        _kbPickedId = null;
+        applyClassifiedDrop({ problemId: childId }, { type: 'lane', key: lane.getAttribute('data-sig-lane') });
+      });
+    });
+    root.querySelector('[data-end-bin]')?.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (!_kbPickedId) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var childId = _kbPickedId;
+      _kbPickedId = null;
+      applyClassifiedDrop({ problemId: childId }, { type: 'bin' });
+    });
+
+    root.querySelectorAll('.ms-pnc-lane, #ms-pnc-tray-pane').forEach(function (pane) {
+      pane.addEventListener('scroll', scheduleLineUpdate);
     });
   }
 
@@ -1846,8 +2128,13 @@
         return s.childId;
       })
     );
-    var tree = buildProblemTree(snap.problems, snap.infoById, snap.parentIdByProblemId, traySuggestedIds);
-    var treeIds = flattenTreeIds(tree);
+    var laneTrees = buildLaneTrees(
+      snap.problems,
+      snap.infoById,
+      snap.parentIdByProblemId,
+      traySuggestedIds
+    );
+    var treeIds = flattenLaneTreeIds(laneTrees);
     var groups = partitionSuggestionTray(liveSuggestions, treeIds, snap.infoById);
     // See _dismissedTextLinkProblemIds' own comment — filters out a
     // suggestion just actioned this session, since nothing in the scan data
@@ -1859,7 +2146,7 @@
       }
     );
     root.innerHTML = wrapPanel(
-      bodyHtml(tree, groups, snap.infoById, liveTextLinkSuggestions, snap.unknownSignificanceSuggestions) +
+      bodyHtml(laneTrees, groups, snap.infoById, liveTextLinkSuggestions, snap.unknownSignificanceSuggestions) +
         confirmBarHtml() +
         footerHtml()
     );

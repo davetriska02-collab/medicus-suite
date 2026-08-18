@@ -4,6 +4,25 @@ All notable changes to Medicus Suite are documented here.
 
 ## [Unreleased]
 
+## [v3.234.0] — 2026-08-18
+
+### Organise problems canvas — significance lanes + End bin
+
+The "Organise on canvas…" overlay is now a unified problem organiser, not
+just a nesting tree. Active problems sit in **Major / Minor / Unresolved**
+columns (Unknown significance). Drag onto another tile still nests or
+flat-links; drag onto a column heading or empty space changes significance;
+drag onto the **End** bin proposes ending the problem as Resolved (today's
+date). Nothing writes until the existing confirm bar. A parent with live
+children cannot be ended from the bin — same rule as Bulk remove?.
+
+**Bulk remove?**, **Change significance**, **Merge duplicates**, and
+**Clean up code** stay on the page. Recode is still **Edit problem…** on a
+tile. Writes go through `window.ProblemNesting` (`commitSignificanceChange`,
+new `commitEndProblem`) — the canvas still owns no API.
+
+## [v3.233.0] — 2026-08-18
+
 ### The Keeper — 18 Aug 2026 currency check (CSO signed off)
 
 Additive Sentinel rule refresh against BNF, SPS, MHRA, UKHSA and NICE CKS
@@ -37,21 +56,6 @@ set (new rules, brand additions, RSV 65–74 clauses, two alerts, two
 reception red-flag changes). Held items stay held — QOF CKD002/003
 disable, AST ID rename, NDH register, RSV care-home under-18 exclusion.
 MEDREVIEW (ACB / STOPP) was not scanned this run.
-
-### Organise problems canvas — significance lanes + End bin
-
-The "Organise on canvas…" overlay is now a unified problem organiser, not
-just a nesting tree. Active problems sit in **Major / Minor / Unresolved**
-columns (Unknown significance). Drag onto another tile still nests or
-flat-links; drag onto a column heading or empty space changes significance;
-drag onto the **End** bin proposes ending the problem as Resolved (today's
-date). Nothing writes until the existing confirm bar. A parent with live
-children cannot be ended from the bin — same rule as Bulk remove?.
-
-**Bulk remove?**, **Change significance**, **Merge duplicates**, and
-**Clean up code** stay on the page. Recode is still **Edit problem…** on a
-tile. Writes go through `window.ProblemNesting` (`commitSignificanceChange`,
-new `commitEndProblem`) — the canvas still owns no API.
 
 ## [v3.232.0] — 2026-08-14
 

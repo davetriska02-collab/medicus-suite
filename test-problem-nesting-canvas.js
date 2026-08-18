@@ -32,6 +32,12 @@ const {
   relativeRect,
   readDropPayload,
   buildPendingLink,
+  significanceLaneKey,
+  partitionProblemsBySignificance,
+  buildLaneTrees,
+  flattenLaneTreeIds,
+  classifyDrop,
+  canProposeEnd,
 } = require('./content-scripts/problem-nesting-canvas.js');
 
 let passed = 0,
@@ -551,6 +557,71 @@ console.log('--- buildProblemTree: parent-map CYCLES render instead of silently 
   check(healthyRoot && healthyRoot.children.length === 1, 'the healthy branch is untouched by the cycle rescue');
 }
 
+console.log('--- significance lanes / classifyDrop / canProposeEnd ---');
+{
+  check(significanceLaneKey('Major') === 'major', 'Major → major');
+  check(significanceLaneKey('Minor') === 'minor', 'Minor → minor');
+  check(significanceLaneKey('Unknown significance') === 'unknown', 'Unknown significance → unknown');
+  check(significanceLaneKey('Unknown') === 'unknown', 'Unknown → unknown');
+  check(significanceLaneKey('') === 'unknown', 'empty label is unresolved');
+  check(significanceLaneKey(null) === 'unknown', 'null label is unresolved');
+
+  const problems = [
+    { id: 'maj', description: 'IHD' },
+    { id: 'min', description: 'Eczema' },
+    { id: 'unk', description: 'H/O stroke' },
+    { id: 'child', description: 'Stent' },
+  ];
+  const info = {
+    maj: { significance: 'Major', onsetDate: '1 Jan 2020' },
+    min: { significance: 'Minor', onsetDate: '1 Jan 2021' },
+    unk: { significance: 'Unknown significance', onsetDate: '1 Jan 2019' },
+    child: { significance: 'Minor', onsetDate: '1 Jan 2022' },
+  };
+  const parts = partitionProblemsBySignificance(problems, info);
+  check(parts.major.map((p) => p.id).join() === 'maj', 'major lane has the Major problem');
+  check(parts.minor.map((p) => p.id).sort().join() === 'child,min', 'minor lane has Minor + child');
+  check(parts.unknown.map((p) => p.id).join() === 'unk', 'unknown lane has the unresolved problem');
+
+  const trees = buildLaneTrees(problems, info, { child: 'maj' }, new Set());
+  check(trees.major.length === 1 && trees.major[0].id === 'maj', 'major lane tree is IHD');
+  check(trees.major[0].children.length === 0, 'minor child is not pulled into the major lane');
+  const minorChild = trees.minor.find((n) => n.id === 'child') || trees.minor[0].children[0];
+  const childNode = (function find(nodes) {
+    for (const n of nodes || []) {
+      if (n.id === 'child') return n;
+      const hit = find(n.children);
+      if (hit) return hit;
+    }
+    return null;
+  })(trees.minor);
+  check(childNode && childNode.crossLaneParentDescription === 'IHD', 'cross-lane child is annotated with the other-lane parent');
+  check(flattenLaneTreeIds(trees).size === 4, 'all four problems still appear across lanes');
+
+  check(
+    classifyDrop({ problemId: 'min' }, { type: 'lane', key: 'major' }, 'minor').kind === 'sig-major',
+    'drop onto Major chrome proposes a significance change'
+  );
+  check(
+    classifyDrop({ problemId: 'min' }, { type: 'lane', key: 'minor' }, 'minor') === null,
+    'drop onto the problem’s own lane is a no-op'
+  );
+  check(
+    classifyDrop({ problemId: 'min' }, { type: 'bin' }, 'minor').kind === 'end',
+    'drop onto the End bin proposes an end'
+  );
+  check(
+    classifyDrop({ problemId: 'min' }, { type: 'tile', id: 'maj' }, 'minor').kind === 'link',
+    'drop onto another tile is still a nest/link'
+  );
+  check(
+    classifyDrop({ problemId: 'min' }, { type: 'tile', id: 'min' }, 'minor') === null,
+    'drop onto self is rejected'
+  );
+  check(canProposeEnd('min', { child: 'maj' }) === true, 'a leaf can be ended');
+  check(canProposeEnd('maj', { child: 'maj' }) === false, 'a parent with a live child cannot be ended');
+}
+
 console.log('--- flattenTreeIds: never recurses forever on a cyclic structure ---');
 {
   // Belt-and-braces: buildProblemTree now guarantees an acyclic result, but
@@ -643,6 +714,12 @@ console.log(
     nestingSrc.includes('consumeTextLinkSuggestion:') && nestingSrc.includes('markTextLinkAlreadyRelated:'),
     'the bridge actually exposes both lifecycle functions the canvas calls'
   );
+  check(
+    nestingSrc.includes('commitEndProblem: commitEndProblem'),
+    'the bridge exposes commitEndProblem for the End bin'
+  );
+  check(src.includes('data-sig-lane') && src.includes('data-end-bin'), 'lanes and the End bin are drop targets');
+  check(src.includes("kind === 'end'"), 'the confirm path can commit an end');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
