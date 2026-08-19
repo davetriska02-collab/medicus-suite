@@ -1,19 +1,20 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved.
-// Medicus Suite — appointment organise core (cancel + cross-list reschedule).
+// Medicus Suite — appointment organise core (cancel + same-list + cross-list).
 //
 // Contract: docs/learnings-appointment-organise-api.md (live capture 2026-08-19,
 // dummy patient Mr Micky Mouse, Sunday 2026-08-23). Paths and payload keys are
 // byte-for-byte what chBook recorded. Do not tidy them.
 //
-// booking-core.js is the ONE reserve / create-appointment / release copy.
-// This file owns cancel + the reschedule orchestration only:
+// booking-core.js is the ONE create-appointment / release copy.
+// Move reserve is the captured 3-field POST (no substituteSlotFilters).
+// This file owns cancel + move orchestration:
 //   GET  /scheduling/data/appointment/appointment-overview/{id}
 //   GET  /scheduling/data/appointment/cancel-appointment/{id}
 //   POST /scheduling/appointment/cancel-appointment
-//   GET  /scheduling/data/appointment/move-appointment/{id}?moveType=to-another-diary
-//   POST /scheduling/slot-reservation/update-slot-reservation  (rescheduledAppointmentId set)
-//   then booking-core.reserveSlot → createAppointment(context=reschedule-appointment) → release
-// Same-list move and extend are BLOCKED — no write slug was captured.
+//   GET  /scheduling/data/appointment/move-appointment/{id}?moveType=to-same-diary|to-another-diary
+//   POST reserve (3 fields) → optional update-slot-reservation (cross-list only)
+//     → booking-core.createAppointment(context=reschedule-appointment) → release
+// Extend is BLOCKED — change-appointment was only seen in a Vue template.
 //
 // Dual-mode: module.exports for Node tests, window.AppointmentOrganiseCore
 // for the appointment-book content script. No ES export (classic-script safe).
@@ -29,6 +30,7 @@
     cancelWrite: '/scheduling/appointment/cancel-appointment',
     moveForm: '/scheduling/data/appointment/move-appointment/',
     updateReservation: '/scheduling/slot-reservation/update-slot-reservation',
+    reserve: '/scheduling/slot-reservation/reserve-slot-and-broadcast-appointment-booking-in-progress',
   };
 
   // Captured POST /scheduling/appointment/cancel-appointment body (01-cancel.json).
@@ -80,9 +82,8 @@
     'followingSlotEndDateTime',
   ];
 
-  var SAME_LIST_BLOCKED =
-    'Same-list move is not in the captured contract (no POST). Drop onto another diary.';
   var EXTEND_BLOCKED = 'Extend is not in the captured contract (no duration write).';
+  var SAME_SLOT = 'Drop onto a different free slot.';
   var ARRIVED_LOCKED = 'Arrived / in-progress appointments cannot be organised from this board.';
   var CANCELLED_EXCLUDED = 'Cancelled appointments are excluded from the board.';
 
@@ -280,10 +281,20 @@
     if (!appointment || !appointment.id) return { ok: false, reason: 'Missing appointment.' };
     if (appointment.locked || appointment.arrived) return { ok: false, reason: ARRIVED_LOCKED };
     if (!target || !target.diaryId || !target.startDateTime) {
-      return { ok: false, reason: 'Drop onto a free slot on another diary.' };
+      return { ok: false, reason: 'Drop onto a free slot.' };
     }
-    if (target.diaryId === appointment.diaryId) return { ok: false, reason: SAME_LIST_BLOCKED };
+    if (target.diaryId === appointment.diaryId && target.startDateTime === appointment.startDateTime) {
+      return { ok: false, reason: SAME_SLOT };
+    }
     return { ok: true, reason: null };
+  }
+
+  function moveTypeFor(appointment, target) {
+    return target && appointment && target.diaryId === appointment.diaryId ? 'to-same-diary' : 'to-another-diary';
+  }
+
+  function isCrossListMove(appointment, target) {
+    return !!(appointment && target && target.diaryId && target.diaryId !== appointment.diaryId);
   }
 
   function canStageCancel(appointment) {
@@ -603,7 +614,7 @@
   }
 
   function requireBooking(booking) {
-    if (!booking || typeof booking.reserveSlot !== 'function' || typeof booking.createAppointment !== 'function') {
+    if (!booking || typeof booking.createAppointment !== 'function') {
       throw new Error('appointment-organise: booking-core reserve/create/release required');
     }
     return booking;
@@ -675,10 +686,23 @@
       return apiFetch(url(PATHS.cancelForm + encodeURIComponent(appointmentId)), {}, fetchImpl);
     }
 
-    async function fetchMoveForm(appointmentId) {
+    async function fetchMoveForm(appointmentId, moveType) {
+      var type = moveType === 'to-same-diary' ? 'to-same-diary' : 'to-another-diary';
       return apiFetch(
-        url(PATHS.moveForm + encodeURIComponent(appointmentId) + '?moveType=to-another-diary'),
+        url(PATHS.moveForm + encodeURIComponent(appointmentId) + '?moveType=' + type),
         {},
+        fetchImpl
+      );
+    }
+
+    async function reserveForMove(payload) {
+      return apiFetch(
+        url(PATHS.reserve),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
         fetchImpl
       );
     }
@@ -761,7 +785,7 @@
         versionId: appointment.versionId,
       });
       if (!boardCheck.ok) throw new Error(boardCheck.reason);
-      var form = await fetchMoveForm(appointment.id);
+      var form = await fetchMoveForm(appointment.id, moveTypeFor(appointment, target));
       var formCheck = verifyMoveForm(form, {
         patientId: appointment.patientId,
         appointmentId: appointment.id,
@@ -772,24 +796,27 @@
       var reserveDuration = Number(target.reserveDuration) || Number(target.duration) || appointment.duration;
       var reservationId = null;
       try {
-        var reserved = await booking.reserveSlot(apiBase, {
-          diaryId: target.diaryId,
-          startDateTime: target.startDateTime,
-          duration: reserveDuration,
-          appointmentTypeId: appointment.appointmentTypeId,
-        });
-        reservationId = reserved && reserved.slotReservationId;
-        if (!reservationId) throw new Error('appointment-organise: reserve returned no slotReservationId');
-        await updateSlotReservation(
-          buildUpdateReservationPayload({
-            slotReservationId: reservationId,
+        var reserved = await reserveForMove(
+          buildReserveReschedulePayload({
             diaryId: target.diaryId,
-            appointmentId: appointment.id,
             startDateTime: target.startDateTime,
-            intendedDuration: appointment.duration,
+            intendedDuration: reserveDuration,
           })
         );
-        return await booking.createAppointment(
+        reservationId = reserved && reserved.slotReservationId;
+        if (!reservationId) throw new Error('appointment-organise: reserve returned no slotReservationId');
+        if (isCrossListMove(appointment, target)) {
+          await updateSlotReservation(
+            buildUpdateReservationPayload({
+              slotReservationId: reservationId,
+              diaryId: target.diaryId,
+              appointmentId: appointment.id,
+              startDateTime: target.startDateTime,
+              intendedDuration: appointment.duration,
+            })
+          );
+        }
+        var created = await booking.createAppointment(
           apiBase,
           buildRescheduleCreatePayload({
             patientId: appointment.patientId,
@@ -806,6 +833,10 @@
             isHiddenFromPatientFacingServices: appointment.isHiddenFromPatientFacingServices,
           })
         );
+        if (reservationId && typeof booking.releaseReservation === 'function') {
+          await booking.releaseReservation(apiBase, reservationId);
+        }
+        return created;
       } catch (err) {
         if (reservationId && typeof booking.releaseReservation === 'function') {
           await booking.releaseReservation(apiBase, reservationId);
@@ -820,6 +851,7 @@
       fetchCancelForm: fetchCancelForm,
       fetchMoveForm: fetchMoveForm,
       cancelAppointment: cancelAppointment,
+      reserveForMove: reserveForMove,
       updateSlotReservation: updateSlotReservation,
       commitCancel: commitCancel,
       commitMove: commitMove,
@@ -832,8 +864,10 @@
     RESERVE_RESCHEDULE_KEYS: RESERVE_RESCHEDULE_KEYS,
     UPDATE_RESERVATION_KEYS: UPDATE_RESERVATION_KEYS,
     RESCHEDULE_CREATE_KEYS: RESCHEDULE_CREATE_KEYS,
-    SAME_LIST_BLOCKED: SAME_LIST_BLOCKED,
     EXTEND_BLOCKED: EXTEND_BLOCKED,
+    SAME_SLOT: SAME_SLOT,
+    moveTypeFor: moveTypeFor,
+    isCrossListMove: isCrossListMove,
     ARRIVED_LOCKED: ARRIVED_LOCKED,
     parseBookRoute: parseBookRoute,
     parseBoard: parseBoard,

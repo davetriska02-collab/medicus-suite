@@ -184,12 +184,16 @@ console.log('=== 1. route + board parse ===');
   check(appt.arrived && appt.locked, 'arrived appointment is locked');
 }
 
-console.log('=== 2. draft stage / same-list blocked ===');
+console.log('=== 2. draft stage / same-list allowed ===');
 {
   const d0 = core.emptyDraft();
   check(core.hasDraftChanges(d0) === false, 'empty draft');
+  const sameSlot = core.canStageMove(mouse, { diaryId: mouse.diaryId, startDateTime: mouse.startDateTime });
+  check(sameSlot.ok === false, 'cannot drop onto the appointment\'s own slot');
   const same = core.canStageMove(mouse, { diaryId: mouse.diaryId, startDateTime: '2026-08-23 10:30:00' });
-  check(same.ok === false && same.reason === core.SAME_LIST_BLOCKED, 'same-list move blocked');
+  check(same.ok === true, 'same-list move to a later slot is allowed');
+  check(core.moveTypeFor(mouse, { diaryId: mouse.diaryId }) === 'to-same-diary', 'same diary → to-same-diary');
+  check(core.isCrossListMove(mouse, { diaryId: mouse.diaryId }) === false, 'same diary is not cross-list');
   const arrived = Object.assign({}, mouse, { arrived: true, locked: true });
   check(core.canStageCancel(arrived).ok === false, 'arrived cannot cancel');
   check(core.canStageMove(arrived, { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00' }).ok === false, 'arrived cannot move');
@@ -454,6 +458,9 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
           },
         });
       }
+      if (url.includes('reserve-slot-and-broadcast')) {
+        return mockResponse(200, { slotReservationId: '01a018e1-9543-73c5-a073-799c14a50cb9' });
+      }
       if (url.includes('update-slot-reservation')) return mockResponse(200, {});
       return mockResponse(200, {});
     });
@@ -467,21 +474,69 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     });
     check(res.appointmentId === '01a018e2-04b1-72dd-a9c4-fdf551f98b4c', 'move returns the new appointment id');
     check(res.appointmentId !== mouse.id, 'new appointment id after move differs from source');
-    check(booking.calls[0].fn === 'reserveSlot', 'move reserve goes through booking-core.reserveSlot');
-    check(booking.calls[0].args.diaryId === otherDiary, 'reserveSlot diaryId is the target diary');
-    check(booking.calls[0].args.duration === 15, 'reserveSlot duration is the target diary usual');
-    check(booking.calls[1].fn === 'createAppointment', 'create goes through booking-core.createAppointment');
-    const created = booking.calls[1].payload;
+    check(booking.calls[0].fn === 'createAppointment', 'create goes through booking-core.createAppointment');
+    const created = booking.calls[0].payload;
     check(created.context === 'reschedule-appointment', 'create context=reschedule-appointment');
     check(created.rescheduledAppointmentVersionId === mouse.versionId, 'create sends the pinned version id');
     check(created.bookingConfirmationRecipients.length === 0, 'create does not invent Send-to');
     const posts = f.calls.filter((c) => c.opts.method === 'POST').map((c) => c.url.replace(API, ''));
-    check(posts.length === 1 && posts[0] === '/scheduling/slot-reservation/update-slot-reservation', 'organise-core POSTs only update-slot-reservation');
+    check(
+      posts[0] === '/scheduling/slot-reservation/reserve-slot-and-broadcast-appointment-booking-in-progress',
+      'cross-list POST 1 = 3-field reserve'
+    );
+    check(posts[1] === '/scheduling/slot-reservation/update-slot-reservation', 'cross-list POST 2 = update-slot-reservation');
     check(!posts.some((p) => /move-appointment$/.test(p)), 'no POST …/move-appointment exists');
     check(!posts.some((p) => /cancel-appointment$/.test(p)), 'cross-list move is not cancel+create');
+    const reserveBody = JSON.parse(f.calls.find((c) => c.url.includes('reserve-slot')).opts.body);
+    check(
+      JSON.stringify(Object.keys(reserveBody)) === JSON.stringify(core.RESERVE_RESCHEDULE_KEYS),
+      'move reserve body is the 3-field capture, not booking-core extras'
+    );
+    check(reserveBody.intendedDuration === 15, 'cross-list reserve uses diary usual 15, not appointment 60');
+    check(!Object.prototype.hasOwnProperty.call(reserveBody, 'substituteSlotFilters'), 'no substituteSlotFilters on move reserve');
     const upd = JSON.parse(f.calls.find((c) => c.url.includes('update-slot-reservation')).opts.body);
     check(upd.intendedDuration === 60, 'update-slot-reservation uses the appointment duration');
     check(upd.rescheduledAppointmentId === mouse.id, 'update-slot-reservation sets rescheduledAppointmentId');
+  }
+
+  {
+    const sameTarget = { diaryId: mouse.diaryId, startDateTime: '2026-08-23 14:00:00', staffName: mouse.staffName, duration: 15 };
+    const f = recordingFetch((url) => {
+      if (url.includes('embedded-overview')) return mockResponse(200, sampleRaw());
+      if (url.includes('/data/appointment/move-appointment/')) {
+        check(url.includes('moveType=to-same-diary'), 'same-list form uses moveType=to-same-diary');
+        return mockResponse(200, {
+          moveType: { value: 'to-same-diary', isToSameDiary: true },
+          appointment: { id: mouse.id, versionId: mouse.versionId, patient: { id: mouse.patientId } },
+        });
+      }
+      if (url.includes('reserve-slot-and-broadcast')) {
+        return mockResponse(200, { slotReservationId: '01a018ef-570e-735f-9a0c-1770fba8695f' });
+      }
+      return mockResponse(200, {});
+    });
+    const booking = recordingBooking();
+    const client = core.createClient(API, { fetchImpl: f, booking: booking });
+    const sameMouse = Object.assign({}, mouse, { duration: 15, startDateTime: '2026-08-23 13:00:00' });
+    const res = await client.commitMove({
+      date: '2026-08-23',
+      appointment: sameMouse,
+      target: sameTarget,
+      pinned: { apiBase: API },
+    });
+    check(res.appointmentId === '01a018e2-04b1-72dd-a9c4-fdf551f98b4c', 'same-list move returns a new appointment id');
+    check(res.appointmentId !== sameMouse.id, 'same-list new id differs from source');
+    check(booking.calls[0].payload.diaryId === sameMouse.diaryId, 'same-list create keeps the source diaryId');
+    check(booking.calls[0].payload.intendedStartDateTime === '2026-08-23 14:00:00', 'same-list create uses the new start');
+    check(
+      !f.calls.some((c) => c.url.includes('update-slot-reservation')),
+      'same-list does not POST update-slot-reservation'
+    );
+    const reserveBody = JSON.parse(f.calls.find((c) => c.url.includes('reserve-slot')).opts.body);
+    check(
+      JSON.stringify(Object.keys(reserveBody)) === JSON.stringify(core.RESERVE_RESCHEDULE_KEYS),
+      'same-list reserve is also the 3-field body'
+    );
   }
 
   {
@@ -516,6 +571,9 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
         return mockResponse(200, {
           appointment: { id: mouse.id, versionId: mouse.versionId, patient: { id: mouse.patientId } },
         });
+      }
+      if (url.includes('reserve-slot-and-broadcast')) {
+        return mockResponse(200, { slotReservationId: '01a018e1-9543-73c5-a073-799c14a50cb9' });
       }
       if (url.includes('update-slot-reservation')) return mockResponse(500, { error: 'nope' });
       return mockResponse(200, {});
@@ -561,12 +619,12 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
         client.commitMove({
           date: '2026-08-23',
           appointment: mouse,
-          target: { diaryId: mouse.diaryId, startDateTime: '2026-08-23 10:30:00', duration: 15 },
+          target: { diaryId: mouse.diaryId, startDateTime: mouse.startDateTime, duration: 15 },
         }),
-      'Same-list',
-      'commitMove refuses same-list even if the UI asked'
+      'different free slot',
+      'commitMove refuses dropping onto the same slot'
     );
-    check(f.calls.length === 0, 'same-list refusal is before any fetch');
+    check(f.calls.length === 0, 'same-slot refusal is before any fetch');
   }
 
   console.log('=== 6. live booking-core is the reserve/create/release copy ===');
@@ -599,9 +657,14 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
         target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
       });
       check(res.appointmentId === '01a018e2-04b1-72dd-a9c4-fdf551f98b4c', 'live booking-core create returns the new id');
+      const reserveCall = f.calls.find((c) =>
+        String(c.url).includes('reserve-slot-and-broadcast-appointment-booking-in-progress')
+      );
+      check(!!reserveCall, 'move reserve hit the captured reserve path');
       check(
-        f.calls.some((c) => String(c.url).includes('reserve-slot-and-broadcast-appointment-booking-in-progress')),
-        'booking-core.reserveSlot hit the captured reserve path'
+        JSON.stringify(Object.keys(JSON.parse(reserveCall.opts.body))) ===
+          JSON.stringify(core.RESERVE_RESCHEDULE_KEYS),
+        'live move reserve posted the 3-field body'
       );
       const createdCall = f.calls.find((c) => String(c.url).endsWith('/scheduling/appointment/create-appointment'));
       check(!!createdCall, 'booking-core.createAppointment hit /scheduling/appointment/create-appointment');

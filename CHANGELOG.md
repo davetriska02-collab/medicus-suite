@@ -23,8 +23,10 @@ Writes follow the 2026-08-19 capture on dummy patient Mr Micky Mouse
   (`rescheduledAppointmentId` set) →
   `POST /scheduling/appointment/create-appointment`
   (`context=reschedule-appointment`). Not cancel-then-create.
-- **Same-list move** and **extend** are not offered — those writes
-  were not captured.
+- **Same-list move** — same three-field reserve +
+  `create-appointment` (`context=reschedule-appointment`) on the
+  **same** `diaryId`. No `update-slot-reservation`.
+- **Extend** is not offered — Edit Details duration is read-only.
 
 New `shared/appointment-organise-core.js` owns cancel + move orchestration
 (`update-slot-reservation`, appointment-overview GET). Reserve / create /

@@ -3,7 +3,7 @@
 //
 // Overlay on the Medicus appointment-book route. Columns are diaries, tiles
 // are booked appointments, gaps are free slots, Cancel is a bin. Drag stages;
-// Finalise writes. Same-list move and extend are not offered (contract blocked).
+// Finalise writes. Same-list and cross-list moves are captured; extend is not.
 // The canvas owns no raw fetch — window.AppointmentOrganiseCore does.
 'use strict';
 
@@ -200,7 +200,7 @@
       return (
         '<div class="ms-aoc-confirmbar">' +
         'This writes the ticked actions through Medicus’s own cancel / reschedule forms. ' +
-        'Send-to is off — no SMS or email. Same-list move and extend are not available. ' +
+        'Send-to is off — no SMS or email. Extend is not available. ' +
         'There is no canvas undo. Tick only what you have checked against the book.' +
         '<div class="ms-aoc-finalise-list">' +
         rows +
@@ -293,8 +293,8 @@
       '<button type="button" class="ms-aoc-close" id="ms-aoc-close">Close</button>' +
       '</header>' +
       '<div class="ms-aoc-explainer">' +
-      'Drag a patient onto a <strong>free slot on another diary</strong> to stage a move, or onto <strong>Cancel</strong>. ' +
-      'Nothing is written until you Finalise. Same-list move and extend are not in the captured contract. ' +
+      'Drag a patient onto a <strong>free slot</strong> (same diary or another) to stage a move, or onto <strong>Cancel</strong>. ' +
+      'Nothing is written until you Finalise. Extend is not in the captured contract. ' +
       'Arrived patients stay locked. Medicus will not send SMS or email from this board.' +
       '</div>' +
       '<div class="ms-aoc-body">' +
