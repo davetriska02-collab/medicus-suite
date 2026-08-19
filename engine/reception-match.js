@@ -419,6 +419,14 @@
     'rf-eye': ['red eye', 'painful eye', 'halos around lights', 'eye pain with headache'],
     'rf-new50': ['temple tenderness', 'pain when chewing', 'jaw claudication', 'new headache over 50'],
     'rf-thinners': ['blood thinners', 'warfarin', 'doac', 'anticoagulant', 'blood thinning medication'],
+    'rf-household-co': [
+      'carbon monoxide',
+      'others in the house have the same headache',
+      'everyone at home has a headache',
+      'whole household has headaches',
+      'partner has the same headache',
+      'same headache at the same time',
+    ],
     'rf-saddle': [
       'saddle numbness',
       'numbness around the genitals',

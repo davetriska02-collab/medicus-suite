@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.234.3] — 2026-08-19
+
+### Reception match — missing topic terms for the carbon-monoxide red flag
+
+The Keeper's v3.234.0 rule refresh added the `rf-household-co` red flag
+("does anyone else in the household have the same new headache") to the
+headache pathway, but `RED_FLAG_TOPIC_TERMS` in `engine/reception-match.js`
+never gained a matching entry, so the flag's topic always read as an un-asked
+gap (safe but noisy) and the coverage guards in `test-reception-match.js` /
+`test-reception-pathway-coverage.js` were failing. Added household /
+carbon-monoxide topic terms for it.
+
 ## [v3.234.2] — 2026-08-19
 
 ### Rules engine — recall due-date could land a day early/late around DST
