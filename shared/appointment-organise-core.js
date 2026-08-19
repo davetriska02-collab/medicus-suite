@@ -566,12 +566,10 @@
         }
       }
     });
-    var origin = parseDt(appointment && appointment.startDateTime);
     out.sort(function (a, b) {
-      var da = Math.abs((parseDt(a.startDateTime) || 0) - origin);
-      var db = Math.abs((parseDt(b.startDateTime) || 0) - origin);
-      if (da !== db) return da - db;
-      return String(a.startDateTime).localeCompare(String(b.startDateTime));
+      var t = String(a.startDateTime).localeCompare(String(b.startDateTime));
+      if (t !== 0) return t;
+      return String(a.staffName || '').localeCompare(String(b.staffName || ''));
     });
     return out;
   }
@@ -758,9 +756,12 @@
 
   function leftoverPhoneText(proposal) {
     var list = sickDayLeftovers(proposal);
-    if (!list.length) return '';
     var sick = (proposal && proposal.sickStaffName) || 'this list';
     var lines = ['Still needs a phone call — ' + sick];
+    if (!list.length) {
+      lines.push('Nobody left to phone.');
+      return lines.join('\n');
+    }
     list.forEach(function (row) {
       lines.push(
         hhmm(row.originalTime) +
@@ -777,6 +778,15 @@
     return lines.join('\n');
   }
 
+  function remainingFreeAfterIncoming(col, claimed) {
+    return ((col && col.slots) || []).filter(function (s) {
+      var end = s.endDateTime || addMinutes(s.startDateTime, s.duration || 0);
+      return !claimed.some(function (c) {
+        return intervalOverlaps(s.startDateTime, end, c.startDateTime, c.endDateTime);
+      });
+    }).length;
+  }
+
   function coverLoadPreview(board, proposal) {
     var dests = {};
     ((proposal && proposal.rows) || []).forEach(function (row) {
@@ -790,22 +800,30 @@
           sessionStart: col && col.sessionStart,
           sessionEnd: col && col.sessionEnd,
           alreadyBooked: col ? (col.appointments || []).length : 0,
-          remainingFree: col ? (col.slots || []).length : 0,
           incoming: 0,
           incomingMinutes: 0,
+          claimed: [],
+          col: col,
         };
       }
       dests[id].incoming += 1;
       dests[id].incomingMinutes += Number((row.appointment && row.appointment.duration) || 0);
+      dests[id].claimed.push({
+        startDateTime: row.suggestion.startDateTime,
+        endDateTime: row.suggestion.endDateTime || addMinutes(row.suggestion.startDateTime, row.suggestion.duration || 0),
+      });
     });
     var cap = Number(proposal && proposal.destExtraCap);
     if (!Number.isFinite(cap) || cap < 1) cap = SICK_DAY_DEST_EXTRA_CAP;
     return Object.keys(dests)
       .map(function (id) {
         var d = dests[id];
+        d.remainingFree = remainingFreeAfterIncoming(d.col, d.claimed);
         d.afterBooked = d.alreadyBooked + d.incoming;
         d.overCap = d.incoming > cap;
         d.cap = cap;
+        delete d.col;
+        delete d.claimed;
         return d;
       })
       .sort(function (a, b) {

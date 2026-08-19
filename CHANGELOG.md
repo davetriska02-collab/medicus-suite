@@ -46,7 +46,11 @@ Writes follow the 2026-08-19 capture on dummy patient Mr Micky Mouse
   **rebooked with Y** even while SMS is off. Consecutive 15s for a
   30-min sick-day rebook live-proven on Sunday dummy Mouse
   (2026-08-19, `2abf49f`): 10:00 NP 30 min → 11:00–11:30 Unassigned,
-  11:15 consumed, no overlap, SMS off.
+  11:15 consumed, no overlap, SMS off. Live polish pass then showed
+  cover cap, cover preview, and confirm "Rebooked with Y"; follow-up
+  fixes: leftover phone list always visible (including nobody to
+  phone), remaining-free subtracts incoming run tiles, default
+  similar slot is the earliest not the closest clock time.
 
 New `shared/appointment-organise-core.js` owns cancel + move orchestration
 (`update-slot-reservation`, appointment-overview GET). Reserve / create /

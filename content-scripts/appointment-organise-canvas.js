@@ -474,36 +474,31 @@
   }
 
   function leftoverPanelHtml(leftovers, sickStaffName, persistOnly) {
-    if (!leftovers || !leftovers.length) {
-      return persistOnly
-        ? '<div class="ms-aoc-confirmbar"><strong>Sick day leftovers.</strong> Everyone who could move has been staged. ' +
-            '<div class="ms-aoc-confirmbar-actions">' +
-            '<button type="button" class="ms-aoc-cancel" id="ms-aoc-sick-cancel">Close leftover list</button>' +
-            '</div></div>'
-        : '';
-    }
-    var rows = leftovers
-      .map(function (row) {
-        return (
-          '<div class="ms-aoc-leftover-row' +
-          (row.status === 'locked' ? ' ms-aoc-leftover-locked' : '') +
-          '">' +
-          '<span class="ms-aoc-leftover-when">' +
-          esc(hhmm(row.originalTime)) +
-          '</span>' +
-          '<span class="ms-aoc-leftover-who">' +
-          esc(row.patientName) +
-          '</span>' +
-          '<span class="ms-aoc-leftover-meta">' +
-          esc((row.appointmentTypeName || 'Appointment') + (row.duration ? ' · ' + row.duration + ' min' : '')) +
-          '</span>' +
-          '<span class="ms-aoc-leftover-why">' +
-          esc(row.status === 'locked' ? 'Waiting room — already here, do not phone to rebook' : row.reason) +
-          '</span>' +
-          '</div>'
-        );
-      })
-      .join('');
+    leftovers = leftovers || [];
+    var rows = leftovers.length
+      ? leftovers
+          .map(function (row) {
+            return (
+              '<div class="ms-aoc-leftover-row' +
+              (row.status === 'locked' ? ' ms-aoc-leftover-locked' : '') +
+              '">' +
+              '<span class="ms-aoc-leftover-when">' +
+              esc(hhmm(row.originalTime)) +
+              '</span>' +
+              '<span class="ms-aoc-leftover-who">' +
+              esc(row.patientName) +
+              '</span>' +
+              '<span class="ms-aoc-leftover-meta">' +
+              esc((row.appointmentTypeName || 'Appointment') + (row.duration ? ' · ' + row.duration + ' min' : '')) +
+              '</span>' +
+              '<span class="ms-aoc-leftover-why">' +
+              esc(row.status === 'locked' ? 'Waiting room — already here, do not phone to rebook' : row.reason) +
+              '</span>' +
+              '</div>'
+            );
+          })
+          .join('')
+      : '<div class="ms-aoc-leftover-row"><span class="ms-aoc-leftover-why">Nobody left to phone.</span></div>';
     return (
       '<div class="' +
       (persistOnly ? 'ms-aoc-confirmbar' : 'ms-aoc-phone-list') +
@@ -513,7 +508,11 @@
       ' from ' +
       esc(sickStaffName || 'this list') +
       '</div>' +
-      '<div class="ms-aoc-hint">Name, original time, and why it failed. No phone numbers on the appointment book — look the patient up in Medicus.</div>' +
+      '<div class="ms-aoc-hint">' +
+      (leftovers.length
+        ? 'Name, original time, and why it failed. No phone numbers on the appointment book — look the patient up in Medicus.'
+        : 'Everyone who could move has a similar slot. This list stays visible so a quiet board is not mistaken for a missing phone list.') +
+      '</div>' +
       '<div class="ms-aoc-finalise-list">' +
       rows +
       '</div>' +
@@ -658,13 +657,12 @@
       if (!_sick || !_sick.proposal) return;
       _draft = C.applySickDayProposal(_draft, _sick.proposal);
       var leftovers = C.sickDayLeftovers(_sick.proposal);
-      if (leftovers.length) {
-        _sick = { step: 'leftovers', proposal: _sick.proposal };
-        announce('Staged accepted sick-day moves. ' + leftovers.length + ' still need a phone call. Finalise when ready.');
-      } else {
-        _sick = null;
-        announce('Staged accepted sick-day moves. Finalise when ready.');
-      }
+      _sick = { step: 'leftovers', proposal: _sick.proposal };
+      announce(
+        leftovers.length
+          ? 'Staged accepted sick-day moves. ' + leftovers.length + ' still need a phone call. Finalise when ready.'
+          : 'Staged accepted sick-day moves. Nobody left to phone. Finalise when ready.'
+      );
       render();
     });
     root.querySelector('#ms-aoc-sick-copy')?.addEventListener('click', function () {

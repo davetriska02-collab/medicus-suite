@@ -389,10 +389,11 @@ Not a Medicus menu. Uses the captured **cross-list move** only
 SMS/email stay Off until a Send-to On payload is captured.
 
 Similar = same appointment type id, duration, site, delivery mode, another
-diary that day, next free slot closest to the original time. Consecutive
-15-min free tiles may cover a 30-min booking (reserve still 15, then
-update to 30). Arrived tiles locked. No type picker. No
-`allowOverlappingAppointments=allow`. Stretch rules unchanged.
+diary that day, **earliest** similar free run (not closest clock time —
+live polish pass defaulted 10:30 over 10:00 because 10:30 was nearer the
+original 11:00). Consecutive 15-min free tiles may cover a 30-min booking
+(reserve still 15, then update to 30). Arrived tiles locked. No type
+picker. No `allowOverlappingAppointments=allow`. Stretch rules unchanged.
 
 Monday-morning suite UI (no new endpoints): leftover still-needs-rebook is
 a first-class phone list (name, original time, why — the book has no
@@ -432,7 +433,23 @@ Status: `C:\Users\Dave\sick-day-retry-status.txt`. Review shot:
 `sick-day-retry-review.png`.
 
 This live-proves the consecutive-15s match and the captured cross-list
-write at 30 min (reserve still 15, then update). It does **not** live-prove
-the later polish (`4af732e`: leftover phone list, cover cap, confirm
-"rebooked with Y") — that commit was after this reload.
+write at 30 min (reserve still 15, then update).
+
+### Live pass — sick-day polish (`4af732e`, Sunday dummy)
+
+Covering cap, cover preview, and confirm **Rebooked with A Nurse Practitioner
+Clinic at 10:30** all showed. SMS off. Only Mouse. Finalised once. After:
+Mouse NP **10:30 30 min F2F**; both Unassigned empty.
+
+Bugs from that pass (fixed after):
+
+- Cover preview said **4 free tiles left** after one 30-min incoming on
+  four 15-min tiles. Should be **2** (10:30+10:45 consumed).
+- Default similar slot was **10:30** not earliest **10:00** (10:00 was
+  offered). Closest-clock sort, not earliest-fill.
+- Leftover phone list did not appear on the happy path (0 leftovers hid
+  the panel). Panel now always shows, including **Nobody left to phone.**
+
+Failed-rebook leftover rows (name / original time / why) still need a
+live pass that leaves someone on the phone list.
 

@@ -62,3 +62,9 @@ Still held (need a capture, do not invent):
 Defaulting matched rows to **accept** favours Monday speed. Reverse it by
 defaulting to **leave** if reception would rather opt in than opt out.
 The dest extra cap (default 6) is the brake on drowning one duty list.
+
+Live Sunday dummy (`4af732e`) proved cover cap, cover preview, and
+"Rebooked with Y". It also showed: remaining-free must subtract the
+incoming run (4 tiles − 30 min = 2, not 4); default must be the
+**earliest** similar slot, not closest clock; leftover phone list must
+stay visible when the count is zero.

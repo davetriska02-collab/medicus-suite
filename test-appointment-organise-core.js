@@ -996,7 +996,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const sug = core.suggestRebook(happy, core.findAppointment(happy, stretchMouse.id));
     check(sug.ok === true, 'suggests a similar slot on another list');
     check(sug.suggestion.diaryId === coverDiary, 'suggestion is not the sick diary');
-    check(sug.suggestion.startDateTime === '2026-08-23 14:00:00', 'prefers the same clock time');
+    check(sug.suggestion.startDateTime === '2026-08-23 14:00:00', 'default is the earliest similar slot');
 
     const arrived = sickBoard({ arrived: true });
     check(
@@ -1129,6 +1129,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     check(coverPrev[0].incoming === 1, 'cover preview counts the pile-on');
     check(coverPrev[0].alreadyBooked === 0, 'cover preview counts already booked');
     check(coverPrev[0].overCap === false, 'one extra is under the default cap');
+    check(/Nobody left to phone/.test(core.leftoverPhoneText(happyProp)), 'happy-path phone list still exists and says nobody to call');
 
     const fullLeftovers = core.sickDayLeftovers(prop);
     check(fullLeftovers.length === 1, 'full cover becomes a leftover phone-list row');
@@ -1259,6 +1260,109 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const past = core.suggestRebook(morning, core.findAppointment(morning, stretchMouse.id), { now: noon });
     check(past.ok === false, 'does not offer a similar slot that is already in the past');
     check(/past/.test(past.reason), 'past-slot leftover says the remaining similar slots are gone');
+
+    const npDiary = 'np-clinic';
+    const unassignedSick = sickDiary;
+    const fourFifteens = core.parseBoard({
+      date: '2026-08-23',
+      staffSchedules: [
+        {
+          name: 'A Nurse Practitioner Clinic',
+          id: 'np',
+          schedule: [
+            {
+              scheduleType: 'diary',
+              id: npDiary,
+              startDateTime: '2026-08-23 10:00:00',
+              endDateTime: '2026-08-23 11:00:00',
+              summary: {
+                status: { isCancelled: false },
+                usualAppointmentDuration: 15,
+                defaultDeliveryMode: { value: 'face-to-face' },
+                defaultAppointmentType: { id: mouse.appointmentTypeId },
+                site: { id: 'witley', name: 'Witley Surgery' },
+                nhsNationalSlotTypeCategoryDefault: { value: '10127' },
+              },
+              entries: [
+                {
+                  diaryEntryType: { value: 'slot' },
+                  startDateTime: '2026-08-23 10:00:00',
+                  endDateTime: '2026-08-23 10:15:00',
+                  duration: 15,
+                  appointmentType: { id: mouse.appointmentTypeId },
+                  defaultDeliveryMode: { value: 'face-to-face' },
+                },
+                {
+                  diaryEntryType: { value: 'slot' },
+                  startDateTime: '2026-08-23 10:15:00',
+                  endDateTime: '2026-08-23 10:30:00',
+                  duration: 15,
+                  appointmentType: { id: mouse.appointmentTypeId },
+                  defaultDeliveryMode: { value: 'face-to-face' },
+                },
+                {
+                  diaryEntryType: { value: 'slot' },
+                  startDateTime: '2026-08-23 10:30:00',
+                  endDateTime: '2026-08-23 10:45:00',
+                  duration: 15,
+                  appointmentType: { id: mouse.appointmentTypeId },
+                  defaultDeliveryMode: { value: 'face-to-face' },
+                },
+                {
+                  diaryEntryType: { value: 'slot' },
+                  startDateTime: '2026-08-23 10:45:00',
+                  endDateTime: '2026-08-23 11:00:00',
+                  duration: 15,
+                  appointmentType: { id: mouse.appointmentTypeId },
+                  defaultDeliveryMode: { value: 'face-to-face' },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      unassignedDiaries: [
+        {
+          scheduleType: 'diary',
+          id: unassignedSick,
+          startDateTime: '2026-08-23 11:00:00',
+          endDateTime: '2026-08-23 12:00:00',
+          summary: {
+            status: { isCancelled: false },
+            usualAppointmentDuration: 15,
+            defaultDeliveryMode: { value: 'face-to-face' },
+            defaultAppointmentType: { id: mouse.appointmentTypeId },
+            site: { id: 'witley', name: 'Witley Surgery' },
+            nhsNationalSlotTypeCategoryDefault: { value: '10127' },
+          },
+          entries: [
+            {
+              id: stretchMouse.id,
+              versionId: stretchMouse.versionId,
+              patient: { id: mouse.patientId, name: mouse.patientName },
+              diaryEntryType: { value: 'appointment' },
+              appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
+              startDateTime: '2026-08-23 11:00:00',
+              endDateTime: '2026-08-23 11:30:00',
+              duration: 30,
+              displayStatus: { value: 'booked' },
+              deliveryMode: { value: 'face-to-face' },
+              appointmentStatus: { value: 'pending', isCancelled: false, isStarted: false, isSeen: false },
+            },
+          ],
+        },
+      ],
+    });
+    const liveLike = core.proposeSickDay(fourFifteens, unassignedSick);
+    check(liveLike.rows[0].status === 'accept', '30-min Mouse on Unassigned still finds NP consecutive 15s');
+    check(liveLike.rows[0].suggestion.startDateTime === '2026-08-23 10:00:00', 'default is earliest 10:00, not closest-clock 10:30');
+    check(
+      liveLike.rows[0].alternatives.some((s) => s.startDateTime === '2026-08-23 10:30:00'),
+      '10:30 remains offered as an alternative'
+    );
+    const livePrev = core.coverLoadPreview(fourFifteens, liveLike);
+    check(livePrev[0].remainingFree === 2, 'one 30-min incoming on four 15-min tiles leaves 2 free, not 4');
+    check(livePrev[0].incoming === 1, 'preview still counts the one incoming patient');
   }
 
   console.log('=== 6. live booking-core is the reserve/create/release copy ===');
