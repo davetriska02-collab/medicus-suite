@@ -35,6 +35,12 @@ All notable changes to Medicus Suite are documented here.
   field (its tray was removed in v3.236.0; the pure builder stays for its tests).
 - `docs/feature-list.md` version header corrected to match the manifest
   (was left at v3.235.0 by the v3.236.0 bump, failing `check-doc-versions`).
+- **SOUP register reissued (v1.11 @ 3.236.1)** — CSO review signed in session by
+  Dr Dave Triska (2026-08-19), closing the 61-minor staleness gap that hard-failed
+  `check-doc-versions`. All 5 vendored files re-verified byte-identical via
+  `verify-vendor.js`; one register gap closed: the v3.176.3 vendored JetBrains Mono
+  font (OFL-1.1, non-executable) is now recorded as §3.1 — it was catalogued in
+  `vendor-versions.json` but absent from the register. Ledger updated.
 
 ## [v3.236.0] — 2026-08-19
 
