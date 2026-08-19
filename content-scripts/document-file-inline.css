@@ -55,6 +55,24 @@
   cursor: default;
 }
 
+/* Non-blocking "possibly already saved" hint — see updatePossibleSavedHint
+   in document-file-inline.js. Deliberately not a chip state: the "Save as
+   document" button stays enabled next to it, this is advisory only. */
+.ms-df-possible-saved-hint {
+  display: inline-block;
+  flex-shrink: 0;
+  margin: 2px 0;
+  padding: 3px 10px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #92400e;
+  cursor: help;
+}
+
 #ms-df-widget .ms-df-filing-row {
   display: flex;
   align-items: center;
