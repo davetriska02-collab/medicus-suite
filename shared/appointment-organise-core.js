@@ -205,6 +205,8 @@
       appointmentTypeId: (entry.appointmentType && entry.appointmentType.id) || null,
       appointmentTypeName: (entry.appointmentType && entry.appointmentType.name) || '',
       deliveryMode: (entry.deliveryMode && entry.deliveryMode.value) || column.defaultDeliveryMode || 'face-to-face',
+      siteId: column.siteId || null,
+      siteName: column.siteName || '',
       nhsNationalSlotTypeCategory: column.nhsNationalSlotTypeCategory || '10127',
       reason: entry.compiledReasonForAppointment || '',
       additionalInformation: entry.additionalInformation || null,
@@ -223,6 +225,9 @@
       startDateTime: entry.startDateTime || '',
       endDateTime: entry.endDateTime || '',
       duration: Number(entry.duration) || column.usualDuration || 0,
+      appointmentTypeId: (entry.appointmentType && entry.appointmentType.id) || column.defaultAppointmentTypeId || null,
+      deliveryMode: (entry.defaultDeliveryMode && entry.defaultDeliveryMode.value) || column.defaultDeliveryMode || null,
+      siteId: column.siteId || null,
     };
   }
 
@@ -230,6 +235,8 @@
     var summary = (session && session.summary) || {};
     var cat = summary.nhsNationalSlotTypeCategoryDefault || {};
     var delivery = summary.defaultDeliveryMode || {};
+    var site = summary.site || {};
+    var defType = summary.defaultAppointmentType || {};
     var column = {
       staffName: staffName || 'Unknown',
       staffId: staffId || null,
@@ -239,6 +246,9 @@
       usualDuration: Number(summary.usualAppointmentDuration) || 0,
       nhsNationalSlotTypeCategory: cat.value || '10127',
       defaultDeliveryMode: delivery.value || 'face-to-face',
+      defaultAppointmentTypeId: defType.id || null,
+      siteId: site.id || null,
+      siteName: site.name || '',
       cancelledSession: !!(summary.status && summary.status.isCancelled),
       appointments: [],
       slots: [],
@@ -262,6 +272,9 @@
         startDateTime: column.sessionStart,
         endDateTime: column.sessionEnd,
         duration: column.usualDuration || 0,
+        appointmentTypeId: column.defaultAppointmentTypeId,
+        deliveryMode: column.defaultDeliveryMode,
+        siteId: column.siteId,
         synthetic: true,
       });
     }
@@ -439,6 +452,106 @@
       return { ok: false, reason: STRETCH_NEIGHBOUR_BOOKED };
     }
     return { ok: true, reason: null };
+  }
+
+  var REBOOK_NO_SLOT = 'No similar free slot today (same type, length, site, delivery). Still needs rebook.';
+  var REBOOK_WAITING = 'Waiting room / arrived — do not rebook from this board.';
+
+  function isHomeVisit(appointment) {
+    var d = String((appointment && appointment.deliveryMode) || '').toLowerCase();
+    var t = String((appointment && appointment.appointmentTypeName) || '').toLowerCase();
+    return d === 'home-visit' || d.indexOf('home') !== -1 || t.indexOf('home visit') !== -1;
+  }
+
+  function slotMatchesSimilar(appointment, slot) {
+    if (!appointment || !slot) return false;
+    if (slot.diaryId === appointment.diaryId) return false;
+    if (Number(slot.duration) !== Number(appointment.duration)) return false;
+    if (appointment.siteId && slot.siteId && appointment.siteId !== slot.siteId) return false;
+    if (appointment.appointmentTypeId && slot.appointmentTypeId && appointment.appointmentTypeId !== slot.appointmentTypeId) {
+      return false;
+    }
+    if (appointment.deliveryMode && slot.deliveryMode && appointment.deliveryMode !== slot.deliveryMode) {
+      return false;
+    }
+    return true;
+  }
+
+  function slotConflicts(board, slot, ignoreId) {
+    var end = slot.endDateTime || addMinutes(slot.startDateTime, slot.duration || 0);
+    return allAppointments(board).some(function (a) {
+      if (!a || a.diaryId !== slot.diaryId || a.id === ignoreId) return false;
+      var aEnd = a.endDateTime || addMinutes(a.startDateTime, a.duration || 0);
+      return intervalOverlaps(slot.startDateTime, end, a.startDateTime, aEnd);
+    });
+  }
+
+  function matchingSlots(board, appointment) {
+    var out = [];
+    ((board && board.columns) || []).forEach(function (col) {
+      (col.slots || []).forEach(function (raw) {
+        var slot = {
+          diaryId: raw.diaryId || col.diaryId,
+          staffName: raw.staffName || col.staffName,
+          startDateTime: raw.startDateTime,
+          endDateTime: raw.endDateTime,
+          duration: Number(raw.duration) || col.usualDuration || 0,
+          appointmentTypeId: raw.appointmentTypeId || col.defaultAppointmentTypeId || null,
+          deliveryMode: raw.deliveryMode || col.defaultDeliveryMode || null,
+          siteId: raw.siteId || col.siteId || null,
+        };
+        if (!slotMatchesSimilar(appointment, slot)) return;
+        if (slotConflicts(board, slot, appointment.id)) return;
+        out.push(slot);
+      });
+    });
+    var origin = parseDt(appointment.startDateTime);
+    out.sort(function (a, b) {
+      var da = Math.abs((parseDt(a.startDateTime) || 0) - origin);
+      var db = Math.abs((parseDt(b.startDateTime) || 0) - origin);
+      if (da !== db) return da - db;
+      return String(a.startDateTime).localeCompare(String(b.startDateTime));
+    });
+    return out;
+  }
+
+  function suggestRebook(board, appointment) {
+    if (!appointment) return { ok: false, reason: 'Missing appointment.', suggestion: null };
+    if (appointment.locked || appointment.arrived) {
+      return { ok: false, reason: REBOOK_WAITING, suggestion: null };
+    }
+    var list = matchingSlots(board, appointment);
+    if (!list.length) return { ok: false, reason: REBOOK_NO_SLOT, suggestion: null };
+    return { ok: true, reason: null, suggestion: list[0] };
+  }
+
+  function proposeSickDay(board, sickDiaryId) {
+    var col = findColumn(board, sickDiaryId);
+    if (!col) return { sickDiaryId: sickDiaryId, sickStaffName: '', rows: [] };
+    var rows = (col.appointments || []).map(function (a) {
+      if (a.locked || a.arrived) {
+        return { appointment: a, status: 'locked', suggestion: null, reason: REBOOK_WAITING, alternatives: [] };
+      }
+      var alts = matchingSlots(board, a);
+      var sug = alts[0] || null;
+      return {
+        appointment: a,
+        status: sug ? 'accept' : 'leave',
+        suggestion: sug,
+        reason: sug ? null : REBOOK_NO_SLOT,
+        alternatives: alts,
+      };
+    });
+    return { sickDiaryId: sickDiaryId, sickStaffName: col.staffName, rows: rows };
+  }
+
+  function applySickDayProposal(draft, proposal) {
+    var next = cloneDraft(draft);
+    ((proposal && proposal.rows) || []).forEach(function (row) {
+      if (row.status !== 'accept' || !row.suggestion || !row.appointment) return;
+      next = stageMove(next, row.appointment.id, row.suggestion);
+    });
+    return next;
   }
 
   function canStageCancel(appointment) {
@@ -639,6 +752,9 @@
         usualDuration: col.usualDuration,
         nhsNationalSlotTypeCategory: col.nhsNationalSlotTypeCategory,
         defaultDeliveryMode: col.defaultDeliveryMode,
+        defaultAppointmentTypeId: col.defaultAppointmentTypeId,
+        siteId: col.siteId,
+        siteName: col.siteName,
         cancelledSession: col.cancelledSession,
         appointments: (col.appointments || []).slice(),
         slots: (col.slots || []).slice(),
@@ -1245,6 +1361,13 @@
     canStageCancel: canStageCancel,
     canStageStretch: canStageStretch,
     followingSlotsFree: followingSlotsFree,
+    isHomeVisit: isHomeVisit,
+    matchingSlots: matchingSlots,
+    suggestRebook: suggestRebook,
+    proposeSickDay: proposeSickDay,
+    applySickDayProposal: applySickDayProposal,
+    REBOOK_NO_SLOT: REBOOK_NO_SLOT,
+    REBOOK_WAITING: REBOOK_WAITING,
     addMinutes: addMinutes,
     stageCancel: stageCancel,
     unstageCancel: unstageCancel,

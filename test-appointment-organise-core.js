@@ -913,6 +913,159 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     check(/Mr Micky Mouse/.test(sum.items[0].text), 'confirm bar names the patient');
   }
 
+  console.log('=== 5c. sick-day rebook suggestions ===');
+  {
+    const coverDiary = 'cover-diary';
+    const sickDiary = stretchDiary;
+    function sickBoard(opts) {
+      opts = opts || {};
+      const coverSlots =
+        opts.coverSlots !== undefined
+          ? opts.coverSlots
+          : [
+              {
+                diaryEntryType: { value: 'slot' },
+                startDateTime: '2026-08-23 14:00:00',
+                endDateTime: '2026-08-23 14:15:00',
+                duration: 15,
+                appointmentType: { id: opts.coverTypeId || mouse.appointmentTypeId },
+                defaultDeliveryMode: { value: opts.coverDelivery || 'face-to-face' },
+              },
+            ];
+      return core.parseBoard({
+        date: '2026-08-23',
+        staffSchedules: [
+          {
+            name: 'Cover GP',
+            id: 'cover',
+            schedule: [
+              {
+                scheduleType: 'diary',
+                id: coverDiary,
+                startDateTime: '2026-08-23 13:00:00',
+                endDateTime: '2026-08-23 15:00:00',
+                summary: {
+                  status: { isCancelled: false },
+                  usualAppointmentDuration: 15,
+                  defaultDeliveryMode: { value: opts.coverDelivery || 'face-to-face' },
+                  defaultAppointmentType: { id: opts.coverTypeId || mouse.appointmentTypeId },
+                  site: { id: 'witley', name: 'Witley Surgery' },
+                  nhsNationalSlotTypeCategoryDefault: { value: '10127' },
+                },
+                entries: coverSlots,
+              },
+            ],
+          },
+        ],
+        unassignedDiaries: [
+          {
+            scheduleType: 'diary',
+            id: sickDiary,
+            startDateTime: '2026-08-23 13:00:00',
+            endDateTime: '2026-08-23 15:00:00',
+            summary: {
+              status: { isCancelled: false },
+              usualAppointmentDuration: 15,
+              defaultDeliveryMode: { value: 'face-to-face' },
+              defaultAppointmentType: { id: mouse.appointmentTypeId },
+              site: { id: opts.sickSite || 'witley', name: 'Witley Surgery' },
+              nhsNationalSlotTypeCategoryDefault: { value: '10127' },
+            },
+            entries: [
+              {
+                id: stretchMouse.id,
+                versionId: stretchMouse.versionId,
+                patient: { id: mouse.patientId, name: mouse.patientName },
+                diaryEntryType: { value: 'appointment' },
+                appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
+                startDateTime: '2026-08-23 14:00:00',
+                endDateTime: '2026-08-23 14:15:00',
+                duration: 15,
+                displayStatus: { value: opts.arrived ? 'arrived' : 'booked' },
+                arrivedDateTime: opts.arrived ? '2026-08-23 13:55:00' : null,
+                deliveryMode: { value: opts.delivery || 'face-to-face' },
+                appointmentStatus: { value: 'pending', isCancelled: false, isStarted: !!opts.arrived, isSeen: false },
+              },
+            ],
+          },
+        ],
+      });
+    }
+
+    const happy = sickBoard();
+    const sug = core.suggestRebook(happy, core.findAppointment(happy, stretchMouse.id));
+    check(sug.ok === true, 'suggests a similar slot on another list');
+    check(sug.suggestion.diaryId === coverDiary, 'suggestion is not the sick diary');
+    check(sug.suggestion.startDateTime === '2026-08-23 14:00:00', 'prefers the same clock time');
+
+    const arrived = sickBoard({ arrived: true });
+    check(
+      core.suggestRebook(arrived, core.findAppointment(arrived, stretchMouse.id)).ok === false,
+      'arrived / waiting-room tile is not suggested'
+    );
+
+    const wrongType = sickBoard({ coverTypeId: 'other-type' });
+    check(
+      core.suggestRebook(wrongType, core.findAppointment(wrongType, stretchMouse.id)).ok === false,
+      'refuses a different appointment type'
+    );
+
+    const wrongLen = sickBoard({
+      coverSlots: [
+        {
+          diaryEntryType: { value: 'slot' },
+          startDateTime: '2026-08-23 14:00:00',
+          duration: 30,
+          appointmentType: { id: mouse.appointmentTypeId },
+          defaultDeliveryMode: { value: 'face-to-face' },
+        },
+      ],
+    });
+    check(
+      core.suggestRebook(wrongLen, core.findAppointment(wrongLen, stretchMouse.id)).ok === false,
+      'refuses a different length'
+    );
+
+    const home = sickBoard({ delivery: 'home-visit', coverDelivery: 'face-to-face' });
+    check(
+      core.suggestRebook(home, core.findAppointment(home, stretchMouse.id)).ok === false,
+      'home visit is not "similar" to a face-to-face slot'
+    );
+
+    const otherSite = sickBoard({ sickSite: 'milford' });
+    check(
+      core.suggestRebook(otherSite, core.findAppointment(otherSite, stretchMouse.id)).ok === false,
+      'refuses a different site'
+    );
+
+    const none = sickBoard({
+      coverSlots: [
+        {
+          id: 'cover-booked',
+          versionId: 'v-c',
+          patient: { id: 'other', name: 'Someone Else' },
+          diaryEntryType: { value: 'appointment' },
+          appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
+          startDateTime: '2026-08-23 13:00:00',
+          endDateTime: '2026-08-23 15:00:00',
+          duration: 120,
+          displayStatus: { value: 'booked' },
+          deliveryMode: { value: 'face-to-face' },
+          appointmentStatus: { value: 'pending', isCancelled: false, isStarted: false, isSeen: false },
+        },
+      ],
+    });
+    const prop = core.proposeSickDay(none, sickDiary);
+    check(prop.rows[0].status === 'leave', 'covering list full → still needs rebook');
+    check(prop.rows[0].suggestion === null, 'no suggestion when cover is full');
+
+    const applied = core.applySickDayProposal(core.emptyDraft(), core.proposeSickDay(happy, sickDiary));
+    check(applied.moveIds.join() === stretchMouse.id, 'accept stages a cross-list move');
+    check(applied.moves[stretchMouse.id].diaryId === coverDiary, 'staged dest is the cover diary');
+    const left = core.applySickDayProposal(core.emptyDraft(), prop);
+    check(left.moveIds.length === 0, 'leave rows are not staged and not written');
+  }
+
   console.log('=== 6. live booking-core is the reserve/create/release copy ===');
   {
     const booking = await import(new URL('./shared/booking-core.js', `file://${process.cwd()}/`).href);

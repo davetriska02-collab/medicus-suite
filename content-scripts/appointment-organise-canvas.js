@@ -39,6 +39,7 @@
   var _loading = false;
   var _drag = null;
   var _open = false;
+  var _sick = null;
   var _booking = null;
   var _bookingWait = null;
 
@@ -317,8 +318,10 @@
       '<div class="ms-aoc-body">' +
       bodyHtml() +
       '</div>' +
+      (_sick ? sickHtml() : '') +
       confirmBarHtml() +
       '<footer class="ms-aoc-footer">' +
+      '<button type="button" class="ms-aoc-ghost" id="ms-aoc-sick">Sick day…</button>' +
       '<button type="button" class="ms-aoc-ghost" id="ms-aoc-discard"' +
       (n ? '' : ' disabled') +
       '>Discard staged</button>' +
@@ -339,6 +342,92 @@
       }
     } catch (_) {}
     return _drag;
+  }
+
+  function sickHtml() {
+    if (!_sick) return '';
+    if (_sick.step === 'pick') {
+      var cols = ((_board && _board.columns) || [])
+        .map(function (col) {
+          var n = (col.appointments || []).length;
+          return (
+            '<button type="button" class="ms-aoc-tray-btn" data-sick-diary="' +
+            esc(col.diaryId) +
+            '">' +
+            esc(col.staffName) +
+            ' — ' +
+            n +
+            ' booked</button>'
+          );
+        })
+        .join('');
+      return (
+        '<div class="ms-aoc-confirmbar">' +
+        '<strong>Sick day.</strong> Whose list are we emptying? Arrived patients stay put. ' +
+        'Suggestions are same type, length, site and delivery on another list today. SMS stays off.' +
+        '<div class="ms-aoc-finalise-list">' +
+        (cols || '<div class="ms-aoc-empty">No diaries.</div>') +
+        '</div>' +
+        '<div class="ms-aoc-confirmbar-actions">' +
+        '<button type="button" class="ms-aoc-cancel" id="ms-aoc-sick-cancel">Cancel</button>' +
+        '</div></div>'
+      );
+    }
+    var rows = ((_sick.proposal && _sick.proposal.rows) || [])
+      .map(function (row, idx) {
+        var a = row.appointment;
+        if (row.status === 'locked') {
+          return (
+            '<div class="ms-aoc-finalise-row">' +
+            esc(hhmm(a.startDateTime) + ' · ' + a.patientName) +
+            ' — waiting room, not moved</div>'
+          );
+        }
+        var opts = (row.alternatives || [])
+          .map(function (s) {
+            var val = s.diaryId + '|' + s.startDateTime;
+            var sel = row.suggestion && s.diaryId === row.suggestion.diaryId && s.startDateTime === row.suggestion.startDateTime;
+            return (
+              '<option value="' +
+              esc(val) +
+              '"' +
+              (sel ? ' selected' : '') +
+              '>' +
+              esc(hhmm(s.startDateTime) + ' ' + s.staffName) +
+              '</option>'
+            );
+          })
+          .join('');
+        return (
+          '<div class="ms-aoc-finalise-row">' +
+          '<span class="ms-aoc-finalise-desc">' +
+          esc(hhmm(a.startDateTime) + ' · ' + a.patientName + ' · ' + (a.appointmentTypeName || '') + ' · ' + a.duration + ' min') +
+          '</span>' +
+          (opts
+            ? '<select class="ms-aoc-finalise-reason" data-sick-pick="' +
+              idx +
+              '"><option value="">Still needs rebook</option>' +
+              opts +
+              '</select>'
+            : '<span class="ms-aoc-hint">Still needs rebook — no similar free slot</span>') +
+          '</div>'
+        );
+      })
+      .join('');
+    return (
+      '<div class="ms-aoc-confirmbar">' +
+      '<strong>Sick day — ' +
+      esc(_sick.proposal.sickStaffName) +
+      '.</strong> Accept a similar slot, pick another, or leave as still needs rebook. ' +
+      'Finalise uses the captured cross-list move. Medicus will not message patients.' +
+      '<div class="ms-aoc-finalise-list">' +
+      rows +
+      '</div>' +
+      '<div class="ms-aoc-confirmbar-actions">' +
+      '<button type="button" class="ms-aoc-cancel" id="ms-aoc-sick-cancel">Back</button>' +
+      '<button type="button" class="ms-aoc-confirm-btn" id="ms-aoc-sick-apply">Stage accepted moves</button>' +
+      '</div></div>'
+    );
   }
 
   function tryStretch(apptId, extraMinutes) {
@@ -460,9 +549,55 @@
       _error = null;
       render();
     });
+    root.querySelector('#ms-aoc-sick')?.addEventListener('click', function () {
+      _sick = { step: 'pick', proposal: null };
+      _pending = null;
+      render();
+    });
+    root.querySelector('#ms-aoc-sick-cancel')?.addEventListener('click', function () {
+      _sick = null;
+      render();
+    });
+    root.querySelector('#ms-aoc-sick-apply')?.addEventListener('click', function () {
+      if (!_sick || !_sick.proposal) return;
+      _draft = C.applySickDayProposal(_draft, _sick.proposal);
+      _sick = null;
+      announce('Staged accepted sick-day moves. Finalise when ready.');
+      render();
+    });
+    root.querySelectorAll('[data-sick-diary]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        _sick = { step: 'review', proposal: C.proposeSickDay(_board, btn.getAttribute('data-sick-diary')) };
+        render();
+      });
+    });
+    root.querySelectorAll('[data-sick-pick]').forEach(function (sel) {
+      sel.addEventListener('change', function () {
+        if (!_sick || !_sick.proposal) return;
+        var idx = Number(sel.getAttribute('data-sick-pick'));
+        var row = _sick.proposal.rows[idx];
+        if (!row) return;
+        var val = sel.value;
+        if (!val) {
+          row.status = 'leave';
+          row.suggestion = null;
+        } else {
+          var parts = val.split('|');
+          var hit = (row.alternatives || []).filter(function (s) {
+            return s.diaryId === parts[0] && s.startDateTime === parts[1];
+          })[0];
+          if (hit) {
+            row.status = 'accept';
+            row.suggestion = hit;
+          }
+        }
+        render();
+      });
+    });
     root.querySelector('#ms-aoc-discard')?.addEventListener('click', function () {
       _draft = C.emptyDraft();
       _pending = null;
+      _sick = null;
       render();
     });
     root.querySelector('#ms-aoc-finalise')?.addEventListener('click', function () {

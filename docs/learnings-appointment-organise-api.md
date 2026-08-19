@@ -380,3 +380,16 @@ Stretch is allowed only into a **free** following slot (Test B). Refuse if the n
 
 v1 GUI: resize handle / +15 min only when `followingSlotsFree`. Next slot booked → no handle, snap back, do not stage, do not Finalise. Confirm bar: cancel then rebook at the new length, names the patient. Re-GET before commit.
 
+---
+
+## H — Sick-day list rebook (suite feature, not native Medicus)
+
+Not a Medicus menu. Uses the captured **cross-list move** only
+(`create-appointment` `context=reschedule-appointment`, new `diaryId`).
+SMS/email stay Off until a Send-to On payload is captured.
+
+Similar = same appointment type id, duration, site, delivery mode, another
+diary that day, next free slot closest to the original time. Arrived tiles
+locked. No type picker. No `allowOverlappingAppointments=allow`. Stretch
+rules unchanged.
+

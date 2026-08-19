@@ -32,6 +32,14 @@ Writes follow the 2026-08-19 capture on dummy patient Mr Micky Mouse
   Never sends `allowOverlappingAppointments=allow`. Type change
   is not offered.
 
+- **Sick day rebook** — one button empties a clinician's list for
+  that day. Each booked (not arrived) tile gets a similar free slot
+  on another list (same type, length, site, delivery). Reception
+  accepts, picks another match, or leaves as still-needs-rebook.
+  Finalise is the captured cross-list move. SMS stays off until a
+  Send-to On capture exists. Home visits are not matched to
+  face-to-face slots.
+
 New `shared/appointment-organise-core.js` owns cancel + move orchestration
 (`update-slot-reservation`, appointment-overview GET). Reserve / create /
 release go through `shared/booking-core.js` — no third copy. Confirm bar names each patient

@@ -359,3 +359,18 @@
   color: #991b1b;
   margin-top: 6px;
 }
+
+.ms-aoc-tray-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #fff;
+  border: 1px solid #bfdbfe;
+  border-radius: var(--r-sm);
+  color: #1e40af;
+  cursor: pointer;
+}
