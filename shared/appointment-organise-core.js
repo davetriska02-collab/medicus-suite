@@ -463,10 +463,9 @@
     return d === 'home-visit' || d.indexOf('home') !== -1 || t.indexOf('home visit') !== -1;
   }
 
-  function slotMatchesSimilar(appointment, slot) {
+  function slotFitsIdentity(appointment, slot) {
     if (!appointment || !slot) return false;
     if (slot.diaryId === appointment.diaryId) return false;
-    if (Number(slot.duration) !== Number(appointment.duration)) return false;
     if (appointment.siteId && slot.siteId && appointment.siteId !== slot.siteId) return false;
     if (appointment.appointmentTypeId && slot.appointmentTypeId && appointment.appointmentTypeId !== slot.appointmentTypeId) {
       return false;
@@ -487,25 +486,62 @@
   }
 
   function matchingSlots(board, appointment) {
+    var need = Number(appointment && appointment.duration) || 0;
     var out = [];
     ((board && board.columns) || []).forEach(function (col) {
-      (col.slots || []).forEach(function (raw) {
-        var slot = {
-          diaryId: raw.diaryId || col.diaryId,
-          staffName: raw.staffName || col.staffName,
-          startDateTime: raw.startDateTime,
-          endDateTime: raw.endDateTime,
-          duration: Number(raw.duration) || col.usualDuration || 0,
-          appointmentTypeId: raw.appointmentTypeId || col.defaultAppointmentTypeId || null,
-          deliveryMode: raw.deliveryMode || col.defaultDeliveryMode || null,
-          siteId: raw.siteId || col.siteId || null,
-        };
-        if (!slotMatchesSimilar(appointment, slot)) return;
-        if (slotConflicts(board, slot, appointment.id)) return;
-        out.push(slot);
-      });
+      if (!appointment || col.diaryId === appointment.diaryId) return;
+      var tiles = (col.slots || [])
+        .map(function (raw) {
+          return {
+            diaryId: raw.diaryId || col.diaryId,
+            staffName: raw.staffName || col.staffName,
+            startDateTime: raw.startDateTime,
+            endDateTime: raw.endDateTime,
+            duration: Number(raw.duration) || col.usualDuration || 0,
+            appointmentTypeId: raw.appointmentTypeId || col.defaultAppointmentTypeId || null,
+            deliveryMode: raw.deliveryMode || col.defaultDeliveryMode || null,
+            siteId: raw.siteId || col.siteId || null,
+          };
+        })
+        .filter(function (slot) {
+          return slotFitsIdentity(appointment, slot) && !slotConflicts(board, slot, appointment.id);
+        })
+        .sort(function (a, b) {
+          return String(a.startDateTime).localeCompare(String(b.startDateTime));
+        });
+      for (var i = 0; i < tiles.length; i++) {
+        var covered = 0;
+        var expected = tiles[i].startDateTime;
+        var ok = true;
+        for (var j = i; j < tiles.length && covered < need; j++) {
+          if (tiles[j].startDateTime !== expected) {
+            ok = false;
+            break;
+          }
+          var tileDur = Number(tiles[j].duration) || 0;
+          if (tileDur <= 0) {
+            ok = false;
+            break;
+          }
+          covered += tileDur;
+          expected = addMinutes(tiles[j].startDateTime, tileDur);
+        }
+        if (ok && covered >= need) {
+          out.push({
+            diaryId: col.diaryId,
+            staffName: col.staffName,
+            startDateTime: tiles[i].startDateTime,
+            endDateTime: addMinutes(tiles[i].startDateTime, need),
+            duration: need,
+            reserveDuration: Number(tiles[i].duration) || need,
+            appointmentTypeId: tiles[i].appointmentTypeId,
+            deliveryMode: tiles[i].deliveryMode,
+            siteId: tiles[i].siteId,
+          });
+        }
+      }
     });
-    var origin = parseDt(appointment.startDateTime);
+    var origin = parseDt(appointment && appointment.startDateTime);
     out.sort(function (a, b) {
       var da = Math.abs((parseDt(a.startDateTime) || 0) - origin);
       var db = Math.abs((parseDt(b.startDateTime) || 0) - origin);
@@ -515,13 +551,83 @@
     return out;
   }
 
+  function longestFreeRun(board, appointment) {
+    var max = 0;
+    var tileDurations = [];
+    ((board && board.columns) || []).forEach(function (col) {
+      if (!appointment || col.diaryId === appointment.diaryId) return;
+      var tiles = (col.slots || [])
+        .map(function (raw) {
+          return {
+            diaryId: col.diaryId,
+            startDateTime: raw.startDateTime,
+            duration: Number(raw.duration) || col.usualDuration || 0,
+            appointmentTypeId: raw.appointmentTypeId || col.defaultAppointmentTypeId || null,
+            deliveryMode: raw.deliveryMode || col.defaultDeliveryMode || null,
+            siteId: raw.siteId || col.siteId || null,
+            staffName: col.staffName,
+          };
+        })
+        .filter(function (slot) {
+          return slotFitsIdentity(appointment, slot) && !slotConflicts(board, slot, appointment.id);
+        })
+        .sort(function (a, b) {
+          return String(a.startDateTime).localeCompare(String(b.startDateTime));
+        });
+      tiles.forEach(function (t) {
+        if (tileDurations.indexOf(t.duration) === -1) tileDurations.push(t.duration);
+      });
+      var run = 0;
+      var expected = null;
+      tiles.forEach(function (t) {
+        if (expected && t.startDateTime === expected) {
+          run += t.duration;
+        } else {
+          run = t.duration;
+        }
+        if (run > max) max = run;
+        expected = addMinutes(t.startDateTime, t.duration);
+      });
+    });
+    tileDurations.sort(function (a, b) {
+      return a - b;
+    });
+    return { max: max, tileDurations: tileDurations };
+  }
+
+  function rebookMissReason(board, appointment) {
+    var need = Number(appointment && appointment.duration) || 0;
+    var run = longestFreeRun(board, appointment);
+    if (!run.tileDurations.length) {
+      var anyFree = false;
+      ((board && board.columns) || []).forEach(function (col) {
+        if (appointment && col.diaryId === appointment.diaryId) return;
+        if (col.slots && col.slots.length) anyFree = true;
+      });
+      if (!anyFree) return 'No free slots on other lists today. Still needs rebook.';
+      return 'Other free slots are a different type, site or delivery. Still needs rebook.';
+    }
+    if (run.max < need) {
+      return (
+        'Need ' +
+        need +
+        ' min; other Sunday lists only have ' +
+        run.tileDurations.join('/') +
+        '-min tiles (longest free run ' +
+        run.max +
+        ' min). Still needs rebook.'
+      );
+    }
+    return REBOOK_NO_SLOT;
+  }
+
   function suggestRebook(board, appointment) {
     if (!appointment) return { ok: false, reason: 'Missing appointment.', suggestion: null };
     if (appointment.locked || appointment.arrived) {
       return { ok: false, reason: REBOOK_WAITING, suggestion: null };
     }
     var list = matchingSlots(board, appointment);
-    if (!list.length) return { ok: false, reason: REBOOK_NO_SLOT, suggestion: null };
+    if (!list.length) return { ok: false, reason: rebookMissReason(board, appointment), suggestion: null };
     return { ok: true, reason: null, suggestion: list[0] };
   }
 
@@ -538,11 +644,17 @@
         appointment: a,
         status: sug ? 'accept' : 'leave',
         suggestion: sug,
-        reason: sug ? null : REBOOK_NO_SLOT,
+        reason: sug ? null : rebookMissReason(board, a),
         alternatives: alts,
       };
     });
     return { sickDiaryId: sickDiaryId, sickStaffName: col.staffName, rows: rows };
+  }
+
+  function sickDayAcceptCount(proposal) {
+    return ((proposal && proposal.rows) || []).filter(function (row) {
+      return row.status === 'accept' && row.suggestion;
+    }).length;
   }
 
   function applySickDayProposal(draft, proposal) {
@@ -1366,6 +1478,8 @@
     suggestRebook: suggestRebook,
     proposeSickDay: proposeSickDay,
     applySickDayProposal: applySickDayProposal,
+    sickDayAcceptCount: sickDayAcceptCount,
+    rebookMissReason: rebookMissReason,
     REBOOK_NO_SLOT: REBOOK_NO_SLOT,
     REBOOK_WAITING: REBOOK_WAITING,
     addMinutes: addMinutes,

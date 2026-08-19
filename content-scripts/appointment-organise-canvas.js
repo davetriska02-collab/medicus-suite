@@ -355,6 +355,8 @@
             esc(col.diaryId) +
             '">' +
             esc(col.staffName) +
+            ' ' +
+            esc(hhmm(col.sessionStart) + '–' + hhmm(col.sessionEnd)) +
             ' — ' +
             n +
             ' booked</button>'
@@ -409,7 +411,9 @@
               '"><option value="">Still needs rebook</option>' +
               opts +
               '</select>'
-            : '<span class="ms-aoc-hint">Still needs rebook — no similar free slot</span>') +
+            : '<span class="ms-aoc-hint">Still needs rebook — ' +
+              esc(row.reason || 'no similar free slot') +
+              '</span>') +
           '</div>'
         );
       })
@@ -425,7 +429,9 @@
       '</div>' +
       '<div class="ms-aoc-confirmbar-actions">' +
       '<button type="button" class="ms-aoc-cancel" id="ms-aoc-sick-cancel">Back</button>' +
-      '<button type="button" class="ms-aoc-confirm-btn" id="ms-aoc-sick-apply">Stage accepted moves</button>' +
+      (C.sickDayAcceptCount(_sick.proposal)
+        ? '<button type="button" class="ms-aoc-confirm-btn" id="ms-aoc-sick-apply">Stage accepted moves</button>'
+        : '<span class="ms-aoc-hint">Nothing to stage — every row still needs rebook or is waiting room.</span>') +
       '</div></div>'
     );
   }

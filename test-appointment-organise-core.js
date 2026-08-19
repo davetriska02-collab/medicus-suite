@@ -1010,21 +1010,50 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       'refuses a different appointment type'
     );
 
-    const wrongLen = sickBoard({
+    const twoFifteens = sickBoard({
       coverSlots: [
         {
           diaryEntryType: { value: 'slot' },
           startDateTime: '2026-08-23 14:00:00',
-          duration: 30,
+          endDateTime: '2026-08-23 14:15:00',
+          duration: 15,
+          appointmentType: { id: mouse.appointmentTypeId },
+          defaultDeliveryMode: { value: 'face-to-face' },
+        },
+        {
+          diaryEntryType: { value: 'slot' },
+          startDateTime: '2026-08-23 14:15:00',
+          endDateTime: '2026-08-23 14:30:00',
+          duration: 15,
           appointmentType: { id: mouse.appointmentTypeId },
           defaultDeliveryMode: { value: 'face-to-face' },
         },
       ],
     });
-    check(
-      core.suggestRebook(wrongLen, core.findAppointment(wrongLen, stretchMouse.id)).ok === false,
-      'refuses a different length'
-    );
+    const mouse30 = Object.assign({}, core.findAppointment(twoFifteens, stretchMouse.id), {
+      duration: 30,
+      endDateTime: '2026-08-23 14:30:00',
+    });
+    const run = core.suggestRebook(twoFifteens, mouse30);
+    check(run.ok === true, 'two consecutive 15-min free tiles match a 30-min booking');
+    check(run.suggestion.duration === 30, 'suggested run is 30 min');
+    check(run.suggestion.reserveDuration === 15, 'reserve still starts at the 15-min tile (captured cross-list)');
+
+    const oneFifteen = sickBoard({
+      coverSlots: [
+        {
+          diaryEntryType: { value: 'slot' },
+          startDateTime: '2026-08-23 14:00:00',
+          duration: 15,
+          appointmentType: { id: mouse.appointmentTypeId },
+          defaultDeliveryMode: { value: 'face-to-face' },
+        },
+      ],
+    });
+    const miss = core.suggestRebook(oneFifteen, mouse30);
+    check(miss.ok === false, 'a single 15-min tile cannot cover 30 min');
+    check(/Need 30 min/.test(miss.reason), 'hint says need 30 min');
+    check(/15-min tiles/.test(miss.reason), 'hint says other lists only have 15-min tiles');
 
     const home = sickBoard({ delivery: 'home-visit', coverDelivery: 'face-to-face' });
     check(
