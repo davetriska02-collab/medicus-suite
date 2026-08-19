@@ -18,7 +18,7 @@
 //
 // DETECTION MODEL (explicit 2026-08-02 decision, AskUserQuestion): a FREE
 // page-load hint, then a click-triggered full scan — not fully opt-in like
-// problem-description-cleanup.js's "Check for retired/legacy codes?", to
+// problem-description-cleanup.js's "Code cleanup?", to
 // preserve duplicate-merge's old proactive-visibility behaviour:
 //   - On page load: only the cheap clinical-summary/summary list is
 //     fetched (unchanged), plus the FREE text-only duplicate grouping

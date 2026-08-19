@@ -145,16 +145,8 @@
   z-index: 1;
 }
 
-.ms-pnc-line {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 1.5;
-  stroke-dasharray: 3 4;
-  opacity: 0.55;
-}
-
-/* Linked problems (2026-08-08) — solid, a different style from the dotted
-   suggestion lines above AND the plain grey parent/child connector stubs,
+/* Linked problems (2026-08-08) — solid, a different style from the dashed
+   suggestion lines below AND the plain grey parent/child connector stubs,
    so all three relationship types stay visually distinct at a glance.
    `stroke` here is a fallback only — each SET of linked problems gets its
    own colour via an inline style (linkSetColor), since two SEPARATE,
@@ -170,26 +162,105 @@
   opacity: 0.85;
 }
 
-.ms-pnc-pane {
-  position: relative;
-  z-index: 2;
-  overflow: auto;
-  padding: 16px 18px;
-  /* The classic flex-child scrolling gotcha (2026-08-08 fix — a long
-     problem list wasn't scrollable at all): a flex item's min-height
-     defaults to 'auto', which means "at least as tall as my content"
-     regardless of overflow:auto — the pane just grew past the panel's own
-     fixed height instead of scrolling internally. min-height:0 on .ms-pnc-body
-     alone wasn't enough; each PANE needs its own override too. */
-  min-height: 0;
+/* Suggestion lines (2026-08-19 — moved off the removed tray, now routed
+   the same elbow/bus way as linked lines above, per Nick's request: "so
+   they are visible to the right of the problems themselves"). Dashed —
+   never a written relationship yet, unlike the solid links above — same
+   accent blue for BOTH kinds deliberately: the flag (suggestionFlagHtml)
+   is what tells a SNOMED-ancestry candidate apart from a "(Grouped with
+   X)" text-link match, via shape + letter, not colour (this suite's
+   colourblind mode must survive every change — see
+   .claude/skills/ui-design/DOCTRINE.md). Reusing one of the semantic
+   colours already meaningful elsewhere in this file (green=confirmed,
+   amber=error, red=danger) for a plain "which kind of suggestion" cue
+   would risk exactly the wrong implication. */
+.ms-pnc-suggestion-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-dasharray: 3 4;
+  opacity: 0.7;
 }
 
+/* A second, independent cue beyond the flag's own shape/letter — a
+   dash-dot rhythm distinct from the SNOMED line's even dashes, so the two
+   kinds are still tellable apart at a glance before a flag is even
+   reached with the eye. */
+.ms-pnc-suggestion-line-textlink {
+  stroke-dasharray: 1 3 5 3;
+}
+
+/* The flag marker naming one suggestion line's own kind — see
+   suggestionFlagHtml's own comment for the full accessibility reasoning.
+   pointer-events re-enabled here specifically (the whole .ms-pnc-lines SVG
+   is pointer-events:none) so its <title> gives a hover tooltip; nothing
+   else on a line is interactive. */
+.ms-pnc-flag {
+  fill: var(--bg-elev);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  pointer-events: auto;
+}
+
+.ms-pnc-flag-group {
+  cursor: help;
+}
+
+.ms-pnc-flag-label {
+  font-size: 9px;
+  font-weight: 700;
+  font-family: inherit;
+  fill: var(--accent);
+  pointer-events: none;
+}
+
+/* The red (X) removal marker on a confirmed linked-problem line
+   (2026-08-19, Nick's request: "in the middle of the connector where it's
+   an existing link") — deliberately red (var(--red), this suite's one
+   destructive-action colour) since, unlike the suggestion flags above,
+   clicking this one DOES arm a real write (the confirm bar still stands
+   between the click and the actual removal — same discipline as every
+   other write in this canvas). ms-pnc-remove-flag-group reuses
+   .ms-pnc-flag-group's cursor/pointer-events re-enable via the shared
+   class both markers carry. */
+.ms-pnc-remove-flag {
+  fill: var(--bg-elev);
+  stroke: var(--red);
+  stroke-width: 1.5;
+  pointer-events: auto;
+}
+
+.ms-pnc-remove-flag-group {
+  cursor: pointer;
+}
+
+.ms-pnc-remove-flag-group:hover .ms-pnc-remove-flag {
+  fill: var(--red);
+}
+
+.ms-pnc-remove-flag-group:hover .ms-pnc-remove-flag-label {
+  fill: var(--bg-elev);
+}
+
+.ms-pnc-remove-flag-label {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  fill: var(--red);
+  pointer-events: none;
+}
+
+/* 2026-08-19: takes the full body width now the suggestion tray pane is
+   gone (previously flex: 3 1 0 against the tray's own flex: 1 1 0). No
+   border-right any more either — the End bin right after it already has
+   its own border-left, so a second line there would double up. */
 .ms-pnc-lanes {
-  flex: 3 1 0;
+  flex: 1 1 0;
   display: flex;
   min-width: 0;
   min-height: 0;
-  border-right: 1px solid var(--border);
 }
 
 .ms-pnc-lane {
@@ -199,6 +270,14 @@
   overflow: auto;
   padding: 12px 10px;
   border-right: 1px solid var(--border);
+}
+
+/* Major carries the bulk of most patients' active problem list and its tiles
+   truncate longer descriptions than Minor/Unresolved tend to need — double
+   width relative to the other two lanes (2026-08-19 feedback: text was
+   getting cut off). */
+.ms-pnc-lane[data-sig-lane='major'] {
+  flex: 2 1 0;
 }
 
 .ms-pnc-lane:last-of-type {
@@ -268,26 +347,6 @@
   font-size: 10.5px;
   color: var(--text-3);
   margin-top: 1px;
-}
-
-.ms-pnc-pane-tree {
-  flex: 2 1 0;
-  border-right: 1px solid var(--border);
-}
-
-.ms-pnc-pane-tray {
-  flex: 1 1 0;
-  min-width: 260px;
-  background: var(--bg-deep);
-}
-
-.ms-pnc-pane-heading {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  margin-bottom: 10px;
 }
 
 .ms-pnc-empty {
@@ -365,10 +424,23 @@
   outline-offset: 1px;
 }
 
-.ms-pnc-tile-actions {
+/* One flex item within .ms-pnc-tile-row (itself a flex row alongside
+   .ms-pnc-tile-main) — stacks its own Remove-link/Edit-problem row and, when
+   present, the "(Grouped with X)" relationship-choice row beneath it,
+   instead of letting those two rows become separate flex items fighting
+   .ms-pnc-tile-main for the same horizontal space (2026-08-19, once
+   text-link actions moved onto the tile itself). */
+.ms-pnc-tile-actions-wrap {
   display: flex;
+  flex-direction: column;
   gap: 4px;
   flex: 0 0 auto;
+}
+
+.ms-pnc-tile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .ms-pnc-tile-action {
@@ -461,77 +533,23 @@
   background: var(--border-hi);
 }
 
-/* ── Right pane: the suggestion tray ─────────────────────────────────────── */
+/* ── Suggestions (2026-08-19: folded onto the tiles themselves — the
+   right-hand tray pane that used to hold these is gone) ─────────────────── */
 
-.ms-pnc-tray-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 10px;
+/* A tile carrying an unconfirmed SNOMED-ancestry or "(Grouped with X)"
+   suggestion — dashed left edge instead of the ordinary tile's solid one,
+   echoing the removed tray card's own dashed border so a suggestion still
+   reads as "unconfirmed" at a glance without a separate pane to hold it. */
+.ms-pnc-tile-suggested {
+  border-left-style: dashed;
 }
 
-.ms-pnc-tray-group-label {
-  font-size: 10px;
-  color: var(--text-3);
-  margin-bottom: 2px;
-}
-
-.ms-pnc-tray-group-blocked {
-  opacity: 0.6;
-}
-
-.ms-pnc-tray-tile {
-  display: flex;
-  flex-direction: column;
-  padding: 3px 8px;
-  background: var(--bg-elev);
-  border: 1px dashed var(--border-hi);
-  border-radius: var(--r-sm);
-  cursor: grab;
-  transition:
-    border-color var(--fast) var(--ease),
-    background var(--fast) var(--ease);
-}
-
-.ms-pnc-tray-tile:hover {
-  border-color: var(--accent);
-  background: var(--accent-dim);
-}
-
-.ms-pnc-tray-tile:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.ms-pnc-tray-hint {
-  margin-top: 3px;
-  font-size: 10.5px;
-  line-height: 1.4;
-  color: var(--text-3);
-}
-
-.ms-pnc-tray-hint strong {
+.ms-pnc-tile-hint-suggested {
   color: var(--text-2);
 }
 
-/* "(Grouped with X)" text-derived suggestions (2026-08-09) — deliberately
-   NOT draggable (solid border, default cursor) unlike .ms-pnc-tray-tile
-   above: this is already a specific resolved pair, offering a relationship-
-   TYPE choice via buttons instead of a drop target. */
-.ms-pnc-tray-group-textlink {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border);
-}
-
-.ms-pnc-textlink-tile {
-  display: flex;
-  flex-direction: column;
-  padding: 6px 8px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border-hi);
-  border-radius: var(--r-sm);
-  margin-bottom: 4px;
+.ms-pnc-tile-hint-suggested strong {
+  color: var(--text-1);
 }
 
 .ms-pnc-textlink-actions {
@@ -568,49 +586,6 @@
 
 .ms-pnc-textlink-btn-leave:hover {
   background: var(--border);
-}
-
-/* "Unknown significance" tray suggestions (2026-08-09) — amber, the SAME
-   warning colour already used for the cycle-error confirm bar, since
-   neither is a confident auto-suggestion the way SNOMED/text-link cards are
-   (both grades are offered, the clinician always decides). */
-.ms-pnc-tray-group-sig {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border);
-}
-
-.ms-pnc-sig-tile {
-  display: flex;
-  flex-direction: column;
-  padding: 6px 8px;
-  background: var(--amber-dim);
-  border: 1px solid var(--amber-line);
-  border-radius: var(--r-sm);
-  margin-bottom: 4px;
-}
-
-.ms-pnc-sig-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 6px;
-}
-
-.ms-pnc-sig-btn {
-  padding: 3px 7px;
-  background: var(--bg-mid);
-  border: 1px solid var(--amber);
-  border-radius: var(--r-sm);
-  font-size: 10.5px;
-  font-weight: 600;
-  font-family: inherit;
-  color: var(--amber);
-  cursor: pointer;
-}
-
-.ms-pnc-sig-btn:hover {
-  background: var(--amber-dim);
 }
 
 /* ── Confirm bar / footer ─────────────────────────────────────────────────── */

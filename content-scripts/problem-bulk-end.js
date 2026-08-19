@@ -1,5 +1,5 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
-// Medicus Suite — "Bulk remove?" widget for the Clinical Summary problem list
+// Medicus Suite — "Bulk remove/merge" widget for the Clinical Summary problem list
 //
 // PURPOSE (user request 2026-07-27, refined same day): busy problem lists
 // carry many problems that plainly need ending, and Medicus's own UI makes
@@ -26,6 +26,27 @@
 // checkbox. problem-junk-code-cleanup.js/.css were retired in the merge; its
 // pure helpers and their tests moved here.
 //
+// MERGE DUPLICATES ADDITION (2026-08-19): a second, independent checklist —
+// "Duplicate copies to merge" — folded in from content-scripts/
+// problem-nesting.js's own "Merge duplicate copies" accordion section,
+// which is now removed from that file entirely (Nick's request: consolidate
+// it here rather than leave it split across two triggers, and rename this
+// button "Bulk remove/merge" to say so). Same UX as before, just relocated:
+// each duplicate-code group (2+ active problems sharing a conceptId) shows
+// collapsed as "Merge…", expands to keeper radios (hasChildren/
+// additionalInformation copies flagged, never silently dropped) and a
+// destructive-confirm with a free-text reason, one group committed at a
+// time — this is its own mini state machine per group, independent of the
+// file's _step ('select'|'confirm'|'done', which only ever governs the
+// END-problems flow). Detection rides the SAME per-problem
+// slideover/overview fetch runFlagScan() already makes for the admin-code
+// badge scan (see BADGE DETECTION below) — no new network call, just a
+// richer extraction from the same response. Write contract:
+// POST /clinical/problem/mark-incorrect-and-hidden (below) — the same
+// confirmed contract the Duplicate Problem Checker uses
+// (engine/record-duplicate-parser.js WRITE_CONTRACTS.problem); NOT an
+// end-date, and there is no known undo endpoint.
+//
 // CONFIRMED CONTRACT (live HAR capture, 2026-07-23, of a real "end problem"
 // action):
 //
@@ -43,6 +64,11 @@
 //   POST /clinical/problem/end-problem
 //        body: { problemId, endDate, reason } → 200 {}
 //        — reason is a plain string; NOT a full-record replace.
+//   POST /clinical/problem/mark-incorrect-and-hidden
+//        body: { problemId, reason, isConfirmedRemoval: true } → 200 {}
+//        — the MERGE write (see MERGE DUPLICATES ADDITION above), not the
+//        end-problem write; entries are hidden as recorded-in-error, not
+//        end-dated, and this cannot be undone from this tool.
 //
 // BADGE DETECTION (ported verbatim from the retired sibling; confirmed live
 // 2026-07-23): the `clinical/gb/snomed/search/description/constrained`
@@ -274,9 +300,12 @@
   }
 
   // Narrows clinical-summary/summary's `problems[]` down to just
-  // {id, description, conceptId} once each has been resolved via the
-  // per-problem overview fetch — drops any whose conceptId couldn't be read
-  // rather than guessing.
+  // {id, description, conceptId, hasChildren, additionalInformation,
+  // onsetDate} once each has been resolved via the per-problem overview
+  // fetch — drops any whose conceptId couldn't be read rather than
+  // guessing. The last three fields exist ONLY for merge-duplicate
+  // detection (added 2026-08-19, see the file header) — the badge scan
+  // itself only ever reads .conceptId, so their presence is harmless to it.
   function withResolvedConceptIds(problems, overviews) {
     var out = [];
     for (var i = 0; i < problems.length; i++) {
@@ -285,7 +314,14 @@
       var code = ov && ov.problemCode;
       var conceptId = code && code.conceptId;
       if (p && conceptId) {
-        out.push({ id: p.id, description: p.problemCodeDescription, conceptId: conceptId });
+        out.push({
+          id: p.id,
+          description: p.problemCodeDescription,
+          conceptId: conceptId,
+          hasChildren: !!(ov && Array.isArray(ov.childProblems) && ov.childProblems.length),
+          additionalInformation: (ov && ov.additionalInformation) || null,
+          onsetDate: (ov && ov.onsetDate) || null,
+        });
       }
     }
     return out;
@@ -297,6 +333,117 @@
       if (seen.indexOf(p.conceptId) === -1) seen.push(p.conceptId);
     });
     return seen;
+  }
+
+  // ── Merge-duplicates pure helpers (ported from content-scripts/
+  // problem-nesting.js's own "Merge duplicate copies" section, 2026-08-19 —
+  // see the file header's MERGE DUPLICATES ADDITION note). ──────────────────
+
+  function buildDuplicateGroups(problems, infoById) {
+    var list = Array.isArray(problems) ? problems : [];
+    var info = infoById || {};
+    var byConcept = Object.create(null);
+    var order = [];
+    list.forEach(function (p) {
+      if (!p || !p.id) return;
+      var ci = info[p.id];
+      if (!ci || !ci.conceptId) return;
+      if (!byConcept[ci.conceptId]) {
+        byConcept[ci.conceptId] = [];
+        order.push(ci.conceptId);
+      }
+      byConcept[ci.conceptId].push(p);
+    });
+    return order
+      .filter(function (c) {
+        return byConcept[c].length >= 2;
+      })
+      .map(function (c) {
+        return { conceptId: c, entries: byConcept[c] };
+      });
+  }
+
+  // Default keeper = the EARLIEST copy. Medicus problem ids are UUIDv7
+  // (time-ordered), so the lexicographically smallest id is the oldest
+  // entry — the same "kept (earliest copy)" default the Duplicate Problem
+  // Checker uses. A default only; the keeper radio stays the clinician's
+  // choice.
+  function pickEarliestCopyId(entries) {
+    var best = null;
+    (Array.isArray(entries) ? entries : []).forEach(function (e) {
+      if (!e || !e.id) return;
+      if (best === null || e.id < best) best = e.id;
+    });
+    return best;
+  }
+
+  // The confirmed mark-incorrect-and-hidden POST body (identical to the
+  // Duplicate Problem Checker's buildRemovalRequest for kind 'problem'):
+  // {problemId, reason, isConfirmedRemoval: true}. Null (never a partial
+  // body) on a missing id or blank reason — a removal must never reach the
+  // record without its reason.
+  function buildMarkIncorrectPayload(problemId, reason) {
+    var trimmed = (reason || '').trim();
+    if (!problemId || !trimmed) return null;
+    return { problemId: problemId, reason: trimmed, isConfirmedRemoval: true };
+  }
+
+  // Which copies in a group the merge may actually remove: everything
+  // except the keeper and except any copy that has nested children
+  // (removing a parent would leave its children dangling — those copies
+  // need the full Duplicate Checker or Medicus itself, where the structure
+  // is visible).
+  function removableDuplicateIds(entries, keeperId) {
+    return (Array.isArray(entries) ? entries : [])
+      .filter(function (e) {
+        return e && e.id && e.id !== keeperId && !e.hasChildren;
+      })
+      .map(function (e) {
+        return e.id;
+      });
+  }
+
+  // Builds the full _mergeGroups state array (UI state included) from a
+  // withResolvedConceptIds()-shaped list — the pure equivalent of
+  // problem-nesting.js's own runScan() merge build-out (:1136-1160 there),
+  // just fed from this file's badge-scan overview fetch instead of
+  // nesting's own scan.
+  function buildMergeGroups(withConcept) {
+    var infoById = {};
+    var problems = (Array.isArray(withConcept) ? withConcept : []).map(function (p) {
+      infoById[p.id] = {
+        conceptId: p.conceptId,
+        hasChildren: p.hasChildren,
+        additionalInformation: p.additionalInformation,
+        onsetDate: p.onsetDate,
+      };
+      return { id: p.id, description: p.description };
+    });
+    return buildDuplicateGroups(problems, infoById).map(function (g) {
+      var entries = g.entries.map(function (p) {
+        var ci = infoById[p.id] || {};
+        return {
+          id: p.id,
+          description: p.description,
+          hasChildren: !!ci.hasChildren,
+          additionalInformation: ci.additionalInformation || null,
+          onsetDate: ci.onsetDate || null,
+        };
+      });
+      return {
+        conceptId: g.conceptId,
+        description: entries[0].description,
+        entries: entries,
+        keeperId: pickEarliestCopyId(entries),
+        open: false,
+        confirming: false,
+        removing: false,
+        reason: 'Duplicate entry - merged into retained copy',
+        errors: {},
+        removedCount: 0,
+        done: false,
+      };
+    });
   }
 
   // ── Node test hook ────────────────────────────────────────────────────────────
@@ -318,6 +465,11 @@
       cautionRootsOf: cautionRootsOf,
       withResolvedConceptIds: withResolvedConceptIds,
       uniqueConceptIds: uniqueConceptIds,
+      buildDuplicateGroups: buildDuplicateGroups,
+      pickEarliestCopyId: pickEarliestCopyId,
+      buildMarkIncorrectPayload: buildMarkIncorrectPayload,
+      removableDuplicateIds: removableDuplicateIds,
+      buildMergeGroups: buildMergeGroups,
     };
     return;
   }
@@ -340,6 +492,32 @@
     return (
       d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
     );
+  }
+
+  // Feather-style stroke glyphs at currentColor — success check and the
+  // destructive-merge warning triangle. Inline so no external asset ever
+  // loads. Ported from problem-nesting.js (2026-08-19, see file header).
+  var CHECK_SVG =
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg>';
+  var WARN_SVG =
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
+  // HTML date suffix for a merge-group entry reference; empty string when no
+  // date. Unlike problem-nesting.js's own dateSuffix (which falls back to an
+  // _infoById lookup for bare ids), merge-group entries here always carry
+  // their own onsetDate directly — nothing else in this file ever calls
+  // dateSuffix with a bare id.
+  function dateSuffix(entry) {
+    var d = entry && entry.onsetDate;
+    return d ? ' <span class="ms-pbe-merge-date">· ' + esc(d) + '</span>' : '';
+  }
+
+  // Screen-reader announcements — writes into the persistent polite live
+  // region (which render() never rebuilds — see injectTrigger()/render()).
+  function announce(text) {
+    var el = document.getElementById('ms-pbe-widget');
+    var live = el && el.querySelector('.ms-pbe-live');
+    if (live) live.textContent = text;
   }
 
   // ── URL detection ────────────────────────────────────────────────────────────
@@ -479,6 +657,15 @@
     });
   }
 
+  // The merge write — see MERGE DUPLICATES ADDITION in the file header.
+  function postMarkIncorrectAndHidden(payload) {
+    return apiFetch('/clinical/problem/mark-incorrect-and-hidden', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
   // ── DOM: finding a problem's row — same discipline (and duplicate-text
   // claimedAnchors guard) as problem-description-cleanup.js. ───────────────────
   function findProblemRow(description, claimedAnchors) {
@@ -506,6 +693,13 @@
   var _endDate = todayISO();
   var _reason = DEFAULT_REASON;
   var _ending = false;
+  // Merge-duplicates — see MERGE DUPLICATES ADDITION in the file header.
+  // Independent of everything above: its own scan-state lifecycle (fed by
+  // the SAME overview fetch runFlagScan makes) and its own array of group
+  // objects, each carrying its own open/confirming/removing UI state (no
+  // shared "_openSection"-style accordion — every group manages itself).
+  var _mergeScanState = 'idle'; // 'idle' | 'running' | 'done' | 'error'
+  var _mergeGroups = [];
 
   function resetForPatient() {
     removeInlineCheckboxes();
@@ -519,6 +713,8 @@
     _endDate = todayISO();
     _reason = DEFAULT_REASON;
     _ending = false;
+    _mergeScanState = 'idle';
+    _mergeGroups = [];
   }
 
   function selectedCount() {
@@ -530,6 +726,25 @@
   function flaggedRows() {
     return _rows.filter(function (r) {
       return r.flagged;
+    });
+  }
+
+  // A group stays visible once merged down to <2 remaining only if it's the
+  // one just-completed ('done') — otherwise it's no longer a duplicate pair
+  // and drops off the list.
+  function liveMergeGroups() {
+    return _mergeGroups.filter(function (g) {
+      return g.done || g.entries.length >= 2;
+    });
+  }
+
+  // Removes a merged-away copy from the bulk-end row list too (if it was
+  // also ticked there) — simpler than problem-nesting.js's own
+  // forgetProblem(), since this file has no _infoById/_parentIdByProblemId/
+  // _sig to keep in sync, just _rows.
+  function forgetMergedProblem(problemId) {
+    _rows = _rows.filter(function (r) {
+      return r.id !== problemId;
     });
   }
 
@@ -580,14 +795,10 @@
   // gates the checklist and its failure leaves the widget fully usable. ────────
   async function runFlagScan() {
     _flagScanState = 'running';
+    _mergeScanState = 'running';
     render();
     try {
       var roots = await ensureNonProblemRootsLoaded();
-      if (!roots.length) {
-        _flagScanState = 'done';
-        return;
-      }
-      var rootsCsv = rootConceptIdsCsv(roots);
       var problems = _problemsCache || [];
       var overviews = await Promise.all(
         problems.map(function (p) {
@@ -597,6 +808,20 @@
         })
       );
       var withConcept = withResolvedConceptIds(problems, overviews);
+
+      // Merge-duplicate detection rides this SAME per-problem overview
+      // fetch — independent of the admin-root badge scan below (which the
+      // roots-empty branch skips entirely), so it's computed BEFORE that
+      // early return, not after it. See MERGE DUPLICATES ADDITION in the
+      // file header.
+      _mergeGroups = buildMergeGroups(withConcept);
+      _mergeScanState = 'done';
+
+      if (!roots.length) {
+        _flagScanState = 'done';
+        return;
+      }
+      var rootsCsv = rootConceptIdsCsv(roots);
       var conceptByProblemId = Object.create(null);
       withConcept.forEach(function (p) {
         conceptByProblemId[p.id] = p.conceptId;
@@ -660,6 +885,10 @@
       _flagScanState = 'done';
     } catch (err) {
       _flagScanState = 'error';
+      // Merge detection may have already succeeded above (it runs first,
+      // before anything that can throw here) — only mark it errored if it
+      // genuinely never completed.
+      if (_mergeScanState === 'running') _mergeScanState = 'error';
     } finally {
       render();
     }
@@ -717,6 +946,60 @@
     // retryable; a fully successful batch lands on the done panel with its
     // explicit "Refresh page" offer (never an auto-reload — see header).
     _step = anyFailed ? 'select' : 'done';
+    render();
+  }
+
+  // ── Merge duplicates (ported from problem-nesting.js, 2026-08-19 — see
+  // file header's MERGE DUPLICATES ADDITION). Commits ONE group's merge at
+  // a time: mark-incorrect-and-hidden on every removable non-keeper copy,
+  // SEQUENTIALLY, with the group's shared reason. Per-copy failures record
+  // against their row and the rest carry on — the keeper is never touched
+  // by definition, so a partial batch is always recoverable (retry or fall
+  // back to the Duplicate Checker). ────────────────────────────────────────
+  async function confirmMergeGroup(g) {
+    if (g.removing || g.done) return;
+    var targets = removableDuplicateIds(g.entries, g.keeperId);
+    var payloadCheck = buildMarkIncorrectPayload('x', g.reason);
+    if (!targets.length || !payloadCheck) return; // blank reason never reaches the record
+    g.removing = true;
+    g.errors = {};
+    render();
+    var batchRemoved = 0;
+    for (var i = 0; i < targets.length; i++) {
+      var id = targets[i];
+      try {
+        await postMarkIncorrectAndHidden(buildMarkIncorrectPayload(id, g.reason));
+        batchRemoved++;
+        g.removedCount++;
+        forgetMergedProblem(id);
+        g.entries = g.entries.filter(function (e) {
+          return e.id !== id;
+        });
+      } catch (err) {
+        g.errors[id] = (err && err.message) || 'Failed to remove this copy — please try again.';
+      }
+    }
+    g.removing = false;
+    g.confirming = false;
+    if (!Object.keys(g.errors).length) g.done = true;
+    if (Object.keys(g.errors).length) {
+      announce('Action failed — see panel');
+    } else if (batchRemoved > 0) {
+      announce(batchRemoved + ' cop' + (batchRemoved === 1 ? 'y' : 'ies') + ' removed');
+    }
+    // One ledger record per batch (batch-local count so a retry never
+    // re-reports earlier successes), fixed label — never the problem
+    // description or the free-typed reason.
+    if (batchRemoved > 0 && typeof window !== 'undefined' && window.EventLedger) {
+      window.EventLedger.record({
+        source: 'record',
+        patientRef: _lastPatientId,
+        severity: null,
+        ruleId: 'problem-merge',
+        label: 'Merge problems: ' + batchRemoved + ' duplicate cop' + (batchRemoved === 1 ? 'y' : 'ies') + ' removed',
+        action: 'committed',
+      });
+    }
     render();
   }
 
@@ -844,6 +1127,156 @@
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
+
+  // One duplicate group's card in the "Duplicate copies to merge" section
+  // (ported from problem-nesting.js's mergeGroupHtml, 2026-08-19). Collapsed:
+  // description + copy count + "Merge…". Expanded: keeper radios (blocked
+  // copies flagged, additional-info copies cautioned), then the KEEPING /
+  // REMOVING confirm with the reason echoed and the mark-incorrect-and-
+  // hidden consequence stated plainly.
+  function mergeGroupHtml(g, gIdx) {
+    if (g.done) {
+      return (
+        '<div class="ms-pbe-merge-card ms-pbe-merge-card-done">' +
+        CHECK_SVG +
+        ' <strong>' +
+        esc(g.description) +
+        '</strong> — ' +
+        g.removedCount +
+        ' duplicate cop' +
+        (g.removedCount === 1 ? 'y' : 'ies') +
+        ' removed, earliest copy kept. Medicus’s own list shows this after a page refresh.</div>'
+      );
+    }
+    if (!g.open) {
+      return (
+        '<div class="ms-pbe-merge-card"><div class="ms-pbe-merge-card-main"><strong>' +
+        esc(g.description) +
+        '</strong> — ' +
+        g.entries.length +
+        ' copies with the same code.</div>' +
+        '<button type="button" class="ms-pbe-merge-open" data-gidx="' +
+        gIdx +
+        '">Merge…</button></div>'
+      );
+    }
+    var rows = g.entries
+      .map(function (e) {
+        var notes = [];
+        if (e.hasChildren) notes.push('has nested children — kept; merge it via the Duplicate Checker or Medicus');
+        if (e.additionalInformation)
+          notes.push('has additional info — removing loses it; compare in the Duplicate Checker first');
+        var err = g.errors[e.id];
+        return (
+          '<label class="ms-pbe-merge-child-row">' +
+          '<input type="radio" name="ms-pbe-merge-keeper-' +
+          gIdx +
+          '" class="ms-pbe-merge-keeper" data-gidx="' +
+          gIdx +
+          '" data-entry-id="' +
+          esc(e.id) +
+          '"' +
+          (g.keeperId === e.id ? ' checked' : '') +
+          (g.removing ? ' disabled' : '') +
+          '>' +
+          '<span>' +
+          esc(e.description) +
+          dateSuffix(e) +
+          (g.keeperId === e.id ? ' <span class="ms-pbe-merge-keep-tag">keep this copy</span>' : '') +
+          (notes.length ? ' <span class="ms-pbe-merge-child-note">(' + esc(notes.join('; ')) + ')</span>' : '') +
+          '</span>' +
+          (err ? '<span class="ms-pbe-merge-card-error">' + esc(err) + '</span>' : '') +
+          '</label>'
+        );
+      })
+      .join('');
+    var removable = removableDuplicateIds(g.entries, g.keeperId);
+    var confirmHtml = '';
+    if (g.confirming && removable.length) {
+      var kept = g.entries.filter(function (e) {
+        return removable.indexOf(e.id) === -1;
+      });
+      confirmHtml =
+        '<div class="ms-pbe-merge-confirm-block">' +
+        WARN_SVG +
+        ' <strong>Keeping</strong> ' +
+        kept
+          .map(function (e) {
+            return '<strong>' + esc(e.description) + '</strong>' + dateSuffix(e);
+          })
+          .join(', ') +
+        ' · <strong>Removing</strong> ' +
+        removable.length +
+        ' cop' +
+        (removable.length === 1 ? 'y' : 'ies') +
+        ' via Medicus’s mark-incorrect-and-hidden — removed copies are hidden from the record as recorded-in-error, ' +
+        'not end-dated, and this cannot be undone from this tool. Reason recorded against each: ' +
+        '<input type="text" class="ms-pbe-merge-reason" data-gidx="' +
+        gIdx +
+        '" value="' +
+        esc(g.reason) +
+        '" maxlength="120">' +
+        '<div class="ms-pbe-merge-confirm-actions">' +
+        '<button type="button" class="ms-pbe-back-btn ms-pbe-merge-back" data-gidx="' +
+        gIdx +
+        '"' +
+        (g.removing ? ' disabled' : '') +
+        '>Back</button>' +
+        '<button type="button" class="ms-pbe-end-btn ms-pbe-merge-confirm" data-gidx="' +
+        gIdx +
+        '"' +
+        (g.removing || !(g.reason || '').trim() ? ' disabled' : '') +
+        '>' +
+        (g.removing
+          ? 'Removing…'
+          : 'Confirm — remove ' + removable.length + ' cop' + (removable.length === 1 ? 'y' : 'ies')) +
+        '</button>' +
+        '</div></div>';
+    }
+    return (
+      '<div class="ms-pbe-merge-card">' +
+      '<div class="ms-pbe-merge-card-main"><strong>' +
+      esc(g.description) +
+      '</strong> — pick the copy to <strong>keep</strong>; every other removable copy is removed.</div>' +
+      '<div class="ms-pbe-merge-children">' +
+      rows +
+      '</div>' +
+      (g.confirming
+        ? confirmHtml
+        : '<button type="button" class="ms-pbe-merge-review" data-gidx="' +
+          gIdx +
+          '"' +
+          (removable.length && !g.removing ? '' : ' disabled') +
+          '>Review merge (' +
+          removable.length +
+          ' to remove)…</button>') +
+      '</div>'
+    );
+  }
+
+  // "Duplicate copies to merge" section content — the empty state or every
+  // live group's card, ported from problem-nesting.js's mergeSectionContent.
+  function mergeSectionContent() {
+    var live = liveMergeGroups();
+    if (_mergeScanState === 'running' && !live.length) {
+      return '<div class="ms-pbe-loading">Checking for duplicate copies…</div>';
+    }
+    if (_mergeScanState === 'error' && !live.length) {
+      // A failed scan must never masquerade as a confirmed negative — "no
+      // duplicates found" when the scan didn't run tells the clinician not
+      // to look, which is the opposite of what happened.
+      return '<div class="ms-pbe-error">Duplicate-copy scan failed — close and reopen this panel to retry.</div>';
+    }
+    if (!live.length) {
+      return '<div class="ms-pbe-empty">No duplicate-code problems found.</div>';
+    }
+    return live
+      .map(function (g) {
+        var gIdx = _mergeGroups.indexOf(g);
+        return mergeGroupHtml(g, gIdx);
+      })
+      .join('');
+  }
 
   function renderSelectStep() {
     var count = selectedCount();
@@ -997,6 +1430,10 @@
       ' selected problem' +
       (count === 1 ? '' : 's') +
       '…</button>' +
+      '<div class="ms-pbe-merge-section">' +
+      '<div class="ms-pbe-merge-heading">Duplicate copies to merge</div>' +
+      mergeSectionContent() +
+      '</div>' +
       '</div>'
     );
   }
@@ -1072,7 +1509,7 @@
       _open +
       '">' +
       (_open ? '▾' : '▸') +
-      ' Bulk remove?</button>';
+      ' Bulk remove/merge</button>';
     if (!_open) return header;
     var body;
     if (_scanState === 'scanning') {
@@ -1163,6 +1600,63 @@
       _open = false;
       render();
     });
+
+    // ── Merge duplicates (ported from problem-nesting.js, 2026-08-19) ──────
+    el.querySelectorAll('.ms-pbe-merge-open').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
+        if (g) {
+          g.open = true;
+          render();
+        }
+      });
+    });
+    el.querySelectorAll('.ms-pbe-merge-keeper').forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        var g = _mergeGroups[Number(radio.getAttribute('data-gidx'))];
+        if (g && radio.checked) {
+          g.keeperId = radio.getAttribute('data-entry-id');
+          g.confirming = false;
+          render();
+        }
+      });
+    });
+    el.querySelectorAll('.ms-pbe-merge-review').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
+        if (g && removableDuplicateIds(g.entries, g.keeperId).length) {
+          g.confirming = true;
+          render();
+        }
+      });
+    });
+    el.querySelectorAll('.ms-pbe-merge-back').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
+        if (g) {
+          g.confirming = false;
+          render();
+        }
+      });
+    });
+    el.querySelectorAll('.ms-pbe-merge-reason').forEach(function (input) {
+      input.addEventListener('input', function () {
+        var g = _mergeGroups[Number(input.getAttribute('data-gidx'))];
+        if (!g) return;
+        g.reason = input.value;
+        // No full re-render on every keystroke (it would drop focus
+        // mid-word); just keep the confirm button's disabled state honest —
+        // same discipline as this file's own end-problems reason input.
+        var btn = el.querySelector('.ms-pbe-merge-confirm[data-gidx="' + input.getAttribute('data-gidx') + '"]');
+        if (btn) btn.disabled = g.removing || !(g.reason || '').trim();
+      });
+    });
+    el.querySelectorAll('.ms-pbe-merge-confirm').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
+        if (g) confirmMergeGroup(g);
+      });
+    });
   }
 
   function render() {
@@ -1171,8 +1665,15 @@
     syncInlineCheckboxes();
     var el = document.getElementById('ms-pbe-widget');
     if (!el) return;
-    el.innerHTML = buildHtml();
-    bindEvents(el);
+    // Only .ms-pbe-root is rebuilt — .ms-pbe-live (added 2026-08-19 for the
+    // ported merge feature's announce()) must survive every render, or a
+    // text mutation set just before this call would be wiped before a
+    // screen reader ever picks it up. Same split as problem-nesting.js's
+    // own .ms-pn-live/.ms-pn-root.
+    var root = el.querySelector('.ms-pbe-root');
+    if (!root) return;
+    root.innerHTML = buildHtml();
+    bindEvents(root);
   }
 
   // ── Injection: one "Bulk remove?" trigger next to the "Major" heading —
@@ -1208,9 +1709,11 @@
     if (!list || !list.parentElement) return;
     var w = document.createElement('div');
     w.id = 'ms-pbe-widget';
-    w.innerHTML = buildHtml();
+    w.innerHTML = '<div class="ms-pbe-live" role="status" aria-live="polite"></div><div class="ms-pbe-root"></div>';
+    var root = w.querySelector('.ms-pbe-root');
+    root.innerHTML = buildHtml();
     list.parentElement.insertBefore(w, list);
-    bindEvents(w);
+    bindEvents(root);
   }
 
   // ── Cheap summary fetch + re-injection — same observer-hub/throttle/own-

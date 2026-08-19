@@ -262,7 +262,12 @@
   }
 
   function injectWidget() {
-    if (!getTaskInfo()) return;
+    const info = getTaskInfo();
+    // Document-filing task pages have Medicus's own direct /task and
+    // /appointment access already (confirmed with Dave, 2026-08-19) — this
+    // widget would only be a redundant duplicate there. Same typeSlug
+    // signal document-codes-to-problems.js's own gate uses.
+    if (!info || info.typeSlug === 'document') return;
     if (document.getElementById('ms-tk-widget')) return;
     const w = document.createElement('div');
     w.id = 'ms-tk-widget';
@@ -602,7 +607,14 @@
 
   function scheduleInject() {
     if (_throttle) return;
-    const onTaskPage = !!getTaskInfo();
+    // Cheap path-gate FIRST: no point throttling a whole-page scan on a page
+    // that isn't a task overview — or IS one, but a document-filing task
+    // specifically (2026-08-19: Medicus's own UI already covers this there,
+    // see injectWidget's own comment). Still handle path-change state reset
+    // below — a document page must still schedule once on arrival so
+    // runInject can clean up a stale widget left over from the PREVIOUS page.
+    const info = getTaskInfo();
+    const onTaskPage = !!info && info.typeSlug !== 'document';
     const pathChanged = location.pathname !== _lastPath;
     if (!onTaskPage && !pathChanged) return;
     if (onTaskPage && !pathChanged) {
@@ -620,7 +632,11 @@
       s = blankState();
     }
     if (document.hidden) return;
-    if (!getTaskInfo()) {
+    // Left a task-overview page, OR arrived on a document-filing task
+    // specifically (2026-08-19 — see injectWidget's own comment): drop any
+    // stale widget so it can't strand at the bottom of the wrong page.
+    const info = getTaskInfo();
+    if (!info || info.typeSlug === 'document') {
       removeWidget();
       return;
     }

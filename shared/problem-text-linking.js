@@ -15,7 +15,7 @@
 // info-text.json, a new pattern entry); THIS file is only the matching step
 // — turning the captured name "X" into a candidate problemId — shared by
 // both problem-description-cleanup.js (the inline create-link offer in the
-// "Check for retired/legacy codes?" scan) and content-scripts/problem-
+// "Code cleanup?" scan) and content-scripts/problem-
 // nesting.js (the same suggestion surfaced in the Organise-problems canvas
 // tray), so the two surfaces can never disagree about which problem a given
 // reference resolves to.

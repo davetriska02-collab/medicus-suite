@@ -25,10 +25,6 @@ const {
   buildTextLinkSuggestions,
   buildUnknownSignificanceSuggestions,
   manualChildOptions,
-  buildDuplicateGroups,
-  pickEarliestCopyId,
-  buildMarkIncorrectPayload,
-  removableDuplicateIds,
   buildSignificancePayload,
   resolveSignificanceOption,
   apiErrorMessage,
@@ -425,54 +421,6 @@ console.log('--- manualChildOptions: the manual builder is looser, except the cy
   );
   check(manualChildOptions(null, problems, {}).length === 0, 'no parent chosen -> no options');
   check(manualChildOptions('x', null, {}).length === 0, 'null problems -> empty, never throws');
-}
-
-console.log('--- duplicate-merge helpers ---');
-{
-  const problems = [
-    { id: 'b-newer', description: 'Anorexia nervosa' },
-    { id: 'a-older', description: 'Anorexia nervosa' },
-    { id: 'brady', description: 'Bradycardia' },
-    { id: 'nocode', description: 'Mystery entry' },
-  ];
-  const info = {
-    'b-newer': { conceptId: 'AN' },
-    'a-older': { conceptId: 'AN' },
-    brady: { conceptId: 'BR' },
-    nocode: { conceptId: null },
-  };
-  const groups = buildDuplicateGroups(problems, info);
-  check(groups.length === 1, 'only same-conceptId sets of 2+ group');
-  check(groups[0].conceptId === 'AN' && groups[0].entries.length === 2, 'the duplicate pair is the group');
-  check(buildDuplicateGroups(null, null).length === 0, 'null inputs -> empty, never throws');
-
-  check(
-    pickEarliestCopyId([{ id: 'b-newer' }, { id: 'a-older' }]) === 'a-older',
-    'earliest copy (smallest UUIDv7 id) is the default keeper'
-  );
-  check(pickEarliestCopyId([]) === null, 'no entries -> null keeper');
-
-  const payload = buildMarkIncorrectPayload('prob-1', '  Duplicate entry  ');
-  check(
-    payload.problemId === 'prob-1' && payload.reason === 'Duplicate entry' && payload.isConfirmedRemoval === true,
-    'the confirmed mark-incorrect-and-hidden body: id, trimmed reason, isConfirmedRemoval'
-  );
-  check(
-    Object.keys(payload).sort().join(',') === 'isConfirmedRemoval,problemId,reason',
-    'exactly the three confirmed fields'
-  );
-  check(buildMarkIncorrectPayload('prob-1', '   ') === null, 'a blank reason never reaches the record');
-  check(buildMarkIncorrectPayload(null, 'x') === null, 'a missing id never reaches the record');
-
-  const entries = [
-    { id: 'keep', hasChildren: false },
-    { id: 'plain', hasChildren: false },
-    { id: 'parent-copy', hasChildren: true },
-  ];
-  const removable = removableDuplicateIds(entries, 'keep');
-  check(removable.length === 1 && removable[0] === 'plain', 'keeper and copies with children are never removable');
-  check(removableDuplicateIds(entries, 'plain').join(',') === 'keep', 'keeper choice flips what is removable');
-  check(removableDuplicateIds(null, 'x').length === 0, 'null entries -> empty, never throws');
 }
 
 console.log('--- resultContainsConceptId (descendant-search reader) ---');

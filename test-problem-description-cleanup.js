@@ -385,6 +385,58 @@ console.log(
     'orphan note (no consultation) produces the IDENTICAL payload shape as the nested case — confirmed live, no special-casing needed'
   );
 
+  console.log(
+    '--- buildChangeNotePayload: recordedAtAnotherOrganisation note (bug found live 2026-08-19, HAR) ---'
+  );
+  {
+    // Modelled EXACTLY on the real live capture that surfaced the bug: a
+    // note recorded at a different organisation carries recordedByOrganisation
+    // in the WRAPPED {label, value:{organisationName, …}} shape from the GET
+    // — round-tripping that verbatim into the POST 400s (same failure mode
+    // buildEditProblemPayload's own unwrapRecordedByOrganisation was built
+    // to fix, just never wired into this later payload builder).
+    const wrappedOrgNotePrefill = Object.assign({}, nestedNotePrefill, {
+      noteId: '01956148-97b4-70b1-9511-cf789598ff7a',
+      recordedAtAnotherOrganisation: true,
+      recordedByOrganisation: {
+        label: 'Imperial College Health Centre',
+        value: {
+          organisationName: 'Imperial College Health Centre',
+          organisationIdentifierType: 'nhs-england-ods-code',
+          organisationIdentifierValue: 'E87677',
+        },
+      },
+    });
+    const wrappedOrgPayload = buildChangeNotePayload(wrappedOrgNotePrefill, sameConceptRelabel);
+    check(
+      JSON.stringify(wrappedOrgPayload.recordedByOrganisation) ===
+        JSON.stringify({
+          organisationName: 'Imperial College Health Centre',
+          organisationIdentifierType: 'nhs-england-ods-code',
+          organisationIdentifierValue: 'E87677',
+        }),
+      'the wrapped GET shape is unwrapped to the plain {organisationName, …} object the POST actually wants'
+    );
+    check(
+      !('label' in wrappedOrgPayload.recordedByOrganisation) && !('value' in wrappedOrgPayload.recordedByOrganisation),
+      'no leftover .label/.value wrapper fields — those are exactly what the server previously rejected as "not expected"'
+    );
+    // Already-unwrapped shape (a normally-recorded-locally note, or a GET
+    // that happens to already be flat) must pass through unchanged — the
+    // helper must not assume every input is wrapped.
+    const flatOrgPayload = buildChangeNotePayload(
+      Object.assign({}, nestedNotePrefill, {
+        recordedAtAnotherOrganisation: true,
+        recordedByOrganisation: { organisationName: 'Park Road Surgery', organisationIdentifierType: 'nhs-england-ods-code' },
+      }),
+      sameConceptRelabel
+    );
+    check(
+      flatOrgPayload.recordedByOrganisation.organisationName === 'Park Road Surgery',
+      'an already-flat recordedByOrganisation passes through unchanged, not double-processed'
+    );
+  }
+
   console.log('--- buildChangeNotePayload: defensive against missing fields ---');
   check(
     JSON.stringify(buildChangeNotePayload(null, sameConceptRelabel).flags) === '[]',
