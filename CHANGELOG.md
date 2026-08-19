@@ -4,6 +4,36 @@ All notable changes to Medicus Suite are documented here.
 
 ## [Unreleased]
 
+## [v3.234.2] — 2026-08-19
+
+### Organise appointments canvas (v1)
+
+**Organise on canvas…** on the Medicus appointment book. Columns are
+clinician diaries, tiles are booked patients, gaps are free slots.
+Drag onto another diary's free slot, or onto **Cancel**, to stage;
+**Finalise** writes the ticked list. Arrived tiles are locked.
+
+Writes follow the 2026-08-19 capture on dummy patient Mr Micky Mouse
+(`docs/learnings-appointment-organise-api.md`):
+
+- **Cancel** — `POST /scheduling/appointment/cancel-appointment`
+  (`otherAppointmentIds` always empty; Send-to always off).
+- **Cross-list move** — reserve (3-field body) →
+  `POST /scheduling/slot-reservation/update-slot-reservation`
+  (`rescheduledAppointmentId` set) →
+  `POST /scheduling/appointment/create-appointment`
+  (`context=reschedule-appointment`). Not cancel-then-create.
+- **Same-list move** and **extend** are not offered — those writes
+  were not captured.
+
+New `shared/appointment-organise-core.js` owns the mutate family.
+`shared/booking-core.js` is unchanged. Confirm bar names each patient
+and states that Medicus will not message them. Re-GET the day board
+(+ move form) before each commit; abort that action on version /
+patient / arrived drift. CSN W14/W15; hazard H-061 (pending CSO).
+
+Tests: `test-appointment-organise-core.js`.
+
 ## [v3.234.1] — 2026-08-18
 
 ### Organise-problems canvas — stage then Finalise

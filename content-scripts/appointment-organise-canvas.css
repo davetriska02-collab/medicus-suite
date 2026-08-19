@@ -1,0 +1,333 @@
+/* Organise appointments canvas. Tokens match the problem-canvas light canon. */
+#ms-aoc-launch {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  z-index: 2147482990;
+  padding: 6px 12px;
+  font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #1e3a5f;
+  background: #fff;
+  border: 1px solid #94a3b8;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+}
+
+#ms-aoc-overlay {
+  --bg-deep: #f8fafc;
+  --bg-mid: #f1f5f9;
+  --bg-elev: #ffffff;
+  --border: #cbd5e1;
+  --border-hi: #94a3b8;
+  --text-1: #0f172a;
+  --text-2: #1e3a5f;
+  --text-3: #475569;
+  --accent: #2563eb;
+  --red: #dc2626;
+  --amber: #b45309;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-pill: 999px;
+  --shadow-2: 0 12px 32px rgba(15, 23, 42, 0.28);
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.ms-aoc-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.ms-aoc-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.ms-aoc-panel {
+  background: var(--bg-elev);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  width: min(1280px, 100%);
+  height: min(780px, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--text-1);
+}
+
+.ms-aoc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-mid);
+}
+
+.ms-aoc-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.ms-aoc-close,
+.ms-aoc-cancel,
+.ms-aoc-ghost {
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.ms-aoc-explainer {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-deep);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.ms-aoc-body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+.ms-aoc-board {
+  flex: 1 1 auto;
+  display: flex;
+  overflow: auto;
+  min-height: 0;
+  padding: 10px;
+  gap: 8px;
+}
+
+.ms-aoc-col {
+  flex: 1 0 220px;
+  min-width: 200px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px;
+  overflow: auto;
+}
+
+.ms-aoc-col-heading {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0 0 8px;
+}
+
+.ms-aoc-col-meta {
+  font-size: 11px;
+  color: var(--text-3);
+  margin: -4px 0 8px;
+}
+
+.ms-aoc-bin {
+  flex: 0 0 200px;
+  background: rgba(220, 38, 38, 0.05);
+  border-left: 1px solid var(--border);
+  padding: 10px;
+  overflow: auto;
+}
+
+.ms-aoc-bin-heading {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--red);
+}
+
+.ms-aoc-tile {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px;
+  margin-bottom: 6px;
+  cursor: grab;
+}
+
+.ms-aoc-tile-locked {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.ms-aoc-tile-staged {
+  outline: 1px dashed var(--red);
+  outline-offset: -1px;
+}
+
+.ms-aoc-tile-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ms-aoc-tile-meta,
+.ms-aoc-tile-draft,
+.ms-aoc-hint,
+.ms-aoc-empty,
+.ms-aoc-msg {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.ms-aoc-tile-lock {
+  font-size: 11px;
+  color: var(--amber);
+  margin-top: 4px;
+}
+
+.ms-aoc-slot {
+  min-height: 36px;
+  border: 1px dashed #94a3b8;
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.ms-aoc-drop-hover,
+.ms-aoc-tile-picked {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.ms-aoc-tile-cancel {
+  margin-top: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid var(--red);
+  color: var(--red);
+  background: #fff;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.ms-aoc-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-mid);
+}
+
+.ms-aoc-finalise {
+  padding: 6px 14px;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-aoc-finalise:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ms-aoc-confirmbar {
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+  background: #fff7ed;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.ms-aoc-confirmbar-error {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.ms-aoc-confirmbar-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ms-aoc-confirm-btn {
+  padding: 6px 14px;
+  background: var(--red);
+  color: #fff;
+  border: 0;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ms-aoc-confirm-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ms-aoc-finalise-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.ms-aoc-finalise-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+}
+
+.ms-aoc-finalise-desc {
+  flex: 1 1 auto;
+}
+
+.ms-aoc-finalise-reason {
+  width: 220px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.ms-aoc-error {
+  color: #991b1b;
+  margin-top: 6px;
+}
