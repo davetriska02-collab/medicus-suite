@@ -51,13 +51,20 @@ Writes follow the 2026-08-19 capture on dummy patient Mr Micky Mouse
   fixes: leftover phone list always visible (including nobody to
   phone), remaining-free subtracts incoming run tiles, default
   similar slot is the earliest not the closest clock time.
+  Live-complete on Sunday dummy Mouse (`5ff708b`, 2026-08-19 17:20 BST,
+  no write): leftover phone list always visible at 0 leftovers
+  ("Still needs a phone call — 0 from …" / "Nobody left to phone." /
+  Copy; no NHS numbers); default similar slot **11:00 Unassigned**
+  (earliest 30-min run, not last-15 of a window, not same-list);
+  remaining-free **2** after one 30-min incoming on four 15s.
 
 New `shared/appointment-organise-core.js` owns cancel + move orchestration
 (`update-slot-reservation`, appointment-overview GET). Reserve / create /
 release go through `shared/booking-core.js` — no third copy. Confirm bar names each patient
 and states that Medicus will not message them. Re-GET the day board
 (+ move form) before each commit; abort that action on version /
-patient / arrived drift. CSN W14/W15; hazard H-061 (pending CSO).
+patient / arrived drift. CSN W14/W15/W16; hazard H-061 (pending CSO).
+Sick-day Finalise is W15 (no new endpoint).
 
 Tests: `test-appointment-organise-core.js`.
 

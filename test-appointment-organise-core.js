@@ -1363,6 +1363,151 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const livePrev = core.coverLoadPreview(fourFifteens, liveLike);
     check(livePrev[0].remainingFree === 2, 'one 30-min incoming on four 15-min tiles leaves 2 free, not 4');
     check(livePrev[0].incoming === 1, 'preview still counts the one incoming patient');
+
+    const zeroPhone = core.leftoverPhoneText(happyProp);
+    check(core.sickDayLeftovers(happyProp).length === 0, 'happy path has zero leftover rows');
+    check(/Still needs a phone call/.test(zeroPhone), 'zero-leftover phone list still titles Still needs a phone call');
+    check(/Nobody left to phone/.test(zeroPhone), 'zero-leftover phone list says nobody left to phone');
+    check(!/NHS|nhs number|01970c67/i.test(zeroPhone), 'zero-leftover phone list has no NHS numbers');
+
+    const failedPhone = core.leftoverPhoneText(prop);
+    check(fullLeftovers[0].patientName === mouse.patientName, 'failed-rebook leftover names the patient');
+    check(/14:00/.test(failedPhone), 'failed-rebook copy list keeps the original time');
+    check(/Still needs rebook/.test(failedPhone), 'failed-rebook copy list says why it failed');
+    check(!/NHS|nhs number|01970c67/i.test(failedPhone), 'failed-rebook copy list has no NHS numbers');
+
+    function slot15(start, end) {
+      return {
+        diaryEntryType: { value: 'slot' },
+        startDateTime: '2026-08-23 ' + start,
+        endDateTime: '2026-08-23 ' + end,
+        duration: 15,
+        appointmentType: { id: mouse.appointmentTypeId },
+        defaultDeliveryMode: { value: 'face-to-face' },
+      };
+    }
+    const liveCompleteNp = 'np-sick-1030';
+    const liveCompleteU11 = 'unassigned-11';
+    const liveCompleteU13 = 'unassigned-13';
+    const liveComplete = core.parseBoard({
+      date: '2026-08-23',
+      staffSchedules: [
+        {
+          name: 'A Nurse Practitioner Clinic',
+          id: 'np-staff',
+          schedule: [
+            {
+              scheduleType: 'diary',
+              id: liveCompleteNp,
+              startDateTime: '2026-08-23 10:00:00',
+              endDateTime: '2026-08-23 11:00:00',
+              summary: {
+                status: { isCancelled: false },
+                usualAppointmentDuration: 15,
+                defaultDeliveryMode: { value: 'face-to-face' },
+                defaultAppointmentType: { id: mouse.appointmentTypeId },
+                site: { id: 'witley', name: 'Witley Surgery' },
+                nhsNationalSlotTypeCategoryDefault: { value: '10127' },
+              },
+              entries: [
+                {
+                  id: stretchMouse.id,
+                  versionId: stretchMouse.versionId,
+                  patient: { id: mouse.patientId, name: mouse.patientName },
+                  diaryEntryType: { value: 'appointment' },
+                  appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
+                  startDateTime: '2026-08-23 10:30:00',
+                  endDateTime: '2026-08-23 11:00:00',
+                  duration: 30,
+                  displayStatus: { value: 'booked' },
+                  deliveryMode: { value: 'face-to-face' },
+                  appointmentStatus: { value: 'pending', isCancelled: false, isStarted: false, isSeen: false },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      unassignedDiaries: [
+        {
+          scheduleType: 'diary',
+          id: liveCompleteU11,
+          startDateTime: '2026-08-23 11:00:00',
+          endDateTime: '2026-08-23 12:00:00',
+          summary: {
+            status: { isCancelled: false },
+            usualAppointmentDuration: 15,
+            defaultDeliveryMode: { value: 'face-to-face' },
+            defaultAppointmentType: { id: mouse.appointmentTypeId },
+            site: { id: 'witley', name: 'Witley Surgery' },
+            nhsNationalSlotTypeCategoryDefault: { value: '10127' },
+          },
+          entries: [
+            slot15('11:00:00', '11:15:00'),
+            slot15('11:15:00', '11:30:00'),
+            slot15('11:30:00', '11:45:00'),
+            slot15('11:45:00', '12:00:00'),
+          ],
+        },
+        {
+          scheduleType: 'diary',
+          id: liveCompleteU13,
+          startDateTime: '2026-08-23 13:00:00',
+          endDateTime: '2026-08-23 15:00:00',
+          summary: {
+            status: { isCancelled: false },
+            usualAppointmentDuration: 15,
+            defaultDeliveryMode: { value: 'face-to-face' },
+            defaultAppointmentType: { id: mouse.appointmentTypeId },
+            site: { id: 'witley', name: 'Witley Surgery' },
+            nhsNationalSlotTypeCategoryDefault: { value: '10127' },
+          },
+          entries: [
+            slot15('13:00:00', '13:15:00'),
+            slot15('13:15:00', '13:30:00'),
+            slot15('13:30:00', '13:45:00'),
+            slot15('13:45:00', '14:00:00'),
+            slot15('14:00:00', '14:15:00'),
+            slot15('14:15:00', '14:30:00'),
+            slot15('14:30:00', '14:45:00'),
+            slot15('14:45:00', '15:00:00'),
+          ],
+        },
+      ],
+    });
+    const completeProp = core.proposeSickDay(liveComplete, liveCompleteNp);
+    const completeSug = completeProp.rows[0].suggestion;
+    const completeAlts = completeProp.rows[0].alternatives || [];
+    check(completeSug.startDateTime === '2026-08-23 11:00:00', 'live-complete default is earliest 11:00 Unassigned');
+    check(completeSug.staffName === 'Unassigned', 'live-complete default is the Unassigned covering list');
+    check(
+      completeAlts.some((s) => s.startDateTime === '2026-08-23 11:15:00') &&
+        completeAlts.some((s) => s.startDateTime === '2026-08-23 11:30:00') &&
+        completeAlts.some((s) => s.startDateTime === '2026-08-23 13:00:00'),
+      'live-complete alts include 11:15/11:30 and 13:00 Unassigned'
+    );
+    check(
+      !completeAlts.some((s) => s.startDateTime === '2026-08-23 10:00:00' || s.startDateTime === '2026-08-23 10:30:00'),
+      'live-complete does not offer same-list 10:00/10:30'
+    );
+    check(
+      !completeAlts.some((s) => s.startDateTime === '2026-08-23 11:45:00' || s.startDateTime === '2026-08-23 14:45:00'),
+      'live-complete does not offer the last 15 of a window for a 30-min booking'
+    );
+    const completePrev = core.coverLoadPreview(liveComplete, completeProp);
+    const u11 = completePrev.find((d) => d.diaryId === liveCompleteU11);
+    check(!!u11, 'live-complete preview names Unassigned 11:00-12:00');
+    check(u11.alreadyBooked === 0 && u11.incoming === 1 && u11.afterBooked === 1, 'live-complete 0 already booked + 1 incoming = 1');
+    check(u11.remainingFree === 2, 'live-complete remaining-free is 2 (4x15 minus 30-min incoming), not 4');
+    const completePhone = core.leftoverPhoneText(completeProp);
+    check(core.sickDayLeftovers(completeProp).length === 0, 'live-complete happy path is zero leftovers');
+    check(/Still needs a phone call/.test(completePhone), 'live-complete zero leftover list is still titled');
+    check(/A Nurse Practitioner Clinic/.test(completePhone), 'live-complete zero leftover list names the sick list');
+    check(/Nobody left to phone/.test(completePhone), 'live-complete zero leftover list says nobody left to phone');
+    check(!/NHS|nhs number/i.test(completePhone), 'live-complete leftover list has no NHS numbers');
+    const completeSum = core.summariseDraft(core.applySickDayProposal(core.emptyDraft(), completeProp), liveComplete);
+    check(/Rebooked with Unassigned/.test(completeSum.items[0].text), 'confirm bar names the covering list');
+    check(/will not send a booking message/.test(completeSum.items[0].text), 'confirm bar still says Medicus will not message');
   }
 
   console.log('=== 6. live booking-core is the reserve/create/release copy ===');

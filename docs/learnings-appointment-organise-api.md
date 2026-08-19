@@ -453,3 +453,27 @@ Bugs from that pass (fixed after):
 Failed-rebook leftover rows (name / original time / why) still need a
 live pass that leaves someone on the phone list.
 
+### Live pass — sick-day complete (`5ff708b`, 2026-08-19 17:20 BST)
+
+Reloaded **3.234.2** from `C:\Users\Dave\Desktop\medicus-suite`. Dummy only:
+Mr Micky Mouse / Mick- Eeee / DOB 02 Sep 1924, Sunday **2026-08-23**,
+Send-to Off, nobody else, no weekday, **no Finalise** (UI proof only).
+Status: `C:\Users\Dave\sick-day-complete-status.txt`.
+
+Sick day → A Nurse Practitioner Clinic 10:00–11:00 (Mouse 10:30–11:00
+30 min GP F2F). Cap left at 6.
+
+- **PASS leftover always visible:** "Still needs a phone call — 0 from
+  A Nurse Practitioner Clinic"; hint that a quiet board is not a missing
+  list; row "Nobody left to phone."; Copy phone list. No NHS numbers.
+- **PASS earliest default:** combo default **11:00 Unassigned**. Alts
+  11:00 / 11:15 / 11:30 and 13:00–14:30 Unassigned. Not same-list 10:00,
+  not last-15 of a window (11:45 / 14:45), not closest-clock 10:30.
+- **PASS remaining-free:** "Unassigned 11:00–12:00 — 0 already booked +
+  1 incoming = 1. 2 free tiles left." (4×15 minus 30-min incoming = 2,
+  not 4).
+
+Sick-day on this branch is dummy-complete. Held: Send-to On on a safe
+dummy channel; next-day similar; move-to-queue; telephone on leftover
+rows if a captured GET already has one.
+
