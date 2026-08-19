@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.2] — 2026-08-19
+
+### "Save attachment as document" widget — two live-tested fixes
+
+- **Fixed a 400 error saving any document type reached via search.** Every entry in
+  `rules/document-types.json` (all 1768) carries this extension's own local
+  `docPriority` ranking field, which Medicus's `POST /clinical/document/create`
+  rejects outright (`documentType.docPriority: This field was not expected.`,
+  confirmed via HAR). Only the two hardcoded extension-guess fallbacks happened to be
+  clean, so a save only ever worked when the clinician left the auto-guessed document
+  type untouched — the moment they used search for any reason, on any file type, it
+  failed. New `sanitizeDocumentType` strips the payload to the three fields Medicus
+  actually accepts, at the single choke point the write payload is built.
+- **"Already saved as a document?" cross-check**, so a clinician reopening a triage
+  card doesn't re-offer (and risk duplicating) a document someone already saved —
+  possibly a different clinician, on a different computer, or via Medicus's own
+  native upload. Cross-references the patient's journal (the same bulk endpoint the
+  duplicate-checker already uses) for a document within a ±7-day window of the
+  attachment's date, corroborated by a file-type check. An exact-title-match first
+  cut was live-tested and found to fail on the very case it exists for — the
+  widget's own default title is a meaningless filename, so a real save's title never
+  matches it — so the check is date/file-type only, and surfaces as a non-blocking
+  "⚠ possibly already saved as …" hint next to a still-clickable button, never a
+  disabled/relabelled chip that could block a genuine save on a wrong guess.
+
 ## [v3.236.1] — 2026-08-19
 
 ### Review fixes on the v3.236.0 branch (PR #288)
