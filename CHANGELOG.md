@@ -43,7 +43,10 @@ Writes follow the 2026-08-19 capture on dummy patient Mr Micky Mouse
   covering-list **preview + cap** so one duty GP is not drowned;
   greedy assign so two patients do not get the same slot; skip
   similar slots that are already in the past; confirm bar says
-  **rebooked with Y** even while SMS is off.
+  **rebooked with Y** even while SMS is off. Consecutive 15s for a
+  30-min sick-day rebook live-proven on Sunday dummy Mouse
+  (2026-08-19, `2abf49f`): 10:00 NP 30 min → 11:00–11:30 Unassigned,
+  11:15 consumed, no overlap, SMS off.
 
 New `shared/appointment-organise-core.js` owns cancel + move orchestration
 (`update-slot-reservation`, appointment-overview GET). Reserve / create /

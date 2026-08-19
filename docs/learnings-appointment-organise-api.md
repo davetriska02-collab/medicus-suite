@@ -405,3 +405,34 @@ Held until captured: Send-to On on a safe dummy channel; next-day similar;
 move-to-queue. Ask whether GET appointment-overview / cancel-appointment
 exposes a telephone we can print on the leftover list without writing.
 
+### Live pass — consecutive 15s for a 30-min sick-day rebook (2026-08-19 ~13:50 BST)
+
+Reloaded **3.234.2** (`2abf49f` + `346641a`). Dummy only: Mr Micky Mouse,
+Sunday **2026-08-23**, Send-to Off, nobody else, no weekday list.
+
+Before: NP Clinic 10:00–10:30 Mouse **30 min** GP F2F; Unassigned 11:00–12:00
+and 13:00–15:00 empty (15-min tiles).
+
+Sick day → NP Clinic. Combo default **11:00 Unassigned**. Options included
+11:00 / 11:15 / 11:30 Unassigned and 13:00 / 13:15 / 13:30 Unassigned
+(the previous "Need 30 min; other Sunday lists only have 15-min tiles"
+miss is gone). Staged once. Confirm: Send-to off, only Mouse. Finalise
+once (`Confirm — write 1`).
+
+After board (screenshot `sick-day-retry-after-board.png`):
+
+- Unassigned 11:00–12:00: **Booked 1 patient (30 mins)**. Tile
+  11:00–11:30 Mr Micky Mouse / Mick- Eeee / GP 30 min Face-to-face.
+  Next free **11:30** then 11:45. No 11:15 free. No overlap label.
+- NP Clinic 10:00–11:00 empty (four 15s free).
+- Unassigned 13:00–15:00 empty.
+- Date still Sun 23 Aug 2026. Nobody except Mouse.
+
+Status: `C:\Users\Dave\sick-day-retry-status.txt`. Review shot:
+`sick-day-retry-review.png`.
+
+This live-proves the consecutive-15s match and the captured cross-list
+write at 30 min (reserve still 15, then update). It does **not** live-prove
+the later polish (`4af732e`: leftover phone list, cover cap, confirm
+"rebooked with Y") — that commit was after this reload.
+
