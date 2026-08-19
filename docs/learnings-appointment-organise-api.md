@@ -253,3 +253,75 @@ same-list + cross-list. Move reserve is the captured 3-field POST.
 `update-slot-reservation` is cross-list only. Create/release go through
 `shared/booking-core.js`. Extend stays blocked. Do not tidy or rename
 the byte-for-byte paths.
+
+---
+
+## E — Change type (05) — BLOCKED
+
+Recaptured 2026-08-19 on the same locked dummy (Mr Micky Mouse, Sunday 2026-08-23, appointment `01a018ef-b029-7245-ac45-6f70ecc11929`). Overlay staged drag was Discarded first. Book stayed 14:00 / 15 min. No Save. No POST.
+
+**Edit Details** fields:
+
+| Field | State |
+|---|---|
+| Date/time | display-only `23 Aug 2026, 14:00 (15 mins)` |
+| Reason for appointment | editable |
+| Additional information | editable |
+| Delivery mode | ComboBox, Face-to-face (editable) |
+| Site | display-only Witley Surgery |
+| NHS slot category | ComboBox, General Consultation Routine (editable) |
+| Redacted from patient online access | checkbox Off (editable) |
+| Appointment type | **absent** (shown as `GP Appointment` on View Appointment Details only) |
+| Duration | no standalone control; only the Date/time display text |
+
+Prefill only:
+
+| Method | Path | Status |
+|---|---|---|
+| GET | `/scheduling/data/appointment/appointment-overview/{id}` | 200 |
+| GET | `/scheduling/ui/appointment/appointment-overview.vue` | 200 |
+| GET | `/scheduling/data/appointment/edit-appointment/{id}` | 200 |
+| GET | `/scheduling/ui/appointment/edit-appointment.vue` | 200 |
+
+Vue shell still has `m-edit-form url="/scheduling/appointment/change-appointment"`. Save was not clicked. That path is **not** a captured write.
+
+Raw: `C:\Users\Dave\Desktop\appt-organise-captures\05-edit-type.json`
+
+**Do not use:** a canvas type picker. Native UI has no type control after booking.
+
+---
+
+## F — Change duration / length (06, 07) — BLOCKED
+
+Tried three native paths. None can lengthen 15 to 30 on the same start.
+
+1. **Edit Details** — duration is display-only inside Date/time. No radios. Save not clicked.
+2. **Reschedule** — slot picker only. Chip `GP Appointment 15`. Every slot `for 15 mins`. No 30-min option. Closed, no write.
+   - GET `/scheduling/data/appointment/create-appointment?context=reschedule-appointment&rescheduledAppointmentId={id}`
+   - GET `/scheduling/ui/appointment/create-appointment.vue`
+3. **Move appointment** (same list) — same-diary 15-min slot picker (13:00–13:45, 14:15–14:45). No duration control. Closed, no write.
+   - GET `/scheduling/data/appointment/move-appointment/{id}?moveType=to-same-diary`
+   - GET `/scheduling/ui/appointment/move-appointment.vue`
+
+Raw: `06-edit-duration.json` (blocked note), `07-reschedule-or-move-duration.json` (GET/prefill only).
+
+**Do not use:** `/scheduling/appointment/change-appointment` as a duration API. **Do not** treat create-appointment `duration` on a reschedule as a length-change contract. That field was only captured on book/move at the original 15 minutes.
+
+SMS/email: no Send-to left on. Nobody except Mouse. Book still 14:00 / 15 min Face-to-face.
+
+---
+
+## Canvas UI implication
+
+Do not ship length or appointment-type chips. They would be fake.
+
+The only Edit Details fields that look writable and were not captured as POSTs yet are **reason**, **additional info**, **delivery mode**, **NHS slot category**, and **Redacted**. Capture a Save on Mouse before wiring any of them. Length and type stay greyed: Medicus will not change these after booking. There is **no Edit slot** control.
+
+### Addendum — 14:15 View Appointment Details (same Sunday, same Mouse)
+
+After the same-list move, View Appointment Details at **14:15 (15 mins)**. Top-right Edit is the 14×14 pencil labelled **Edit Details**. Opens **Edit Appointment**. Date/time is a read-only description-list item `23 Aug 2026, 14:15 (15 mins)` — no duration radios, no type combo. Writable: Reason, Additional info, Delivery mode, NHS slot category, Redacted. **Save was not clicked** (it would not change length). More actions on this card: Move appointment, Move to another diary, Move to a queue, Reschedule, Cancel appointment, Patient did not attend, Send booking confirmation. **No Edit slot. No POST.**
+
+---
+
+Operational note (driving bot, not a Medicus contract): AVG "ALLOW APP" did not land and hid the dialog. `cmd` writes to Desktop work; PowerShell Desktop writes still blocked because `fileprotection.paths` still includes Desktop.
+
