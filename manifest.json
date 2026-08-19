@@ -161,6 +161,7 @@
         "rules/allergy-junk-codes.json",
         "rules/allergy-substance-conversion.json",
         "rules/problem-nesting-overrides.json",
+        "shared/booking-core.js",
         "side-panel/modules/sentinel/passport.html"
       ],
       "matches": ["https://*.medicus.health/*"]

@@ -5,12 +5,14 @@
 // dummy patient Mr Micky Mouse, Sunday 2026-08-23). Paths and payload keys are
 // byte-for-byte what chBook recorded. Do not tidy them.
 //
-// booking-core.js stays the create/reserve/release copy used by Slots / W12.
-// This file owns the mutate family only:
+// booking-core.js is the ONE reserve / create-appointment / release copy.
+// This file owns cancel + the reschedule orchestration only:
+//   GET  /scheduling/data/appointment/appointment-overview/{id}
+//   GET  /scheduling/data/appointment/cancel-appointment/{id}
 //   POST /scheduling/appointment/cancel-appointment
+//   GET  /scheduling/data/appointment/move-appointment/{id}?moveType=to-another-diary
 //   POST /scheduling/slot-reservation/update-slot-reservation  (rescheduledAppointmentId set)
-//   POST /scheduling/appointment/create-appointment           (context=reschedule-appointment)
-//   POST /scheduling/slot-reservation/reserve-slot-…          (move-capture body: 3 fields)
+//   then booking-core.reserveSlot → createAppointment(context=reschedule-appointment) → release
 // Same-list move and extend are BLOCKED — no write slug was captured.
 //
 // Dual-mode: module.exports for Node tests, window.AppointmentOrganiseCore
@@ -22,14 +24,11 @@
 
   var PATHS = {
     overview: '/scheduling/data/appointment-book/embedded-overview',
+    appointmentOverview: '/scheduling/data/appointment/appointment-overview/',
     cancelForm: '/scheduling/data/appointment/cancel-appointment/',
     cancelWrite: '/scheduling/appointment/cancel-appointment',
     moveForm: '/scheduling/data/appointment/move-appointment/',
-    reserve: '/scheduling/slot-reservation/reserve-slot-and-broadcast-appointment-booking-in-progress',
     updateReservation: '/scheduling/slot-reservation/update-slot-reservation',
-    createAppointment: '/scheduling/appointment/create-appointment',
-    releaseReservation:
-      '/scheduling/slot-reservation/remove-slot-reservation-and-broadcast-appointment-booking-ended',
   };
 
   // Captured POST /scheduling/appointment/cancel-appointment body (01-cancel.json).
@@ -580,6 +579,36 @@
     return { ok: true, reason: null };
   }
 
+  function verifyOverview(overview, pinned) {
+    pinned = pinned || {};
+    if (!overview) return { ok: false, reason: driftMessage('missing') };
+    if (pinned.appointmentId && overview.appointmentId !== pinned.appointmentId) {
+      return { ok: false, reason: driftMessage('id') };
+    }
+    if (pinned.versionId && overview.versionId !== pinned.versionId) {
+      return { ok: false, reason: driftMessage('version') };
+    }
+    if (pinned.patientId && overview.patientId !== pinned.patientId) {
+      return { ok: false, reason: driftMessage('patient') };
+    }
+    var details = overview.details || {};
+    var display = String((details.displayStatus && details.displayStatus.value) || '').toLowerCase();
+    var st = details.appointmentStatus || {};
+    if (display === 'arrived' || (details.displayStatus && details.displayStatus.isArrived)) {
+      return { ok: false, reason: ARRIVED_LOCKED };
+    }
+    if (st.isStarted || st.isSeen || st.isDidNotAttend) return { ok: false, reason: ARRIVED_LOCKED };
+    if (st.isCancelled || display === 'cancelled') return { ok: false, reason: CANCELLED_EXCLUDED };
+    return { ok: true, reason: null };
+  }
+
+  function requireBooking(booking) {
+    if (!booking || typeof booking.reserveSlot !== 'function' || typeof booking.createAppointment !== 'function') {
+      throw new Error('appointment-organise: booking-core reserve/create/release required');
+    }
+    return booking;
+  }
+
   function verifyMoveForm(form, pinned) {
     pinned = pinned || {};
     var appt = (form && form.appointment) || {};
@@ -638,6 +667,10 @@
       return parseBoard(raw);
     }
 
+    async function fetchAppointmentOverview(appointmentId) {
+      return apiFetch(url(PATHS.appointmentOverview + encodeURIComponent(appointmentId)), {}, fetchImpl);
+    }
+
     async function fetchCancelForm(appointmentId) {
       return apiFetch(url(PATHS.cancelForm + encodeURIComponent(appointmentId)), {}, fetchImpl);
     }
@@ -665,18 +698,6 @@
       );
     }
 
-    async function reserveForReschedule(payload) {
-      return apiFetch(
-        url(PATHS.reserve),
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        },
-        fetchImpl
-      );
-    }
-
     async function updateSlotReservation(payload) {
       return apiFetch(
         url(PATHS.updateReservation),
@@ -687,37 +708,6 @@
         },
         fetchImpl
       );
-    }
-
-    async function createRescheduleAppointment(payload) {
-      if (!payload || !payload.patientId) {
-        throw new Error('appointment-organise: explicit patientId required');
-      }
-      return apiFetch(
-        url(PATHS.createAppointment),
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        },
-        fetchImpl
-      );
-    }
-
-    async function releaseReservation(slotReservationId) {
-      if (!slotReservationId) return;
-      try {
-        await apiFetch(
-          url(PATHS.releaseReservation),
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ slotReservationId: slotReservationId }),
-            keepalive: true,
-          },
-          fetchImpl
-        );
-      } catch (_) {}
     }
 
     async function commitCancel(opts) {
@@ -734,6 +724,13 @@
         Object.assign({ patientId: opts.patientId, appointmentId: opts.appointmentId }, pinned)
       );
       if (!check.ok) throw new Error(check.reason);
+      var overview = await fetchAppointmentOverview(opts.appointmentId);
+      var ovCheck = verifyOverview(overview, {
+        patientId: opts.patientId,
+        appointmentId: opts.appointmentId,
+        versionId: pinned.versionId,
+      });
+      if (!ovCheck.ok) throw new Error(ovCheck.reason);
       var form = await fetchCancelForm(opts.appointmentId);
       if (form && form.targetAppointmentId && form.targetAppointmentId !== opts.appointmentId) {
         throw new Error(driftMessage('id'));
@@ -750,11 +747,12 @@
       if (!appointment || !appointment.patientId) {
         throw new Error('appointment-organise: explicit patientId required');
       }
+      var gate = canStageMove(appointment, target);
+      if (!gate.ok) throw new Error(gate.reason);
+      requireBooking(deps.booking);
       if (pinned.apiBase && pinned.apiBase !== apiBase) {
         throw new Error(driftMessage('site'));
       }
-      var gate = canStageMove(appointment, target);
-      if (!gate.ok) throw new Error(gate.reason);
       var board = await fetchBoard(opts.date);
       var live = findAppointment(board, appointment.id);
       var boardCheck = verifyAgainstBoard(live, {
@@ -770,16 +768,16 @@
         versionId: appointment.versionId,
       });
       if (!formCheck.ok) throw new Error(formCheck.reason);
+      var booking = requireBooking(deps.booking);
       var reserveDuration = Number(target.reserveDuration) || Number(target.duration) || appointment.duration;
       var reservationId = null;
       try {
-        var reserved = await reserveForReschedule(
-          buildReserveReschedulePayload({
-            diaryId: target.diaryId,
-            startDateTime: target.startDateTime,
-            intendedDuration: reserveDuration,
-          })
-        );
+        var reserved = await booking.reserveSlot(apiBase, {
+          diaryId: target.diaryId,
+          startDateTime: target.startDateTime,
+          duration: reserveDuration,
+          appointmentTypeId: appointment.appointmentTypeId,
+        });
         reservationId = reserved && reserved.slotReservationId;
         if (!reservationId) throw new Error('appointment-organise: reserve returned no slotReservationId');
         await updateSlotReservation(
@@ -791,7 +789,8 @@
             intendedDuration: appointment.duration,
           })
         );
-        return await createRescheduleAppointment(
+        return await booking.createAppointment(
+          apiBase,
           buildRescheduleCreatePayload({
             patientId: appointment.patientId,
             appointmentId: appointment.id,
@@ -808,20 +807,20 @@
           })
         );
       } catch (err) {
-        if (reservationId) await releaseReservation(reservationId);
+        if (reservationId && typeof booking.releaseReservation === 'function') {
+          await booking.releaseReservation(apiBase, reservationId);
+        }
         throw err;
       }
     }
 
     return {
       fetchBoard: fetchBoard,
+      fetchAppointmentOverview: fetchAppointmentOverview,
       fetchCancelForm: fetchCancelForm,
       fetchMoveForm: fetchMoveForm,
       cancelAppointment: cancelAppointment,
-      reserveForReschedule: reserveForReschedule,
       updateSlotReservation: updateSlotReservation,
-      createRescheduleAppointment: createRescheduleAppointment,
-      releaseReservation: releaseReservation,
       commitCancel: commitCancel,
       commitMove: commitMove,
     };
@@ -861,6 +860,7 @@
     buildUpdateReservationPayload: buildUpdateReservationPayload,
     buildRescheduleCreatePayload: buildRescheduleCreatePayload,
     verifyAgainstBoard: verifyAgainstBoard,
+    verifyOverview: verifyOverview,
     verifyMoveForm: verifyMoveForm,
     keysOf: keysOf,
     createClient: createClient,

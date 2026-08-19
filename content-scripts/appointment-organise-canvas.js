@@ -39,6 +39,8 @@
   var _loading = false;
   var _drag = null;
   var _open = false;
+  var _booking = null;
+  var _bookingWait = null;
 
   function announce(text) {
     var live = document.querySelector('#' + OVERLAY_ID + ' .ms-aoc-live');
@@ -49,9 +51,29 @@
     return C.parseBookRoute(location.pathname, location.search);
   }
 
+  function ensureBooking() {
+    if (_booking) return Promise.resolve(_booking);
+    if (_bookingWait) return _bookingWait;
+    if (window.BookingCore) {
+      _booking = window.BookingCore;
+      return Promise.resolve(_booking);
+    }
+    _bookingWait = import(chrome.runtime.getURL('shared/booking-core.js'))
+      .then(function (mod) {
+        _booking = mod.default || mod;
+        return _booking;
+      })
+      .catch(function (err) {
+        _bookingWait = null;
+        throw err;
+      });
+    return _bookingWait;
+  }
+
   function client() {
     if (!_route) throw new Error('appointment-organise: no book route');
-    return C.createClient(_route.apiBase);
+    if (!_booking) throw new Error('appointment-organise: booking-core reserve/create/release required');
+    return C.createClient(_route.apiBase, { booking: _booking });
   }
 
   async function loadBoard() {
@@ -59,6 +81,7 @@
     _error = null;
     render();
     try {
+      await ensureBooking();
       _board = await client().fetchBoard(_route.date);
     } catch (err) {
       _error = err && err.message ? err.message : 'Could not read the appointment book.';

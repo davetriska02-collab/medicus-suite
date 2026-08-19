@@ -337,6 +337,18 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
   {
     const f = recordingFetch((url) => {
       if (url.includes('embedded-overview')) return mockResponse(200, sampleRaw());
+      if (url.includes('/data/appointment/appointment-overview/')) {
+        return mockResponse(200, {
+          appointmentId: mouse.id,
+          versionId: mouse.versionId,
+          patientId: mouse.patientId,
+          diaryId: mouse.diaryId,
+          details: {
+            appointmentStatus: { value: 'pending', isCancelled: false, isStarted: false, isSeen: false },
+            displayStatus: { value: 'booked', isArrived: false },
+          },
+        });
+      }
       if (url.includes('/data/appointment/cancel-appointment/')) {
         return mockResponse(200, { targetAppointmentId: mouse.id, otherAppointmentIds: ['weekday-live'] });
       }
@@ -351,6 +363,10 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       reason: 'SUITE TEST delete dummy Sunday booking',
       pinned: { apiBase: API, patientId: mouse.patientId, appointmentId: mouse.id, versionId: mouse.versionId },
     });
+    check(
+      f.calls.some((c) => c.url === API + '/scheduling/data/appointment/appointment-overview/' + mouse.id),
+      'cancel re-GETs appointment-overview'
+    );
     const write = f.calls.find((c) => c.opts.method === 'POST');
     check(
       write.url === API + '/scheduling/appointment/cancel-appointment',
@@ -406,6 +422,24 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
 
   console.log('=== 5. commit move — captured sequence, drift, release on fail ===');
 
+  function recordingBooking() {
+    const calls = [];
+    return {
+      calls: calls,
+      reserveSlot: async (apiBase, args) => {
+        calls.push({ fn: 'reserveSlot', apiBase: apiBase, args: args });
+        return { slotReservationId: '01a018e1-9543-73c5-a073-799c14a50cb9' };
+      },
+      createAppointment: async (apiBase, payload) => {
+        calls.push({ fn: 'createAppointment', apiBase: apiBase, payload: payload });
+        return { appointmentId: '01a018e2-04b1-72dd-a9c4-fdf551f98b4c' };
+      },
+      releaseReservation: async (apiBase, id) => {
+        calls.push({ fn: 'releaseReservation', apiBase: apiBase, id: id });
+      },
+    };
+  }
+
   {
     const f = recordingFetch((url) => {
       if (url.includes('embedded-overview')) return mockResponse(200, sampleRaw());
@@ -420,16 +454,11 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
           },
         });
       }
-      if (url.includes('reserve-slot-and-broadcast')) {
-        return mockResponse(200, { slotReservationId: '01a018e1-9543-73c5-a073-799c14a50cb9' });
-      }
       if (url.includes('update-slot-reservation')) return mockResponse(200, {});
-      if (url.includes('/appointment/create-appointment')) {
-        return mockResponse(200, { appointmentId: '01a018e2-04b1-72dd-a9c4-fdf551f98b4c' });
-      }
       return mockResponse(200, {});
     });
-    const client = core.createClient(API, { fetchImpl: f });
+    const booking = recordingBooking();
+    const client = core.createClient(API, { fetchImpl: f, booking: booking });
     const res = await client.commitMove({
       date: '2026-08-23',
       appointment: mouse,
@@ -437,24 +466,22 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       pinned: { apiBase: API },
     });
     check(res.appointmentId === '01a018e2-04b1-72dd-a9c4-fdf551f98b4c', 'move returns the new appointment id');
+    check(res.appointmentId !== mouse.id, 'new appointment id after move differs from source');
+    check(booking.calls[0].fn === 'reserveSlot', 'move reserve goes through booking-core.reserveSlot');
+    check(booking.calls[0].args.diaryId === otherDiary, 'reserveSlot diaryId is the target diary');
+    check(booking.calls[0].args.duration === 15, 'reserveSlot duration is the target diary usual');
+    check(booking.calls[1].fn === 'createAppointment', 'create goes through booking-core.createAppointment');
+    const created = booking.calls[1].payload;
+    check(created.context === 'reschedule-appointment', 'create context=reschedule-appointment');
+    check(created.rescheduledAppointmentVersionId === mouse.versionId, 'create sends the pinned version id');
+    check(created.bookingConfirmationRecipients.length === 0, 'create does not invent Send-to');
     const posts = f.calls.filter((c) => c.opts.method === 'POST').map((c) => c.url.replace(API, ''));
-    check(
-      posts[0] === '/scheduling/slot-reservation/reserve-slot-and-broadcast-appointment-booking-in-progress',
-      'move POST 1 = reserve'
-    );
-    check(posts[1] === '/scheduling/slot-reservation/update-slot-reservation', 'move POST 2 = update-slot-reservation');
-    check(posts[2] === '/scheduling/appointment/create-appointment', 'move POST 3 = create-appointment');
+    check(posts.length === 1 && posts[0] === '/scheduling/slot-reservation/update-slot-reservation', 'organise-core POSTs only update-slot-reservation');
     check(!posts.some((p) => /move-appointment$/.test(p)), 'no POST …/move-appointment exists');
     check(!posts.some((p) => /cancel-appointment$/.test(p)), 'cross-list move is not cancel+create');
-    const reserveBody = JSON.parse(f.calls.find((c) => c.url.includes('reserve-slot')).opts.body);
-    check(JSON.stringify(Object.keys(reserveBody)) === JSON.stringify(core.RESERVE_RESCHEDULE_KEYS), 'reserve body 3 keys');
-    check(reserveBody.intendedDuration === 15, 'reserve uses the target diary usual duration');
     const upd = JSON.parse(f.calls.find((c) => c.url.includes('update-slot-reservation')).opts.body);
     check(upd.intendedDuration === 60, 'update-slot-reservation uses the appointment duration');
     check(upd.rescheduledAppointmentId === mouse.id, 'update-slot-reservation sets rescheduledAppointmentId');
-    const created = JSON.parse(f.calls.find((c) => c.url.includes('/appointment/create-appointment')).opts.body);
-    check(created.context === 'reschedule-appointment', 'create context=reschedule-appointment');
-    check(created.rescheduledAppointmentVersionId === mouse.versionId, 'create sends the pinned version id');
   }
 
   {
@@ -465,7 +492,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       if (url.includes('embedded-overview')) return mockResponse(200, raw);
       return mockResponse(200, {});
     });
-    const client = core.createClient(API, { fetchImpl: f });
+    const client = core.createClient(API, { fetchImpl: f, booking: recordingBooking() });
     await expectReject(
       () =>
         client.commitMove({
@@ -490,13 +517,11 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
           appointment: { id: mouse.id, versionId: mouse.versionId, patient: { id: mouse.patientId } },
         });
       }
-      if (url.includes('reserve-slot-and-broadcast')) {
-        return mockResponse(200, { slotReservationId: 'res-fail' });
-      }
       if (url.includes('update-slot-reservation')) return mockResponse(500, { error: 'nope' });
       return mockResponse(200, {});
     });
-    const client = core.createClient(API, { fetchImpl: f });
+    const booking = recordingBooking();
+    const client = core.createClient(API, { fetchImpl: f, booking: booking });
     await expectReject(
       () =>
         client.commitMove({
@@ -507,9 +532,25 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       'HTTP 500',
       'move surfaces update failure'
     );
-    const release = f.calls.find((c) => c.url.includes('remove-slot-reservation'));
-    check(!!release, 'failed move releases the reservation');
-    check(release && release.opts.keepalive === true, 'release uses keepalive');
+    check(
+      booking.calls.some((c) => c.fn === 'releaseReservation' && c.id === '01a018e1-9543-73c5-a073-799c14a50cb9'),
+      'failed move releases via booking-core.releaseReservation'
+    );
+  }
+
+  {
+    const f = recordingFetch(() => mockResponse(200, sampleRaw()));
+    const client = core.createClient(API, { fetchImpl: f });
+    await expectReject(
+      () =>
+        client.commitMove({
+          date: '2026-08-23',
+          appointment: mouse,
+          target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
+        }),
+      'booking-core reserve/create/release required',
+      'commitMove refuses to invent a third reserve/create copy'
+    );
   }
 
   {
@@ -526,6 +567,51 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       'commitMove refuses same-list even if the UI asked'
     );
     check(f.calls.length === 0, 'same-list refusal is before any fetch');
+  }
+
+  console.log('=== 6. live booking-core is the reserve/create/release copy ===');
+  {
+    const booking = await import(new URL('./shared/booking-core.js', `file://${process.cwd()}/`).href);
+    const prevFetch = global.fetch;
+    const f = recordingFetch((url) => {
+      if (url.includes('embedded-overview')) return mockResponse(200, sampleRaw());
+      if (url.includes('/data/appointment/move-appointment/')) {
+        return mockResponse(200, {
+          appointment: { id: mouse.id, versionId: mouse.versionId, patient: { id: mouse.patientId } },
+        });
+      }
+      if (url.includes('reserve-slot-and-broadcast')) {
+        return mockResponse(200, { slotReservationId: 'live-res' });
+      }
+      if (url.includes('update-slot-reservation')) return mockResponse(200, {});
+      if (url.includes('/appointment/create-appointment')) {
+        return mockResponse(200, { appointmentId: '01a018e2-04b1-72dd-a9c4-fdf551f98b4c' });
+      }
+      if (url.includes('remove-slot-reservation')) return mockResponse(200, {});
+      return mockResponse(200, {});
+    });
+    global.fetch = f;
+    try {
+      const client = core.createClient(API, { fetchImpl: f, booking: booking });
+      const res = await client.commitMove({
+        date: '2026-08-23',
+        appointment: mouse,
+        target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
+      });
+      check(res.appointmentId === '01a018e2-04b1-72dd-a9c4-fdf551f98b4c', 'live booking-core create returns the new id');
+      check(
+        f.calls.some((c) => String(c.url).includes('reserve-slot-and-broadcast-appointment-booking-in-progress')),
+        'booking-core.reserveSlot hit the captured reserve path'
+      );
+      const createdCall = f.calls.find((c) => String(c.url).endsWith('/scheduling/appointment/create-appointment'));
+      check(!!createdCall, 'booking-core.createAppointment hit /scheduling/appointment/create-appointment');
+      check(
+        JSON.parse(createdCall.opts.body).context === 'reschedule-appointment',
+        'live booking-core posted the reschedule payload, not create-booked-appointment'
+      );
+    } finally {
+      global.fetch = prevFetch;
+    }
   }
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed');

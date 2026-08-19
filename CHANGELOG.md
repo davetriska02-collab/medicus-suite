@@ -26,8 +26,9 @@ Writes follow the 2026-08-19 capture on dummy patient Mr Micky Mouse
 - **Same-list move** and **extend** are not offered — those writes
   were not captured.
 
-New `shared/appointment-organise-core.js` owns the mutate family.
-`shared/booking-core.js` is unchanged. Confirm bar names each patient
+New `shared/appointment-organise-core.js` owns cancel + move orchestration
+(`update-slot-reservation`, appointment-overview GET). Reserve / create /
+release go through `shared/booking-core.js` — no third copy. Confirm bar names each patient
 and states that Medicus will not message them. Re-GET the day board
 (+ move form) before each commit; abort that action on version /
 patient / arrived drift. CSN W14/W15; hazard H-061 (pending CSO).

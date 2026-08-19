@@ -200,6 +200,7 @@ On **View Appointment Details**:
 
 v1 shipped on branch `appointment-organise-v1` (suite v3.234.2):
 `shared/appointment-organise-core.js` + appointment-book canvas.
-Cancel + cross-list reschedule only. Leave same-list move and extend
+Cancel + cross-list reschedule only. Reserve / create / release go
+through `shared/booking-core.js`. Leave same-list move and extend
 as **blocked / needs a second dummy capture** until those writes are
 seen. Do not tidy or rename the byte-for-byte paths.
