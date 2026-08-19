@@ -1091,6 +1091,29 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const applied = core.applySickDayProposal(core.emptyDraft(), core.proposeSickDay(happy, sickDiary));
     check(applied.moveIds.join() === stretchMouse.id, 'accept stages a cross-list move');
     check(applied.moves[stretchMouse.id].diaryId === coverDiary, 'staged dest is the cover diary');
+    const applied30 = core.applySickDayProposal(
+      core.emptyDraft(),
+      core.proposeSickDay(
+        Object.assign(twoFifteens, {}),
+        sickDiary
+      )
+    );
+    const mouse30onBoard = Object.assign({}, core.findAppointment(twoFifteens, stretchMouse.id), {
+      duration: 30,
+      endDateTime: '2026-08-23 14:30:00',
+    });
+    const prop30 = {
+      rows: [
+        {
+          status: 'accept',
+          appointment: mouse30onBoard,
+          suggestion: run.suggestion,
+        },
+      ],
+    };
+    const staged30 = core.applySickDayProposal(core.emptyDraft(), prop30);
+    check(staged30.moves[mouse30onBoard.id].reserveDuration === 15, 'staged 30-min run keeps reserveDuration 15');
+    check(staged30.moves[mouse30onBoard.id].duration === undefined || staged30.moves[mouse30onBoard.id].startDateTime === run.suggestion.startDateTime, 'staged run keeps the start of the first 15-min tile');
     const left = core.applySickDayProposal(core.emptyDraft(), prop);
     check(left.moveIds.length === 0, 'leave rows are not staged and not written');
   }

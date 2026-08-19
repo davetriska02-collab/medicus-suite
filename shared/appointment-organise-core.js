@@ -763,7 +763,7 @@
       diaryId: target.diaryId,
       startDateTime: target.startDateTime,
       staffName: target.staffName || '',
-      reserveDuration: Number(target.duration) || 0,
+      reserveDuration: Number(target.reserveDuration) || Number(target.duration) || 0,
       included: true,
     };
     return next;
