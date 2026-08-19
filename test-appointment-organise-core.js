@@ -557,6 +557,47 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
   }
 
   {
+    check(core.moveDuration({ duration: 15 }) === 15, 'moveDuration keeps 15');
+    let threw = false;
+    try {
+      core.moveDuration({ duration: 0 });
+    } catch (e) {
+      threw = /keep the booking length/.test(e.message);
+    }
+    check(threw, 'moveDuration refuses a zero length (TEST A overlap path)');
+    const f = recordingFetch((url) => {
+      if (url.includes('embedded-overview')) return mockResponse(200, sampleRaw());
+      if (url.includes('/data/appointment/move-appointment/')) {
+        return mockResponse(200, {
+          appointment: { id: mouse.id, versionId: mouse.versionId, patient: { id: mouse.patientId } },
+        });
+      }
+      if (url.includes('reserve-slot-and-broadcast')) {
+        return mockResponse(200, { slotReservationId: 'res-30' });
+      }
+      if (url.includes('update-slot-reservation')) return mockResponse(200, {});
+      return mockResponse(200, {});
+    });
+    const booking = recordingBooking();
+    const client = core.createClient(API, { fetchImpl: f, booking: booking });
+    await client.commitMove({
+      date: '2026-08-23',
+      appointment: mouse,
+      target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 30 },
+    });
+    check(
+      booking.calls[0].payload.intendedDuration === 60,
+      'dropping onto a 30-min gap still creates at the source 60 min (TEST A must not lengthen)'
+    );
+    check(
+      !f.calls.some((c) => c.url.includes('cancel-appointment')),
+      'move is not cancel-then-create (TEST A)'
+    );
+    const upd = JSON.parse(f.calls.find((c) => c.url.includes('update-slot-reservation')).opts.body);
+    check(upd.intendedDuration === 60, 'cross-list update-slot-reservation keeps 60, not the 30-min gap');
+  }
+
+  {
     const raw = sampleRaw();
     raw.staffSchedules[0].schedule[0].entries[0].displayStatus = { value: 'arrived' };
     raw.staffSchedules[0].schedule[0].entries[0].arrivedDateTime = '2026-08-23 10:02:00';

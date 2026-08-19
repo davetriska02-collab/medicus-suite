@@ -307,13 +307,29 @@ Raw: `06-edit-duration.json` (blocked note), `07-reschedule-or-move-duration.jso
 
 **Do not use:** `/scheduling/appointment/change-appointment` as a duration API. **Do not** treat create-appointment `duration` on a reschedule as a length-change contract. That field was only captured on book/move at the original 15 minutes.
 
+---
+
+## G — TEST A (cancel + update-reservation 30 + create 30) — REJECTED
+
+Tried to lengthen a 15-min booking by:
+
+1. `POST /scheduling/appointment/cancel-appointment` — reason `Snooze`, `cancellationConfirmationRecipients: []`
+2. `POST /scheduling/slot-reservation/update-slot-reservation` — `intendedDuration: 30`, `allowOverlappingAppointments: "allow"`
+3. `POST /scheduling/appointment/create-appointment` — duration 30
+
+A 30-min option **was offered**. SMS off. Neighbour at **14:15 stayed 15 min**. Both tiles then showed **Overlapping Appointment**.
+
+That is not an extend. It is a new 30-min booking overlapping the next patient. The organise canvas must not do this: never cancel-then-create to change length; a move keeps the source `intendedDuration`.
+
 SMS/email: no Send-to left on. Nobody except Mouse. Book still 14:00 / 15 min Face-to-face.
 
 ---
 
 ## Canvas UI implication
 
-Do not ship length or appointment-type chips. They would be fake.
+Do not ship length or appointment-type chips. They would be fake. Do not
+offer a 30-min drop that cancels and rebooks: TEST A overlapped the
+14:15 neighbour.
 
 The only Edit Details fields that look writable and were not captured as POSTs yet are **reason**, **additional info**, **delivery mode**, **NHS slot category**, and **Redacted**. Capture a Save on Mouse before wiring any of them. Length and type stay greyed: Medicus will not change these after booking. There is **no Edit slot** control.
 

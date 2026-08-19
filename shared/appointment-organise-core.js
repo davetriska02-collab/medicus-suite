@@ -84,6 +84,8 @@
 
   var EXTEND_BLOCKED = 'Extend is not in the captured contract (no duration write).';
   var SAME_SLOT = 'Drop onto a different free slot.';
+  var DURATION_LOCKED =
+    'Move must keep the booking length. Cancel-then-create at 30 min overlapped the neighbour (TEST A).';
   var ARRIVED_LOCKED = 'Arrived / in-progress appointments cannot be organised from this board.';
   var CANCELLED_EXCLUDED = 'Cancelled appointments are excluded from the board.';
 
@@ -295,6 +297,12 @@
 
   function isCrossListMove(appointment, target) {
     return !!(appointment && target && target.diaryId && target.diaryId !== appointment.diaryId);
+  }
+
+  function moveDuration(appointment) {
+    var n = Number(appointment && appointment.duration);
+    if (!Number.isFinite(n) || n <= 0) throw new Error(DURATION_LOCKED);
+    return n;
   }
 
   function canStageCancel(appointment) {
@@ -793,7 +801,8 @@
       });
       if (!formCheck.ok) throw new Error(formCheck.reason);
       var booking = requireBooking(deps.booking);
-      var reserveDuration = Number(target.reserveDuration) || Number(target.duration) || appointment.duration;
+      var keepDuration = moveDuration(appointment);
+      var reserveDuration = Number(target.reserveDuration) || Number(target.duration) || keepDuration;
       var reservationId = null;
       try {
         var reserved = await reserveForMove(
@@ -812,7 +821,7 @@
               diaryId: target.diaryId,
               appointmentId: appointment.id,
               startDateTime: target.startDateTime,
-              intendedDuration: appointment.duration,
+              intendedDuration: keepDuration,
             })
           );
         }
@@ -825,7 +834,7 @@
             slotReservationId: reservationId,
             diaryId: target.diaryId,
             startDateTime: target.startDateTime,
-            intendedDuration: appointment.duration,
+            intendedDuration: keepDuration,
             deliveryMode: appointment.deliveryMode,
             nhsNationalSlotTypeCategory: appointment.nhsNationalSlotTypeCategory,
             reasonForAppointment: appointment.reason || null,
@@ -867,7 +876,9 @@
     UPDATE_RESERVATION_KEYS: UPDATE_RESERVATION_KEYS,
     RESCHEDULE_CREATE_KEYS: RESCHEDULE_CREATE_KEYS,
     EXTEND_BLOCKED: EXTEND_BLOCKED,
+    DURATION_LOCKED: DURATION_LOCKED,
     SAME_SLOT: SAME_SLOT,
+    moveDuration: moveDuration,
     moveTypeFor: moveTypeFor,
     isCrossListMove: isCrossListMove,
     ARRIVED_LOCKED: ARRIVED_LOCKED,
