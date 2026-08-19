@@ -55,6 +55,43 @@
     'allowOverlappingAppointments',
   ];
 
+  // Stretch update-slot-reservation (Test B) minus allowOverlappingAppointments.
+  var STRETCH_UPDATE_KEYS = [
+    'slotReservationId',
+    'diaryId',
+    'rescheduledAppointmentId',
+    'intendedStartDateTime',
+    'intendedDuration',
+  ];
+
+  // Stretch create-appointment (Test B) is create-booked-appointment, not reschedule.
+  // allowOverlappingAppointments is omitted — Test A overlapped the neighbour when it was "allow".
+  var STRETCH_CREATE_KEYS = [
+    'context',
+    'appointmentTemporalType',
+    'appointmentTypeId',
+    'patientId',
+    'deliveryMode',
+    'intendedDuration',
+    'diaryId',
+    'isHighPriority',
+    'isHiddenFromPatientFacingServices',
+    'intendedStartDateTime',
+    'reasonForAppointment',
+    'additionalInformation',
+    'embargoOverrideReason',
+    'slotReservationId',
+    'nhsNationalSlotTypeCategory',
+    'gpadReportingExceptionReasons',
+    'clinicalCaseId',
+    'bookingConfirmationRecipients',
+    'followingSlotConvertToBreak',
+    'followingSlotNewAppointmentTypeId',
+    'followingSlotStartDateTime',
+    'followingSlotEndDateTime',
+    'rescheduledAppointmentVersionId',
+  ];
+
   // Captured POST create-appointment with context=reschedule-appointment.
   // Not the booking-core create-booked-appointment key list.
   var RESCHEDULE_CREATE_KEYS = [
@@ -86,6 +123,10 @@
   var SAME_SLOT = 'Drop onto a different free slot.';
   var DURATION_LOCKED =
     'Move must keep the booking length. Cancel-then-create at 30 min overlapped the neighbour (TEST A).';
+  var STRETCH_NEIGHBOUR_BOOKED =
+    'Cannot stretch: the following slot is booked. Snap back — nothing staged.';
+  var STRETCH_CANCEL_REASON = 'Stretched on organise canvas';
+  var STRETCH_STEP_MINUTES = 15;
   var ARRIVED_LOCKED = 'Arrived / in-progress appointments cannot be organised from this board.';
   var CANCELLED_EXCLUDED = 'Cancelled appointments are excluded from the board.';
 
@@ -262,7 +303,7 @@
   }
 
   function emptyDraft() {
-    return { cancelIds: [], cancels: {}, moveIds: [], moves: {} };
+    return { cancelIds: [], cancels: {}, moveIds: [], moves: {}, stretchIds: [], stretches: {} };
   }
 
   function cloneDraft(draft) {
@@ -272,11 +313,18 @@
       cancels: JSON.parse(JSON.stringify(src.cancels || {})),
       moveIds: (src.moveIds || []).slice(),
       moves: JSON.parse(JSON.stringify(src.moves || {})),
+      stretchIds: (src.stretchIds || []).slice(),
+      stretches: JSON.parse(JSON.stringify(src.stretches || {})),
     };
   }
 
   function hasDraftChanges(draft) {
-    return !!(draft && ((draft.cancelIds && draft.cancelIds.length) || (draft.moveIds && draft.moveIds.length)));
+    return !!(
+      draft &&
+      ((draft.cancelIds && draft.cancelIds.length) ||
+        (draft.moveIds && draft.moveIds.length) ||
+        (draft.stretchIds && draft.stretchIds.length))
+    );
   }
 
   function canStageMove(appointment, target) {
@@ -305,6 +353,94 @@
     return n;
   }
 
+  function parseDt(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(String(s || ''));
+    if (!m) return null;
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6] || 0));
+  }
+
+  function formatDt(d) {
+    return (
+      d.getFullYear() +
+      '-' +
+      pad(d.getMonth() + 1) +
+      '-' +
+      pad(d.getDate()) +
+      ' ' +
+      pad(d.getHours()) +
+      ':' +
+      pad(d.getMinutes()) +
+      ':' +
+      pad(d.getSeconds())
+    );
+  }
+
+  function addMinutes(s, mins) {
+    var d = parseDt(s);
+    if (!d) return s;
+    d.setMinutes(d.getMinutes() + Number(mins) || 0);
+    return formatDt(d);
+  }
+
+  function intervalOverlaps(aStart, aEnd, bStart, bEnd) {
+    var a0 = parseDt(aStart);
+    var a1 = parseDt(aEnd);
+    var b0 = parseDt(bStart);
+    var b1 = parseDt(bEnd);
+    if (!a0 || !a1 || !b0 || !b1) return false;
+    return a0 < b1 && b0 < a1;
+  }
+
+  function findColumn(board, diaryId) {
+    var cols = (board && board.columns) || [];
+    for (var i = 0; i < cols.length; i++) {
+      if (cols[i].diaryId === diaryId) return cols[i];
+    }
+    return null;
+  }
+
+  function followingSlotsFree(board, appointment, newDuration) {
+    if (!appointment || !board) return false;
+    var keep = Number(appointment.duration);
+    var next = Number(newDuration);
+    if (!Number.isFinite(keep) || !Number.isFinite(next) || next <= keep) return false;
+    var start = appointment.startDateTime;
+    var extraStart = appointment.endDateTime || addMinutes(start, keep);
+    var extraEnd = addMinutes(start, next);
+    var col = findColumn(board, appointment.diaryId);
+    if (col && col.sessionEnd) {
+      var sessEnd = parseDt(col.sessionEnd);
+      var winEnd = parseDt(extraEnd);
+      if (sessEnd && winEnd && winEnd > sessEnd) return false;
+    }
+    var others = allAppointments(board).filter(function (a) {
+      return a && a.diaryId === appointment.diaryId && a.id !== appointment.id;
+    });
+    for (var i = 0; i < others.length; i++) {
+      var o = others[i];
+      var oEnd = o.endDateTime || addMinutes(o.startDateTime, o.duration || 0);
+      if (intervalOverlaps(extraStart, extraEnd, o.startDateTime, oEnd)) return false;
+    }
+    return true;
+  }
+
+  function canStageStretch(appointment, newDuration, board) {
+    if (!appointment || !appointment.id) return { ok: false, reason: 'Missing appointment.' };
+    if (appointment.locked || appointment.arrived) return { ok: false, reason: ARRIVED_LOCKED };
+    var next = Number(newDuration);
+    var keep = Number(appointment.duration);
+    if (!Number.isFinite(next) || !Number.isFinite(keep) || next <= keep) {
+      return { ok: false, reason: STRETCH_NEIGHBOUR_BOOKED };
+    }
+    if ((next - keep) % STRETCH_STEP_MINUTES !== 0) {
+      return { ok: false, reason: STRETCH_NEIGHBOUR_BOOKED };
+    }
+    if (!followingSlotsFree(board, appointment, next)) {
+      return { ok: false, reason: STRETCH_NEIGHBOUR_BOOKED };
+    }
+    return { ok: true, reason: null };
+  }
+
   function canStageCancel(appointment) {
     if (!appointment || !appointment.id) return { ok: false, reason: 'Missing appointment.' };
     if (appointment.locked || appointment.arrived) return { ok: false, reason: ARRIVED_LOCKED };
@@ -318,6 +454,10 @@
       return id !== appointmentId;
     });
     delete next.moves[appointmentId];
+    next.stretchIds = (next.stretchIds || []).filter(function (id) {
+      return id !== appointmentId;
+    });
+    delete next.stretches[appointmentId];
     if (next.cancelIds.indexOf(appointmentId) === -1) next.cancelIds.push(appointmentId);
     if (!next.cancels[appointmentId]) {
       next.cancels[appointmentId] = { reason: '', included: true };
@@ -351,6 +491,34 @@
     if (next.moves[appointmentId]) {
       next.moves[appointmentId] = Object.assign({}, next.moves[appointmentId], { included: !!included });
     }
+    if (next.stretches[appointmentId]) {
+      next.stretches[appointmentId] = Object.assign({}, next.stretches[appointmentId], { included: !!included });
+    }
+    return next;
+  }
+
+  function stageStretch(draft, appointmentId, newDuration) {
+    var next = cloneDraft(draft);
+    if (!appointmentId) return next;
+    next.cancelIds = (next.cancelIds || []).filter(function (id) {
+      return id !== appointmentId;
+    });
+    delete next.cancels[appointmentId];
+    next.moveIds = (next.moveIds || []).filter(function (id) {
+      return id !== appointmentId;
+    });
+    delete next.moves[appointmentId];
+    if (next.stretchIds.indexOf(appointmentId) === -1) next.stretchIds.push(appointmentId);
+    next.stretches[appointmentId] = { duration: Number(newDuration), included: true };
+    return next;
+  }
+
+  function unstageStretch(draft, appointmentId) {
+    var next = cloneDraft(draft);
+    next.stretchIds = (next.stretchIds || []).filter(function (id) {
+      return id !== appointmentId;
+    });
+    delete next.stretches[appointmentId];
     return next;
   }
 
@@ -361,6 +529,10 @@
       return id !== appointmentId;
     });
     delete next.cancels[appointmentId];
+    next.stretchIds = (next.stretchIds || []).filter(function (id) {
+      return id !== appointmentId;
+    });
+    delete next.stretches[appointmentId];
     if (next.moveIds.indexOf(appointmentId) === -1) next.moveIds.push(appointmentId);
     next.moves[appointmentId] = {
       diaryId: target.diaryId,
@@ -429,6 +601,27 @@
           ' — Medicus will not send a booking message',
       });
     });
+    ((draft && draft.stretchIds) || []).forEach(function (id) {
+      var appt = findAppointment(board, id) || { id: id, patientName: id, startDateTime: '', duration: 0 };
+      var st = (draft.stretches && draft.stretches[id]) || {};
+      items.push({
+        kind: 'stretch',
+        id: id,
+        included: st.included !== false,
+        patientName: appt.patientName,
+        duration: st.duration,
+        text:
+          'Cancel then rebook ' +
+          appt.patientName +
+          ', ' +
+          hhmm(appt.startDateTime) +
+          ' ' +
+          appt.duration +
+          ' min → ' +
+          st.duration +
+          ' min — Medicus will not send a message',
+      });
+    });
     var included = items.filter(function (i) {
       return i.included;
     });
@@ -491,6 +684,27 @@
         });
       }
     });
+    ((draft && draft.stretchIds) || []).forEach(function (id) {
+      var st = draft.stretches[id];
+      if (!st) return;
+      nextCols.forEach(function (col) {
+        col.appointments = col.appointments.map(function (a) {
+          if (a.id !== id) return a;
+          var extraEnd = addMinutes(a.startDateTime, st.duration);
+          col.slots = col.slots.filter(function (s) {
+            var s0 = parseDt(s.startDateTime);
+            var win0 = parseDt(a.endDateTime || addMinutes(a.startDateTime, a.duration));
+            var win1 = parseDt(extraEnd);
+            return !(s0 && win0 && win1 && s0 >= win0 && s0 < win1);
+          });
+          return Object.assign({}, a, {
+            duration: st.duration,
+            endDateTime: extraEnd,
+            stagedStretch: true,
+          });
+        });
+      });
+    });
     return { date: board && board.date, columns: nextCols };
   }
 
@@ -523,6 +737,50 @@
       diaryId: opts.diaryId,
       intendedStartDateTime: opts.startDateTime,
       intendedDuration: duration,
+    };
+  }
+
+  function buildStretchUpdatePayload(opts) {
+    opts = opts || {};
+    if (!opts.slotReservationId) throw new Error('appointment-organise: slotReservationId required');
+    if (!opts.diaryId) throw new Error('appointment-organise: diaryId required');
+    return {
+      slotReservationId: opts.slotReservationId,
+      diaryId: opts.diaryId,
+      rescheduledAppointmentId: null,
+      intendedStartDateTime: opts.startDateTime,
+      intendedDuration: Number(opts.intendedDuration),
+    };
+  }
+
+  function buildStretchCreatePayload(opts) {
+    opts = opts || {};
+    if (!opts.patientId) throw new Error('appointment-organise: explicit patientId required');
+    if (!opts.slotReservationId) throw new Error('appointment-organise: slotReservationId required');
+    return {
+      context: 'create-booked-appointment',
+      appointmentTemporalType: 'timed',
+      appointmentTypeId: opts.appointmentTypeId,
+      patientId: opts.patientId,
+      deliveryMode: opts.deliveryMode || 'face-to-face',
+      intendedDuration: Number(opts.intendedDuration),
+      diaryId: opts.diaryId,
+      isHighPriority: false,
+      isHiddenFromPatientFacingServices: !!opts.isHiddenFromPatientFacingServices,
+      intendedStartDateTime: opts.startDateTime,
+      reasonForAppointment: opts.reasonForAppointment == null ? null : opts.reasonForAppointment,
+      additionalInformation: opts.additionalInformation == null ? null : opts.additionalInformation,
+      embargoOverrideReason: null,
+      slotReservationId: opts.slotReservationId,
+      nhsNationalSlotTypeCategory: opts.nhsNationalSlotTypeCategory || '10127',
+      gpadReportingExceptionReasons: [],
+      clinicalCaseId: null,
+      bookingConfirmationRecipients: [],
+      followingSlotConvertToBreak: null,
+      followingSlotNewAppointmentTypeId: null,
+      followingSlotStartDateTime: null,
+      followingSlotEndDateTime: null,
+      rescheduledAppointmentVersionId: null,
     };
   }
 
@@ -856,6 +1114,91 @@
       }
     }
 
+    async function commitStretch(opts) {
+      opts = opts || {};
+      var pinned = opts.pinned || {};
+      var appointment = opts.appointment;
+      var newDuration = Number(opts.newDuration);
+      if (!appointment || !appointment.patientId) {
+        throw new Error('appointment-organise: explicit patientId required');
+      }
+      if (pinned.apiBase && pinned.apiBase !== apiBase) {
+        throw new Error(driftMessage('site'));
+      }
+      var booking = requireBooking(deps.booking);
+      var board = await fetchBoard(opts.date);
+      var live = findAppointment(board, appointment.id);
+      var boardCheck = verifyAgainstBoard(live, {
+        patientId: appointment.patientId,
+        appointmentId: appointment.id,
+        versionId: appointment.versionId,
+      });
+      if (!boardCheck.ok) throw new Error(boardCheck.reason);
+      var gate = canStageStretch(live, newDuration, board);
+      if (!gate.ok) throw new Error(gate.reason);
+      var overview = await fetchAppointmentOverview(appointment.id);
+      var ovCheck = verifyOverview(overview, {
+        patientId: appointment.patientId,
+        appointmentId: appointment.id,
+        versionId: appointment.versionId,
+      });
+      if (!ovCheck.ok) throw new Error(ovCheck.reason);
+      await cancelAppointment(
+        buildCancelPayload({
+          appointmentId: appointment.id,
+          reason: opts.reason || STRETCH_CANCEL_REASON,
+        })
+      );
+      var reservationId = null;
+      try {
+        var reserved = await reserveForMove(
+          buildReserveReschedulePayload({
+            diaryId: appointment.diaryId,
+            startDateTime: appointment.startDateTime,
+            intendedDuration: appointment.duration,
+          })
+        );
+        reservationId = reserved && reserved.slotReservationId;
+        if (!reservationId) throw new Error('appointment-organise: reserve returned no slotReservationId');
+        var stretchUpd = buildStretchUpdatePayload({
+          slotReservationId: reservationId,
+          diaryId: appointment.diaryId,
+          startDateTime: appointment.startDateTime,
+          intendedDuration: newDuration,
+        });
+        if (Object.prototype.hasOwnProperty.call(stretchUpd, 'allowOverlappingAppointments')) {
+          throw new Error('appointment-organise: must not send allowOverlappingAppointments');
+        }
+        await updateSlotReservation(stretchUpd);
+        var createdBody = buildStretchCreatePayload({
+          patientId: appointment.patientId,
+          appointmentTypeId: appointment.appointmentTypeId,
+          slotReservationId: reservationId,
+          diaryId: appointment.diaryId,
+          startDateTime: appointment.startDateTime,
+          intendedDuration: newDuration,
+          deliveryMode: appointment.deliveryMode,
+          nhsNationalSlotTypeCategory: appointment.nhsNationalSlotTypeCategory,
+          reasonForAppointment: appointment.reason || null,
+          additionalInformation: appointment.additionalInformation,
+          isHiddenFromPatientFacingServices: appointment.isHiddenFromPatientFacingServices,
+        });
+        if (Object.prototype.hasOwnProperty.call(createdBody, 'allowOverlappingAppointments')) {
+          throw new Error('appointment-organise: must not send allowOverlappingAppointments');
+        }
+        var created = await booking.createAppointment(apiBase, createdBody);
+        if (reservationId && typeof booking.releaseReservation === 'function') {
+          await booking.releaseReservation(apiBase, reservationId);
+        }
+        return created;
+      } catch (err) {
+        if (reservationId && typeof booking.releaseReservation === 'function') {
+          await booking.releaseReservation(apiBase, reservationId);
+        }
+        throw err;
+      }
+    }
+
     return {
       fetchBoard: fetchBoard,
       fetchAppointmentOverview: fetchAppointmentOverview,
@@ -866,6 +1209,7 @@
       updateSlotReservation: updateSlotReservation,
       commitCancel: commitCancel,
       commitMove: commitMove,
+      commitStretch: commitStretch,
     };
   }
 
@@ -874,9 +1218,14 @@
     CANCEL_PAYLOAD_KEYS: CANCEL_PAYLOAD_KEYS,
     RESERVE_RESCHEDULE_KEYS: RESERVE_RESCHEDULE_KEYS,
     UPDATE_RESERVATION_KEYS: UPDATE_RESERVATION_KEYS,
+    STRETCH_UPDATE_KEYS: STRETCH_UPDATE_KEYS,
+    STRETCH_CREATE_KEYS: STRETCH_CREATE_KEYS,
     RESCHEDULE_CREATE_KEYS: RESCHEDULE_CREATE_KEYS,
     EXTEND_BLOCKED: EXTEND_BLOCKED,
     DURATION_LOCKED: DURATION_LOCKED,
+    STRETCH_NEIGHBOUR_BOOKED: STRETCH_NEIGHBOUR_BOOKED,
+    STRETCH_CANCEL_REASON: STRETCH_CANCEL_REASON,
+    STRETCH_STEP_MINUTES: STRETCH_STEP_MINUTES,
     SAME_SLOT: SAME_SLOT,
     moveDuration: moveDuration,
     moveTypeFor: moveTypeFor,
@@ -894,18 +1243,25 @@
     hasDraftChanges: hasDraftChanges,
     canStageMove: canStageMove,
     canStageCancel: canStageCancel,
+    canStageStretch: canStageStretch,
+    followingSlotsFree: followingSlotsFree,
+    addMinutes: addMinutes,
     stageCancel: stageCancel,
     unstageCancel: unstageCancel,
     setCancelReason: setCancelReason,
     setDraftIncluded: setDraftIncluded,
     stageMove: stageMove,
     unstageMove: unstageMove,
+    stageStretch: stageStretch,
+    unstageStretch: unstageStretch,
     summariseDraft: summariseDraft,
     applyDraftToBoard: applyDraftToBoard,
     buildCancelPayload: buildCancelPayload,
     buildReserveReschedulePayload: buildReserveReschedulePayload,
     buildUpdateReservationPayload: buildUpdateReservationPayload,
     buildRescheduleCreatePayload: buildRescheduleCreatePayload,
+    buildStretchUpdatePayload: buildStretchUpdatePayload,
+    buildStretchCreatePayload: buildStretchCreatePayload,
     verifyAgainstBoard: verifyAgainstBoard,
     verifyOverview: verifyOverview,
     verifyMoveForm: verifyMoveForm,

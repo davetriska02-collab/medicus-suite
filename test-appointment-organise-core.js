@@ -132,6 +132,101 @@ function sampleRaw() {
   };
 }
 
+const stretchDiary = '01a018eb-e836-7072-9110-6f5e7115410b';
+const stretchMouse = {
+  id: '01a018ef-b029-7245-ac45-6f70ecc11929',
+  versionId: 'c3e761d3fc7f8a3aaf0d67316bf293fb',
+  patientId: mouse.patientId,
+  patientName: mouse.patientName,
+  diaryId: stretchDiary,
+  staffName: 'Unassigned',
+  startDateTime: '2026-08-23 14:00:00',
+  endDateTime: '2026-08-23 14:15:00',
+  duration: 15,
+  appointmentTypeId: mouse.appointmentTypeId,
+  appointmentTypeName: 'GP Appointment',
+  deliveryMode: 'face-to-face',
+  nhsNationalSlotTypeCategory: '10127',
+  reason: 'GP Appointment',
+  additionalInformation: null,
+  isHiddenFromPatientFacingServices: false,
+  displayStatus: 'booked',
+  arrived: false,
+  locked: false,
+};
+
+function stretchEntry(kind, start, extra) {
+  extra = extra || {};
+  if (kind === 'slot') {
+    return {
+      diaryEntryType: { value: 'slot' },
+      diaryId: stretchDiary,
+      startDateTime: start,
+      endDateTime: core.addMinutes(start, 15),
+      duration: 15,
+    };
+  }
+  return Object.assign(
+    {
+      id: extra.id,
+      versionId: extra.versionId || 'v-n',
+      patient: { id: extra.patientId || mouse.patientId, name: extra.patientName || mouse.patientName },
+      diaryEntryType: { value: 'appointment' },
+      appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
+      startDateTime: start,
+      endDateTime: extra.end || core.addMinutes(start, 15),
+      duration: extra.duration || 15,
+      displayStatus: { value: 'booked' },
+      deliveryMode: { value: 'face-to-face' },
+      appointmentStatus: { value: 'pending', isCancelled: false, isStarted: false, isSeen: false },
+    },
+    extra.fields || {}
+  );
+}
+
+function sampleStretchRaw(nextBooked) {
+  const entries = [
+    stretchEntry('slot', '2026-08-23 13:00:00'),
+    stretchEntry('appointment', '2026-08-23 14:00:00', {
+      id: stretchMouse.id,
+      versionId: stretchMouse.versionId,
+      end: '2026-08-23 14:15:00',
+    }),
+  ];
+  if (nextBooked) {
+    entries.push(
+      stretchEntry('appointment', '2026-08-23 14:15:00', {
+        id: '01a01967-24fa-723b-9563-9d7865a909d7',
+        versionId: '3bb6bfcbb2979f139d972e2615c062dc',
+        end: '2026-08-23 14:30:00',
+      })
+    );
+  } else {
+    entries.push(stretchEntry('slot', '2026-08-23 14:15:00'));
+  }
+  entries.push(stretchEntry('slot', '2026-08-23 14:30:00'));
+  entries.push(stretchEntry('slot', '2026-08-23 14:45:00'));
+  return {
+    date: '2026-08-23',
+    staffSchedules: [],
+    unassignedDiaries: [
+      {
+        scheduleType: 'diary',
+        id: stretchDiary,
+        startDateTime: '2026-08-23 13:00:00',
+        endDateTime: '2026-08-23 15:00:00',
+        summary: {
+          status: { isCancelled: false },
+          usualAppointmentDuration: 15,
+          defaultDeliveryMode: { value: 'face-to-face' },
+          nhsNationalSlotTypeCategoryDefault: { value: '10127' },
+        },
+        entries: entries,
+      },
+    ],
+  };
+}
+
 console.log('=== 1. route + board parse ===');
 {
   const route = core.parseBookRoute('/560b6c/scheduling/appointment-book', '?date=2026-08-23');
@@ -683,6 +778,139 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       'commitMove refuses dropping onto the same slot'
     );
     check(f.calls.length === 0, 'same-slot refusal is before any fetch');
+  }
+
+  console.log('=== 5b. stretch — refuse when next booked, allow when next free ===');
+  {
+    const booked = core.parseBoard(sampleStretchRaw(true));
+    const free = core.parseBoard(sampleStretchRaw(false));
+    const apptB = core.findAppointment(booked, stretchMouse.id);
+    const apptF = core.findAppointment(free, stretchMouse.id);
+    check(core.followingSlotsFree(booked, apptB, 30) === false, 'followingSlotsFree false when 14:15 is booked');
+    check(core.followingSlotsFree(free, apptF, 30) === true, 'followingSlotsFree true when 14:15 is free');
+    const refuse = core.canStageStretch(apptB, 30, booked);
+    check(refuse.ok === false && refuse.reason === core.STRETCH_NEIGHBOUR_BOOKED, 'refuse stretch when neighbour booked (TEST A)');
+    const allow = core.canStageStretch(apptF, 30, free);
+    check(allow.ok === true, 'allow stretch when neighbour free (TEST B)');
+    check(core.canStageStretch(apptF, 30, booked).ok === false, 'same-patient neighbour still blocks');
+    const stretchUpd = core.buildStretchUpdatePayload({
+      slotReservationId: '01a019a4-00aa-73af-8595-cb98780f69e4',
+      diaryId: stretchDiary,
+      startDateTime: '2026-08-23 14:00:00',
+      intendedDuration: 30,
+    });
+    check(
+      JSON.stringify(Object.keys(stretchUpd)) === JSON.stringify(core.STRETCH_UPDATE_KEYS),
+      'stretch update-slot-reservation keys omit allowOverlappingAppointments'
+    );
+    check(
+      !Object.prototype.hasOwnProperty.call(stretchUpd, 'allowOverlappingAppointments'),
+      'stretch update does not send allowOverlappingAppointments'
+    );
+    const stretchCreate = core.buildStretchCreatePayload({
+      patientId: stretchMouse.patientId,
+      appointmentTypeId: stretchMouse.appointmentTypeId,
+      slotReservationId: '01a019a4-00aa-73af-8595-cb98780f69e4',
+      diaryId: stretchDiary,
+      startDateTime: '2026-08-23 14:00:00',
+      intendedDuration: 30,
+    });
+    check(
+      JSON.stringify(Object.keys(stretchCreate)) === JSON.stringify(core.STRETCH_CREATE_KEYS),
+      'stretch create-appointment key list pinned without allow'
+    );
+    check(stretchCreate.context === 'create-booked-appointment', 'stretch create is a new book after cancel, not reschedule');
+    check(stretchCreate.intendedDuration === 30, 'stretch create duration is 30');
+    check(stretchCreate.bookingConfirmationRecipients.length === 0, 'stretch Send-to off');
+    check(
+      !Object.prototype.hasOwnProperty.call(stretchCreate, 'allowOverlappingAppointments'),
+      'stretch create does not send allowOverlappingAppointments'
+    );
+  }
+
+  {
+    const f = recordingFetch((url) => {
+      if (url.includes('embedded-overview')) return mockResponse(200, sampleStretchRaw(true));
+      return mockResponse(200, {});
+    });
+    const client = core.createClient(API, { fetchImpl: f, booking: recordingBooking() });
+    await expectReject(
+      () =>
+        client.commitStretch({
+          date: '2026-08-23',
+          appointment: stretchMouse,
+          newDuration: 30,
+        }),
+      'following slot is booked',
+      'commitStretch aborts before cancel when neighbour is booked'
+    );
+    check(
+      f.calls.every((c) => c.opts.method !== 'POST'),
+      'no cancel/create POSTs when stretch is refused'
+    );
+  }
+
+  {
+    const f = recordingFetch((url) => {
+      if (url.includes('embedded-overview')) return mockResponse(200, sampleStretchRaw(false));
+      if (url.includes('/data/appointment/appointment-overview/')) {
+        return mockResponse(200, {
+          appointmentId: stretchMouse.id,
+          versionId: stretchMouse.versionId,
+          patientId: stretchMouse.patientId,
+          details: {
+            appointmentStatus: { value: 'pending', isCancelled: false },
+            displayStatus: { value: 'booked', isArrived: false },
+          },
+        });
+      }
+      if (url.includes('cancel-appointment') && !url.includes('/data/')) {
+        return mockResponse(200, {});
+      }
+      if (url.includes('reserve-slot-and-broadcast')) {
+        return mockResponse(200, { slotReservationId: '01a019a4-00aa-73af-8595-cb98780f69e4' });
+      }
+      if (url.includes('update-slot-reservation')) return mockResponse(200, {});
+      return mockResponse(200, {});
+    });
+    const booking = recordingBooking();
+    const client = core.createClient(API, { fetchImpl: f, booking: booking });
+    const res = await client.commitStretch({
+      date: '2026-08-23',
+      appointment: stretchMouse,
+      newDuration: 30,
+    });
+    check(!!res.appointmentId, 'TEST B stretch returns a new appointment id');
+    const posts = f.calls.filter((c) => c.opts.method === 'POST').map((c) => c.url.replace(API, ''));
+    check(posts[0] === '/scheduling/appointment/cancel-appointment', 'stretch POST 1 = cancel');
+    check(
+      posts[1] === '/scheduling/slot-reservation/reserve-slot-and-broadcast-appointment-booking-in-progress',
+      'stretch POST 2 = reserve at original 15'
+    );
+    check(posts[2] === '/scheduling/slot-reservation/update-slot-reservation', 'stretch POST 3 = update duration 30');
+    const cancelBody = JSON.parse(f.calls.find((c) => String(c.url).endsWith('/cancel-appointment')).opts.body);
+    check(cancelBody.otherAppointmentIds.length === 0, 'stretch cancel does not tick other appointments');
+    check(cancelBody.cancellationConfirmationRecipients.length === 0, 'stretch cancel Send-to off');
+    const reserveBody = JSON.parse(f.calls.find((c) => c.url.includes('reserve-slot')).opts.body);
+    check(reserveBody.intendedDuration === 15, 'stretch reserve starts at 15');
+    const upd = JSON.parse(f.calls.find((c) => c.url.includes('update-slot-reservation')).opts.body);
+    check(upd.intendedDuration === 30, 'stretch update sets 30');
+    check(upd.rescheduledAppointmentId === null, 'stretch update rescheduledAppointmentId is null');
+    check(!Object.prototype.hasOwnProperty.call(upd, 'allowOverlappingAppointments'), 'stretch update omits allow');
+    check(booking.calls[0].payload.intendedDuration === 30, 'stretch create duration 30');
+    check(booking.calls[0].payload.context === 'create-booked-appointment', 'stretch create context is book, not reschedule');
+    check(
+      !Object.prototype.hasOwnProperty.call(booking.calls[0].payload, 'allowOverlappingAppointments'),
+      'stretch create omits allowOverlappingAppointments'
+    );
+    check(
+      booking.calls.some((c) => c.fn === 'releaseReservation'),
+      'stretch releases the reservation after create'
+    );
+    const d = core.stageStretch(core.emptyDraft(), stretchMouse.id, 30);
+    const sum = core.summariseDraft(d, core.parseBoard(sampleStretchRaw(false)));
+    check(/Cancel then rebook/.test(sum.items[0].text), 'confirm bar says cancel then rebook');
+    check(/Mr Micky Mouse/.test(sum.items[0].text), 'confirm bar names the patient');
   }
 
   console.log('=== 6. live booking-core is the reserve/create/release copy ===');

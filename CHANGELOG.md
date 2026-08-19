@@ -26,7 +26,11 @@ Writes follow the 2026-08-19 capture on dummy patient Mr Micky Mouse
 - **Same-list move** — same three-field reserve +
   `create-appointment` (`context=reschedule-appointment`) on the
   **same** `diaryId`. No `update-slot-reservation`.
-- **Extend** is not offered — Edit Details duration is read-only.
+- **Stretch** — `+15 min` / resize handle only when the following
+  slot is free. Writes are cancel then rebook at the new length.
+  Neighbour booked → no handle, nothing staged (Test A overlap).
+  Never sends `allowOverlappingAppointments=allow`. Type change
+  is not offered.
 
 New `shared/appointment-organise-core.js` owns cancel + move orchestration
 (`update-slot-reservation`, appointment-overview GET). Reserve / create /

@@ -125,6 +125,16 @@
           esc(appt.id) +
           '">Cancel</button>'
         : '') +
+      (opts.canStretch
+        ? '<button type="button" class="ms-aoc-tile-stretch" data-stretch-id="' +
+          esc(appt.id) +
+          '">+' +
+          C.STRETCH_STEP_MINUTES +
+          ' min</button>' +
+          '<div class="ms-aoc-stretch-handle" data-stretch-handle="' +
+          esc(appt.id) +
+          '" title="Drag to stretch into a free following slot"></div>'
+        : '') +
       '</div>'
     );
   }
@@ -229,7 +239,13 @@
         var items = [];
         var seen = {};
         (col.appointments || []).forEach(function (a) {
-          items.push({ t: a.startDateTime, html: tileHtml(a, { staged: !!a.stagedMove }) });
+          var live = C.findAppointment(_board, a.id) || a;
+          var nextLen = (a.duration || live.duration || 0) + C.STRETCH_STEP_MINUTES;
+          var canStretch = !a.stagedMove && C.canStageStretch(live, nextLen, _board).ok;
+          items.push({
+            t: a.startDateTime,
+            html: tileHtml(a, { staged: !!a.stagedMove || !!a.stagedStretch, canStretch: canStretch }),
+          });
           seen[a.startDateTime] = true;
         });
         (col.slots || []).forEach(function (s) {
@@ -294,7 +310,8 @@
       '</header>' +
       '<div class="ms-aoc-explainer">' +
       'Drag a patient onto a <strong>free slot</strong> (same diary or another) to stage a move, or onto <strong>Cancel</strong>. ' +
-      'Nothing is written until you Finalise. Extend is not in the captured contract. ' +
+      'Stretch with <strong>+15 min</strong> or the bottom handle only when the following slot is free. ' +
+      'If the next slot is booked the handle will not stage. Nothing is written until you Finalise. ' +
       'Arrived patients stay locked. Medicus will not send SMS or email from this board.' +
       '</div>' +
       '<div class="ms-aoc-body">' +
@@ -322,6 +339,22 @@
       }
     } catch (_) {}
     return _drag;
+  }
+
+  function tryStretch(apptId, extraMinutes) {
+    var appt = C.findAppointment(_board, apptId);
+    if (!appt) return;
+    var next = (appt.duration || 0) + Number(extraMinutes);
+    var gate = C.canStageStretch(appt, next, _board);
+    if (!gate.ok) {
+      _error = gate.reason;
+      announce(gate.reason);
+      render();
+      return;
+    }
+    _draft = C.stageStretch(_draft, apptId, next);
+    announce('Staged stretch for ' + appt.patientName + ' to ' + next + ' min');
+    render();
   }
 
   function stageFromDrop(apptId, target) {
@@ -386,6 +419,14 @@
             pinned: { apiBase: _route.apiBase },
           });
           _draft = C.unstageMove(_draft, item.id);
+        } else if (item.kind === 'stretch') {
+          await api.commitStretch({
+            date: _route.date,
+            appointment: appt,
+            newDuration: item.duration,
+            pinned: { apiBase: _route.apiBase },
+          });
+          _draft = C.unstageStretch(_draft, item.id);
         }
         _board = await api.fetchBoard(_route.date);
       } catch (err) {
@@ -461,6 +502,36 @@
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
         stageFromDrop(btn.getAttribute('data-cancel-id'), { kind: 'cancel' });
+      });
+    });
+    root.querySelectorAll('[data-stretch-id]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        tryStretch(btn.getAttribute('data-stretch-id'), C.STRETCH_STEP_MINUTES);
+      });
+    });
+    root.querySelectorAll('[data-stretch-handle]').forEach(function (handle) {
+      handle.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var id = handle.getAttribute('data-stretch-handle');
+        var startY = e.clientY;
+        function onMove(ev) {
+          if (ev.clientY - startY < 8) return;
+        }
+        function onUp(ev) {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          var delta = ev.clientY - startY;
+          if (delta < 12) {
+            tryStretch(id, C.STRETCH_STEP_MINUTES);
+            return;
+          }
+          var steps = Math.max(1, Math.round(delta / 24));
+          tryStretch(id, steps * C.STRETCH_STEP_MINUTES);
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
       });
     });
 

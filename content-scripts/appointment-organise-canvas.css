@@ -221,6 +221,34 @@
   outline-offset: -2px;
 }
 
+.ms-aoc-tile-stretch {
+  margin-top: 6px;
+  margin-left: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: #fff;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.ms-aoc-stretch-handle {
+  height: 8px;
+  margin-top: 6px;
+  border-radius: var(--r-sm);
+  background: repeating-linear-gradient(
+    90deg,
+    #94a3b8,
+    #94a3b8 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  cursor: ns-resize;
+}
+
 .ms-aoc-tile-cancel {
   margin-top: 6px;
   padding: 2px 8px;

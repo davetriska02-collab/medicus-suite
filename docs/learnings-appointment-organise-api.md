@@ -341,3 +341,42 @@ After the same-list move, View Appointment Details at **14:15 (15 mins)**. Top-r
 
 Operational note (driving bot, not a Medicus contract): AVG "ALLOW APP" did not land and hid the dialog. `cmd` writes to Desktop work; PowerShell Desktop writes still blocked because `fileprotection.paths` still includes Desktop.
 
+
+---
+
+## G — Stretch length via cancel + rebook (20, 21) — captured 2026-08-19
+
+Native Edit Appointment cannot change length. Dave's theory: a canvas stretch is cancel + rebook at the new duration.
+
+Dummy only: Mr Micky Mouse, Sunday 2026-08-23, UNASSIGNED 13:00–15:00. SMS/email off (`cancellationConfirmationRecipients=[]`, Send-to unchecked).
+
+### Test A — neighbour booked
+
+14:00 and 14:15 both Mouse 15 min. Cancel 14:00, rebook 14:00 at 30 min while 14:15 still booked.
+
+30 / 45 / 60 were offered. Book succeeded. 14:15 stayed, still 15 min, not moved. Both tiles labelled **Overlapping Appointment**. Neighbour did **not** auto-change.
+
+### Test B — neighbour free
+
+14:00 Mouse 15, 14:15 free. Cancel 14:00, rebook 14:00 at 30 min.
+
+Succeeded. 14:15 free slot consumed. Next free 14:30. No ghost 15. One 30-min tile. No overlap label.
+
+### Writes (both tests, chBook)
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/scheduling/appointment/cancel-appointment` | `otherAppointmentIds: []`, reason Snooze |
+| POST | `/scheduling/slot-reservation/reserve-slot-and-broadcast-appointment-booking-in-progress` | `intendedDuration: 15` first |
+| POST | `/scheduling/slot-reservation/update-slot-reservation` | `intendedDuration: 30`, `allowOverlappingAppointments: "allow"` |
+| POST | `/scheduling/appointment/create-appointment` | `intendedDuration: 30` |
+| POST | `/scheduling/slot-reservation/remove-slot-reservation-and-broadcast-appointment-booking-ended` | |
+
+Raw: `C:\Users\Dave\Desktop\20-stretch-adjacent-cancel-rebook.json`, `21-stretch-booked-then-free.json`
+
+### Canvas implication
+
+Stretch is allowed only into a **free** following slot (Test B). Refuse if the next slot is booked (Test A would overlap). Do not send `allowOverlappingAppointments: allow` for a stretch. Do not treat this as a native duration PATCH. Type change was not part of this test.
+
+v1 GUI: resize handle / +15 min only when `followingSlotsFree`. Next slot booked → no handle, snap back, do not stage, do not Finalise. Confirm bar: cancel then rebook at the new length, names the patient. Re-GET before commit.
+
