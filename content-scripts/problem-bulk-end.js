@@ -1229,8 +1229,7 @@
         '>' +
         (g.removing
           ? 'Removing…'
-          : 'Confirm — remove ' + removable.length + ' cop' + (removable.length === 1 ? 'y' : 'ies'))
-        +
+          : 'Confirm — remove ' + removable.length + ' cop' + (removable.length === 1 ? 'y' : 'ies')) +
         '</button>' +
         '</div></div>';
     }
@@ -1261,6 +1260,12 @@
     var live = liveMergeGroups();
     if (_mergeScanState === 'running' && !live.length) {
       return '<div class="ms-pbe-loading">Checking for duplicate copies…</div>';
+    }
+    if (_mergeScanState === 'error' && !live.length) {
+      // A failed scan must never masquerade as a confirmed negative — "no
+      // duplicates found" when the scan didn't run tells the clinician not
+      // to look, which is the opposite of what happened.
+      return '<div class="ms-pbe-error">Duplicate-copy scan failed — close and reopen this panel to retry.</div>';
     }
     if (!live.length) {
       return '<div class="ms-pbe-empty">No duplicate-code problems found.</div>';

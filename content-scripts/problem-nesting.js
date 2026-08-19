@@ -1478,17 +1478,12 @@
     if (!problemId) throw new Error('A problem must be chosen.');
     if (!_lastPatientId) throw new Error('Patient context was lost — not ending.');
     if (hasActiveChildren(problemId, _parentIdByProblemId)) {
-      throw new Error(
-        'This problem still has active children — end or un-nest them first, or use Bulk remove?.'
-      );
+      throw new Error('This problem still has active children — end or un-nest them first, or use Bulk remove?.');
     }
     var form = await fetchEndProblemForm(problemId);
-    var childCount =
-      (form && Array.isArray(form.activeChildProblems) && form.activeChildProblems.length) || 0;
+    var childCount = (form && Array.isArray(form.activeChildProblems) && form.activeChildProblems.length) || 0;
     if (childCount > 0) {
-      throw new Error(
-        'This problem still has active children — end or un-nest them first, or use Bulk remove?.'
-      );
+      throw new Error('This problem still has active children — end or un-nest them first, or use Bulk remove?.');
     }
     await postEndProblem(buildEndProblemPayload(problemId, todayISO(), 'Resolved'));
     _problems = (_problems || []).filter(function (p) {
@@ -1582,13 +1577,11 @@
         infoById: _infoById,
         suggestions: _suggestions,
         textLinkSuggestions: _textLinkSuggestions,
-        // Recomputed fresh on EVERY snapshot read, unlike _suggestions/
-        // _textLinkSuggestions above (which are cached once per scan) —
-        // this is pure and cheap (no fetch, significance is already in
-        // infoById), and a just-committed change (commitSignificanceChange)
-        // must stop being offered immediately without needing its own
-        // dismissed-ids bookkeeping the way the text-link suggestions do.
-        unknownSignificanceSuggestions: buildUnknownSignificanceSuggestions(_problems, _infoById),
+        // unknownSignificanceSuggestions was dropped from the snapshot when
+        // the canvas's unknown-significance tray was removed (v3.236.x —
+        // significance is now changed by dragging between lanes); the pure
+        // buildUnknownSignificanceSuggestions helper stays exported for its
+        // unit tests and any future consumer.
         parentIdByProblemId: _parentIdByProblemId,
         scanState: _scanState,
       };

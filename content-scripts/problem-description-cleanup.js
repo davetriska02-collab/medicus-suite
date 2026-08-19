@@ -1394,6 +1394,8 @@
         // failed — section omitted, not an error shown to the clinician.
         nestingInfo: null,
         nestingActing: false, // true while a remove-link/un-nest POST for this row is in flight
+        nestingPending: null, // {kind, targetId} armed by the first click — the write only fires on the second, confirming click (same two-step discipline as every other relationship write)
+        nestingError: null, // user-visible failure of the last un-nest/remove-link write — cleared when a new action is armed
       };
     }
     return _rows[problemId];
@@ -1865,10 +1867,41 @@
   // related problem with its own single "Remove" — deliberately per-item,
   // not a single "clear all" (same one-write-at-a-time discipline as the
   // canvas's own tile actions this mirrors).
+  // One relationship-write button. First click ARMS it (label flips to the
+  // explicit confirm wording); only the second, confirming click commits —
+  // these write to the live record, and every other relationship write in
+  // the suite (canvas confirm bar, bulk-end, merge) has the same two-step
+  // gate. Arming a different button, or a re-render from elsewhere, keeps
+  // the armed state only for the exact button it was armed on.
+  function nestingBtnHtml(problemId, kind, targetId, normalLabel, confirmLabel, st) {
+    var armed = st.nestingPending && st.nestingPending.kind === kind && st.nestingPending.targetId === targetId;
+    return (
+      '<button type="button" class="ms-pdc-nesting-btn' +
+      (armed ? ' ms-pdc-nesting-btn-armed' : '') +
+      '" data-problem-id="' +
+      esc(problemId) +
+      '" data-nesting-kind="' +
+      esc(kind) +
+      '" data-target-id="' +
+      esc(targetId) +
+      '"' +
+      (st.nestingActing ? ' disabled' : '') +
+      '>' +
+      esc(armed ? confirmLabel : normalLabel) +
+      '</button>'
+    );
+  }
+
   function nestingInfoHtml(problemId, st) {
     var n = st.nestingInfo;
-    if (!n || (!n.parentId && !n.children.length && !n.linked.length)) return '';
-    var rows = '';
+    var errHtml = st.nestingError ? '<div class="ms-pdc-error">' + esc(st.nestingError) + '</div>' : '';
+    if (!n || (!n.parentId && !n.children.length && !n.linked.length)) {
+      // Keep a write failure visible even if the post-write relationship
+      // refresh came back empty/unavailable — the error must outlive the row
+      // it was about.
+      return errHtml ? '<div class="ms-pdc-nesting-section">' + errHtml + '</div>' : '';
+    }
+    var rows = errHtml;
     if (n.parentId) {
       rows +=
         '<div class="ms-pdc-nesting-row">' +
@@ -1876,13 +1909,7 @@
         '<strong>' +
         esc(n.parentDescription) +
         '</strong>' +
-        '<button type="button" class="ms-pdc-nesting-btn" data-problem-id="' +
-        esc(problemId) +
-        '" data-nesting-kind="unnest" data-target-id="' +
-        esc(problemId) +
-        '"' +
-        (st.nestingActing ? ' disabled' : '') +
-        '>Un-nest</button>' +
+        nestingBtnHtml(problemId, 'unnest', problemId, 'Un-nest', 'Confirm un-nest?', st) +
         '</div>';
     }
     if (n.children.length) {
@@ -1899,13 +1926,8 @@
               '<div class="ms-pdc-nesting-chip"><strong>' +
               esc(c.description) +
               '</strong>' +
-              '<button type="button" class="ms-pdc-nesting-btn" data-problem-id="' +
-              esc(problemId) +
-              '" data-nesting-kind="unnest" data-target-id="' +
-              esc(c.id) +
-              '"' +
-              (st.nestingActing ? ' disabled' : '') +
-              '>Un-nest</button></div>'
+              nestingBtnHtml(problemId, 'unnest', c.id, 'Un-nest', 'Confirm un-nest?', st) +
+              '</div>'
             );
           })
           .join('') +
@@ -1921,13 +1943,8 @@
               '<div class="ms-pdc-nesting-chip"><strong>' +
               esc(l.description) +
               '</strong>' +
-              '<button type="button" class="ms-pdc-nesting-btn" data-problem-id="' +
-              esc(problemId) +
-              '" data-nesting-kind="flat-unlink" data-target-id="' +
-              esc(l.id) +
-              '"' +
-              (st.nestingActing ? ' disabled' : '') +
-              '>Remove link</button></div>'
+              nestingBtnHtml(problemId, 'flat-unlink', l.id, 'Remove link', 'Confirm removal?', st) +
+              '</div>'
             );
           })
           .join('') +
@@ -1936,10 +1953,28 @@
     return '<div class="ms-pdc-nesting-section">' + rows + '</div>';
   }
 
+  // First click arms, second click (on the SAME button) commits — the
+  // relationship write never fires on a single click. Clicking a different
+  // relationship button while one is armed just moves the armed state there.
+  function armOrCommitNesting(problemId, kind, targetId) {
+    var st = rowState(problemId);
+    if (st.nestingActing) return;
+    var p = st.nestingPending;
+    if (p && p.kind === kind && p.targetId === targetId) {
+      st.nestingPending = null;
+      removeNestingOrLink(problemId, kind, targetId);
+      return;
+    }
+    st.nestingPending = { kind: kind, targetId: targetId };
+    st.nestingError = null;
+    renderPanel(problemId);
+  }
+
   async function removeNestingOrLink(problemId, kind, targetId) {
     var st = rowState(problemId);
     if (st.nestingActing || !window.ProblemNesting) return;
     st.nestingActing = true;
+    st.nestingError = null;
     renderPanel(problemId);
     try {
       if (kind === 'unnest') {
@@ -1950,6 +1985,14 @@
       if (window.ProblemNesting.refresh) window.ProblemNesting.refresh();
     } catch (e) {
       console.warn('[Clean up code] remove link/un-nest failed:', e && e.message);
+      // Surface the failure — the row below re-renders unchanged, which is
+      // otherwise indistinguishable from a slow refresh; every comparable
+      // write in this suite (canvas confirm bar, bulk-end endError, merge
+      // g.errors) shows its failure to the clinician.
+      st.nestingError =
+        (kind === 'unnest' ? 'Un-nest failed — ' : 'Removing the link failed — ') +
+        ((e && e.message) || 'the update was not accepted') +
+        '. Nothing was changed; the relationship below is still in place.';
     }
     st.nestingActing = false;
     // Recompute rather than trust the pre-write snapshot — same reasoning
@@ -2494,7 +2537,7 @@
     });
     root.querySelectorAll('.ms-pdc-nesting-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        removeNestingOrLink(problemId, btn.getAttribute('data-nesting-kind'), btn.getAttribute('data-target-id'));
+        armOrCommitNesting(problemId, btn.getAttribute('data-nesting-kind'), btn.getAttribute('data-target-id'));
       });
     });
     root.querySelectorAll('.ms-pdc-severity-correct-btn').forEach(function (btn) {
@@ -2587,7 +2630,16 @@
       st.currentDescription = code.description;
       st.currentDescriptionId = code.descriptionId; // needed to build a correct noteSNOMEDct for applyToJournal — not used by any existing apply path, which only ever needs conceptId/description
       st.additionalInformation = prefill.additionalInformation || '';
-      await refreshNestingInfo(problemId);
+      // Deliberately NOT awaited: the linked/nested lookup costs a network
+      // round-trip (getLinkedProblemIds) that is independent of everything
+      // below — its result only feeds nestingInfoHtml. Blocking here delayed
+      // every panel open by a full RTT before the description searches even
+      // started; instead it fills in with its own re-render when it lands
+      // (same pattern as document-codes-to-problems' deferred exists-flag
+      // check). refreshNestingInfo never rejects (catch inside).
+      refreshNestingInfo(problemId).then(function () {
+        renderPanel(problemId);
+      });
       // Computed for EVERY open panel, regardless of why this row was
       // flagged — additionalInformation is already in hand here whether the
       // fetch above just ran or was reused from the retirement/legacy-code
@@ -2790,8 +2842,9 @@
         try {
           var retireOverview = await fetchProblemOverview(problemId);
           var legacyReadCode =
-            findLegacyReadCodeOrigin(retireOverview && retireOverview.problemCode && retireOverview.problemCode.originalCodes) ||
-            null;
+            findLegacyReadCodeOrigin(
+              retireOverview && retireOverview.problemCode && retireOverview.problemCode.originalCodes
+            ) || null;
           if (legacyReadCode && !st.alternatives.length) legacyReadCode = null; // see runRetiredCodesScan's own NO-OP READ-V2 FLAG SUPPRESSION comment
           if (legacyReadCode) st.legacyReadCode = legacyReadCode;
           var retirement = await fetchRetirementStatus(code.conceptId);

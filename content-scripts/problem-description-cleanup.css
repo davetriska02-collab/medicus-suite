@@ -157,6 +157,16 @@ input[class*='ms-pdc-']:focus-visible {
   cursor: not-allowed;
 }
 
+/* Armed (first-click) state — the write only fires on the second,
+   confirming click, so the armed button must read as a live question,
+   not a finished action. Same red family as .ms-pdc-error. */
+.ms-pdc-nesting-btn-armed,
+.ms-pdc-nesting-btn-armed:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #b91c1c;
+  color: #b91c1c;
+}
+
 /* Severity-defaulting contradiction (2026-07-29) — this DOES change a
    structured clinical field (significance), not just tidy free text, so it
    gets the same amber warning treatment as the retirement note below rather

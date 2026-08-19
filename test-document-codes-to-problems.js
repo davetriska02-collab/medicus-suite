@@ -25,6 +25,7 @@ const {
   annotateExistingProblemFlags,
   isAllergyRelatedCode,
   buildCreateProblemPayload,
+  markSameBatchDuplicates,
 } = require('./content-scripts/document-codes-to-problems.js');
 
 let passed = 0,
@@ -372,6 +373,31 @@ console.log('--- buildCreateProblemPayload: matches the real POST /clinical/prob
     emptyPayload.contextId === null && emptyPayload.contextType === null,
     'context fields still null on an empty call'
   );
+}
+
+console.log('\n--- markSameBatchDuplicates: same-code entries within ONE submit batch (2026-08-19 review) ---');
+{
+  const rows = [
+    { id: 'a', _resolvedCode: { conceptId: '111' } },
+    { id: 'b', _resolvedCode: { conceptId: '222' } },
+    { id: 'c', _resolvedCode: { conceptId: '111' } },
+    { id: 'd', _resolvedCode: { conceptId: '111' } },
+    { id: 'e', _resolvedCode: {} },
+    { id: 'f' },
+  ];
+  markSameBatchDuplicates(rows);
+  check(rows[0]._dupInBatch === false, 'first occurrence of a conceptId is NOT a duplicate');
+  check(rows[1]._dupInBatch === false, 'a different conceptId is NOT a duplicate');
+  check(
+    rows[2]._dupInBatch === true && rows[3]._dupInBatch === true,
+    'every occurrence AFTER the first of the same conceptId is flagged — both would otherwise write as fresh first-episode problems'
+  );
+  check(
+    rows[4]._dupInBatch === undefined && rows[5]._dupInBatch === undefined,
+    'rows without a resolved conceptId are left untouched, never throw'
+  );
+  check(JSON.stringify(markSameBatchDuplicates([])) === '[]', 'empty rows -> [], never throws');
+  check(markSameBatchDuplicates(null) === null, 'null rows -> returned as-is, never throws');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

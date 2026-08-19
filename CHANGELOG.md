@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.1] — 2026-08-19
+
+### Review fixes on the v3.236.0 branch (PR #288)
+
+- **"Add as problem?" — same-code entries in one batch no longer write duplicate
+  first-episode problems.** Two selected entries carrying the same SNOMED conceptId
+  were each checked only against the pre-batch problem list, so both wrote as fresh
+  active problems. The confirm summary now flags the repeat ("same code as another
+  selected entry"), and the write records it as a subsequent episode once the first
+  copy's POST has landed (new pure `markSameBatchDuplicates`, regression-tested).
+- **"Add as problem?" — deferred exists-flag check no longer orphans an in-flight
+  submit.** The flag check swaps `entries` for cloned rows when it resolves; if a
+  submit had started while its fetches were in flight, the created rows re-rendered
+  as still-pending (inviting a duplicate submit). The swap is now skipped while a
+  submit is in flight — flags are best-effort and the submit path computes its own.
+- **Edit-problem popup — un-nest / remove-link now takes two clicks.** The first
+  click arms the button ("Confirm un-nest?" / "Confirm removal?"), only the second
+  commits — same two-step discipline as every other relationship write in the suite.
+  It was the only relationship write that fired on a single click.
+- **Edit-problem popup — a failed un-nest / remove-link is now told to the
+  clinician** ("Nothing was changed; the relationship below is still in place")
+  instead of only `console.warn` — the row re-rendering unchanged was
+  indistinguishable from a slow refresh.
+- **Bulk remove/merge — a failed duplicate-copy scan no longer reads as "No
+  duplicate-code problems found."** The error state now says the scan failed and how
+  to retry, instead of a false negative.
+- **Edit-problem popup opens faster** — the linked/nested-problem lookup no longer
+  blocks the panel's search chain on its network round-trip; it fills in with its
+  own re-render when it lands.
+- **Problem-nesting snapshot** — dropped the dead `unknownSignificanceSuggestions`
+  field (its tray was removed in v3.236.0; the pure builder stays for its tests).
+- `docs/feature-list.md` version header corrected to match the manifest
+  (was left at v3.235.0 by the v3.236.0 bump, failing `check-doc-versions`).
+
 ## [v3.236.0] — 2026-08-19
 
 ### Organise problems — straight to canvas, no more reflow

@@ -316,6 +316,25 @@
     };
   }
 
+  // Same-batch duplicate check (2026-08-19 review): _existsWarning only
+  // covers codes that were ALREADY problems at prefill time — two selected
+  // entries carrying the same conceptId would otherwise BOTH write as fresh
+  // first-episode active problems (exactly the duplicate Medicus's own
+  // create-problem.vue check exists to catch). Marks every row after the
+  // first occurrence of its conceptId so the confirm summary can say so and
+  // the write loop records it as a subsequent episode. Mutates the rows —
+  // they're doSubmit's own working set, never the state entries.
+  function markSameBatchDuplicates(rows) {
+    var seen = {};
+    (rows || []).forEach(function (r) {
+      var cid = r && r._resolvedCode && r._resolvedCode.conceptId;
+      if (!cid) return;
+      r._dupInBatch = !!seen[cid];
+      seen[cid] = true;
+    });
+    return rows;
+  }
+
   // ── Node test hook ────────────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -332,6 +351,7 @@
       annotateExistingProblemFlags,
       isAllergyRelatedCode,
       buildCreateProblemPayload,
+      markSameBatchDuplicates,
     };
     return;
   }
@@ -703,11 +723,14 @@
       readyRows.forEach(function (e) {
         e._allergyWarning = !!allergyByDescription[e._resolvedCode.description];
       });
+      markSameBatchDuplicates(readyRows);
 
       var summaryLines = readyRows.map(function (e) {
         var flags = [];
         if (e._existsWarning)
           flags.push('already an active problem for this code — will be recorded as a subsequent episode');
+        if (e._dupInBatch && !e._existsWarning)
+          flags.push('same code as another selected entry — will be recorded as a subsequent episode');
         if (e._allergyWarning) flags.push('allergy-related — not recommended as a problem record');
         return '• ' + e._resolvedCode.description + (flags.length ? ' (' + flags.join('; ') + ')' : '');
       });
@@ -730,8 +753,14 @@
       var recordDate = prefill.recordDate || today;
       var recordedByStaff = prefill.recordedByStaff || null;
 
+      // Tracks conceptIds SUCCESSFULLY created within this batch — a same-
+      // batch duplicate is only truly "subsequent" once the first copy's
+      // POST landed (if the first write failed, the second is still the
+      // first episode on the record).
+      var createdConceptIds = {};
       for (var w of readyRows) {
         try {
+          var subsequent = !!w._existsWarning || !!createdConceptIds[w._resolvedCode.conceptId];
           var payload = buildCreateProblemPayload({
             patientId: st.patientId,
             code: w._resolvedCode,
@@ -739,7 +768,7 @@
             onsetDate: onsetDate,
             recordDate: recordDate,
             recordedByStaff: recordedByStaff,
-            isSubsequentEpisode: !!w._existsWarning,
+            isSubsequentEpisode: subsequent,
           });
           await apiFetch('/clinical/problem/create-problem', {
             method: 'POST',
@@ -747,11 +776,12 @@
             body: JSON.stringify(payload),
           });
           if (st !== s) return;
+          createdConceptIds[w._resolvedCode.conceptId] = true;
           w.acted = true;
           w.checked = false;
           w.appliedDescription = w._resolvedCode.description;
           w.appliedOnsetDate = onsetDate;
-          w.appliedEpisode = w._existsWarning ? 'subsequent' : null;
+          w.appliedEpisode = subsequent ? 'subsequent' : null;
         } catch (err) {
           w.actError = (err && err.message) || 'Failed to create this problem — please try again.';
         }
@@ -873,6 +903,17 @@
       try {
         var flagData = await fetchExistingProblemFlags(st.patientId, st.entries);
         if (st !== s) return;
+        // A submit that started while these flag fetches were in flight
+        // holds references into the CURRENT st.entries rows (doSubmit writes
+        // acted/appliedDescription onto them as each POST lands). Swapping
+        // in annotate's CLONED rows now would orphan those writes — created
+        // rows would re-render as still-pending, inviting a duplicate
+        // submit. Flags are best-effort: skip them; doSubmit computes its
+        // own _existsWarning fresh anyway.
+        if (st.submitting) {
+          dbg('loadTask: submit in flight — skipping existing-problem flag swap');
+          return;
+        }
         st.entries = annotateExistingProblemFlags(st.entries, flagData.noteDetailsById, flagData.existingProblems);
         dbg('loadTask: existing-problem flags resolved for', Object.keys(flagData.noteDetailsById).length, 'entries');
         rerender();
