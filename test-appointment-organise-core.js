@@ -479,6 +479,17 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     check(created.context === 'reschedule-appointment', 'create context=reschedule-appointment');
     check(created.rescheduledAppointmentVersionId === mouse.versionId, 'create sends the pinned version id');
     check(created.bookingConfirmationRecipients.length === 0, 'create does not invent Send-to');
+    check(
+      booking.calls.some(
+        (c) => c.fn === 'releaseReservation' && c.id === '01a018e1-9543-73c5-a073-799c14a50cb9'
+      ),
+      'cross-list releases the reservation AFTER successful create (captured 07:17:41)'
+    );
+    check(
+      booking.calls.findIndex((c) => c.fn === 'createAppointment') <
+        booking.calls.findIndex((c) => c.fn === 'releaseReservation'),
+      'cross-list release is after create, not instead of it'
+    );
     const posts = f.calls.filter((c) => c.opts.method === 'POST').map((c) => c.url.replace(API, ''));
     check(
       posts[0] === '/scheduling/slot-reservation/reserve-slot-and-broadcast-appointment-booking-in-progress',
@@ -536,6 +547,12 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     check(
       JSON.stringify(Object.keys(reserveBody)) === JSON.stringify(core.RESERVE_RESCHEDULE_KEYS),
       'same-list reserve is also the 3-field body'
+    );
+    check(
+      booking.calls.some(
+        (c) => c.fn === 'releaseReservation' && c.id === '01a018ef-570e-735f-9a0c-1770fba8695f'
+      ),
+      'same-list releases the reservation AFTER successful create (captured 07:32:37)'
     );
   }
 
@@ -671,6 +688,14 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       check(
         JSON.parse(createdCall.opts.body).context === 'reschedule-appointment',
         'live booking-core posted the reschedule payload, not create-booked-appointment'
+      );
+      const releaseCall = f.calls.find((c) => String(c.url).includes('remove-slot-reservation-and-broadcast-appointment-booking-ended'));
+      check(!!releaseCall, 'live booking-core released after successful create');
+      check(JSON.parse(releaseCall.opts.body).slotReservationId === 'live-res', 'release body is { slotReservationId }');
+      check(
+        f.calls.findIndex((c) => String(c.url).endsWith('/scheduling/appointment/create-appointment')) <
+          f.calls.findIndex((c) => String(c.url).includes('remove-slot-reservation')),
+        'live release is after create-appointment 200'
       );
     } finally {
       global.fetch = prevFetch;

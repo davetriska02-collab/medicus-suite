@@ -833,6 +833,8 @@
             isHiddenFromPatientFacingServices: appointment.isHiddenFromPatientFacingServices,
           })
         );
+        // Captured after create-appointment 200 on both same-list and
+        // cross-list (07:32:37 / 07:17:41). Not failure-only cleanup.
         if (reservationId && typeof booking.releaseReservation === 'function') {
           await booking.releaseReservation(apiBase, reservationId);
         }
