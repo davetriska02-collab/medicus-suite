@@ -2,8 +2,6 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [Unreleased]
-
 ## [v3.236.0] — 2026-08-19
 
 ### Organise problems — straight to canvas, no more reflow
@@ -151,6 +149,29 @@ Explicitly deferred to a follow-up: a date-proximity duplicate check
 (catching a likely-duplicate problem near the document's date even when
 the code doesn't match exactly) — today's check is exact-code only,
 matching Medicus's own.
+
+## [v3.234.3] — 2026-08-19
+
+### Reception match — missing topic terms for the carbon-monoxide red flag
+
+The Keeper's v3.234.0 rule refresh added the `rf-household-co` red flag
+("does anyone else in the household have the same new headache") to the
+headache pathway, but `RED_FLAG_TOPIC_TERMS` in `engine/reception-match.js`
+never gained a matching entry, so the flag's topic always read as an un-asked
+gap (safe but noisy) and the coverage guards in `test-reception-match.js` /
+`test-reception-pathway-coverage.js` were failing. Added household /
+carbon-monoxide topic terms for it.
+
+## [v3.234.2] — 2026-08-19
+
+### Rules engine — recall due-date could land a day early/late around DST
+
+`lastDate` strings (`YYYY-MM-DD`) parse as UTC midnight, but the due-date calculation
+was advancing them with local-time `setDate`/`getDate`. On a BST (or other
+DST-shifted) host, adding the interval in local time could push the computed
+due date a day off from adding it in UTC. Switched to `setUTCDate`/`getUTCDate`
+so the whole calculation stays in UTC, matching the `Date.UTC` convention already
+used elsewhere in this file.
 
 ## [v3.234.1] — 2026-08-18
 
