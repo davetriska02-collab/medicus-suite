@@ -226,7 +226,7 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 
 ## Recent additions (last 4 weeks)
 
-- **v3.234.2 (2026-08-19)** — Appointment-book organise canvas: cancel, same-list/cross-list move, stretch into a free following slot, and sick-day rebook (similar slot on another list). SMS off. Arrived tiles locked.
+- **v3.234.2 (2026-08-19)** — Appointment-book organise canvas: cancel, same-list/cross-list move, stretch into a free following slot, and sick-day rebook (similar slot on another list). SMS off. Arrived tiles locked. Sick-day leftovers are a phone list; covering lists show a pile-on preview with a cap; confirm bar says rebooked with the covering clinician.
 - **v3.234.1 (2026-08-18)** — Canvas End and significance are staged: arrange many tiles, then Finalise writes them all. Nest/link still confirm per drop.
 - **v3.234.0 (2026-08-18)** — Organise-problems canvas is now a unified organiser: Major / Minor / Unresolved lanes, an End bin (Resolved, today's date; parents with live children blocked), tile-to-tile nest/link unchanged. Existing single-action buttons stay on the page.
 - **v3.233.0 (2026-08-18)** — The Keeper currency check, CSO-signed: new warfarin/VKA INR, mycophenolate and fezolinetant monitoring rules; eprosartan/Teveten, Curatil, Mintreleq XL/Sondate XL and Marevan brand gaps closed; RSV 65–74 COPD and immunosuppression eligibility from 1 Sept 2026 (bare asthma omitted); topiramate PPP and warfarin+tramadol alerts; sore-throat unwell-child promoted to 999; headache household carbon-monoxide flag. Held (not applied): CKD002/003 disable, AST ID rename, NDH, RSV care-home under-18 exclusion.

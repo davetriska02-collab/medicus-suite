@@ -29,13 +29,36 @@ still-needs-rebook. Stage then Finalise. SMS off until a Send-to capture.
 | Double-book | Covering list with no gap. | Slot conflict check; no `allowOverlappingAppointments=allow`. |
 | Similar but wrong type | 10-min phone vs 15-min GP. | Type id and duration must match. No type picker. |
 
-## Held (need a capture)
+## Round 2 — Monday morning (still inside captured contracts)
 
-- Send-to On wording ("due to unforeseen circumstances…").
-- Queue / DNA / Reschedule menu.
-- Stretch into a booked neighbour.
+Reception, 08:05, one GP called in sick:
+
+| Need | Verdict | Shipped |
+|---|---|---|
+| Who do I phone? | Inline "still needs rebook" hints vanish into the list. The leftover **is** the work. | First-class phone list: original time, name, type/length, why. Copy. Stays after Stage. |
+| Number to dial | Not on `embedded-overview.patient` (id, name, preferredName only). Inventing a contacts GET would be a new endpoint. | List says look them up in Medicus. Ask the driving bot if overview/cancel GET already has a telephone. |
+| Did we drown the duty GP? | Nearest-slot dump piles everyone onto the first similar list. | Covering-list preview (already booked + incoming + free tiles). Default cap 6 extra per dest; reception can raise it. |
+| Two patients, one slot | Independent suggest offered the same 14:00 twice. | Greedy consume in clock order. |
+| Suggesting 08:15 at 10:40 | Useless, and a no-show risk if Finalised. | Skip past slots when the book date is today. Future dummy Sundays unchanged. |
+| What do I tell the patient? | "Move X → Y — will not send a booking message" is engineer-speak. | Confirm bar: **Rebooked with Y at {time} — {patient} (was …) — Medicus will not send a booking message**. SMS still off. |
+
+GP covering:
+
+| Need | Verdict | Shipped |
+|---|---|---|
+| See the pile-on before it writes | Preview, not a surprise at 11:00. | Covering-list preview on the review step. |
+| Home visits / wrong type | Already matched on delivery + type + site + length. | Unchanged. |
+| Waiting room | Do not phone someone who is already here. | Locked leftovers labelled waiting room. |
+
+Still held (need a capture, do not invent):
+
+- Send-to On on a **safe dummy** channel (Mouse's live form showed real-looking NHS email and UK mobiles — do not submit).
+- Next-day similar slot.
+- Move-to-queue.
+- Telephone / NHS number on leftover rows, if a **captured GET** already returns them.
 
 ## Judgement call
 
 Defaulting matched rows to **accept** favours Monday speed. Reverse it by
 defaulting to **leave** if reception would rather opt in than opt out.
+The dest extra cap (default 6) is the brake on drowning one duty list.

@@ -375,16 +375,47 @@
         '</div></div>'
       );
     }
-    var rows = ((_sick.proposal && _sick.proposal.rows) || [])
-      .map(function (row, idx) {
+    var leftovers = C.sickDayLeftovers(_sick.proposal);
+    var cover = C.coverLoadPreview(_board, _sick.proposal);
+    var cap = Number(_sick.proposal.destExtraCap) || C.SICK_DAY_DEST_EXTRA_CAP;
+    if (_sick.step === 'leftovers') {
+      return leftoverPanelHtml(leftovers, _sick.proposal.sickStaffName, true);
+    }
+    var coverHtml = cover.length
+      ? '<div class="ms-aoc-cover-preview">' +
+        '<div class="ms-aoc-cover-preview-title">Covering lists after this pile-on</div>' +
+        cover
+          .map(function (d) {
+            return (
+              '<div class="ms-aoc-cover-row' +
+              (d.overCap ? ' ms-aoc-cover-over' : '') +
+              '">' +
+              esc(d.staffName) +
+              ' ' +
+              esc(hhmm(d.sessionStart) + '–' + hhmm(d.sessionEnd)) +
+              ' — ' +
+              d.alreadyBooked +
+              ' already booked + ' +
+              d.incoming +
+              ' incoming = ' +
+              d.afterBooked +
+              '. ' +
+              d.remainingFree +
+              ' free tiles left' +
+              (d.overCap ? ' — over the cap of ' + d.cap + ' extra.' : '.') +
+              '</div>'
+            );
+          })
+          .join('') +
+        '</div>'
+      : '<div class="ms-aoc-hint">No covering list would take anyone — this is a phone list.</div>';
+    var moveRows = ((_sick.proposal && _sick.proposal.rows) || [])
+      .filter(function (row) {
+        return row.status !== 'locked';
+      })
+      .map(function (row) {
+        var idx = _sick.proposal.rows.indexOf(row);
         var a = row.appointment;
-        if (row.status === 'locked') {
-          return (
-            '<div class="ms-aoc-finalise-row">' +
-            esc(hhmm(a.startDateTime) + ' · ' + a.patientName) +
-            ' — waiting room, not moved</div>'
-          );
-        }
         var opts = (row.alternatives || [])
           .map(function (s) {
             var val = s.diaryId + '|' + s.startDateTime;
@@ -423,15 +454,74 @@
       '<strong>Sick day — ' +
       esc(_sick.proposal.sickStaffName) +
       '.</strong> Accept a similar slot, pick another, or leave as still needs rebook. ' +
-      'Finalise uses the captured cross-list move. Medicus will not message patients.' +
+      'Finalise uses the captured cross-list move. Confirm will say rebooked with the covering clinician. SMS stays off.' +
+      '<label class="ms-aoc-cap-label">Max extra per covering list ' +
+      '<input type="number" class="ms-aoc-cap-input" id="ms-aoc-sick-cap" min="1" max="20" value="' +
+      esc(String(cap)) +
+      '"></label>' +
+      coverHtml +
       '<div class="ms-aoc-finalise-list">' +
-      rows +
+      (moveRows || '<div class="ms-aoc-empty">Nobody can be moved on similar slots.</div>') +
       '</div>' +
+      leftoverPanelHtml(leftovers, _sick.proposal.sickStaffName, false) +
       '<div class="ms-aoc-confirmbar-actions">' +
       '<button type="button" class="ms-aoc-cancel" id="ms-aoc-sick-cancel">Back</button>' +
       (C.sickDayAcceptCount(_sick.proposal)
         ? '<button type="button" class="ms-aoc-confirm-btn" id="ms-aoc-sick-apply">Stage accepted moves</button>'
         : '<span class="ms-aoc-hint">Nothing to stage — every row still needs rebook or is waiting room.</span>') +
+      '</div></div>'
+    );
+  }
+
+  function leftoverPanelHtml(leftovers, sickStaffName, persistOnly) {
+    if (!leftovers || !leftovers.length) {
+      return persistOnly
+        ? '<div class="ms-aoc-confirmbar"><strong>Sick day leftovers.</strong> Everyone who could move has been staged. ' +
+            '<div class="ms-aoc-confirmbar-actions">' +
+            '<button type="button" class="ms-aoc-cancel" id="ms-aoc-sick-cancel">Close leftover list</button>' +
+            '</div></div>'
+        : '';
+    }
+    var rows = leftovers
+      .map(function (row) {
+        return (
+          '<div class="ms-aoc-leftover-row' +
+          (row.status === 'locked' ? ' ms-aoc-leftover-locked' : '') +
+          '">' +
+          '<span class="ms-aoc-leftover-when">' +
+          esc(hhmm(row.originalTime)) +
+          '</span>' +
+          '<span class="ms-aoc-leftover-who">' +
+          esc(row.patientName) +
+          '</span>' +
+          '<span class="ms-aoc-leftover-meta">' +
+          esc((row.appointmentTypeName || 'Appointment') + (row.duration ? ' · ' + row.duration + ' min' : '')) +
+          '</span>' +
+          '<span class="ms-aoc-leftover-why">' +
+          esc(row.status === 'locked' ? 'Waiting room — already here, do not phone to rebook' : row.reason) +
+          '</span>' +
+          '</div>'
+        );
+      })
+      .join('');
+    return (
+      '<div class="' +
+      (persistOnly ? 'ms-aoc-confirmbar' : 'ms-aoc-phone-list') +
+      '">' +
+      '<div class="ms-aoc-phone-title">Still needs a phone call — ' +
+      leftovers.length +
+      ' from ' +
+      esc(sickStaffName || 'this list') +
+      '</div>' +
+      '<div class="ms-aoc-hint">Name, original time, and why it failed. No phone numbers on the appointment book — look the patient up in Medicus.</div>' +
+      '<div class="ms-aoc-finalise-list">' +
+      rows +
+      '</div>' +
+      '<div class="ms-aoc-confirmbar-actions">' +
+      '<button type="button" class="ms-aoc-ghost" id="ms-aoc-sick-copy">Copy phone list</button>' +
+      (persistOnly
+        ? '<button type="button" class="ms-aoc-cancel" id="ms-aoc-sick-cancel">Close leftover list</button>'
+        : '') +
       '</div></div>'
     );
   }
@@ -567,10 +657,45 @@
     root.querySelector('#ms-aoc-sick-apply')?.addEventListener('click', function () {
       if (!_sick || !_sick.proposal) return;
       _draft = C.applySickDayProposal(_draft, _sick.proposal);
-      _sick = null;
-      announce('Staged accepted sick-day moves. Finalise when ready.');
+      var leftovers = C.sickDayLeftovers(_sick.proposal);
+      if (leftovers.length) {
+        _sick = { step: 'leftovers', proposal: _sick.proposal };
+        announce('Staged accepted sick-day moves. ' + leftovers.length + ' still need a phone call. Finalise when ready.');
+      } else {
+        _sick = null;
+        announce('Staged accepted sick-day moves. Finalise when ready.');
+      }
       render();
     });
+    root.querySelector('#ms-aoc-sick-copy')?.addEventListener('click', function () {
+      if (!_sick || !_sick.proposal) return;
+      var text = C.leftoverPhoneText(_sick.proposal);
+      if (!text) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(
+          function () {
+            announce('Phone list copied.');
+          },
+          function () {
+            announce(text);
+          }
+        );
+      } else {
+        announce(text);
+      }
+    });
+    var capInput = root.querySelector('#ms-aoc-sick-cap');
+    if (capInput) {
+      capInput.addEventListener('change', function () {
+        if (!_sick || !_sick.proposal) return;
+        var n = Number(capInput.value);
+        _sick = {
+          step: 'review',
+          proposal: C.proposeSickDay(_board, _sick.proposal.sickDiaryId, { destExtraCap: n }),
+        };
+        render();
+      });
+    }
     root.querySelectorAll('[data-sick-diary]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         _sick = { step: 'review', proposal: C.proposeSickDay(_board, btn.getAttribute('data-sick-diary')) };

@@ -389,7 +389,19 @@ Not a Medicus menu. Uses the captured **cross-list move** only
 SMS/email stay Off until a Send-to On payload is captured.
 
 Similar = same appointment type id, duration, site, delivery mode, another
-diary that day, next free slot closest to the original time. Arrived tiles
-locked. No type picker. No `allowOverlappingAppointments=allow`. Stretch
-rules unchanged.
+diary that day, next free slot closest to the original time. Consecutive
+15-min free tiles may cover a 30-min booking (reserve still 15, then
+update to 30). Arrived tiles locked. No type picker. No
+`allowOverlappingAppointments=allow`. Stretch rules unchanged.
+
+Monday-morning suite UI (no new endpoints): leftover still-needs-rebook is
+a first-class phone list (name, original time, why — the book has no
+telephone); covering-list preview after the pile-on with a dest extra cap
+(default 6); greedy consume so two patients are not offered the same slot;
+past slots on today's book are not suggested; confirm bar says
+"rebooked with Y" while `bookingConfirmationRecipients` stays `[]`.
+
+Held until captured: Send-to On on a safe dummy channel; next-day similar;
+move-to-queue. Ask whether GET appointment-overview / cancel-appointment
+exposes a telephone we can print on the leftover list without writing.
 

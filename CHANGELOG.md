@@ -38,7 +38,12 @@ Writes follow the 2026-08-19 capture on dummy patient Mr Micky Mouse
   accepts, picks another match, or leaves as still-needs-rebook.
   Finalise is the captured cross-list move. SMS stays off until a
   Send-to On capture exists. Home visits are not matched to
-  face-to-face slots.
+  face-to-face slots. Monday-morning polish (same captured write):
+  leftover **phone list** (name, original time, why it failed, copy);
+  covering-list **preview + cap** so one duty GP is not drowned;
+  greedy assign so two patients do not get the same slot; skip
+  similar slots that are already in the past; confirm bar says
+  **rebooked with Y** even while SMS is off.
 
 New `shared/appointment-organise-core.js` owns cancel + move orchestration
 (`update-slot-reservation`, appointment-overview GET). Reserve / create /

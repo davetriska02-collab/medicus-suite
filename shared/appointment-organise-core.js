@@ -456,6 +456,9 @@
 
   var REBOOK_NO_SLOT = 'No similar free slot today (same type, length, site, delivery). Still needs rebook.';
   var REBOOK_WAITING = 'Waiting room / arrived — do not rebook from this board.';
+  var REBOOK_PAST = 'Remaining similar slots are already in the past. Still needs rebook.';
+  var REBOOK_CLAIMED = 'Similar slots already offered to earlier patients on this list. Still needs rebook.';
+  var SICK_DAY_DEST_EXTRA_CAP = 6;
 
   function isHomeVisit(appointment) {
     var d = String((appointment && appointment.deliveryMode) || '').toLowerCase();
@@ -485,7 +488,25 @@
     });
   }
 
-  function matchingSlots(board, appointment) {
+  function slotIsPast(slot, board, now) {
+    if (!slot || !board || !board.date) return false;
+    if (board.date !== todayISO()) return false;
+    var d = parseDt(slot.startDateTime);
+    if (!d) return false;
+    var t = now == null ? Date.now() : Number(now);
+    return d.getTime() <= t;
+  }
+
+  function slotOverlapsClaimed(slot, claimed) {
+    if (!slot || !claimed || !claimed.length) return false;
+    var end = slot.endDateTime || addMinutes(slot.startDateTime, slot.duration || 0);
+    return claimed.some(function (c) {
+      return c.diaryId === slot.diaryId && intervalOverlaps(slot.startDateTime, end, c.startDateTime, c.endDateTime);
+    });
+  }
+
+  function matchingSlots(board, appointment, opts) {
+    opts = opts || {};
     var need = Number(appointment && appointment.duration) || 0;
     var out = [];
     ((board && board.columns) || []).forEach(function (col) {
@@ -504,7 +525,11 @@
           };
         })
         .filter(function (slot) {
-          return slotFitsIdentity(appointment, slot) && !slotConflicts(board, slot, appointment.id);
+          return (
+            slotFitsIdentity(appointment, slot) &&
+            !slotConflicts(board, slot, appointment.id) &&
+            !slotIsPast(slot, board, opts.now)
+          );
         })
         .sort(function (a, b) {
           return String(a.startDateTime).localeCompare(String(b.startDateTime));
@@ -569,7 +594,11 @@
           };
         })
         .filter(function (slot) {
-          return slotFitsIdentity(appointment, slot) && !slotConflicts(board, slot, appointment.id);
+          return (
+            slotFitsIdentity(appointment, slot) &&
+            !slotConflicts(board, slot, appointment.id) &&
+            !slotIsPast(slot, board, null)
+          );
         })
         .sort(function (a, b) {
           return String(a.startDateTime).localeCompare(String(b.startDateTime));
@@ -595,8 +624,20 @@
     return { max: max, tileDurations: tileDurations };
   }
 
-  function rebookMissReason(board, appointment) {
+  function destCapReason(cap) {
+    return 'Covering list would take more than ' + cap + ' extra patients. Still needs rebook.';
+  }
+
+  function rebookMissReason(board, appointment, opts) {
     var need = Number(appointment && appointment.duration) || 0;
+    if (
+      board &&
+      board.date === todayISO() &&
+      matchingSlots(board, appointment, { now: 0 }).length &&
+      !matchingSlots(board, appointment, opts).length
+    ) {
+      return REBOOK_PAST;
+    }
     var run = longestFreeRun(board, appointment);
     if (!run.tileDurations.length) {
       var anyFree = false;
@@ -621,40 +662,155 @@
     return REBOOK_NO_SLOT;
   }
 
-  function suggestRebook(board, appointment) {
+  function suggestRebook(board, appointment, opts) {
     if (!appointment) return { ok: false, reason: 'Missing appointment.', suggestion: null };
     if (appointment.locked || appointment.arrived) {
       return { ok: false, reason: REBOOK_WAITING, suggestion: null };
     }
-    var list = matchingSlots(board, appointment);
-    if (!list.length) return { ok: false, reason: rebookMissReason(board, appointment), suggestion: null };
+    var list = matchingSlots(board, appointment, opts);
+    if (!list.length) return { ok: false, reason: rebookMissReason(board, appointment, opts), suggestion: null };
     return { ok: true, reason: null, suggestion: list[0] };
   }
 
-  function proposeSickDay(board, sickDiaryId) {
+  function proposeSickDay(board, sickDiaryId, opts) {
+    opts = opts || {};
+    var destExtraCap = Number(opts.destExtraCap);
+    if (!Number.isFinite(destExtraCap) || destExtraCap < 1) destExtraCap = SICK_DAY_DEST_EXTRA_CAP;
     var col = findColumn(board, sickDiaryId);
-    if (!col) return { sickDiaryId: sickDiaryId, sickStaffName: '', rows: [] };
-    var rows = (col.appointments || []).map(function (a) {
+    if (!col) {
+      return { sickDiaryId: sickDiaryId, sickStaffName: '', destExtraCap: destExtraCap, rows: [] };
+    }
+    var claimed = [];
+    var destCount = {};
+    var appointments = (col.appointments || []).slice().sort(function (a, b) {
+      return String(a.startDateTime).localeCompare(String(b.startDateTime));
+    });
+    var rows = appointments.map(function (a) {
       if (a.locked || a.arrived) {
         return { appointment: a, status: 'locked', suggestion: null, reason: REBOOK_WAITING, alternatives: [] };
       }
-      var alts = matchingSlots(board, a);
-      var sug = alts[0] || null;
+      var alts = matchingSlots(board, a, { now: opts.now });
+      var usable = alts.filter(function (s) {
+        if ((destCount[s.diaryId] || 0) >= destExtraCap) return false;
+        return !slotOverlapsClaimed(s, claimed);
+      });
+      var sug = usable[0] || null;
+      var reason = null;
+      if (!sug) {
+        if (!alts.length) reason = rebookMissReason(board, a, { now: opts.now });
+        else if (alts.every(function (s) { return (destCount[s.diaryId] || 0) >= destExtraCap; })) {
+          reason = destCapReason(destExtraCap);
+        } else {
+          reason = REBOOK_CLAIMED;
+        }
+      } else {
+        claimed.push({
+          diaryId: sug.diaryId,
+          startDateTime: sug.startDateTime,
+          endDateTime: sug.endDateTime || addMinutes(sug.startDateTime, sug.duration || 0),
+        });
+        destCount[sug.diaryId] = (destCount[sug.diaryId] || 0) + 1;
+      }
       return {
         appointment: a,
         status: sug ? 'accept' : 'leave',
         suggestion: sug,
-        reason: sug ? null : rebookMissReason(board, a),
+        reason: reason,
         alternatives: alts,
       };
     });
-    return { sickDiaryId: sickDiaryId, sickStaffName: col.staffName, rows: rows };
+    return {
+      sickDiaryId: sickDiaryId,
+      sickStaffName: col.staffName,
+      destExtraCap: destExtraCap,
+      rows: rows,
+    };
   }
 
   function sickDayAcceptCount(proposal) {
     return ((proposal && proposal.rows) || []).filter(function (row) {
       return row.status === 'accept' && row.suggestion;
     }).length;
+  }
+
+  function sickDayLeftovers(proposal) {
+    return ((proposal && proposal.rows) || [])
+      .filter(function (row) {
+        return row.status === 'leave' || row.status === 'locked';
+      })
+      .map(function (row) {
+        var a = row.appointment || {};
+        return {
+          appointmentId: a.id || null,
+          patientName: a.patientName || 'Unknown',
+          originalTime: a.startDateTime || '',
+          duration: a.duration || 0,
+          appointmentTypeName: a.appointmentTypeName || '',
+          deliveryMode: a.deliveryMode || '',
+          status: row.status,
+          reason: row.reason || (row.status === 'locked' ? REBOOK_WAITING : REBOOK_NO_SLOT),
+        };
+      })
+      .sort(function (a, b) {
+        return String(a.originalTime).localeCompare(String(b.originalTime));
+      });
+  }
+
+  function leftoverPhoneText(proposal) {
+    var list = sickDayLeftovers(proposal);
+    if (!list.length) return '';
+    var sick = (proposal && proposal.sickStaffName) || 'this list';
+    var lines = ['Still needs a phone call — ' + sick];
+    list.forEach(function (row) {
+      lines.push(
+        hhmm(row.originalTime) +
+          '  ' +
+          row.patientName +
+          '  ' +
+          (row.appointmentTypeName || 'Appointment') +
+          (row.duration ? ' ' + row.duration + ' min' : '') +
+          '  —  ' +
+          row.reason
+      );
+    });
+    lines.push('No phone numbers on the appointment book. Look the patient up in Medicus.');
+    return lines.join('\n');
+  }
+
+  function coverLoadPreview(board, proposal) {
+    var dests = {};
+    ((proposal && proposal.rows) || []).forEach(function (row) {
+      if (row.status !== 'accept' || !row.suggestion) return;
+      var id = row.suggestion.diaryId;
+      if (!dests[id]) {
+        var col = findColumn(board, id);
+        dests[id] = {
+          diaryId: id,
+          staffName: (col && col.staffName) || row.suggestion.staffName || '',
+          sessionStart: col && col.sessionStart,
+          sessionEnd: col && col.sessionEnd,
+          alreadyBooked: col ? (col.appointments || []).length : 0,
+          remainingFree: col ? (col.slots || []).length : 0,
+          incoming: 0,
+          incomingMinutes: 0,
+        };
+      }
+      dests[id].incoming += 1;
+      dests[id].incomingMinutes += Number((row.appointment && row.appointment.duration) || 0);
+    });
+    var cap = Number(proposal && proposal.destExtraCap);
+    if (!Number.isFinite(cap) || cap < 1) cap = SICK_DAY_DEST_EXTRA_CAP;
+    return Object.keys(dests)
+      .map(function (id) {
+        var d = dests[id];
+        d.afterBooked = d.alreadyBooked + d.incoming;
+        d.overCap = d.incoming > cap;
+        d.cap = cap;
+        return d;
+      })
+      .sort(function (a, b) {
+        return String(a.staffName).localeCompare(String(b.staffName));
+      });
   }
 
   function applySickDayProposal(draft, proposal) {
@@ -813,17 +969,16 @@
         included: mv.included !== false,
         patientName: appt.patientName,
         text:
-          'Move ' +
-          appt.patientName +
-          ', ' +
-          hhmm(appt.startDateTime) +
-          ' ' +
-          (appt.staffName || '') +
-          ' → ' +
+          'Rebooked with ' +
+          (mv.staffName || 'the covering list') +
+          ' at ' +
           hhmm(mv.startDateTime) +
-          ' ' +
-          (mv.staffName || '') +
-          ' — Medicus will not send a booking message',
+          ' — ' +
+          appt.patientName +
+          ' (was ' +
+          hhmm(appt.startDateTime) +
+          (appt.staffName ? ' ' + appt.staffName : '') +
+          ') — Medicus will not send a booking message',
       });
     });
     ((draft && draft.stretchIds) || []).forEach(function (id) {
@@ -1479,9 +1634,16 @@
     proposeSickDay: proposeSickDay,
     applySickDayProposal: applySickDayProposal,
     sickDayAcceptCount: sickDayAcceptCount,
+    sickDayLeftovers: sickDayLeftovers,
+    leftoverPhoneText: leftoverPhoneText,
+    coverLoadPreview: coverLoadPreview,
     rebookMissReason: rebookMissReason,
+    slotIsPast: slotIsPast,
     REBOOK_NO_SLOT: REBOOK_NO_SLOT,
     REBOOK_WAITING: REBOOK_WAITING,
+    REBOOK_PAST: REBOOK_PAST,
+    REBOOK_CLAIMED: REBOOK_CLAIMED,
+    SICK_DAY_DEST_EXTRA_CAP: SICK_DAY_DEST_EXTRA_CAP,
     addMinutes: addMinutes,
     stageCancel: stageCancel,
     unstageCancel: unstageCancel,

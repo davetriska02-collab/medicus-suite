@@ -1116,6 +1116,149 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     check(staged30.moves[mouse30onBoard.id].duration === undefined || staged30.moves[mouse30onBoard.id].startDateTime === run.suggestion.startDateTime, 'staged run keeps the start of the first 15-min tile');
     const left = core.applySickDayProposal(core.emptyDraft(), prop);
     check(left.moveIds.length === 0, 'leave rows are not staged and not written');
+
+    const happyProp = core.proposeSickDay(happy, sickDiary);
+    const happySum = core.summariseDraft(core.applySickDayProposal(core.emptyDraft(), happyProp), happy);
+    check(/Rebooked with Cover GP/.test(happySum.items[0].text), 'confirm bar says rebooked with the covering clinician');
+    check(/Mr Micky Mouse/.test(happySum.items[0].text), 'confirm bar still names the patient');
+    check(/will not send a booking message/.test(happySum.items[0].text), 'confirm bar still says SMS is off');
+
+    const coverPrev = core.coverLoadPreview(happy, happyProp);
+    check(coverPrev.length === 1, 'cover preview has the dest list');
+    check(coverPrev[0].staffName === 'Cover GP', 'cover preview names the dest');
+    check(coverPrev[0].incoming === 1, 'cover preview counts the pile-on');
+    check(coverPrev[0].alreadyBooked === 0, 'cover preview counts already booked');
+    check(coverPrev[0].overCap === false, 'one extra is under the default cap');
+
+    const fullLeftovers = core.sickDayLeftovers(prop);
+    check(fullLeftovers.length === 1, 'full cover becomes a leftover phone-list row');
+    check(fullLeftovers[0].patientName === mouse.patientName, 'leftover names the patient');
+    check(fullLeftovers[0].originalTime === '2026-08-23 14:00:00', 'leftover keeps the original time');
+    check(/Still needs rebook/.test(fullLeftovers[0].reason), 'leftover says why it failed');
+    check(/Mr Micky Mouse/.test(core.leftoverPhoneText(prop)), 'copyable phone list names the patient');
+    check(/No phone numbers/.test(core.leftoverPhoneText(prop)), 'copyable list admits the book has no number');
+
+    const twoSick = core.parseBoard({
+      date: '2026-08-23',
+      staffSchedules: [
+        {
+          name: 'Cover GP',
+          id: 'cover',
+          schedule: [
+            {
+              scheduleType: 'diary',
+              id: coverDiary,
+              startDateTime: '2026-08-23 13:00:00',
+              endDateTime: '2026-08-23 15:00:00',
+              summary: {
+                status: { isCancelled: false },
+                usualAppointmentDuration: 15,
+                defaultDeliveryMode: { value: 'face-to-face' },
+                defaultAppointmentType: { id: mouse.appointmentTypeId },
+                site: { id: 'witley', name: 'Witley Surgery' },
+                nhsNationalSlotTypeCategoryDefault: { value: '10127' },
+              },
+              entries: [
+                {
+                  diaryEntryType: { value: 'slot' },
+                  startDateTime: '2026-08-23 14:00:00',
+                  endDateTime: '2026-08-23 14:15:00',
+                  duration: 15,
+                  appointmentType: { id: mouse.appointmentTypeId },
+                  defaultDeliveryMode: { value: 'face-to-face' },
+                },
+                {
+                  diaryEntryType: { value: 'slot' },
+                  startDateTime: '2026-08-23 14:15:00',
+                  endDateTime: '2026-08-23 14:30:00',
+                  duration: 15,
+                  appointmentType: { id: mouse.appointmentTypeId },
+                  defaultDeliveryMode: { value: 'face-to-face' },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      unassignedDiaries: [
+        {
+          scheduleType: 'diary',
+          id: sickDiary,
+          startDateTime: '2026-08-23 13:00:00',
+          endDateTime: '2026-08-23 15:00:00',
+          summary: {
+            status: { isCancelled: false },
+            usualAppointmentDuration: 15,
+            defaultDeliveryMode: { value: 'face-to-face' },
+            defaultAppointmentType: { id: mouse.appointmentTypeId },
+            site: { id: 'witley', name: 'Witley Surgery' },
+            nhsNationalSlotTypeCategoryDefault: { value: '10127' },
+          },
+          entries: [
+            {
+              id: stretchMouse.id,
+              versionId: stretchMouse.versionId,
+              patient: { id: mouse.patientId, name: mouse.patientName },
+              diaryEntryType: { value: 'appointment' },
+              appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
+              startDateTime: '2026-08-23 14:00:00',
+              endDateTime: '2026-08-23 14:15:00',
+              duration: 15,
+              displayStatus: { value: 'booked' },
+              deliveryMode: { value: 'face-to-face' },
+              appointmentStatus: { value: 'pending', isCancelled: false, isStarted: false, isSeen: false },
+            },
+            {
+              id: 'daisy-1',
+              versionId: 'daisy-v',
+              patient: { id: 'daisy-p', name: 'Daisy Duck' },
+              diaryEntryType: { value: 'appointment' },
+              appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
+              startDateTime: '2026-08-23 14:15:00',
+              endDateTime: '2026-08-23 14:30:00',
+              duration: 15,
+              displayStatus: { value: 'booked' },
+              deliveryMode: { value: 'face-to-face' },
+              appointmentStatus: { value: 'pending', isCancelled: false, isStarted: false, isSeen: false },
+            },
+          ],
+        },
+      ],
+    });
+    const spread = core.proposeSickDay(twoSick, sickDiary);
+    check(spread.rows.filter((r) => r.status === 'accept').length === 2, 'two similar patients both get a slot');
+    check(
+      spread.rows[0].suggestion.startDateTime !== spread.rows[1].suggestion.startDateTime,
+      'greedy assign does not offer the same cover slot twice'
+    );
+    const capped = core.proposeSickDay(twoSick, sickDiary, { destExtraCap: 1 });
+    check(capped.rows[0].status === 'accept', 'first patient still takes the dest under a cap of 1');
+    check(capped.rows[1].status === 'leave', 'second patient is leftover when dest would drown');
+    check(/more than 1 extra/.test(capped.rows[1].reason), 'cap leftover says the covering list would take too many');
+    const cappedPrev = core.coverLoadPreview(twoSick, capped);
+    check(cappedPrev[0].incoming === 1, 'capped preview does not pile the leftover onto dest');
+
+    const todayDate = new Date();
+    const y = todayDate.getFullYear();
+    const m = String(todayDate.getMonth() + 1).padStart(2, '0');
+    const day = String(todayDate.getDate()).padStart(2, '0');
+    const todayStr = y + '-' + m + '-' + day;
+    const morning = sickBoard();
+    morning.date = todayStr;
+    morning.columns.forEach((col) => {
+      (col.slots || []).forEach((s) => {
+        s.startDateTime = todayStr + ' 08:00:00';
+        s.endDateTime = todayStr + ' 08:15:00';
+      });
+      (col.appointments || []).forEach((a) => {
+        a.startDateTime = todayStr + ' 08:00:00';
+        a.endDateTime = todayStr + ' 08:15:00';
+      });
+    });
+    const noon = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate(), 12, 0, 0).getTime();
+    const past = core.suggestRebook(morning, core.findAppointment(morning, stretchMouse.id), { now: noon });
+    check(past.ok === false, 'does not offer a similar slot that is already in the past');
+    check(/past/.test(past.reason), 'past-slot leftover says the remaining similar slots are gone');
   }
 
   console.log('=== 6. live booking-core is the reserve/create/release copy ===');

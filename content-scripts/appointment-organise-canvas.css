@@ -374,3 +374,87 @@
   color: #1e40af;
   cursor: pointer;
 }
+
+.ms-aoc-cover-preview {
+  margin-top: 8px;
+  padding: 8px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: var(--r-sm);
+}
+
+.ms-aoc-cover-preview-title,
+.ms-aoc-phone-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+
+.ms-aoc-cover-row {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+
+.ms-aoc-cover-over {
+  color: #991b1b;
+  font-weight: 600;
+}
+
+.ms-aoc-cap-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.ms-aoc-cap-input {
+  width: 56px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.ms-aoc-phone-list {
+  margin-top: 10px;
+  padding: 8px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: var(--r-sm);
+}
+
+.ms-aoc-leftover-row {
+  display: grid;
+  grid-template-columns: 48px minmax(120px, 1.2fr) minmax(100px, 1fr) minmax(160px, 1.6fr);
+  gap: 8px;
+  align-items: start;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.ms-aoc-leftover-locked {
+  opacity: 0.78;
+}
+
+.ms-aoc-leftover-when {
+  font-weight: 700;
+}
+
+.ms-aoc-leftover-who {
+  font-weight: 600;
+}
+
+.ms-aoc-leftover-meta,
+.ms-aoc-leftover-why {
+  color: var(--text-3);
+}
+
+.ms-aoc-finalise-list {
+  max-height: 280px;
+}
