@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "lastVerified": "2026-07-25",
+  "lastVerified": "2026-08-20",
   "notes": "Config for the public, no-auth NHS SNOMED CT UK-edition termbrowser API (https://termbrowser.nhs.uk/), used by shared/snomed-retirement.js to check whether a problem's own SNOMED conceptId is active or retired -- a SEPARATE public service from Medicus's own API, confirmed live 2026-07-25 (GET {baseUrl}/{edition}/v{release}/concepts/{conceptId} -> {active, memberships:[...], ...}). NOT the official NHS England Terminology Server FHIR API (digital.nhs.uk/developer/api-catalogue/terminology-server-fhir) -- that one requires a system-to-system account, which can't be safely embedded in a distributed browser extension; this termbrowser API needs no authentication at all. The 'release' string changes roughly twice a year with each SNOMED CT UK edition release and is NOT auto-discoverable via any endpoint confirmed live so far (a wrong release string returns the literal JSON value `false`, not an error) -- update this file's 'release' field when queries start failing, confirmed via https://termbrowser.nhs.uk/?perspective=full&edition=uk-edition&release= (leave release blank in that URL, the UI page will show/default to the current one) or a live console capture like the one used to find v20260603. Code calling this API MUST fail closed to 'unknown, skip' on any error or unexpected response shape (including a bare `false`) -- NEVER assume active or inactive when the check itself failed.",
   "baseUrl": "https://termbrowser.nhs.uk/sct-browser-api/snomed",
   "edition": "uk-edition",
-  "release": "v20260603"
+  "release": "v20260729"
 }

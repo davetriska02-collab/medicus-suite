@@ -113,21 +113,43 @@
   // undated (the mis-sorting Nick found live 2026-08-08).
   var ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-  // Parses either the confirmed "DD Mon YYYY" onset-date display shape OR
-  // an already-ISO "YYYY-MM-DD" shape (recordDate) into a zero-padded
-  // 'YYYY-MM-DD' string (lexically sortable). Returns null for
-  // missing/malformed input — never guesses a date.
+  // A PARTIAL onset date — month + year only, no day (e.g. "Dec 2008") —
+  // is a real, legitimate shape Medicus stores (an imported/historic record
+  // that never had a day recorded), confirmed live 2026-08-20: it fell
+  // through DATE_RE (which requires a day) AND ISO_DATE_RE, so dateSortKey
+  // returned null and the problem sorted as fully undated — below every
+  // dated entry, including ones far older than it.
+  var MONTH_ONLY_DATE_RE = /^([A-Za-z]{3}) (\d{4})$/;
+
+  // Parses the confirmed "DD Mon YYYY" onset-date display shape, an
+  // already-ISO "YYYY-MM-DD" shape (recordDate), OR a partial "Mon YYYY"
+  // onset date into a zero-padded, lexically sortable key. Returns null for
+  // missing/malformed input — never guesses a day that wasn't given.
   function dateSortKey(value) {
     if (value == null) return null;
     var s = String(value).trim();
     var iso = ISO_DATE_RE.exec(s);
     if (iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
     var m = DATE_RE.exec(s);
-    if (!m) return null;
-    var month = MONTH_ABBR[m[2]];
-    if (!month) return null;
-    var day = m[1].length === 1 ? '0' + m[1] : m[1];
-    return m[3] + '-' + month + '-' + day;
+    if (m) {
+      var month = MONTH_ABBR[m[2]];
+      if (!month) return null;
+      var day = m[1].length === 1 ? '0' + m[1] : m[1];
+      return m[3] + '-' + month + '-' + day;
+    }
+    // Deliberately NOT padded to a guessed day (01, or the month's last
+    // day) — a shorter 'YYYY-MM' key is a natural string PREFIX of any
+    // 'YYYY-MM-DD' key in the same month, so plain lexical comparison
+    // already places it correctly within its year/month (sorting fractionally
+    // after any specifically-dated entry in that same month, before entries
+    // in the following month) without inventing a day Medicus never gave.
+    var mo = MONTH_ONLY_DATE_RE.exec(s);
+    if (mo) {
+      var monthOnly = MONTH_ABBR[mo[1]];
+      if (!monthOnly) return null;
+      return mo[2] + '-' + monthOnly;
+    }
+    return null;
   }
 
   // Descending by date; undated entries always sort last regardless of
@@ -1180,9 +1202,7 @@
       '"' +
       (node.linkedProblemIds.length ? ' data-linked-ids="' + esc(node.linkedProblemIds.join(',')) + '"' : '') +
       (suggestedIds.length ? ' data-suggested-ids="' + esc(suggestedIds.join(',')) + '"' : '') +
-      (node.textLinkSuggestion
-        ? ' data-textlink-id="' + esc(node.textLinkSuggestion.matchedProblemId) + '"'
-        : '') +
+      (node.textLinkSuggestion ? ' data-textlink-id="' + esc(node.textLinkSuggestion.matchedProblemId) + '"' : '') +
       '>' +
       '<div class="ms-pnc-tile-main">' +
       '<div class="ms-pnc-tile-desc">' +
@@ -1381,7 +1401,7 @@
             : '') +
           '"Confirm — link problems" instead records a flat "related problems" link — no nesting changes' +
           (d.previousParentId ? ' (it stays under ' + esc(d.previousParentDescription) + ')' : '') +
-          '. There is no bulk undo; links are removed individually — click the red × on the link\'s own line once it\'s drawn.';
+          ". There is no bulk undo; links are removed individually — click the red × on the link's own line once it's drawn.";
         confirmLabel = 'Confirm — nest it';
         busyLabel = 'Linking…';
         secondaryConfirmLabel = 'Confirm — link problems';
@@ -1738,15 +1758,15 @@
     // used to sit permanently on the card; see tileHtml's own comment for
     // why it moved here instead).
     var suggestionEntries = [];
-    root.querySelectorAll('.ms-pnc-lane .ms-pnc-tile[data-suggested-ids], .ms-pnc-lane .ms-pnc-tile[data-textlink-id]').forEach(
-      function (tile) {
+    root
+      .querySelectorAll('.ms-pnc-lane .ms-pnc-tile[data-suggested-ids], .ms-pnc-lane .ms-pnc-tile[data-textlink-id]')
+      .forEach(function (tile) {
         suggestionEntries.push({
           id: tile.getAttribute('data-problem-id'),
           suggestedIds: (tile.getAttribute('data-suggested-ids') || '').split(',').filter(Boolean),
           textlinkId: tile.getAttribute('data-textlink-id') || null,
         });
-      }
-    );
+      });
     groupLinkedPairsIntoSets(buildSuggestionPairs(suggestionEntries)).forEach(function (setPairs) {
       var laneX = linkSetLaneX(busX, nextLane, 14);
       nextLane++;
@@ -1756,7 +1776,10 @@
         if (!rectA || !rectB) return; // candidate not currently rendered — no line to draw
         var d = buildElbowConnectorPath(rectA, rectB, laneX);
         if (!d) return;
-        var lineClass = pair.kind === 'textlink' ? 'ms-pnc-suggestion-line ms-pnc-suggestion-line-textlink' : 'ms-pnc-suggestion-line';
+        var lineClass =
+          pair.kind === 'textlink'
+            ? 'ms-pnc-suggestion-line ms-pnc-suggestion-line-textlink'
+            : 'ms-pnc-suggestion-line';
         markup.push('<path d="' + d + '" class="' + lineClass + '"></path>');
         var title =
           pair.kind === 'textlink'
@@ -2017,7 +2040,11 @@
     if (!problemId || !targetKey || !snap) return;
     var liveKey = liveLaneKey(snap.infoById, problemId);
     var currentKey = effectiveLaneKey(snap.infoById, _draft, problemId);
-    if (currentKey === targetKey && !(_draft.sigById && _draft.sigById[problemId]) && _draft.endIds.indexOf(problemId) === -1) {
+    if (
+      currentKey === targetKey &&
+      !(_draft.sigById && _draft.sigById[problemId]) &&
+      _draft.endIds.indexOf(problemId) === -1
+    ) {
       return;
     }
     _cycleError = null;

@@ -124,17 +124,23 @@ console.log('\n--- normaliseListQuery: string vs { qs, scopeWarning } resolution
   check(empty.qs === '' && empty.scopeWarning === null, 'null input degrades to an empty query, never throws');
 }
 
-console.log('\n--- Engine source lock: a widened scope must be VISIBLE and select-all withheld ---');
+console.log('\n--- Engine source lock: a widened scope must be VISIBLE, but select-all is no longer withheld ---');
 {
   // Post-merge review of #272, finding 2: the unscoped privacy-officer
   // fallback used to render identically to the correctly-scoped case, so
   // "Select all + Confirm" could acknowledge OTHER officers' alerts with no
-  // sign anything was different. These pins hold the two controls in place.
+  // sign anything was different. The banner pin (below) still holds — the
+  // widened scope must still be VISIBLE. The select-all-withholding pin was
+  // REMOVED 2026-08-20 (Nick's explicit request, privacy-officer role): the
+  // identity-stamp resolution never succeeds for his workflow, so the
+  // fallback — and the withhold — was permanent, not occasional, blocking a
+  // legitimate bulk action he's authorised to take. This is now a warning to
+  // review before confirming, not a block.
   const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
   check(src.includes('ms-tba-scope-warning'), 'engine renders a dedicated scope-warning element');
   check(
-    /config\.selectAllAllowed && !_scopeWarning/.test(src),
-    'select-all is withheld while a scope warning is active — never rendered, not just disabled'
+    !/config\.selectAllAllowed && !_scopeWarning/.test(src),
+    'select-all is no longer gated on the scope warning — a scope warning is a banner, not a block'
   );
   const selectStep = src.slice(src.indexOf('function renderSelectStep'), src.indexOf('function renderConfirmStep'));
   const confirmStep = src.slice(src.indexOf('function renderConfirmStep'), src.indexOf('function renderDoneStep'));

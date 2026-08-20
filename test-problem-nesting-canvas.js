@@ -79,6 +79,20 @@ console.log('--- dateSortKey: "DD Mon YYYY" (onsetDate) AND ISO "YYYY-MM-DD" (re
   check(dateSortKey('2020-04-20') === '2020-04-20', 'ISO shape passes through as its own sort key');
   check(dateSortKey('20 Foo 2020') === null, 'unrecognised month abbreviation -> null');
   check(dateSortKey('garbage') === null, 'garbage -> null, never throws');
+  // The real bug Nick found live 2026-08-20: a partial onset date (month +
+  // year only, no day — a real shape Medicus stores for an imported/
+  // historic record) fell through both regexes and sorted as fully
+  // undated, below every dated entry regardless of year.
+  check(dateSortKey('Dec 2008') === '2008-12', 'partial "Mon YYYY" onset date parses to a YYYY-MM key, not null');
+  check(dateSortKey('Jan 1999') === '1999-01', 'partial date works for any month, not just the reported example');
+  check(
+    dateSortKey('Foo 2020') === null,
+    'unrecognised month abbreviation on a partial date -> null, same as a full date'
+  );
+  check(
+    dateSortKey('2008') === null,
+    'a bare year with no month is NOT treated as a partial date — never seen live, not guessed at'
+  );
 }
 
 console.log('--- compareDatesDesc: descending, undated always last ---');
@@ -100,6 +114,19 @@ console.log('--- compareDatesDesc: descending, undated always last ---');
   check(
     compareDatesDesc('1 Jan 2019', '2025-01-15') > 0,
     'a UK-style date correctly sorts after an ISO date from the same comparison, regardless of which side is which format'
+  );
+  // The partial-date fix, 2026-08-20: a "Mon YYYY" entry must sort within
+  // its correct year — nowhere near the true undated ("sorts after
+  // everything") position it fell into before dateSortKey recognised it.
+  check(compareDatesDesc('Dec 2008', null) < 0, 'a partial date still sorts before a genuinely undated entry');
+  check(compareDatesDesc('Dec 2008', '1 Jan 1990') < 0, 'a partial date correctly sorts before an older FULL date');
+  check(
+    compareDatesDesc('1 Jan 2020', 'Dec 2008') < 0,
+    'a newer full date correctly sorts before an older partial date'
+  );
+  check(
+    compareDatesDesc('Dec 2008', '15 Dec 2008') > 0,
+    'a partial date sorts fractionally after a specifically-dated entry in the SAME month (least-specific-first within a tie)'
   );
 }
 
@@ -196,7 +223,9 @@ console.log('--- buildProblemTree: roots, nesting, sort order ---');
   check(deepTree[0].children[0].id === 'mastectomy', 'mastectomy nested at depth 1');
   check(deepTree[0].children[0].children[0].id === 'capsular', 'capsular contracture nested at depth 2');
 
-  console.log('--- buildProblemTree: a problem carrying an unconfirmed suggestion still renders as an ordinary root (2026-08-19: no more tray to hide it in) ---');
+  console.log(
+    '--- buildProblemTree: a problem carrying an unconfirmed suggestion still renders as an ordinary root (2026-08-19: no more tray to hide it in) ---'
+  );
   const edge = [
     { id: 'x', description: 'X' },
     { id: 'c1', description: 'Child of X' },
@@ -299,14 +328,19 @@ console.log(
     suggestionCandidateTitleText('Something', undefined) === 'SNOMED marks this as a child of Something',
     'a missing source defaults to snomed (defensive — matches every candidate before this field existed)'
   );
-  check(suggestionCandidateTitleText(null, 'snomed') === 'SNOMED marks this as a child of ', 'null description -> empty, never throws');
+  check(
+    suggestionCandidateTitleText(null, 'snomed') === 'SNOMED marks this as a child of ',
+    'null description -> empty, never throws'
+  );
   check(
     /^<strong>|<\/strong>$/.test(suggestionCandidateTitleText('X', 'snomed')) === false,
     'plain text — no HTML markup (an SVG <title> element cannot render it, unlike the removed card-hint version)'
   );
 }
 
-console.log('--- buildSuggestionPairs: directional pairs, tagged by kind (2026-08-19 — moved off the removed tray) ---');
+console.log(
+  '--- buildSuggestionPairs: directional pairs, tagged by kind (2026-08-19 — moved off the removed tray) ---'
+);
 {
   const entries = [
     { id: 'stent', suggestedIds: ['ihd'], textlinkId: null },
@@ -346,9 +380,7 @@ console.log('--- buildSuggestionPairs: directional pairs, tagged by kind (2026-0
   );
 
   console.log('--- buildSuggestionPairs: "id|source" compound format (2026-08-19, for the flag tooltip) ---');
-  const sourced = buildSuggestionPairs([
-    { id: 'x', suggestedIds: ['a|snomed', 'b|override', 'c'], textlinkId: null },
-  ]);
+  const sourced = buildSuggestionPairs([{ id: 'x', suggestedIds: ['a|snomed', 'b|override', 'c'], textlinkId: null }]);
   check(
     sourced.find((p) => p.b === 'a').source === 'snomed' &&
       sourced.find((p) => p.b === 'b').source === 'override' &&
@@ -360,7 +392,10 @@ console.log('--- buildSuggestionPairs: directional pairs, tagged by kind (2026-0
     'the "|source" suffix is stripped from the pair\'s own b id — never leaks into the raw problem id'
   );
   const textlinkPair = buildSuggestionPairs([{ id: 'x', suggestedIds: [], textlinkId: 'y' }])[0];
-  check(!('source' in textlinkPair), 'a text-link pair carries no source field at all — only snomed-kind pairs need one');
+  check(
+    !('source' in textlinkPair),
+    'a text-link pair carries no source field at all — only snomed-kind pairs need one'
+  );
 }
 
 console.log('--- elbowFlagPoint: the flag marker sits at the midpoint of its OWN vertical bus segment ---');
@@ -600,7 +635,13 @@ console.log('--- significance lanes / classifyDrop / canProposeEnd ---');
   };
   const parts = partitionProblemsBySignificance(problems, info);
   check(parts.major.map((p) => p.id).join() === 'maj', 'major lane has the Major problem');
-  check(parts.minor.map((p) => p.id).sort().join() === 'child,min', 'minor lane has Minor + child');
+  check(
+    parts.minor
+      .map((p) => p.id)
+      .sort()
+      .join() === 'child,min',
+    'minor lane has Minor + child'
+  );
   check(parts.unknown.map((p) => p.id).join() === 'unk', 'unknown lane has the unresolved problem');
 
   const trees = buildLaneTrees(problems, info, { child: 'maj' });
@@ -614,7 +655,10 @@ console.log('--- significance lanes / classifyDrop / canProposeEnd ---');
     }
     return null;
   })(trees.minor);
-  check(childNode && childNode.crossLaneParentDescription === 'IHD', 'cross-lane child is annotated with the other-lane parent');
+  check(
+    childNode && childNode.crossLaneParentDescription === 'IHD',
+    'cross-lane child is annotated with the other-lane parent'
+  );
   const allLaneIds = new Set([
     ...flattenTreeIds(trees.major),
     ...flattenTreeIds(trees.minor),
@@ -623,7 +667,9 @@ console.log('--- significance lanes / classifyDrop / canProposeEnd ---');
   check(allLaneIds.size === 4, 'all four problems still appear across lanes');
 }
 
-console.log('--- annotateTreeSuggestions: suggestion data attaches onto the SAME tree node (2026-08-19 — no more separate tray) ---');
+console.log(
+  '--- annotateTreeSuggestions: suggestion data attaches onto the SAME tree node (2026-08-19 — no more separate tray) ---'
+);
 {
   const tree = buildProblemTree(
     [
@@ -654,7 +700,10 @@ console.log('--- annotateTreeSuggestions: suggestion data attaches onto the SAME
     'a "(Grouped with X)" suggestion attaches onto the subject node directly'
   );
   check(!eczNode.suggestedParentOptions, 'eczema has no SNOMED suggestion of its own');
-  check(!ihdNode.suggestedParentOptions && !ihdNode.textLinkSuggestion, 'a node with no suggestion of its own gets neither field');
+  check(
+    !ihdNode.suggestedParentOptions && !ihdNode.textLinkSuggestion,
+    'a node with no suggestion of its own gets neither field'
+  );
   check(
     annotateTreeSuggestions([], {}, {}).length === 0,
     'empty tree -> empty tree, never throws on empty lookup maps'
@@ -700,7 +749,10 @@ console.log('--- draft workspace: stage End + significance, then summarise ---')
   check(parentTooSoon.error === 'has-children', 'a parent cannot stage until its children are also in End');
 
   const parentAfter = stageEnd(leaf.draft, 'parent', parentMap);
-  check(parentAfter.error === null && parentAfter.draft.endIds.join() === 'child,parent', 'parent stages once its child is already in End');
+  check(
+    parentAfter.error === null && parentAfter.draft.endIds.join() === 'child,parent',
+    'parent stages once its child is already in End'
+  );
 
   const unstageChild = unstageEnd(parentAfter.draft, 'child', parentMap);
   check(
@@ -730,7 +782,13 @@ console.log('--- draft workspace: stage End + significance, then summarise ---')
 
   const visible = problemsNotEnded([{ id: 'a' }, { id: 'b' }], two.draft);
   check(visible.length === 0, 'staged-end problems leave the lanes');
-  const inBin = endedProblemList([{ id: 'a', description: 'A' }, { id: 'b', description: 'B' }], two.draft);
+  const inBin = endedProblemList(
+    [
+      { id: 'a', description: 'A' },
+      { id: 'b', description: 'B' },
+    ],
+    two.draft
+  );
   check(inBin.map((p) => p.id).join() === 'a,b', 'End bin lists staged problems in drop order');
 
   const ordered = orderEndsForCommit(['parent', 'child'], { child: 'parent' });

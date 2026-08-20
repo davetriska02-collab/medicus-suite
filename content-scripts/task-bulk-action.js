@@ -128,10 +128,22 @@
   // scope the list the way its confirmed contract intends — privacy-officer's
   // masterAssignee filter needs the staff-identity stamp, which can lag page
   // load. A non-null scopeWarning makes the widened scope VISIBLE: the engine
-  // renders it as a banner on both the select and confirm steps and disables
-  // select-all for that load. A silently widened list rendering identically
-  // to a correctly scoped one is how a bulk compliance action gets applied to
-  // someone else's queue without anyone noticing.
+  // renders it as a banner on both the select and confirm steps. A silently
+  // widened list rendering identically to a correctly scoped one is how a
+  // bulk compliance action gets applied to someone else's queue without
+  // anyone noticing.
+  //
+  // SOFTENED 2026-08-20 (Nick's explicit request, privacy-officer role):
+  // this used to also withhold select-all while a scope warning was active,
+  // forcing row-by-row ticking. For Nick's real workflow the identity-stamp
+  // resolution never succeeds (still unconfirmed why — a role-based
+  // assignee mismatch is the leading guess, not yet investigated), so the
+  // fallback was ALWAYS active and select-all was ALWAYS unavailable —
+  // a permanent, not occasional, block on a legitimate bulk compliance
+  // action he's authorised to take under his own professional judgement.
+  // The banner (see scopeWarningHtml) still renders at both steps, so the
+  // scope is never silently widened — only the withhold-select-all
+  // mechanism itself was removed.
   function normaliseListQuery(value) {
     if (value && typeof value === 'object') {
       return {
@@ -387,15 +399,14 @@
         (live.length === 1 ? esc(config.itemNounSingular) : esc(config.itemNounPlural)) +
         '.</div>';
 
-      // select-all is withheld (not just visually hidden — the button is
-      // never in the DOM) while a scope warning is active: "Select all" on a
-      // list that may span OTHER staff's queues is exactly the one-click
-      // mistake the warning exists to prevent. Row-by-row ticking stays
-      // available — each row names its patient, so per-row selection is a
-      // considered act in a way select-all is not.
+      // select-all is gated ONLY by config.selectAllAllowed — a scope
+      // warning no longer withholds it (see this file's SOFTENED 2026-08-20
+      // comment above normaliseListQuery). The banner above still makes a
+      // widened scope visible at both steps; select-all itself is a UI
+      // convenience, not the safety control.
       var selectRow =
         '<div class="ms-tba-select-row">' +
-        (config.selectAllAllowed && !_scopeWarning
+        (config.selectAllAllowed
           ? '<button type="button" class="ms-tba-select-all" id="ms-tba-select-all-' +
             esc(config.id) +
             '">Select all (' +
