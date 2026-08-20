@@ -640,6 +640,220 @@
     return bestIdx;
   }
 
+  // ── Duplicate phone/email detection (within ONE patient's own record) ──────────────────────────
+  // Same shape as findDuplicateAddressGroups/chooseAddressToKeep above — "only within the hub
+  // patient" is a CALLER decision, not these functions', they just group whatever list they're
+  // given. Requested 2026-08-20 alongside the "non-identical duplicates" real example: "020 8977
+  // 5481" recorded as one entry, "8977 5481" (the same number with the area code dropped — a
+  // real, recurring GP2GP-import pattern, not a hypothetical) recorded as another.
+  //
+  // isLikelyDuplicatePhone: digit-only comparison PLUS a suffix check for the area-code-dropped
+  // case — a shorter number is a duplicate of a longer one if its digits are an exact trailing
+  // SUFFIX of the longer one's digits. That covers a dropped UK trunk prefix ("0") or a dropped
+  // area code ("020"). A country-code prefix is NOT just extra leading digits: +44 *replaces* the
+  // leading 0, so "+44 20 8977 5481" (442089775481) is not a suffix of "020 8977 5481"
+  // (02089775481) and a raw digit-suffix check misses the most common UK national/international
+  // pair. canonicalUkPhoneDigits therefore strips a leading 00 and, when the remaining NSN is a
+  // plausible UK length, rewrites a leading 44 as 0 before the suffix compare. Gated on the
+  // SHORTER (canonical) number being at least PHONE_DUPLICATE_MIN_SUFFIX_LENGTH digits so a short
+  // shared suffix is never treated as evidence on its own.
+  const PHONE_DUPLICATE_MIN_SUFFIX_LENGTH = 7;
+  function canonicalUkPhoneDigits(p) {
+    let d = normalisePhoneDigits(p);
+    if (d.startsWith('00')) d = d.slice(2);
+    // UK NSN is 9 or 10 digits. 44 + 9 = 11, 44 + 10 = 12. Do not rewrite shorter "44…" strings
+    // (they are not a country-code + NSN pair — rewriting those would invent a leading 0).
+    if (d.startsWith('44') && (d.length === 11 || d.length === 12)) {
+      d = '0' + d.slice(2);
+    }
+    return d;
+  }
+  function isLikelyDuplicatePhone(a, b) {
+    const da = canonicalUkPhoneDigits(a);
+    const db = canonicalUkPhoneDigits(b);
+    if (!da || !db) return false;
+    if (da === db) return true;
+    const shorter = da.length <= db.length ? da : db;
+    const longer = da.length <= db.length ? db : da;
+    if (shorter.length < PHONE_DUPLICATE_MIN_SUFFIX_LENGTH) return false;
+    return longer.endsWith(shorter);
+  }
+
+  // findDuplicatePhoneGroups(patientTelephoneNumbers) -> [[i, j, ...], ...]
+  //   patientTelephoneNumbers: a SINGLE patient's own patientContactInformationSection.
+  //   patientTelephoneNumbers array (confirmed shape: {telephoneNumberId, telephoneNumberType,
+  //   telephoneNumber, preferredTelephoneNumberForSms, notes}).
+  // Groups by ARRAY INDEX, anchored to the first (lowest-index) member — same deliberate
+  // simplification as findDuplicateAddressGroups: a delete action only ever needs "these look like
+  // the same number", not a formal transitive-equivalence guarantee across a 3+-entry group.
+  function findDuplicatePhoneGroups(patientTelephoneNumbers) {
+    const list = Array.isArray(patientTelephoneNumbers) ? patientTelephoneNumbers : [];
+    const groups = [];
+    const grouped = new Set();
+    for (let i = 0; i < list.length; i++) {
+      if (grouped.has(i)) continue;
+      const group = [i];
+      for (let j = i + 1; j < list.length; j++) {
+        if (grouped.has(j)) continue;
+        if (isLikelyDuplicatePhone(list[i] && list[i].telephoneNumber, list[j] && list[j].telephoneNumber)) {
+          group.push(j);
+        }
+      }
+      if (group.length > 1) {
+        group.forEach((idx) => grouped.add(idx));
+        groups.push(group);
+      }
+    }
+    return groups;
+  }
+
+  // choosePhoneToKeep(entries) -> index into `entries` to KEEP once a duplicate group is confirmed
+  // for deletion — every OTHER entry is a delete candidate. entries: the SAME group's own
+  // patientTelephoneNumbers objects, same order as the caller's own duplicate-group indexes.
+  // Tie-break order:
+  //   1. Whichever is preferredTelephoneNumberForSms — protected, same reasoning as
+  //      chooseAddressToKeep's correspondence-address check: losing the SMS-preferred flag would be
+  //      a real functional loss, not a cosmetic one.
+  //   2. Whichever has the MORE COMPLETE digit string (the longer one) — this is what actually
+  //      distinguishes "020 8977 5481" (keep) from "8977 5481" (delete) in the motivating example:
+  //      the fuller number carries strictly more information (the area code), never less.
+  //   3. The first one in the given order — a final deterministic tiebreak, never random/unstable.
+  function choosePhoneToKeep(entries) {
+    if (!Array.isArray(entries) || !entries.length) return -1;
+    const preferredIdx = entries.findIndex((e) => e && e.preferredTelephoneNumberForSms);
+    if (preferredIdx !== -1) return preferredIdx;
+    let bestIdx = 0;
+    let bestLength = normalisePhoneDigits(entries[0] && entries[0].telephoneNumber).length;
+    for (let i = 1; i < entries.length; i++) {
+      const len = normalisePhoneDigits(entries[i] && entries[i].telephoneNumber).length;
+      if (len > bestLength) {
+        bestLength = len;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
+  }
+
+  // isLikelyDuplicateEmail: case-insensitive, whitespace-trimmed exact match ONLY. Deliberately NOT
+  // provider-specific normalisation (Gmail's dot-insensitivity or "+work" plus-addressing, etc.) —
+  // that would be guessing at a pattern never confirmed for this population, the same "no ad hoc
+  // synonym pairs" discipline this file already applies elsewhere (see emailOwnerHint's own
+  // comment). Case/whitespace differences ARE a confirmed real "non-identical duplicate" shape
+  // (mail servers treat the local part as effectively case-insensitive in practice, whatever the
+  // spec technically permits) — extend to a provider-specific rule only after a real example is
+  // seen, not ahead of one.
+  function isLikelyDuplicateEmail(a, b) {
+    const na = String(a == null ? '' : a)
+      .trim()
+      .toLowerCase();
+    const nb = String(b == null ? '' : b)
+      .trim()
+      .toLowerCase();
+    if (!na || !nb) return false;
+    return na === nb;
+  }
+
+  // findDuplicateEmailGroups(patientEmailAddresses) -> [[i, j, ...], ...]
+  //   patientEmailAddresses: a SINGLE patient's own patientContactInformationSection.
+  //   patientEmailAddresses array (confirmed shape: {emailAddressId, emailAddressType,
+  //   emailAddress, isInvalidEmailAddress, preferredEmailAddress}).
+  function findDuplicateEmailGroups(patientEmailAddresses) {
+    const list = Array.isArray(patientEmailAddresses) ? patientEmailAddresses : [];
+    const groups = [];
+    const grouped = new Set();
+    for (let i = 0; i < list.length; i++) {
+      if (grouped.has(i)) continue;
+      const group = [i];
+      for (let j = i + 1; j < list.length; j++) {
+        if (grouped.has(j)) continue;
+        if (isLikelyDuplicateEmail(list[i] && list[i].emailAddress, list[j] && list[j].emailAddress)) {
+          group.push(j);
+        }
+      }
+      if (group.length > 1) {
+        group.forEach((idx) => grouped.add(idx));
+        groups.push(group);
+      }
+    }
+    return groups;
+  }
+
+  // chooseEmailToKeep(entries) -> index into `entries` to KEEP. Tie-break order: whichever is
+  // preferredEmailAddress (protected, same reasoning as choosePhoneToKeep's SMS-preferred check),
+  // else the first in the given order — unlike phone, a case/whitespace-only duplicate carries no
+  // "more complete" dimension to prefer between, so there is no second tie-break to make.
+  function chooseEmailToKeep(entries) {
+    if (!Array.isArray(entries) || !entries.length) return -1;
+    const preferredIdx = entries.findIndex((e) => e && e.preferredEmailAddress);
+    return preferredIdx !== -1 ? preferredIdx : 0;
+  }
+
+  // preferredFlagNeedsTransfer(entries, keepIndex, flag) -> true when the GP picked a keeper
+  // that does NOT hold `flag` but at least one sibling being deleted does. The address-merge
+  // path already transfers isCorrespondenceAddress BEFORE any delete (H-056); phone/email
+  // delete must do the same for preferredTelephoneNumberForSms / preferredEmailAddress or
+  // choosing the fuller/better-cased copy silently drops appointment SMS / preferred email.
+  // keepIndex is an index into `entries` (the group's own objects, same order as the radios).
+  function preferredFlagNeedsTransfer(entries, keepIndex, flag) {
+    if (!Array.isArray(entries) || keepIndex < 0 || keepIndex >= entries.length) return false;
+    const keep = entries[keepIndex];
+    if (keep && keep[flag]) return false;
+    return entries.some((e, i) => i !== keepIndex && e && e[flag]);
+  }
+
+  // unfinishedMergeConversionPlan(params) -> what the close-time "OK, link as Other" path
+  // is allowed to write. buildConfirmForCard's fallback chain (reciprocal suggestion, slot
+  // guess, manual free-text) can resolve to wife/daughter/etc.; writing that from a
+  // window.confirm, with no gender-inversion review, is exactly the confirm-panel skip this
+  // path claimed it was not doing. Two modes only:
+  //   delete-manual-only — a real forward link already exists: delete the manual duplicate,
+  //     do not recategorise the existing relationship (forcing Other would downgrade Daughter).
+  //   link-as-other — no forward link yet: force Other both ways. 'other' inverts to 'other'
+  //     with no gender step, which is why this path can skip the confirm panel at all.
+  function unfinishedMergeConversionPlan(params) {
+    const p = params || {};
+    if (p.existingForwardLink) {
+      return {
+        mode: 'delete-manual-only',
+        baseId: null,
+        modifierId: null,
+        reverseBaseId: null,
+        relationshipUpdateId: null,
+        reciprocalUpdateId: null,
+      };
+    }
+    return {
+      mode: 'link-as-other',
+      baseId: 'other',
+      modifierId: null,
+      // An already-real reverse link must not be re-created (POST link-patient is not
+      // idempotent). Only write the reverse side when it is missing, or when it was
+      // downgraded to the placeholder and needs an in-place Other repair.
+      reverseBaseId: p.existingReciprocal && !p.reciprocalNeedsRepair ? null : 'other',
+      relationshipUpdateId: null,
+      reciprocalUpdateId: p.reciprocalNeedsRepair ? p.reciprocalRelationshipId || null : null,
+    };
+  }
+
+  // unfinishedMergeLeavePrompt(action) -> the window.confirm copy. Shared by every leave
+  // path (close / reload / import / navigate); the original close-only wording told a GP
+  // hitting Refresh that OK would "close anyway".
+  function unfinishedMergeLeavePrompt(action) {
+    const actionPhrase =
+      action === 'reload'
+        ? 'reload the page'
+        : action === 'import'
+          ? 'switch to Import'
+          : action === 'navigate'
+            ? 'leave this patient'
+            : 'close';
+    return (
+      "You've merged one or more contacts that haven't been linked yet.\n\n" +
+      'Click CANCEL to go back and drag the merged card down to the family tree yourself, if you know how they are related.\n\n' +
+      `Click OK to ${actionPhrase} and link them as "Other" instead — a generic contact relationship, written to both records — rather than losing the match. You can re-open the canvas and correct it to a specific relationship any time.`
+    );
+  }
+
   // buildChangeAddressBody({addressId, address, description, accessNotes, isCorrespondenceAddress})
   // -> the exact POST /patient/address/change-address body (confirmed via HAR capture 2026-07-30:
   // setting an existing address as the patient's correspondence address). A full-replace write,
@@ -905,6 +1119,16 @@
     isLikelyDuplicateAddress,
     findDuplicateAddressGroups,
     chooseAddressToKeep,
+    isLikelyDuplicatePhone,
+    canonicalUkPhoneDigits,
+    findDuplicatePhoneGroups,
+    choosePhoneToKeep,
+    isLikelyDuplicateEmail,
+    findDuplicateEmailGroups,
+    chooseEmailToKeep,
+    preferredFlagNeedsTransfer,
+    unfinishedMergeConversionPlan,
+    unfinishedMergeLeavePrompt,
     buildChangeAddressBody,
     emailOwnerHint,
     findSharedContactInfo,

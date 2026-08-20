@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.4] — 2026-08-20
+
+### Contacts canvas — duplicate phone/email cleanup + unfinished-merge softening (review of `433a268`)
+
+Nick's contacts-canvas work from [PR #290](https://github.com/davetriska02-collab/medicus-suite/pull/290) (`433a268`), plus review fixes. Main already shipped 3.236.3 (allergy canvas); this lands as 3.236.4 so merge cannot downgrade the manifest.
+
+- **Duplicate phone/email detection** on the index patient's own record. Phone matching is digit-normalised with a 7-digit-minimum suffix check (catches "020 8977 5481" recorded alongside "8977 5481"). Email matching is case/whitespace-insensitive only. Each group has a pick-which-to-keep radio and a delete action. New confirmed endpoint: `POST /patient/email/delete-email-address/{id}`.
+- **Matched-but-unplaced manual contacts are no longer silently discarded on close.** The existing unfinished-merge warning's OK button converts each pairing into a real link (or deletes the manual duplicate if a real link already exists) rather than dropping the match.
+
+Review fixes on that commit:
+
+- **`+44` vs `0` was not a duplicate.** `+44` *replaces* the leading `0`, so a raw suffix check missed the most common UK national/international pair (`+44 20 8977 5481` / `020 8977 5481`). Matching now canonicalises `00`/`+44` to the `0`-prefixed national form first.
+- **Close-time convert claimed "Other" but wrote the guess.** `buildConfirmForCard`'s fallback chain can resolve to wife/daughter from a reciprocal or the manual free text — written from `window.confirm` with no gender-inversion review. The path now forces Other both ways, or deletes the manual duplicate only when a real forward link already exists (so a Daughter is never downgraded to Other). A null confirm-builder result is a hard failure, not a silent skip that then discarded the pairing.
+- **Preferred SMS flag was lost if the GP kept the other copy.** Address merge already transfers the correspondence flag before any delete; phone delete now transfers `preferredTelephoneNumberForSms` the same way. Email has no confirmed change-email write, so deleting a preferred address while keeping a non-preferred one is refused.
+- **Leave-path copy said "close anyway" on Refresh / Import / Next family member.** Prompt is now path-aware.
+- **`anyWriteInFlight` ignored the new delete sets**, so a confirm or flag write could start mid-delete.
+
+### "Clean up code" — junk problem text: SUMMARY=Y
+
+Added to `rules/generic-additional-info-text.json` as a plain literal entry (from the same commit).
+
 ## [v3.236.3] — 2026-08-20
 
 ### Allergy canvas — Finalise reports what actually landed (PR #293 review fixes)
