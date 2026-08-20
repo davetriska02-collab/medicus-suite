@@ -42,6 +42,8 @@ const {
   normalizedConceptSearchResults,
   rankSubstanceResults,
   extractAllergenAndReactionHint,
+  ALLERGY_SHAPED_REACTION_SEED,
+  HYPERSENSITIVITY_SHAPED_REACTION_SEED,
   pickReactionSeed,
   groupDuplicateAllergies,
   remapReviewsByGroupIdentity,
@@ -894,19 +896,21 @@ console.log(
   const iodine = extractAllergenAndReactionHint('Adverse reaction to iodine');
   check(
     iodine.substanceHint === 'iodine' && iodine.reactionHint === null,
-    '"Adverse reaction to X" strips to the allergen alone, no specific reaction guessed (got ' +
+    '"Adverse reaction to X" strips to the allergen alone, no allergy reaction guessed — an ADR is not an allergy (got ' +
       JSON.stringify(iodine) +
       ')'
   );
   const cat = extractAllergenAndReactionHint('Cat allergy');
   check(
-    cat.substanceHint === 'Cat' && cat.reactionHint === null,
-    '"X allergy" strips the suffix, no reaction guessed (got ' + JSON.stringify(cat) + ')'
+    cat.substanceHint === 'Cat' && cat.reactionHint === ALLERGY_SHAPED_REACTION_SEED,
+    '"X allergy" strips the suffix and seeds the reaction search with "allergic reaction" (got ' +
+      JSON.stringify(cat) +
+      ')'
   );
   const shellfish = extractAllergenAndReactionHint('Shellfish allergy');
   check(
-    shellfish.substanceHint === 'Shellfish' && shellfish.reactionHint === null,
-    '"Shellfish allergy" -> "Shellfish"'
+    shellfish.substanceHint === 'Shellfish' && shellfish.reactionHint === ALLERGY_SHAPED_REACTION_SEED,
+    '"Shellfish allergy" -> substance "Shellfish" + reaction seed "allergic reaction"'
   );
   const chloroquine = extractAllergenAndReactionHint('Chloroquine retinopathy');
   check(
@@ -921,8 +925,41 @@ console.log(
   );
   const allergyTo = extractAllergenAndReactionHint('Allergy to penicillin');
   check(
-    allergyTo.substanceHint === 'penicillin' && allergyTo.reactionHint === null,
-    '"Allergy to X" strips the prefix'
+    allergyTo.substanceHint === 'penicillin' && allergyTo.reactionHint === ALLERGY_SHAPED_REACTION_SEED,
+    '"Allergy to X" strips the prefix and seeds the reaction search with "allergic reaction" (got ' +
+      JSON.stringify(allergyTo) +
+      ')'
+  );
+  const allergicReactionTo = extractAllergenAndReactionHint('Allergic reaction to latex');
+  check(
+    allergicReactionTo.substanceHint === 'latex' && allergicReactionTo.reactionHint === ALLERGY_SHAPED_REACTION_SEED,
+    '"Allergic reaction to X" -> substance X + reaction seed "allergic reaction"'
+  );
+  const penicillinAllergicReaction = extractAllergenAndReactionHint('penicillin allergic reaction');
+  check(
+    penicillinAllergicReaction.substanceHint === 'penicillin' &&
+      penicillinAllergicReaction.reactionHint === ALLERGY_SHAPED_REACTION_SEED,
+    '"X allergic reaction" -> substance X + reaction seed "allergic reaction"'
+  );
+  const hypersensitivityTo = extractAllergenAndReactionHint('Hypersensitivity to aspirin');
+  check(
+    hypersensitivityTo.substanceHint === 'aspirin' &&
+      hypersensitivityTo.reactionHint === HYPERSENSITIVITY_SHAPED_REACTION_SEED,
+    '"Hypersensitivity to X" seeds the reaction search with "hypersensitivity"'
+  );
+  const aspirinHypersensitivity = extractAllergenAndReactionHint('Aspirin hypersensitivity');
+  check(
+    aspirinHypersensitivity.substanceHint === 'Aspirin' &&
+      aspirinHypersensitivity.reactionHint === HYPERSENSITIVITY_SHAPED_REACTION_SEED,
+    '"X hypersensitivity" seeds the reaction search with "hypersensitivity"'
+  );
+  check(
+    typeof ALLERGY_SHAPED_REACTION_SEED === 'string' && !/^\d+$/.test(ALLERGY_SHAPED_REACTION_SEED),
+    'the allergy-shaped reaction seed is plain search text, never a conceptId'
+  );
+  check(
+    pickReactionSeed('retinopathy', ALLERGY_SHAPED_REACTION_SEED, 'shivering') === 'retinopathy',
+    'a curated rule reaction hint still beats the allergy-shaped pattern seed (Chloroquine retinopathy stays "retinopathy")'
   );
   const single = extractAllergenAndReactionHint('Atopy');
   check(

@@ -554,7 +554,9 @@
           '</div>'
       );
     } else if (conv) {
-      hints.push('<div class="ms-acc-tile-hint">Pre-defined-allergy code — convert to a substance</div>');
+      hints.push(
+        '<div class="ms-acc-tile-hint">Pre-defined-allergy code — convert to a substance, and a reaction when the wording is Allergy-to-X</div>'
+      );
     }
     if (dual) {
       hints.push(
