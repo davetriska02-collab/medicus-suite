@@ -243,7 +243,12 @@
     return field;
   }
 
-  function buildEditProblemPayload(prefill, newProblemCode, overrideAdditionalInformation) {
+  // overrideOnsetDate (2026-08-20): the GP2GP-onset-date confirm path below
+  // is the ONE apply path that changes onsetDate instead of problemCode or
+  // additionalInformation — same optional-4th-param shape as
+  // overrideAdditionalInformation above, for the same reason (every other
+  // existing caller omits it, preserving their exact original behaviour).
+  function buildEditProblemPayload(prefill, newProblemCode, overrideAdditionalInformation, overrideOnsetDate) {
     var p = prefill || {};
     var additionalInformation =
       overrideAdditionalInformation !== undefined
@@ -251,8 +256,9 @@
         : p.additionalInformation != null
           ? p.additionalInformation
           : null;
+    var onsetDate = overrideOnsetDate !== undefined ? overrideOnsetDate : p.onsetDate != null ? p.onsetDate : null;
     var payload = {
-      onsetDate: p.onsetDate != null ? p.onsetDate : null,
+      onsetDate: onsetDate,
       contextId: p.contextId != null ? p.contextId : null,
       contextType: p.contextType != null ? p.contextType : null,
       significance: p.significance != null ? unwrapOptionValue(p.significance) : null,
@@ -542,6 +548,53 @@
     });
     if (!match) return null;
     return { code: match.code, description: match.description };
+  }
+
+  // GP2GP-STYLE ONSET-DATE GAP (2026-08-20 request). Real example Nick found
+  // live: a problem with BOTH onsetDate and recordDate genuinely null on
+  // Medicus's own side — not a parsing issue like a partial "Mon YYYY" date
+  // (see problem-nesting-canvas.js's own dateSortKey fix the same day), this
+  // problem has NO date at all on either field. Its slideover/overview
+  // response (the same shape openPanel's PER-PROBLEM RETIREMENT/LEGACY-CODE
+  // CHECK below already fetches) carries two distinct timestamps:
+  // createdDateTime (when this record was written into Medicus itself — a
+  // migration artefact, NOT clinically meaningful, deliberately never read
+  // here) and createdInOriginalSystemDateTime (the ORIGINAL clinical
+  // system's own creation timestamp — a real historical anchor, and the
+  // classic signature of a GP2GP-transferred record whose onset date never
+  // survived migration). Extracts just the date portion (the time-of-day is
+  // never clinically meaningful at problem-onset granularity) — returns
+  // null for anything that doesn't match the confirmed "YYYY-MM-DD
+  // HH:MM:SS" shape, never guesses at an unconfirmed format. This is
+  // presented to the clinician as a SUGGESTION to confirm, not applied
+  // automatically — it's when the problem was first recorded in the
+  // original system, not a clinically-verified true onset date, and the
+  // caller (openPanel) only offers it at all when onsetDate is genuinely
+  // blank.
+  var GP2GP_ORIGINAL_DATETIME_RE = /^(\d{4}-\d{2}-\d{2})[ T]\d{2}:\d{2}:\d{2}/;
+  function extractGp2gpOnsetDateCandidate(overview) {
+    var raw = overview && overview.createdInOriginalSystemDateTime;
+    if (typeof raw !== 'string') return null;
+    var m = GP2GP_ORIGINAL_DATETIME_RE.exec(raw.trim());
+    return m ? m[1] : null;
+  }
+
+  // Confirming the GP2GP-onset-date suggestion above 500'd live (HAR
+  // 73-api500-settingdate.har, 2026-08-20): sending onsetDate non-null with
+  // recordDate genuinely null (this problem's own real pre-existing state)
+  // — {"status":500,"detail":"Internal Server Error"}, not a clean
+  // validation 400, so Medicus's own backend appears to choke internally on
+  // that combination rather than reject it cleanly. Every CONFIRMED-working
+  // edit-problem capture with a non-null onsetDate also has a non-null
+  // recordDate (docs/learnings-problem-description-cleanup.md — one
+  // capture even sets both to the IDENTICAL date), so this backfills
+  // recordDate to the SAME date being set as onsetDate — but ONLY when
+  // recordDate was already null; an existing real recordDate is never
+  // touched, since it may carry its own, separately-correct value.
+  function buildGp2gpOnsetPayload(prefill, code, isoDate) {
+    var payload = buildEditProblemPayload(prefill, code, undefined, isoDate);
+    if (!prefill || prefill.recordDate == null) payload.recordDate = isoDate;
+    return payload;
   }
 
   // Which conceptId the descendant/laterality search should target (2026-07-29
@@ -891,6 +944,8 @@
       groupCandidatesByConcept,
       normalizedSearchResults,
       findLegacyReadCodeOrigin,
+      extractGp2gpOnsetDateCandidate,
+      buildGp2gpOnsetPayload,
       descendantSearchTargetConceptId,
       stripGenericAdditionalInfoLines,
       literalTextsFromEntries,
@@ -1367,6 +1422,8 @@
         confirmedPartiallyEquivalents: null, // [{description, conceptId, descriptionId}, …] — same shape as confirmedPossibleEquivalents but for PARTIALLY EQUIVALENT TO, a distinct SNOMED association (see partiallyEquivalentHtml)
         practiceRemap: null, // {conceptId, descriptionId, description} — resolved from pdc.conceptRemap, keyed by this problem's OWN current conceptId (the source), or null. See openPanel's own comment.
         legacyReadCode: null, // {code, description} — set by the opt-in scan when originalCodes shows a read-v2 origin
+        gp2gpOnsetSuggestion: undefined, // {isoDate} | null | undefined — undefined = not yet checked this open, null = checked and nothing to offer, object = a real suggestion. See extractGp2gpOnsetDateCandidate's own header.
+        gp2gpOnsetSaving: false,
         journalMatches: null, // [{entryId, encounterId, date, clinicalCodeDescription, tier}] — set by openPanel's best-effort journal duplicate check (shared/journal-problem-matching.js). null = not yet checked or the check failed; [] = checked, none found.
         journalApply: {}, // entryId -> {saving, saved, error, appliedDescription, prevCode, undoing, undone, restoredDescription} — per-journal-match write state (applyToJournal) plus its one-click revert (undoJournalCodeSync; prevCode is the pre-sync noteSNOMEDct captured from the write's own prefill). Nested by entryId, unlike every other flag on this row, because one problem can have several journal matches, each an independent write target.
         journalInfoApply: {}, // entryId -> {saving, saved, error, appliedText, prevNote, undoing, undone} — SEPARATE per-journal-match state for the "remove generic import text" sync (applyGenericAdditionalInfoToJournal) plus its revert (undoJournalTextSync; prevNote is the pre-strip note text, '' allowed), kept apart from journalApply so a code-sync and a text-sync on the same entry don't conflate their saved/error state.
@@ -1592,6 +1649,30 @@
       ' “' +
       esc(st.legacyReadCode.description) +
       '”) — even if the SNOMED code itself is current, review the suggestions below for a clearer modern wording.</div>'
+    );
+  }
+
+  // GP2GP-STYLE ONSET-DATE GAP (2026-08-20 request) — see
+  // extractGp2gpOnsetDateCandidate's own header for the full detection
+  // story. Deliberately explicit that the date is an inference (when it was
+  // FIRST RECORDED in the original system), never claims to know the true
+  // clinical onset — the clinician applies their own judgement, same
+  // discipline as every other suggestion in this panel.
+  function gp2gpOnsetSuggestionHtml(problemId, st) {
+    if (!st.gp2gpOnsetSuggestion) return '';
+    return (
+      '<div class="ms-pdc-gp2gp-onset-section">' +
+      '<span class="ms-pdc-gp2gp-onset-label">No onset date is recorded for this problem. This looks like a GP2GP-transferred record — the original system shows it was first recorded on ' +
+      esc(st.gp2gpOnsetSuggestion.isoDate) +
+      '. That’s when it was recorded there, not necessarily when it began — use your own judgement before confirming.</span>' +
+      '<button type="button" class="ms-pdc-gp2gp-onset-btn" data-problem-id="' +
+      esc(problemId) +
+      '"' +
+      (st.gp2gpOnsetSaving ? ' disabled' : '') +
+      '>' +
+      (st.gp2gpOnsetSaving ? 'Setting…' : 'Set as onset date') +
+      '</button>' +
+      '</div>'
     );
   }
 
@@ -2358,6 +2439,7 @@
       severityReviewNoteHtml(st) +
       linkSuggestionHtml(problemId, st) +
       genericAdditionalInfoHtml(problemId, st) +
+      gp2gpOnsetSuggestionHtml(problemId, st) +
       retiredInfoHtml(problemId, st) +
       legacyReadCodeHtml(st) +
       journalMatchesHtml(problemId, st);
@@ -2533,6 +2615,11 @@
     root.querySelectorAll('.ms-pdc-genericinfo-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         applyRemoveGenericAdditionalInfo(problemId);
+      });
+    });
+    root.querySelectorAll('.ms-pdc-gp2gp-onset-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyGp2gpOnsetDate(problemId);
       });
     });
     root.querySelectorAll('.ms-pdc-nesting-btn').forEach(function (btn) {
@@ -2838,23 +2925,36 @@
       // (same stripLegacyMarkers(description) + bare-conceptId search), so
       // that check is reused directly instead of fetching it twice.
       // Best-effort, own try/catch — never blocks the rest of the panel.
-      if (!st.retiredInfo && !st.legacyReadCode) {
+      // Also covers the GP2GP-onset-date check below (2026-08-20) — it reads
+      // the SAME slideover/overview fetch, so the OR here means "either
+      // check still needs a fresh overview", never a second redundant fetch
+      // to the same endpoint on the same panel open.
+      if ((!st.retiredInfo && !st.legacyReadCode) || st.gp2gpOnsetSuggestion === undefined) {
         try {
           var retireOverview = await fetchProblemOverview(problemId);
-          var legacyReadCode =
-            findLegacyReadCodeOrigin(
-              retireOverview && retireOverview.problemCode && retireOverview.problemCode.originalCodes
-            ) || null;
-          if (legacyReadCode && !st.alternatives.length) legacyReadCode = null; // see runRetiredCodesScan's own NO-OP READ-V2 FLAG SUPPRESSION comment
-          if (legacyReadCode) st.legacyReadCode = legacyReadCode;
-          var retirement = await fetchRetirementStatus(code.conceptId);
-          if (retirement && retirement.active === false) {
-            st.retiredInfo = {
-              inactivationReason: retirement.inactivationReason,
-              replacement: retirement.replacement,
-              possiblyEquivalentTo: retirement.possiblyEquivalentTo || [],
-              partiallyEquivalentTo: retirement.partiallyEquivalentTo || [],
-            };
+          if (!st.retiredInfo && !st.legacyReadCode) {
+            var legacyReadCode =
+              findLegacyReadCodeOrigin(
+                retireOverview && retireOverview.problemCode && retireOverview.problemCode.originalCodes
+              ) || null;
+            if (legacyReadCode && !st.alternatives.length) legacyReadCode = null; // see runRetiredCodesScan's own NO-OP READ-V2 FLAG SUPPRESSION comment
+            if (legacyReadCode) st.legacyReadCode = legacyReadCode;
+            var retirement = await fetchRetirementStatus(code.conceptId);
+            if (retirement && retirement.active === false) {
+              st.retiredInfo = {
+                inactivationReason: retirement.inactivationReason,
+                replacement: retirement.replacement,
+                possiblyEquivalentTo: retirement.possiblyEquivalentTo || [],
+                partiallyEquivalentTo: retirement.partiallyEquivalentTo || [],
+              };
+            }
+          }
+          if (st.gp2gpOnsetSuggestion === undefined) {
+            st.gp2gpOnsetSuggestion = null;
+            if (prefill.onsetDate == null) {
+              var gp2gpDate = extractGp2gpOnsetDateCandidate(retireOverview);
+              if (gp2gpDate) st.gp2gpOnsetSuggestion = { isoDate: gp2gpDate };
+            }
           }
         } catch (e) {
           console.warn('[Clean up code] per-problem retirement check failed (non-fatal):', e && e.message);
@@ -3161,14 +3261,18 @@
 
   // ── Bridge for external callers (problem-nesting-canvas.js's "Edit
   // problem" trigger, 2026-08-08 request) ──────────────────────────────────
-  // Runs the SAME check openPanel always runs for any problem — same-concept
+  // Runs the SAME checks openPanel always runs for any problem — same-concept
   // alternatives, descendant/laterality suggestions, cross-concept
   // alternatives, generic-import-text cleanup, severity-contradiction
-  // detection — for ANY problemId, not just one already flagged by the
-  // automatic text-pattern scan. Deliberately does NOT run retirement or
-  // legacy-Read-code detection (Nick's explicit call, 2026-08-08: that's
-  // already available via the separate opt-in "Check for retired/legacy
-  // codes?" scan — no need to duplicate it here).
+  // detection, GP2GP onset-date gap — for ANY problemId, not just one
+  // already flagged by the automatic text-pattern scan. STALE NOTE,
+  // CORRECTED 2026-08-19: this used to also skip retirement/legacy-Read-code
+  // detection on the (2026-08-08) assumption a clinician reaching this popup
+  // always had the separate opt-in scan's own trigger one click away on the
+  // same page — no longer true once "Organise problems?" began opening the
+  // canvas directly (a full-screen overlay with no scan trigger visible
+  // behind it). openPanel's own PER-PROBLEM RETIREMENT/LEGACY-CODE CHECK now
+  // runs that check here too — see its own comment for the full story.
   //
   // Renders into `containerEl` (supplied by the caller) instead of inline
   // next to the Medicus row — see renderPanel's hostContainer support above
@@ -3181,32 +3285,32 @@
   // be findable right now.
   function openInContainer(problemId, containerEl, onApplied) {
     var st = rowState(problemId);
-    // Re-opening AFTER a successful save (st.saved): every fetched/derived
-    // field in this row's state — prefill, conceptId, currentDescription,
-    // the candidate lists — describes the record as it was BEFORE that save,
-    // and openPanel's `st.alternatives || st.saved` short-circuit would
-    // render it all as current. Worse than cosmetic: a second apply would
-    // build its full-record-replace payload from the PRE-save prefill
-    // (buildEditProblemPayload(st.prefill, …)). The inline flow never hits
-    // this (its button removes itself on save), but the canvas's "Edit
-    // problem…" button is always offered — so discard the whole row state
-    // and start factory-fresh, forcing openPanel to refetch everything
-    // against the live record. (anchorEl is re-resolved below; hostContainer/
-    // onApplied are re-set below; panelEl was already removed on the save.)
-    if (st.saved) {
-      if (st.panelEl) st.panelEl.remove();
-      delete _rows[problemId];
-      st = rowState(problemId);
-    }
-    // A stale panelEl (detached from any host, e.g. the caller's own
-    // container was torn down and rebuilt since the last time this problem's
-    // panel was opened here) must be discarded, or renderPanel would silently
-    // update a node nobody can see instead of creating a fresh one in the
-    // new container.
-    if (st.panelEl && !(containerEl && containerEl.contains(st.panelEl))) {
-      st.panelEl.remove();
-      st.panelEl = null;
-    }
+    // ALWAYS discard and start factory-fresh (2026-08-20 hardening —
+    // previously only did this after a successful save). Every
+    // fetched/derived field in a row's state — prefill, conceptId,
+    // currentDescription, the candidate lists, retiredInfo, legacyReadCode,
+    // gp2gpOnsetSuggestion, practiceRemap — describes the record as it was
+    // the LAST time this problem's popup was opened this page session, and
+    // openPanel's very first line (`if (st.alternatives || st.saved) {
+    // renderPanel(problemId); return; }`) treats any previously-computed
+    // row as fully current forever, however it got that way — including a
+    // fetch that partially failed, or ran before some other still-loading
+    // prerequisite was ready. A stale-but-truthy `st.alternatives` (even an
+    // empty array survives this check) silently serves that same possibly-
+    // incomplete render on every re-open instead of refetching. Never
+    // confirmed as the cause of any ONE specific report (see
+    // [[project-canvas-panel-stale-cache-hypothesis]] in memory), but
+    // removing the whole staleness class is safer than leaving a
+    // known-fragile cache gate in place on a guess — the cost is one extra
+    // fetch per re-open of the SAME problem within a session, cheap for a
+    // popup that's opened rarely, never in a hot loop. (This also makes the
+    // old "stale panelEl in a torn-down container" guard that used to sit
+    // here unreachable — a fresh row's panelEl is always null — so it's
+    // removed rather than left as dead code; anchorEl/hostContainer/
+    // onApplied are all re-resolved below regardless.)
+    if (st.panelEl) st.panelEl.remove();
+    delete _rows[problemId];
+    st = rowState(problemId);
     st.hostContainer = containerEl || null;
     st.onApplied = typeof onApplied === 'function' ? onApplied : null;
     // Best-effort anchor lookup for the live-list-text-update nicety only
@@ -3820,6 +3924,37 @@
       st.error = (err && err.message) || 'Failed to remove generic text — please try again.';
     } finally {
       st.genericAdditionalInfoSaving = false;
+      renderPanel(problemId);
+    }
+  }
+
+  // Confirm-and-write for the GP2GP-onset-date suggestion above — same
+  // narrowed-problemCode discipline as applyRemoveGenericAdditionalInfo
+  // just above (its own comment has the full story on why the raw GET
+  // shape 400s). Uses buildGp2gpOnsetPayload, not buildEditProblemPayload
+  // directly — see that function's own comment for the live 500 it fixes.
+  async function applyGp2gpOnsetDate(problemId) {
+    var st = rowState(problemId);
+    if (!st.gp2gpOnsetSuggestion || st.gp2gpOnsetSaving || !st.prefill) return;
+    var codeValue = st.prefill.problemCode && st.prefill.problemCode.value;
+    if (!codeValue) return;
+    var code = {
+      description: codeValue.description,
+      conceptId: codeValue.conceptId,
+      descriptionId: codeValue.descriptionId,
+    };
+    var isoDate = st.gp2gpOnsetSuggestion.isoDate;
+    st.gp2gpOnsetSaving = true;
+    renderPanel(problemId);
+    try {
+      var payload = buildGp2gpOnsetPayload(st.prefill, code, isoDate);
+      await postEditProblem(problemId, payload);
+      st.prefill = Object.assign({}, st.prefill, { onsetDate: isoDate, recordDate: payload.recordDate });
+      st.gp2gpOnsetSuggestion = null;
+    } catch (err) {
+      st.error = (err && err.message) || 'Failed to set the onset date — please try again.';
+    } finally {
+      st.gp2gpOnsetSaving = false;
       renderPanel(problemId);
     }
   }

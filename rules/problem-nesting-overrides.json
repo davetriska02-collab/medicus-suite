@@ -15,6 +15,13 @@
       "parentConceptId": "193570009",
       "parentDescription": "Cataract",
       "note": "UNLIKE the pseudophakia entry above, this one IS believed to be a genuine SNOMED IS-A descendant of cataract (Nick confirmed it sits under the cataract hierarchy) -- added here as a pragmatic workaround because problem-nesting.js's own live descendant-search mechanism (the pairHits two-step combined-then-attribute query) was NOT finding it for a real patient. Root cause unconfirmed -- candidates: the combined query's constrainingParentConcepts comma-list (built from every OTHER active problem's own conceptId) may silently truncate/behave unexpectedly at some length; or the specific recorded 'Cataract' problem on that record may carry a different/synonym conceptId than 193570009. Worth a live console probe (constrainingParentConcepts=193570009&query=53889007 directly) if this keeps happening for other genuinely-SNOMED pairs, rather than adding every miss here piecemeal."
+    },
+    {
+      "childConceptId": "84149000",
+      "childDescription": "Phacoemulsification of lens",
+      "parentConceptId": "193570009",
+      "parentDescription": "Cataract",
+      "note": "CORRECTED 2026-08-20 after Nick reported the first cut (1359971008, FSN 'Extraction of lens by phacoemulsification (procedure)') wasn't matching a real patient's own recorded problem -- 84149000 (FSN 'Aspiration of cataract by phacoemulsification (procedure)') is the code actually used/recorded for this in practice. Confirmed via the public NHS termbrowser API (release v20260729) that 84149000 IS-A both 112963003 'Aspiration of cataract' and 1359971008 (the original entry's own concept) -- a more specific descendant of it, on the same Procedure axis, still NOT a descendant of Cataract (193570009, Disorder/Clinical-finding axis) itself. Same relationship shape as the pseudophakia entry above: a real clinical sequela of a cataract problem (the extraction procedure), different hierarchy branch entirely, so the live descendant search would never surface it on its own. Requested 2026-08-20 alongside a request to always offer this pairing regardless of hierarchy nuance. If this specific conceptId ever stops matching a real patient again, check whether the practice's records instead use 1359971008 or another sibling under 75170007 'Extraction of lens of eye' before re-guessing -- ask Nick to confirm from a real problem entry rather than picking by text search alone, same lesson as this correction."
     }
   ]
 }
