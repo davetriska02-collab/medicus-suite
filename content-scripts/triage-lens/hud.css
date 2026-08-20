@@ -32,7 +32,13 @@
 .ch-kbd-cursor,
 .ch-row-seen,
 .ch-result-popover,
-.ch-detail-verdict {
+.ch-detail-verdict,
+.ch-q-pulse,
+.ch-q-why,
+.ch-q-act,
+.ch-row-pulse-red,
+.ch-row-pulse-amber,
+.ch-row-pulse-on {
   /* Surfaces */
   --bg-deep: #f8fafc;
   --bg-mid: #f1f5f9;
@@ -238,6 +244,197 @@
 }
 .ch-row-sev-amber {
   box-shadow: inset 3px 0 0 0 var(--amber);
+}
+
+/* ---- Queue pulse (v3.236.4) — compress the chip pile to one named weight ----
+   Marker classes on Medicus's own `.ag-row` (same host-class pattern as
+   `.ch-row-sev-*`). Pulse ON replaces the 3px result tint so two left-edge
+   shadows never fight. Filled bar = named red; hollow ring sits in the
+   pulse chrome, not on the row (AG-Grid box-shadow can't draw a ring). */
+.ch-row-pulse-red {
+  box-shadow: inset 4px 0 0 0 var(--red);
+}
+.ch-row-pulse-amber {
+  box-shadow: inset 4px 0 0 0 var(--amber);
+}
+/* Hide the per-family chip pile while pulse chrome is showing — chips stay
+   in the DOM for de-dupe / why-tray collection / fetch-driven inject. */
+.ch-row-pulse-on .ch-queue-chips,
+.ch-row-pulse-on .ch-q-mon,
+.ch-row-pulse-on .ch-q-result,
+.ch-row-pulse-on .ch-q-pa,
+.ch-row-pulse-on .ch-q-pending,
+.ch-row-pulse-on .ch-q-repeat,
+.ch-row-pulse-on .ch-q-carry {
+  display: none !important;
+}
+
+.ch-q-pulse {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 100%;
+  grid-column: 1 / -1;
+  margin: 0 0 4px;
+  font-family: var(--sans);
+  max-width: 100%;
+}
+.ch-q-pulse-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ch-q-pulse-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ch-q-pulse-head .ch-chip {
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ch-q-pulse-diamond {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  background: var(--red);
+  transform: rotate(45deg);
+  box-shadow: 0 0 0 1px var(--red-line);
+}
+.ch-q-pulse-diamond.amber {
+  background: var(--amber);
+  box-shadow: 0 0 0 1px var(--amber-line);
+}
+.ch-q-pulse-more,
+.ch-q-pulse-thread {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.ch-q-pulse-thread {
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 1px 7px;
+  color: var(--text-2);
+}
+.ch-q-pulse-act {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-hi);
+  background: var(--bg-elev);
+  color: var(--text-3);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.ch-q-pulse-act[aria-expanded='true'] {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--text-2);
+}
+
+.ch-q-why,
+.ch-q-act {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  box-shadow: var(--shadow-1);
+}
+.ch-q-why h3,
+.ch-q-act h3 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-2);
+}
+.ch-q-why-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+.ch-q-why-list li {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-1);
+  align-items: start;
+}
+.ch-q-why-mark {
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: var(--text-4);
+}
+.ch-q-why-mark.red {
+  background: var(--red);
+}
+.ch-q-why-mark.amber {
+  background: transparent;
+  border: 2px solid var(--amber);
+  border-radius: 50%;
+}
+.ch-q-why-mark.info,
+.ch-q-why-mark.green {
+  background: var(--accent);
+}
+.ch-q-why-src {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.ch-q-why-foot {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-4);
+  font-style: italic;
+}
+.ch-q-act-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ch-q-act-row button {
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-hi);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: left;
+}
+.ch-q-act-row button small {
+  display: block;
+  font-size: 10px;
+  color: var(--text-4);
+  font-weight: 400;
+}
+.ch-q-act-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.ch-q-act-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-4);
 }
 
 /* ---- Keyboard-triage cursor (item 4.6, TRIAGE-LENS-2026-07-02.md) ----

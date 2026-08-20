@@ -1185,6 +1185,23 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Residual risk**               | 4 — Acceptable (ALARP) |
 | **Acceptability**               | **Proposed — pending CSO sign-off** on the release PR (#253). Deploying-organisation briefing duty: ending, merging and converting allergy entries are clinical decisions; the widget prepares and batches them but the confirming clinician is accountable for each one, and Medicus's own record view (not the widget) is the source of truth to verify afterwards. |
 
+### H-061 — Queue pulse misread as an urgency score or all-clear
+
+| Field                           | Value |
+| ------------------------------- | ----- |
+| **Hazard ID**                   | H-061 |
+| **Description**                 | From v3.236.4 the request/results queue can compress every chip family into one left rail and one named headline (`queuePulseCompress`, default on). A GP may treat the rail as a composite urgency score, or treat a quiet/empty rail as “this row is safe,” skipping the request body. A second red signal hidden behind `· N` may be missed if the why-tray is never opened. |
+| **Potential causes**            | Automation bias (H-007 family); scanning by colour only; overflow count unread; fetch-driven chips not yet landed so the headline is incomplete; pref left on without a duty-session of calibration. |
+| **Affected users / components** | Clinicians on the Medicus task queue. `content-scripts/triage-lens/queue-pulse.js`, `content-scripts/triage-lens/content.js` (pulse host / why / act), `hud.css`. |
+| **Initial severity**            | 4 |
+| **Initial likelihood**          | 3 |
+| **Initial risk**                | 12 |
+| **Controls / mitigations**      | (a) **No number, no P-rank** — composer picks a named max, never arithmetic (`test-queue-pulse.js`). (b) **Quiet rail is not all-clear** — why-tray footer and aria-label state this; empty ≠ green. (c) **Overflow is mandatory** whenever more than one signal exists; why-tray lists every named source. (d) Age / days-open / thread counts / Pharmacy First never own the rail. (e) Diamond marks a headline that came from the record, not the request words. (f) Pref to restore the full chip pile. (g) Act tray is prepare-only (existing pathway menu); no Done/Sent/Booked. (h) Absence of a pulse never suppresses the underlying chips (they stay in the DOM; hide is CSS-only). |
+| **Residual severity**           | 4 |
+| **Residual likelihood**         | 2 |
+| **Residual risk**               | 8 — Acceptable (ALARP) pending live-duty review |
+| **Acceptability**               | **Proposed — pending CSO review** after a live queue session. |
+
 ---
 
 ## 6. Hazard summary
@@ -1249,6 +1266,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | H-058 | Staffing decision on a stale/degraded rota status panel                                      | 3×3         | 9            | 3×2          | 6             | Accepted (ALARP)                             |
 | H-059 | Malformed shared-drive sync data corrupts rota state                                         | 3×3         | 9            | 3×1          | 3             | Broadly acceptable                           |
 | H-060 | An allergy record ended, merged or re-coded in error (allergy cleanup suite)                 | 4×3         | 12           | 4×1          | 4             | Proposed — pending CSO sign-off              |
+| H-061 | Queue pulse misread as an urgency score or all-clear                                         | 4×3         | 12           | 4×2          | 8             | Proposed — pending live-duty / CSO review    |
 
 **Addendum at v3.211.0 (hazard-log v3.22):** H-058 and H-059 cover the rota surface subsumed into the suite at v3.211.0. They are recorded here on the CSO's own review of the rota port; they do **not** constitute a new full re-baseline, and the product-version pin in the header remains at v3.202.0 (the last CSO-reviewed version) until the next one.
 

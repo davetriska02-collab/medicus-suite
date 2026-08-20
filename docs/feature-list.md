@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.236.3
+**Version:** v3.236.4
 **Generated:** 2026-08-20
 
 ## What it is
@@ -175,7 +175,7 @@ The **full Rota Manager** (its own browser tab) covers working patterns and mult
 
 ## In-page features (content scripts)
 
-- **Triage Lens** — decoration chips on the request queue (age, flags) plus keyword-based red-flag detection with linked actions (Samaritans, risk-assessment snippets)
+- **Triage Lens** — decoration chips on the request queue (age, flags) plus keyword-based red-flag detection with linked actions (Samaritans, risk-assessment snippets). From v3.236.4 the chip pile **compresses into a pulse** (one named headline + left rail + quiet overflow) when `queuePulseCompress` is on (default): Space opens why, › / `a` stages Pharmacy First or ask-back drafts. Not a score; a quiet rail is not all-clear. Untick the pref to see the full pile.
 - **Triage Lens investigation-results queue** — the same overlay applied to the lab-results queue, flagging results against configured thresholds
 - **Lab Results Auto-Filing button** — files a lab result as normal (driving Medicus's own filing controls) only when every parameter is confirmed within normal limits
 - **Prescribing workflow button** — one-click re-assignment of a routine prescription request to the practice's configured team, driving Medicus's own UI

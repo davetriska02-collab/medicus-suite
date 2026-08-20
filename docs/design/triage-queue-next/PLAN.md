@@ -8,7 +8,9 @@ It does **not** reopen scoring, diagnosis, or auto-disposition.
 **Mocks:** `docs/design/triage-queue-next/mock.html` (static, not loaded by the
 extension). Open in a browser; each frame is a screenshot target.
 
-**Status:** design only. No product code in this change.
+**Status:** first live cut shipped in **v3.236.4** (pulse + why-tray + thin act
+tray + thread mark). Pref `queuePulseCompress` (default on). Book / Park /
+silent-unchecked rail / B1 context headlines are still later.
 
 ---
 

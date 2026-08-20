@@ -747,6 +747,16 @@ if (!parts.some((p) => !p)) {
     _durableRowMap: new Map(),
     _queueResultCache: new Map(),
     _queueMonCache: new Map(),
+    // Pulse v1 lives outside this harness (own unit tests). Stub the free
+    // variables decorateOneRow / inject* / onQueueKeydown now close over so
+    // the extracted injection functions still compile and run.
+    _pulseActByRow: new Map(),
+    _pulseOpenByKey: new Map(),
+    refreshPulseOnRow: () => {},
+    pulseOpenKey: () => null,
+    PULSE_ON: 'ch-row-pulse-on',
+    PULSE_RED: 'ch-row-pulse-red',
+    PULSE_AMBER: 'ch-row-pulse-amber',
     // Items 4.1/4.2 — the CSO-signed reception-pathways ruleset, "externally
     // provided" exactly like _durableRowMap/_queueResultCache above: real
     // content.js fetches this ONCE at bootstrap (ensureReceptionPathwaysLoaded,
