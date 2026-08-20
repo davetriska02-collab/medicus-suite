@@ -640,6 +640,146 @@
     return bestIdx;
   }
 
+  // ── Duplicate phone/email detection (within ONE patient's own record) ──────────────────────────
+  // Same shape as findDuplicateAddressGroups/chooseAddressToKeep above — "only within the hub
+  // patient" is a CALLER decision, not these functions', they just group whatever list they're
+  // given. Requested 2026-08-20 alongside the "non-identical duplicates" real example: "020 8977
+  // 5481" recorded as one entry, "8977 5481" (the same number with the area code dropped — a
+  // real, recurring GP2GP-import pattern, not a hypothetical) recorded as another.
+  //
+  // isLikelyDuplicatePhone: digit-only comparison (normalisePhoneDigits, already used elsewhere in
+  // this file for exact-match comparisons) PLUS a suffix check for the area-code-dropped case — a
+  // shorter number is a duplicate of a longer one if its digits are an exact trailing SUFFIX of the
+  // longer one's digits. This naturally covers a dropped UK trunk prefix ("0"), a dropped area code
+  // ("020"), or a country code used on one side and not the other ("+44 20 …") without needing to
+  // special-case any of them individually — all of those are just extra leading digits in front of
+  // the same core subscriber number. Gated on the SHORTER number being at least
+  // PHONE_DUPLICATE_MIN_SUFFIX_LENGTH digits, specifically to keep the false-positive risk
+  // negligible: a real UK subscriber number (the part after the area code) is 6-8 digits, so a
+  // 7-digit floor means two GENUINELY different numbers matching by coincidence is astronomically
+  // unlikely, while a short shared suffix (a handful of digits) would not be safe evidence on its
+  // own.
+  const PHONE_DUPLICATE_MIN_SUFFIX_LENGTH = 7;
+  function isLikelyDuplicatePhone(a, b) {
+    const da = normalisePhoneDigits(a);
+    const db = normalisePhoneDigits(b);
+    if (!da || !db) return false;
+    if (da === db) return true;
+    const shorter = da.length <= db.length ? da : db;
+    const longer = da.length <= db.length ? db : da;
+    if (shorter.length < PHONE_DUPLICATE_MIN_SUFFIX_LENGTH) return false;
+    return longer.endsWith(shorter);
+  }
+
+  // findDuplicatePhoneGroups(patientTelephoneNumbers) -> [[i, j, ...], ...]
+  //   patientTelephoneNumbers: a SINGLE patient's own patientContactInformationSection.
+  //   patientTelephoneNumbers array (confirmed shape: {telephoneNumberId, telephoneNumberType,
+  //   telephoneNumber, preferredTelephoneNumberForSms, notes}).
+  // Groups by ARRAY INDEX, anchored to the first (lowest-index) member — same deliberate
+  // simplification as findDuplicateAddressGroups: a delete action only ever needs "these look like
+  // the same number", not a formal transitive-equivalence guarantee across a 3+-entry group.
+  function findDuplicatePhoneGroups(patientTelephoneNumbers) {
+    const list = Array.isArray(patientTelephoneNumbers) ? patientTelephoneNumbers : [];
+    const groups = [];
+    const grouped = new Set();
+    for (let i = 0; i < list.length; i++) {
+      if (grouped.has(i)) continue;
+      const group = [i];
+      for (let j = i + 1; j < list.length; j++) {
+        if (grouped.has(j)) continue;
+        if (isLikelyDuplicatePhone(list[i] && list[i].telephoneNumber, list[j] && list[j].telephoneNumber)) {
+          group.push(j);
+        }
+      }
+      if (group.length > 1) {
+        group.forEach((idx) => grouped.add(idx));
+        groups.push(group);
+      }
+    }
+    return groups;
+  }
+
+  // choosePhoneToKeep(entries) -> index into `entries` to KEEP once a duplicate group is confirmed
+  // for deletion — every OTHER entry is a delete candidate. entries: the SAME group's own
+  // patientTelephoneNumbers objects, same order as the caller's own duplicate-group indexes.
+  // Tie-break order:
+  //   1. Whichever is preferredTelephoneNumberForSms — protected, same reasoning as
+  //      chooseAddressToKeep's correspondence-address check: losing the SMS-preferred flag would be
+  //      a real functional loss, not a cosmetic one.
+  //   2. Whichever has the MORE COMPLETE digit string (the longer one) — this is what actually
+  //      distinguishes "020 8977 5481" (keep) from "8977 5481" (delete) in the motivating example:
+  //      the fuller number carries strictly more information (the area code), never less.
+  //   3. The first one in the given order — a final deterministic tiebreak, never random/unstable.
+  function choosePhoneToKeep(entries) {
+    if (!Array.isArray(entries) || !entries.length) return -1;
+    const preferredIdx = entries.findIndex((e) => e && e.preferredTelephoneNumberForSms);
+    if (preferredIdx !== -1) return preferredIdx;
+    let bestIdx = 0;
+    let bestLength = normalisePhoneDigits(entries[0] && entries[0].telephoneNumber).length;
+    for (let i = 1; i < entries.length; i++) {
+      const len = normalisePhoneDigits(entries[i] && entries[i].telephoneNumber).length;
+      if (len > bestLength) {
+        bestLength = len;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
+  }
+
+  // isLikelyDuplicateEmail: case-insensitive, whitespace-trimmed exact match ONLY. Deliberately NOT
+  // provider-specific normalisation (Gmail's dot-insensitivity or "+work" plus-addressing, etc.) —
+  // that would be guessing at a pattern never confirmed for this population, the same "no ad hoc
+  // synonym pairs" discipline this file already applies elsewhere (see emailOwnerHint's own
+  // comment). Case/whitespace differences ARE a confirmed real "non-identical duplicate" shape
+  // (mail servers treat the local part as effectively case-insensitive in practice, whatever the
+  // spec technically permits) — extend to a provider-specific rule only after a real example is
+  // seen, not ahead of one.
+  function isLikelyDuplicateEmail(a, b) {
+    const na = String(a == null ? '' : a)
+      .trim()
+      .toLowerCase();
+    const nb = String(b == null ? '' : b)
+      .trim()
+      .toLowerCase();
+    if (!na || !nb) return false;
+    return na === nb;
+  }
+
+  // findDuplicateEmailGroups(patientEmailAddresses) -> [[i, j, ...], ...]
+  //   patientEmailAddresses: a SINGLE patient's own patientContactInformationSection.
+  //   patientEmailAddresses array (confirmed shape: {emailAddressId, emailAddressType,
+  //   emailAddress, isInvalidEmailAddress, preferredEmailAddress}).
+  function findDuplicateEmailGroups(patientEmailAddresses) {
+    const list = Array.isArray(patientEmailAddresses) ? patientEmailAddresses : [];
+    const groups = [];
+    const grouped = new Set();
+    for (let i = 0; i < list.length; i++) {
+      if (grouped.has(i)) continue;
+      const group = [i];
+      for (let j = i + 1; j < list.length; j++) {
+        if (grouped.has(j)) continue;
+        if (isLikelyDuplicateEmail(list[i] && list[i].emailAddress, list[j] && list[j].emailAddress)) {
+          group.push(j);
+        }
+      }
+      if (group.length > 1) {
+        group.forEach((idx) => grouped.add(idx));
+        groups.push(group);
+      }
+    }
+    return groups;
+  }
+
+  // chooseEmailToKeep(entries) -> index into `entries` to KEEP. Tie-break order: whichever is
+  // preferredEmailAddress (protected, same reasoning as choosePhoneToKeep's SMS-preferred check),
+  // else the first in the given order — unlike phone, a case/whitespace-only duplicate carries no
+  // "more complete" dimension to prefer between, so there is no second tie-break to make.
+  function chooseEmailToKeep(entries) {
+    if (!Array.isArray(entries) || !entries.length) return -1;
+    const preferredIdx = entries.findIndex((e) => e && e.preferredEmailAddress);
+    return preferredIdx !== -1 ? preferredIdx : 0;
+  }
+
   // buildChangeAddressBody({addressId, address, description, accessNotes, isCorrespondenceAddress})
   // -> the exact POST /patient/address/change-address body (confirmed via HAR capture 2026-07-30:
   // setting an existing address as the patient's correspondence address). A full-replace write,
@@ -905,6 +1045,12 @@
     isLikelyDuplicateAddress,
     findDuplicateAddressGroups,
     chooseAddressToKeep,
+    isLikelyDuplicatePhone,
+    findDuplicatePhoneGroups,
+    choosePhoneToKeep,
+    isLikelyDuplicateEmail,
+    findDuplicateEmailGroups,
+    chooseEmailToKeep,
     buildChangeAddressBody,
     emailOwnerHint,
     findSharedContactInfo,

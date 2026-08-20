@@ -1445,6 +1445,25 @@ console.log('--- rules/generic-additional-info-text.json: the imported list itse
     genericAdditionalInfoText.entries.some((e) => e.text === 'Problem severity: Minor'),
     '"Problem severity: Minor" is present (added 2026-07-26)'
   );
+  check(
+    genericAdditionalInfoText.entries.some((e) => e.text === 'SUMMARY=Y'),
+    '"SUMMARY=Y" is present (added 2026-08-20)'
+  );
+}
+
+console.log('--- stripGenericAdditionalInfoLines: "SUMMARY=Y" (2026-08-20 addition) ---');
+{
+  const genericTexts = literalTextsFromEntries(genericAdditionalInfoText.entries);
+  const result = stripGenericAdditionalInfoLines('cough\nSUMMARY=Y', genericTexts);
+  check(result.cleaned === 'cough', 'the genuine free-text line survives, SUMMARY=Y is stripped');
+  check(
+    result.removed.length === 1 && result.removed[0] === 'SUMMARY=Y',
+    'the removed line is reported (got ' + JSON.stringify(result.removed) + ')'
+  );
+  check(
+    stripGenericAdditionalInfoLines('summary=y', genericTexts).removed.length === 1,
+    'matching is case-insensitive, same as every other literal entry'
+  );
 }
 
 console.log('--- stripGenericAdditionalInfoLines: real 2026-07-26 example (Read-v2 "Infantile eczema" problem) ---');
