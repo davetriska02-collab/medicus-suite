@@ -1659,7 +1659,11 @@
   }
 
   // ── Junk / not-an-allergy end action (canvas Finalise, already confirmed) ──
-  async function commitEndJunk(ids) {
+  // opts.deferReload: the canvas Finalise runs ends THEN tidies in one
+  // gesture — the caller owns the single post-success reload, otherwise the
+  // reload scheduled here can fire while the tidy writes are still in
+  // flight and destroy their outcome.
+  async function commitEndJunk(ids, opts) {
     var targets = resolveEndTargets(ids);
     if (!targets.length || _ending || !_endDate) return { ended: [], skipped: true };
     _ending = true;
@@ -1691,7 +1695,7 @@
     // succeeded, after a brief pause so the "Ended" tags are actually
     // visible first — a failed end must stay on screen with its error
     // message so the clinician can see and retry it.
-    if (allSucceeded && targets.length) {
+    if (allSucceeded && targets.length && !(opts && opts.deferReload)) {
       setTimeout(function () {
         location.reload();
       }, 900);
@@ -1707,7 +1711,7 @@
   // ── Dual-coded bulk cleanup (legacy code alongside an already-authoritative
   // substance — see classifyDualCodedEntries's own comment for why this is
   // bulk-safe, unlike merge/conversion) ─────────────────────────────────────
-  async function commitClearLegacy(ids) {
+  async function commitClearLegacy(ids, opts) {
     var want = {};
     (Array.isArray(ids) ? ids : []).forEach(function (id) {
       want[id] = true;
@@ -1739,7 +1743,7 @@
     });
     _dualCodedTidying = false;
     render();
-    if (allSucceeded && targets.length) {
+    if (allSucceeded && targets.length && !(opts && opts.deferReload)) {
       setTimeout(function () {
         location.reload();
       }, 900);

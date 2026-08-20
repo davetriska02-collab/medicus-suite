@@ -238,6 +238,38 @@
     return { ends: ends, tidies: tidies, count: ends.length + tidies.length };
   }
 
+  // Compares what Finalise asked for against what the write bridge reports
+  // actually landed. commitEndJunk/commitClearLegacy settle every write and
+  // never throw — a failed or bridge-refused row simply comes back missing
+  // from ended/tidied, so success must be established from these lists, not
+  // from the absence of an exception.
+  function diffFinaliseOutcome(wantEndIds, wantTidyIds, endedList, tidiedList) {
+    var endedById = {};
+    (endedList || []).forEach(function (f) {
+      if (f && f.id) endedById[f.id] = true;
+    });
+    var tidiedById = {};
+    (tidiedList || []).forEach(function (f) {
+      if (f && f.id) tidiedById[f.id] = true;
+    });
+    var failedEnds = (wantEndIds || []).filter(function (id) {
+      return !endedById[id];
+    });
+    var failedTidies = (wantTidyIds || []).filter(function (id) {
+      return !tidiedById[id];
+    });
+    var wanted = (wantEndIds || []).length + (wantTidyIds || []).length;
+    var failed = failedEnds.length + failedTidies.length;
+    return {
+      failedEnds: failedEnds,
+      failedTidies: failedTidies,
+      wanted: wanted,
+      written: wanted - failed,
+      failed: failed,
+      allWritten: failed === 0,
+    };
+  }
+
   // Tile → tile: merge only inside a known duplicate group. Tile → End:
   // propose end (canStageEnd decides). Tile → Dual-coded lane: stage tidy.
   // Tile → Active: unstage tidy. Same-lane / self / unknown = no-op.
@@ -397,6 +429,7 @@
       allergiesNotEnded: allergiesNotEnded,
       endedAllergyList: endedAllergyList,
       summariseDraft: summariseDraft,
+      diffFinaliseOutcome: diffFinaliseOutcome,
       classifyDrop: classifyDrop,
       readDropPayload: readDropPayload,
       relativeRect: relativeRect,
@@ -531,6 +564,7 @@
           esc((dual.substance && dual.substance.description) || 'current') +
           '</div>'
       );
+      if (dual.tidyError) hints.push('<div class="ms-acc-tile-warn">⚠ ' + esc(dual.tidyError) + '</div>');
     }
     if (groupIdx !== -1) hints.push('<div class="ms-acc-tile-hint">Possible duplicate</div>');
     if (info) hints.push('<div class="ms-acc-tile-info">' + esc(info) + '</div>');
@@ -584,8 +618,11 @@
     );
   }
 
-  function binTileHtml(allergy) {
+  function binTileHtml(allergy, flags) {
     if (!allergy || !allergy.id) return '';
+    var junk = flags && flags.junkById && flags.junkById[allergy.id];
+    var conv = flags && flags.convertById && flags.convertById[allergy.id];
+    var endError = (junk && junk.endError) || (conv && conv.endError) || null;
     return (
       '<div class="ms-acc-tile ms-acc-bin-tile" draggable="true" tabindex="0" data-allergy-id="' +
       esc(allergy.id) +
@@ -593,11 +630,12 @@
       '<div class="ms-acc-tile-main"><div class="ms-acc-tile-desc">' +
       esc(allergy.description || allergy.id) +
       '</div></div>' +
+      (endError ? '<div class="ms-acc-tile-warn">⚠ ' + esc(endError) + '</div>' : '') +
       '</div>'
     );
   }
 
-  function binHtml(endedAllergies) {
+  function binHtml(endedAllergies, flags) {
     var list = Array.isArray(endedAllergies) ? endedAllergies : [];
     return (
       '<div class="ms-acc-bin" data-end-bin tabindex="0" aria-label="End allergies (' +
@@ -607,7 +645,13 @@
       (list.length ? ' (' + list.length + ')' : '') +
       '</div>' +
       (list.length
-        ? '<div class="ms-acc-bin-list">' + list.map(binTileHtml).join('') + '</div>'
+        ? '<div class="ms-acc-bin-list">' +
+          list
+            .map(function (a) {
+              return binTileHtml(a, flags);
+            })
+            .join('') +
+          '</div>'
         : '<div class="ms-acc-bin-hint">Drop junk or not-an-allergy rows here. Nothing is ended until you Finalise. Genuine allergies cannot be ended from this bin.</div>') +
       '</div>'
     );
@@ -735,7 +779,7 @@
       laneHtml('junk', 'Junk / low-rel', lanes.junk, flags, groups, opts) +
       laneHtml('convert', 'Convert', lanes.convert, flags, groups, opts) +
       laneHtml('dual', 'Dual-coded', lanes.dual, flags, groups, opts) +
-      binHtml(endedAllergies) +
+      binHtml(endedAllergies, flags) +
       '</div>' +
       '</div>'
     );
@@ -925,15 +969,53 @@
     d.working = true;
     render();
     try {
-      if (_draft.endIds.length) await window.AllergyCleanup.commitEndJunk(_draft.endIds.slice());
+      // deferReload on both commits: this gesture chains ends then tidies,
+      // so the engine's own post-success reload (scheduled 900ms after the
+      // ends land) could fire while the tidy writes are still in flight.
+      // The canvas owns the single reload below, after BOTH phases report.
+      var wantEnd = _draft.endIds.slice();
+      var wantTidy = _draft.tidyIds.slice();
+      var endResult = { ended: [], skipped: false };
+      var tidyResult = { tidied: [], skipped: false };
+      if (wantEnd.length) endResult = await window.AllergyCleanup.commitEndJunk(wantEnd, { deferReload: true });
       if (window.AllergyCleanup.getSnapshot().patientId !== _openedPatientId) {
         close();
         return;
       }
-      if (_draft.tidyIds.length) await window.AllergyCleanup.commitClearLegacy(_draft.tidyIds.slice());
-      _draft = emptyDraft();
-      _pendingAction = null;
-      announce('Staged writes sent.');
+      if (wantTidy.length) tidyResult = await window.AllergyCleanup.commitClearLegacy(wantTidy, { deferReload: true });
+      if (window.AllergyCleanup.getSnapshot().patientId !== _openedPatientId) {
+        close();
+        return;
+      }
+      var outcome = diffFinaliseOutcome(wantEnd, wantTidy, endResult.ended, tidyResult.tidied);
+      if (outcome.allWritten) {
+        _draft = emptyDraft();
+        _pendingAction = null;
+        announce(
+          (outcome.written === 1
+            ? 'The staged change was written.'
+            : 'All ' + outcome.written + ' staged changes were written.') + ' Reloading to show the updated list…'
+        );
+        render();
+        setTimeout(function () {
+          location.reload();
+        }, 900);
+        return;
+      }
+      // A write failed (or the bridge refused a row) — keep exactly those
+      // rows staged so nothing silently disappears, and say so. Success is
+      // never claimed for a write that did not come back confirmed.
+      _draft = { endIds: outcome.failedEnds, tidyIds: outcome.failedTidies };
+      d.working = false;
+      d.error =
+        (outcome.written ? outcome.written + ' of ' + outcome.wanted + ' staged changes were written. ' : '') +
+        outcome.failed +
+        ' could not be written and ' +
+        (outcome.failed === 1 ? 'is' : 'are') +
+        ' still staged — the record is unchanged for ' +
+        (outcome.failed === 1 ? 'that row' : 'those rows') +
+        '. Check each staged row for its error, then Finalise again. Nothing is retried automatically.';
+      announce(d.error);
       render();
     } catch (err) {
       d.working = false;

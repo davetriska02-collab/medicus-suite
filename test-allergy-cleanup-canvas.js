@@ -26,6 +26,7 @@ const {
   allergiesNotEnded,
   endedAllergyList,
   summariseDraft,
+  diffFinaliseOutcome,
   classifyDrop,
   readDropPayload,
   relativeRect,
@@ -288,6 +289,26 @@ check(
 }
 check(truncateText('abcdefghijklmnopqrstuvwxyz', 10) === 'abcdefghi…', 'truncate');
 check(truncateText('  short  ', 70) === 'short', 'truncate keeps short text');
+
+console.log('--- diffFinaliseOutcome: success is only what the bridge confirms ---');
+{
+  const all = diffFinaliseOutcome(['j1', 'c2'], ['d1'], [{ id: 'j1' }, { id: 'c2' }], [{ id: 'd1' }]);
+  check(all.allWritten === true && all.written === 3 && all.failed === 0, 'everything confirmed -> allWritten');
+  const partial = diffFinaliseOutcome(['j1', 'c2'], ['d1'], [{ id: 'j1' }], []);
+  check(partial.allWritten === false, 'a missing confirmation is a failure');
+  check(partial.written === 1 && partial.failed === 2, 'partial counts written vs failed');
+  check(partial.failedEnds.length === 1 && partial.failedEnds[0] === 'c2', 'failed end ids are the unconfirmed ones');
+  check(partial.failedTidies.length === 1 && partial.failedTidies[0] === 'd1', 'failed tidy ids kept');
+  const skipped = diffFinaliseOutcome(['j1'], [], [], []);
+  check(
+    skipped.allWritten === false && skipped.failed === 1,
+    'a skipped commit (empty ended list) is never reported as success'
+  );
+  const none = diffFinaliseOutcome([], [], [], []);
+  check(none.allWritten === true && none.wanted === 0, 'nothing wanted -> vacuously all written');
+  const nullSafe = diffFinaliseOutcome(['j1'], null, null, null);
+  check(nullSafe.failed === 1 && nullSafe.failedEnds[0] === 'j1', 'null lists never throw');
+}
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

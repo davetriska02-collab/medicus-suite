@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.3] — 2026-08-20
+
+### Allergy canvas — Finalise reports what actually landed (PR #293 review fixes)
+
+Two defects in the new Organise-allergies canvas, both in the Finalise path:
+
+- **A failed write was announced as success.** `commitEndJunk` / `commitClearLegacy`
+  settle every write and never throw, but the canvas ignored their return values —
+  it cleared the draft and announced "Staged writes sent" even when every write
+  failed, and the per-row `endError` / `tidyError` the engine records were only
+  rendered by the retired checklist (dead code). Finalise now diffs what it asked
+  for against what the bridge confirms (`diffFinaliseOutcome`, pinned by tests):
+  failed or bridge-refused rows **stay staged**, the confirm bar names the exact
+  written/failed counts, and each failed row shows its error on the tile (End-bin
+  tiles show `endError`; dual-coded tiles show `tidyError`). Success is never
+  claimed for a write that did not come back confirmed.
+- **A mixed Finalise could reload the page mid-write.** When every staged end
+  succeeded, the engine scheduled `location.reload()` 900 ms later — while the
+  canvas was still awaiting the tidy writes (two round-trips per row), so the
+  reload could destroy their outcome and errors. Both commits now take a
+  `deferReload` option (canvas-only; default behaviour unchanged) and the canvas
+  owns a single reload after **both** phases report fully successful, guarded on
+  the snapshot patient still matching.
+
 ## [v3.236.2] — 2026-08-20
 
 ### Allergy cleanup — organise on canvas
