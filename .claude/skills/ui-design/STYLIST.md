@@ -45,7 +45,7 @@ files listed in your prompt. Touch nothing else.
 - Don't reformat whole files (no wholesale Prettier); keep diffs reviewable
   and the existing comment style/section banners intact.
 - Don't restyle suite chrome owned by `panel.css` from module CSS.
-- For injected stylesheets (`sidebar.css`, `hud.css`): keep them
+- For injected stylesheets (`hud.css`): keep them
   self-contained per TOKENS.md §Injected surfaces — define/update the scoped
   token block; never reference panel.css vars that won't resolve in the host
   page.

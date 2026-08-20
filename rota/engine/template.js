@@ -6,7 +6,7 @@
 import { datesInRange, dayKey, templateWeekIndex } from '../shared/time.js';
 import { typeById, canSupervise, periodsFor } from '../shared/model.js';
 import { approvedLeaveFor } from './leave.js';
-import { uid } from '../shared/store.js';
+import { uid } from '../shared/uid.js';
 
 export function generateEntries({ staff, startDate, endDate, existingEntries, leaveList, settings }) {
   const existing = new Set(existingEntries.map((e) => `${e.staffId}|${e.date}|${e.period}`));

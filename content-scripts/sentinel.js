@@ -76,7 +76,9 @@
       if (CONFIG.autoRefresh !== false) {
         loadRules()
           .then((rules) => evaluateAndPublish(rules))
-          .catch(() => {});
+          .catch((err) => {
+            console.warn('[Sentinel] rule-edit re-eval failed — chips may be stale until navigation', err && err.message);
+          });
       }
     }
     if (!changes['sentinel.config']) return;

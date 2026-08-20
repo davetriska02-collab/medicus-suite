@@ -753,6 +753,10 @@ if (cqrrMatch) {
     /evaluateReportSeverity threw[\s\S]*?return QUEUE_RESULT_FETCH_ERROR/.test(cqrrMatch[0]),
     'a thrown evaluateReportSeverity() returns the error sentinel (previously uncaught)'
   );
+  check(
+    /sev\.level === 'error'[\s\S]*?return QUEUE_RESULT_FETCH_ERROR/.test(cqrrMatch[0]),
+    'evaluateReportSeverity level:"error" (engine catch, no rethrow) returns the error sentinel'
+  );
   // Structural "nothing to check" paths — NOT per-row failures — must stay
   // plain null, never the error sentinel: a disabled feature (anyEnabled
   // false), the whole Sentinel API being absent from this world (globals not

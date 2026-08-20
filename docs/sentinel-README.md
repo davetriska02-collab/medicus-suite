@@ -87,9 +87,6 @@ sentinel/
 ├── rules/
 │   ├── drug-rules.json        curated drug-monitoring rules
 │   └── qof-rules.json         QOF 2025/26 registers and indicators
-├── sidebar/
-│   ├── sidebar.html
-│   └── sidebar.css
 ├── options/
 │   ├── options.html           Display / Drug Rules / QOF Rules / Advanced
 │   └── options.js

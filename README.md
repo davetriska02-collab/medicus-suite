@@ -48,36 +48,48 @@ automatically when you push a version tag. To cut a new release:
 # Bump the version in manifest.json
 # Then commit and tag
 git add manifest.json
-git commit -m "Release v1.3.2"
-git tag v1.3.2
+git commit -m "Release v3.236.2"
+git tag v3.236.2
 git push && git push --tags
 ```
 
 The workflow at `.github/workflows/release.yml` packs the repo into
-`medicus-suite-v1.3.2.zip` (excluding tests and dev files), creates a
+`medicus-suite-v3.236.2.zip` (excluding tests and dev files), creates a
 GitHub release with that tag, and attaches the zip. Within 24 hours every
 installed extension's update banner will surface the new version.
 
 ## What it does and does not do
 
-The extension only reads from Medicus. It does not create, modify, assign,
-or delete clinical or administrative records. It uses the user's existing
-Medicus login (session cookies on `*.api.england.medicus.health`) and does
-not transmit patient information to any external server. By default the only
-external endpoint the extension contacts is `api.github.com` for update
-checks; no patient data is included in those requests.
+The extension sits alongside Medicus and uses the user's existing login
+(session cookies on `*.api.england.medicus.health`). A small, enumerated
+set of **user-initiated** write actions can create or change records in
+Medicus — appointment booking, general-task creation, inbound-document
+filing, normal-lab-result filing, routine-prescription re-assignment, and
+problem-list / duplicate / allergy tidy-up. Every write is triggered by the
+user on the record in front of them, confirmed at the point of commit, and
+executed under that user's own Medicus session. Medicus remains the system
+of record. Nothing is written automatically or in the background.
 
-The **Leaflets** tab (NHS patient information) is a second, optional
-exception, and it is off by default. With no API key configured in
-Options → Leaflets, the tab works entirely from a bundled local index and
-`chrome.tabs.create` (a normal browser navigation the user initiates by
-clicking "Open") — no new endpoint is contacted. If a user registers for the
-free NHS Website Content API and pastes a key into Options → Leaflets, then
-selecting a search result additionally sends a plain GET request to
-`api.nhs.uk` containing only the condition or medicine name the user
-selected — never patient data — to fetch and display the leaflet text in the
-panel. The API key itself is stored locally on that device only and is
-deliberately excluded from suite backups.
+By default the extension does not transmit patient information to any
+external server. The only external endpoint contacted by default is
+`api.github.com` for update checks (no patient data). Two optional,
+off-by-default exceptions:
+
+- **Leaflets** — with no API key configured in Options → Leaflets, the tab
+  works entirely from a bundled local index and `chrome.tabs.create` (a
+  normal browser navigation the user initiates). If a user registers for
+  the free NHS Website Content API and pastes a key into Options →
+  Leaflets, selecting a search result additionally sends a plain GET to
+  `api.nhs.uk` containing only the condition or medicine name — never
+  patient data. The API key is stored locally on that device only and is
+  deliberately excluded from suite backups.
+- **Transactional API** — a practice may enable a read-only Medicus
+  Transactional API path via a Graysbrook-operated UK proxy
+  (`txn.integrationMode`). Off by default; do not enable it until the
+  practice has reviewed `docs/INTENDED-PURPOSE.md` and
+  `docs/TRANSACTIONAL-API-INTEGRATION.md`.
+
+The binding safety notice is [`docs/CLINICAL-SAFETY-NOTICE.md`](docs/CLINICAL-SAFETY-NOTICE.md).
 
 ## Licence
 

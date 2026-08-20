@@ -3406,6 +3406,26 @@ console.log('\n--- item 3.3 (REVERTED): base-fib4-elevated status quo (red ≥2.
   assert(quiet.level === 'none', 'FIB-4 1.1 (below amber 1.3) → quiet');
 }
 
+// ── Fail-visible eval error (audit 2026-08-20) ────────────────────────────────
+// A throw inside evaluation used to return the same `{ level: 'none' }` shape
+// as a genuinely clean report. That hid the queue chip and could arm
+// lab-filing's all-normal gate. The catch now returns level:'error'.
+console.log('\n--- evaluateReportSeverity fail-visible error ---');
+{
+  const poison = {
+    get name() {
+      throw new Error('poisoned result');
+    },
+    value: 16.7,
+    isAbove: true,
+    urgent: true,
+  };
+  const sev = evaluateReportSeverity({ results: [poison] }, {});
+  assert(sev.level === 'error', 'a throw inside evaluation returns level:"error", not "none"');
+  assert(sev.urgentCount === 0 && sev.abnormalCount === 0, 'error result does not look like a flagged report');
+  assert(sev.level !== 'none', 'error is never indistinguishable from all-clear');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

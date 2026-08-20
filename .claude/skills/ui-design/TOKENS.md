@@ -210,15 +210,14 @@ layout.
 
 ## Injected surfaces (content scripts) — self-contained token rule
 
-`sidebar/sidebar.css` and `content-scripts/triage-lens/hud.css` are injected
-into Medicus pages, which never load `panel.css` — `var(--bg-elev)` etc.
-resolve to nothing there. Therefore each injected stylesheet **defines its own
-scoped token block** on its root (`.sentinel-root { --… }`,
-`#medicus-clinical-hud { --… }`) carrying the _light-theme_ canon values
-(host page is light), with a comment pointing back to this file. Inside the
-scope, rules consume the scoped vars exactly like module CSS. When the canon
-changes, these blocks are updated in the same commit — the surveyor stage
-checks for drift.
+`content-scripts/triage-lens/hud.css` is injected into Medicus pages, which
+never load `panel.css` — `var(--bg-elev)` etc. resolve to nothing there.
+Therefore each injected stylesheet **defines its own scoped token block** on
+its root (`#medicus-clinical-hud { --… }`) carrying the _light-theme_ canon
+values (host page is light), with a comment pointing back to this file. Inside
+the scope, rules consume the scoped vars exactly like module CSS. When the
+canon changes, these blocks are updated in the same commit — the surveyor
+stage checks for drift.
 
 ## Out-of-scope / constraints
 

@@ -62,8 +62,13 @@ const APP_DIRS = [
   'rota',
 ];
 const APP_FILES = [
-  // Top-level JS
+  // Top-level JS (full-tab pages live at the repo root, not under APP_DIRS —
+  // omitting them is how cqc.* and duplicate-checker keys stayed invisible)
   path.join(ROOT, 'service-worker.js'),
+  path.join(ROOT, 'cqc-readiness.js'),
+  path.join(ROOT, 'duplicate-checker.js'),
+  path.join(ROOT, 'practice-report.js'),
+  path.join(ROOT, 'visualiser-core.js'),
 ];
 for (const d of APP_DIRS) {
   APP_FILES.push(...listFilesRecursive(path.join(ROOT, d), ['.js']));
@@ -125,6 +130,11 @@ const KEY_PREFIXES = [
   // for labfiling/patientAlerts/followups/practice above.
   'contactsCanvas',
   'rota',
+  // Audit loose-ends (2026-08-20): scanner was prefix-blind to CQC recon/anchor
+  // keys and the Record tab's per-patient brief fingerprints — same class as
+  // the M18 miss above.
+  'cqc',
+  'brief',
 ];
 
 function hasKeyPrefix(k) {
@@ -327,21 +337,6 @@ const ALLOWLIST = new Set([
   // sweep.handout exactly — see side-panel/modules/sweep/sweep.js):
   'sweep.worklist',
 
-  // Practice's own £-per-QOF-point figure (manager £ projection — explicitly
-  // non-clinical arithmetic; no national default exists in this repo on
-  // purpose, see sweep-core.js qofPoundsValue). Unlike the transient keys
-  // above, this genuinely IS user config, not PHI or session state — in
-  // principle it should ride a real shared/io/sweep-io.js the way
-  // condor.indexConfig rides condor-io.js (see shared/io/condor-io.js), so a
-  // practice's figure survives a suite backup/restore. Sweep has no io file
-  // today (its other keys are all transient/PHI and were never meant to be
-  // backed up), and this change's scope was restricted to the sweep module +
-  // test files, not options.js/options.html/suite-envelope.js. Allowlisted
-  // for now; a follow-up should add shared/io/sweep-io.js (covering just this
-  // key) and wire it into doFullExport()/applyEnvelope()/previewEnvelope(),
-  // then remove this entry:
-  'sweep.qofConfig',
-
   // Per-machine first-run onboarding state — dismissed/skipped flags.
   // Not user config; deliberately excluded from backups so a restore onto a
   // new machine still offers the setup checklist. Mirrors suite.tour.seenVersion
@@ -430,6 +425,17 @@ const ALLOWLIST = new Set([
   // machine (or a fresh install) must NOT silently suppress that machine's
   // own health warning, so it is never backed up:
   'health.stripSnooze',
+
+  // Record-tab "since last visit" fingerprints (`brief.fp.<patientUuid>`).
+  // Per-patient observational state: restoring them onto another machine
+  // would show a false "no changes" line. The prefix constant is the only
+  // literal the scanner can see (`brief.fp`); the per-uuid keys are built
+  // at runtime. Machine-local, never backed up:
+  'brief.fp',
+
+  // Duplicate-checker debug dump of the patient-list API field shape —
+  // written once during discovery, not user config, not restored:
+  'suite.patientFieldDebug',
 
   // Follow-ups ledger (v3.160.0): personal safety-net reminders carrying
   // patient-identifiable free text + patient UUIDs. Machine-local BY DESIGN

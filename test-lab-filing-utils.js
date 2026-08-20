@@ -466,6 +466,18 @@ check(
   'free-text/non-numeric result blocks and is named'
 );
 check(LF.fileabilityBlockers({ results: [] }, { level: 'none' }, someRules).length > 0, 'empty results blocks');
+check(
+  LF.fileabilityBlockers(okReport, { level: 'error' }, someRules).some((r) => /could not be checked/.test(r)),
+  'severity level:"error" (eval throw) blocks as could-not-check, not as all-normal'
+);
+check(
+  !LF.fileabilityBlockers(okReport, { level: 'error' }, someRules).some((r) => /within normal/.test(r)),
+  'eval-error reason is distinct from the numeric-abnormal wording'
+);
+check(
+  LF.fileabilityBlockers(okReport, null, someRules).some((r) => /could not be checked/.test(r)),
+  'missing severity object also fails closed as could-not-check'
+);
 
 // ── buildFilingConfirmMessage ──────────────────────────────────────────────────
 console.log('\n--- buildFilingConfirmMessage ---');

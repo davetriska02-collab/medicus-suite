@@ -105,6 +105,8 @@ const VALID_SCOPES = [
   'problemDescriptionCleanup',
   'phrases',
   'rota',
+  'sweep',
+  'cqc',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -502,6 +504,24 @@ function previewEnvelope(envelope) {
     );
   } else {
     const m = missing('Rota');
+    if (m) lines.push(m);
+  }
+
+  if (mods.sweep) {
+    const rate = mods.sweep.qofConfig && mods.sweep.qofConfig.poundsPerPoint;
+    lines.push(Number.isFinite(rate) && rate > 0 ? `Sweep: £${rate} per QOF point` : 'Sweep: QOF £/point unset');
+  } else {
+    const m = missing('Sweep');
+    if (m) lines.push(m);
+  }
+
+  if (mods.cqc) {
+    const countKeys =
+      mods.cqc.reconCounts && typeof mods.cqc.reconCounts === 'object' ? Object.keys(mods.cqc.reconCounts).length : 0;
+    const hasAnchor = !!(mods.cqc.readinessAnchor && typeof mods.cqc.readinessAnchor === 'object');
+    lines.push(`CQC readiness: ${countKeys} recon count(s)${hasAnchor ? ', baseline saved' : ''}`);
+  } else {
+    const m = missing('CQC readiness');
     if (m) lines.push(m);
   }
 

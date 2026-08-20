@@ -74,8 +74,9 @@ touch the same file. A proven full-suite split:
 - **D** `reception` + `sweep` module CSS + `pop-out/pop-out.css`
 - **E** `options/options.html` (embedded styles) + `sentinel-options/options.html`
   + `content-scripts/triage-lens/options.css`
-- **F** `sidebar/sidebar.css` + `content-scripts/triage-lens/hud.css`
-  (**self-contained token rule applies** — see TOKENS.md §Injected surfaces)
+- **F** `content-scripts/triage-lens/hud.css`
+  (**self-contained token rule applies** — see TOKENS.md §Injected surfaces;
+  the legacy `sidebar/sidebar.css` HUD was deleted)
 - **G** `visualiser-core.html` embedded styles (NHS palette is intentional —
   polish, don't re-brand; it must stay print-friendly)
 

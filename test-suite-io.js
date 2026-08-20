@@ -14,6 +14,8 @@ const subIo = require('./shared/io/submissions-io.js');
 const suiteIo = require('./shared/io/suite-io.js');
 const referralsIo = require('./shared/io/referrals-io.js');
 const rotaIo = require('./shared/io/rota-io.js');
+const sweepIo = require('./shared/io/sweep-io.js');
+const cqcIo = require('./shared/io/cqc-io.js');
 
 let passed = 0;
 let failed = 0;
@@ -998,6 +1000,83 @@ console.log('\n--- applyWithRollback rollback ---');
     );
 
     global.chrome = savedChrome3;
+  }
+
+  // ── Sweep + CQC IO (audit 2026-08-20 backup loose ends) ─────────────────────
+  console.log('\n--- Sweep / CQC IO ---');
+
+  {
+    const savedChrome4 = global.chrome;
+    const extraStore = {};
+    global.chrome = {
+      storage: {
+        local: {
+          async get(keys) {
+            const ks = Array.isArray(keys) ? keys : typeof keys === 'string' ? [keys] : Object.keys(keys || {});
+            const out = {};
+            ks.forEach((k) => {
+              if (k in extraStore) out[k] = extraStore[k];
+            });
+            return out;
+          },
+          async set(obj) {
+            Object.assign(extraStore, obj);
+          },
+          async remove(keys) {
+            const ks = Array.isArray(keys) ? keys : [keys];
+            ks.forEach((k) => {
+              delete extraStore[k];
+            });
+          },
+        },
+      },
+    };
+
+    extraStore['sweep.qofConfig'] = { poundsPerPoint: 198.0 };
+    const sweepOut = await sweepIo.sweepExport();
+    assert(sweepOut.qofConfig && sweepOut.qofConfig.poundsPerPoint === 198, 'sweepExport: captures £/point');
+    delete extraStore['sweep.qofConfig'];
+    await sweepIo.sweepImport(sweepOut);
+    assert(extraStore['sweep.qofConfig'].poundsPerPoint === 198, 'sweepImport: restores £/point');
+    await sweepIo.sweepImport({ qofConfig: { poundsPerPoint: -3 } });
+    assert(!extraStore['sweep.qofConfig'], 'sweepImport: invalid rate clears the key');
+    assert(suiteEnv.VALID_SCOPES.includes('sweep'), 'suite-envelope: sweep is a valid scope');
+    const sweepLines = suiteEnv.previewEnvelope(
+      suiteEnv.wrap('sweep', { sweep: { qofConfig: { poundsPerPoint: 198 } } })
+    );
+    assert(
+      sweepLines.some((l) => l === 'Sweep: £198 per QOF point'),
+      'previewEnvelope: summarises sweep £/point'
+    );
+
+    extraStore['cqc.readiness.anchor'] = { generatedAt: '2026-08-01' };
+    extraStore['cqc.recon.counts'] = { 'qof-dm': '12' };
+    const cqcOut = await cqcIo.cqcExport();
+    assert(cqcOut.readinessAnchor && cqcOut.readinessAnchor.generatedAt === '2026-08-01', 'cqcExport: captures anchor');
+    assert(cqcOut.reconCounts && cqcOut.reconCounts['qof-dm'] === '12', 'cqcExport: captures recon counts');
+    delete extraStore['cqc.readiness.anchor'];
+    delete extraStore['cqc.recon.counts'];
+    await cqcIo.cqcImport(cqcOut);
+    assert(extraStore['cqc.readiness.anchor'].generatedAt === '2026-08-01', 'cqcImport: restores anchor');
+    assert(extraStore['cqc.recon.counts']['qof-dm'] === '12', 'cqcImport: restores recon counts');
+    assert(suiteEnv.VALID_SCOPES.includes('cqc'), 'suite-envelope: cqc is a valid scope');
+    const cqcLines = suiteEnv.previewEnvelope(
+      suiteEnv.wrap('cqc', { cqc: { readinessAnchor: { ok: true }, reconCounts: { a: '1' } } })
+    );
+    assert(
+      cqcLines.some((l) => l === 'CQC readiness: 1 recon count(s), baseline saved'),
+      'previewEnvelope: summarises CQC module'
+    );
+
+    let cqcThrew = false;
+    try {
+      await cqcIo.cqcImport({ reconCounts: ['nope'] });
+    } catch (_) {
+      cqcThrew = true;
+    }
+    assert(cqcThrew, 'cqcImport: rejects non-object reconCounts');
+
+    global.chrome = savedChrome4;
   }
 
   // ── Summary ───────────────────────────────────────────────────────────────────

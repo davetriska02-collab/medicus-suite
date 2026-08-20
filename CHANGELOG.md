@@ -2,6 +2,48 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.2] — 2026-08-20
+
+### Audit loose-ends — fail-visible clinical paths + backup IO + hygiene
+
+Closes the high-confidence holes from the 2026-08-20 repo bug review.
+
+- **Result severity no longer fails open.** A throw inside
+  `evaluateReportSeverity` used to return the same `{ level: 'none' }` shape
+  as a genuinely clean report — the queue's error-sentinel `catch` was dead
+  code, and lab-filing's all-normal gate could arm. The engine now returns
+  `level: 'error'`; the queue treats that as `QUEUE_RESULT_FETCH_ERROR`
+  ("couldn't check"); `fileabilityBlockers` fail-closes with a distinct
+  "could not be checked" reason. Runtime-tested, not just a source-grep.
+- **Silent clinical fallbacks now log.** Corrupt embedded triage defaults,
+  a failed Sentinel rule-edit republish, and a thrown patient-alert store
+  load no longer fail empty without a console warning. The PA-store catch
+  leaves the store `null` (chips withheld) rather than pretending the
+  patient has no flags.
+- **`sweep.qofConfig` survives backup/restore** via new `shared/io/sweep-io.js`
+  (wired through envelope, Options export/import, preview). The previous
+  coverage-test allowlist that kept CI green while dropping the key is gone.
+- **Backup scanner sees `cqc.*` and `brief.fp.*`.** Root full-tab pages
+  (`cqc-readiness.js`, `duplicate-checker.js`, `practice-report.js`,
+  `visualiser-core.js`) are now in the USED scan. CQC recon counts +
+  readiness baseline ride `shared/io/cqc-io.js`. Brief fingerprints stay
+  machine-local (allowlisted — restoring them would show a false "no
+  changes").
+- **README write/egress claims match the signed intended purpose** — the
+  extension is no longer described as read-only / no-external-transmission.
+  Binding notice is `docs/CLINICAL-SAFETY-NOTICE.md`.
+- **Dead Sentinel sidebar removed** (audit M5) — `sidebar/sidebar.html` +
+  `.css` deleted; dropped from `web_accessible_resources`.
+- **Stale docs:** `visualiser.html` line removed from CLAUDE.md; Referrals
+  headless-discovery, Practice Report and CQC plans marked SHIPPED;
+  `SECURITY-AUDIT.md` NF6 closed (PDF.js 4.2.67 already vendored).
+- **Rota engine purity:** `uid()` lives in `rota/shared/uid.js` so
+  `rota/engine/` no longer imports the chrome-storage `store.js` module.
+
+CSO-pending items (H-049 / H-052 / H-060, disabled digoxin rule, unsigned
+DPIA, Transactional API hazard) are deliberately untouched — those need a
+human CSO pass, not a code PR.
+
 ## [v3.236.1] — 2026-08-19
 
 ### Review fixes on the v3.236.0 branch (PR #288)

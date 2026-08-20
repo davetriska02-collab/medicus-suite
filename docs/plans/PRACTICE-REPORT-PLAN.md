@@ -1,7 +1,8 @@
 # Practice Report — feature plan (Condor) — 2026-06-16
 
-Status: **PLAN — not yet built.** Research complete (5 codebase + 5 web agents).
-Build to be done by Opus after sign-off. Report-only until approved.
+Status: **SHIPPED** (v3.101.0; CSV export v3.113.0). Full-tab page is
+`practice-report.html` / `practice-report.js`. Original plan kept as the
+design record. Research complete (5 codebase + 5 web agents).
 
 ## 1. What it is
 

@@ -7,7 +7,7 @@
 import { roleById } from '../shared/model.js';
 import { approvedLeaveFor } from './leave.js';
 import { mondayOf, weekDates } from '../shared/time.js';
-import { uid } from '../shared/store.js';
+import { uid } from '../shared/uid.js';
 
 const ACTIVE = ['planned', 'confirmed', 'covered'];
 
