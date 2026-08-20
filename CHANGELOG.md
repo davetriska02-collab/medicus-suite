@@ -15,6 +15,8 @@ First implementation of the queue-next plan (`docs/design/triage-queue-next/PLAN
 
 Injection law unchanged (PREPEND, wipe-and-redecorate, durable map, token-block classes). Composer is `content-scripts/triage-lens/queue-pulse.js` (`window.TriageQueuePulse`), unit-tested in `test-queue-pulse.js`.
 
+Callback mock (same eight rows, chip pile then pulse): `docs/design/triage-queue-next/before-after.html`.
+
 ## [v3.236.3] — 2026-08-20
 
 ### Allergy canvas — Finalise reports what actually landed (PR #293 review fixes)
