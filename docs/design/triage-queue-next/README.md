@@ -5,6 +5,7 @@ Not loaded by the extension.
 
 - **[PLAN.md](./PLAN.md)** — constraints, composition rules, hazards, build order
 - **[mock.html](./mock.html)** — nine frames; open in a browser, or `?shot=pulse-scan`
+- **[before-after.html](./before-after.html)** — callback of the v3.236.4 pulse cut: same eight rows, chip pile then pulse (`?shot=compare`)
 
 Frames: `today` · `pulse-scan` · `pulse-why` · `act-stage` · `act-confirm` · `thread` · `silent` · `composed` · `colorblind`
 

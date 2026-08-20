@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const html = resolve(here, "mock.html");
+const beforeAfter = resolve(here, "before-after.html");
 const outDir = process.argv[2] || "/opt/cursor/artifacts/screenshots";
 const frames = [
   "today",
@@ -18,6 +19,7 @@ const frames = [
   "composed",
   "colorblind",
 ];
+const callbackFrames = ["compare", "before", "after", "why", "act"];
 
 await mkdir(outDir, { recursive: true });
 const browser = await chromium.launch({
@@ -39,6 +41,21 @@ for (const id of frames) {
     animations: "disabled",
   });
   console.log("wrote triage-" + id + ".png");
+}
+
+const tall = await browser.newPage({
+  viewport: { width: 1320, height: 1680 },
+  deviceScaleFactor: 2,
+});
+for (const id of callbackFrames) {
+  await tall.goto("file://" + beforeAfter + "?shot=" + id, { waitUntil: "domcontentloaded" });
+  await tall.waitForSelector(".frame.is-on .desk");
+  const el = await tall.locator(".frame.is-on");
+  await el.screenshot({
+    path: resolve(outDir, `triage-callback-${id}.png`),
+    animations: "disabled",
+  });
+  console.log("wrote triage-callback-" + id + ".png");
 }
 
 await browser.close();
