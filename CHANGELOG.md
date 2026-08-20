@@ -4,6 +4,47 @@ All notable changes to Medicus Suite are documented here.
 
 ## [v3.236.23] — 2026-08-20
 
+### Cataract nesting overrides + partial onset-date sort fix
+
+- **"Organise problems?" canvas now offers "Phacoemulsification of lens" as a child
+  of Cataract**, alongside the existing pseudophakia entry (`rules/problem-nesting-
+  overrides.json`) — conceptId corrected live to `84149000` after a first pick
+  (`1359971008`, an exact text match) didn't match a real patient's own recorded
+  code. Also refreshed the NHS termbrowser API's release string
+  (`rules/snomed-terminology-server.json`), which had gone stale and was silently
+  returning `false` for every retirement lookup.
+- **Fixed partial onset dates (e.g. "Dec 2008") sorting as fully undated** — below
+  every dated problem, however old. `dateSortKey` (duplicated in
+  `problem-nesting-canvas.js` and `problem-nesting.js`) now parses a month+year-only
+  date into a `YYYY-MM` sort key. The `problem-nesting.js` copy also feeds
+  `predatesParent`'s nesting-chronology safety check, which shared the same gap —
+  not just a display/sort issue.
+
+### "Clean up code" — GP2GP onset-date suggestion
+
+For a problem with no onset date AND no record date on Medicus's own side, offers
+the original clinical system's own record-creation timestamp
+(`createdInOriginalSystemDateTime`) as a confirmable onset date — the classic
+signature of a GP2GP-transferred record whose onset date never survived migration.
+Explicitly labelled as an inference, never auto-applied. Confirming it first threw a
+live 500 from Medicus's own backend (every confirmed-working write pairs a non-null
+onsetDate with a non-null recordDate) — fixed by backfilling recordDate to the same
+date, only when it was genuinely null.
+
+Also hardened `problem-description-cleanup.js`'s canvas bridge
+(`openInContainer`) to always start with fresh state on every open, not just after a
+save — removes a theoretical stale-cache class entirely rather than leaving a
+fragile cache gate in place on an unconfirmed guess.
+
+### Privacy Officer bulk-acknowledge — scope warning no longer blocks Select all
+
+When the widget can't confirm which pending alerts are the current user's own (the
+staff-identity stamp didn't resolve), it used to withhold "Select all" entirely,
+forcing row-by-row ticking. For at least one real workflow (a privacy-officer role)
+that resolution never succeeds, making the block permanent rather than occasional.
+Softened to a warning banner shown at both the select and confirm steps — Select all
+now works regardless, trusting the clinician's own review before confirming.
+
 ### "Save attachment as document" widget — two live-tested fixes
 
 - **Fixed a 400 error saving any document type reached via search.** Every entry in

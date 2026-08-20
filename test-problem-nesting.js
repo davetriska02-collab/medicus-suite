@@ -350,6 +350,25 @@ console.log('--- dateSortKey / resolveChronologyDate / predatesParent ---');
   // SAME response as "onsetDate":"20 Apr 2006") — must parse both formats,
   // or the onset-blank record-date fallback below silently goes null.
   check(dateSortKey('2025-01-15') === '2025-01-15', 'already-ISO shape (recordDate) parsed too');
+  // The real bug Nick found live 2026-08-20: a partial onset date (month +
+  // year only, no day — a real shape Medicus stores for an imported/
+  // historic record) used to fall through the day-requiring regex and
+  // return null, which silently defeated predatesParent's chronology check
+  // for that problem, not just its display sort order.
+  check(dateSortKey('Dec 2008') === '2008-12', 'partial "Mon YYYY" onset date parses to a YYYY-MM key, not null');
+  check(
+    dateSortKey('2008') === null,
+    'a bare year with no month is NOT treated as a partial date — never seen live, not guessed at'
+  );
+
+  check(
+    predatesParent({ onsetDate: 'Dec 2008' }, { onsetDate: '1 Jan 2020' }) === true,
+    'a partial-dated child correctly predates a later full-dated parent — the real live case this fixes'
+  );
+  check(
+    predatesParent({ onsetDate: '1 Jan 1990' }, { onsetDate: 'Dec 2008' }) === true,
+    'a partial-dated parent is also handled — the earlier full-dated child still predates it'
+  );
 
   check(
     resolveChronologyDate({ onsetDate: '1 Jan 2020', recordDate: '1 Jan 2019' }) === '2020-01-01',
@@ -520,7 +539,10 @@ console.log('--- end-problem payload / hasActiveChildren ---');
   check(ended.problemId === 'prob-1', 'end payload carries the problem id');
   check(ended.endDate === '2026-08-17', 'end payload carries the date');
   check(ended.reason === 'Resolved', 'end payload defaults to the Bulk remove? reason');
-  check(Object.keys(ended).sort().join(',') === 'endDate,problemId,reason', 'exactly the three-field Bulk remove? contract');
+  check(
+    Object.keys(ended).sort().join(',') === 'endDate,problemId,reason',
+    'exactly the three-field Bulk remove? contract'
+  );
   check(hasActiveChildren('parent', { child: 'parent' }) === true, 'a parent with a live child is flagged');
   check(hasActiveChildren('leaf', { child: 'parent' }) === false, 'a leaf is not flagged');
   check(hasActiveChildren(null, { child: 'parent' }) === false, 'null id is not a parent');
