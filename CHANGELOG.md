@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.237.0] — 2026-08-20
+## [v3.236.2] — 2026-08-20
 
 ### Allergy cleanup — organise on canvas
 
