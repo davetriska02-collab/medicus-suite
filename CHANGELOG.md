@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.236.23] — 2026-08-19
+## [v3.236.23] — 2026-08-20
 
 ### "Save attachment as document" widget — two live-tested fixes
 
@@ -19,13 +19,34 @@ All notable changes to Medicus Suite are documented here.
   card doesn't re-offer (and risk duplicating) a document someone already saved —
   possibly a different clinician, on a different computer, or via Medicus's own
   native upload. Cross-references the patient's journal (the same bulk endpoint the
-  duplicate-checker already uses) for a document within a ±7-day window of the
+  duplicate-checker already uses) for a document within a ±2-day window of the
   attachment's date, corroborated by a file-type check. An exact-title-match first
   cut was live-tested and found to fail on the very case it exists for — the
   widget's own default title is a meaningless filename, so a real save's title never
   matches it — so the check is date/file-type only, and surfaces as a non-blocking
-  "⚠ possibly already saved as …" hint next to a still-clickable button, never a
-  disabled/relabelled chip that could block a genuine save on a wrong guess.
+  "⚠ a .jpeg was filed on … — check before saving" hint next to a still-clickable
+  button, never a disabled/relabelled chip that could block a genuine save on a
+  wrong guess.
+
+### Review fixes on this branch (PR #290)
+
+- **Journal dates are display strings, not ISO.** `documentDate` arrives as
+  `"16 Aug 2025"` (docs/learnings-duplicate-entry-timestamps.md); the first cut
+  handed it to `new Date()`. New `parseDocDate` handles ISO and the live display
+  shape (optional weekday prefix) and compares both at local midnight.
+- **Null `documentDate` falls back to the journal day's title.** A real original
+  document in that same capture has `documentDate: null`; dropping those missed
+  the native-upload case the check exists for.
+- **Tighter window, one journal entry per attachment, honest wording.** ±7 days
+  was a 15-day coincidence window that flagged every same-extension file on an
+  active record; three photos on one card all inherited one saved jpeg. Window
+  is now ±2 days, a claimed `entryId` is not reused, and the hint states the
+  evidence ("a .jpeg was filed on 16 Aug") rather than asserting identity.
+- **Preview fetches are memoised** on `entryId` (the duplicate-checker already
+  learned this cost the hard way) and `.jpg`/`.jpeg` aliases are normalised.
+- Residual limitation, named honestly: matched on date and file type, so it can
+  still flag a same-day unrelated document of the same type, and it can still
+  miss a save whose journal entry carries no date at all. See H-061.
 
 ## [v3.236.22] — 2026-08-22
 
