@@ -45,6 +45,7 @@ const {
   ALLERGY_SHAPED_REACTION_SEED,
   HYPERSENSITIVITY_SHAPED_REACTION_SEED,
   pickReactionSeed,
+  describeConversionPreview,
   groupDuplicateAllergies,
   remapReviewsByGroupIdentity,
   isSameAllergenConcept,
@@ -773,10 +774,27 @@ console.log('--- classifyConvertibleEntries: pre-defined-allergy detection, junk
     !!amoxFlag && amoxFlag.rule === null,
     '"Amoxicillin allergy" has no rules-file entry -> rule: null, manual search only'
   );
+  check(
+    !!amoxFlag &&
+      amoxFlag.preview &&
+      amoxFlag.preview.substanceLabel === 'Amoxicillin' &&
+      amoxFlag.preview.reactionLabel === ALLERGY_SHAPED_REACTION_SEED &&
+      amoxFlag.preview.summary === 'Amoxicillin + allergic reaction',
+    'canvas Convert tile preview for "Amoxicillin allergy" is substance + allergic reaction (got ' +
+      JSON.stringify(amoxFlag && amoxFlag.preview) +
+      ')'
+  );
   const chloroquineFlag = flagged.find((f) => f.id === 'chloroquine-entry');
   check(
     !!chloroquineFlag && chloroquineFlag.rule && chloroquineFlag.rule.kind === 'substance-plus-reaction',
     '"Chloroquine retinopathy" resolves its full rule, including kind'
+  );
+  check(
+    !!chloroquineFlag &&
+      chloroquineFlag.preview &&
+      chloroquineFlag.preview.substanceLabel === 'Chloroquine only product' &&
+      chloroquineFlag.preview.reactionLabel === 'retinopathy',
+    'canvas Convert tile preview for Chloroquine retinopathy keeps the curated reaction seed'
   );
   check(classifyConvertibleEntries([], {}, [], new Set()).length === 0, 'no candidates -> no flags');
   check(classifyConvertibleEntries(null, {}, [], new Set()).length === 0, 'null candidates -> no flags, never throws');
@@ -971,6 +989,45 @@ console.log(
     'empty description -> empty hint, never throws'
   );
   check(extractAllergenAndReactionHint(null).substanceHint === '', 'null description -> empty hint, never throws');
+}
+
+console.log('--- describeConversionPreview: what Convert tiles on the canvas name as the target ---');
+{
+  const allergyToX = describeConversionPreview('Allergy to penicillin', null);
+  check(
+    allergyToX.substanceLabel === 'penicillin' &&
+      allergyToX.reactionLabel === ALLERGY_SHAPED_REACTION_SEED &&
+      allergyToX.summary === 'penicillin + allergic reaction',
+    '"Allergy to X" preview is substance + allergic reaction (got ' + JSON.stringify(allergyToX) + ')'
+  );
+  const reviewedAllergy = describeConversionPreview('Allergy to canagliflozin', {
+    kind: 'substance',
+    substance: { conceptId: '775025005', description: 'Canagliflozin' },
+    reaction: null,
+  });
+  check(
+    reviewedAllergy.substanceLabel === 'Canagliflozin' &&
+      reviewedAllergy.reactionLabel === ALLERGY_SHAPED_REACTION_SEED,
+    'a reviewed substance rule still picks up the allergy-shaped reaction seed for the canvas tile'
+  );
+  const adr = describeConversionPreview('Adverse reaction to iodine', null);
+  check(
+    adr.substanceLabel === 'iodine' && adr.reactionLabel === null && adr.summary === 'iodine',
+    '"Adverse reaction to X" preview is substance only — an ADR is not an allergy'
+  );
+  const curated = describeConversionPreview('Chloroquine retinopathy', {
+    kind: 'substance-plus-reaction',
+    substance: { conceptId: '775187003', description: 'Chloroquine only product' },
+    reaction: { text: 'retinopathy' },
+  });
+  check(
+    curated.substanceLabel === 'Chloroquine only product' && curated.reactionLabel === 'retinopathy',
+    'curated decompose preview uses the rule substance label + rule reaction text'
+  );
+  check(
+    describeConversionPreview('', null).summary === '' && describeConversionPreview(null, null).substanceLabel === '',
+    'empty/null description -> empty preview, never throws'
+  );
 }
 
 console.log('--- buildAllergyProvenanceFields: shared passthrough used by BOTH payload builders ---');

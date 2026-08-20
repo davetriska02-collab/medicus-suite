@@ -339,11 +339,16 @@
       var overview = (overviewsById && overviewsById[a.id]) || null;
       if (!overview || overview.allergyCodeType !== 'pre-defined-allergies') return;
       var conceptId = resolveAllergyConceptId(overview);
+      var rule = findConversionRule(conceptId, conversionRules);
       flagged.push({
         id: a.id,
         description: a.allergyCodeDescription,
         conceptId: conceptId,
-        rule: findConversionRule(conceptId, conversionRules),
+        rule: rule,
+        // Canvas Convert tiles render this as "→ substance + reaction".
+        // Search labels only — never a conceptId. The convert review still
+        // requires a live pick + Convert click (H-060 control c).
+        preview: describeConversionPreview(a.allergyCodeDescription, rule),
       });
     });
     return flagged;
@@ -520,6 +525,36 @@
     if (patternReactionHint && String(patternReactionHint).trim()) return String(patternReactionHint).trim();
     if (additionalInformation && String(additionalInformation).trim()) return String(additionalInformation).trim();
     return '';
+  }
+
+  // What a Convert tile on the Organise-allergies canvas should name as
+  // the target: the curated substance (when the rules file has one) plus
+  // the same reaction seed the convert review will put in the search box.
+  // Labels only — never a conceptId. Used by classifyConvertibleEntries so
+  // the canvas can render the mapping without re-deriving the wording.
+  function describeConversionPreview(description, rule) {
+    var pattern = extractAllergenAndReactionHint(description);
+    var substanceLabel = '';
+    if (rule && rule.substance && rule.substance.description) {
+      substanceLabel = String(rule.substance.description).trim();
+    } else if (pattern && pattern.substanceHint) {
+      substanceLabel = String(pattern.substanceHint).trim();
+    }
+    var reactionLabel = pickReactionSeed(
+      rule && rule.reaction && rule.reaction.text,
+      pattern && pattern.reactionHint,
+      null
+    );
+    if (!reactionLabel) reactionLabel = null;
+    return {
+      substanceLabel: substanceLabel,
+      reactionLabel: reactionLabel,
+      summary: substanceLabel
+        ? reactionLabel
+          ? substanceLabel + ' + ' + reactionLabel
+          : substanceLabel
+        : reactionLabel || '',
+    };
   }
 
   // Groups the cheap allergies[] list by exact (trimmed, case-insensitive)
@@ -995,6 +1030,7 @@
       ALLERGY_SHAPED_REACTION_SEED: ALLERGY_SHAPED_REACTION_SEED,
       HYPERSENSITIVITY_SHAPED_REACTION_SEED: HYPERSENSITIVITY_SHAPED_REACTION_SEED,
       pickReactionSeed: pickReactionSeed,
+      describeConversionPreview: describeConversionPreview,
       groupDuplicateAllergies: groupDuplicateAllergies,
       remapReviewsByGroupIdentity: remapReviewsByGroupIdentity,
       isSameAllergenConcept: isSameAllergenConcept,

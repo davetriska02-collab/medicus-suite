@@ -116,6 +116,29 @@
     return !!(convertFlag && convertFlag.rule && convertFlag.rule.kind === 'not-an-allergy');
   }
 
+  // Convert-lane copy. `conv.preview` is the engine's describeConversionPreview
+  // (substance + optional reaction seed — labels only, never a conceptId).
+  function convertTileHint(conv) {
+    if (!conv) return '';
+    if (isNotAnAllergy(conv)) {
+      return (conv.rule && conv.rule.notes) || 'This may not be a genuine allergy — consider ending it.';
+    }
+    var preview = conv.preview;
+    if (preview && preview.substanceLabel && preview.reactionLabel) {
+      return 'Convert to ' + preview.substanceLabel + ' + ' + preview.reactionLabel;
+    }
+    if (preview && preview.substanceLabel) {
+      return 'Convert to substance ' + preview.substanceLabel;
+    }
+    return 'Pre-defined-allergy code — convert to a substance';
+  }
+
+  function convertActionLabel(conv) {
+    if (!conv || isNotAnAllergy(conv)) return '';
+    if (conv.preview && conv.preview.reactionLabel) return 'Convert to substance + reaction…';
+    return 'Convert to substance…';
+  }
+
   function isEndableClassification(allergyId, flags) {
     var f = flags || {};
     if (f.junkById && f.junkById[allergyId] && !f.junkById[allergyId].ended) return true;
@@ -416,6 +439,8 @@
       sameDuplicateGroup: sameDuplicateGroup,
       buildDuplicatePairs: buildDuplicatePairs,
       isNotAnAllergy: isNotAnAllergy,
+      convertTileHint: convertTileHint,
+      convertActionLabel: convertActionLabel,
       isEndableClassification: isEndableClassification,
       countLiveNka: countLiveNka,
       canStageEnd: canStageEnd,
@@ -518,7 +543,9 @@
       buttons.push(
         '<button type="button" class="ms-acc-tile-action" data-action="convert" data-target-id="' +
           esc(id) +
-          '">Convert…</button>'
+          '">' +
+          esc(convertActionLabel(conv)) +
+          '</button>'
       );
     }
     if (findDuplicateGroupIndex(id, groups) !== -1) {
@@ -547,16 +574,8 @@
     var groupIdx = findDuplicateGroupIndex(id, groups);
     var hints = [];
     if (junk && junk.caution) hints.push('<div class="ms-acc-tile-warn">⚠ ' + esc(junk.caution) + '</div>');
-    if (conv && isNotAnAllergy(conv)) {
-      hints.push(
-        '<div class="ms-acc-tile-hint">' +
-          esc((conv.rule && conv.rule.notes) || 'This may not be a genuine allergy — consider ending it.') +
-          '</div>'
-      );
-    } else if (conv) {
-      hints.push(
-        '<div class="ms-acc-tile-hint">Pre-defined-allergy code — convert to a substance, and a reaction when the wording is Allergy-to-X</div>'
-      );
+    if (conv) {
+      hints.push('<div class="ms-acc-tile-hint">' + esc(convertTileHint(conv)) + '</div>');
     }
     if (dual) {
       hints.push(
@@ -770,7 +789,8 @@
     return (
       '<div class="ms-acc-explainer">Drag a junk or not-an-allergy row onto <strong>End</strong> to stage ' +
       'removal; drop a dual-coded tile onto <strong>Dual-coded</strong> to stage clearing the stale legacy ' +
-      'code; drop one duplicate onto its pair to review a merge. Convert tiles open the existing review. ' +
+      'code; drop one duplicate onto its pair to review a merge. Click a <strong>Convert</strong> tile to ' +
+      'review turning an Allergy-to-X code into a dm+d substance plus a reaction code. ' +
       'Arrange as many as you like, then <strong>Finalise</strong>. Genuine allergies cannot be ended from ' +
       'this canvas. The last “No known allergies” copy cannot be ended.</div>' +
       (_stageError ? '<div class="ms-acc-stage-error">' + esc(_stageError) + '</div>' : '') +
