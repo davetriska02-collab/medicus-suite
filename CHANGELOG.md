@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.24] — 2026-08-20
+
+### Contacts canvas — duplicate phone/email cleanup + unfinished-merge softening
+
+- **Duplicate phone/email detection**, on opening the canvas, within the index patient's own
+  record. Phone matching is digit-normalised with a suffix check — "020 8977 5481" recorded
+  alongside "8977 5481" (area code dropped, a real recurring GP2GP-import pattern) is caught,
+  gated to a 7-digit minimum shared suffix to keep false positives negligible. Email matching is
+  case/whitespace-insensitive only, deliberately not guessing at provider-specific rules (Gmail
+  dot/plus-addressing) without a confirmed example. Each duplicate group gets a pick-which-to-keep
+  radio (defaulting to whichever is marked preferred, or the fuller phone number) and a delete
+  action. New confirmed endpoint: `POST /patient/email/delete-email-address/{id}`.
+- **Matched-but-unplaced manual contacts are no longer silently discarded on close.** Dragging a
+  manual contact onto its Medicus match only persisted once the pairing was ALSO placed in the
+  family tree — if the exact relationship wasn't known, closing the canvas lost the match
+  entirely. The existing "you've merged contacts that haven't been linked yet" warning's OK button
+  now converts each unfinished match into a real link on both records instead, using the generic
+  "Other" relationship (gender-neutral, unambiguous reciprocal — no review step needed) rather than
+  adding a new action for it. Known, deliberately parked gap: this bulk path doesn't also offer to
+  remove a REVERSE manual match on the other record the way a normal drag-to-slot confirm does —
+  doing so per merged card would need its own popup per card, which felt worse than the gap itself.
+
+### "Clean up code" — junk problem text: SUMMARY=Y
+
+Added to `rules/generic-additional-info-text.json` as a plain literal entry, offered for removal
+the same as every other known GP2GP boilerplate fragment.
+
 ## [v3.236.23] — 2026-08-20
 
 ### Cataract nesting overrides + partial onset-date sort fix

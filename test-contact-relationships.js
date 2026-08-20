@@ -798,5 +798,141 @@ console.log('13: emailOwnerHint / findSharedContactInfo');
 }
 
 // ============================================================
+// 14 — isLikelyDuplicatePhone / findDuplicatePhoneGroups / choosePhoneToKeep
+// ============================================================
+console.log('14: isLikelyDuplicatePhone / findDuplicatePhoneGroups / choosePhoneToKeep');
+{
+  // The real motivating example, 2026-08-20: the same number, once with its area code, once
+  // without — a real, recurring GP2GP-import pattern, not a hypothetical.
+  check(
+    CR.isLikelyDuplicatePhone('020 8977 5481', '8977 5481') === true,
+    'the area-code-dropped duplicate is recognised (the real reported case)'
+  );
+  check(
+    CR.isLikelyDuplicatePhone('8977 5481', '020 8977 5481') === true,
+    'order-independent — the shorter number can be either argument'
+  );
+  check(CR.isLikelyDuplicatePhone('020 8977 5481', '020 8977 5481') === true, 'byte-for-byte identical -> duplicate');
+  check(
+    CR.isLikelyDuplicatePhone('020-8977-5481', '02089775481') === true,
+    'formatting punctuation (dashes, spaces) is ignored, not just an exact-string comparison'
+  );
+  check(
+    CR.isLikelyDuplicatePhone('+44 20 8977 5481', '8977 5481') === true,
+    'a country code prefix on one side is handled the same way as a dropped area code — no special-casing needed, just extra leading digits'
+  );
+  check(
+    CR.isLikelyDuplicatePhone('020 8977 5481', '020 8977 5482') === false,
+    'a genuinely different number of the same length is never a duplicate'
+  );
+  check(
+    CR.isLikelyDuplicatePhone('020 8977 5481', '5481') === false,
+    'a too-short shared suffix (below the minimum length) is NOT treated as evidence of a duplicate, however it lines up'
+  );
+  check(CR.isLikelyDuplicatePhone(null, '8977 5481') === false, 'a missing number is a safe no-op, not a throw');
+  check(CR.isLikelyDuplicatePhone('', '') === false, 'two empty strings are not a duplicate — nothing to compare');
+
+  const patientTelephoneNumbers = [
+    { telephoneNumberId: 't1', telephoneNumberType: 'Home', telephoneNumber: '020 8977 5481' },
+    { telephoneNumberId: 't2', telephoneNumberType: 'Mobile', telephoneNumber: '07770 000001' },
+    { telephoneNumberId: 't3', telephoneNumberType: 'Work', telephoneNumber: '8977 5481' },
+  ];
+  const phoneGroups = CR.findDuplicatePhoneGroups(patientTelephoneNumbers);
+  check(phoneGroups.length === 1, 'exactly one duplicate group found among three numbers, two of which match');
+  check(
+    phoneGroups[0].length === 2 && phoneGroups[0].includes(0) && phoneGroups[0].includes(2),
+    'the duplicate group contains the two matching indexes (0 and 2), not the genuinely different mobile number'
+  );
+  check(CR.findDuplicatePhoneGroups([]).length === 0, 'an empty phone list produces no groups');
+  check(
+    CR.findDuplicatePhoneGroups([{ telephoneNumberId: 't1', telephoneNumber: '020 8977 5481' }]).length === 0,
+    'a single number can never be a duplicate of itself'
+  );
+
+  check(
+    CR.choosePhoneToKeep([
+      { telephoneNumber: '8977 5481', preferredTelephoneNumberForSms: false },
+      { telephoneNumber: '020 8977 5481', preferredTelephoneNumberForSms: true },
+    ]) === 1,
+    'the SMS-preferred number is always kept, even over a more complete non-preferred duplicate'
+  );
+  check(
+    CR.choosePhoneToKeep([
+      { telephoneNumber: '8977 5481', preferredTelephoneNumberForSms: false },
+      { telephoneNumber: '020 8977 5481', preferredTelephoneNumberForSms: false },
+    ]) === 1,
+    'with neither SMS-preferred, the more complete (longer digit string) number is kept — the real motivating case'
+  );
+  check(
+    CR.choosePhoneToKeep([
+      { telephoneNumber: '020 8977 5481', preferredTelephoneNumberForSms: false },
+      { telephoneNumber: '020 8977 5481', preferredTelephoneNumberForSms: false },
+    ]) === 0,
+    'a genuine tie (identical digits, neither preferred) deterministically keeps the first'
+  );
+  check(CR.choosePhoneToKeep([]) === -1, 'an empty list returns -1 (nothing to keep)');
+  check(CR.choosePhoneToKeep(null) === -1, 'is defensive against null');
+}
+
+// ============================================================
+// 15 — isLikelyDuplicateEmail / findDuplicateEmailGroups / chooseEmailToKeep
+// ============================================================
+console.log('15: isLikelyDuplicateEmail / findDuplicateEmailGroups / chooseEmailToKeep');
+{
+  check(
+    CR.isLikelyDuplicateEmail('Bob@Example.com', 'bob@example.com') === true,
+    'case differences are recognised as the same address'
+  );
+  check(
+    CR.isLikelyDuplicateEmail('  bob@example.com  ', 'bob@example.com') === true,
+    'surrounding whitespace is trimmed before comparing'
+  );
+  check(
+    CR.isLikelyDuplicateEmail('bob@example.com', 'bob@example.com') === true,
+    'byte-for-byte identical -> duplicate'
+  );
+  check(
+    CR.isLikelyDuplicateEmail('bob@example.com', 'bob.smith@example.com') === false,
+    'a genuinely different local part is never a duplicate — no dot-insensitivity/plus-addressing guessing'
+  );
+  check(CR.isLikelyDuplicateEmail(null, 'bob@example.com') === false, 'a missing email is a safe no-op, not a throw');
+  check(CR.isLikelyDuplicateEmail('', '') === false, 'two empty strings are not a duplicate — nothing to compare');
+
+  const patientEmailAddresses = [
+    { emailAddressId: 'e1', emailAddressType: 'Personal', emailAddress: 'grundyn@yahoo.co.uk' },
+    { emailAddressId: 'e2', emailAddressType: 'Work', emailAddress: 'other@example.com' },
+    { emailAddressId: 'e3', emailAddressType: 'Personal', emailAddress: 'GrundyN@Yahoo.co.uk' },
+  ];
+  const emailGroups = CR.findDuplicateEmailGroups(patientEmailAddresses);
+  check(emailGroups.length === 1, 'exactly one duplicate group found among three addresses, two of which match');
+  check(
+    emailGroups[0].length === 2 && emailGroups[0].includes(0) && emailGroups[0].includes(2),
+    'the duplicate group contains the two matching indexes (0 and 2), not the genuinely different work address'
+  );
+  check(CR.findDuplicateEmailGroups([]).length === 0, 'an empty email list produces no groups');
+  check(
+    CR.findDuplicateEmailGroups([{ emailAddressId: 'e1', emailAddress: 'grundyn@yahoo.co.uk' }]).length === 0,
+    'a single address can never be a duplicate of itself'
+  );
+
+  check(
+    CR.chooseEmailToKeep([
+      { emailAddress: 'GrundyN@Yahoo.co.uk', preferredEmailAddress: false },
+      { emailAddress: 'grundyn@yahoo.co.uk', preferredEmailAddress: true },
+    ]) === 1,
+    'the preferred email address is always kept'
+  );
+  check(
+    CR.chooseEmailToKeep([
+      { emailAddress: 'GrundyN@Yahoo.co.uk', preferredEmailAddress: false },
+      { emailAddress: 'grundyn@yahoo.co.uk', preferredEmailAddress: false },
+    ]) === 0,
+    'with neither preferred, a genuine tie deterministically keeps the first'
+  );
+  check(CR.chooseEmailToKeep([]) === -1, 'an empty list returns -1 (nothing to keep)');
+  check(CR.chooseEmailToKeep(null) === -1, 'is defensive against null');
+}
+
+// ============================================================
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
