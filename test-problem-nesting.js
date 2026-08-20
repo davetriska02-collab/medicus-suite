@@ -331,6 +331,14 @@ console.log('--- rules/problem-nesting-overrides.json: the shipped list itself -
     pairSet.has('53889007|193570009'),
     'nuclear cataract (53889007) as a child of cataract (193570009) is still in the shipped file'
   );
+  check(
+    pairSet.has('84149000|193570009'),
+    'phacoemulsification of lens (84149000) as a child of cataract is in the shipped file — the live-corrected conceptId'
+  );
+  check(
+    pairSet.has('1359971008|193570009'),
+    'the broader phaco parent (1359971008) is also shipped — other records may still carry it'
+  );
   overrides.pairs.forEach((p) => {
     check(
       typeof p.childConceptId === 'string' && typeof p.parentConceptId === 'string',
@@ -350,6 +358,37 @@ console.log('--- dateSortKey / resolveChronologyDate / predatesParent ---');
   // SAME response as "onsetDate":"20 Apr 2006") — must parse both formats,
   // or the onset-blank record-date fallback below silently goes null.
   check(dateSortKey('2025-01-15') === '2025-01-15', 'already-ISO shape (recordDate) parsed too');
+  // The real bug Nick found live 2026-08-20: a partial onset date (month +
+  // year only, no day — a real shape Medicus stores for an imported/
+  // historic record) used to fall through the day-requiring regex and
+  // return null, which silently defeated predatesParent's chronology check
+  // for that problem, not just its display sort order.
+  check(dateSortKey('Dec 2008') === '2008-12', 'partial "Mon YYYY" onset date parses to a YYYY-MM key, not null');
+  check(
+    dateSortKey('2008') === null,
+    'a bare year with no month is NOT treated as a partial date — never seen live, not guessed at'
+  );
+
+  check(
+    predatesParent({ onsetDate: 'Dec 2008' }, { onsetDate: '1 Jan 2020' }) === true,
+    'a partial-dated child correctly predates a later full-dated parent — the real live case this fixes'
+  );
+  check(
+    predatesParent({ onsetDate: '1 Jan 1990' }, { onsetDate: 'Dec 2008' }) === true,
+    'a partial-dated parent is also handled — the earlier full-dated child still predates it'
+  );
+  check(
+    predatesParent({ onsetDate: 'Dec 2008' }, { onsetDate: '15 Dec 2008' }) === false,
+    'same year-month, different precision is NOT positive evidence the child predates — fail open'
+  );
+  check(
+    predatesParent({ onsetDate: '15 Dec 2008' }, { onsetDate: 'Dec 2008' }) === false,
+    'the reverse (day-precise child, month-only parent, same month) also fails open'
+  );
+  check(
+    predatesParent({ onsetDate: 'Nov 2008' }, { onsetDate: '15 Dec 2008' }) === true,
+    'different months stay comparable — a November child still predates a December parent'
+  );
 
   check(
     resolveChronologyDate({ onsetDate: '1 Jan 2020', recordDate: '1 Jan 2019' }) === '2020-01-01',
@@ -520,7 +559,10 @@ console.log('--- end-problem payload / hasActiveChildren ---');
   check(ended.problemId === 'prob-1', 'end payload carries the problem id');
   check(ended.endDate === '2026-08-17', 'end payload carries the date');
   check(ended.reason === 'Resolved', 'end payload defaults to the Bulk remove? reason');
-  check(Object.keys(ended).sort().join(',') === 'endDate,problemId,reason', 'exactly the three-field Bulk remove? contract');
+  check(
+    Object.keys(ended).sort().join(',') === 'endDate,problemId,reason',
+    'exactly the three-field Bulk remove? contract'
+  );
   check(hasActiveChildren('parent', { child: 'parent' }) === true, 'a parent with a live child is flagged');
   check(hasActiveChildren('leaf', { child: 'parent' }) === false, 'a leaf is not flagged');
   check(hasActiveChildren(null, { child: 'parent' }) === false, 'null id is not a parent');

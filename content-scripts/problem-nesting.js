@@ -169,24 +169,46 @@
   // fails open, so this also silently defeated predatesParent below).
   var ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-  // Parses either the confirmed "DD Mon YYYY" onset-date display shape OR
-  // an already-ISO "YYYY-MM-DD" shape (recordDate) into a zero-padded
-  // 'YYYY-MM-DD' string (lexically comparable). Returns null for
-  // missing/malformed input — never guesses a date. Same regex/table as
-  // problem-nesting-canvas.js's own dateSortKey and allergy-cleanup.js's
-  // normalizeOnsetDateForSubmit — duplicated, not shared, the same way each
-  // content script already carries its own copy of small parsing helpers.
+  // A PARTIAL onset date — month + year only, no day (e.g. "Dec 2008") —
+  // is a real, legitimate shape Medicus stores (an imported/historic record
+  // that never had a day recorded), confirmed live 2026-08-20: it fell
+  // through ONSET_DATE_RE (which requires a day) AND ISO_DATE_RE, so
+  // dateSortKey returned null — resolveChronologyDate below then also
+  // returned null for it, silently defeating predatesParent's own
+  // chronology check for any problem with a partial onset date, not just
+  // the display sort order.
+  var ONSET_MONTH_ONLY_RE = /^([A-Za-z]{3}) (\d{4})$/;
+
+  // Parses the confirmed "DD Mon YYYY" onset-date display shape, an
+  // already-ISO "YYYY-MM-DD" shape (recordDate), OR a partial "Mon YYYY"
+  // onset date into a zero-padded, lexically comparable key. Returns null
+  // for missing/malformed input — never guesses a day that wasn't given.
+  // Same regex/table as problem-nesting-canvas.js's own dateSortKey and
+  // allergy-cleanup.js's normalizeOnsetDateForSubmit — duplicated, not
+  // shared, the same way each content script already carries its own copy
+  // of small parsing helpers.
   function dateSortKey(value) {
     if (value == null) return null;
     var s = String(value).trim();
     var iso = ISO_DATE_RE.exec(s);
     if (iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
     var m = ONSET_DATE_RE.exec(s);
-    if (!m) return null;
-    var month = ONSET_MONTH_ABBR[m[2]];
-    if (!month) return null;
-    var day = m[1].length === 1 ? '0' + m[1] : m[1];
-    return m[3] + '-' + month + '-' + day;
+    if (m) {
+      var month = ONSET_MONTH_ABBR[m[2]];
+      if (!month) return null;
+      var day = m[1].length === 1 ? '0' + m[1] : m[1];
+      return m[3] + '-' + month + '-' + day;
+    }
+    // Deliberately NOT padded to a guessed day — see
+    // problem-nesting-canvas.js's own dateSortKey for why a bare 'YYYY-MM'
+    // key already sorts correctly via plain string-prefix comparison.
+    var mo = ONSET_MONTH_ONLY_RE.exec(s);
+    if (mo) {
+      var monthOnly = ONSET_MONTH_ABBR[mo[1]];
+      if (!monthOnly) return null;
+      return mo[2] + '-' + monthOnly;
+    }
+    return null;
   }
 
   // Onset date, falling back to record date when onset is blank — same
@@ -210,6 +232,15 @@
     var childDate = resolveChronologyDate(childInfo);
     var parentDate = resolveChronologyDate(parentInfo);
     if (!childDate || !parentDate) return false;
+    // A month-only key ('YYYY-MM') compared to a day-precise key in the
+    // SAME year-month is not positive evidence either way — "Dec 2008"
+    // might be the 1st or the 31st. The display sort may still place the
+    // shorter key first (string-prefix order); this exclusionary check
+    // must not. Fail OPEN, same as a missing date: only a strictly
+    // earlier *comparable* date rules a pairing out.
+    if (childDate.length !== parentDate.length && childDate.slice(0, 7) === parentDate.slice(0, 7)) {
+      return false;
+    }
     return childDate < parentDate;
   }
 

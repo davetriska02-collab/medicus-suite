@@ -23,12 +23,15 @@
 //        the fetch WAITS for it — up to ~5s — before falling back to an
 //        unscoped fetch. The fallback keeps the widget usable, but it must
 //        never look identical to the scoped case: an unscoped list includes
-//        OTHER staff's pending alerts, and "Select all + Confirm" on it
-//        would acknowledge alerts assigned to other privacy officers,
-//        misattributing a compliance action. So the fallback carries a
-//        scopeWarning the engine renders as a banner on the select AND
-//        confirm steps and uses to withhold select-all for that load
-//        (row-by-row ticking stays available — each row names its patient).
+//        OTHER staff's pending alerts, so acknowledging it could misattribute
+//        a compliance action. So the fallback carries a scopeWarning the
+//        engine renders as a banner on the select AND confirm steps — a
+//        WARNING to review before confirming, not a block. It used to also
+//        withhold select-all for that load; softened 2026-08-20 (Nick's
+//        explicit request — the identity-stamp resolution never succeeds for
+//        his privacy-officer role, so the fallback was ALWAYS active and
+//        select-all was ALWAYS unavailable, permanently blocking a
+//        legitimate bulk action rather than occasionally warning about one).
 //   POST /tasks/patient-privacy-officer/complete
 //        body: { taskId } → 200 {}
 //
@@ -81,13 +84,16 @@
       var qs = 'statuses%5B%5D=pending&viewContext=homepage';
       if (staffId) return qs + '&masterAssignee=' + encodeURIComponent(staffId);
       // Unscoped fallback — MUST be visibly different from the scoped case;
-      // see this file's header. Consequence first, mechanism second.
+      // see this file's header. Consequence first, mechanism second. No
+      // longer withholds select-all (2026-08-20, softened at Nick's request
+      // — see task-bulk-action.js's own SOFTENED comment) — this is now a
+      // warning to review before confirming, not a block.
       return {
         qs: qs,
         scopeWarning:
           'Could not confirm which alerts are yours — this list shows pending alerts for ALL staff, ' +
-          'not just you, and Select all is unavailable. Only tick alerts you know are yours, ' +
-          'or close and reopen this panel to try again.',
+          'not just you. Review the list before confirming — acknowledging someone else’s alert has ' +
+          'no bulk undo — or close and reopen this panel to try scoping it to you again.',
       };
     },
     actionPath: '/tasks/patient-privacy-officer/complete',
