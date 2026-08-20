@@ -107,7 +107,14 @@ upload-then-attach. `multipart/form-data` (`FormData`) with exactly two parts:
 descriptionId}` — the same shape as the already-confirmed edit-existing-
   document contract (`record-duplicate-parser.js`'s `code` field), good
   corroboration this is the stable representation for a document's type
-  across both create and edit.
+  across both create and edit. **A fourth field is rejected.** Every entry
+  in `rules/document-types.json` carries this extension's own local
+  `docPriority` ranking (1–6). `POST /clinical/document/create` 400s on it
+  (`documentType.docPriority: This field was not expected.`, HAR
+  69-failed-docsave.har, 2026-08-19). `sanitizeDocumentType` in
+  `content-scripts/document-file-inline.js` strips the payload to those
+  three fields at the single write-payload choke point — do not send the
+  raw rules-file object.
 - `file` — **required**. `accept=".txt,.html,.htm,.pdf,.xml,.rtf,.rtx,.au,
 .mp3,.png,.gif,.jpg,.jpe,.jpeg,.tif,.tiff,.mpg,.mpeg,.mpe,.doc,.docx,.dcm,
 .xls,.xlsx"`, max size 151MB.
