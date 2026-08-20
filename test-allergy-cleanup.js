@@ -26,6 +26,8 @@ const {
   resolveAllergyConceptId,
   buildEndAllergyPayload,
   isEndable,
+  NKA_CONCEPT_ID,
+  isNkaAllergy,
   normalizeAllergyDescription,
   activeNonDraftAllergies,
   reactionDescriptions,
@@ -360,6 +362,14 @@ console.log('--- isEndable ---');
   check(isEndable({ ended: true }) === false, 'already ended -> not endable');
   check(isEndable(null) === false, 'null entry -> not endable, never throws');
   check(isEndable(undefined) === false, 'undefined entry -> not endable, never throws');
+  check(NKA_CONCEPT_ID === '716186003', 'NKA concept id is the SNOMED code');
+  check(isNkaAllergy({ conceptId: '716186003' }) === true, 'NKA by conceptId');
+  check(isNkaAllergy({ description: 'No known allergies' }) === true, 'NKA by description');
+  check(isNkaAllergy({ allergyCodeDescription: 'No known allergies' }) === true, 'NKA by allergyCodeDescription');
+  check(
+    isNkaAllergy({ conceptId: '419076005', description: 'Allergic reaction' }) === false,
+    'generic junk is not NKA'
+  );
 }
 
 console.log('--- reactionDescriptions: real overview-allergy allergyReactions shapes ---');

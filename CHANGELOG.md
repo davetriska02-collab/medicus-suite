@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.237.0] — 2026-08-20
+
+### Allergy cleanup — organise on canvas
+
+"Clean up allergies?" now opens a full-screen **Organise allergies** canvas
+directly on click — no accordion panel (same reflow-safe trigger as Organise
+problems). Active allergies sit in computed **Active / Junk / Convert /
+Dual-coded** lanes; drag junk or a "not an allergy" row onto **End** to stage
+`end-allergy`; drop a dual-coded tile onto **Dual-coded** to stage clearing
+the stale legacy code; drop one duplicate onto its pair (dashed connector
+lines) to open the existing merge modal; click a Convert tile to open the
+existing substance-conversion review. Arrange many, then **Finalise** writes
+the staged ends and tidies. Merge and convert stay per-entry modal reviews
+(H-060 control c). Genuine allergies cannot be ended from the bin; the last
+"No known allergies" copy is refused in both the canvas stager and the write
+bridge. The canvas owns no API — `content-scripts/allergy-cleanup-canvas.js`
+is a view over `window.AllergyCleanup`.
+
+Tests: `test-allergy-cleanup-canvas.js` (lane placement, drop classification,
+draft staging, last-NKA / unrelated-drop locks, connector math);
+`test-allergy-cleanup.js` pins `isNkaAllergy`.
+
 ## [v3.236.1] — 2026-08-19
 
 ### Review fixes on the v3.236.0 branch (PR #288)
