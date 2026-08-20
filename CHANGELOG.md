@@ -28,8 +28,9 @@ the original clinical system's own record-creation timestamp
 signature of a GP2GP-transferred record whose onset date never survived migration.
 Explicitly labelled as an inference, never auto-applied. Confirming it first threw a
 live 500 from Medicus's own backend (every confirmed-working write pairs a non-null
-onsetDate with a non-null recordDate) — fixed by backfilling recordDate to the same
-date, only when it was genuinely null.
+onsetDate with a non-null recordDate) — fixed by backfilling recordDate only when
+it was genuinely null, preferring the Medicus-side `createdDateTime` (when this
+record entered Medicus) over the original-system stamp.
 
 Also hardened `problem-description-cleanup.js`'s canvas bridge
 (`openInContainer`) to always start with fresh state on every open, not just after a
@@ -69,7 +70,31 @@ now works regardless, trusting the clinician's own review before confirming.
   button, never a disabled/relabelled chip that could block a genuine save on a
   wrong guess.
 
-### Review fixes on this branch (PR #290)
+### Review fixes on this branch (PR #290, latest commit)
+
+- **GP2GP onset suggestion only fires when BOTH Medicus dates are blank.** The
+  first cut gated on `onsetDate == null` alone, so any GP2GP-imported problem
+  with a record date but no onset would have offered "Set as onset date".
+  `shouldOfferGp2gpOnsetSuggestion` now requires a blank recordDate too — the
+  "no date at all" signature the changelog already described.
+- **recordDate backfill uses `createdDateTime`, not the 1995 original-system
+  stamp.** Writing the original-system date as `recordDate` would have dated the
+  Medicus-side record to the sending system's creation time. The 500 still needs
+  a non-null pair; the honest value is when this record entered Medicus.
+- **Onset date is shown as "25 Nov 1995", not ISO.** Same display shape as the
+  rest of the record.
+- **`predatesParent` fails open on same-month different precision.** `"Dec 2008"`
+  vs `"15 Dec 2008"` is not evidence the child started first — a `YYYY-MM` key
+  is a string prefix of `YYYY-MM-DD`, so lexical `<` was a false positive that
+  would have blocked a legitimate nest. Different months stay comparable.
+- **Both phaco conceptIds are shipped.** `84149000` (the live-corrected code)
+  and `1359971008` (the first pick, still used on other records). Matching is
+  by conceptId only.
+- **H-062 / H-063** record the privacy-officer select-all softening and the
+  new GP2GP onset write (pending CSO sign-off). Version bumped to **3.236.4**
+  so this branch cannot downgrade main's already-shipped 3.236.3.
+
+### Review fixes on the already-saved document hint (PR #290)
 
 - **Journal dates are display strings, not ISO.** `documentDate` arrives as
   `"16 Aug 2025"` (docs/learnings-duplicate-entry-timestamps.md); the first cut

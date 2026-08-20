@@ -232,6 +232,15 @@
     var childDate = resolveChronologyDate(childInfo);
     var parentDate = resolveChronologyDate(parentInfo);
     if (!childDate || !parentDate) return false;
+    // A month-only key ('YYYY-MM') compared to a day-precise key in the
+    // SAME year-month is not positive evidence either way — "Dec 2008"
+    // might be the 1st or the 31st. The display sort may still place the
+    // shorter key first (string-prefix order); this exclusionary check
+    // must not. Fail OPEN, same as a missing date: only a strictly
+    // earlier *comparable* date rules a pairing out.
+    if (childDate.length !== parentDate.length && childDate.slice(0, 7) === parentDate.slice(0, 7)) {
+      return false;
+    }
     return childDate < parentDate;
   }
 

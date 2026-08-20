@@ -569,14 +569,55 @@
   // presented to the clinician as a SUGGESTION to confirm, not applied
   // automatically — it's when the problem was first recorded in the
   // original system, not a clinically-verified true onset date, and the
-  // caller (openPanel) only offers it at all when onsetDate is genuinely
-  // blank.
+  // caller (openPanel) only offers it at all when BOTH onsetDate and
+  // recordDate are genuinely blank (shouldOfferGp2gpOnsetSuggestion).
   var GP2GP_ORIGINAL_DATETIME_RE = /^(\d{4}-\d{2}-\d{2})[ T]\d{2}:\d{2}:\d{2}/;
-  function extractGp2gpOnsetDateCandidate(overview) {
-    var raw = overview && overview.createdInOriginalSystemDateTime;
+  var GP2GP_ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+  var GP2GP_MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  function parseIsoDatePrefix(raw) {
     if (typeof raw !== 'string') return null;
     var m = GP2GP_ORIGINAL_DATETIME_RE.exec(raw.trim());
     return m ? m[1] : null;
+  }
+
+  function isBlankClinicalDate(value) {
+    return value == null || (typeof value === 'string' && value.trim() === '');
+  }
+
+  function extractGp2gpOnsetDateCandidate(overview) {
+    return parseIsoDatePrefix(overview && overview.createdInOriginalSystemDateTime);
+  }
+
+  // createdDateTime is when THIS record was written into Medicus — the
+  // honest recordDate for a GP2GP import. Deliberately never offered as
+  // onset (that's createdInOriginalSystemDateTime). Used ONLY to satisfy
+  // Medicus's non-null recordDate pairing when recordDate is genuinely
+  // missing; see buildGp2gpOnsetPayload.
+  function extractGp2gpRecordDateFallback(overview) {
+    return parseIsoDatePrefix(overview && overview.createdDateTime);
+  }
+
+  // The changelog/header contract is BOTH onsetDate AND recordDate blank
+  // on Medicus's own side. A missing onset with a real recordDate is a
+  // common, different gap — offering the original-system stamp there
+  // would fire on most GP2GP-imported problems, not the "no date at all"
+  // case this suggestion exists for.
+  function shouldOfferGp2gpOnsetSuggestion(prefill, overview) {
+    if (!prefill || !isBlankClinicalDate(prefill.onsetDate) || !isBlankClinicalDate(prefill.recordDate)) {
+      return false;
+    }
+    return !!extractGp2gpOnsetDateCandidate(overview);
+  }
+
+  // GPs read "25 Nov 1995", not "1995-11-25". Falls back to the raw
+  // string if the ISO shape is unexpected, never throws.
+  function formatIsoDateUk(iso) {
+    var m = typeof iso === 'string' ? GP2GP_ISO_DATE_RE.exec(iso.trim()) : null;
+    if (!m) return iso || '';
+    var month = GP2GP_MONTH_NAMES[parseInt(m[2], 10) - 1];
+    if (!month) return iso;
+    return parseInt(m[3], 10) + ' ' + month + ' ' + m[1];
   }
 
   // Confirming the GP2GP-onset-date suggestion above 500'd live (HAR
@@ -587,13 +628,18 @@
   // that combination rather than reject it cleanly. Every CONFIRMED-working
   // edit-problem capture with a non-null onsetDate also has a non-null
   // recordDate (docs/learnings-problem-description-cleanup.md — one
-  // capture even sets both to the IDENTICAL date), so this backfills
-  // recordDate to the SAME date being set as onsetDate — but ONLY when
-  // recordDate was already null; an existing real recordDate is never
-  // touched, since it may carry its own, separately-correct value.
-  function buildGp2gpOnsetPayload(prefill, code, isoDate) {
+  // capture even sets both to the IDENTICAL date). When recordDate is
+  // already null this backfills it — preferring createdDateTime (when
+  // this record entered Medicus) over the onset date itself, so a 1995
+  // original-system stamp is not written as if it were recorded here in
+  // 1995. Falls back to the onset ISO only when createdDateTime is also
+  // unparseable, to still avoid the 500. An existing real recordDate is
+  // never touched.
+  function buildGp2gpOnsetPayload(prefill, code, isoDate, recordDateFallback) {
     var payload = buildEditProblemPayload(prefill, code, undefined, isoDate);
-    if (!prefill || prefill.recordDate == null) payload.recordDate = isoDate;
+    if (!prefill || isBlankClinicalDate(prefill.recordDate)) {
+      payload.recordDate = recordDateFallback || isoDate;
+    }
     return payload;
   }
 
@@ -945,6 +991,9 @@
       normalizedSearchResults,
       findLegacyReadCodeOrigin,
       extractGp2gpOnsetDateCandidate,
+      extractGp2gpRecordDateFallback,
+      shouldOfferGp2gpOnsetSuggestion,
+      formatIsoDateUk,
       buildGp2gpOnsetPayload,
       descendantSearchTargetConceptId,
       stripGenericAdditionalInfoLines,
@@ -1471,8 +1520,7 @@
     if (!st.retiredInfo) return '';
     var reason = st.retiredInfo.inactivationReason;
     var reasonText = reason ? esc(reason.description) : 'unspecified reason';
-    var html =
-      '<div class="ms-pdc-retired-note">⚠ This code has been RETIRED by SNOMED CT (' + reasonText + ').</div>';
+    var html = '<div class="ms-pdc-retired-note">⚠ This code has been RETIRED by SNOMED CT (' + reasonText + ').</div>';
     if (st.confirmedReplacement && st.confirmedReplacement.length) {
       html +=
         '<div class="ms-pdc-retired-replacement-section">' +
@@ -1663,7 +1711,7 @@
     return (
       '<div class="ms-pdc-gp2gp-onset-section">' +
       '<span class="ms-pdc-gp2gp-onset-label">No onset date is recorded for this problem. This looks like a GP2GP-transferred record — the original system shows it was first recorded on ' +
-      esc(st.gp2gpOnsetSuggestion.isoDate) +
+      esc(formatIsoDateUk(st.gp2gpOnsetSuggestion.isoDate)) +
       '. That’s when it was recorded there, not necessarily when it began — use your own judgement before confirming.</span>' +
       '<button type="button" class="ms-pdc-gp2gp-onset-btn" data-problem-id="' +
       esc(problemId) +
@@ -2951,9 +2999,11 @@
           }
           if (st.gp2gpOnsetSuggestion === undefined) {
             st.gp2gpOnsetSuggestion = null;
-            if (prefill.onsetDate == null) {
-              var gp2gpDate = extractGp2gpOnsetDateCandidate(retireOverview);
-              if (gp2gpDate) st.gp2gpOnsetSuggestion = { isoDate: gp2gpDate };
+            if (shouldOfferGp2gpOnsetSuggestion(prefill, retireOverview)) {
+              st.gp2gpOnsetSuggestion = {
+                isoDate: extractGp2gpOnsetDateCandidate(retireOverview),
+                recordDateFallback: extractGp2gpRecordDateFallback(retireOverview),
+              };
             }
           }
         } catch (e) {
@@ -3947,7 +3997,7 @@
     st.gp2gpOnsetSaving = true;
     renderPanel(problemId);
     try {
-      var payload = buildGp2gpOnsetPayload(st.prefill, code, isoDate);
+      var payload = buildGp2gpOnsetPayload(st.prefill, code, isoDate, st.gp2gpOnsetSuggestion.recordDateFallback);
       await postEditProblem(problemId, payload);
       st.prefill = Object.assign({}, st.prefill, { onsetDate: isoDate, recordDate: payload.recordDate });
       st.gp2gpOnsetSuggestion = null;

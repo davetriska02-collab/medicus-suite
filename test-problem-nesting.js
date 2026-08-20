@@ -331,6 +331,14 @@ console.log('--- rules/problem-nesting-overrides.json: the shipped list itself -
     pairSet.has('53889007|193570009'),
     'nuclear cataract (53889007) as a child of cataract (193570009) is still in the shipped file'
   );
+  check(
+    pairSet.has('84149000|193570009'),
+    'phacoemulsification of lens (84149000) as a child of cataract is in the shipped file — the live-corrected conceptId'
+  );
+  check(
+    pairSet.has('1359971008|193570009'),
+    'the broader phaco parent (1359971008) is also shipped — other records may still carry it'
+  );
   overrides.pairs.forEach((p) => {
     check(
       typeof p.childConceptId === 'string' && typeof p.parentConceptId === 'string',
@@ -368,6 +376,18 @@ console.log('--- dateSortKey / resolveChronologyDate / predatesParent ---');
   check(
     predatesParent({ onsetDate: '1 Jan 1990' }, { onsetDate: 'Dec 2008' }) === true,
     'a partial-dated parent is also handled — the earlier full-dated child still predates it'
+  );
+  check(
+    predatesParent({ onsetDate: 'Dec 2008' }, { onsetDate: '15 Dec 2008' }) === false,
+    'same year-month, different precision is NOT positive evidence the child predates — fail open'
+  );
+  check(
+    predatesParent({ onsetDate: '15 Dec 2008' }, { onsetDate: 'Dec 2008' }) === false,
+    'the reverse (day-precise child, month-only parent, same month) also fails open'
+  );
+  check(
+    predatesParent({ onsetDate: 'Nov 2008' }, { onsetDate: '15 Dec 2008' }) === true,
+    'different months stay comparable — a November child still predates a December parent'
   );
 
   check(

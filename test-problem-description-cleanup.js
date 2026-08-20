@@ -44,6 +44,9 @@ const {
   normalizedSearchResults,
   findLegacyReadCodeOrigin,
   extractGp2gpOnsetDateCandidate,
+  extractGp2gpRecordDateFallback,
+  shouldOfferGp2gpOnsetSuggestion,
+  formatIsoDateUk,
   buildGp2gpOnsetPayload,
   descendantSearchTargetConceptId,
   stripGenericAdditionalInfoLines,
@@ -1368,6 +1371,39 @@ console.log(
   );
   check(extractGp2gpOnsetDateCandidate({}) === null, 'no timestamp field at all -> null');
   check(extractGp2gpOnsetDateCandidate(null) === null, 'null overview -> null, never throws');
+  check(
+    extractGp2gpRecordDateFallback(realOverview) === '2024-09-28',
+    'recordDate fallback is the Medicus-side createdDateTime, not the 1995 original-system stamp'
+  );
+  check(
+    extractGp2gpRecordDateFallback({ createdInOriginalSystemDateTime: '1995-11-25 11:23:53' }) === null,
+    'original-system timestamp is never used as the recordDate fallback'
+  );
+  check(
+    formatIsoDateUk('1995-11-25') === '25 Nov 1995',
+    'ISO date is shown to the GP as a UK display date, not YYYY-MM-DD'
+  );
+  check(formatIsoDateUk('1995-01-05') === '5 Jan 1995', 'leading zero on the day is dropped');
+  check(formatIsoDateUk('not-a-date') === 'not-a-date', 'unrecognised input passes through, never throws');
+  check(
+    shouldOfferGp2gpOnsetSuggestion({ onsetDate: null, recordDate: null }, realOverview) === true,
+    'offered only when BOTH Medicus dates are blank and the original-system stamp is present'
+  );
+  check(
+    shouldOfferGp2gpOnsetSuggestion({ onsetDate: null, recordDate: '2010-06-01' }, realOverview) === false,
+    'a real recordDate with a blank onset is NOT the GP2GP no-date-at-all case — do not offer'
+  );
+  check(
+    shouldOfferGp2gpOnsetSuggestion({ onsetDate: '1 Jan 1990', recordDate: null }, realOverview) === false,
+    'a real onset date is never overwritten by this suggestion'
+  );
+  check(
+    shouldOfferGp2gpOnsetSuggestion(
+      { onsetDate: null, recordDate: null },
+      { createdDateTime: '2024-09-28 05:27:44' }
+    ) === false,
+    'no original-system stamp -> nothing to offer, even when both dates are blank'
+  );
 }
 
 console.log('--- buildGp2gpOnsetPayload: the live 500 fix (HAR 73-api500-settingdate.har, 2026-08-20) ---');
@@ -1375,25 +1411,31 @@ console.log('--- buildGp2gpOnsetPayload: the live 500 fix (HAR 73-api500-setting
   const gp2gpCode = { description: 'Morbid obesity', conceptId: '238136002', descriptionId: null };
   // The real live failure: recordDate genuinely null, onsetDate being set
   // for the first time -> 500'd. Confirmed-working captures always pair a
-  // non-null onsetDate with a non-null recordDate.
+  // non-null onsetDate with a non-null recordDate. Prefer the Medicus-side
+  // createdDateTime as that recordDate so a 1995 original-system stamp is
+  // not written as if it were recorded here in 1995.
   const nullRecordDatePrefill = Object.assign({}, prefill, { onsetDate: null, recordDate: null });
-  const backfilledPayload = buildGp2gpOnsetPayload(nullRecordDatePrefill, gp2gpCode, '1995-11-25');
+  const backfilledPayload = buildGp2gpOnsetPayload(nullRecordDatePrefill, gp2gpCode, '1995-11-25', '2024-09-28');
   check(backfilledPayload.onsetDate === '1995-11-25', 'onsetDate is set to the confirmed date');
   check(
-    backfilledPayload.recordDate === '1995-11-25',
-    'recordDate is backfilled to the SAME date — the actual fix for the live 500'
+    backfilledPayload.recordDate === '2024-09-28',
+    'recordDate is backfilled to createdDateTime (when this record entered Medicus), not the 1995 onset'
+  );
+  check(
+    buildGp2gpOnsetPayload(nullRecordDatePrefill, gp2gpCode, '1995-11-25').recordDate === '1995-11-25',
+    'without a createdDateTime fallback, recordDate still backfills to the onset ISO — avoids the 500'
   );
   // An existing real recordDate must never be overwritten by this apply
   // path — it may carry its own, separately-correct value.
   const realRecordDatePrefill = Object.assign({}, prefill, { onsetDate: null, recordDate: '2010-06-01' });
-  const preservedPayload = buildGp2gpOnsetPayload(realRecordDatePrefill, gp2gpCode, '1995-11-25');
+  const preservedPayload = buildGp2gpOnsetPayload(realRecordDatePrefill, gp2gpCode, '1995-11-25', '2024-09-28');
   check(preservedPayload.onsetDate === '1995-11-25', 'onsetDate is still set');
   check(
     preservedPayload.recordDate === '2010-06-01',
     'an existing real recordDate is left untouched, not overwritten by the onset-date backfill'
   );
   check(
-    buildGp2gpOnsetPayload(null, gp2gpCode, '1995-11-25').recordDate === '1995-11-25',
+    buildGp2gpOnsetPayload(null, gp2gpCode, '1995-11-25', '2024-09-28').recordDate === '2024-09-28',
     'a null prefill is treated the same as recordDate == null — backfills rather than throwing'
   );
 }
