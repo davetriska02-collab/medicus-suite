@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.236.2] — 2026-08-20
+## [v3.236.4] — 2026-08-20
 
 ### Cataract nesting overrides + partial onset-date sort fix
 
@@ -88,6 +88,52 @@ now works regardless, trusting the clinician's own review before confirming.
 - Residual limitation, named honestly: matched on date and file type, so it can
   still flag a same-day unrelated document of the same type, and it can still
   miss a save whose journal entry carries no date at all. See H-061.
+
+## [v3.236.3] — 2026-08-20
+
+### Allergy canvas — Finalise reports what actually landed (PR #293 review fixes)
+
+Two defects in the new Organise-allergies canvas, both in the Finalise path:
+
+- **A failed write was announced as success.** `commitEndJunk` / `commitClearLegacy`
+  settle every write and never throw, but the canvas ignored their return values —
+  it cleared the draft and announced "Staged writes sent" even when every write
+  failed, and the per-row `endError` / `tidyError` the engine records were only
+  rendered by the retired checklist (dead code). Finalise now diffs what it asked
+  for against what the bridge confirms (`diffFinaliseOutcome`, pinned by tests):
+  failed or bridge-refused rows **stay staged**, the confirm bar names the exact
+  written/failed counts, and each failed row shows its error on the tile (End-bin
+  tiles show `endError`; dual-coded tiles show `tidyError`). Success is never
+  claimed for a write that did not come back confirmed.
+- **A mixed Finalise could reload the page mid-write.** When every staged end
+  succeeded, the engine scheduled `location.reload()` 900 ms later — while the
+  canvas was still awaiting the tidy writes (two round-trips per row), so the
+  reload could destroy their outcome and errors. Both commits now take a
+  `deferReload` option (canvas-only; default behaviour unchanged) and the canvas
+  owns a single reload after **both** phases report fully successful, guarded on
+  the snapshot patient still matching.
+
+## [v3.236.2] — 2026-08-20
+
+### Allergy cleanup — organise on canvas
+
+"Clean up allergies?" now opens a full-screen **Organise allergies** canvas
+directly on click — no accordion panel (same reflow-safe trigger as Organise
+problems). Active allergies sit in computed **Active / Junk / Convert /
+Dual-coded** lanes; drag junk or a "not an allergy" row onto **End** to stage
+`end-allergy`; drop a dual-coded tile onto **Dual-coded** to stage clearing
+the stale legacy code; drop one duplicate onto its pair (dashed connector
+lines) to open the existing merge modal; click a Convert tile to open the
+existing substance-conversion review. Arrange many, then **Finalise** writes
+the staged ends and tidies. Merge and convert stay per-entry modal reviews
+(H-060 control c). Genuine allergies cannot be ended from the bin; the last
+"No known allergies" copy is refused in both the canvas stager and the write
+bridge. The canvas owns no API — `content-scripts/allergy-cleanup-canvas.js`
+is a view over `window.AllergyCleanup`.
+
+Tests: `test-allergy-cleanup-canvas.js` (lane placement, drop classification,
+draft staging, last-NKA / unrelated-drop locks, connector math);
+`test-allergy-cleanup.js` pins `isNkaAllergy`.
 
 ## [v3.236.1] — 2026-08-19
 
