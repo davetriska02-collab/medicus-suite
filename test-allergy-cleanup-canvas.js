@@ -13,6 +13,8 @@ const {
   sameDuplicateGroup,
   buildDuplicatePairs,
   isNotAnAllergy,
+  convertTileHint,
+  convertActionLabel,
   isEndableClassification,
   countLiveNka,
   canStageEnd,
@@ -72,6 +74,11 @@ const convertAmox = {
   description: 'Amoxicillin allergy',
   conceptId: '294505008',
   rule: { kind: 'substance' },
+  preview: {
+    substanceLabel: 'Amoxicillin',
+    reactionLabel: 'allergic reaction',
+    summary: 'Amoxicillin + allergic reaction',
+  },
 };
 const convertNotAllergy = {
   id: 'c2',
@@ -258,6 +265,33 @@ check(
 );
 check(isNotAnAllergy(convertNotAllergy) === true, 'not-an-allergy kind');
 check(isNotAnAllergy(convertAmox) === false, 'substance kind is convertible');
+check(
+  convertTileHint(convertAmox) === 'Convert to Amoxicillin + allergic reaction',
+  'Convert tile names the substance + reaction target on the canvas'
+);
+check(
+  convertActionLabel(convertAmox) === 'Convert to substance + reaction…',
+  'Convert action on an Allergy-to-X tile names both codes'
+);
+check(
+  convertTileHint({
+    rule: { kind: 'substance' },
+    preview: { substanceLabel: 'Iodine', reactionLabel: null, summary: 'Iodine' },
+  }) === 'Convert to substance Iodine',
+  'ADR-shaped convert tile names the substance only'
+);
+check(
+  convertActionLabel({
+    rule: { kind: 'substance' },
+    preview: { substanceLabel: 'Iodine', reactionLabel: null },
+  }) === 'Convert to substance…',
+  'ADR-shaped convert action does not promise a reaction'
+);
+check(
+  convertTileHint(convertNotAllergy) === 'consider removal',
+  'not-an-allergy tile keeps its rule note, not a convert target'
+);
+check(convertActionLabel(convertNotAllergy) === '', 'not-an-allergy has no Convert action');
 
 console.log('--- drop payload / connectors ---');
 check(readDropPayload({ dataTransfer: { getData: () => '' } }) === null, 'empty payload');

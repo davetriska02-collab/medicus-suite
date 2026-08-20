@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.4] — 2026-08-20
+
+### Allergy canvas — Convert Allergy-to-X to substance + reaction
+
+On the **Organise allergies** canvas, a Convert tile for an
+**“Allergy to X”** / **“X allergy”** code now names the target on the
+tile itself (`Convert to penicillin + allergic reaction`) and the action
+is **Convert to substance + reaction…**. Click still opens the existing
+per-entry review (H-060 control c). The reaction search is seeded with
+`allergic reaction` (hypersensitivity-worded codes seed
+`hypersensitivity`) so the clinician can pick a live reaction result as
+well as the dm+d substance.
+
+- Search seed only — **no conceptId is ever pre-selected**. Convert is
+  still a separate click. A reaction remains optional (substance-only
+  convert still works if no good match exists).
+- Curated rule reaction text still wins (`Chloroquine retinopathy` stays
+  `retinopathy`, not `allergic reaction`).
+- **“Adverse reaction to X”** is unchanged: no allergy reaction is
+  guessed. An ADR is not an allergy.
+- The pattern hint now runs even when a reviewed rule already
+  pre-selects the substance, so “Allergy to canagliflozin” and friends
+  get the reaction box seeded too. The reaction search auto-runs when a
+  seed is present; results appear, none are picked.
+
+Pinned by `test-allergy-cleanup.js` and `test-allergy-cleanup-canvas.js`.
+H-060 control (c) records the seed discipline.
+
 ## [v3.236.3] — 2026-08-20
 
 ### Allergy canvas — Finalise reports what actually landed (PR #293 review fixes)

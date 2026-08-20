@@ -339,11 +339,16 @@
       var overview = (overviewsById && overviewsById[a.id]) || null;
       if (!overview || overview.allergyCodeType !== 'pre-defined-allergies') return;
       var conceptId = resolveAllergyConceptId(overview);
+      var rule = findConversionRule(conceptId, conversionRules);
       flagged.push({
         id: a.id,
         description: a.allergyCodeDescription,
         conceptId: conceptId,
-        rule: findConversionRule(conceptId, conversionRules),
+        rule: rule,
+        // Canvas Convert tiles render this as "→ substance + reaction".
+        // Search labels only — never a conceptId. The convert review still
+        // requires a live pick + Convert click (H-060 control c).
+        preview: describeConversionPreview(a.allergyCodeDescription, rule),
       });
     });
     return flagged;
@@ -431,23 +436,36 @@
   }
 
   // Extracts a probable {substanceHint, reactionHint} pair from a legacy
-  // code's OWN description text — used ONLY to pre-fill the search boxes'
-  // query text for conversion-eligible entries with NO rules-file match
+  // code's OWN description text — used to pre-fill the search boxes'
+  // query text. For conversion-eligible entries with NO rules-file match
   // (rules/allergy-substance-conversion.json's reviewed 314-concept sweep is
   // necessarily incomplete — found live 2026-08-02: "Elastoplast contact
   // dermatitis", "Adverse reaction to iodine", "Cat allergy", "Shellfish
-  // allergy" all fall outside it). NEVER auto-selects a conceptId — the
-  // clinician still has to run the search and pick a real result
-  // themselves, same discipline as every other search box in this file;
-  // this only saves them from having to retype/edit the FULL raw
+  // allergy" all fall outside it) this seeds BOTH boxes. For a curated
+  // substance match it still seeds the reaction box when the wording is
+  // allergy-shaped ("Allergy to X" / "X allergy"), so the clinician can
+  // add a reaction code as well as the pre-selected substance. NEVER
+  // auto-selects a conceptId — the clinician still has to pick a real
+  // result themselves, same discipline as every other search box in this
+  // file; this only saves them from having to retype/edit the FULL raw
   // description as their starting query. Deliberately reuses the same small
   // set of structural templates already characterised (by hand, against
   // real examples) in the adverse-reaction-decomposition.csv review this
   // reviewed rules file was built from — not a new invented heuristic, the
   // same one just applied live instead of only to the pre-reviewed set:
   //   - "<X>-induced <Y>" -> substance X, reaction Y (e.g. "Allopurinol-induced DRESS syndrome")
-  //   - "Allergy/Hypersensitivity/Adverse reaction to <X>" -> substance X, no reaction
-  //   - "<X> allergy/hypersensitivity/(allergic )reaction" -> substance X, no reaction
+  //   - "Allergy / Allergic reaction to <X>" and "<X> allergy / allergic
+  //     reaction" -> substance X + reaction seed "allergic reaction"
+  //     (search text only — never a conceptId). That is how an
+  //     Allergy-to-X finding keeps its allergy meaning when the code
+  //     itself becomes a dm+d substance: the clinician can still pick a
+  //     reaction code. Convert stays optional-reaction; they can still
+  //     convert substance-only if no good reaction match exists.
+  //   - "Hypersensitivity to <X>" / "<X> hypersensitivity" -> substance X
+  //     + reaction seed "hypersensitivity" (same discipline).
+  //   - "Adverse reaction to <X>" / "<X> adverse reaction" / "<X> reaction"
+  //     -> substance X, no reaction guessed. An ADR is not an allergy;
+  //     seeding "allergic reaction" here would recode it as one.
   //   - anything else with 2+ words -> first word is the substance guess, the
   //     rest is the reaction guess (e.g. "Elastoplast contact dermatitis",
   //     "Chloroquine retinopathy" -- this last one matches the real reviewed
@@ -456,6 +474,18 @@
   //     "Reaction to spinal puncture") produces a nonsensical substance
   //     guess too; harmless because it only ever pre-fills an editable
   //     search box, never anything applied.
+  var ALLERGY_SHAPED_REACTION_SEED = 'allergic reaction';
+  var HYPERSENSITIVITY_SHAPED_REACTION_SEED = 'hypersensitivity';
+
+  function reactionSeedForAllergyWording(prefixOrSuffix) {
+    var token = String(prefixOrSuffix == null ? '' : prefixOrSuffix).trim();
+    if (/^allergy$/i.test(token) || /^allergic reaction$/i.test(token)) {
+      return ALLERGY_SHAPED_REACTION_SEED;
+    }
+    if (/^hypersensitivity$/i.test(token)) return HYPERSENSITIVITY_SHAPED_REACTION_SEED;
+    return null;
+  }
+
   function extractAllergenAndReactionHint(description) {
     var text = String(description == null ? '' : description).trim();
     if (!text) return { substanceHint: '', reactionHint: null };
@@ -463,11 +493,15 @@
     var m = /^(.+?)-induced\s+(.+)$/i.exec(text);
     if (m) return { substanceHint: m[1].trim(), reactionHint: m[2].trim() };
 
-    m = /^(?:Allergy|Hypersensitivity|Adverse reaction)\s+to\s+(.+)$/i.exec(text);
-    if (m) return { substanceHint: m[1].trim(), reactionHint: null };
+    m = /^(Allergy|Allergic reaction|Hypersensitivity|Adverse reaction)\s+to\s+(.+)$/i.exec(text);
+    if (m) {
+      return { substanceHint: m[2].trim(), reactionHint: reactionSeedForAllergyWording(m[1]) };
+    }
 
-    m = /^(.+?)\s+(?:allergic reaction|adverse reaction|hypersensitivity|allergy|reaction)$/i.exec(text);
-    if (m) return { substanceHint: m[1].trim(), reactionHint: null };
+    m = /^(.+?)\s+(allergic reaction|adverse reaction|hypersensitivity|allergy|reaction)$/i.exec(text);
+    if (m) {
+      return { substanceHint: m[1].trim(), reactionHint: reactionSeedForAllergyWording(m[2]) };
+    }
 
     var words = text.split(/\s+/);
     if (words.length >= 2) {
@@ -491,6 +525,36 @@
     if (patternReactionHint && String(patternReactionHint).trim()) return String(patternReactionHint).trim();
     if (additionalInformation && String(additionalInformation).trim()) return String(additionalInformation).trim();
     return '';
+  }
+
+  // What a Convert tile on the Organise-allergies canvas should name as
+  // the target: the curated substance (when the rules file has one) plus
+  // the same reaction seed the convert review will put in the search box.
+  // Labels only — never a conceptId. Used by classifyConvertibleEntries so
+  // the canvas can render the mapping without re-deriving the wording.
+  function describeConversionPreview(description, rule) {
+    var pattern = extractAllergenAndReactionHint(description);
+    var substanceLabel = '';
+    if (rule && rule.substance && rule.substance.description) {
+      substanceLabel = String(rule.substance.description).trim();
+    } else if (pattern && pattern.substanceHint) {
+      substanceLabel = String(pattern.substanceHint).trim();
+    }
+    var reactionLabel = pickReactionSeed(
+      rule && rule.reaction && rule.reaction.text,
+      pattern && pattern.reactionHint,
+      null
+    );
+    if (!reactionLabel) reactionLabel = null;
+    return {
+      substanceLabel: substanceLabel,
+      reactionLabel: reactionLabel,
+      summary: substanceLabel
+        ? reactionLabel
+          ? substanceLabel + ' + ' + reactionLabel
+          : substanceLabel
+        : reactionLabel || '',
+    };
   }
 
   // Groups the cheap allergies[] list by exact (trimmed, case-insensitive)
@@ -963,7 +1027,10 @@
       normalizedConceptSearchResults: normalizedConceptSearchResults,
       rankSubstanceResults: rankSubstanceResults,
       extractAllergenAndReactionHint: extractAllergenAndReactionHint,
+      ALLERGY_SHAPED_REACTION_SEED: ALLERGY_SHAPED_REACTION_SEED,
+      HYPERSENSITIVITY_SHAPED_REACTION_SEED: HYPERSENSITIVITY_SHAPED_REACTION_SEED,
       pickReactionSeed: pickReactionSeed,
+      describeConversionPreview: describeConversionPreview,
       groupDuplicateAllergies: groupDuplicateAllergies,
       remapReviewsByGroupIdentity: remapReviewsByGroupIdentity,
       isSameAllergenConcept: isSameAllergenConcept,
@@ -1970,7 +2037,12 @@
     try {
       st.prefill = await fetchEditAllergyForm(f.id);
       var rule = f.rule;
-      var patternHint = null;
+      // Always extract the description-pattern hint. When a curated rule
+      // pre-selects the substance we still want the allergy-shaped
+      // reaction seed ("Allergy to X" → "allergic reaction") so the
+      // clinician can add a reaction code; the rule's own reaction.text
+      // still wins when present (e.g. "retinopathy").
+      var patternHint = extractAllergenAndReactionHint(f.description);
       if (rule && rule.substance) {
         // A curated, Nick-reviewed rules-file match — pre-SELECTED, not just
         // a search seed (still requires the explicit Convert click below to
@@ -1982,7 +2054,6 @@
         // heuristic rather than seeding the search with the full raw
         // description. Search-seed ONLY, nothing pre-selected — the
         // clinician must run the search and pick a real result themselves.
-        patternHint = extractAllergenAndReactionHint(f.description);
         st.substanceQuery = patternHint.substanceHint;
       }
       // Reaction seed priority: curated rule hint > pattern-extracted hint >
@@ -1999,6 +2070,12 @@
     } finally {
       st.loading = false;
       showModal('convert', idx);
+    }
+    // Auto-run the reaction search when we have a seed and nothing picked
+    // yet — results appear, none are selected. Convert stays a separate
+    // click; a reaction pick is still optional.
+    if (!st.error && (st.reactionQuery || '').trim() && !st.pendingReactions.length) {
+      runReactionSearch(idx);
     }
   }
 
@@ -2889,8 +2966,11 @@
     // with both "shivering" and "bradycardia" to the same substance).
     var body =
       '<div class="ms-ac-modal-body">' +
-      '<div class="ms-ac-note">Pick the substance this allergy is really to. Severity, certainty, additional ' +
-      'info and (unless you pick a new reaction below) existing reactions are all carried through unchanged.</div>' +
+      '<div class="ms-ac-note">Pick the substance this allergy is really to. For an “Allergy to X” / “X allergy” ' +
+      'code the reaction box is seeded with “allergic reaction” so you can add a reaction code as well — search, ' +
+      'pick, then Convert. A reaction is still optional: you can convert with the substance alone if no good match ' +
+      'exists. Severity, certainty, additional info and (unless you pick a new reaction below) existing reactions ' +
+      'are all carried through unchanged. Nothing is applied until you press Convert.</div>' +
       ruleNoteHtml +
       currentRecordHtml +
       conceptSearchSectionHtml(idx, {
@@ -2904,7 +2984,7 @@
       }) +
       conceptSearchSectionHtml(idx, {
         fieldPrefix: 'reaction',
-        label: 'Reaction(s) (optional)',
+        label: 'Reaction(s) (optional — seeded for Allergy-to-X so you can add a reaction code)',
         query: st.reactionQuery,
         loading: st.reactionLoading,
         error: st.reactionError,
