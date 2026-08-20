@@ -25,6 +25,10 @@ const {
   extractJournalDocumentCandidates,
   findPossibleSavedDocuments,
   daysBetween,
+  parseDocDate,
+  candidateAnchorDate,
+  normExt,
+  extensionOf,
   SAVED_DOC_DATE_TOLERANCE_DAYS,
   DOCUMENT_TYPES,
   IMAGE_EXT_RE,
@@ -525,7 +529,7 @@ console.log('--- findDocumentTypeByConceptId ---');
 }
 
 console.log(
-  '--- extractJournalDocumentCandidates: purpose-built walker for entryType/type === "document" (2026-08-19, "already saved?" cross-check) ---'
+  '--- extractJournalDocumentCandidates: purpose-built walker for document/fit-note entries (2026-08-19, "already saved?" cross-check) ---'
 );
 {
   // Modelled on record-duplicate-parser.js's own confirmed document-entry
@@ -573,9 +577,10 @@ console.log(
                         clinicalCodeDescription: 'Unrelated nested note',
                       },
                       {
-                        entryType: 'fit-note', // a real entryType, but NOT 'document' — must be excluded
+                        entryType: 'fit-note', // same document kind as record-duplicate-parser.js
                         id: 'fit-note-1',
                         title: 'Fit note',
+                        documentDate: '2026-08-18',
                       },
                     ],
                   },
@@ -588,7 +593,7 @@ console.log(
     },
   ];
   const candidates = extractJournalDocumentCandidates(dayGroups);
-  check(candidates.length === 2, 'exactly the two real document entries survive — the note and fit-note are excluded');
+  check(candidates.length === 3, 'document + fit-note survive — the sibling note is excluded');
   check(
     candidates.some((c) => c.entryId === 'flat-doc-1-real' && c.title === 'IMG_1234'),
     'flat top-level document: real content read from item.data, not the (always-null) item.title'
@@ -598,25 +603,57 @@ console.log(
     'nested document (inside a consultation topic heading): real content read directly off the entry'
   );
   check(
+    candidates.some((c) => c.entryId === 'fit-note-1' && c.title === 'Fit note'),
+    'nested fit-note is a document-kind entry (record-duplicate-parser.js parity), not dropped'
+  );
+  check(
+    candidates.every((c) => c.dayTitle === '19 Aug 2026'),
+    'every candidate carries the journal day title as a date fallback'
+  );
+  check(
     JSON.stringify(extractJournalDocumentCandidates([])) === '[]' &&
       JSON.stringify(extractJournalDocumentCandidates(null)) === '[]',
     'empty/null dayGroups -> [], never throws'
   );
+  const nullData = extractJournalDocumentCandidates([
+    { title: 'Mon 1 Jan 2024', items: [{ type: 'document', id: 'x', data: null }] },
+  ]);
   check(
-    JSON.stringify(
-      extractJournalDocumentCandidates([{ title: 'day', items: [{ type: 'document', id: 'x', data: null }] }])
-    ) !== '[]',
-    'a document item with null data still produces a candidate (falls back to item.id, null title) rather than throwing'
+    nullData.length === 1 && nullData[0].entryId === 'x' && nullData[0].dayTitle === 'Mon 1 Jan 2024',
+    'a document item with null data still produces a candidate (falls back to item.id + day.title) rather than throwing'
   );
 }
 
-console.log('--- daysBetween ---');
+console.log('--- parseDocDate / daysBetween: ISO and live journal display strings ---');
 {
-  check(daysBetween('2026-08-19', '2026-08-19') === 0, 'same date -> 0');
-  check(daysBetween('2026-08-19', '2026-08-12') === 7, 'exactly a week apart -> 7');
+  check(!!parseDocDate('2026-08-19') && parseDocDate('2026-08-19').getDate() === 19, 'ISO YYYY-MM-DD');
+  check(
+    !!parseDocDate('16 Aug 2025') && parseDocDate('16 Aug 2025').getDate() === 16,
+    'live journal display "16 Aug 2025"'
+  );
+  check(
+    !!parseDocDate('Sat 16 Aug 2025') && parseDocDate('Sat 16 Aug 2025').getMonth() === 7,
+    'day.title weekday prefix "Sat 16 Aug 2025" (journal day title shape)'
+  );
+  check(parseDocDate('not-a-date') === null, 'unparseable -> null');
+  check(parseDocDate(null) === null, 'null -> null, never throws');
+  check(daysBetween('2026-08-19', '2026-08-19') === 0, 'same ISO date -> 0');
+  check(daysBetween('16 Aug 2025', '2025-08-19') === 3, 'live display vs ISO, 3 days apart');
+  check(daysBetween('19 Aug 2026', '2026-08-19') === 0, 'same calendar day across formats -> 0 (no UTC/local skew)');
+  check(daysBetween('2026-08-19', '2026-08-17') === 2, 'exactly 2 days apart -> 2');
   check(daysBetween('2026-08-12', '2026-08-19') === 7, 'order-independent (absolute difference)');
   check(daysBetween('not-a-date', '2026-08-19') === null, 'unparseable date -> null, never throws');
   check(daysBetween(null, '2026-08-19') === null, 'null date -> null, never throws');
+}
+
+console.log('--- normExt / extensionOf ---');
+{
+  check(normExt('jpg') === 'jpeg' && normExt('JPG') === 'jpeg' && normExt('jpe') === 'jpeg', 'jpg/jpe alias to jpeg');
+  check(normExt('tif') === 'tiff' && normExt('tiff') === 'tiff', 'tif alias to tiff');
+  check(normExt('pdf') === 'pdf', 'already-canonical extensions pass through');
+  check(extensionOf('photo.jpg') === 'jpeg', 'extensionOf normalises jpg');
+  check(extensionOf('https://x/doc/1.PDF') === 'pdf', 'extensionOf is case-insensitive');
+  check(extensionOf('no-extension') === null, 'no extension -> null');
 }
 
 console.log(
@@ -628,29 +665,42 @@ console.log(
   // the clinician saved it with the title "ENT letter New Victoria" — no
   // title-based match could ever have found this candidate.
   const candidates = [
-    { entryId: 'a', title: 'ENT letter New Victoria', documentDate: '2026-08-17' }, // 2 days out — within tolerance
-    { entryId: 'b', title: 'Unrelated scan result', documentDate: '2026-08-25' }, // 6 days out — within tolerance, different title (irrelevant now)
-    { entryId: 'c', title: 'Old referral', documentDate: '2026-08-30' }, // 11 days out — outside tolerance
-    { entryId: 'd', title: 'No date on this one', documentDate: null }, // no date at all — nothing to anchor on, excluded
+    { entryId: 'a', title: 'ENT letter New Victoria', documentDate: '2026-08-17' }, // 2 days before — within ±2
+    { entryId: 'b', title: 'Unrelated scan result', documentDate: '2026-08-25' }, // +6 days — outside ±2
+    { entryId: 'c', title: 'Old referral', documentDate: '2026-08-30' }, // +11 days — outside
+    { entryId: 'd', title: 'No date on this one', documentDate: null }, // no date, no dayTitle — excluded
+    { entryId: 'e', title: 'Native upload', documentDate: null, dayTitle: 'Mon 18 Aug 2026' }, // null documentDate, day.title fallback
+    { entryId: 'f', title: 'Same-day display string', documentDate: '19 Aug 2026' }, // live journal format
   ];
-  const matches = findPossibleSavedDocuments(candidates, '2026-08-19', 7);
-  const ids = matches.map((m) => m.entryId).sort();
+  check(SAVED_DOC_DATE_TOLERANCE_DAYS === 2, 'default window is ±2 days (not the original ±7)');
+  const matches = findPossibleSavedDocuments(candidates, '2026-08-19');
+  const ids = matches.map((m) => m.entryId);
   check(
-    JSON.stringify(ids) === JSON.stringify(['a', 'b']),
-    `every candidate within the date window survives regardless of title (got ${ids})`
+    JSON.stringify(ids.slice().sort()) === JSON.stringify(['a', 'e', 'f']),
+    `in-window candidates survive regardless of title, including dayTitle fallback + display-string date (got ${ids})`
   );
-  check(!ids.includes('c'), 'a candidate 11 days out, outside a 7-day tolerance, is excluded');
+  check(ids[0] === 'f', 'closest date (same day) is sorted first');
+  check(!ids.includes('b'), 'a candidate 6 days out is outside the default ±2-day window');
+  check(!ids.includes('c'), 'a candidate 11 days out is excluded');
+  check(!ids.includes('d'), 'a candidate with neither documentDate nor dayTitle is excluded');
+  check(candidateAnchorDate(candidates[4]) === 'Mon 18 Aug 2026', 'candidateAnchorDate falls back to dayTitle');
+  check(findPossibleSavedDocuments(candidates, null).length === 0, 'no expectedDateIso -> no matches, never throws');
+  check(findPossibleSavedDocuments(null, '2026-08-19').length === 0, 'null candidates -> [], never throws');
   check(
-    !ids.includes('d'),
-    'a candidate with no documentDate has nothing to anchor a possible match on and is excluded'
+    findPossibleSavedDocuments(candidates, '2026-08-19', 7).some((m) => m.entryId === 'b'),
+    'an explicit 7-day tolerance still includes the +6-day candidate (window is a parameter, not hardcoded in the filter)'
   );
-  check(findPossibleSavedDocuments(candidates, null, 7).length === 0, 'no expectedDateIso -> no matches, never throws');
-  check(findPossibleSavedDocuments(null, '2026-08-19', 7).length === 0, 'null candidates -> [], never throws');
+}
+
+console.log('--- hint copy does not assert a title identity (H-061) ---');
+{
+  const fs = require('fs');
+  const src = fs.readFileSync(require('path').join(__dirname, 'content-scripts/document-file-inline.js'), 'utf8');
   check(
-    findPossibleSavedDocuments(candidates, '2026-08-19').length ===
-      findPossibleSavedDocuments(candidates, '2026-08-19', SAVED_DOC_DATE_TOLERANCE_DAYS).length,
-    'toleranceDays defaults to SAVED_DOC_DATE_TOLERANCE_DAYS when omitted'
+    !/possibly already saved as/.test(src),
+    'hint copy no longer asserts “already saved as <title>” — date+type cannot support that claim'
   );
+  check(/check before saving/.test(src), 'hint tells the clinician to check, not that a match is confirmed');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
