@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.25] — 2026-08-21
+
+### Contacts canvas — always-expanded slots + drag-to-reclassify
+
+- **Grandparents/Aunts-Uncles/Other no longer sit behind a "+" button.** Always shown as drop
+  targets now; removed the now-dead expand-on-click state, handler, and CSS.
+- **Drag a placed card straight onto a different slot to reclassify it**, instead of the old
+  two-step "drag to remove, then re-drop." Three real bugs found and fixed getting there, each via
+  live testing:
+  - The drop was silently swallowed by a card-level handler that unconditionally ignored any drop
+    payload carrying `removeCardId`, even once it also carried `id`/`kind` for a relocate — fixed
+    to only treat a bare `removeCardId` (nothing else to act on) as a dead end.
+  - `findCard(id, kind)` — the very first lookup `tryAssign` makes — had no case at all for `kind
+    === 'linked'` (an already-placed card's own kind), so it returned `null` and the whole action
+    silently no-opped with no error, no panel, nothing visible.
+  - The relationship picker was hidden for the drop's confirm panel, because `relationshipKnown`
+    (true for any already-linked card) was assumed to mean "never needs asking again" — wrong
+    specifically for a relocate, where reclassifying is the entire point. Now shown whenever a
+    relocate is in progress, pre-filled with the auto-picked guess so it's reviewable, not blind.
+  - Also fixed a correctness gap the naive version would have shipped with: a direct relocate only
+    updates the FORWARD relationship by default — the RECIPROCAL record on the other patient needs
+    explicit re-checking too, or it silently keeps reading the old relationship. A relocate now
+    always re-verifies and offers to correct the reciprocal, with copy that states what it
+    currently says and what it'll change to (distinct from the existing "was reset when removed
+    from the tree" copy, which would have been literally false for this case).
+
 ## [v3.236.24] — 2026-08-20
 
 ### Contacts canvas — duplicate phone/email cleanup + unfinished-merge softening

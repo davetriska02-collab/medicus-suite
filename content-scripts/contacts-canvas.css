@@ -422,10 +422,6 @@
   font-style: normal;
 }
 
-#ms-contacts-canvas-overlay .ms-cv-slot-expand {
-  font-size: 12px;
-}
-
 #ms-contacts-canvas-overlay .ms-cv-unplaced {
   width: 100%;
   border: 1px solid #fde68a;
