@@ -688,7 +688,14 @@
       reasons.push('no results could be read from this report');
       return reasons;
     }
-    if (!severity || severity.level !== 'none') reasons.push('not every result is within normal limits');
+    // evaluateReportSeverity returns level:'error' when it threw — that is
+    // "couldn't check", not "all normal". Fail closed with a distinct reason
+    // so we never reuse the numeric-abnormal wording for an engine failure.
+    if (!severity || severity.level === 'error') {
+      reasons.push('result severity could not be checked');
+      return reasons;
+    }
+    if (severity.level !== 'none') reasons.push('not every result is within normal limits');
     if ((severity && severity.unmatched) || report.unmatched) reasons.push('this report is not matched to a patient');
     // Without result rules the suite cannot flag cultures or apply threshold
     // escalations, so an abnormal culture could read as normal — fail closed.

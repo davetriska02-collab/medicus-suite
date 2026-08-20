@@ -38,11 +38,7 @@ async function rawClear(keys) {
   for (const k of keys) localStorage.removeItem(k);
 }
 
-let counter = 0;
-export function uid() {
-  counter = (counter + 1) % 1296;
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + counter.toString(36);
-}
+export { uid } from './uid.js';
 
 // The settings merge is a spread, so a STORED value always beats the default —
 // including a stored null. The engine indexes into these four without guarding

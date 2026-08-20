@@ -29,7 +29,8 @@ All prior fixes (F1–F8, NF1–NF5) verified still holding at dd6a61f. The mate
 new exposure was a **data-minimisation regression** in the newer Referrals module
 (same class as the previously-fixed F2): it persisted a full patient-identifiable
 referral dataset to `chrome.storage.local` plaintext **and** exported it into suite
-backups. Four findings remediated in 3.56.1; PDF.js upgrade (NF6) still deferred.
+backups. Four findings remediated in 3.56.1; PDF.js upgrade (NF6) was later
+completed — vendored 4.2.67 (CVE-2024-4367).
 
 ### Findings (third pass)
 
@@ -39,7 +40,7 @@ backups. Four findings remediated in 3.56.1; PDF.js upgrade (NF6) still deferred
 | TF2 | **Medium** | Operational alert thresholds (`submissions`, `triage-alert`) not numerically validated on import; a crafted backup with a string threshold makes `value >= NaN` always false → submissions RAG strip / triage demand alerts silently never fire. | `shared/io/submissions-io.js:24-28`, `shared/io/triage-alert-io.js:31-34` | Fixed v3.56.1 |
 | TF3 | **Low** | `sentinel-io.js` non-merge import path wrote `data.rules` raw; merge path already stripped `__proto__`/`constructor`/`prototype`. | `shared/io/sentinel-io.js:80` | Fixed v3.56.1 |
 | TF4 | **Low** | Transient print/passport keys (`sweep.handout`, `sweep.batchPack`, `sentinel.passport`) hold full PHI on disk in the write→read window; linger if the print tab never renders. | `side-panel/modules/sweep/sweep.js:623,643`, `side-panel/modules/sentinel/sentinel.js:1136` | Fixed v3.56.1 — 60s TTL backstop |
-| NF6 | **Low** | PDF.js 3.11.174 predates CVE-2024-4367 patch (<4.2.67); mitigated by `isEvalSupported:false`. | `vendor/pdf.min.js` | Still tracked (re-vendoring required) |
+| NF6 | **Low** | PDF.js 3.11.174 predates CVE-2024-4367 patch (<4.2.67); mitigated by `isEvalSupported:false`. | `vendor/pdf.min.js` | Fixed — vendored **4.2.67** (`vendor-versions.json`; SOUP v1.11 @ 3.236.1) |
 
 ### Verified-and-downgraded / rejected (third pass)
 
@@ -82,7 +83,7 @@ All F1–F8 fixes from the first pass verified as still holding. Four new findin
 | NF3 | **Medium** | `sentinelImport()` accepted any object for `hiddenRules` entries without validating `{until: ISO\|null}` structure. | `shared/io/sentinel-io.js:90–94` | Fixed v3.32.0 |
 | NF4 | **Low** | `popout:closed` `onMessage` handler lacked `sender.id` guard (defence-in-depth gap). | `side-panel/panel.js:192` | Fixed v3.32.0 |
 | NF5 | **Low** | `activeTab` permission declared but never exercised (`tabs` permission covers all use). | `manifest.json` | Fixed v3.32.0 — removed |
-| NF6 | **Low** | PDF.js 3.11.174 predates CVE-2024-4367 patch (<4.2.67); mitigated by `isEvalSupported:false`. | `vendor/pdf.min.js` | Tracked follow-up |
+| NF6 | **Low** | PDF.js 3.11.174 predates CVE-2024-4367 patch (<4.2.67); mitigated by `isEvalSupported:false`. | `vendor/pdf.min.js` | Fixed — vendored **4.2.67** (`vendor-versions.json`; SOUP v1.11 @ 3.236.1) |
 
 ### Verified-and-downgraded (second pass)
 

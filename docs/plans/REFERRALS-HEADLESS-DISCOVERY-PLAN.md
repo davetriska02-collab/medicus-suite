@@ -1,6 +1,9 @@
 # Referrals — remove the "open the report once" dependency (headless discovery)
 
-Status: **PLAN — not yet built.** Converged from 3 opus investigation agents (2026-06-16).
+Status: **SHIPPED.** Headless discovery lives in `shared/referrals-api.js`
+(`ensureReferralsDiscovery`); Practice Report calls it from
+`side-panel/modules/condor/report/report-data.js`. Original plan kept as
+the design record. Converged from 3 opus investigation agents (2026-06-16).
 Approach chosen by maintainer: **headless discovery + bug fix** (automatic, with fallback).
 Implement as a separate, signed-off piece.
 

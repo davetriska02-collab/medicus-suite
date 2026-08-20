@@ -12,8 +12,8 @@
 | `engine/` | Business logic (rules engine, extractors, triage engine) |
 | `content-scripts/` | Injected into Medicus pages |
 | `options/` | Settings page |
-| `rota/` | Rota Manager subtree — self-contained ESM app with its own `package.json` (`"type": "module"`). `rota/engine/` is **pure** (no DOM/`chrome.*`/`fetch`), `rota/shared/` is storage + helpers, `rota/app/app.html` is the full app (opens as a full tab). Tests are the root-level `test-rota-*.js` files |
-| `visualiser.html` / `visualiser-core.html` | Patient record visualiser (opens as full tab) |
+| `rota/` | Rota Manager subtree — self-contained ESM app with its own `package.json` (`"type": "module"`). `rota/engine/` is **pure** (no DOM/`chrome.*`/`fetch`; ids come from `rota/shared/uid.js`, not `store.js`), `rota/shared/` is storage + helpers, `rota/app/app.html` is the full app (opens as a full tab). Tests are the root-level `test-rota-*.js` files |
+| `visualiser-core.html` | Patient record visualiser (opens as a full tab) |
 
 ## Adding a new side-panel module
 

@@ -358,7 +358,10 @@
       if (EMBEDDED_DEFAULTS && !EMBEDDED_DEFAULTS.includes('DEFAULTS_PLACEHOLDER')) {
         return JSON.parse(EMBEDDED_DEFAULTS);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[ClinHUD] embedded defaults failed to parse', e && e.message);
+    }
+    console.warn('[ClinHUD] fallbackConfig: empty rule set — triage chips will not fire');
     return { version: 1, rules: [], thresholds: {}, prefs: {} };
   };
 
@@ -4305,7 +4308,10 @@
         _paQueueStore = r && r['patientAlerts.byPatient'] && typeof r['patientAlerts.byPatient'] === 'object'
           ? r['patientAlerts.byPatient'] : {};
       });
-    } catch (_) { _paQueueStore = {}; }
+    } catch (e) {
+      console.warn('[ClinHUD] patientAlerts.byPatient load failed — queue flag chips withheld', e && e.message);
+      /* leave _paQueueStore null so injectQueuePaChip bails; do not treat as empty */
+    }
   };
   loadPaQueueStore();
   try {
@@ -4316,7 +4322,9 @@
       // Content changed: wipe + re-inject so edited/removed flags update immediately.
       if (pageType() === 'queue') refreshQueueChips();
     });
-  } catch (_) { /* storage unavailable — chips simply stay absent */ }
+  } catch (e) {
+    console.warn('[ClinHUD] patientAlerts storage listener failed — queue flag chips will not update', e && e.message);
+  }
 
   const injectQueuePaChip = (rowIndex, patientUuid) => {
     const LK = window.PatientAlertsLookup;
@@ -5331,6 +5339,13 @@
       });
     } catch (e) {
       log('queue-result: evaluateReportSeverity threw', e.message);
+      return QUEUE_RESULT_FETCH_ERROR;
+    }
+    // The engine swallows its own throw and returns level:'error' (never
+    // rethrows) so lab-file call sites without a try/catch stay safe. Treat
+    // that as the same "couldn't check" sentinel as a thrown eval.
+    if (sev && sev.level === 'error') {
+      log('queue-result: evaluateReportSeverity returned error');
       return QUEUE_RESULT_FETCH_ERROR;
     }
     // Item 2.2 — build the compact per-result detail array for the queue chip popover

@@ -1116,6 +1116,10 @@
    *             reviewCount, noGrowthCount, reviewTop, noGrowthTop, comboCount, comboTop,
    *             flagged, unitMismatches, unclassified }}
    *
+   * `level` is 'none' | 'amber' | 'red' | 'error'. 'error' means evaluation threw —
+   * callers MUST treat it as "couldn't check", never as all-clear. Lab-filing
+   * and the queue chip both fail closed on it.
+   *
    * Combo-rule outcomes (kind:'combo') are evaluated across the WHOLE report (not per
    * result): a combo fires when ALL its conditions are satisfied by SOME result in the
    * report. Combos are ESCALATE-ONLY — a fired amber combo raises level to ≥ 'amber', a
@@ -1440,8 +1444,14 @@
         unitMismatches,
         unclassified,
       };
-    } catch (_) {
-      return none;
+    } catch (err) {
+      // Fail visible: a throw used to return the same `none` shape as a genuinely
+      // clean report, which hid the queue chip AND could arm lab-filing's
+      // all-normal gate. Callers treat level:'error' as "couldn't check".
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[ResultSeverity] evaluateReportSeverity failed closed', err && err.message);
+      }
+      return { ...none, level: 'error' };
     }
   }
 

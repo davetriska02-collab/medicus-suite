@@ -1,6 +1,8 @@
 # CQC evidence pack — build plan (v1)
 
-Status: **PLAN — not yet built.** Folds the Practice-panel reaction (R-A..R-D) into the
+Status: **SHIPPED** (v3.110.0; Settings entry v3.110.2). Full-tab page is
+`cqc-readiness.html` / `cqc-readiness.js`. Original plan kept as the design
+record. Folds the Practice-panel reaction (R-A..R-D) into the
 research scoping (`CQC-EVIDENCE-PACK-SCOPING.md`). Report-only until signed off. Clinical-
 rule additions route through **The Keeper**; UI through the existing report engine.
 

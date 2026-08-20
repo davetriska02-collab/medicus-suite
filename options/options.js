@@ -857,6 +857,8 @@ async function doFullExport() {
     problemDescriptionCleanup,
     phrases,
     rota,
+    sweep,
+    cqc,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -877,6 +879,8 @@ async function doFullExport() {
     problemDescriptionCleanupExport(),
     phrasesExport(),
     rotaExport(),
+    sweepExport(),
+    cqcExport(),
   ]);
   const suite = await suiteExport();
   return window.SuiteEnvelope.wrap(
@@ -901,6 +905,8 @@ async function doFullExport() {
       problemDescriptionCleanup,
       phrases,
       rota,
+      sweep,
+      cqc,
       suite,
     },
     chrome.runtime.getManifest().version
@@ -928,6 +934,8 @@ async function doModuleExport(scope) {
     problemDescriptionCleanup: () => problemDescriptionCleanupExport(),
     phrases: () => phrasesExport(),
     rota: () => rotaExport(),
+    sweep: () => sweepExport(),
+    cqc: () => cqcExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -969,6 +977,8 @@ async function applyEnvelope(envelope) {
     mods.problemDescriptionCleanup && (() => problemDescriptionCleanupImport(mods.problemDescriptionCleanup)),
     mods.phrases && (() => phrasesImport(mods.phrases)),
     mods.rota && (() => rotaImport(mods.rota)),
+    mods.sweep && (() => sweepImport(mods.sweep)),
+    mods.cqc && (() => cqcImport(mods.cqc)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
