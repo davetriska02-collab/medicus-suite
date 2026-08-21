@@ -163,6 +163,38 @@ check(
     ),
   'focus-alerts dim never fades a pulse-red/amber row (both CSS copies)'
 );
+check(
+  /PULSE_HOST \+ \(previewRow \? '' : ' ch-q-pulse-inline'\)/.test(content),
+  'flat queues (no preview) mark pulse as inline so it does not steal the name cell'
+);
+check(/\.ch-q-pulse-inline \{[\s\S]*?flex: 0 1 auto/.test(hud), 'inline pulse drops the preview-row 100% flex');
+check(
+  /\[col-id='patientName'\]:has\(> \.ch-q-pulse\)/.test(hud) &&
+    /flex-direction: row/.test(
+      hud.slice(hud.search(/\[col-id='patientName'\]:has\(> \.ch-q-result-inline\)/))
+    ) &&
+    /flex-wrap: nowrap/.test(
+      hud.slice(hud.search(/\[col-id='patientName'\]:has\(> \.ch-q-result-inline\)/))
+    ),
+  'flat-queue chips sit on the same line after the name (row, nowrap — not clipped under it)'
+);
+check(
+  /\[col-id='patientName'\] > \.ch-q-pulse \{[\s\S]*?flex: 0 1 auto/.test(hud),
+  'pulse inside patientName does not take 100% of the cell'
+);
+check(/positionPulseFloat/.test(content), 'why/act trays are positioned as viewport popovers');
+check(/ch-q-pulse-float/.test(content) && /\.ch-q-pulse-float \{/.test(hud), 'float class is styled');
+check(/document\.body\.appendChild\(tray\)/.test(content), 'expanded tray is appended to body, not the grid cell');
+check(
+  /\[col-id='patientName'\]:has\(> \.ch-q-repeat-inline\)/.test(hud) &&
+    /\[col-id='patientName'\]:has\(> \.ch-q-carry-inline\)/.test(hud),
+  'repeat/carry inline chips join the same-line-after-name layout'
+);
+check(
+  /overflow: hidden !important/.test(hud) &&
+    /\[col-id='patientName'\]:has\(> \.ch-queue-chips\)/.test(hud),
+  'name cell clips chips so the next AG-Grid column cannot chop them'
+);
 
 console.log('\n--- Results: ' + passed + ' passed, ' + failed + ' failed ---\n');
 if (failed > 0) process.exit(1);

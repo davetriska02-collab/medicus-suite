@@ -22,6 +22,8 @@ const path = require('path');
 const {
   apiErrorMessage,
   parseQueuePagePath,
+  extractTaskArray,
+  taskIdFromRow,
   partitionSelection,
   canSubmit,
   buildActionPayload,
@@ -87,6 +89,37 @@ console.log('\n--- parseQueuePagePath: /{site}/tasks/{slug}/task-list detection 
   );
   check(parseQueuePagePath(null, 'patient_privacy_officer_alert_task') === null, 'null pathname -> null, never throws');
   check(parseQueuePagePath('/e38a9f/tasks/x/task-list', '') === null, 'empty slug -> null, never a wildcard match');
+  check(
+    JSON.stringify(
+      parseQueuePagePath(
+        '/e38a9f/tasks/data/patient_privacy_officer_alert_task/task-list',
+        'patient_privacy_officer_alert_task'
+      )
+    ) === JSON.stringify({ siteId: 'e38a9f' }),
+    'also matches the /tasks/data/{slug}/task-list URL shape'
+  );
+  check(
+    JSON.stringify(
+      parseQueuePagePath(
+        '/e38a9f/tasks/patient-privacy-officer-alert-task/task-list',
+        'patient_privacy_officer_alert_task'
+      )
+    ) === JSON.stringify({ siteId: 'e38a9f' }),
+    'hyphenated URL slug still matches the underscore API slug — otherwise the Bulk button never appears'
+  );
+}
+
+console.log('\n--- extractTaskArray / taskIdFromRow: envelopes and id aliases ---');
+{
+  check(extractTaskArray({ tasks: [{ id: 'a' }] })[0].id === 'a', 'top-level tasks[] (confirmed capture shape)');
+  check(extractTaskArray({ data: { tasks: [{ id: 'b' }] } })[0].id === 'b', 'nested data.tasks[]');
+  check(extractTaskArray({ data: [{ id: 'c' }] })[0].id === 'c', 'data as a bare array');
+  check(extractTaskArray(null).length === 0, 'null body -> [], never throws');
+  check(extractTaskArray({ foo: 1 }).length === 0, 'unknown envelope -> [], never throws');
+  check(taskIdFromRow({ id: 'x' }) === 'x', 'id is preferred');
+  check(taskIdFromRow({ taskUuid: 'u' }) === 'u', 'taskUuid is used when id is missing');
+  check(taskIdFromRow({ taskId: 't' }) === 't', 'taskId is used when id is missing');
+  check(taskIdFromRow(null) === '', 'null row -> empty id, never throws');
 }
 
 console.log('\n--- partitionSelection: acting vs keeping, already-acted rows excluded from both being re-acted ---');
@@ -230,6 +263,29 @@ console.log('\n--- manifest.json wiring ---');
   check(engineIdx !== -1 && poIdx !== -1 && epsIdx !== -1, 'all three files are registered');
   check(engineIdx < poIdx && engineIdx < epsIdx, 'the shared engine loads BEFORE either instantiation');
   check(medicusBlock.css.includes('content-scripts/task-bulk-action.css'), 'shared CSS is registered');
+}
+
+console.log('\n--- Widget persistence: Vue strip must re-inject, not be treated as own-write ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
+  check(
+    src.includes('_onMatchingPage && !document.getElementById(widgetId)') ||
+      src.includes("_onMatchingPage && !document.getElementById(widgetId)"),
+    'a missing widget on a matching page is not classified as an own-write'
+  );
+  check(/setInterval\(function \(\) \{[\s\S]*?scheduleCheck\(\);[\s\S]*?\}, 2000\)/.test(src), 'polls to re-inject if Vue stripped the panel');
+  check(src.includes('document.body.insertBefore'), 'falls back to document.body if the grid is not mounted yet');
+}
+
+console.log('\n--- Open panel stays in the viewport (Review/Confirm not below the fold) ---');
+{
+  const css = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.css'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
+  check(/function capOpenPanel\(/.test(src), 'capOpenPanel measures remaining viewport');
+  check(/body\.style\.height = max/.test(src), 'a long list gets an explicit height so the footer is not clipped');
+  check(/ms-tba-footer/.test(src) && /\.ms-tba-footer \{/.test(css), 'Review/Confirm live in a footer outside the scrolling list');
+  check(/Review and /.test(src) && /config\.verb\.toLowerCase\(\)/.test(src), 'the mass-action button names the verb (acknowledge / discard)');
+  check(/\.ms-tba-scroll \{[\s\S]*?overflow-y: auto/.test(css), 'the row list scrolls, not the whole page');
 }
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);

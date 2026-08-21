@@ -36,6 +36,24 @@
   vertical-align: middle;
   overflow: hidden;
 }
+/* Same-line as triage chips: PREPEND in DOM, CSS order after the name so
+   presence does not sit in front of it on flat queues. */
+[col-id='patientName']:has(> .ms-tp-chips) {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  column-gap: 6px;
+  overflow: hidden;
+}
+[col-id='patientName'] > .ms-tp-chips {
+  order: 2;
+  flex: 0 1 auto;
+  min-width: 1.75rem;
+  max-width: 46%;
+  margin: 0;
+  overflow: hidden;
+}
 
 .ms-tp-chip {
   display: inline-block;

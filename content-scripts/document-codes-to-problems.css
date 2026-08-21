@@ -7,12 +7,16 @@
    unmounted along with whatever card it would otherwise sit under. */
 #ms-dcp-widget {
   position: fixed;
+  /* Top-right, not bottom-right: Medicus's File document control lives at
+     the bottom of this task page and the panel was covering it. Drag the
+     header to move; JS also nudges off that button if they still overlap. */
+  top: 72px;
   right: 20px;
-  bottom: 20px;
+  bottom: auto;
   z-index: 999999;
   width: 340px;
   max-width: calc(100vw - 40px);
-  max-height: calc(100vh - 40px);
+  max-height: calc(100vh - 92px);
   display: flex;
   flex-direction: column;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -35,6 +39,23 @@
   font-size: 13px;
   color: #1e3a8a;
   flex-shrink: 0;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+#ms-dcp-widget.ms-dcp-dragging .ms-dcp-header {
+  cursor: grabbing;
+}
+
+#ms-dcp-widget .ms-dcp-grip {
+  width: 8px;
+  height: 14px;
+  flex-shrink: 0;
+  background-image: radial-gradient(circle, #7b8ec4 1.1px, transparent 1.25px);
+  background-size: 4px 5px;
+  background-repeat: repeat;
+  opacity: 0.85;
 }
 
 #ms-dcp-widget .ms-dcp-header-toggle {
@@ -44,6 +65,11 @@
   cursor: pointer;
   user-select: none;
   min-width: 0;
+  flex: 1;
+}
+
+#ms-dcp-widget:not(:has(.ms-dcp-body)) .ms-dcp-header {
+  border-radius: 8px;
 }
 
 #ms-dcp-widget .ms-dcp-header-toggle span:last-child {
@@ -174,6 +200,8 @@
 }
 
 #ms-dcp-widget .ms-dcp-btn {
+  position: sticky;
+  bottom: 0;
   padding: 8px 16px;
   background: #2563eb;
   color: #fff;
@@ -184,6 +212,7 @@
   cursor: pointer;
   align-self: flex-start;
   font-family: inherit;
+  box-shadow: 0 -6px 8px -4px #fff;
 }
 
 #ms-dcp-widget .ms-dcp-btn:hover:not(:disabled) {

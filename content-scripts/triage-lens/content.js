@@ -251,11 +251,12 @@
   box-shadow: 0 8px 24px rgba(20, 30, 50, 0.22);
   min-width: 220px;
   max-width: 320px;
+  max-height: min(70vh, calc(100vh - 16px));
+  overflow-y: auto;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 12px;
   line-height: 1.4;
   color: #1c2733;
-  overflow: hidden;
 }
 .ch-action-menu * { box-sizing: border-box; }
 .ch-action-menu-head {
@@ -6928,8 +6929,47 @@
   const PULSE_ON = 'ch-row-pulse-on';
   const PULSE_RED = 'ch-row-pulse-red';
   const PULSE_AMBER = 'ch-row-pulse-amber';
+  const PULSE_FLOAT = 'ch-q-pulse-float';
   const _pulseActByRow = new Map(); // rowIndex → pathway context from decorateOneRow
   const _pulseOpenByKey = new Map(); // taskUuid|ri → 'why' | 'act'
+  let _pulseFloatCleanup = null;
+
+  const clearPulseFloatUi = () => {
+    if (_pulseFloatCleanup) {
+      _pulseFloatCleanup();
+      _pulseFloatCleanup = null;
+    }
+    document.querySelectorAll('.' + PULSE_FLOAT).forEach((el) => el.remove());
+  };
+
+  const positionPulseFloat = (tray, anchor) => {
+    tray.classList.add(PULSE_FLOAT);
+    tray.style.position = 'fixed';
+    tray.style.zIndex = '2147483646';
+    const pad = 8;
+    const maxW = Math.min(420, window.innerWidth - pad * 2);
+    tray.style.width = maxW + 'px';
+    tray.style.maxWidth = maxW + 'px';
+    tray.style.maxHeight = Math.min(360, window.innerHeight - pad * 2) + 'px';
+    tray.style.overflowY = 'auto';
+    document.body.appendChild(tray);
+    const r = anchor.getBoundingClientRect();
+    const th = tray.getBoundingClientRect().height;
+    const tw = tray.getBoundingClientRect().width;
+    const roomBelow = window.innerHeight - pad - (r.bottom + 4);
+    const roomAbove = r.top - pad - 4;
+    let top;
+    if (th <= roomBelow || roomBelow >= roomAbove) {
+      top = Math.max(pad, Math.min(r.bottom + 4, window.innerHeight - pad - Math.min(th, window.innerHeight - pad * 2)));
+    } else {
+      top = Math.max(pad, r.top - th - 4);
+    }
+    let left = r.left;
+    if (left + tw > window.innerWidth - pad) left = window.innerWidth - pad - tw;
+    if (left < pad) left = pad;
+    tray.style.top = Math.round(top) + 'px';
+    tray.style.left = Math.round(left) + 'px';
+  };
 
   const pulseOpenKey = (row) => {
     const ri = row && row.getAttribute && row.getAttribute('row-index');
@@ -7157,8 +7197,16 @@
     if (!row || !row.classList || !row.classList.contains('ag-row')) return;
     if (row.classList.contains('ag-full-width-row')) return;
     if (!row.querySelector('[col-id="dateOfBirth"]')) return;
-    const { target } = pulseTarget(row);
+    const { target, previewRow } = pulseTarget(row);
     if (!target) return;
+    const key = pulseOpenKey(row);
+    if (_pulseFloatCleanup) {
+      _pulseFloatCleanup();
+      _pulseFloatCleanup = null;
+    }
+    document.querySelectorAll('.' + PULSE_FLOAT).forEach((el) => {
+      if (!key || el.getAttribute('data-pulse-key') === key) el.remove();
+    });
     target.querySelectorAll('.' + PULSE_HOST).forEach((el) => el.remove());
     if (!PREF('queuePulseCompress', true)) {
       clearPulseClasses(row);
@@ -7170,7 +7218,10 @@
     applyPulseRail(row, composed.rail);
     const escalate = composed.rail === 'red' || composed.rail === 'amber';
     const host = document.createElement('span');
-    host.className = PULSE_HOST;
+    // Flat queues (tasks / investigations) have no preview row — pulse is
+    // PREPENDed into the patient-name cell. Inline class drops the
+    // preview-row 100% flex so the name stays visible.
+    host.className = PULSE_HOST + (previewRow ? '' : ' ch-q-pulse-inline');
     const line = document.createElement('span');
     line.className = 'ch-q-pulse-row';
     // Compression chrome (headline / overflow / thread / ring) only when the
@@ -7229,10 +7280,7 @@
     line.appendChild(actBtn);
     host.appendChild(line);
 
-    const key = pulseOpenKey(row);
     const open = key ? _pulseOpenByKey.get(key) : null;
-    if (open === 'why') host.appendChild(buildPulseWhyTray(composed));
-    if (open === 'act') host.appendChild(buildPulseActTray(row, act));
     actBtn.setAttribute('aria-expanded', open === 'act' ? 'true' : 'false');
 
     const toggle = (which) => {
@@ -7258,10 +7306,44 @@
     });
 
     target.insertBefore(host, target.firstChild);
+
+    if (open === 'why' || open === 'act') {
+      const tray = open === 'why' ? buildPulseWhyTray(composed) : buildPulseActTray(row, act);
+      if (key) tray.setAttribute('data-pulse-key', key);
+      tray.addEventListener('click', (e) => e.stopPropagation());
+      tray.addEventListener('mousedown', (e) => e.stopPropagation());
+      positionPulseFloat(tray, host);
+      const onDoc = (e) => {
+        if (tray.contains(e.target) || host.contains(e.target)) return;
+        if (key) _pulseOpenByKey.set(key, null);
+        clearPulseFloatUi();
+      };
+      const onKey = (e) => {
+        if (e.key !== 'Escape') return;
+        if (key) _pulseOpenByKey.set(key, null);
+        clearPulseFloatUi();
+      };
+      const onScroll = () => {
+        if (key) _pulseOpenByKey.set(key, null);
+        clearPulseFloatUi();
+      };
+      const arm = () => {
+        document.addEventListener('click', onDoc, true);
+        document.addEventListener('keydown', onKey, true);
+        window.addEventListener('scroll', onScroll, true);
+      };
+      _pulseFloatCleanup = () => {
+        document.removeEventListener('click', onDoc, true);
+        document.removeEventListener('keydown', onKey, true);
+        window.removeEventListener('scroll', onScroll, true);
+      };
+      setTimeout(arm, 0);
+    }
   };
 
   const reapplyQueuePulses = () => {
     if (!PREF('queuePulseCompress', true)) {
+      clearPulseFloatUi();
       queueScope()
         .querySelectorAll('.' + PULSE_ON + ', .' + PULSE_RED + ', .' + PULSE_AMBER)
         .forEach((el) => el.classList.remove(PULSE_ON, PULSE_RED, PULSE_AMBER));
@@ -7621,6 +7703,7 @@
       closeActionMenu();
     }
     if (queueObserver) queueObserver.disconnect();
+    clearPulseFloatUi();
     queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result, .ch-q-pa, .ch-q-pending, .ch-q-repeat, .ch-q-carry, .ch-q-pulse').forEach(s => s.remove());
     // Wipe stale severity tint in the SAME cycle as the chip-node wipe (item 1.3) —
     // a recycled row-index must never keep a previous patient's tint colour.
@@ -7722,7 +7805,7 @@
           if (!cl) return false;
           // ch-q-pa included (audit M2): each patient-flag chip injection used
           // to read as a real grid mutation and trigger a full refresh cycle.
-          if (!(cl.contains('ch-q-result') || cl.contains('ch-q-mon') || cl.contains('ch-queue-chips') || cl.contains('ch-chip') || cl.contains('ch-q-pa') || cl.contains('ch-q-pulse'))) return false;
+          if (!(cl.contains('ch-q-result') || cl.contains('ch-q-mon') || cl.contains('ch-queue-chips') || cl.contains('ch-chip') || cl.contains('ch-q-pa') || cl.contains('ch-q-pending') || cl.contains('ch-q-repeat') || cl.contains('ch-q-carry') || cl.contains('ch-q-pulse') || cl.contains('ch-q-why') || cl.contains('ch-q-act') || cl.contains('ch-q-pulse-float'))) return false;
         }
       }
     }

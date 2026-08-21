@@ -1692,7 +1692,16 @@
     return document.querySelector('ul[aria-labelledby="problems-major-label"]');
   }
 
+  // RETIRED UI (2026-08-21): Organise problems (End bin + merge on the
+  // canvas) superseded the on-page "Bulk remove/merge" trigger. The engine
+  // and write helpers stay (tests + canvas still end via the same
+  // contracts); the button is not injected.
+  var UI_RETIRED = true;
+
   function injectTrigger() {
+    var leftover = document.getElementById('ms-pbe-widget');
+    if (leftover) leftover.remove();
+    if (UI_RETIRED) return;
     if (document.getElementById('ms-pbe-widget')) return;
     if (!_problemsCache || !_problemsCache.length) return;
     // Wrong-patient guard for bridge-derived contexts: the fetched list must
@@ -1803,27 +1812,31 @@
     return true;
   }
 
-  var _hub = window.__chObserverHub;
-  if (_hub && _hub.subscribe) {
-    _hub.subscribe(function (mutations) {
-      if (_isOwnMutation(mutations)) return;
-      scheduleScan();
-    });
-  } else {
-    var _obs = new MutationObserver(function (mutations) {
-      if (_isOwnMutation(mutations)) return;
-      scheduleScan();
-    });
-    _obs.observe(document.body, { childList: true, subtree: true });
-  }
+  if (!UI_RETIRED) {
+    var _hub = window.__chObserverHub;
+    if (_hub && _hub.subscribe) {
+      _hub.subscribe(function (mutations) {
+        if (_isOwnMutation(mutations)) return;
+        scheduleScan();
+      });
+    } else {
+      var _obs = new MutationObserver(function (mutations) {
+        if (_isOwnMutation(mutations)) return;
+        scheduleScan();
+      });
+      _obs.observe(document.body, { childList: true, subtree: true });
+    }
 
-  document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) scheduleScan();
-  });
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) scheduleScan();
+    });
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', scheduleScan);
-  } else {
-    scheduleScan();
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', scheduleScan);
+    } else {
+      scheduleScan();
+    }
+  } else if (document.getElementById('ms-pbe-widget')) {
+    document.getElementById('ms-pbe-widget').remove();
   }
 })();

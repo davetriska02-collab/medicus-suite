@@ -12,8 +12,9 @@
 // gesture as any other nest/link. Dropping on a lane or the End bin STAGES
 // the change on the canvas — tiles move immediately, nothing is written —
 // until Finalise commits the whole draft.
-// Existing single-action buttons (Bulk remove/merge, Clean up code) stay on
-// the page; "Change significance" is no longer one of them (2026-08-19) — it
+// Existing single-action buttons: Clean up code stays on the page.
+// "Bulk remove/merge" is retired (2026-08-21) — End + merge live on this
+// canvas. "Change significance" is no longer a page button (2026-08-19) — it
 // now happens by dragging a tile between the canvas's own significance
 // lanes, and the tray's old "Unknown significance, pick a grade" card is
 // gone with it — the Unresolved lane already IS that decision, dragging out

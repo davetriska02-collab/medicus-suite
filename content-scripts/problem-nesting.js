@@ -1478,12 +1478,12 @@
     if (!problemId) throw new Error('A problem must be chosen.');
     if (!_lastPatientId) throw new Error('Patient context was lost — not ending.');
     if (hasActiveChildren(problemId, _parentIdByProblemId)) {
-      throw new Error('This problem still has active children — end or un-nest them first, or use Bulk remove?.');
+      throw new Error('This problem still has active children — end or un-nest them first.');
     }
     var form = await fetchEndProblemForm(problemId);
     var childCount = (form && Array.isArray(form.activeChildProblems) && form.activeChildProblems.length) || 0;
     if (childCount > 0) {
-      throw new Error('This problem still has active children — end or un-nest them first, or use Bulk remove?.');
+      throw new Error('This problem still has active children — end or un-nest them first.');
     }
     await postEndProblem(buildEndProblemPayload(problemId, todayISO(), 'Resolved'));
     _problems = (_problems || []).filter(function (p) {

@@ -42,13 +42,22 @@ input[class*='ms-tba-']:focus-visible {
   border-radius: 6px;
   font-size: 12px;
   color: #1a2030;
-  /* The panel as a WHOLE scrolls within the viewport — a big "select all"
-     must never push the action button below the visible screen with no way
-     to reach it. The action buttons themselves are pinned via
-     position:sticky (see .ms-tba-review-btn / .ms-tba-confirm-actions
-     below) so they stay visible without extra scrolling once opened. */
-  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ms-tba-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+}
+
+.ms-tba-footer {
+  flex-shrink: 0;
+  padding-top: 8px;
+  background: #f9fafb;
 }
 
 .ms-tba-loading,
@@ -109,15 +118,10 @@ input[class*='ms-tba-']:focus-visible {
 }
 
 .ms-tba-list {
-  /* No max-height/overflow of its own — .ms-tba-body is the single scroll
-     container (nesting two independent scrollbars here was confusing and
-     didn't even solve the real problem: the action button below this list
-     is a SIBLING, not a child, so a scrollable list alone never brought it
-     back into view). */
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .ms-tba-row {
@@ -173,13 +177,7 @@ input[class*='ms-tba-']:focus-visible {
 }
 
 .ms-tba-review-btn {
-  /* Sticky to the bottom of .ms-tba-body's own scroll area — see that
-     class's comment. A long "select all" list must never require scrolling
-     PAST the button to find it; this keeps it in view throughout. Its own
-     opaque background means it never needs the full-bleed treatment a
-     transparent sticky element would — content simply scrolls behind it. */
-  position: sticky;
-  bottom: 0;
+  flex-shrink: 0;
   display: block;
   width: 100%;
   padding: 8px 14px;
@@ -257,11 +255,7 @@ input[class*='ms-tba-']:focus-visible {
 }
 
 .ms-tba-confirm-actions {
-  /* Same sticky-footer reasoning as .ms-tba-review-btn — the confirm step's
-     ACTING list can also be long after a "select all", and the done step's
-     Refresh/Close buttons (which reuse this class) must stay reachable too. */
-  position: sticky;
-  bottom: 0;
+  flex-shrink: 0;
   display: flex;
   gap: 8px;
   padding: 6px 0 2px;

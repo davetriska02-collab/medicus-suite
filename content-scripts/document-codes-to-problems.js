@@ -335,6 +335,92 @@
     return rows;
   }
 
+  // Layout helpers (pure) — default dock is top-right so it does not sit on
+  // the document-file chip ("Save as document") or Medicus File document.
+  // Nudge is used when those controls are on-screen and still overlap.
+  function isFileDocumentButtonLabel(text) {
+    var t = String(text == null ? '' : text)
+      .replace(/\s+/g, ' ')
+      .replace(/^✓\s*/, '')
+      .trim();
+    if (!t) return false;
+    if (/^(file(\s+(this\s+)?document)?|filed(\s+document)?|document file)$/i.test(t)) return true;
+    if (/^save as document$/i.test(t) || /^saved as document$/i.test(t)) return true;
+    return false;
+  }
+
+  function normalizeRect(r) {
+    if (!r) return null;
+    var left = r.left;
+    var top = r.top;
+    var width = r.width != null ? r.width : r.right - r.left;
+    var height = r.height != null ? r.height : r.bottom - r.top;
+    if (!isFinite(left) || !isFinite(top) || !isFinite(width) || !isFinite(height)) return null;
+    if (width <= 0 || height <= 0) return null;
+    return { left: left, top: top, width: width, height: height, right: left + width, bottom: top + height };
+  }
+
+  function rectsOverlap(a, b, pad) {
+    a = normalizeRect(a);
+    b = normalizeRect(b);
+    if (!a || !b) return false;
+    pad = pad == null ? 8 : pad;
+    return a.left < b.right + pad && a.right + pad > b.left && a.top < b.bottom + pad && a.bottom + pad > b.top;
+  }
+
+  function defaultPanelPosition(widgetSize, viewport, margin) {
+    margin = margin == null ? 20 : margin;
+    viewport = viewport || { width: 1280, height: 800 };
+    widgetSize = widgetSize || { width: 340, height: 240 };
+    var left = viewport.width - widgetSize.width - margin;
+    if (left < margin) left = margin;
+    return { left: left, top: 72 };
+  }
+
+  function nudgeClearOf(widget, obstacles, viewport, pad) {
+    var wr = normalizeRect(widget);
+    if (!wr) return { left: 20, top: 72 };
+    viewport = viewport || { width: 1280, height: 800 };
+    pad = pad == null ? 12 : pad;
+    var left = wr.left;
+    var top = wr.top;
+    var w = wr.width;
+    var h = wr.height;
+    var list = (obstacles || []).map(normalizeRect).filter(Boolean);
+
+    function clamp() {
+      var maxL = Math.max(8, viewport.width - w - 8);
+      var maxT = Math.max(8, viewport.height - h - 8);
+      left = Math.max(8, Math.min(left, maxL));
+      top = Math.max(8, Math.min(top, maxT));
+    }
+
+    clamp();
+    for (var pass = 0; pass < 12; pass++) {
+      var cur = { left: left, top: top, width: w, height: h, right: left + w, bottom: top + h };
+      var hit = null;
+      for (var i = 0; i < list.length; i++) {
+        if (rectsOverlap(cur, list[i], pad)) {
+          hit = list[i];
+          break;
+        }
+      }
+      if (!hit) break;
+      var leftOf = hit.left - w - pad;
+      var above = hit.top - h - pad;
+      var below = hit.bottom + pad;
+      if (leftOf >= 8) left = leftOf;
+      else if (above >= 8) top = above;
+      else if (below + h <= viewport.height - 8) top = below;
+      else {
+        left = 8;
+        top = 72;
+      }
+      clamp();
+    }
+    return { left: Math.round(left), top: Math.round(top) };
+  }
+
   // ── Node test hook ────────────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -352,6 +438,10 @@
       isAllergyRelatedCode,
       buildCreateProblemPayload,
       markSameBatchDuplicates,
+      isFileDocumentButtonLabel,
+      rectsOverlap,
+      defaultPanelPosition,
+      nudgeClearOf,
     };
     return;
   }
@@ -362,6 +452,9 @@
   window.__msDocCodesToProblems = true;
 
   var WIDGET_ID = 'ms-dcp-widget';
+  var POS_KEY = 'ms-dcp-pos';
+  var _userDragged = false;
+  var _skipToggle = false;
 
   // Same localStorage flag content-scripts/triage-lens/content.js's own
   // [ClinHUD] pipeline logging already reads
@@ -479,6 +572,145 @@
   // rendering of it). Nothing to search for, so this is unconditional —
   // always succeeds once document.body exists.
 
+  function readSavedPos() {
+    try {
+      var raw = localStorage.getItem(POS_KEY);
+      if (!raw) return null;
+      var p = JSON.parse(raw);
+      if (!p || typeof p.left !== 'number' || typeof p.top !== 'number') return null;
+      return p;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function savePos(left, top, dragged) {
+    try {
+      localStorage.setItem(POS_KEY, JSON.stringify({ left: left, top: top, dragged: !!dragged }));
+    } catch (_) {
+      /* private mode / blocked storage — position just isn't remembered */
+    }
+  }
+
+  function applyLeftTop(el, left, top) {
+    if (!el) return;
+    var wr = el.getBoundingClientRect();
+    var w = wr.width || 340;
+    var h = wr.height || 80;
+    var maxL = Math.max(8, window.innerWidth - w - 8);
+    var maxT = Math.max(8, window.innerHeight - h - 8);
+    left = Math.max(8, Math.min(left, maxL));
+    top = Math.max(8, Math.min(top, maxT));
+    el.style.left = Math.round(left) + 'px';
+    el.style.top = Math.round(top) + 'px';
+    el.style.right = 'auto';
+    el.style.bottom = 'auto';
+  }
+
+  function hostFileButtonRects() {
+    var out = [];
+    function addEl(el) {
+      if (!el || (el.closest && el.closest('#' + WIDGET_ID))) return;
+      var r = el.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4) return;
+      out.push({ left: r.left, top: r.top, width: r.width, height: r.height });
+    }
+    // The suite's own "Save as document" chip/form — this is the control
+    // Nick's panel was covering (document-file-inline.js).
+    document.querySelectorAll('.ms-df-chip, .ms-df-chip-wrap, #ms-df-widget, #ms-df-widget .ms-df-btn').forEach(addEl);
+    var nodes = document.querySelectorAll('button, [role="button"], a.q-btn, .q-btn');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (el.closest && el.closest('#' + WIDGET_ID)) continue;
+      var aria = (el.getAttribute && el.getAttribute('aria-label')) || '';
+      var text = el.textContent || '';
+      if (!isFileDocumentButtonLabel(aria) && !isFileDocumentButtonLabel(text)) continue;
+      addEl(el);
+    }
+    return out;
+  }
+
+  function placePanel(el) {
+    if (!el) return;
+    var saved = readSavedPos();
+    if (saved && saved.dragged) _userDragged = true;
+    var wr = el.getBoundingClientRect();
+    var size = { width: wr.width || 340, height: wr.height || 80 };
+    var vp = { width: window.innerWidth, height: window.innerHeight };
+    var pos;
+    if (_userDragged && saved) pos = { left: saved.left, top: saved.top };
+    else pos = defaultPanelPosition(size, vp, 20);
+    if (!_userDragged) {
+      pos = nudgeClearOf(
+        { left: pos.left, top: pos.top, width: size.width, height: size.height },
+        hostFileButtonRects(),
+        vp,
+        12
+      );
+    } else {
+      pos = nudgeClearOf({ left: pos.left, top: pos.top, width: size.width, height: size.height }, [], vp, 0);
+    }
+    applyLeftTop(el, pos.left, pos.top);
+  }
+
+  function ensureClearOfFileButton(el) {
+    el = el || document.getElementById(WIDGET_ID);
+    if (!el || _userDragged) return;
+    placePanel(el);
+  }
+
+  function enableDrag(el) {
+    var header = el.querySelector('.ms-dcp-header');
+    if (!header || header.dataset.msDcpDrag === '1') return;
+    header.dataset.msDcpDrag = '1';
+    var dragging = false;
+    var moved = false;
+    var sx = 0;
+    var sy = 0;
+    var sl = 0;
+    var st = 0;
+
+    function onMove(e) {
+      if (!dragging) return;
+      var dx = e.clientX - sx;
+      var dy = e.clientY - sy;
+      if (!moved && dx * dx + dy * dy < 25) return;
+      moved = true;
+      _skipToggle = true;
+      el.classList.add('ms-dcp-dragging');
+      applyLeftTop(el, sl + dx, st + dy);
+    }
+
+    function endDrag() {
+      if (!dragging) return;
+      dragging = false;
+      el.classList.remove('ms-dcp-dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', endDrag);
+      window.removeEventListener('blur', endDrag);
+      if (!moved) return;
+      _userDragged = true;
+      var r = el.getBoundingClientRect();
+      savePos(r.left, r.top, true);
+    }
+
+    header.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      if (e.target.closest && e.target.closest('#ms-dcp-refresh, .ms-dcp-refresh-btn, button, input')) return;
+      var rect = el.getBoundingClientRect();
+      sx = e.clientX;
+      sy = e.clientY;
+      sl = rect.left;
+      st = rect.top;
+      dragging = true;
+      moved = false;
+      _skipToggle = false;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', endDrag);
+      window.addEventListener('blur', endDrag);
+    });
+  }
+
   function injectWidget() {
     if (document.getElementById(WIDGET_ID)) {
       dbg('injectWidget: already present, no-op');
@@ -490,6 +722,9 @@
     dbg('injectWidget: appending fixed panel to document.body');
     withObserverPaused(function () {
       document.body.appendChild(w);
+    });
+    requestAnimationFrame(function () {
+      placePanel(w);
     });
   }
 
@@ -574,6 +809,7 @@
     var count = s.entries.length;
     return (
       '<div class="ms-dcp-header">' +
+      '<span class="ms-dcp-grip" title="Drag to move" aria-hidden="true"></span>' +
       '<span class="ms-dcp-header-toggle" id="ms-dcp-toggle" role="button" tabindex="0" aria-expanded="' +
       !s.collapsed +
       '">' +
@@ -818,9 +1054,17 @@
     if (refreshBtn) refreshBtn.addEventListener('click', doRefresh);
     var toggle = el.querySelector('#ms-dcp-toggle');
     if (toggle) {
-      toggle.addEventListener('click', function () {
+      toggle.addEventListener('click', function (e) {
+        if (_skipToggle) {
+          _skipToggle = false;
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         s.collapsed = !s.collapsed;
         rerender();
+        var w = document.getElementById(WIDGET_ID);
+        if (w && !_userDragged) placePanel(w);
       });
       toggle.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -829,6 +1073,7 @@
         }
       });
     }
+    enableDrag(el);
   }
 
   function doRefresh() {
@@ -1026,7 +1271,10 @@
     // is if the SPA wiped our own node and it needs re-inserting.
     if (onDocTask && !pathChanged && s.taskUuid === (info && info.taskUuid)) {
       var existing = document.getElementById(WIDGET_ID);
-      if (existing && existing.isConnected) return;
+      if (existing && existing.isConnected) {
+        ensureClearOfFileButton(existing);
+        return;
+      }
       dbg('scheduleInject: on same task, widget not connected — scheduling runInject');
     }
     _throttle = setTimeout(runInject, 350);
@@ -1093,6 +1341,11 @@
 
   document.addEventListener('visibilitychange', function () {
     if (!document.hidden) scheduleInject();
+  });
+
+  window.addEventListener('resize', function () {
+    var w = document.getElementById(WIDGET_ID);
+    if (w) placePanel(w);
   });
 
   // Defensive backstop beyond the mutation observer. Confirmed live

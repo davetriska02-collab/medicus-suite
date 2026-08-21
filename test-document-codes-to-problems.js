@@ -11,6 +11,8 @@
 
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const {
   todayISO,
   clampToToday,
@@ -26,6 +28,10 @@ const {
   isAllergyRelatedCode,
   buildCreateProblemPayload,
   markSameBatchDuplicates,
+  isFileDocumentButtonLabel,
+  rectsOverlap,
+  defaultPanelPosition,
+  nudgeClearOf,
 } = require('./content-scripts/document-codes-to-problems.js');
 
 let passed = 0,
@@ -398,6 +404,61 @@ console.log('\n--- markSameBatchDuplicates: same-code entries within ONE submit 
   );
   check(JSON.stringify(markSameBatchDuplicates([])) === '[]', 'empty rows -> [], never throws');
   check(markSameBatchDuplicates(null) === null, 'null rows -> returned as-is, never throws');
+}
+
+console.log('\n--- panel placement: File document is not covered ---');
+{
+  check(isFileDocumentButtonLabel('File document') === true, 'File document matches');
+  check(isFileDocumentButtonLabel('File') === true, 'File matches');
+  check(isFileDocumentButtonLabel('Filed document') === true, 'Filed document matches');
+  check(isFileDocumentButtonLabel('File this document') === true, 'File this document matches');
+  check(isFileDocumentButtonLabel('Save as document') === true, 'Save as document (the document-file chip) matches');
+  check(isFileDocumentButtonLabel('✓ Saved as document') === true, 'Saved as document chip matches');
+  check(isFileDocumentButtonLabel('Document file') === true, 'Document file matches');
+  check(isFileDocumentButtonLabel('File all normal') === false, 'lab-file "File all normal" is not this button');
+  check(isFileDocumentButtonLabel('') === false, 'empty label is not a match');
+
+  const vp = { width: 1280, height: 800 };
+  const size = { width: 340, height: 280 };
+  const def = defaultPanelPosition(size, vp, 20);
+  check(def.top === 72, 'default dock is below the app header, not the bottom of the page');
+  check(def.left === 1280 - 340 - 20, 'default dock is right-aligned with a 20px gutter');
+
+  check(
+    rectsOverlap({ left: 0, top: 0, width: 10, height: 10 }, { left: 20, top: 20, width: 10, height: 10 }, 8) === false,
+    'separated rects do not overlap'
+  );
+  check(
+    rectsOverlap({ left: 900, top: 700, width: 340, height: 80 }, { left: 1100, top: 740, width: 120, height: 36 }, 8) ===
+      true,
+    'bottom-right panel overlapping a File button is detected'
+  );
+
+  const fileBtn = { left: 1100, top: 740, width: 140, height: 36 };
+  const overlapping = { left: 920, top: 520, width: 340, height: 280 };
+  const nudged = nudgeClearOf(overlapping, [fileBtn], vp, 12);
+  check(
+    !rectsOverlap(
+      { left: nudged.left, top: nudged.top, width: 340, height: 280 },
+      fileBtn,
+      12
+    ),
+    'nudge moves the panel off the File document button'
+  );
+  check(nudged.top < 740, 'nudge prefers staying off the bottom action, not dropping onto it');
+}
+
+console.log('\n--- wiring: draggable header, not a bottom-right cover ---');
+{
+  const js = fs.readFileSync(path.join(__dirname, 'content-scripts/document-codes-to-problems.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, 'content-scripts/document-codes-to-problems.css'), 'utf8');
+  check(/function enableDrag\(el\)/.test(js), 'enableDrag is wired');
+  check(/POS_KEY = 'ms-dcp-pos'/.test(js), 'drag position is remembered');
+  check(/ms-dcp-grip/.test(js) && /\.ms-dcp-grip \{/.test(css), 'header has a drag grip');
+  check(/top:\s*72px/.test(css), 'CSS default is top-right (72px)');
+  check(/bottom:\s*auto/.test(css), 'CSS default is bottom: auto, not pinned to the page foot');
+  check(!/bottom:\s*20px/.test(css), 'CSS no longer uses bottom: 20px (that covered File document)');
+  check(/\.ms-df-chip/.test(js), 'nudge treats the Save as document chip as an obstacle');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

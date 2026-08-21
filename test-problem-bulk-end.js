@@ -495,5 +495,17 @@ console.log('--- extractPatientIdFromTaskOverview: the task-inline fallback chai
   check(extractPatientIdFromTaskOverview(null) === null, 'null response -> null, never throws');
 }
 
+console.log('\n--- UI retired: Bulk remove/merge trigger is not injected ---');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'problem-bulk-end.js'), 'utf8');
+  check(/var UI_RETIRED = true/.test(src), 'UI_RETIRED is set');
+  check(
+    /if \(UI_RETIRED\) return/.test(src) && /if \(!UI_RETIRED\) \{/.test(src),
+    'injectTrigger and the observer boot are skipped while retired'
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
