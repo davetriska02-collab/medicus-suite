@@ -797,8 +797,10 @@
    virtualises rows; hiding them would desync scroll math). Preview/detail
    rows of a red/amber master already carry the same tint class (item 1.3
    applies it to both), so they are excluded from dimming by the same
-   :not() clauses with no extra selector needed. */
-.ch-q-focus-alerts .ag-row:not(.ch-row-sev-red):not(.ch-row-sev-amber) {
+   :not() clauses with no extra selector needed. Pulse rails (v3.236.4)
+   are the request-queue's red/amber mark — a focus-dim that faded a
+   pulse-red row would contradict its own rail, so they are excluded too. */
+.ch-q-focus-alerts .ag-row:not(.ch-row-sev-red):not(.ch-row-sev-amber):not(.ch-row-pulse-red):not(.ch-row-pulse-amber) {
   opacity: 0.35;
 }
 

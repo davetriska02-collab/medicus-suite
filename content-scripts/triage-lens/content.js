@@ -101,7 +101,7 @@
   0%, 100% { box-shadow: none; }
   50% { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3); }
 }
-.ch-q-focus-alerts .ag-row:not(.ch-row-sev-red):not(.ch-row-sev-amber) {
+.ch-q-focus-alerts .ag-row:not(.ch-row-sev-red):not(.ch-row-sev-amber):not(.ch-row-pulse-red):not(.ch-row-pulse-amber) {
   opacity: 0.35;
 }
 
@@ -6264,8 +6264,13 @@
         const ri = row.getAttribute('row-index');
         if (ri == null) return;
         const n = Number(ri);
-        if (row.classList.contains(ROW_TINT_RED)) red.push(n);
-        else if (row.classList.contains(ROW_TINT_AMBER)) amber.push(n);
+        // Pulse rails count as alerts too — on the request queue they are the
+        // only red/amber row mark, and a jump/focus that cannot see them makes
+        // the screen contradict its own rail.
+        const isRed = row.classList.contains(ROW_TINT_RED) || row.classList.contains(PULSE_RED);
+        const isAmber = row.classList.contains(ROW_TINT_AMBER) || row.classList.contains(PULSE_AMBER);
+        if (isRed) red.push(n);
+        else if (isAmber) amber.push(n);
       });
     red.sort((a, b) => a - b);
     amber.sort((a, b) => a - b);

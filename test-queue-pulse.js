@@ -148,6 +148,21 @@ check(
   'pulse compression chrome is escalate-only — quiet rows keep the chip pile'
 );
 check(/Nothing named matched/.test(content), 'empty why-tray refuses the all-clear reading');
+const tintedFn = content.match(/const getQueueTintedRowIndexes = \(\) => \{[\s\S]*?\n  \};/);
+check(!!tintedFn, 'getQueueTintedRowIndexes found');
+if (tintedFn) {
+  check(
+    /PULSE_RED/.test(tintedFn[0]) && /PULSE_AMBER/.test(tintedFn[0]),
+    'jump button / n key see pulse rails as red/amber alerts'
+  );
+}
+check(
+  /\.ch-q-focus-alerts[\s\S]{0,200}?:not\(\.ch-row-pulse-red\):not\(\.ch-row-pulse-amber\)/.test(hud) &&
+    /\.ch-q-focus-alerts .ag-row:not\(\.ch-row-sev-red\):not\(\.ch-row-sev-amber\):not\(\.ch-row-pulse-red\):not\(\.ch-row-pulse-amber\)/.test(
+      content
+    ),
+  'focus-alerts dim never fades a pulse-red/amber row (both CSS copies)'
+);
 
 console.log('\n--- Results: ' + passed + ' passed, ' + failed + ' failed ---\n');
 if (failed > 0) process.exit(1);

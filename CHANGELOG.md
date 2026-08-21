@@ -12,6 +12,7 @@ First implementation of the queue-next plan (`docs/design/triage-queue-next/PLAN
 - **Why-tray** — click the headline / overflow, or Space on the j/k cursor. Lists every named signal plus source. Footer refuses the score reading.
 - **Act tray (thin)** — `›` or `a` opens numbered prepare-only actions. Pharmacy First and Ask-back reuse the existing pathway menu (still not sent). Book and Park are present and disabled. No Done / Sent / Booked.
 - **Thread mark** — the existing B3 repeat-contact chip is shown as a count on the pulse, not a rail-raiser.
+- **Jump / focus see the rail** — the status bar's ▶ jump button, the `n` key and "Focus alerts" now treat pulse red/amber rows as alerts (previously they only saw the results-queue tint, so on the request queue "Focus alerts" would have dimmed a row whose own rail was red).
 
 Injection law unchanged (PREPEND, wipe-and-redecorate, durable map, token-block classes). Composer is `content-scripts/triage-lens/queue-pulse.js` (`window.TriageQueuePulse`), unit-tested in `test-queue-pulse.js`.
 
