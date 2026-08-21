@@ -254,31 +254,49 @@
 }
 
 .ms-aoc-tile-stretch {
-  margin-top: 6px;
-  margin-left: 6px;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
+  margin-top: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 700;
   font-family: inherit;
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  background: #fff;
-  border-radius: var(--r-sm);
+  letter-spacing: 0.02em;
+  border: 2px solid var(--accent);
+  color: #fff;
+  background: var(--accent);
+  border-radius: var(--r-md);
   cursor: pointer;
+  box-shadow: 0 2px 0 #1e40af;
+}
+
+.ms-aoc-tile-stretch:hover {
+  filter: brightness(1.05);
+}
+
+.ms-aoc-tile-stretch:active {
+  transform: translateY(2px);
+  box-shadow: 0 0 0 #1e40af;
 }
 
 .ms-aoc-stretch-handle {
-  height: 8px;
-  margin-top: 6px;
+  height: 14px;
+  margin-top: 8px;
   border-radius: var(--r-sm);
   background: repeating-linear-gradient(
     90deg,
-    #94a3b8,
-    #94a3b8 4px,
-    transparent 4px,
-    transparent 8px
+    #64748b,
+    #64748b 5px,
+    transparent 5px,
+    transparent 10px
   );
   cursor: ns-resize;
+}
+
+.ms-aoc-stretch-live {
+  margin-top: 6px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.02em;
 }
 
 .ms-aoc-tile-cancel {

@@ -121,7 +121,8 @@
       esc((appt.appointmentTypeName || 'Appointment') + (appt.duration ? ' · ' + appt.duration + ' min' : '')) +
       '</div>' +
       (locked ? '<div class="ms-aoc-tile-lock">Locked — arrived / in progress</div>' : '') +
-      (staged ? '<div class="ms-aoc-tile-draft">Not written</div>' : '') +
+      (staged ? '<div class="ms-aoc-tile-draft">On this canvas only — not in Medicus yet</div>' : '') +
+      '<div class="ms-aoc-stretch-live" hidden></div>' +
       (!locked && !opts.inBin
         ? '<button type="button" class="ms-aoc-tile-cancel" data-cancel-id="' +
           esc(appt.id) +
@@ -211,9 +212,9 @@
       });
       return (
         '<div class="ms-aoc-confirmbar">' +
-        'This writes the ticked actions through Medicus’s own cancel / reschedule forms. ' +
-        'Send-to is off — no SMS or email. Extend is not available. ' +
-        'There is no canvas undo. Tick only what you have checked against the book.' +
+        '<strong>This is the write.</strong> Everything above is only staged on this canvas until you press the red button. ' +
+        'Send-to is off — no SMS or email. There is no undo after this. ' +
+        'Review staged greys out afterwards because there is nothing left to send.' +
         '<div class="ms-aoc-finalise-list">' +
         rows +
         '</div>' +
@@ -221,11 +222,13 @@
         '<div class="ms-aoc-confirmbar-actions">' +
         '<button type="button" class="ms-aoc-cancel" id="ms-aoc-action-cancel"' +
         (_pending.writing ? ' disabled' : '') +
-        '>Keep organising</button>' +
+        '>Back — keep it staged</button>' +
         '<button type="button" class="ms-aoc-confirm-btn" id="ms-aoc-action-confirm"' +
         (_pending.writing || !s.count || missingReason ? ' disabled' : '') +
         '>' +
-        (_pending.writing ? 'Writing…' : 'Confirm — write ' + s.count) +
+        (_pending.writing
+          ? 'Writing…'
+          : 'Write ' + s.count + ' to Medicus') +
         '</button>' +
         '</div></div>'
       );
@@ -349,7 +352,8 @@
       '<div class="ms-aoc-explainer">' +
       'Drag a patient onto a <strong>free slot</strong> (same diary or another) to stage a move, or onto <strong>Cancel</strong>. ' +
       'Stretch with <strong>+15 min</strong> or the bottom handle only when the following slot is free. ' +
-      'If the next slot is booked the handle will not stage. Nothing is written until you Finalise. ' +
+      'If the next slot is booked the handle will not stage. <strong>Review staged</strong> shows the list; ' +
+      '<strong>Write to Medicus</strong> is the actual send. After a successful write the review button greys out because the canvas is empty. ' +
       'Arrived patients stay locked. Medicus will not send SMS or email from this board.' +
       '</div>' +
       '<div class="ms-aoc-body">' +
@@ -364,7 +368,8 @@
       '>Discard staged</button>' +
       '<button type="button" class="ms-aoc-finalise" id="ms-aoc-finalise"' +
       (n ? '' : ' disabled') +
-      '>Finalise…</button>' +
+      (n ? '' : ' title="Nothing staged. Drag a patient first."') +
+      '>Review staged…</button>' +
       '</footer>' +
       '</div></div>';
     bind();
@@ -562,12 +567,10 @@
     );
   }
 
-  function tryStretch(apptId, extraMinutes) {
+  function tryStretchTo(apptId, newDuration) {
     var appt = C.findAppointment(_board, apptId);
     if (!appt) return;
-    var staged = _draft.stretches && _draft.stretches[apptId];
-    var from = staged && Number(staged.duration) ? Number(staged.duration) : appt.duration || 0;
-    var next = from + Number(extraMinutes);
+    var next = Number(newDuration);
     var gate = C.canStageStretch(appt, next, _board);
     if (!gate.ok) {
       _error = gate.reason;
@@ -578,6 +581,39 @@
     _draft = C.stageStretch(_draft, apptId, next);
     announce('Staged stretch for ' + appt.patientName + ' to ' + next + ' min');
     render();
+  }
+
+  function tryStretch(apptId, extraMinutes) {
+    var appt = C.findAppointment(_board, apptId);
+    if (!appt) return;
+    var staged = _draft.stretches && _draft.stretches[apptId];
+    var from = staged && Number(staged.duration) ? Number(staged.duration) : appt.duration || 0;
+    tryStretchTo(apptId, from + Number(extraMinutes));
+  }
+
+  function maxStretchDuration(appt) {
+    var keep = Number(appt && appt.duration) || 0;
+    var next = keep + C.STRETCH_STEP_MINUTES;
+    var last = keep;
+    while (C.canStageStretch(appt, next, _board).ok) {
+      last = next;
+      next += C.STRETCH_STEP_MINUTES;
+      if (next - keep > 240) break;
+    }
+    return last;
+  }
+
+  function paintStretchPreview(tile, liveDur, previewDur) {
+    if (!tile) return;
+    var live = tile.querySelector('.ms-aoc-stretch-live');
+    var extra = Math.max(0, previewDur - liveDur);
+    var steps = extra / C.STRETCH_STEP_MINUTES;
+    tile.style.minHeight = 72 + steps * 28 + 'px';
+    tile.style.transition = 'min-height 90ms ease-out';
+    if (live) {
+      live.hidden = previewDur <= liveDur;
+      live.textContent = previewDur + ' min';
+    }
   }
 
   function stageFromDrop(apptId, target) {
@@ -668,7 +704,7 @@
       return;
     }
     _pending = null;
-    announce('Board written.');
+    announce('Written to Medicus. Review staged is empty because that action already went.');
     render();
   }
 
@@ -727,8 +763,8 @@
       _sick = { step: 'leftovers', proposal: _sick.proposal };
       announce(
         leftovers.length
-          ? 'Staged accepted sick-day moves. ' + leftovers.length + ' still need a phone call. Finalise when ready.'
-          : 'Staged accepted sick-day moves. Nobody left to phone. Finalise when ready.'
+          ? 'Staged accepted sick-day moves. ' + leftovers.length + ' still need a phone call. Review staged when ready.'
+          : 'Staged accepted sick-day moves. Nobody left to phone. Review staged when ready.'
       );
       render();
     });
@@ -846,20 +882,33 @@
         e.preventDefault();
         e.stopPropagation();
         var id = handle.getAttribute('data-stretch-handle');
+        var appt = C.findAppointment(_board, id);
+        if (!appt) return;
+        var tile = handle.closest('.ms-aoc-tile');
+        var liveDur = Number(appt.duration) || 0;
+        var cap = maxStretchDuration(appt);
         var startY = e.clientY;
-        function onMove(ev) {
-          if (ev.clientY - startY < 8) return;
+        var preview = liveDur;
+        function stepsFromDelta(delta) {
+          if (delta < 10) return 0;
+          return Math.max(1, Math.round(delta / 28));
         }
-        function onUp(ev) {
+        function onMove(ev) {
+          var steps = stepsFromDelta(ev.clientY - startY);
+          preview = Math.min(cap, liveDur + steps * C.STRETCH_STEP_MINUTES);
+          if (preview > liveDur && !C.canStageStretch(appt, preview, _board).ok) {
+            preview = liveDur;
+          }
+          paintStretchPreview(tile, liveDur, preview);
+        }
+        function onUp() {
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
-          var delta = ev.clientY - startY;
-          if (delta < 12) {
-            tryStretch(id, C.STRETCH_STEP_MINUTES);
+          if (preview <= liveDur) {
+            paintStretchPreview(tile, liveDur, liveDur);
             return;
           }
-          var steps = Math.max(1, Math.round(delta / 24));
-          tryStretch(id, steps * C.STRETCH_STEP_MINUTES);
+          tryStretchTo(id, preview);
         }
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
