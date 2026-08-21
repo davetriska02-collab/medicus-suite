@@ -49,6 +49,20 @@ console.log('\n--- queue Pharmacy First safety ---');
   check(matched.some((p) => p.id === 'urinary'), 'urinary-symptoms wording matches urinary');
   check(queuePharmacyFirstSafe(matched, gaps) === false, 'unanswered rf-male-child on a UTI row blocks the queue PF chip');
 }
+{
+  const text = 'Earache since yesterday.';
+  const matched = matchPathways(text, PATHWAYS);
+  const gaps = redFlagGaps(matched[0], text);
+  check(matched[0] && matched[0].id === 'earache', 'plain earache is the top match');
+  check(queuePharmacyFirstSafe(matched, gaps) === true, 'plain earache with no volunteered flag is PF-safe');
+}
+{
+  const text = 'Earache since yesterday, with some swelling behind the ear.';
+  const matched = matchPathways(text, PATHWAYS);
+  const gaps = redFlagGaps(matched[0], text);
+  check((gaps.flaggedInText || []).some((g) => (g.id || g) === 'rf-mastoid'), 'mastoid swelling is a volunteered 999 flag');
+  check(queuePharmacyFirstSafe(matched, gaps) === false, 'volunteered 999 flag withholds the queue PF chip');
+}
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
