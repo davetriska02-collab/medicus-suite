@@ -297,6 +297,26 @@
     return { date: date, columns: columns.filter(function (c) { return c.diaryId; }) };
   }
 
+  function filterBoardColumns(columns, opts) {
+    opts = opts || {};
+    var q = String(opts.q || '').trim().toLowerCase();
+    var site = String(opts.site || '').trim().toLowerCase();
+    var hideEmpty = !!opts.hideEmpty;
+    return (columns || []).filter(function (col) {
+      if (hideEmpty && !(col.appointments && col.appointments.length)) return false;
+      if (site) {
+        var sn = String(col.siteName || '').toLowerCase();
+        var sid = String(col.siteId || '').toLowerCase();
+        if (sn !== site && sid !== site) return false;
+      }
+      if (q) {
+        var hay = ((col.staffName || '') + ' ' + (col.siteName || '') + ' ' + hhmm(col.sessionStart || '')).toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+  }
+
   function allAppointments(board) {
     var out = [];
     ((board && board.columns) || []).forEach(function (col) {
@@ -1634,6 +1654,7 @@
     ARRIVED_LOCKED: ARRIVED_LOCKED,
     parseBookRoute: parseBookRoute,
     parseBoard: parseBoard,
+    filterBoardColumns: filterBoardColumns,
     allAppointments: allAppointments,
     findAppointment: findAppointment,
     isCancelled: isCancelled,

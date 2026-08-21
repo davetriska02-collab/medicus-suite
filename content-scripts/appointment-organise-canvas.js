@@ -42,6 +42,7 @@
   var _sick = null;
   var _booking = null;
   var _bookingWait = null;
+  var _colFilter = { q: '', hideEmpty: false, site: '' };
 
   function announce(text) {
     var live = document.querySelector('#' + OVERLAY_ID + ' .ms-aoc-live');
@@ -235,7 +236,7 @@
   function bodyHtml() {
     if (_loading) return '<div class="ms-aoc-msg" style="padding:16px">Reading the appointment book…</div>';
     var visual = visualBoard();
-    var cols = (visual.columns || [])
+    var cols = C.filterBoardColumns(visual.columns || [], _colFilter)
       .map(function (col) {
         var items = [];
         var seen = {};
@@ -294,6 +295,41 @@
     );
   }
 
+  function filterBarHtml() {
+    var sites = [];
+    ((_board && _board.columns) || []).forEach(function (col) {
+      var name = col.siteName || '';
+      if (name && sites.indexOf(name) === -1) sites.push(name);
+    });
+    var siteOpts = sites
+      .map(function (s) {
+        return (
+          '<option value="' +
+          esc(s) +
+          '"' +
+          (_colFilter.site === s ? ' selected' : '') +
+          '>' +
+          esc(s) +
+          '</option>'
+        );
+      })
+      .join('');
+    return (
+      '<div class="ms-aoc-filterbar">' +
+      '<input type="search" class="ms-aoc-filter-q" id="ms-aoc-filter-q" placeholder="Filter lists (name, site, time)" value="' +
+      esc(_colFilter.q || '') +
+      '">' +
+      '<select class="ms-aoc-filter-site" id="ms-aoc-filter-site">' +
+      '<option value="">All sites</option>' +
+      siteOpts +
+      '</select>' +
+      '<label class="ms-aoc-filter-empty"><input type="checkbox" id="ms-aoc-filter-empty"' +
+      (_colFilter.hideEmpty ? ' checked' : '') +
+      '> Hide empty lists</label>' +
+      '</div>'
+    );
+  }
+
   function render() {
     if (!_open) return;
     var root = document.getElementById(OVERLAY_ID);
@@ -309,6 +345,7 @@
       '</h2>' +
       '<button type="button" class="ms-aoc-close" id="ms-aoc-close">Close</button>' +
       '</header>' +
+      filterBarHtml() +
       '<div class="ms-aoc-explainer">' +
       'Drag a patient onto a <strong>free slot</strong> (same diary or another) to stage a move, or onto <strong>Cancel</strong>. ' +
       'Stretch with <strong>+15 min</strong> or the bottom handle only when the following slot is free. ' +
@@ -528,7 +565,9 @@
   function tryStretch(apptId, extraMinutes) {
     var appt = C.findAppointment(_board, apptId);
     if (!appt) return;
-    var next = (appt.duration || 0) + Number(extraMinutes);
+    var staged = _draft.stretches && _draft.stretches[apptId];
+    var from = staged && Number(staged.duration) ? Number(staged.duration) : appt.duration || 0;
+    var next = from + Number(extraMinutes);
     var gate = C.canStageStretch(appt, next, _board);
     if (!gate.ok) {
       _error = gate.reason;
@@ -640,6 +679,34 @@
     root.querySelector('#ms-aoc-close')?.addEventListener('click', function () {
       requestClose();
     });
+    var fq = root.querySelector('#ms-aoc-filter-q');
+    if (fq) {
+      fq.addEventListener('input', function () {
+        _colFilter.q = fq.value;
+        render();
+        var again = document.querySelector('#ms-aoc-filter-q');
+        if (again) {
+          again.focus();
+          try {
+            again.setSelectionRange(again.value.length, again.value.length);
+          } catch (e) {}
+        }
+      });
+    }
+    var fs = root.querySelector('#ms-aoc-filter-site');
+    if (fs) {
+      fs.addEventListener('change', function () {
+        _colFilter.site = fs.value;
+        render();
+      });
+    }
+    var fe = root.querySelector('#ms-aoc-filter-empty');
+    if (fe) {
+      fe.addEventListener('change', function () {
+        _colFilter.hideEmpty = fe.checked;
+        render();
+      });
+    }
     root.querySelector('#ms-aoc-error-dismiss')?.addEventListener('click', function () {
       _error = null;
       render();
@@ -892,6 +959,33 @@
     loadBoard();
   }
 
+  function placeLauncher(launch) {
+    if (!launch) return;
+    var actions = null;
+    var buttons = document.querySelectorAll('button');
+    for (var i = 0; i < buttons.length; i++) {
+      var t = String(buttons[i].textContent || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (t === 'Open Actions') {
+        actions = buttons[i];
+        break;
+      }
+    }
+    launch.style.position = 'fixed';
+    launch.style.right = 'auto';
+    if (!actions) {
+      launch.style.top = '12px';
+      launch.style.left = 'auto';
+      launch.style.right = '140px';
+      return;
+    }
+    var r = actions.getBoundingClientRect();
+    var w = launch.offsetWidth || 168;
+    launch.style.top = Math.max(8, Math.round(r.top + (r.height - 28) / 2)) + 'px';
+    launch.style.left = Math.max(8, Math.round(r.left - w - 8)) + 'px';
+  }
+
   function ensureLauncher() {
     var route = currentRoute();
     var launch = document.getElementById(LAUNCH_ID);
@@ -901,17 +995,19 @@
       return;
     }
     _route = route;
-    if (launch) return;
-    launch = document.createElement('button');
-    launch.type = 'button';
-    launch.id = LAUNCH_ID;
-    launch.textContent = 'Organise on canvas…';
-    launch.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      openOverlay();
-    });
-    document.documentElement.appendChild(launch);
+    if (!launch) {
+      launch = document.createElement('button');
+      launch.type = 'button';
+      launch.id = LAUNCH_ID;
+      launch.textContent = 'Organise on canvas…';
+      launch.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openOverlay();
+      });
+      document.documentElement.appendChild(launch);
+    }
+    placeLauncher(launch);
   }
 
   document.addEventListener(

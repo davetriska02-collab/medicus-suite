@@ -255,6 +255,10 @@ console.log('=== 1. route + board parse ===');
   const unassigned = board.columns.find((c) => c.staffName === 'Unassigned');
   check(!!unassigned && unassigned.slots.length === 1, 'empty diary gets a synthetic drop slot');
   check(unassigned.slots[0].startDateTime === '2026-08-23 11:00:00', 'synthetic slot uses session start');
+  const noEmpty = core.filterBoardColumns(board.columns, { hideEmpty: true });
+  check(noEmpty.length === 1 && noEmpty[0].staffName !== 'Unassigned', 'hide empty drops lists with no bookings');
+  const named = core.filterBoardColumns(board.columns, { q: 'unassigned' });
+  check(named.length === 1 && named[0].staffName === 'Unassigned', 'name filter matches Unassigned');
 }
 
 {
