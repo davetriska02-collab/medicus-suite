@@ -327,21 +327,6 @@ const ALLOWLIST = new Set([
   // sweep.handout exactly — see side-panel/modules/sweep/sweep.js):
   'sweep.worklist',
 
-  // Practice's own £-per-QOF-point figure (manager £ projection — explicitly
-  // non-clinical arithmetic; no national default exists in this repo on
-  // purpose, see sweep-core.js qofPoundsValue). Unlike the transient keys
-  // above, this genuinely IS user config, not PHI or session state — in
-  // principle it should ride a real shared/io/sweep-io.js the way
-  // condor.indexConfig rides condor-io.js (see shared/io/condor-io.js), so a
-  // practice's figure survives a suite backup/restore. Sweep has no io file
-  // today (its other keys are all transient/PHI and were never meant to be
-  // backed up), and this change's scope was restricted to the sweep module +
-  // test files, not options.js/options.html/suite-envelope.js. Allowlisted
-  // for now; a follow-up should add shared/io/sweep-io.js (covering just this
-  // key) and wire it into doFullExport()/applyEnvelope()/previewEnvelope(),
-  // then remove this entry:
-  'sweep.qofConfig',
-
   // Per-machine first-run onboarding state — dismissed/skipped flags.
   // Not user config; deliberately excluded from backups so a restore onto a
   // new machine still offers the setup checklist. Mirrors suite.tour.seenVersion

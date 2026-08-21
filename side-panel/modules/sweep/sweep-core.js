@@ -157,10 +157,11 @@ export function extractBookedPatients(raw, opts) {
       }
     }
 
-    const sources = p ? [p, entry] : [entry];
-    for (const obj of sources) {
-      if (!obj || typeof obj !== 'object') continue;
-      for (const val of Object.values(obj)) {
+    // Scan string values on the patient object only (e.g. a /patient/{uuid}
+    // link). NEVER scrape the diary entry — entry.id is the appointment
+    // UUID and treating it as a patient is a wrong-patient hazard.
+    if (p && typeof p === 'object') {
+      for (const val of Object.values(p)) {
         if (typeof val === 'string') {
           const m = val.match(UUID_RE);
           if (m) return m[1].toLowerCase();

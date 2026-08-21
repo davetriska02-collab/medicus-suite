@@ -54,10 +54,13 @@ async function runTests() {
     .href;
 
   let buildSmrPack;
+  let smrPackMatchesRequest;
   try {
     const mod = await import(modPath);
     buildSmrPack = mod.buildSmrPack;
+    smrPackMatchesRequest = mod.smrPackMatchesRequest;
     check(typeof buildSmrPack === 'function', 'buildSmrPack imported');
+    check(typeof smrPackMatchesRequest === 'function', 'smrPackMatchesRequest imported');
   } catch (e) {
     console.error('FATAL: could not import smr-pack-core.js:', e.message);
     process.exitCode = 1;
@@ -315,6 +318,12 @@ async function runTests() {
     'Coded live snapshot, not the complete record. Excludes allergies, immunisations and free-text history. ' +
     'Verify against the patient record before any prescribing decision.';
   check(full.caveat === expectedCaveat, `caveat matches verbatim wording (got: "${full.caveat}")`);
+
+  // ── 13. SMR pack nonce (wrong-patient fail-closed) ────────────────────────
+  console.log('\n--- pack nonce ---');
+  check(smrPackMatchesRequest({ patient: { name: 'A' }, packId: 'one' }, 'one') === true, 'matching packId accepted');
+  check(smrPackMatchesRequest({ patient: { name: 'A' }, packId: 'one' }, 'two') === false, 'mismatched packId rejected');
+  check(smrPackMatchesRequest({ patient: { name: 'A' } }, 'one') === false, 'missing packId rejected');
 
   // ── Results ───────────────────────────────────────────────────────────────
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);

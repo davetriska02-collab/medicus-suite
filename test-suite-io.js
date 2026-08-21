@@ -14,6 +14,7 @@ const subIo = require('./shared/io/submissions-io.js');
 const suiteIo = require('./shared/io/suite-io.js');
 const referralsIo = require('./shared/io/referrals-io.js');
 const rotaIo = require('./shared/io/rota-io.js');
+const sweepIo = require('./shared/io/sweep-io.js');
 
 let passed = 0;
 let failed = 0;
@@ -604,7 +605,7 @@ console.log('\n--- applyWithRollback rollback ---');
   assert(Object.prototype.hasOwnProperty.call(subExp, 'config'), 'submissions export still contains config');
   assert(Object.prototype.hasOwnProperty.call(subExp, 'thresholds'), 'submissions export still contains thresholds');
 
-  // Legacy import: a payload WITH practiceCode (e.g. old standalone backup) is still applied
+  // A submissions-scoped payload must not write suite.practiceCode.
   const subStoreLegacy = {};
   global.chrome = {
     storage: {
@@ -625,8 +626,8 @@ console.log('\n--- applyWithRollback rollback ---');
   };
   await subIo.submissionsImport({ practiceCode: 'legacy1' });
   assert(
-    subStoreLegacy['suite.practiceCode'] === 'legacy1',
-    'submissionsImport: legacy payload with practiceCode still applied'
+    subStoreLegacy['suite.practiceCode'] === undefined,
+    'submissionsImport: must not write suite.practiceCode from a submissions payload'
   );
 
   global.chrome = origChrome;
@@ -807,6 +808,7 @@ console.log('\n--- applyWithRollback rollback ---');
       stored.length === 1 && stored[0].id === 'custom-b12-ferritin-1',
       'sentinelImport: resilient mode imports the valid custom rule despite an invalid sibling'
     );
+    assert(stored[0].enabled === false, 'sentinelImport: imported custom rules start disabled');
     assert(
       res &&
         Array.isArray(res.rejectedCustomRules) &&
@@ -998,6 +1000,74 @@ console.log('\n--- applyWithRollback rollback ---');
     );
 
     global.chrome = savedChrome3;
+  }
+
+  // ── Sweep £/QOF-point config round-trip (was allowlisted, so restore dropped it)
+  {
+    const sweepStore = {};
+    const savedChrome4 = global.chrome;
+    global.chrome = {
+      storage: {
+        local: {
+          async get(keys) {
+            const ks = Array.isArray(keys) ? keys : typeof keys === 'string' ? [keys] : Object.keys(keys || {});
+            const out = {};
+            ks.forEach((k) => {
+              if (k in sweepStore) out[k] = sweepStore[k];
+            });
+            return out;
+          },
+          async set(obj) {
+            Object.assign(sweepStore, obj);
+          },
+          async remove(key) {
+            delete sweepStore[key];
+          },
+        },
+      },
+    };
+
+    sweepStore['sweep.qofConfig'] = { poundsPerPoint: 220.5 };
+    const exported = await sweepIo.sweepExport();
+    assert(exported.qofConfig && exported.qofConfig.poundsPerPoint === 220.5, 'sweepExport: captures poundsPerPoint');
+
+    delete sweepStore['sweep.qofConfig'];
+    await sweepIo.sweepImport(exported);
+    assert(sweepStore['sweep.qofConfig'].poundsPerPoint === 220.5, 'sweepImport: restores poundsPerPoint');
+
+    let threw = false;
+    try {
+      await sweepIo.sweepImport({ qofConfig: { poundsPerPoint: -1 } });
+    } catch (_) {
+      threw = true;
+    }
+    assert(threw, 'sweepImport: rejects non-positive poundsPerPoint');
+
+    assert(suiteEnv.VALID_SCOPES.includes('sweep'), 'suite-envelope: sweep is a valid scope');
+    const sweepLines = suiteEnv.previewEnvelope(suiteEnv.wrap('sweep', { sweep: exported }));
+    assert(
+      sweepLines.some((l) => /Sweep: £220\.5 per QOF point/.test(l)),
+      'previewEnvelope: summarises sweep £/point'
+    );
+
+    global.chrome = savedChrome4;
+  }
+
+  // ── applyEnvelope honours envelope.scope (source lock) ────────────────────────
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const optionsSrc = fs.readFileSync(path.join(__dirname, 'options', 'options.js'), 'utf8');
+    const applyFn = optionsSrc.match(/async function applyEnvelope\(envelope\) \{[\s\S]*?\n\}/);
+    assert(!!applyFn, 'applyEnvelope extracted from options.js');
+    assert(
+      applyFn && /const allow = \(name\) => !scope \|\| scope === 'suite' \|\| scope === name;/.test(applyFn[0]),
+      'applyEnvelope only imports modules matching envelope.scope'
+    );
+    assert(
+      applyFn && /allow\('sentinel'\) && mods\.sentinel/.test(applyFn[0]) && /allow\('suite'\) && mods\.suite/.test(applyFn[0]),
+      'applyEnvelope gates sentinel and suite imports on scope'
+    );
   }
 
   // ── Summary ───────────────────────────────────────────────────────────────────

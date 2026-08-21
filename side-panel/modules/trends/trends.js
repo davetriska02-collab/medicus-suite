@@ -4,6 +4,7 @@ import { lineChart, esc, fmtDate, parseBp, bpTarget } from '../shared/trend-char
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
 import { downloadCsv } from '../shared/export-util.js';
 import { getTxnBundleIfEnabled, feedSourceLabel } from '../../../shared/panel-txn-feed.js';
+import { chooseMedicusTab, isPopOutPath } from '../../../shared/medicus-tab-choice.js';
 
 // ── Transactional feed integration (v3.165.0+) ──────────────────────────────
 //
@@ -124,6 +125,8 @@ let pollTimer = null;
 let onRuntimeMsg = null;
 let selectedView = 'bp'; // 'bp' | 'renal' | 'hba1c' | 'chol' | 'weight'
 let lastData = null;
+let _refreshGen = 0;
+let _lastTabId = null;
 
 export async function init(el) {
   container = el;
@@ -157,13 +160,43 @@ export function cleanup() {
   }
   container = null;
   lastData = null;
+  _lastTabId = null;
+  _refreshGen += 1;
+}
+
+async function findMedicusTab() {
+  const active = await chrome.tabs.query({ active: true, currentWindow: true });
+  let lastTab = null;
+  if (_lastTabId != null) {
+    try {
+      lastTab = await chrome.tabs.get(_lastTabId);
+    } catch (_) {
+      lastTab = null;
+    }
+  }
+  let isPopOut = false;
+  try {
+    isPopOut = isPopOutPath(location.pathname);
+  } catch (_) {
+    isPopOut = false;
+  }
+  const any = isPopOut ? await chrome.tabs.query({ url: 'https://*.medicus.health/*' }) : [];
+  const { tab } = chooseMedicusTab({
+    activeTab: active[0],
+    lastTab,
+    anyMedicusTabs: any,
+    isPopOut,
+  });
+  return tab || null;
 }
 
 async function refresh() {
   if (!container) return;
+  const gen = ++_refreshGen;
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = await findMedicusTab();
     if (!tab?.url || !/medicus\.health/.test(tab.url)) {
+      if (gen !== _refreshGen) return;
       lastData = null;
       render({ state: 'no-medicus' });
       return;
@@ -174,14 +207,19 @@ async function refresh() {
         else res(r);
       });
     }).catch(() => null);
+    if (gen !== _refreshGen) return;
     if (!sessionData) {
       lastData = null;
       render({ state: 'no-data' });
       return;
     }
-    lastData = await resolveTrendData(sessionData);
+    const resolved = await resolveTrendData(sessionData);
+    if (gen !== _refreshGen) return;
+    _lastTabId = tab.id;
+    lastData = resolved;
     render({ state: 'ok' });
   } catch (_) {
+    if (gen !== _refreshGen) return;
     render({ state: 'no-data' });
   }
 }

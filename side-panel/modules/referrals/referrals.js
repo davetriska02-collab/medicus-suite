@@ -65,6 +65,8 @@ let state = {
   // null when none is open.
   letterhead: {},
   chaseDraftId: null,
+  // Incomplete 2WW rows from a 12-month lookback (chart range is often MTD).
+  safetyNetRaw: [],
 };
 
 function resolveStored(stored) {
@@ -86,6 +88,38 @@ function resolveStored(stored) {
 function getSearchFilteredRawRows() {
   if (!Array.isArray(state.rawReferrals)) return state.rawReferrals;
   return applyReferralFilters(state.rawReferrals, {
+    patientName: state.patientNameFilter,
+    clinician: state.clinicianDropdownFilter,
+  });
+}
+
+function safetyNetLookbackStartISO() {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 12);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function mergeReferralRows(a, b) {
+  const seen = new Set();
+  const out = [];
+  for (const r of [...(a || []), ...(b || [])]) {
+    if (!r) continue;
+    const id =
+      r.referralId ||
+      r.id ||
+      [r.patientFamilyName, r.patientGivenName, r.referralDate, r.priority, r.referralService].join('|');
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(r);
+  }
+  return out;
+}
+
+function getSafetyNetSourceRows() {
+  const lookback = Array.isArray(state.safetyNetRaw) ? state.safetyNetRaw : [];
+  const chart = Array.isArray(state.rawReferrals) ? state.rawReferrals : [];
+  return applyReferralFilters(mergeReferralRows(chart, lookback), {
     patientName: state.patientNameFilter,
     clinician: state.clinicianDropdownFilter,
   });
@@ -252,7 +286,12 @@ export async function init(el) {
 
   const onChange = (ch) => {
     if (ch['suite.practiceCode']) {
-      fetchAndRender();
+      chrome.storage.local.remove([DISCOVERY_KEY, CONFIG_KEY]).then(() => {
+        state.discoveryUrl = null;
+        state.configUrl = null;
+        state.safetyNetRaw = [];
+        fetchAndRender();
+      });
       return;
     }
     if (ch[LETTERHEAD_KEY]) {
@@ -326,7 +365,7 @@ async function fetchAndRender() {
         })
       : Promise.reject(new Error('Activity module not loaded'));
 
-    const [refResult, actResult] = await Promise.allSettled([
+    const [refResult, actResult, snResult] = await Promise.allSettled([
       api.fetchReferrals(code, state.startDate, state.endDate, {
         templateUrl: state.discoveryUrl,
         onProgress: (loaded, total) => {
@@ -343,11 +382,28 @@ async function fetchAndRender() {
           }),
       }),
       actFetch,
+      state.startDate && state.startDate <= safetyNetLookbackStartISO()
+        ? Promise.resolve({ referrals: [] })
+        : api.fetchReferrals(code, safetyNetLookbackStartISO(), state.endDate || safetyNetLookbackStartISO(), {
+            templateUrl: state.discoveryUrl,
+            fetch: (url, init) =>
+              window.ApiDiag.fetch({
+                module: 'referrals-safetynet',
+                url,
+                code: code || '(auto)',
+                codeSource: source || 'tab',
+                init,
+              }),
+          }).catch(() => ({ referrals: [] })),
     ]);
 
     if (refResult.status === 'fulfilled') {
       const result = refResult.value;
       state.rawReferrals = result.referrals;
+      state.safetyNetRaw =
+        snResult && snResult.status === 'fulfilled' && Array.isArray(snResult.value?.referrals)
+          ? snResult.value.referrals
+          : [];
       state.totalCount = result.totalCount;
       state.aggregated = api.aggregate(result.referrals);
       state.lastFetched = new Date();
@@ -622,7 +678,7 @@ function renderDiagnostics() {
 function renderSafetyNet() {
   const api = ApiNs();
   if (!api || !api.buildSafetyNet || !Array.isArray(state.rawReferrals)) return '';
-  const sn = api.buildSafetyNet(getSearchFilteredRawRows(), {});
+  const sn = api.buildSafetyNet(getSafetyNetSourceRows(), {});
   if (!sn.rows.length) return '';
 
   const rowsHtml = sn.rows

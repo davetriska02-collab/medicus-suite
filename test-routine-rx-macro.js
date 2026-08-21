@@ -611,7 +611,7 @@ function makeSandbox(rootEl, pathname) {
       'happy path: confirm dialog names the destination team'
     );
     check(
-      TOASTS.some((t) => t.kind === 'ok' && /Sent to/.test(t.msg)),
+      TOASTS.some((t) => t.kind === 'ok' && /Clicked Send/.test(t.msg)),
       'happy path: a success toast is shown after commit'
     );
   }
@@ -663,7 +663,7 @@ function makeSandbox(rootEl, pathname) {
     );
     check(assign.value === teamName, 'full-name fallback: the full team name was typed on the fallback query');
     check(
-      TOASTS.some((t) => t.kind === 'ok' && /Sent to/.test(t.msg)),
+      TOASTS.some((t) => t.kind === 'ok' && /Clicked Send/.test(t.msg)),
       'full-name fallback: a success toast is shown'
     );
   }
@@ -733,7 +733,7 @@ function makeSandbox(rootEl, pathname) {
     check(CLICKS.indexOf('CommitBtn') !== -1, 'auto mode: commit IS clicked');
     check(!confirmCalled, 'auto mode: window.confirm is never invoked');
     check(
-      TOASTS.some((t) => t.kind === 'ok' && /Sent to/.test(t.msg)),
+      TOASTS.some((t) => t.kind === 'ok' && /Clicked Send/.test(t.msg)),
       'auto mode: a success toast is shown'
     );
   }

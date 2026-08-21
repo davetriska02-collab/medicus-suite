@@ -220,4 +220,26 @@ describe('buildRecordSummaryText', async () => {
     const text = buildRecordSummaryText(FIXTURE_MODEL, null, FIXTURE_STAMP);
     assert.ok(text.includes('NHS 900 000 000'), 'Expected formatted NHS number with spaces');
   });
+
+  it('does not claim allergies "not shown" when the feed retrieved them', () => {
+    const model = {
+      ...FIXTURE_MODEL,
+      allergiesRetrieved: true,
+      allergies: [{ label: 'Penicillin' }],
+    };
+    const text = buildRecordSummaryText(model, null, FIXTURE_STAMP);
+    assert.ok(!text.includes('Allergies & adverse reactions — not shown'), 'Must not contradict on-screen allergy data');
+    assert.ok(text.includes('Penicillin'), 'Retrieved allergy must appear in the copy');
+  });
+
+  it('retrieved-empty allergies stay explicit (not silent, not "not shown")', () => {
+    const model = {
+      ...FIXTURE_MODEL,
+      allergiesRetrieved: true,
+      allergies: [],
+    };
+    const text = buildRecordSummaryText(model, null, FIXTURE_STAMP);
+    assert.ok(!text.includes('Allergies & adverse reactions — not shown'), 'Retrieved-empty is not "not shown"');
+    assert.ok(/none recorded here/.test(text), 'Retrieved-empty must still be an explicit line');
+  });
 });

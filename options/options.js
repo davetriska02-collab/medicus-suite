@@ -857,6 +857,7 @@ async function doFullExport() {
     problemDescriptionCleanup,
     phrases,
     rota,
+    sweep,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -877,6 +878,7 @@ async function doFullExport() {
     problemDescriptionCleanupExport(),
     phrasesExport(),
     rotaExport(),
+    sweepExport(),
   ]);
   const suite = await suiteExport();
   return window.SuiteEnvelope.wrap(
@@ -901,6 +903,7 @@ async function doFullExport() {
       problemDescriptionCleanup,
       phrases,
       rota,
+      sweep,
       suite,
     },
     chrome.runtime.getManifest().version
@@ -928,6 +931,7 @@ async function doModuleExport(scope) {
     problemDescriptionCleanup: () => problemDescriptionCleanupExport(),
     phrases: () => phrasesExport(),
     rota: () => rotaExport(),
+    sweep: () => sweepExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -939,11 +943,14 @@ async function doModuleExport(scope) {
 async function applyEnvelope(envelope) {
   const mods = envelope.modules || {};
   const notes = [];
+  const scope = envelope.scope;
+  const allow = (name) => !scope || scope === 'suite' || scope === name;
   // Build task list in the same order as doFullExport to make auditing straightforward.
   // Only include modules that are present in this backup (same mods.X && gating).
+  // A per-module envelope must not restore other modules' keys (scope bypass).
   // applyWithRollback runs them sequentially; if any throws, all writes are rolled back.
   const tasks = [
-    mods.sentinel &&
+    allow('sentinel') && mods.sentinel &&
       (async () => {
         const res = await sentinelImport(mods.sentinel, { skipInvalidCustomRules: true });
         if (res && res.rejectedCustomRules && res.rejectedCustomRules.length) {
@@ -951,25 +958,28 @@ async function applyEnvelope(envelope) {
           notes.push(`${res.rejectedCustomRules.length} custom rule(s) skipped as invalid: ${ids}`);
         }
       }),
-    mods.capacity && (() => capacityImport(mods.capacity)),
-    mods.triage && (() => triageImport(mods.triage)),
-    mods.triageAlerts && (() => TriageAlertIO.importData(mods.triageAlerts)),
-    mods.slots && (() => slotCounterImport(mods.slots)),
-    mods.submissions && (() => submissionsImport(mods.submissions)),
-    mods.popout && (() => popoutImport(mods.popout)),
-    mods.referrals && (() => referralsImport(mods.referrals)),
-    mods.requestMonitor && (() => requestMonitorImport(mods.requestMonitor)),
-    mods.condor && (() => condorImport(mods.condor)),
-    mods.reception && (() => receptionImport(mods.reception)),
-    mods.knowledge && (() => knowledgeImport(mods.knowledge)),
-    mods.labfiling && (() => labfilingImport(mods.labfiling)),
-    mods.notifications && (() => notificationsImport(mods.notifications)),
-    mods.leaflets && (() => leafletsImport(mods.leaflets)),
-    mods.patientAlerts && (() => patientAlertsImport(mods.patientAlerts)),
-    mods.problemDescriptionCleanup && (() => problemDescriptionCleanupImport(mods.problemDescriptionCleanup)),
-    mods.phrases && (() => phrasesImport(mods.phrases)),
-    mods.rota && (() => rotaImport(mods.rota)),
-    mods.suite && (() => suiteImport(mods.suite)),
+    allow('capacity') && mods.capacity && (() => capacityImport(mods.capacity)),
+    allow('triage') && mods.triage && (() => triageImport(mods.triage)),
+    allow('triageAlerts') && mods.triageAlerts && (() => TriageAlertIO.importData(mods.triageAlerts)),
+    allow('slots') && mods.slots && (() => slotCounterImport(mods.slots)),
+    allow('submissions') && mods.submissions && (() => submissionsImport(mods.submissions)),
+    allow('popout') && mods.popout && (() => popoutImport(mods.popout)),
+    allow('referrals') && mods.referrals && (() => referralsImport(mods.referrals)),
+    allow('requestMonitor') && mods.requestMonitor && (() => requestMonitorImport(mods.requestMonitor)),
+    allow('condor') && mods.condor && (() => condorImport(mods.condor)),
+    allow('reception') && mods.reception && (() => receptionImport(mods.reception)),
+    allow('knowledge') && mods.knowledge && (() => knowledgeImport(mods.knowledge)),
+    allow('labfiling') && mods.labfiling && (() => labfilingImport(mods.labfiling)),
+    allow('notifications') && mods.notifications && (() => notificationsImport(mods.notifications)),
+    allow('leaflets') && mods.leaflets && (() => leafletsImport(mods.leaflets)),
+    allow('patientAlerts') && mods.patientAlerts && (() => patientAlertsImport(mods.patientAlerts)),
+    allow('problemDescriptionCleanup') &&
+      mods.problemDescriptionCleanup &&
+      (() => problemDescriptionCleanupImport(mods.problemDescriptionCleanup)),
+    allow('phrases') && mods.phrases && (() => phrasesImport(mods.phrases)),
+    allow('rota') && mods.rota && (() => rotaImport(mods.rota)),
+    allow('sweep') && mods.sweep && (() => sweepImport(mods.sweep)),
+    allow('suite') && mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
   return { notes };
@@ -1160,7 +1170,7 @@ async function acceptForPractice() {
   });
 }
 async function withdrawPracticeAcceptance() {
-  await chrome.storage.local.remove('suite.practiceAcceptedAt');
+  await chrome.storage.local.remove(['suite.practiceAcceptedAt', 'sentinel.alertLibrary.acknowledged']);
 }
 async function isPracticeAccepted() {
   try {
@@ -3108,6 +3118,13 @@ initPdcTallySection({
           red:
             parseInt(grid.querySelector(`[data-key="${key}"][data-field="red"]`)?.value) || DEFAULT_THRESHOLDS[key].red,
         };
+        if (out[key].red < out[key].amber) {
+          if (status) {
+            status.textContent = 'Red must be at least amber.';
+            status.style.display = '';
+          }
+          return;
+        }
       }
       await chrome.storage.local.set({ 'submissions.thresholds': out });
       if (status) {

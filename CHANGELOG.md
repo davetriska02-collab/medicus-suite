@@ -2,6 +2,48 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.19] — 2026-08-21
+
+### Lint — parse `shared/medicus-tab-choice.js` as ESM
+
+The tab-choice helper shipped in v3.236.17 is an ES module. ESLint still treated `shared/` as classic script, so CI lint failed closed on `import`/`export`. Added to the existing shared-ESM allow-list in `eslint.config.mjs`.
+
+## [v3.236.18] — 2026-08-21
+
+### Bug bash — leftover fail-closed findings (CSO-conservative)
+
+The identity wave (v3.236.17) left the high-confidence, non-threshold leftovers. This cut ships those. Clinical numbers that need CSO sign-off (K+ Sentinel vs Queue bands, digoxin enable, CHOL004 LDL, calcium raw vs adjusted) are still untouched.
+
+- **Queue Pharmacy First** no longer first-match-wins on a male/ambiguous UTI. `cystitis` offers both urinary and gu-male; bare `breakdown` no longer routes a car breakdown to mental-health; the green chip is withheld if a clinician-only pathway also matched, if the male/child gate is unanswered, or if the request already volunteered an escalation. Reception capture uses the form's confirmed age, not the record age.
+- **Sentinel hide is patient-scoped** (`patientUuid|ruleId`). A hide without a live patient UUID is refused. Resurface uses clinical rank, so due_soon → stale comes back. The brief is not "all-clear" when the live extract is degraded, journal-failed, or has zero meds+obs+problems.
+- **Vaccine `effectiveFrom` is fail-closed.** RSV 65–74 clauses stay dark until 1 Sept 2026; flu/PPV homelessness until 1 Oct 2026.
+- **Visualiser ACB/STOPP** score the matched prescription terms, not class labels such as "Antipsychotic".
+- **Result triage** no longer treats an unclassified-positive (or unmatched-only) report as all-clear: a text rule that matched the analyte but not the phrase leaves the Part B net able to fire, and unmatched reports are amber.
+- **Patient Alerts and Trends** discard stale snapshot responses (`_refreshGen`). Trends uses the same tab-choice policy as Record. Today treats Sweep as "ran today" only on today's clinic date, and honours `slots.hiddenTypes`.
+- **Overview URL** injectors accept the live `/tasks/<slug>/overview/…` route and uppercase UUIDs. Routine-rx toast says "Clicked Send…" — it does not claim the list was sent.
+- **Referrals** drop discovery/config on a practice-code change, and the 2WW safety-net looks back 12 months even when the chart is MTD.
+- **Rota leave** charges a request that crosses 1 April against each leave year separately.
+- **Backup import** honours `envelope.scope` (a module backup cannot restore other modules). Custom Sentinel rules import disabled. Dangerous keys are stripped from more import objects. WR/submissions thresholds reject `red < amber`. Withdrawing practice acceptance also clears the alert-library acknowledgement. Submissions IO no longer writes `suite.practiceCode`.
+- **Service worker:** `txn:fetchPatientBundle` requires a UUID and either a Medicus tab whose URL contains that patient or an extension-page sender. Presence folder beats lock-on-first-write per tab (spoofed `staff_id`/`site` refused).
+- **A11y:** HUD chip text uses darker ink; demoted chips are no longer faded to 0.72; status/OIR/action chips have `:focus-visible`; HUD tiles, OIR badges and rule-id chips are keyboard-activable.
+
+## [v3.236.17] — 2026-08-21
+
+### Bug bash — Record identity, queue filter canary, Sweep backup
+
+Findings from a 24-agent review of the live surfaces, implemented as fail-closed guards:
+
+- **Record never copies the previous patient mid-reload.** Copy summary / SMR prep pack disable the moment a load starts, and a patient-UUID change clears `_lastModel` before the new fetch returns.
+- **Record no longer attaches to `chrome.tabs.query()[0]`.** When the focused tab is not Medicus, the docked panel keeps the last snapshot (or shows empty) instead of picking a random open Medicus tab. The pop-out fallback, when it must run, prefers the most recently accessed Medicus tab.
+- **SMR prep pack is nonce-bound.** Each open carries `?pack=` matching the storage payload; a second click before the first tab reads storage fails closed (empty page) instead of rendering the wrong patient.
+- **H-032 gap markers tell the truth when the transactional feed retrieved allergies/imms.** The live view and the copied summary no longer say "not shown" while allergy prompts sit on the same screen.
+- **Queue H6 canary now covers client-side filters** (`ag-header-cell-filtered`), the same wrong-row hazard as a client-side sort.
+- **`sweep.qofConfig` survives suite backup/restore** via `shared/io/sweep-io.js` (practice £-per-QOF-point only — worklists stay out of backups).
+- **Sweep no longer treats an appointment `entry.id` as the patient UUID** when `patient.id` is missing — that row is skipped and named.
+- **Patient Alerts, Record, and Reception pop-out share one tab-choice policy** (`shared/medicus-tab-choice.js`): the docked panel never attaches to `chrome.tabs.query()[0]`; pop-out fallback prefers the most recently accessed Medicus tab.
+- **Queue pulse Act tray and durable row map drop on a real queue change** (pathname) and on the H6 sort/filter canary, so a recycled `row-index` cannot keep the previous task's pathway or severity.
+- **Signing overview-patient cache is keyed by `apiBase` + overview URL**, so a mid-session site switch cannot reuse another practice's UUID.
+
 ## [v3.236.16] — 2026-08-21
 
 ### Queue pulse — design-crit pass (multi-critic review of the v3.236.4 cut)

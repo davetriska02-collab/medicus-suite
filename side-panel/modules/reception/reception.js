@@ -47,6 +47,7 @@ import {
 import { createBookingPanel } from '../shared/booking-panel.js';
 import { bookingGateState } from '../shared/booking-panel-core.js';
 import { createFirstAvailablePanel } from '../shared/first-available.js';
+import { chooseMedicusTab } from '../../../shared/medicus-tab-choice.js';
 
 // Canonical "no alert ≠ monitoring complete" caveat (shared/provenance.js,
 // loaded as a classic script in panel.html / pop-out.html). Fall back to the
@@ -486,7 +487,13 @@ async function findMedicusTab() {
   // so this fallback can never feed a booking.
   if (isPopOutContext()) {
     const any = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
-    return any[0] || null;
+    const { tab } = chooseMedicusTab({
+      activeTab: active[0],
+      lastTab: null,
+      anyMedicusTabs: any,
+      isPopOut: true,
+    });
+    return tab || null;
   }
   return null;
 }
@@ -1456,7 +1463,7 @@ function generateSummary(form, pathway) {
       nowIso: new Date().toISOString(),
       suiteVersion: chrome.runtime.getManifest?.().version || '',
       patientLine,
-      pharmacyFirstHint: pharmacyFirstHint(pathway, pc?.ageYears ?? null),
+      pharmacyFirstHint: pharmacyFirstHint(pathway, readConfirmedAge(form)),
       safeguardingContact: _config.safeguardingContact || '',
       crisisLine: _config.crisisLineText || '',
       // Re-evaluated here, not read off the last render: what goes in the

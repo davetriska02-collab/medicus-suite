@@ -33,27 +33,44 @@ function anyLeaveOn(leaveList, staffId, dateISO, statuses) {
 // How many sessions a date range costs a given staff member.
 // Rostered entries are the truth where they exist; otherwise fall back to
 // the working pattern.
-export function sessionsInRange(staffMember, startISO, endISO, entries, settings) {
+function sessionCostOnDate(staffMember, date, entries, settings, rangeStartISO) {
   const bankHolidays = settings.bankHolidays || [];
+  if (bankHolidays.includes(date)) return 0;
   let count = 0;
-  for (const date of datesInRange(startISO, endISO)) {
-    if (bankHolidays.includes(date)) continue; // closed days cost nothing
-    for (const period of periodsFor(settings)) {
-      const entry = entries.find(
-        (e) => e.staffId === staffMember.id && e.date === date && e.period === period && e.status !== 'cancelled'
-      );
-      if (entry) {
-        count += 1;
-        continue;
-      }
-      const pattern = staffMember.pattern || [];
-      if (!pattern.length) continue;
-      const anchor = settings.templateAnchorMonday || startISO;
-      const week = pattern[templateWeekIndex(anchor, date, pattern.length)];
-      if (week && week[dayKey(date)] && week[dayKey(date)][period]) count += 1;
+  for (const period of periodsFor(settings)) {
+    const entry = entries.find(
+      (e) => e.staffId === staffMember.id && e.date === date && e.period === period && e.status !== 'cancelled'
+    );
+    if (entry) {
+      count += 1;
+      continue;
     }
+    const pattern = staffMember.pattern || [];
+    if (!pattern.length) continue;
+    const anchor = settings.templateAnchorMonday || rangeStartISO || date;
+    const week = pattern[templateWeekIndex(anchor, date, pattern.length)];
+    if (week && week[dayKey(date)] && week[dayKey(date)][period]) count += 1;
   }
   return count;
+}
+
+export function sessionsInRange(staffMember, startISO, endISO, entries, settings) {
+  let count = 0;
+  for (const date of datesInRange(startISO, endISO)) {
+    count += sessionCostOnDate(staffMember, date, entries, settings, startISO);
+  }
+  return count;
+}
+
+export function sessionsByLeaveYear(staffMember, startISO, endISO, entries, settings) {
+  const byYear = {};
+  for (const date of datesInRange(startISO, endISO)) {
+    const cost = sessionCostOnDate(staffMember, date, entries, settings, startISO);
+    if (!cost) continue;
+    const ys = leaveYearStart(date);
+    byYear[ys] = (byYear[ys] || 0) + cost;
+  }
+  return byYear;
 }
 
 // Balance for a counted leave type (annual/study) in the leave year of asOf.
@@ -91,20 +108,19 @@ export function checkLeaveRequest(req, { staff, leaveList, entries, settings }) 
   if (!person) return { sessions: 0, warnings: [{ severity: 'high', message: 'Unknown staff member' }] };
 
   const sessions = sessionsInRange(person, req.startDate, req.endDate, entries, settings);
+  const byYear = sessionsByLeaveYear(person, req.startDate, req.endDate, entries, settings);
 
   const lt = leaveTypeById(req.type);
   if (lt && lt.counted) {
-    const bal = leaveBalance(
-      person,
-      leaveList.filter((l) => l.id !== req.id),
-      req.type,
-      req.startDate
-    );
-    if (sessions > bal.remaining) {
-      warnings.push({
-        severity: 'high',
-        message: `${person.name}: request costs ${sessions} sessions but only ${bal.remaining} of ${bal.entitled} ${lt.name.toLowerCase()} sessions remain this leave year`,
-      });
+    const others = leaveList.filter((l) => l.id !== req.id);
+    for (const [yearStart, yearSessions] of Object.entries(byYear)) {
+      const bal = leaveBalance(person, others, req.type, yearStart);
+      if (yearSessions > bal.remaining) {
+        warnings.push({
+          severity: 'high',
+          message: `${person.name}: request costs ${yearSessions} sessions in the ${yearStart} leave year but only ${bal.remaining} of ${bal.entitled} ${lt.name.toLowerCase()} sessions remain that year`,
+        });
+      }
     }
   }
 

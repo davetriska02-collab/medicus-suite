@@ -62,7 +62,12 @@ async function suiteImport(data) {
     if (typeof data.display !== 'object' || Array.isArray(data.display)) {
       throw new Error('suite.display must be an object.');
     }
-    toSet['suite.display'] = data.display;
+    const display = {};
+    for (const [k, v] of Object.entries(data.display)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      display[k] = v;
+    }
+    toSet['suite.display'] = display;
   }
   if (data.practiceCode != null) {
     if (typeof data.practiceCode !== 'string') throw new Error('suite.practiceCode must be a string.');
@@ -103,6 +108,9 @@ async function suiteImport(data) {
     if (typeof w !== 'object' || Array.isArray(w) || !Number.isFinite(w.amber) || !Number.isFinite(w.red)) {
       throw new Error('suite.waitingRoom.thresholds must be an object with numeric amber and red.');
     }
+    if (w.red < w.amber) {
+      throw new Error('suite.waitingRoom.thresholds: red must be at least amber.');
+    }
     toSet['suite.waitingRoom.thresholds'] = { amber: w.amber, red: w.red };
   }
   if (data.letterhead != null) {
@@ -128,6 +136,7 @@ async function suiteImport(data) {
     }
     const cleanAtt = {};
     for (const [gate, prov] of Object.entries(at)) {
+      if (gate === '__proto__' || gate === 'constructor' || gate === 'prototype') continue;
       if (!prov || typeof prov !== 'object' || Array.isArray(prov)) {
         throw new Error('suite.practiceProfile.attestations entries must be objects.');
       }

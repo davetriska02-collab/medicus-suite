@@ -62,12 +62,15 @@
   --green: #16a34a;
   --green-dim: rgba(22, 163, 74, 0.09);
   --green-line: rgba(22, 163, 74, 0.3);
+  --green-ink: #14532d;
   --amber: #b45309;
   --amber-dim: rgba(180, 83, 9, 0.09);
   --amber-line: rgba(180, 83, 9, 0.32);
+  --amber-ink: #7c2d12;
   --red: #dc2626;
   --red-dim: rgba(220, 38, 38, 0.08);
   --red-line: rgba(220, 38, 38, 0.3);
+  --red-ink: #991b1b;
   /* Shape */
   --r-sm: 4px;
   --r-md: 6px;
@@ -107,18 +110,22 @@
 /* Status chip triads — aligned to canon (heals mismatch vs sidebar chips) */
 .ch-chip-red {
   background: var(--red-dim);
-  color: var(--red);
+  color: var(--red-ink);
   border-color: var(--red-line);
 }
 .ch-chip-amber {
   background: var(--amber-dim);
-  color: var(--amber);
+  color: var(--amber-ink);
   border-color: var(--amber-line);
 }
 .ch-chip-green {
   background: var(--green-dim);
-  color: var(--green);
+  color: var(--green-ink);
   border-color: var(--green-line);
+}
+.ch-q-result .ch-chip:not(.ch-chip-meta):not(.ch-chip-info)::before {
+  content: '▲ ';
+  font-size: 9px;
 }
 .ch-chip-info {
   background: var(--accent-dim);
@@ -161,7 +168,6 @@
    `ch-chip ch-chip-red ch-chip-demoted`). */
 .ch-chip-demoted {
   background: transparent;
-  opacity: 0.72;
   border-style: dashed;
 }
 /* "Unit mismatch" chip (item 3.1, TRIAGE-LENS-2026-07-02.md) — shown when one or
@@ -850,6 +856,10 @@
 .ch-q-status-btn:hover:not(:disabled) {
   background: var(--accent-line);
 }
+.ch-q-status-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 .ch-q-status-btn:disabled {
   cursor: default;
   opacity: 0.45;
@@ -970,6 +980,11 @@
   background: var(--accent-hover);
   border-color: var(--accent-hover);
 }
+.ch-oir-bulk-btn:focus-visible,
+.ch-oir-clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* Auto-tick toast — informs of a machine-initiated OIR tick (content.js
    performOirAutoTick). Fixed bottom-right, ~15s auto-fade. The action is
@@ -1029,6 +1044,10 @@
 }
 .ch-oir-toast-btn:hover {
   background: var(--accent-line);
+}
+.ch-oir-toast-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* Review flash — pulses the auto-ticked row(s) when the toast's Review
@@ -1414,6 +1433,10 @@
   background: var(--bg-hover);
   border-color: var(--border-hi);
 }
+.ch-action-back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 .ch-action-menu-empty {
   padding: 10px;
   color: var(--text-5);
@@ -1465,6 +1488,10 @@
 }
 .ch-chip-actionable:hover {
   filter: brightness(0.96);
+}
+.ch-chip-actionable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .ch-chev {
   opacity: 0.55;
@@ -1668,7 +1695,8 @@
 }
 .ch-result-popover-line-above,
 .ch-result-popover-line-below {
-  color: var(--amber);
+  color: var(--amber-ink, var(--amber));
+  font-weight: 600;
 }
 /* Error variant — the grey "?" chip's explanation (fetch/eval failed, retries
    automatically). Grey like the .ch-chip-error family: informational, never

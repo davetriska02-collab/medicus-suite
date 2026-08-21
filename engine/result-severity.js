@@ -339,13 +339,12 @@
   //                  'red', otherwise 'amber' for a review outcome (null when the outcome is
   //                  not a review). Escalate-only — the caller lifts the report to red on a
   //                  red review, never lowers anything.
-  //   applied      — Part B support: true iff SOME text rule's analyte matched this result
-  //                  (even a lone-abnormalText rule that found no flag phrase, i.e. outcome
-  //                  'none' but the analyte WAS seen). The unclassified-positive fall-through
-  //                  pass (evaluateReportSeverity) uses this to leave alone any result a text
-  //                  rule already covers. A rule skipped by the context gate (item 3.5) is
-  //                  NOT "seen" — it counts as though its analyte never matched, so it can
-  //                  never mark `applied` true and can never block the unclassified fallback.
+  //   applied      — Part B support: true only when a text rule actually classified
+  //                  this result (review / noGrowth). A lone-abnormalText rule that
+  //                  matched the analyte but found no phrase leaves applied false so
+  //                  the unclassified-positive net can still fire ("Organism isolated"
+  //                  must not vanish just because a culture rule exists). A rule
+  //                  skipped by the context gate (item 3.5) is also not applied.
   //   `patientContext` (optional, item 3.5) — gates any rule carrying a `context` clause,
   //                  see contextAllows above. Fail closed when absent/insufficient.
   function computeTextOutcome(result, rules, patientContext) {
@@ -487,7 +486,10 @@
     // A normalText-driven review ("not clearly normal") is always amber — abnormalLevel:'red'
     // only ever escalates a POSITIVE abnormalText flag, never the calm-set-absent review.
     if (reviewLabel) return { outcome: 'review', label: reviewLabel, normalLabel: null, level: 'amber', applied: true };
-    return { outcome: 'none', label: null, normalLabel: null, level: null, applied: true };
+    // Analyte matched but no phrase classified this result — leave Part B
+    // unclassified-positive fall-through able to fire (a culture that says
+    // "Organism isolated" must not vanish just because a text rule exists).
+    return { outcome: 'none', label: null, normalLabel: null, level: null, applied: false };
   }
 
   // ── Patient-record suppression helper ─────────────────────────────────────────
@@ -1328,11 +1330,9 @@
         // Part B (item 3.2) — unclassified qualitative positive fall-through. Runs AFTER
         // rules, only for a result that: (1) has NO finite numeric value; (2) has NO lab
         // flag (isAbove/isBelow/urgent all false); and (3) was NOT classified by ANY text
-        // rule (textResult.applied is false — this is the "no double-count" guard: a
-        // result an authored text rule already covers, even one that matched the analyte
-        // but found no phrase, is left to that rule and never re-flagged here). Such a
-        // result scores 'none' today and disappears entirely; if its text carries a
-        // positive qualitative token past the negation guard, surface it amber.
+        // rule (textResult.applied is false). applied is true only when a rule actually
+        // classified (review / noGrowth); a bare analyte match that found no phrase
+        // leaves this net able to fire so "Organism isolated" cannot vanish.
         // Escalate-only, AMBER-MAX — never red (see matchUnclassifiedPositive header).
         if (!Number.isFinite(r.value) && !r.isAbove && !r.isBelow && !r.urgent && !(textResult && textResult.applied)) {
           const token = matchUnclassifiedPositive(r);
@@ -1373,9 +1373,10 @@
       let level;
       if (urgentCount > 0) {
         level = 'red';
-      } else if (abnormalCount > 0 || reviewCount > 0 || unclassified.length > 0) {
+      } else if (abnormalCount > 0 || reviewCount > 0 || unclassified.length > 0 || report.unmatched) {
         // review (unclassified culture) escalates to amber; noGrowth does not. Part B —
         // an unclassified qualitative positive also escalates to (at most) amber.
+        // Unmatched-only reports are a process alert, not "all clear".
         level = 'amber';
       } else {
         level = 'none';

@@ -63,7 +63,12 @@ async function submissionsImport(data, _opts = {}) {
     if (typeof data.config !== 'object' || Array.isArray(data.config)) {
       throw new Error('submissions.config must be an object.');
     }
-    toSet['submissions.config'] = data.config;
+    const cleanCfg = {};
+    for (const [k, v] of Object.entries(data.config)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      cleanCfg[k] = v;
+    }
+    toSet['submissions.config'] = cleanCfg;
   }
   if (data.thresholds != null) {
     if (typeof data.thresholds !== 'object' || Array.isArray(data.thresholds)) {
@@ -90,6 +95,11 @@ async function submissionsImport(data, _opts = {}) {
           `submissions.thresholds.${cat}.enabled must be a boolean (got ${JSON.stringify(entry.enabled)}).`
         );
       }
+      const amber = entry.amber;
+      const red = entry.red;
+      if (Number.isFinite(amber) && Number.isFinite(red) && red < amber) {
+        throw new Error(`submissions.thresholds.${cat}: red must be at least amber.`);
+      }
     }
     toSet['submissions.thresholds'] = data.thresholds;
   }
@@ -98,11 +108,8 @@ async function submissionsImport(data, _opts = {}) {
     if (clean === null) throw new Error('submissions.ledger must be an object with a days map.');
     toSet['submissions.ledger'] = clean;
   }
-  // Legacy-tolerated: standalone submissions backups carried practiceCode; owner is suite-io.
-  if (data.practiceCode != null) {
-    if (typeof data.practiceCode !== 'string') throw new Error('practiceCode must be a string.');
-    toSet['suite.practiceCode'] = data.practiceCode;
-  }
+  // practiceCode belongs to suite-io. A submissions-scoped backup must not
+  // write suite keys (that was a cross-module smuggle path).
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);
   }

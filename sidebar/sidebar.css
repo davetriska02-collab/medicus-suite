@@ -438,7 +438,7 @@
 .chip-in_date .chip-status,
 .chip-achieved .chip-status {
   background: var(--green-dim);
-  color: var(--green);
+  color: #14532d;
   border: 1px solid var(--green-line);
 }
 /* recently_initiated — accent triad */

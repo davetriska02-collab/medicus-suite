@@ -4487,8 +4487,10 @@ if (sandbox) {
     // unwell-child) as a gap — so ONE fixture exercises the PF chip, the
     // ask-back gaps, AND the flaggedInText escalation note together. Verified
     // directly against the real engine before writing these assertions.
+    const cleanText = 'Earache since yesterday.';
     const requestText = 'Earache since yesterday, with some swelling behind the ear.';
     const expectedGapIds = ['rf-meningism', 'rf-head-injury', 'rf-sudden-deaf', 'rf-facial-droop', 'rf-unwell-child'];
+    const cleanGapIds = [...expectedGapIds, 'rf-mastoid'];
 
     let clipboardWrites;
     const mockClipboard = () => {
@@ -4514,15 +4516,16 @@ if (sandbox) {
       return { master, wrap };
     };
 
-    // ---- known age within the pathway's PF band -> green "Pharmacy First"
-    //      chip renders (never an "Ask-back" chip on the SAME row — one
-    //      pathway chip per row) ----
+    // ---- known age within the pathway's PF band, no volunteered escalation
+    //      -> green "Pharmacy First" chip (never an "Ask-back" chip on the
+    //      SAME row — one pathway chip per row). A volunteered 999 flag
+    //      withholds the green chip (see the mastoid row below). ----
     freshCaches();
     mockClipboard();
     sandbox.matchRules = () => [];
     sandbox._receptionPathwaysData = receptionPathwaysData;
     const rowIdA = 'e0000000-0000-4000-8000-000000000001';
-    const { wrap: wrapA } = setupRow({ rowId: rowIdA, dob: '01 Jan 2018 (8y)' });
+    const { wrap: wrapA } = setupRow({ rowId: rowIdA, dob: '01 Jan 2018 (8y)', text: cleanText });
     sandbox.decorateOneRow(sandbox.document.querySelector(`[row-id="${rowIdA}"]`));
 
     const ruleChipsA = wrapA.querySelectorAll('.ch-q-rule-chip');
@@ -4550,27 +4553,9 @@ if (sandbox) {
       'only one popover open at a time (shared singleton)'
     );
 
-    // ---- escalation note: PROMINENT, at the top, names the volunteered red flag + its escalate level ----
-    const escalationEl = menu.querySelector('.ch-pathway-escalation');
-    check(!!escalationEl, 'flaggedInText (rf-mastoid, "swelling behind the ear") renders the escalation banner');
     check(
-      /already mentioned/i.test(escalationEl.querySelector('.ch-pathway-escalation-head').textContent),
-      'escalation banner heading reads "…already mentioned…"'
-    );
-    const escalationLine = escalationEl.querySelector('.ch-pathway-escalation-line');
-    check(
-      /swelling.*BEHIND the ear/i.test(escalationLine.textContent) && /999/.test(escalationLine.textContent),
-      `escalation line names the volunteered red flag and its escalate level (999), got "${escalationLine && escalationLine.textContent}"`
-    );
-    check(
-      escalationLine._innerHTML === null,
-      'escalation line built via textContent, never innerHTML (untrusted-adjacent content discipline)'
-    );
-    // Escalation banner is the FIRST content node after the menu head/disclaimer.
-    const menuSectionOrder = menu.children.map((c) => c.classes[c.classes.length - 1] || c.classes[0]);
-    check(
-      menuSectionOrder.indexOf('ch-pathway-escalation') < menuSectionOrder.indexOf('ch-pathway-section'),
-      'escalation banner renders ABOVE the Pharmacy First/ask-back sections, not buried below them'
+      !menu.querySelector('.ch-pathway-escalation'),
+      'plain earache (no volunteered red flag) has no escalation banner'
     );
 
     // ---- Pharmacy First section: pathway note + prepare-only redirect draft + copy button ----
@@ -4616,12 +4601,8 @@ if (sandbox) {
     // degrade to matching just the <ul> itself. Walk .children instead.
     const gapItems = abSection.querySelector('.ch-pathway-gap-list').children;
     check(
-      gapItems.length === expectedGapIds.length,
-      `ask-back lists exactly the un-mentioned red flags (${expectedGapIds.length}: meningism/head-injury/sudden-deaf/facial-droop/unwell-child), got ${gapItems.length}`
-    );
-    check(
-      !gapItems.some((li) => /swelling.*BEHIND the ear/i.test(li.textContent)),
-      'the ALREADY-volunteered red flag (rf-mastoid) is never ALSO listed as a gap'
+      gapItems.length === cleanGapIds.length,
+      `plain earache ask-back lists every red flag as a gap (${cleanGapIds.length}), got ${gapItems.length}`
     );
     check(
       gapItems.every((li) => li._innerHTML === null),
@@ -4639,13 +4620,74 @@ if (sandbox) {
       `clicking the ask-back copy button writes the buildAskBackText() draft to the clipboard, got "${clipboardWrites[0]}"`
     );
     check(
-      expectedGapIds.every((id) => {
+      cleanGapIds.every((id) => {
         const rf = receptionPathwaysData.pathways.find((p) => p.id === 'earache').redFlags.find((r) => r.id === id);
         return clipboardWrites[0].includes(rf.ask);
       }),
       'the copied ask-back draft names every gap question (buildAskBackText output, unmodified)'
     );
 
+    sandbox.closeActionMenu();
+
+    // ---- volunteered 999 flag (rf-mastoid) withholds the green PF chip.
+    //      Ask-back still opens the same menu; escalation sits above the
+    //      (still-eligible) Pharmacy First section so a clinician can review
+    //      before diverting. ----
+    freshCaches();
+    mockClipboard();
+    sandbox.matchRules = () => [];
+    sandbox._receptionPathwaysData = receptionPathwaysData;
+    const rowIdMastoid = 'e0000000-0000-4000-8000-00000000000a';
+    const { wrap: wrapMastoid } = setupRow({ rowId: rowIdMastoid, dob: '01 Jan 2018 (8y)', text: requestText });
+    sandbox.decorateOneRow(sandbox.document.querySelector(`[row-id="${rowIdMastoid}"]`));
+    const mastoidChips = wrapMastoid.querySelectorAll('.ch-q-rule-chip');
+    check(
+      !mastoidChips.some((c) => c.textContent.includes('Pharmacy First')),
+      'volunteered 999 flag: NO green Pharmacy First chip (routing hazard)'
+    );
+    const mastoidAsk = mastoidChips.find((c) => c.textContent.includes('Ask-back'));
+    check(!!mastoidAsk, 'volunteered 999 flag: Ask-back chip still surfaces');
+    mastoidAsk.click();
+    menu = sandbox.document.querySelector('.ch-pathway-menu');
+    const escalationEl = menu && menu.querySelector('.ch-pathway-escalation');
+    check(!!escalationEl, 'flaggedInText (rf-mastoid, "swelling behind the ear") renders the escalation banner');
+    check(
+      /already mentioned/i.test(escalationEl.querySelector('.ch-pathway-escalation-head').textContent),
+      'escalation banner heading reads "…already mentioned…"'
+    );
+    const escalationLine = escalationEl.querySelector('.ch-pathway-escalation-line');
+    check(
+      /swelling.*BEHIND the ear/i.test(escalationLine.textContent) && /999/.test(escalationLine.textContent),
+      `escalation line names the volunteered red flag and its escalate level (999), got "${escalationLine && escalationLine.textContent}"`
+    );
+    check(
+      escalationLine._innerHTML === null,
+      'escalation line built via textContent, never innerHTML (untrusted-adjacent content discipline)'
+    );
+    const menuSectionOrder = menu.children.map((c) => c.classes[c.classes.length - 1] || c.classes[0]);
+    check(
+      menuSectionOrder.indexOf('ch-pathway-escalation') < menuSectionOrder.indexOf('ch-pathway-section'),
+      'escalation banner renders ABOVE the Pharmacy First/ask-back sections, not buried below them'
+    );
+    check(
+      menu
+        .querySelectorAll('.ch-pathway-section-head')
+        .map((h) => h.textContent)
+        .includes('Pharmacy First'),
+      'age-eligible mastoid row: menu still carries the Pharmacy First section (eligibility held; chip withheld)'
+    );
+    const mastoidGaps = menu
+      .querySelectorAll('.ch-pathway-section')
+      .find((s) => /Ask-back/.test(s.querySelector('.ch-pathway-section-head').textContent))
+      .querySelector('.ch-pathway-gap-list').children;
+    check(
+      mastoidGaps.length === expectedGapIds.length,
+      `mastoid ask-back lists the un-mentioned red flags (${expectedGapIds.length}), got ${mastoidGaps.length}`
+    );
+    check(
+      !mastoidGaps.some((li) => /swelling.*BEHIND the ear/i.test(li.textContent)),
+      'the ALREADY-volunteered red flag (rf-mastoid) is never ALSO listed as a gap'
+    );
     sandbox.closeActionMenu();
 
     // ---- age UNKNOWN on the SAME matched pathway/text: PF chip fails closed

@@ -53,7 +53,7 @@ const _SITE_CODE_RE = /^[a-f0-9]{4,8}$/i;
 
 // Relative task-overview path validation — identical to the queue bridge's
 // _OVERVIEW_URL_RE in content-scripts/triage-lens/content.js.
-const _OVERVIEW_URL_RE = /^\/tasks\/data\/[A-Za-z0-9_-]+\/overview\/[0-9a-f-]+$/;
+const _OVERVIEW_URL_RE = /^\/tasks\/(?:data\/)?[A-Za-z0-9_-]+\/overview\/[0-9a-fA-F-]+$/;
 
 const TASK_TYPES = [
   { key: 'routine', slug: 'prescription_request_task_routine', label: 'Routine' },
@@ -261,17 +261,18 @@ async function runMonitoringPass(apiBase) {
 // queue bridge fetches it directly); the constructed
 // /tasks/data/{list-slug}/overview/{id} path is only a fallback because the
 // overview slug is not guaranteed to equal the task-list slug.
-const _overviewPatientCache = new Map(); // overviewURL -> patientUuid (session)
+const _overviewPatientCache = new Map(); // apiBase|overviewURL -> patientUuid (session)
 async function resolvePatientForRow(api, apiBase, row) {
   if (row.overviewURL) {
-    if (_overviewPatientCache.has(row.overviewURL)) return _overviewPatientCache.get(row.overviewURL);
+    const cacheKey = String(apiBase || '') + '|' + row.overviewURL;
+    if (_overviewPatientCache.has(cacheKey)) return _overviewPatientCache.get(cacheKey);
     try {
       const r = await fetch(`${apiBase}${row.overviewURL}`, { credentials: 'include' });
       if (r.ok) {
         const data = await r.json();
         const uuid = data?.data?.patient?.id || data?.data?.patientId || data?.patient?.id || data?.patientId || null;
         if (uuid) {
-          _overviewPatientCache.set(row.overviewURL, uuid);
+          _overviewPatientCache.set(cacheKey, uuid);
           return uuid;
         }
       }

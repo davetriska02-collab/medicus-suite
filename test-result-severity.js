@@ -215,6 +215,7 @@ console.log('\n--- unmatched passthrough ---');
 {
   const out = evaluateReportSeverity(makeReport([wbcNormal], true));
   assert(out.unmatched === true, 'unmatched true passes through');
+  assert(out.level === 'amber', 'unmatched-only report is amber, not all-clear');
 }
 {
   const out = evaluateReportSeverity(makeReport([wbcNormal], false));
@@ -677,7 +678,8 @@ console.log('\n--- abnormalText: normal & positive screening results → none (n
   const out = evaluateReportSeverity(makeReport([bowelAbnormal]), { resultRules: [bowelRule] });
   assert(out.reviewCount === 0, 'abnormal result not flagged by the non-responder rule');
   assert(out.noGrowthCount === 0, 'abnormal result NOT calmed (no false-negative)');
-  assert(out.level === 'none', 'abnormal result → none from this rule (a lab flag would still apply)');
+  assert(out.unclassified.length === 1, 'abnormal bowel screen still surfaces via unclassified-positive');
+  assert(out.level === 'amber', 'abnormal bowel screen is amber, not silent because a text rule exists');
 }
 
 // ── abnormalText: a positive flag wins over a normal phrase in the same rule ─────
@@ -2438,8 +2440,9 @@ console.log('\n--- Leg B: unclassified qualitative positive surfacing ---');
   assert(out.unclassified.length === 0, 'substring inside a larger word does not trip the lexicon');
 }
 {
-  // A result COVERED by a text rule is left to that rule (not double-surfaced),
-  // even when the rule's outcome is 'none' (lone abnormalText, no phrase hit).
+  // A text rule that matched the analyte but classified nothing must NOT
+  // suppress the unclassified-positive net (a culture saying "Organism isolated"
+  // is still a finding).
   const coverRule = {
     id: 'cov',
     kind: 'text',
@@ -2450,7 +2453,8 @@ console.log('\n--- Leg B: unclassified qualitative positive surfacing ---');
   };
   const r = textResult('Urine culture', { text: 'Organism isolated, mixed growth' });
   const out = evaluateReportSeverity(makeReport([r]), { resultRules: [coverRule] });
-  assert(out.unclassified.length === 0, 'a result a text rule touched is NOT also surfaced as unclassified');
+  assert(out.unclassified.length === 1, 'unclassified-positive still fires when a text rule matched the analyte but not the phrase');
+  assert(out.level === 'amber', 'that unclassified positive is amber, not silent');
 }
 {
   // A lab-flagged (abnormal) result is already visible → not unclassified.

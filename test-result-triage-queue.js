@@ -567,6 +567,14 @@ if (OVERVIEW_URL_RE) {
     OVERVIEW_URL_RE.test('/tasks/data/review_investigation_results_task/overview/550e8400-e29b-41d4-a716-446655440000'),
     'accepts underscore slug'
   );
+  check(
+    OVERVIEW_URL_RE.test('/tasks/data/review-investigation-report/overview/550E8400-E29B-41D4-A716-446655440000'),
+    'accepts uppercase UUID'
+  );
+  check(
+    OVERVIEW_URL_RE.test('/tasks/review-investigation-report/overview/550e8400-e29b-41d4-a716-446655440000'),
+    'accepts live route without /data/'
+  );
 
   // Invalid paths — absolute URL with host
   check(

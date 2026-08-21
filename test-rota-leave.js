@@ -8,8 +8,15 @@ const path = require('path');
 const R = (p) => import(new URL('rota/' + p, `file://${path.resolve(__dirname)}/`).href);
 
 (async () => {
-  const { sessionsInRange, leaveBalance, checkLeaveRequest, applyApprovedLeave, sfeReimbursementFlags, fitNoteFlags } =
-    await R('engine/leave.js');
+  const {
+    sessionsInRange,
+    sessionsByLeaveYear,
+    leaveBalance,
+    checkLeaveRequest,
+    applyApprovedLeave,
+    sfeReimbursementFlags,
+    fitNoteFlags,
+  } = await R('engine/leave.js');
   const { newStaff, blankPattern, DEFAULT_SETTINGS } = await R('shared/model.js');
 
   /* ---- original test body, unchanged ---- */
@@ -192,6 +199,24 @@ const R = (p) => import(new URL('rota/' + p, `file://${path.resolve(__dirname)}/
   assert.equal(ff.length, 0);
   ff = fitNoteFlags([sickRec({ startDate: '2026-04-01', endDate: '2026-04-03' })], [gp], asOf);
   assert.equal(ff.length, 0);
+
+  // A request that crosses 1 April must charge each year separately.
+  gp.pattern[0].wed = { am: 'surgery', pm: null };
+  const byYear = sessionsByLeaveYear(gp, '2026-03-30', '2026-04-01', [], settings);
+  assert.equal(byYear['2025-04-01'], 3, 'Mon+Tue before 1 Apr stay on the previous leave year');
+  assert.equal(byYear['2026-04-01'], 1, 'Wed 1 Apr is charged to the new leave year');
+  const tight = newStaff({ id: 'gp2', name: 'Dr B', entitlement: { annual: 2 }, pattern: blankPattern(1) });
+  tight.pattern[0].mon = { am: 'surgery', pm: 'surgery' };
+  tight.pattern[0].tue = { am: 'surgery', pm: null };
+  tight.pattern[0].wed = { am: 'surgery', pm: null };
+  const spanRes = checkLeaveRequest(
+    { id: 'l-span', staffId: 'gp2', type: 'annual', startDate: '2026-03-30', endDate: '2026-04-01' },
+    { staff: [tight], leaveList: [], entries: [], settings }
+  );
+  assert.ok(
+    spanRes.warnings.some((w) => /2025-04-01 leave year/.test(w.message)),
+    'cross-year request warns against the year that is actually overdrawn'
+  );
 
   console.log('test-leave: OK');
 })().catch((e) => {

@@ -2121,6 +2121,17 @@
   color: var(--green);
   line-height: 1.4;
 }
+.sent-brief-incomplete {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0 2px;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--amber);
+  line-height: 1.4;
+}
 
 /* ── Brief: per-group RAG pills (header, survive collapse) ────────────────── */
 .sent-brief-pill {

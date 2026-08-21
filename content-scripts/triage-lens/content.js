@@ -611,7 +611,7 @@
       // Accept updates on either key for a clean transition period
       const newVal = changes['triagelens.config']?.newValue || changes['config']?.newValue;
       if (!newVal) return;
-      CONFIG = newVal || fallbackConfig();
+      CONFIG = mergeShippedDefaults(newVal) || newVal || fallbackConfig();
       recompileRules();
       try { onChange(); } catch (e) {}
     });
@@ -2048,16 +2048,31 @@
     const el = tmp.firstElementChild;
     if (!el) return;
     el.classList.add('ch-monitoring-chip');
-    el.addEventListener('click', (e) => {
+    const open = (e) => {
       e.preventDefault(); e.stopPropagation();
       showActionMenu(el, el.dataset.ruleId);
-    });
+    };
+    el.addEventListener('click', open);
+    bindActivate(el, open);
     row.appendChild(el);
   };
 
   // ============================================================
   // 4. RENDERING + PIP
   // ============================================================
+
+  function bindActivate(el, fn) {
+    if (!el || el.dataset.chActivateBound === '1') return;
+    el.dataset.chActivateBound = '1';
+    if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
+    if (!el.getAttribute('role')) el.setAttribute('role', 'button');
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fn(e);
+      }
+    });
+  }
 
   const HUD_ID = 'medicus-clinical-hud';
 
@@ -2806,7 +2821,7 @@
 
     // Tile detail
     hud.querySelectorAll('.ch-tile').forEach(t => {
-      t.addEventListener('click', () => {
+      const openTile = () => {
         hud.querySelectorAll('.ch-tile').forEach(x => x.classList.remove('ch-tile-sel'));
         t.classList.add('ch-tile-sel');
         const key = t.dataset.tile;
@@ -2815,7 +2830,9 @@
         hud.querySelector('#ch-detail').innerHTML = `
           <div class="ch-detail-head">${labels[key]}</div>
           ${detailList(sig.items)}`;
-      });
+      };
+      t.addEventListener('click', openTile);
+      bindActivate(t, openTile);
     });
 
     // Header buttons
@@ -2845,10 +2862,12 @@
 
     // Rule chip click handlers — open action menu
     hud.querySelectorAll('[data-rule-id]').forEach(el => {
-      el.addEventListener('click', (e) => {
+      const open = (e) => {
         e.preventDefault(); e.stopPropagation();
         showActionMenu(el, el.dataset.ruleId);
-      });
+      };
+      el.addEventListener('click', open);
+      bindActivate(el, open);
     });
 
     if (collapsed) hud.classList.add('ch-min');
@@ -3397,11 +3416,13 @@
       badge.title = (verdict.reason ? verdict.reason + ' — ' : '') + 'click to open patient record';
       if (!badge.dataset.oirLinked) {
         badge.dataset.oirLinked = '1';
-        badge.addEventListener('click', (e) => {
+        const openRecord = (e) => {
           e.preventDefault();
           e.stopPropagation(); // do not toggle the Quasar checkbox
           window.open('/care-record/' + patientUuid, '_blank', 'noopener');
-        });
+        };
+        badge.addEventListener('click', openRecord);
+        bindActivate(badge, openRecord);
       }
     } else if (!elsewhere) {
       badge.style.cursor = '';
@@ -3638,6 +3659,15 @@
     // inject chips onto wrong rows in the new queue before the fresh
     // ch-task-list-data event arrives. Prune cache entries older than 2×TTL.
     _queueRowUuids.clear();
+    // Same-queue SPA churn must keep _durableRowMap (v3.70). A different
+    // queue (pathname changed since the last bridge write) must drop it or
+    // reinjectCachedResultChips paints the previous queue's severities onto
+    // the new grid's row-indexes until the next task-list event.
+    if (_durableMapPath && _durableMapPath !== location.pathname) {
+      _durableRowMap.clear();
+      _durableMapPath = null;
+    }
+    if (typeof _pulseActByRow !== 'undefined') _pulseActByRow.clear();
     // Arm the leading-edge first result-triage pass for this queue entry: the next
     // bridge task-list event fires the pass immediately instead of via the 150ms debounce.
     _firstResultPassPending = true;
@@ -3793,11 +3823,17 @@
   // rowIndex → taskUuid for the current queue load. runQueue clears this on every
   // queue (re)entry, which keeps the FETCH path from chasing a previous queue's tasks.
   const _queueRowUuids = new Map();
-  // Durable mirror, written ONLY by the bridge task-list event (never cleared by
-  // runQueue). Used to RE-INJECT cached result chips after the SPA's re-renders —
-  // runQueue's churn keeps emptying _queueRowUuids, and that emptying is exactly what
-  // made the chips flash-and-vanish. The bridge owns this map's whole lifecycle.
+  // Durable mirror, written by the bridge task-list event. runQueue must NOT
+  // clear it on same-queue SPA churn (that emptying made chips flash-and-vanish
+  // — v3.70). It DOES clear when location.pathname changed since the last
+  // bridge write (queue A → queue B), otherwise reinject uses the old
+  // rowIndex→taskUuid map on the new grid. The H6 sort/filter canary also
+  // drops it. The bridge owns the rest of the lifecycle.
   const _durableRowMap = new Map();
+  // Pathname at the last bridge write. runQueue clears the durable map only
+  // when this differs from location.pathname (queue A → queue B), not on
+  // same-queue SPA churn.
+  let _durableMapPath = null;
   // taskUuid → { taskTypeSlug, result, ts } — session-level cache with TTL
   const _queueMonCache = new Map();
   const _MON_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -4038,7 +4074,7 @@
   // taskTypeSlug: alphanumeric + underscores/hyphens, reasonable length
   const _BRIDGE_SLUG_RE = /^[a-zA-Z0-9_-]{1,80}$/;
   // overviewURL: relative path only — /tasks/data/<slug>/overview/<uuid>
-  const _OVERVIEW_URL_RE = /^\/tasks\/data\/[A-Za-z0-9_-]+\/overview\/[0-9a-f-]+$/;
+  const _OVERVIEW_URL_RE = /^\/tasks\/(?:data\/)?[A-Za-z0-9_-]+\/overview\/[0-9a-fA-F-]+$/;
   // Maximum rows processed from a single event (cap to prevent fan-out DoS)
   const _BRIDGE_MAX_ROWS = 500;
 
@@ -4080,6 +4116,8 @@
     _currentQueueSlug = taskTypeSlug;
     _queueRowUuids.clear();
     _durableRowMap.clear();
+    _durableMapPath = location.pathname;
+    if (typeof _pulseActByRow !== 'undefined') _pulseActByRow.clear();
     // A fresh task-list payload is authoritative for the grid's CURRENT state,
     // so re-baseline the sort canary (H6): without this, a server-side sort
     // whose fetch lands before the observer notices the new header classes
@@ -5754,10 +5792,11 @@
     }, 0);
   };
 
-  // Re-inject result chips straight from the per-task cache, keyed by each row's own
-  // `row-id` (the task UUID) read from the DOM — exactly how the durable age/decoration
-  // chips work. This does NOT depend on the bridge-provided `_queueRowUuids` map (which
-  // the Medicus SPA churn keeps clearing to 0), so chips survive every re-render.
+  // Re-inject result chips straight from the per-task cache, keyed by the durable
+  // rowIndex→taskUuid map (NOT row-id — on real Medicus row-id is NOT the task
+  // UUID; keying off it was the v3.69.0 no-op). This does NOT depend on the
+  // bridge-provided `_queueRowUuids` map (which the Medicus SPA churn keeps
+  // clearing to 0), so chips survive every re-render.
   // injectResultChip de-dupes, and a wipe immediately precedes this call, so it's a
   // clean, synchronous restore with no visible gap.
   const reinjectCachedResultChips = () => {
@@ -7569,7 +7608,11 @@
         const closingQuestions = _receptionPathwaysData.closingQuestions;
         const hasEscalation = gapsData.flaggedInText.length > 0;
         const hasAskBack = gapsData.gaps.length > 0 || hasEscalation;
-        if (pfElig.eligible === true) {
+        const pfSafe =
+          typeof RM.queuePharmacyFirstSafe === 'function'
+            ? RM.queuePharmacyFirstSafe(matchedPathways, gapsData)
+            : !hasEscalation;
+        if (pfElig.eligible === true && pfSafe) {
           const pfIdx = ruleMatchActivators.push(
             (el) => showPathwayMenu(el, topPathway, previewText, pfElig, gapsData, closingQuestions)
           ) - 1;
@@ -7646,10 +7689,12 @@
       // (child/elder/priority/task-age + any other plain ruleId chip) —
       // UNCHANGED from before item 2.5.
       strip.querySelectorAll('[data-rule-id]').forEach(el => {
-        el.addEventListener('click', (e) => {
+        const open = (e) => {
           e.preventDefault(); e.stopPropagation();
           showActionMenu(el, el.dataset.ruleId);
-        });
+        };
+        el.addEventListener('click', open);
+        bindActivate(el, open);
       });
       // Wire the ranked rule-match chips (top + "+N") — item 2.3/2.5. Enter/
       // Space activate too (role="button" chips, per plan a11y requirement).
@@ -7705,11 +7750,22 @@
   let _queueSortSig; // undefined = no baseline yet (fresh queue entry)
   const queueSortSignature = () => {
     const cells = queueScope().querySelectorAll('.ag-header-cell-sorted-asc, .ag-header-cell-sorted-desc');
-    if (!cells.length) return '';
-    return Array.from(cells)
-      .map((c) => (c.getAttribute('col-id') || '?') + ':' + (c.classList.contains('ag-header-cell-sorted-asc') ? 'asc' : 'desc'))
-      .sort()
-      .join(',');
+    const filterCells = queueScope().querySelectorAll('.ag-header-cell-filtered');
+    const sortPart = !cells.length
+      ? ''
+      : Array.from(cells)
+          .map((c) => (c.getAttribute('col-id') || '?') + ':' + (c.classList.contains('ag-header-cell-sorted-asc') ? 'asc' : 'desc'))
+          .sort()
+          .join(',');
+    // Client-side FILTER reassigns row-index the same way SORT does (H6).
+    // Include filtered columns so a filter-only change also drops the maps.
+    const filterPart = !filterCells.length
+      ? ''
+      : Array.from(filterCells)
+          .map((c) => 'f:' + (c.getAttribute('col-id') || '?'))
+          .sort()
+          .join(',');
+    return filterPart ? sortPart + '|' + filterPart : sortPart;
   };
   const checkQueueSortCanary = () => {
     const sig = queueSortSignature();
@@ -7718,7 +7774,8 @@
     _queueSortSig = sig;
     _queueRowUuids.clear();
     _durableRowMap.clear();
-    log('queue: sort change detected — rowIndex maps dropped (H6 canary), sig=' + (sig || 'none'));
+    if (typeof _pulseActByRow !== 'undefined') _pulseActByRow.clear();
+    log('queue: sort/filter change detected — rowIndex maps dropped (H6 canary), sig=' + (sig || 'none'));
   };
 
   // Fully tear down the queue observer and forget the container reference.

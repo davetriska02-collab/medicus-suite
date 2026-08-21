@@ -49,10 +49,14 @@ if (sigMatch && canaryMatch) {
 
   const sandbox = {
     _cells: [],
+    _filterCells: [],
     _logs: [],
     _queueRowUuids: new Map(),
     _durableRowMap: new Map(),
-    queueScope: () => ({ querySelectorAll: () => sandbox._cells }),
+    _pulseActByRow: new Map(),
+    queueScope: () => ({
+      querySelectorAll: (sel) => (String(sel).includes('filtered') ? sandbox._filterCells : sandbox._cells),
+    }),
     log: (m) => sandbox._logs.push(m),
   };
   vm.runInNewContext(
@@ -70,6 +74,7 @@ if (sigMatch && canaryMatch) {
   const seed = () => {
     sandbox._queueRowUuids.set(0, 'aaaaaaaa-0000-0000-0000-000000000000');
     sandbox._durableRowMap.set(0, 'aaaaaaaa-0000-0000-0000-000000000000');
+    sandbox._pulseActByRow.set(0, { pathway: { title: 'stale' } });
   };
 
   // Unsorted grid → empty signature
@@ -106,8 +111,9 @@ if (sigMatch && canaryMatch) {
   sandbox.run();
   check(sandbox._durableRowMap.size === 0, 'sort change drops _durableRowMap');
   check(sandbox._queueRowUuids.size === 0, 'sort change drops _queueRowUuids');
+  check(sandbox._pulseActByRow.size === 0, 'sort change drops _pulseActByRow (stale Act tray)');
   check(
-    sandbox._logs.some((m) => /sort change/.test(m)),
+    sandbox._logs.some((m) => /sort(?:\/filter)? change/.test(m)),
     'sort change is logged'
   );
 
@@ -129,6 +135,21 @@ if (sigMatch && canaryMatch) {
   sandbox._cells = makeCells([['dueDate', 'asc']]);
   sandbox.run();
   check(sandbox._durableRowMap.size === 1, 're-baselined canary does not drop the maps on next run');
+
+  // Client-side FILTER (no sort change) must also drop the maps — same
+  // wrong-patient hazard as H6 sort.
+  sandbox.reset();
+  seed();
+  sandbox._cells = [];
+  sandbox._filterCells = [];
+  sandbox.run();
+  check(sandbox._durableRowMap.size === 1, 'empty-filter baseline keeps the maps');
+  sandbox._filterCells = [
+    { getAttribute: (a) => (a === 'col-id' ? 'patientName' : null), classList: { contains: () => false } },
+  ];
+  sandbox.run();
+  check(sandbox._durableRowMap.size === 0, 'filter-only change drops _durableRowMap');
+  check(sandbox._queueRowUuids.size === 0, 'filter-only change drops _queueRowUuids');
 }
 
 // ============================================================
