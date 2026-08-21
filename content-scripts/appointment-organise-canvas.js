@@ -201,8 +201,21 @@
             '>' +
             '<span class="ms-aoc-finalise-desc">' +
             esc(item.text) +
+            (item.kind === 'move'
+              ? '<div class="ms-aoc-hint">' + esc(C.LENGTH_ON_MOVE_BLOCKED) + '</div>'
+              : '') +
             '</span>' +
             reason +
+            '<label class="ms-aoc-notify"><input type="checkbox" class="ms-aoc-finalise-notify" data-notify-id="' +
+            esc(item.id) +
+            '"' +
+            (item.notify ? ' checked' : '') +
+            '> Tell the patient — Medicus’s own confirmation, not custom wording</label>' +
+            (item.script
+              ? '<button type="button" class="ms-aoc-ghost ms-aoc-copy-script" data-copy-script="' +
+                esc(item.script) +
+                '">Copy call script</button>'
+              : '') +
             '</label>'
           );
         })
@@ -497,6 +510,13 @@
       esc(_sick.proposal.sickStaffName) +
       '.</strong> Accept a similar slot, pick another, or leave as still needs rebook. ' +
       'Finalise uses the captured cross-list move. Confirm will say rebooked with the covering clinician. SMS stays off.' +
+      '<label class="ms-aoc-cap-label">Why (for the call script, not Medicus SMS) ' +
+      '<input type="text" class="ms-aoc-filter-q" id="ms-aoc-sick-because" placeholder="e.g. clinician sickness" value="' +
+      esc(_sick.because || '') +
+      '"></label>' +
+      '<label class="ms-aoc-notify"><input type="checkbox" id="ms-aoc-sick-notify"' +
+      (_sick.notify ? ' checked' : '') +
+      '> Tell patients — Medicus’s own confirmation, default off. Custom “sorry we had to rearrange…” is a call script you copy, not an SMS we compose.</label>' +
       '<label class="ms-aoc-cap-label">Max extra per covering list ' +
       '<input type="number" class="ms-aoc-cap-input" id="ms-aoc-sick-cap" min="1" max="20" value="' +
       esc(String(cap)) +
@@ -661,6 +681,7 @@
             appointmentId: item.id,
             patientId: appt && appt.patientId,
             reason: item.reason,
+            notify: !!item.notify,
             pinned: {
               apiBase: _route.apiBase,
               patientId: appt && appt.patientId,
@@ -674,7 +695,7 @@
           await api.commitMove({
             date: _route.date,
             appointment: appt,
-            target: mv,
+            target: Object.assign({}, mv, { notify: !!item.notify }),
             pinned: { apiBase: _route.apiBase },
           });
           _draft = C.unstageMove(_draft, item.id);
@@ -759,6 +780,13 @@
     root.querySelector('#ms-aoc-sick-apply')?.addEventListener('click', function () {
       if (!_sick || !_sick.proposal) return;
       _draft = C.applySickDayProposal(_draft, _sick.proposal);
+      var because = _sick.because || '';
+      var tell = !!_sick.notify;
+      (_sick.proposal.rows || []).forEach(function (row) {
+        if (row.status !== 'accept' || !row.appointment) return;
+        if (tell) _draft = C.setDraftNotify(_draft, row.appointment.id, true);
+        if (because) _draft = C.setMoveBecause(_draft, row.appointment.id, because);
+      });
       var leftovers = C.sickDayLeftovers(_sick.proposal);
       _sick = { step: 'leftovers', proposal: _sick.proposal };
       announce(
@@ -785,6 +813,18 @@
         announce(text);
       }
     });
+    var becauseInput = root.querySelector('#ms-aoc-sick-because');
+    if (becauseInput) {
+      becauseInput.addEventListener('change', function () {
+        if (_sick) _sick.because = becauseInput.value;
+      });
+    }
+    var sickNotify = root.querySelector('#ms-aoc-sick-notify');
+    if (sickNotify) {
+      sickNotify.addEventListener('change', function () {
+        if (_sick) _sick.notify = sickNotify.checked;
+      });
+    }
     var capInput = root.querySelector('#ms-aoc-sick-cap');
     if (capInput) {
       capInput.addEventListener('change', function () {
@@ -855,6 +895,25 @@
         _draft = C.setDraftIncluded(_draft, box.getAttribute('data-item-id'), box.checked);
         _pending = { kind: 'finalise', summary: C.summariseDraft(_draft, _board || { columns: [] }), writing: false };
         render();
+      });
+    });
+    root.querySelectorAll('.ms-aoc-finalise-notify').forEach(function (box) {
+      box.addEventListener('change', function () {
+        _draft = C.setDraftNotify(_draft, box.getAttribute('data-notify-id'), box.checked);
+        _pending = { kind: 'finalise', summary: C.summariseDraft(_draft, _board || { columns: [] }), writing: false };
+        render();
+      });
+    });
+    root.querySelectorAll('[data-copy-script]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var text = btn.getAttribute('data-copy-script') || '';
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () {
+            announce('Call script copied. Medicus SMS wording is still Medicus’s own.');
+          });
+        } else announce(text);
       });
     });
     root.querySelectorAll('[data-cancel-reason]').forEach(function (input) {

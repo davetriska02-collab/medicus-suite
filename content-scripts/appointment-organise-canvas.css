@@ -405,6 +405,19 @@
   font-size: 12px;
 }
 
+.ms-aoc-notify {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-2);
+  margin-top: 4px;
+}
+
+.ms-aoc-copy-script {
+  margin-top: 4px;
+}
+
 .ms-aoc-error {
   color: #991b1b;
   margin-top: 6px;

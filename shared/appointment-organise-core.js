@@ -479,6 +479,17 @@
   var REBOOK_PAST = 'Remaining similar slots are already in the past. Still needs rebook.';
   var REBOOK_CLAIMED = 'Similar slots already offered to earlier patients on this list. Still needs rebook.';
   var SICK_DAY_DEST_EXTRA_CAP = 6;
+  var NOTIFY_RECIPIENT_KEYS = [
+    'recipientId',
+    'recipientType',
+    'newCommunicationId',
+    'defaultChannelOverride',
+    'adhocEmailAddress',
+    'adhocTelephoneNumberForSMS',
+  ];
+  var LENGTH_ON_MOVE_BLOCKED =
+    'Length stays the original booking. A move cannot change length (TEST A overlapped the neighbour). Stretch on the new list after write if the following slot is free.';
+  var NOTIFY_NO_CHANNEL = 'Medicus did not offer a confirmation channel for this patient. Send-to stays off.';
 
   function isHomeVisit(appointment) {
     var d = String((appointment && appointment.deliveryMode) || '').toLowerCase();
@@ -879,7 +890,7 @@
     delete next.stretches[appointmentId];
     if (next.cancelIds.indexOf(appointmentId) === -1) next.cancelIds.push(appointmentId);
     if (!next.cancels[appointmentId]) {
-      next.cancels[appointmentId] = { reason: '', included: true };
+      next.cancels[appointmentId] = { reason: '', included: true, notify: false };
     }
     return next;
   }
@@ -916,6 +927,30 @@
     return next;
   }
 
+  function setDraftNotify(draft, appointmentId, notify) {
+    var next = cloneDraft(draft);
+    if (next.cancels[appointmentId]) {
+      next.cancels[appointmentId] = Object.assign({}, next.cancels[appointmentId], { notify: !!notify });
+    }
+    if (next.moves[appointmentId]) {
+      next.moves[appointmentId] = Object.assign({}, next.moves[appointmentId], { notify: !!notify });
+    }
+    if (next.stretches[appointmentId]) {
+      next.stretches[appointmentId] = Object.assign({}, next.stretches[appointmentId], { notify: !!notify });
+    }
+    return next;
+  }
+
+  function setMoveBecause(draft, appointmentId, because) {
+    var next = cloneDraft(draft);
+    if (next.moves[appointmentId]) {
+      next.moves[appointmentId] = Object.assign({}, next.moves[appointmentId], {
+        because: String(because || ''),
+      });
+    }
+    return next;
+  }
+
   function stageStretch(draft, appointmentId, newDuration) {
     var next = cloneDraft(draft);
     if (!appointmentId) return next;
@@ -928,7 +963,7 @@
     });
     delete next.moves[appointmentId];
     if (next.stretchIds.indexOf(appointmentId) === -1) next.stretchIds.push(appointmentId);
-    next.stretches[appointmentId] = { duration: Number(newDuration), included: true };
+    next.stretches[appointmentId] = { duration: Number(newDuration), included: true, notify: false };
     return next;
   }
 
@@ -959,6 +994,7 @@
       staffName: target.staffName || '',
       reserveDuration: Number(target.reserveDuration) || Number(target.duration) || 0,
       included: true,
+      notify: false,
     };
     return next;
   }
@@ -981,13 +1017,15 @@
     var items = [];
     ((draft && draft.cancelIds) || []).forEach(function (id) {
       var appt = findAppointment(board, id) || { id: id, patientName: id, startDateTime: '', staffName: '' };
-      var row = (draft.cancels && draft.cancels[id]) || { reason: '', included: true };
+      var row = (draft.cancels && draft.cancels[id]) || { reason: '', included: true, notify: false };
       items.push({
         kind: 'cancel',
         id: id,
         included: row.included !== false,
+        notify: !!row.notify,
         reason: row.reason || '',
         patientName: appt.patientName,
+        script: patientMessageScript('cancel', appt, null, row.reason),
         text:
           'Cancel ' +
           appt.patientName +
@@ -995,7 +1033,9 @@
           hhmm(appt.startDateTime) +
           ' ' +
           (appt.staffName || '') +
-          ' — Medicus will not send a cancellation message',
+          (row.notify
+            ? ' — Medicus will send its own cancellation confirmation (wording is Medicus’s, not ours)'
+            : ' — Medicus will not send a cancellation message'),
       });
     });
     ((draft && draft.moveIds) || []).forEach(function (id) {
@@ -1005,7 +1045,10 @@
         kind: 'move',
         id: id,
         included: mv.included !== false,
+        notify: !!mv.notify,
         patientName: appt.patientName,
+        durationLocked: true,
+        script: patientMessageScript('move', appt, mv, mv.because || ''),
         text:
           'Rebooked with ' +
           (mv.staffName || 'the covering list') +
@@ -1016,7 +1059,12 @@
           ' (was ' +
           hhmm(appt.startDateTime) +
           (appt.staffName ? ' ' + appt.staffName : '') +
-          ') — Medicus will not send a booking message',
+          ', still ' +
+          (appt.duration || '') +
+          ' min) — ' +
+          (mv.notify
+            ? 'Medicus will send its own booking confirmation (wording is Medicus’s, not ours)'
+            : 'Medicus will not send a booking message'),
       });
     });
     ((draft && draft.stretchIds) || []).forEach(function (id) {
@@ -1026,6 +1074,7 @@
         kind: 'stretch',
         id: id,
         included: st.included !== false,
+        notify: !!st.notify,
         patientName: appt.patientName,
         duration: st.duration,
         text:
@@ -1037,7 +1086,10 @@
           appt.duration +
           ' min → ' +
           st.duration +
-          ' min — Medicus will not send a message',
+          ' min — ' +
+          (st.notify
+            ? 'Medicus will send its own booking confirmation (wording is Medicus’s, not ours)'
+            : 'Medicus will not send a message'),
       });
     });
     var included = items.filter(function (i) {
@@ -1133,16 +1185,77 @@
     return Object.keys(obj);
   }
 
+  function pickNotifyRecipients(form) {
+    var opts =
+      (form && form.bookingConfirmationRecipientOptions) ||
+      (form && form.cancellationConfirmationRecipientOptions) ||
+      [];
+    if (!opts.length) return [];
+    var raw = opts[0].value || opts[0];
+    if (!raw || !raw.recipientId || !raw.newCommunicationId) return [];
+    return [
+      {
+        recipientId: raw.recipientId,
+        recipientType: raw.recipientType || 'patient',
+        newCommunicationId: raw.newCommunicationId,
+        defaultChannelOverride: raw.defaultChannelOverride == null ? null : raw.defaultChannelOverride,
+        adhocEmailAddress: raw.adhocEmailAddress == null ? null : raw.adhocEmailAddress,
+        adhocTelephoneNumberForSMS: raw.adhocTelephoneNumberForSMS == null ? null : raw.adhocTelephoneNumberForSMS,
+      },
+    ];
+  }
+
+  function notifyChannelLabel(form) {
+    var opts =
+      (form && form.bookingConfirmationRecipientOptions) ||
+      (form && form.cancellationConfirmationRecipientOptions) ||
+      [];
+    if (opts[0] && opts[0].label) return String(opts[0].label);
+    return '';
+  }
+
+  function patientMessageScript(kind, appt, dest, because) {
+    var z = String(because || '').trim() || 'unforeseen circumstances at the surgery';
+    var dateBit = String((appt && appt.startDateTime) || '').slice(0, 10);
+    var oldT = hhmm(appt && appt.startDateTime);
+    if (kind === 'cancel') {
+      return (
+        'We are sorry to have to cancel your appointment on ' +
+        dateBit +
+        ' at ' +
+        oldT +
+        '. This is because of ' +
+        z +
+        '. Please contact the surgery if you have any queries or need to reschedule.'
+      );
+    }
+    var newT = hhmm(dest && dest.startDateTime);
+    var who = (dest && dest.staffName) || 'the covering clinician';
+    return (
+      'We are sorry to have to rearrange your appointment from ' +
+      oldT +
+      ' to ' +
+      newT +
+      ' with ' +
+      who +
+      '. This is because of ' +
+      z +
+      '. Please contact the surgery if you have any queries or need to reschedule.'
+    );
+  }
+
   function buildCancelPayload(opts) {
     opts = opts || {};
     if (!opts.appointmentId) throw new Error('appointment-organise: targetAppointmentId required');
     var reason = String(opts.reason || '').trim();
     if (!reason) throw new Error('appointment-organise: cancellationReason required');
+    var recipients = opts.notify ? opts.recipients || [] : [];
+    if (opts.notify && !recipients.length) throw new Error(NOTIFY_NO_CHANNEL);
     return {
       targetAppointmentId: opts.appointmentId,
       otherAppointmentIds: [],
       cancellationReason: reason,
-      cancellationConfirmationRecipients: [],
+      cancellationConfirmationRecipients: recipients,
     };
   }
 
@@ -1196,7 +1309,7 @@
       nhsNationalSlotTypeCategory: opts.nhsNationalSlotTypeCategory || '10127',
       gpadReportingExceptionReasons: [],
       clinicalCaseId: null,
-      bookingConfirmationRecipients: [],
+      bookingConfirmationRecipients: opts.notify ? opts.recipients || [] : [],
       followingSlotConvertToBreak: null,
       followingSlotNewAppointmentTypeId: null,
       followingSlotStartDateTime: null,
@@ -1226,6 +1339,7 @@
     if (!opts.appointmentId) throw new Error('appointment-organise: rescheduledAppointmentId required');
     if (!opts.versionId) throw new Error('appointment-organise: rescheduledAppointmentVersionId required');
     if (!opts.slotReservationId) throw new Error('appointment-organise: slotReservationId required');
+    if (opts.notify && !(opts.recipients && opts.recipients.length)) throw new Error(NOTIFY_NO_CHANNEL);
     return {
       context: 'reschedule-appointment',
       appointmentTemporalType: 'timed',
@@ -1244,7 +1358,7 @@
       intendedStartDateTime: opts.startDateTime,
       intendedDuration: Number(opts.intendedDuration),
       embargoOverrideReason: null,
-      bookingConfirmationRecipients: [],
+      bookingConfirmationRecipients: opts.notify ? opts.recipients || [] : [],
       followingSlotConvertToBreak: null,
       followingSlotNewAppointmentTypeId: null,
       followingSlotStartDateTime: null,
@@ -1446,7 +1560,13 @@
       if (form && form.targetAppointmentId && form.targetAppointmentId !== opts.appointmentId) {
         throw new Error(driftMessage('id'));
       }
-      var payload = buildCancelPayload({ appointmentId: opts.appointmentId, reason: opts.reason });
+      var recipients = opts.notify ? pickNotifyRecipients(form) : [];
+      var payload = buildCancelPayload({
+        appointmentId: opts.appointmentId,
+        reason: opts.reason,
+        notify: !!opts.notify,
+        recipients: recipients,
+      });
       return cancelAppointment(payload);
     }
 
@@ -1519,6 +1639,8 @@
             reasonForAppointment: appointment.reason || null,
             additionalInformation: appointment.additionalInformation,
             isHiddenFromPatientFacingServices: appointment.isHiddenFromPatientFacingServices,
+            notify: !!(target && target.notify),
+            recipients: target && target.notify ? pickNotifyRecipients(form) : [],
           })
         );
         // Captured after create-appointment 200 on both same-list and
@@ -1688,6 +1810,14 @@
     unstageCancel: unstageCancel,
     setCancelReason: setCancelReason,
     setDraftIncluded: setDraftIncluded,
+    setDraftNotify: setDraftNotify,
+    setMoveBecause: setMoveBecause,
+    pickNotifyRecipients: pickNotifyRecipients,
+    notifyChannelLabel: notifyChannelLabel,
+    patientMessageScript: patientMessageScript,
+    NOTIFY_RECIPIENT_KEYS: NOTIFY_RECIPIENT_KEYS,
+    NOTIFY_NO_CHANNEL: NOTIFY_NO_CHANNEL,
+    LENGTH_ON_MOVE_BLOCKED: LENGTH_ON_MOVE_BLOCKED,
     stageMove: stageMove,
     unstageMove: unstageMove,
     stageStretch: stageStretch,

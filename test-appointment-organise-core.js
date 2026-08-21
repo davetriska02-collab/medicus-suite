@@ -343,6 +343,45 @@ console.log('=== 3. payload keys (captured byte-for-byte) ===');
       cancel.cancellationConfirmationRecipients.length === 0,
     'never defaults Send-to On'
   );
+  const rec = {
+    recipientId: mouse.patientId,
+    recipientType: 'patient',
+    newCommunicationId: '01a01e33-6182-73d9-b8ce-f579e84a3e07',
+    defaultChannelOverride: null,
+    adhocEmailAddress: null,
+    adhocTelephoneNumberForSMS: null,
+  };
+  const told = core.buildCancelPayload({
+    appointmentId: cancel.targetAppointmentId,
+    reason: 'clinician sickness',
+    notify: true,
+    recipients: [rec],
+  });
+  check(told.cancellationConfirmationRecipients.length === 1, 'opt-in Send-to uses the captured recipient object');
+  check(
+    JSON.stringify(Object.keys(told.cancellationConfirmationRecipients[0])) ===
+      JSON.stringify(core.NOTIFY_RECIPIENT_KEYS),
+    'notify recipient keys match the Send-to On capture'
+  );
+  const picked = core.pickNotifyRecipients({
+    cancellationConfirmationRecipientOptions: [{ value: rec, label: 'Mr Micky Mouse (davetriska02@gmail.com)' }],
+  });
+  check(picked[0].newCommunicationId === rec.newCommunicationId, 'recipients are copied from the GET form, not invented');
+  let noChan = false;
+  try {
+    core.buildCancelPayload({ appointmentId: mouse.id, reason: 'x', notify: true, recipients: [] });
+  } catch (e) {
+    noChan = /did not offer a confirmation channel/.test(e.message);
+  }
+  check(noChan, 'notify with no form channel refuses to write');
+  const script = core.patientMessageScript(
+    'move',
+    { startDateTime: '2026-08-23 10:00:00', patientName: mouse.patientName },
+    { startDateTime: '2026-08-23 11:00:00', staffName: 'Cover GP' },
+    'clinician sickness'
+  );
+  check(/rearrange/.test(script) && /clinician sickness/.test(script), 'call script names from/to and the reason');
+  check(/Length stays the original/.test(core.LENGTH_ON_MOVE_BLOCKED), 'length-on-move stays blocked by TEST A');
 }
 
 {
