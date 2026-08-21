@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.19] — 2026-08-21
+
+### Lint — parse `shared/medicus-tab-choice.js` as ESM
+
+The tab-choice helper shipped in v3.236.17 is an ES module. ESLint still treated `shared/` as classic script, so CI lint failed closed on `import`/`export`. Added to the existing shared-ESM allow-list in `eslint.config.mjs`.
+
 ## [v3.236.18] — 2026-08-21
 
 ### Bug bash — leftover fail-closed findings (CSO-conservative)
