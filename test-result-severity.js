@@ -678,7 +678,8 @@ console.log('\n--- abnormalText: normal & positive screening results → none (n
   const out = evaluateReportSeverity(makeReport([bowelAbnormal]), { resultRules: [bowelRule] });
   assert(out.reviewCount === 0, 'abnormal result not flagged by the non-responder rule');
   assert(out.noGrowthCount === 0, 'abnormal result NOT calmed (no false-negative)');
-  assert(out.level === 'none', 'abnormal result → none from this rule (a lab flag would still apply)');
+  assert(out.unclassified.length === 1, 'abnormal bowel screen still surfaces via unclassified-positive');
+  assert(out.level === 'amber', 'abnormal bowel screen is amber, not silent because a text rule exists');
 }
 
 // ── abnormalText: a positive flag wins over a normal phrase in the same rule ─────

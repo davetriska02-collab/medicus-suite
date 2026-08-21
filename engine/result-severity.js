@@ -339,13 +339,12 @@
   //                  'red', otherwise 'amber' for a review outcome (null when the outcome is
   //                  not a review). Escalate-only — the caller lifts the report to red on a
   //                  red review, never lowers anything.
-  //   applied      — Part B support: true iff SOME text rule's analyte matched this result
-  //                  (even a lone-abnormalText rule that found no flag phrase, i.e. outcome
-  //                  'none' but the analyte WAS seen). The unclassified-positive fall-through
-  //                  pass (evaluateReportSeverity) uses this to leave alone any result a text
-  //                  rule already covers. A rule skipped by the context gate (item 3.5) is
-  //                  NOT "seen" — it counts as though its analyte never matched, so it can
-  //                  never mark `applied` true and can never block the unclassified fallback.
+  //   applied      — Part B support: true only when a text rule actually classified
+  //                  this result (review / noGrowth). A lone-abnormalText rule that
+  //                  matched the analyte but found no phrase leaves applied false so
+  //                  the unclassified-positive net can still fire ("Organism isolated"
+  //                  must not vanish just because a culture rule exists). A rule
+  //                  skipped by the context gate (item 3.5) is also not applied.
   //   `patientContext` (optional, item 3.5) — gates any rule carrying a `context` clause,
   //                  see contextAllows above. Fail closed when absent/insufficient.
   function computeTextOutcome(result, rules, patientContext) {
