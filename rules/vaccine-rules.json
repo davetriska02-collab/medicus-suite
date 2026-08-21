@@ -17,7 +17,7 @@
           { "kind": "age", "ageMin": 65, "label": "Age 65+" },
           { "kind": "age", "ageMin": 2, "ageMax": 17, "label": "Child (2–17 years)" },
           { "kind": "problem", "match": ["pregnan"], "sex": "F", "label": "Pregnancy" },
-          { "kind": "problem", "match": ["homeless","rough sleeper","no fixed abode","night shelter resident","hostel resident"], "ageMin": 16, "label": "Experiencing homelessness (age 16+)" },
+          { "kind": "problem", "match": ["homeless","rough sleeper","no fixed abode","night shelter resident","hostel resident"], "ageMin": 16, "effectiveFrom": "2026-10-01", "label": "Experiencing homelessness (age 16+)" },
           { "kind": "register", "registers": ["DM","CKD","COPD","CHD","HF","STIA","AF","PAD"], "label": "Clinical risk group (QOF register)" },
           { "kind": "problem", "match": ["cirrhosis","chronic hepatitis b","chronic hepatitis c","chronic liver disease","primary biliary","primary sclerosing cholangitis","biliary atresia","epilepsy","multiple sclerosis","parkinson","cerebral palsy","motor neurone","huntington","splenectomy","asplenia","hyposplenism","sickle cell","thalassaemia major","hereditary spherocytosis","hiv","aids","transplant","leukaemia","lymphoma","myeloma","bronchiectasis","cystic fibrosis","pulmonary fibrosis","interstitial lung","learning disabilit","downs syndrome","down syndrome"], "label": "Clinical risk group (problem)" },
           { "kind": "medication", "match": ["rituximab","adalimumab","infliximab","etanercept","abatacept","tocilizumab","secukinumab","ustekinumab","baricitinib","tofacitinib","azathioprine","ciclosporin","mycophenolate","tacrolimus","sirolimus","methotrexate","cyclophosphamide","chlorambucil","prednisolone","dexamethasone","chemotherapy"], "label": "Immunosuppressive medication" },
@@ -64,7 +64,7 @@
       "notes": "DOUBLE-CHECK ELIGIBILITY: One-off dose from age 65 (routine vaccine is now PCV20; a previously-recorded PPV23 dose still counts as given). Status inferred from coded records only — vaccination given elsewhere (or pre-registration) may not appear. Revaccination every 5 years applies ONLY to asplenia/splenic dysfunction/CKD and is NOT encoded here — check manually for those patients. At-risk under-65 cohort (Green Book ch 25 risk groups) intentionally not encoded EXCEPT the homelessness cohort below. Rule id retained as 'vax-pneumo-ppv23' so existing user snoozes/overrides are preserved. HOMELESSNESS COHORT (vacc-003, effective 1 Oct 2026): people experiencing homelessness aged 16+ become eligible — rough sleepers and those using hostels for the homeless or night shelters. Match terms proxy the coding used in Medicus; homelessness is rarely coded so this will flag only patients with an explicit code. Operational outreach remains the primary delivery route. Source: GOV.UK pneumococcal vaccination expansion letter, JCVI advice June 2024.",
       "eligibility": { "anyOf": [
         { "kind": "age", "ageMin": 65, "label": "Age 65+" },
-        { "kind": "problem", "match": ["homeless", "rough sleeper", "no fixed abode", "night shelter resident", "hostel resident"], "ageMin": 16, "label": "Experiencing homelessness (age 16+, from 1 Oct 2026)" }
+        { "kind": "problem", "match": ["homeless", "rough sleeper", "no fixed abode", "night shelter resident", "hostel resident"], "ageMin": 16, "effectiveFrom": "2026-10-01", "label": "Experiencing homelessness (age 16+, from 1 Oct 2026)" }
       ] },
       "statusTerms": {
         "given": ["pneumococcal vaccination", "pneumococcal vaccine", "pneumococcal polysaccharide vaccin", "pneumovax", "ppv23", "23-valent pneumococcal", "pcv20", "20-valent pneumococcal", "apexxnar", "prevenar 20", "pneumococcal conjugate vaccin", "pneumococcal immunisation"],
@@ -103,9 +103,9 @@
       "eligibility": { "anyOf": [
         { "kind": "age", "ageMin": 75, "label": "Age 75+" },
         { "kind": "problem", "match": ["care home resident", "nursing home resident", "residential care"], "label": "Care-home resident (adult, all ages)" },
-        { "kind": "problem", "match": ["copd", "chronic obstructive", "emphysema", "chronic bronchitis", "cystic fibrosis", "bronchiectasis"], "ageMin": 65, "ageMax": 74, "label": "Age 65–74 chronic respiratory disease (from 1 Sept 2026; asthma not included)" },
-        { "kind": "problem", "match": ["immunosuppress", "immunodeficiency", "chemotherapy", "leukaemia", "leukemia", "lymphoma", "myeloma", "transplant", "hiv", "aids"], "ageMin": 65, "ageMax": 74, "label": "Age 65–74 immunosuppression — disease (from 1 Sept 2026)" },
-        { "kind": "medication", "match": ["rituximab", "ciclosporin", "mycophenolate", "tacrolimus", "azathioprine", "methotrexate", "cyclophosphamide", "chemotherapy", "alemtuzumab", "ofatumumab", "ibrutinib", "venetoclax"], "ageMin": 65, "ageMax": 74, "label": "Age 65–74 immunosuppression — medication (from 1 Sept 2026)" }
+        { "kind": "problem", "match": ["copd", "chronic obstructive", "emphysema", "chronic bronchitis", "cystic fibrosis", "bronchiectasis"], "ageMin": 65, "ageMax": 74, "effectiveFrom": "2026-09-01", "label": "Age 65–74 chronic respiratory disease (from 1 Sept 2026; asthma not included)" },
+        { "kind": "problem", "match": ["immunosuppress", "immunodeficiency", "chemotherapy", "leukaemia", "leukemia", "lymphoma", "myeloma", "transplant", "hiv", "aids"], "ageMin": 65, "ageMax": 74, "effectiveFrom": "2026-09-01", "label": "Age 65–74 immunosuppression — disease (from 1 Sept 2026)" },
+        { "kind": "medication", "match": ["rituximab", "ciclosporin", "mycophenolate", "tacrolimus", "azathioprine", "methotrexate", "cyclophosphamide", "chemotherapy", "alemtuzumab", "ofatumumab", "ibrutinib", "venetoclax"], "ageMin": 65, "ageMax": 74, "effectiveFrom": "2026-09-01", "label": "Age 65–74 immunosuppression — medication (from 1 Sept 2026)" }
       ] },
       "statusTerms": {
         "given": ["respiratory syncytial virus vaccin", "rsv vaccination", "rsv vaccine", "abrysvo", "arexvy", "mresvia"],

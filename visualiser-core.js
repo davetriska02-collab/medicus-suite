@@ -1648,8 +1648,18 @@ function computeDrugMonitoring(entries) {
     }
     const daysSinceMon = lastMon ? Math.round((today - lastMon) / 86400000) : null;
     const overdue = active && d.interval > 0 && (daysSinceMon == null || daysSinceMon > d.interval);
+    const matchedTerms = [];
+    for (const e of drugEntries) {
+      const hay = ((e.code || '') + ' ' + (e.body || []).join(' ')).toLowerCase();
+      for (const t of d.terms || []) {
+        if (t && hay.includes(String(t).toLowerCase()) && matchedTerms.indexOf(t) === -1) {
+          matchedTerms.push(t);
+        }
+      }
+    }
     results.push({
       ...d,
+      matchedTerms,
       active,
       lastSeen,
       occurrences: drugEntries.length,
@@ -1974,8 +1984,14 @@ function rebuildAll() {
   const conditionSummaries = computeConditionSummaries(registersWithReview, invData.analytes);
 
   // ── SMR: ACB + STOPP/START ────────────────────────────────────────────────
-  // ACB runs on active drugs (full record labels).
-  const acb = typeof ACBScores !== 'undefined' ? ACBScores.computeACB(drugs) : { total: 0, perDrug: [], alert: false };
+  // Feed matched prescription terms, not HIGH_RISK_DRUGS class labels
+  // ("Antipsychotic" never matches "quetiapine" in ACB/STOPP).
+  const scoredDrugs = (drugs || []).filter((d) => d && d.active).flatMap((d) => {
+    const names =
+      d.matchedTerms && d.matchedTerms.length ? d.matchedTerms : d.terms && d.terms.length ? d.terms : d.label ? [d.label] : [];
+    return names.map((name) => ({ ...d, label: name }));
+  });
+  const acb = typeof ACBScores !== 'undefined' ? ACBScores.computeACB(scoredDrugs) : { total: 0, perDrug: [], alert: false };
 
   // Derive ageYears and latest eGFR for STOPP/START gates.
   const ageYears = (() => {
@@ -1995,8 +2011,8 @@ function rebuildAll() {
     return Number.isFinite(v) ? v : null;
   })();
 
-  // Build a plain-string drug list for STOPP/START from active detected drugs.
-  const drugStrings = drugs.filter((d) => d.active).map((d) => d.label);
+  // Build a plain-string drug list for STOPP/START from matched terms.
+  const drugStrings = scoredDrugs.map((d) => d.label);
   const allProblems = [..._s.activeProblems, ..._s.pastProblems];
 
   const stoppStart =

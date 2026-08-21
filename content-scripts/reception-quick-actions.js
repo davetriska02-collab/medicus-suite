@@ -58,7 +58,7 @@
 
   function getTaskInfo() {
     const m = location.pathname.match(
-      /\/([0-9a-f]{4,})\/tasks\/data\/([^/]+)\/overview\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
+      /\/([0-9a-f]{4,})\/tasks\/(?:data\/)?([^/]+)\/overview\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
     );
     if (!m) return null;
     return { siteId: m[1], typeSlug: m[2], taskUuid: m[3] };

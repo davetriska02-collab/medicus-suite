@@ -695,6 +695,65 @@ check(
   'single-item branch accesses items[0].patient for initials (by design)'
 );
 
+console.log('\n--- txn:fetchPatientBundle sender binding ---');
+
+{
+  const uuidFn = src.match(/const PATIENT_UUID_RE\s*=\s*\/[^/\n]+\/i;/);
+  const mayFn = src.match(
+    /function senderMayFetchPatientBundle\(sender, patientUuid\) \{\n(?: {2}.*\n)*\}/
+  );
+  check(!!uuidFn, 'PATIENT_UUID_RE extracted');
+  check(!!mayFn, 'senderMayFetchPatientBundle extracted');
+  if (uuidFn && mayFn) {
+    const sandbox = {
+      chrome: { runtime: { getURL: (p) => 'chrome-extension://ms/' + (p || '') } },
+    };
+    vm.runInNewContext(
+      uuidFn[0] + '\n' + mayFn[0] + '\nthis.senderMayFetchPatientBundle = senderMayFetchPatientBundle;',
+      sandbox
+    );
+    const may = sandbox.senderMayFetchPatientBundle;
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    check(may({ tab: { url: 'https://app.medicus.health/care-record/' + uuid } }, uuid) === true, 'Medicus tab URL containing the UUID is allowed');
+    check(
+      may({ tab: { url: 'https://app.medicus.health/care-record/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' } }, uuid) ===
+        false,
+      'Medicus tab for a different patient is refused'
+    );
+    check(may({ tab: { url: 'https://evil.example/care-record/' + uuid } }, uuid) === false, 'non-Medicus tab is refused');
+    check(may({ url: 'chrome-extension://ms/side-panel/panel.html' }, uuid) === true, 'extension page sender is allowed');
+    check(may({ url: 'https://evil.example/panel.html' }, uuid) === false, 'web page spoofing an extension URL is refused');
+    check(may({ url: 'chrome-extension://ms/side-panel/panel.html' }, 'not-a-uuid') === false, 'malformed UUID is refused');
+  }
+}
+
+console.log('\n--- presence folder write lock-on-first-write ---');
+
+{
+  const authFn = src.match(/function authorizePresenceWrite\(sender, site, staffId\) \{\n(?: {2}.*\n)*\}/);
+  check(!!authFn, 'authorizePresenceWrite extracted');
+  if (authFn) {
+    const sandbox = { Map, _presenceSelfByTab: new Map() };
+    vm.runInNewContext(
+      'const _presenceSelfByTab = this._presenceSelfByTab;\n' +
+        authFn[0] +
+        '\nthis.authorizePresenceWrite = authorizePresenceWrite;',
+      sandbox
+    );
+    const auth = sandbox.authorizePresenceWrite;
+    const first = auth({ tab: { id: 7 } }, '560b6c', 'staff-a');
+    check(first && first.site === '560b6c' && first.staff_id === 'staff-a', 'first beat on a tab locks that staff');
+    const spoof = auth({ tab: { id: 7 } }, '560b6c', 'staff-b');
+    check(spoof === null, 'a different staff_id on the same tab is refused');
+    const same = auth({ tab: { id: 7 } }, '560b6c', 'staff-a');
+    check(same && same.staff_id === 'staff-a', 'the locked staff can keep writing');
+    const otherTab = auth({ tab: { id: 8 } }, '560b6c', 'staff-b');
+    check(otherTab && otherTab.staff_id === 'staff-b', 'a different tab can lock a different staff');
+    check(auth({}, '560b6c', 'staff-a') === null, 'sender without a tab is not authorised');
+    check(auth({ tab: { id: 9 } }, '', 'staff-a') === null, 'missing site is refused');
+  }
+}
+
 console.log('\n--- termbrowser:fetchConcept relay: sender guard + host restriction ------');
 
 // Content-script fetch() to termbrowser.nhs.uk was found live to be blocked

@@ -443,6 +443,15 @@ async function runTests() {
   // allClear is false as soon as anything is action-needed
   check(buildBrief(makeSnapshot([mtxChip]), null).allClear === false, 'action chip present → allClear false');
 
+  // Zero-module / journal-failed extracts must not green-light "all clear"
+  const emptyExtract = buildBrief({ chips: [], modules: { medications: 0, observations: 0, problems: 0 } }, null);
+  check(emptyExtract.allClear === false, 'zero extracted modules → allClear false');
+  check(emptyExtract.extractionIncomplete === true, 'zero extracted modules → extractionIncomplete');
+  const journalFail = buildBrief({ chips: [inDateChip], journalAugmentFailed: true }, null);
+  check(journalFail.allClear === false, 'journal augment failed → allClear false');
+  const degraded = buildBrief({ chips: [], degraded: true }, null);
+  check(degraded.allClear === false, 'degraded snapshot → allClear false');
+
   // ── 13b. Per-group RAG: meds / qof / general split ────────────────────────
   console.log('\n--- per-group RAG ---');
   const vaxChip = { type: 'vaccine', ruleId: 'pcv20', status: 'vax_due', displayName: 'Pneumococcal (PCV20)' };

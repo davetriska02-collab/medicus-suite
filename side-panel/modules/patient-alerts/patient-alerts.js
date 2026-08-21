@@ -45,6 +45,7 @@ let _types = [];
 let _typesCustomised = false; // true when storage held a palette (vs shipped defaults)
 let _pc = null; // patientContext from the last good snapshot, or null
 let _lastTabId = null; // last Medicus tab we successfully read a snapshot from
+let _refreshGen = 0;
 let _query = '';
 let _formOpen = false;
 let _editingAlertId = null; // alert id being edited in the form, or null
@@ -158,6 +159,7 @@ function cleanup() {
   container = null;
   _pc = null;
   _lastTabId = null;
+  _refreshGen += 1;
 }
 
 export { cleanup };
@@ -249,6 +251,7 @@ async function findMedicusTab() {
 }
 
 async function refreshSnapshot() {
+  const gen = ++_refreshGen;
   let pc = null;
   try {
     const tab = await findMedicusTab();
@@ -263,6 +266,7 @@ async function refreshSnapshot() {
     // No Medicus tab / content script not mounted — pc stays null and the
     // current-patient card renders its idle state (never a stale patient).
   }
+  if (gen !== _refreshGen) return;
   const prevKey = patientKey(_pc) || (_pc && _pc.nhsNumber) || null;
   const nextKey = patientKey(pc) || (pc && pc.nhsNumber) || null;
   const changed = prevKey !== nextKey || !!_pc !== !!pc;

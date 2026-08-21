@@ -65,7 +65,7 @@ async function sentinelImport(data, { merge = false, skipInvalidCustomRules = fa
     if (typeof data.config !== 'object' || Array.isArray(data.config)) {
       throw new Error('sentinel.config must be an object.');
     }
-    toSet['sentinel.config'] = data.config;
+    toSet['sentinel.config'] = _stripDangerousKeys(data.config);
   }
 
   if (data.rules !== undefined) {
@@ -124,11 +124,11 @@ async function sentinelImport(data, { merge = false, skipInvalidCustomRules = fa
       const existingIds = new Set(existingRules.map((r) => r.id));
       const merged = [...existingRules];
       incoming.forEach((rule) => {
-        if (!existingIds.has(rule.id)) merged.push(rule);
+        if (!existingIds.has(rule.id)) merged.push({ ...rule, enabled: false });
       });
       toSet['sentinel.customRules'] = merged;
     } else {
-      toSet['sentinel.customRules'] = incoming;
+      toSet['sentinel.customRules'] = incoming.map((rule) => ({ ...rule, enabled: false }));
     }
   }
 
@@ -173,7 +173,7 @@ async function sentinelImport(data, { merge = false, skipInvalidCustomRules = fa
         throw new Error(`sentinel.hiddenRules["${ruleId}"].dismissedAt: must be null or a YYYY-MM-DD date string.`);
       }
     }
-    toSet['sentinel.hiddenRules'] = data.hiddenRules;
+    toSet['sentinel.hiddenRules'] = _stripDangerousKeys(data.hiddenRules);
   }
 
   if (data.briefCollapsed !== undefined) {

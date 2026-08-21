@@ -1463,7 +1463,7 @@ function generateSummary(form, pathway) {
       nowIso: new Date().toISOString(),
       suiteVersion: chrome.runtime.getManifest?.().version || '',
       patientLine,
-      pharmacyFirstHint: pharmacyFirstHint(pathway, pc?.ageYears ?? null),
+      pharmacyFirstHint: pharmacyFirstHint(pathway, readConfirmedAge(form)),
       safeguardingContact: _config.safeguardingContact || '',
       crisisLine: _config.crisisLineText || '',
       // Re-evaluated here, not read off the last render: what goes in the

@@ -236,6 +236,9 @@
       'urinary tract infection',
       'waterworks',
       'water infection',
+      // Same lay term as `urinary` — so "cystitis" offers BOTH tiles (male UTI
+      // is not Pharmacy First). Queue auto-chip must not first-match-win.
+      'cystitis',
       'weak stream',
       'cant pass urine',
       'unable to pass urine',
@@ -289,7 +292,7 @@
       'mental health',
       'mental health crisis',
       'mental breakdown',
-      'breakdown',
+      'nervous breakdown',
       'anxiety',
       'anxious',
       'depression',
@@ -407,7 +410,17 @@
     'rf-loin': ['loin pain', 'flank pain', 'kidney pain', 'side pain', 'pain around the kidney'],
     'rf-vomiting': ['vomiting', 'being sick', 'throwing up', 'cant keep fluids down', 'unable to keep fluids down'],
     'rf-pregnant': ['pregnant', 'pregnancy', 'could be pregnant'],
-    'rf-male-child': ['hes male', 'hes a boy', 'male patient', 'under 16'],
+    'rf-male-child': [
+      'hes male',
+      'hes a boy',
+      'male patient',
+      'under 16',
+      'male',
+      'boy',
+      'man with',
+      'he has',
+      'he thinks',
+    ],
     'rf-thunderclap': [
       'thunderclap headache',
       'sudden severe headache',
@@ -901,6 +914,27 @@
     };
   }
 
+  // Queue rows have a DOB but no sex. A green "Pharmacy First" chip on the
+  // women's UTI pathway is a routing hazard whenever a male/clinician-only
+  // pathway also matched, a male/child gate is still unanswered, or the
+  // patient already volunteered an escalation red flag.
+  const QUEUE_PF_BLOCK_PATHWAY_IDS = ['gu-male', 'gyn-female', 'mental-health', 'general'];
+  function queuePharmacyFirstSafe(matchedPathways, gapsData) {
+    if (!Array.isArray(matchedPathways) || !matchedPathways.length) return false;
+    if (matchedPathways.some((p) => p && QUEUE_PF_BLOCK_PATHWAY_IDS.indexOf(p.id) !== -1)) {
+      return false;
+    }
+    const gaps = (gapsData && gapsData.gaps) || [];
+    const flagged = (gapsData && gapsData.flaggedInText) || [];
+    const gapIds = gaps.map((g) => (g && g.id) || g);
+    const flaggedIds = flagged.map((g) => (g && g.id) || g);
+    if (gapIds.indexOf('rf-male-child') !== -1 || flaggedIds.indexOf('rf-male-child') !== -1) {
+      return false;
+    }
+    if (flaggedIds.length > 0) return false;
+    return true;
+  }
+
   // ── redFlagGaps(pathway, requestText) ─────────────────────────────────────────────────────────
   //
   // Returns { gaps, flaggedInText }, each an array of { id, ask, escalate } drawn from
@@ -977,6 +1011,7 @@
   const api = {
     matchPathways,
     pharmacyFirstEligibility,
+    queuePharmacyFirstSafe,
     redFlagGaps,
     buildAskBackText,
     // Exposed for CSO review / coverage testing, not part of the "public" call surface above.

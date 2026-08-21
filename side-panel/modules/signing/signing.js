@@ -53,7 +53,7 @@ const _SITE_CODE_RE = /^[a-f0-9]{4,8}$/i;
 
 // Relative task-overview path validation — identical to the queue bridge's
 // _OVERVIEW_URL_RE in content-scripts/triage-lens/content.js.
-const _OVERVIEW_URL_RE = /^\/tasks\/data\/[A-Za-z0-9_-]+\/overview\/[0-9a-f-]+$/;
+const _OVERVIEW_URL_RE = /^\/tasks\/(?:data\/)?[A-Za-z0-9_-]+\/overview\/[0-9a-fA-F-]+$/;
 
 const TASK_TYPES = [
   { key: 'routine', slug: 'prescription_request_task_routine', label: 'Routine' },

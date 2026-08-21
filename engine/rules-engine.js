@@ -2311,12 +2311,25 @@
     return null;
   }
 
-  function matchVaccineEligibility(rule, data) {
+  function clauseInEffect(clause, nowIso) {
+    if (!clause || typeof clause !== 'object') return false;
+    const now = typeof nowIso === 'string' && nowIso.length >= 10 ? nowIso.slice(0, 10) : null;
+    if (clause.effectiveFrom) {
+      if (!now || now < String(clause.effectiveFrom).slice(0, 10)) return false;
+    }
+    if (clause.effectiveUntil) {
+      if (!now || now > String(clause.effectiveUntil).slice(0, 10)) return false;
+    }
+    return true;
+  }
+
+  function matchVaccineEligibility(rule, data, nowIso) {
     const ctx = data.patientContext || {};
     const age = Number.isFinite(ctx.ageYears) ? ctx.ageYears : Number.isFinite(ctx.age) ? ctx.age : null;
     const sex = (ctx.sex || ctx.gender || '').toLowerCase();
 
     for (const clause of rule.eligibility?.anyOf || []) {
+      if (!clauseInEffect(clause, nowIso)) continue;
       const k = clause.kind;
 
       if (k === 'age') {
@@ -2451,7 +2464,7 @@
   function evaluateVaccineRule(rule, data, nowIso) {
     if (rule.enabled === false) return [];
     const traceEntry = _traceBase(data, rule);
-    const matchedClause = matchVaccineEligibility(rule, data);
+    const matchedClause = matchVaccineEligibility(rule, data, nowIso);
     if (!matchedClause) {
       if (traceEntry) traceEntry.skipReason = 'not-eligible';
       return [];

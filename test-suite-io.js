@@ -605,7 +605,7 @@ console.log('\n--- applyWithRollback rollback ---');
   assert(Object.prototype.hasOwnProperty.call(subExp, 'config'), 'submissions export still contains config');
   assert(Object.prototype.hasOwnProperty.call(subExp, 'thresholds'), 'submissions export still contains thresholds');
 
-  // Legacy import: a payload WITH practiceCode (e.g. old standalone backup) is still applied
+  // A submissions-scoped payload must not write suite.practiceCode.
   const subStoreLegacy = {};
   global.chrome = {
     storage: {
@@ -626,8 +626,8 @@ console.log('\n--- applyWithRollback rollback ---');
   };
   await subIo.submissionsImport({ practiceCode: 'legacy1' });
   assert(
-    subStoreLegacy['suite.practiceCode'] === 'legacy1',
-    'submissionsImport: legacy payload with practiceCode still applied'
+    subStoreLegacy['suite.practiceCode'] === undefined,
+    'submissionsImport: must not write suite.practiceCode from a submissions payload'
   );
 
   global.chrome = origChrome;
@@ -808,6 +808,7 @@ console.log('\n--- applyWithRollback rollback ---');
       stored.length === 1 && stored[0].id === 'custom-b12-ferritin-1',
       'sentinelImport: resilient mode imports the valid custom rule despite an invalid sibling'
     );
+    assert(stored[0].enabled === false, 'sentinelImport: imported custom rules start disabled');
     assert(
       res &&
         Array.isArray(res.rejectedCustomRules) &&
@@ -1050,6 +1051,23 @@ console.log('\n--- applyWithRollback rollback ---');
     );
 
     global.chrome = savedChrome4;
+  }
+
+  // ── applyEnvelope honours envelope.scope (source lock) ────────────────────────
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const optionsSrc = fs.readFileSync(path.join(__dirname, 'options', 'options.js'), 'utf8');
+    const applyFn = optionsSrc.match(/async function applyEnvelope\(envelope\) \{[\s\S]*?\n\}/);
+    assert(!!applyFn, 'applyEnvelope extracted from options.js');
+    assert(
+      applyFn && /const allow = \(name\) => !scope \|\| scope === 'suite' \|\| scope === name;/.test(applyFn[0]),
+      'applyEnvelope only imports modules matching envelope.scope'
+    );
+    assert(
+      applyFn && /allow\('sentinel'\) && mods\.sentinel/.test(applyFn[0]) && /allow\('suite'\) && mods\.suite/.test(applyFn[0]),
+      'applyEnvelope gates sentinel and suite imports on scope'
+    );
   }
 
   // ── Summary ───────────────────────────────────────────────────────────────────

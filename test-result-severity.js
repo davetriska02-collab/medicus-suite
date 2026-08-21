@@ -215,6 +215,7 @@ console.log('\n--- unmatched passthrough ---');
 {
   const out = evaluateReportSeverity(makeReport([wbcNormal], true));
   assert(out.unmatched === true, 'unmatched true passes through');
+  assert(out.level === 'amber', 'unmatched-only report is amber, not all-clear');
 }
 {
   const out = evaluateReportSeverity(makeReport([wbcNormal], false));
@@ -2438,8 +2439,9 @@ console.log('\n--- Leg B: unclassified qualitative positive surfacing ---');
   assert(out.unclassified.length === 0, 'substring inside a larger word does not trip the lexicon');
 }
 {
-  // A result COVERED by a text rule is left to that rule (not double-surfaced),
-  // even when the rule's outcome is 'none' (lone abnormalText, no phrase hit).
+  // A text rule that matched the analyte but classified nothing must NOT
+  // suppress the unclassified-positive net (a culture saying "Organism isolated"
+  // is still a finding).
   const coverRule = {
     id: 'cov',
     kind: 'text',
@@ -2450,7 +2452,8 @@ console.log('\n--- Leg B: unclassified qualitative positive surfacing ---');
   };
   const r = textResult('Urine culture', { text: 'Organism isolated, mixed growth' });
   const out = evaluateReportSeverity(makeReport([r]), { resultRules: [coverRule] });
-  assert(out.unclassified.length === 0, 'a result a text rule touched is NOT also surfaced as unclassified');
+  assert(out.unclassified.length === 1, 'unclassified-positive still fires when a text rule matched the analyte but not the phrase');
+  assert(out.level === 'amber', 'that unclassified positive is amber, not silent');
 }
 {
   // A lab-flagged (abnormal) result is already visible → not unclassified.

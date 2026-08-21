@@ -27,7 +27,6 @@ import { followupCounts } from '../followups/followups-core.js';
 
 const WR_POLL_MS = 30 * 1000;
 const DEMAND_POLL_MS = 60 * 1000;
-const SWEEP_LAST_RUN_TTL_MS = 2 * 60 * 60 * 1000;
 
 const DEFAULT_SUB_THRESHOLDS = {
   medical: { amber: 30, red: 60, enabled: false },
@@ -61,6 +60,18 @@ function todayISO() {
   const d = new Date();
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function sweepLastRunIsToday(d) {
+  if (!d || typeof d !== 'object') return false;
+  if (typeof d.clinicDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.clinicDate)) {
+    return d.clinicDate === todayISO();
+  }
+  const runAt = typeof d.runAt === 'string' ? new Date(d.runAt) : d.runAt ? new Date(d.runAt) : null;
+  if (!runAt || Number.isNaN(runAt.getTime())) return false;
+  const pad = (n) => String(n).padStart(2, '0');
+  const local = `${runAt.getFullYear()}-${pad(runAt.getMonth() + 1)}-${pad(runAt.getDate())}`;
+  return local === todayISO();
 }
 
 function navTo(module) {
@@ -277,8 +288,9 @@ async function fetchSlots() {
       renderHeadline();
       return;
     }
-    const stored = await chrome.storage.local.get('slots.alertRules');
+    const stored = await chrome.storage.local.get(['slots.alertRules', 'slots.hiddenTypes']);
     const alertRules = stored['slots.alertRules'] || [];
+    const hiddenTypes = new Set(stored['slots.hiddenTypes'] || []);
     const trackBreaches = hasEnabledRules(alertRules);
 
     const today = todayISO();
@@ -293,9 +305,10 @@ async function fetchSlots() {
         for (const entry of session.entries || []) {
           if (entry.diaryEntryType?.value !== 'slot') continue;
           if (entry.startDateTime && new Date(entry.startDateTime) < now) continue;
+          const type = entry.appointmentType?.name || 'Unknown';
+          if (hiddenTypes.has(type)) continue;
           count++;
           if (byType) {
-            const type = entry.appointmentType?.name || 'Unknown';
             byType[type] = (byType[type] || 0) + 1;
           }
         }
@@ -318,13 +331,11 @@ async function fetchSweep() {
     const d = r['sweep.lastRun'];
     if (!d || typeof d !== 'object') {
       _sweepData = { lastRun: null };
+    } else if (!sweepLastRunIsToday(d)) {
+      // Yesterday's (or undated) run must never read as "ran today".
+      _sweepData = { lastRun: null };
     } else {
-      const runAt = typeof d.runAt === 'string' ? new Date(d.runAt).getTime() : d.runAt;
-      if (!runAt || Date.now() - runAt > SWEEP_LAST_RUN_TTL_MS) {
-        _sweepData = { lastRun: null };
-      } else {
-        _sweepData = { lastRun: d };
-      }
+      _sweepData = { lastRun: d };
     }
   } catch (_) {
     _sweepData = { lastRun: null };

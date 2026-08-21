@@ -334,7 +334,7 @@
       if (area !== 'local') return;
       const change = changes['triagelens.config'] || changes['config'];
       if (!change || !change.newValue) return;
-      CONFIG = change.newValue;
+      CONFIG = (DEFAULTS && mergeShippedDefaults(change.newValue, DEFAULTS)) || change.newValue;
       if (!Array.isArray(CONFIG.rules)) CONFIG.rules = [];
       if (!Array.isArray(CONFIG.resultRules)) CONFIG.resultRules = [];
       renderRules();

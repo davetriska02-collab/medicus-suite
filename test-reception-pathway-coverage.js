@@ -133,6 +133,18 @@ console.log('\n--- GU tie-break: generic UTI wording offers BOTH urinary and gu-
   const ids = matchPathways('bleeding after sex and pelvic pain', PATHWAYS).map((p) => p.id);
   check(ids.includes('gyn-female'), 'gynae wording offers the gyn-female pathway');
 }
+{
+  const ids = matchPathways('cystitis again', PATHWAYS).map((p) => p.id);
+  check(ids.includes('urinary') && ids.includes('gu-male'), '"cystitis" offers both urinary and gu-male');
+}
+{
+  const ids = matchPathways('car breakdown on the M25 need a sick note', PATHWAYS).map((p) => p.id);
+  check(!ids.includes('mental-health'), 'bare "breakdown" (car) does not offer mental-health');
+}
+{
+  const ids = matchPathways('nervous breakdown after bereavement', PATHWAYS).map((p) => p.id);
+  check(ids.includes('mental-health'), '"nervous breakdown" still offers mental-health');
+}
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

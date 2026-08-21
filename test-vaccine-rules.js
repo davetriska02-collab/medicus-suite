@@ -265,11 +265,20 @@ console.log('\n--- RSV eligibility ---');
 // ── 2026-08-18 Keeper: RSV 65–74 clinical-risk (effective 1 Sept 2026) ────────
 console.log('\n--- RSV 65-74 clinical-risk (vax-001, 2026-08-18) ---');
 
-// Age 70 + COPD → eligible
+const RSV_65_FROM = '2026-09-01';
+
+// Age 70 + COPD before the policy date → no chip (effectiveFrom fail-closed)
 {
   const data = { ...baseData(70), problems: [{ label: 'COPD', status: 'active' }] };
   const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
-  assert(chips.length === 1, 'RSV: age 70 + COPD → chip');
+  assert(chips.length === 0, 'RSV: age 70 + COPD before 1 Sept 2026 → no chip');
+}
+
+// Age 70 + COPD on/after the policy date → eligible
+{
+  const data = { ...baseData(70), problems: [{ label: 'COPD', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, RSV_65_FROM);
+  assert(chips.length === 1, 'RSV: age 70 + COPD on 1 Sept 2026 → chip');
   assert(
     chips[0].eligibilityReason && /chronic respiratory|65/i.test(chips[0].eligibilityReason),
     `RSV: age 70 + COPD eligibility mentions 65–74 respiratory (got: ${chips[0]?.eligibilityReason})`
@@ -296,18 +305,35 @@ console.log('\n--- RSV 65-74 clinical-risk (vax-001, 2026-08-18) ---');
   assert(chips.length === 0, 'RSV: age 64 + COPD → no chip');
 }
 
-// Age 70 + lymphoma → immunosuppression problem
+// Age 70 + lymphoma → immunosuppression problem (only once the clause is in force)
 {
   const data = { ...baseData(70), problems: [{ label: 'Non-Hodgkin lymphoma', status: 'active' }] };
-  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
-  assert(chips.length === 1, 'RSV: age 70 + lymphoma → chip');
+  assert(engine.evaluateVaccineRule(rsvRule, data, NOW).length === 0, 'RSV: age 70 + lymphoma before 1 Sept 2026 → no chip');
+  const chips = engine.evaluateVaccineRule(rsvRule, data, RSV_65_FROM);
+  assert(chips.length === 1, 'RSV: age 70 + lymphoma on 1 Sept 2026 → chip');
 }
 
 // Age 70 + mycophenolate (no coded problem) → immunosuppression medication
 {
   const data = { ...baseData(70), medications: [{ name: 'Mycophenolate mofetil 500mg tablets' }] };
-  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
-  assert(chips.length === 1, 'RSV: age 70 + mycophenolate → chip');
+  assert(
+    engine.evaluateVaccineRule(rsvRule, data, NOW).length === 0,
+    'RSV: age 70 + mycophenolate before 1 Sept 2026 → no chip'
+  );
+  const chips = engine.evaluateVaccineRule(rsvRule, data, RSV_65_FROM);
+  assert(chips.length === 1, 'RSV: age 70 + mycophenolate on 1 Sept 2026 → chip');
+}
+
+// PPV / flu homelessness cohorts are 1 Oct 2026 — not 16+ from midsummer
+{
+  const peh = {
+    ...baseData(30),
+    problems: [{ label: 'Rough sleeper', status: 'active' }],
+  };
+  assert(engine.evaluateVaccineRule(ppv23Rule, peh, NOW).length === 0, 'PPV: PEH age 30 in June → no chip');
+  assert(engine.evaluateVaccineRule(ppv23Rule, peh, '2026-10-01').length === 1, 'PPV: PEH age 30 on 1 Oct 2026 → chip');
+  assert(engine.evaluateVaccineRule(fluRule, peh, '2026-09-15').length === 0, 'Flu: PEH age 30 on 15 Sep 2026 → no chip');
+  assert(engine.evaluateVaccineRule(fluRule, peh, '2026-10-01').length === 1, 'Flu: PEH age 30 on 1 Oct 2026 → chip');
 }
 
 // Age 80 + COPD still eligible via the age-75+ clause (not only the 65–74 band)

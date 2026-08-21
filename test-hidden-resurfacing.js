@@ -24,17 +24,10 @@ const src = fs.readFileSync(
   path.join(__dirname, 'side-panel', 'modules', 'sentinel', 'sentinel.js'), 'utf8'
 );
 
-// Extract COLOUR_RANK map, statusSeverityRank helper, and chipSuppressionResult.
-// We rely on the fact that STATUS_COLOUR, COLOUR_RANK, statusSeverityRank, and
-// chipSuppressionResult are all top-level declarations in the module.
+// Extract CLINICAL_HIDE_RANK map, statusSeverityRank helper, and chipSuppressionResult.
 
-// Extract STATUS_COLOUR (needed by statusSeverityRank)
-const scMatch = src.match(/const STATUS_COLOUR\s*=\s*\{[\s\S]*?\};/);
-check(!!scMatch, 'STATUS_COLOUR extracted from module');
-
-// Extract COLOUR_RANK
-const crMatch = src.match(/const COLOUR_RANK\s*=\s*\{[\s\S]*?\};/);
-check(!!crMatch, 'COLOUR_RANK extracted from module');
+const crMatch = src.match(/const CLINICAL_HIDE_RANK\s*=\s*\{[\s\S]*?\};/);
+check(!!crMatch, 'CLINICAL_HIDE_RANK extracted from module');
 
 // Extract statusSeverityRank
 const ssrMatch = src.match(/function statusSeverityRank\([\s\S]*?\n\}/);
@@ -45,9 +38,8 @@ const csrMatch = src.match(/export function chipSuppressionResult\([\s\S]*?\n\}/
 check(!!csrMatch, 'chipSuppressionResult extracted from module');
 
 let chipSuppressionResult = null;
-if (scMatch && crMatch && ssrMatch && csrMatch) {
+if (crMatch && ssrMatch && csrMatch) {
   const snippet = [
-    scMatch[0],
     crMatch[0],
     ssrMatch[0],
     csrMatch[0].replace(/^export\s+/, ''),
@@ -179,11 +171,19 @@ console.log('\n--- new permanent: status worsened → resurface ---');
 }
 
 {
-  // Dismissed as no_data (neutral=1), now stale (amber=2) → worse → resurface
+  // Dismissed as no_data, now stale → worse → resurface
   const entry = { until: null, statusAtDismissal: 'no_data', dismissedAt: '2026-01-01' };
   const r = chipSuppressionResult(entry, 'stale', TODAY);
   check(r.hidden === false,   'neutral→amber: resurfaced');
   check(r.resurfaced === true, 'neutral→amber: resurfaced=true');
+}
+
+{
+  // Same colour (both amber) but clinically worse: due_soon → stale must resurface
+  const entry = { until: null, statusAtDismissal: 'due_soon', dismissedAt: '2026-01-01' };
+  const r = chipSuppressionResult(entry, 'stale', TODAY);
+  check(r.hidden === false, 'due_soon→stale: resurfaced (clinical rank, not colour)');
+  check(r.resurfaced === true, 'due_soon→stale: resurfaced=true');
 }
 
 // ── 6. Unknown status resurfaces (fail-safe) ─────────────────────────────────
@@ -233,6 +233,25 @@ console.log('\n--- null / missing entry ---');
 {
   const r = chipSuppressionResult(undefined, 'overdue', TODAY);
   check(r.hidden === false, 'undefined entry: not hidden');
+}
+
+console.log('\n--- hide store is patient-scoped ---');
+
+{
+  check(
+    /function hiddenRuleKey\(ruleId, patientUuid\)/.test(src) &&
+      /return `\$\{patientUuid\}\|\$\{ruleId\}`/.test(src),
+    'hide keys are patientUuid|ruleId, not a bare rule id'
+  );
+  check(
+    /if \(!key\) return;/.test(src),
+    'a hide without a patient UUID is refused'
+  );
+  check(
+    /function lookupHiddenEntry\(ruleId\)/.test(src) &&
+      /if \(!uuid\) return null;/.test(src),
+    'lookup ignores hides when the live snapshot has no patient UUID'
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -148,7 +148,7 @@
   // full async find/type/wait pipeline — see test-routine-rx-macro.js.
   function commitAndAudit(commitEl, team, mode) {
     realClick(commitEl);
-    toast('Sent to “' + team + '”.', 'ok');
+    toast('Clicked Send to “' + team + '”. Confirm the list in Medicus.', 'ok');
     recordAudit(team, mode, 'committed', null);
   }
   function highlightAndAudit(commitEl, team, mode) {

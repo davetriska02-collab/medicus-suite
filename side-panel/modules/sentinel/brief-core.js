@@ -352,15 +352,32 @@ export function buildBrief(snapshot, trendData) {
   }));
 
   const trendNotes = buildTrendNotes(trendData);
+  const extractionIncomplete = briefExtractionIncomplete(snapshot);
 
   return {
     patientLine: buildPatientLine(patient),
     counts: { red, amber },
     groups,
-    allClear: actionChips.length === 0,
+    allClear: actionChips.length === 0 && !extractionIncomplete,
+    extractionIncomplete,
     signals,
     moreCount,
     moreRed,
     trendNotes,
   };
+}
+
+// Green "all clear" is only honest when we actually extracted something to
+// check. Demographics-only / journal-failed / degraded snapshots used to
+// render "Nothing to do" with zero meds, obs and problems.
+export function briefExtractionIncomplete(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return false;
+  if (snapshot.degraded) return true;
+  if (snapshot.journalAugmentFailed) return true;
+  const m = snapshot.modules;
+  if (!m || typeof m !== 'object') return false;
+  const meds = Number(m.medications) || 0;
+  const obs = Number(m.observations) || 0;
+  const probs = Number(m.problems) || 0;
+  return meds + obs + probs === 0;
 }

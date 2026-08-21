@@ -59,16 +59,32 @@ const STATUS_LABEL = {
   in_date: 'IN DATE',
 };
 
-// Colour → severity rank for dismissal escalation. Red=3, amber=2, neutral=1, green=0.
-// Unknown colours (or statuses not in STATUS_COLOUR) rank as red (fail-safe: resurface).
-// keep in sync with shared/chip-renderer.js STATUS_COLOUR
-const COLOUR_RANK = { red: 3, amber: 2, neutral: 1, green: 0 };
+// Clinical severity rank for dismissal escalation. Higher = worse.
+// Inverted from STATUS_RANK (where 0 is worst) so `current > recorded`
+// still means "worsened". Colour buckets hid due_soon→stale (both amber).
+// Unknown statuses rank above any known status (fail-safe: resurface).
+const CLINICAL_HIDE_RANK = {
+  overdue: 10,
+  not_met: 10,
+  alert: 10,
+  stale: 9,
+  vax_due: 9,
+  due_soon: 8,
+  caution: 8,
+  no_data: 5,
+  noted: 5,
+  vax_declined: 5,
+  recently_initiated: 4,
+  achieved: 2,
+  in_date: 2,
+  vax_given: 2,
+};
 
 // Returns the numeric severity rank for a status string.
-// Unknown statuses rank as red (3) — fail-safe, resurfaces the chip.
+// Unknown statuses rank as 11 — fail-safe, resurfaces the chip.
 function statusSeverityRank(status) {
-  const colour = STATUS_COLOUR[status];
-  return colour !== undefined ? (COLOUR_RANK[colour] ?? 3) : 3;
+  if (status != null && CLINICAL_HIDE_RANK[status] !== undefined) return CLINICAL_HIDE_RANK[status];
+  return 11;
 }
 
 // Modals live in #sentModalHost — a persistent node OUTSIDE the re-rendered
@@ -394,9 +410,26 @@ export function chipSuppressionResult(entry, currentStatus, todayIso) {
   return { hidden: true, resurfaced: false };
 }
 
+function currentPatientUuid() {
+  const pc = _currentSnapshot && _currentSnapshot.patientContext;
+  return (pc && (pc.patientUuid || pc.uuid || pc.patientId)) || null;
+}
+
+function hiddenRuleKey(ruleId, patientUuid) {
+  if (!ruleId || !patientUuid) return null;
+  return `${patientUuid}|${ruleId}`;
+}
+
+function lookupHiddenEntry(ruleId) {
+  if (!ruleId) return null;
+  const uuid = currentPatientUuid();
+  if (!uuid) return null;
+  return _hiddenRules[hiddenRuleKey(ruleId, uuid)] || null;
+}
+
 function isRuleHiddenResult(ruleId, currentStatus) {
   if (!ruleId) return { hidden: false, resurfaced: false };
-  const entry = _hiddenRules[ruleId];
+  const entry = lookupHiddenEntry(ruleId);
   if (!entry) return { hidden: false, resurfaced: false };
   const today = new Date().toISOString().slice(0, 10);
   return chipSuppressionResult(entry, currentStatus, today);
@@ -520,9 +553,12 @@ export async function init(el) {
     // Record the chip's current status so a later status-escalation can resurface it.
     const statusAtDismissal = btn.dataset.dismissStatus || null;
     const dismissedAt = new Date().toISOString().slice(0, 10);
+    const uuid = currentPatientUuid();
+    const key = hiddenRuleKey(ruleId, uuid);
+    if (!key) return; // cannot scope a hide without a patient — fail toward showing
     const r = await chrome.storage.local.get('sentinel.hiddenRules');
     const hidden = r['sentinel.hiddenRules'] || {};
-    hidden[ruleId] = { until, statusAtDismissal, dismissedAt };
+    hidden[key] = { until, statusAtDismissal, dismissedAt };
     await chrome.storage.local.set({ 'sentinel.hiddenRules': hidden });
     _hiddenRules = hidden;
     // F2 Clinical Event Ledger — record the dismissal (fire-and-forget; the
@@ -1983,6 +2019,15 @@ function renderBriefCard(brief) {
         `</div>`
     )
     .join('');
+
+  if (brief.extractionIncomplete && !(brief.signals && brief.signals.length)) {
+    const bodyHtml = `
+    <div class="sent-brief-body" id="sentBriefBody">
+      <div class="sent-brief-incomplete">Not all-clear — this live extract may be incomplete. Check meds, QOF and vaccines in Medicus.</div>
+      ${trendLines}
+    </div>`;
+    return `<div class="${cardClass}">${headerHtml}${bodyHtml}</div>`;
+  }
 
   if (allClear) {
     // Loud green all-clear: nothing action-needed anywhere. Wording stays

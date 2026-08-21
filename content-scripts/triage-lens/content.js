@@ -611,7 +611,7 @@
       // Accept updates on either key for a clean transition period
       const newVal = changes['triagelens.config']?.newValue || changes['config']?.newValue;
       if (!newVal) return;
-      CONFIG = newVal || fallbackConfig();
+      CONFIG = mergeShippedDefaults(newVal) || newVal || fallbackConfig();
       recompileRules();
       try { onChange(); } catch (e) {}
     });
@@ -2048,16 +2048,31 @@
     const el = tmp.firstElementChild;
     if (!el) return;
     el.classList.add('ch-monitoring-chip');
-    el.addEventListener('click', (e) => {
+    const open = (e) => {
       e.preventDefault(); e.stopPropagation();
       showActionMenu(el, el.dataset.ruleId);
-    });
+    };
+    el.addEventListener('click', open);
+    bindActivate(el, open);
     row.appendChild(el);
   };
 
   // ============================================================
   // 4. RENDERING + PIP
   // ============================================================
+
+  function bindActivate(el, fn) {
+    if (!el || el.dataset.chActivateBound === '1') return;
+    el.dataset.chActivateBound = '1';
+    if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
+    if (!el.getAttribute('role')) el.setAttribute('role', 'button');
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fn(e);
+      }
+    });
+  }
 
   const HUD_ID = 'medicus-clinical-hud';
 
@@ -2806,7 +2821,7 @@
 
     // Tile detail
     hud.querySelectorAll('.ch-tile').forEach(t => {
-      t.addEventListener('click', () => {
+      const openTile = () => {
         hud.querySelectorAll('.ch-tile').forEach(x => x.classList.remove('ch-tile-sel'));
         t.classList.add('ch-tile-sel');
         const key = t.dataset.tile;
@@ -2815,7 +2830,9 @@
         hud.querySelector('#ch-detail').innerHTML = `
           <div class="ch-detail-head">${labels[key]}</div>
           ${detailList(sig.items)}`;
-      });
+      };
+      t.addEventListener('click', openTile);
+      bindActivate(t, openTile);
     });
 
     // Header buttons
@@ -2845,10 +2862,12 @@
 
     // Rule chip click handlers — open action menu
     hud.querySelectorAll('[data-rule-id]').forEach(el => {
-      el.addEventListener('click', (e) => {
+      const open = (e) => {
         e.preventDefault(); e.stopPropagation();
         showActionMenu(el, el.dataset.ruleId);
-      });
+      };
+      el.addEventListener('click', open);
+      bindActivate(el, open);
     });
 
     if (collapsed) hud.classList.add('ch-min');
@@ -3397,11 +3416,13 @@
       badge.title = (verdict.reason ? verdict.reason + ' — ' : '') + 'click to open patient record';
       if (!badge.dataset.oirLinked) {
         badge.dataset.oirLinked = '1';
-        badge.addEventListener('click', (e) => {
+        const openRecord = (e) => {
           e.preventDefault();
           e.stopPropagation(); // do not toggle the Quasar checkbox
           window.open('/care-record/' + patientUuid, '_blank', 'noopener');
-        });
+        };
+        badge.addEventListener('click', openRecord);
+        bindActivate(badge, openRecord);
       }
     } else if (!elsewhere) {
       badge.style.cursor = '';
@@ -4053,7 +4074,7 @@
   // taskTypeSlug: alphanumeric + underscores/hyphens, reasonable length
   const _BRIDGE_SLUG_RE = /^[a-zA-Z0-9_-]{1,80}$/;
   // overviewURL: relative path only — /tasks/data/<slug>/overview/<uuid>
-  const _OVERVIEW_URL_RE = /^\/tasks\/data\/[A-Za-z0-9_-]+\/overview\/[0-9a-f-]+$/;
+  const _OVERVIEW_URL_RE = /^\/tasks\/(?:data\/)?[A-Za-z0-9_-]+\/overview\/[0-9a-fA-F-]+$/;
   // Maximum rows processed from a single event (cap to prevent fan-out DoS)
   const _BRIDGE_MAX_ROWS = 500;
 
@@ -7587,7 +7608,11 @@
         const closingQuestions = _receptionPathwaysData.closingQuestions;
         const hasEscalation = gapsData.flaggedInText.length > 0;
         const hasAskBack = gapsData.gaps.length > 0 || hasEscalation;
-        if (pfElig.eligible === true) {
+        const pfSafe =
+          typeof RM.queuePharmacyFirstSafe === 'function'
+            ? RM.queuePharmacyFirstSafe(matchedPathways, gapsData)
+            : !hasEscalation;
+        if (pfElig.eligible === true && pfSafe) {
           const pfIdx = ruleMatchActivators.push(
             (el) => showPathwayMenu(el, topPathway, previewText, pfElig, gapsData, closingQuestions)
           ) - 1;
@@ -7664,10 +7689,12 @@
       // (child/elder/priority/task-age + any other plain ruleId chip) —
       // UNCHANGED from before item 2.5.
       strip.querySelectorAll('[data-rule-id]').forEach(el => {
-        el.addEventListener('click', (e) => {
+        const open = (e) => {
           e.preventDefault(); e.stopPropagation();
           showActionMenu(el, el.dataset.ruleId);
-        });
+        };
+        el.addEventListener('click', open);
+        bindActivate(el, open);
       });
       // Wire the ranked rule-match chips (top + "+N") — item 2.3/2.5. Enter/
       // Space activate too (role="button" chips, per plan a11y requirement).

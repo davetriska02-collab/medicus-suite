@@ -194,9 +194,30 @@ async function txnFetchPatientBundle(patientUuid) {
   return { ok: true, bundle: bridged };
 }
 
+const PATIENT_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function senderMayFetchPatientBundle(sender, patientUuid) {
+  if (!patientUuid || !PATIENT_UUID_RE.test(String(patientUuid))) return false;
+  if (sender && sender.tab && sender.tab.url) {
+    const url = String(sender.tab.url);
+    return /medicus\.health/i.test(url) && url.toLowerCase().includes(String(patientUuid).toLowerCase());
+  }
+  const url = (sender && sender.url) || '';
+  try {
+    const origin = chrome.runtime.getURL('');
+    return typeof url === 'string' && url.startsWith(origin);
+  } catch (_) {
+    return false;
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id) return; // F5: intra-extension only
   if (!msg || msg.action !== 'txn:fetchPatientBundle') return;
+  if (!senderMayFetchPatientBundle(sender, msg.patientUuid)) {
+    sendResponse({ ok: false, error: 'txn:fetchPatientBundle refused — sender is not bound to that patient' });
+    return;
+  }
   txnFetchPatientBundle(msg.patientUuid)
     .then(sendResponse)
     .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
@@ -422,7 +443,27 @@ async function presenceFolderStatus() {
   return { configured: true, permission, folderName: handle.name || '' };
 }
 
-async function presenceFolderIO(kind, payload) {
+const _presenceSelfByTab = new Map();
+
+function authorizePresenceWrite(sender, site, staffId) {
+  const tabId = sender && sender.tab && sender.tab.id;
+  if (tabId == null || !site || !staffId) return null;
+  const locked = _presenceSelfByTab.get(tabId);
+  if (!locked) {
+    _presenceSelfByTab.set(tabId, { site: String(site), staff_id: String(staffId) });
+    return _presenceSelfByTab.get(tabId);
+  }
+  if (locked.site !== String(site) || locked.staff_id !== String(staffId)) return null;
+  return locked;
+}
+
+if (chrome.tabs && chrome.tabs.onRemoved) {
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    _presenceSelfByTab.delete(tabId);
+  });
+}
+
+async function presenceFolderIO(kind, payload, sender) {
   if (typeof PresenceFolder === 'undefined') return { ok: false, reason: 'module-missing' };
   const handle = await PresenceFolder.loadHandle().catch(() => null);
   if (!handle) return { ok: false, reason: 'not-configured' };
@@ -430,11 +471,16 @@ async function presenceFolderIO(kind, payload) {
   if (permission !== 'granted') return { ok: false, reason: 'permission-' + permission };
   try {
     if (kind === 'beat') {
-      await PresenceFolder.writeBeat(handle, payload && payload.row);
+      const row = payload && payload.row;
+      const auth = authorizePresenceWrite(sender, row && row.site, row && row.staff_id);
+      if (!auth) return { ok: false, reason: 'writer-not-authorised' };
+      await PresenceFolder.writeBeat(handle, { ...row, site: auth.site, staff_id: auth.staff_id });
       return { ok: true };
     }
     if (kind === 'clear') {
-      await PresenceFolder.clearBeat(handle, payload && payload.site, payload && payload.staffId);
+      const auth = authorizePresenceWrite(sender, payload && payload.site, payload && payload.staffId);
+      if (!auth) return { ok: false, reason: 'writer-not-authorised' };
+      await PresenceFolder.clearBeat(handle, auth.site, auth.staff_id);
       return { ok: true };
     }
     if (kind === 'read') {
@@ -465,7 +511,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           ? 'read'
           : null;
   if (!kind) return;
-  presenceFolderIO(kind, msg)
+  presenceFolderIO(kind, msg, sender)
     .then(sendResponse)
     .catch((e) => sendResponse({ ok: false, reason: String((e && e.message) || e).slice(0, 200) }));
   return true; // async sendResponse
