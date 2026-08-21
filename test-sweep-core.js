@@ -160,6 +160,34 @@ const path = require('path');
   check(fbResult.patients[0].uuid === 'bbbbbbbb-0000-0000-0000-000000000001', 'patient.uuid strategy works');
   check(fbResult.patients[1].uuid === 'cccccccc-0000-0000-0000-000000000001', 'UUID scan strategy works');
 
+  // Appointment UUID on the entry must NEVER be treated as the patient.
+  const appointmentIdTrap = {
+    staffSchedules: [
+      {
+        name: 'Dr Test',
+        schedule: [
+          {
+            entries: [
+              {
+                id: 'eeeeeeee-0000-0000-0000-000000000099',
+                diaryEntryType: { value: 'appointment' },
+                patient: { name: 'No patient id' },
+                start: '08:20',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const trapResult = extractBookedPatients(appointmentIdTrap);
+  check(trapResult.patients.length === 0, 'appointment entry.id is not used as a patient UUID');
+  check(trapResult.missingUuidCount === 1, 'appointment-id-only entry is skipped');
+  check(
+    trapResult.skippedEntries[0] && trapResult.skippedEntries[0].rawName === 'No patient id',
+    'appointment-id-only entry is named in skippedEntries'
+  );
+
   // ── extractBookedPatients — missing UUID ──────────────────────────────────────
   console.log('\n--- extractBookedPatients: missing UUID ---');
   const missingUuidRaw = {

@@ -24,12 +24,15 @@
 // CLINICAL-SAFETY FRAMING (non-negotiable — see docs/appraisal + INTENDED-PURPOSE)
 // -------------------------------------------------------------------------------
 // This view is INCOMPLETE by construction and must never read as a record of
-// truth. It cannot show allergies or immunisations (no live endpoint), and some
-// consultation-coded entries are limited to ~400 days. Therefore:
+// truth. Consultation history is never in the live view. Allergies and
+// immunisations arrive only when the transactional feed offers them — when it
+// does not, they render as explicit GAP-MARKERS (never silent absence, never
+// "none"). When the feed DID retrieve them, the gap marker is omitted so the
+// screen cannot contradict itself (H-032). Therefore:
 //   - a persistent provenance banner states it is a live snapshot, verify in
 //     the record;
-//   - allergies / immunisations / consultation history render as explicit
-//     GAP-MARKERS where the data would be, not as silent absences;
+//   - unretrieved allergies / immunisations / consultation history render as
+//     GAP-MARKERS where the data would be;
 //   - each safety score carries an inline caveat that it excludes allergies and
 //     uses coded problems only.
 // These are load-bearing patient-safety controls, not decoration.
@@ -74,6 +77,8 @@ import { copyText } from '../shared/export-util.js';
 import { isChipActionNeeded } from '../sentinel/sentinel-core.js';
 import { getTxnBundleIfEnabled, feedSourceLabel } from '../../../shared/panel-txn-feed.js';
 import { buildSmrPack } from './smr-pack-core.js';
+import { chooseMedicusTab, isPopOutPath } from '../../../shared/medicus-tab-choice.js';
+export { chooseMedicusTab };
 
 let container = null;
 let _runToken = 0; // cancels stale async renders on rapid patient/tab change
@@ -139,6 +144,7 @@ export function cleanup() {
   if (_onDelegatedClick && container) container.removeEventListener('click', _onDelegatedClick);
   _onRuntimeMsg = _onTabChange = _onDelegatedClick = _onLetterheadChange = null;
   _lastModel = _lastChips = _lastStamp = _lastUuid = null;
+  _lastTabId = null;
   _letterhead = {};
   _preflightOpen = false;
   _preflightInput = '';
@@ -187,6 +193,10 @@ let _lastStamp = null;
 // the rendered model — the ONLY patient identifier the event ledger may
 // receive (never a name). Module-local; never written to storage by this module.
 let _lastUuid = null;
+// Tab we last successfully resolved a patient from — used instead of
+// chrome.tabs.query()[0] when the focused tab is not Medicus (wrong-patient
+// guard: any[0] is window order, not "the patient you were just looking at").
+let _lastTabId = null;
 
 // Practice letterhead ({ practiceName, clinicianName }) used to auto-fill the
 // SMR prep pack sign-off, read from 'suite.letterhead'. Same convention as
@@ -267,12 +277,25 @@ function wireStaticControls() {
 async function onPrintSmrPack() {
   if (!_lastModel) return;
   const model = buildSmrPack(_lastModel, _lastChips, _letterhead, new Date().toISOString());
-  await chrome.storage.local.set({ 'record.smrPack': model });
+  // Nonce ties this write to the tab we are about to open. A second click
+  // before the first tab reads storage overwrites the key — the first tab
+  // then fails closed (empty state) instead of rendering the wrong patient.
+  const packId =
+    typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `p${Date.now()}-${Math.random()}`;
+  await chrome.storage.local.set({ 'record.smrPack': { ...model, packId } });
   // best-effort PHI-at-rest backstop (mirrors passport's 60s backstop) — primary
   // clear is consume-on-read in the print tab; this covers the case where the
-  // tab never renders (e.g. the user closes it before it loads).
-  setTimeout(() => {
-    chrome.storage.local.remove('record.smrPack');
+  // tab never renders (e.g. the user closes it before it loads). Only remove
+  // OUR nonce — a later pack must not be deleted by an earlier timer.
+  setTimeout(async () => {
+    try {
+      const r = await chrome.storage.local.get('record.smrPack');
+      if (r['record.smrPack'] && r['record.smrPack'].packId === packId) {
+        chrome.storage.local.remove('record.smrPack');
+      }
+    } catch (_) {
+      /* no-op */
+    }
   }, 60000);
   // F2 Clinical Event Ledger — record that a pack was generated (fire-and-forget;
   // the ledger swallows its own failures and can never break this button).
@@ -284,7 +307,9 @@ async function onPrintSmrPack() {
     label: 'SMR prep pack generated',
     action: 'smr-pack-generated',
   });
-  chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/record/smr-pack.html') });
+  chrome.tabs.create({
+    url: chrome.runtime.getURL('side-panel/modules/record/smr-pack.html') + '?pack=' + encodeURIComponent(packId),
+  });
 }
 
 function setBody(html) {
@@ -309,12 +334,43 @@ async function loadLetterhead() {
   _letterhead = r['suite.letterhead'] || {};
 }
 
+// Docked panel vs pop-out. Fail closed towards "not pop-out" so a thrown
+// location read never enables the any-Medicus-tab fallback (that fallback
+// is what attached Record to the wrong patient when Gmail was focused).
+function isPopOutContext() {
+  try {
+    return isPopOutPath(location.pathname);
+  } catch (_) {
+    return false;
+  }
+}
+
 async function findMedicusTab() {
-  // Prefer the active tab; fall back to any open Medicus tab in the window.
   const active = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (active[0]?.url && /medicus\.health/.test(active[0].url)) return active[0];
-  const any = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
-  return any[0] || null;
+  let lastTab = null;
+  if (_lastTabId != null) {
+    try {
+      lastTab = await chrome.tabs.get(_lastTabId);
+    } catch (_) {
+      lastTab = null;
+    }
+  }
+  const isPopOut = isPopOutContext();
+  const any = isPopOut ? await chrome.tabs.query({ url: 'https://*.medicus.health/*' }) : [];
+  const { tab } = chooseMedicusTab({
+    activeTab: active[0],
+    lastTab,
+    anyMedicusTabs: any,
+    isPopOut,
+  });
+  return tab || null;
+}
+
+function setRecordActionsEnabled(on) {
+  const copyBtn = container?.querySelector('#recCopySummary');
+  const smrBtn = container?.querySelector('#recSmrPack');
+  if (copyBtn) copyBtn.disabled = !on;
+  if (smrBtn) smrBtn.disabled = !on;
 }
 
 async function patientUuidFromContentScript(tabId) {
@@ -347,10 +403,20 @@ async function load(force) {
     return;
   }
 
+  // Disable Copy / SMR immediately so a click during reload cannot emit the
+  // previous patient's summary (buttons used to stay enabled until render()).
+  setRecordActionsEnabled(false);
   setSource('Locating patient…');
   const tab = await findMedicusTab();
   if (token !== _runToken) return;
   if (!tab) {
+    if (_lastModel) {
+      // Safer than picking a random Medicus tab: keep the last snapshot and
+      // re-enable actions for THAT patient only.
+      setSource('Medicus tab not in focus — still showing last snapshot', 'rec-source-warn');
+      setRecordActionsEnabled(true);
+      return;
+    }
     setSource('No Medicus tab open', 'rec-source-warn');
     setBody(
       stateCard(
@@ -365,8 +431,20 @@ async function load(force) {
   let uuid = ctx.patientUuid;
   if (!uuid) uuid = await patientUuidFromContentScript(tab.id);
   if (token !== _runToken) return;
+  if (uuid && _lastUuid && uuid !== _lastUuid) {
+    _lastModel = null;
+    _lastChips = null;
+    _lastStamp = null;
+  }
 
   if (!ctx.apiBase || !uuid) {
+    if (_lastModel) {
+      // Same as the no-tab path: do not replace a valid snapshot with an
+      // empty card while Copy/SMR still hold the previous patient.
+      setSource('No patient in this tab — still showing last snapshot', 'rec-source-warn');
+      setRecordActionsEnabled(true);
+      return;
+    }
     setSource('No patient open', 'rec-source-warn');
     setBody(
       stateCard(
@@ -425,6 +503,7 @@ async function load(force) {
   if (token !== _runToken) return;
 
   _lastUuid = uuid;
+  _lastTabId = tab.id;
   await render(data, chips, errs, { feedBundle, token, uuid });
 }
 
@@ -486,8 +565,13 @@ function buildRecordModel(sessionData, feedBundle) {
     observationHistory: s.observationHistory || b.observationHistory || [],
     problems: b.problems || s.problems || [],
     pastProblems: b.pastProblems || s.pastProblems || [],
-    allergies: b.allergies || [],
-    immunisations: b.immunisations || [],
+    allergies: Array.isArray(b.allergies) ? b.allergies : [],
+    immunisations: Array.isArray(b.immunisations) ? b.immunisations : [],
+    // H-032: [] is also the no-bundle default, so "retrieved" is a separate
+    // flag. Gap markers must say "not shown" only when the feed never offered
+    // the section — never when we actually have (even empty) txn data.
+    allergiesRetrieved: Array.isArray(b.allergies),
+    immunisationsRetrieved: Array.isArray(b.immunisations),
   };
 }
 
@@ -576,7 +660,7 @@ async function render(data, chips, errs, opts) {
      ${demographicsCard(pc)}
      ${safetyBanner()}
      ${partial}
-     ${gapMarkers()}
+     ${gapMarkers(data)}
      ${problemsCard(problems, past)}
      ${medsCard(meds)}
      ${safetyCard(meds, problems, obs, pc, chips, allergyHtml)}
@@ -756,9 +840,28 @@ export function buildRecordSummaryText(model, chips, stamp) {
   lines.push('');
 
   // ── Gap markers — absence must be explicit in the copy ────────────────────
+  // Only claim "not shown" for sections the live view structurally lacks.
+  // When the transactional feed retrieved allergies/imms, saying "not shown"
+  // while allergy chips sit on screen is an H-032 contradiction.
   lines.push('NOT SHOWN IN THIS SUMMARY (verify in Medicus):');
-  lines.push('  Allergies & adverse reactions — not shown — verify in Medicus before prescribing');
-  lines.push('  Immunisations — not shown — verify in Medicus');
+  if (!(model && model.allergiesRetrieved)) {
+    lines.push('  Allergies & adverse reactions — not shown — verify in Medicus before prescribing');
+  } else if (Array.isArray(model.allergies) && model.allergies.length) {
+    lines.push(`ALLERGIES (${model.allergies.length}) — shown on screen; verify in Medicus before prescribing`);
+    model.allergies.forEach((a) => {
+      const label = (a && (a.label || a.name || a.substance)) || '';
+      if (label) lines.push(`  ${label}`);
+    });
+  } else {
+    lines.push(
+      '  Allergies & adverse reactions — live feed returned none recorded here — still verify in Medicus before prescribing'
+    );
+  }
+  if (!(model && model.immunisationsRetrieved)) {
+    lines.push('  Immunisations — not shown — verify in Medicus');
+  } else if (!(Array.isArray(model.immunisations) && model.immunisations.length)) {
+    lines.push('  Immunisations — live feed returned none recorded here — still verify in Medicus');
+  }
   lines.push('  Consultation history — not shown — use full visualiser for the timeline');
   lines.push('');
 
@@ -986,17 +1089,45 @@ function safetyBanner() {
 
 // Persistent gap-markers: surface what is NOT in the live view, where a reader
 // would otherwise assume absence means "none recorded".
-function gapMarkers() {
-  return `
-    <div class="rec-gaps" role="group" aria-label="Data not available in the live view">
+function gapMarkers(data) {
+  const allergyRetrieved = !!(data && data.allergiesRetrieved);
+  const immsRetrieved = !!(data && data.immunisationsRetrieved);
+  const allergyEmpty = allergyRetrieved && !(data.allergies && data.allergies.length);
+  const immsEmpty = immsRetrieved && !(data.immunisations && data.immunisations.length);
+  // Unretrieved → "not shown". Retrieved-with-items → omit (chips/labels show
+  // them). Retrieved-empty → still an explicit line (H-032: silence ≠ none).
+  let allergyGap = '';
+  if (!allergyRetrieved) {
+    allergyGap = `
       <div class="rec-gap" role="note">
         <span class="rec-gap-label">Allergies &amp; adverse reactions</span>
         <span class="rec-gap-val">Not shown in the live view — check the record before prescribing</span>
-      </div>
+      </div>`;
+  } else if (allergyEmpty) {
+    allergyGap = `
+      <div class="rec-gap" role="note">
+        <span class="rec-gap-label">Allergies &amp; adverse reactions</span>
+        <span class="rec-gap-val">Live feed returned none recorded here — still verify in Medicus before prescribing</span>
+      </div>`;
+  }
+  let immsGap = '';
+  if (!immsRetrieved) {
+    immsGap = `
       <div class="rec-gap" role="note">
         <span class="rec-gap-label">Immunisations</span>
         <span class="rec-gap-val">Not shown in the live view — check the record</span>
-      </div>
+      </div>`;
+  } else if (immsEmpty) {
+    immsGap = `
+      <div class="rec-gap" role="note">
+        <span class="rec-gap-label">Immunisations</span>
+        <span class="rec-gap-val">Live feed returned none recorded here — still verify in the record</span>
+      </div>`;
+  }
+  return `
+    <div class="rec-gaps" role="group" aria-label="Data not available in the live view">
+      ${allergyGap}
+      ${immsGap}
       <div class="rec-gap" role="note">
         <span class="rec-gap-label">Consultation history</span>
         <span class="rec-gap-val">Not shown here — use “Open full visualiser” below for the timeline</span>

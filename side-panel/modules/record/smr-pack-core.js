@@ -39,6 +39,15 @@
 'use strict';
 
 // ── Verbatim clinical-safety caveat — top AND bottom of the pack ────────────
+// A second "SMR prep pack" click overwrites the one-key store. The print
+// tab must refuse a payload whose packId does not match its own URL, or it
+// can render the WRONG patient (fail closed → empty state).
+export function smrPackMatchesRequest(stored, packIdFromUrl) {
+  if (!stored || !stored.patient) return false;
+  if (!packIdFromUrl || !stored.packId) return false;
+  return stored.packId === packIdFromUrl;
+}
+
 export const SMR_CAVEAT =
   'Coded live snapshot, not the complete record. Excludes allergies, immunisations and free-text history. ' +
   'Verify against the patient record before any prescribing decision.';

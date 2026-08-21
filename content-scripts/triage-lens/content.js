@@ -3638,6 +3638,15 @@
     // inject chips onto wrong rows in the new queue before the fresh
     // ch-task-list-data event arrives. Prune cache entries older than 2×TTL.
     _queueRowUuids.clear();
+    // Same-queue SPA churn must keep _durableRowMap (v3.70). A different
+    // queue (pathname changed since the last bridge write) must drop it or
+    // reinjectCachedResultChips paints the previous queue's severities onto
+    // the new grid's row-indexes until the next task-list event.
+    if (_durableMapPath && _durableMapPath !== location.pathname) {
+      _durableRowMap.clear();
+      _durableMapPath = null;
+    }
+    if (typeof _pulseActByRow !== 'undefined') _pulseActByRow.clear();
     // Arm the leading-edge first result-triage pass for this queue entry: the next
     // bridge task-list event fires the pass immediately instead of via the 150ms debounce.
     _firstResultPassPending = true;
@@ -3793,11 +3802,17 @@
   // rowIndex → taskUuid for the current queue load. runQueue clears this on every
   // queue (re)entry, which keeps the FETCH path from chasing a previous queue's tasks.
   const _queueRowUuids = new Map();
-  // Durable mirror, written ONLY by the bridge task-list event (never cleared by
-  // runQueue). Used to RE-INJECT cached result chips after the SPA's re-renders —
-  // runQueue's churn keeps emptying _queueRowUuids, and that emptying is exactly what
-  // made the chips flash-and-vanish. The bridge owns this map's whole lifecycle.
+  // Durable mirror, written by the bridge task-list event. runQueue must NOT
+  // clear it on same-queue SPA churn (that emptying made chips flash-and-vanish
+  // — v3.70). It DOES clear when location.pathname changed since the last
+  // bridge write (queue A → queue B), otherwise reinject uses the old
+  // rowIndex→taskUuid map on the new grid. The H6 sort/filter canary also
+  // drops it. The bridge owns the rest of the lifecycle.
   const _durableRowMap = new Map();
+  // Pathname at the last bridge write. runQueue clears the durable map only
+  // when this differs from location.pathname (queue A → queue B), not on
+  // same-queue SPA churn.
+  let _durableMapPath = null;
   // taskUuid → { taskTypeSlug, result, ts } — session-level cache with TTL
   const _queueMonCache = new Map();
   const _MON_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -4080,6 +4095,8 @@
     _currentQueueSlug = taskTypeSlug;
     _queueRowUuids.clear();
     _durableRowMap.clear();
+    _durableMapPath = location.pathname;
+    if (typeof _pulseActByRow !== 'undefined') _pulseActByRow.clear();
     // A fresh task-list payload is authoritative for the grid's CURRENT state,
     // so re-baseline the sort canary (H6): without this, a server-side sort
     // whose fetch lands before the observer notices the new header classes
@@ -5754,10 +5771,11 @@
     }, 0);
   };
 
-  // Re-inject result chips straight from the per-task cache, keyed by each row's own
-  // `row-id` (the task UUID) read from the DOM — exactly how the durable age/decoration
-  // chips work. This does NOT depend on the bridge-provided `_queueRowUuids` map (which
-  // the Medicus SPA churn keeps clearing to 0), so chips survive every re-render.
+  // Re-inject result chips straight from the per-task cache, keyed by the durable
+  // rowIndex→taskUuid map (NOT row-id — on real Medicus row-id is NOT the task
+  // UUID; keying off it was the v3.69.0 no-op). This does NOT depend on the
+  // bridge-provided `_queueRowUuids` map (which the Medicus SPA churn keeps
+  // clearing to 0), so chips survive every re-render.
   // injectResultChip de-dupes, and a wipe immediately precedes this call, so it's a
   // clean, synchronous restore with no visible gap.
   const reinjectCachedResultChips = () => {
@@ -7705,11 +7723,22 @@
   let _queueSortSig; // undefined = no baseline yet (fresh queue entry)
   const queueSortSignature = () => {
     const cells = queueScope().querySelectorAll('.ag-header-cell-sorted-asc, .ag-header-cell-sorted-desc');
-    if (!cells.length) return '';
-    return Array.from(cells)
-      .map((c) => (c.getAttribute('col-id') || '?') + ':' + (c.classList.contains('ag-header-cell-sorted-asc') ? 'asc' : 'desc'))
-      .sort()
-      .join(',');
+    const filterCells = queueScope().querySelectorAll('.ag-header-cell-filtered');
+    const sortPart = !cells.length
+      ? ''
+      : Array.from(cells)
+          .map((c) => (c.getAttribute('col-id') || '?') + ':' + (c.classList.contains('ag-header-cell-sorted-asc') ? 'asc' : 'desc'))
+          .sort()
+          .join(',');
+    // Client-side FILTER reassigns row-index the same way SORT does (H6).
+    // Include filtered columns so a filter-only change also drops the maps.
+    const filterPart = !filterCells.length
+      ? ''
+      : Array.from(filterCells)
+          .map((c) => 'f:' + (c.getAttribute('col-id') || '?'))
+          .sort()
+          .join(',');
+    return filterPart ? sortPart + '|' + filterPart : sortPart;
   };
   const checkQueueSortCanary = () => {
     const sig = queueSortSignature();
@@ -7718,7 +7747,8 @@
     _queueSortSig = sig;
     _queueRowUuids.clear();
     _durableRowMap.clear();
-    log('queue: sort change detected — rowIndex maps dropped (H6 canary), sig=' + (sig || 'none'));
+    if (typeof _pulseActByRow !== 'undefined') _pulseActByRow.clear();
+    log('queue: sort/filter change detected — rowIndex maps dropped (H6 canary), sig=' + (sig || 'none'));
   };
 
   // Fully tear down the queue observer and forget the container reference.

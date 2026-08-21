@@ -6,7 +6,7 @@
 //   formatVersion: 1
 //   scope: "suite" | "sentinel" | "capacity" | "triage" | "triageAlerts" |
 //           "slots" | "submissions" | "popout" | "referrals" | "requestMonitor" |
-//           "condor"
+//           "condor" | "sweep"
 //   modules: { [scope]: { ...module data } }
 //
 // A scoped export (e.g. just Capacity) includes only that module's key under
@@ -105,6 +105,7 @@ const VALID_SCOPES = [
   'problemDescriptionCleanup',
   'phrases',
   'rota',
+  'sweep',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -502,6 +503,18 @@ function previewEnvelope(envelope) {
     );
   } else {
     const m = missing('Rota');
+    if (m) lines.push(m);
+  }
+
+  if (mods.sweep) {
+    const rate = mods.sweep.qofConfig && mods.sweep.qofConfig.poundsPerPoint;
+    lines.push(
+      Number.isFinite(Number(rate)) && Number(rate) > 0
+        ? `Sweep: £${Number(rate)} per QOF point`
+        : 'Sweep: QOF £/point not set'
+    );
+  } else {
+    const m = missing('Sweep');
     if (m) lines.push(m);
   }
 

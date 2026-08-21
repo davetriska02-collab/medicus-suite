@@ -33,6 +33,7 @@ import {
   sortAlerts,
   upsertAlert,
 } from './patient-alerts-core.js';
+import { chooseMedicusTab, isPopOutPath } from '../../../shared/medicus-tab-choice.js';
 
 const STORE_KEY = 'patientAlerts.byPatient';
 const TYPES_KEY = 'patientAlerts.types';
@@ -43,6 +44,7 @@ let _store = {};
 let _types = [];
 let _typesCustomised = false; // true when storage held a palette (vs shipped defaults)
 let _pc = null; // patientContext from the last good snapshot, or null
+let _lastTabId = null; // last Medicus tab we successfully read a snapshot from
 let _query = '';
 let _formOpen = false;
 let _editingAlertId = null; // alert id being edited in the form, or null
@@ -154,6 +156,8 @@ function cleanup() {
     container.removeEventListener('change', onChange);
   }
   container = null;
+  _pc = null;
+  _lastTabId = null;
 }
 
 export { cleanup };
@@ -219,11 +223,29 @@ function scheduleSnapshotRefresh() {
 }
 
 async function findMedicusTab() {
-  // Prefer the active tab; fall back to any open Medicus tab (covers pop-out).
   const active = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (active[0]?.url && /medicus\.health/.test(active[0].url)) return active[0];
-  const any = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
-  return any[0] || null;
+  let lastTab = null;
+  if (_lastTabId != null) {
+    try {
+      lastTab = await chrome.tabs.get(_lastTabId);
+    } catch (_) {
+      lastTab = null;
+    }
+  }
+  let isPopOut = false;
+  try {
+    isPopOut = isPopOutPath(location.pathname);
+  } catch (_) {
+    isPopOut = false;
+  }
+  const any = isPopOut ? await chrome.tabs.query({ url: 'https://*.medicus.health/*' }) : [];
+  const { tab } = chooseMedicusTab({
+    activeTab: active[0],
+    lastTab,
+    anyMedicusTabs: any,
+    isPopOut,
+  });
+  return tab || null;
 }
 
 async function refreshSnapshot() {
@@ -232,7 +254,10 @@ async function refreshSnapshot() {
     const tab = await findMedicusTab();
     if (tab?.id) {
       const snap = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
-      if (snap && !snap.unavailable && snap.patientContext) pc = snap.patientContext;
+      if (snap && !snap.unavailable && snap.patientContext) {
+        pc = snap.patientContext;
+        _lastTabId = tab.id;
+      }
     }
   } catch (_) {
     // No Medicus tab / content script not mounted — pc stays null and the

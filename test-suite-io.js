@@ -14,6 +14,7 @@ const subIo = require('./shared/io/submissions-io.js');
 const suiteIo = require('./shared/io/suite-io.js');
 const referralsIo = require('./shared/io/referrals-io.js');
 const rotaIo = require('./shared/io/rota-io.js');
+const sweepIo = require('./shared/io/sweep-io.js');
 
 let passed = 0;
 let failed = 0;
@@ -998,6 +999,57 @@ console.log('\n--- applyWithRollback rollback ---');
     );
 
     global.chrome = savedChrome3;
+  }
+
+  // ── Sweep £/QOF-point config round-trip (was allowlisted, so restore dropped it)
+  {
+    const sweepStore = {};
+    const savedChrome4 = global.chrome;
+    global.chrome = {
+      storage: {
+        local: {
+          async get(keys) {
+            const ks = Array.isArray(keys) ? keys : typeof keys === 'string' ? [keys] : Object.keys(keys || {});
+            const out = {};
+            ks.forEach((k) => {
+              if (k in sweepStore) out[k] = sweepStore[k];
+            });
+            return out;
+          },
+          async set(obj) {
+            Object.assign(sweepStore, obj);
+          },
+          async remove(key) {
+            delete sweepStore[key];
+          },
+        },
+      },
+    };
+
+    sweepStore['sweep.qofConfig'] = { poundsPerPoint: 220.5 };
+    const exported = await sweepIo.sweepExport();
+    assert(exported.qofConfig && exported.qofConfig.poundsPerPoint === 220.5, 'sweepExport: captures poundsPerPoint');
+
+    delete sweepStore['sweep.qofConfig'];
+    await sweepIo.sweepImport(exported);
+    assert(sweepStore['sweep.qofConfig'].poundsPerPoint === 220.5, 'sweepImport: restores poundsPerPoint');
+
+    let threw = false;
+    try {
+      await sweepIo.sweepImport({ qofConfig: { poundsPerPoint: -1 } });
+    } catch (_) {
+      threw = true;
+    }
+    assert(threw, 'sweepImport: rejects non-positive poundsPerPoint');
+
+    assert(suiteEnv.VALID_SCOPES.includes('sweep'), 'suite-envelope: sweep is a valid scope');
+    const sweepLines = suiteEnv.previewEnvelope(suiteEnv.wrap('sweep', { sweep: exported }));
+    assert(
+      sweepLines.some((l) => /Sweep: £220\.5 per QOF point/.test(l)),
+      'previewEnvelope: summarises sweep £/point'
+    );
+
+    global.chrome = savedChrome4;
   }
 
   // ── Summary ───────────────────────────────────────────────────────────────────

@@ -261,17 +261,18 @@ async function runMonitoringPass(apiBase) {
 // queue bridge fetches it directly); the constructed
 // /tasks/data/{list-slug}/overview/{id} path is only a fallback because the
 // overview slug is not guaranteed to equal the task-list slug.
-const _overviewPatientCache = new Map(); // overviewURL -> patientUuid (session)
+const _overviewPatientCache = new Map(); // apiBase|overviewURL -> patientUuid (session)
 async function resolvePatientForRow(api, apiBase, row) {
   if (row.overviewURL) {
-    if (_overviewPatientCache.has(row.overviewURL)) return _overviewPatientCache.get(row.overviewURL);
+    const cacheKey = String(apiBase || '') + '|' + row.overviewURL;
+    if (_overviewPatientCache.has(cacheKey)) return _overviewPatientCache.get(cacheKey);
     try {
       const r = await fetch(`${apiBase}${row.overviewURL}`, { credentials: 'include' });
       if (r.ok) {
         const data = await r.json();
         const uuid = data?.data?.patient?.id || data?.data?.patientId || data?.patient?.id || data?.patientId || null;
         if (uuid) {
-          _overviewPatientCache.set(row.overviewURL, uuid);
+          _overviewPatientCache.set(cacheKey, uuid);
           return uuid;
         }
       }

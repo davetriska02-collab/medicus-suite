@@ -449,7 +449,7 @@
       row.className = 'tl-rule-row' + (rule.enabled ? '' : ' tl-rule-disabled');
       row.innerHTML = `
         <input type="checkbox" class="tl-rule-toggle" ${rule.enabled ? 'checked' : ''}>
-        <span class="tl-rule-kind tl-rule-kind-${escAttr(rule.kind)}">${KIND_LABEL[rule.kind] || rule.kind}</span>
+        <span class="tl-rule-kind tl-rule-kind-${escAttr(rule.kind)}">${escHtml(KIND_LABEL[rule.kind] || rule.kind)}</span>
         <span>
           <span class="tl-rule-label">${escHtml(rule.label)}</span>
           <span class="tl-rule-meta">  ${rule.builtin ? '· built-in ' : ''}${rule.notes ? ' · ' + escHtml(rule.notes.slice(0, 50)) : ''}</span>

@@ -236,12 +236,19 @@ function observationsHtml(section) {
     </table>`;
 }
 
+function smrPackMatchesRequest(stored, packIdFromUrl) {
+  if (!stored || !stored.patient) return false;
+  if (!packIdFromUrl || !stored.packId) return false;
+  return stored.packId === packIdFromUrl;
+}
+
 async function render() {
   const content = document.getElementById('content');
   const r = await chrome.storage.local.get('record.smrPack');
   const model = r['record.smrPack'];
+  const packIdFromUrl = new URLSearchParams(location.search).get('pack');
 
-  if (!model || !model.patient) {
+  if (!smrPackMatchesRequest(model, packIdFromUrl)) {
     content.innerHTML = `<div class="empty-page">No SMR prep pack found. Open a patient record in Medicus, then click "SMR prep pack" in the Record tab.</div>`;
     return;
   }
