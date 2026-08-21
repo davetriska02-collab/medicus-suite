@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.236.16
+**Version:** v3.236.17
 **Generated:** 2026-08-21
 
 ## What it is
@@ -227,7 +227,7 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 
 ## Recent additions (last 4 weeks)
 
-- **v3.236.16 (2026-08-21)** — Signed .crx packaging for IT-managed installs: `npm run pack:crx` builds a CRX3 package + `update.xml` policy feed; releases attach both when the signing secret is set. Deployment guide in docs/IT-DEPLOYMENT.md.
+- **v3.236.17 (2026-08-21)** — Signed .crx packaging for IT-managed installs: `npm run pack:crx` builds a CRX3 package + `update.xml` policy feed; releases attach both when the signing secret is set. Deployment guide in docs/IT-DEPLOYMENT.md.
 - **v3.236.15 (2026-08-21)** — Bulk acknowledge: Review/Confirm sit in a footer so select-all cannot hide the mass-resolve button.
 - **v3.236.14 (2026-08-21)** — Bulk remove/merge trigger removed from the Clinical Summary (Organise problems owns End/merge). Quiet-row chips clip inside the name column so the next box cannot chop them.
 - **v3.236.13 (2026-08-21)** — Add-as-problem panel nudges off the Save as document chip, not only Medicus File.
