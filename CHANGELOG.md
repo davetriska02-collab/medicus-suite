@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.16] — 2026-08-21
+
+### Organise canvas — fail-safe write paths (merge-review fixes)
+
+An adversarial review of the v3.236.5–.15 merge found the organise canvas's failure paths could strand or double-book patients. All write-path findings fixed:
+
+- **Stretch can no longer silently strand a cancelled patient.** Everything the rebook needs is validated **before** the destructive cancel (a null appointment type now refuses up front). If a post-cancel step still fails, the original booking is **re-created at its original length**; if even that fails, the error says — urgently, naming the patient — that they currently have **no appointment** and must be rebooked now, instead of the old false "the rest are still staged". Failure also refetches the board so the canvas shows what Medicus actually has.
+- **Moves prove the destination is still free before writing.** The captured reschedule payload carries `allowOverlappingAppointments: 'allow'`, so Medicus will not refuse a double-booking — the commit now checks the whole kept-length window against the **fresh** board (free-slot coverage, staged moves included at stage time) and refuses if a colleague took the slot or the appointment doesn't fit (the 60-min-onto-15-min TEST A class). Same-list moves onto a shorter tile now widen the reservation via the captured reserve-then-update lifecycle instead of leaving the contract.
+- **The overlay freezes while a Finalise batch writes.** Every input, Close, Discard and the footer are disabled and guarded, so a mid-write click can no longer start a second concurrent batch (duplicate writes) or "discard" actions that were in fact still being written to Medicus. Failures report exactly how many earlier actions were written.
+- **Send-to claims now match the write.** The confirm bar's static "Send-to is off" line is dynamic — it counts ticked patients when the v3.236.15 "Tell the patient" opt-in is used. The tick is no longer offered on a stretch (that write never sends recipients, and the old summary falsely promised a Medicus confirmation). `HAZARD-LOG.md` H-062 control (d) and CSN §6.3/W14–W16 corrected to record the opt-in — both had still claimed "recipient lists are always empty".
+- **Fail-closed gates.** Stretch "free following slot" now requires actual free-slot coverage (a slotless gap — break/blocked time — refuses); sick-day similar matching refuses untyped diaries instead of matching anything; the book's site+date are pinned at overlay open and a Finalise refuses if the Medicus SPA moved underneath; invalid stretch amounts get their own refusal reason; the sick-day miss reason names the board's real weekday (was hard-coded "Sunday"); staged moves read "Rebook with…", not the past-tense "Rebooked".
+- Reservation-release failures no longer misreport: a confirmed write is returned even if the cleanup release fails, and a release failure in the error path no longer masks the real error.
+- Screen-reader announcements survive the re-render (deferred live-region write).
+
+### Queue pulse / bulk panels — review fixes
+
+- **Pulse popovers no longer leak or resurrect.** The why/act floating trays now use per-key cleanup (was one shared slot): every queue refresh no longer leaks capture listeners while a tray is open, opening a second tray removes the first, and a dismissed tray no longer re-opens by itself on the next refresh sweep.
+- **Scrolling inside a why-tray or chip action menu no longer closes it** — the close-on-scroll listeners now ignore scrolls that originate inside the popover, so a long red-rail explanation can actually be read past the fold.
+- **Flat-queue chips keep a visible colour stub.** The v3.236.14 name-cell clip had no minimum width, so a squeezed red/amber result chip could shrink to nothing; `.ch-q-result-inline`/`.ch-q-mon-inline` now carry the same 1.75rem floor as the pulse.
+- Bulk-acknowledge URL matching re-anchored (siteId must be the first path segment); an aborted drag of the codes-to-problems panel header no longer swallows the next collapse click.
+
+Tests: `test-appointment-organise-core.js` grows to 241 checks (destination-taken, oversize drop, post-cancel restore both ways, release failures, pre-flight, fail-closed identity, day naming, notify no-op); `test-queue-pulse.js`, `test-task-bulk-action.js`, `test-document-codes-to-problems.js` extended.
+
 ## [v3.236.15] — 2026-08-21
 
 ### Bulk acknowledge — Review stays on screen

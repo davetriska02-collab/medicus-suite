@@ -288,14 +288,17 @@ console.log('=== 2. draft stage / same-list allowed ===');
   const d0 = core.emptyDraft();
   check(core.hasDraftChanges(d0) === false, 'empty draft');
   const sameSlot = core.canStageMove(mouse, { diaryId: mouse.diaryId, startDateTime: mouse.startDateTime });
-  check(sameSlot.ok === false, 'cannot drop onto the appointment\'s own slot');
+  check(sameSlot.ok === false, "cannot drop onto the appointment's own slot");
   const same = core.canStageMove(mouse, { diaryId: mouse.diaryId, startDateTime: '2026-08-23 10:30:00' });
   check(same.ok === true, 'same-list move to a later slot is allowed');
   check(core.moveTypeFor(mouse, { diaryId: mouse.diaryId }) === 'to-same-diary', 'same diary → to-same-diary');
   check(core.isCrossListMove(mouse, { diaryId: mouse.diaryId }) === false, 'same diary is not cross-list');
   const arrived = Object.assign({}, mouse, { arrived: true, locked: true });
   check(core.canStageCancel(arrived).ok === false, 'arrived cannot cancel');
-  check(core.canStageMove(arrived, { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00' }).ok === false, 'arrived cannot move');
+  check(
+    core.canStageMove(arrived, { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00' }).ok === false,
+    'arrived cannot move'
+  );
   const cross = core.canStageMove(mouse, { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00' });
   check(cross.ok === true, 'cross-list move allowed');
   const d1 = core.stageMove(d0, mouse.id, {
@@ -320,7 +323,10 @@ console.log('=== 2. draft stage / same-list allowed ===');
   });
   const visual = core.applyDraftToBoard(board, d4);
   const dest = visual.columns.find((c) => c.diaryId === otherDiary);
-  check(dest.appointments.some((a) => a.id === mouse.id && a.stagedMove), 'staged move appears on the target diary');
+  check(
+    dest.appointments.some((a) => a.id === mouse.id && a.stagedMove),
+    'staged move appears on the target diary'
+  );
   check(
     !visual.columns.find((c) => c.diaryId === mouse.diaryId).appointments.some((a) => a.id === mouse.id),
     'staged move leaves the source diary'
@@ -337,10 +343,12 @@ console.log('=== 3. payload keys (captured byte-for-byte) ===');
     JSON.stringify(Object.keys(cancel)) === JSON.stringify(core.CANCEL_PAYLOAD_KEYS),
     'cancel body key list pinned'
   );
-  check(Array.isArray(cancel.otherAppointmentIds) && cancel.otherAppointmentIds.length === 0, 'never ticks other appointments');
   check(
-    Array.isArray(cancel.cancellationConfirmationRecipients) &&
-      cancel.cancellationConfirmationRecipients.length === 0,
+    Array.isArray(cancel.otherAppointmentIds) && cancel.otherAppointmentIds.length === 0,
+    'never ticks other appointments'
+  );
+  check(
+    Array.isArray(cancel.cancellationConfirmationRecipients) && cancel.cancellationConfirmationRecipients.length === 0,
     'never defaults Send-to On'
   );
   const rec = {
@@ -366,7 +374,10 @@ console.log('=== 3. payload keys (captured byte-for-byte) ===');
   const picked = core.pickNotifyRecipients({
     cancellationConfirmationRecipientOptions: [{ value: rec, label: 'Mr Micky Mouse (davetriska02@gmail.com)' }],
   });
-  check(picked[0].newCommunicationId === rec.newCommunicationId, 'recipients are copied from the GET form, not invented');
+  check(
+    picked[0].newCommunicationId === rec.newCommunicationId,
+    'recipients are copied from the GET form, not invented'
+  );
   let noChan = false;
   try {
     core.buildCancelPayload({ appointmentId: mouse.id, reason: 'x', notify: true, recipients: [] });
@@ -439,10 +450,16 @@ console.log('=== 3. payload keys (captured byte-for-byte) ===');
     JSON.stringify(Object.keys(created)) === JSON.stringify(core.RESCHEDULE_CREATE_KEYS),
     'reschedule create-appointment key list pinned'
   );
-  check(created.context === 'reschedule-appointment', 'context is reschedule-appointment, not create-booked-appointment');
+  check(
+    created.context === 'reschedule-appointment',
+    'context is reschedule-appointment, not create-booked-appointment'
+  );
   check(created.rescheduledAppointmentVersionId === mouse.versionId, 'version id is sent, never null');
   check(created.bookingConfirmationRecipients.length === 0, 'reschedule does not invent Send-to channels');
-  check(!Object.prototype.hasOwnProperty.call(created, 'appointmentTypeId'), 'reschedule payload has no appointmentTypeId');
+  check(
+    !Object.prototype.hasOwnProperty.call(created, 'appointmentTypeId'),
+    'reschedule payload has no appointmentTypeId'
+  );
 }
 
 {
@@ -618,9 +635,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     check(created.rescheduledAppointmentVersionId === mouse.versionId, 'create sends the pinned version id');
     check(created.bookingConfirmationRecipients.length === 0, 'create does not invent Send-to');
     check(
-      booking.calls.some(
-        (c) => c.fn === 'releaseReservation' && c.id === '01a018e1-9543-73c5-a073-799c14a50cb9'
-      ),
+      booking.calls.some((c) => c.fn === 'releaseReservation' && c.id === '01a018e1-9543-73c5-a073-799c14a50cb9'),
       'cross-list releases the reservation AFTER successful create (captured 07:17:41)'
     );
     check(
@@ -633,7 +648,10 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       posts[0] === '/scheduling/slot-reservation/reserve-slot-and-broadcast-appointment-booking-in-progress',
       'cross-list POST 1 = 3-field reserve'
     );
-    check(posts[1] === '/scheduling/slot-reservation/update-slot-reservation', 'cross-list POST 2 = update-slot-reservation');
+    check(
+      posts[1] === '/scheduling/slot-reservation/update-slot-reservation',
+      'cross-list POST 2 = update-slot-reservation'
+    );
     check(!posts.some((p) => /move-appointment$/.test(p)), 'no POST …/move-appointment exists');
     check(!posts.some((p) => /cancel-appointment$/.test(p)), 'cross-list move is not cancel+create');
     const reserveBody = JSON.parse(f.calls.find((c) => c.url.includes('reserve-slot')).opts.body);
@@ -642,16 +660,38 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       'move reserve body is the 3-field capture, not booking-core extras'
     );
     check(reserveBody.intendedDuration === 15, 'cross-list reserve uses diary usual 15, not appointment 60');
-    check(!Object.prototype.hasOwnProperty.call(reserveBody, 'substituteSlotFilters'), 'no substituteSlotFilters on move reserve');
+    check(
+      !Object.prototype.hasOwnProperty.call(reserveBody, 'substituteSlotFilters'),
+      'no substituteSlotFilters on move reserve'
+    );
     const upd = JSON.parse(f.calls.find((c) => c.url.includes('update-slot-reservation')).opts.body);
     check(upd.intendedDuration === 60, 'update-slot-reservation uses the appointment duration');
     check(upd.rescheduledAppointmentId === mouse.id, 'update-slot-reservation sets rescheduledAppointmentId');
   }
 
   {
-    const sameTarget = { diaryId: mouse.diaryId, startDateTime: '2026-08-23 14:00:00', staffName: mouse.staffName, duration: 15 };
+    const sameTarget = {
+      diaryId: mouse.diaryId,
+      startDateTime: '2026-08-23 14:00:00',
+      staffName: mouse.staffName,
+      duration: 15,
+    };
+    // Fresh-board fixture must actually carry the free 14:00 tile: commitMove
+    // now proves the destination window is covered by free slots before writing.
+    const sameRaw = sampleRaw();
+    const sameSched = sameRaw.staffSchedules[0].schedule[0];
+    sameSched.endDateTime = '2026-08-23 15:00:00';
+    sameSched.entries[0].startDateTime = '2026-08-23 13:00:00';
+    sameSched.entries[0].endDateTime = '2026-08-23 13:15:00';
+    sameSched.entries[0].duration = 15;
+    sameSched.entries.push({
+      diaryEntryType: { value: 'slot' },
+      startDateTime: '2026-08-23 14:00:00',
+      endDateTime: '2026-08-23 14:15:00',
+      duration: 15,
+    });
     const f = recordingFetch((url) => {
-      if (url.includes('embedded-overview')) return mockResponse(200, sampleRaw());
+      if (url.includes('embedded-overview')) return mockResponse(200, sameRaw);
       if (url.includes('/data/appointment/move-appointment/')) {
         check(url.includes('moveType=to-same-diary'), 'same-list form uses moveType=to-same-diary');
         return mockResponse(200, {
@@ -676,7 +716,10 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     check(res.appointmentId === '01a018e2-04b1-72dd-a9c4-fdf551f98b4c', 'same-list move returns a new appointment id');
     check(res.appointmentId !== sameMouse.id, 'same-list new id differs from source');
     check(booking.calls[0].payload.diaryId === sameMouse.diaryId, 'same-list create keeps the source diaryId');
-    check(booking.calls[0].payload.intendedStartDateTime === '2026-08-23 14:00:00', 'same-list create uses the new start');
+    check(
+      booking.calls[0].payload.intendedStartDateTime === '2026-08-23 14:00:00',
+      'same-list create uses the new start'
+    );
     check(
       !f.calls.some((c) => c.url.includes('update-slot-reservation')),
       'same-list does not POST update-slot-reservation'
@@ -687,9 +730,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       'same-list reserve is also the 3-field body'
     );
     check(
-      booking.calls.some(
-        (c) => c.fn === 'releaseReservation' && c.id === '01a018ef-570e-735f-9a0c-1770fba8695f'
-      ),
+      booking.calls.some((c) => c.fn === 'releaseReservation' && c.id === '01a018ef-570e-735f-9a0c-1770fba8695f'),
       'same-list releases the reservation AFTER successful create (captured 07:32:37)'
     );
   }
@@ -727,10 +768,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       booking.calls[0].payload.intendedDuration === 60,
       'dropping onto a 30-min gap still creates at the source 60 min (TEST A must not lengthen)'
     );
-    check(
-      !f.calls.some((c) => c.url.includes('cancel-appointment')),
-      'move is not cancel-then-create (TEST A)'
-    );
+    check(!f.calls.some((c) => c.url.includes('cancel-appointment')), 'move is not cancel-then-create (TEST A)');
     const upd = JSON.parse(f.calls.find((c) => c.url.includes('update-slot-reservation')).opts.body);
     check(upd.intendedDuration === 60, 'cross-list update-slot-reservation keeps 60, not the 30-min gap');
   }
@@ -832,7 +870,10 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     check(core.followingSlotsFree(booked, apptB, 30) === false, 'followingSlotsFree false when 14:15 is booked');
     check(core.followingSlotsFree(free, apptF, 30) === true, 'followingSlotsFree true when 14:15 is free');
     const refuse = core.canStageStretch(apptB, 30, booked);
-    check(refuse.ok === false && refuse.reason === core.STRETCH_NEIGHBOUR_BOOKED, 'refuse stretch when neighbour booked (TEST A)');
+    check(
+      refuse.ok === false && refuse.reason === core.STRETCH_NEIGHBOUR_BOOKED,
+      'refuse stretch when neighbour booked (TEST A)'
+    );
     const allow = core.canStageStretch(apptF, 30, free);
     check(allow.ok === true, 'allow stretch when neighbour free (TEST B)');
     check(core.canStageStretch(apptF, 30, booked).ok === false, 'same-patient neighbour still blocks');
@@ -862,7 +903,10 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       JSON.stringify(Object.keys(stretchCreate)) === JSON.stringify(core.STRETCH_CREATE_KEYS),
       'stretch create-appointment key list pinned without allow'
     );
-    check(stretchCreate.context === 'create-booked-appointment', 'stretch create is a new book after cancel, not reschedule');
+    check(
+      stretchCreate.context === 'create-booked-appointment',
+      'stretch create is a new book after cancel, not reschedule'
+    );
     check(stretchCreate.intendedDuration === 30, 'stretch create duration is 30');
     check(stretchCreate.bookingConfirmationRecipients.length === 0, 'stretch Send-to off');
     check(
@@ -941,7 +985,10 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     check(upd.rescheduledAppointmentId === null, 'stretch update rescheduledAppointmentId is null');
     check(!Object.prototype.hasOwnProperty.call(upd, 'allowOverlappingAppointments'), 'stretch update omits allow');
     check(booking.calls[0].payload.intendedDuration === 30, 'stretch create duration 30');
-    check(booking.calls[0].payload.context === 'create-booked-appointment', 'stretch create context is book, not reschedule');
+    check(
+      booking.calls[0].payload.context === 'create-booked-appointment',
+      'stretch create context is book, not reschedule'
+    );
     check(
       !Object.prototype.hasOwnProperty.call(booking.calls[0].payload, 'allowOverlappingAppointments'),
       'stretch create omits allowOverlappingAppointments'
@@ -1136,10 +1183,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     check(applied.moves[stretchMouse.id].diaryId === coverDiary, 'staged dest is the cover diary');
     const applied30 = core.applySickDayProposal(
       core.emptyDraft(),
-      core.proposeSickDay(
-        Object.assign(twoFifteens, {}),
-        sickDiary
-      )
+      core.proposeSickDay(Object.assign(twoFifteens, {}), sickDiary)
     );
     const mouse30onBoard = Object.assign({}, core.findAppointment(twoFifteens, stretchMouse.id), {
       duration: 30,
@@ -1156,13 +1200,20 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     };
     const staged30 = core.applySickDayProposal(core.emptyDraft(), prop30);
     check(staged30.moves[mouse30onBoard.id].reserveDuration === 15, 'staged 30-min run keeps reserveDuration 15');
-    check(staged30.moves[mouse30onBoard.id].duration === undefined || staged30.moves[mouse30onBoard.id].startDateTime === run.suggestion.startDateTime, 'staged run keeps the start of the first 15-min tile');
+    check(
+      staged30.moves[mouse30onBoard.id].duration === undefined ||
+        staged30.moves[mouse30onBoard.id].startDateTime === run.suggestion.startDateTime,
+      'staged run keeps the start of the first 15-min tile'
+    );
     const left = core.applySickDayProposal(core.emptyDraft(), prop);
     check(left.moveIds.length === 0, 'leave rows are not staged and not written');
 
     const happyProp = core.proposeSickDay(happy, sickDiary);
     const happySum = core.summariseDraft(core.applySickDayProposal(core.emptyDraft(), happyProp), happy);
-    check(/Rebooked with Cover GP/.test(happySum.items[0].text), 'confirm bar says rebooked with the covering clinician');
+    check(
+      /Rebook with Cover GP/.test(happySum.items[0].text),
+      'confirm bar stages (not claims) rebook with the covering clinician'
+    );
     check(/Mr Micky Mouse/.test(happySum.items[0].text), 'confirm bar still names the patient');
     check(/will not send a booking message/.test(happySum.items[0].text), 'confirm bar still says SMS is off');
 
@@ -1172,7 +1223,10 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     check(coverPrev[0].incoming === 1, 'cover preview counts the pile-on');
     check(coverPrev[0].alreadyBooked === 0, 'cover preview counts already booked');
     check(coverPrev[0].overCap === false, 'one extra is under the default cap');
-    check(/Nobody left to phone/.test(core.leftoverPhoneText(happyProp)), 'happy-path phone list still exists and says nobody to call');
+    check(
+      /Nobody left to phone/.test(core.leftoverPhoneText(happyProp)),
+      'happy-path phone list still exists and says nobody to call'
+    );
 
     const fullLeftovers = core.sickDayLeftovers(prop);
     check(fullLeftovers.length === 1, 'full cover becomes a leftover phone-list row');
@@ -1398,7 +1452,10 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     });
     const liveLike = core.proposeSickDay(fourFifteens, unassignedSick);
     check(liveLike.rows[0].status === 'accept', '30-min Mouse on Unassigned still finds NP consecutive 15s');
-    check(liveLike.rows[0].suggestion.startDateTime === '2026-08-23 10:00:00', 'default is earliest 10:00, not closest-clock 10:30');
+    check(
+      liveLike.rows[0].suggestion.startDateTime === '2026-08-23 10:00:00',
+      'default is earliest 10:00, not closest-clock 10:30'
+    );
     check(
       liveLike.rows[0].alternatives.some((s) => s.startDateTime === '2026-08-23 10:30:00'),
       '10:30 remains offered as an alternative'
@@ -1540,7 +1597,10 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const completePrev = core.coverLoadPreview(liveComplete, completeProp);
     const u11 = completePrev.find((d) => d.diaryId === liveCompleteU11);
     check(!!u11, 'live-complete preview names Unassigned 11:00-12:00');
-    check(u11.alreadyBooked === 0 && u11.incoming === 1 && u11.afterBooked === 1, 'live-complete 0 already booked + 1 incoming = 1');
+    check(
+      u11.alreadyBooked === 0 && u11.incoming === 1 && u11.afterBooked === 1,
+      'live-complete 0 already booked + 1 incoming = 1'
+    );
     check(u11.remainingFree === 2, 'live-complete remaining-free is 2 (4x15 minus 30-min incoming), not 4');
     const completePhone = core.leftoverPhoneText(completeProp);
     check(core.sickDayLeftovers(completeProp).length === 0, 'live-complete happy path is zero leftovers');
@@ -1549,8 +1609,11 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     check(/Nobody left to phone/.test(completePhone), 'live-complete zero leftover list says nobody left to phone');
     check(!/NHS|nhs number/i.test(completePhone), 'live-complete leftover list has no NHS numbers');
     const completeSum = core.summariseDraft(core.applySickDayProposal(core.emptyDraft(), completeProp), liveComplete);
-    check(/Rebooked with Unassigned/.test(completeSum.items[0].text), 'confirm bar names the covering list');
-    check(/will not send a booking message/.test(completeSum.items[0].text), 'confirm bar still says Medicus will not message');
+    check(/Rebook with Unassigned/.test(completeSum.items[0].text), 'confirm bar names the covering list');
+    check(
+      /will not send a booking message/.test(completeSum.items[0].text),
+      'confirm bar still says Medicus will not message'
+    );
   }
 
   console.log('=== 6. live booking-core is the reserve/create/release copy ===');
@@ -1582,14 +1645,16 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
         appointment: mouse,
         target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
       });
-      check(res.appointmentId === '01a018e2-04b1-72dd-a9c4-fdf551f98b4c', 'live booking-core create returns the new id');
+      check(
+        res.appointmentId === '01a018e2-04b1-72dd-a9c4-fdf551f98b4c',
+        'live booking-core create returns the new id'
+      );
       const reserveCall = f.calls.find((c) =>
         String(c.url).includes('reserve-slot-and-broadcast-appointment-booking-in-progress')
       );
       check(!!reserveCall, 'move reserve hit the captured reserve path');
       check(
-        JSON.stringify(Object.keys(JSON.parse(reserveCall.opts.body))) ===
-          JSON.stringify(core.RESERVE_RESCHEDULE_KEYS),
+        JSON.stringify(Object.keys(JSON.parse(reserveCall.opts.body))) === JSON.stringify(core.RESERVE_RESCHEDULE_KEYS),
         'live move reserve posted the 3-field body'
       );
       const createdCall = f.calls.find((c) => String(c.url).endsWith('/scheduling/appointment/create-appointment'));
@@ -1598,9 +1663,14 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
         JSON.parse(createdCall.opts.body).context === 'reschedule-appointment',
         'live booking-core posted the reschedule payload, not create-booked-appointment'
       );
-      const releaseCall = f.calls.find((c) => String(c.url).includes('remove-slot-reservation-and-broadcast-appointment-booking-ended'));
+      const releaseCall = f.calls.find((c) =>
+        String(c.url).includes('remove-slot-reservation-and-broadcast-appointment-booking-ended')
+      );
       check(!!releaseCall, 'live booking-core released after successful create');
-      check(JSON.parse(releaseCall.opts.body).slotReservationId === 'live-res', 'release body is { slotReservationId }');
+      check(
+        JSON.parse(releaseCall.opts.body).slotReservationId === 'live-res',
+        'release body is { slotReservationId }'
+      );
       check(
         f.calls.findIndex((c) => String(c.url).endsWith('/scheduling/appointment/create-appointment')) <
           f.calls.findIndex((c) => String(c.url).includes('remove-slot-reservation')),
@@ -1609,6 +1679,435 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     } finally {
       global.fetch = prevFetch;
     }
+  }
+
+  console.log('=== 7. review fixes — fail-safe write paths ===');
+
+  function stretchOverviewMock(url) {
+    if (url.includes('/data/appointment/appointment-overview/')) {
+      return mockResponse(200, {
+        appointmentId: stretchMouse.id,
+        versionId: stretchMouse.versionId,
+        patientId: stretchMouse.patientId,
+        details: {
+          appointmentStatus: { value: 'pending', isCancelled: false },
+          displayStatus: { value: 'booked', isArrived: false },
+        },
+      });
+    }
+    return null;
+  }
+
+  // 7a. commitMove refuses when the destination is taken on the FRESH board.
+  {
+    const takenRaw = sampleRaw();
+    takenRaw.unassignedDiaries[0].entries.push({
+      id: 'someone-else',
+      versionId: 'v-else',
+      patient: { id: 'p-else', name: 'Ms Other Patient' },
+      diaryEntryType: { value: 'appointment' },
+      appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
+      startDateTime: '2026-08-23 11:00:00',
+      endDateTime: '2026-08-23 11:15:00',
+      duration: 15,
+      displayStatus: { value: 'booked' },
+      appointmentStatus: { value: 'pending', isCancelled: false, isStarted: false, isSeen: false },
+    });
+    const f = recordingFetch((url) => {
+      if (url.includes('embedded-overview')) return mockResponse(200, takenRaw);
+      return mockResponse(200, {});
+    });
+    const booking = recordingBooking();
+    const client = core.createClient(API, { fetchImpl: f, booking: booking });
+    await expectReject(
+      () =>
+        client.commitMove({
+          date: '2026-08-23',
+          appointment: mouse,
+          target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
+        }),
+      'no longer free',
+      'move refuses a destination someone booked since staging'
+    );
+    check(
+      f.calls.every((c) => c.opts.method !== 'POST'),
+      'no reserve/create POSTs after destination-taken refusal'
+    );
+    check(booking.calls.length === 0, 'booking-core never called for a taken destination');
+  }
+
+  // 7b. commitMove refuses an oversize drop (60 min onto a 30-min free window).
+  {
+    const shortRaw = sampleRaw();
+    shortRaw.unassignedDiaries[0].endDateTime = '2026-08-23 11:30:00';
+    const f = recordingFetch((url) => {
+      if (url.includes('embedded-overview')) return mockResponse(200, shortRaw);
+      return mockResponse(200, {});
+    });
+    const client = core.createClient(API, { fetchImpl: f, booking: recordingBooking() });
+    await expectReject(
+      () =>
+        client.commitMove({
+          date: '2026-08-23',
+          appointment: mouse,
+          target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
+        }),
+      'no longer free',
+      '60-min appointment refuses a 30-min free window (TEST A class)'
+    );
+    check(
+      f.calls.every((c) => c.opts.method !== 'POST'),
+      'no POSTs for the oversize drop'
+    );
+    const gate = core.canStageMove(
+      mouse,
+      { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00' },
+      core.parseBoard(shortRaw)
+    );
+    check(
+      gate.ok === false && gate.reason === core.MOVE_TARGET_NOT_FREE,
+      'stage gate with a board also refuses the oversize drop'
+    );
+  }
+
+  // 7c. Same-list move onto a SHORTER tile widens the reservation before create.
+  {
+    const mixRaw = sampleRaw();
+    const mixSched = mixRaw.staffSchedules[0].schedule[0];
+    mixSched.endDateTime = '2026-08-23 15:00:00';
+    mixSched.entries[0].startDateTime = '2026-08-23 13:00:00';
+    mixSched.entries[0].endDateTime = '2026-08-23 13:30:00';
+    mixSched.entries[0].duration = 30;
+    mixSched.entries.push(
+      {
+        diaryEntryType: { value: 'slot' },
+        startDateTime: '2026-08-23 14:00:00',
+        endDateTime: '2026-08-23 14:15:00',
+        duration: 15,
+      },
+      {
+        diaryEntryType: { value: 'slot' },
+        startDateTime: '2026-08-23 14:15:00',
+        endDateTime: '2026-08-23 14:30:00',
+        duration: 15,
+      }
+    );
+    const f = recordingFetch((url) => {
+      if (url.includes('embedded-overview')) return mockResponse(200, mixRaw);
+      if (url.includes('/data/appointment/move-appointment/')) {
+        return mockResponse(200, {
+          appointment: { id: mouse.id, versionId: mouse.versionId, patient: { id: mouse.patientId } },
+        });
+      }
+      if (url.includes('reserve-slot-and-broadcast')) return mockResponse(200, { slotReservationId: 'res-mix' });
+      if (url.includes('update-slot-reservation')) return mockResponse(200, {});
+      return mockResponse(200, {});
+    });
+    const booking = recordingBooking();
+    const client = core.createClient(API, { fetchImpl: f, booking: booking });
+    const mixMouse = Object.assign({}, mouse, {
+      duration: 30,
+      startDateTime: '2026-08-23 13:00:00',
+      endDateTime: '2026-08-23 13:30:00',
+    });
+    await client.commitMove({
+      date: '2026-08-23',
+      appointment: mixMouse,
+      target: { diaryId: mixMouse.diaryId, startDateTime: '2026-08-23 14:00:00', duration: 15, reserveDuration: 15 },
+    });
+    const upd = f.calls.find((c) => c.url.includes('update-slot-reservation'));
+    check(!!upd, 'same-list 30-min onto a 15-min tile posts update-slot-reservation');
+    check(JSON.parse(upd.opts.body).intendedDuration === 30, 'same-list mixed-duration update widens to the kept 30');
+    check(booking.calls[0].payload.intendedDuration === 30, 'same-list mixed-duration create keeps 30');
+  }
+
+  // 7d. Stretch failure AFTER the cancel: the original booking is put back.
+  {
+    let createCalls = 0;
+    const booking = {
+      createAppointment: async (apiBase, payload) => {
+        createCalls++;
+        if (createCalls === 1) throw new Error('HTTP 500');
+        return { appointmentId: 'restored-id', payload: payload };
+      },
+      releaseReservation: async () => {},
+    };
+    const f = recordingFetch((url) => {
+      if (url.includes('embedded-overview')) return mockResponse(200, sampleStretchRaw(false));
+      const ov = stretchOverviewMock(url);
+      if (ov) return ov;
+      if (url.includes('reserve-slot-and-broadcast')) return mockResponse(200, { slotReservationId: 'res-restore' });
+      return mockResponse(200, {});
+    });
+    const client = core.createClient(API, { fetchImpl: f, booking: booking });
+    let err = null;
+    try {
+      await client.commitStretch({ date: '2026-08-23', appointment: stretchMouse, newDuration: 30 });
+    } catch (e) {
+      err = e;
+    }
+    check(!!err, 'stretch create failure still surfaces as an error');
+    check(err && err.stretchCancelWritten === true, 'error is flagged: the cancel WAS written');
+    check(err && err.stretchRestored === true, 'error is flagged: the original booking was put back');
+    check(err && /put back unchanged/.test(err.message), 'restored message says the original was put back');
+    check(err && /Mr Micky Mouse/.test(err.message), 'restored message names the patient');
+    check(createCalls === 2, 'a compensating create ran after the failed one');
+    const updates = f.calls
+      .filter((c) => c.url.includes('update-slot-reservation'))
+      .map((c) => JSON.parse(c.opts.body));
+    check(
+      updates.some((u) => u.intendedDuration === stretchMouse.duration),
+      'the reservation is put back to the original length before the compensating create'
+    );
+  }
+
+  // 7e. Stretch failure AFTER the cancel where restore ALSO fails: urgent message.
+  {
+    const booking = {
+      createAppointment: async () => {
+        throw new Error('HTTP 500');
+      },
+      releaseReservation: async () => {},
+    };
+    let reserves = 0;
+    const f = recordingFetch((url) => {
+      if (url.includes('embedded-overview')) return mockResponse(200, sampleStretchRaw(false));
+      const ov = stretchOverviewMock(url);
+      if (ov) return ov;
+      if (url.includes('reserve-slot-and-broadcast')) {
+        reserves++;
+        return mockResponse(200, { slotReservationId: 'res-doomed' });
+      }
+      if (url.includes('update-slot-reservation')) return mockResponse(200, {});
+      return mockResponse(200, {});
+    });
+    const client = core.createClient(API, { fetchImpl: f, booking: booking });
+    let err = null;
+    try {
+      await client.commitStretch({ date: '2026-08-23', appointment: stretchMouse, newDuration: 30 });
+    } catch (e) {
+      err = e;
+    }
+    check(!!err && err.stretchCancelWritten === true, 'unrestored failure is flagged as cancel-written');
+    check(err && err.stretchRestored === false, 'unrestored failure is flagged as NOT restored');
+    check(
+      err && /URGENT/.test(err.message) && /NO appointment/.test(err.message),
+      'unrestored message says the patient has NO appointment'
+    );
+    check(err && /rebook them in Medicus now/i.test(err.message), 'unrestored message tells the user to rebook now');
+  }
+
+  // 7f. Stretch pre-flight: a missing appointmentTypeId refuses BEFORE the cancel.
+  {
+    const f = recordingFetch((url) => {
+      if (url.includes('embedded-overview')) return mockResponse(200, sampleStretchRaw(false));
+      const ov = stretchOverviewMock(url);
+      if (ov) return ov;
+      return mockResponse(200, {});
+    });
+    const client = core.createClient(API, { fetchImpl: f, booking: recordingBooking() });
+    await expectReject(
+      () =>
+        client.commitStretch({
+          date: '2026-08-23',
+          appointment: Object.assign({}, stretchMouse, { appointmentTypeId: null }),
+          newDuration: 30,
+        }),
+      'appointmentTypeId required before a stretch cancel',
+      'stretch pre-flight refuses a null appointmentTypeId'
+    );
+    check(
+      f.calls.every((c) => c.opts.method !== 'POST'),
+      'no cancel POST when pre-flight refuses'
+    );
+  }
+
+  // 7g. A failed reservation RELEASE never misreports the write.
+  {
+    const booking = {
+      createAppointment: async () => ({ appointmentId: 'created-despite-release' }),
+      releaseReservation: async () => {
+        throw new Error('release blew up');
+      },
+    };
+    const f = recordingFetch((url) => {
+      if (url.includes('embedded-overview')) return mockResponse(200, sampleRaw());
+      if (url.includes('/data/appointment/move-appointment/')) {
+        return mockResponse(200, {
+          appointment: { id: mouse.id, versionId: mouse.versionId, patient: { id: mouse.patientId } },
+        });
+      }
+      if (url.includes('reserve-slot-and-broadcast')) return mockResponse(200, { slotReservationId: 'res-rel' });
+      if (url.includes('update-slot-reservation')) return mockResponse(200, {});
+      return mockResponse(200, {});
+    });
+    const client = core.createClient(API, { fetchImpl: f, booking: booking });
+    const res = await client.commitMove({
+      date: '2026-08-23',
+      appointment: mouse,
+      target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
+    });
+    check(res.appointmentId === 'created-despite-release', 'a confirmed move is returned even if the release fails');
+  }
+
+  // 7h. A failed release in the CATCH path keeps the original error.
+  {
+    const booking = {
+      createAppointment: async () => {
+        throw new Error('HTTP 500');
+      },
+      releaseReservation: async () => {
+        throw new Error('release blew up');
+      },
+    };
+    const f = recordingFetch((url) => {
+      if (url.includes('embedded-overview')) return mockResponse(200, sampleRaw());
+      if (url.includes('/data/appointment/move-appointment/')) {
+        return mockResponse(200, {
+          appointment: { id: mouse.id, versionId: mouse.versionId, patient: { id: mouse.patientId } },
+        });
+      }
+      if (url.includes('reserve-slot-and-broadcast')) return mockResponse(200, { slotReservationId: 'res-rel2' });
+      if (url.includes('update-slot-reservation')) return mockResponse(200, {});
+      return mockResponse(200, {});
+    });
+    const client = core.createClient(API, { fetchImpl: f, booking: booking });
+    await expectReject(
+      () =>
+        client.commitMove({
+          date: '2026-08-23',
+          appointment: mouse,
+          target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
+        }),
+      'HTTP 500',
+      'the create failure, not the release failure, is surfaced'
+    );
+  }
+
+  // 7i. Sick-day similar matching fails CLOSED on missing slot identity.
+  {
+    const untyped = { diaryId: 'other-d', appointmentTypeId: null, deliveryMode: 'face-to-face', siteId: null };
+    const typedAppt = Object.assign({}, stretchMouse, { diaryId: 'appt-d' });
+    check(
+      core.matchingSlots(
+        core.parseBoard({
+          date: '2026-08-23',
+          staffSchedules: [
+            {
+              name: 'Untyped',
+              id: 'u1',
+              schedule: [
+                {
+                  scheduleType: 'diary',
+                  id: 'other-d',
+                  startDateTime: '2026-08-23 14:00:00',
+                  endDateTime: '2026-08-23 15:00:00',
+                  summary: { status: { isCancelled: false }, usualAppointmentDuration: 15 },
+                  entries: [
+                    {
+                      diaryEntryType: { value: 'slot' },
+                      startDateTime: '2026-08-23 14:00:00',
+                      endDateTime: '2026-08-23 14:15:00',
+                      duration: 15,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          unassignedDiaries: [],
+        }),
+        typedAppt,
+        { now: 0 }
+      ).length === 0,
+      'an untyped diary is never proposed as "similar" (fail closed)'
+    );
+    check(core.freeWindowCovered !== undefined, 'freeWindowCovered is exported for the canvas');
+  }
+
+  // 7j. The rebook miss reason names the board day, not a hard-coded Sunday.
+  {
+    const mondayBoard = core.parseBoard({
+      date: '2026-08-24',
+      staffSchedules: [
+        {
+          name: 'Short Tiles',
+          id: 's1',
+          schedule: [
+            {
+              scheduleType: 'diary',
+              id: 'short-d',
+              startDateTime: '2026-08-24 14:00:00',
+              endDateTime: '2026-08-24 15:00:00',
+              summary: {
+                status: { isCancelled: false },
+                usualAppointmentDuration: 15,
+                defaultAppointmentType: { id: stretchMouse.appointmentTypeId },
+                defaultDeliveryMode: { value: 'face-to-face' },
+              },
+              entries: [
+                {
+                  diaryEntryType: { value: 'slot' },
+                  startDateTime: '2026-08-24 14:00:00',
+                  endDateTime: '2026-08-24 14:15:00',
+                  duration: 15,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      unassignedDiaries: [],
+    });
+    const bigAppt = Object.assign({}, stretchMouse, { diaryId: 'elsewhere', duration: 60 });
+    const reason = core.rebookMissReason(mondayBoard, bigAppt, { now: 0 });
+    check(/other Monday lists/.test(reason), 'miss reason names the board day (Monday), not Sunday');
+    check(!/Sunday/.test(reason), 'no hard-coded Sunday on a Monday board');
+  }
+
+  // 7k. Distinct refusal reasons: invalid step vs booked neighbour.
+  {
+    const free = core.parseBoard(sampleStretchRaw(false));
+    const appt = core.findAppointment(free, stretchMouse.id);
+    const bad = core.canStageStretch(appt, 20, free);
+    check(
+      bad.ok === false && bad.reason === core.STRETCH_STEP_INVALID,
+      'a non-15-min step is refused as invalid, not "booked"'
+    );
+    const shrink = core.canStageStretch(appt, 15, free);
+    check(
+      shrink.ok === false && shrink.reason === core.STRETCH_STEP_INVALID,
+      'a non-lengthening stretch is refused as invalid'
+    );
+  }
+
+  // 7l. Stretch never claims a patient message; notify on a stretch is a no-op.
+  {
+    let d = core.stageStretch(core.emptyDraft(), stretchMouse.id, 30);
+    d = core.setDraftNotify(d, stretchMouse.id, true);
+    const sum = core.summariseDraft(d, core.parseBoard(sampleStretchRaw(false)));
+    check(sum.items[0].notify === false, 'setDraftNotify on a stretch is a no-op (the write sends no recipients)');
+    check(/Medicus will not send a message/.test(sum.items[0].text), 'stretch confirm text never claims a message');
+  }
+
+  // 7m. The stretch gate needs REAL free-slot coverage, not just "no appointment".
+  {
+    const gapRaw = sampleStretchRaw(false);
+    // Remove every slot entry after the appointment: the 14:15 window is now a
+    // hole (break/blocked time never maps into the board model).
+    const gapFilter = (sched) => {
+      sched.entries = sched.entries.filter(
+        (e) => !(e.diaryEntryType && e.diaryEntryType.value === 'slot' && e.startDateTime >= '2026-08-23 14:15:00')
+      );
+    };
+    (gapRaw.staffSchedules || []).forEach((s) => s.schedule.forEach(gapFilter));
+    (gapRaw.unassignedDiaries || []).forEach(gapFilter);
+    const gapBoard = core.parseBoard(gapRaw);
+    const appt = core.findAppointment(gapBoard, stretchMouse.id);
+    check(
+      core.canStageStretch(appt, 30, gapBoard).ok === false,
+      'a stretch over a slotless gap (break/blocked) is refused, not written'
+    );
   }
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed');

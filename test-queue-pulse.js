@@ -195,6 +195,40 @@ check(
     /\[col-id='patientName'\]:has\(> \.ch-queue-chips\)/.test(hud),
   'name cell clips chips so the next AG-Grid column cannot chop them'
 );
+check(
+  /\[col-id='patientName'\] > \.ch-queue-chips,[\s\S]{0,900}?min-width: 1\.75rem/.test(hud),
+  'flat-queue chip containers keep a min-width floor — a squeezed red/amber chip leaves a colour stub, never vanishes'
+);
+
+console.log('\nLayer 4: float lifecycle — per-key cleanup, no leaked listeners, no ghost re-open');
+check(/_pulseFloatCleanups = new Map\(\)/.test(content), 'float cleanups are a per-key Map');
+check(!/_pulseFloatCleanup\b/.test(content), 'the single shared cleanup slot is gone (it leaked listeners every sweep)');
+check(/runPulseFloatCleanup\(key\)/.test(content), "refreshPulseOnRow cleans up ONLY its own key's tray");
+check(
+  /clearTimeout\(armTimer\)/.test(content) && /const armTimer = setTimeout\(arm, 0\)/.test(content),
+  'per-key cleanup cancels the pending arm — a cleanup that runs before arm leaks no listeners'
+);
+const dismissFn = content.match(/const dismissPulseFloats = \(\) => \{[\s\S]*?\n  \};/);
+check(!!dismissFn, 'dismissPulseFloats found');
+if (dismissFn) {
+  check(
+    /clearPulseFloatUi\(\)/.test(dismissFn[0]) && /_pulseOpenByKey/.test(dismissFn[0]),
+    'dismissal closes every float AND nulls EVERY open key — a dismissed tray cannot resurrect on the next sweep'
+  );
+}
+check(
+  /const onDoc = [\s\S]{0,200}?dismissPulseFloats\(\)/.test(content) &&
+    /const onKey = [\s\S]{0,200}?dismissPulseFloats\(\)/.test(content),
+  'click-away and Escape route through the all-keys dismissal helper'
+);
+check(
+  /const onScroll = \(e\) => \{[\s\S]{0,400}?tray\.contains\(e\.target\)\) return;/.test(content),
+  'scrolling INSIDE the tray does not dismiss it (the tray itself has overflow-y: auto)'
+);
+check(
+  /onScrollForMenu = \(e\) => \{[\s\S]{0,400}?activeActionMenu\.contains\(e\.target\)\) return;/.test(content),
+  'scrolling INSIDE the action menu does not close it (it has a max-height scroll cap)'
+);
 
 console.log('\n--- Results: ' + passed + ' passed, ' + failed + ' failed ---\n');
 if (failed > 0) process.exit(1);

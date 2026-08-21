@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.236.15
+**Version:** v3.236.16
 **Generated:** 2026-08-21
 
 ## What it is
@@ -227,6 +227,7 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.236.16 (2026-08-21)** — Organise-canvas fail-safe write paths: moves prove the destination is still free on the fresh board before writing; a failed stretch re-creates the original booking (URGENT no-appointment error if that also fails); the overlay freezes during a Finalise batch; Send-to copy matches the per-action "Tell the patient" opt-in (stretch never offers it); pulse popovers stop leaking/resurrecting and survive internal scrolling; flat-queue chips keep a 1.75rem colour floor.
 - **v3.236.15 (2026-08-21)** — Bulk acknowledge: Review/Confirm sit in a footer so select-all cannot hide the mass-resolve button.
 - **v3.236.14 (2026-08-21)** — Bulk remove/merge trigger removed from the Clinical Summary (Organise problems owns End/merge). Quiet-row chips clip inside the name column so the next box cannot chop them.
 - **v3.236.13 (2026-08-21)** — Add-as-problem panel nudges off the Save as document chip, not only Medicus File.
@@ -237,7 +238,7 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 - **v3.236.8 (2026-08-21)** — Queue chips on tasks / investigations sit after the patient name on the same line (no longer clipped under it).
 - **v3.236.7 (2026-08-21)** — "Add coded entries as problems" docks top-right (not on File document) and the header is draggable.
 - **v3.236.6 (2026-08-21)** — Queue pulse on tasks / investigations no longer covers the patient name (100% flex was preview-row only; name stays first).
-- **v3.236.5 (2026-08-21)** — Appointment-book organise canvas: cancel, same-list/cross-list move, stretch into a free following slot, and sick-day rebook. SMS off. Leftover phone list; covering-list preview + cap; earliest similar slot; launcher sits left of Open Actions; diary filter for working-day boards.
+- **v3.236.5 (2026-08-21)** — Appointment-book organise canvas: cancel, same-list/cross-list move, stretch into a free following slot, and sick-day rebook. Send-to off by default (per-action "Tell the patient" opt-in from v3.236.15; never on stretch). Leftover phone list; covering-list preview + cap; earliest similar slot; launcher sits left of Open Actions; diary filter for working-day boards.
 - **v3.235.0 (2026-08-19)** — "Add coded entries as problems": a floating panel on document-filing task pages checklists every coded journal-note entry on that document and, on confirmation, creates each as a new Problem via Medicus's own create-problem endpoint — code, note text, and an onset date derived from the document's own date carried across automatically, closing a gap where Medicus's own "Codes & actions" card has no such action at all. Ships as a fixed floating panel rather than anchored inline, since the task page's switchable right pane (existing problems / medication) would otherwise unmount an inline widget along with whatever card it sat under.
 - **v3.234.1 (2026-08-18)** — Canvas End and significance are staged: arrange many tiles, then Finalise writes them all. Nest/link still confirm per drop.
 - **v3.234.0 (2026-08-18)** — Organise-problems canvas is now a unified organiser: Major / Minor / Unresolved lanes, an End bin (Resolved, today's date; parents with live children blocked), tile-to-tile nest/link unchanged. Existing single-action buttons stay on the page.
