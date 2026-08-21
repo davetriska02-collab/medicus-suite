@@ -11,8 +11,10 @@ extension). Open in a browser; each frame is a screenshot target.
 `docs/design/triage-queue-next/before-after.html` (`?shot=compare`).
 
 **Status:** first live cut shipped in **v3.236.4** (pulse + why-tray + thin act
-tray + thread mark). Pref `queuePulseCompress` (default on). Book / Park /
-silent-unchecked rail / B1 context headlines are still later.
+tray + thread mark). Pref `queuePulseCompress` (default on). Amber is a
+hollow ring (not a filled bar). Quiet rows keep their chips (empty is not
+all-clear). Book / Park / dashed unchecked rail / thread expand / B1
+context headlines / huddle are out of this cut.
 
 ---
 

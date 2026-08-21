@@ -38,7 +38,8 @@
 .ch-q-act,
 .ch-row-pulse-red,
 .ch-row-pulse-amber,
-.ch-row-pulse-on {
+.ch-row-pulse-on,
+.ch-q-pulse-rail-ring {
   /* Surfaces */
   --bg-deep: #f8fafc;
   --bg-mid: #f1f5f9;
@@ -249,16 +250,20 @@
 /* ---- Queue pulse (v3.236.4) — compress the chip pile to one named weight ----
    Marker classes on Medicus's own `.ag-row` (same host-class pattern as
    `.ch-row-sev-*`). Pulse ON replaces the 3px result tint so two left-edge
-   shadows never fight. Filled bar = named red; hollow ring sits in the
-   pulse chrome, not on the row (AG-Grid box-shadow can't draw a ring). */
+   shadows never fight. Filled bar = named red. Amber is a hollow ring
+   on the pulse chrome (`.ch-q-pulse-rail-ring`) — AG-Grid box-shadow
+   cannot draw a ring, and a second filled bar would only differ from
+   red by hue. `.ch-row-pulse-amber` is a marker class only (seen-dim
+   gate); it must not paint a bar. */
 .ch-row-pulse-red {
   box-shadow: inset 4px 0 0 0 var(--red);
 }
 .ch-row-pulse-amber {
-  box-shadow: inset 4px 0 0 0 var(--amber);
+  /* marker only — do not paint a filled bar */
 }
-/* Hide the per-family chip pile while pulse chrome is showing — chips stay
-   in the DOM for de-dupe / why-tray collection / fetch-driven inject. */
+/* Hide the per-family chip pile only on escalate (red/amber) rows. Quiet
+   rows never get `.ch-row-pulse-on`, so their chips stay visible — hiding
+   them would read as all-clear. Chips stay in the DOM either way. */
 .ch-row-pulse-on .ch-queue-chips,
 .ch-row-pulse-on .ch-q-mon,
 .ch-row-pulse-on .ch-q-result,
@@ -284,6 +289,15 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+}
+.ch-q-pulse-rail-ring {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border: 2px solid var(--amber);
+  border-radius: 50%;
+  background: transparent;
+  box-sizing: border-box;
 }
 .ch-q-pulse-head {
   display: inline-flex;

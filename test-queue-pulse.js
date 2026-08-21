@@ -123,6 +123,31 @@ if (actFn) {
   );
 }
 check(/Not a score/.test(content), 'why-tray footer refuses the score reading');
+check(
+  /composed\.rail === 'amber'/.test(content) && /ch-q-pulse-rail-ring/.test(content),
+  'amber rail paints a hollow ring in the pulse chrome, not a second filled bar'
+);
+check(/\.ch-q-pulse-rail-ring/.test(hud.split('{')[0]), 'hud.css token-block lists the amber ring');
+check(/\.ch-row-pulse-red \{[\s\S]*?inset 4px 0 0 0 var\(--red\)/.test(hud), 'red rail is still a filled inset bar');
+check(
+  /\.ch-row-pulse-amber \{\s*\/\* marker only/.test(hud) &&
+    !/\.ch-row-pulse-amber \{[\s\S]*?box-shadow: inset/.test(hud),
+  'amber marker class does not paint a filled bar (shape, not hue)'
+);
+check(/\.ch-q-pulse-rail-ring \{[\s\S]*?border-radius: 50%/.test(hud), 'amber ring is a hollow circle');
+const applyFn = content.match(/const applyPulseRail = \([\s\S]*?\n  \};/);
+check(!!applyFn, 'applyPulseRail found');
+if (applyFn) {
+  check(
+    /rail !== 'red' && rail !== 'amber'/.test(applyFn[0]) && /PULSE_ON/.test(applyFn[0]),
+    'empty rail does not hide chips (quiet row is not all-clear)'
+  );
+}
+check(
+  /escalate && composed\.headline/.test(content) && /escalate && composed\.thread/.test(content),
+  'pulse compression chrome is escalate-only — quiet rows keep the chip pile'
+);
+check(/Nothing named matched/.test(content), 'empty why-tray refuses the all-clear reading');
 
 console.log('\n--- Results: ' + passed + ' passed, ' + failed + ' failed ---\n');
 if (failed > 0) process.exit(1);

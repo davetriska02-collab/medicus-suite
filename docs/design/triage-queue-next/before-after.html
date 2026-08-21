@@ -122,11 +122,14 @@
     .g-row:nth-child(even) { background: #fbfdff; }
     .g-row.is-cursor { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 1; }
     .rail { padding: 0 !important; position: relative; }
-    .rail i.red, .rail i.amber {
-      position: absolute; inset: 0 auto 0 0; width: 4px;
+    .rail i.red {
+      position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--red);
     }
-    .rail i.red { background: var(--red); }
-    .rail i.amber { background: var(--amber); }
+    .rail i.amber {
+      position: absolute; top: 50%; left: 1px; width: 8px; height: 8px;
+      margin-top: -4px; border: 2px solid var(--amber); border-radius: 50%;
+      background: transparent;
+    }
     .name { font-size: 12.5px; font-weight: 650; color: var(--accent); line-height: 1.25; }
     .name .age { display: block; font-weight: 500; font-size: 10px; color: var(--text-3); margin-top: 1px; }
     .check { display: flex; align-items: center; justify-content: center; color: var(--border-hi); font-size: 13px; }
@@ -150,6 +153,10 @@
     .chip.info { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-line); }
     .chip.meta { background: transparent; color: var(--text-4); border-color: var(--border); }
     .pulse-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 3px; }
+    .rail-ring {
+      width: 8px; height: 8px; flex: 0 0 8px; border: 2px solid var(--amber);
+      border-radius: 50%; background: transparent; box-sizing: border-box;
+    }
     .pulse-head { display: inline-flex; align-items: center; gap: 5px; }
     .more { font-family: var(--mono); font-size: 10px; color: var(--text-3); }
     .thread {
@@ -201,7 +208,9 @@
     .legend span { display: inline-flex; align-items: center; gap: 6px; }
     .swatch { width: 10px; height: 10px; border-radius: 2px; }
     .swatch.red { background: var(--red); }
-    .swatch.amber { background: var(--amber); }
+    .swatch.amber {
+      background: #fff; border: 2px solid var(--amber); border-radius: 50%;
+    }
     .swatch.dia { width: 8px; height: 8px; background: var(--red); transform: rotate(45deg); border-radius: 0; }
   </style>
 </head>
@@ -212,9 +221,9 @@
   </div>
 <script>
 const FRAMES = [
-  { id: "compare", title: "Callback — same eight rows, before then after", sub: "v3.236.4 pulse cut. Before is today’s chip pile (pref off). After is default-on: one rail, one named headline, quiet overflow, › to stage. Not a score. A quiet rail is not all-clear. Book / Park / dashed unchecked rail are not in this cut." },
+  { id: "compare", title: "Callback — same eight rows, before then after", sub: "v3.236.4 pulse cut. Before is today’s chip pile (pref off). After is default-on: red = filled bar, amber = hollow ring, one named headline, quiet overflow, › to stage. A quiet row keeps its chips — empty is not all-clear. Book / Park / dashed unchecked rail are not in this cut." },
   { id: "before", title: "Before — the chip pile", sub: "Every family is truthful. Together they compete on the name / preview. This is the queue with queuePulseCompress off." },
-  { id: "after", title: "After — pulse scan (what shipped)", sub: "Filled red / amber rail. One headline. · N overflow. Thread count as a quiet pill. › stages, does not send. Diamond = headline came from the record, not the request words." },
+  { id: "after", title: "After — pulse scan (what shipped)", sub: "Filled red bar / amber hollow ring. One headline on escalate rows. Quiet rows keep their chips so they cannot look cleared. › stages, does not send. Diamond = headline came from the record, not the request words." },
   { id: "why", title: "After — why this is marked", sub: "Click the headline or · N, or Space on the j/k cursor. Named sources. Footer refuses the score reading." },
   { id: "act", title: "After — thin act tray", sub: "› or a. Pharmacy First and Ask-back reuse the existing pathway menu (still not sent). Book and Park are present and disabled. No Done / Sent / Booked." },
 ];
@@ -332,24 +341,31 @@ function chip(s) {
 
 function pulseLine(row, actOn) {
   const p = compose(row);
-  if (!p.headline && !p.overflow.length && !p.thread) {
-    return `<div class="pulse-line"><button class="act-btn${actOn ? " on" : ""}" type="button">›</button></div>`;
+  const escalate = p.rail === "red" || p.rail === "amber";
+  const act = `<button class="act-btn${actOn ? " on" : ""}" type="button">›</button>`;
+  if (!escalate) {
+    const chips = row.signals.length ? `<div class="chips">${row.signals.map(chip).join("")}</div>` : "";
+    return `${chips}<div class="pulse-line">${act}</div>`;
   }
+  const ring = p.rail === "amber" ? `<i class="rail-ring" title="Amber — worst named signal is amber; not a score"></i>` : "";
   const dia = p.silent ? `<i class="diamond${p.headline && p.headline.kind === "amber" ? " amber" : ""}" title="From the record, not the request text"></i>` : "";
   const head = p.headline ? `<span class="pulse-head">${dia}${chip(p.headline)}</span>` : "";
   const more = p.overflow.length ? `<span class="more">· ${p.overflow.length}</span>` : "";
   const th = p.thread ? `<span class="thread">${p.thread.name}</span>` : "";
-  return `<div class="pulse-line">${head}${more}${th}<button class="act-btn${actOn ? " on" : ""}" type="button">›</button></div>`;
+  return `<div class="pulse-line">${ring}${head}${more}${th}${act}</div>`;
 }
 
 function whyTray(row) {
   const p = compose(row);
-  const items = p.signals.map((s) => `<li>
+  const items = p.signals.length
+    ? p.signals.map((s) => `<li>
     <i class="mark ${s.kind === "green" ? "info" : s.kind}"></i>
     <div><strong>${s.name}</strong>
       <span class="src">${s.source}${s.silent ? " — from the record, not the request text" : ""}</span>
     </div>
-  </li>`).join("");
+  </li>`).join("")
+    : `<li><div><strong>Nothing named matched</strong>
+      <span class="src">Not all-clear — the request still has to be read.</span></div></li>`;
   return `<div class="tray">
     <h3>Why this is marked</h3>
     <ul class="why-list">${items}</ul>
@@ -397,7 +413,7 @@ function desk(mode, opts, tag) {
   const body = ROWS.map((r) => renderRow(r, mode, opts)).join("");
   const legend = mode === "after" ? `<div class="legend">
     <span><i class="swatch red"></i> Filled rail — a named red</span>
-    <span><i class="swatch amber"></i> Filled amber rail — worst is amber</span>
+    <span><i class="swatch amber"></i> Hollow ring — worst is amber</span>
     <span><i class="swatch dia"></i> Diamond — headline from the record, not the request</span>
     <span>· N — more signals (click / Space)</span>
     <span>› — stage a next step, nothing is sent</span>

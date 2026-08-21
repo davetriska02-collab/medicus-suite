@@ -7022,12 +7022,15 @@
 
   const applyPulseRail = (row, rail) => {
     clearPulseClasses(row);
+    // Chip-hide (PULSE_ON) is escalate-only. An empty / unchecked rail must
+    // leave the chip pile visible — hiding it is the quiet-row all-clear lie.
+    if (rail !== 'red' && rail !== 'amber') return;
     const preview = findQueuePreviewRow(row);
     const add = (el) => {
       if (!el) return;
       el.classList.add(PULSE_ON);
       if (rail === 'red') el.classList.add(PULSE_RED);
-      else if (rail === 'amber') el.classList.add(PULSE_AMBER);
+      else el.classList.add(PULSE_AMBER);
     };
     add(row);
     add(preview);
@@ -7049,7 +7052,21 @@
     tray.appendChild(h);
     const ul = document.createElement('ul');
     ul.className = 'ch-q-why-list';
-    (composed.signals || []).forEach((s) => {
+    const signals = composed.signals || [];
+    if (signals.length === 0) {
+      const li = document.createElement('li');
+      const wrap = document.createElement('div');
+      const strong = document.createElement('strong');
+      strong.textContent = 'Nothing named matched';
+      const src = document.createElement('span');
+      src.className = 'ch-q-why-src';
+      src.textContent = 'Not all-clear — the request still has to be read.';
+      wrap.appendChild(strong);
+      wrap.appendChild(src);
+      li.appendChild(wrap);
+      ul.appendChild(li);
+    }
+    signals.forEach((s) => {
       const li = document.createElement('li');
       const mark = document.createElement('i');
       mark.className = 'ch-q-why-mark ' + (s.kind || 'info');
@@ -7146,11 +7163,21 @@
     if (!QP) return;
     const composed = QP.composePulse(collectSignalsFromRow(row), {});
     applyPulseRail(row, composed.rail);
+    const escalate = composed.rail === 'red' || composed.rail === 'amber';
     const host = document.createElement('span');
     host.className = PULSE_HOST;
     const line = document.createElement('span');
     line.className = 'ch-q-pulse-row';
-    if (composed.headline) {
+    // Compression chrome (headline / overflow / thread / ring) only when the
+    // rail escalates. Quiet rows keep the chip pile so they cannot look cleared.
+    if (escalate && composed.rail === 'amber') {
+      const ring = document.createElement('i');
+      ring.className = 'ch-q-pulse-rail-ring';
+      ring.title = 'Amber — worst named signal is amber; not a score';
+      ring.setAttribute('aria-hidden', 'true');
+      line.appendChild(ring);
+    }
+    if (escalate && composed.headline) {
       const head = document.createElement('span');
       head.className = 'ch-q-pulse-head';
       head.setAttribute('role', 'button');
@@ -7171,7 +7198,7 @@
       head.appendChild(chip);
       line.appendChild(head);
     }
-    if (composed.overflowCount > 0) {
+    if (escalate && composed.overflowCount > 0) {
       const more = document.createElement('span');
       more.className = 'ch-q-pulse-more';
       more.textContent = '· ' + composed.overflowCount;
@@ -7180,7 +7207,7 @@
       more.setAttribute('aria-label', composed.overflowCount + ' more signals — show why');
       line.appendChild(more);
     }
-    if (composed.thread) {
+    if (escalate && composed.thread) {
       const th = document.createElement('span');
       th.className = 'ch-q-pulse-thread';
       th.textContent = composed.thread.name;
