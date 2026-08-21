@@ -123,18 +123,28 @@ if (actFn) {
   );
 }
 check(/Not a score/.test(content), 'why-tray footer refuses the score reading');
-check(
-  /composed\.rail === 'amber'/.test(content) && /ch-q-pulse-rail-ring/.test(content),
-  'amber rail paints a hollow ring in the pulse chrome, not a second filled bar'
-);
-check(/\.ch-q-pulse-rail-ring/.test(hud.split('{')[0]), 'hud.css token-block lists the amber ring');
+// Amber gets a rail in the same column as red (hollow, not solid) — severity
+// lives on ONE axis (the rail column), distinguished by fill density/shape,
+// not hue. The old standalone amber ring is retired.
+check(!/ch-q-pulse-rail-ring/.test(content), 'the standalone amber ring marker is retired from content.js');
+check(!/\.ch-q-pulse-rail-ring/.test(hud), 'the amber ring CSS and its token-block entry are retired from hud.css');
 check(/\.ch-row-pulse-red \{[\s\S]*?inset 4px 0 0 0 var\(--red\)/.test(hud), 'red rail is still a filled inset bar');
 check(
-  /\.ch-row-pulse-amber \{\s*\/\* marker only/.test(hud) &&
-    !/\.ch-row-pulse-amber \{[\s\S]*?box-shadow: inset/.test(hud),
-  'amber marker class does not paint a filled bar (shape, not hue)'
+  /\.ch-row-pulse-amber \{[\s\S]*?inset 4px 0 0 0 var\(--amber-dim\)[\s\S]*?inset 1px 0 0 0 var\(--amber\)/.test(hud),
+  'amber rail is a hollow wash+stroke inset, in the same rail column as red'
 );
-check(/\.ch-q-pulse-rail-ring \{[\s\S]*?border-radius: 50%/.test(hud), 'amber ring is a hollow circle');
+check(
+  !/\.ch-row-pulse-amber \{[\s\S]*?box-shadow: inset 4px 0 0 0 var\(--(red|amber)\);/.test(hud),
+  'amber rail never uses a solid single-layer ink-fill bar (shape/density, not hue, distinguishes the tiers)'
+);
+// The provenance diamond is replaced by an in-chip mono micro-token.
+check(!/ch-q-pulse-diamond/.test(content), 'the provenance diamond marker is retired from content.js');
+check(!/\.ch-q-pulse-diamond/.test(hud), 'the provenance diamond CSS is retired from hud.css');
+check(/ch-q-pulse-src/.test(content), 'silent headlines get an in-chip record-source micro-token (ch-q-pulse-src)');
+check(
+  /composed\.silent \? ' — from the record, not the request text' : ''/.test(content),
+  'silent pulse headline aria-label names the record source'
+);
 const applyFn = content.match(/const applyPulseRail = \([\s\S]*?\n  \};/);
 check(!!applyFn, 'applyPulseRail found');
 if (applyFn) {

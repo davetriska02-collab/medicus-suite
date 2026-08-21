@@ -38,8 +38,7 @@
 .ch-q-act,
 .ch-row-pulse-red,
 .ch-row-pulse-amber,
-.ch-row-pulse-on,
-.ch-q-pulse-rail-ring {
+.ch-row-pulse-on {
   /* Surfaces */
   --bg-deep: #f8fafc;
   --bg-mid: #f1f5f9;
@@ -52,8 +51,8 @@
   --text-1: #0f172a;
   --text-2: #1e3a5f;
   --text-3: #475569;
-  --text-4: #64748b;
-  --text-5: #94a3b8;
+  --text-4: #556377;
+  --text-5: #5f6f85;
   /* Accent triad */
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
@@ -250,16 +249,18 @@
 /* ---- Queue pulse (v3.236.4) — compress the chip pile to one named weight ----
    Marker classes on Medicus's own `.ag-row` (same host-class pattern as
    `.ch-row-sev-*`). Pulse ON replaces the 3px result tint so two left-edge
-   shadows never fight. Filled bar = named red. Amber is a hollow ring
-   on the pulse chrome (`.ch-q-pulse-rail-ring`) — AG-Grid box-shadow
-   cannot draw a ring, and a second filled bar would only differ from
-   red by hue. `.ch-row-pulse-amber` is a marker class only (seen-dim
-   gate); it must not paint a bar. */
+   shadows never fight. Severity lives on ONE axis — the same rail column —
+   distinguished by fill density/shape, not hue: red is a SOLID 4px ink bar;
+   amber is a HOLLOW bar in the same column (a 4px wash band plus a 1px
+   full-strength ink stroke at the row edge), so red vs amber survives
+   colourblind mode by shape, never by hue alone. */
 .ch-row-pulse-red {
   box-shadow: inset 4px 0 0 0 var(--red);
 }
 .ch-row-pulse-amber {
-  /* marker only — do not paint a filled bar */
+  box-shadow:
+    inset 4px 0 0 0 var(--amber-dim),
+    inset 1px 0 0 0 var(--amber);
 }
 /* Hide the per-family chip pile only on escalate (red/amber) rows. Quiet
    rows never get `.ch-row-pulse-on`, so their chips stay visible — hiding
@@ -275,97 +276,125 @@
 }
 
 .ch-q-pulse {
-  display: flex;
+  display: inline-flex;
   flex-direction: column;
-  gap: 6px;
-  flex: 0 0 100%;
-  grid-column: 1 / -1;
-  margin: 0 0 4px;
+  gap: 8px;
+  vertical-align: middle;
+  margin: 0 6px 4px 0;
   font-family: var(--sans);
   max-width: 100%;
+}
+/* Full-width layout restored only where the line needs the row's whole
+   width: an escalate row owns the line (headline/thread/overflow read
+   left to right), and an open tray needs the width regardless of rail.
+   NOTE: `.ch-row-pulse-on .ch-q-pulse` only matches when the marker class
+   is on the preview row too — applyPulseRail already adds it to both; the
+   host lives in the preview row, so this works. */
+.ch-row-pulse-on .ch-q-pulse,
+.ch-q-pulse.ch-q-pulse-open {
+  display: flex;
+  flex: 0 0 100%;
+  grid-column: 1 / -1;
 }
 .ch-q-pulse-row {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-}
-.ch-q-pulse-rail-ring {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 8px;
-  border: 2px solid var(--amber);
-  border-radius: 50%;
-  background: transparent;
-  box-sizing: border-box;
+  gap: 4px;
 }
 .ch-q-pulse-head {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  max-width: 22ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   cursor: pointer;
 }
-.ch-q-pulse-head .ch-chip {
-  max-width: 18ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.ch-q-pulse-src {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  margin-left: 4px;
 }
-.ch-q-pulse-diamond {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 8px;
-  background: var(--red);
-  transform: rotate(45deg);
-  box-shadow: 0 0 0 1px var(--red-line);
-}
-.ch-q-pulse-diamond.amber {
-  background: var(--amber);
-  box-shadow: 0 0 0 1px var(--amber-line);
-}
-.ch-q-pulse-more,
-.ch-q-pulse-thread {
+.ch-q-pulse-more {
   font-family: var(--mono);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   color: var(--text-3);
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
   cursor: pointer;
 }
 .ch-q-pulse-thread {
+  font-family: var(--sans);
+  font-size: 10px;
   background: var(--bg-mid);
   border: 1px solid var(--border);
   border-radius: var(--r-pill);
-  padding: 1px 7px;
+  padding: 1px 8px;
   color: var(--text-2);
+  cursor: default;
 }
 .ch-q-pulse-act {
-  width: 22px;
-  height: 22px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border-hi);
-  background: var(--bg-elev);
+  width: auto;
+  height: 24px;
+  padding: 0 8px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--text-3);
-  font-size: 14px;
-  line-height: 1;
+  background: transparent;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-md);
   cursor: pointer;
-  padding: 0;
 }
 .ch-q-pulse-act[aria-expanded='true'] {
   background: var(--accent-dim);
   border-color: var(--accent-line);
   color: var(--text-2);
 }
+/* Interaction states for every pulse control (same pattern as
+   .ch-action-menu-item:hover/:focus-visible above). */
+.ch-q-pulse-head:hover .ch-chip {
+  filter: brightness(0.96);
+}
+.ch-q-pulse-head:focus-visible,
+.ch-q-pulse-more:focus-visible,
+.ch-q-pulse-act:focus-visible,
+.ch-q-act-row button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.ch-q-pulse-more:hover {
+  background: var(--bg-hover);
+}
+.ch-q-pulse-act:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--text-2);
+}
+.ch-q-act-row button:hover:not(:disabled) {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+.ch-q-pulse-head[aria-expanded='true'] .ch-chip,
+.ch-q-pulse-more[aria-expanded='true'] {
+  background: var(--accent-dim);
+}
 
+/* Inline in-row tray, not a floating modal — shadow-2 (raised content lift),
+   never shadow-3 (that's reserved for modals/HUD). */
 .ch-q-why,
 .ch-q-act {
-  background: var(--bg-deep);
+  background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: 8px 10px;
-  box-shadow: var(--shadow-1);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  padding: 8px 12px;
+  max-width: 520px;
 }
 .ch-q-why h3,
 .ch-q-act h3 {
@@ -393,6 +422,8 @@
   width: 8px;
   height: 8px;
   margin-top: 4px;
+  /* 2px is glyph-internal geometry (a barely-rounded square for unknown
+     kinds), not a component radius from the shape scale. */
   border-radius: 2px;
   background: var(--text-4);
 }
@@ -406,49 +437,69 @@
 }
 .ch-q-why-mark.info,
 .ch-q-why-mark.green {
-  background: var(--accent);
+  /* Neutral filled dot, not var(--accent) — a why-tray bullet is not a
+     fourth clinical colour; only red/amber carry meaning here. */
+  background: var(--text-4);
+  border-radius: 50%;
 }
 .ch-q-why-src {
-  display: block;
-  font-size: 11px;
+  display: inline;
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.ch-q-why-rec {
+  font-family: var(--sans);
+  font-size: 10px;
   color: var(--text-3);
 }
 .ch-q-why-foot {
   margin: 8px 0 0;
   font-size: 11px;
-  color: var(--text-4);
-  font-style: italic;
+  color: var(--text-3);
+  font-style: normal;
 }
 .ch-q-act-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 .ch-q-act-row button {
   font-family: var(--sans);
   font-size: 12px;
   padding: 6px 8px;
   border-radius: var(--r-md);
-  border: 1px solid var(--border-hi);
+  border: 1px solid var(--accent-line);
   background: var(--bg-elev);
-  color: var(--text-2);
+  color: var(--text-1);
   cursor: pointer;
   text-align: left;
 }
 .ch-q-act-row button small {
   display: block;
   font-size: 10px;
-  color: var(--text-4);
+  color: var(--text-3);
   font-weight: 400;
 }
 .ch-q-act-row button:disabled {
-  opacity: 0.45;
+  background: var(--bg-mid);
+  border-color: var(--border);
+  color: var(--text-3);
   cursor: not-allowed;
+}
+.ch-q-act-row button:disabled small {
+  color: var(--text-3);
 }
 .ch-q-act-note {
   margin: 6px 0 0;
   font-size: 11px;
-  color: var(--text-4);
+  color: var(--text-3);
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
 }
 
 /* ---- Keyboard-triage cursor (item 4.6, TRIAGE-LENS-2026-07-02.md) ----
