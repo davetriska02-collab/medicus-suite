@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.16] — 2026-08-21
+
+### Enterprise CRX for practice IT
+
+Practice IT who agreed to install ahead of the Chrome Web Store can now have a
+signed `.crx` and a stable extension id (`mnbhphomkajfoabindnmndboiipofnko`).
+Releases attach the CRX when the signing secret is present. Chrome will not
+install it by double-click — force-install via enterprise policy. Handout:
+`docs/IT-ENTERPRISE-INSTALL.md`.
+
 ## [v3.236.15] — 2026-08-21
 
 ### Bulk acknowledge — Review stays on screen

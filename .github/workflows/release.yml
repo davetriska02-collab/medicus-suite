@@ -43,39 +43,31 @@ jobs:
             "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG")
           echo "release_exists=$([ "$STATUS" = '200' ] && echo 'true' || echo 'false')" >> "$GITHUB_OUTPUT"
 
-      - name: Build extension zip
+      - name: Set up Node
         if: steps.check.outputs.release_exists == 'false'
-        run: |
-          mkdir -p _build/medicus-suite-v${{ steps.version.outputs.version }}
-          rsync -av \
-            --exclude='.git/' \
-            --exclude='.github/' \
-            --exclude='.gitignore' \
-            --exclude='README.md' \
-            --exclude='LICENSE' \
-            --exclude='_build/' \
-            --exclude='test-*.js' \
-            --exclude='scripts/' \
-            --exclude='.claude/' \
-            --exclude='*.zip' \
-            --exclude='.DS_Store' \
-            --exclude='package.json' \
-            --exclude='package-lock.json' \
-            --exclude='node_modules/' \
-            --exclude='eslint.config.mjs' \
-            --exclude='.prettierrc.json' \
-            --exclude='.prettierignore' \
-            --exclude='.githooks/' \
-            --exclude='brand/generate-icons.mjs' \
-            ./ _build/medicus-suite-v${{ steps.version.outputs.version }}/
-          cd _build
-          zip -r ../medicus-suite-v${{ steps.version.outputs.version }}.zip medicus-suite-v${{ steps.version.outputs.version }}/
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Generate SHA-256 checksum
+      - name: Build extension zip and CRX
         if: steps.check.outputs.release_exists == 'false'
+        env:
+          CRX_PRIVATE_KEY: ${{ secrets.CRX_PRIVATE_KEY }}
         run: |
-          sha256sum "medicus-suite-v${{ steps.version.outputs.version }}.zip" > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+          node scripts/pack-crx.js --zip --crx --allow-missing-key --out-dir _build
+          mkdir -p _release
+          cp "_build/medicus-suite-v${{ steps.version.outputs.version }}.zip" _release/
+          cp _build/SHA256SUMS.txt _release/
+          if [ -f "_build/medicus-suite-v${{ steps.version.outputs.version }}.crx" ]; then
+            cp "_build/medicus-suite-v${{ steps.version.outputs.version }}.crx" _release/
+            echo "crx=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "crx=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::CRX skipped — add repo secret CRX_PRIVATE_KEY to attach a signed .crx"
+          fi
+          echo "----- SHA256SUMS -----"
+          cat _release/SHA256SUMS.txt
+        id: pack
 
       - name: Build release notes from CHANGELOG
         if: steps.check.outputs.release_exists == 'false'
@@ -103,6 +95,13 @@ jobs:
             echo "3. Click **Load unpacked** and select the unzipped \`medicus-suite-v${VERSION}\` folder."
             echo "4. Pin the extension and open the side panel. Full steps: [README](https://github.com/${{ github.repository }}/blob/main/README.md)."
             echo
+            if [ -f "_release/medicus-suite-v${VERSION}.crx" ]; then
+              echo "### Enterprise CRX (practice IT)"
+              echo "Extension id: \`$(tr -d '[:space:]' < packaging/extension-id.txt)\`"
+              echo
+              echo "Download \`medicus-suite-v${VERSION}.crx\` below. Managed Chrome / Edge will **not** install it by double-click — force-install via enterprise policy. Steps: [docs/IT-ENTERPRISE-INSTALL.md](https://github.com/${{ github.repository }}/blob/main/docs/IT-ENTERPRISE-INSTALL.md)."
+              echo
+            fi
             echo "### Verify your download"
             echo "Download \`SHA256SUMS.txt\` alongside the zip, then:"
             echo '```'
@@ -120,7 +119,6 @@ jobs:
           name: Medicus Suite ${{ steps.version.outputs.tag }}
           body_path: RELEASE_NOTES.md
           files: |
-            medicus-suite-v${{ steps.version.outputs.version }}.zip
-            SHA256SUMS.txt
+            _release/*
           draft: false
           prerelease: false

@@ -1,0 +1,7 @@
+{
+  "mnbhphomkajfoabindnmndboiipofnko": {
+    "installation_mode": "force_installed",
+    "update_url": "https://YOUR-INTRANET.example.nhs.uk/apps/updates.xml",
+    "toolbar_pin": "force_pinned"
+  }
+}

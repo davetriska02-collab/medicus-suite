@@ -9,7 +9,13 @@
 
 # Build artefacts (the GitHub Actions workflow creates these)
 *.zip
+*.crx
 !medicus-suite-baseline.zip
+_build/
+
+# CRX signing private key — NEVER commit. Public half + id live in packaging/.
+*.pem
+!packaging/extension.pub.pem
 
 # Local dev scratch
 node_modules/

@@ -31,6 +31,21 @@ honest limits — see [`docs/VISION.md`](docs/VISION.md).
    from any open Medicus tab. If you want to use the Triage Request Monitor,
    enable it there and paste in the assignee UUID.
 
+### Practice IT / managed Chrome or Edge
+
+The unpacked steps above are for named clinicians on an unmanaged browser.
+Practice IT who need a **`.crx` and an extension id** (allow-list / Intune /
+force-install before the Chrome Web Store listing exists) should use
+[`docs/IT-ENTERPRISE-INSTALL.md`](docs/IT-ENTERPRISE-INSTALL.md).
+
+- **Extension id:** `mnbhphomkajfoabindnmndboiipofnko` (stable; same id we will
+  keep on the Web Store).
+- A signed `medicus-suite-vX.Y.Z.crx` is attached to each GitHub release once
+  the `CRX_PRIVATE_KEY` secret is set. Chrome will not install that file from
+  a double-click — it is for enterprise policy.
+
+Packaging internals: [`packaging/README.md`](packaging/README.md).
+
 ## Auto-update
 
 From v1.3.1 the extension checks this repository once a day for new releases.
@@ -54,9 +69,10 @@ git push && git push --tags
 ```
 
 The workflow at `.github/workflows/release.yml` packs the repo into
-`medicus-suite-v1.3.2.zip` (excluding tests and dev files), creates a
-GitHub release with that tag, and attaches the zip. Within 24 hours every
-installed extension's update banner will surface the new version.
+`medicus-suite-v1.3.2.zip` (excluding tests and dev files) and a signed
+`.crx` when `CRX_PRIVATE_KEY` is set, creates a GitHub release with that
+tag, and attaches both. Within 24 hours every installed extension's update
+banner will surface the new version. Local pack: `node scripts/pack-crx.js --zip --crx`.
 
 ## What it does and does not do
 

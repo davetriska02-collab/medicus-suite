@@ -48,7 +48,7 @@ const NHS_ADD_ALLOWLIST = new Set([
 const SKIP_NHS_SCAN = [
   /(^|\/)node_modules\//,
   /(^|\/)vendor\//,
-  /\.(png|jpe?g|gif|webp|ico|pdf|zip|woff2?|ttf|eot|mp4|wasm|map)$/i,
+  /\.(png|jpe?g|gif|webp|ico|pdf|zip|crx|pem|woff2?|ttf|eot|mp4|wasm|map)$/i,
   /(^|\/)package-lock\.json$/,
   /(^|\/)scripts\/check-no-patient-data\.js$/, // documents the regex itself
 ];

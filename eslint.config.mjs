@@ -6,7 +6,7 @@ import globals from 'globals';
 const cjsGuard = { module: 'readonly', require: 'readonly', exports: 'readonly' };
 
 export default [
-  { ignores: ['vendor/**', 'node_modules/**', '_skill/**', '*.zip'] },
+  { ignores: ['vendor/**', 'node_modules/**', '_skill/**', '*.zip', '_build/**'] },
   // Suppress warnings about eslint-disable directives that reference rules not in
   // this config (e.g. the no-new-func directive in test-triage-defaults.js).
   { linterOptions: { reportUnusedDisableDirectives: false } },
