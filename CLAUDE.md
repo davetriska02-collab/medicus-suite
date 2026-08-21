@@ -204,6 +204,24 @@ Drug matching in `engine/rules-engine.js` (`drugMatchesRule`) is **case-insensit
 
 After changing `match`/`exclude`, run `node test-drug-brand-coverage.js` and add the new drug/brands to its `EXPECTED` map so the coverage is regression-guarded. This converts "a clinician notices a missing alert months later" into "CI fails on the PR".
 
+## Medicus-native integration (external collaborators — start here)
+
+Medicus (Doctolib) engineers — Tim Gray and any AI assistant working on their behalf —
+are collaborators on bringing the **Sentinel engine** into the Medicus platform natively
+(coded-data hooks instead of display-text matching; platform endpoints instead of
+browser-session APIs). The dedicated workspace is **`docs/medicus-integration/`**:
+
+- `docs/medicus-integration/README.md` — orientation and reading order
+- `docs/medicus-integration/SENTINEL-PORTING-GUIDE.md` — engine architecture, exact data
+  contracts, rule schema, text→coded migration map, integration options, safety invariants
+- `docs/medicus-integration/RESOURCE-PUBLISHING-API.md` — embedded reference for the
+  Medicus Resource Publishing API (Transactional API family)
+
+Rule *content* under `rules/` remains clinically reviewed material (Keeper/CSO trail in
+each file's `sourceNotes`) — integration work should extend the schema (e.g. more coded
+identifiers) rather than fork a parallel rule set, and content changes still follow the
+review process regardless of who makes them.
+
 ## Version bumping
 
 Bump `manifest.json` `version` for every pushed change. Use semantic versioning:
