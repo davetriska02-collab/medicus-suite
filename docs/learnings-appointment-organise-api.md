@@ -465,6 +465,11 @@ longest free 45). Phone list:
 
 Organise launcher currently overlaps **Open Actions** (sit it to the left).
 
+Working-day canvas will have a large number of diaries (Monday 24 peek:
+GP CONNECT, embargo, nurse, care co-ordinator, MH, etc.). Canvas needs a
+**filter** (staff / session window / site / hide empty) so the board is
+usable. Data is already on `embedded-overview` — no new endpoint.
+
 ### Live pass — sick-day complete (`5ff708b`, 2026-08-19 17:20 BST)
 
 Reloaded **3.234.2** from `C:\Users\Dave\Desktop\medicus-suite`. Dummy only:
@@ -534,4 +539,43 @@ recipients `[]`. No `update-slot-reservation`.
 Do not invent a third create copy. Same `create-appointment` reschedule
 keys as W15. Queue dest is `queueId` + null diary/start; timed dest is
 `diaryId` + start + null queueId.
+
+---
+
+## J — Cross-date reschedule (Sun 23 → Sun 30 dummy, 2026-08-21)
+
+Dummy diary on **Sun 30 Aug 2026** Unassigned 10:00–11:00 Witley, Timed,
+Copy forward Off, Also create empty. Empty of live patients.
+
+Native **More actions → Reschedule** (not Move to another diary) opens
+**Reschedule Appointment** with its own date control. Picked **30 Aug**,
+Book 10:00 15 min. Send-to Off. Mouse 15-min **queue** booking on the 23rd
+→ timed 10:00 on the 30th. Queue on the 23rd then empty. NP 60-min Mouse
+on the 23rd untouched. Nobody else. No weekday write.
+
+Raw: `C:\Users\Dave\Downloads\queue-cap (1).json` (copy
+`18-reschedule-sun30.json`).
+
+Prefill GET (not the move-appointment GET):
+
+`GET /scheduling/data/appointment/create-appointment?context=reschedule-appointment&rescheduledAppointmentId={id}`
+plus `GET /scheduling/ui/appointment/create-appointment.vue`
+
+Then:
+
+| Method | Path |
+|---|---|
+| POST | reserve 3-field `diaryId` **Sun 30** diary, `intendedStartDateTime=2026-08-30 10:00:00`, duration 15 |
+| POST | `/scheduling/appointment/create-appointment` |
+| POST | remove-slot-reservation |
+
+Create `context=reschedule-appointment`, `appointmentTemporalType=timed`,
+**`appointmentTypeId` present** (same-day W15 move omits it),
+`intendedStartDateTime=2026-08-30 10:00:00`, new `diaryId`
+`01a02511-343f-72bd-98ee-6842e91ed2b5`, `bookingConfirmationRecipients=[]`.
+Key order is **not** the W15 `RESCHEDULE_CREATE_KEYS` list — do not reuse
+that list for cross-date. `queueId` was omitted (not `null`).
+
+Sick-day v1 stays **same-day**. Cross-date is this Reschedule path if we
+wire “next dummy day”; do not invent a date query on the move form.
 
