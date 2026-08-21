@@ -317,7 +317,17 @@
       hiddenFromPatientFacingServices: !!p.hiddenFromPatientFacingServices,
       confidentialFromThirdParties: !!p.confidentialFromThirdParties,
       flagOnPatientBanner: !!p.flagOnPatientBanner,
-      recordedByOrganisation: p.recordedByOrganisation != null ? p.recordedByOrganisation : null,
+      // unwrapRecordedByOrganisation, NOT p.recordedByOrganisation verbatim
+      // (bug found live 2026-08-19, HAR from a note with
+      // recordedAtAnotherOrganisation:true): buildEditProblemPayload above
+      // already learned this the hard way — GET's own prefill shape is the
+      // WRAPPED {label, value:{organisationName, …}} form, and round-tripping
+      // that verbatim 400s. This payload builder was written later
+      // (2026-08-13) and never got the same fix, so both applyToJournal
+      // (code-sync) and applyGenericAdditionalInfoToJournal (text-sync) 400
+      // on any journal entry recorded at another organisation — exactly the
+      // shape this file's own unwrapRecordedByOrganisation exists to handle.
+      recordedByOrganisation: unwrapRecordedByOrganisation(p.recordedByOrganisation),
       recordedByPractitioner: p.recordedByPractitioner != null ? p.recordedByPractitioner : null,
       recordedByStaff: p.recordedByStaff != null ? p.recordedByStaff : null,
       recordDate: p.recordDate != null ? p.recordDate : null,
@@ -1373,6 +1383,19 @@
         manualSearchError: null,
         saving: false,
         saved: false,
+        // {parentId, parentDescription, children:[{id,description}],
+        // linked:[{id,description}]} — best-effort, set by openPanel (2026-08-19,
+        // "we have lost the ability to remove a linkage/un-nest"). parentId/
+        // children come from window.ProblemNesting's own scan snapshot, so
+        // they can be incomplete the first time this panel opens on a page
+        // where that scan hasn't run yet (e.g. opened inline, never via
+        // "Organise problems?"); linked is always a fresh single-problem
+        // fetch, never scan-dependent. null = bridge unavailable or lookup
+        // failed — section omitted, not an error shown to the clinician.
+        nestingInfo: null,
+        nestingActing: false, // true while a remove-link/un-nest POST for this row is in flight
+        nestingPending: null, // {kind, targetId} armed by the first click — the write only fires on the second, confirming click (same two-step discipline as every other relationship write)
+        nestingError: null, // user-visible failure of the last un-nest/remove-link write — cleared when a new action is armed
       };
     }
     return _rows[problemId];
@@ -1777,6 +1800,211 @@
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
   }
 
+  // LINKED/NESTED-PROBLEM LOOKUP (2026-08-19, "we have lost the ability to
+  // remove a linkage between problems, and to un-nest problems" — this
+  // popup is now the one place both remove-a-flat-link and un-nest live,
+  // reachable whichever surface opened it). Best-effort, own try/catch —
+  // same discipline as the relationship/journal checks in openPanel: a
+  // lookup failure here must never block the rest of the panel, and the
+  // section simply doesn't render rather than showing an error. Extracted
+  // from openPanel so a successful remove/un-nest (removeNestingOrLink
+  // below) can re-resolve just this, without forcing openPanel's full
+  // search/journal-match chain to re-run.
+  //   - parentId/children: read from window.ProblemNesting's own scan
+  //     snapshot (ensureScanned fired, not awaited — the canvas already
+  //     runs this scan before a clinician can reach "Edit problem…", so
+  //     it's normally already done by the time this fires; opened inline,
+  //     without a prior canvas visit this session, the scan may still be
+  //     running and this can under-report until reopened — an accepted,
+  //     honest degradation rather than making every "Edit problem" open
+  //     wait on a whole-patient scan).
+  //   - linked: NEVER scan-dependent — getLinkedProblemIds is a fresh,
+  //     single-problem fetch (same one commitFlatLink/commitFlatUnlink make
+  //     for themselves), so this is always accurate regardless of scan
+  //     state.
+  async function refreshNestingInfo(problemId) {
+    var st = rowState(problemId);
+    st.nestingInfo = null;
+    try {
+      if (!window.ProblemNesting) return;
+      window.ProblemNesting.ensureScanned();
+      var nestSnap = window.ProblemNesting.getSnapshot();
+      var nestDescById = {};
+      (nestSnap.problems || []).forEach(function (p) {
+        if (p && p.id) nestDescById[p.id] = p.description;
+      });
+      var parentId = nestSnap.parentIdByProblemId[problemId] || null;
+      var childIds = Object.keys(nestSnap.parentIdByProblemId).filter(function (id) {
+        return nestSnap.parentIdByProblemId[id] === problemId;
+      });
+      var linkedIds = window.ProblemNesting.getLinkedProblemIds
+        ? await window.ProblemNesting.getLinkedProblemIds(problemId)
+        : [];
+      st.nestingInfo = {
+        parentId: parentId,
+        parentDescription: parentId ? nestDescById[parentId] || parentId : null,
+        children: childIds.map(function (id) {
+          return { id: id, description: nestDescById[id] || id };
+        }),
+        linked: (Array.isArray(linkedIds) ? linkedIds : [])
+          .filter(function (id) {
+            return id !== problemId;
+          })
+          .map(function (id) {
+            return { id: id, description: nestDescById[id] || id };
+          }),
+      };
+    } catch (e) {
+      console.warn('[Clean up code] linked/nested-problem lookup failed (non-fatal):', e && e.message);
+    }
+  }
+
+  // Linked/nested-problem section (2026-08-19) — see refreshNestingInfo's
+  // own comment for how each piece is resolved. Three
+  // independent rows, any subset of which may be present: this problem is
+  // NESTED UNDER a parent, this problem HAS its own nested children, this
+  // problem carries flat (non-hierarchical) LINKS. Each row lists every
+  // related problem with its own single "Remove" — deliberately per-item,
+  // not a single "clear all" (same one-write-at-a-time discipline as the
+  // canvas's own tile actions this mirrors).
+  // One relationship-write button. First click ARMS it (label flips to the
+  // explicit confirm wording); only the second, confirming click commits —
+  // these write to the live record, and every other relationship write in
+  // the suite (canvas confirm bar, bulk-end, merge) has the same two-step
+  // gate. Arming a different button, or a re-render from elsewhere, keeps
+  // the armed state only for the exact button it was armed on.
+  function nestingBtnHtml(problemId, kind, targetId, normalLabel, confirmLabel, st) {
+    var armed = st.nestingPending && st.nestingPending.kind === kind && st.nestingPending.targetId === targetId;
+    return (
+      '<button type="button" class="ms-pdc-nesting-btn' +
+      (armed ? ' ms-pdc-nesting-btn-armed' : '') +
+      '" data-problem-id="' +
+      esc(problemId) +
+      '" data-nesting-kind="' +
+      esc(kind) +
+      '" data-target-id="' +
+      esc(targetId) +
+      '"' +
+      (st.nestingActing ? ' disabled' : '') +
+      '>' +
+      esc(armed ? confirmLabel : normalLabel) +
+      '</button>'
+    );
+  }
+
+  function nestingInfoHtml(problemId, st) {
+    var n = st.nestingInfo;
+    var errHtml = st.nestingError ? '<div class="ms-pdc-error">' + esc(st.nestingError) + '</div>' : '';
+    if (!n || (!n.parentId && !n.children.length && !n.linked.length)) {
+      // Keep a write failure visible even if the post-write relationship
+      // refresh came back empty/unavailable — the error must outlive the row
+      // it was about.
+      return errHtml ? '<div class="ms-pdc-nesting-section">' + errHtml + '</div>' : '';
+    }
+    var rows = errHtml;
+    if (n.parentId) {
+      rows +=
+        '<div class="ms-pdc-nesting-row">' +
+        '<span class="ms-pdc-nesting-row-label">Nested under:</span> ' +
+        '<strong>' +
+        esc(n.parentDescription) +
+        '</strong>' +
+        nestingBtnHtml(problemId, 'unnest', problemId, 'Un-nest', 'Confirm un-nest?', st) +
+        '</div>';
+    }
+    if (n.children.length) {
+      rows +=
+        '<div class="ms-pdc-nesting-row">' +
+        '<span class="ms-pdc-nesting-row-label">Has ' +
+        n.children.length +
+        ' problem' +
+        (n.children.length === 1 ? '' : 's') +
+        ' nested under it:</span>' +
+        n.children
+          .map(function (c) {
+            return (
+              '<div class="ms-pdc-nesting-chip"><strong>' +
+              esc(c.description) +
+              '</strong>' +
+              nestingBtnHtml(problemId, 'unnest', c.id, 'Un-nest', 'Confirm un-nest?', st) +
+              '</div>'
+            );
+          })
+          .join('') +
+        '</div>';
+    }
+    if (n.linked.length) {
+      rows +=
+        '<div class="ms-pdc-nesting-row">' +
+        '<span class="ms-pdc-nesting-row-label">Linked to:</span>' +
+        n.linked
+          .map(function (l) {
+            return (
+              '<div class="ms-pdc-nesting-chip"><strong>' +
+              esc(l.description) +
+              '</strong>' +
+              nestingBtnHtml(problemId, 'flat-unlink', l.id, 'Remove link', 'Confirm removal?', st) +
+              '</div>'
+            );
+          })
+          .join('') +
+        '</div>';
+    }
+    return '<div class="ms-pdc-nesting-section">' + rows + '</div>';
+  }
+
+  // First click arms, second click (on the SAME button) commits — the
+  // relationship write never fires on a single click. Clicking a different
+  // relationship button while one is armed just moves the armed state there.
+  function armOrCommitNesting(problemId, kind, targetId) {
+    var st = rowState(problemId);
+    if (st.nestingActing) return;
+    var p = st.nestingPending;
+    if (p && p.kind === kind && p.targetId === targetId) {
+      st.nestingPending = null;
+      removeNestingOrLink(problemId, kind, targetId);
+      return;
+    }
+    st.nestingPending = { kind: kind, targetId: targetId };
+    st.nestingError = null;
+    renderPanel(problemId);
+  }
+
+  async function removeNestingOrLink(problemId, kind, targetId) {
+    var st = rowState(problemId);
+    if (st.nestingActing || !window.ProblemNesting) return;
+    st.nestingActing = true;
+    st.nestingError = null;
+    renderPanel(problemId);
+    try {
+      if (kind === 'unnest') {
+        await window.ProblemNesting.commitUnlink(targetId);
+      } else if (kind === 'flat-unlink') {
+        await window.ProblemNesting.commitFlatUnlink(problemId, targetId);
+      }
+      if (window.ProblemNesting.refresh) window.ProblemNesting.refresh();
+    } catch (e) {
+      console.warn('[Clean up code] remove link/un-nest failed:', e && e.message);
+      // Surface the failure — the row below re-renders unchanged, which is
+      // otherwise indistinguishable from a slow refresh; every comparable
+      // write in this suite (canvas confirm bar, bulk-end endError, merge
+      // g.errors) shows its failure to the clinician.
+      st.nestingError =
+        (kind === 'unnest' ? 'Un-nest failed — ' : 'Removing the link failed — ') +
+        ((e && e.message) || 'the update was not accepted') +
+        '. Nothing was changed; the relationship below is still in place.';
+    }
+    st.nestingActing = false;
+    // Recompute rather than trust the pre-write snapshot — same reasoning
+    // as everywhere else in this file that re-derives state after a write
+    // instead of hand-patching it. Deliberately NOT touching st.alternatives/
+    // st.saved — a remove-link/un-nest is unrelated to the code-alternatives
+    // search above it, and resetting those would force the whole panel's
+    // search/journal-match chain to re-fetch for no reason.
+    await refreshNestingInfo(problemId);
+    renderPanel(problemId);
+  }
+
   // Severity-defaulting contradiction (2026-07-29) — see this file's own
   // header comment for the full GP2GP mechanism. Deliberately its own
   // section, not folded into genericAdditionalInfoHtml above: this is a
@@ -2125,6 +2353,7 @@
           esc(st.additionalInformation) +
           '</div>'
         : '') +
+      nestingInfoHtml(problemId, st) +
       severityContradictionHtml(problemId, st) +
       severityReviewNoteHtml(st) +
       linkSuggestionHtml(problemId, st) +
@@ -2306,6 +2535,11 @@
         applyRemoveGenericAdditionalInfo(problemId);
       });
     });
+    root.querySelectorAll('.ms-pdc-nesting-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        armOrCommitNesting(problemId, btn.getAttribute('data-nesting-kind'), btn.getAttribute('data-target-id'));
+      });
+    });
     root.querySelectorAll('.ms-pdc-severity-correct-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         applyCorrectSeverityAndRemoveJunk(problemId);
@@ -2396,6 +2630,16 @@
       st.currentDescription = code.description;
       st.currentDescriptionId = code.descriptionId; // needed to build a correct noteSNOMEDct for applyToJournal — not used by any existing apply path, which only ever needs conceptId/description
       st.additionalInformation = prefill.additionalInformation || '';
+      // Deliberately NOT awaited: the linked/nested lookup costs a network
+      // round-trip (getLinkedProblemIds) that is independent of everything
+      // below — its result only feeds nestingInfoHtml. Blocking here delayed
+      // every panel open by a full RTT before the description searches even
+      // started; instead it fills in with its own re-render when it lands
+      // (same pattern as document-codes-to-problems' deferred exists-flag
+      // check). refreshNestingInfo never rejects (catch inside).
+      refreshNestingInfo(problemId).then(function () {
+        renderPanel(problemId);
+      });
       // Computed for EVERY open panel, regardless of why this row was
       // flagged — additionalInformation is already in hand here whether the
       // fetch above just ran or was reused from the retirement/legacy-code
@@ -2573,6 +2817,49 @@
       }
       var combinedResults = results.concat(byConceptId);
       st.alternatives = sameConceptAlternatives(combinedResults, code.conceptId, code.description);
+      // PER-PROBLEM RETIREMENT/LEGACY-CODE CHECK (2026-08-19). Previously
+      // deliberately skipped for any openInContainer caller — "Nick's
+      // explicit call, 2026-08-08: already available via the separate
+      // opt-in scan" — on the assumption a clinician reaching this popup
+      // would always have that scan's own trigger one click away on the
+      // same page. That stopped being true once "Organise problems?"
+      // began opening the canvas directly (2026-08-19): the canvas is a
+      // full-screen overlay with no "Code cleanup?" trigger visible behind
+      // it, so a clinician working there had no way to see a confirmed
+      // SNOMED replacement/practice tie-break for a retired code at all.
+      // Runs the SAME two checks runRetiredCodesScan makes per problem
+      // (fetchProblemOverview for the Read-v2-origin signal,
+      // fetchRetirementStatus for the SNOMED status), just for this one id
+      // — skipped entirely when the bulk scan already flagged this row
+      // (st.retiredInfo/st.legacyReadCode already set, reused as-is, never
+      // overwritten by a second fetch). combinedResults/st.alternatives
+      // just above are the exact same query runRetiredCodesScan's own
+      // "hasBetterWording" suppression would have made for a Read-v2 flag
+      // (same stripLegacyMarkers(description) + bare-conceptId search), so
+      // that check is reused directly instead of fetching it twice.
+      // Best-effort, own try/catch — never blocks the rest of the panel.
+      if (!st.retiredInfo && !st.legacyReadCode) {
+        try {
+          var retireOverview = await fetchProblemOverview(problemId);
+          var legacyReadCode =
+            findLegacyReadCodeOrigin(
+              retireOverview && retireOverview.problemCode && retireOverview.problemCode.originalCodes
+            ) || null;
+          if (legacyReadCode && !st.alternatives.length) legacyReadCode = null; // see runRetiredCodesScan's own NO-OP READ-V2 FLAG SUPPRESSION comment
+          if (legacyReadCode) st.legacyReadCode = legacyReadCode;
+          var retirement = await fetchRetirementStatus(code.conceptId);
+          if (retirement && retirement.active === false) {
+            st.retiredInfo = {
+              inactivationReason: retirement.inactivationReason,
+              replacement: retirement.replacement,
+              possiblyEquivalentTo: retirement.possiblyEquivalentTo || [],
+              partiallyEquivalentTo: retirement.partiallyEquivalentTo || [],
+            };
+          }
+        } catch (e) {
+          console.warn('[Clean up code] per-problem retirement check failed (non-fatal):', e && e.message);
+        }
+      }
       // PRACTICE-PREFERENCE SUPPLEMENT (2026-07-29, real gap reported live):
       // a clinician had to fall back to manual search because NONE of the
       // search-based candidates above found anything for this concept —
@@ -4187,7 +4474,7 @@
         '</span>'
       );
     }
-    return '<button type="button" class="ms-pdc-retired-scan-btn" id="ms-pdc-retired-scan-btn">Check for retired/legacy codes?</button>';
+    return '<button type="button" class="ms-pdc-retired-scan-btn" id="ms-pdc-retired-scan-btn">Code cleanup?</button>';
   }
 
   function bindRetiredWidgetEvents(el) {

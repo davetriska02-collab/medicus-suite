@@ -62,9 +62,9 @@
     },
     {
       "file": "docs/SOUP.md",
-      "last_cso_review_version": "3.175.0",
-      "last_cso_review_date": "2026-07-18",
-      "notes": "SOUP v1.10. Reissued at 3.175.0 on 2026-07-18 (CSO Dr Dave Triska, recorded via PR #216): no SOUP changes since 3.115.0 — PDF.js 4.2.67 (+ worker), Chart.js 4.4.1 and D3.js 7.8.5 all re-verified byte-identical via scripts/verify-vendor.js; the v3.175.0 Patient Alerts module adds no third-party code. Prior reissue was v1.9 at 3.115.0 (2026-06-17)."
+      "last_cso_review_version": "3.236.1",
+      "last_cso_review_date": "2026-08-19",
+      "notes": "SOUP v1.11. Reissued at 3.236.1 on 2026-08-19: CSO review signed IN SESSION by Dr Dave Triska on 2026-08-19, on verification evidence gathered and presented by Claude in that session (recorded via the PR #288/#289 merge), closing the 3.176.0–3.236.1 gap that tripped check-doc-versions' 60-minor threshold. Scope: scripts/verify-vendor.js re-verified all 5 vendored files byte-identical to catalogued SHA-256 checksums (PDF.js 4.2.67 + worker, CVE-2024-4367 disposition unchanged; Chart.js 4.4.1; D3.js 7.8.5; JetBrains Mono font); register gap closed by adding the v3.176.3 vendored JetBrains Mono font (OFL-1.1, non-executable, side-panel typography only) as new §3.1 — it was catalogued in vendor-versions.json but absent from the register; the v3.211.0 Rota Manager subsumption confirmed to ship no dependencies (all first-party ESM); devDependencies unchanged. Prior reissue was v1.10 at 3.175.0 (2026-07-18, PR #216)."
     },
     {
       "file": "docs/INTENDED-PURPOSE.md",
@@ -89,9 +89,9 @@
     },
     {
       "file": "docs/feature-list.md",
-      "last_cso_review_version": "3.178.0",
-      "last_cso_review_date": "2026-07-25",
-      "notes": "Feature list v3.178.0 reviewed by CSO (Dr Dave Triska) on 2026-07-25 as part of the v3.178.0 Keeper clinical-rule change proposal (PR #221), which he reviewed and approved for merge. Scope of this review is the rule-set currency changes and the corresponding feature-list count/summary refresh (starter alerts 32 -> 35; new reception red flags; DEM004 correction) — it is not a full re-baseline of the whole document. Ledger continuity note: the doc was bumped 3.126.0 -> 3.177.0 in commit 8455ab1 (safety-doc sync) without a matching ledger update, so this entry also reconciles that gap; the intervening weekly feature-list refreshes were content syncs, not CSO reviews. Prior recorded review was 3.126.0 on 2026-06-21."
+      "last_cso_review_version": "3.233.0",
+      "last_cso_review_date": "2026-08-18",
+      "notes": "Feature list v3.233.0 reviewed by CSO (Dr Dave Triska) on 2026-08-18 as part of the v3.233.0 Keeper clinical-rule change proposal (the-keeper-report-2026-08-18.md), which he reviewed and approved in session. Scope is the applied additive rule-set currency changes and the corresponding feature-list count refresh (starter alerts 35 -> 37; 32 built-in drug-monitoring rules of which 31 are enabled). It is not a full re-baseline of the whole document. Held items (CKD002/003 disable, AST ID rename, NDH, RSV care-home ageMin 18) were NOT signed. Prior recorded Keeper review was 3.178.0 on 2026-07-25 (PR #221)."
     }
   ]
 }

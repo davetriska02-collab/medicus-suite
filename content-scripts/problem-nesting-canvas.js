@@ -1,31 +1,38 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — "Organise problems" canvas overlay
 //
-// PURPOSE (user request 2026-08-08): a visual, drag-and-drop alternative to
-// the "Suggested links" / "Link manually" accordion sections that used to
-// live in content-scripts/problem-nesting.js — a left pane renders the
-// problem list as an auto-laid-out tree (root problems sorted by onset date
-// [falling back to record date when onset is blank] descending, each one's
-// real children nested and sorted the same way beneath it, to whatever depth
-// the record actually has); a right pane holds SNOMED-suggested-but-
-// unconfirmed children as a draggable tray, each labelled with its candidate
-// parent(s) and connected to them by an always-on dotted line. Dragging ANY
-// tile onto ANY other tile (either pane — SNOMED candidates are a hint,
-// never a constraint) proposes a link; nothing writes without an explicit
-// confirm.
+// PURPOSE (user request 2026-08-08, expanded 2026-08-17, tray folded into
+// the tiles 2026-08-19): a visual, drag-and-drop organiser for the problem
+// list. Three significance lanes (Major / Minor / Unresolved) each hold
+// their own nest tree; an End bin resolves a problem. There is no separate
+// suggestion pane any more — a SNOMED-ancestry or "(Grouped with X)"
+// text-link suggestion now renders as a dotted line straight onto the
+// suggested tile itself (see tileHtml/annotateTreeSuggestions), and dragging
+// that tile onto its match confirms it via the SAME general tile-onto-tile
+// gesture as any other nest/link. Dropping on a lane or the End bin STAGES
+// the change on the canvas — tiles move immediately, nothing is written —
+// until Finalise commits the whole draft.
+// Existing single-action buttons (Bulk remove/merge, Clean up code) stay on
+// the page; "Change significance" is no longer one of them (2026-08-19) — it
+// now happens by dragging a tile between the canvas's own significance
+// lanes, and the tray's old "Unknown significance, pick a grade" card is
+// gone with it — the Unresolved lane already IS that decision, dragging out
+// of it already stages it.
 //
 // TILE ACTIONS (revised 2026-08-08 — clicking the connector line to unlink
 // wasn't intuitive enough): clicking a tree-pane tile reveals two buttons
 // beside it — "Remove link" (only when the tile has a parent) and "Edit
-// problem…" (always). Only one tile's actions show at a time. Tray tiles
-// don't get these — they aren't part of the record's structure yet.
+// problem…" (always), plus (2026-08-19) the relationship-choice buttons for
+// a pending "(Grouped with X)" text-link suggestion, if this tile carries
+// one. Only one tile's actions show at a time.
 //
 // "Edit problem" opens problem-description-cleanup.js's own review panel
 // (same-concept alternatives, descendant/laterality, cross-concept,
-// generic-import-text, severity-contradiction — NOT retirement/legacy-Read-
-// code detection, deliberately excluded per Nick, 2026-08-08: already
-// available via that file's own separate opt-in scan) for ANY problem, not
-// just ones its own text-pattern scan already flagged. It renders as a
+// generic-import-text, severity-contradiction, and — since 2026-08-19, once
+// this canvas became the primary way to reach it — retirement/legacy-Read-
+// code detection too, run per-problem instead of duplicating the separate
+// opt-in scan's whole-patient pass) for ANY problem, not just ones its own
+// text-pattern scan already flagged. It renders as a
 // modal ON TOP of this canvas (never closes it — "I would prefer not to
 // close the canvas... this is helpful precisely because it gives a genuine
 // view of the whole problem page") via a persistent #ms-pnc-edit-overlay
@@ -46,32 +53,30 @@
 // parent map); a drag or a tile click is a pure gesture, not a placement to
 // remember. A confirmed change re-renders the whole tree from scratch.
 //
-// THREE connector mechanisms, chosen for what each actually needs:
+// TWO coordinate-math connector mechanisms plus one purely-visual stub:
 //   - Left-pane parent→children connectors are purely visual — simple
 //     nested-DOM + CSS (a small stub between the branch's indent guide and
 //     each child's tile), no coordinate math, no click handler.
-//   - Right-pane suggestion arrows point from a tray tile to its candidate
-//     parent(s) in the OTHER pane, at positions neither list controls (both
-//     are independently sorted, and the tree's own row heights vary with
-//     how much is nested under each tile) — that needs real
-//     getBoundingClientRect() math, drawn as a dotted SVG bezier overlay,
-//     pointer-events:none (visual only, never a click target).
-//   - Linked-problem lines (2026-08-08, then revised twice more the same
-//     day — straight diagonal lines weren't clear enough, then separate,
-//     unrelated SETS of linked problems shared one bus and one colour,
-//     indistinguishable from a single connected group) connect two TREE
-//     tiles that could sit anywhere relative to each other — no hierarchy
-//     constrains their position, unlike parent/child. Every link's
-//     horizontal arm reaches out from its own tile's right edge to a
-//     vertical bus line (computeLinkBusX + linkSetLaneX) — but each
-//     connected SET (groupLinkedPairsIntoSets: two pairs sharing a problem,
-//     directly or via a chain, are one set) gets its OWN lane AND its OWN
-//     colour (linkSetColor), so two genuinely separate sets never look like
-//     one. Solid, distinct from both the dotted suggestion arrows and the
-//     plain grey parent/child stubs. Display-only — no create/remove
-//     interaction yet (explicit scope decision), even though the write
-//     contract is now fully confirmed (see
-//     docs/learnings-problem-nesting-api.md).
+//   - Linked-problem lines AND suggestion lines (2026-08-19: the two were
+//     unified onto ONE elbow/bus mechanism — see updateConnectorLines'
+//     own comment) both connect two TREE tiles that can sit anywhere
+//     relative to each other — no hierarchy constrains their position,
+//     unlike parent/child. Every line's horizontal arm reaches out from
+//     its own tile's right edge to a SHARED vertical bus (computeLinkBusX),
+//     each connected SET (groupLinkedPairsIntoSets: pairs sharing a
+//     problem, directly or via a chain, are one set) getting its OWN lane
+//     (linkSetLaneX) so sets never overlap — linked-line sets claim the
+//     first lanes, suggestion-line sets continue right after them, so the
+//     two families never share a lane either. Linked lines are solid, one
+//     colour per SET (linkSetColor); suggestion lines are dashed (never a
+//     written relationship yet) with a shape+letter flag naming the
+//     suggestion's OWN kind — SNOMED-ancestry vs "(Grouped with X)"
+//     text-link — since this suite's colourblind mode must survive on
+//     colour alone never being the only cue (suggestionFlagHtml). Linked
+//     lines are still display-only — no create/remove interaction (explicit
+//     scope decision), even though the write contract is fully confirmed
+//     (see docs/learnings-problem-nesting-api.md); suggestion lines confirm
+//     via the ordinary tile-onto-tile drag, same as any other nest/link.
 //
 // UN-NESTING: CONFIRMED live 2026-08-08 (two real HAR captures Nick
 // recorded — see docs/learnings-problem-nesting-api.md). Same endpoint, same
@@ -158,18 +163,20 @@
     return s.slice(0, limit - 1).trim() + '…';
   }
 
-  // Builds the left-pane tree. Roots are problems with no live parent — with
-  // one refinement: a problem that's ALSO sitting in the unconfirmed
-  // suggestion tray (traySuggestedIds) is skipped as a root ONLY when it has
-  // no real children of its own. If it already has real children, it must
-  // still render (it's their genuine home in the record) even though it's
-  // simultaneously shown in the tray for its own unconfirmed suggestion —
-  // hiding it would silently orphan those children from the tree.
-  function buildProblemTree(problems, infoById, parentIdByProblemId, traySuggestedIds) {
+  // Builds the left-pane tree. Roots are problems with no live parent.
+  // 2026-08-19: a problem carrying an unconfirmed suggestion (SNOMED-
+  // ancestry parent, or a "(Grouped with X)" text-link match) used to be
+  // hidden here whenever it had no real children of its own — it lived only
+  // in the now-removed right-hand suggestion tray, as a separate draggable
+  // card. It now always renders as an ordinary lane tile like any other
+  // active problem; annotateTreeSuggestions (called by buildLaneTrees)
+  // attaches the candidate-parent/text-link info AFTER the tree is built, so
+  // tileHtml can draw the dotted suggestion line and (for text-link) surface
+  // the relationship-choice buttons straight on the tile.
+  function buildProblemTree(problems, infoById, parentIdByProblemId) {
     var list = Array.isArray(problems) ? problems : [];
     var info = infoById || {};
     var parentMap = parentIdByProblemId || {};
-    var suggested = traySuggestedIds instanceof Set ? traySuggestedIds : new Set(traySuggestedIds || []);
     var byId = {};
     list.forEach(function (p) {
       if (!p || !p.id) return;
@@ -211,7 +218,6 @@
     Object.keys(byId).forEach(function (id) {
       var parentId = parentMap[id];
       if (parentId && byId[parentId]) return; // already placed as a real child, above
-      if (suggested.has(id) && !byId[id].children.length) return; // tray-only, no orphaned children to house
       roots.push(byId[id]);
       markReachable(byId[id]);
     });
@@ -247,8 +253,8 @@
   }
 
   // Every id currently rendered in the tree (roots + every depth of
-  // children) — the set the tray's actionable/blocked split is judged
-  // against, and the set the SVG line-drawer treats as valid targets.
+  // children) — a pure, generic helper the cycle-rescue tests rely on to
+  // verify no problem silently vanishes from the tree.
   function flattenTreeIds(tree) {
     var ids = new Set();
     function walk(nodes) {
@@ -262,13 +268,11 @@
     return ids;
   }
 
-  // Live-filters the bridge's raw suggestion list down to what's still valid
-  // to show in the tray right now: the child problem still exists (not
+  // Live-filters the bridge's raw suggestion list down to what's still worth
+  // annotating onto a tile right now: the child problem still exists (not
   // merged away this session), still has no real parent (not linked via
   // another route this session), and its candidate-parent list is narrowed
   // to options that still exist and wouldn't create a cycle right now.
-  // Mirrors the same per-card filtering the old accordion's cardHtml() used
-  // to do, just computed once for the whole tray instead of per card.
   function filterLiveSuggestions(suggestions, problems, parentIdByProblemId, wouldCreateCycleFn) {
     var problemIds = new Set(
       (Array.isArray(problems) ? problems : []).map(function (p) {
@@ -294,68 +298,24 @@
     return out;
   }
 
-  // Groups a suggestion's parentOptions by provenance (2026-08-08,
-  // rules/problem-nesting-overrides.json): 'snomed' — a genuine live
-  // SNOMED-descendant hit — vs 'override' — a practice-defined pair SNOMED
-  // itself doesn't recognise as a hierarchy (e.g. pseudophakia as a child
-  // of cataract). An option with no 'source' at all (defensive — shouldn't
-  // happen from the current bridge, but never assume) groups as 'snomed',
-  // matching what every option meant before this field existed. Used to
-  // build accurate tray copy — crediting SNOMED for a pairing it never
-  // actually made would be misleading now that a second source exists.
-  function groupOptionsBySource(parentOptions) {
-    var snomed = [];
-    var override = [];
-    (Array.isArray(parentOptions) ? parentOptions : []).forEach(function (o) {
-      if (!o) return;
-      (o.source === 'override' ? override : snomed).push(o);
-    });
-    return { snomed: snomed, override: override };
-  }
-
-  // Splits the live tray into 'actionable' (at least one candidate parent
-  // already renders in the left-pane tree right now — there's somewhere to
-  // drop this tile) and 'blocked' (every candidate is itself still an
-  // unconfirmed tray item — nothing to drop onto yet, resolves once that
-  // other suggestion is confirmed). Each group sorted by onset date
-  // descending.
-  function partitionSuggestionTray(suggestions, treeProblemIds, infoById) {
-    var ids = treeProblemIds instanceof Set ? treeProblemIds : new Set(treeProblemIds || []);
-    var info = infoById || {};
-    var actionable = [];
-    var blocked = [];
-    (Array.isArray(suggestions) ? suggestions : []).forEach(function (s) {
-      var options = Array.isArray(s.parentOptions) ? s.parentOptions : [];
-      var hasActionable = options.some(function (o) {
-        return o && ids.has(o.id);
-      });
-      (hasActionable ? actionable : blocked).push(s);
-    });
-    function byDate(a, b) {
-      var da = resolveDisplayDate(info[a.childId]);
-      var db = resolveDisplayDate(info[b.childId]);
-      return compareDatesDesc(da, db);
-    }
-    actionable.sort(byDate);
-    blocked.sort(byDate);
-    return { actionable: actionable, blocked: blocked };
-  }
-
-  // Pure cubic-bezier path builder for the cross-pane suggestion lines. Both
-  // rects are plain {left, right, top, bottom, width, height} objects
-  // (container-relative — the caller subtracts the container's own origin
-  // before calling this, so it never needs a live DOM element to be tested).
-  // Curves from the tray tile's LEFT edge to the target tile's RIGHT edge —
-  // the tray sits physically to the right of the tree, so the line points
-  // back toward it.
-  function buildConnectorPath(fromRect, toRect) {
-    if (!fromRect || !toRect) return null;
-    var x1 = fromRect.left;
-    var y1 = fromRect.top + fromRect.height / 2;
-    var x2 = toRect.right;
-    var y2 = toRect.top + toRect.height / 2;
-    var midX = (x1 + x2) / 2;
-    return 'M ' + x1 + ' ' + y1 + ' C ' + midX + ' ' + y1 + ', ' + midX + ' ' + y2 + ', ' + x2 + ' ' + y2;
+  // Accurate provenance copy (2026-08-08, rules/problem-nesting-overrides.json):
+  // 'snomed' — a genuine live SNOMED-descendant hit — credited differently
+  // from 'override' — a practice-defined pair SNOMED itself doesn't
+  // recognise as a hierarchy (e.g. pseudophakia as a child of cataract).
+  // Crediting SNOMED for a pairing it never actually made would be
+  // misleading. Plain text, not HTML (2026-08-19: this now feeds an SVG
+  // <title> tooltip on the suggestion flag — see suggestionFlagHtml's own
+  // comment for why the "SNOMED marks this as a child of X" explanation
+  // moved off the card onto the connector line's own flag — an SVG title
+  // has no markup rendering, unlike the old card-hint's <strong> tags).
+  // One CANDIDATE at a time (not the old multi-candidate "X or Y" join):
+  // each candidate now draws its OWN line and OWN flag, so there is no
+  // multi-candidate sentence to build any more.
+  function suggestionCandidateTitleText(candidateDescription, source) {
+    var desc = candidateDescription || '';
+    return source === 'override'
+      ? "this practice's own reference list marks this as a child of " + desc
+      : 'SNOMED marks this as a child of ' + desc;
   }
 
   function relativeRect(rect, containerRect) {
@@ -389,6 +349,143 @@
       });
     });
     return pairs;
+  }
+
+  // Suggestion pairs (2026-08-19, moved off the removed tray) — unlike
+  // linked-problem pairs above, these are directional (a = the suggested
+  // child/subject, b = the candidate parent/matched problem) and never
+  // symmetric on the record, so no dedup-by-unordered-pair is needed: each
+  // tile only ever lists its OWN outgoing suggestion(s). `kind` distinguishes
+  // a SNOMED-ancestry candidate from a "(Grouped with X)" text-link match so
+  // the line-drawer can flag each one differently (Nick's feedback:
+  // "differentiate the SNOMED marks this... explanation from the additional
+  // details explanation visually" — shape/label, not colour alone, per this
+  // suite's colourblind-mode requirement). entries: [{id, suggestedIds,
+  // textlinkId}]. Each suggestedIds entry is either a bare id or an
+  // "id|source" compound string (2026-08-19 follow-up — tileHtml now tags
+  // each candidate with its own provenance so the flag's tooltip can name
+  // the exact source, "SNOMED marks this..." vs "this practice's own
+  // reference list..."); a bare id with no "|" defaults to 'snomed', same
+  // as every candidate meant before this field existed.
+  function buildSuggestionPairs(entries) {
+    var pairs = [];
+    (Array.isArray(entries) ? entries : []).forEach(function (entry) {
+      if (!entry || !entry.id) return;
+      (Array.isArray(entry.suggestedIds) ? entry.suggestedIds : []).forEach(function (raw) {
+        var parts = String(raw).split('|');
+        var otherId = parts[0];
+        var source = parts[1] === 'override' ? 'override' : 'snomed';
+        if (!otherId || otherId === entry.id) return;
+        pairs.push({ a: entry.id, b: otherId, kind: 'snomed', source: source });
+      });
+      if (entry.textlinkId && entry.textlinkId !== entry.id) {
+        pairs.push({ a: entry.id, b: entry.textlinkId, kind: 'textlink' });
+      }
+    });
+    return pairs;
+  }
+
+  // The flag marker's position for one elbow-routed line — the midpoint of
+  // its OWN vertical bus segment (not the shared bus's full extent), so two
+  // lines on the same lane but at very different heights don't both plant
+  // their flag at the same spot. Mirrors buildElbowConnectorPath's own
+  // y-coordinate math exactly (tile right-edge, vertical-centre).
+  function elbowFlagPoint(rectA, rectB, busX) {
+    if (!rectA || !rectB || typeof busX !== 'number') return null;
+    var yA = rectA.top + rectA.height / 2;
+    var yB = rectB.top + rectB.height / 2;
+    return { x: busX, y: (yA + yB) / 2 };
+  }
+
+  // The small marker naming a suggestion line's OWN kind (2026-08-19,
+  // Nick's feedback) — deliberately shape + letter, not colour alone: this
+  // suite's colourblind mode must survive every change (see
+  // .claude/skills/ui-design/DOCTRINE.md), so a SNOMED-ancestry candidate
+  // (circle, "S") and a "(Grouped with X)" text-link match (square, "G")
+  // stay distinguishable with colour vision entirely disabled. The dash
+  // pattern on the line itself differs too (see the CSS), a third,
+  // independent cue. pointer-events re-enabled on just the flag (the whole
+  // SVG is pointer-events:none, same "visual only" discipline the plain
+  // lines keep) so its <title> gives an accessible hover tooltip naming the
+  // suggestion in full — the flag is the only interactive part of a line.
+  // `title`: the FULL explanation text (2026-08-19 follow-up — this used to
+  // be a generic "SNOMED ancestry suggestion" string; the caller now builds
+  // the exact per-candidate sentence, e.g. "SNOMED marks this as a child of
+  // Hypertension", the same one the removed on-card hint used to show, and
+  // passes it straight through here).
+  function suggestionFlagHtml(point, kind, title) {
+    if (!point) return '';
+    var isTextlink = kind === 'textlink';
+    var label = isTextlink ? 'G' : 'S';
+    var shapeClass = 'ms-pnc-flag ' + (isTextlink ? 'ms-pnc-flag-textlink' : 'ms-pnc-flag-snomed');
+    var shape = isTextlink
+      ? '<rect x="' +
+        (point.x - 7) +
+        '" y="' +
+        (point.y - 7) +
+        '" width="14" height="14" rx="3" class="' +
+        shapeClass +
+        '"></rect>'
+      : '<circle cx="' + point.x + '" cy="' + point.y + '" r="7.5" class="' + shapeClass + '"></circle>';
+    return (
+      '<g class="ms-pnc-flag-group">' +
+      '<title>' +
+      esc(title || (isTextlink ? 'Import text match ("Grouped with…")' : 'SNOMED ancestry suggestion')) +
+      '</title>' +
+      shape +
+      '<text x="' +
+      point.x +
+      '" y="' +
+      point.y +
+      '" class="ms-pnc-flag-label" text-anchor="middle" dominant-baseline="central">' +
+      label +
+      '</text>' +
+      '</g>'
+    );
+  }
+
+  // The red (X) removal marker for an EXISTING linked-problem line
+  // (2026-08-19, Nick's feedback: "in the middle of the connector where
+  // it's an existing link" — a direct way to remove a flat link without
+  // first clicking the tile to select it, mirroring the suggestion flag's
+  // own always-visible marker on the SAME kind of elbow-routed line).
+  // data-remove-a/-b carry the pair's raw ids — bindEvents' delegated click
+  // handler reads them straight off the DOM (the SVG is fully rebuilt on
+  // every scroll/resize via updateConnectorLines, so per-node listeners
+  // here would be orphaned the moment that happens; one delegated listener
+  // on the stable root element, same technique the rest of this file
+  // avoids re-binding costs with, survives that rebuild). Only ARMS the
+  // confirm bar (_pendingAction) — never commits directly on click, same
+  // discipline as every other write in this canvas.
+  function linkRemoveFlagHtml(point, aId, bId, aDescription, bDescription) {
+    if (!point) return '';
+    return (
+      '<g class="ms-pnc-flag-group ms-pnc-remove-flag-group" data-remove-a="' +
+      esc(aId) +
+      '" data-remove-b="' +
+      esc(bId) +
+      '" data-remove-a-desc="' +
+      esc(aDescription) +
+      '" data-remove-b-desc="' +
+      esc(bDescription) +
+      '">' +
+      '<title>Remove the link between ' +
+      esc(aDescription) +
+      ' and ' +
+      esc(bDescription) +
+      '</title>' +
+      '<circle cx="' +
+      point.x +
+      '" cy="' +
+      point.y +
+      '" r="7.5" class="ms-pnc-remove-flag"></circle>' +
+      '<text x="' +
+      point.x +
+      '" y="' +
+      point.y +
+      '" class="ms-pnc-remove-flag-label" text-anchor="middle" dominant-baseline="central">×</text>' +
+      '</g>'
+    );
   }
 
   // Groups deduped {a,b} pairs into connected "sets" — 2026-08-08 follow-up:
@@ -481,8 +578,8 @@
   // just linked ones — indentation means an unlinked, deeply-nested tile
   // could still be the widest thing on screen, and the bus must sit to the
   // right of all of them or it would cut through tile content. Capped at
-  // the tree pane's own right boundary (when known) so it never bleeds into
-  // the tray pane sitting alongside it.
+  // the lanes pane's own right boundary (when known) so it never bleeds
+  // past the End bin sitting alongside it.
   function computeLinkBusX(tileRects, margin, paneRightEdge) {
     var rects = (Array.isArray(tileRects) ? tileRects : []).filter(Boolean);
     if (!rects.length) return null;
@@ -555,6 +652,297 @@
     };
   }
 
+  // Significance lane for a Medicus display label. Same prefix match as
+  // problem-nesting.js's sigCurrentMatchesTarget — "Major", "Minor",
+  // "Unknown" / "Unknown significance" / missing all land in a bucket.
+  // Anything that isn't major/minor is unresolved (unknown).
+  function significanceLaneKey(label) {
+    var s = String(label == null ? '' : label)
+      .trim()
+      .toLowerCase();
+    if (s.indexOf('major') === 0) return 'major';
+    if (s.indexOf('minor') === 0) return 'minor';
+    return 'unknown';
+  }
+
+  var SIGNIFICANCE_LANES = ['major', 'minor', 'unknown'];
+
+  function partitionProblemsBySignificance(problems, infoById) {
+    var out = { major: [], minor: [], unknown: [] };
+    var info = infoById || {};
+    (Array.isArray(problems) ? problems : []).forEach(function (p) {
+      if (!p || !p.id) return;
+      var current = (info[p.id] && info[p.id].significance) || 'Unknown';
+      out[significanceLaneKey(current)].push(p);
+    });
+    return out;
+  }
+
+  // After a per-lane buildProblemTree, mark roots whose live parent sits in
+  // a *different* lane so the tile can say "nested under X" without pulling
+  // that parent into this column.
+  function annotateCrossLaneParents(tree, problems, parentIdByProblemId) {
+    var descById = {};
+    (Array.isArray(problems) ? problems : []).forEach(function (p) {
+      if (p && p.id) descById[p.id] = p.description;
+    });
+    var parentMap = parentIdByProblemId || {};
+    function walk(nodes) {
+      (Array.isArray(nodes) ? nodes : []).forEach(function (n) {
+        if (!n) return;
+        var pid = parentMap[n.id];
+        if (pid && !n.parentId && descById[pid]) {
+          n.crossLaneParentId = pid;
+          n.crossLaneParentDescription = descById[pid];
+        }
+        walk(n.children);
+      });
+    }
+    walk(tree);
+    return tree;
+  }
+
+  // 2026-08-19: attaches each tile's own unconfirmed-suggestion data
+  // directly to its tree node, now that suggestion-only problems render as
+  // ordinary lane tiles instead of separate tray cards. tileHtml reads
+  // node.suggestedParentOptions to emit data-suggested-ids (the dashed
+  // candidate line(s) updateConnectorLines draws, elbow/bus-routed the same
+  // way as linked-problem lines) and node.textLinkSuggestion to emit
+  // data-textlink-id (its own dashed line) plus offer the "Grouped with X"
+  // relationship-choice buttons alongside Remove link/Edit problem once the
+  // tile is selected. suggestionsByChildId/textLinkByProblemId are plain
+  // id->suggestion lookup objects, built once in render() from the SAME
+  // filtered lists the removed tray used to consume.
+  function annotateTreeSuggestions(tree, suggestionsByChildId, textLinkByProblemId) {
+    function walk(nodes) {
+      (Array.isArray(nodes) ? nodes : []).forEach(function (n) {
+        if (!n) return;
+        var s = suggestionsByChildId[n.id];
+        if (s) n.suggestedParentOptions = s.parentOptions;
+        var t = textLinkByProblemId[n.id];
+        if (t) n.textLinkSuggestion = t;
+        walk(n.children);
+      });
+    }
+    walk(tree);
+    return tree;
+  }
+
+  function buildLaneTrees(problems, infoById, parentIdByProblemId, suggestionsByChildId, textLinkByProblemId) {
+    var parts = partitionProblemsBySignificance(problems, infoById);
+    var trees = {};
+    SIGNIFICANCE_LANES.forEach(function (key) {
+      var tree = buildProblemTree(parts[key], infoById, parentIdByProblemId);
+      tree = annotateCrossLaneParents(tree, problems, parentIdByProblemId);
+      trees[key] = annotateTreeSuggestions(tree, suggestionsByChildId || {}, textLinkByProblemId || {});
+    });
+    return trees;
+  }
+
+  // Classifies a drop (or keyboard drop) against a target. Tile→tile is a
+  // nest/link; tile→lane chrome is a significance change; tile→bin is an
+  // end. Returns null for no-ops (same lane, self-drop, unknown target).
+  // currentLaneKey is the dragged problem's current significance lane.
+  function classifyDrop(payload, dropTarget, currentLaneKey) {
+    if (!payload || !payload.problemId || !dropTarget || !dropTarget.type) return null;
+    if (dropTarget.type === 'tile') {
+      if (!dropTarget.id || dropTarget.id === payload.problemId) return null;
+      return { kind: 'link', childId: payload.problemId, parentId: dropTarget.id };
+    }
+    if (dropTarget.type === 'lane') {
+      var key = dropTarget.key;
+      if (SIGNIFICANCE_LANES.indexOf(key) === -1) return null;
+      if (currentLaneKey === key) return null;
+      return { kind: 'sig-' + key, problemId: payload.problemId, targetKey: key };
+    }
+    if (dropTarget.type === 'bin') {
+      return { kind: 'end', problemId: payload.problemId };
+    }
+    return null;
+  }
+
+  // True when no other live problem lists this id as its parent. Same
+  // "can't end a parent while children are active" rule as
+  // problem-bulk-end.js's isEndable — the commit path re-checks against
+  // Medicus's own end-problem form.
+  function canProposeEnd(problemId, parentIdByProblemId) {
+    return canStageEnd(problemId, parentIdByProblemId, []);
+  }
+
+  // Parent may be staged for End once every live child is also staged
+  // (or already gone). Children-first staging, children-first commit.
+  function canStageEnd(problemId, parentIdByProblemId, endIds) {
+    if (!problemId) return false;
+    var staged = {};
+    (endIds || []).forEach(function (id) {
+      staged[id] = true;
+    });
+    staged[problemId] = true;
+    var map = parentIdByProblemId || {};
+    var keys = Object.keys(map);
+    for (var i = 0; i < keys.length; i++) {
+      if (map[keys[i]] === problemId && !staged[keys[i]]) return false;
+    }
+    return true;
+  }
+
+  function emptyDraft() {
+    return { endIds: [], sigById: {} };
+  }
+
+  function cloneDraft(draft) {
+    var src = draft || emptyDraft();
+    return { endIds: (src.endIds || []).slice(), sigById: Object.assign({}, src.sigById || {}) };
+  }
+
+  function hasDraftChanges(draft) {
+    if (!draft) return false;
+    return (draft.endIds && draft.endIds.length > 0) || Object.keys(draft.sigById || {}).length > 0;
+  }
+
+  function significanceLabel(key) {
+    if (key === 'major') return 'Major';
+    if (key === 'minor') return 'Minor';
+    return 'Unknown significance';
+  }
+
+  function liveLaneKey(infoById, problemId) {
+    var current = (infoById && infoById[problemId] && infoById[problemId].significance) || 'Unknown';
+    return significanceLaneKey(current);
+  }
+
+  function effectiveLaneKey(infoById, draft, problemId) {
+    if (draft && draft.sigById && draft.sigById[problemId]) return draft.sigById[problemId];
+    return liveLaneKey(infoById, problemId);
+  }
+
+  function stageEnd(draft, problemId, parentIdByProblemId) {
+    var next = cloneDraft(draft);
+    if (!problemId) return { draft: next, error: 'A problem must be chosen.' };
+    if (next.endIds.indexOf(problemId) !== -1) return { draft: next, error: null };
+    if (!canStageEnd(problemId, parentIdByProblemId, next.endIds)) {
+      return { draft: draft || emptyDraft(), error: 'has-children' };
+    }
+    next.endIds.push(problemId);
+    delete next.sigById[problemId];
+    return { draft: next, error: null };
+  }
+
+  function unstageEnd(draft, problemId, parentIdByProblemId) {
+    var next = cloneDraft(draft);
+    next.endIds = next.endIds.filter(function (id) {
+      return id !== problemId;
+    });
+    var changed = true;
+    while (changed) {
+      changed = false;
+      var keep = [];
+      for (var i = 0; i < next.endIds.length; i++) {
+        var id = next.endIds[i];
+        var others = next.endIds.filter(function (x) {
+          return x !== id;
+        });
+        if (canStageEnd(id, parentIdByProblemId, others)) keep.push(id);
+        else changed = true;
+      }
+      next.endIds = keep;
+    }
+    return next;
+  }
+
+  function stageSignificance(draft, problemId, targetKey, liveKey, parentIdByProblemId) {
+    var next = unstageEnd(draft || emptyDraft(), problemId, parentIdByProblemId);
+    if (!problemId || SIGNIFICANCE_LANES.indexOf(targetKey) === -1) return next;
+    if (targetKey === liveKey) delete next.sigById[problemId];
+    else next.sigById[problemId] = targetKey;
+    return next;
+  }
+
+  function overlayInfoById(infoById, draft) {
+    var out = {};
+    var src = infoById || {};
+    Object.keys(src).forEach(function (id) {
+      out[id] = src[id];
+    });
+    var sig = (draft && draft.sigById) || {};
+    Object.keys(sig).forEach(function (id) {
+      var prev = out[id] || {};
+      var copy = {};
+      Object.keys(prev).forEach(function (k) {
+        copy[k] = prev[k];
+      });
+      copy.significance = significanceLabel(sig[id]);
+      out[id] = copy;
+    });
+    return out;
+  }
+
+  function problemsNotEnded(problems, draft) {
+    var ended = {};
+    ((draft && draft.endIds) || []).forEach(function (id) {
+      ended[id] = true;
+    });
+    return (problems || []).filter(function (p) {
+      return p && p.id && !ended[p.id];
+    });
+  }
+
+  function endedProblemList(problems, draft) {
+    var byId = {};
+    (problems || []).forEach(function (p) {
+      if (p && p.id) byId[p.id] = p;
+    });
+    return ((draft && draft.endIds) || [])
+      .map(function (id) {
+        return byId[id];
+      })
+      .filter(Boolean);
+  }
+
+  // Children before parents so a staged parent is not POSTed while its
+  // children are still live on Medicus.
+  function orderEndsForCommit(endIds, parentIdByProblemId) {
+    var remaining = (endIds || []).slice();
+    var map = parentIdByProblemId || {};
+    var out = [];
+    while (remaining.length) {
+      var pick = -1;
+      for (var i = 0; i < remaining.length; i++) {
+        var id = remaining[i];
+        var hasChildStill = remaining.some(function (other) {
+          return other !== id && map[other] === id;
+        });
+        if (!hasChildStill) {
+          pick = i;
+          break;
+        }
+      }
+      if (pick === -1) return out.concat(remaining);
+      out.push(remaining[pick]);
+      remaining.splice(pick, 1);
+    }
+    return out;
+  }
+
+  function summariseDraft(draft, descById) {
+    var endIds = (draft && draft.endIds) || [];
+    var sigById = (draft && draft.sigById) || {};
+    var ends = endIds.map(function (id) {
+      return { id: id, description: (descById && descById[id]) || id };
+    });
+    var sigs = [];
+    Object.keys(sigById).forEach(function (id) {
+      if (endIds.indexOf(id) !== -1) return;
+      sigs.push({
+        id: id,
+        description: (descById && descById[id]) || id,
+        targetKey: sigById[id],
+        targetLabel: significanceLabel(sigById[id]),
+      });
+    });
+    return { ends: ends, sigs: sigs, count: ends.length + sigs.length };
+  }
+
   // ── Node test hook ────────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -565,10 +953,10 @@
       buildProblemTree: buildProblemTree,
       flattenTreeIds: flattenTreeIds,
       filterLiveSuggestions: filterLiveSuggestions,
-      groupOptionsBySource: groupOptionsBySource,
-      partitionSuggestionTray: partitionSuggestionTray,
-      buildConnectorPath: buildConnectorPath,
+      suggestionCandidateTitleText: suggestionCandidateTitleText,
       buildLinkedProblemPairs: buildLinkedProblemPairs,
+      buildSuggestionPairs: buildSuggestionPairs,
+      elbowFlagPoint: elbowFlagPoint,
       groupLinkedPairsIntoSets: groupLinkedPairsIntoSets,
       linkSetLaneX: linkSetLaneX,
       linkSetColor: linkSetColor,
@@ -577,6 +965,26 @@
       relativeRect: relativeRect,
       readDropPayload: readDropPayload,
       buildPendingLink: buildPendingLink,
+      significanceLaneKey: significanceLaneKey,
+      partitionProblemsBySignificance: partitionProblemsBySignificance,
+      annotateCrossLaneParents: annotateCrossLaneParents,
+      buildLaneTrees: buildLaneTrees,
+      annotateTreeSuggestions: annotateTreeSuggestions,
+      classifyDrop: classifyDrop,
+      canProposeEnd: canProposeEnd,
+      canStageEnd: canStageEnd,
+      emptyDraft: emptyDraft,
+      hasDraftChanges: hasDraftChanges,
+      stageEnd: stageEnd,
+      unstageEnd: unstageEnd,
+      stageSignificance: stageSignificance,
+      overlayInfoById: overlayInfoById,
+      problemsNotEnded: problemsNotEnded,
+      endedProblemList: endedProblemList,
+      orderEndsForCommit: orderEndsForCommit,
+      summariseDraft: summariseDraft,
+      effectiveLaneKey: effectiveLaneKey,
+      liveLaneKey: liveLaneKey,
     };
     return;
   }
@@ -611,6 +1019,11 @@
   // tile's own action buttons; only the confirm copy and which bridge
   // function fires on confirm differ.
   var _pendingAction = null;
+  // Draft workspace for End + significance. Tiles move on the canvas
+  // immediately; Medicus is not written until Finalise. Nest/link still
+  // use _pendingAction (one pair, one confirm) because those need the
+  // nest-vs-flat choice.
+  var _draft = emptyDraft();
   // Session-local, canvas-only (never touches problem-nesting.js's own
   // state/bridge): problemIds whose text-derived suggestion has just been
   // successfully actioned. Unlike the SNOMED tray (filterLiveSuggestions
@@ -674,8 +1087,21 @@
   // data-target-id, NOT data-problem-id — these buttons must never match
   // the drag/drop-target queries (which key off data-problem-id) and become
   // spurious drop targets of their own.
+  //
+  // 2026-08-19: a selected tile carrying a "(Grouped with X)" text-link
+  // suggestion (node.textLinkSuggestion) ALSO gets the relationship-choice
+  // buttons the now-removed suggestion tray used to show on its own
+  // duplicate card — same classes/data attributes (.ms-pnc-textlink-btn,
+  // data-textlink-action/data-problem-id/data-matched-id), so the existing
+  // click handlers in bindEvents work unchanged.
   function tileActionsHtml(node) {
+    // Single outer wrapper (2026-08-19) — .ms-pnc-tile-row is itself a flex
+    // row (tile-main sits alongside these actions), so this needs to be ONE
+    // flex item that stacks its own two button rows vertically, rather than
+    // letting .ms-pnc-tile-actions and .ms-pnc-textlink-actions become two
+    // separate flex items competing for the same horizontal row.
     return (
+      '<div class="ms-pnc-tile-actions-wrap">' +
       '<div class="ms-pnc-tile-actions">' +
       (node.parentId
         ? '<button type="button" class="ms-pnc-tile-action" data-action="unlink" data-target-id="' +
@@ -685,6 +1111,8 @@
       '<button type="button" class="ms-pnc-tile-action" data-action="edit" data-target-id="' +
       esc(node.id) +
       '">Edit problem…</button>' +
+      '</div>' +
+      (node.textLinkSuggestion ? textLinkActionsHtml(node.textLinkSuggestion) : '') +
       '</div>'
     );
   }
@@ -693,6 +1121,19 @@
   // branch's indent guide and the child's tile, reading as "this tile
   // attaches here") — un-nesting now happens via the tile's own action
   // button (see tileActionsHtml), not by clicking the line itself.
+  //
+  // 2026-08-19: node.suggestedParentOptions (SNOMED-ancestry) and
+  // node.textLinkSuggestion ("Grouped with X") — annotated by
+  // annotateTreeSuggestions, since suggestion-only problems now render as
+  // ordinary tiles instead of separate tray cards — both surface here:
+  // data-suggested-ids / data-textlink-id feed updateConnectorLines' elbow/
+  // bus line-drawing (same routing as linked-problem lines, with a
+  // shape-flagged dashed line instead of a solid one), and a small
+  // always-visible hint names the suggestion so it's discoverable without
+  // clicking (the tray equivalent never required a click either).
+  // Confirming still works via the ALREADY-generic tile-onto-tile drag/drop
+  // this file already has — no new drag logic needed, just both tiles now
+  // genuinely existing.
   function tileHtml(node) {
     var branch = node.children.length
       ? '<div class="ms-pnc-branch">' +
@@ -710,16 +1151,38 @@
       : '';
     var addInfo = truncateText(node.additionalInformation, 70);
     var selected = _selectedTileId === node.id;
+    // Two SEPARATE attributes (2026-08-19, was one combined data-candidate-ids)
+    // — the line-drawer needs to tell a SNOMED-ancestry candidate apart from
+    // a text-link match to flag each line's kind distinctly (Nick's
+    // feedback: "differentiate the SNOMED marks this... explanation from
+    // the additional details explanation visually"). Each id carries its own
+    // `|source` suffix (2026-08-19 follow-up: "remove the SNOMED marks this
+    // as a child... text from the card, and add it to the hover tooltip") —
+    // updateConnectorLines needs to know, per CANDIDATE, whether it came
+    // from SNOMED itself or this practice's own override list, to build the
+    // exact same "SNOMED marks this as a child of X" / "this practice's own
+    // reference list marks this as a child of X" sentence the removed
+    // on-card hint used to show, now per-line instead of one combined
+    // sentence for every candidate at once.
+    var suggestedIds = (node.suggestedParentOptions || []).map(function (o) {
+      return o.id + '|' + (o.source === 'override' ? 'override' : 'snomed');
+    });
     return (
       '<div class="ms-pnc-node">' +
       '<div class="ms-pnc-tile-row">' +
       '<div class="ms-pnc-tile' +
       (selected ? ' ms-pnc-tile-selected' : '') +
       (_kbPickedId === node.id ? ' ms-pnc-tile-picked' : '') +
+      (_draft.sigById && _draft.sigById[node.id] ? ' ms-pnc-tile-staged' : '') +
+      (node.suggestedParentOptions || node.textLinkSuggestion ? ' ms-pnc-tile-suggested' : '') +
       '" draggable="true" tabindex="0" data-problem-id="' +
       esc(node.id) +
       '"' +
       (node.linkedProblemIds.length ? ' data-linked-ids="' + esc(node.linkedProblemIds.join(',')) + '"' : '') +
+      (suggestedIds.length ? ' data-suggested-ids="' + esc(suggestedIds.join(',')) + '"' : '') +
+      (node.textLinkSuggestion
+        ? ' data-textlink-id="' + esc(node.textLinkSuggestion.matchedProblemId) + '"'
+        : '') +
       '>' +
       '<div class="ms-pnc-tile-main">' +
       '<div class="ms-pnc-tile-desc">' +
@@ -728,6 +1191,18 @@
       (node.displayDate ? '<div class="ms-pnc-tile-date">' + esc(node.displayDate) + '</div>' : '') +
       '</div>' +
       (addInfo ? '<div class="ms-pnc-tile-info">' + esc(addInfo) + '</div>' : '') +
+      (node.crossLaneParentDescription
+        ? '<div class="ms-pnc-tile-hint">nested under ' + esc(node.crossLaneParentDescription) + '</div>'
+        : '') +
+      // 2026-08-19: the SNOMED-ancestry explanation moved off the card
+      // entirely, onto the (S)/override flag's own hover tooltip on the
+      // connector line (see suggestionFlagHtml) — a card carrying several
+      // candidate suggestions no longer stacks one combined sentence for
+      // all of them; each line now names its OWN candidate instead. The
+      // "(Grouped with X)" text-link hint stays on the card (not asked to
+      // move, and it carries actionable state — alreadyRelated/
+      // hasOtherRelationship — the flag's tooltip doesn't need to repeat).
+      (node.textLinkSuggestion ? textLinkHintHtml(node.textLinkSuggestion) : '') +
       '</div>' +
       (selected ? tileActionsHtml(node) : '') +
       '</div>' +
@@ -749,117 +1224,25 @@
     );
   }
 
-  function joinOptionNames(options) {
-    return options
-      .map(function (o) {
-        return '<strong>' + esc(o.description) + '</strong>';
-      })
-      .join(' or ');
-  }
-
-  // Accurate provenance copy (2026-08-08) — a pairing from
-  // rules/problem-nesting-overrides.json is credited to "this practice's
-  // own reference list", never to SNOMED, which never actually made that
-  // pairing. A suggestion with candidates from BOTH sources (rare — one
-  // real SNOMED hit alongside a separate practice-defined one) shows both
-  // sentences.
-  function suggestionHintHtml(parentOptions) {
-    var groups = groupOptionsBySource(parentOptions);
-    var parts = [];
-    if (groups.snomed.length) {
-      parts.push('SNOMED marks this as a child of ' + joinOptionNames(groups.snomed));
-    }
-    if (groups.override.length) {
-      parts.push("this practice's own reference list marks this as a child of " + joinOptionNames(groups.override));
-    }
-    return parts.join('; ');
-  }
-
-  function trayTileHtml(s, infoById, groupClass) {
-    var info = infoById[s.childId];
-    var date = resolveDisplayDate(info);
-    var addInfo = truncateText(info && info.additionalInformation, 70);
-    var candidateIds = s.parentOptions.map(function (o) {
-      return o.id;
-    });
-    return (
-      '<div class="ms-pnc-tray-tile ' +
-      groupClass +
-      (_kbPickedId === s.childId ? ' ms-pnc-tile-picked' : '') +
-      '" draggable="true" tabindex="0" data-problem-id="' +
-      esc(s.childId) +
-      '" data-candidate-ids="' +
-      esc(candidateIds.join(',')) +
-      '">' +
-      '<div class="ms-pnc-tile-main">' +
-      '<div class="ms-pnc-tile-desc">' +
-      esc(s.childDescription) +
-      '</div>' +
-      (date ? '<div class="ms-pnc-tile-date">' + esc(date) + '</div>' : '') +
-      '</div>' +
-      (addInfo ? '<div class="ms-pnc-tile-info">' + esc(addInfo) + '</div>' : '') +
-      '<div class="ms-pnc-tray-hint">' +
-      suggestionHintHtml(s.parentOptions) +
-      '</div>' +
-      '</div>'
-    );
-  }
-
-  // "(Grouped with X)" text-derived suggestion card (2026-08-09) — NOT
-  // draggable, unlike trayTileHtml above: this is already a specific
-  // resolved pair (see shared/problem-text-linking.js's matching), so there
-  // is nothing to drop it ONTO — the three buttons offer the relationship-
-  // TYPE choice instead (same three-way choice content-scripts/problem-
-  // description-cleanup.js's own linkSuggestionHtml offers, so a clinician
-  // sees identical wording whichever surface they act from). Each click sets
-  // _pendingAction, same two-step confirm-bar discipline as every other
-  // write in this canvas — never commits directly on click.
-  function textLinkTileHtml(s) {
-    // data-candidate-ids is self-referencing here (s.problemId, not
-    // s.matchedProblemId) — deliberately different from trayTileHtml's own
-    // use of the SAME attribute above (there it points at CANDIDATE
-    // targets). A "(Grouped with X)" suggestion's subject is a REAL problem
-    // that already renders normally in the tree (unlike a SNOMED
-    // suggestion's child, which buildProblemTree hides from the tree while
-    // it's suggestion-only) — so this card is a genuine duplicate of a tile
-    // already visible on the left. The dotted line is a locator back to
-    // that tile, not a relationship indicator (the relationship is already
-    // named in the card's own text below) — 2026-08-09 follow-up: "I would
-    // like a dotted line between the two identical tiles."
-    var selfPointerAttrs = ' data-problem-id="' + esc(s.problemId) + '" data-candidate-ids="' + esc(s.problemId) + '"';
-    // Someone already created this relationship manually in Medicus
-    // (checkExistingRelationship, run at scan time) — offering to
-    // (re)create it would be redundant; only the leftover import text is
-    // still a genuine action here (2026-08-09 request).
+  // "(Grouped with X)" text-derived suggestion (2026-08-09; folded onto the
+  // tile itself 2026-08-19 — see tileHtml/tileActionsHtml's own comments).
+  // Split into a short always-visible hint (textLinkHintHtml, so it's
+  // discoverable without clicking — the removed tray card never required a
+  // click either) and the actual relationship-choice buttons
+  // (textLinkActionsHtml, shown only once the tile is selected, alongside
+  // Remove link/Edit problem). Each click sets _pendingAction, same
+  // two-step confirm-bar discipline as every other write in this canvas —
+  // never commits directly on click.
+  function textLinkHintHtml(s) {
     if (s.alreadyRelated) {
       return (
-        '<div class="ms-pnc-textlink-tile"' +
-        selfPointerAttrs +
-        '>' +
-        '<div class="ms-pnc-tile-desc">' +
-        esc(s.problemDescription) +
-        '</div>' +
-        '<div class="ms-pnc-tray-hint">🔗 Already linked/nested with <strong>' +
+        '<div class="ms-pnc-tile-hint ms-pnc-tile-hint-suggested">🔗 Already linked/nested with <strong>' +
         esc(s.matchedDescription) +
-        '</strong> — the import text is now redundant.</div>' +
-        '<div class="ms-pnc-textlink-actions">' +
-        '<button type="button" class="ms-pnc-textlink-btn" data-textlink-action="alreadyRelated" data-problem-id="' +
-        esc(s.problemId) +
-        '" data-matched-id="' +
-        esc(s.matchedProblemId) +
-        '">Remove import text</button>' +
-        '</div>' +
-        '</div>'
+        '</strong> — the import text is now redundant.</div>'
       );
     }
     return (
-      '<div class="ms-pnc-textlink-tile"' +
-      selfPointerAttrs +
-      '>' +
-      '<div class="ms-pnc-tile-desc">' +
-      esc(s.problemDescription) +
-      '</div>' +
-      '<div class="ms-pnc-tray-hint">🔗 "Grouped with' +
+      '<div class="ms-pnc-tile-hint ms-pnc-tile-hint-suggested">🔗 "Grouped with' +
       (s.confidence === 'partial' ? '" (best match)' : '"') +
       ' — <strong>' +
       esc(s.matchedDescription) +
@@ -870,8 +1253,28 @@
       // DIFFERENT problem). The 3-way offer below still stands, but a "Leave
       // as-is" escape hatch avoids forcing a redundant/conflicting write.
       (s.hasOtherRelationship
-        ? '<div class="ms-pnc-tray-hint">This problem already has another relationship recorded.</div>'
-        : '') +
+        ? '<div class="ms-pnc-tile-hint">This problem already has another relationship recorded.</div>'
+        : '')
+    );
+  }
+
+  function textLinkActionsHtml(s) {
+    // Someone already created this relationship manually in Medicus
+    // (checkExistingRelationship, run at scan time) — offering to
+    // (re)create it would be redundant; only the leftover import text is
+    // still a genuine action here (2026-08-09 request).
+    if (s.alreadyRelated) {
+      return (
+        '<div class="ms-pnc-textlink-actions">' +
+        '<button type="button" class="ms-pnc-textlink-btn" data-textlink-action="alreadyRelated" data-problem-id="' +
+        esc(s.problemId) +
+        '" data-matched-id="' +
+        esc(s.matchedProblemId) +
+        '">Remove import text</button>' +
+        '</div>'
+      );
+    }
+    return (
       '<div class="ms-pnc-textlink-actions">' +
       '<button type="button" class="ms-pnc-textlink-btn" data-textlink-action="linked" data-problem-id="' +
       esc(s.problemId) +
@@ -895,82 +1298,7 @@
           esc(s.matchedProblemId) +
           '">Leave as-is, remove text</button>'
         : '') +
-      '</div>' +
       '</div>'
-    );
-  }
-
-  // "Unknown significance" suggestion card (2026-08-09 request: "flag any
-  // problems with 'unknown' severity, and offer to promote them to major or
-  // minor"). Unlike every other suggestion type in this tray, there is no
-  // confident auto-pick — both grades are offered side by side, and the
-  // clinician chooses; this card only surfaces that a decision is
-  // outstanding. Reuses the SAME confirmed full-replace write the old
-  // accordion's bulk re-grade tool already uses (commitSignificanceChange),
-  // exposed here as a per-problem tray action instead.
-  function unknownSignificanceTileHtml(s) {
-    return (
-      '<div class="ms-pnc-sig-tile" data-problem-id="' +
-      esc(s.problemId) +
-      '">' +
-      '<div class="ms-pnc-tile-desc">' +
-      esc(s.problemDescription) +
-      '</div>' +
-      '<div class="ms-pnc-tray-hint">⚠ Significance is currently <strong>' +
-      esc(s.currentSignificance) +
-      '</strong> — pick a grade:</div>' +
-      '<div class="ms-pnc-sig-actions">' +
-      '<button type="button" class="ms-pnc-sig-btn" data-sig-target="major" data-problem-id="' +
-      esc(s.problemId) +
-      '">Set Major</button>' +
-      '<button type="button" class="ms-pnc-sig-btn" data-sig-target="minor" data-problem-id="' +
-      esc(s.problemId) +
-      '">Set Minor</button>' +
-      '</div>' +
-      '</div>'
-    );
-  }
-
-  function trayHtml(groups, infoById, textLinkSuggestions, unknownSignificanceSuggestions) {
-    var textLinkHtml = (Array.isArray(textLinkSuggestions) ? textLinkSuggestions : []).map(textLinkTileHtml).join('');
-    var textLinkSection = textLinkHtml
-      ? '<div class="ms-pnc-tray-group ms-pnc-tray-group-textlink">' +
-        '<div class="ms-pnc-tray-group-label">Suggested from import text</div>' +
-        textLinkHtml +
-        '</div>'
-      : '';
-    var sigHtml = (Array.isArray(unknownSignificanceSuggestions) ? unknownSignificanceSuggestions : [])
-      .map(unknownSignificanceTileHtml)
-      .join('');
-    var sigSection = sigHtml
-      ? '<div class="ms-pnc-tray-group ms-pnc-tray-group-sig">' +
-        '<div class="ms-pnc-tray-group-label">Unknown significance</div>' +
-        sigHtml +
-        '</div>'
-      : '';
-    if (!groups.actionable.length && !groups.blocked.length) {
-      return textLinkSection + sigSection || '<div class="ms-pnc-empty">No SNOMED-suggested links right now.</div>';
-    }
-    var actionableHtml = groups.actionable
-      .map(function (s) {
-        return trayTileHtml(s, infoById, 'ms-pnc-tray-actionable');
-      })
-      .join('');
-    var blockedHtml = groups.blocked
-      .map(function (s) {
-        return trayTileHtml(s, infoById, 'ms-pnc-tray-blocked');
-      })
-      .join('');
-    return (
-      (actionableHtml ? '<div class="ms-pnc-tray-group">' + actionableHtml + '</div>' : '') +
-      (blockedHtml
-        ? '<div class="ms-pnc-tray-group ms-pnc-tray-group-blocked">' +
-          '<div class="ms-pnc-tray-group-label">Waiting on another suggestion first</div>' +
-          blockedHtml +
-          '</div>'
-        : '') +
-      textLinkSection +
-      sigSection
     );
   }
 
@@ -1008,6 +1336,19 @@
         ' again.';
       confirmLabel = 'Confirm — remove link';
       busyLabel = 'Removing…';
+    } else if (d.kind === 'flat-unlink') {
+      // The red (X) on a confirmed linked-problem line (2026-08-19) — a
+      // FLAT (non-hierarchical, symmetric) relationship, distinct from
+      // 'unlink' above (which only ever removes a parent/child nest).
+      message =
+        'This will remove the link between <strong>' +
+        esc(d.aDescription) +
+        '</strong> and <strong>' +
+        esc(d.bDescription) +
+        '</strong> — neither becomes a child of the other, this just un-links them. There is no undo; re-link them ' +
+        'by dragging one onto the other again.';
+      confirmLabel = 'Confirm — remove link';
+      busyLabel = 'Removing…';
     } else if (d.kind === 'link') {
       // Each choice states ITS OWN consequence (review finding: the nest
       // copy — including the re-parent "will move it out of there"
@@ -1040,7 +1381,7 @@
             : '') +
           '"Confirm — link problems" instead records a flat "related problems" link — no nesting changes' +
           (d.previousParentId ? ' (it stays under ' + esc(d.previousParentDescription) + ')' : '') +
-          '. There is no bulk undo; links are removed individually — click the child tile, then "Remove link".';
+          '. There is no bulk undo; links are removed individually — click the red × on the link\'s own line once it\'s drawn.';
         confirmLabel = 'Confirm — nest it';
         busyLabel = 'Linking…';
         secondaryConfirmLabel = 'Confirm — link problems';
@@ -1079,18 +1420,66 @@
         'now-redundant import text, leaving that relationship as-is.';
       confirmLabel = 'Confirm — remove text';
       busyLabel = 'Removing…';
-    } else if (d.kind === 'sig-major' || d.kind === 'sig-minor') {
-      var sigTarget = d.kind === 'sig-major' ? 'Major' : 'Minor';
+    } else if (d.kind === 'finalise') {
+      var s = d.summary || { ends: [], sigs: [], count: 0 };
+      var lines = [];
+      if (s.ends.length) {
+        lines.push(
+          '<strong>' +
+            s.ends.length +
+            '</strong> problem' +
+            (s.ends.length === 1 ? '' : 's') +
+            ' ended as <strong>Resolved</strong> (today’s date): ' +
+            s.ends
+              .slice(0, 12)
+              .map(function (item) {
+                return esc(item.description);
+              })
+              .join('; ') +
+            (s.ends.length > 12 ? '…' : '')
+        );
+      }
+      if (s.sigs.length) {
+        lines.push(
+          '<strong>' +
+            s.sigs.length +
+            '</strong> significance change' +
+            (s.sigs.length === 1 ? '' : 's') +
+            ': ' +
+            s.sigs
+              .slice(0, 12)
+              .map(function (item) {
+                return esc(item.description) + ' → ' + esc(item.targetLabel);
+              })
+              .join('; ') +
+            (s.sigs.length > 12 ? '…' : '')
+        );
+      }
       message =
-        'This will change the significance of <strong>' +
-        esc(d.problemDescription) +
-        '</strong> from <strong>' +
-        esc(d.currentSignificance) +
-        '</strong> to <strong>' +
-        sigTarget +
-        '</strong> via Medicus’s own edit form — every other field is resent unchanged.';
-      confirmLabel = 'Confirm — set ' + sigTarget;
-      busyLabel = 'Updating…';
+        'This will write everything you have staged on this canvas, via Medicus’s own forms. ' +
+        'There is no canvas undo — use Medicus to reopen an ended problem. ' +
+        lines.join(' ') +
+        '. Nesting and linking you already confirmed are already written.';
+      confirmLabel = 'Confirm — write all ' + s.count;
+      busyLabel = 'Writing…';
+    } else if (d.kind === 'abandon') {
+      message =
+        'You have <strong>' +
+        (d.count || 0) +
+        '</strong> unwritten staged change' +
+        ((d.count || 0) === 1 ? '' : 's') +
+        ' on this canvas. Discard them and close?';
+      confirmLabel = 'Discard and close';
+      busyLabel = 'Closing…';
+    } else if (d.kind === 'discard') {
+      message =
+        'Discard <strong>' +
+        (d.count || 0) +
+        '</strong> staged change' +
+        ((d.count || 0) === 1 ? '' : 's') +
+        ' and put the tiles back? Nothing has been written.';
+      confirmLabel = 'Discard staged';
+      busyLabel = 'Discarding…';
     } else {
       return '';
     }
@@ -1119,15 +1508,33 @@
     );
   }
 
-  function footerHtml() {
-    if (!_linkedCount) return '';
-    return (
-      '<div class="ms-pnc-footer"><span>' +
-      _linkedCount +
-      ' change' +
-      (_linkedCount === 1 ? '' : 's') +
-      ' made</span> <button type="button" id="ms-pnc-refresh">Refresh page</button></div>'
-    );
+  function footerHtml(summary) {
+    var parts = [];
+    if (summary && summary.count) {
+      var bits = [];
+      if (summary.ends.length) bits.push(summary.ends.length + ' to end');
+      if (summary.sigs.length) bits.push(summary.sigs.length + ' significance');
+      parts.push(
+        '<span class="ms-pnc-draft-summary">' +
+          summary.count +
+          ' staged (' +
+          bits.join(', ') +
+          ') — not written yet</span>' +
+          '<button type="button" class="ms-pnc-discard" id="ms-pnc-discard">Discard staged</button>' +
+          '<button type="button" class="ms-pnc-finalise" id="ms-pnc-finalise">Finalise…</button>'
+      );
+    }
+    if (_linkedCount) {
+      parts.push(
+        '<span>' +
+          _linkedCount +
+          ' change' +
+          (_linkedCount === 1 ? '' : 's') +
+          ' written</span> <button type="button" id="ms-pnc-refresh">Refresh page</button>'
+      );
+    }
+    if (!parts.length) return '';
+    return '<div class="ms-pnc-footer">' + parts.join('<span class="ms-pnc-footer-gap"></span>') + '</div>';
   }
 
   function wrapPanel(contentHtml) {
@@ -1142,27 +1549,103 @@
     );
   }
 
-  function bodyHtml(tree, groups, infoById, textLinkSuggestions, unknownSignificanceSuggestions) {
+  // 2026-08-19: the right-hand "Suggested links" tray pane is gone —
+  // SNOMED-ancestry and "(Grouped with X)" suggestions now render as
+  // dotted lines straight onto the suggested tiles themselves (see
+  // tileHtml/annotateTreeSuggestions), and the separate "Unknown
+  // significance, pick a grade" card is dropped entirely: the Unresolved
+  // lane already IS "needs a significance decision", and dragging a tile
+  // out of it into Major/Minor already stages exactly that (Nick's
+  // confirmed call — the lane + existing drag is the same information,
+  // without a second UI for it).
+  function bodyHtml(laneTrees, endedProblems) {
     return (
-      '<div class="ms-pnc-explainer">Drag and drop problems to create parent-child relationships — ' +
-      'or press Enter on a tile to pick it up, then Enter on its new parent. ' +
-      'Suggested options are on the right. Click on a problem tile to remove a link, or to search ' +
-      'for better codes based on free-text.</div>' +
+      '<div class="ms-pnc-explainer">Drag a problem onto another to nest or link it (that still ' +
+      'confirms one pair at a time) — a dotted line marks a suggested pairing worth trying. Drop on ' +
+      '<strong>Major / Minor / Unresolved</strong> or <strong>End</strong> to stage the change — arrange as ' +
+      'many as you like, then <strong>Finalise</strong> to write them all. Drag a staged tile back out to ' +
+      'undo it. Click a tile to recode it or remove a nest.</div>' +
       '<div class="ms-pnc-body">' +
       '<svg class="ms-pnc-lines" aria-hidden="true"></svg>' +
-      '<div class="ms-pnc-pane ms-pnc-pane-tree" id="ms-pnc-tree-pane">' +
-      treeHtml(tree) +
+      '<div class="ms-pnc-lanes" id="ms-pnc-lanes">' +
+      laneHtml('major', 'Major', laneTrees.major) +
+      laneHtml('minor', 'Minor', laneTrees.minor) +
+      laneHtml('unknown', 'Unresolved', laneTrees.unknown) +
+      binHtml(endedProblems) +
       '</div>' +
-      '<div class="ms-pnc-pane ms-pnc-pane-tray" id="ms-pnc-tray-pane">' +
-      '<div class="ms-pnc-pane-heading">Suggested links</div>' +
-      trayHtml(groups, infoById, textLinkSuggestions, unknownSignificanceSuggestions) +
+      '</div>'
+    );
+  }
+
+  function laneHtml(key, label, tree) {
+    var empty = !tree || !tree.length;
+    return (
+      '<div class="ms-pnc-lane" data-sig-lane="' +
+      esc(key) +
+      '" tabindex="0" aria-label="' +
+      esc(label) +
+      ' problems">' +
+      '<div class="ms-pnc-lane-heading">' +
+      esc(label) +
       '</div>' +
+      (empty ? '<div class="ms-pnc-empty">None</div>' : treeHtml(tree)) +
+      '</div>'
+    );
+  }
+
+  function binTileHtml(problem) {
+    if (!problem || !problem.id) return '';
+    return (
+      '<div class="ms-pnc-tile ms-pnc-bin-tile' +
+      (_kbPickedId === problem.id ? ' ms-pnc-tile-picked' : '') +
+      '" draggable="true" tabindex="0" data-problem-id="' +
+      esc(problem.id) +
+      '">' +
+      '<div class="ms-pnc-tile-main">' +
+      '<div class="ms-pnc-tile-desc">' +
+      esc(problem.description || problem.id) +
+      '</div>' +
+      '</div>' +
+      '</div>'
+    );
+  }
+
+  function binHtml(endedProblems) {
+    var list = Array.isArray(endedProblems) ? endedProblems : [];
+    var count = list.length;
+    return (
+      '<div class="ms-pnc-bin" data-end-bin tabindex="0" aria-label="End problems (' +
+      count +
+      ' staged)">' +
+      '<div class="ms-pnc-bin-heading">End' +
+      (count ? ' (' + count + ')' : '') +
+      '</div>' +
+      (count
+        ? '<div class="ms-pnc-bin-list">' +
+          list
+            .map(function (p) {
+              return binTileHtml(p);
+            })
+            .join('') +
+          '</div>'
+        : '<div class="ms-pnc-bin-hint">Drop problems here. Nothing is ended until you Finalise.</div>') +
       '</div>'
     );
   }
 
   // ── Connector-line drawing ────────────────────────────────────────────────
 
+  // 2026-08-19: suggestion lines now route the SAME elbow/bus way as
+  // confirmed linked-problem lines (Nick's feedback: "please can the dotted
+  // lines work as the linked lines do so they are visible to the right of
+  // the problems themselves") — both reach out from a tile's own RIGHT edge
+  // to a shared vertical bus, so this is one shared routing pass over BOTH
+  // pair types rather than two separate code paths. The earlier diagonal
+  // bezier version (buildConnectorPath) is fully removed, not just retired
+  // — it had no remaining caller once this switched to elbow routing.
+  // Suggestion-line sets continue the SAME lane-index sequence linked-line
+  // sets use, immediately after them, so the two never share a lane and
+  // stay visually separate strips.
   function updateConnectorLines(root) {
     var svg = root.querySelector('.ms-pnc-lines');
     var body = root.querySelector('.ms-pnc-body');
@@ -1171,76 +1654,118 @@
     svg.setAttribute('width', String(containerRect.width));
     svg.setAttribute('height', String(containerRect.height));
     var markup = [];
-    // .ms-pnc-textlink-tile[data-candidate-ids] (2026-08-09) — a
-    // "(Grouped with X)" suggestion card is a duplicate of a tile already
-    // visible in the tree (see textLinkTileHtml's own comment on why this
-    // differs from a SNOMED suggestion, which the tree hides while it's
-    // suggestion-only) — draws the SAME dotted line a SNOMED candidate does,
-    // but as a SELF-pointer back to its own tree tile rather than to a
-    // relationship target, so a clinician can locate it. Reuses this exact
-    // mechanism (data-candidate-ids read straight off the DOM) rather than a
-    // second line-drawing code path.
-    root
-      .querySelectorAll('.ms-pnc-tray-tile[data-candidate-ids], .ms-pnc-textlink-tile[data-candidate-ids]')
-      .forEach(function (trayTile) {
-        var idsAttr = trayTile.getAttribute('data-candidate-ids') || '';
-        var ids = idsAttr.split(',').filter(Boolean);
-        var fromRect = relativeRect(trayTile.getBoundingClientRect(), containerRect);
-        ids.forEach(function (id) {
-          var target = root.querySelector('.ms-pnc-pane-tree .ms-pnc-tile[data-problem-id="' + cssEscapeId(id) + '"]');
-          if (!target) return; // candidate not currently rendered in the tree — no line to draw
-          var toRect = relativeRect(target.getBoundingClientRect(), containerRect);
-          var d = buildConnectorPath(fromRect, toRect);
-          if (d) markup.push('<path d="' + d + '" class="ms-pnc-line"></path>');
-        });
-      });
-    // Linked problems (2026-08-08, revised same day to elbow/bus routing —
-    // see buildElbowConnectorPath's own comment for why) — display-only,
-    // tree-tile to tree-tile, symmetric. Reads data-linked-ids straight off
-    // the DOM (same technique as the suggestion lines' data-candidate-ids
-    // above), not passed-in state, so this stays correct across
-    // scheduleLineUpdate's scroll/resize recomputes without needing to
-    // thread render()'s own data through.
     var treeTileRects = [];
-    root.querySelectorAll('.ms-pnc-pane-tree .ms-pnc-tile[data-problem-id]').forEach(function (tile) {
+    root.querySelectorAll('.ms-pnc-lane .ms-pnc-tile[data-problem-id]').forEach(function (tile) {
       treeTileRects.push(relativeRect(tile.getBoundingClientRect(), containerRect));
     });
-    var treePaneEl = root.querySelector('.ms-pnc-pane-tree');
+    var treePaneEl = root.querySelector('#ms-pnc-lanes');
     var treePaneRightEdge = treePaneEl
       ? relativeRect(treePaneEl.getBoundingClientRect(), containerRect).right
       : undefined;
     var busX = computeLinkBusX(treeTileRects, 16, treePaneRightEdge);
-
-    if (busX !== null) {
-      var linkEntries = [];
-      root.querySelectorAll('.ms-pnc-pane-tree .ms-pnc-tile[data-linked-ids]').forEach(function (tile) {
-        linkEntries.push({
-          id: tile.getAttribute('data-problem-id'),
-          linkedIds: (tile.getAttribute('data-linked-ids') || '').split(',').filter(Boolean),
-        });
-      });
-      // Each connected SET (2026-08-08 follow-up: separate sets were
-      // sharing one bus AND one colour, indistinguishable from a single
-      // genuinely-connected group) gets its own lane and colour — see
-      // groupLinkedPairsIntoSets/linkSetLaneX/linkSetColor's own comments.
-      groupLinkedPairsIntoSets(buildLinkedProblemPairs(linkEntries)).forEach(function (setPairs, setIndex) {
-        var laneX = linkSetLaneX(busX, setIndex, 14);
-        var color = linkSetColor(setIndex);
-        setPairs.forEach(function (pair) {
-          var tileA = root.querySelector(
-            '.ms-pnc-pane-tree .ms-pnc-tile[data-problem-id="' + cssEscapeId(pair.a) + '"]'
-          );
-          var tileB = root.querySelector(
-            '.ms-pnc-pane-tree .ms-pnc-tile[data-problem-id="' + cssEscapeId(pair.b) + '"]'
-          );
-          if (!tileA || !tileB) return; // one side not currently rendered — no line to draw
-          var rectA = relativeRect(tileA.getBoundingClientRect(), containerRect);
-          var rectB = relativeRect(tileB.getBoundingClientRect(), containerRect);
-          var d = buildElbowConnectorPath(rectA, rectB, laneX);
-          if (d) markup.push('<path d="' + d + '" class="ms-pnc-link-line" style="stroke: ' + color + '"></path>');
-        });
-      });
+    if (busX === null) {
+      svg.innerHTML = '';
+      return;
     }
+
+    function tileRect(id) {
+      var tile = root.querySelector('.ms-pnc-lane .ms-pnc-tile[data-problem-id="' + cssEscapeId(id) + '"]');
+      return tile ? relativeRect(tile.getBoundingClientRect(), containerRect) : null;
+    }
+    // Reads a tile's own visible description straight off the DOM — cheap,
+    // and always current (2026-08-19, for both the remove-flag's tooltip
+    // and the suggestion flag's per-candidate tooltip; no separate id->desc
+    // map needs threading through from render()).
+    var descCache = {};
+    function tileDesc(id) {
+      if (id in descCache) return descCache[id];
+      var tile = root.querySelector('.ms-pnc-lane .ms-pnc-tile[data-problem-id="' + cssEscapeId(id) + '"]');
+      var descEl = tile && tile.querySelector('.ms-pnc-tile-desc');
+      var text = descEl ? descEl.textContent : id;
+      descCache[id] = text;
+      return text;
+    }
+
+    var nextLane = 0;
+
+    // Linked problems (2026-08-08, revised same day to elbow/bus routing —
+    // see buildElbowConnectorPath's own comment for why) — display-only
+    // until 2026-08-19: each pair now ALSO gets a red (X) removal marker at
+    // its own midpoint (linkRemoveFlagHtml), Nick's request for a direct
+    // way to remove a flat link without first clicking the tile to select
+    // it. Reads data-linked-ids straight off the DOM, not passed-in state,
+    // so this stays correct across scheduleLineUpdate's scroll/resize
+    // recomputes without needing to thread render()'s own data through.
+    var linkEntries = [];
+    root.querySelectorAll('.ms-pnc-lane .ms-pnc-tile[data-linked-ids]').forEach(function (tile) {
+      linkEntries.push({
+        id: tile.getAttribute('data-problem-id'),
+        linkedIds: (tile.getAttribute('data-linked-ids') || '').split(',').filter(Boolean),
+      });
+    });
+    // Each connected SET (2026-08-08 follow-up: separate sets were sharing
+    // one bus AND one colour, indistinguishable from a single genuinely-
+    // connected group) gets its own lane and colour — see
+    // groupLinkedPairsIntoSets/linkSetLaneX/linkSetColor's own comments.
+    groupLinkedPairsIntoSets(buildLinkedProblemPairs(linkEntries)).forEach(function (setPairs) {
+      var laneX = linkSetLaneX(busX, nextLane, 14);
+      var color = linkSetColor(nextLane);
+      nextLane++;
+      setPairs.forEach(function (pair) {
+        var rectA = tileRect(pair.a);
+        var rectB = tileRect(pair.b);
+        if (!rectA || !rectB) return; // one side not currently rendered — no line to draw
+        var d = buildElbowConnectorPath(rectA, rectB, laneX);
+        if (!d) return;
+        markup.push('<path d="' + d + '" class="ms-pnc-link-line" style="stroke: ' + color + '"></path>');
+        markup.push(
+          linkRemoveFlagHtml(elbowFlagPoint(rectA, rectB, laneX), pair.a, pair.b, tileDesc(pair.a), tileDesc(pair.b))
+        );
+      });
+    });
+
+    // Suggestion lines (2026-08-19: moved off the removed suggestion tray
+    // onto the suggested tiles themselves — see tileHtml's own comment). A
+    // SNOMED-ancestry child points to each of its candidate parents; a
+    // "(Grouped with X)" subject points to its matched problem. Both are
+    // ordinary lane tiles now (data-suggested-ids / data-textlink-id).
+    // Dashed (unconfirmed — never a written relationship yet, unlike the
+    // solid links above) plus a shape+letter flag naming each line's own
+    // kind (suggestionFlagHtml) — continues the SAME lane sequence the
+    // linked-line sets above used, so the two pair types never collide on
+    // one lane even though they share the one bus position. The flag's
+    // tooltip carries the FULL per-candidate explanation (2026-08-19 — this
+    // used to sit permanently on the card; see tileHtml's own comment for
+    // why it moved here instead).
+    var suggestionEntries = [];
+    root.querySelectorAll('.ms-pnc-lane .ms-pnc-tile[data-suggested-ids], .ms-pnc-lane .ms-pnc-tile[data-textlink-id]').forEach(
+      function (tile) {
+        suggestionEntries.push({
+          id: tile.getAttribute('data-problem-id'),
+          suggestedIds: (tile.getAttribute('data-suggested-ids') || '').split(',').filter(Boolean),
+          textlinkId: tile.getAttribute('data-textlink-id') || null,
+        });
+      }
+    );
+    groupLinkedPairsIntoSets(buildSuggestionPairs(suggestionEntries)).forEach(function (setPairs) {
+      var laneX = linkSetLaneX(busX, nextLane, 14);
+      nextLane++;
+      setPairs.forEach(function (pair) {
+        var rectA = tileRect(pair.a);
+        var rectB = tileRect(pair.b);
+        if (!rectA || !rectB) return; // candidate not currently rendered — no line to draw
+        var d = buildElbowConnectorPath(rectA, rectB, laneX);
+        if (!d) return;
+        var lineClass = pair.kind === 'textlink' ? 'ms-pnc-suggestion-line ms-pnc-suggestion-line-textlink' : 'ms-pnc-suggestion-line';
+        markup.push('<path d="' + d + '" class="' + lineClass + '"></path>');
+        var title =
+          pair.kind === 'textlink'
+            ? 'Import text match — "Grouped with ' + tileDesc(pair.b) + '"'
+            : suggestionCandidateTitleText(tileDesc(pair.b), pair.source) + ' — drag onto it to confirm';
+        markup.push(suggestionFlagHtml(elbowFlagPoint(rectA, rectB, laneX), pair.kind, title));
+      });
+    });
+
     svg.innerHTML = markup.join('');
   }
 
@@ -1281,6 +1806,9 @@
       if (d.kind === 'unlink') {
         await window.ProblemNesting.commitUnlink(d.childId);
         announce(d.childDescription + ' is no longer nested under ' + d.parentDescription);
+      } else if (d.kind === 'flat-unlink') {
+        await window.ProblemNesting.commitFlatUnlink(d.a, d.b);
+        announce(d.aDescription + ' is no longer linked with ' + d.bDescription);
       } else if (d.kind === 'link') {
         // nestAllowed === false means the bar's ONE button is the flat
         // link (see buildPendingLink) — the primary confirm handler passes
@@ -1337,10 +1865,48 @@
           return;
         }
         announce('Removed the import text for ' + d.problemDescription);
-      } else if (d.kind === 'sig-major' || d.kind === 'sig-minor') {
-        var sigTargetKey = d.kind === 'sig-major' ? 'major' : 'minor';
-        await window.ProblemNesting.commitSignificanceChange(d.problemId, sigTargetKey);
-        announce('Set ' + d.problemDescription + ' to ' + (sigTargetKey === 'major' ? 'Major' : 'Minor'));
+      } else if (d.kind === 'abandon') {
+        _draft = emptyDraft();
+        _pendingAction = null;
+        close();
+        return;
+      } else if (d.kind === 'discard') {
+        _draft = emptyDraft();
+        _pendingAction = null;
+        announce('Staged changes discarded — nothing was written.');
+        render();
+        return;
+      } else if (d.kind === 'finalise') {
+        if (!window.ProblemNesting.commitEndProblem && (_draft.endIds || []).length) {
+          throw new Error('Ending a problem isn’t available on this page.');
+        }
+        var remaining = cloneDraft(_draft);
+        var snapNow = window.ProblemNesting.getSnapshot();
+        var parentMap = snapNow.parentIdByProblemId || {};
+        var sigKeys = Object.keys(remaining.sigById || {});
+        for (var si = 0; si < sigKeys.length; si++) {
+          var sid = sigKeys[si];
+          if (remaining.endIds.indexOf(sid) !== -1) continue;
+          await window.ProblemNesting.commitSignificanceChange(sid, remaining.sigById[sid]);
+          delete remaining.sigById[sid];
+          _draft = cloneDraft(remaining);
+          _linkedCount++;
+        }
+        var endOrder = orderEndsForCommit(remaining.endIds, parentMap);
+        for (var ei = 0; ei < endOrder.length; ei++) {
+          var eid = endOrder[ei];
+          await window.ProblemNesting.commitEndProblem(eid);
+          remaining.endIds = remaining.endIds.filter(function (id) {
+            return id !== eid;
+          });
+          _draft = cloneDraft(remaining);
+          _linkedCount++;
+        }
+        _draft = emptyDraft();
+        announce('Wrote the staged canvas changes.');
+        _pendingAction = null;
+        window.ProblemNesting.refresh();
+        return;
       } else {
         return;
       }
@@ -1352,6 +1918,14 @@
       window.ProblemNesting.refresh();
     } catch (err) {
       d.error = (err && err.message) || 'Failed to save this change — please try again.';
+      if (d.kind === 'finalise') {
+        var failSnap = window.ProblemNesting.getSnapshot();
+        var failDesc = {};
+        (failSnap.problems || []).forEach(function (p) {
+          if (p && p.id) failDesc[p.id] = p.description;
+        });
+        d.summary = summariseDraft(_draft, failDesc);
+      }
     } finally {
       d.linking = false;
       render();
@@ -1425,6 +1999,7 @@
   // confirm bar, whichever input proposed it.
   function proposeLink(childId, parentId, snap, descById) {
     if (!childId || !parentId || childId === parentId || !window.ProblemNesting) return;
+    _draft = unstageEnd(_draft, childId, snap.parentIdByProblemId);
     var pending = buildPendingLink(childId, parentId, descById, snap.parentIdByProblemId);
     if (window.ProblemNesting.wouldCreateCycle(childId, parentId, snap.parentIdByProblemId)) {
       // Nesting would loop — but a FLAT link between the same pair is
@@ -1438,10 +2013,63 @@
     render();
   }
 
+  function proposeSignificance(problemId, targetKey, snap, descById) {
+    if (!problemId || !targetKey || !snap) return;
+    var liveKey = liveLaneKey(snap.infoById, problemId);
+    var currentKey = effectiveLaneKey(snap.infoById, _draft, problemId);
+    if (currentKey === targetKey && !(_draft.sigById && _draft.sigById[problemId]) && _draft.endIds.indexOf(problemId) === -1) {
+      return;
+    }
+    _cycleError = null;
+    _pendingAction = null;
+    _draft = stageSignificance(_draft, problemId, targetKey, liveKey, snap.parentIdByProblemId);
+    announce(
+      'Staged ' +
+        ((descById && descById[problemId]) || 'problem') +
+        ' as ' +
+        (targetKey === 'unknown' ? 'Unresolved' : targetKey === 'major' ? 'Major' : 'Minor') +
+        '. Finalise when the board looks right.'
+    );
+    render();
+  }
+
+  function proposeEnd(problemId, snap, descById) {
+    if (!problemId || !snap) return;
+    var description = (descById && descById[problemId]) || problemId;
+    var result = stageEnd(_draft, problemId, snap.parentIdByProblemId);
+    if (result.error === 'has-children') {
+      _cycleError =
+        description +
+        ' still has active child problems that are not also in End. Stage the children first, or un-nest them.';
+      render();
+      return;
+    }
+    _cycleError = null;
+    _pendingAction = null;
+    _draft = result.draft;
+    announce('Staged ' + description + ' in End (' + _draft.endIds.length + ' waiting). Finalise when ready.');
+    render();
+  }
+
+  function proposeFinalise(snap, descById) {
+    var summary = summariseDraft(_draft, descById);
+    if (!summary.count) return;
+    _cycleError = null;
+    _pendingAction = { kind: 'finalise', summary: summary, linking: false, error: null };
+    render();
+  }
+
+  function proposeDiscard() {
+    var summary = summariseDraft(_draft, {});
+    if (!summary.count) return;
+    _pendingAction = { kind: 'discard', count: summary.count, linking: false, error: null };
+    render();
+  }
+
   function bindCommonEvents(root) {
-    root.querySelector('#ms-pnc-close')?.addEventListener('click', close);
+    root.querySelector('#ms-pnc-close')?.addEventListener('click', requestClose);
     root.querySelector('.ms-pnc-backdrop')?.addEventListener('click', function (e) {
-      if (e.target === e.currentTarget) close();
+      if (e.target === e.currentTarget) requestClose();
     });
   }
 
@@ -1465,17 +2093,48 @@
       confirmPendingAction('flatlink');
     });
 
+    // Delegated (2026-08-19) — the red (X) remove-flag markers live inside
+    // .ms-pnc-lines' SVG, whose innerHTML updateConnectorLines fully
+    // rebuilds on every scroll/resize (scheduleLineUpdate), not just on a
+    // full render(). A listener bound directly to one of those <g> nodes
+    // would be silently orphaned the next time that happens. One listener
+    // on root (rebuilt only by render() itself, so it survives those SVG
+    // rebuilds) closest()-matches the click instead — same technique this
+    // file already leans on for everything that must survive a rebuild
+    // without needing to re-run bindEvents.
+    root.querySelector('.ms-pnc-lines')?.addEventListener('click', function (e) {
+      var g = e.target.closest && e.target.closest('.ms-pnc-remove-flag-group');
+      if (!g) return;
+      var a = g.getAttribute('data-remove-a');
+      var b = g.getAttribute('data-remove-b');
+      if (!a || !b) return;
+      _pendingAction = {
+        kind: 'flat-unlink',
+        a: a,
+        b: b,
+        aDescription: g.getAttribute('data-remove-a-desc') || a,
+        bDescription: g.getAttribute('data-remove-b-desc') || b,
+        linking: false,
+        error: null,
+      };
+      render();
+    });
+
     var descById = {};
     (snap.problems || []).forEach(function (p) {
       descById[p.id] = p.description;
     });
+    root.querySelector('#ms-pnc-finalise')?.addEventListener('click', function () {
+      proposeFinalise(snap, descById);
+    });
+    root.querySelector('#ms-pnc-discard')?.addEventListener('click', function () {
+      proposeDiscard();
+    });
 
-    // Tree-pane tiles only (tray tiles aren't part of the record's
-    // structure yet, per the 2026-08-08 scope decision) — click toggles
-    // this tile's action buttons; clicking the SAME tile again, or any
-    // other tile, deselects/reselects. A drag never reaches this handler:
-    // dragstart fires instead of click for an actual drag gesture, standard
-    // HTML5 DnD behaviour.
+    // click toggles this tile's action buttons; clicking the SAME tile
+    // again, or any other tile, deselects/reselects. A drag never reaches
+    // this handler: dragstart fires instead of click for an actual drag
+    // gesture, standard HTML5 DnD behaviour.
     //
     // ROOT-TILE SHORTCUT (2026-08-08 follow-up): a tile with no parent has
     // nothing to unlink — "Remove link" would never show anyway (see
@@ -1486,13 +2145,20 @@
     // node.parentId (parent id present AND that parent still exists in the
     // live problem list), not the raw parentIdByProblemId value alone, so
     // this never disagrees with what the tile's own action buttons would
-    // have shown.
-    root.querySelectorAll('.ms-pnc-pane-tree .ms-pnc-tile[data-problem-id]').forEach(function (tile) {
+    // have shown. 2026-08-19: the shortcut is now ALSO skipped for a tile
+    // carrying a pending "(Grouped with X)" text-link suggestion
+    // (data-textlink-id) — that tile has a second real choice beyond Edit
+    // problem (the relationship buttons in tileActionsHtml), so it needs
+    // the select step same as a tile with a parent to unlink. A pending
+    // SNOMED-ancestry suggestion alone does NOT block the shortcut — that's
+    // confirmed by dragging the tile, not a button, so Edit problem is
+    // still the only click-driven action on a root tile with no text-link.
+    root.querySelectorAll('.ms-pnc-lane .ms-pnc-tile[data-problem-id]').forEach(function (tile) {
       tile.addEventListener('click', function () {
         var id = tile.getAttribute('data-problem-id');
         var parentId = snap.parentIdByProblemId[id];
         var hasRealParent = !!(parentId && Object.prototype.hasOwnProperty.call(descById, parentId));
-        if (!hasRealParent) {
+        if (!hasRealParent && !tile.hasAttribute('data-textlink-id')) {
           _selectedTileId = null;
           openEditPanel(id, descById[id]);
           return;
@@ -1554,28 +2220,6 @@
       });
     });
 
-    // "Unknown significance" tray buttons (2026-08-09) — same
-    // set-_pendingAction-then-confirm flow as every other write in this
-    // canvas, never a direct commit on click.
-    root.querySelectorAll('.ms-pnc-sig-btn').forEach(function (btn) {
-      btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var problemId = btn.getAttribute('data-problem-id');
-        var target = btn.getAttribute('data-sig-target');
-        if (!problemId || !target) return;
-        var current = (snap.infoById[problemId] && snap.infoById[problemId].significance) || 'Unknown';
-        _pendingAction = {
-          kind: 'sig-' + target,
-          problemId: problemId,
-          problemDescription: descById[problemId] || problemId,
-          currentSignificance: current,
-          linking: false,
-          error: null,
-        };
-        render();
-      });
-    });
-
     var clearDrag = function () {
       _dragPayload = null;
     };
@@ -1607,6 +2251,67 @@
       });
     });
 
+    function currentLaneOf(problemId) {
+      if (_draft.endIds.indexOf(problemId) !== -1) return null;
+      return effectiveLaneKey(snap.infoById, _draft, problemId);
+    }
+
+    function applyClassifiedDrop(payload, dropTarget) {
+      var classified = classifyDrop(payload, dropTarget, currentLaneOf(payload.problemId));
+      if (!classified) return;
+      if (classified.kind === 'link') {
+        proposeLink(classified.childId, classified.parentId, snap, descById);
+      } else if (classified.kind === 'end') {
+        proposeEnd(classified.problemId, snap, descById);
+      } else if (classified.targetKey) {
+        proposeSignificance(classified.problemId, classified.targetKey, snap, descById);
+      }
+    }
+
+    root.querySelectorAll('[data-sig-lane]').forEach(function (lane) {
+      lane.addEventListener('dragover', function (e) {
+        if (!_dragPayload) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        lane.classList.add('ms-pnc-drop-hover');
+      });
+      lane.addEventListener('dragleave', function (e) {
+        if (lane.contains(e.relatedTarget)) return;
+        lane.classList.remove('ms-pnc-drop-hover');
+      });
+      lane.addEventListener('drop', function (e) {
+        e.preventDefault();
+        lane.classList.remove('ms-pnc-drop-hover');
+        var payload = readDropPayload(e);
+        _dragPayload = null;
+        if (!payload) return;
+        applyClassifiedDrop(payload, { type: 'lane', key: lane.getAttribute('data-sig-lane') });
+      });
+    });
+
+    var bin = root.querySelector('[data-end-bin]');
+    if (bin) {
+      bin.addEventListener('dragover', function (e) {
+        if (!_dragPayload) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        bin.classList.add('ms-pnc-drop-hover');
+      });
+      bin.addEventListener('dragleave', function (e) {
+        if (bin.contains(e.relatedTarget)) return;
+        bin.classList.remove('ms-pnc-drop-hover');
+      });
+      bin.addEventListener('drop', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        bin.classList.remove('ms-pnc-drop-hover');
+        var payload = readDropPayload(e);
+        _dragPayload = null;
+        if (!payload) return;
+        applyClassifiedDrop(payload, { type: 'bin' });
+      });
+    }
+
     // Keyboard path to the same link gesture (review finding: drag-and-drop
     // was the ONLY way to link — the widget's core function was unreachable
     // without a pointer, a regression from the deleted accordion's native
@@ -1617,7 +2322,7 @@
     // pick-up (see onKeydown). keydown, not click: these tiles are plain
     // divs, so Enter/Space never synthesise clicks the way buttons do — the
     // tree tiles' click-to-select behaviour is untouched.
-    root.querySelectorAll('.ms-pnc-tile[data-problem-id], .ms-pnc-tray-tile[data-problem-id]').forEach(function (tile) {
+    root.querySelectorAll('.ms-pnc-tile[data-problem-id]').forEach(function (tile) {
       tile.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         e.preventDefault();
@@ -1646,8 +2351,30 @@
       });
     });
 
-    ['#ms-pnc-tree-pane', '#ms-pnc-tray-pane'].forEach(function (sel) {
-      root.querySelector(sel)?.addEventListener('scroll', scheduleLineUpdate);
+    root.querySelectorAll('[data-sig-lane]').forEach(function (lane) {
+      lane.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (!_kbPickedId) return;
+        if (e.target !== lane) return; // a focused tile inside the lane handles its own Enter
+        e.preventDefault();
+        e.stopPropagation();
+        var childId = _kbPickedId;
+        _kbPickedId = null;
+        applyClassifiedDrop({ problemId: childId }, { type: 'lane', key: lane.getAttribute('data-sig-lane') });
+      });
+    });
+    root.querySelector('[data-end-bin]')?.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (!_kbPickedId) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var childId = _kbPickedId;
+      _kbPickedId = null;
+      applyClassifiedDrop({ problemId: childId }, { type: 'bin' });
+    });
+
+    root.querySelectorAll('.ms-pnc-lane').forEach(function (pane) {
+      pane.addEventListener('scroll', scheduleLineUpdate);
     });
   }
 
@@ -1670,7 +2397,7 @@
       render();
       return;
     }
-    close();
+    requestClose();
   }
 
   function open() {
@@ -1678,6 +2405,7 @@
     if (!window.ProblemNesting) return; // bridge not present — nothing to open onto
     window.ProblemNesting.ensureScanned();
     _pendingAction = null;
+    _draft = emptyDraft();
     _cycleError = null;
     _kbPickedId = null;
     _linkedCount = 0;
@@ -1770,12 +2498,23 @@
     _editingProblemId = null;
   }
 
+  function requestClose() {
+    if (hasDraftChanges(_draft)) {
+      var summary = summariseDraft(_draft, {});
+      _pendingAction = { kind: 'abandon', count: summary.count, linking: false, error: null };
+      render();
+      return;
+    }
+    close();
+  }
+
   function close() {
     var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
     document.removeEventListener('keydown', onKeydown);
     closeEditPanel();
     _pendingAction = null;
+    _draft = emptyDraft();
     _cycleError = null;
     _selectedTileId = null;
     _kbPickedId = null;
@@ -1835,20 +2574,18 @@
     // bridge re-renders when they arrive and the lines appear then; every
     // later call is a state-guarded no-op.
     if (window.ProblemNesting.ensureLinkedIdsLoaded) window.ProblemNesting.ensureLinkedIdsLoaded();
+    var overlayInfo = overlayInfoById(snap.infoById, _draft);
+    var visibleProblems = problemsNotEnded(snap.problems, _draft);
     var liveSuggestions = filterLiveSuggestions(
       snap.suggestions,
-      snap.problems,
+      visibleProblems,
       snap.parentIdByProblemId,
       window.ProblemNesting.wouldCreateCycle
     );
-    var traySuggestedIds = new Set(
-      liveSuggestions.map(function (s) {
-        return s.childId;
-      })
-    );
-    var tree = buildProblemTree(snap.problems, snap.infoById, snap.parentIdByProblemId, traySuggestedIds);
-    var treeIds = flattenTreeIds(tree);
-    var groups = partitionSuggestionTray(liveSuggestions, treeIds, snap.infoById);
+    var suggestionsByChildId = {};
+    liveSuggestions.forEach(function (s) {
+      suggestionsByChildId[s.childId] = s;
+    });
     // See _dismissedTextLinkProblemIds' own comment — filters out a
     // suggestion just actioned this session, since nothing in the scan data
     // itself changes to make it disappear on its own (the underlying text
@@ -1858,11 +2595,24 @@
         return s && !_dismissedTextLinkProblemIds.has(s.problemId);
       }
     );
-    root.innerHTML = wrapPanel(
-      bodyHtml(tree, groups, snap.infoById, liveTextLinkSuggestions, snap.unknownSignificanceSuggestions) +
-        confirmBarHtml() +
-        footerHtml()
+    var textLinkByProblemId = {};
+    liveTextLinkSuggestions.forEach(function (s) {
+      textLinkByProblemId[s.problemId] = s;
+    });
+    var endedProblems = endedProblemList(snap.problems, _draft);
+    var descById = {};
+    (snap.problems || []).forEach(function (p) {
+      if (p && p.id) descById[p.id] = p.description;
+    });
+    var draftSummary = summariseDraft(_draft, descById);
+    var laneTrees = buildLaneTrees(
+      visibleProblems,
+      overlayInfo,
+      snap.parentIdByProblemId,
+      suggestionsByChildId,
+      textLinkByProblemId
     );
+    root.innerHTML = wrapPanel(bodyHtml(laneTrees, endedProblems) + confirmBarHtml() + footerHtml(draftSummary));
     bindEvents(root, snap);
     updateConnectorLines(root);
     restoreFocusedProblemId(root, focusId);

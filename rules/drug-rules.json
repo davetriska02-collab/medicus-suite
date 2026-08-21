@@ -1,8 +1,8 @@
 {
-  "lastUpdated": "2026-07-25",
+  "lastUpdated": "2026-08-18",
   "schemaVersion": 2,
-  "specVersion": "Sentinel drug rules - July 2026 review (The Keeper)",
-  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-14 CSO-approved Keeper addition: added brand 'jayempi' to azathioprine-maintenance (licensed UK azathioprine 10mg/ml oral suspension, Nova Laboratories, MA PLGB 13581/0005, available Feb 2024) — WebSearch-corroborated (emc SmPC / NHSBSA Drug Tariff), CSO-signed-off. 2026-06-20 (The Keeper, CSO proposal): corrected the DOAC rule notes to specify CrCl (Cockcroft-Gault), NOT eGFR, for renal-banded monitoring frequency (eGFR overestimates clearance and raises bleeding risk; MHRA/SPS/EHRA) — no interval change. Added a DMPA injectable-contraception monitoring rule (dmpa-injectable, enabled, 2-yearly BP+weight, FSRH). Added a combined-hormonal-contraception rule (chc-combined-hormonal) SHIPPED DISABLED pending engine disambiguation: the hrt-systemic rule matches bare 'estradiol', a substring of 'ethinylestradiol', so an enabled CHC rule would double-fire the HRT rule for oestrogen-ingredient/natural-oestrogen records. SOURCE GAP: FSRH/BNF primary PDFs 403 — corroborated via NHS formulary/NICE CKS reproductions; pending primary-source confirmation. 2026-06-21 (The Keeper, Sentinel currency review): additive safety/source refresh only — added the MHRA DSU 29 Jan 2026 strengthened GLP-1/GIP pancreatitis warning (glp1-receptor-agonist), refreshed the csDMARD source citation to the 2025 BSR guideline (Rheumatology, Nov 2025) across methotrexate/leflunomide/azathioprine/sulfasalazine/hydroxychloroquine with NO interval change, and noted the MHRA tirzepatide-to-oral-contraceptive interaction on chc-combined-hormonal. All corroborated across multiple secondary summaries; primary gov.uk/journal PDFs were 403 this run, pending primary-source confirmation. NOT changed: QOF DM036 age band (file uses <=70; one secondary source says <=79) — held for primary confirmation to avoid a silent chip change. 2026-06-29 (additive safety enhancement, PENDING CSO REVIEW): added a post-initiation U&E test to the ace-arb (RAAS blocker) rule enforcing NICE NG136's requirement for a U&E within ~1-2 weeks of STARTING an ACE-I/ARB (previously only described in notes, not enforced). Implemented via a new engine `postInitiationDays`/`postInitiationDueSoonDays` test mechanism that fires only when the drug's start date is known AND no U&E has been recorded since starting — so it cannot raise a false alert on an established patient whose start date is not visible. No change to the existing annual U&E/BP intervals or to any other rule. 2026-07-08 (Transactional-API enablement): added the drug-allergy rule type and three starter cross-check rules (penicillin, NSAID hypersensitivity, sulfonamide) that fire only when a documented ACTIVE allergy co-occurs with a contraindicated drug. These read the allergies bundle, available ONLY from the Transactional (GP Connect Structured) feed; on the legacy session/DOM feed there are no allergies so they FAIL CLOSED and never fire. SHIPPED ENABLED because fail-closed makes them zero-risk today; marked PENDING CSO REVIEW for the term lists and cross-sensitivity scope. Sources: BNF interactions/allergy guidance, MHRA, NICE CKS drug-allergy; primary PDFs to be confirmed at CSO review.",
+  "specVersion": "Sentinel drug rules - August 2026 review (The Keeper)",
+  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-14 CSO-approved Keeper addition: added brand 'jayempi' to azathioprine-maintenance (licensed UK azathioprine 10mg/ml oral suspension, Nova Laboratories, MA PLGB 13581/0005, available Feb 2024) — WebSearch-corroborated (emc SmPC / NHSBSA Drug Tariff), CSO-signed-off. 2026-06-20 (The Keeper, CSO proposal): corrected the DOAC rule notes to specify CrCl (Cockcroft-Gault), NOT eGFR, for renal-banded monitoring frequency (eGFR overestimates clearance and raises bleeding risk; MHRA/SPS/EHRA) — no interval change. Added a DMPA injectable-contraception monitoring rule (dmpa-injectable, enabled, 2-yearly BP+weight, FSRH). Added a combined-hormonal-contraception rule (chc-combined-hormonal) SHIPPED DISABLED pending engine disambiguation: the hrt-systemic rule matches bare 'estradiol', a substring of 'ethinylestradiol', so an enabled CHC rule would double-fire the HRT rule for oestrogen-ingredient/natural-oestrogen records. SOURCE GAP: FSRH/BNF primary PDFs 403 — corroborated via NHS formulary/NICE CKS reproductions; pending primary-source confirmation. 2026-06-21 (The Keeper, Sentinel currency review): additive safety/source refresh only — added the MHRA DSU 29 Jan 2026 strengthened GLP-1/GIP pancreatitis warning (glp1-receptor-agonist), refreshed the csDMARD source citation to the 2025 BSR guideline (Rheumatology, Nov 2025) across methotrexate/leflunomide/azathioprine/sulfasalazine/hydroxychloroquine with NO interval change, and noted the MHRA tirzepatide-to-oral-contraceptive interaction on chc-combined-hormonal. All corroborated across multiple secondary summaries; primary gov.uk/journal PDFs were 403 this run, pending primary-source confirmation. NOT changed: QOF DM036 age band (file uses <=70; one secondary source says <=79) — held for primary confirmation to avoid a silent chip change. 2026-06-29 (additive safety enhancement, PENDING CSO REVIEW): added a post-initiation U&E test to the ace-arb (RAAS blocker) rule enforcing NICE NG136's requirement for a U&E within ~1-2 weeks of STARTING an ACE-I/ARB (previously only described in notes, not enforced). Implemented via a new engine `postInitiationDays`/`postInitiationDueSoonDays` test mechanism that fires only when the drug's start date is known AND no U&E has been recorded since starting — so it cannot raise a false alert on an established patient whose start date is not visible. No change to the existing annual U&E/BP intervals or to any other rule. 2026-07-08 (Transactional-API enablement): added the drug-allergy rule type and three starter cross-check rules (penicillin, NSAID hypersensitivity, sulfonamide) that fire only when a documented ACTIVE allergy co-occurs with a contraindicated drug. These read the allergies bundle, available ONLY from the Transactional (GP Connect Structured) feed; on the legacy session/DOM feed there are no allergies so they FAIL CLOSED and never fire. SHIPPED ENABLED because fail-closed makes them zero-risk today; marked PENDING CSO REVIEW for the term lists and cross-sensitivity scope. Sources: BNF interactions/allergy guidance, MHRA, NICE CKS drug-allergy; primary PDFs to be confirmed at CSO review. 2026-08-18 (The Keeper): added warfarin/VKA INR 84d (BNF warfarin-sodium, max 12-weekly when stable), mycophenolate-maintenance FBC/LFT/U&E 84d (SPS 7 Jan 2026, ≥12-weekly once stable), and fezolinetant-lft 90d (MHRA DSU 10 Apr 2025 — monthly LFTs for 3 months then periodic; 90d is the conservative maintenance interval). Brand additions: eprosartan/Teveten (ace-arb), Curatil (carbamazepine), Mintreleq XL/Sondate XL (quetiapine). Additive only; no interval lengthened. CSO-SIGNED-OFF 2026-08-18: Dr D. Triska approved this applied set in session.",
   "rules": [
     {
       "type": "drug-monitoring",
@@ -202,7 +202,7 @@
       "id": "carbamazepine-maintenance",
       "drugClass": "Antiepileptic",
       "drug": {
-        "match": ["carbamazepine", "tegretol", "carbagen"],
+        "match": ["carbamazepine", "tegretol", "carbagen", "curatil"],
         "snomed": ["387222003"]
       },
       "phase": "maintenance",
@@ -243,7 +243,7 @@
         }
       ],
       "source": "BNF / MHRA / NICE CG137 / shared care",
-      "notes": "FBC: haematological toxicity risk (aplastic anaemia, agranulocytosis — rare but serious; check at baseline, 4 weeks, 6 months, then 6-monthly). LFT: hepatotoxicity risk; check same schedule. U&E/Sodium: enzyme-induction can cause SIADH and hyponatraemia — sodium should be monitored 6-monthly; risk heightened in the elderly and on concurrent diuretics. Carbamazepine level: narrow therapeutic index (target typically 4–12 mg/L); useful if toxicity suspected, poor seizure control, or dose change. Lipid profile: CYP enzyme induction raises LDL and total cholesterol — annual check. For women of childbearing age, ensure adequate contraception (enzyme inducer reduces hormonal contraceptive efficacy) and consider folic acid supplementation (teratogenicity risk — neural tube defects); refer to specialist before conception.",
+      "notes": "FBC: haematological toxicity risk (aplastic anaemia, agranulocytosis — rare but serious; check at baseline, 4 weeks, 6 months, then 6-monthly). LFT: hepatotoxicity risk; check same schedule. U&E/Sodium: enzyme-induction can cause SIADH and hyponatraemia — sodium should be monitored 6-monthly; risk heightened in the elderly and on concurrent diuretics. Carbamazepine level: narrow therapeutic index (target typically 4–12 mg/L); useful if toxicity suspected, poor seizure control, or dose change. Lipid profile: CYP enzyme induction raises LDL and total cholesterol — annual check. For women of childbearing age, ensure adequate contraception (enzyme inducer reduces hormonal contraceptive efficacy) and consider folic acid supplementation (teratogenicity risk — neural tube defects); refer to specialist before conception. 2026-08-18 (The Keeper): added UK brand Curatil PR (BNF carbamazepine medicinal forms) — a brand-only script previously never fired this rule.",
       "sharedCare": true
     },
     {
@@ -422,7 +422,9 @@
           "cilazapril",
           "vascace",
           "imidapril",
-          "tanatril"
+          "tanatril",
+          "eprosartan",
+          "teveten"
         ]
       },
       "phase": "maintenance",
@@ -450,7 +452,7 @@
         }
       ],
       "source": "NICE NG136 / BNF",
-      "notes": "U&E within 1-2 weeks of initiation or dose change, then annual review thereafter unless eGFR <60. The post-initiation U&E test fires only when the drug's start date is known and no U&E has been recorded since starting (it cannot cry wolf on an established patient whose start date is not visible). Sacubitril/valsartan (Entresto) added to match list for HFrEF use. Cilazapril (brand Vascace) and imidapril (brand Tanatril) are legacy UK ACE inhibitors, no longer widely initiated but may appear on older repeat prescriptions — added 2026-07-11 to close silent-failure gap (BNF/dm+d corroborated; primary-source PDFs 403 this run).",
+      "notes": "U&E within 1-2 weeks of initiation or dose change, then annual review thereafter unless eGFR <60. The post-initiation U&E test fires only when the drug's start date is known and no U&E has been recorded since starting (it cannot cry wolf on an established patient whose start date is not visible). Sacubitril/valsartan (Entresto) added to match list for HFrEF use. Cilazapril (brand Vascace) and imidapril (brand Tanatril) are legacy UK ACE inhibitors, no longer widely initiated but may appear on older repeat prescriptions — added 2026-07-11 to close silent-failure gap (BNF/dm+d corroborated; primary-source PDFs 403 this run). 2026-08-18 (The Keeper): added eprosartan and brand Teveten (Viatris) from BNF medicinal forms — previously a silent monitoring gap.",
       "sharedCare": false
     },
     {
@@ -715,7 +717,9 @@
           "depixol",
           "fluanxol",
           "fluphenazine",
-          "modecate"
+          "modecate",
+          "mintreleq",
+          "sondate"
         ],
         "exclude": ["clozapine"]
       },
@@ -757,7 +761,7 @@
         }
       ],
       "source": "NICE CG178 / Maudsley Prescribing Guidelines 14th ed / QOF MH002-MH012 / BNF",
-      "notes": "Metabolic syndrome screening. ECG recommended at baseline and annually if cardiovascular risk factors or QTc-prolonging concomitant drugs. Clozapine EXCLUDED here — monitored under separate national protocol (CPMS/ZTAS) with weekly FBC for 18 weeks, then 2-weekly to 1 year, then 4-weekly indefinitely; mandatorily clozapine-clinic led, not amenable to primary-care rule firing. 2026-07-11: added sulpiride (brands Dolmatil, Sulpitil, Sulpor), zuclopenthixol (brand Clopixol), flupentixol (brands Depixol, Fluanxol) and fluphenazine (brand Modecate) — depot antipsychotics frequently managed in primary care under shared-care; omission would silently fail metabolic monitoring for these patients (BNF/dm+d corroborated; primary-source PDFs 403 this run).",
+      "notes": "Metabolic syndrome screening. ECG recommended at baseline and annually if cardiovascular risk factors or QTc-prolonging concomitant drugs. Clozapine EXCLUDED here — monitored under separate national protocol (CPMS/ZTAS) with weekly FBC for 18 weeks, then 2-weekly to 1 year, then 4-weekly indefinitely; mandatorily clozapine-clinic led, not amenable to primary-care rule firing. 2026-07-11: added sulpiride (brands Dolmatil, Sulpitil, Sulpor), zuclopenthixol (brand Clopixol), flupentixol (brands Depixol, Fluanxol) and fluphenazine (brand Modecate) — depot antipsychotics frequently managed in primary care under shared-care; omission would silently fail metabolic monitoring for these patients (BNF/dm+d corroborated; primary-source PDFs 403 this run). 2026-08-18 (The Keeper): added Mintreleq XL and Sondate XL (BNF quetiapine modified-release medicinal forms) — brand-only scripts previously never fired this rule.",
       "sharedCare": true
     },
     {
@@ -1246,6 +1250,88 @@
       ],
       "source": "BNF / NICE TA877 (finerenone for CKD in T2DM, 2023) / finerenone SmPC (Kerendia, Bayer) / MHRA",
       "notes": "Finerenone (Kerendia) is a non-steroidal mineralocorticoid receptor antagonist licensed for CKD in T2DM (NICE TA877). Primary monitoring concern is hyperkalaemia — serum potassium and eGFR at baseline, at 4 weeks after initiation, and then every 4 months (120d) during maintenance. Withhold if serum K+ >5.5 mmol/L before starting; restart only when K+ <5.0 mmol/L. Reduce or withhold if eGFR falls to <25 mL/min/1.73m² or K+ consistently >5.5 mmol/L. Contraindicated with strong CYP3A4 inhibitors (itraconazole, ketoconazole, clarithromycin, ritonavir). Dispensing-practice note: ensure patients receive branded Kerendia (not generic preparations of spironolactone etc.) — finerenone is structurally distinct from spironolactone and eplerenone. Added 2026-07-11: BNF/NICE TA877 corroborated; primary SmPC PDF 403 this run.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "warfarin-vka",
+      "drugClass": "Vitamin K antagonist",
+      "drug": {
+        "match": ["warfarin", "marevan", "acenocoumarol", "sinthrome", "phenindione", "dindevan"],
+        "snomed": ["48603004"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "INR",
+          "match": ["inr", "international normalised ratio", "international normalized ratio", "prothrombin time"],
+          "snomed": ["165581004"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        }
+      ],
+      "source": "BNF warfarin sodium (monitoring requirements); NHS SPS / BCSH — maximum 12-weekly INR when stable. 2026-08-18 (The Keeper, drug-001).",
+      "notes": "BNF: INR at least every 12 weeks once stable (84 days). More frequent during initiation, after dose change, intercurrent illness, or interacting medicines (including tramadol). Covers UK oral VKAs: warfarin (Marevan), acenocoumarol (Sinthrome), phenindione (Dindevan). Sentinel chips the overdue INR only — it does not interpret time-in-range. Added 2026-08-18: previously no warfarin/VKA monitoring rule existed in drug-rules.json (PINCER #7 in the alert library covers warfarin generic only).",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "mycophenolate-maintenance",
+      "drugClass": "Immunosuppressant",
+      "drug": {
+        "match": ["mycophenolate", "mycophenolic acid", "cellcept", "myfenax", "myfortic", "ceptava"],
+        "snomed": ["386976000"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "FBC",
+          "match": ["fbc", "full blood count"],
+          "snomed": ["26604007"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        },
+        {
+          "name": "U&E",
+          "match": ["u&e", "urea and electrolytes", "renal profile"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 84,
+          "dueSoonDays": 14
+        }
+      ],
+      "source": "SPS mycophenolate monitoring (updated 7 Jan 2026) — FBC, LFT and U&E at least 12-weekly once stable. 2026-08-18 (The Keeper, drug-006).",
+      "notes": "SPS (7 Jan 2026): once stable, monitor FBC, LFT and U&E at least every 12 weeks (84d). Sentinel keeps 12-weekly as the safer default; local shared-care may permit longer intervals after prolonged stability — extend via Options if the practice protocol says so, do not silently lengthen the shipped interval. Intensified initiation monitoring is described in shared-care documents and is not enforced here. Brands: CellCept, Myfenax (mycophenolate mofetil); Myfortic, Ceptava (mycophenolic acid / EC). Shared-care / specialist-initiated in most ICBs.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "fezolinetant-lft",
+      "drugClass": "NK3 receptor antagonist",
+      "drug": {
+        "match": ["fezolinetant", "veoza"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "LFT",
+          "match": ["lft", "liver function"],
+          "snomed": ["26958001"],
+          "intervalDays": 90,
+          "dueSoonDays": 14
+        }
+      ],
+      "source": "MHRA Drug Safety Update 10 April 2025 (fezolinetant / Veoza — risk of liver injury; LFTs monthly for first 3 months then periodically). 2026-08-18 (The Keeper, drug-008).",
+      "notes": "MHRA 10 Apr 2025: check LFTs before starting, monthly for the first 3 months, then periodically. Sentinel encodes a 90-day maintenance interval (conservative periodic check) and describes the monthly-for-3-months initiation phase in this note — the engine does not yet enforce a time-limited monthly initiation schedule. Stop and investigate if ALT/AST >3× ULN or if the patient develops symptoms of liver injury. COMMISSIONING CAVEAT: the April 2025 DSU described private prescribing; NICE later recommended fezolinetant (March 2026) so NHS scripts may now appear. Brand Veoza. Added 2026-08-18.",
       "sharedCare": false
     },
     {

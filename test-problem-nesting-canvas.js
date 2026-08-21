@@ -20,10 +20,10 @@ const {
   buildProblemTree,
   flattenTreeIds,
   filterLiveSuggestions,
-  groupOptionsBySource,
-  partitionSuggestionTray,
-  buildConnectorPath,
+  suggestionCandidateTitleText,
   buildLinkedProblemPairs,
+  buildSuggestionPairs,
+  elbowFlagPoint,
   groupLinkedPairsIntoSets,
   linkSetLaneX,
   linkSetColor,
@@ -32,6 +32,24 @@ const {
   relativeRect,
   readDropPayload,
   buildPendingLink,
+  significanceLaneKey,
+  partitionProblemsBySignificance,
+  buildLaneTrees,
+  annotateTreeSuggestions,
+  classifyDrop,
+  canProposeEnd,
+  canStageEnd,
+  emptyDraft,
+  hasDraftChanges,
+  stageEnd,
+  unstageEnd,
+  stageSignificance,
+  overlayInfoById,
+  problemsNotEnded,
+  endedProblemList,
+  orderEndsForCommit,
+  summariseDraft,
+  effectiveLaneKey,
 } = require('./content-scripts/problem-nesting-canvas.js');
 
 let passed = 0,
@@ -126,7 +144,7 @@ console.log('--- buildProblemTree: roots, nesting, sort order ---');
     cancer: { onsetDate: '1 Jan 2021', linkedProblemIds: ['ihd'] },
   };
   const parentMap = { aspirin: 'ihd', beta: 'ihd', stent: 'ihd' };
-  const tree = buildProblemTree(problems, infoById, parentMap, new Set());
+  const tree = buildProblemTree(problems, infoById, parentMap);
   check(tree.length === 2, 'two roots: cancer (no parent) and ihd (has children, no parent of its own)');
   check(
     tree[1].children.find((c) => c.id === 'beta').displayDate === '1 Nov 2010',
@@ -173,32 +191,27 @@ console.log('--- buildProblemTree: roots, nesting, sort order ---');
     capsular: { onsetDate: '1 Jan 2018' },
   };
   const deepParents = { mastectomy: 'cancer2', capsular: 'mastectomy' };
-  const deepTree = buildProblemTree(deep, deepInfo, deepParents, new Set());
+  const deepTree = buildProblemTree(deep, deepInfo, deepParents);
   check(deepTree.length === 1 && deepTree[0].id === 'cancer2', 'single root at depth 0');
   check(deepTree[0].children[0].id === 'mastectomy', 'mastectomy nested at depth 1');
   check(deepTree[0].children[0].children[0].id === 'capsular', 'capsular contracture nested at depth 2');
 
-  console.log('--- buildProblemTree: a suggested-tray item that already has real children stays a root ---');
+  console.log('--- buildProblemTree: a problem carrying an unconfirmed suggestion still renders as an ordinary root (2026-08-19: no more tray to hide it in) ---');
   const edge = [
     { id: 'x', description: 'X' },
     { id: 'c1', description: 'Child of X' },
   ];
   const edgeInfo = { x: { onsetDate: '1 Jan 2020' }, c1: { onsetDate: '1 Jan 2019' } };
   const edgeParents = { c1: 'x' };
-  const withRealChildren = buildProblemTree(edge, edgeInfo, edgeParents, new Set(['x']));
+  const withRealChildren = buildProblemTree(edge, edgeInfo, edgeParents);
   check(
     withRealChildren.length === 1 && withRealChildren[0].id === 'x' && withRealChildren[0].children.length === 1,
-    'X still renders as a root (with its real child) even though it is ALSO an unconfirmed tray suggestion — hiding it would orphan c1'
+    'X renders as a root with its real child regardless of any suggestion status — buildProblemTree no longer takes a suggestion set at all'
   );
-  const noRealChildren = buildProblemTree(
-    [{ id: 'y', description: 'Y' }],
-    { y: { onsetDate: '1 Jan 2020' } },
-    {},
-    new Set(['y'])
-  );
+  const childless = buildProblemTree([{ id: 'y', description: 'Y' }], { y: { onsetDate: '1 Jan 2020' } }, {});
   check(
-    noRealChildren.length === 0,
-    'a childless tray item is excluded from the tree entirely (lives only in the tray)'
+    childless.length === 1 && childless[0].id === 'y',
+    'a childless problem with no parent renders as its own root too — suggestion-only hiding was removed entirely (annotateTreeSuggestions now attaches candidate data onto the SAME tile instead of a separate tray card)'
   );
 }
 
@@ -269,83 +282,96 @@ console.log('--- filterLiveSuggestions: mirrors the old per-card filtering, once
   );
 }
 
-console.log('--- groupOptionsBySource: accurate provenance copy (2026-08-08 overrides list) ---');
+console.log(
+  '--- suggestionCandidateTitleText: per-candidate provenance copy, plain text for the flag tooltip (2026-08-19, moved off the card) ---'
+);
 {
-  const mixed = [
-    { id: 'cataract', description: 'Cataract', source: 'override' },
-    { id: 'angio', description: 'Angioplasty', source: 'snomed' },
-    { id: 'legacy', description: 'No source field at all' },
-  ];
-  const groups = groupOptionsBySource(mixed);
   check(
-    groups.override.length === 1 && groups.override[0].id === 'cataract',
-    'override-sourced option grouped correctly'
+    suggestionCandidateTitleText('Hypertension', 'snomed') === 'SNOMED marks this as a child of Hypertension',
+    'a SNOMED-sourced candidate credits SNOMED'
   );
   check(
-    groups.snomed.length === 2,
-    'snomed-sourced AND an option with no source field at all group as snomed (defensive default)'
+    suggestionCandidateTitleText('Cataract', 'override') ===
+      "this practice's own reference list marks this as a child of Cataract",
+    'an override-sourced candidate credits the practice reference list, never SNOMED'
   );
   check(
-    groups.snomed.some((o) => o.id === 'legacy'),
-    'a missing source field is never mistaken for an override'
+    suggestionCandidateTitleText('Something', undefined) === 'SNOMED marks this as a child of Something',
+    'a missing source defaults to snomed (defensive — matches every candidate before this field existed)'
   );
+  check(suggestionCandidateTitleText(null, 'snomed') === 'SNOMED marks this as a child of ', 'null description -> empty, never throws');
   check(
-    groupOptionsBySource([]).snomed.length === 0 && groupOptionsBySource([]).override.length === 0,
-    'empty input -> both groups empty'
-  );
-  check(
-    groupOptionsBySource(null).snomed.length === 0 && groupOptionsBySource(null).override.length === 0,
-    'null input -> both groups empty, never throws'
+    /^<strong>|<\/strong>$/.test(suggestionCandidateTitleText('X', 'snomed')) === false,
+    'plain text — no HTML markup (an SVG <title> element cannot render it, unlike the removed card-hint version)'
   );
 }
 
-console.log('--- partitionSuggestionTray: actionable-before-blocked, sorted by date within each group ---');
+console.log('--- buildSuggestionPairs: directional pairs, tagged by kind (2026-08-19 — moved off the removed tray) ---');
 {
-  const infoById = {
-    early: { onsetDate: '1 Jan 2018' },
-    late: { onsetDate: '1 Jan 2022' },
-    chained: { onsetDate: '1 Jan 2020' },
-  };
-  const suggestions = [
-    { childId: 'early', childDescription: 'Early', parentOptions: [{ id: 'inTree', description: 'In tree' }] },
-    { childId: 'late', childDescription: 'Late', parentOptions: [{ id: 'inTree', description: 'In tree' }] },
-    {
-      childId: 'chained',
-      childDescription: 'Chained',
-      parentOptions: [{ id: 'notInTreeYet', description: 'Not in tree yet' }],
-    },
+  const entries = [
+    { id: 'stent', suggestedIds: ['ihd'], textlinkId: null },
+    { id: 'ecz', suggestedIds: [], textlinkId: 'ihd' },
+    { id: 'multi', suggestedIds: ['a', 'b'], textlinkId: 'c' },
+    { id: 'self', suggestedIds: ['self'], textlinkId: 'self' },
+    { id: 'empty', suggestedIds: [], textlinkId: null },
   ];
-  const treeIds = new Set(['inTree']);
-  const { actionable, blocked } = partitionSuggestionTray(suggestions, treeIds, infoById);
-  check(actionable.length === 2 && blocked.length === 1, 'two actionable (candidate already in tree), one blocked');
+  const pairs = buildSuggestionPairs(entries);
   check(
-    actionable[0].childId === 'late' && actionable[1].childId === 'early',
-    'actionable group sorted by date descending'
+    pairs.some((p) => p.a === 'stent' && p.b === 'ihd' && p.kind === 'snomed'),
+    'a SNOMED-ancestry candidate becomes a pair tagged "snomed"'
   );
   check(
-    blocked[0].childId === 'chained',
-    'the chained/blocked suggestion is the one whose candidate is itself unconfirmed'
+    pairs.some((p) => p.a === 'ecz' && p.b === 'ihd' && p.kind === 'textlink'),
+    'a text-link match becomes a pair tagged "textlink"'
+  );
+  check(
+    pairs.filter((p) => p.a === 'multi').length === 3,
+    'a tile with 2 SNOMED candidates AND a text-link match produces 3 separate pairs'
+  );
+  check(
+    !pairs.some((p) => p.a === 'self' && p.b === 'self'),
+    'a self-pointing id (SNOMED or text-link) is never turned into a pair'
+  );
+  check(
+    JSON.stringify(buildSuggestionPairs(null)) === '[]' && JSON.stringify(buildSuggestionPairs([])) === '[]',
+    'null/empty input -> [], never throws'
+  );
+  check(
+    JSON.stringify(buildSuggestionPairs([{ id: 'x' }])) === '[]',
+    'an entry with neither suggestedIds nor textlinkId contributes nothing'
+  );
+  check(
+    pairs.find((p) => p.a === 'stent' && p.b === 'ihd').source === 'snomed',
+    'a bare id with no "|source" suffix defaults to snomed provenance'
   );
 
-  console.log('--- partitionSuggestionTray: re-partition after a simulated confirm ---');
-  const treeIdsAfterConfirm = new Set(['inTree', 'notInTreeYet']); // 'notInTreeYet' just got confirmed into the tree
-  const after = partitionSuggestionTray(suggestions, treeIdsAfterConfirm, infoById);
+  console.log('--- buildSuggestionPairs: "id|source" compound format (2026-08-19, for the flag tooltip) ---');
+  const sourced = buildSuggestionPairs([
+    { id: 'x', suggestedIds: ['a|snomed', 'b|override', 'c'], textlinkId: null },
+  ]);
   check(
-    after.actionable.some((s) => s.childId === 'chained'),
-    'the previously-blocked suggestion flips to actionable once its candidate is confirmed into the tree'
+    sourced.find((p) => p.b === 'a').source === 'snomed' &&
+      sourced.find((p) => p.b === 'b').source === 'override' &&
+      sourced.find((p) => p.b === 'c').source === 'snomed',
+    'each candidate carries its OWN source — explicit snomed, explicit override, and a bare id defaulting to snomed, all in the same call'
   );
-  check(after.blocked.length === 0, 'nothing left blocked once every candidate is in the tree');
+  check(
+    sourced.every((p) => p.b === 'a' || p.b === 'b' || p.b === 'c'),
+    'the "|source" suffix is stripped from the pair\'s own b id — never leaks into the raw problem id'
+  );
+  const textlinkPair = buildSuggestionPairs([{ id: 'x', suggestedIds: [], textlinkId: 'y' }])[0];
+  check(!('source' in textlinkPair), 'a text-link pair carries no source field at all — only snomed-kind pairs need one');
 }
 
-console.log('--- buildConnectorPath: pure cubic-bezier path from a tray tile to its candidate parent ---');
+console.log('--- elbowFlagPoint: the flag marker sits at the midpoint of its OWN vertical bus segment ---');
 {
-  const fromRect = { left: 500, right: 600, top: 100, bottom: 130, width: 100, height: 30 };
-  const toRect = { left: 50, right: 200, top: 300, bottom: 330, width: 150, height: 30 };
-  const d = buildConnectorPath(fromRect, toRect);
-  check(typeof d === 'string' && d.startsWith('M 500 115'), "starts at the tray tile's left-middle edge");
-  check(d.includes('200 315'), "ends at the target tile's right-middle edge");
-  check(buildConnectorPath(null, toRect) === null, 'missing fromRect -> null, never throws');
-  check(buildConnectorPath(fromRect, null) === null, 'missing toRect -> null, never throws');
+  const rectA = { left: 0, right: 100, top: 100, bottom: 130, width: 100, height: 30 };
+  const rectB = { left: 0, right: 100, top: 300, bottom: 330, width: 100, height: 30 };
+  const point = elbowFlagPoint(rectA, rectB, 250);
+  check(point.x === 250, 'flag sits ON the bus line (the laneX passed in), not offset from it');
+  check(point.y === (115 + 315) / 2, 'flag sits at the vertical midpoint between the two tiles own centre-lines');
+  check(elbowFlagPoint(null, rectB, 250) === null, 'missing rectA -> null, never throws');
+  check(elbowFlagPoint(rectA, rectB, 'not-a-number') === null, 'non-numeric busX -> null, never throws');
 }
 
 console.log('--- buildElbowConnectorPath: elbow/bus routing for linked problems (2026-08-08 revision) ---');
@@ -523,7 +549,7 @@ console.log('--- buildProblemTree: parent-map CYCLES render instead of silently 
   // rescue pass they'd disappear from the rendered problem list entirely.
   const problems = [{ id: 'a' }, { id: 'b' }];
   const infoById = { a: { onsetDate: '20 Apr 2020' }, b: { onsetDate: '5 Jul 2009' } };
-  const cycleTree = buildProblemTree(problems, infoById, { a: 'b', b: 'a' }, new Set());
+  const cycleTree = buildProblemTree(problems, infoById, { a: 'b', b: 'a' });
   const cycleIds = flattenTreeIds(cycleTree);
   check(cycleIds.has('a') && cycleIds.has('b'), 'both members of a 2-cycle still render');
   check(cycleTree.length === 1, 'one cycle member is promoted to a root, not both');
@@ -534,7 +560,7 @@ console.log('--- buildProblemTree: parent-map CYCLES render instead of silently 
   // A 3-cycle with an innocent child hanging off it — the whole component
   // must survive, and the hanger-on keeps its real parent.
   const bigger = [{ id: 'p' }, { id: 'q' }, { id: 'r' }, { id: 'kid' }];
-  const biggerTree = buildProblemTree(bigger, {}, { p: 'q', q: 'r', r: 'p', kid: 'p' }, new Set());
+  const biggerTree = buildProblemTree(bigger, {}, { p: 'q', q: 'r', r: 'p', kid: 'p' });
   const biggerIds = flattenTreeIds(biggerTree);
   check(
     ['p', 'q', 'r', 'kid'].every((id) => biggerIds.has(id)),
@@ -544,11 +570,175 @@ console.log('--- buildProblemTree: parent-map CYCLES render instead of silently 
 
   // A cycle NEXT TO healthy data must not disturb the healthy part.
   const mixed = [{ id: 'root' }, { id: 'child' }, { id: 'c1' }, { id: 'c2' }];
-  const mixedTree = buildProblemTree(mixed, {}, { child: 'root', c1: 'c2', c2: 'c1' }, new Set());
+  const mixedTree = buildProblemTree(mixed, {}, { child: 'root', c1: 'c2', c2: 'c1' });
   const mixedIds = flattenTreeIds(mixedTree);
   check(mixedIds.size === 4, 'healthy root+child AND both cycle members all render');
   const healthyRoot = mixedTree.find((n) => n.id === 'root');
   check(healthyRoot && healthyRoot.children.length === 1, 'the healthy branch is untouched by the cycle rescue');
+}
+
+console.log('--- significance lanes / classifyDrop / canProposeEnd ---');
+{
+  check(significanceLaneKey('Major') === 'major', 'Major → major');
+  check(significanceLaneKey('Minor') === 'minor', 'Minor → minor');
+  check(significanceLaneKey('Unknown significance') === 'unknown', 'Unknown significance → unknown');
+  check(significanceLaneKey('Unknown') === 'unknown', 'Unknown → unknown');
+  check(significanceLaneKey('') === 'unknown', 'empty label is unresolved');
+  check(significanceLaneKey(null) === 'unknown', 'null label is unresolved');
+
+  const problems = [
+    { id: 'maj', description: 'IHD' },
+    { id: 'min', description: 'Eczema' },
+    { id: 'unk', description: 'H/O stroke' },
+    { id: 'child', description: 'Stent' },
+  ];
+  const info = {
+    maj: { significance: 'Major', onsetDate: '1 Jan 2020' },
+    min: { significance: 'Minor', onsetDate: '1 Jan 2021' },
+    unk: { significance: 'Unknown significance', onsetDate: '1 Jan 2019' },
+    child: { significance: 'Minor', onsetDate: '1 Jan 2022' },
+  };
+  const parts = partitionProblemsBySignificance(problems, info);
+  check(parts.major.map((p) => p.id).join() === 'maj', 'major lane has the Major problem');
+  check(parts.minor.map((p) => p.id).sort().join() === 'child,min', 'minor lane has Minor + child');
+  check(parts.unknown.map((p) => p.id).join() === 'unk', 'unknown lane has the unresolved problem');
+
+  const trees = buildLaneTrees(problems, info, { child: 'maj' });
+  check(trees.major.length === 1 && trees.major[0].id === 'maj', 'major lane tree is IHD');
+  check(trees.major[0].children.length === 0, 'minor child is not pulled into the major lane');
+  const childNode = (function find(nodes) {
+    for (const n of nodes || []) {
+      if (n.id === 'child') return n;
+      const hit = find(n.children);
+      if (hit) return hit;
+    }
+    return null;
+  })(trees.minor);
+  check(childNode && childNode.crossLaneParentDescription === 'IHD', 'cross-lane child is annotated with the other-lane parent');
+  const allLaneIds = new Set([
+    ...flattenTreeIds(trees.major),
+    ...flattenTreeIds(trees.minor),
+    ...flattenTreeIds(trees.unknown),
+  ]);
+  check(allLaneIds.size === 4, 'all four problems still appear across lanes');
+}
+
+console.log('--- annotateTreeSuggestions: suggestion data attaches onto the SAME tree node (2026-08-19 — no more separate tray) ---');
+{
+  const tree = buildProblemTree(
+    [
+      { id: 'stent', description: 'Stent' },
+      { id: 'ihd', description: 'IHD' },
+      { id: 'ecz', description: 'Eczema' },
+    ],
+    { stent: { onsetDate: '1 Jan 2020' }, ihd: { onsetDate: '1 Jan 2019' }, ecz: { onsetDate: '1 Jan 2021' } },
+    {}
+  );
+  const suggestionsByChildId = {
+    stent: { childId: 'stent', childDescription: 'Stent', parentOptions: [{ id: 'ihd', description: 'IHD' }] },
+  };
+  const textLinkByProblemId = {
+    ecz: { problemId: 'ecz', matchedProblemId: 'ihd', matchedDescription: 'IHD', confidence: 'exact' },
+  };
+  const annotated = annotateTreeSuggestions(tree, suggestionsByChildId, textLinkByProblemId);
+  const stentNode = annotated.find((n) => n.id === 'stent');
+  const eczNode = annotated.find((n) => n.id === 'ecz');
+  const ihdNode = annotated.find((n) => n.id === 'ihd');
+  check(
+    stentNode.suggestedParentOptions && stentNode.suggestedParentOptions[0].id === 'ihd',
+    'a SNOMED-ancestry suggestion attaches its candidate parent options onto the child node directly'
+  );
+  check(!stentNode.textLinkSuggestion, 'stent has no text-link suggestion of its own');
+  check(
+    eczNode.textLinkSuggestion && eczNode.textLinkSuggestion.matchedProblemId === 'ihd',
+    'a "(Grouped with X)" suggestion attaches onto the subject node directly'
+  );
+  check(!eczNode.suggestedParentOptions, 'eczema has no SNOMED suggestion of its own');
+  check(!ihdNode.suggestedParentOptions && !ihdNode.textLinkSuggestion, 'a node with no suggestion of its own gets neither field');
+  check(
+    annotateTreeSuggestions([], {}, {}).length === 0,
+    'empty tree -> empty tree, never throws on empty lookup maps'
+  );
+}
+
+{
+  check(
+    classifyDrop({ problemId: 'min' }, { type: 'lane', key: 'major' }, 'minor').kind === 'sig-major',
+    'drop onto Major chrome proposes a significance change'
+  );
+  check(
+    classifyDrop({ problemId: 'min' }, { type: 'lane', key: 'minor' }, 'minor') === null,
+    'drop onto the problem’s own lane is a no-op'
+  );
+  check(
+    classifyDrop({ problemId: 'min' }, { type: 'bin' }, 'minor').kind === 'end',
+    'drop onto the End bin proposes an end'
+  );
+  check(
+    classifyDrop({ problemId: 'min' }, { type: 'tile', id: 'maj' }, 'minor').kind === 'link',
+    'drop onto another tile is still a nest/link'
+  );
+  check(
+    classifyDrop({ problemId: 'min' }, { type: 'tile', id: 'min' }, 'minor') === null,
+    'drop onto self is rejected'
+  );
+  check(canProposeEnd('min', { child: 'maj' }) === true, 'a leaf can be ended');
+  check(canProposeEnd('maj', { child: 'maj' }) === false, 'a parent with a live child cannot be ended');
+}
+
+console.log('--- draft workspace: stage End + significance, then summarise ---');
+{
+  const parentMap = { child: 'parent' };
+  const empty = emptyDraft();
+  check(hasDraftChanges(empty) === false, 'empty draft has no changes');
+
+  const leaf = stageEnd(empty, 'child', parentMap);
+  check(leaf.error === null && leaf.draft.endIds.join() === 'child', 'a leaf stages into End');
+  check(hasDraftChanges(leaf.draft) === true, 'a staged end is a draft change');
+
+  const parentTooSoon = stageEnd(empty, 'parent', parentMap);
+  check(parentTooSoon.error === 'has-children', 'a parent cannot stage until its children are also in End');
+
+  const parentAfter = stageEnd(leaf.draft, 'parent', parentMap);
+  check(parentAfter.error === null && parentAfter.draft.endIds.join() === 'child,parent', 'parent stages once its child is already in End');
+
+  const unstageChild = unstageEnd(parentAfter.draft, 'child', parentMap);
+  check(
+    unstageChild.endIds.indexOf('child') === -1 && unstageChild.endIds.indexOf('parent') === -1,
+    'unstaging a child also unstages the parent that depended on it'
+  );
+
+  const two = stageEnd(stageEnd(empty, 'a', {}).draft, 'b', {});
+  check(two.draft.endIds.join() === 'a,b', 'several problems can sit in End at once');
+
+  const info = { a: { significance: 'Minor' }, b: { significance: 'Major' } };
+  const moved = stageSignificance(empty, 'a', 'major', 'minor', {});
+  check(moved.sigById.a === 'major', 'significance stages without writing');
+  check(effectiveLaneKey(info, moved, 'a') === 'major', 'effective lane follows the draft');
+  check(effectiveLaneKey(info, empty, 'a') === 'minor', 'live lane is unchanged when nothing is staged');
+
+  const back = stageSignificance(moved, 'a', 'minor', 'minor', {});
+  check(!back.sigById.a, 'dropping back on the live lane clears the staged significance');
+
+  const endThenSig = stageSignificance(two.draft, 'a', 'unknown', 'minor', {});
+  check(endThenSig.endIds.indexOf('a') === -1, 'dragging an End tile onto a lane unstages the end');
+  check(endThenSig.sigById.a === 'unknown', '…and stages the new significance');
+
+  const overlay = overlayInfoById(info, moved);
+  check(overlay.a.significance === 'Major', 'overlay info reports the staged grade');
+  check(info.a.significance === 'Minor', 'the live snapshot is not mutated');
+
+  const visible = problemsNotEnded([{ id: 'a' }, { id: 'b' }], two.draft);
+  check(visible.length === 0, 'staged-end problems leave the lanes');
+  const inBin = endedProblemList([{ id: 'a', description: 'A' }, { id: 'b', description: 'B' }], two.draft);
+  check(inBin.map((p) => p.id).join() === 'a,b', 'End bin lists staged problems in drop order');
+
+  const ordered = orderEndsForCommit(['parent', 'child'], { child: 'parent' });
+  check(ordered.join() === 'child,parent', 'commit order is children before parents');
+
+  const summary = summariseDraft(parentAfter.draft, { child: 'Stent', parent: 'IHD' });
+  check(summary.count === 2 && summary.ends.length === 2, 'summary counts staged ends');
+  check(summary.ends[0].description === 'Stent', 'summary carries descriptions');
 }
 
 console.log('--- flattenTreeIds: never recurses forever on a cyclic structure ---');
@@ -643,6 +833,13 @@ console.log(
     nestingSrc.includes('consumeTextLinkSuggestion:') && nestingSrc.includes('markTextLinkAlreadyRelated:'),
     'the bridge actually exposes both lifecycle functions the canvas calls'
   );
+  check(
+    nestingSrc.includes('commitEndProblem: commitEndProblem'),
+    'the bridge exposes commitEndProblem for the End bin'
+  );
+  check(src.includes('data-sig-lane') && src.includes('data-end-bin'), 'lanes and the End bin are drop targets');
+  check(src.includes("kind === 'finalise'"), 'the confirm path finalises the staged canvas draft');
+  check(src.includes('orderEndsForCommit'), 'finalise commits ends children-first');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

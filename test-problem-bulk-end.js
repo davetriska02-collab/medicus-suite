@@ -12,7 +12,10 @@
 // problem-junk-code-cleanup.js — see problem-bulk-end.js's header): the
 // combined constrainingParentConcepts value, flagged-concept decisions,
 // caution-root filtering, conceptId resolution and dedupe, plus the
-// regression locks on rules/non-problem-root-codes.json itself.
+// regression locks on rules/non-problem-root-codes.json itself. Also the
+// duplicate-merge helpers ported here 2026-08-19 from problem-nesting.js's
+// own "Merge duplicate copies" section (folded into "Bulk remove/merge" —
+// see problem-bulk-end.js's file header for the full history).
 
 'use strict';
 
@@ -33,6 +36,11 @@ const {
   cautionRootsOf,
   withResolvedConceptIds,
   uniqueConceptIds,
+  buildDuplicateGroups,
+  pickEarliestCopyId,
+  buildMarkIncorrectPayload,
+  removableDuplicateIds,
+  buildMergeGroups,
 } = require('./content-scripts/problem-bulk-end.js');
 const nonProblemRootCodes = require('./rules/non-problem-root-codes.json');
 
@@ -278,7 +286,12 @@ console.log('--- withResolvedConceptIds: pairs clinical-summary problems with th
     { id: 'p3', problemCodeDescription: 'Some problem whose overview fetch failed' },
   ];
   const overviews = [
-    { problemCode: { conceptId: '23591000000100', description: 'FP1001 contraception claim' } },
+    {
+      problemCode: { conceptId: '23591000000100', description: 'FP1001 contraception claim' },
+      childProblems: [{ id: 'child-1' }],
+      additionalInformation: 'Imported via GP2GP',
+      onsetDate: '20 Apr 2020',
+    },
     { problemCode: { conceptId: '38341003', description: 'Essential hypertension' } },
     null, // overview fetch failed/errored -> caught and passed through as null
   ];
@@ -287,6 +300,15 @@ console.log('--- withResolvedConceptIds: pairs clinical-summary problems with th
   check(resolved[0].id === 'p1' && resolved[0].conceptId === '23591000000100', 'first problem resolved correctly');
   check(resolved[1].id === 'p2' && resolved[1].conceptId === '38341003', 'second problem resolved correctly');
   check(withResolvedConceptIds([], []).length === 0, 'empty input -> empty output');
+
+  // The three fields added 2026-08-19 for merge-duplicate detection — see
+  // problem-bulk-end.js's file header MERGE DUPLICATES ADDITION note.
+  check(resolved[0].hasChildren === true, 'hasChildren true when childProblems is non-empty');
+  check(resolved[1].hasChildren === false, 'hasChildren false when childProblems is absent');
+  check(resolved[0].additionalInformation === 'Imported via GP2GP', 'additionalInformation carried through');
+  check(resolved[1].additionalInformation === null, 'missing additionalInformation -> null, never undefined');
+  check(resolved[0].onsetDate === '20 Apr 2020', 'onsetDate carried through');
+  check(resolved[1].onsetDate === null, 'missing onsetDate -> null, never undefined');
 }
 
 console.log('--- uniqueConceptIds: dedupes before the (one-per-distinct-code) descendant check ---');
@@ -300,6 +322,95 @@ console.log('--- uniqueConceptIds: dedupes before the (one-per-distinct-code) de
   check(unique.length === 2, `two distinct conceptIds from three problems (got ${unique.length})`);
   check(unique.indexOf('111') !== -1 && unique.indexOf('222') !== -1, 'both distinct conceptIds present');
   check(uniqueConceptIds([]).length === 0, 'empty input -> empty output');
+}
+
+console.log('--- duplicate-merge helpers (ported from problem-nesting.js, 2026-08-19) ---');
+{
+  const problems = [
+    { id: 'b-newer', description: 'Anorexia nervosa' },
+    { id: 'a-older', description: 'Anorexia nervosa' },
+    { id: 'brady', description: 'Bradycardia' },
+    { id: 'nocode', description: 'Mystery entry' },
+  ];
+  const info = {
+    'b-newer': { conceptId: 'AN' },
+    'a-older': { conceptId: 'AN' },
+    brady: { conceptId: 'BR' },
+    nocode: { conceptId: null },
+  };
+  const groups = buildDuplicateGroups(problems, info);
+  check(groups.length === 1, 'only same-conceptId sets of 2+ group');
+  check(groups[0].conceptId === 'AN' && groups[0].entries.length === 2, 'the duplicate pair is the group');
+  check(buildDuplicateGroups(null, null).length === 0, 'null inputs -> empty, never throws');
+
+  check(
+    pickEarliestCopyId([{ id: 'b-newer' }, { id: 'a-older' }]) === 'a-older',
+    'earliest copy (smallest UUIDv7 id) is the default keeper'
+  );
+  check(pickEarliestCopyId([]) === null, 'no entries -> null keeper');
+
+  const payload = buildMarkIncorrectPayload('prob-1', '  Duplicate entry  ');
+  check(
+    payload.problemId === 'prob-1' && payload.reason === 'Duplicate entry' && payload.isConfirmedRemoval === true,
+    'the confirmed mark-incorrect-and-hidden body: id, trimmed reason, isConfirmedRemoval'
+  );
+  check(
+    Object.keys(payload).sort().join(',') === 'isConfirmedRemoval,problemId,reason',
+    'exactly the three confirmed fields'
+  );
+  check(buildMarkIncorrectPayload('prob-1', '   ') === null, 'a blank reason never reaches the record');
+  check(buildMarkIncorrectPayload(null, 'x') === null, 'a missing id never reaches the record');
+
+  const entries = [
+    { id: 'keep', hasChildren: false },
+    { id: 'plain', hasChildren: false },
+    { id: 'parent-copy', hasChildren: true },
+  ];
+  const removable = removableDuplicateIds(entries, 'keep');
+  check(removable.length === 1 && removable[0] === 'plain', 'keeper and copies with children are never removable');
+  check(removableDuplicateIds(entries, 'plain').join(',') === 'keep', 'keeper choice flips what is removable');
+  check(removableDuplicateIds(null, 'x').length === 0, 'null entries -> empty, never throws');
+}
+
+console.log('--- buildMergeGroups: withResolvedConceptIds -> full _mergeGroups state array ---');
+{
+  const withConcept = [
+    {
+      id: 'newer',
+      description: 'Anorexia nervosa',
+      conceptId: 'AN',
+      hasChildren: false,
+      additionalInformation: null,
+      onsetDate: '10 Aug 2010',
+    },
+    {
+      id: 'older',
+      description: 'Anorexia nervosa',
+      conceptId: 'AN',
+      hasChildren: true,
+      additionalInformation: 'Imported via GP2GP',
+      onsetDate: '01 Jan 2000',
+    },
+    { id: 'solo', description: 'Bradycardia', conceptId: 'BR', hasChildren: false },
+  ];
+  const groups = buildMergeGroups(withConcept);
+  check(groups.length === 1, 'only the AN pair groups; the solo Bradycardia entry does not');
+  const g = groups[0];
+  check(g.conceptId === 'AN' && g.description === 'Anorexia nervosa', 'group carries conceptId + description');
+  check(g.entries.length === 2, 'both duplicate entries present');
+  check(
+    g.entries[1].hasChildren === true && g.entries[1].additionalInformation === 'Imported via GP2GP',
+    'entry fields (hasChildren, additionalInformation, onsetDate) carried through from withConcept'
+  );
+  check(g.keeperId === 'newer', 'default keeper is the earliest (lexicographically smallest) id');
+  check(
+    g.open === false && g.confirming === false && g.removing === false && g.done === false,
+    'fresh UI state — nothing pre-opened, pre-confirmed, or pre-committed'
+  );
+  check(g.reason === 'Duplicate entry - merged into retained copy', 'default reason matches the confirmed live capture');
+  check(g.removedCount === 0 && Object.keys(g.errors).length === 0, 'no removals or errors yet');
+  check(buildMergeGroups([]).length === 0, 'empty input -> empty output');
+  check(buildMergeGroups(null).length === 0, 'null input -> empty, never throws');
 }
 
 console.log('--- apiErrorMessage: same server-reason surfacing as problem-description-cleanup ---');

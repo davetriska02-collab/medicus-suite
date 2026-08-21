@@ -430,3 +430,176 @@ input[class*='ms-pbe-']:focus-visible {
   text-decoration: line-through;
   opacity: 0.55;
 }
+
+/* Visually-hidden persistent live region for announce() (2026-08-19,
+   ported alongside the merge feature) — screen-reader-only, standard
+   clip-to-nothing pattern (same shape as problem-nesting.css's .ms-pn-live). */
+.ms-pbe-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ── "Duplicate copies to merge" — ported from problem-nesting.js's own
+   "Merge duplicate copies" accordion section (2026-08-19, folded into this
+   widget as "Bulk remove/merge" — see the JS header's MERGE DUPLICATES
+   ADDITION note). A second, independent section within the same panel body;
+   deliberately its OWN visual language (`.ms-pbe-merge-*`), matching this
+   file's existing hardcoded-hex palette rather than importing
+   problem-nesting.css's design-token variables, which this file doesn't use
+   anywhere else. ─────────────────────────────────────────────────────────── */
+
+.ms-pbe-merge-section {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px dashed #d1d5db;
+}
+
+.ms-pbe-merge-heading {
+  font-size: 11px;
+  font-weight: 700;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.ms-pbe-merge-card {
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  line-height: 1.45;
+  font-size: 12px;
+  color: #1a2030;
+}
+
+.ms-pbe-merge-card-done {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.ms-pbe-merge-card-main {
+  margin-bottom: 4px;
+}
+
+.ms-pbe-merge-date {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  color: #6b7280;
+}
+
+.ms-pbe-merge-open,
+.ms-pbe-merge-review {
+  margin-top: 6px;
+  padding: 3px 10px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #1d4ed8;
+  cursor: pointer;
+}
+
+.ms-pbe-merge-open:hover,
+.ms-pbe-merge-review:hover:not(:disabled) {
+  background: #eff6ff;
+}
+
+.ms-pbe-merge-review:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ms-pbe-merge-children {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: min(280px, 40vh);
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.ms-pbe-merge-child-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.ms-pbe-merge-child-row:hover {
+  background: #f9fafb;
+}
+
+.ms-pbe-merge-child-note {
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.ms-pbe-merge-keep-tag {
+  color: #166534;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ms-pbe-merge-card-error {
+  margin-top: 4px;
+  color: #b91c1c;
+  font-size: 11px;
+}
+
+/* Destructive confirm BLOCK (the wrapper div) — the ONLY amber block in
+   this file, reserved for the merge action (ending a problem is its own
+   red confirm, see .ms-pbe-confirm-ending above; merge is a DIFFERENT,
+   non-undoable write). Deliberately NAMED DIFFERENTLY from
+   .ms-pbe-merge-confirm, which is the CONFIRM BUTTON's own class (also the
+   event-binding hook in bindEvents()) — a shared name here would make
+   `.ms-pbe-merge-confirm` match both the wrapper and the button. */
+.ms-pbe-merge-confirm-block {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 5px;
+  color: #92400e;
+  font-size: 12px;
+}
+
+.ms-pbe-merge-reason {
+  display: block;
+  margin-top: 4px;
+  width: 100%;
+  max-width: 360px;
+  padding: 3px 6px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #374151;
+}
+
+.ms-pbe-merge-reason:focus {
+  border-color: #2563eb;
+}
+
+.ms-pbe-merge-confirm-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+/* Reuses the file's own .ms-pbe-back-btn / .ms-pbe-end-btn button recipes
+   directly on the merge confirm/back buttons (see mergeGroupHtml in the JS)
+   — no separate button classes needed. */

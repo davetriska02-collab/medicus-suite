@@ -987,8 +987,11 @@
             const baselineDays = tv.baselineIntervalDays || tv.intervalDays || 365;
             let dueDate = null;
             if (lastDate) {
+              // Bare YYYY-MM-DD strings parse as UTC midnight; mutate/read in UTC
+              // too, or a BST/DST host shifts the result by a day (see the similar
+              // note on Date.UTC usage elsewhere in this file).
               const d = new Date(lastDate);
-              d.setDate(d.getDate() + intDays);
+              d.setUTCDate(d.getUTCDate() + intDays);
               dueDate = d.toISOString().slice(0, 10);
             }
             // OPTIONAL banding audit: record WHICH band fired and the source value

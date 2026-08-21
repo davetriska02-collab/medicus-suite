@@ -262,6 +262,61 @@ console.log('\n--- RSV eligibility ---');
   assert(chips.length === 1, 'RSV: care-home resident (age 68) → chip');
 }
 
+// ── 2026-08-18 Keeper: RSV 65–74 clinical-risk (effective 1 Sept 2026) ────────
+console.log('\n--- RSV 65-74 clinical-risk (vax-001, 2026-08-18) ---');
+
+// Age 70 + COPD → eligible
+{
+  const data = { ...baseData(70), problems: [{ label: 'COPD', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: age 70 + COPD → chip');
+  assert(
+    chips[0].eligibilityReason && /chronic respiratory|65/i.test(chips[0].eligibilityReason),
+    `RSV: age 70 + COPD eligibility mentions 65–74 respiratory (got: ${chips[0]?.eligibilityReason})`
+  );
+}
+
+// Age 70, no clinical-risk problem → still no chip (age-only 75+ holds)
+{
+  const chips = engine.evaluateVaccineRule(rsvRule, baseData(70), NOW);
+  assert(chips.length === 0, 'RSV: age 70 without clinical-risk → no chip');
+}
+
+// Age 70 + well-controlled asthma → must NOT fire (bare asthma omitted on purpose)
+{
+  const data = { ...baseData(70), problems: [{ label: 'Asthma', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 0, 'RSV: age 70 + asthma only → no chip (poorly-controlled asthma not encoded)');
+}
+
+// Age 64 + COPD → too young for the 65–74 band
+{
+  const data = { ...baseData(64), problems: [{ label: 'COPD', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 0, 'RSV: age 64 + COPD → no chip');
+}
+
+// Age 70 + lymphoma → immunosuppression problem
+{
+  const data = { ...baseData(70), problems: [{ label: 'Non-Hodgkin lymphoma', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: age 70 + lymphoma → chip');
+}
+
+// Age 70 + mycophenolate (no coded problem) → immunosuppression medication
+{
+  const data = { ...baseData(70), medications: [{ name: 'Mycophenolate mofetil 500mg tablets' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: age 70 + mycophenolate → chip');
+}
+
+// Age 80 + COPD still eligible via the age-75+ clause (not only the 65–74 band)
+{
+  const data = { ...baseData(80), problems: [{ label: 'COPD', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: age 80 + COPD → still chip via 75+');
+}
+
 // ── Schema: source and notes required on new rules ───────────────────────────
 console.log('\n--- new vaccine rules have non-empty source and notes ---');
 [ppv23Rule, shinglesRule, rsvRule].forEach((r) => {

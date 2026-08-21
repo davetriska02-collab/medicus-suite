@@ -1,58 +1,155 @@
 {
-  "runDate": "2026-08-01",
-  "previousRunDate": "2026-07-25",
-  "manifestVersion": "3.207.0",
+  "runDate": "2026-08-18",
+  "previousRunDate": "2026-08-01",
+  "manifestVersion": "3.233.0",
+  "csoSignedOff": {
+    "date": "2026-08-18",
+    "by": "Dr D. Triska",
+    "scope": "Applied additive set only (12 changes). Held items remain unsigned."
+  },
   "ruleFileLastUpdated": {
-    "rules/drug-rules.json": "2026-07-25",
+    "rules/drug-rules.json": "2026-08-18",
     "rules/qof-rules.json": "2026-07-25",
-    "rules/vaccine-rules.json": "2026-08-01",
-    "rules/alert-library.json": "2026-07-25",
-    "rules/reception-pathways.json": "2026-07-25",
+    "rules/vaccine-rules.json": "2026-08-18",
+    "rules/alert-library.json": "2026-08-18",
+    "rules/reception-pathways.json": "2026-08-18",
     "engine/acb-scores.js": "2026-07-25",
     "engine/stopp-start.js": "2026-07-25",
     "engine/rules-engine.js": "2026-08-01"
   },
   "sourcesChecked": [
-    "internal://rules/vaccine-rules.json",
-    "internal://engine/rules-engine.js",
-    "internal://rules/drug-rules.json",
-    "internal://engine/stopp-start.js"
+    "https://bnf.nice.org.uk/drugs/warfarin-sodium/",
+    "https://bnf.nice.org.uk/drugs/eprosartan/medicinal-forms/",
+    "https://bnf.nice.org.uk/drugs/quetiapine/medicinal-forms/",
+    "https://bnf.nice.org.uk/drugs/carbamazepine/medicinal-forms/",
+    "https://www.sps.nhs.uk/monitorings/mycophenolate-mofetil-and-mycophenolic-acid-monitoring/",
+    "https://www.gov.uk/drug-safety-update/fezolinetant-veoza-risk-of-liver-injury-new-recommendations-to-minimise-risk",
+    "https://www.gov.uk/drug-safety-update/topiramate-topamax-introduction-of-new-safety-measures-including-a-pregnancy-prevention-programme",
+    "https://www.gov.uk/government/publications/respiratory-syncytial-virus-rsv-programme-information-for-healthcare-professionals",
+    "https://cks.nice.org.uk/topics/sore-throat-acute/",
+    "https://cks.nice.org.uk/topics/headache-assessment/"
   ],
   "heldForNextRun": [
     {
-      "id": "ob004-qof",
-      "description": "OB004 indicator values — PRN02356 July 2026 amendment inaccessible (HTTP 403, second consecutive run). Held pending egress restoration.",
-      "heldSince": "2026-07-25"
+      "id": "qof-ckd002-003-disable",
+      "description": "CKD002/CKD003 disable (weakens_safety). Scanners say they are not in official 26/27 tables. Held for CSO sign-off.",
+      "heldSince": "2026-08-17"
     },
     {
-      "id": "vax-001",
-      "description": "RSV 65-74 clinical-risk expansion (effective 1 Sept 2026, NHSE letter 2 July 2026). Engine cannot encode conditional-age eligibility — matchVaccineEligibility() has no combined age-band + clinical-risk handler. Engine sprint required. Assess manually from 1 Sept 2026.",
+      "id": "qof-ast-id-rename",
+      "description": "AST012→AST014, AST007→AST015 ID rename. Keep old IDs until CSO confirms July PRN02356 mapping.",
+      "heldSince": "2026-08-17"
+    },
+    {
+      "id": "qof-ndh",
+      "description": "NDH register + NDH003 held pending CSO review of July QOF PDF.",
+      "heldSince": "2026-08-17"
+    },
+    {
+      "id": "vax-004",
+      "description": "RSV care-home ageMin: 18 (weakens_safety). UKHSA HCP v05 says under-18 care-home residents are not eligible; current rule flags all ages. Not applied.",
+      "heldSince": "2026-08-17"
+    },
+    {
+      "id": "drug-003-chc-brands",
+      "description": "CHC brand-list expansion (Drovelis / estetrol etc.) — not re-fetched brand-by-brand this apply pass.",
+      "heldSince": "2026-08-17"
+    },
+    {
+      "id": "medreview-scan",
+      "description": "MEDREVIEW scanner hung. ACB / STOPP / visualiser PINCER tables still unchecked this cycle. Standing CSO verification of ACB/STOPP starter set still outstanding.",
+      "heldSince": "2026-08-17"
+    },
+    {
+      "id": "rsv-poorly-controlled-asthma",
+      "description": "RSV 65-74 poorly-controlled asthma (24-month OCS/admission count) — engine cannot encode. Bare asthma deliberately omitted.",
       "heldSince": "2026-07-25",
       "effectiveDate": "2026-09-01"
+    },
+    {
+      "id": "ob004-qof",
+      "description": "OB004/OB005 stay disabled (90-day / TA1026 SDM not expressible). Values confirmable from July PDF.",
+      "heldSince": "2026-07-25"
     }
   ],
   "sourceGaps": [
-    "All UK clinical reference pages (gov.uk, nice.org.uk, england.nhs.uk, bnf.nice.org.uk, medicines.org.uk, sps.nhs.uk) — HTTP 403 from outbound proxy; widened since 2026-07-25 (was PDF-specific; now all pages). Second consecutive run with egress blocked.",
-    "PRN02356 July 2026 QOF amendment (NHSE) — HTTP 403, second consecutive run."
+    "BSR 2025 full-text PDF (Cloudflare)",
+    "NHS Digital QOF v51 extract files (landing page only)",
+    "MEDREVIEW domain not scanned (scanner hung)",
+    "CHC brand-completeness sweep not re-fetched this apply pass"
   ],
   "changesAppliedThisRun": [
     {
-      "id": "vax-002",
+      "id": "drug-001",
       "rag": "Red",
-      "description": "mRESVIA declined variants (5 terms) added to vax-rsv statusTerms.declined — fixes C2-class false-GIVEN risk",
-      "appliedDate": "2026-08-01"
+      "description": "New warfarin-vka INR 84d rule (warfarin, marevan, acenocoumarol, sinthrome, phenindione, dindevan)",
+      "appliedDate": "2026-08-18"
     },
     {
-      "id": "vax-003",
+      "id": "drug-002",
       "rag": "Red",
-      "description": "engine/rules-engine.js matchVaccineEligibility() — ageMin/ageMax check added to problem and medication clause handlers",
-      "appliedDate": "2026-08-01"
+      "description": "ace-arb: add eprosartan, teveten",
+      "appliedDate": "2026-08-18"
     },
     {
-      "id": "alert-C005",
+      "id": "drug-004",
       "rag": "Red",
-      "description": "Disabled digoxin-renal-monitoring rule added to drug-rules.json (enabled:false, pending CSO activation)",
-      "appliedDate": "2026-08-01"
+      "description": "antipsychotic: add mintreleq, sondate",
+      "appliedDate": "2026-08-18"
+    },
+    {
+      "id": "drug-005",
+      "rag": "Red",
+      "description": "carbamazepine-maintenance: add curatil",
+      "appliedDate": "2026-08-18"
+    },
+    {
+      "id": "drug-006",
+      "rag": "Amber",
+      "description": "New mycophenolate-maintenance FBC/LFT/U&E 84d",
+      "appliedDate": "2026-08-18"
+    },
+    {
+      "id": "drug-008",
+      "rag": "Amber",
+      "description": "New fezolinetant-lft 90d (Veoza)",
+      "appliedDate": "2026-08-18"
+    },
+    {
+      "id": "vax-001",
+      "rag": "Red",
+      "description": "RSV 65-74 COPD + immunosuppression eligibility encoded (effective 1 Sept 2026; no bare asthma)",
+      "appliedDate": "2026-08-18"
+    },
+    {
+      "id": "alert-S004",
+      "rag": "Red",
+      "description": "New mhra-topiramate-ppp alert (F 12-55)",
+      "appliedDate": "2026-08-18"
+    },
+    {
+      "id": "alert-S006",
+      "rag": "Red",
+      "description": "New mhra-warfarin-tramadol interaction alert",
+      "appliedDate": "2026-08-18"
+    },
+    {
+      "id": "alert-pincer7-marevan",
+      "rag": "Red",
+      "description": "PINCER #7 match adds marevan",
+      "appliedDate": "2026-08-18"
+    },
+    {
+      "id": "pathway-001",
+      "rag": "Red",
+      "description": "sore-throat rf-unwell-child duty→999",
+      "appliedDate": "2026-08-18"
+    },
+    {
+      "id": "pathway-004",
+      "rag": "Red",
+      "description": "headache rf-household-co 999 added",
+      "appliedDate": "2026-08-18"
     }
   ]
 }
