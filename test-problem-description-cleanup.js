@@ -385,9 +385,7 @@ console.log(
     'orphan note (no consultation) produces the IDENTICAL payload shape as the nested case — confirmed live, no special-casing needed'
   );
 
-  console.log(
-    '--- buildChangeNotePayload: recordedAtAnotherOrganisation note (bug found live 2026-08-19, HAR) ---'
-  );
+  console.log('--- buildChangeNotePayload: recordedAtAnotherOrganisation note (bug found live 2026-08-19, HAR) ---');
   {
     // Modelled EXACTLY on the real live capture that surfaced the bug: a
     // note recorded at a different organisation carries recordedByOrganisation
@@ -427,7 +425,10 @@ console.log(
     const flatOrgPayload = buildChangeNotePayload(
       Object.assign({}, nestedNotePrefill, {
         recordedAtAnotherOrganisation: true,
-        recordedByOrganisation: { organisationName: 'Park Road Surgery', organisationIdentifierType: 'nhs-england-ods-code' },
+        recordedByOrganisation: {
+          organisationName: 'Park Road Surgery',
+          organisationIdentifierType: 'nhs-england-ods-code',
+        },
       }),
       sameConceptRelabel
     );
@@ -1359,6 +1360,25 @@ console.log('--- rules/generic-additional-info-text.json: the imported list itse
   check(
     genericAdditionalInfoText.entries.some((e) => e.text === 'Problem severity: Minor'),
     '"Problem severity: Minor" is present (added 2026-07-26)'
+  );
+  check(
+    genericAdditionalInfoText.entries.some((e) => e.text === 'SUMMARY=Y'),
+    '"SUMMARY=Y" is present (added 2026-08-20)'
+  );
+}
+
+console.log('--- stripGenericAdditionalInfoLines: "SUMMARY=Y" (2026-08-20 addition) ---');
+{
+  const genericTexts = literalTextsFromEntries(genericAdditionalInfoText.entries);
+  const result = stripGenericAdditionalInfoLines('cough\nSUMMARY=Y', genericTexts);
+  check(result.cleaned === 'cough', 'the genuine free-text line survives, SUMMARY=Y is stripped');
+  check(
+    result.removed.length === 1 && result.removed[0] === 'SUMMARY=Y',
+    'the removed line is reported (got ' + JSON.stringify(result.removed) + ')'
+  );
+  check(
+    stripGenericAdditionalInfoLines('summary=y', genericTexts).removed.length === 1,
+    'matching is case-insensitive, same as every other literal entry'
   );
 }
 

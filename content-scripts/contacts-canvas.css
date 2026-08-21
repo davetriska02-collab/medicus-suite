@@ -95,7 +95,9 @@
   flex-shrink: 0;
 }
 
-#ms-contacts-canvas-overlay .ms-cv-dupaddr-merge {
+#ms-contacts-canvas-overlay .ms-cv-dupaddr-merge,
+#ms-contacts-canvas-overlay .ms-cv-dupphone-delete,
+#ms-contacts-canvas-overlay .ms-cv-dupemail-delete {
   margin-top: 4px;
 }
 
