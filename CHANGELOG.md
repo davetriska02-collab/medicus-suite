@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.16] — 2026-08-21
+
+### Signed .crx packaging for managed (IT policy) installs
+
+New `scripts/pack-crx.js` (`npm run pack:crx`) builds a signed CRX3 package plus an
+`update.xml` policy feed, with the extension ID pinned by a persistent signing key
+(`keys/medicus-suite.pem`, gitignored — see docs/IT-DEPLOYMENT.md for key custody).
+The release workflow attaches `medicus-suite-v<version>.crx` and `update.xml` to every
+GitHub release when the `CRX_PRIVATE_KEY` Actions secret is configured, so
+policy-deployed installs auto-update from
+`https://github.com/davetriska02-collab/medicus-suite/releases/latest/download/update.xml`.
+`docs/IT-DEPLOYMENT.md` gives IT the extension ID, force-install policy strings
+(Chrome + Edge), and the Web Store ID-continuity note. Packed files are enumerated via
+`git ls-files`, so untracked local files (patient data, keys, scratch) can never leak
+into a package.
+
 ## [v3.236.15] — 2026-08-21
 
 ### Bulk acknowledge — Review stays on screen
