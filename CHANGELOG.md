@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.4] — 2026-08-20
+
+### Triage queue — first pulse cut (live-reviewable)
+
+First implementation of the queue-next plan (`docs/design/triage-queue-next/PLAN.md`) on the live Medicus request/results list. Pref-gated (`queuePulseCompress`, default on; Triage Lens → Preferences to restore the chip pile):
+
+- **Pulse** — chips already on the row compress to one left rail and one **named** headline. **Red is a filled bar. Amber is a hollow ring** on the pulse chrome (shape, not hue — a second filled bar would only differ from red by colour). Compression (and chip-hide) is **escalate-only**: a quiet row keeps its chips, so empty cannot read as all-clear. Age, days-open, thread counts and Pharmacy First do not own the rail. A diamond on the headline means it came from the record (monitoring / pending result), not the request text. Overflow is a quiet `· N`. Not a score; a quiet rail is not all-clear.
+- **Why-tray** — click the headline / overflow, or Space on the j/k cursor. Lists every named signal plus source. Footer refuses the score reading.
+- **Act tray (thin)** — `›` or `a` opens numbered prepare-only actions. Pharmacy First and Ask-back reuse the existing pathway menu (still not sent). Book and Park are present and disabled. No Done / Sent / Booked.
+- **Thread mark** — the existing B3 repeat-contact chip is shown as a count on the pulse, not a rail-raiser.
+- **Jump / focus see the rail** — the status bar's ▶ jump button, the `n` key and "Focus alerts" now treat pulse red/amber rows as alerts (previously they only saw the results-queue tint, so on the request queue "Focus alerts" would have dimmed a row whose own rail was red).
+
+Injection law unchanged (PREPEND, wipe-and-redecorate, durable map, token-block classes). Composer is `content-scripts/triage-lens/queue-pulse.js` (`window.TriageQueuePulse`), unit-tested in `test-queue-pulse.js`.
+
+Callback mock (same eight rows, chip pile then pulse): `docs/design/triage-queue-next/before-after.html`.
+
 ## [v3.236.3] — 2026-08-20
 
 ### Allergy canvas — Finalise reports what actually landed (PR #293 review fixes)

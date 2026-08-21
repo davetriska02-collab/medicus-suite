@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Triage pulse — before / after callback</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-deep: #f8fafc;
+      --bg-mid: #f1f5f9;
+      --bg-elev: #ffffff;
+      --border: #cbd5e1;
+      --border-hi: #94a3b8;
+      --text-1: #0f172a;
+      --text-2: #1e3a5f;
+      --text-3: #475569;
+      --text-4: #556377;
+      --accent: #2563eb;
+      --accent-dim: rgba(37, 99, 235, 0.09);
+      --accent-line: rgba(37, 99, 235, 0.3);
+      --green: #16a34a;
+      --green-dim: rgba(22, 163, 74, 0.09);
+      --green-line: rgba(22, 163, 74, 0.3);
+      --amber: #b45309;
+      --amber-dim: rgba(180, 83, 9, 0.09);
+      --amber-line: rgba(180, 83, 9, 0.32);
+      --red: #dc2626;
+      --red-dim: rgba(220, 38, 38, 0.08);
+      --red-line: rgba(220, 38, 38, 0.3);
+      --violet: #7c3aed;
+      --violet-dim: rgba(124, 58, 237, 0.09);
+      --violet-line: rgba(124, 58, 237, 0.3);
+      --r-sm: 4px;
+      --r-md: 6px;
+      --r-pill: 999px;
+      --shadow-3: 0 8px 28px rgba(15, 23, 42, 0.14);
+      --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --header-bg: #1e3a5f;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: var(--sans);
+      background: #0b1424;
+      color: var(--text-1);
+      min-height: 100vh;
+    }
+    .page { max-width: 1280px; margin: 0 auto; padding: 20px 20px 48px; }
+    .page.shot { padding: 16px; }
+    .chooser { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+    .chooser button {
+      font-family: var(--mono); font-size: 10px; font-weight: 600;
+      letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 6px 10px; border-radius: var(--r-md);
+      border: 1px solid #2a4060; background: #131e34; color: #93a8c5; cursor: pointer;
+    }
+    .chooser button[aria-current="true"] {
+      background: rgba(91, 143, 199, 0.14);
+      border-color: rgba(91, 143, 199, 0.35); color: #cfe1ff;
+    }
+    .page.shot .chooser { display: none; }
+    .frame { display: none; }
+    .frame.is-on { display: block; }
+    .caption { font-size: 13px; font-weight: 650; color: #cfe1ff; margin: 0 0 4px; }
+    .subcap { font-size: 12px; color: #7d97b5; margin: 0 0 14px; line-height: 1.45; max-width: 78ch; }
+    .pair { display: grid; gap: 22px; }
+    .band {
+      font-family: var(--mono); font-size: 10px; font-weight: 700;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: #93a8c5; margin: 0 0 8px;
+    }
+    .band.after { color: #9fd4b0; }
+
+    .desk {
+      background: #e8eef4; border: 1px solid #1c2e4e; border-radius: 10px;
+      box-shadow: var(--shadow-3); overflow: hidden;
+    }
+    .os-bar {
+      height: 32px; background: #d5dde6; display: flex; align-items: center;
+      gap: 8px; padding: 0 12px; border-bottom: 1px solid #c5ced8;
+    }
+    .os-dots { display: flex; gap: 6px; }
+    .os-dots i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+    .os-dots i:nth-child(1) { background: #ff5f57; }
+    .os-dots i:nth-child(2) { background: #febc2e; }
+    .os-dots i:nth-child(3) { background: #28c840; }
+    .os-url {
+      flex: 1; background: #f4f7fa; border: 1px solid #c5ced8; border-radius: 6px;
+      height: 20px; font: 10px/20px var(--mono); color: #5f6f85; padding: 0 10px;
+    }
+    .app-bar {
+      background: var(--header-bg); color: #f8fafc; padding: 9px 14px 8px;
+      display: flex; align-items: baseline; gap: 14px;
+    }
+    .app-bar .brand { font-size: 13px; font-weight: 700; }
+    .app-bar .crumb { font-size: 11px; opacity: 0.72; }
+    .app-bar .meta { margin-left: auto; font-family: var(--mono); font-size: 10px; opacity: 0.7; }
+    .toolbar {
+      background: #fff; border-bottom: 1px solid var(--border);
+      padding: 8px 12px; display: flex; align-items: center; gap: 8px;
+    }
+    .toolbar h1 { margin: 0; font-size: 14px; font-weight: 650; }
+    .toolbar .count {
+      font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text-3);
+    }
+    .grid { background: #fff; }
+    .g-head, .g-row {
+      display: grid;
+      grid-template-columns: 10px 28px minmax(210px, 1.2fr) 78px 108px minmax(340px, 2.8fr);
+      align-items: stretch;
+    }
+    .g-head {
+      background: var(--bg-mid); border-bottom: 1px solid var(--border);
+      font-family: var(--mono); font-size: 9px; font-weight: 600;
+      letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-4);
+    }
+    .g-head > span, .g-row > .cell { padding: 7px 8px; border-right: 1px solid #e8eef4; }
+    .g-row { border-bottom: 1px solid #e8eef4; background: #fff; min-height: 40px; }
+    .g-row:nth-child(even) { background: #fbfdff; }
+    .g-row.is-cursor { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 1; }
+    .rail { padding: 0 !important; position: relative; }
+    .rail i.red {
+      position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--red);
+    }
+    .rail i.amber {
+      position: absolute; top: 50%; left: 1px; width: 8px; height: 8px;
+      margin-top: -4px; border: 2px solid var(--amber); border-radius: 50%;
+      background: transparent;
+    }
+    .name { font-size: 12.5px; font-weight: 650; color: var(--accent); line-height: 1.25; }
+    .name .age { display: block; font-weight: 500; font-size: 10px; color: var(--text-3); margin-top: 1px; }
+    .check { display: flex; align-items: center; justify-content: center; color: var(--border-hi); font-size: 13px; }
+    .cell.pri { font-size: 11px; color: var(--text-2); }
+    .pri-u { color: var(--red); font-weight: 650; }
+    .cell.created {
+      font-family: var(--mono); font-size: 10px; font-variant-numeric: tabular-nums; color: var(--text-3);
+    }
+    .preview { font-size: 12px; color: var(--text-1); line-height: 1.35; }
+    .preview .req {
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+    .chip {
+      display: inline-flex; align-items: center; padding: 1px 7px; border-radius: var(--r-pill);
+      font-size: 10px; font-weight: 550; line-height: 1.4; border: 1px solid transparent; white-space: nowrap;
+    }
+    .chip.red { background: var(--red-dim); color: var(--red); border-color: var(--red-line); }
+    .chip.amber { background: var(--amber-dim); color: var(--amber); border-color: var(--amber-line); }
+    .chip.green { background: var(--green-dim); color: var(--green); border-color: var(--green-line); }
+    .chip.info { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-line); }
+    .chip.meta { background: transparent; color: var(--text-4); border-color: var(--border); }
+    .pulse-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 3px; }
+    .rail-ring {
+      width: 8px; height: 8px; flex: 0 0 8px; border: 2px solid var(--amber);
+      border-radius: 50%; background: transparent; box-sizing: border-box;
+    }
+    .pulse-head { display: inline-flex; align-items: center; gap: 5px; }
+    .more { font-family: var(--mono); font-size: 10px; color: var(--text-3); }
+    .thread {
+      font-family: var(--mono); font-size: 10px; font-variant-numeric: tabular-nums;
+      background: var(--bg-mid); border: 1px solid var(--border); border-radius: var(--r-pill);
+      padding: 1px 7px; color: var(--text-2);
+    }
+    .diamond {
+      width: 8px; height: 8px; background: var(--red); transform: rotate(45deg);
+      flex: 0 0 8px; box-shadow: 0 0 0 1px var(--red-line);
+    }
+    .diamond.amber { background: var(--amber); box-shadow: 0 0 0 1px var(--amber-line); }
+    .act-btn {
+      width: 22px; height: 22px; border-radius: var(--r-md); border: 1px solid var(--border-hi);
+      background: #fff; color: var(--text-3); font-size: 14px; line-height: 1; padding: 0;
+    }
+    .act-btn.on { background: var(--accent-dim); border-color: var(--accent-line); color: var(--text-2); }
+    .eye {
+      display: inline-flex; align-items: center; gap: 4px; font-size: 10px;
+      color: var(--violet); background: var(--violet-dim); border: 1px solid var(--violet-line);
+      border-radius: var(--r-pill); padding: 1px 7px; margin-left: 6px;
+    }
+    .tray {
+      grid-column: 1 / -1; background: var(--bg-deep); border-top: 1px solid var(--border);
+      padding: 10px 14px 12px 22px;
+    }
+    .tray h3 { margin: 0 0 8px; font-size: 11px; font-weight: 650; color: var(--text-2); }
+    .why-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+    .why-list li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; font-size: 12px; }
+    .why-list .mark { width: 8px; height: 8px; margin-top: 5px; border-radius: 2px; }
+    .why-list .mark.red { background: var(--red); }
+    .why-list .mark.amber { background: transparent; border: 2px solid var(--amber); border-radius: 50%; }
+    .why-list .mark.info, .why-list .mark.green { background: var(--accent); }
+    .why-list .src { display: block; font-size: 11px; color: var(--text-3); margin-top: 1px; }
+    .why-foot { margin: 10px 0 0; font-size: 11px; color: var(--text-4); font-style: italic; }
+    .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+    .acts button {
+      font-size: 12px; padding: 6px 8px; border-radius: var(--r-md);
+      border: 1px solid var(--border-hi); background: #fff; color: var(--text-2);
+      text-align: left; min-width: 150px;
+    }
+    .acts button small { display: block; font-size: 10px; color: var(--text-4); font-weight: 400; }
+    .acts button:disabled { opacity: 0.45; }
+    .act-note { margin: 6px 0 0; font-size: 11px; color: var(--text-4); }
+    .legend {
+      display: flex; flex-wrap: wrap; gap: 14px; padding: 8px 12px 10px;
+      background: #fff; border-top: 1px solid var(--border); font-size: 10px; color: var(--text-4);
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .swatch { width: 10px; height: 10px; border-radius: 2px; }
+    .swatch.red { background: var(--red); }
+    .swatch.amber {
+      background: #fff; border: 2px solid var(--amber); border-radius: 50%;
+    }
+    .swatch.dia { width: 8px; height: 8px; background: var(--red); transform: rotate(45deg); border-radius: 0; }
+  </style>
+</head>
+<body>
+  <div class="page" id="page">
+    <nav class="chooser" id="chooser"></nav>
+    <div id="frames"></div>
+  </div>
+<script>
+const FRAMES = [
+  { id: "compare", title: "Callback — same eight rows, before then after", sub: "v3.236.4 pulse cut. Before is today’s chip pile (pref off). After is default-on: red = filled bar, amber = hollow ring, one named headline, quiet overflow, › to stage. A quiet row keeps its chips — empty is not all-clear. Book / Park / dashed unchecked rail are not in this cut." },
+  { id: "before", title: "Before — the chip pile", sub: "Every family is truthful. Together they compete on the name / preview. This is the queue with queuePulseCompress off." },
+  { id: "after", title: "After — pulse scan (what shipped)", sub: "Filled red bar / amber hollow ring. One headline on escalate rows. Quiet rows keep their chips so they cannot look cleared. › stages, does not send. Diamond = headline came from the record, not the request words." },
+  { id: "why", title: "After — why this is marked", sub: "Click the headline or · N, or Space on the j/k cursor. Named sources. Footer refuses the score reading." },
+  { id: "act", title: "After — thin act tray", sub: "› or a. Pharmacy First and Ask-back reuse the existing pathway menu (still not sent). Book and Park are present and disabled. No Done / Sent / Booked." },
+];
+
+const EYE = `<span class="eye">👁 Dr Chen</span>`;
+
+const ROWS = [
+  {
+    id: "amina", name: "Patel, Amina", dob: "12 Mar 2019 (7 y)",
+    priority: "Routine", created: "20 Aug 09:12",
+    request: "He keeps saying he wants to die and I don’t know what to do",
+    signals: [
+      { kind: "red", name: "MH crisis", source: "request text", family: "rule" },
+      { kind: "info", name: "Child · 7y", source: "date of birth", family: "age" },
+      { kind: "amber", name: "2nd contact · 6d", source: "contact ledger", family: "repeat" },
+    ],
+    silent: false, presence: false,
+  },
+  {
+    id: "david", name: "Hughes, David", dob: "03 Jan 1954 (72 y)",
+    priority: "Routine", created: "20 Aug 08:41",
+    request: "Repeat methotrexate 15 mg weekly please, thank you",
+    signals: [
+      { kind: "red", name: "MTX · FBC overdue", source: "monitoring (record)", family: "monitoring", silent: true },
+      { kind: "info", name: "Elder · 72y", source: "date of birth", family: "age" },
+    ],
+    silent: true, presence: false,
+  },
+  {
+    id: "farah", name: "Khan, Farah", dob: "19 Nov 1991 (34 y)",
+    priority: "Routine", created: "20 Aug 09:28",
+    request: "Sore throat for 3 days, no fever, can swallow, no rash. Can I have antibiotics?",
+    signals: [
+      { kind: "green", name: "Pharmacy First", source: "pathway", family: "pf" },
+      { kind: "info", name: "Ask-back", source: "pathway gaps", family: "ask" },
+    ],
+    silent: false, presence: false, pf: true, ask: true,
+  },
+  {
+    id: "margaret", name: "Brown, Margaret", dob: "22 Jul 1944 (81 y)",
+    priority: "Routine", created: "19 Aug 16:05",
+    request: "Fit note for next week please, still off with the back",
+    signals: [
+      { kind: "amber", name: "Frailty", source: "record context", family: "context", silent: true },
+      { kind: "info", name: "Elder · 81y", source: "date of birth", family: "age" },
+      { kind: "meta", name: "Carried 1d", source: "task ledger", family: "carry" },
+    ],
+    silent: true, presence: false,
+  },
+  {
+    id: "tom", name: "Williams, Tom", dob: "08 May 1981 (45 y)",
+    priority: "Urgent", created: "20 Aug 07:58",
+    request: "Chest pain last night, still aching this morning, a bit short of breath",
+    signals: [
+      { kind: "red", name: "Chest pain", source: "request text", family: "rule" },
+      { kind: "amber", name: "Priority · Urgent", source: "Medicus flag", family: "priority" },
+    ],
+    silent: false, presence: false,
+  },
+  {
+    id: "chioma", name: "Adeyemi, Chioma", dob: "14 Feb 1997 (29 y)",
+    priority: "Routine", created: "20 Aug 10:02",
+    request: "Photo of the rash, it’s spreading onto her chest now",
+    signals: [
+      { kind: "info", name: "Ask-back", source: "pathway gaps", family: "ask" },
+      { kind: "amber", name: "4th contact · 10d", source: "contact ledger", family: "repeat" },
+    ],
+    silent: false, presence: false, ask: true,
+  },
+  {
+    id: "john", name: "Smith, John", dob: "01 Sep 1969 (56 y)",
+    priority: "Routine", created: "20 Aug 09:47",
+    request: "Can I have some more of the painkillers for my knee, the last lot ran out",
+    signals: [], silent: false, presence: true,
+  },
+  {
+    id: "priya", name: "Sharma, Priya", dob: "30 Apr 1985 (41 y)",
+    priority: "Routine", created: "20 Aug 10:11",
+    request: "Feeling tired all the time, can I have a blood test",
+    signals: [], silent: false, presence: false,
+  },
+];
+
+const CONTEXT = { age: true, priority: true, carry: true, repeat: true, pf: true };
+const RANK = { red: 3, amber: 2, info: 1, green: 0, meta: 0 };
+
+function isContextOnly(s) {
+  return !s || s.kind === "green" || s.kind === "meta" || CONTEXT[s.family];
+}
+
+function compose(row) {
+  const list = row.signals || [];
+  const clinical = list.filter((s) => !isContextOnly(s));
+  let headline = null;
+  for (const s of clinical) {
+    if (!headline || RANK[s.kind] > RANK[headline.kind]) headline = s;
+  }
+  if (headline) {
+    const same = clinical.filter((s) => s.kind === headline.kind);
+    const fromReq = same.find((s) => s.family === "rule" || s.source === "request text");
+    if (fromReq) headline = fromReq;
+  }
+  let rail = "";
+  if (headline && headline.kind === "red") rail = "red";
+  else if (headline && headline.kind === "amber") rail = "amber";
+  const overflow = list.filter((s) => s !== headline);
+  const thread = list.find((s) => s.family === "repeat") || null;
+  const silent = !!(headline && (headline.silent || headline.family === "monitoring" || headline.family === "context"));
+  return { rail, headline, overflow, thread, silent, signals: list };
+}
+
+function chip(s) {
+  return `<span class="chip ${s.kind}">${s.name}</span>`;
+}
+
+function pulseLine(row, actOn) {
+  const p = compose(row);
+  const escalate = p.rail === "red" || p.rail === "amber";
+  const act = `<button class="act-btn${actOn ? " on" : ""}" type="button">›</button>`;
+  if (!escalate) {
+    const chips = row.signals.length ? `<div class="chips">${row.signals.map(chip).join("")}</div>` : "";
+    return `${chips}<div class="pulse-line">${act}</div>`;
+  }
+  const ring = p.rail === "amber" ? `<i class="rail-ring" title="Amber — worst named signal is amber; not a score"></i>` : "";
+  const dia = p.silent ? `<i class="diamond${p.headline && p.headline.kind === "amber" ? " amber" : ""}" title="From the record, not the request text"></i>` : "";
+  const head = p.headline ? `<span class="pulse-head">${dia}${chip(p.headline)}</span>` : "";
+  const more = p.overflow.length ? `<span class="more">· ${p.overflow.length}</span>` : "";
+  const th = p.thread ? `<span class="thread">${p.thread.name}</span>` : "";
+  return `<div class="pulse-line">${ring}${head}${more}${th}${act}</div>`;
+}
+
+function whyTray(row) {
+  const p = compose(row);
+  const items = p.signals.length
+    ? p.signals.map((s) => `<li>
+    <i class="mark ${s.kind === "green" ? "info" : s.kind}"></i>
+    <div><strong>${s.name}</strong>
+      <span class="src">${s.source}${s.silent ? " — from the record, not the request text" : ""}</span>
+    </div>
+  </li>`).join("")
+    : `<li><div><strong>Nothing named matched</strong>
+      <span class="src">Not all-clear — the request still has to be read.</span></div></li>`;
+  return `<div class="tray">
+    <h3>Why this is marked</h3>
+    <ul class="why-list">${items}</ul>
+    <p class="why-foot">Not a score. A quiet rail is not all-clear — it means nothing matched, or we have not checked the record yet.</p>
+  </div>`;
+}
+
+function actTray(row) {
+  return `<div class="tray">
+    <h3>1. Stage a next step ↓ &nbsp; 2. Then open the request to finish. Nothing is sent from here.</h3>
+    <div class="acts">
+      <button type="button" disabled>1. Book<small>Not in this first cut — open the request to book</small></button>
+      <button type="button" ${row.pf ? "" : "disabled"}>2. Pharmacy First<small>${row.pf ? "Open the pathway draft (still not sent)" : "Age or pathway not confirmed"}</small></button>
+      <button type="button" ${row.ask ? "" : "disabled"}>3. Ask-back<small>${row.ask ? "Open the gap-question draft (still not sent)" : "No pathway gaps on this request"}</small></button>
+      <button type="button" disabled>4. Park until…<small>Not in this first cut — Medicus status unchanged</small></button>
+    </div>
+    <p class="act-note">Prepare-only. The request still has to be opened for anything to reach reception.</p>
+  </div>`;
+}
+
+function renderRow(row, mode, opts) {
+  const after = mode === "after";
+  const p = compose(row);
+  const rail = after ? p.rail : (p.headline && (p.headline.kind === "red" || p.headline.kind === "amber") ? p.headline.kind : "");
+  const cursor = opts.cursor === row.id ? " is-cursor" : "";
+  const pri = row.priority === "Urgent" ? `<span class="pri-u">${row.priority}</span>` : row.priority;
+  const tray = opts.why === row.id ? whyTray(row) : opts.act === row.id ? actTray(row) : "";
+  return `<div class="g-row${cursor}">
+    <div class="cell rail">${rail ? `<i class="${rail}"></i>` : ""}</div>
+    <div class="cell check">☐</div>
+    <div class="cell">
+      <div class="name">${row.name}${row.presence ? EYE : ""}<span class="age">${row.dob}</span></div>
+    </div>
+    <div class="cell pri">${pri}</div>
+    <div class="cell created">${row.created}</div>
+    <div class="cell preview">
+      ${after ? pulseLine(row, opts.act === row.id) : (row.signals.length ? `<div class="chips">${row.signals.map(chip).join("")}</div>` : "")}
+      <div class="req">${row.request}</div>
+    </div>
+    ${tray}
+  </div>`;
+}
+
+function desk(mode, opts, tag) {
+  const body = ROWS.map((r) => renderRow(r, mode, opts)).join("");
+  const legend = mode === "after" ? `<div class="legend">
+    <span><i class="swatch red"></i> Filled rail — a named red</span>
+    <span><i class="swatch amber"></i> Hollow ring — worst is amber</span>
+    <span><i class="swatch dia"></i> Diamond — headline from the record, not the request</span>
+    <span>· N — more signals (click / Space)</span>
+    <span>› — stage a next step, nothing is sent</span>
+  </div>` : "";
+  return `<div class="desk">
+    <div class="os-bar">
+      <div class="os-dots"><i></i><i></i><i></i></div>
+      <div class="os-url">https://practice.api.england.medicus.health/tasks/medical-request</div>
+    </div>
+    <div class="app-bar">
+      <span class="brand">Medicus</span>
+      <span class="crumb">Tasks / Medical requests</span>
+      <span class="meta">MOCK — ${tag} — not a live patient list</span>
+    </div>
+    <div class="toolbar">
+      <h1>Medical requests</h1>
+      <span class="count">8 open</span>
+    </div>
+    <div class="grid">
+      <div class="g-head">
+        <span></span><span></span>
+        <span>Patient</span><span>Priority</span><span>Created</span><span>Request</span>
+      </div>
+      ${body}
+    </div>
+    ${legend}
+  </div>`;
+}
+
+function renderFrame(id) {
+  if (id === "compare") {
+    return `<div class="pair">
+      <div>
+        <p class="band">Before — chip pile</p>
+        ${desk("before", {}, "BEFORE")}
+      </div>
+      <div>
+        <p class="band after">After — pulse (v3.236.4, default on)</p>
+        ${desk("after", { cursor: "tom" }, "AFTER")}
+      </div>
+    </div>`;
+  }
+  if (id === "before") return desk("before", {}, "BEFORE");
+  if (id === "after") return desk("after", { cursor: "tom" }, "AFTER");
+  if (id === "why") return desk("after", { cursor: "amina", why: "amina" }, "AFTER · WHY");
+  if (id === "act") return desk("after", { cursor: "farah", act: "farah" }, "AFTER · ACT");
+  return "";
+}
+
+const params = new URLSearchParams(location.search);
+const shot = params.get("shot");
+const page = document.getElementById("page");
+if (shot) page.classList.add("shot");
+
+const chooser = document.getElementById("chooser");
+const frames = document.getElementById("frames");
+FRAMES.forEach((f, i) => {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = `${i + 1}  ${f.id}`;
+  btn.dataset.id = f.id;
+  chooser.appendChild(btn);
+  const sec = document.createElement("section");
+  sec.className = "frame";
+  sec.id = "frame-" + f.id;
+  sec.dataset.shot = f.id;
+  sec.innerHTML = `<p class="caption">${f.title}</p><p class="subcap">${f.sub}</p>${renderFrame(f.id)}`;
+  frames.appendChild(sec);
+});
+
+function show(id) {
+  document.querySelectorAll(".frame").forEach((el) => el.classList.toggle("is-on", el.dataset.shot === id));
+  document.querySelectorAll(".chooser button").forEach((b) => b.setAttribute("aria-current", b.dataset.id === id ? "true" : "false"));
+  history.replaceState(null, "", shot ? ("?shot=" + id) : ("#" + id));
+}
+chooser.addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (b) show(b.dataset.id);
+});
+show(shot || location.hash.replace("#", "") || "compare");
+</script>
+</body>
+</html>
