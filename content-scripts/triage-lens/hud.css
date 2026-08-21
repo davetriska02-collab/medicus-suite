@@ -286,15 +286,34 @@
 }
 /* Full-width layout restored only where the line needs the row's whole
    width: an escalate row owns the line (headline/thread/overflow read
-   left to right), and an open tray needs the width regardless of rail.
+   left to right). Guarded off `.ch-q-pulse-inline` — in flat queues the
+   pulse sits inside the patient-name cell and claiming 100% ate the name.
    NOTE: `.ch-row-pulse-on .ch-q-pulse` only matches when the marker class
    is on the preview row too — applyPulseRail already adds it to both; the
-   host lives in the preview row, so this works. */
-.ch-row-pulse-on .ch-q-pulse,
-.ch-q-pulse.ch-q-pulse-open {
+   host lives in the preview row, so this works. Trays no longer need
+   in-row width: they render as floating popovers (positionPulseFloat). */
+.ch-row-pulse-on .ch-q-pulse:not(.ch-q-pulse-inline) {
   display: flex;
   flex: 0 0 100%;
   grid-column: 1 / -1;
+}
+/* No preview row: pulse lives in [col-id=patientName]. Never claim 100% of
+   the cell (that ate the name) and never wrap onto a second line (AG-Grid
+   row height clips anything below the name). Same line, after the name. */
+.ch-q-pulse-inline {
+  flex: 0 1 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  grid-column: auto;
+  width: auto;
+  max-width: 55%;
+  margin: 0;
+  min-width: 1.75rem;
+  min-height: 0;
+}
+.ch-q-pulse-inline .ch-q-pulse-row {
+  flex-wrap: nowrap;
 }
 .ch-q-pulse-row {
   display: inline-flex;
@@ -395,6 +414,13 @@
   box-shadow: var(--shadow-2);
   padding: 8px 12px;
   max-width: 520px;
+}
+/* Expanded why/act sit on the viewport (same idea as .ch-action-menu), not
+   inside the AG-Grid cell — expanding in-cell grew the row and forced a
+   scroll on tasks/investigations. */
+.ch-q-pulse-float {
+  box-shadow: var(--shadow-3);
+  box-sizing: border-box;
 }
 .ch-q-why h3,
 .ch-q-act h3 {
@@ -704,40 +730,49 @@
      row wide: cap it and ellipsise. Full text remains on hover (title). */
   max-width: 18ch;
 }
-/* "Chips under the name" (flat-queue): when our chips land in the patient-name
-   cell, stack them on their OWN line UNDER the name instead of sitting before it
-   and eating horizontal width. We still PREPEND (firstChild) so Medicus's Vue
-   reconciler doesn't strip them — CSS column ORDER, not DOM order, puts them
-   below: the cell becomes a column and our chip line is ordered after the name
-   (a bare-text name becomes an anonymous flex item at order 0). Scoped via :has()
-   so the cell is only restyled when one of our chips is actually present.
-   NOTE: this restyles a Medicus-owned AG-Grid cell — verify on the LIVE grid
-   (CLAUDE.md "capture first"). If a fixed row-height clips the second line, this
-   block is self-contained and can be reverted on its own. */
+/* Flat queues (tasks / investigations): chips still PREPEND (Vue strips
+   trailing nodes) but CSS ORDER puts them AFTER the name on the SAME line.
+   A column stack under the name is clipped by AG-Grid's fixed row height. */
 [col-id='patientName']:has(> .ch-q-result-inline),
 [col-id='patientName']:has(> .ch-q-mon-inline),
 [col-id='patientName']:has(> .ch-q-pending-inline),
-[col-id='patientName']:has(> .ch-queue-chips) {
+[col-id='patientName']:has(> .ch-q-pa-inline),
+[col-id='patientName']:has(> .ch-q-repeat-inline),
+[col-id='patientName']:has(> .ch-q-carry-inline),
+[col-id='patientName']:has(> .ch-queue-chips),
+[col-id='patientName']:has(> .ch-q-pulse) {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-start;
-  row-gap: 1px;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  column-gap: 6px;
+  /* Quiet rows keep the full chip pile — without a hard clip the next
+     AG-Grid column paints over them. */
+  overflow: hidden !important;
+  min-width: 0;
+  isolation: isolate;
 }
-[col-id='patientName'] > .ch-queue-chips {
-  order: 2;
-}
+[col-id='patientName'] > .ch-queue-chips,
+[col-id='patientName'] > .ch-q-pulse,
 [col-id='patientName'] > .ch-q-result-inline,
-[col-id='patientName'] > .ch-q-mon-inline {
-  /* On its own line the chip block no longer needs the 45% width cap. */
-  order: 3;
-  max-width: 100%;
-  margin-right: 0;
+[col-id='patientName'] > .ch-q-mon-inline,
+[col-id='patientName'] > .ch-q-pending-inline,
+[col-id='patientName'] > .ch-q-pa-inline,
+[col-id='patientName'] > .ch-q-repeat-inline,
+[col-id='patientName'] > .ch-q-carry-inline {
+  order: 2;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 46%;
+  margin: 0;
+  overflow: hidden;
 }
-[col-id='patientName'] > .ch-q-result-inline .ch-chip,
-[col-id='patientName'] > .ch-q-mon-inline .ch-chip {
-  /* On their own line chips get full cell width — lift the inline 18ch cap. */
-  max-width: 100%;
+[col-id='patientName'] > .ch-q-pulse {
+  flex: 0 1 auto;
+  grid-column: auto;
+  width: auto;
+  min-height: 0;
 }
 
 /* ---- Queue triage status bar (item 1.2, TRIAGE-LENS-2026-07-02.md) ---- */
@@ -1336,11 +1371,12 @@
   box-shadow: var(--shadow-3);
   min-width: 220px;
   max-width: 320px;
+  max-height: min(70vh, calc(100vh - 16px));
+  overflow-y: auto;
   font-family: var(--sans);
   font-size: 12px;
   line-height: 1.4;
   color: var(--text-1);
-  overflow: hidden;
 }
 .ch-action-menu * {
   box-sizing: border-box;

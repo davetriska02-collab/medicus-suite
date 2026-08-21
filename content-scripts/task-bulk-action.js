@@ -91,14 +91,40 @@
   // /{siteId}/tasks/{taskListSlug}/task-list — the browser URL for a task
   // queue page, same route family triage-lens/content.js already detects
   // generically (`/tasks/[^/]+/task-list`), narrowed to one specific slug
-  // per instantiation.
+  // per instantiation. Also accepts the /tasks/data/{slug}/ task-list shape
+  // (overview pages already use /data/) and hyphen vs underscore slug
+  // spelling, because a miss here means the Bulk button never appears.
   function parseQueuePagePath(pathname, taskListSlug) {
     var safeSlug = String(taskListSlug == null ? '' : taskListSlug).replace(/[^a-zA-Z0-9_-]/g, '');
     if (!safeSlug) return null;
-    var re = new RegExp('^/([0-9a-z]{2,})/tasks/' + safeSlug + '/task-list', 'i');
-    var m = re.exec(String(pathname == null ? '' : pathname));
-    if (!m) return null;
-    return { siteId: m[1] };
+    var alt = safeSlug.indexOf('_') >= 0 ? safeSlug.replace(/_/g, '-') : safeSlug.replace(/-/g, '_');
+    var slugs = alt === safeSlug ? [safeSlug] : [safeSlug, alt];
+    var path = String(pathname == null ? '' : pathname);
+    for (var i = 0; i < slugs.length; i++) {
+      var re = new RegExp('/([0-9a-z]{2,})/tasks/(?:data/)?' + slugs[i] + '/task-list', 'i');
+      var m = re.exec(path);
+      if (m) return { siteId: m[1] };
+    }
+    return null;
+  }
+
+  // Same envelope list as page-world.js / submissions-core extractTaskArray:
+  // a renamed wrapper must show as an empty checklist, never throw.
+  function extractTaskArray(body) {
+    if (!body) return [];
+    if (Array.isArray(body)) return body;
+    if (Array.isArray(body.tasks)) return body.tasks;
+    if (Array.isArray(body.results)) return body.results;
+    if (Array.isArray(body.rows)) return body.rows;
+    if (body.data && Array.isArray(body.data.tasks)) return body.data.tasks;
+    if (Array.isArray(body.data)) return body.data;
+    return [];
+  }
+
+  function taskIdFromRow(row) {
+    if (!row || typeof row !== 'object') return '';
+    var v = row.id || row.taskId || row.taskUuid || row.uuid;
+    return v == null ? '' : String(v);
   }
 
   function partitionSelection(rows) {
@@ -147,6 +173,8 @@
     module.exports = {
       apiErrorMessage: apiErrorMessage,
       parseQueuePagePath: parseQueuePagePath,
+      extractTaskArray: extractTaskArray,
+      taskIdFromRow: taskIdFromRow,
       partitionSelection: partitionSelection,
       canSubmit: canSubmit,
       buildActionPayload: buildActionPayload,
@@ -264,7 +292,7 @@
       // Returned (not written to _scopeWarning here) so load() can apply it
       // only after its own generation check — a fetch completing after SPA
       // navigation must not pollute the next page entry's state.
-      return { tasks: (data && data.tasks) || [], scopeWarning: norm.scopeWarning };
+      return { tasks: extractTaskArray(data), scopeWarning: norm.scopeWarning };
     }
 
     function postAction(taskId) {
@@ -291,9 +319,14 @@
         var result = await fetchTaskList();
         if (gen !== _generation) return; // navigated away mid-fetch — stale result
         _scopeWarning = result.scopeWarning;
-        _rows = result.tasks.map(function (t) {
-          return Object.assign({}, t, { checked: false, acted: false, actError: null });
-        });
+        _rows = result.tasks
+          .map(function (t) {
+            var id = taskIdFromRow(t);
+            return Object.assign({}, t, { id: id, checked: false, acted: false, actError: null });
+          })
+          .filter(function (t) {
+            return !!t.id;
+          });
         _loadState = 'done';
       } catch (err) {
         if (gen !== _generation) return;
@@ -330,14 +363,18 @@
       // One event per BATCH, patientRef null (spans multiple patients) — see
       // this file's header SAFETY POSTURE note.
       if (succeeded > 0 && typeof window !== 'undefined' && window.EventLedger) {
-        window.EventLedger.record({
-          source: 'record',
-          patientRef: null,
-          severity: null,
-          ruleId: config.ledgerRuleId,
-          label: config.ledgerLabel(succeeded),
-          action: 'committed',
-        });
+        try {
+          window.EventLedger.record({
+            source: 'record',
+            patientRef: null,
+            severity: null,
+            ruleId: config.ledgerRuleId,
+            label: config.ledgerLabel(succeeded),
+            action: 'committed',
+          });
+        } catch (_) {
+          /* ledger must never block the confirm-done UI */
+        }
       }
       // The ledger record above still happens on a stale generation — the
       // POSTs really were committed — but the UI state must not be touched:
@@ -455,17 +492,23 @@
       return (
         '<div class="ms-tba-body">' +
         scopeWarningHtml() +
+        '<div class="ms-tba-scroll">' +
         summary +
         selectRow +
         failedHtml +
         listHtml +
+        '</div>' +
+        '<div class="ms-tba-footer">' +
         '<button type="button" class="ms-tba-review-btn" id="ms-tba-review-' +
         esc(config.id) +
         '"' +
         (canSubmit(count, _acting) ? '' : ' disabled') +
-        '>Review ' +
+        '>Review and ' +
+        esc(config.verb.toLowerCase()) +
+        ' ' +
         count +
         ' selected…</button>' +
+        '</div>' +
         '</div>'
       );
     }
@@ -483,6 +526,7 @@
       return (
         '<div class="ms-tba-body">' +
         scopeWarningHtml() +
+        '<div class="ms-tba-scroll">' +
         '<div class="ms-tba-confirm-acting"><span class="ms-tba-confirm-heading">' +
         esc(config.verbGerund.toUpperCase()) +
         ' (' +
@@ -498,6 +542,8 @@
         '<div class="ms-tba-confirm-warning">' +
         esc(config.confirmWarning) +
         '</div>' +
+        '</div>' +
+        '<div class="ms-tba-footer">' +
         '<div class="ms-tba-confirm-actions">' +
         '<button type="button" class="ms-tba-back-btn" id="ms-tba-back-' +
         esc(config.id) +
@@ -511,6 +557,7 @@
         '>' +
         (_acting ? config.verbGerund + '…' : 'Confirm — ' + config.verb.toLowerCase() + ' ' + parts.acting.length) +
         '</button>' +
+        '</div>' +
         '</div>' +
         '</div>'
       );
@@ -634,11 +681,28 @@
       });
     }
 
+    function capOpenPanel() {
+      var el = document.getElementById(widgetId);
+      if (!el) return;
+      var body = el.querySelector('.ms-tba-body');
+      if (!body) return;
+      body.style.height = 'auto';
+      body.style.maxHeight = 'none';
+      var top = body.getBoundingClientRect().top;
+      var max = Math.max(180, window.innerHeight - top - 16);
+      var natural = body.getBoundingClientRect().height;
+      if (natural > max) {
+        body.style.height = max + 'px';
+        body.style.maxHeight = max + 'px';
+      }
+    }
+
     function render() {
       var el = document.getElementById(widgetId);
       if (!el) return;
       el.innerHTML = buildHtml();
       bindEvents(el);
+      requestAnimationFrame(capOpenPanel);
     }
 
     // ── Injection: one trigger above the AG Grid, retried until the grid
@@ -646,18 +710,36 @@
     // setupQueueObserver retry-until-found). ─────────────────────────────────
 
     function findGridAnchor() {
-      return document.querySelector('.ag-root-wrapper');
+      return (
+        document.querySelector('.ag-root-wrapper') ||
+        document.querySelector('.ag-root') ||
+        document.querySelector('.ag-body-viewport')
+      );
     }
 
     function injectTrigger() {
-      if (document.getElementById(widgetId)) return;
+      var existing = document.getElementById(widgetId);
       var anchor = findGridAnchor();
-      if (!anchor || !anchor.parentElement) return;
+      if (existing) {
+        if (anchor && anchor.parentElement && existing.parentElement !== anchor.parentElement) {
+          anchor.parentElement.insertBefore(existing, anchor);
+        }
+        return;
+      }
       var w = document.createElement('div');
       w.id = widgetId;
       w.className = 'ms-tba-widget';
       w.innerHTML = buildHtml();
-      anchor.parentElement.insertBefore(w, anchor);
+      if (anchor && anchor.parentElement) {
+        anchor.parentElement.insertBefore(w, anchor);
+      } else if (document.body) {
+        // Same lesson as document-codes-to-problems: a Vue-managed parent
+        // can unmount an inline node. Body is a backstop until the grid
+        // exists; checkPage re-runs and will re-home above the grid.
+        document.body.insertBefore(w, document.body.firstChild);
+      } else {
+        return;
+      }
       bindEvents(w);
     }
 
@@ -690,6 +772,9 @@
     // problem-bulk-end.js. ─────────────────────────────────────────────────
 
     function isOwnMutation(mutations) {
+      // Vue stripping this widget is NOT an own-write — skip-scheduling
+      // here is how "Bulk acknowledge?" vanished and never came back.
+      if (_onMatchingPage && !document.getElementById(widgetId)) return false;
       for (var i = 0; i < mutations.length; i++) {
         var m = mutations[i];
         if (m.target && m.target.nodeType === 1 && m.target.closest && m.target.closest('#' + widgetId)) continue;
@@ -734,6 +819,12 @@
     document.addEventListener('visibilitychange', function () {
       if (!document.hidden) scheduleCheck();
     });
+
+    window.addEventListener('resize', capOpenPanel);
+
+    setInterval(function () {
+      if (!document.hidden) scheduleCheck();
+    }, 2000);
 
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', scheduleCheck);

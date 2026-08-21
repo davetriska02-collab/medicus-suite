@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.236.5] — 2026-08-21
+## [v3.236.16] — 2026-08-21
 
 ### Queue pulse — design-crit pass (multi-critic review of the v3.236.4 cut)
 
@@ -17,6 +17,89 @@ Findings from a three-lens design crit (art director on rendered pixels, token/c
 - **Interaction states everywhere**: `:hover`/`:focus-visible` on all pulse controls (the block previously had none — the only interactive cluster in hud.css without them), `aria-expanded`/`aria-controls` on all three toggles, Escape closes an open tray, and focus survives the rebuild-on-toggle (it used to drop to `<body>`).
 - Overflow count reads `+N` at the end of the chip run; thread chip recast to the sans voice and no longer claims a pointer it doesn't have; hud.css/sidebar.css scoped `--text-4`/`--text-5` corrected to the canon values (contrast improves suite-wide).
 - Hazard log H-061 controls (b)/(e) updated to describe the new rail and provenance implementations (intent unchanged, mechanisms swapped).
+- Merged over v3.236.6–15's parallel pulse work: the trays now render through main's floating-popover mechanism (`positionPulseFloat`, with its own outside-click/Escape/scroll dismissal) rather than in-row, keeping the crit's tray design, severity sort, aria wiring and focus survival; the escalate full-width rail line is guarded off main's flat-queue `.ch-q-pulse-inline` variant so the patient name is never eaten.
+## [v3.236.15] — 2026-08-21
+
+### Bulk acknowledge — Review stays on screen
+
+Ticking several Privacy Officer alerts left no visible mass-resolve button: the list filled the panel and `overflow: hidden` clipped **Review**. The list now scrolls; **Review and acknowledge N selected…** (then **Confirm**) sits in a footer that cannot be clipped.
+
+## [v3.236.14] — 2026-08-21
+
+### Organise problems replaces Bulk remove/merge on the page
+
+The **Bulk remove/merge** button is no longer injected. Ending and merging stay on **Organise problems** (End bin + drop-to-merge). The write helpers remain for tests.
+
+### Quiet-row chips stay inside the name column
+
+Low-priority (quiet) rows keep the full chip pile. That pile was overflowing into the next AG-Grid cell and getting chopped. The name cell now clips; chips shrink inside it.
+
+## [v3.236.13] — 2026-08-21
+
+### Add-as-problem panel — don't cover Save as document
+
+Nick's codes-to-problems panel was covering the **Save as document** chip (document-file-inline), not Medicus's File control. The panel now treats that chip and its form as obstacles and nudges off them (still draggable).
+
+## [v3.236.12] — 2026-08-21
+
+### Bulk acknowledge / discard — Review and Confirm stay on screen
+
+Select-all on Privacy Officer (or EPS) used to grow a 70vh panel from mid-page, so Review/Confirm sat below the fold and you had to scroll the page. The list now scrolls inside the remaining viewport; the action buttons stay put. Chip action menus also cap at 70vh with internal scroll.
+
+## [v3.236.11] — 2026-08-21
+
+### Flat-queue chips — repeat / carry / presence after the name
+
+Same-line-after-name layout on tasks/investigations now includes repeat-contact, carry-over, and task-presence chips (they still sat *before* the name). Chip hosts keep a 1.75rem colour floor so a squeezed red/amber pill cannot vanish.
+
+## [v3.236.10] — 2026-08-21
+
+### Pulse why / act — expand without scrolling the row
+
+Clicking a pulse headline or › used to grow the tray *inside* the AG-Grid cell, so on tasks and investigations you had to scroll the row to read it. Why and act now open as a viewport popover (same idea as the chip action menu): sits on screen, Escape / click-away to close, row height unchanged.
+
+## [v3.236.9] — 2026-08-21
+
+### Privacy Officer bulk-acknowledge actually stays on the page
+
+"Bulk acknowledge?" was easy to lose: Vue could unmount the panel and the engine treated that as its own write so it never came back; the URL matcher missed `/tasks/data/…` and hyphenated slugs; a wrapped task-list payload rendered as an empty list. The panel now re-injects if stripped, matches the live URL shapes, and reads `tasks` from the same envelopes as the rest of the suite. Confirm still uses Medicus's own `POST /tasks/patient-privacy-officer/complete`.
+
+## [v3.236.8] — 2026-08-21
+
+### Queue chips on tasks / investigations — same line as the name
+
+v3.236.6 put pulse/chips *under* the patient name so they would not cover it. AG-Grid's fixed row height then clipped that second line. On lists with no request preview (tasks, investigations) chips now sit **after** the name on the same line: name stays visible, chips are not cut off.
+
+## [v3.236.7] — 2026-08-21
+
+### Add-as-problem panel — don't cover File document
+
+Nick's "Add coded entries as problems" panel sat `bottom: 20px; right: 20px` and covered Medicus's **File document** button. It now docks **top-right**, nudges itself off that button if they still overlap, and the header is **draggable** (position remembered).
+
+## [v3.236.6] — 2026-08-21
+
+### Queue pulse — name stays visible on tasks / investigations
+
+Pulse compression (`flex: 0 0 100%`) was built for the request-queue **preview** row. On Miscellaneous Tasks and investigations there is no preview row, so the pulse was PREPENDed into the patient-name cell and took the whole cell — the name disappeared on load. Flat-queue pulses now sit **under** the name (same stack as the chip pile); the 100% flex is preview-only.
+
+## [v3.236.5] — 2026-08-21
+
+### Organise appointments canvas (v1)
+
+**Organise on canvas…** on the Medicus appointment book (sits to the
+**left of Open Actions**, not on top of it). Columns are clinician
+diaries; a **filter** (name / site / hide empty) keeps weekday boards
+usable. Tiles are booked patients, gaps are free slots. Drag onto
+another diary's free slot, or onto **Cancel**, to stage; **Finalise**
+writes the ticked list. Arrived tiles are locked. SMS stays off.
+
+Writes follow dummy-patient captures (`docs/learnings-appointment-organise-api.md`):
+cancel, same-list/cross-list move, stretch into a free following slot,
+sick-day similar-slot rebook (leftover phone list, covering-list
+preview + cap, earliest similar default). CSN W14/W15/W16; hazard
+**H-062** (H-061 on main is queue pulse).
+
+Tests: `test-appointment-organise-core.js`.
 
 ## [v3.236.4] — 2026-08-20
 
