@@ -269,7 +269,12 @@
   }
 
   function injectWidget() {
-    if (!getTaskInfo()) return;
+    const info = getTaskInfo();
+    // Document-filing task pages have Medicus's own direct /task and
+    // /appointment access already (confirmed with Dave, 2026-08-19) — this
+    // widget would only be a redundant duplicate there. Same typeSlug
+    // signal document-codes-to-problems.js's own gate uses.
+    if (!info || info.typeSlug === 'document') return;
     if (document.getElementById('ms-bk-widget')) return;
     const card = findCard();
     if (!card || !card.parentElement) return;
@@ -743,8 +748,13 @@
   function scheduleInject() {
     if (_throttle) return;
     // Cheap path-gate FIRST: no point throttling a whole-page scan on a page
-    // that isn't a task overview. Still handle path-change state reset below.
-    const onTaskPage = !!getTaskInfo();
+    // that isn't a task overview — or IS one, but a document-filing task
+    // specifically (2026-08-19: Medicus's own UI already covers booking
+    // there, see injectWidget's own comment). Still handle path-change state
+    // reset below — a document page must still schedule once on arrival so
+    // runInject can clean up a stale widget left over from the PREVIOUS page.
+    const info = getTaskInfo();
+    const onTaskPage = !!info && info.typeSlug !== 'document';
     const pathChanged = location.pathname !== _lastPath;
     if (!onTaskPage && !pathChanged) return;
     // Already placed and still connected → nothing to do.
@@ -765,9 +775,12 @@
     }
     // Skip the heavy scan while backgrounded; visibilitychange re-checks.
     if (document.hidden) return;
-    // Left a task-overview page (e.g. navigated to a task-LIST): drop any stale
-    // widget so it can't strand at the bottom of the wrong page.
-    if (!getTaskInfo()) {
+    // Left a task-overview page (e.g. navigated to a task-LIST), OR arrived
+    // on a document-filing task specifically (2026-08-19 — see injectWidget's
+    // own comment): drop any stale widget so it can't strand at the bottom
+    // of the wrong page.
+    const info = getTaskInfo();
+    if (!info || info.typeSlug === 'document') {
       removeWidget();
       return;
     }

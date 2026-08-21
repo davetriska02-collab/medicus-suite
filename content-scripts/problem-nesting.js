@@ -11,9 +11,16 @@
 // near the bottom of this file) to problem-nesting-canvas.js — the drag-and-drop
 // organiser (2026-08-08, significance lanes + End bin 2026-08-17) is where the
 // clinician confirms nest/link, significance, and single-problem end. This file
-// itself still owns the scan, the "Merge duplicate copies" and "Change
-// significance" accordion sections, Bulk remove?'s sibling writes, and every
-// write — the canvas never writes to Medicus directly.
+// itself still owns the scan and every write — the canvas never writes to
+// Medicus directly. 2026-08-19: the trigger button now opens the canvas
+// directly with no accordion panel of its own any more — the "Change
+// significance" accordion section was removed (the canvas's own significance
+// lanes cover it) and the "Merge duplicate copies" accordion section moved to
+// content-scripts/problem-bulk-end.js (folded into "Bulk remove/merge" — see
+// that file's own header for the full history). The significance-write
+// functions below (commitSignificanceChange, buildUnknownSignificanceSuggestions,
+// SIG_TARGETS, etc.) stay here — the canvas still calls them via
+// window.ProblemNesting.
 //
 // CONFIRMED CONTRACT (live capture 2026-08-03, scripts/problem-nesting-capture.js —
 // full write-up in docs/learnings-problem-nesting-api.md):
@@ -313,7 +320,7 @@
   // for the identical three-way choice offered there). Only pairs with a
   // CONFIDENT match are included — an unmatched reference has nothing
   // actionable to suggest here (it still surfaces as an informational note
-  // in the "Check for retired/legacy codes?" panel instead).
+  // in the "Code cleanup?" panel instead).
   //
   // `matcher` is dependency-injected (shared/problem-text-linking.js's
   // exports) rather than read from `window` directly, so this stays a pure,
@@ -367,74 +374,6 @@
   }
 
   // ── Duplicate-merge helpers (the in-panel "merge these copies" shortcut) ─────
-  // Groups the active problems by IDENTICAL conceptId — two entries carrying
-  // the same code are duplicate copies, not a hierarchy (the exact case the
-  // suggestion engine refuses to pair). Groups of 2+ only; problems with no
-  // resolved conceptId never group. This is the lightweight, same-code-only
-  // sibling of the full Duplicate Problem Checker — it deliberately does NOT
-  // attempt the checker's fuzzy/cross-kind matching.
-  function buildDuplicateGroups(problems, infoById) {
-    var list = Array.isArray(problems) ? problems : [];
-    var info = infoById || {};
-    var byConcept = Object.create(null);
-    var order = [];
-    list.forEach(function (p) {
-      if (!p || !p.id) return;
-      var ci = info[p.id];
-      if (!ci || !ci.conceptId) return;
-      if (!byConcept[ci.conceptId]) {
-        byConcept[ci.conceptId] = [];
-        order.push(ci.conceptId);
-      }
-      byConcept[ci.conceptId].push(p);
-    });
-    return order
-      .filter(function (c) {
-        return byConcept[c].length >= 2;
-      })
-      .map(function (c) {
-        return { conceptId: c, entries: byConcept[c] };
-      });
-  }
-
-  // Default keeper = the EARLIEST copy. Medicus problem ids are UUIDv7
-  // (time-ordered), so the lexicographically smallest id is the oldest entry
-  // — the same "kept (earliest copy)" default the Duplicate Problem Checker
-  // uses. A default only; the keeper radio stays the clinician's choice.
-  function pickEarliestCopyId(entries) {
-    var best = null;
-    (Array.isArray(entries) ? entries : []).forEach(function (e) {
-      if (!e || !e.id) return;
-      if (best === null || e.id < best) best = e.id;
-    });
-    return best;
-  }
-
-  // The confirmed mark-incorrect-and-hidden POST body (identical to the
-  // Duplicate Problem Checker's buildRemovalRequest for kind 'problem'):
-  // {problemId, reason, isConfirmedRemoval: true}. Null (never a partial
-  // body) on a missing id or blank reason — a removal must never reach the
-  // record without its reason.
-  function buildMarkIncorrectPayload(problemId, reason) {
-    var trimmed = (reason || '').trim();
-    if (!problemId || !trimmed) return null;
-    return { problemId: problemId, reason: trimmed, isConfirmedRemoval: true };
-  }
-
-  // Which copies in a group the merge may actually remove: everything except
-  // the keeper and except any copy that has nested children (removing a
-  // parent would leave its children dangling — those copies need the full
-  // Duplicate Checker or Medicus itself, where the structure is visible).
-  function removableDuplicateIds(entries, keeperId) {
-    return (Array.isArray(entries) ? entries : [])
-      .filter(function (e) {
-        return e && e.id && e.id !== keeperId && !e.hasChildren;
-      })
-      .map(function (e) {
-        return e.id;
-      });
-  }
-
   // ── Significance re-grade helpers ────────────────────────────────────────
   // Change-significance rides the CONFIRMED edit-problem full-replace
   // contract problem-description-cleanup.js drives in production: the
@@ -607,10 +546,6 @@
       buildTextLinkSuggestions: buildTextLinkSuggestions,
       buildUnknownSignificanceSuggestions: buildUnknownSignificanceSuggestions,
       manualChildOptions: manualChildOptions,
-      buildDuplicateGroups: buildDuplicateGroups,
-      pickEarliestCopyId: pickEarliestCopyId,
-      buildMarkIncorrectPayload: buildMarkIncorrectPayload,
-      removableDuplicateIds: removableDuplicateIds,
       unwrapOptionValue: unwrapOptionValue,
       unwrapRecordedByOrganisation: unwrapRecordedByOrganisation,
       buildSignificancePayload: buildSignificancePayload,
@@ -640,29 +575,12 @@
       .replace(/"/g, '&quot;');
   }
 
-  // ── Render-layer helpers (glyphs, dates, live region, focus restore) ─────────
-
-  // Feather-style stroke glyphs at currentColor — success check and the
-  // destructive-merge warning triangle. Inline so no external asset ever loads.
-  var CHECK_SVG =
-    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="20 6 9 17 4 12"/></svg>';
-  var WARN_SVG =
-    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-
-  // Onset date for a problem reference — accepts a problemId (looked up in
-  // the scan's info map) or an entry object that carries its own onsetDate
-  // (merge-group entries survive removal of their info-map row).
-  function onsetDateFor(ref) {
-    if (ref && typeof ref === 'object') return ref.onsetDate || null;
-    var i = _infoById[ref];
-    return (i && i.onsetDate) || null;
-  }
-
-  // HTML date suffix for names in markup; empty string when no date.
-  function dateSuffix(ref) {
-    var d = onsetDateFor(ref);
-    return d ? ' <span class="ms-pn-date">· ' + esc(d) + '</span>' : '';
-  }
+  // ── Render-layer helpers (live region, focus restore) ────────────────────────
+  // CHECK_SVG/onsetDateFor/dateSuffix (glyph + date-suffix helpers, used by
+  // the old accordion's merge/significance card rendering) were removed
+  // 2026-08-19 once both sections left this file — see MERGE DUPLICATES
+  // ADDITION in problem-bulk-end.js's header and buildHtml()'s own comment
+  // below for where each moved to.
 
   // Screen-reader announcements — writes into the persistent polite live
   // region (which render() never rebuilds).
@@ -860,19 +778,6 @@
     });
   }
 
-  // Same confirmed write the Duplicate Problem Checker uses to retire a
-  // duplicate copy (engine/record-duplicate-parser.js WRITE_CONTRACTS.problem)
-  // — marks the entry incorrect and hides it from the record. Not an
-  // end-date: the copy disappears as recorded-in-error. No undo endpoint is
-  // known (the checker's own open question), so the confirm copy says so.
-  function postMarkIncorrectAndHidden(payload) {
-    return apiFetch('/clinical/problem/mark-incorrect-and-hidden', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-  }
-
   // ── Split-page patient resolution (same block as problem-bulk-end.js) ────────
   function fetchEditProblemPrefill(problemId) {
     return apiFetch('/clinical/data/problem/edit-problem/' + encodeURIComponent(problemId));
@@ -934,11 +839,15 @@
   // rather than a parseable URL — gates injection on a DOM row match.
   var _contextViaBridge = false;
   var _problemsCache = null;
-  var _open = false;
-  var _scanState = 'idle'; // 'idle' | 'scanning' | 'done' | 'error'
+  // 'idle' | 'scanning' | 'done' | 'error' — still owned here (runScan/
+  // ensureScanned) since problem-nesting-canvas.js's own open() calls
+  // window.ProblemNesting.ensureScanned() and reads scanState via
+  // getSnapshot(). This file's OWN trigger no longer renders a body of its
+  // own for any of these states (2026-08-19: "Organise problems?" now
+  // opens the canvas directly — see buildHtml()/bindEvents() below); the
+  // canvas has its own loading/error/retry UI, confirmed self-sufficient.
+  var _scanState = 'idle';
   var _scanError = null;
-  // Accordion: which done-view section is expanded (one at a time).
-  var _openSection = null; // 'merge' | 'significance' | null
   // [{childId, childDescription, childConceptId, parentOptions, chosenParentId,
   //   confirming, linking, linked, linkedParentDescription, linkError}] — no
   // longer rendered by this file's own accordion (see the "canvas" section in
@@ -975,14 +884,6 @@
   // scan doubled the scan's API fan-out for data most sessions never look
   // at (review finding on the canvas PR).
   var _linkedIdsState = 'idle';
-  // Duplicate-merge groups: [{conceptId, description, entries: [{id,
-  //   description, hasChildren, additionalInformation}], keeperId, open,
-  //   confirming, removing, reason, errors: {id: msg}, removedCount, done}]
-  var _mergeGroups = [];
-  // Significance re-grade state: target grade key, ticked set, per-row
-  // errors; _sigChanged is this session's committed re-grades (display only).
-  var _sig = { target: null, ids: {}, confirming: false, committing: false, errors: {} };
-  var _sigChanged = [];
   // Subscribers to the bridge's onChange (see window.ProblemNesting below) —
   // notified at the end of every render() so the canvas overlay
   // (problem-nesting-canvas.js) stays in sync with state changed from
@@ -991,10 +892,8 @@
 
   function resetForPatient() {
     _problemsCache = null;
-    _open = false;
     _scanState = 'idle';
     _scanError = null;
-    _openSection = null;
     _suggestions = [];
     _textLinkSuggestions = [];
     _parentIdByProblemId = {};
@@ -1002,9 +901,6 @@
     _problems = [];
     _infoById = {};
     _linkedIdsState = 'idle';
-    _mergeGroups = [];
-    _sig = { target: null, ids: {}, confirming: false, committing: false, errors: {} };
-    _sigChanged = [];
     // Notify subscribers (the canvas overlay) even though our own widget DOM
     // is about to be rebuilt by injectTrigger — the canvas is a fixed overlay
     // nothing else closes on an SPA patient navigation, and it decides
@@ -1133,31 +1029,6 @@
       // this point — commitParentLink's sync cycle guard can trust the map
       // from here on (see _parentMapComplete's own comment).
       _parentMapComplete = true;
-      _mergeGroups = buildDuplicateGroups(problems, infoById).map(function (g) {
-        var entries = g.entries.map(function (p) {
-          var ci = infoById[p.id] || {};
-          return {
-            id: p.id,
-            description: p.description,
-            hasChildren: !!ci.hasChildren,
-            additionalInformation: ci.additionalInformation || null,
-            onsetDate: ci.onsetDate || null,
-          };
-        });
-        return {
-          conceptId: g.conceptId,
-          description: entries[0].description,
-          entries: entries,
-          keeperId: pickEarliestCopyId(entries),
-          open: false,
-          confirming: false,
-          removing: false,
-          reason: 'Duplicate entry - merged into retained copy',
-          errors: {},
-          removedCount: 0,
-          done: false,
-        };
-      });
       // Practice-defined pairs (rules/problem-nesting-overrides.json) fold
       // into the same suggestion builder as the live SNOMED hits — see
       // buildNestingSuggestions' own comment for how the two are merged and
@@ -1199,21 +1070,11 @@
       // the relationship-check batch above is one network round-trip per
       // confident suggestion, plenty of time for an SPA patient navigation.
       // resetForPatient set _scanState back to 'idle' for the NEW patient —
-      // writing 'done' (and _openSection) here would present a completed
-      // scan over cleared data instead of offering to scan.
+      // writing 'done' here would present a completed scan over cleared
+      // data instead of offering to scan.
       if (_lastPatientId !== scanPatientId) return;
       _scanState = 'done';
-      // Accordion default: first section with something in it.
-      _openSection = _mergeGroups.length ? 'merge' : 'significance';
-      announce(
-        _suggestions.length +
-          ' suggestion' +
-          (_suggestions.length === 1 ? '' : 's') +
-          ', ' +
-          _mergeGroups.length +
-          ' duplicate group' +
-          (_mergeGroups.length === 1 ? '' : 's')
-      );
+      announce(_suggestions.length + ' suggestion' + (_suggestions.length === 1 ? '' : 's'));
     } catch (err) {
       if (_lastPatientId !== scanPatientId) return;
       _scanState = 'error';
@@ -1350,6 +1211,20 @@
     }
   }
 
+  // Single-problem, always-fresh read of a problem's current flat-linked-id
+  // set (2026-08-19, for content-scripts/problem-description-cleanup.js's
+  // "Edit problem" panel to offer removing a link) — deliberately NOT
+  // ensureLinkedIdsLoaded (that populates EVERY on-record problem's
+  // linkedProblemIds in one batched pass for the canvas's own tree
+  // rendering, and only after a full nesting scan has completed). This is
+  // the one-fetch, scan-independent read commitFlatLink/commitFlatUnlink
+  // already do for themselves, exposed so a caller can show the CURRENT
+  // set without committing anything.
+  async function getLinkedProblemIds(problemId) {
+    var prefill = await fetchLinkedProblemIds(_lastPatientId, problemId);
+    return Array.isArray(prefill && prefill.existingLinkedProblems) ? prefill.existingLinkedProblems : [];
+  }
+
   // Creates a flat (non-hierarchical) link between two problems via the
   // update-problem-links endpoint — confirmed 2026-08-08, CONFIRMED FULL
   // REPLACE (docs/learnings-problem-nesting-api.md, HAR 53): unlike
@@ -1395,6 +1270,45 @@
     }
   }
 
+  // Removes a flat (non-hierarchical) link between two problems — the
+  // counterpart commitFlatLink never had (2026-08-19 report: a clinician
+  // could create a flat link but had no way to undo one, unlike
+  // commitUnlink for a parent/child nest). Same full-replace discipline as
+  // commitFlatLink: fetch a fresh set right now (never the scan-time
+  // cache), drop the one id if present, POST the resulting array back. A
+  // no-op (the link is already gone) skips the write entirely — same
+  // "don't needlessly re-trigger EventLedger/onChange" reasoning as the
+  // no-op guard in commitFlatLink.
+  async function commitFlatUnlink(problemId, otherProblemId) {
+    if (!otherProblemId) throw new Error('No linked problem given to remove.');
+    var prefill = await fetchLinkedProblemIds(_lastPatientId, problemId);
+    var existing = Array.isArray(prefill && prefill.existingLinkedProblems) ? prefill.existingLinkedProblems : [];
+    var idx = existing.indexOf(otherProblemId);
+    if (idx === -1) {
+      if (_infoById[problemId]) _infoById[problemId].linkedProblemIds = existing;
+      return;
+    }
+    var next = existing.slice(0, idx).concat(existing.slice(idx + 1));
+    await postUpdateProblemLinks(buildUpdateProblemLinksPayload(_lastPatientId, problemId, next));
+    if (_infoById[problemId]) _infoById[problemId].linkedProblemIds = next;
+    if (_infoById[otherProblemId]) {
+      var otherNext = _infoById[otherProblemId].linkedProblemIds.filter(function (id) {
+        return id !== problemId;
+      });
+      _infoById[otherProblemId].linkedProblemIds = otherNext;
+    }
+    if (window.EventLedger) {
+      window.EventLedger.record({
+        source: 'record',
+        patientRef: _lastPatientId,
+        severity: null,
+        ruleId: 'problem-nesting',
+        label: 'Remove link: 1 link removed',
+        action: 'committed',
+      });
+    }
+  }
+
   // Confirms whether problemId and otherProblemId are ALREADY related on the
   // record — either a flat link (update-problem-links) or a parent/child
   // nesting in EITHER direction — so a confident "(Grouped with X)" text
@@ -1403,7 +1317,7 @@
   // created (2026-08-09 request: "check for existing relationships... has
   // someone already manually fixed this"). Deliberately self-contained
   // rather than assuming a prior scan has run: content-scripts/problem-
-  // description-cleanup.js's own "Check for retired/legacy codes?" scan
+  // description-cleanup.js's own "Code cleanup?" scan
   // never calls this file's runScan, so _infoById may be empty when this is
   // called from there — falls back to a fresh overview fetch per problem
   // only when the cached parentProblemId isn't already known (the canvas's
@@ -1523,17 +1437,10 @@
     return out;
   }
 
-  function sigSelectedIds() {
-    return Object.keys(_sig.ids).filter(function (id) {
-      return _sig.ids[id];
-    });
-  }
-
-  // Single-problem significance change — the SAME confirmed full-replace
-  // write confirmSignificanceBatch's own per-row body uses (GET the
-  // problem's own edit-problem prefill, resolve the target grade from the
-  // prefill's OWN significances options, rebuild with ONLY significance
-  // changed, POST), exposed standalone for the canvas's own "Unknown
+  // Single-problem significance change — a confirmed full-replace write
+  // (GET the problem's own edit-problem prefill, resolve the target grade
+  // from the prefill's OWN significances options, rebuild with ONLY
+  // significance changed, POST), exposed for the canvas's own "Unknown
   // significance" tray suggestions (2026-08-09) rather than routing through
   // the old accordion's manual tick-and-batch UI. Throws on failure (a
   // per-row refusal or a real API error) with a user-facing message, same
@@ -1571,17 +1478,12 @@
     if (!problemId) throw new Error('A problem must be chosen.');
     if (!_lastPatientId) throw new Error('Patient context was lost — not ending.');
     if (hasActiveChildren(problemId, _parentIdByProblemId)) {
-      throw new Error(
-        'This problem still has active children — end or un-nest them first, or use Bulk remove?.'
-      );
+      throw new Error('This problem still has active children — end or un-nest them first, or use Bulk remove?.');
     }
     var form = await fetchEndProblemForm(problemId);
-    var childCount =
-      (form && Array.isArray(form.activeChildProblems) && form.activeChildProblems.length) || 0;
+    var childCount = (form && Array.isArray(form.activeChildProblems) && form.activeChildProblems.length) || 0;
     if (childCount > 0) {
-      throw new Error(
-        'This problem still has active children — end or un-nest them first, or use Bulk remove?.'
-      );
+      throw new Error('This problem still has active children — end or un-nest them first, or use Bulk remove?.');
     }
     await postEndProblem(buildEndProblemPayload(problemId, todayISO(), 'Resolved'));
     _problems = (_problems || []).filter(function (p) {
@@ -1601,293 +1503,7 @@
     }
   }
 
-  // Commits the ticked re-grades SEQUENTIALLY: per row, GET the problem's
-  // own edit-problem prefill, resolve the target grade from the prefill's
-  // OWN significances options (a form that doesn't offer the grade is a
-  // per-row refusal, never an invented enum), rebuild the full-replace body
-  // with ONLY significance changed, POST. Per-row failures keep their tick
-  // and show their error; the batch carries on.
-  async function confirmSignificanceBatch() {
-    var m = _sig;
-    if (m.committing || !m.target) return;
-    var targets = sigSelectedIds();
-    if (!targets.length) return;
-    m.committing = true;
-    m.errors = {};
-    render();
-    var batch = 0;
-    for (var i = 0; i < targets.length; i++) {
-      var id = targets[i];
-      var prob = _problems.find(function (x) {
-        return x.id === id;
-      });
-      if (!prob) continue;
-      try {
-        var prefill = await fetchEditProblemPrefill(id);
-        var value = resolveSignificanceOption(prefill && prefill.significances, m.target);
-        if (!value) {
-          throw new Error(
-            "Medicus's own edit form doesn't offer that significance for this problem — change it in Medicus."
-          );
-        }
-        var payload = buildSignificancePayload(prefill, value);
-        if (!payload) throw new Error('Could not build a safe update for this problem — skipped.');
-        await postEditProblem(id, payload);
-        var fromLabel = (_infoById[id] && _infoById[id].significance) || 'Unknown';
-        _sigChanged.push({ description: prob.description, id: id, from: fromLabel, to: sigTargetLabel(m.target) });
-        if (_infoById[id]) _infoById[id].significance = sigTargetLabel(m.target);
-        delete m.ids[id];
-        batch++;
-      } catch (err) {
-        m.errors[id] = (err && err.message) || 'Failed to update this problem — please try again.';
-      }
-    }
-    m.committing = false;
-    m.confirming = false;
-    // One ledger record per batch, fixed label with the batch-local count —
-    // never problem descriptions.
-    if (batch > 0 && window.EventLedger) {
-      window.EventLedger.record({
-        source: 'record',
-        patientRef: _lastPatientId,
-        severity: null,
-        ruleId: 'problem-significance',
-        label: 'Change significance: ' + batch + ' problem' + (batch === 1 ? '' : 's') + ' re-graded',
-        action: 'committed',
-      });
-    }
-    announce(
-      batch +
-        ' problem' +
-        (batch === 1 ? '' : 's') +
-        ' re-graded' +
-        (Object.keys(m.errors).length ? ', ' + Object.keys(m.errors).length + ' failed' : '')
-    );
-    render();
-  }
-
-  // Removes a merged-away copy from every piece of live widget state so the
-  // other sections (and, via the bridge, the canvas overlay's own live-
-  // filtering) stop offering it: the problem list, the info/link maps, and
-  // any significance tick.
-  function forgetProblem(problemId) {
-    _problems = _problems.filter(function (p) {
-      return p.id !== problemId;
-    });
-    delete _infoById[problemId];
-    delete _parentIdByProblemId[problemId];
-    delete _sig.ids[problemId];
-  }
-
-  // Commits one duplicate group's merge: mark-incorrect-and-hidden on every
-  // removable non-keeper copy, SEQUENTIALLY, with the group's shared reason.
-  // Per-copy failures record against their row and the rest carry on — the
-  // keeper is never touched by definition, so a partial batch is always
-  // recoverable (retry or fall back to the Duplicate Checker).
-  async function confirmMergeGroup(g) {
-    if (g.removing || g.done) return;
-    var targets = removableDuplicateIds(g.entries, g.keeperId);
-    var payloadCheck = buildMarkIncorrectPayload('x', g.reason);
-    if (!targets.length || !payloadCheck) return; // blank reason never reaches the record
-    g.removing = true;
-    g.errors = {};
-    render();
-    var batchRemoved = 0;
-    for (var i = 0; i < targets.length; i++) {
-      var id = targets[i];
-      try {
-        await postMarkIncorrectAndHidden(buildMarkIncorrectPayload(id, g.reason));
-        batchRemoved++;
-        g.removedCount++;
-        forgetProblem(id);
-        g.entries = g.entries.filter(function (e) {
-          return e.id !== id;
-        });
-      } catch (err) {
-        g.errors[id] = (err && err.message) || 'Failed to remove this copy — please try again.';
-      }
-    }
-    g.removing = false;
-    g.confirming = false;
-    if (!Object.keys(g.errors).length) g.done = true;
-    if (Object.keys(g.errors).length) {
-      announce('Action failed — see panel');
-    } else if (batchRemoved > 0) {
-      announce(batchRemoved + ' cop' + (batchRemoved === 1 ? 'y' : 'ies') + ' removed');
-    }
-    // One ledger record per batch (batch-local count so a retry never
-    // re-reports earlier successes), fixed label — never the problem
-    // description or the free-typed reason.
-    if (batchRemoved > 0 && window.EventLedger) {
-      window.EventLedger.record({
-        source: 'record',
-        patientRef: _lastPatientId,
-        severity: null,
-        ruleId: 'problem-merge',
-        label: 'Merge problems: ' + batchRemoved + ' duplicate cop' + (batchRemoved === 1 ? 'y' : 'ies') + ' removed',
-        action: 'committed',
-      });
-    }
-    render();
-  }
-
   // ── Render ────────────────────────────────────────────────────────────────────
-
-  // One duplicate group's card in the "Merge duplicate copies" section.
-  // Collapsed: description + copy count + "Merge…". Expanded: keeper radios
-  // (blocked copies flagged, additional-info copies cautioned), then the
-  // KEEPING / REMOVING confirm with the reason echoed and the
-  // mark-incorrect-and-hidden consequence stated plainly.
-  function mergeGroupHtml(g, gIdx) {
-    if (g.done) {
-      return (
-        '<div class="ms-pn-card ms-pn-card-linked">' +
-        CHECK_SVG +
-        ' <strong>' +
-        esc(g.description) +
-        '</strong> — ' +
-        g.removedCount +
-        ' duplicate cop' +
-        (g.removedCount === 1 ? 'y' : 'ies') +
-        ' removed, earliest copy kept. Medicus’s own list shows this after a page refresh.</div>'
-      );
-    }
-    if (!g.open) {
-      return (
-        '<div class="ms-pn-card"><div class="ms-pn-card-main"><strong>' +
-        esc(g.description) +
-        '</strong> — ' +
-        g.entries.length +
-        ' copies with the same code.</div>' +
-        '<button type="button" class="ms-pn-link-btn ms-pn-merge-open" data-gidx="' +
-        gIdx +
-        '">Merge…</button></div>'
-      );
-    }
-    var rows = g.entries
-      .map(function (e) {
-        var notes = [];
-        if (e.hasChildren) notes.push('has nested children — kept; merge it via the Duplicate Checker or Medicus');
-        if (e.additionalInformation)
-          notes.push('has additional info — removing loses it; compare in the Duplicate Checker first');
-        var err = g.errors[e.id];
-        return (
-          '<label class="ms-pn-man-child-row">' +
-          '<input type="radio" name="ms-pn-merge-keeper-' +
-          gIdx +
-          '" class="ms-pn-merge-keeper" data-gidx="' +
-          gIdx +
-          '" data-entry-id="' +
-          esc(e.id) +
-          '"' +
-          (g.keeperId === e.id ? ' checked' : '') +
-          (g.removing ? ' disabled' : '') +
-          '>' +
-          '<span>' +
-          esc(e.description) +
-          dateSuffix(e) +
-          (g.keeperId === e.id ? ' <span class="ms-pn-merge-keep-tag">keep this copy</span>' : '') +
-          (notes.length ? ' <span class="ms-pn-man-child-note">(' + esc(notes.join('; ')) + ')</span>' : '') +
-          '</span>' +
-          (err ? '<span class="ms-pn-card-error">' + esc(err) + '</span>' : '') +
-          '</label>'
-        );
-      })
-      .join('');
-    var removable = removableDuplicateIds(g.entries, g.keeperId);
-    var confirmHtml = '';
-    if (g.confirming && removable.length) {
-      var kept = g.entries.filter(function (e) {
-        return removable.indexOf(e.id) === -1;
-      });
-      confirmHtml =
-        '<div class="ms-pn-confirm ms-pn-confirm-danger">' +
-        WARN_SVG +
-        ' <strong>Keeping</strong> ' +
-        kept
-          .map(function (e) {
-            return '<strong>' + esc(e.description) + '</strong>' + dateSuffix(e);
-          })
-          .join(', ') +
-        ' · <strong>Removing</strong> ' +
-        removable.length +
-        ' cop' +
-        (removable.length === 1 ? 'y' : 'ies') +
-        ' via Medicus’s mark-incorrect-and-hidden — removed copies are hidden from the record as recorded-in-error, ' +
-        'not end-dated, and this cannot be undone from this tool. Reason recorded against each: ' +
-        '<input type="text" class="ms-pn-merge-reason" data-gidx="' +
-        gIdx +
-        '" value="' +
-        esc(g.reason) +
-        '" maxlength="120">' +
-        '<div class="ms-pn-confirm-actions">' +
-        '<button type="button" class="ms-pn-cancel ms-pn-merge-back" data-gidx="' +
-        gIdx +
-        '"' +
-        (g.removing ? ' disabled' : '') +
-        '>Back</button>' +
-        '<button type="button" class="ms-pn-confirm-btn ms-pn-merge-confirm" data-gidx="' +
-        gIdx +
-        '"' +
-        (g.removing || !(g.reason || '').trim() ? ' disabled' : '') +
-        '>' +
-        (g.removing
-          ? 'Removing…'
-          : 'Confirm — remove ' + removable.length + ' cop' + (removable.length === 1 ? 'y' : 'ies')) +
-        '</button>' +
-        '</div></div>';
-    }
-    return (
-      '<div class="ms-pn-card">' +
-      '<div class="ms-pn-card-main"><strong>' +
-      esc(g.description) +
-      '</strong> — pick the copy to <strong>keep</strong>; every other removable copy is removed.</div>' +
-      '<div class="ms-pn-man-children">' +
-      rows +
-      '</div>' +
-      (g.confirming
-        ? confirmHtml
-        : '<button type="button" class="ms-pn-link-btn ms-pn-merge-review" data-gidx="' +
-          gIdx +
-          '"' +
-          (removable.length && !g.removing ? '' : ' disabled') +
-          '>Review merge (' +
-          removable.length +
-          ' to remove)…</button>') +
-      '</div>'
-    );
-  }
-
-  function liveMergeGroups() {
-    return _mergeGroups.filter(function (g) {
-      return g.done || g.entries.length >= 2;
-    });
-  }
-
-  function emptyBlockHtml(title, sub) {
-    return (
-      '<div class="ms-pn-empty-block"><div class="ms-pn-empty-title">' +
-      esc(title) +
-      '</div><div class="ms-pn-empty-sub">' +
-      esc(sub) +
-      '</div></div>'
-    );
-  }
-
-  function mergeSectionContent() {
-    var live = liveMergeGroups();
-    if (!live.length) {
-      return emptyBlockHtml('No duplicate copies', 'No two active problems here share the same SNOMED code.');
-    }
-    return (
-      '<div class="ms-pn-sec-note">Same code recorded more than once. Pick the copy to keep.</div>' +
-      live
-        .map(function (g) {
-          return mergeGroupHtml(g, _mergeGroups.indexOf(g));
-        })
-        .join('')
-    );
-  }
 
   function problemDescription(problemId) {
     var p = _problems.find(function (x) {
@@ -1896,317 +1512,25 @@
     return p ? p.description : null;
   }
 
-  // The significance re-grade section — tick problems, pick a target grade,
-  // one confirmed batch. Non-destructive relative to the other sections (a
-  // grade can be changed back the same way), so the confirm stays neutral —
-  // but it is still a live-record write via a FULL-REPLACE endpoint, hence
-  // the same per-row prefill round-trip discipline as "Clean up code".
-  function sigSectionContent() {
-    var m = _sig;
-    var targetOptions = SIG_TARGETS.map(function (t) {
-      return (
-        '<option value="' + t.key + '"' + (m.target === t.key ? ' selected' : '') + '>' + esc(t.label) + '</option>'
-      );
-    }).join('');
-    var selected = sigSelectedIds();
-
-    var rows = _problems
-      .map(function (p) {
-        var current = (_infoById[p.id] && _infoById[p.id].significance) || 'Unknown';
-        var already = sigCurrentMatchesTarget(current, m.target);
-        var err = m.errors[p.id];
-        return (
-          '<label class="ms-pn-man-child-row">' +
-          '<input type="checkbox" class="ms-pn-sig-cb" data-sig-id="' +
-          esc(p.id) +
-          '"' +
-          (m.ids[p.id] && !already ? ' checked' : '') +
-          (m.committing || already ? ' disabled' : '') +
-          '>' +
-          '<span>' +
-          esc(p.description) +
-          dateSuffix(p.id) +
-          ' <span class="ms-pn-date">' +
-          esc(current) +
-          '</span>' +
-          (already ? ' <span class="ms-pn-man-child-note">(already ' + esc(current) + ')</span>' : '') +
-          '</span>' +
-          (err ? '<span class="ms-pn-card-error">' + esc(err) + '</span>' : '') +
-          '</label>'
-        );
-      })
-      .join('');
-
-    var changedHtml = _sigChanged
-      .map(function (c) {
-        return (
-          '<div class="ms-pn-card ms-pn-card-linked">' +
-          CHECK_SVG +
-          ' <strong>' +
-          esc(c.description) +
-          '</strong>' +
-          dateSuffix(c.id) +
-          ' — ' +
-          esc(c.from) +
-          ' → <strong>' +
-          esc(c.to) +
-          '</strong>. Medicus’s own list shows this after a page refresh.</div>'
-        );
-      })
-      .join('');
-
-    var confirmHtml = '';
-    if (m.confirming && m.target && selected.length) {
-      confirmHtml =
-        '<div class="ms-pn-confirm">This re-grades ' +
-        selected.length +
-        ' problem' +
-        (selected.length === 1 ? '' : 's') +
-        ' to <strong>' +
-        esc(sigTargetLabel(m.target)) +
-        '</strong> via Medicus’s own edit form — every other field on each problem is resent unchanged:' +
-        '<ul class="ms-pn-confirm-list">' +
-        selected
-          .map(function (id) {
-            var current = (_infoById[id] && _infoById[id].significance) || 'Unknown';
-            return (
-              '<li>' +
-              esc(problemDescription(id) || id) +
-              dateSuffix(id) +
-              ' — ' +
-              esc(current) +
-              ' → ' +
-              esc(sigTargetLabel(m.target)) +
-              '</li>'
-            );
-          })
-          .join('') +
-        '</ul>' +
-        'Significance changes how the problem list groups these entries; it can be changed back the same way.' +
-        '<div class="ms-pn-confirm-actions">' +
-        '<button type="button" class="ms-pn-cancel" id="ms-pn-sig-cancel"' +
-        (m.committing ? ' disabled' : '') +
-        '>Cancel</button>' +
-        '<button type="button" class="ms-pn-confirm-btn" id="ms-pn-sig-confirm"' +
-        (m.committing ? ' disabled' : '') +
-        '>' +
-        (m.committing
-          ? 'Updating…'
-          : 'Confirm — re-grade ' + selected.length + ' problem' + (selected.length === 1 ? '' : 's')) +
-        '</button>' +
-        '</div></div>';
-    }
-
-    var failedCount = Object.keys(m.errors).length;
-    return (
-      '<div class="ms-pn-sec-note">Tick the problems, pick the grade they should be.</div>' +
-      '<div class="ms-pn-manual-row">Move ticked problems to ' +
-      '<select class="ms-pn-parent-select" id="ms-pn-sig-target">' +
-      '<option value=""' +
-      (m.target ? '' : ' selected') +
-      ' disabled>Choose grade…</option>' +
-      targetOptions +
-      '</select>' +
-      ' <button type="button" class="ms-pn-link-btn" id="ms-pn-sig-go"' +
-      (m.target && selected.length && !m.confirming && !m.committing ? '' : ' disabled') +
-      '>Re-grade ' +
-      (selected.length || '') +
-      ' selected…</button>' +
-      '</div>' +
-      '<div class="ms-pn-man-children">' +
-      rows +
-      '</div>' +
-      confirmHtml +
-      (failedCount && !m.confirming
-        ? '<div class="ms-pn-card-error">' +
-          failedCount +
-          ' update' +
-          (failedCount === 1 ? '' : 's') +
-          ' failed — the error is shown against each row; they stay ticked so you can retry.</div>'
-        : '') +
-      changedHtml
-    );
-  }
-
-  // Accordion section header: sans 12px/600 label, text chevron left,
-  // mono count right, aria-expanded honest. One open at a time.
-  function sectionHeadHtml(key, label, countText) {
-    var open = _openSection === key;
-    return (
-      '<button type="button" class="ms-pn-sec-head" data-sec="' +
-      key +
-      '" aria-expanded="' +
-      (open ? 'true' : 'false') +
-      '">' +
-      '<span class="ms-pn-sec-chevron">' +
-      (open ? '▾' : '▸') +
-      '</span>' +
-      '<span>' +
-      esc(label) +
-      '</span>' +
-      '<span class="ms-pn-sec-count">' +
-      esc(countText) +
-      '</span>' +
-      '</button>'
-    );
-  }
-
   function buildHtml() {
-    var header =
-      '<button type="button" class="ms-pn-toggle" id="ms-pn-toggle" aria-expanded="' +
-      _open +
-      '">' +
-      (_open ? '▾' : '▸') +
-      ' Organise problems?</button>';
-    if (!_open) return header;
-    var body;
-    if (_scanState === 'scanning') {
-      body =
-        '<div class="ms-pn-body"><span class="ms-pn-loading">Checking SNOMED relationships between the active problems…</span></div>';
-    } else if (_scanState === 'error') {
-      body =
-        '<div class="ms-pn-body"><span class="ms-pn-error">' +
-        esc(_scanError) +
-        '</span> <button type="button" class="ms-pn-retry" id="ms-pn-retry">Retry</button></div>';
-    } else if (_scanState === 'done') {
-      body =
-        '<div class="ms-pn-body">' +
-        '<div class="ms-pn-summary">From SNOMED codes already on this record — nothing links without its own confirm.</div>' +
-        '<div class="ms-pn-canvas-row">' +
-        '<button type="button" class="ms-pn-link-btn" id="ms-pn-open-canvas">Organise on canvas…</button>' +
-        '<span class="ms-pn-sec-count">' +
-        _suggestions.length +
-        ' suggested</span>' +
-        '</div>' +
-        sectionHeadHtml('merge', 'Merge duplicate copies', String(liveMergeGroups().length)) +
-        (_openSection === 'merge' ? '<div class="ms-pn-sec-body">' + mergeSectionContent() + '</div>' : '') +
-        sectionHeadHtml(
-          'significance',
-          'Change significance',
-          sigSelectedIds().length > 0 ? sigSelectedIds().length + ' selected' : String(_problems.length)
-        ) +
-        (_openSection === 'significance' ? '<div class="ms-pn-sec-body">' + sigSectionContent() + '</div>' : '') +
-        '</div>';
-    } else {
-      body = '';
-    }
-    return header + body;
+    // 2026-08-19: "Organise problems?" now opens the canvas directly —
+    // no more accordion panel of its own (Change significance moved fully
+    // onto the canvas's significance lanes, v3.234.0; Merge duplicate
+    // copies moved to "Bulk remove/merge", problem-bulk-end.js). This was
+    // also the fix for the reported reflow bug: the trigger never grows a
+    // .ms-pn-body sibling now, so the :has(.ms-pn-body) CSS flex-basis
+    // flip that pushed it onto its own row (problem-nesting.css) never
+    // fires — the button simply never changes shape when clicked.
+    return '<button type="button" class="ms-pn-toggle" id="ms-pn-toggle">Organise problems?</button>';
   }
 
   function bindEvents(el) {
+    // 2026-08-19: goes straight to the canvas — no accordion state of its
+    // own to toggle. ProblemNestingCanvas.open() calls
+    // window.ProblemNesting.ensureScanned() itself, so this doesn't need to
+    // trigger or await the scan; the canvas shows its own loading state.
     el.querySelector('#ms-pn-toggle').addEventListener('click', function () {
-      if (_open) {
-        _open = false;
-        render();
-        return;
-      }
-      _open = true;
-      if (_scanState === 'idle') {
-        runScan();
-      } else {
-        render();
-      }
-    });
-    el.querySelectorAll('.ms-pn-sec-head').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var key = btn.getAttribute('data-sec');
-        _openSection = _openSection === key ? null : key;
-        render();
-      });
-    });
-    el.querySelector('#ms-pn-retry')?.addEventListener('click', function () {
-      runScan();
-    });
-    el.querySelector('#ms-pn-refresh')?.addEventListener('click', function () {
-      location.reload();
-    });
-    el.querySelector('#ms-pn-open-canvas')?.addEventListener('click', function () {
       if (window.ProblemNestingCanvas) window.ProblemNestingCanvas.open();
-    });
-    el.querySelector('#ms-pn-sig-target')?.addEventListener('change', function (e) {
-      _sig.target = e.target.value || null;
-      // A new target re-filters which rows are tickable (already-at-target
-      // rows disable); keep ticks for rows still eligible.
-      _sig.confirming = false;
-      _sig.errors = {};
-      render();
-    });
-    el.querySelectorAll('.ms-pn-sig-cb').forEach(function (cb) {
-      cb.addEventListener('change', function () {
-        var id = cb.getAttribute('data-sig-id');
-        if (cb.checked) _sig.ids[id] = true;
-        else delete _sig.ids[id];
-        _sig.confirming = false;
-        render();
-      });
-    });
-    el.querySelector('#ms-pn-sig-go')?.addEventListener('click', function () {
-      if (_sig.target && sigSelectedIds().length) {
-        _sig.confirming = true;
-        render();
-      }
-    });
-    el.querySelector('#ms-pn-sig-cancel')?.addEventListener('click', function () {
-      _sig.confirming = false;
-      render();
-    });
-    el.querySelector('#ms-pn-sig-confirm')?.addEventListener('click', function () {
-      confirmSignificanceBatch();
-    });
-    el.querySelectorAll('.ms-pn-merge-open').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
-        if (g) {
-          g.open = true;
-          render();
-        }
-      });
-    });
-    el.querySelectorAll('.ms-pn-merge-keeper').forEach(function (radio) {
-      radio.addEventListener('change', function () {
-        var g = _mergeGroups[Number(radio.getAttribute('data-gidx'))];
-        if (g && radio.checked) {
-          g.keeperId = radio.getAttribute('data-entry-id');
-          g.confirming = false;
-          render();
-        }
-      });
-    });
-    el.querySelectorAll('.ms-pn-merge-review').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
-        if (g && removableDuplicateIds(g.entries, g.keeperId).length) {
-          g.confirming = true;
-          render();
-        }
-      });
-    });
-    el.querySelectorAll('.ms-pn-merge-back').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
-        if (g) {
-          g.confirming = false;
-          render();
-        }
-      });
-    });
-    el.querySelectorAll('.ms-pn-merge-reason').forEach(function (input) {
-      input.addEventListener('input', function () {
-        var g = _mergeGroups[Number(input.getAttribute('data-gidx'))];
-        if (!g) return;
-        g.reason = input.value;
-        // No full re-render on every keystroke (it would drop focus
-        // mid-word); just keep the confirm button's disabled state honest —
-        // same discipline as problem-bulk-end's reason input.
-        var btn = el.querySelector('.ms-pn-merge-confirm[data-gidx="' + input.getAttribute('data-gidx') + '"]');
-        if (btn) btn.disabled = g.removing || !(g.reason || '').trim();
-      });
-    });
-    el.querySelectorAll('.ms-pn-merge-confirm').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var g = _mergeGroups[Number(btn.getAttribute('data-gidx'))];
-        if (g) confirmMergeGroup(g);
-      });
     });
   }
 
@@ -2253,13 +1577,11 @@
         infoById: _infoById,
         suggestions: _suggestions,
         textLinkSuggestions: _textLinkSuggestions,
-        // Recomputed fresh on EVERY snapshot read, unlike _suggestions/
-        // _textLinkSuggestions above (which are cached once per scan) —
-        // this is pure and cheap (no fetch, significance is already in
-        // infoById), and a just-committed change (commitSignificanceChange)
-        // must stop being offered immediately without needing its own
-        // dismissed-ids bookkeeping the way the text-link suggestions do.
-        unknownSignificanceSuggestions: buildUnknownSignificanceSuggestions(_problems, _infoById),
+        // unknownSignificanceSuggestions was dropped from the snapshot when
+        // the canvas's unknown-significance tray was removed (v3.236.x —
+        // significance is now changed by dragging between lanes); the pure
+        // buildUnknownSignificanceSuggestions helper stays exported for its
+        // unit tests and any future consumer.
         parentIdByProblemId: _parentIdByProblemId,
         scanState: _scanState,
       };
@@ -2268,9 +1590,11 @@
       if (_scanState === 'idle') runScan();
     },
     ensureLinkedIdsLoaded: ensureLinkedIdsLoaded,
+    getLinkedProblemIds: getLinkedProblemIds,
     commitParentLink: commitParentLink,
     commitUnlink: commitUnlink,
     commitFlatLink: commitFlatLink,
+    commitFlatUnlink: commitFlatUnlink,
     checkExistingRelationship: checkExistingRelationship,
     commitSignificanceChange: commitSignificanceChange,
     commitEndProblem: commitEndProblem,

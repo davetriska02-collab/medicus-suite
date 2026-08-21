@@ -101,7 +101,7 @@
   0%, 100% { box-shadow: none; }
   50% { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3); }
 }
-.ch-q-focus-alerts .ag-row:not(.ch-row-sev-red):not(.ch-row-sev-amber) {
+.ch-q-focus-alerts .ag-row:not(.ch-row-sev-red):not(.ch-row-sev-amber):not(.ch-row-pulse-red):not(.ch-row-pulse-amber) {
   opacity: 0.35;
 }
 
@@ -4224,6 +4224,7 @@
     span.innerHTML = renderChipHtml(chip);
     // Always prepend (see injectResultChip — appended nodes are reconciled away).
     host.target.insertBefore(span, host.target.firstChild);
+    refreshPulseOnRow(row);
   };
 
   const scheduleQueueMonitoring = async () => {
@@ -4343,6 +4344,7 @@
     span.title = 'Practice alerts: ' + summary.all.join(' · ') + ' — recorded in the Pt Alerts tab, not the clinical record.';
     // Always prepend (see injectResultChip — appended nodes are reconciled away).
     host.target.insertBefore(span, host.target.firstChild);
+    refreshPulseOnRow(row);
   };
 
   const scheduleQueuePaFlags = async () => {
@@ -4432,6 +4434,7 @@
       'Data age: ' + (ageLabel || 'recent') + '. Cross-linked from this session only.';
     // Always PREPEND (Vue reconciles away trailing foreign nodes — CLAUDE.md rule 1).
     host.target.insertBefore(span, host.target.firstChild);
+    refreshPulseOnRow(row);
   };
 
   // Fetch-scheduling pass (mirrors scheduleQueuePaFlags). Gated OFF the results
@@ -4604,6 +4607,7 @@
         : `This patient has ${pick.count} open requests seen in your queues this tab session. Session-only — cleared when the tab closes.`;
     // Always PREPEND (Vue reconciles away trailing foreign nodes — CLAUDE.md rule 1).
     host.target.insertBefore(span, host.target.firstChild);
+    refreshPulseOnRow(row);
   };
 
   // Fetch-scheduling pass (mirrors scheduleQueuePending). Gated OFF the results
@@ -4732,6 +4736,7 @@
       ' Local task-age ledger — task ID + dates only, no patient identity.';
     // Always PREPEND (Vue reconciles away trailing foreign nodes — CLAUDE.md rule 1).
     host.target.insertBefore(span, host.target.firstChild);
+    refreshPulseOnRow(row);
   };
 
   // Scheduling pass — records every visible request-row task into the task-age
@@ -5525,6 +5530,7 @@
     // before the cell's own content survives. The name stays visible via the CSS
     // width-cap on .ch-q-result-inline, not by position.
     host.target.insertBefore(span, host.target.firstChild);
+    refreshPulseOnRow(row);
     log('queue-result: chip injected', rowIndex, 'inPreview=' + host.inPreview, isError ? '(error)' : '');
     const rendered = span.querySelectorAll('.ch-chip');
     if (built) {
@@ -5902,6 +5908,9 @@
         ) {
           return;
         }
+        // Pulse rail is the request-queue equivalent of the result tint —
+        // never dim a row the pulse has marked red/amber.
+        if (row.classList.contains(PULSE_RED) || row.classList.contains(PULSE_AMBER)) return;
         row.classList.add(ROW_SEEN_CLASS);
         const previewRow = findQueuePreviewRow(row);
         if (previewRow) previewRow.classList.add(ROW_SEEN_CLASS);
@@ -6255,8 +6264,13 @@
         const ri = row.getAttribute('row-index');
         if (ri == null) return;
         const n = Number(ri);
-        if (row.classList.contains(ROW_TINT_RED)) red.push(n);
-        else if (row.classList.contains(ROW_TINT_AMBER)) amber.push(n);
+        // Pulse rails count as alerts too — on the request queue they are the
+        // only red/amber row mark, and a jump/focus that cannot see them makes
+        // the screen contradict its own rail.
+        const isRed = row.classList.contains(ROW_TINT_RED) || row.classList.contains(PULSE_RED);
+        const isAmber = row.classList.contains(ROW_TINT_AMBER) || row.classList.contains(PULSE_AMBER);
+        if (isRed) red.push(n);
+        else if (isAmber) amber.push(n);
       });
     red.sort((a, b) => a - b);
     amber.sort((a, b) => a - b);
@@ -6464,6 +6478,28 @@
         if (e.preventDefault) e.preventDefault();
         target.click();
       }
+    } else if (key === ' ' || key === 'Spacebar') {
+      if (!PREF('queuePulseCompress', true)) return;
+      if (_kbdCursorRowIndex == null) return;
+      const row = queueScope().querySelector('.ag-row[row-index="' + _kbdCursorRowIndex + '"]:not(.ag-full-width-row)');
+      if (!row) return;
+      if (e.preventDefault) e.preventDefault();
+      const keyId = pulseOpenKey(row);
+      if (keyId) {
+        _pulseOpenByKey.set(keyId, _pulseOpenByKey.get(keyId) === 'why' ? null : 'why');
+        refreshPulseOnRow(row);
+      }
+    } else if (key === 'a' || key === 'A') {
+      if (!PREF('queuePulseCompress', true)) return;
+      if (_kbdCursorRowIndex == null) return;
+      const row = queueScope().querySelector('.ag-row[row-index="' + _kbdCursorRowIndex + '"]:not(.ag-full-width-row)');
+      if (!row) return;
+      if (e.preventDefault) e.preventDefault();
+      const keyId = pulseOpenKey(row);
+      if (keyId) {
+        _pulseOpenByKey.set(keyId, _pulseOpenByKey.get(keyId) === 'act' ? null : 'act');
+        refreshPulseOnRow(row);
+      }
     } else if (key === 'n' || key === 'N') {
       if (e.preventDefault) e.preventDefault();
       const target = jumpToAlertRow(_queueStatusJumpPos);
@@ -6474,7 +6510,7 @@
         applyQueueKbdCursor();
       }
     } else if (key === '?') {
-      log('queue keyboard shortcuts: j/k (or arrows) move, Enter opens, n jumps to next red/amber');
+      log('queue keyboard shortcuts: j/k (or arrows) move, Enter opens, Space why-pulse, a act-tray, n jumps to next red/amber');
     }
   };
 
@@ -6883,6 +6919,362 @@
     return el;
   };
 
+  // ---- Queue pulse (v3.236.4) — compress already-computed chips to one named weight ----
+  // Composer is window.TriageQueuePulse (queue-pulse.js). This block is DOM-only:
+  // collect chips already on the row, render rail + headline + why/act trays,
+  // PREPEND the host, re-run after every fetch-driven inject. Pref
+  // queuePulseCompress (default on). Not a score — see PLAN.md.
+  const PULSE_HOST = 'ch-q-pulse';
+  const PULSE_ON = 'ch-row-pulse-on';
+  const PULSE_RED = 'ch-row-pulse-red';
+  const PULSE_AMBER = 'ch-row-pulse-amber';
+  const _pulseActByRow = new Map(); // rowIndex → pathway context from decorateOneRow
+  const _pulseOpenByKey = new Map(); // taskUuid|ri → 'why' | 'act'
+
+  const pulseOpenKey = (row) => {
+    const ri = row && row.getAttribute && row.getAttribute('row-index');
+    if (ri == null) return null;
+    const taskUuid = _durableRowMap.get(Number(ri));
+    return taskUuid || ('ri:' + ri);
+  };
+
+  const chipKindFromEl = (el) => {
+    if (!el || !el.classList) return 'info';
+    if (el.classList.contains('ch-chip-red')) return 'red';
+    if (el.classList.contains('ch-chip-amber')) return 'amber';
+    if (el.classList.contains('ch-chip-green')) return 'green';
+    if (el.classList.contains('ch-chip-info')) return 'info';
+    if (el.classList.contains('ch-chip-meta') || el.classList.contains('ch-chip-error')) return 'meta';
+    return 'info';
+  };
+
+  const familyFromChipEl = (chip, host) => {
+    if (host) {
+      if (host.classList.contains('ch-q-mon')) return 'monitoring';
+      if (host.classList.contains('ch-q-pending')) return 'pending';
+      if (host.classList.contains('ch-q-repeat')) return 'repeat';
+      if (host.classList.contains('ch-q-carry')) return 'carry';
+      if (host.classList.contains('ch-q-result')) return 'result';
+    }
+    const rawId = (chip.getAttribute && chip.getAttribute('data-rule-id')) || '';
+    const id = rawId.replace(/^system:/, '');
+    if (id === 'queue.child' || id === 'queue.elder') return 'age';
+    if (id === 'queue.priority') return 'priority';
+    if (id === 'queue.taskAgeAmber' || id === 'queue.taskAgeRed') return 'taskAge';
+    if (id === 'queue.repeatContact' || id === 'queue.repeatContactSession') return 'repeat';
+    if (id === 'queue.carryOverRed' || id === 'queue.carryOverAmber') return 'carry';
+    if (id === 'queue.monitoringDueRed' || id === 'queue.monitoringDueAmber') return 'monitoring';
+    if (id === 'queue.pendingResultRed' || id === 'queue.pendingResultAmber') return 'pending';
+    const label = ((chip.getAttribute && chip.getAttribute('title')) || chip.textContent || '')
+      .replace(/\s*▾\s*$/, '')
+      .trim();
+    if (/^pharmacy first$/i.test(label)) return 'pf';
+    if (/^ask-back$/i.test(label)) return 'askback';
+    if (chip.classList && chip.classList.contains('ch-q-rule-chip')) return 'rule';
+    return 'system';
+  };
+
+  const collectSignalsFromRow = (row) => {
+    const preview = findQueuePreviewRow(row);
+    const roots = [row, preview].filter(Boolean);
+    const seen = new Set();
+    const signals = [];
+    const push = (sig, key) => {
+      if (!sig || !sig.name || seen.has(key)) return;
+      seen.add(key);
+      signals.push(sig);
+    };
+    roots.forEach((root) => {
+      root.querySelectorAll('.ch-q-pa').forEach((host) => {
+        const level = host.classList.contains('ch-q-pa-red') ? 'red' : 'amber';
+        const labelEl = host.querySelector('.ch-q-pa-label');
+        const name = ((labelEl && labelEl.textContent) || host.getAttribute('title') || 'Practice alert').trim();
+        push(
+          { kind: level, name: name, family: 'flag', source: 'patient-alerts', silent: true },
+          'pa:' + name
+        );
+      });
+      root.querySelectorAll('.ch-chip').forEach((chip) => {
+        if (chip.closest && (chip.closest('.ch-q-pulse') || chip.closest('.ch-action-menu'))) return;
+        const host =
+          chip.closest('.ch-q-mon, .ch-q-pending, .ch-q-repeat, .ch-q-carry, .ch-q-result, .ch-queue-chips') ||
+          chip.parentElement;
+        const name = ((chip.getAttribute('title') || chip.textContent || '').replace(/\s*▾\s*$/, '')).trim();
+        if (!name || name === '+' || /^\+\d+$/.test(name)) return;
+        const family = familyFromChipEl(chip, host);
+        const kind = chipKindFromEl(chip);
+        push(
+          {
+            kind: kind,
+            name: name,
+            family: family,
+            source: family === 'rule' ? 'request' : family,
+            silent: family === 'monitoring' || family === 'pending',
+          },
+          family + ':' + name
+        );
+      });
+    });
+    return signals;
+  };
+
+  const clearPulseClasses = (row) => {
+    if (!row || !row.classList) return;
+    row.classList.remove(PULSE_ON, PULSE_RED, PULSE_AMBER);
+    const preview = findQueuePreviewRow(row);
+    if (preview) preview.classList.remove(PULSE_ON, PULSE_RED, PULSE_AMBER);
+  };
+
+  const applyPulseRail = (row, rail) => {
+    clearPulseClasses(row);
+    // Chip-hide (PULSE_ON) is escalate-only. An empty / unchecked rail must
+    // leave the chip pile visible — hiding it is the quiet-row all-clear lie.
+    if (rail !== 'red' && rail !== 'amber') return;
+    const preview = findQueuePreviewRow(row);
+    const add = (el) => {
+      if (!el) return;
+      el.classList.add(PULSE_ON);
+      if (rail === 'red') el.classList.add(PULSE_RED);
+      else el.classList.add(PULSE_AMBER);
+    };
+    add(row);
+    add(preview);
+  };
+
+  const pulseTarget = (row) => {
+    const previewRow = findQueuePreviewRow(row);
+    const target = previewRow
+      ? previewRow.querySelector('.h-full.w-full') || previewRow.firstElementChild || previewRow
+      : row.querySelector('[col-id="patientName"]');
+    return { target: target, previewRow: previewRow };
+  };
+
+  const buildPulseWhyTray = (composed) => {
+    const tray = document.createElement('div');
+    tray.className = 'ch-q-why';
+    const h = document.createElement('h3');
+    h.textContent = 'Why this is marked';
+    tray.appendChild(h);
+    const ul = document.createElement('ul');
+    ul.className = 'ch-q-why-list';
+    const signals = composed.signals || [];
+    if (signals.length === 0) {
+      const li = document.createElement('li');
+      const wrap = document.createElement('div');
+      const strong = document.createElement('strong');
+      strong.textContent = 'Nothing named matched';
+      const src = document.createElement('span');
+      src.className = 'ch-q-why-src';
+      src.textContent = 'Not all-clear — the request still has to be read.';
+      wrap.appendChild(strong);
+      wrap.appendChild(src);
+      li.appendChild(wrap);
+      ul.appendChild(li);
+    }
+    signals.forEach((s) => {
+      const li = document.createElement('li');
+      const mark = document.createElement('i');
+      mark.className = 'ch-q-why-mark ' + (s.kind || 'info');
+      const wrap = document.createElement('div');
+      const strong = document.createElement('strong');
+      strong.textContent = s.name;
+      const src = document.createElement('span');
+      src.className = 'ch-q-why-src';
+      src.textContent = (s.source || s.family || '') + (s.silent ? ' — from the record, not the request text' : '');
+      wrap.appendChild(strong);
+      wrap.appendChild(src);
+      li.appendChild(mark);
+      li.appendChild(wrap);
+      ul.appendChild(li);
+    });
+    tray.appendChild(ul);
+    const foot = document.createElement('p');
+    foot.className = 'ch-q-why-foot';
+    foot.textContent =
+      'Not a score. A quiet rail is not all-clear — it means nothing matched, or we have not checked the record yet.';
+    tray.appendChild(foot);
+    return tray;
+  };
+
+  const buildPulseActTray = (row, act) => {
+    const tray = document.createElement('div');
+    tray.className = 'ch-q-act';
+    const h = document.createElement('h3');
+    h.textContent = '1. Stage a next step ↓  2. Then open the request to finish. Nothing is sent from here.';
+    tray.appendChild(h);
+    const rowEl = document.createElement('div');
+    rowEl.className = 'ch-q-act-row';
+    const addBtn = (n, label, detail, enabled, onClick) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.disabled = !enabled;
+      const title = document.createElement('span');
+      title.textContent = n + '. ' + label;
+      const small = document.createElement('small');
+      small.textContent = detail;
+      b.appendChild(title);
+      b.appendChild(small);
+      if (enabled && onClick) {
+        b.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onClick(b);
+        });
+      }
+      rowEl.appendChild(b);
+    };
+    addBtn('1', 'Book', 'Not in this first cut — open the request to book', false);
+    const pfOk = !!(act && act.pfElig && act.pfElig.eligible === true);
+    const askOk = !!(act && act.gapsData && (act.gapsData.gaps.length || act.gapsData.flaggedInText.length));
+    addBtn(
+      '2',
+      'Pharmacy First',
+      pfOk ? 'Open the pathway draft (still not sent)' : 'Age or pathway not confirmed',
+      pfOk,
+      (anchor) => {
+        if (act) showPathwayMenu(anchor, act.pathway, act.previewText, act.pfElig, act.gapsData, act.closingQuestions);
+      }
+    );
+    addBtn(
+      '3',
+      'Ask-back',
+      askOk ? 'Open the gap-question draft (still not sent)' : 'No pathway gaps on this request',
+      askOk,
+      (anchor) => {
+        if (act) showPathwayMenu(anchor, act.pathway, act.previewText, act.pfElig, act.gapsData, act.closingQuestions);
+      }
+    );
+    addBtn('4', 'Park until…', 'Not in this first cut — Medicus status unchanged', false);
+    tray.appendChild(rowEl);
+    const note = document.createElement('p');
+    note.className = 'ch-q-act-note';
+    note.textContent = 'Prepare-only. The request still has to be opened for anything to reach reception.';
+    tray.appendChild(note);
+    return tray;
+  };
+
+  const refreshPulseOnRow = (row) => {
+    if (!row || !row.classList || !row.classList.contains('ag-row')) return;
+    if (row.classList.contains('ag-full-width-row')) return;
+    if (!row.querySelector('[col-id="dateOfBirth"]')) return;
+    const { target } = pulseTarget(row);
+    if (!target) return;
+    target.querySelectorAll('.' + PULSE_HOST).forEach((el) => el.remove());
+    if (!PREF('queuePulseCompress', true)) {
+      clearPulseClasses(row);
+      return;
+    }
+    const QP = typeof window !== 'undefined' && window.TriageQueuePulse;
+    if (!QP) return;
+    const composed = QP.composePulse(collectSignalsFromRow(row), {});
+    applyPulseRail(row, composed.rail);
+    const escalate = composed.rail === 'red' || composed.rail === 'amber';
+    const host = document.createElement('span');
+    host.className = PULSE_HOST;
+    const line = document.createElement('span');
+    line.className = 'ch-q-pulse-row';
+    // Compression chrome (headline / overflow / thread / ring) only when the
+    // rail escalates. Quiet rows keep the chip pile so they cannot look cleared.
+    if (escalate && composed.rail === 'amber') {
+      const ring = document.createElement('i');
+      ring.className = 'ch-q-pulse-rail-ring';
+      ring.title = 'Amber — worst named signal is amber; not a score';
+      ring.setAttribute('aria-hidden', 'true');
+      line.appendChild(ring);
+    }
+    if (escalate && composed.headline) {
+      const head = document.createElement('span');
+      head.className = 'ch-q-pulse-head';
+      head.setAttribute('role', 'button');
+      head.setAttribute('tabindex', '0');
+      head.setAttribute(
+        'aria-label',
+        composed.headline.name + ' — ' + composed.headline.kind + ' — not a score. Space or click for why.'
+      );
+      if (composed.silent) {
+        const dia = document.createElement('i');
+        dia.className = 'ch-q-pulse-diamond' + (composed.headline.kind === 'amber' ? ' amber' : '');
+        dia.title = 'From the record, not the request text';
+        head.appendChild(dia);
+      }
+      const chip = document.createElement('span');
+      chip.className = 'ch-chip ch-chip-' + composed.headline.kind;
+      chip.textContent = composed.headline.name;
+      head.appendChild(chip);
+      line.appendChild(head);
+    }
+    if (escalate && composed.overflowCount > 0) {
+      const more = document.createElement('span');
+      more.className = 'ch-q-pulse-more';
+      more.textContent = '· ' + composed.overflowCount;
+      more.setAttribute('role', 'button');
+      more.setAttribute('tabindex', '0');
+      more.setAttribute('aria-label', composed.overflowCount + ' more signals — show why');
+      line.appendChild(more);
+    }
+    if (escalate && composed.thread) {
+      const th = document.createElement('span');
+      th.className = 'ch-q-pulse-thread';
+      th.textContent = composed.thread.name;
+      th.title = 'Contact count — not a grade';
+      line.appendChild(th);
+    }
+    const ri = row.getAttribute('row-index');
+    const act = ri != null ? _pulseActByRow.get(Number(ri)) : null;
+    const actBtn = document.createElement('button');
+    actBtn.type = 'button';
+    actBtn.className = 'ch-q-pulse-act';
+    actBtn.textContent = '›';
+    actBtn.setAttribute('aria-label', 'Stage a next step — nothing is sent from here');
+    line.appendChild(actBtn);
+    host.appendChild(line);
+
+    const key = pulseOpenKey(row);
+    const open = key ? _pulseOpenByKey.get(key) : null;
+    if (open === 'why') host.appendChild(buildPulseWhyTray(composed));
+    if (open === 'act') host.appendChild(buildPulseActTray(row, act));
+    actBtn.setAttribute('aria-expanded', open === 'act' ? 'true' : 'false');
+
+    const toggle = (which) => {
+      if (!key) return;
+      _pulseOpenByKey.set(key, _pulseOpenByKey.get(key) === which ? null : which);
+      refreshPulseOnRow(row);
+    };
+    const onWhy = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggle('why');
+    };
+    host.querySelectorAll('.ch-q-pulse-head, .ch-q-pulse-more').forEach((el) => {
+      el.addEventListener('click', onWhy);
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') onWhy(e);
+      });
+    });
+    actBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggle('act');
+    });
+
+    target.insertBefore(host, target.firstChild);
+  };
+
+  const reapplyQueuePulses = () => {
+    if (!PREF('queuePulseCompress', true)) {
+      queueScope()
+        .querySelectorAll('.' + PULSE_ON + ', .' + PULSE_RED + ', .' + PULSE_AMBER)
+        .forEach((el) => el.classList.remove(PULSE_ON, PULSE_RED, PULSE_AMBER));
+      queueScope()
+        .querySelectorAll('.' + PULSE_HOST)
+        .forEach((el) => el.remove());
+      return;
+    }
+    queueScope()
+      .querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)')
+      .forEach((row) => refreshPulseOnRow(row));
+  };
+
   const decorateOneRow = (row) => {
     if (!row || !row.classList || !row.classList.contains('ag-row')) return;
     // Only decorate master rows. Skip detail/preview rows (they have no cells).
@@ -7065,11 +7457,22 @@
               (hasEscalation ? ', patient may have already mentioned a red flag — review before proceeding' : '')
           });
         }
+        const pulseRi = row.getAttribute('row-index');
+        if (pulseRi != null) {
+          _pulseActByRow.set(Number(pulseRi), {
+            pathway: topPathway,
+            previewText: previewText,
+            pfElig: pfElig,
+            gapsData: gapsData,
+            closingQuestions: closingQuestions
+          });
+        }
       }
     }
 
     if (!chips.length) {
       row.dataset[QUEUE_DECORATED_KEY] = '1';
+      refreshPulseOnRow(row);
       return;
     }
 
@@ -7125,6 +7528,7 @@
     }
 
     row.dataset[QUEUE_DECORATED_KEY] = '1';
+    refreshPulseOnRow(row);
   };
 
   const decorateQueueRows = () => {
@@ -7217,10 +7621,13 @@
       closeActionMenu();
     }
     if (queueObserver) queueObserver.disconnect();
-    queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result, .ch-q-pa, .ch-q-pending, .ch-q-repeat, .ch-q-carry').forEach(s => s.remove());
+    queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result, .ch-q-pa, .ch-q-pending, .ch-q-repeat, .ch-q-carry, .ch-q-pulse').forEach(s => s.remove());
     // Wipe stale severity tint in the SAME cycle as the chip-node wipe (item 1.3) —
     // a recycled row-index must never keep a previous patient's tint colour.
     clearQueueRowTint();
+    queueScope()
+      .querySelectorAll('.' + PULSE_ON + ', .' + PULSE_RED + ', .' + PULSE_AMBER)
+      .forEach((el) => el.classList.remove(PULSE_ON, PULSE_RED, PULSE_AMBER));
     // Item 4.7 — same reasoning as the tint wipe above: a recycled row-index
     // must never keep a previous patient's seen-dim.
     clearQueueSeenDim();
@@ -7273,6 +7680,8 @@
     // re-injects. Placement rides the durable map (H6-safe).
     reinjectCachedRepeatChips();
     reinjectCachedCarryChips();
+    // Pulse recomposes from whatever chips this cycle just restored.
+    reapplyQueuePulses();
     // Re-render the status bar AFTER the tint pass above so its jump-target query
     // (tinted .ag-row elements) sees this cycle's freshly-applied classes, not the
     // previous cycle's. Also re-assert the focus-dim class every cycle — cheap and
@@ -7313,7 +7722,7 @@
           if (!cl) return false;
           // ch-q-pa included (audit M2): each patient-flag chip injection used
           // to read as a real grid mutation and trigger a full refresh cycle.
-          if (!(cl.contains('ch-q-result') || cl.contains('ch-q-mon') || cl.contains('ch-queue-chips') || cl.contains('ch-chip') || cl.contains('ch-q-pa'))) return false;
+          if (!(cl.contains('ch-q-result') || cl.contains('ch-q-mon') || cl.contains('ch-queue-chips') || cl.contains('ch-chip') || cl.contains('ch-q-pa') || cl.contains('ch-q-pulse'))) return false;
         }
       }
     }

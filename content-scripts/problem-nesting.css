@@ -1,53 +1,42 @@
 /* Medicus Suite — "Nest problems?" widget for the Clinical Summary problem list */
 /* (ms-pn-* prefix; all selectors scoped to avoid Medicus conflicts) */
 
-/* Scoped light-canon token block — this stylesheet is injected into Medicus
-   pages, which never load panel.css, so the widget carries its own copy of
-   the light-theme canon values (host page is light). Canon source:
-   .claude/skills/ui-design/TOKENS.md ("Injected surfaces" rule) — when the
-   canon changes, update this block in the same commit. */
+/* Trimmed 2026-08-19: "Organise problems?" now opens the canvas directly
+   (no accordion panel of its own — Change significance moved fully onto
+   the canvas's significance lanes, v3.234.0; Merge duplicate copies moved
+   to "Bulk remove/merge", problem-bulk-end.css, 2026-08-19). The widget is
+   now just a single trigger button that never grows a body, which is also
+   the actual fix for the reported reflow: without a .ms-pn-body ever
+   appearing, the :has(.ms-pn-body) flex-basis flip that used to push the
+   whole row onto its own line can never fire. Every rule below that only
+   ever styled the removed accordion (sections, cards, confirms, the
+   merge/significance forms, the empty/loading/error states) was removed
+   with it — see content-scripts/problem-nesting.js's own header for the
+   full history of where each piece moved to.
+
+   Scoped light-canon token block — this stylesheet is injected into
+   Medicus pages, which never load panel.css, so the widget carries its
+   own copy of the light-theme canon values (host page is light). Canon
+   source: .claude/skills/ui-design/TOKENS.md ("Injected surfaces" rule) —
+   when the canon changes, update this block in the same commit. */
 #ms-pn-widget {
-  --bg-deep: #f8fafc;
   --bg-mid: #f1f5f9;
-  --bg-elev: #ffffff;
-  --bg-hover: #e2eaf5;
   --border: #cbd5e1;
   --border-hi: #94a3b8;
-  --text-1: #0f172a;
   --text-2: #1e3a5f;
-  --text-3: #475569;
-  --text-4: #556377;
-  --text-5: #5f6f85;
+  --bg-hover: #e2eaf5;
   --accent: #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-dim: rgba(37, 99, 235, 0.09);
-  --accent-line: rgba(37, 99, 235, 0.3);
-  --green: #16a34a;
-  --green-dim: rgba(22, 163, 74, 0.09);
-  --green-line: rgba(22, 163, 74, 0.3);
-  --amber: #b45309;
-  --amber-dim: rgba(180, 83, 9, 0.09);
-  --amber-line: rgba(180, 83, 9, 0.32);
-  --red: #dc2626;
-  --r-sm: 4px;
-  --r-md: 6px;
-  --r-lg: 8px;
   --r-pill: 999px;
-  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05);
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --fast: 120ms;
-  --mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
   display: block;
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 /* Keyboard focus ring — same single wildcard rule as the sibling problem
-   widgets' CSS, extended to the widget's inputs (checkboxes, radios, the
-   merge-reason field). */
-button[class*='ms-pn-']:focus-visible,
-select[class*='ms-pn-']:focus-visible,
-#ms-pn-widget input[class*='ms-pn-']:focus-visible {
+   widgets' CSS. */
+button[class*='ms-pn-']:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -56,8 +45,8 @@ select[class*='ms-pn-']:focus-visible,
    triggers (#ms-pbe-widget, #ms-pdc-retired-widget). Same :has() scoping as
    their CSS files — the same rule is declared in all three so the row works
    whichever widget(s) actually injected; keep the exclusion lists in
-   lock-step across all three files. Collapsed: just the toggle on the
-   heading row. Expanded: full-width row. */
+   lock-step across all three files. The widget never leaves this row now —
+   it has no expanded state to grow into (see the 2026-08-19 note above). */
 .m-card-v2__content:has(> #ms-pn-widget) {
   display: flex;
   flex-wrap: wrap;
@@ -70,12 +59,10 @@ select[class*='ms-pn-']:focus-visible,
   flex-basis: 100%;
 }
 
-#ms-pn-widget:has(.ms-pn-body) {
-  flex-basis: 100%;
-  margin-top: 4px;
-}
-
-/* Visually-hidden polite live region — persistent, never rebuilt by render. */
+/* Visually-hidden polite live region — persistent, never rebuilt by render.
+   (Currently unused now the accordion's own announce() calls left with it —
+   kept as a harmless, ready-to-use hook rather than ripped out, since
+   render()'s focus-capture/restore machinery around it is still live.) */
 .ms-pn-live {
   position: absolute;
   width: 1px;
@@ -85,27 +72,11 @@ select[class*='ms-pn-']:focus-visible,
   white-space: nowrap;
 }
 
-/* Shared micro-transition for every interactive element. */
-.ms-pn-toggle,
-.ms-pn-sec-head,
-.ms-pn-btn,
-.ms-pn-link-btn,
-.ms-pn-cancel,
-.ms-pn-retry,
-.ms-pn-refresh,
-.ms-pn-confirm-btn,
-.ms-pn-parent-select,
-.ms-pn-merge-reason,
-.ms-pn-man-child-row {
+.ms-pn-toggle {
   transition:
     background var(--fast) var(--ease),
     border-color var(--fast) var(--ease),
     color var(--fast) var(--ease);
-}
-
-/* Toggle pill — text chevrons ▸/▾ for family consistency with the sibling
-   problem widgets. */
-.ms-pn-toggle {
   padding: 4px 10px;
   background: var(--bg-mid);
   border: 1px solid var(--border);
@@ -120,355 +91,4 @@ select[class*='ms-pn-']:focus-visible,
 .ms-pn-toggle:hover {
   background: var(--bg-hover);
   border-color: var(--border-hi);
-}
-
-.ms-pn-body {
-  margin-top: 8px;
-  padding: 8px 10px;
-  background: var(--bg-deep);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  font-size: 12px;
-  color: var(--text-2);
-  max-height: 60vh;
-  overflow-y: auto;
-}
-
-/* One-line lead. */
-.ms-pn-summary {
-  margin-bottom: 8px;
-  color: var(--text-3);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-/* "Organise on canvas…" trigger row — button + suggestion-count badge, sits
-   above the Merge/Change-significance accordion sections (not one of them:
-   it opens the canvas overlay, problem-nesting-canvas.js, rather than
-   expanding inline). */
-.ms-pn-canvas-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-}
-
-/* Accordion section headers — sans 12px/600 sentence case, text chevron
-   left, mono count right. Sections are separated by space, not boxes. */
-.ms-pn-sec-head {
-  display: flex;
-  width: 100%;
-  align-items: baseline;
-  gap: 6px;
-  margin-top: 12px;
-  padding: 4px 6px;
-  background: transparent;
-  border: 0;
-  border-radius: var(--r-sm);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-2);
-  text-align: left;
-  cursor: pointer;
-}
-
-.ms-pn-sec-head:first-of-type {
-  margin-top: 0;
-}
-
-.ms-pn-sec-head:hover {
-  background: var(--bg-hover);
-}
-
-.ms-pn-sec-chevron {
-  color: var(--text-4);
-}
-
-.ms-pn-sec-count {
-  margin-left: auto;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-3);
-}
-
-.ms-pn-sec-body {
-  margin: 4px 0 8px;
-}
-
-.ms-pn-sec-note {
-  color: var(--text-3);
-  font-size: 11px;
-  margin-bottom: 8px;
-  line-height: 1.45;
-}
-
-/* Empty-section treatment — centred quiet block, never a bare string. */
-.ms-pn-empty-block {
-  text-align: center;
-  padding: 24px 0;
-}
-
-.ms-pn-empty-title {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-4);
-}
-
-.ms-pn-empty-sub {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--text-3);
-}
-
-.ms-pn-loading {
-  color: var(--text-3);
-  font-size: 11px;
-}
-
-.ms-pn-error {
-  color: var(--red);
-  font-size: 11px;
-}
-
-/* Ghost button — the one shared secondary-action recipe. */
-.ms-pn-btn,
-.ms-pn-link-btn,
-.ms-pn-cancel,
-.ms-pn-retry,
-.ms-pn-refresh {
-  padding: 3px 10px;
-  background: transparent;
-  border: 1px solid var(--border-hi);
-  border-radius: var(--r-sm);
-  font-size: 11px;
-  font-weight: 600;
-  font-family: inherit;
-  color: var(--text-3);
-  cursor: pointer;
-}
-
-.ms-pn-btn:hover,
-.ms-pn-link-btn:hover,
-.ms-pn-cancel:hover,
-.ms-pn-retry:hover,
-.ms-pn-refresh:hover {
-  border-color: var(--accent);
-  color: var(--text-2);
-  background: var(--accent-dim);
-}
-
-.ms-pn-btn:active,
-.ms-pn-link-btn:active,
-.ms-pn-cancel:active,
-.ms-pn-retry:active,
-.ms-pn-refresh:active {
-  background: var(--accent-line);
-}
-
-.ms-pn-btn:disabled,
-.ms-pn-link-btn:disabled,
-.ms-pn-cancel:disabled,
-.ms-pn-retry:disabled,
-.ms-pn-refresh:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.ms-pn-card {
-  padding: 8px 10px;
-  margin-bottom: 8px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-1);
-  line-height: 1.45;
-}
-
-/* Success cards — green triad (wash/line/ink) + inline check glyph. */
-.ms-pn-card-linked {
-  background: var(--green-dim);
-  border-color: var(--green-line);
-  color: var(--green);
-}
-
-.ms-pn-card-main {
-  margin-bottom: 4px;
-}
-
-/* Mono tabular date suffix on every problem reference. */
-.ms-pn-date {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 10px;
-  color: var(--text-3);
-}
-
-/* Input recipe — selects and the merge-reason field. */
-.ms-pn-parent-select,
-.ms-pn-merge-reason {
-  background: var(--bg-mid);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  font-size: 11px;
-  font-family: inherit;
-  color: var(--text-2);
-}
-
-.ms-pn-parent-select:focus,
-.ms-pn-merge-reason:focus {
-  border-color: var(--accent);
-  background: var(--bg-elev);
-}
-
-.ms-pn-parent-select {
-  max-width: 100%;
-  padding: 2px 4px;
-}
-
-.ms-pn-merge-reason {
-  display: block;
-  margin-top: 4px;
-  width: 100%;
-  max-width: 360px;
-  padding: 2px 6px;
-}
-
-/* Neutral confirm (suggestion + manual batch) — the amber stays reserved for
-   the destructive merge confirm below. */
-.ms-pn-confirm {
-  margin-top: 8px;
-  padding: 8px 10px;
-  background: var(--bg-mid);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  color: var(--text-2);
-}
-
-/* Destructive merge confirm — the ONLY amber confirm, plus warning glyph. */
-.ms-pn-confirm-danger {
-  background: var(--amber-dim);
-  border-color: var(--amber-line);
-  color: var(--amber);
-}
-
-.ms-pn-confirm-actions {
-  margin-top: 8px;
-  display: flex;
-  gap: 8px;
-}
-
-/* Primary button — one per confirm, max. On-accent text is --bg-deep. */
-.ms-pn-confirm-btn {
-  padding: 3px 10px;
-  background: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: var(--r-sm);
-  font-size: 11px;
-  font-weight: 600;
-  font-family: inherit;
-  color: var(--bg-deep);
-  cursor: pointer;
-}
-
-.ms-pn-confirm-btn:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-}
-
-.ms-pn-confirm-btn:active {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-}
-
-.ms-pn-confirm-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.ms-pn-manual-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-/* Scrollable checklist with scroll-shadow affordance (shadows appear only
-   when there is more to scroll). */
-.ms-pn-man-children {
-  margin-top: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: min(320px, 40vh);
-  overflow-y: auto;
-  padding: 4px 2px;
-  border-top: 1px solid var(--bg-mid);
-  border-bottom: 1px solid var(--bg-mid);
-  background:
-    linear-gradient(var(--bg-elev) 30%, rgba(255, 255, 255, 0)) center top,
-    linear-gradient(rgba(255, 255, 255, 0), var(--bg-elev) 70%) center bottom,
-    radial-gradient(farthest-side at 50% 0, rgba(15, 23, 42, 0.12), rgba(0, 0, 0, 0)) center top,
-    radial-gradient(farthest-side at 50% 100%, rgba(15, 23, 42, 0.12), rgba(0, 0, 0, 0)) center bottom;
-  background-repeat: no-repeat;
-  background-size:
-    100% 24px,
-    100% 24px,
-    100% 8px,
-    100% 8px;
-  background-attachment: local, local, scroll, scroll;
-}
-
-.ms-pn-man-child-row {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  padding: 4px 6px;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-}
-
-.ms-pn-man-child-row:hover {
-  background: var(--bg-hover);
-}
-
-.ms-pn-man-child-note {
-  color: var(--text-3);
-  font-size: 11px;
-}
-
-.ms-pn-confirm-list {
-  margin: 4px 0 4px 16px;
-  padding: 0;
-}
-
-.ms-pn-merge-keep-tag {
-  color: var(--green);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.ms-pn-card-error {
-  margin-top: 4px;
-  color: var(--red);
-  font-size: 11px;
-}
-
-/* Footer — one line: mono count + ghost Refresh. */
-.ms-pn-footer {
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ms-pn-footer-count {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 10px;
-  color: var(--green);
 }

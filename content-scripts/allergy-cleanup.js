@@ -1,5 +1,8 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
-// Medicus Suite — "Clean up allergies?" widget: unifies what used to be two
+// Medicus Suite — "Clean up allergies?" engine + trigger. The live UI is
+// the Organise-allergies canvas (allergy-cleanup-canvas.js); this file
+// owns the scan, classifiers, payload builders, writes, and
+// window.AllergyCleanup bridge. Unifies what used to be two
 // separate content scripts, allergy-junk-code-cleanup.js ("Bulk remove?")
 // and allergy-duplicate-merge.js ("N possible duplicates — Review?"), into
 // one shared scan + one trigger. Explicit 2026-08-02 decision, reversing the
@@ -18,7 +21,7 @@
 //
 // DETECTION MODEL (explicit 2026-08-02 decision, AskUserQuestion): a FREE
 // page-load hint, then a click-triggered full scan — not fully opt-in like
-// problem-description-cleanup.js's "Check for retired/legacy codes?", to
+// problem-description-cleanup.js's "Code cleanup?", to
 // preserve duplicate-merge's old proactive-visibility behaviour:
 //   - On page load: only the cheap clinical-summary/summary list is
 //     fetched (unchanged), plus the FREE text-only duplicate grouping
@@ -179,6 +182,17 @@
   // ended this session AND isn't cautioned (see buildCautionMessage below).
   function isEndable(entry) {
     return !!entry && !entry.ended;
+  }
+
+  // "No known allergies" (SNOMED 716186003) is a positive assertion, not
+  // import noise — duplicates may be ended, the LAST remaining copy must
+  // not (H-060). Matched by conceptId when the scan has one, else by the
+  // exact display string Medicus uses for that code.
+  var NKA_CONCEPT_ID = '716186003';
+  function isNkaAllergy(entry) {
+    if (!entry) return false;
+    if (String(entry.conceptId || '') === NKA_CONCEPT_ID) return true;
+    return normalizeAllergyDescription(entry.description || entry.allergyCodeDescription) === 'no known allergies';
   }
 
   function normalizeAllergyDescription(desc) {
@@ -933,6 +947,8 @@
       resolveAllergyConceptId: resolveAllergyConceptId,
       buildEndAllergyPayload: buildEndAllergyPayload,
       isEndable: isEndable,
+      NKA_CONCEPT_ID: NKA_CONCEPT_ID,
+      isNkaAllergy: isNkaAllergy,
       normalizeAllergyDescription: normalizeAllergyDescription,
       activeNonDraftAllergies: activeNonDraftAllergies,
       reactionDescriptions: reactionDescriptions,
@@ -1254,6 +1270,8 @@
 
   // ── State ─────────────────────────────────────────────────────────────────────
   var _lastPatientId = null;
+  var _subscribers = [];
+  var _overviewsById = {};
   // Bumped on every patient change (resetForPatient). Every async flow that
   // writes module state after an await captures this at its start and
   // discards its result if the epoch has moved on — otherwise a fetch/scan
@@ -1263,7 +1281,6 @@
   var _patientEpoch = 0;
   var _allergiesCache = null;
   var _hintGroups = []; // free, text-only groupDuplicateAllergies result — page-load only
-  var _open = false;
   var _scanState = 'idle'; // 'idle' | 'scanning' | 'done' | 'error'
   var _scanError = null;
   var _junkFlagged = []; // [{ id, description, conceptId, reasonEnded, ..., anchorEl, checked, ended, endError }]
@@ -1290,7 +1307,6 @@
     hideModal(); // an open review modal belongs to the previous patient
     _allergiesCache = null;
     _hintGroups = [];
-    _open = false;
     _scanState = 'idle';
     _scanError = null;
     _junkFlagged = [];
@@ -1304,6 +1320,18 @@
     _conversionReviews = Object.create(null);
     _dualCodedFlagged = [];
     _dualCodedTidying = false;
+    _overviewsById = {};
+    notifySubscribers();
+  }
+
+  function notifySubscribers() {
+    _subscribers.forEach(function (cb) {
+      try {
+        cb();
+      } catch (_) {
+        /* a subscriber's own render failing must never break this one */
+      }
+    });
   }
 
   function groupState(idx) {
@@ -1430,6 +1458,7 @@
       candidates.forEach(function (a, i) {
         overviewsById[a.id] = overviewList[i];
       });
+      _overviewsById = overviewsById;
 
       var scopeEl = findAllergiesSectionRoot();
       var claimedAnchors = new Set();
@@ -1459,7 +1488,9 @@
         overviewsById,
         conversionRules || [],
         excludeFromConversion
-      );
+      ).map(function (f) {
+        return Object.assign({}, f, { ended: false, endError: null });
+      });
 
       // Duplicate grouping reuses whatever concept-ancestry enrichment has
       // accumulated so far (empty on a fresh scan — degenerates to
@@ -1580,27 +1611,61 @@
     }
   }
 
-  // ── Junk bulk-end action ──────────────────────────────────────────────────────
-  async function endSelectedJunk() {
-    var targets = _junkFlagged.filter(function (f) {
-      return f.checked && isEndable(f);
+  // Resolves canvas-staged ids to endable junk / not-an-allergy rows.
+  // Last remaining NKA is dropped here (not just hidden in the canvas) so a
+  // stale draft cannot destroy the "asked, none found" assertion.
+  function resolveEndTargets(ids) {
+    var junkById = {};
+    _junkFlagged.forEach(function (f) {
+      junkById[f.id] = f;
     });
-    // No end date -> no POST, ever.
-    if (!targets.length || _ending || !_endDate) return;
-    // Ending an allergy is effectively irreversible from this widget — same
-    // "Are you sure?" gate (cancel by default) the OIR select-all uses, per
-    // the clinical safety notice, naming the exact count being acted on.
-    if (
-      !window.confirm(
-        'End ' +
-          targets.length +
-          ' selected allerg' +
-          (targets.length === 1 ? 'y' : 'ies') +
-          ' as junk/low-relevance codes? This cannot be undone from here.'
-      )
-    ) {
-      return;
+    var convertById = {};
+    _conversionFlagged.forEach(function (f) {
+      convertById[f.id] = f;
+    });
+    var allowed = (Array.isArray(ids) ? ids : []).filter(function (id) {
+      var junk = junkById[id];
+      if (junk && isEndable(junk)) return true;
+      var conv = convertById[id];
+      return !!(conv && conv.rule && conv.rule.kind === 'not-an-allergy' && !conv.ended);
+    });
+    var liveNka = _junkFlagged.filter(function (f) {
+      return isNkaAllergy(f) && isEndable(f);
+    });
+    var endingNka = allowed.filter(function (id) {
+      return liveNka.some(function (f) {
+        return f.id === id;
+      });
+    });
+    if (liveNka.length && endingNka.length >= liveNka.length) {
+      allowed = allowed.filter(function (id) {
+        return endingNka.indexOf(id) === -1;
+      });
     }
+    return allowed.map(function (id) {
+      var junk = junkById[id];
+      if (junk) return junk;
+      var conv = convertById[id];
+      return {
+        id: conv.id,
+        description: conv.description,
+        reasonEnded:
+          (conv.rule && conv.rule.notes) || 'Not a genuine allergy — ended rather than converted to a substance code',
+        ended: !!conv.ended,
+        endError: conv.endError || null,
+        _conversion: conv,
+      };
+    });
+  }
+
+  // ── Junk / not-an-allergy end action (canvas Finalise, already confirmed) ──
+  // opts.deferReload: the canvas Finalise runs ends THEN tidies in one
+  // gesture — the caller owns the single post-success reload, otherwise the
+  // reload scheduled here can fire while the tidy writes are still in
+  // flight and destroy their outcome.
+  async function commitEndJunk(ids, opts) {
+    var targets = resolveEndTargets(ids);
+    if (!targets.length || _ending || !_endDate) return { ended: [], skipped: true };
     _ending = true;
     render();
     var results = await Promise.allSettled(
@@ -1615,10 +1680,12 @@
         f.ended = true;
         f.checked = false;
         f.endError = null;
+        if (f._conversion) f._conversion.ended = true;
         if (f.anchorEl) f.anchorEl.classList.add('ms-ac-anchor-ended');
       } else {
         allSucceeded = false;
         f.endError = (r.reason && r.reason.message) || 'Failed to end this allergy — please try again.';
+        if (f._conversion) f._conversion.endError = f.endError;
       }
     });
     _ending = false;
@@ -1628,32 +1695,31 @@
     // succeeded, after a brief pause so the "Ended" tags are actually
     // visible first — a failed end must stay on screen with its error
     // message so the clinician can see and retry it.
-    if (allSucceeded && targets.length) {
+    if (allSucceeded && targets.length && !(opts && opts.deferReload)) {
       setTimeout(function () {
         location.reload();
       }, 900);
     }
+    return {
+      ended: targets.filter(function (f) {
+        return f.ended;
+      }),
+      skipped: false,
+    };
   }
 
   // ── Dual-coded bulk cleanup (legacy code alongside an already-authoritative
   // substance — see classifyDualCodedEntries's own comment for why this is
   // bulk-safe, unlike merge/conversion) ─────────────────────────────────────
-  async function tidySelectedDualCoded() {
-    var targets = _dualCodedFlagged.filter(function (f) {
-      return f.checked && !f.tidied;
+  async function commitClearLegacy(ids, opts) {
+    var want = {};
+    (Array.isArray(ids) ? ids : []).forEach(function (id) {
+      want[id] = true;
     });
-    if (!targets.length || _dualCodedTidying) return;
-    if (
-      !window.confirm(
-        'Remove the stale legacy code from ' +
-          targets.length +
-          ' selected entr' +
-          (targets.length === 1 ? 'y' : 'ies') +
-          '? The current substance and all clinical detail are kept unchanged.'
-      )
-    ) {
-      return;
-    }
+    var targets = _dualCodedFlagged.filter(function (f) {
+      return want[f.id] && !f.tidied;
+    });
+    if (!targets.length || _dualCodedTidying) return { tidied: [], skipped: true };
     _dualCodedTidying = true;
     render();
     var results = await Promise.allSettled(
@@ -1677,11 +1743,17 @@
     });
     _dualCodedTidying = false;
     render();
-    if (allSucceeded && targets.length) {
+    if (allSucceeded && targets.length && !(opts && opts.deferReload)) {
       setTimeout(function () {
         location.reload();
       }, 900);
     }
+    return {
+      tidied: targets.filter(function (f) {
+        return f.tidied;
+      }),
+      skipped: false,
+    };
   }
 
   // ── Duplicate per-group review (opt-in — only from a "Review?" click) ─────────
@@ -2266,131 +2338,27 @@
     return 'Clean up allergies?';
   }
 
+  // 2026-08-20: "Clean up allergies?" opens the canvas directly — no
+  // accordion panel of its own (same reflow-safe trigger as Organise
+  // problems). The checklist/section renderers above stay as unused
+  // fallbacks; the live path is allergy-cleanup-canvas.js.
   function buildHtml() {
-    var header =
-      '<button type="button" class="ms-ac-toggle" id="ms-ac-toggle" aria-expanded="' +
-      _open +
-      '">' +
-      (_open ? '▾' : '▸') +
-      ' ' +
-      esc(buttonLabel()) +
-      '</button>';
-    if (!_open) return header;
-    var body;
-    if (_scanState === 'scanning') {
-      body = '<div class="ms-ac-body"><span class="ms-ac-loading">Scanning allergies…</span></div>';
-    } else if (_scanState === 'error') {
-      body =
-        '<div class="ms-ac-body"><span class="ms-ac-error">' +
-        esc(_scanError) +
-        '</span> <button type="button" class="ms-ac-retry" id="ms-ac-retry">Retry</button></div>';
-    } else if (_scanState === 'done') {
-      if (!_junkFlagged.length && !_duplicateGroups.length && !_conversionFlagged.length && !_dualCodedFlagged.length) {
-        body =
-          '<div class="ms-ac-body"><span class="ms-ac-empty">Nothing to clean up — no known junk/low-relevance ' +
-          'codes, possible duplicates, dual-coded entries, or pre-defined-allergy codes found.</span></div>';
-      } else {
-        body =
-          '<div class="ms-ac-body">' +
-          (_junkFlagged.length ? renderJunkChecklist() : '') +
-          (_dualCodedFlagged.length ? renderDualCodedChecklist() : '') +
-          (_duplicateGroups.length ? renderDuplicateSection() : '') +
-          (_conversionFlagged.length ? renderConvertibleSection() : '') +
-          '</div>';
-      }
-    } else {
-      body = '';
-    }
-    return header + body;
+    return '<button type="button" class="ms-ac-toggle" id="ms-ac-toggle">' + esc(buttonLabel()) + '</button>';
   }
 
   function bindEvents(el) {
     el.querySelector('#ms-ac-toggle').addEventListener('click', function () {
-      if (_open) {
-        _open = false;
-        render();
-        return;
-      }
-      _open = true;
-      if (_scanState === 'idle') {
-        runFullScan();
-      } else {
-        render();
-      }
-    });
-    el.querySelector('#ms-ac-retry')?.addEventListener('click', function () {
-      runFullScan();
-    });
-    el.querySelectorAll('.ms-ac-checkbox').forEach(function (cb) {
-      cb.addEventListener('change', function () {
-        var id = cb.getAttribute('data-allergy-id');
-        var f = _junkFlagged.find(function (x) {
-          return x.id === id;
-        });
-        if (f) f.checked = cb.checked;
-        render();
-      });
-    });
-    el.querySelector('#ms-ac-select-all')?.addEventListener('click', function () {
-      _junkFlagged.forEach(function (f) {
-        if (isEndable(f) && !f.caution) f.checked = true;
-      });
-      render();
-    });
-    el.querySelector('#ms-ac-select-none')?.addEventListener('click', function () {
-      _junkFlagged.forEach(function (f) {
-        f.checked = false;
-      });
-      render();
-    });
-    el.querySelector('#ms-ac-end-date')?.addEventListener('input', function (e) {
-      _endDate = e.target.value;
-    });
-    el.querySelector('#ms-ac-end-selected')?.addEventListener('click', function () {
-      endSelectedJunk();
-    });
-    el.querySelectorAll('.ms-ac-dup-row-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        openReview(Number(btn.getAttribute('data-group')));
-      });
-    });
-    el.querySelectorAll('.ms-ac-convert-row-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        openConversionReview(Number(btn.getAttribute('data-conversion')));
-      });
-    });
-    el.querySelectorAll('.ms-ac-dual-checkbox').forEach(function (cb) {
-      cb.addEventListener('change', function () {
-        var id = cb.getAttribute('data-allergy-id');
-        var f = _dualCodedFlagged.find(function (x) {
-          return x.id === id;
-        });
-        if (f) f.checked = cb.checked;
-        render();
-      });
-    });
-    el.querySelector('#ms-ac-dual-select-all')?.addEventListener('click', function () {
-      _dualCodedFlagged.forEach(function (f) {
-        if (!f.tidied) f.checked = true;
-      });
-      render();
-    });
-    el.querySelector('#ms-ac-dual-select-none')?.addEventListener('click', function () {
-      _dualCodedFlagged.forEach(function (f) {
-        f.checked = false;
-      });
-      render();
-    });
-    el.querySelector('#ms-ac-dual-tidy-selected')?.addEventListener('click', function () {
-      tidySelectedDualCoded();
+      if (window.AllergyCleanupCanvas) window.AllergyCleanupCanvas.open();
     });
   }
 
   function render() {
     var el = document.getElementById('ms-ac-widget');
-    if (!el) return;
-    el.innerHTML = buildHtml();
-    bindEvents(el);
+    if (el) {
+      el.innerHTML = buildHtml();
+      bindEvents(el);
+    }
+    notifySubscribers();
   }
 
   // ── Render: duplicate-merge modal (unchanged from the retired widget) ────────
@@ -3135,6 +3103,86 @@
     document.removeEventListener('keydown', _onModalKeydown);
   }
 
+  function snapshotAllergies() {
+    return activeNonDraftAllergies(_allergiesCache).map(function (a) {
+      var ov = _overviewsById[a.id] || {};
+      return {
+        id: a.id,
+        description: a.allergyCodeDescription,
+        onsetDate: ov.onsetDate || null,
+        recordDate: ov.recordDate || null,
+        severity: ov.severity || null,
+        certainty: ov.certainty || null,
+        additionalInformation: ov.additionalInformation || null,
+      };
+    });
+  }
+
+  function mapById(list) {
+    var out = {};
+    (Array.isArray(list) ? list : []).forEach(function (item) {
+      if (item && item.id) out[item.id] = item;
+    });
+    return out;
+  }
+
+  function findDuplicateGroupIndex(allergyId) {
+    for (var i = 0; i < _duplicateGroups.length; i++) {
+      var entries = (_duplicateGroups[i] && _duplicateGroups[i].entries) || [];
+      for (var j = 0; j < entries.length; j++) {
+        if (entries[j] && entries[j].id === allergyId) return i;
+      }
+    }
+    return -1;
+  }
+
+  function findConversionIndex(allergyId) {
+    return _conversionFlagged.findIndex(function (f) {
+      return f && f.id === allergyId;
+    });
+  }
+
+  // ── Bridge to allergy-cleanup-canvas.js ───────────────────────────────────
+  // The ONLY way the canvas overlay touches this widget's state or writes to
+  // Medicus — no scan/commit/classify logic is duplicated in the canvas file.
+  window.AllergyCleanup = {
+    getSnapshot: function () {
+      return {
+        patientId: _lastPatientId,
+        allergies: snapshotAllergies(),
+        junkById: mapById(_junkFlagged),
+        convertById: mapById(_conversionFlagged),
+        dualById: mapById(_dualCodedFlagged),
+        duplicateGroups: _duplicateGroups,
+        scanState: _scanState,
+        scanError: _scanError,
+        ending: _ending,
+        dualCodedTidying: _dualCodedTidying,
+      };
+    },
+    ensureScanned: function () {
+      if (_scanState === 'idle') runFullScan();
+    },
+    commitEndJunk: commitEndJunk,
+    commitClearLegacy: commitClearLegacy,
+    openReview: openReview,
+    openConversionReview: openConversionReview,
+    openReviewForAllergy: function (allergyId) {
+      var idx = findDuplicateGroupIndex(allergyId);
+      if (idx === -1) return;
+      openReview(idx);
+    },
+    openConversionForAllergy: function (allergyId) {
+      var idx = findConversionIndex(allergyId);
+      if (idx === -1) return;
+      openConversionReview(idx);
+    },
+    refresh: render,
+    onChange: function (cb) {
+      if (typeof cb === 'function') _subscribers.push(cb);
+    },
+  };
+
   // ── Injection: ONE "Clean up allergies?" trigger, placed above the first
   // allergy row ──────────────────────────────────────────────────────────────
   // Non-destructive — refreshed in place on every rescan, never
@@ -3144,12 +3192,8 @@
   function injectTrigger() {
     var existing = document.getElementById('ms-ac-widget');
     if (existing) {
-      // Refresh the trigger label (hint count may have changed) without
-      // touching an already-open panel's scan results.
-      if (!_open) {
-        existing.innerHTML = buildHtml();
-        bindEvents(existing);
-      }
+      existing.innerHTML = buildHtml();
+      bindEvents(existing);
       return;
     }
     if (!_allergiesCache || !_allergiesCache.length) return;
@@ -3182,15 +3226,21 @@
         m.target &&
         m.target.nodeType === 1 &&
         m.target.closest &&
-        (m.target.closest('#ms-ac-widget') || m.target.closest('#ms-ac-modal-root'))
+        (m.target.closest('#ms-ac-widget') ||
+          m.target.closest('#ms-ac-modal-root') ||
+          m.target.closest('#ms-acc-overlay'))
       ) {
         continue;
       }
       for (var nodes of [m.addedNodes, m.removedNodes]) {
         for (var n of nodes) {
           if (n.nodeType !== 1) continue;
-          if (n.id === 'ms-ac-widget' || n.id === 'ms-ac-modal-root') continue;
-          if (n.closest && (n.closest('#ms-ac-widget') || n.closest('#ms-ac-modal-root'))) continue;
+          if (n.id === 'ms-ac-widget' || n.id === 'ms-ac-modal-root' || n.id === 'ms-acc-overlay') continue;
+          if (
+            n.closest &&
+            (n.closest('#ms-ac-widget') || n.closest('#ms-ac-modal-root') || n.closest('#ms-acc-overlay'))
+          )
+            continue;
           return false;
         }
       }

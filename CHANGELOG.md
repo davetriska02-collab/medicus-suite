@@ -2,71 +2,297 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [Unreleased]
-
-## [v3.234.2] — 2026-08-19
+## [v3.236.5] — 2026-08-21
 
 ### Organise appointments canvas (v1)
 
-**Organise on canvas…** on the Medicus appointment book. Columns are
-clinician diaries, tiles are booked patients, gaps are free slots.
-Drag onto another diary's free slot, or onto **Cancel**, to stage;
-**Finalise** writes the ticked list. Arrived tiles are locked.
+**Organise on canvas…** on the Medicus appointment book (sits to the
+**left of Open Actions**, not on top of it). Columns are clinician
+diaries; a **filter** (name / site / hide empty) keeps weekday boards
+usable. Tiles are booked patients, gaps are free slots. Drag onto
+another diary's free slot, or onto **Cancel**, to stage; **Finalise**
+writes the ticked list. Arrived tiles are locked. SMS stays off.
 
-Writes follow the 2026-08-19 capture on dummy patient Mr Micky Mouse
-(`docs/learnings-appointment-organise-api.md`):
-
-- **Cancel** — `POST /scheduling/appointment/cancel-appointment`
-  (`otherAppointmentIds` always empty; Send-to always off).
-- **Cross-list move** — reserve (3-field body) →
-  `POST /scheduling/slot-reservation/update-slot-reservation`
-  (`rescheduledAppointmentId` set) →
-  `POST /scheduling/appointment/create-appointment`
-  (`context=reschedule-appointment`). Not cancel-then-create.
-- **Same-list move** — same three-field reserve +
-  `create-appointment` (`context=reschedule-appointment`) on the
-  **same** `diaryId`. No `update-slot-reservation`.
-- **Stretch** — `+15 min` / resize handle only when the following
-  slot is free. Writes are cancel then rebook at the new length.
-  Neighbour booked → no handle, nothing staged (Test A overlap).
-  Never sends `allowOverlappingAppointments=allow`. Type change
-  is not offered.
-
-- **Sick day rebook** — one button empties a clinician's list for
-  that day. Each booked (not arrived) tile gets a similar free slot
-  on another list (same type, length, site, delivery). Reception
-  accepts, picks another match, or leaves as still-needs-rebook.
-  Finalise is the captured cross-list move. SMS stays off until a
-  Send-to On capture exists. Home visits are not matched to
-  face-to-face slots. Monday-morning polish (same captured write):
-  leftover **phone list** (name, original time, why it failed, copy);
-  covering-list **preview + cap** so one duty GP is not drowned;
-  greedy assign so two patients do not get the same slot; skip
-  similar slots that are already in the past; confirm bar says
-  **rebooked with Y** even while SMS is off. Consecutive 15s for a
-  30-min sick-day rebook live-proven on Sunday dummy Mouse
-  (2026-08-19, `2abf49f`): 10:00 NP 30 min → 11:00–11:30 Unassigned,
-  11:15 consumed, no overlap, SMS off. Live polish pass then showed
-  cover cap, cover preview, and confirm "Rebooked with Y"; follow-up
-  fixes: leftover phone list always visible (including nobody to
-  phone), remaining-free subtracts incoming run tiles, default
-  similar slot is the earliest not the closest clock time.
-  Live-complete on Sunday dummy Mouse (`5ff708b`, 2026-08-19 17:20 BST,
-  no write): leftover phone list always visible at 0 leftovers
-  ("Still needs a phone call — 0 from …" / "Nobody left to phone." /
-  Copy; no NHS numbers); default similar slot **11:00 Unassigned**
-  (earliest 30-min run, not last-15 of a window, not same-list);
-  remaining-free **2** after one 30-min incoming on four 15s.
-
-New `shared/appointment-organise-core.js` owns cancel + move orchestration
-(`update-slot-reservation`, appointment-overview GET). Reserve / create /
-release go through `shared/booking-core.js` — no third copy. Confirm bar names each patient
-and states that Medicus will not message them. Re-GET the day board
-(+ move form) before each commit; abort that action on version /
-patient / arrived drift. CSN W14/W15/W16; hazard H-061 (pending CSO).
-Sick-day Finalise is W15 (no new endpoint).
+Writes follow dummy-patient captures (`docs/learnings-appointment-organise-api.md`):
+cancel, same-list/cross-list move, stretch into a free following slot,
+sick-day similar-slot rebook (leftover phone list, covering-list
+preview + cap, earliest similar default). CSN W14/W15/W16; hazard
+**H-062** (H-061 on main is queue pulse).
 
 Tests: `test-appointment-organise-core.js`.
+
+## [v3.236.4] — 2026-08-20
+
+### Triage queue — first pulse cut (live-reviewable)
+
+First implementation of the queue-next plan (`docs/design/triage-queue-next/PLAN.md`) on the live Medicus request/results list. Pref-gated (`queuePulseCompress`, default on; Triage Lens → Preferences to restore the chip pile):
+
+- **Pulse** — chips already on the row compress to one left rail and one **named** headline. **Red is a filled bar. Amber is a hollow ring** on the pulse chrome (shape, not hue — a second filled bar would only differ from red by colour). Compression (and chip-hide) is **escalate-only**: a quiet row keeps its chips, so empty cannot read as all-clear. Age, days-open, thread counts and Pharmacy First do not own the rail. A diamond on the headline means it came from the record (monitoring / pending result), not the request text. Overflow is a quiet `· N`. Not a score; a quiet rail is not all-clear.
+- **Why-tray** — click the headline / overflow, or Space on the j/k cursor. Lists every named signal plus source. Footer refuses the score reading.
+- **Act tray (thin)** — `›` or `a` opens numbered prepare-only actions. Pharmacy First and Ask-back reuse the existing pathway menu (still not sent). Book and Park are present and disabled. No Done / Sent / Booked.
+- **Thread mark** — the existing B3 repeat-contact chip is shown as a count on the pulse, not a rail-raiser.
+- **Jump / focus see the rail** — the status bar's ▶ jump button, the `n` key and "Focus alerts" now treat pulse red/amber rows as alerts (previously they only saw the results-queue tint, so on the request queue "Focus alerts" would have dimmed a row whose own rail was red).
+
+Injection law unchanged (PREPEND, wipe-and-redecorate, durable map, token-block classes). Composer is `content-scripts/triage-lens/queue-pulse.js` (`window.TriageQueuePulse`), unit-tested in `test-queue-pulse.js`.
+
+Callback mock (same eight rows, chip pile then pulse): `docs/design/triage-queue-next/before-after.html`.
+
+## [v3.236.3] — 2026-08-20
+
+### Allergy canvas — Finalise reports what actually landed (PR #293 review fixes)
+
+Two defects in the new Organise-allergies canvas, both in the Finalise path:
+
+- **A failed write was announced as success.** `commitEndJunk` / `commitClearLegacy`
+  settle every write and never throw, but the canvas ignored their return values —
+  it cleared the draft and announced "Staged writes sent" even when every write
+  failed, and the per-row `endError` / `tidyError` the engine records were only
+  rendered by the retired checklist (dead code). Finalise now diffs what it asked
+  for against what the bridge confirms (`diffFinaliseOutcome`, pinned by tests):
+  failed or bridge-refused rows **stay staged**, the confirm bar names the exact
+  written/failed counts, and each failed row shows its error on the tile (End-bin
+  tiles show `endError`; dual-coded tiles show `tidyError`). Success is never
+  claimed for a write that did not come back confirmed.
+- **A mixed Finalise could reload the page mid-write.** When every staged end
+  succeeded, the engine scheduled `location.reload()` 900 ms later — while the
+  canvas was still awaiting the tidy writes (two round-trips per row), so the
+  reload could destroy their outcome and errors. Both commits now take a
+  `deferReload` option (canvas-only; default behaviour unchanged) and the canvas
+  owns a single reload after **both** phases report fully successful, guarded on
+  the snapshot patient still matching.
+
+## [v3.236.2] — 2026-08-20
+
+### Allergy cleanup — organise on canvas
+
+"Clean up allergies?" now opens a full-screen **Organise allergies** canvas
+directly on click — no accordion panel (same reflow-safe trigger as Organise
+problems). Active allergies sit in computed **Active / Junk / Convert /
+Dual-coded** lanes; drag junk or a "not an allergy" row onto **End** to stage
+`end-allergy`; drop a dual-coded tile onto **Dual-coded** to stage clearing
+the stale legacy code; drop one duplicate onto its pair (dashed connector
+lines) to open the existing merge modal; click a Convert tile to open the
+existing substance-conversion review. Arrange many, then **Finalise** writes
+the staged ends and tidies. Merge and convert stay per-entry modal reviews
+(H-060 control c). Genuine allergies cannot be ended from the bin; the last
+"No known allergies" copy is refused in both the canvas stager and the write
+bridge. The canvas owns no API — `content-scripts/allergy-cleanup-canvas.js`
+is a view over `window.AllergyCleanup`.
+
+Tests: `test-allergy-cleanup-canvas.js` (lane placement, drop classification,
+draft staging, last-NKA / unrelated-drop locks, connector math);
+`test-allergy-cleanup.js` pins `isNkaAllergy`.
+
+## [v3.236.1] — 2026-08-19
+
+### Review fixes on the v3.236.0 branch (PR #288)
+
+- **"Add as problem?" — same-code entries in one batch no longer write duplicate
+  first-episode problems.** Two selected entries carrying the same SNOMED conceptId
+  were each checked only against the pre-batch problem list, so both wrote as fresh
+  active problems. The confirm summary now flags the repeat ("same code as another
+  selected entry"), and the write records it as a subsequent episode once the first
+  copy's POST has landed (new pure `markSameBatchDuplicates`, regression-tested).
+- **"Add as problem?" — deferred exists-flag check no longer orphans an in-flight
+  submit.** The flag check swaps `entries` for cloned rows when it resolves; if a
+  submit had started while its fetches were in flight, the created rows re-rendered
+  as still-pending (inviting a duplicate submit). The swap is now skipped while a
+  submit is in flight — flags are best-effort and the submit path computes its own.
+- **Edit-problem popup — un-nest / remove-link now takes two clicks.** The first
+  click arms the button ("Confirm un-nest?" / "Confirm removal?"), only the second
+  commits — same two-step discipline as every other relationship write in the suite.
+  It was the only relationship write that fired on a single click.
+- **Edit-problem popup — a failed un-nest / remove-link is now told to the
+  clinician** ("Nothing was changed; the relationship below is still in place")
+  instead of only `console.warn` — the row re-rendering unchanged was
+  indistinguishable from a slow refresh.
+- **Bulk remove/merge — a failed duplicate-copy scan no longer reads as "No
+  duplicate-code problems found."** The error state now says the scan failed and how
+  to retry, instead of a false negative.
+- **Edit-problem popup opens faster** — the linked/nested-problem lookup no longer
+  blocks the panel's search chain on its network round-trip; it fills in with its
+  own re-render when it lands.
+- **Problem-nesting snapshot** — dropped the dead `unknownSignificanceSuggestions`
+  field (its tray was removed in v3.236.0; the pure builder stays for its tests).
+- `docs/feature-list.md` version header corrected to match the manifest
+  (was left at v3.235.0 by the v3.236.0 bump, failing `check-doc-versions`).
+- **SOUP register reissued (v1.11 @ 3.236.1)** — CSO review signed in session by
+  Dr Dave Triska (2026-08-19), closing the 61-minor staleness gap that hard-failed
+  `check-doc-versions`. All 5 vendored files re-verified byte-identical via
+  `verify-vendor.js`; one register gap closed: the v3.176.3 vendored JetBrains Mono
+  font (OFL-1.1, non-executable) is now recorded as §3.1 — it was catalogued in
+  `vendor-versions.json` but absent from the register. Ledger updated.
+
+## [v3.236.0] — 2026-08-19
+
+### Organise problems — straight to canvas, no more reflow
+
+"Organise problems?" now opens the canvas directly on click — no
+intermediate accordion panel. This is the actual fix for the reported
+reflow bug (the button visibly moving down a line and reading as a fresh
+button appearing): the trigger never grows a body element any more, so the
+CSS `:has(.ms-pn-body)` flex-basis flip that used to push it onto its own
+row can never fire. "Change significance" is no longer a separate button
+either — dragging a tile between the canvas's own significance lanes is
+now how re-grading happens. "Merge duplicate copies" moved into **Bulk
+remove?**, renamed **Bulk remove/merge**, reusing the badge scan's existing
+overview fetch (no new network calls).
+
+### Organise-problems canvas — suggestions and links move onto the tiles
+
+The separate right-hand suggestion tray is gone. SNOMED-ancestry and
+"(Grouped with X)" text-link suggestions now render as a connector line
+straight onto the suggested tile itself — routed the same elbow/bus way as
+the existing linked-problem lines (out from the tile's own right edge to a
+shared vertical bus, its own lane per connected group), dashed since
+nothing is written yet. A small shape-and-letter flag on the line (circle
+"S" for SNOMED, square "G" for a text-link match, plus a distinct dash
+rhythm per kind) tells the two apart without relying on colour alone — this
+suite's colourblind mode has to survive every change — and its hover
+tooltip names the specific candidate ("SNOMED marks this as a child of
+X"), which used to sit permanently on the card. Dragging the tile onto its
+candidate confirms it via the same tile-onto-tile gesture as any other
+nest/link. The old "Unknown significance, pick a grade" tray card is gone
+too — the Unresolved lane already is that decision, dragging out of it
+already stages it.
+
+A confirmed linked-problem line now also carries a red **×** at its own
+midpoint — click to remove that flat link directly, without first
+selecting the tile (the confirm bar still stands between the click and the
+actual write, same as every other change here). This closes a real gap:
+`commitFlatLink` had no removal counterpart at all before this — a
+clinician could create a flat link but never undo one from the canvas.
+
+Major is now double the width of Minor/Unresolved (it usually carries the
+bulk of a patient's problem list).
+
+### "Edit problem…" popup — remove nesting/linkage, retirement check
+
+The per-problem edit popup (reachable from any tile, canvas or Clinical
+Summary) now shows this problem's own nesting/linkage — "Nested under X" /
+"Has N problems nested under it" / "Linked to Y", each with its own
+Un-nest/Remove-link button. Removing a flat link was previously only
+possible via the canvas's connector-line ×; this makes it reachable from
+the popup too, and adds a genuinely new capability (a flat link's removal
+had no bridge function at all before `commitFlatUnlink`). The popup also
+now runs the per-problem retirement/legacy-code check the separate "Code
+cleanup?" scan does — previously skipped here on the assumption the scan's
+own trigger was always one click away on the same page, which stopped
+being true once the canvas became a full-screen overlay with no page
+behind it.
+
+### "Check for retired/legacy codes?" renamed to "Code cleanup?"
+
+Same button, same scan — just the label.
+
+### Journal sync — fixed a 400 on notes recorded at another organisation
+
+`buildChangeNotePayload` (the shared payload builder behind both the
+per-problem code-sync and the "remove generic import text" journal
+cleanup) was sending a journal note's `recordedByOrganisation` straight
+through from its GET prefill without unwrapping it. For a note recorded at
+another organisation, that prefill shape is `{label, value:{organisationName,
+…}}` — round-tripping it verbatim 400s (`"This field is missing"` /
+`"not expected"`), the exact failure mode `unwrapRecordedByOrganisation`
+was already built to fix for the problem-code editor, just never wired
+into this later payload builder. Fixed; both journal-sync write paths now
+share the same fix.
+
+### Inline booking / create-task — hidden on document-filing tasks
+
+Medicus's own UI already offers direct `/task` and `/appointment` access
+on document-filing task pages, so the "Book appointment for this patient"
+and "Create task for this patient" panels no longer inject there — they're
+still offered on every other task-overview page type (prescription
+requests, etc.).
+
+### "Add as problem?" panel — flags codes that already exist
+
+Refresh (and the initial load) now checks each not-yet-added coded entry
+against the patient's existing problems by exact conceptId — the same
+check Submit already ran, just surfaced earlier. A flagged row still ticks
+and adds normally (recorded as a subsequent episode, same as before); this
+is advance notice, not a block. Deliberately exact-code only, not the
+canvas's SNOMED-ancestry/hierarchy check — that scales with the *patient's*
+whole active-problem count, not the document's, so a busy multimorbid
+patient would slow every Refresh; exact match costs a fixed, small handful
+of requests regardless.
+
+## [v3.235.0] — 2026-08-19
+
+### "Add as problem?" floating panel on document-filing tasks
+
+New `content-scripts/document-codes-to-problems.js` — a document-filing
+task's "Codes & actions" card lists every coded journal note added against
+that document, but Medicus itself has no action anywhere on that card to
+turn one into a Problem (confirmed: no "problem" entry in its own
+`codesAndActionsOptions` list). Today that means retyping the code, the
+note's free text, and the onset date by hand into a separate "New Problem"
+modal. This widget offers a checkbox per coded entry and a single "Add
+selected as problems" button that drives Medicus's own
+`POST /clinical/problem/create-problem` directly — code, note text (as
+Additional information), and onset date (derived from the document's own
+date, preferring `documentDate` and falling back to `recordDate`) carried
+across automatically.
+
+Ships as a **fixed floating panel** (bottom-right corner), not anchored
+inline below the Codes & actions card — that was tried first and
+abandoned: the card unmounts entirely when the task page's right pane
+switches to something else (existing problems / medication), taking the
+widget and its Refresh button with it, and even the first render on a
+freshly-opened task could race Medicus's own rendering of that card. A
+body-level panel needs nothing to find, so it survives pane-switching,
+task-to-task navigation, and DOM churn that would otherwise wipe an
+inline-anchored node. A manual collapse toggle (chevron in the header)
+gives it an escape hatch since it can't be scrolled past like an inline
+widget.
+
+Two non-blocking warnings mirror checks Medicus's own "New Problem" modal
+already makes (decoded from its `.vue` source): an exact-code match
+against the patient's existing problems (flagged, recorded as a subsequent
+episode, explained in both the confirm() dialog and the success line), and
+an allergy-classified code. Free-text notes with no SNOMED code (added via
+Medicus's own plain "Note" action) are excluded from the checklist
+entirely — they can't become a Problem (create-problem requires a code)
+and previously rendered as a blank, unlabelled checkbox.
+
+`onsetDate` is defensively validated before being sent — a document's own
+recordDate/documentDate can be a partial date (year-only or year-month, a
+real shape for an old scanned letter), and forwarding one straight through
+400'd (`"Value is not a valid partial date."`); now only a genuine full
+ISO date is ever sent, falling back to no onset date otherwise.
+
+Full confirmed API contract in
+`docs/learnings-document-problem-creation-api.md`; 82 assertions in
+`test-document-codes-to-problems.js`.
+
+Explicitly deferred to a follow-up: a date-proximity duplicate check
+(catching a likely-duplicate problem near the document's date even when
+the code doesn't match exactly) — today's check is exact-code only,
+matching Medicus's own.
+
+## [v3.234.3] — 2026-08-19
+
+### Reception match — missing topic terms for the carbon-monoxide red flag
+
+The Keeper's v3.234.0 rule refresh added the `rf-household-co` red flag
+("does anyone else in the household have the same new headache") to the
+headache pathway, but `RED_FLAG_TOPIC_TERMS` in `engine/reception-match.js`
+never gained a matching entry, so the flag's topic always read as an un-asked
+gap (safe but noisy) and the coverage guards in `test-reception-match.js` /
+`test-reception-pathway-coverage.js` were failing. Added household /
+carbon-monoxide topic terms for it.
+
+## [v3.234.2] — 2026-08-19
+
+### Rules engine — recall due-date could land a day early/late around DST
+
+`lastDate` strings (`YYYY-MM-DD`) parse as UTC midnight, but the due-date calculation
+was advancing them with local-time `setDate`/`getDate`. On a BST (or other
+DST-shifted) host, adding the interval in local time could push the computed
+due date a day off from adding it in UTC. Switched to `setUTCDate`/`getUTCDate`
+so the whole calculation stays in UTC, matching the `Date.UTC` convention already
+used elsewhere in this file.
 
 ## [v3.234.1] — 2026-08-18
 

@@ -102,6 +102,71 @@ input[class*='ms-pdc-']:focus-visible {
   cursor: not-allowed;
 }
 
+/* Linked/nested-problem section (2026-08-19) — same neutral, plain palette
+   as generic-import-text cleanup above: this changes the RELATIONSHIP
+   between problems, never problemCode, so it doesn't belong in any of the
+   coding-risk palettes (amber crossconcept, red hintexpand, etc.) below. */
+.ms-pdc-nesting-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  background: #f9fafb;
+  border-left: 2px solid #9ca3af;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.ms-pdc-nesting-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ms-pdc-nesting-row-label {
+  color: #4b5563;
+}
+
+.ms-pdc-nesting-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.ms-pdc-nesting-btn {
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #9ca3af;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-pdc-nesting-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.ms-pdc-nesting-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Armed (first-click) state — the write only fires on the second,
+   confirming click, so the armed button must read as a live question,
+   not a finished action. Same red family as .ms-pdc-error. */
+.ms-pdc-nesting-btn-armed,
+.ms-pdc-nesting-btn-armed:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #b91c1c;
+  color: #b91c1c;
+}
+
 /* Severity-defaulting contradiction (2026-07-29) — this DOES change a
    structured clinical field (significance), not just tidy free text, so it
    gets the same amber warning treatment as the retirement note below rather

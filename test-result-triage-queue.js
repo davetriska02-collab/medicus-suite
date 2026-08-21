@@ -1581,7 +1581,7 @@ if (rdvMatch) {
 // an unstyled box.
 const hudCss = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'hud.css'), 'utf8');
 check(
-  /\.ch-result-popover,\s*\n\.ch-detail-verdict \{/.test(hudCss),
+  /\.ch-result-popover,\s*\n\.ch-detail-verdict,\s*\n\.ch-q-pulse,/.test(hudCss),
   ".ch-detail-verdict is in hud.css's token-block selector list"
 );
 check(
