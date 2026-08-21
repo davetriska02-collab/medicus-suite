@@ -450,8 +450,20 @@ Bugs from that pass (fixed after):
 - Leftover phone list did not appear on the happy path (0 leftovers hid
   the panel). Panel now always shows, including **Nobody left to phone.**
 
-Failed-rebook leftover rows (name / original time / why) still need a
-live pass that leaves someone on the phone list.
+### Live pass — leftover miss (2026-08-21)
+
+Cancelled empty Unassigned 13:00–15:00 dummy diary. Stretched NP Mouse
+10:00 15 → **60 min** (handle; +15 click does not stack — live duration
+bug). Sick day → NP Clinic. No similar 60-min run (Unassigned 11:00–12:00
+longest free 45). Phone list:
+
+- Still needs a phone call — 1 from A Nurse Practitioner Clinic
+- 10:00 · Mr Micky Mouse · GP Appointment · 60 min
+- Need 60 min; other Sunday lists only have 15-min tiles (longest free
+  run 45 min). Still needs rebook.
+- Copy phone list. No NHS numbers. Nothing to stage.
+
+Organise launcher currently overlaps **Open Actions** (sit it to the left).
 
 ### Live pass — sick-day complete (`5ff708b`, 2026-08-19 17:20 BST)
 
@@ -473,7 +485,53 @@ Sick day → A Nurse Practitioner Clinic 10:00–11:00 (Mouse 10:30–11:00
   1 incoming = 1. 2 free tiles left." (4×15 minus 30-min incoming = 2,
   not 4).
 
-Sick-day on this branch is dummy-complete. Held: Send-to On on a safe
-dummy channel; next-day similar; move-to-queue; telephone on leftover
-rows if a captured GET already has one.
+Sick-day leftover miss live-proven 2026-08-21. Held: next-day similar
+(Monday 24 has live books — do not write). Send-to On and leftover
+telephone GETs were captured 2026-08-20 (`10`–`15` json). Move-to-queue
+captured 2026-08-21 (below).
+
+---
+
+## I — Move to / from a queue (2026-08-21, dummy Mouse, Sunday 2026-08-23)
+
+Dummy queue created via Open Actions → Add new appointment queue:
+General Appointments / GP Appointment / **23 Aug 2026 15:00–16:00** /
+Witley / Copy forward **Off** / Also create on **empty**. No free-text
+name — column is service + clock + site. Empty state: "There are no
+appointments in this queue." After a patient: "Left to be seen: 1".
+
+Send-to Off (`bookingConfirmationRecipients: []`). Nobody except Mouse.
+Raw: `C:\Users\Dave\Downloads\queue-cap.json` (copy
+`appt-organise-captures/17-queue-move.json`).
+
+### Diary → queue (`moveType=diary-to-queue`)
+
+| Method | Path |
+|---|---|
+| GET | `/scheduling/data/appointment/move-appointment/{id}?moveType=diary-to-queue` |
+| POST | `/scheduling/appointment/create-appointment` |
+
+No reserve. No `update-slot-reservation`. No remove-slot-reservation.
+Create body (keys same as reschedule list): `context=reschedule-appointment`,
+`appointmentTemporalType: null`, `slotReservationId: null`, `diaryId: null`,
+`queueId` set (`01a024f9-a775-7220-a3c3-a9ddf4331719`),
+`intendedStartDateTime: null`, `intendedDuration: 15`,
+`bookingConfirmationRecipients: []`. UI new date has **no clock time**.
+
+### Queue → diary (`moveType=queue-to-diary`)
+
+| Method | Path |
+|---|---|
+| GET | `/scheduling/data/appointment/move-appointment/{id}?moveType=queue-to-diary` |
+| POST | reserve (3-field: diaryId, start, duration) |
+| POST | `/scheduling/appointment/create-appointment` |
+| POST | remove-slot-reservation |
+
+Create: `context=reschedule-appointment`, `appointmentTemporalType: timed`,
+`diaryId` set, `queueId: null`, timed `intendedStartDateTime`, duration 15,
+recipients `[]`. No `update-slot-reservation`.
+
+Do not invent a third create copy. Same `create-appointment` reschedule
+keys as W15. Queue dest is `queueId` + null diary/start; timed dest is
+`diaryId` + start + null queueId.
 
