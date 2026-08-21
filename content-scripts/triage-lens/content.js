@@ -6495,6 +6495,8 @@
       if (keyId) {
         _pulseOpenByKey.set(keyId, _pulseOpenByKey.get(keyId) === 'why' ? null : 'why');
         refreshPulseOnRow(row);
+        const whyEl = pulseTarget(row).target.querySelector('.ch-q-pulse-head');
+        if (whyEl && whyEl.focus) whyEl.focus();
       }
     } else if (key === 'a' || key === 'A') {
       if (!PREF('queuePulseCompress', true)) return;
@@ -6506,7 +6508,23 @@
       if (keyId) {
         _pulseOpenByKey.set(keyId, _pulseOpenByKey.get(keyId) === 'act' ? null : 'act');
         refreshPulseOnRow(row);
+        const actEl = pulseTarget(row).target.querySelector('.ch-q-pulse-act');
+        if (actEl && actEl.focus) actEl.focus();
       }
+    } else if (key === 'Escape') {
+      if (!PREF('queuePulseCompress', true)) return;
+      if (_kbdCursorRowIndex == null) return;
+      const row = queueScope().querySelector('.ag-row[row-index="' + _kbdCursorRowIndex + '"]:not(.ag-full-width-row)');
+      if (!row) return;
+      const keyId = pulseOpenKey(row);
+      const wasOpen = keyId && _pulseOpenByKey.get(keyId);
+      if (!wasOpen) return;
+      if (e.preventDefault) e.preventDefault();
+      _pulseOpenByKey.set(keyId, null);
+      refreshPulseOnRow(row);
+      const cls = wasOpen === 'act' ? 'ch-q-pulse-act' : 'ch-q-pulse-head';
+      const trigEl = pulseTarget(row).target.querySelector('.' + cls);
+      if (trigEl && trigEl.focus) trigEl.focus();
     } else if (key === 'n' || key === 'N') {
       if (e.preventDefault) e.preventDefault();
       const target = jumpToAlertRow(_queueStatusJumpPos);
@@ -7129,7 +7147,10 @@
     tray.appendChild(h);
     const ul = document.createElement('ul');
     ul.className = 'ch-q-why-list';
-    const signals = composed.signals || [];
+    const RANK = (typeof window !== 'undefined' && window.TriageQueuePulse && window.TriageQueuePulse.KIND_RANK) || {};
+    // Red before amber before info/green/meta — stable for ties (Array#sort
+    // is stable in every engine this ships to).
+    const signals = (composed.signals || []).slice().sort((a, b) => (RANK[b.kind] || 0) - (RANK[a.kind] || 0));
     if (signals.length === 0) {
       const li = document.createElement('li');
       const wrap = document.createElement('div');
@@ -7152,9 +7173,15 @@
       strong.textContent = s.name;
       const src = document.createElement('span');
       src.className = 'ch-q-why-src';
-      src.textContent = (s.source || s.family || '') + (s.silent ? ' — from the record, not the request text' : '');
+      src.textContent = s.source || s.family || '';
       wrap.appendChild(strong);
       wrap.appendChild(src);
+      if (s.silent) {
+        const rec = document.createElement('span');
+        rec.className = 'ch-q-why-rec';
+        rec.textContent = ' — from the record, not the request text';
+        wrap.appendChild(rec);
+      }
       li.appendChild(mark);
       li.appendChild(wrap);
       ul.appendChild(li);
@@ -7172,7 +7199,7 @@
     const tray = document.createElement('div');
     tray.className = 'ch-q-act';
     const h = document.createElement('h3');
-    h.textContent = '1. Stage a next step ↓  2. Then open the request to finish. Nothing is sent from here.';
+    h.textContent = '1 · Stage a next step — nothing is sent from here.';
     tray.appendChild(h);
     const rowEl = document.createElement('div');
     rowEl.className = 'ch-q-act-row';
@@ -7181,7 +7208,7 @@
       b.type = 'button';
       b.disabled = !enabled;
       const title = document.createElement('span');
-      title.textContent = n + '. ' + label;
+      title.textContent = n ? n + '. ' + label : label;
       const small = document.createElement('small');
       small.textContent = detail;
       b.appendChild(title);
@@ -7195,11 +7222,11 @@
       }
       rowEl.appendChild(b);
     };
-    addBtn('1', 'Book', 'Not in this first cut — open the request to book', false);
+    addBtn('', 'Book', 'Not in this first cut — open the request to book', false);
     const pfOk = !!(act && act.pfElig && act.pfElig.eligible === true);
     const askOk = !!(act && act.gapsData && (act.gapsData.gaps.length || act.gapsData.flaggedInText.length));
     addBtn(
-      '2',
+      '',
       'Pharmacy First',
       pfOk ? 'Open the pathway draft (still not sent)' : 'Age or pathway not confirmed',
       pfOk,
@@ -7208,7 +7235,7 @@
       }
     );
     addBtn(
-      '3',
+      '',
       'Ask-back',
       askOk ? 'Open the gap-question draft (still not sent)' : 'No pathway gaps on this request',
       askOk,
@@ -7216,11 +7243,11 @@
         if (act) showPathwayMenu(anchor, act.pathway, act.previewText, act.pfElig, act.gapsData, act.closingQuestions);
       }
     );
-    addBtn('4', 'Park until…', 'Not in this first cut — Medicus status unchanged', false);
+    addBtn('', 'Park until…', 'Not in this first cut — Medicus status unchanged', false);
     tray.appendChild(rowEl);
     const note = document.createElement('p');
     note.className = 'ch-q-act-note';
-    note.textContent = 'Prepare-only. The request still has to be opened for anything to reach reception.';
+    note.textContent = '2 · Open the request to finish — nothing reaches reception until you do.';
     tray.appendChild(note);
     return tray;
   };
@@ -7253,6 +7280,18 @@
     const composed = QP.composePulse(collectSignalsFromRow(row), {});
     applyPulseRail(row, composed.rail);
     const escalate = composed.rail === 'red' || composed.rail === 'amber';
+    const open = key ? _pulseOpenByKey.get(key) : null;
+    // Nothing to say and nothing summoned: no pulse chrome at all — a quiet
+    // row keeps its chip pile untouched (applyPulseRail above) and gets no
+    // extra host. The keyboard Space/`a` paths still work: they set the open
+    // state BEFORE calling refreshPulseOnRow, so the host appears on demand.
+    if (!escalate && composed.signals.length === 0 && !open) {
+      clearPulseClasses(row);
+      return;
+    }
+    const ri = row.getAttribute('row-index');
+    const whyTrayId = 'ch-q-why-' + ri;
+    const actTrayId = 'ch-q-act-' + ri;
     const host = document.createElement('span');
     // Flat queues (tasks / investigations) have no preview row — pulse is
     // PREPENDed into the patient-name cell. Inline class drops the
@@ -7260,44 +7299,36 @@
     host.className = PULSE_HOST + (previewRow ? '' : ' ch-q-pulse-inline');
     const line = document.createElement('span');
     line.className = 'ch-q-pulse-row';
-    // Compression chrome (headline / overflow / thread / ring) only when the
-    // rail escalates. Quiet rows keep the chip pile so they cannot look cleared.
-    if (escalate && composed.rail === 'amber') {
-      const ring = document.createElement('i');
-      ring.className = 'ch-q-pulse-rail-ring';
-      ring.title = 'Amber — worst named signal is amber; not a score';
-      ring.setAttribute('aria-hidden', 'true');
-      line.appendChild(ring);
-    }
+    // Compression chrome (headline / thread / overflow) only when the rail
+    // escalates. Quiet rows keep the chip pile so they cannot look cleared.
     if (escalate && composed.headline) {
       const head = document.createElement('span');
       head.className = 'ch-q-pulse-head';
       head.setAttribute('role', 'button');
       head.setAttribute('tabindex', '0');
+      head.setAttribute('aria-controls', whyTrayId);
+      head.setAttribute('aria-expanded', open === 'why' ? 'true' : 'false');
       head.setAttribute(
         'aria-label',
-        composed.headline.name + ' — ' + composed.headline.kind + ' — not a score. Space or click for why.'
+        composed.headline.name +
+          ' — ' +
+          composed.headline.kind +
+          ' — not a score. Space or click for why.' +
+          (composed.silent ? ' — from the record, not the request text' : '')
       );
-      if (composed.silent) {
-        const dia = document.createElement('i');
-        dia.className = 'ch-q-pulse-diamond' + (composed.headline.kind === 'amber' ? ' amber' : '');
-        dia.title = 'From the record, not the request text';
-        head.appendChild(dia);
-      }
       const chip = document.createElement('span');
       chip.className = 'ch-chip ch-chip-' + composed.headline.kind;
       chip.textContent = composed.headline.name;
+      chip.title = composed.headline.name;
+      if (composed.silent) {
+        const src = document.createElement('span');
+        src.className = 'ch-q-pulse-src';
+        src.setAttribute('aria-hidden', 'true');
+        src.textContent = 'record';
+        chip.appendChild(src);
+      }
       head.appendChild(chip);
       line.appendChild(head);
-    }
-    if (escalate && composed.overflowCount > 0) {
-      const more = document.createElement('span');
-      more.className = 'ch-q-pulse-more';
-      more.textContent = '· ' + composed.overflowCount;
-      more.setAttribute('role', 'button');
-      more.setAttribute('tabindex', '0');
-      more.setAttribute('aria-label', composed.overflowCount + ' more signals — show why');
-      line.appendChild(more);
     }
     if (escalate && composed.thread) {
       const th = document.createElement('span');
@@ -7306,28 +7337,50 @@
       th.title = 'Contact count — not a grade';
       line.appendChild(th);
     }
-    const ri = row.getAttribute('row-index');
+    if (escalate && composed.overflowCount > 0) {
+      const more = document.createElement('span');
+      more.className = 'ch-q-pulse-more';
+      more.textContent = '+' + composed.overflowCount;
+      more.setAttribute('role', 'button');
+      more.setAttribute('tabindex', '0');
+      more.setAttribute('aria-controls', whyTrayId);
+      more.setAttribute('aria-expanded', open === 'why' ? 'true' : 'false');
+      more.setAttribute('aria-label', composed.overflowCount + ' more signals — show why');
+      line.appendChild(more);
+    }
     const act = ri != null ? _pulseActByRow.get(Number(ri)) : null;
     const actBtn = document.createElement('button');
     actBtn.type = 'button';
     actBtn.className = 'ch-q-pulse-act';
-    actBtn.textContent = '›';
+    actBtn.textContent = 'Act ›';
     actBtn.setAttribute('aria-label', 'Stage a next step — nothing is sent from here');
+    actBtn.setAttribute('aria-controls', actTrayId);
+    actBtn.setAttribute('aria-expanded', open === 'act' ? 'true' : 'false');
     line.appendChild(actBtn);
     host.appendChild(line);
 
-    const open = key ? _pulseOpenByKey.get(key) : null;
-    actBtn.setAttribute('aria-expanded', open === 'act' ? 'true' : 'false');
 
-    const toggle = (which) => {
+    // Focus survival: after a toggle rebuilds the host, re-find the control
+    // that triggered it (by class, inside the freshly rebuilt target) and
+    // refocus it — a rebuild must never drop focus back onto the page body.
+    const refocus = (cls) => {
+      const el = pulseTarget(row).target.querySelector('.' + cls);
+      if (el && el.focus) el.focus();
+    };
+    const toggle = (which, cls) => {
       if (!key) return;
       _pulseOpenByKey.set(key, _pulseOpenByKey.get(key) === which ? null : which);
       refreshPulseOnRow(row);
+      if (cls) refocus(cls);
     };
     const onWhy = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      toggle('why');
+      const cls =
+        e.currentTarget && e.currentTarget.classList.contains('ch-q-pulse-more')
+          ? 'ch-q-pulse-more'
+          : 'ch-q-pulse-head';
+      toggle('why', cls);
     };
     host.querySelectorAll('.ch-q-pulse-head, .ch-q-pulse-more').forEach((el) => {
       el.addEventListener('click', onWhy);
@@ -7338,13 +7391,15 @@
     actBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      toggle('act');
+      toggle('act', 'ch-q-pulse-act');
     });
 
     target.insertBefore(host, target.firstChild);
 
     if (open === 'why' || open === 'act') {
       const tray = open === 'why' ? buildPulseWhyTray(composed) : buildPulseActTray(row, act);
+      // The triggers' aria-controls point at these ids (crit decision I).
+      tray.id = open === 'why' ? whyTrayId : actTrayId;
       if (key) tray.setAttribute('data-pulse-key', key);
       tray.addEventListener('click', (e) => e.stopPropagation());
       tray.addEventListener('mousedown', (e) => e.stopPropagation());

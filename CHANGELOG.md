@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.236.16] — 2026-08-21
+## [v3.236.17] — 2026-08-21
 
 ### Organise canvas — fail-safe write paths (merge-review fixes)
 
@@ -24,6 +24,23 @@ An adversarial review of the v3.236.5–.15 merge found the organise canvas's fa
 - Bulk-acknowledge URL matching re-anchored (siteId must be the first path segment); an aborted drag of the codes-to-problems panel header no longer swallows the next collapse click.
 
 Tests: `test-appointment-organise-core.js` grows to 241 checks (destination-taken, oversize drop, post-cancel restore both ways, release failures, pre-flight, fail-closed identity, day naming, notify no-op); `test-queue-pulse.js`, `test-task-bulk-action.js`, `test-document-codes-to-problems.js` extended.
+
+## [v3.236.16] — 2026-08-21
+
+### Queue pulse — design-crit pass (multi-critic review of the v3.236.4 cut)
+
+Findings from a three-lens design crit (art director on rendered pixels, token/code surveyor, fresh-eyes GP persona on screenshots only) of the real injected surface, implemented as one settled ruling set:
+
+- **Amber joins red in the rail column.** The inline amber ring under-signalled (tiny, on a different visual axis to red's bar — an urgent child-wheeze row scanned no differently to a travel enquiry). Amber is now a **hollow bar** (amber wash + 1px edge stroke) beside red's **solid bar**: one scanning axis, severity still distinguished by fill/shape, not hue. Amber salience raised; red untouched.
+- **No pulse chrome on rows with nothing to say.** The bare `›` no longer appears alone on signal-less rows (keyboard `a`/Space still summon the act tray); quiet rows with context chips get a labelled **ACT ›** ghost button on the same line as their chips instead of a line of their own — the compressed view is now genuinely shorter than the chip pile.
+- **The headline never truncates** (the `×2` in "Monitoring overdue ×2" was being cut); full name also on the chip's title.
+- **Record-provenance mark recast**: the filled diamond (which collided with the suite's filled=red / hollow=amber shape coding) is now a mono `RECORD` micro-token inside the headline chip, with the aria-label spelling it out.
+- **Why-tray** is a real popover (elevated, `--r-lg`, max-width) sorted red → amber → context, one line per signal with a mono category token; the "not a score / quiet rail is not all-clear" footer promoted out of the muted text tier. Info signals use a neutral dot — no fourth colour in the red/amber system.
+- **Act tray**: fixed four-column grid (no reflow between states), one numbering system (steps 1·2, options unnumbered), disabled reasons now legible (full-opacity muted tokens instead of a 1.83:1 fade), consequence stated once.
+- **Interaction states everywhere**: `:hover`/`:focus-visible` on all pulse controls (the block previously had none — the only interactive cluster in hud.css without them), `aria-expanded`/`aria-controls` on all three toggles, Escape closes an open tray, and focus survives the rebuild-on-toggle (it used to drop to `<body>`).
+- Overflow count reads `+N` at the end of the chip run; thread chip recast to the sans voice and no longer claims a pointer it doesn't have; hud.css/sidebar.css scoped `--text-4`/`--text-5` corrected to the canon values (contrast improves suite-wide).
+- Hazard log H-061 controls (b)/(e) updated to describe the new rail and provenance implementations (intent unchanged, mechanisms swapped).
+- Merged over v3.236.6–15's parallel pulse work: the trays now render through main's floating-popover mechanism (`positionPulseFloat`, with its own outside-click/Escape/scroll dismissal) rather than in-row, keeping the crit's tray design, severity sort, aria wiring and focus survival; the escalate full-width rail line is guarded off main's flat-queue `.ch-q-pulse-inline` variant so the patient name is never eaten.
 
 ## [v3.236.15] — 2026-08-21
 

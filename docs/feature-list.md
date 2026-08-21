@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.236.16
+**Version:** v3.236.17
 **Generated:** 2026-08-21
 
 ## What it is
@@ -227,7 +227,7 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 
 ## Recent additions (last 4 weeks)
 
-- **v3.236.16 (2026-08-21)** — Organise-canvas fail-safe write paths: moves prove the destination is still free on the fresh board before writing; a failed stretch re-creates the original booking (URGENT no-appointment error if that also fails); the overlay freezes during a Finalise batch; Send-to copy matches the per-action "Tell the patient" opt-in (stretch never offers it); pulse popovers stop leaking/resurrecting and survive internal scrolling; flat-queue chips keep a 1.75rem colour floor.
+- **v3.236.17 (2026-08-21)** — Organise-canvas fail-safe write paths: moves prove the destination is still free on the fresh board before writing; a failed stretch re-creates the original booking (URGENT no-appointment error if that also fails); the overlay freezes during a Finalise batch; Send-to copy matches the per-action "Tell the patient" opt-in (stretch never offers it); pulse popovers stop leaking/resurrecting and survive internal scrolling; flat-queue chips keep a 1.75rem colour floor.
 - **v3.236.15 (2026-08-21)** — Bulk acknowledge: Review/Confirm sit in a footer so select-all cannot hide the mass-resolve button.
 - **v3.236.14 (2026-08-21)** — Bulk remove/merge trigger removed from the Clinical Summary (Organise problems owns End/merge). Quiet-row chips clip inside the name column so the next box cannot chop them.
 - **v3.236.13 (2026-08-21)** — Add-as-problem panel nudges off the Save as document chip, not only Medicus File.
