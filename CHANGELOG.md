@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.25] — 2026-08-22
+
+### Review fixes — CSN table ordering and issue date
+
+Self-review of the v3.236.23/.24 safety-net work. No content change to
+any signed row — ordering and metadata only:
+
+- **CSN §6.1**: W17–W21 had been inserted between W16 and W15, stranding
+  W15 at the bottom of the inventory. The table now runs W14, W15, W16,
+  W17–W21. (The long-standing W12-before-W11 order on `main` is untouched.)
+- **CSN §13 version history**: rows 3.18/3.19 had been inserted mid-table
+  in reverse order, leaving 3.16 as the final row; they now append at the
+  end in ascending order.
+- **CSN header**: "Date issued" now reads 2026-08-22, matching document
+  version 3.19's issue date (it still read 2026-07-28).
+- `test-write-path-inventory.js`: merged the two W-row loops left over
+  from the two-phase landing into one W1–W21 loop.
+
 ## [v3.236.24] — 2026-08-22
 
 ### CSO sign-off — CSN §6.1 W17–W21

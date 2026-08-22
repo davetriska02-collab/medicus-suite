@@ -169,13 +169,9 @@ function csnHasRow(id) {
   return csn.includes(`| ${id} |`);
 }
 
-for (let n = 1; n <= 16; n++) {
+for (let n = 1; n <= 21; n++) {
   const id = 'W' + n;
   check(csnHasRow(id), `CSN §6.1 has table row | ${id} |`);
-}
-for (let n = 17; n <= 21; n++) {
-  const id = 'W' + n;
-  check(csnHasRow(id), `CSN §6.1 has required table row | ${id} |`);
 }
 
 // ── 3. Every mapped product file still exists ────────────────────────────────
