@@ -7,8 +7,8 @@ All notable changes to Medicus Suite are documented here.
 ### Monitoring — don't leave "Task created for X" on the next patient
 
 Creating a recall task (or a follow-up reminder) in Monitoring writes a
-green confirmation into `#sentTaskSlot` — "Task created for Mr Dolly
-Smith". That slot sits on the persistent scaffold, outside the chip
+green confirmation into `#sentTaskSlot` — "Task created for [patient
+name]". That slot sits on the persistent scaffold, outside the chip
 area that re-renders on each poll, so the banner (and the patient name
 in it) used to stay on screen after auto-follow loaded the next record.
 

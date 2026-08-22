@@ -167,7 +167,7 @@ if (patientIdFromContext) {
   check(patientIdFromContext({ patientUuid: 'aaa' }) === 'aaa', 'reads patientUuid');
   check(patientIdFromContext({ uuid: 'bbb' }) === 'bbb', 'falls back to uuid');
   check(patientIdFromContext({ patientUuid: 'aaa', uuid: 'bbb' }) === 'aaa', 'patientUuid wins over uuid');
-  check(patientIdFromContext({ patientName: 'Mr Dolly Smith' }) === '', 'a name alone is never an id');
+  check(patientIdFromContext({ patientName: 'Mr Test Patient' }) === '', 'a name alone is never an id');
   check(patientIdFromContext(null) === '', 'null patient → empty, never throws');
   check(patientIdFromContext(undefined) === '', 'undefined patient → empty, never throws');
 }
@@ -176,7 +176,7 @@ console.log('\n--- taskSlotShouldClearOnPatientChange ---');
 if (taskSlotShouldClearOnPatientChange) {
   check(
     taskSlotShouldClearOnPatientChange('patient-a', 'patient-b') === true,
-    'Dolly → next patient: clear the leftover "Task created for Dolly" banner'
+    'patient A → patient B: clear the leftover "Task created for A" banner'
   );
   check(
     taskSlotShouldClearOnPatientChange('patient-a', 'patient-a') === false,
@@ -204,8 +204,8 @@ if (taskSlotShouldClearOnPatientChange) {
 console.log('\n--- clearSentinelTaskSlot ---');
 if (clearSentinelTaskSlot) {
   const slot = {
-    innerHTML: '<div class="sent-task-done">Task created for Mr Dolly Smith.</div>',
-    dataset: { open: 'done', patientId: 'patient-a', patientName: 'Mr Dolly Smith' },
+    innerHTML: '<div class="sent-task-done">Task created for Mr Test Patient.</div>',
+    dataset: { open: 'done', patientId: 'patient-a', patientName: 'Mr Test Patient' },
   };
   clearSentinelTaskSlot(slot);
   check(slot.innerHTML === '', 'wipes the leftover banner HTML');
@@ -217,9 +217,9 @@ if (clearSentinelTaskSlot) {
 
 console.log('\n--- taskSlotCancelledNoticeHtml: an open form is never silently vanished ---');
 if (taskSlotCancelledNoticeHtml) {
-  const html = taskSlotCancelledNoticeHtml('Mr Dolly Smith');
+  const html = taskSlotCancelledNoticeHtml('Mr Test Patient');
   check(/Nothing was created/.test(html), 'states the consequence — the GP must not believe the task went in');
-  check(/Mr Dolly Smith/.test(html), 'names the patient the form belonged to');
+  check(/Mr Test Patient/.test(html), 'names the patient the form belonged to');
   check(/Dismiss/.test(html), 'carries a dismiss action (no timeout — the notice must not expire on its own)');
   const xss = taskSlotCancelledNoticeHtml('<img src=x onerror=alert(1)>');
   check(!/<img/.test(xss), 'patient name is HTML-escaped');
