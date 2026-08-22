@@ -9,15 +9,35 @@ lists (emergency / duty today), not a yes/no row each; two history
 turns per condition; stop the line on a 999. Do not build a 111-style
 wizard.
 
-Mocks (sore throat, proposed — not shipped):
-`docs/plans/reception-sore-throat-call-mock.png` (all-clear, 9 of 9)
-and `docs/plans/reception-sore-throat-999-mock.png` (stop on emergency).
+Sign-off mocks (proposed — not shipped), same format on every
+bundled condition, **no caller question and no age field** — those
+land in own words if the caller says them:
 
-Every call also has the same wrap, counted inside the ten, not written
-out per condition below: who you are speaking to, age on this call,
-what’s the problem in their words, how long and is it better or worse,
-what they were hoping for, best number. What follows is only the
-**individual questions for each condition**.
+| Condition | File | Turns |
+|---|---|---|
+| Sore throat | `docs/plans/reception-call-mocks/sore-throat.png` | 7 |
+| Earache | `docs/plans/reception-call-mocks/earache.png` | 8 |
+| Cough / chest (adult) | `docs/plans/reception-call-mocks/cough.png` | 7 |
+| Urinary (woman 16–64) | `docs/plans/reception-call-mocks/urinary.png` | 8 |
+| Headache (adult) | `docs/plans/reception-call-mocks/headache.png` | 7 |
+| Low back pain | `docs/plans/reception-call-mocks/backpain.png` | 7 |
+| Sinusitis | `docs/plans/reception-call-mocks/sinusitis.png` | 8 |
+| Feverish child | `docs/plans/reception-call-mocks/feverish-child.png` | 8 |
+| Rash / skin | `docs/plans/reception-call-mocks/rash.png` | 8 |
+| Something else / general | `docs/plans/reception-call-mocks/general.png` | 8 |
+| Urinary / genital (male) | `docs/plans/reception-call-mocks/gu-male.png` | 8 |
+| Gynae / urinary (female) | `docs/plans/reception-call-mocks/gyn-female.png` | 8 |
+| Mental health | `docs/plans/reception-call-mocks/mental-health.png` | 6 |
+
+Shared wrap on every call except mental health: own words, how long /
+course, what they want, best number. Mental health uses “what’s
+happening today” instead of own words + duration, and drops “what
+were you hoping for” (already in their words). Child-only lines stay
+on the list with an “If a child…” prefix — there is no age field to
+gate them.
+
+What follows is the spoken condition questions (the two safety lists
+and the history turns).
 
 A list read as “any of these?” is one question. Empty is not “all no”
 — they tick **None of these**. A 999 yes generates now; later questions

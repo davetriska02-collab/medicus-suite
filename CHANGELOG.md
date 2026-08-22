@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.21] — 2026-08-22
+
+### Docs — all bundled reception call-script mocks for CSO sign-off
+
+Same proposed form on every bundled pathway. Caller and age questions dropped (own words can catch them). Not shipped UI.
+
 ## [v3.236.20] — 2026-08-22
 
 ### Docs — sore-throat call-script mocks
