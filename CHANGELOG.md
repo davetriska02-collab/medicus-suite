@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.24] — 2026-08-22
+
+### CSO sign-off — CSN §6.1 W17–W21
+
+Dave reviewed the write-path inventory and signed off (session 2026-08-22).
+CSN document version 3.19 records the increment. Product-version pin
+moves 3.177.0 → 3.236.23. Not a full re-baseline: the 3.14 write-path
+posture rewrite and the section 6 items 1/8/9 transactional-API note
+stay pending; H-060/H-061/H-062 stay Proposed.
+
 ## [v3.236.23] — 2026-08-22
 
 ### Write-path safety net — inventory, public docs, shared confirm-diff
