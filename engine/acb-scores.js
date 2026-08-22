@@ -46,6 +46,7 @@
     //    in verification (cyclobenzaprine/loxapine: not UK primary-care; cimetidine/
     //    baclofen: score conflict 1-vs-2; levomepromazine: actually score 3). ──
     { term: 'carbamazepine', score: 2, note: 'Boustani/Campbell ACB score 2 (antiepileptic)' },
+    { term: 'curatil', score: 2, note: 'brand: carbamazepine; Boustani/Campbell ACB score 2; Keeper 2026-08-22' },
     { term: 'oxcarbazepine', score: 2, note: 'Boustani/Campbell ACB score 2; 10-keto analogue of carbamazepine (not a substring of carbamazepine — no collision)' },
     { term: 'amantadine', score: 2, note: 'Boustani/Campbell ACB score 2 (Parkinson)' },
     { term: 'pethidine', score: 2, note: 'Boustani/Campbell ACB score 2 (opioid; UK name — meperidine is US name, not added)' },
@@ -86,6 +87,8 @@
     // ── Score 3: Antipsychotics with high ACB ────────────────────────────────
     { term: 'olanzapine', score: 3 },
     { term: 'quetiapine', score: 3 },
+    { term: 'mintreleq', score: 3, note: 'brand: quetiapine (Mintreleq XL); Keeper 2026-08-22' },
+    { term: 'sondate', score: 3, note: 'brand: quetiapine (Sondate XL); Keeper 2026-08-22' },
     { term: 'clozapine', score: 3 },
     { term: 'chlorpromazine', score: 3 },
     { term: 'levomepromazine', score: 3, note: 'Boustani/Campbell ACB score 3 (phenothiazine; = methotrimeprazine)' },

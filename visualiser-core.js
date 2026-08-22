@@ -408,7 +408,9 @@ const HIGH_RISK_DRUGS = [
     label: 'Warfarin / VKA',
     // All UK oral vitamin-K antagonists share INR monitoring (BNF 2.8.2;
     // acenocoumarol/phenindione emc-corroborated, 2026-06-11 Keeper run).
-    terms: ['warfarin', 'acenocoumarol', 'phenindione'],
+    // Marevan (warfarin brand) + Sinthrome (acenocoumarol brand) added 2026-08-22
+    // for parity with drug-rules.json warfarin-vka and alert-library.json PINCER-7.
+    terms: ['warfarin', 'marevan', 'acenocoumarol', 'sinthrome', 'phenindione'],
     requires: ['inr', 'u&e'],
     interval: 42,
   },
