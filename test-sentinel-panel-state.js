@@ -124,30 +124,42 @@ if (headline) {
 // ── task-slot patient-switch: "Task created for X" must not ride onto Y ─────
 // #sentTaskSlot lives on the persistent scaffold (outside #sentDynamic), so
 // a success banner / open form naming the previous patient used to survive
-// the next record load. These helpers are the gate render() uses.
+// the next record load. The slot is stamped with the patient it was opened
+// for; syncTaskSlotToPatient (called from render()) clears a confirmation —
+// or replaces an OPEN form with a persistent "nothing was created" notice —
+// when a DIFFERENT patient's data renders. Leaving the record (idle/queue)
+// deliberately keeps the slot: the banner names its own patient, and a GP
+// flicking to another tab and back must not lose the confirmation.
 
 const pidFn = src.match(/function patientIdFromContext\(patient\) \{[\s\S]*?\n\}/);
 check(!!pidFn, 'patientIdFromContext extracted from side-panel sentinel module');
-const clearFn = src.match(/function taskSlotShouldClearOnPatientChange\(previousPatientId, nextPatientId\) \{[\s\S]*?\n\}/);
+const clearFn = src.match(/function taskSlotShouldClearOnPatientChange\(slotPatientId, nextPatientId\) \{[\s\S]*?\n\}/);
 check(!!clearFn, 'taskSlotShouldClearOnPatientChange extracted from side-panel sentinel module');
 const wipeFn = src.match(/function clearSentinelTaskSlot\(slot\) \{[\s\S]*?\n\}/);
 check(!!wipeFn, 'clearSentinelTaskSlot extracted from side-panel sentinel module');
+const noticeFn = src.match(/function taskSlotCancelledNoticeHtml\(patientName\) \{[\s\S]*?\n\}/);
+check(!!noticeFn, 'taskSlotCancelledNoticeHtml extracted from side-panel sentinel module');
 
 let patientIdFromContext = null;
 let taskSlotShouldClearOnPatientChange = null;
 let clearSentinelTaskSlot = null;
-if (pidFn && clearFn && wipeFn) {
+let taskSlotCancelledNoticeHtml = null;
+if (pidFn && clearFn && wipeFn && noticeFn) {
   const sandbox = {};
+  const escSrc =
+    "const escHtml = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;');\n";
   vm.runInNewContext(
-    pidFn[0] + '\n' + clearFn[0] + '\n' + wipeFn[0] +
+    escSrc + pidFn[0] + '\n' + clearFn[0] + '\n' + wipeFn[0] + '\n' + noticeFn[0] +
       '\nthis.patientIdFromContext = patientIdFromContext;' +
       '\nthis.taskSlotShouldClearOnPatientChange = taskSlotShouldClearOnPatientChange;' +
-      '\nthis.clearSentinelTaskSlot = clearSentinelTaskSlot;',
+      '\nthis.clearSentinelTaskSlot = clearSentinelTaskSlot;' +
+      '\nthis.taskSlotCancelledNoticeHtml = taskSlotCancelledNoticeHtml;',
     sandbox
   );
   patientIdFromContext = sandbox.patientIdFromContext;
   taskSlotShouldClearOnPatientChange = sandbox.taskSlotShouldClearOnPatientChange;
   clearSentinelTaskSlot = sandbox.clearSentinelTaskSlot;
+  taskSlotCancelledNoticeHtml = sandbox.taskSlotCancelledNoticeHtml;
 }
 
 console.log('\n--- patientIdFromContext ---');
@@ -171,43 +183,61 @@ if (taskSlotShouldClearOnPatientChange) {
     'same-patient 10s poll: keep the confirmation'
   );
   check(
-    taskSlotShouldClearOnPatientChange('patient-a', '') === true,
-    'left the record (no-medicus / loading): clear — must not sit on an empty panel'
+    taskSlotShouldClearOnPatientChange('patient-a', '') === false,
+    'left the record (idle / queue / other browser tab): KEEP — banner names its own patient, and flicking away must not lose it'
   );
   check(
-    taskSlotShouldClearOnPatientChange('', 'patient-b') === true,
-    'first patient after idle: clear (slot should already be empty; no-op wipe)'
+    taskSlotShouldClearOnPatientChange('', 'patient-b') === false,
+    'un-stamped slot: nothing owned, nothing to clear'
+  );
+  check(taskSlotShouldClearOnPatientChange('', '') === false, 'idle → idle: nothing to clear');
+  check(
+    taskSlotShouldClearOnPatientChange(null, 'patient-b') === false,
+    'null stamp → false, never throws'
   );
   check(
-    taskSlotShouldClearOnPatientChange('', '') === false,
-    'idle → idle: nothing to clear'
-  );
-  check(
-    taskSlotShouldClearOnPatientChange(null, 'patient-b') === true,
-    'null previous (first data render) → clear, never throws'
-  );
-  check(
-    taskSlotShouldClearOnPatientChange('patient-a', null) === true,
-    'null next (left the record) → clear, never throws'
+    taskSlotShouldClearOnPatientChange('patient-a', null) === false,
+    'null next (no patientContext on this state) → keep, never throws'
   );
 }
 
 console.log('\n--- clearSentinelTaskSlot ---');
 if (clearSentinelTaskSlot) {
-  const slot = { innerHTML: '<div class="sent-task-done">Task created for Mr Dolly Smith.</div>', dataset: { open: 'done' } };
+  const slot = {
+    innerHTML: '<div class="sent-task-done">Task created for Mr Dolly Smith.</div>',
+    dataset: { open: 'done', patientId: 'patient-a', patientName: 'Mr Dolly Smith' },
+  };
   clearSentinelTaskSlot(slot);
   check(slot.innerHTML === '', 'wipes the leftover banner HTML');
   check(slot.dataset.open === '', 'resets dataset.open so the next Create task is a fresh form');
+  check(!slot.dataset.patientId && !slot.dataset.patientName, 'removes the ownership stamp');
   clearSentinelTaskSlot(null);
   check(true, 'null slot → no throw');
 }
 
-console.log('\n--- wiring: render() syncs the slot on every patient change ---');
+console.log('\n--- taskSlotCancelledNoticeHtml: an open form is never silently vanished ---');
+if (taskSlotCancelledNoticeHtml) {
+  const html = taskSlotCancelledNoticeHtml('Mr Dolly Smith');
+  check(/Nothing was created/.test(html), 'states the consequence — the GP must not believe the task went in');
+  check(/Mr Dolly Smith/.test(html), 'names the patient the form belonged to');
+  check(/Dismiss/.test(html), 'carries a dismiss action (no timeout — the notice must not expire on its own)');
+  const xss = taskSlotCancelledNoticeHtml('<img src=x onerror=alert(1)>');
+  check(!/<img/.test(xss), 'patient name is HTML-escaped');
+}
+
+console.log('\n--- wiring: render() syncs the slot on every patient-bearing state ---');
 {
-  check(/taskSlotShouldClearOnPatientChange\(prevPatientId, nextPatientId\)/.test(src),
-    'render() asks the helper whether the slot belongs to someone else');
-  check(/clearSentinelTaskSlot\(container\.querySelector\('#sentTaskSlot'\)\)/.test(src),
-    'render() wipes #sentTaskSlot when the followed patient changes');
+  check(/syncTaskSlotToPatient\(\s*container\.querySelector\('#sentTaskSlot'\),/.test(src),
+    'render() syncs #sentTaskSlot against the patient now on screen');
+  check(/patientIdFromContext\(snapshot && snapshot\.patientContext\)/.test(src),
+    'the comparison uses the snapshot patientContext (data AND degraded both carry one)');
+  check(/slot\.dataset\.patientId = patientId;[\s\S]{0,400}slot\.dataset\.patientName = patientName;/.test(src),
+    'the slot is stamped with its owner when a form opens');
+  check((src.match(/slot\.dataset\.patientId = patientId;/g) || []).length >= 2,
+    'BOTH the create-task form and the follow-up form stamp ownership');
+  check(/dataset\.open === '1'[\s\S]{0,200}taskSlotCancelledNoticeHtml/.test(src),
+    'an OPEN form is replaced by the cancelled notice, not silently wiped'
+  );
   check(/#sentTaskSlot/.test(src) && /sent-task-done/.test(src),
     'the success banner still exists — we clear it on switch, we do not remove the confirmation');
 }

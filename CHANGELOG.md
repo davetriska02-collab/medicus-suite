@@ -12,11 +12,19 @@ Smith". That slot sits on the persistent scaffold, outside the chip
 area that re-renders on each poll, so the banner (and the patient name
 in it) used to stay on screen after auto-follow loaded the next record.
 
-`render()` now compares the previously-followed patient UUID with the
-one now on screen and clears the slot on any change, including leaving
-the record. A same-patient 10s refresh still keeps the confirmation.
-The create-task write itself was already guarded (submit aborts if the
-open patient moved); this is the leftover banner.
+The slot is now stamped with the patient it was opened for, and
+`render()` syncs it against the patient on screen (data and degraded
+states both carry one). When a DIFFERENT patient loads: a confirmation
+or error simply clears; an OPEN form is replaced by a persistent
+"Patient changed — the form for X was closed without saving. Nothing
+was created for them." notice with a Dismiss button — never silently
+vanished, so a GP who typed a task for X cannot look back and believe
+it was created (the submit-time wrong-patient guard already refused the
+write; this names it). A same-patient 10s refresh keeps the
+confirmation, and leaving the record (idle / a queue page / another
+browser tab) keeps it too — the banner names its own patient, so it
+cannot be misattributed there, and flicking to another tab and back
+must not lose the confirmation.
 
 ## [v3.236.22] — 2026-08-22
 
