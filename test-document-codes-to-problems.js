@@ -459,6 +459,12 @@ console.log('\n--- wiring: draggable header, not a bottom-right cover ---');
   check(/bottom:\s*auto/.test(css), 'CSS default is bottom: auto, not pinned to the page foot');
   check(!/bottom:\s*20px/.test(css), 'CSS no longer uses bottom: 20px (that covered File document)');
   check(/\.ms-df-chip/.test(js), 'nudge treats the Save as document chip as an obstacle');
+  check(
+    /window\.removeEventListener\('blur', endDrag\);[\s\S]{0,700}?setTimeout\(function \(\) \{\s*_skipToggle = false;\s*\}, 0\);/.test(
+      js
+    ),
+    'endDrag always clears _skipToggle once the drag click has been consumed — an off-widget drag end cannot swallow the next collapse click'
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

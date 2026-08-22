@@ -123,8 +123,10 @@
   var SAME_SLOT = 'Drop onto a different free slot.';
   var DURATION_LOCKED =
     'Move must keep the booking length. Cancel-then-create at 30 min overlapped the neighbour (TEST A).';
-  var STRETCH_NEIGHBOUR_BOOKED =
-    'Cannot stretch: the following slot is booked. Snap back — nothing staged.';
+  var STRETCH_NEIGHBOUR_BOOKED = 'Cannot stretch: the following slot is booked. Snap back — nothing staged.';
+  var STRETCH_STEP_INVALID = 'Stretch must add whole 15-minute steps to the current length. Nothing staged.';
+  var MOVE_TARGET_NOT_FREE =
+    'The destination is no longer free for the whole appointment — that move was not written. Refresh and pick another slot.';
   var STRETCH_CANCEL_REASON = 'Stretched on organise canvas';
   var STRETCH_STEP_MINUTES = 15;
   var ARRIVED_LOCKED = 'Arrived / in-progress appointments cannot be organised from this board.';
@@ -181,7 +183,7 @@
   }
 
   function isLocked(entry) {
-    return isArrived(entry) || !!(appointmentStatus(entry).isDidNotAttend);
+    return isArrived(entry) || !!appointmentStatus(entry).isDidNotAttend;
   }
 
   function entryType(entry) {
@@ -226,7 +228,8 @@
       endDateTime: entry.endDateTime || '',
       duration: Number(entry.duration) || column.usualDuration || 0,
       appointmentTypeId: (entry.appointmentType && entry.appointmentType.id) || column.defaultAppointmentTypeId || null,
-      deliveryMode: (entry.defaultDeliveryMode && entry.defaultDeliveryMode.value) || column.defaultDeliveryMode || null,
+      deliveryMode:
+        (entry.defaultDeliveryMode && entry.defaultDeliveryMode.value) || column.defaultDeliveryMode || null,
       siteId: column.siteId || null,
     };
   }
@@ -294,13 +297,22 @@
     (raw && raw.unassignedDiaries ? raw.unassignedDiaries : []).forEach(function (session) {
       columns.push(sessionColumn('Unassigned', null, session));
     });
-    return { date: date, columns: columns.filter(function (c) { return c.diaryId; }) };
+    return {
+      date: date,
+      columns: columns.filter(function (c) {
+        return c.diaryId;
+      }),
+    };
   }
 
   function filterBoardColumns(columns, opts) {
     opts = opts || {};
-    var q = String(opts.q || '').trim().toLowerCase();
-    var site = String(opts.site || '').trim().toLowerCase();
+    var q = String(opts.q || '')
+      .trim()
+      .toLowerCase();
+    var site = String(opts.site || '')
+      .trim()
+      .toLowerCase();
     var hideEmpty = !!opts.hideEmpty;
     return (columns || []).filter(function (col) {
       if (hideEmpty && !(col.appointments && col.appointments.length)) return false;
@@ -310,7 +322,13 @@
         if (sn !== site && sid !== site) return false;
       }
       if (q) {
-        var hay = ((col.staffName || '') + ' ' + (col.siteName || '') + ' ' + hhmm(col.sessionStart || '')).toLowerCase();
+        var hay = (
+          (col.staffName || '') +
+          ' ' +
+          (col.siteName || '') +
+          ' ' +
+          hhmm(col.sessionStart || '')
+        ).toLowerCase();
         if (hay.indexOf(q) === -1) return false;
       }
       return true;
@@ -360,7 +378,7 @@
     );
   }
 
-  function canStageMove(appointment, target) {
+  function canStageMove(appointment, target, board) {
     if (!appointment || !appointment.id) return { ok: false, reason: 'Missing appointment.' };
     if (appointment.locked || appointment.arrived) return { ok: false, reason: ARRIVED_LOCKED };
     if (!target || !target.diaryId || !target.startDateTime) {
@@ -368,6 +386,15 @@
     }
     if (target.diaryId === appointment.diaryId && target.startDateTime === appointment.startDateTime) {
       return { ok: false, reason: SAME_SLOT };
+    }
+    // With a board, the appointment must FIT: the whole kept length covered by
+    // free slots at the destination (a 30-min booking on a lone 15-min tile
+    // would write an overlap — TEST A).
+    if (board) {
+      var need = Number(appointment.duration) || 0;
+      if (need > 0 && !freeWindowCovered(board, target.diaryId, target.startDateTime, need, appointment.id)) {
+        return { ok: false, reason: MOVE_TARGET_NOT_FREE };
+      }
     }
     return { ok: true, reason: null };
   }
@@ -432,6 +459,49 @@
     return null;
   }
 
+  // The window [startDateTime, startDateTime + durationMinutes) on diaryId must
+  // be covered end-to-end by free SLOT entries and overlap no appointment other
+  // than ignoreId. Fail closed: a gap with no slot entry (break, blocked time,
+  // embargo — those never map into the board model) refuses the write.
+  function freeWindowCovered(board, diaryId, startDateTime, durationMinutes, ignoreId) {
+    var col = findColumn(board, diaryId);
+    if (!col) return false;
+    var winStart = parseDt(startDateTime);
+    var winEnd = parseDt(addMinutes(startDateTime, durationMinutes));
+    if (!winStart || !winEnd || winEnd <= winStart) return false;
+    if (col.sessionEnd) {
+      var sessEnd = parseDt(col.sessionEnd);
+      if (sessEnd && winEnd > sessEnd) return false;
+    }
+    var winEndStr = addMinutes(startDateTime, durationMinutes);
+    var clash = allAppointments(board).some(function (a) {
+      if (!a || a.diaryId !== diaryId || a.id === ignoreId) return false;
+      var aEnd = a.endDateTime || addMinutes(a.startDateTime, a.duration || 0);
+      return intervalOverlaps(startDateTime, winEndStr, a.startDateTime, aEnd);
+    });
+    if (clash) return false;
+    var slots = (col.slots || [])
+      .map(function (s) {
+        return {
+          start: parseDt(s.startDateTime),
+          end: parseDt(s.endDateTime || addMinutes(s.startDateTime, s.duration || 0)),
+        };
+      })
+      .filter(function (s) {
+        return s.start && s.end && s.end > s.start;
+      })
+      .sort(function (a, b) {
+        return a.start - b.start;
+      });
+    var cursor = winStart;
+    for (var i = 0; i < slots.length && cursor < winEnd; i++) {
+      if (slots[i].end <= cursor) continue;
+      if (slots[i].start > cursor) return false;
+      cursor = slots[i].end;
+    }
+    return cursor >= winEnd;
+  }
+
   function followingSlotsFree(board, appointment, newDuration) {
     if (!appointment || !board) return false;
     var keep = Number(appointment.duration);
@@ -439,22 +509,10 @@
     if (!Number.isFinite(keep) || !Number.isFinite(next) || next <= keep) return false;
     var start = appointment.startDateTime;
     var extraStart = appointment.endDateTime || addMinutes(start, keep);
-    var extraEnd = addMinutes(start, next);
-    var col = findColumn(board, appointment.diaryId);
-    if (col && col.sessionEnd) {
-      var sessEnd = parseDt(col.sessionEnd);
-      var winEnd = parseDt(extraEnd);
-      if (sessEnd && winEnd && winEnd > sessEnd) return false;
-    }
-    var others = allAppointments(board).filter(function (a) {
-      return a && a.diaryId === appointment.diaryId && a.id !== appointment.id;
-    });
-    for (var i = 0; i < others.length; i++) {
-      var o = others[i];
-      var oEnd = o.endDateTime || addMinutes(o.startDateTime, o.duration || 0);
-      if (intervalOverlaps(extraStart, extraEnd, o.startDateTime, oEnd)) return false;
-    }
-    return true;
+    // The extension window must be genuinely FREE slot time, not merely
+    // appointment-free — a break or blocked period never maps into the board
+    // model, so "no appointment there" alone is not "free" (fail closed).
+    return freeWindowCovered(board, appointment.diaryId, extraStart, next - keep, appointment.id);
   }
 
   function canStageStretch(appointment, newDuration, board) {
@@ -463,10 +521,10 @@
     var next = Number(newDuration);
     var keep = Number(appointment.duration);
     if (!Number.isFinite(next) || !Number.isFinite(keep) || next <= keep) {
-      return { ok: false, reason: STRETCH_NEIGHBOUR_BOOKED };
+      return { ok: false, reason: STRETCH_STEP_INVALID };
     }
     if ((next - keep) % STRETCH_STEP_MINUTES !== 0) {
-      return { ok: false, reason: STRETCH_NEIGHBOUR_BOOKED };
+      return { ok: false, reason: STRETCH_STEP_INVALID };
     }
     if (!followingSlotsFree(board, appointment, next)) {
       return { ok: false, reason: STRETCH_NEIGHBOUR_BOOKED };
@@ -500,13 +558,15 @@
   function slotFitsIdentity(appointment, slot) {
     if (!appointment || !slot) return false;
     if (slot.diaryId === appointment.diaryId) return false;
-    if (appointment.siteId && slot.siteId && appointment.siteId !== slot.siteId) return false;
-    if (appointment.appointmentTypeId && slot.appointmentTypeId && appointment.appointmentTypeId !== slot.appointmentTypeId) {
-      return false;
-    }
-    if (appointment.deliveryMode && slot.deliveryMode && appointment.deliveryMode !== slot.deliveryMode) {
-      return false;
-    }
+    // Fail closed on missing identity: "similar" is same type, site and
+    // delivery (the doc's definition). A slot whose column carries no default
+    // type/delivery is not provably similar — an untyped diary could be a
+    // different service entirely, so it is never proposed.
+    if (!appointment.appointmentTypeId || !slot.appointmentTypeId) return false;
+    if (appointment.appointmentTypeId !== slot.appointmentTypeId) return false;
+    if ((appointment.siteId || slot.siteId) && appointment.siteId !== slot.siteId) return false;
+    if (!appointment.deliveryMode || !slot.deliveryMode) return false;
+    if (appointment.deliveryMode !== slot.deliveryMode) return false;
     return true;
   }
 
@@ -653,6 +713,13 @@
     return { max: max, tileDurations: tileDurations };
   }
 
+  var DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  function boardDayName(board) {
+    var d = parseDt(String((board && board.date) || '') + ' 12:00');
+    return d ? DAY_NAMES[d.getDay()] : 'same-day';
+  }
+
   function destCapReason(cap) {
     return 'Covering list would take more than ' + cap + ' extra patients. Still needs rebook.';
   }
@@ -681,7 +748,9 @@
       return (
         'Need ' +
         need +
-        ' min; other Sunday lists only have ' +
+        ' min; other ' +
+        boardDayName(board) +
+        ' lists only have ' +
         run.tileDurations.join('/') +
         '-min tiles (longest free run ' +
         run.max +
@@ -727,7 +796,11 @@
       var reason = null;
       if (!sug) {
         if (!alts.length) reason = rebookMissReason(board, a, { now: opts.now });
-        else if (alts.every(function (s) { return (destCount[s.diaryId] || 0) >= destExtraCap; })) {
+        else if (
+          alts.every(function (s) {
+            return (destCount[s.diaryId] || 0) >= destExtraCap;
+          })
+        ) {
           reason = destCapReason(destExtraCap);
         } else {
           reason = REBOOK_CLAIMED;
@@ -841,7 +914,8 @@
       dests[id].incomingMinutes += Number((row.appointment && row.appointment.duration) || 0);
       dests[id].claimed.push({
         startDateTime: row.suggestion.startDateTime,
-        endDateTime: row.suggestion.endDateTime || addMinutes(row.suggestion.startDateTime, row.suggestion.duration || 0),
+        endDateTime:
+          row.suggestion.endDateTime || addMinutes(row.suggestion.startDateTime, row.suggestion.duration || 0),
       });
     });
     var cap = Number(proposal && proposal.destExtraCap);
@@ -935,9 +1009,8 @@
     if (next.moves[appointmentId]) {
       next.moves[appointmentId] = Object.assign({}, next.moves[appointmentId], { notify: !!notify });
     }
-    if (next.stretches[appointmentId]) {
-      next.stretches[appointmentId] = Object.assign({}, next.stretches[appointmentId], { notify: !!notify });
-    }
+    // Stretches never notify: the stretch write path sends no recipients, so a
+    // tick here would promise a patient message that is never sent.
     return next;
   }
 
@@ -1050,7 +1123,7 @@
         durationLocked: true,
         script: patientMessageScript('move', appt, mv, mv.because || ''),
         text:
-          'Rebooked with ' +
+          'Rebook with ' +
           (mv.staffName || 'the covering list') +
           ' at ' +
           hhmm(mv.startDateTime) +
@@ -1074,7 +1147,8 @@
         kind: 'stretch',
         id: id,
         included: st.included !== false,
-        notify: !!st.notify,
+        // The stretch write never sends recipients — never claim it will.
+        notify: false,
         patientName: appt.patientName,
         duration: st.duration,
         text:
@@ -1086,10 +1160,7 @@
           appt.duration +
           ' min → ' +
           st.duration +
-          ' min — ' +
-          (st.notify
-            ? 'Medicus will send its own booking confirmation (wording is Medicus’s, not ours)'
-            : 'Medicus will not send a message'),
+          ' min — Medicus will not send a message',
       });
     });
     var included = items.filter(function (i) {
@@ -1489,11 +1560,7 @@
 
     async function fetchMoveForm(appointmentId, moveType) {
       var type = moveType === 'to-same-diary' ? 'to-same-diary' : 'to-another-diary';
-      return apiFetch(
-        url(PATHS.moveForm + encodeURIComponent(appointmentId) + '?moveType=' + type),
-        {},
-        fetchImpl
-      );
+      return apiFetch(url(PATHS.moveForm + encodeURIComponent(appointmentId) + '?moveType=' + type), {}, fetchImpl);
     }
 
     async function reserveForMove(payload) {
@@ -1592,6 +1659,14 @@
         versionId: appointment.versionId,
       });
       if (!boardCheck.ok) throw new Error(boardCheck.reason);
+      var keepDuration = moveDuration(appointment);
+      // The reschedule payloads carry the captured allowOverlappingAppointments
+      // 'allow', so the server will NOT refuse an overlap — the destination must
+      // be proven free on the fresh board here, before anything else happens
+      // (someone else may have booked it since the canvas was opened).
+      if (!freeWindowCovered(board, target.diaryId, target.startDateTime, keepDuration, appointment.id)) {
+        throw new Error(MOVE_TARGET_NOT_FREE);
+      }
       var form = await fetchMoveForm(appointment.id, moveTypeFor(appointment, target));
       var formCheck = verifyMoveForm(form, {
         patientId: appointment.patientId,
@@ -1600,7 +1675,6 @@
       });
       if (!formCheck.ok) throw new Error(formCheck.reason);
       var booking = requireBooking(deps.booking);
-      var keepDuration = moveDuration(appointment);
       var reserveDuration = Number(target.reserveDuration) || Number(target.duration) || keepDuration;
       var reservationId = null;
       try {
@@ -1613,7 +1687,13 @@
         );
         reservationId = reserved && reserved.slotReservationId;
         if (!reservationId) throw new Error('appointment-organise: reserve returned no slotReservationId');
-        if (isCrossListMove(appointment, target)) {
+        // update-slot-reservation whenever the reservation was made at the
+        // tile's length and the booking keeps a different length — cross-list
+        // as captured (03-move-cross-list.json), and same-list onto a shorter
+        // tile via the same reserve-then-update lifecycle the stretch capture
+        // proved on one diary (Test B). Same-length same-list stays reserve →
+        // create only, exactly as recaptured.
+        if (isCrossListMove(appointment, target) || keepDuration !== reserveDuration) {
           await updateSlotReservation(
             buildUpdateReservationPayload({
               slotReservationId: reservationId,
@@ -1644,14 +1724,22 @@
           })
         );
         // Captured after create-appointment 200 on both same-list and
-        // cross-list (07:32:37 / 07:17:41). Not failure-only cleanup.
+        // cross-list (07:32:37 / 07:17:41). Not failure-only cleanup. The move
+        // IS written once create returns — a failed release must not turn a
+        // confirmed write into a reported failure.
         if (reservationId && typeof booking.releaseReservation === 'function') {
-          await booking.releaseReservation(apiBase, reservationId);
+          try {
+            await booking.releaseReservation(apiBase, reservationId);
+          } catch (_) {}
         }
         return created;
       } catch (err) {
+        // The release is cleanup; if it also fails, the ORIGINAL error is the
+        // one the user needs to see.
         if (reservationId && typeof booking.releaseReservation === 'function') {
-          await booking.releaseReservation(apiBase, reservationId);
+          try {
+            await booking.releaseReservation(apiBase, reservationId);
+          } catch (_) {}
         }
         throw err;
       }
@@ -1686,6 +1774,35 @@
         versionId: appointment.versionId,
       });
       if (!ovCheck.ok) throw new Error(ovCheck.reason);
+      // PRE-FLIGHT, before the destructive cancel: everything the rebook needs
+      // must be provably present now. After the cancel this patient has no
+      // appointment — a create rejected for a missing field would strand them.
+      if (!appointment.appointmentTypeId) {
+        throw new Error('appointment-organise: appointmentTypeId required before a stretch cancel');
+      }
+      function stretchCreateBody(duration, reservation) {
+        return buildStretchCreatePayload({
+          patientId: appointment.patientId,
+          appointmentTypeId: appointment.appointmentTypeId,
+          slotReservationId: reservation,
+          diaryId: appointment.diaryId,
+          startDateTime: appointment.startDateTime,
+          intendedDuration: duration,
+          deliveryMode: appointment.deliveryMode,
+          nhsNationalSlotTypeCategory: appointment.nhsNationalSlotTypeCategory,
+          reasonForAppointment: appointment.reason || null,
+          additionalInformation: appointment.additionalInformation,
+          isHiddenFromPatientFacingServices: appointment.isHiddenFromPatientFacingServices,
+        });
+      }
+      // Dry-build both post-cancel payloads so builder validation fires NOW.
+      stretchCreateBody(newDuration, 'preflight-validate');
+      buildStretchUpdatePayload({
+        slotReservationId: 'preflight-validate',
+        diaryId: appointment.diaryId,
+        startDateTime: appointment.startDateTime,
+        intendedDuration: newDuration,
+      });
       await cancelAppointment(
         buildCancelPayload({
           appointmentId: appointment.id,
@@ -1693,6 +1810,13 @@
         })
       );
       var reservationId = null;
+      async function releaseQuietly() {
+        if (reservationId && typeof booking.releaseReservation === 'function') {
+          try {
+            await booking.releaseReservation(apiBase, reservationId);
+          } catch (_) {}
+        }
+      }
       try {
         var reserved = await reserveForMove(
           buildReserveReschedulePayload({
@@ -1713,32 +1837,77 @@
           throw new Error('appointment-organise: must not send allowOverlappingAppointments');
         }
         await updateSlotReservation(stretchUpd);
-        var createdBody = buildStretchCreatePayload({
-          patientId: appointment.patientId,
-          appointmentTypeId: appointment.appointmentTypeId,
-          slotReservationId: reservationId,
-          diaryId: appointment.diaryId,
-          startDateTime: appointment.startDateTime,
-          intendedDuration: newDuration,
-          deliveryMode: appointment.deliveryMode,
-          nhsNationalSlotTypeCategory: appointment.nhsNationalSlotTypeCategory,
-          reasonForAppointment: appointment.reason || null,
-          additionalInformation: appointment.additionalInformation,
-          isHiddenFromPatientFacingServices: appointment.isHiddenFromPatientFacingServices,
-        });
+        var createdBody = stretchCreateBody(newDuration, reservationId);
         if (Object.prototype.hasOwnProperty.call(createdBody, 'allowOverlappingAppointments')) {
           throw new Error('appointment-organise: must not send allowOverlappingAppointments');
         }
         var created = await booking.createAppointment(apiBase, createdBody);
-        if (reservationId && typeof booking.releaseReservation === 'function') {
-          await booking.releaseReservation(apiBase, reservationId);
-        }
+        await releaseQuietly();
         return created;
       } catch (err) {
-        if (reservationId && typeof booking.releaseReservation === 'function') {
-          await booking.releaseReservation(apiBase, reservationId);
+        // The cancel above has ALREADY been written: right now this patient
+        // has no appointment. Try to put the original booking back at its
+        // original length before surfacing anything.
+        var restored = false;
+        try {
+          if (!reservationId) {
+            var reReserved = await reserveForMove(
+              buildReserveReschedulePayload({
+                diaryId: appointment.diaryId,
+                startDateTime: appointment.startDateTime,
+                intendedDuration: appointment.duration,
+              })
+            );
+            reservationId = reReserved && reReserved.slotReservationId;
+          } else {
+            // The reservation may already have been widened to newDuration —
+            // put it back to the original length before re-creating.
+            await updateSlotReservation(
+              buildStretchUpdatePayload({
+                slotReservationId: reservationId,
+                diaryId: appointment.diaryId,
+                startDateTime: appointment.startDateTime,
+                intendedDuration: appointment.duration,
+              })
+            );
+          }
+          if (reservationId) {
+            await booking.createAppointment(apiBase, stretchCreateBody(appointment.duration, reservationId));
+            restored = true;
+          }
+        } catch (_) {}
+        await releaseQuietly();
+        var who = appointment.patientName || 'this patient';
+        var when = hhmm(appointment.startDateTime);
+        var detail = (err && err.message) || 'write failed';
+        var wrapped;
+        if (restored) {
+          wrapped = new Error(
+            'Stretch failed after the cancel; the original ' +
+              appointment.duration +
+              '-min booking for ' +
+              who +
+              ' at ' +
+              when +
+              ' was put back unchanged. Nothing is stretched. (' +
+              detail +
+              ')'
+          );
+        } else {
+          wrapped = new Error(
+            'URGENT — the stretch cancelled ' +
+              who +
+              '’s ' +
+              when +
+              ' appointment but the rebook failed, and putting the original back also failed. ' +
+              'This patient currently has NO appointment: rebook them in Medicus now. (' +
+              detail +
+              ')'
+          );
         }
-        throw err;
+        wrapped.stretchCancelWritten = true;
+        wrapped.stretchRestored = restored;
+        throw wrapped;
       }
     }
 
@@ -1767,6 +1936,8 @@
     EXTEND_BLOCKED: EXTEND_BLOCKED,
     DURATION_LOCKED: DURATION_LOCKED,
     STRETCH_NEIGHBOUR_BOOKED: STRETCH_NEIGHBOUR_BOOKED,
+    STRETCH_STEP_INVALID: STRETCH_STEP_INVALID,
+    MOVE_TARGET_NOT_FREE: MOVE_TARGET_NOT_FREE,
     STRETCH_CANCEL_REASON: STRETCH_CANCEL_REASON,
     STRETCH_STEP_MINUTES: STRETCH_STEP_MINUTES,
     SAME_SLOT: SAME_SLOT,
@@ -1789,6 +1960,7 @@
     canStageCancel: canStageCancel,
     canStageStretch: canStageStretch,
     followingSlotsFree: followingSlotsFree,
+    freeWindowCovered: freeWindowCovered,
     isHomeVisit: isHomeVisit,
     matchingSlots: matchingSlots,
     suggestRebook: suggestRebook,
