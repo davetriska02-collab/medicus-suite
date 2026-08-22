@@ -359,6 +359,72 @@ Custom indicators are not QOF indicators. They do not constitute QOF achievement
 The hotfix in v1.2.0 removes a developer-side hardcoded practice code that was preventing the extension from working correctly on practices other than the developer's own. The fix is data hygiene only. It does not alter the intended purpose, the clinical behaviour, or any data-handling characteristic of the software. The user's practice code, configured through the Options page, is the sole source for API endpoint selection. No practice code is preconfigured.
 
 
+--- v3.236.16 addendum ---
+
+This addendum records features added since the v3.159.0 addendum below that
+materially change the software's surface area, for the period 2026-08-18 to
+2026-08-21 (v3.234.0-v3.236.16/v3.237.0). It does not attempt a full catch-up
+of every release since v3.159.0 - that remains a separate, larger
+documentation exercise - and covers only this period's new write surfaces and
+one control correction, reviewed against the frozen intended-purpose
+statement at section 3 below.
+
+The Organise problems canvas (v3.234.0, v3.236.0) lets a clinician change a
+problem's coded significance, end a problem, or nest/link problems as
+parent-child, via drag-and-drop onto a staged board. Significance changes and
+ending are staged and written together only on an explicit Finalise that
+names every change; nesting and linking write immediately, one pair at a
+time, on their own individual confirmation. A problem with a live child
+cannot be ended. This remains within the frozen intended-purpose statement:
+it is a user-initiated write, through Medicus's own endpoints, on the record
+already open, confirmed at the point of commit. See docs/HAZARD-LOG.md H-063
+and docs/CLINICAL-SAFETY-NOTICE.md section 6.1 row W17 (both pending CSO
+sign-off).
+
+The Document codes to problems panel (v3.236.0) reads SNOMED codes found in a
+filed clinical document and, on the user's explicit confirmation, creates new
+Problem records from them through Medicus's own endpoint. A code that already
+exists on the record is flagged as a warning in that confirmation, not
+silently blocked or silently created. See docs/HAZARD-LOG.md H-064 and
+docs/CLINICAL-SAFETY-NOTICE.md section 6.1 row W18 (both pending CSO
+sign-off).
+
+CORRECTION: the appointment-organise cancel, move and stretch surfaces
+(CLINICAL-SAFETY-NOTICE.md W14/W15/W16) previously sent Medicus's own
+patient-confirmation message to nobody - the recipient list was always sent
+empty. From v3.236.16 this is opt-in: a "Tell the patient" tick, default
+off, added per staged item. When ticked, the software still composes no
+message of its own - it copies the recipient identifier Medicus's own form
+already offered for that patient and passes it back to Medicus's own
+confirmation endpoint unchanged; if Medicus's form offered no such
+identifier, the tick has no effect and nothing is sent. A separate "copy call
+script" control places suggested phone-script wording on the user's
+clipboard only, for the user to read to the patient by phone; it is never
+transmitted anywhere by the software. This corrects, and does not weaken,
+section 1's "sends nothing" bullet as it applied to this surface.
+
+More broadly: section 1's "writes nothing, sends nothing, submits nothing,
+modifies nothing" bullet describes Sentinel's original v0.x scope and no
+longer describes the current product without qualification. Since v1.1.0 the
+software has grown a defined, user-initiated write capability into Medicus
+covering appointment booking and cancellation, task creation, document
+filing, prescription re-assignment, problem-list correction (including this
+addendum's two new surfaces), duplicate-record removal/merge, allergy-list
+cleanup, and rota/contacts management. Every one of those write paths is
+enumerated with its trigger and controls in
+docs/CLINICAL-SAFETY-NOTICE.md section 6.1 (rows W1-W18) and in the
+corresponding hazard entries in docs/HAZARD-LOG.md; none is automatic,
+silent, background, or performed without a user's own confirming action on
+the record or task in front of them, and Medicus remains the system of
+record throughout. CLINICAL-SAFETY-NOTICE.md's own section 6.2/6.3 were
+corrected to this effect at that document's v3.14 (2026-07-28); this
+disclaimer's section 1 has not previously carried an equivalent correction
+and is flagged here for the Clinical Safety Officer's attention alongside
+this addendum. Nothing above changes what the software does not do: it
+performs no clinical reasoning, recommendation, triage, prioritisation or
+ranking, and it makes no prescribing or diagnostic decision.
+
+
 --- v3.159.0 addendum ---
 
 This addendum records features added between the v3.26.4 addendum and Medicus Suite
