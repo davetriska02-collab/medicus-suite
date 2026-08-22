@@ -178,6 +178,20 @@
       addressMergeGroups: [], // [{ indexes: [i, j, ...], keepIndex }] — duplicateAddressGroups augmented with which member to keep (buildAddressMergeGroups), drives renderDuplicateAddressWarning + mergeDuplicateAddressGroup
       addressMerging: new Set(), // group keys (indexes.join(',')) currently mid-merge — same Set-not-single-value reasoning as phoneDeleting
       addressMergeError: null,
+
+      // Duplicate phone/email detection (2026-08-20 request) — same pattern as the address
+      // duplicates above, but no per-member fetch is needed: preferredTelephoneNumberForSms /
+      // preferredEmailAddress are already present directly on patientTelephoneNumbers[] /
+      // patientEmailAddresses[] (confirmed via HAR capture 2026-08-20), unlike
+      // isCorrespondenceAddress for addresses.
+      indexPhones: [], // the hub/index patient's OWN patientContactInformationSection.patientTelephoneNumbers — feeds duplicatePhoneGroups
+      duplicatePhoneGroups: [], // [[i, j, ...], ...] — ContactRelationships.findDuplicatePhoneGroups(indexPhones)
+      duplicatePhoneDeleting: new Set(), // telephoneNumberIds currently being deleted from THIS (duplicate-cleanup) flow — kept separate from phoneDeleting below, which is scoped to an active merge-panel review of a DIFFERENT (candidate) patient's numbers
+      duplicatePhoneError: null,
+      indexEmails: [], // the hub/index patient's OWN patientContactInformationSection.patientEmailAddresses — feeds duplicateEmailGroups
+      duplicateEmailGroups: [], // [[i, j, ...], ...] — ContactRelationships.findDuplicateEmailGroups(indexEmails)
+      duplicateEmailDeleting: new Set(), // emailAddressIds currently being deleted
+      duplicateEmailError: null,
       flagUpdating: new Set(), // `${cardId}:${flagKind}` currently mid-write — same Set-not-single-value reasoning as phoneDeleting
       reciprocalDowngrading: new Set(), // cardIds currently mid-write for removeCardFromTree's reciprocal-relationship downgrade
       tree: null, // window.ContactTree instance — LOCKED edges only, pre-placed from linkedCards; see file header
@@ -504,6 +518,21 @@
       st.duplicateAddressGroups = window.ContactRelationships.findDuplicateAddressGroups(st.indexAddresses);
       st.addressMergeGroups = await buildAddressMergeGroups(st.apiBase, st.indexAddresses, st.duplicateAddressGroups);
       if (st !== cs) return;
+      // Duplicate phone/email detection (2026-08-20 request), same "hub/index patient only" scoping
+      // as addresses above — no extra fetch needed (see indexPhones/indexEmails' own state comment),
+      // so groups are built with their default keepIndex directly here rather than via an async
+      // buildXMergeGroups helper like addresses need.
+      const cinfo = details.patientContactInformationSection;
+      st.indexPhones = (cinfo && cinfo.patientTelephoneNumbers) || [];
+      st.duplicatePhoneGroups = window.ContactRelationships.findDuplicatePhoneGroups(st.indexPhones).map((indexes) => {
+        const keepPos = window.ContactRelationships.choosePhoneToKeep(indexes.map((idx) => st.indexPhones[idx]));
+        return { indexes, keepIndex: indexes[keepPos === -1 ? 0 : keepPos] };
+      });
+      st.indexEmails = (cinfo && cinfo.patientEmailAddresses) || [];
+      st.duplicateEmailGroups = window.ContactRelationships.findDuplicateEmailGroups(st.indexEmails).map((indexes) => {
+        const keepPos = window.ContactRelationships.chooseEmailToKeep(indexes.map((idx) => st.indexEmails[idx]));
+        return { indexes, keepIndex: indexes[keepPos === -1 ? 0 : keepPos] };
+      });
       const indexAge = candidateAgeFromDob(details.patientDetailsSection && details.patientDetailsSection.dateOfBirth);
       st.indexAge = indexAge; // stashed on state too — cardHtml's sharedContactInfoDetailHtml needs it for the "ages side by side" hint
 
@@ -2226,6 +2255,98 @@
     `;
   }
 
+  // renderDuplicatePhoneWarning / renderDuplicateEmailWarning (2026-08-20 request) — same shape as
+  // renderDuplicateAddressWarning above, simplified: no correspondence-flag transfer, no per-member
+  // fetch/unverified state (see deleteDuplicatePhoneGroup/deleteDuplicateEmailGroup's own comment).
+  function renderDuplicatePhoneWarning() {
+    if (!cs.duplicatePhoneGroups.length) return '';
+    const groups = cs.duplicatePhoneGroups
+      .map((plan) => {
+        const groupKey = plan.indexes.join(',');
+        const deleting = cs.duplicatePhoneDeleting.has(groupKey);
+        const rows = plan.indexes
+          .map((idx) => {
+            const entry = cs.indexPhones[idx];
+            const text = (entry && entry.telephoneNumber) || '(no number)';
+            const type = (entry && entry.telephoneNumberType) || '';
+            return `
+              <label class="ms-cv-dupaddr-line">
+                <input type="radio" name="ms-cv-dupphone-keep-${esc(groupKey)}" class="ms-cv-dupphone-keep-radio"
+                       data-phone-group="${esc(groupKey)}" data-phone-index="${idx}"
+                       ${idx === plan.keepIndex ? 'checked' : ''} ${deleting ? 'disabled' : ''}/>
+                ${esc(text)}${type ? ` <span class="ms-ct-note">(${esc(type)})</span>` : ''}${
+                  entry && entry.preferredTelephoneNumberForSms
+                    ? ' <span class="ms-ct-note">(preferred for SMS)</span>'
+                    : ''
+                }
+              </label>
+            `;
+          })
+          .join('');
+        return `
+          <div class="ms-cv-dupaddr-group">
+            ${rows}
+            <button class="ms-ct-btn-ghost ms-cv-dupphone-delete" data-phone-group="${esc(groupKey)}" ${deleting ? 'disabled' : ''}>${deleting ? 'Deleting…' : 'Keep the selected number — delete the rest'}</button>
+          </div>
+        `;
+      })
+      .join('');
+    const n = cs.duplicatePhoneGroups.length;
+    return `
+      <div class="ms-ct-warn ms-cv-dupaddr-warn">
+        <strong>${n} possible duplicate phone number${n === 1 ? '' : 's'} on this patient's own record</strong> —
+        looks like the same number recorded more than once, e.g. once with its area code and once
+        without. Pick which one to keep for each group (defaults to whichever is preferred for SMS,
+        or the fuller number if neither is).
+        ${groups}
+        ${cs.duplicatePhoneError ? `<div class="ms-ct-error">${esc(cs.duplicatePhoneError)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  function renderDuplicateEmailWarning() {
+    if (!cs.duplicateEmailGroups.length) return '';
+    const groups = cs.duplicateEmailGroups
+      .map((plan) => {
+        const groupKey = plan.indexes.join(',');
+        const deleting = cs.duplicateEmailDeleting.has(groupKey);
+        const rows = plan.indexes
+          .map((idx) => {
+            const entry = cs.indexEmails[idx];
+            const text = (entry && entry.emailAddress) || '(no address)';
+            const type = (entry && entry.emailAddressType) || '';
+            return `
+              <label class="ms-cv-dupaddr-line">
+                <input type="radio" name="ms-cv-dupemail-keep-${esc(groupKey)}" class="ms-cv-dupemail-keep-radio"
+                       data-email-group="${esc(groupKey)}" data-email-index="${idx}"
+                       ${idx === plan.keepIndex ? 'checked' : ''} ${deleting ? 'disabled' : ''}/>
+                ${esc(text)}${type ? ` <span class="ms-ct-note">(${esc(type)})</span>` : ''}${
+                  entry && entry.preferredEmailAddress ? ' <span class="ms-ct-note">(preferred)</span>' : ''
+                }
+              </label>
+            `;
+          })
+          .join('');
+        return `
+          <div class="ms-cv-dupaddr-group">
+            ${rows}
+            <button class="ms-ct-btn-ghost ms-cv-dupemail-delete" data-email-group="${esc(groupKey)}" ${deleting ? 'disabled' : ''}>${deleting ? 'Deleting…' : 'Keep the selected address — delete the rest'}</button>
+          </div>
+        `;
+      })
+      .join('');
+    const n = cs.duplicateEmailGroups.length;
+    return `
+      <div class="ms-ct-warn ms-cv-dupaddr-warn">
+        <strong>${n} possible duplicate email address${n === 1 ? '' : 'es'} on this patient's own record</strong> —
+        looks like the same address recorded more than once with different capitalisation or spacing.
+        Pick which one to keep for each group (defaults to whichever is marked preferred).
+        ${groups}
+        ${cs.duplicateEmailError ? `<div class="ms-ct-error">${esc(cs.duplicateEmailError)}</div>` : ''}
+      </div>
+    `;
+  }
+
   function render() {
     const overlay = document.getElementById('ms-contacts-canvas-overlay');
     if (!overlay) return;
@@ -2258,6 +2379,8 @@
                    ${renderFlagTokens()}
                    ${renderRemoveZone()}
                    ${renderDuplicateAddressWarning()}
+                   ${renderDuplicatePhoneWarning()}
+                   ${renderDuplicateEmailWarning()}
                    ${renderTree()}
                    ${cs.pendingMerge ? renderMergePanel() : renderConfirmPanel()}
                    ${renderSources()}
@@ -2831,6 +2954,100 @@
     }
   }
 
+  // deleteDuplicatePhoneGroup / deleteDuplicateEmailGroup (2026-08-20 request) — simpler than
+  // mergeDuplicateAddressGroup above: no flag-transfer step, since neither
+  // preferredTelephoneNumberForSms nor preferredEmailAddress needs moving first — choosePhoneToKeep/
+  // chooseEmailToKeep already refuse to pick anything OTHER than the preferred entry when one
+  // exists (see their own comments), so the entry being kept already holds whichever flag matters.
+  // Same "filter locally from deletes we know completed, don't re-fetch" discipline as
+  // mergeDuplicateAddressGroup — a re-fetch immediately after a delete was found (live, for
+  // addresses) to sometimes still show the just-deleted entry.
+  async function deleteDuplicatePhoneGroup(groupKey) {
+    const plan = cs.duplicatePhoneGroups.find((g) => g.indexes.join(',') === groupKey);
+    if (!plan) return;
+    const st = cs;
+    if (st.duplicatePhoneDeleting.has(groupKey)) return; // already mid-delete — never fire twice
+    if (anyWriteInFlight()) {
+      st.duplicatePhoneError = 'Another change is still saving — wait for it to finish, then try again.';
+      render();
+      return;
+    }
+    st.duplicatePhoneError = null;
+    st.duplicatePhoneDeleting.add(groupKey);
+    render();
+    try {
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      }
+      const deletedIds = new Set();
+      for (const idx of plan.indexes) {
+        if (idx === plan.keepIndex) continue;
+        const entry = st.indexPhones[idx];
+        if (!entry || !entry.telephoneNumberId) continue;
+        await window.ContactsApi.deleteTelephoneNumber(st.apiBase, entry.telephoneNumberId);
+        if (st !== cs) return;
+        deletedIds.add(entry.telephoneNumberId);
+      }
+      st.indexPhones = st.indexPhones.filter(
+        (entry) => !entry.telephoneNumberId || !deletedIds.has(entry.telephoneNumberId)
+      );
+      st.duplicatePhoneGroups = window.ContactRelationships.findDuplicatePhoneGroups(st.indexPhones).map((indexes) => {
+        const keepPos = window.ContactRelationships.choosePhoneToKeep(indexes.map((idx) => st.indexPhones[idx]));
+        return { indexes, keepIndex: indexes[keepPos === -1 ? 0 : keepPos] };
+      });
+    } catch (err) {
+      st.duplicatePhoneError = `${err.message || 'Failed to delete these duplicate numbers.'} Some may still be there — refresh to check what remains.`;
+    } finally {
+      if (st === cs) {
+        st.duplicatePhoneDeleting.delete(groupKey);
+        render();
+      }
+    }
+  }
+
+  async function deleteDuplicateEmailGroup(groupKey) {
+    const plan = cs.duplicateEmailGroups.find((g) => g.indexes.join(',') === groupKey);
+    if (!plan) return;
+    const st = cs;
+    if (st.duplicateEmailDeleting.has(groupKey)) return;
+    if (anyWriteInFlight()) {
+      st.duplicateEmailError = 'Another change is still saving — wait for it to finish, then try again.';
+      render();
+      return;
+    }
+    st.duplicateEmailError = null;
+    st.duplicateEmailDeleting.add(groupKey);
+    render();
+    try {
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      }
+      const deletedIds = new Set();
+      for (const idx of plan.indexes) {
+        if (idx === plan.keepIndex) continue;
+        const entry = st.indexEmails[idx];
+        if (!entry || !entry.emailAddressId) continue;
+        await window.ContactsApi.deleteEmailAddress(st.apiBase, entry.emailAddressId);
+        if (st !== cs) return;
+        deletedIds.add(entry.emailAddressId);
+      }
+      st.indexEmails = st.indexEmails.filter((entry) => !entry.emailAddressId || !deletedIds.has(entry.emailAddressId));
+      st.duplicateEmailGroups = window.ContactRelationships.findDuplicateEmailGroups(st.indexEmails).map((indexes) => {
+        const keepPos = window.ContactRelationships.chooseEmailToKeep(indexes.map((idx) => st.indexEmails[idx]));
+        return { indexes, keepIndex: indexes[keepPos === -1 ? 0 : keepPos] };
+      });
+    } catch (err) {
+      st.duplicateEmailError = `${err.message || 'Failed to delete these duplicate email addresses.'} Some may still be there — refresh to check what remains.`;
+    } finally {
+      if (st === cs) {
+        st.duplicateEmailDeleting.delete(groupKey);
+        render();
+      }
+    }
+  }
+
   // setContactFlag(cardId, flagKind, value) — sets/unsets NOK ('nok') or copy-correspondence ('cc')
   // directly on an already-real link, via drag-a-token-onto-a-card or clicking the resulting badge.
   // Same GET-full-state-then-full-replace-POST pattern as doCanvasConfirm's relationshipUpdateId
@@ -2997,7 +3214,7 @@
     const otherName = (lc && lc.name) || 'this contact';
     // Asked BEFORE anything is cleared or written, so cancelling leaves the canvas exactly as it
     // was — including any success panel or unanswered offer already on screen. Spells out which
-    // button does what, matching confirmDiscardUnfinishedMerge: window.confirm's OK/Cancel carry no
+    // button does what, matching resolveUnfinishedMergesBeforeLeaving: window.confirm's OK/Cancel carry no
     // inherent meaning of their own.
     if (
       lc &&
@@ -3703,8 +3920,8 @@
     // Guarded exactly like Close: a reload discards `cs` just as completely as closing does, so an
     // unfinished merge is just as lost. It was missing here purely because this button was added
     // later than the guard.
-    overlay.querySelector('#ms-cv-refresh-page')?.addEventListener('click', () => {
-      if (!confirmDiscardUnfinishedMerge()) return;
+    overlay.querySelector('#ms-cv-refresh-page')?.addEventListener('click', async () => {
+      if (!(await resolveUnfinishedMergesBeforeLeaving())) return;
       location.reload();
     });
     // Secondary path to the older inline widget (content-scripts/contacts-link-button.js), kept
@@ -3717,8 +3934,8 @@
     // close() normally does (see close()'s own comment) — the widget renders in place at its own
     // position on the page, not as an overlay on top of this.
     overlay.querySelector('#ms-cv-next-family')?.addEventListener('click', () => advanceToNextFamilyMember());
-    overlay.querySelector('#ms-cv-open-import')?.addEventListener('click', () => {
-      if (!confirmDiscardUnfinishedMerge()) return;
+    overlay.querySelector('#ms-cv-open-import')?.addEventListener('click', async () => {
+      if (!(await resolveUnfinishedMergesBeforeLeaving())) return;
       closeOverlay();
       window.ContactsWidget.openImport();
     });
@@ -4040,6 +4257,32 @@
     overlay.querySelectorAll('.ms-cv-dupaddr-merge').forEach((btn) => {
       btn.addEventListener('click', () => mergeDuplicateAddressGroup(btn.getAttribute('data-address-group')));
     });
+    overlay.querySelectorAll('.ms-cv-dupphone-keep-radio').forEach((r) => {
+      r.addEventListener('change', (e) => {
+        if (!e.target.checked) return;
+        const groupKey = r.getAttribute('data-phone-group');
+        const idx = Number(r.getAttribute('data-phone-index'));
+        const plan = cs.duplicatePhoneGroups.find((g) => g.indexes.join(',') === groupKey);
+        if (plan) plan.keepIndex = idx;
+        render();
+      });
+    });
+    overlay.querySelectorAll('.ms-cv-dupphone-delete').forEach((btn) => {
+      btn.addEventListener('click', () => deleteDuplicatePhoneGroup(btn.getAttribute('data-phone-group')));
+    });
+    overlay.querySelectorAll('.ms-cv-dupemail-keep-radio').forEach((r) => {
+      r.addEventListener('change', (e) => {
+        if (!e.target.checked) return;
+        const groupKey = r.getAttribute('data-email-group');
+        const idx = Number(r.getAttribute('data-email-index'));
+        const plan = cs.duplicateEmailGroups.find((g) => g.indexes.join(',') === groupKey);
+        if (plan) plan.keepIndex = idx;
+        render();
+      });
+    });
+    overlay.querySelectorAll('.ms-cv-dupemail-delete').forEach((btn) => {
+      btn.addEventListener('click', () => deleteDuplicateEmailGroup(btn.getAttribute('data-email-group')));
+    });
     overlay.querySelector('#ms-cv-phone-edit-cancel')?.addEventListener('click', () => cancelPhoneEdit());
     overlay.querySelector('#ms-cv-phone-edit-save')?.addEventListener('click', () => savePhoneEdit());
     overlay.querySelector('#ms-cv-phone-edit-number')?.addEventListener('input', (e) => {
@@ -4141,7 +4384,7 @@
   // Peeking before probing also means the confirm dialog can ALWAYS name the target: the candidate
   // is known before the user is asked, not chosen by the same call that consumed it.
   async function advanceToNextFamilyMember() {
-    if (!confirmDiscardUnfinishedMerge()) return;
+    if (!(await resolveUnfinishedMergesBeforeLeaving())) return;
     const st = cs;
     const fromPatientId = st.patientId;
     let session = window.ContactTree.setTreeFor(st.familySession, fromPatientId, st.tree);
@@ -4318,20 +4561,123 @@
     loadCanvas();
   }
 
+  // Converts every manual card that's been matched-but-not-yet-placed (card.mergedWith set, no
+  // family-tree slot chosen) into a real Medicus link on BOTH records, using the generic 'Other'
+  // relationship, then deletes the manual duplicate — 2026-08-2X request: "we should not make this
+  // another action", so this reuses the EXISTING close-time warning as its trigger rather than
+  // adding a new button. baseId defaults to 'other' inside buildConfirmForCard itself whenever there
+  // is no slot/guess/reciprocal signal to work from (see that function's own fallback chain) —
+  // calling it here with slotPath=null IS exactly that "no specific relationship known" case, the
+  // same default the rest of this file already trusts. 'other' is also the one relationship in
+  // rules/contact-relationships.json with an unambiguous, gender-neutral reciprocal ("other" ->
+  // "other"), so — unlike a real family relationship — there is no gender-inversion review step to
+  // skip past here; the reverse side can be written with the same confidence as the forward side.
+  //
+  // Every card is attempted independently; one failure does not abort the others (a GP who merged
+  // three contacts shouldn't lose the two that DID convert because the third's request failed) — but
+  // the CALLER only proceeds to close/reload/navigate if every one succeeded, so a genuine failure
+  // stays visibly pending on screen (still merged, still unplaced) rather than being silently
+  // discarded by the very action it was meant to block.
+  //
+  // KNOWN LIMITATION, deliberately parked (2026-08-20, Nick's own call after live-testing this):
+  // a normal drag-to-slot confirm ALSO checks for and offers to remove a REVERSE manual match — a
+  // manual contact sitting on the OTHER (candidate's) record that itself represents THIS index
+  // patient (see cs.reverseManualMatch / renderReverseManualMatch, set by doCanvasConfirm's own
+  // follow-up check). This bulk close-time path does NOT run that check — doing so per merged card,
+  // each needing its own separate review-and-confirm popup, would be clunky exactly where this
+  // whole flow is trying to avoid extra interaction. Left as a known gap rather than solved here;
+  // revisit if it turns out to matter in practice.
+  async function convertUnfinishedMergesToOther() {
+    const CR = window.ContactRelationships;
+    const merged = cs.manualCards.filter((c) => c.mergedWith);
+    let allOk = true;
+    for (const manual of merged) {
+      if (!cs.manualCards.includes(manual)) continue; // removed by an earlier iteration this same pass
+      const params = buildConfirmForCard(manual, 'manual', null);
+      if (!params) continue; // mergedWith was just checked above — fail-safe skip, not a throw
+      try {
+        const ctx = window.ContactsApi.resolveContext();
+        if (!ctx || ctx.patientId !== cs.patientId) {
+          throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+        }
+        // Same reciprocal-repair resolution as doCanvasConfirm's own — a downgraded-to-placeholder
+        // reciprocal from an EARLIER canvas session carries no cached id, so it's resolved here with
+        // the same single bounded fetch, immediately before writing.
+        let reciprocalUpdateId = params.reciprocalRelationshipId || null;
+        let reverseBaseId = params.reverseBaseId;
+        if (params.reciprocalNeedsRepair && !reciprocalUpdateId) {
+          const candidateDetails = await window.ContactsApi.getPatientDetails(
+            cs.apiBase,
+            params.candidatePatientId
+          ).catch(() => null);
+          const entry = candidateDetails && CR.findExistingForwardLink(candidateDetails, cs.patientId);
+          reciprocalUpdateId = (entry && entry.patientContactId) || null;
+          if (!reciprocalUpdateId) reverseBaseId = null;
+        }
+        await window.ContactsApi.performLinkAndCleanup({
+          apiBase: cs.apiBase,
+          patientId: cs.patientId,
+          candidatePatientId: params.candidatePatientId,
+          candidateDisplayName: params.candidateDisplayName,
+          indexPatientFullName:
+            cs.indexPatientDetails.patientDetailsSection &&
+            cs.indexPatientDetails.patientDetailsSection.fullOfficialName,
+          baseId: params.baseId,
+          modifierId: params.modifierId,
+          forwardIsNextOfKin: params.forwardIsNextOfKin,
+          forwardCopyCorrespondence: params.forwardCopyCorrespondence,
+          notes: params.notes,
+          existingForwardLink: params.existingForwardLink,
+          relationshipUpdateId:
+            params.existingForwardLink &&
+            (!params.relationshipKnown ||
+              params.baseId !== params.originalBaseId ||
+              params.modifierId !== params.originalModifierId)
+              ? params.existingForwardLink.patientContactId
+              : null,
+          reverseBaseId,
+          reverseIsNextOfKin: params.reverseIsNextOfKin,
+          reverseCopyCorrespondence: params.reverseCopyCorrespondence,
+          existingReciprocal: params.existingReciprocal,
+          reciprocalUpdateId,
+          manualContactIdToDelete: params.manualContactIdToDelete,
+          progress: null,
+        });
+        cs.manualCards = cs.manualCards.filter((c) => c.id !== manual.id);
+      } catch (err) {
+        allOk = false;
+        cs.workingError = `Failed to link ${manual.name} as "Other" — ${err.message || 'please try again.'}`;
+      }
+    }
+    render();
+    return allOk;
+  }
+
   // A merged-but-not-yet-linked pairing lives only in cs, which is discarded on close — warn
   // before losing it, matching duplicate-checker.js's confirm() pattern for a similar
   // "in-progress decision about to be discarded" situation. Shared by every way of leaving the
   // canvas (Close, and the "Import from another patient" header link) — an unfinished merge is
   // equally lost whichever way the canvas closes.
-  function confirmDiscardUnfinishedMerge() {
+  //
+  // RENAMED from confirmDiscardUnfinishedMerge (2026-08-2X): OK no longer discards the pairing —
+  // it converts it to a real 'Other' link via convertUnfinishedMergesToOther, reusing this existing
+  // hook rather than adding a separate action for it (Nick's explicit call). Returns false (caller
+  // must not proceed) on Cancel OR on a conversion failure — only a clean Cancel-free, error-free
+  // path clears the way to actually leave.
+  async function resolveUnfinishedMergesBeforeLeaving() {
     if (!(cs && cs.manualCards.some((c) => c.mergedWith))) return true;
     // window.confirm's OK/Cancel buttons carry no inherent meaning of their own — spell out
     // which button does what rather than relying on the reader inferring it from context.
-    return window.confirm(
-      "You've merged one or more contacts that haven't been linked yet — nothing has been written to Medicus, so closing now will lose that pairing.\n\n" +
-        'Click CANCEL to go back and drag the merged card down to the family tree to finish.\n' +
-        'Click OK to close anyway and discard the unfinished merge.'
-    );
+    if (
+      !window.confirm(
+        "You've merged one or more contacts that haven't been linked yet.\n\n" +
+          'Click CANCEL to go back and drag the merged card down to the family tree yourself, if you know how they’re related.\n\n' +
+          'Click OK to close anyway and link them as "Other" instead — a generic contact relationship, written to both records — rather than losing the match. You can re-open the canvas and correct it to a specific relationship any time.'
+      )
+    ) {
+      return false;
+    }
+    return convertUnfinishedMergesToOther();
   }
 
   function closeOverlay() {
@@ -4340,8 +4686,8 @@
     if (overlay) overlay.remove();
   }
 
-  function close() {
-    if (!confirmDiscardUnfinishedMerge()) return;
+  async function close() {
+    if (!(await resolveUnfinishedMergesBeforeLeaving())) return;
     closeOverlay();
     // Every write this canvas makes only ever updates local state (see the "Refresh now" buttons
     // sprinkled through the confirm/merge panels) — Medicus's own contacts card never reflects any
