@@ -645,6 +645,66 @@
   background: var(--red-dim);
 }
 
+.rcp-duration-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 8px;
+}
+.rcp-duration-grid input,
+.rcp-duration-grid select {
+  width: 100%;
+}
+
+.rcp-amalgam {
+  border-radius: var(--r-md);
+  padding: 7px 9px;
+}
+.rcp-amalgam-emergency {
+  border: 1px solid var(--red-line);
+  background: var(--red-dim);
+}
+.rcp-amalgam-duty {
+  border: 1px solid var(--amber-line);
+  background: var(--amber-dim);
+}
+.rcp-amalgam-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+  border-top: 1px dashed var(--border);
+  cursor: pointer;
+}
+.rcp-amalgam-item:first-child {
+  border-top: none;
+}
+.rcp-amalgam-item input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.rcp-amalgam-none {
+  font-weight: 600;
+}
+
+.rcp-more {
+  margin: 8px 0 12px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.rcp-more summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+}
+.rcp-more[open] summary {
+  margin-bottom: 8px;
+}
+
+.rcp-stopped-999 .rcp-after-stop,
+.rcp-stopped-999 .rcp-more {
+  opacity: 0.4;
+}
+
 .rcp-rf-row {
   display: flex;
   justify-content: space-between;
