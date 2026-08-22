@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.18] — 2026-08-22
+
+### Docs — reception call script tap-out at 10 questions
+
+Proposal update: a completed all-clear **call** is ≤10 spoken turns. Same-tier red flags amalgamate into two lists (999 / duty) with a required “None of these”; each pathway gets two clinical slots. No runtime or pathway-JSON change.
+
 ## [v3.236.17] — 2026-08-22
 
 ### Docs — reception pathway slim-down proposal
