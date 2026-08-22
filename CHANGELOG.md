@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.17] — 2026-08-22
+
+### Docs — reception pathway slim-down proposal
+
+Proposal only (`docs/plans/RECEPTION-PATHWAY-SLIM-2026-08-22.md`). No runtime or pathway-JSON change. The v1.9 bundled set stays as signed.
+
 ## [v3.236.16] — 2026-08-21
 
 ### Queue pulse — design-crit pass (multi-critic review of the v3.236.4 cut)
