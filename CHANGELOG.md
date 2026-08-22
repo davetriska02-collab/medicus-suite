@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.24] — 2026-08-22
+
+### Monitoring — don't leave "Task created for X" on the next patient
+
+Creating a recall task (or a follow-up reminder) in Monitoring writes a
+green confirmation into `#sentTaskSlot` — "Task created for Mr Dolly
+Smith". That slot sits on the persistent scaffold, outside the chip
+area that re-renders on each poll, so the banner (and the patient name
+in it) used to stay on screen after auto-follow loaded the next record.
+
+`render()` now compares the previously-followed patient UUID with the
+one now on screen and clears the slot on any change, including leaving
+the record. A same-patient 10s refresh still keeps the confirmation.
+The create-task write itself was already guarded (submit aborts if the
+open patient moved); this is the leftover banner.
+
 ## [v3.236.22] — 2026-08-22
 
 ### Reception — signed-off call script

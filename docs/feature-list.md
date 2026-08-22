@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.236.22
+**Version:** v3.236.24
 **Generated:** 2026-08-22
 
 ## What it is
@@ -227,6 +227,7 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.236.24 (2026-08-22)** — Monitoring: "Task created for X" (and the follow-up reminder confirmation) clears when the next patient loads.
 - **v3.236.22 (2026-08-22)** — Reception call script: two same-tier safety lists, short history, no separate caller/age questions. CSO-signed.
 - **v3.236.15 (2026-08-21)** — Bulk acknowledge: Review/Confirm sit in a footer so select-all cannot hide the mass-resolve button.
 - **v3.236.14 (2026-08-21)** — Bulk remove/merge trigger removed from the Clinical Summary (Organise problems owns End/merge). Quiet-row chips clip inside the name column so the next box cannot chop them.

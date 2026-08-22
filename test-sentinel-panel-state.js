@@ -121,5 +121,96 @@ if (headline) {
     'null/undefined fields → null (no crash)');
 }
 
+// ── task-slot patient-switch: "Task created for X" must not ride onto Y ─────
+// #sentTaskSlot lives on the persistent scaffold (outside #sentDynamic), so
+// a success banner / open form naming the previous patient used to survive
+// the next record load. These helpers are the gate render() uses.
+
+const pidFn = src.match(/function patientIdFromContext\(patient\) \{[\s\S]*?\n\}/);
+check(!!pidFn, 'patientIdFromContext extracted from side-panel sentinel module');
+const clearFn = src.match(/function taskSlotShouldClearOnPatientChange\(previousPatientId, nextPatientId\) \{[\s\S]*?\n\}/);
+check(!!clearFn, 'taskSlotShouldClearOnPatientChange extracted from side-panel sentinel module');
+const wipeFn = src.match(/function clearSentinelTaskSlot\(slot\) \{[\s\S]*?\n\}/);
+check(!!wipeFn, 'clearSentinelTaskSlot extracted from side-panel sentinel module');
+
+let patientIdFromContext = null;
+let taskSlotShouldClearOnPatientChange = null;
+let clearSentinelTaskSlot = null;
+if (pidFn && clearFn && wipeFn) {
+  const sandbox = {};
+  vm.runInNewContext(
+    pidFn[0] + '\n' + clearFn[0] + '\n' + wipeFn[0] +
+      '\nthis.patientIdFromContext = patientIdFromContext;' +
+      '\nthis.taskSlotShouldClearOnPatientChange = taskSlotShouldClearOnPatientChange;' +
+      '\nthis.clearSentinelTaskSlot = clearSentinelTaskSlot;',
+    sandbox
+  );
+  patientIdFromContext = sandbox.patientIdFromContext;
+  taskSlotShouldClearOnPatientChange = sandbox.taskSlotShouldClearOnPatientChange;
+  clearSentinelTaskSlot = sandbox.clearSentinelTaskSlot;
+}
+
+console.log('\n--- patientIdFromContext ---');
+if (patientIdFromContext) {
+  check(patientIdFromContext({ patientUuid: 'aaa' }) === 'aaa', 'reads patientUuid');
+  check(patientIdFromContext({ uuid: 'bbb' }) === 'bbb', 'falls back to uuid');
+  check(patientIdFromContext({ patientUuid: 'aaa', uuid: 'bbb' }) === 'aaa', 'patientUuid wins over uuid');
+  check(patientIdFromContext({ patientName: 'Mr Dolly Smith' }) === '', 'a name alone is never an id');
+  check(patientIdFromContext(null) === '', 'null patient → empty, never throws');
+  check(patientIdFromContext(undefined) === '', 'undefined patient → empty, never throws');
+}
+
+console.log('\n--- taskSlotShouldClearOnPatientChange ---');
+if (taskSlotShouldClearOnPatientChange) {
+  check(
+    taskSlotShouldClearOnPatientChange('patient-a', 'patient-b') === true,
+    'Dolly → next patient: clear the leftover "Task created for Dolly" banner'
+  );
+  check(
+    taskSlotShouldClearOnPatientChange('patient-a', 'patient-a') === false,
+    'same-patient 10s poll: keep the confirmation'
+  );
+  check(
+    taskSlotShouldClearOnPatientChange('patient-a', '') === true,
+    'left the record (no-medicus / loading): clear — must not sit on an empty panel'
+  );
+  check(
+    taskSlotShouldClearOnPatientChange('', 'patient-b') === true,
+    'first patient after idle: clear (slot should already be empty; no-op wipe)'
+  );
+  check(
+    taskSlotShouldClearOnPatientChange('', '') === false,
+    'idle → idle: nothing to clear'
+  );
+  check(
+    taskSlotShouldClearOnPatientChange(null, 'patient-b') === true,
+    'null previous (first data render) → clear, never throws'
+  );
+  check(
+    taskSlotShouldClearOnPatientChange('patient-a', null) === true,
+    'null next (left the record) → clear, never throws'
+  );
+}
+
+console.log('\n--- clearSentinelTaskSlot ---');
+if (clearSentinelTaskSlot) {
+  const slot = { innerHTML: '<div class="sent-task-done">Task created for Mr Dolly Smith.</div>', dataset: { open: 'done' } };
+  clearSentinelTaskSlot(slot);
+  check(slot.innerHTML === '', 'wipes the leftover banner HTML');
+  check(slot.dataset.open === '', 'resets dataset.open so the next Create task is a fresh form');
+  clearSentinelTaskSlot(null);
+  check(true, 'null slot → no throw');
+}
+
+console.log('\n--- wiring: render() syncs the slot on every patient change ---');
+{
+  check(/taskSlotShouldClearOnPatientChange\(prevPatientId, nextPatientId\)/.test(src),
+    'render() asks the helper whether the slot belongs to someone else');
+  check(/clearSentinelTaskSlot\(container\.querySelector\('#sentTaskSlot'\)\)/.test(src),
+    'render() wipes #sentTaskSlot when the followed patient changes');
+  check(/#sentTaskSlot/.test(src) && /sent-task-done/.test(src),
+    'the success banner still exists — we clear it on switch, we do not remove the confirmation');
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

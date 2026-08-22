@@ -1164,6 +1164,14 @@ function render(payload) {
   if (!container) return;
   const { state, snapshot, message } = payload;
 
+  // #sentTaskSlot is scaffold, not #sentDynamic — a "Task created for X"
+  // banner (or an open form naming X) must not ride onto the next patient.
+  const prevPatientId = patientIdFromContext(_renderCtx && _renderCtx.patient);
+  const nextPatientId = state === 'data' ? patientIdFromContext(snapshot && snapshot.patientContext) : '';
+  if (taskSlotShouldClearOnPatientChange(prevPatientId, nextPatientId)) {
+    clearSentinelTaskSlot(container.querySelector('#sentTaskSlot'));
+  }
+
   if (state !== 'data') {
     // No usable data behind the action bar in these states.
     _renderCtx = null;
@@ -2153,6 +2161,27 @@ function scaffoldHtml() {
 // patient UUID still matches the one the form was opened for — auto-follow
 // switching patients mid-form invalidates the submit instead of creating a
 // task against the wrong record.
+//
+// SUCCESS-BANNER STALENESS: #sentTaskSlot lives on the persistent scaffold
+// (outside #sentDynamic), so a "Task created for X" / "Reminder added for X"
+// confirmation — or an open form — used to survive the next patient load.
+// render() compares the previously-followed UUID with the one now on screen
+// and clears the slot on any change (including leaving the record). A
+// same-patient 10s poll keeps the confirmation.
+
+function patientIdFromContext(patient) {
+  return (patient && (patient.patientUuid || patient.uuid)) || '';
+}
+
+function taskSlotShouldClearOnPatientChange(previousPatientId, nextPatientId) {
+  return (previousPatientId || '') !== (nextPatientId || '');
+}
+
+function clearSentinelTaskSlot(slot) {
+  if (!slot) return;
+  slot.innerHTML = '';
+  slot.dataset.open = '';
+}
 
 let _sentTaskFormCache = null; // assignee/priority options are practice-wide
 
@@ -2160,8 +2189,7 @@ async function toggleCreateTaskForm() {
   const slot = container?.querySelector('#sentTaskSlot');
   if (!slot) return;
   if (slot.dataset.open === '1') {
-    slot.innerHTML = '';
-    slot.dataset.open = '';
+    clearSentinelTaskSlot(slot);
     return;
   }
   const patient = _renderCtx?.patient;
@@ -2239,8 +2267,7 @@ async function toggleCreateTaskForm() {
   assigneeSel.addEventListener('change', updateEnabled);
   descEl.addEventListener('input', updateEnabled);
   slot.querySelector('.sent-task-cancel').addEventListener('click', () => {
-    slot.innerHTML = '';
-    slot.dataset.open = '';
+    clearSentinelTaskSlot(slot);
   });
   createBtn.addEventListener('click', () => submitSentinelTask(slot, apiBase, patientId, patientName));
 }
@@ -2257,8 +2284,7 @@ function toggleFollowupForm() {
   const slot = container?.querySelector('#sentTaskSlot');
   if (!slot) return;
   if (slot.dataset.open === '1') {
-    slot.innerHTML = '';
-    slot.dataset.open = '';
+    clearSentinelTaskSlot(slot);
     return;
   }
   const patient = _renderCtx?.patient;
@@ -2290,8 +2316,7 @@ function toggleFollowupForm() {
     saveBtn.disabled = !whatEl.value.trim();
   });
   slot.querySelector('.sent-task-cancel').addEventListener('click', () => {
-    slot.innerHTML = '';
-    slot.dataset.open = '';
+    clearSentinelTaskSlot(slot);
   });
   saveBtn.addEventListener('click', async () => {
     const statusEl = slot.querySelector('.sent-task-status');
