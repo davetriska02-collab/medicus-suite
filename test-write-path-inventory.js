@@ -79,7 +79,7 @@ SCAN_FILES.sort();
 
 const ALLOWLIST = {
   'shared/txn-transport.js':
-    'optional Transactional API proxy POST; intended-purpose says this path is read-only for patient data (isWrite writes are refused). Not a Medicus session write surface.',
+    'optional Transactional API proxy POST; read-only for patient data — the transport THROWS on isWrite before any network call (enforced, regression-guarded by test-txn-modules.js). Not a Medicus session write surface.',
   'content-scripts/task-presence.js': 'Supabase task_presence upsert, not a Medicus clinical write.',
 };
 

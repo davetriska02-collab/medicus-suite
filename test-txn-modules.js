@@ -93,9 +93,26 @@ test('txn-transport: refuses without proxyUrl or credential; surfaces HTTP error
     fetchFn: async () => ({ ok: false, status: 401, text: async () => JSON.stringify({ error: 'unauthorized' }) }),
   });
   await assert.rejects(
-    () => err401({ method: 'POST', path: '/transactional-api/create-note', body: {}, isWrite: true }),
-    (e) => e.status === 401 && e.isWrite === true
+    () => err401({ method: 'GET', path: '/transactional-api/patient/p1/demographics', isWrite: false }),
+    (e) => e.status === 401 && e.isWrite === false
   );
+});
+
+test('txn-transport: REFUSES isWrite before any network call — the read-only boundary is enforced, not assumed', async () => {
+  let fetchCalls = 0;
+  const transport = TxnTransport.createProxyTransport({
+    proxyUrl: 'https://proj.supabase.co/functions/v1',
+    getCallerCredential: async () => 'caller-key',
+    fetchFn: async () => {
+      fetchCalls++;
+      return { ok: true, text: async () => '{}' };
+    },
+  });
+  await assert.rejects(
+    () => transport({ method: 'POST', path: '/transactional-api/create-note', body: {}, isWrite: true }),
+    (e) => e.refusedWrite === true && e.isWrite === true && /read-only/.test(e.message)
+  );
+  assert.equal(fetchCalls, 0, 'a refused write must never reach the network');
 });
 
 test('record-provider: session mode uses session client; hybrid falls back on txn read failure', async () => {
