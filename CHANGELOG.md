@@ -26,6 +26,44 @@ browser tab) keeps it too — the banner names its own patient, so it
 cannot be misattributed there, and flicking to another tab and back
 must not lose the confirmation.
 
+## [v3.236.23] — 2026-08-22
+
+### Add coded entries as problems — now on investigation filing too
+
+The document-filing panel ("Add coded entries as problems") now also
+appears on investigation-result filing pages. The same floating checklist
+reads the task's coded journal notes (the "Code as" field on the
+screenshot — e.g. Osteoarthritis of knee on an XR Knee) and, on confirm,
+creates each as a Problem via Medicus's own create-problem endpoint —
+code, note text, and onset date carried across automatically.
+
+The overview fetch uses the live URL typeSlug
+(`/tasks/data/{typeSlug}/overview/{taskUuid}`) rather than a hardcoded
+document path, so every investigation slug already in the repo
+(`investigation_result`, `review_investigation_results_task`,
+`review-investigation-report`) is covered — the same family
+lab-file-button.js already treats as a filing screen. Onset date on an
+investigation comes from the first confirmed result-level
+`specimenCollectionDate` (then `issuedDateTime`); those are the two
+fields `engine/normalisers.js` already reads, not a guessed report-level
+date. The panel also nudges off Medicus's **File results** button and the
+suite's own lab-file card, the same way it already nudges off File
+document.
+
+Empty-state copy names "Code as" on investigations and still names
+"Codes & actions" on documents. Create-problem write, duplicate /
+allergy warnings, and the confirm() dialog are unchanged.
+
+Post-review fix: the investigation filing page opens its "Code as" form
+as a right-hand slideover exactly where the panel docks top-right, and
+the panel's z-index sits above it — covering the Code as field and the
+slideover's own patient banner. Medicus overlays (`[role="dialog"]` /
+`[aria-modal="true"]`, the same family task-inline.js already detects)
+now join the nudge obstacles, so the panel steps left while a slideover
+or modal is open and returns when it closes. Full-viewport matches are
+the dialog wrapper/backdrop, not the visible panel — skipped, or every
+open dialog would shove the widget to the fallback corner.
+
 ## [v3.236.22] — 2026-08-22
 
 ### Reception — signed-off call script
