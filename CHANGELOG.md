@@ -6,7 +6,7 @@ All notable changes to Medicus Suite are documented here.
 
 ### Add coded entries as problems — now on investigation filing too
 
-Nick's document-filing panel ("Add coded entries as problems") now also
+The document-filing panel ("Add coded entries as problems") now also
 appears on investigation-result filing pages. The same floating checklist
 reads the task's coded journal notes (the "Code as" field on the
 screenshot — e.g. Osteoarthritis of knee on an XR Knee) and, on confirm,

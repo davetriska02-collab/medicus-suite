@@ -306,7 +306,7 @@ console.log('--- extractCodedNoteEntries: investigation overview with the same c
 {
   const invOverview = {
     data: {
-      patient: { id: 'p-inv-1', displayName: 'Mrs Elizabeth Avis' },
+      patient: { id: 'p-inv-1', displayName: 'Mrs Test Patient' },
       investigationReport: {
         investigationGroups: [{ results: [{ specimenCollectionDate: '2026-07-28 00:00:00' }] }],
         ungroupedResults: [],
