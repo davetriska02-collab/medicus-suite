@@ -196,6 +196,24 @@ console.log('\n--- 2026-07-25 Keeper: ACB score-3 first-gen AH additions ---');
   assert(r.perDrug[0] && r.perDrug[0].score === 3, 'brompheniramine scores 3 (first-gen AH, ACBcalc score 3)');
 }
 
+// ── 2026-08-22 Keeper: quetiapine brands (Mintreleq XL, Sondate XL) and curatil ─
+console.log('\n--- 2026-08-22 Keeper: quetiapine brands + curatil ---');
+{
+  const r = computeACB(['Mintreleq XL 200mg modified-release tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Mintreleq XL (quetiapine brand) scores 3');
+  assert(r.perDrug[0] && r.perDrug[0].matchedTerm === 'mintreleq', 'Mintreleq XL matched by mintreleq term');
+}
+{
+  const r = computeACB(['Sondate XL 50mg modified-release tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Sondate XL (quetiapine brand) scores 3');
+  assert(r.perDrug[0] && r.perDrug[0].matchedTerm === 'sondate', 'Sondate XL matched by sondate term');
+}
+{
+  const r = computeACB(['Curatil 200mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 2, 'Curatil (carbamazepine brand) scores 2');
+  assert(r.perDrug[0] && r.perDrug[0].matchedTerm === 'curatil', 'Curatil matched by curatil term (not carbamazepine)');
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

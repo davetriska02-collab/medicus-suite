@@ -1,11 +1,11 @@
 {
-  "runDate": "2026-08-18",
-  "previousRunDate": "2026-08-01",
-  "manifestVersion": "3.233.0",
+  "runDate": "2026-08-22",
+  "previousRunDate": "2026-08-18",
+  "manifestVersion": "3.236.23",
   "csoSignedOff": {
     "date": "2026-08-18",
     "by": "Dr D. Triska",
-    "scope": "Applied additive set only (12 changes). Held items remain unsigned."
+    "scope": "Previous run only (12 changes). This run (3 additive brand additions) awaits CSO review."
   },
   "ruleFileLastUpdated": {
     "rules/drug-rules.json": "2026-08-18",
@@ -13,21 +13,15 @@
     "rules/vaccine-rules.json": "2026-08-18",
     "rules/alert-library.json": "2026-08-18",
     "rules/reception-pathways.json": "2026-08-18",
-    "engine/acb-scores.js": "2026-07-25",
+    "engine/acb-scores.js": "2026-08-22",
     "engine/stopp-start.js": "2026-07-25",
-    "engine/rules-engine.js": "2026-08-01"
+    "engine/rules-engine.js": "2026-08-01",
+    "visualiser-core.js": "2026-08-22"
   },
   "sourcesChecked": [
-    "https://bnf.nice.org.uk/drugs/warfarin-sodium/",
-    "https://bnf.nice.org.uk/drugs/eprosartan/medicinal-forms/",
     "https://bnf.nice.org.uk/drugs/quetiapine/medicinal-forms/",
     "https://bnf.nice.org.uk/drugs/carbamazepine/medicinal-forms/",
-    "https://www.sps.nhs.uk/monitorings/mycophenolate-mofetil-and-mycophenolic-acid-monitoring/",
-    "https://www.gov.uk/drug-safety-update/fezolinetant-veoza-risk-of-liver-injury-new-recommendations-to-minimise-risk",
-    "https://www.gov.uk/drug-safety-update/topiramate-topamax-introduction-of-new-safety-measures-including-a-pregnancy-prevention-programme",
-    "https://www.gov.uk/government/publications/respiratory-syncytial-virus-rsv-programme-information-for-healthcare-professionals",
-    "https://cks.nice.org.uk/topics/sore-throat-acute/",
-    "https://cks.nice.org.uk/topics/headache-assessment/"
+    "https://bnf.nice.org.uk/drugs/warfarin-sodium/"
   ],
   "heldForNextRun": [
     {
@@ -56,13 +50,13 @@
       "heldSince": "2026-08-17"
     },
     {
-      "id": "medreview-scan",
-      "description": "MEDREVIEW scanner hung. ACB / STOPP / visualiser PINCER tables still unchecked this cycle. Standing CSO verification of ACB/STOPP starter set still outstanding.",
+      "id": "medreview-scan-full",
+      "description": "Full MEDREVIEW scanner not run. 3 targeted brand additions applied from existing 2026-08-18 BNF verification. Standing CSO verification of ACB/STOPP v3.51.0 starter set still outstanding.",
       "heldSince": "2026-08-17"
     },
     {
       "id": "rsv-poorly-controlled-asthma",
-      "description": "RSV 65-74 poorly-controlled asthma (24-month OCS/admission count) — engine cannot encode. Bare asthma deliberately omitted.",
+      "description": "RSV 65-74 poorly-controlled asthma (24-month OCS/admission count) — engine cannot encode. Bare asthma deliberately omitted. EFFECTIVE DATE 2026-09-01 NOW PAST — flag for CSO awareness.",
       "heldSince": "2026-07-25",
       "effectiveDate": "2026-09-01"
     },
@@ -80,76 +74,22 @@
   ],
   "changesAppliedThisRun": [
     {
-      "id": "drug-001",
+      "id": "medreview-acb-001",
       "rag": "Red",
-      "description": "New warfarin-vka INR 84d rule (warfarin, marevan, acenocoumarol, sinthrome, phenindione, dindevan)",
-      "appliedDate": "2026-08-18"
+      "description": "ACB table engine/acb-scores.js: add quetiapine brands mintreleq and sondate (score 3)",
+      "appliedDate": "2026-08-22"
     },
     {
-      "id": "drug-002",
+      "id": "medreview-acb-002",
       "rag": "Red",
-      "description": "ace-arb: add eprosartan, teveten",
-      "appliedDate": "2026-08-18"
+      "description": "ACB table engine/acb-scores.js: add carbamazepine brand curatil (score 2)",
+      "appliedDate": "2026-08-22"
     },
     {
-      "id": "drug-004",
+      "id": "medreview-vkac-001",
       "rag": "Red",
-      "description": "antipsychotic: add mintreleq, sondate",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "drug-005",
-      "rag": "Red",
-      "description": "carbamazepine-maintenance: add curatil",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "drug-006",
-      "rag": "Amber",
-      "description": "New mycophenolate-maintenance FBC/LFT/U&E 84d",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "drug-008",
-      "rag": "Amber",
-      "description": "New fezolinetant-lft 90d (Veoza)",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "vax-001",
-      "rag": "Red",
-      "description": "RSV 65-74 COPD + immunosuppression eligibility encoded (effective 1 Sept 2026; no bare asthma)",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "alert-S004",
-      "rag": "Red",
-      "description": "New mhra-topiramate-ppp alert (F 12-55)",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "alert-S006",
-      "rag": "Red",
-      "description": "New mhra-warfarin-tramadol interaction alert",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "alert-pincer7-marevan",
-      "rag": "Red",
-      "description": "PINCER #7 match adds marevan",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "pathway-001",
-      "rag": "Red",
-      "description": "sore-throat rf-unwell-child duty→999",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "pathway-004",
-      "rag": "Red",
-      "description": "headache rf-household-co 999 added",
-      "appliedDate": "2026-08-18"
+      "description": "visualiser-core.js HIGH_RISK_DRUGS warfarin: add VKA brands marevan and sinthrome",
+      "appliedDate": "2026-08-22"
     }
   ]
 }

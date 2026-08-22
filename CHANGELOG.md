@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.23] — 2026-08-22
+
+### MEDREVIEW — ACB brand completeness (The Keeper, 2026-08-22 run)
+
+Three additive brand-completeness changes to the MEDREVIEW instruments. All sourced from BNF,
+consistent with VKA and antipsychotic/antiepileptic changes already applied to `drug-rules.json`
+and `alert-library.json` on 2026-08-18.
+
+**`engine/acb-scores.js` — 3 new brand terms:**
+- `mintreleq` (score 3, quetiapine brand: Mintreleq XL). A record showing only the brand would
+  previously have scored 0 and the STOPP anticholinergic-burden criterion (STOPP 10b) would have
+  silently missed it. Parity with drug-rules.json drug-004 (2026-08-18).
+- `sondate` (score 3, quetiapine brand: Sondate XL). Same rationale as Mintreleq XL.
+- `curatil` (score 2, carbamazepine brand: Curatil). Silent ACB miss for brand-name carbamazepine
+  prescriptions. Parity with drug-rules.json drug-005 (2026-08-18).
+
+**`visualiser-core.js` HIGH_RISK_DRUGS warfarin terms:**
+- Added `marevan` (warfarin brand) and `sinthrome` (acenocoumarol brand). A patient record
+  showing only the brand name would previously not appear in the visualiser's monitoring panel.
+  Parity with drug-rules.json warfarin-vka (drug-001, 2026-08-18) and alert-library.json
+  alert-pincer7-marevan (2026-08-18).
+
+Source: BNF (same authority as the 2026-08-18 apply pass). RAG: Red (silent monitoring miss).
+No `weakens_safety`. Regression tests added to `test-acb-scores.js` (59/59 pass).
+
 ## [v3.236.22] — 2026-08-22
 
 ### Reception — signed-off call script
