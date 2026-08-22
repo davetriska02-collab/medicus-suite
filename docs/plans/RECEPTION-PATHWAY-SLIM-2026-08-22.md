@@ -9,6 +9,10 @@ lists (emergency / duty today), not a yes/no row each; two history
 turns per condition; stop the line on a 999. Do not build a 111-style
 wizard.
 
+Mocks (sore throat, proposed — not shipped):
+`docs/plans/reception-sore-throat-call-mock.png` (all-clear, 9 of 9)
+and `docs/plans/reception-sore-throat-999-mock.png` (stop on emergency).
+
 Every call also has the same wrap, counted inside the ten, not written
 out per condition below: who you are speaking to, age on this call,
 what’s the problem in their words, how long and is it better or worse,

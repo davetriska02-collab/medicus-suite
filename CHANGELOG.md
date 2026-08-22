@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.20] — 2026-08-22
+
+### Docs — sore-throat call-script mocks
+
+Two proposed-form screenshots for the reception slim-down plan (all-clear and stop-on-999). Not shipped UI.
+
 ## [v3.236.19] — 2026-08-22
 
 ### Docs — reception proposal lists condition questions only
