@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.236.17] — 2026-08-21
+## [v3.236.23] — 2026-08-22
 
 ### Organise canvas — fail-safe write paths (merge-review fixes)
 
@@ -24,6 +24,42 @@ An adversarial review of the v3.236.5–.15 merge found the organise canvas's fa
 - Bulk-acknowledge URL matching re-anchored (siteId must be the first path segment); an aborted drag of the codes-to-problems panel header no longer swallows the next collapse click.
 
 Tests: `test-appointment-organise-core.js` grows to 241 checks (destination-taken, oversize drop, post-cancel restore both ways, release failures, pre-flight, fail-closed identity, day naming, notify no-op); `test-queue-pulse.js`, `test-task-bulk-action.js`, `test-document-codes-to-problems.js` extended.
+
+## [v3.236.22] — 2026-08-22
+
+### Reception — signed-off call script
+
+CSO-approved capture format for a live phone call. Red flags render as two same-tier lists (emergency / duty) with a required **None of these**. Own words, how long / course, one or two history turns, what they want, and a number. Caller and age are not asked as their own questions. Extra history sits under **More for the clinician**. A 999 tick allows Generate; later flags stamp unanswered, not a forged no. Signed-off 2026-08-22 (Dr D. Triska).
+
+## [v3.236.21] — 2026-08-22
+
+### Docs — all bundled reception call-script mocks for CSO sign-off
+
+Same proposed form on every bundled pathway. Caller and age questions dropped (own words can catch them). Not shipped UI.
+
+## [v3.236.20] — 2026-08-22
+
+### Docs — sore-throat call-script mocks
+
+Two proposed-form screenshots for the reception slim-down plan (all-clear and stop-on-999). Not shipped UI.
+
+## [v3.236.19] — 2026-08-22
+
+### Docs — reception proposal lists condition questions only
+
+The slim-down plan now writes each condition as the receptionist questions (two safety lists + one or two history turns). Shared wrap and flag ids are not repeated per pathway.
+
+## [v3.236.18] — 2026-08-22
+
+### Docs — reception call script tap-out at 10 questions
+
+Proposal update: a completed all-clear **call** is ≤10 spoken turns. Same-tier red flags amalgamate into two lists (999 / duty) with a required “None of these”; each pathway gets two clinical slots. No runtime or pathway-JSON change.
+
+## [v3.236.17] — 2026-08-22
+
+### Docs — reception pathway slim-down proposal
+
+Proposal only (`docs/plans/RECEPTION-PATHWAY-SLIM-2026-08-22.md`). No runtime or pathway-JSON change. The v1.9 bundled set stays as signed.
 
 ## [v3.236.16] — 2026-08-21
 
