@@ -10,10 +10,12 @@
 //   2. Guided capture — fixed question sets per presenting problem. ALL
 //      pathways ship disabled; a practice administrator must accept the
 //      disclaimer in Options → Reception to enable them. Practices can edit
-//      bundled pathways and author custom ones there. Red flags come first
-//      with escalation prompts; output is a structured plain-text block to
-//      copy-paste into the Medicus triage entry. Capture only — the tool
-//      never triages, diagnoses, or advises beyond red-flag escalation.
+//      bundled pathways and author custom ones there. On a call the form is
+//      the signed-off script in reception-call-script.js: two amalgam safety
+//      lists, a short history set, wants + contact. Red flags still escalate
+//      999/duty. Output is a structured plain-text block to copy-paste into
+//      the Medicus triage entry. Capture only — the tool never triages,
+//      diagnoses, or advises beyond red-flag escalation.
 //   3. Book an appointment (plan D3, hazard H-051) — the shared booking panel,
 //      created and destroyed WITH the capture form. It is the suite's first
 //      clinical write surface aimed at non-clinical staff, so it is gated hard:
@@ -43,6 +45,21 @@ import {
   destinationLabel,
   overrideDestinations,
 } from './reception-core.js';
+
+import {
+  splitRedFlags,
+  mainQuestions,
+  moreQuestions,
+  mainClosingIds,
+  closingInOrder,
+  moreClosingQuestions,
+  showDurationRow,
+  ownWordsLabel,
+  generateAllowed,
+  applyAmalgamAnswers,
+  CALL_DURATION_ID,
+  CALL_COURSE_ID,
+} from './reception-call-script.js';
 
 import { createBookingPanel } from '../shared/booking-panel.js';
 import { bookingGateState } from '../shared/booking-panel-core.js';
@@ -885,6 +902,30 @@ function inputHtml(scope, q) {
   return `<input type="text" name="${esc(nm)}" autocomplete="off">`;
 }
 
+function amalgamListHtml(tier, flags, title) {
+  if (!flags.length) return '';
+  const cls = tier === '999' ? 'rcp-amalgam-emergency' : 'rcp-amalgam-duty';
+  const items = flags
+    .map(
+      (rf) => `
+      <label class="rcp-amalgam-item rcp-rf-row" data-rf="${esc(rf.id)}">
+        <input type="checkbox" name="rf-${esc(rf.id)}" value="yes" data-tier="${esc(tier)}">
+        <span class="rcp-rf-ask">${esc(rf.ask)}</span>
+      </label>`
+    )
+    .join('');
+  return `<div class="rcp-q-row">
+      <label class="rcp-q-ask">${esc(title)}</label>
+      <div class="rcp-amalgam ${cls}" data-tier="${esc(tier)}">
+        ${items}
+        <label class="rcp-amalgam-item rcp-amalgam-none">
+          <input type="checkbox" name="rf-none-${esc(tier)}" value="none" data-tier="${esc(tier)}" data-none="1">
+          <span>None of these</span>
+        </label>
+      </div>
+    </div>`;
+}
+
 async function renderCaptureForm(pathway) {
   const body = container?.querySelector('#rcpCaptureBody');
   if (!body || !_bundledDoc) return;
@@ -919,31 +960,43 @@ async function renderCaptureForm(pathway) {
       }
     : null;
 
-  const rfRows = (pathway.redFlags || [])
-    .map(
-      (rf) => `
-    <div class="rcp-rf-row" data-rf="${esc(rf.id)}">
-      <span class="rcp-rf-ask">${esc(rf.ask)}</span>
-      <span class="rcp-yn">
-        <label><input type="radio" name="rf-${esc(rf.id)}" value="yes"> Yes</label>
-        <label><input type="radio" name="rf-${esc(rf.id)}" value="no"> No</label>
-      </span>
-    </div>`
-    )
-    .join('');
+  const { emergency, duty } = splitRedFlags(pathway.redFlags);
+  const closing = _bundledDoc.closingQuestions || [];
+  const durationQ = (pathway.questions || []).find((q) => q.id === CALL_DURATION_ID);
+  const courseQ = closing.find((q) => q.id === CALL_COURSE_ID);
+  const durationRow = showDurationRow(pathway)
+    ? `<div class="rcp-q-row rcp-duration-row">
+        <label class="rcp-q-ask">How long, and is it better, worse, or the same?</label>
+        <div class="rcp-duration-grid">
+          ${durationQ ? inputHtml('q', durationQ) : '<input type="text" name="q-duration" autocomplete="off" placeholder="How long">'}
+          ${courseQ ? inputHtml('c', courseQ) : ''}
+        </div>
+      </div>`
+    : '';
 
-  const qRows = (pathway.questions || [])
+  const qRows = mainQuestions(pathway)
     .map(
       (q) => `
     <div class="rcp-q-row"><label class="rcp-q-ask">${esc(q.ask)}</label>${inputHtml('q', q)}</div>`
     )
     .join('');
-  const cRows = (_bundledDoc.closingQuestions || [])
+  const cRows = closingInOrder(closing, mainClosingIds(pathway))
     .map(
       (q) => `
     <div class="rcp-q-row"><label class="rcp-q-ask">${esc(q.ask)}</label>${inputHtml('c', q)}</div>`
     )
     .join('');
+  const moreQ = moreQuestions(pathway);
+  const moreC = moreClosingQuestions(pathway, closing);
+  const moreRows = [...moreQ, ...moreC]
+    .map((q) => {
+      const scope = moreQ.includes(q) ? 'q' : 'c';
+      return `<div class="rcp-q-row"><label class="rcp-q-ask">${esc(q.ask)}</label>${inputHtml(scope, q)}</div>`;
+    })
+    .join('');
+  const moreDrawer = moreRows
+    ? `<details class="rcp-more"><summary>More for the clinician</summary>${moreRows}</details>`
+    : '';
 
   // Sensitive pathways: the crisis route is a fixed footer on the form (and goes
   // into the pasted text too). Practice-editable via reception.config.
@@ -967,21 +1020,17 @@ async function renderCaptureForm(pathway) {
 
       <div class="rcp-banner rcp-banner-hidden" id="rcpEscBanner" role="alert" aria-atomic="true"></div>
 
-      <div class="rcp-section rcp-section-rf">
-        <div class="rcp-section-title">1 · Red flags — ask every one</div>
-        ${rfRows}
-      </div>
-
       <div class="rcp-section">
-        <div class="rcp-section-title">2 · About the problem</div>
-        <div class="rcp-q-row"><label class="rcp-q-ask">In the patient's own words, what's the problem?</label>
+        <div class="rcp-q-row"><label class="rcp-q-ask">${esc(ownWordsLabel(pathway))}</label>
           <textarea name="ownWords" rows="2"></textarea></div>
-        ${qRows}
-      </div>
-
-      <div class="rcp-section">
-        <div class="rcp-section-title">3 · Wrapping up</div>
-        ${cRows}
+        ${durationRow}
+        ${amalgamListHtml('999', emergency, 'Any of these — we stop and treat as an emergency?')}
+        ${amalgamListHtml('duty', duty, 'Any of these — duty doctor today, not routine?')}
+        <div class="rcp-after-stop">
+          ${qRows}
+          ${cRows}
+        </div>
+        ${moreDrawer}
       </div>
 
       <div class="rcp-disposition rcp-disposition-hidden" id="rcpDisposition">
@@ -1038,7 +1087,8 @@ async function renderCaptureForm(pathway) {
   // Escalation banner reacts the moment any red flag is answered YES; the
   // disposition card re-evaluates on the same hook, so a red flag flipped to
   // YES removes a suggestion that was already on screen.
-  form.addEventListener('change', () => {
+  form.addEventListener('change', (e) => {
+    syncAmalgamExclusive(form, e.target);
     updateEscalationBanner(form, pathway);
     updateDispositionCard(form, pathway);
     // Same hook, same red-flag evaluation: a flag flipped to YES pulls the
@@ -1062,12 +1112,33 @@ async function renderCaptureForm(pathway) {
   });
 }
 
+function syncAmalgamExclusive(form, target) {
+  if (!target || !target.dataset || !target.dataset.tier) return;
+  const tier = target.dataset.tier;
+  if (target.dataset.none === '1' && target.checked) {
+    form.querySelectorAll(`input[data-tier="${CSS.escape(tier)}"]:not([data-none])`).forEach((el) => {
+      el.checked = false;
+    });
+    return;
+  }
+  if (target.checked && target.dataset.none !== '1') {
+    const none = form.querySelector(`input[data-none="1"][data-tier="${CSS.escape(tier)}"]`);
+    if (none) none.checked = false;
+  }
+}
+
 function readRedFlagAnswers(form, pathway) {
   const answers = {};
-  for (const rf of pathway.redFlags || []) {
-    const v = form.querySelector(`input[name="rf-${CSS.escape(rf.id)}"]:checked`)?.value;
-    if (v === 'yes' || v === 'no') answers[rf.id] = v;
-  }
+  const { emergency, duty } = splitRedFlags(pathway.redFlags);
+  const applyTier = (tier, flags) => {
+    const noneChecked = !!form.querySelector(`input[data-none="1"][data-tier="${CSS.escape(tier)}"]:checked`);
+    const checkedIds = flags
+      .filter((rf) => form.querySelector(`input[name="rf-${CSS.escape(rf.id)}"]:checked`))
+      .map((rf) => rf.id);
+    applyAmalgamAnswers(answers, flags, { noneChecked, checkedIds });
+  };
+  applyTier('999', emergency);
+  applyTier('duty', duty);
   return answers;
 }
 
@@ -1075,6 +1146,7 @@ function updateEscalationBanner(form, pathway) {
   const banner = form.querySelector('#rcpEscBanner');
   if (!banner) return;
   const { positives } = evaluateRedFlags(pathway.redFlags, readRedFlagAnswers(form, pathway));
+  form.classList.toggle('rcp-stopped-999', positives.some((p) => p.escalate === '999'));
   if (positives.length === 0) {
     banner.className = 'rcp-banner rcp-banner-hidden';
     banner.textContent = '';
@@ -1407,13 +1479,13 @@ function readQuestionAnswers(form, scope, questions) {
 function generateSummary(form, pathway) {
   const msg = form.querySelector('#rcpFormMsg');
   const rfAnswers = readRedFlagAnswers(form, pathway);
-  const { unanswered } = evaluateRedFlags(pathway.redFlags, rfAnswers);
+  const gate = generateAllowed(pathway.redFlags, rfAnswers);
 
   form.querySelectorAll('.rcp-rf-row').forEach((row) => {
-    row.classList.toggle('rcp-rf-missing', unanswered.includes(row.dataset.rf));
+    row.classList.toggle('rcp-rf-missing', !gate.ok && gate.unanswered.includes(row.dataset.rf));
   });
-  if (unanswered.length > 0) {
-    if (msg) msg.textContent = `Answer every red-flag question first (${unanswered.length} unanswered).`;
+  if (!gate.ok) {
+    if (msg) msg.textContent = `Answer the safety lists first (${gate.unanswered.length} unanswered). Tick any that apply, or None of these.`;
     form.querySelector('.rcp-rf-missing')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
@@ -1449,7 +1521,15 @@ function generateSummary(form, pathway) {
     escalations: _bundledDoc.escalations || {},
     ownWords: (form.querySelector('[name="ownWords"]')?.value || '').trim(),
     redFlagAnswers: rfAnswers,
-    questionAnswers: readQuestionAnswers(form, 'q', pathway.questions),
+    questionAnswers: (() => {
+      const qa = readQuestionAnswers(form, 'q', pathway.questions);
+      // Mental-health "today" is the own-words box — copy through so the
+      // paste still has the pathway question label.
+      if (pathway.id === 'mental-health' && !qa.today) {
+        qa.today = (form.querySelector('[name="ownWords"]')?.value || '').trim();
+      }
+      return qa;
+    })(),
     closingAnswers: readQuestionAnswers(form, 'c', _bundledDoc.closingQuestions),
     meta: {
       takerInitials: _takerInitials,
