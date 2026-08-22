@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.19] — 2026-08-22
+
+### Docs — reception proposal lists condition questions only
+
+The slim-down plan now writes each condition as the receptionist questions (two safety lists + one or two history turns). Shared wrap and flag ids are not repeated per pathway.
+
 ## [v3.236.18] — 2026-08-22
 
 ### Docs — reception call script tap-out at 10 questions
