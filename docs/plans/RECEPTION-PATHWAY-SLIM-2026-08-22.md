@@ -1,7 +1,7 @@
 # Reception pathways — slim-down proposal
 
 **Status:** CSO-signed 2026-08-22 (Dr D. Triska) and shipped as the
-call-script renderer in v3.237.0. Red-flag *meanings* in
+call-script renderer in v3.236.22. Red-flag *meanings* in
 `rules/reception-pathways.json` are unchanged (v1.9); the live form
 is the format below. Constraint: a **call** taps out at **10 spoken
 questions**, even if that means amalgamating.

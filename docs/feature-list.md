@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.236.15
-**Generated:** 2026-08-21
+**Version:** v3.236.22
+**Generated:** 2026-08-22
 
 ## What it is
 
@@ -95,7 +95,7 @@ A single live "practice pressure" gauge combining waiting-room load, queue backl
 A reception-facing view of whichever patient's record is open, plus optional guided-capture question sets for common presenting problems and an inline appointment-booking panel. Guided pathways ship switched off until a practice administrator accepts the disclaimer; booking is only offered when no red flag has been raised.
 
 - Single-glance patient status pill (practice-configurable which chips show)
-- Guided capture pathways per presenting problem, red flags surfaced first
+- Guided capture pathways per presenting problem; on a call, red flags are two same-tier lists (emergency / duty) with None of these, then a short history set (CSO-signed call script, v3.236.22)
 - Structured plain-text output to paste into the triage entry — capture only, never a diagnosis
 - Inline "book an appointment" panel, gated to an open record with no unresolved red flag
 - "First available appointment" card (shared with the Slot Counter tab): one-click "when is the next FCP?" answers for the phone — no patient record needed, with a "Book →" handoff into the Slots booking section
@@ -227,6 +227,7 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.236.22 (2026-08-22)** — Reception call script: two same-tier safety lists, short history, no separate caller/age questions. CSO-signed.
 - **v3.236.15 (2026-08-21)** — Bulk acknowledge: Review/Confirm sit in a footer so select-all cannot hide the mass-resolve button.
 - **v3.236.14 (2026-08-21)** — Bulk remove/merge trigger removed from the Clinical Summary (Organise problems owns End/merge). Quiet-row chips clip inside the name column so the next box cannot chop them.
 - **v3.236.13 (2026-08-21)** — Add-as-problem panel nudges off the Save as document chip, not only Medicus File.
