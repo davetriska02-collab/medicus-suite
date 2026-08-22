@@ -71,10 +71,29 @@ jobs:
           cd _build
           zip -r ../medicus-suite-v${{ steps.version.outputs.version }}.zip medicus-suite-v${{ steps.version.outputs.version }}/
 
+      - name: Build signed .crx for managed installs (needs CRX_PRIVATE_KEY secret)
+        if: steps.check.outputs.release_exists == 'false'
+        env:
+          CRX_KEY: ${{ secrets.CRX_PRIVATE_KEY }}
+        run: |
+          if [ -z "$CRX_KEY" ]; then
+            echo "CRX_PRIVATE_KEY secret not set — skipping .crx (zip-only release)."
+            echo "See docs/IT-DEPLOYMENT.md for how to configure it."
+            exit 0
+          fi
+          printf '%s\n' "$CRX_KEY" > /tmp/crx-key.pem
+          CRX_KEY_PEM=/tmp/crx-key.pem node scripts/pack-crx.js
+          rm -f /tmp/crx-key.pem
+          cp "dist/medicus-suite-v${{ steps.version.outputs.version }}.crx" .
+          cp dist/update.xml .
+
       - name: Generate SHA-256 checksum
         if: steps.check.outputs.release_exists == 'false'
         run: |
           sha256sum "medicus-suite-v${{ steps.version.outputs.version }}.zip" > SHA256SUMS.txt
+          if [ -f "medicus-suite-v${{ steps.version.outputs.version }}.crx" ]; then
+            sha256sum "medicus-suite-v${{ steps.version.outputs.version }}.crx" >> SHA256SUMS.txt
+          fi
           cat SHA256SUMS.txt
 
       - name: Build release notes from CHANGELOG
@@ -103,6 +122,11 @@ jobs:
             echo "3. Click **Load unpacked** and select the unzipped \`medicus-suite-v${VERSION}\` folder."
             echo "4. Pin the extension and open the side panel. Full steps: [README](https://github.com/${{ github.repository }}/blob/main/README.md)."
             echo
+            if [ -f "medicus-suite-v${VERSION}.crx" ]; then
+              echo "### Managed install (IT-deployed .crx)"
+              echo "\`medicus-suite-v${VERSION}.crx\` below is the signed package for enterprise policy deployment; \`update.xml\` is its update feed. Deployment guide (extension ID, policy strings): [docs/IT-DEPLOYMENT.md](https://github.com/${{ github.repository }}/blob/main/docs/IT-DEPLOYMENT.md)."
+              echo
+            fi
             echo "### Verify your download"
             echo "Download \`SHA256SUMS.txt\` alongside the zip, then:"
             echo '```'
@@ -121,6 +145,8 @@ jobs:
           body_path: RELEASE_NOTES.md
           files: |
             medicus-suite-v${{ steps.version.outputs.version }}.zip
+            medicus-suite-v${{ steps.version.outputs.version }}.crx
+            update.xml
             SHA256SUMS.txt
           draft: false
           prerelease: false

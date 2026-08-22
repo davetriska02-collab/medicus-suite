@@ -10,6 +10,12 @@
 # Build artefacts (the GitHub Actions workflow creates these)
 *.zip
 !medicus-suite-baseline.zip
+*.crx
+dist/
+
+# CRX signing key — the extension ID derives from it. NEVER commit; the CI copy
+# lives in the CRX_PRIVATE_KEY Actions secret. See docs/IT-DEPLOYMENT.md.
+keys/
 
 # Local dev scratch
 node_modules/
