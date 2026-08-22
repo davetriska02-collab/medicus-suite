@@ -81,6 +81,16 @@ export default [
     languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
   },
   {
+    // New write-path safety-net files: stricter than the repo-wide
+    // "existing code passes" defaults. Do not widen this override to
+    // legacy files — turn rules on as new modules land.
+    files: ['shared/write-core.js', 'test-write-core.js', 'test-write-path-inventory.js'],
+    rules: {
+      'no-undef': 'error',
+      'no-unused-vars': 'error',
+    },
+  },
+  {
     // Node ESM tooling scripts (e.g. brand/generate-icons.mjs,
     // design-system/build.mjs — esbuild bundlers, docs/design mock screenshot
     // capture scripts — all run under Node, never shipped)
