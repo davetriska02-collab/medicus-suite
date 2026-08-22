@@ -1,4 +1,5 @@
-/* Medicus Suite — "Add as problem?" checkbox widget for document-filing task pages */
+/* Medicus Suite — "Add as problem?" checkbox widget for document-filing
+   and investigation-result task pages */
 /* All selectors scoped to #ms-dcp-widget to avoid Medicus style conflicts */
 
 /* Fixed-position floating panel (2026-08-13) — deliberately NOT nested
