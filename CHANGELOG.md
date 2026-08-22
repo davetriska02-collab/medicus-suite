@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.237.0] — 2026-08-22
+
+### Add coded entries as problems — now on investigation filing too
+
+Nick's document-filing panel ("Add coded entries as problems") now also
+appears on investigation-result filing pages. The same floating checklist
+reads the task's coded journal notes (the "Code as" field on the
+screenshot — e.g. Osteoarthritis of knee on an XR Knee) and, on confirm,
+creates each as a Problem via Medicus's own create-problem endpoint —
+code, note text, and onset date carried across automatically.
+
+The overview fetch uses the live URL typeSlug
+(`/tasks/data/{typeSlug}/overview/{taskUuid}`) rather than a hardcoded
+document path, so every investigation slug already in the repo
+(`investigation_result`, `review_investigation_results_task`,
+`review-investigation-report`) is covered — the same family
+lab-file-button.js already treats as a filing screen. Onset date on an
+investigation comes from the first confirmed result-level
+`specimenCollectionDate` (then `issuedDateTime`); those are the two
+fields `engine/normalisers.js` already reads, not a guessed report-level
+date. The panel also nudges off Medicus's **File results** button and the
+suite's own lab-file card, the same way it already nudges off File
+document.
+
+Empty-state copy names "Code as" on investigations and still names
+"Codes & actions" on documents. Create-problem write, duplicate /
+allergy warnings, and the confirm() dialog are unchanged.
+
 ## [v3.236.22] — 2026-08-22
 
 ### Reception — signed-off call script

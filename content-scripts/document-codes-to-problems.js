@@ -1,25 +1,38 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
-// Medicus Suite — "Add as problem?" checkbox widget for document-filing task pages.
+// Medicus Suite — "Add as problem?" checkbox widget for document-filing
+// AND investigation-result task pages.
 //
 // A document-filing task's "Codes & actions" card lists every coded journal
 // note added against that document (e.g. "Inflammatory bowel disease",
-// "Shared care prescribing: Octasa"). Medicus itself has no "turn this code
-// into a Problem" action anywhere on that card (confirmed live — the card's
-// own `codesAndActionsOptions` list has entries for allergy/appointment/
-// immunisation/prescription/etc but never "problem") — today the clinician
-// has to separately open Medicus's own "New Problem" modal and retype the
-// code, the note's free text (as "Additional information"), and the onset
-// date by hand, with no link back to the document at all. This widget
-// offers a checkbox per coded note entry and a single "Add selected as
-// problems" button that drives Medicus's own create-problem endpoint
-// directly, carrying the code/text/date across automatically.
+// "Shared care prescribing: Octasa"). The same coded-note list is how an
+// investigation-result filing page records a "Code as" entry (e.g.
+// "Osteoarthritis of knee" on an XR Knee). Medicus itself has no "turn this
+// code into a Problem" action anywhere on that card (confirmed live — the
+// card's own `codesAndActionsOptions` list has entries for allergy/
+// appointment/immunisation/prescription/etc but never "problem") — today
+// the clinician has to separately open Medicus's own "New Problem" modal
+// and retype the code, the note's free text (as "Additional information"),
+// and the onset date by hand. This widget offers a checkbox per coded note
+// entry and a single "Add selected as problems" button that drives
+// Medicus's own create-problem endpoint directly, carrying the
+// code/text/date across automatically.
 //
 // Confirmed via two live HAR captures (2026-08-12,
 // 66-adding-codes-to-document.har / 67-adding-problem-to-record.har):
 //
-//   GET  /tasks/data/document/overview/{taskUuid}
+//   GET  /tasks/data/{typeSlug}/overview/{taskUuid}
+//        document: typeSlug "document"
+//        investigation: the URL slug already on the filing page
+//          (investigation_result, review_investigation_results_task,
+//          review-investigation-report — same family lab-file-button.js
+//          already matches). Same /tasks/data/{typeSlug}/overview/ path
+//          task-inline.js / document-file-inline.js / labfiling-capture.js
+//          already use; never a reconstructed investigation-only URL.
 //        → data.codesAndActions[{code,id,type:"note",text,...}],
-//          data.inboundDocument{documentDate,recordDate,...}
+//          data.inboundDocument{documentDate,recordDate,...} (documents),
+//          data.investigationReport{investigationGroups,ungroupedResults}
+//          (investigations — date from confirmed result-level
+//          specimenCollectionDate / issuedDateTime only)
 //   GET  /clinical/data/note/edit-note/{noteId}
 //        → {note, noteSNOMEDct:{conceptId,description,descriptionId}, ...}
 //          — the SAME endpoint content-scripts/problem-description-cleanup.js's
@@ -57,7 +70,13 @@
 // DATE: onsetDate prefers inboundDocument.documentDate, falling back to
 // .recordDate only when documentDate is null (frequently the case — the
 // live capture's own test document had no documentDate at all). Confirmed
-// as the right preference order by Nick 2026-08-12.
+// as the right preference order by Nick 2026-08-12. On an investigation
+// page there is no inboundDocument — onsetDate then takes the first
+// confirmed full ISO date on a result (specimenCollectionDate, then
+// issuedDateTime — the same two fields engine/normalisers.js already
+// reads). Never an unconfirmed report-level field. null is an
+// already-accepted create-problem value when neither source has a full
+// ISO date.
 //
 // UI: per CLAUDE.md's rule for Vue-rendered surfaces (queue chips,
 // task-overview cards alike) — never touch Medicus's own codesAndActions
@@ -137,6 +156,68 @@
   function documentDateSource(inboundDocument) {
     var d = inboundDocument || {};
     return d.documentDate || d.recordDate || null;
+  }
+
+  // Same slug family content-scripts/triage-lens/lab-file-button.js's
+  // FILING_URL_RE already treats as an investigation-result filing page
+  // (`investigation` / `result` / `report` in the typeSlug). `document`
+  // does not match, so the two surfaces stay disjoint.
+  function isInvestigationTaskSlug(slug) {
+    return /investigation|result|report/i.test(String(slug || ''));
+  }
+
+  function isCodesToProblemsTaskSlug(slug) {
+    var s = String(slug || '');
+    return s === 'document' || isInvestigationTaskSlug(s);
+  }
+
+  // Pulls YYYY-MM-DD off a confirmed datetime string
+  // (`2026-01-09 08:26:00` / `2026-03-15T10:00:00Z` — both real
+  // investigation-result shapes in engine/normalisers.js). Anything that
+  // is not a full ISO date prefix is dropped — sanitizeOnsetDate would
+  // refuse it anyway, this just avoids forwarding a partial.
+  function isoDatePrefix(value) {
+    if (value == null || value === '') return null;
+    var m = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : null;
+  }
+
+  // First confirmed result-level date on an investigationReport. Walks
+  // investigationGroups[].results then ungroupedResults — the same two
+  // arrays normaliseInvestigationReport already reads. Field names
+  // (specimenCollectionDate, issuedDateTime) are the confirmed pair from
+  // that normaliser; formattedSpecimenCollectionDate is a display string
+  // ("09 Jan 26, 08:26") and is deliberately not used. First hit wins —
+  // grouped analytes on one report share a specimen date.
+  function firstInvestigationResultDate(report) {
+    if (!report) return null;
+    var results = [];
+    var groups = Array.isArray(report.investigationGroups) ? report.investigationGroups : [];
+    groups.forEach(function (g) {
+      if (g && Array.isArray(g.results)) {
+        g.results.forEach(function (r) {
+          results.push(r);
+        });
+      }
+    });
+    var ungrouped = Array.isArray(report.ungroupedResults) ? report.ungroupedResults : [];
+    ungrouped.forEach(function (r) {
+      results.push(r);
+    });
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      if (!r) continue;
+      var d = isoDatePrefix(r.specimenCollectionDate) || isoDatePrefix(r.issuedDateTime);
+      if (d) return d;
+    }
+    return null;
+  }
+
+  // Document date wins when inboundDocument is present; otherwise the
+  // investigation result date. Never a guessed third source.
+  function onsetDateSource(overviewData) {
+    var data = (overviewData && overviewData.data) || overviewData || {};
+    return documentDateSource(data.inboundDocument) || firstInvestigationResultDate(data.investigationReport) || null;
   }
 
   // data.data.patient.id / data.data.patientId / data.patient.id /
@@ -349,6 +430,38 @@
     return false;
   }
 
+  // Investigation filing page equivalent — Medicus's "File results" (the
+  // screenshot footer) and the suite's own lab-file chip. Same reason the
+  // document labels exist: the panel must not sit on the irreversible
+  // File control.
+  function isFileResultsButtonLabel(text) {
+    var t = String(text == null ? '' : text)
+      .replace(/\s+/g, ' ')
+      .replace(/^✓\s*/, '')
+      .trim();
+    if (!t) return false;
+    if (/^file(d)? results$/i.test(t)) return true;
+    if (/^file(d)? (this )?result$/i.test(t)) return true;
+    if (/^review & file all normal$/i.test(t)) return true;
+    if (/^file all normal/i.test(t)) return true;
+    return false;
+  }
+
+  function isHostFileButtonLabel(text) {
+    return isFileDocumentButtonLabel(text) || isFileResultsButtonLabel(text);
+  }
+
+  function surfaceNoun(typeSlug) {
+    return isInvestigationTaskSlug(typeSlug) ? 'investigation' : 'document';
+  }
+
+  function emptyStateCopy(typeSlug) {
+    if (isInvestigationTaskSlug(typeSlug)) {
+      return 'No coded entries on this investigation yet. Add a code via Medicus\'s own "Code as" field, then Refresh.';
+    }
+    return 'No coded entries on this document yet. Add some via Medicus\'s own "Codes & actions" section, then Refresh.';
+  }
+
   function normalizeRect(r) {
     if (!r) return null;
     var left = r.left;
@@ -428,6 +541,11 @@
       clampToToday,
       sanitizeOnsetDate,
       documentDateSource,
+      isoDatePrefix,
+      firstInvestigationResultDate,
+      onsetDateSource,
+      isInvestigationTaskSlug,
+      isCodesToProblemsTaskSlug,
       patientIdFromOverview,
       extractInboundDocument,
       extractCodedNoteEntries,
@@ -439,6 +557,10 @@
       buildCreateProblemPayload,
       markSameBatchDuplicates,
       isFileDocumentButtonLabel,
+      isFileResultsButtonLabel,
+      isHostFileButtonLabel,
+      surfaceNoun,
+      emptyStateCopy,
       rectsOverlap,
       defaultPanelPosition,
       nudgeClearOf,
@@ -551,8 +673,10 @@
   function blankState() {
     return {
       taskUuid: null,
+      typeSlug: null,
       patientId: null,
       inboundDocument: null,
+      onsetDateRaw: null,
       loading: false,
       loadError: null,
       entries: [], // {id, code, text, checked, acted, actError, appliedDescription, appliedOnsetDate, appliedEpisode}
@@ -616,15 +740,20 @@
       out.push({ left: r.left, top: r.top, width: r.width, height: r.height });
     }
     // The suite's own "Save as document" chip/form — this is the control
-    // Nick's panel was covering (document-file-inline.js).
-    document.querySelectorAll('.ms-df-chip, .ms-df-chip-wrap, #ms-df-widget, #ms-df-widget .ms-df-btn').forEach(addEl);
+    // Nick's panel was covering (document-file-inline.js). Lab-file card
+    // is the investigation equivalent (bottom-left, but still an
+    // irreversible File control if the panel is dragged or the viewport
+    // is narrow).
+    document
+      .querySelectorAll('.ms-df-chip, .ms-df-chip-wrap, #ms-df-widget, #ms-df-widget .ms-df-btn, .chlf-card, .chlf-primary')
+      .forEach(addEl);
     var nodes = document.querySelectorAll('button, [role="button"], a.q-btn, .q-btn');
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
       if (el.closest && el.closest('#' + WIDGET_ID)) continue;
       var aria = (el.getAttribute && el.getAttribute('aria-label')) || '';
       var text = el.textContent || '';
-      if (!isFileDocumentButtonLabel(aria) && !isFileDocumentButtonLabel(text)) continue;
+      if (!isHostFileButtonLabel(aria) && !isHostFileButtonLabel(text)) continue;
       addEl(el);
     }
     return out;
@@ -852,7 +981,9 @@
     if (!s.entries.length) {
       return (
         headerHtml() +
-        '<div class="ms-dcp-body"><div class="ms-dcp-empty">No coded entries on this document yet. Add some via Medicus\'s own "Codes &amp; actions" section, then Refresh.</div></div>'
+        '<div class="ms-dcp-body"><div class="ms-dcp-empty">' +
+        esc(emptyStateCopy(s.typeSlug)) +
+        '</div></div>'
       );
     }
     var n = checkedCount();
@@ -886,7 +1017,7 @@
     // doCreate(): a clinical write must never fire against a task the
     // clinician has already navigated away from.
     var info = getTaskInfo();
-    if (!info || info.typeSlug !== 'document' || info.taskUuid !== s.taskUuid) {
+    if (!info || info.typeSlug !== s.typeSlug || info.taskUuid !== s.taskUuid) {
       s.batchError = 'Task changed — reopen the page and try again.';
       rerender();
       return;
@@ -975,7 +1106,9 @@
           readyRows.length +
           ' new problem' +
           (readyRows.length === 1 ? '' : 's') +
-          ' from this document?\n\n' +
+          ' from this ' +
+          surfaceNoun(st.typeSlug) +
+          '?\n\n' +
           summaryLines.join('\n')
       );
       if (!confirmed) {
@@ -985,7 +1118,7 @@
       }
 
       var today = todayISO();
-      var onsetDate = sanitizeOnsetDate(documentDateSource(st.inboundDocument), today);
+      var onsetDate = sanitizeOnsetDate(st.onsetDateRaw, today);
       var recordDate = prefill.recordDate || today;
       var recordedByStaff = prefill.recordedByStaff || null;
 
@@ -1077,8 +1210,8 @@
   }
 
   function doRefresh() {
-    if (s.loading || !s.taskUuid) return;
-    loadTask(s.taskUuid);
+    if (s.loading || !s.taskUuid || !s.typeSlug) return;
+    loadTask(s.taskUuid, s.typeSlug);
   }
 
   // ── Load ──────────────────────────────────────────────────────────────────────
@@ -1089,12 +1222,17 @@
   // `priorEntries` carries any already-created rows across via
   // mergeActedState so a re-fetch doesn't make an "Added as problem" row
   // look unconverted again.
-  async function loadTask(taskUuid) {
-    dbg('loadTask: starting for', taskUuid);
-    var sameTask = s.taskUuid === taskUuid;
+  async function loadTask(taskUuid, typeSlug) {
+    if (!taskUuid || !isCodesToProblemsTaskSlug(typeSlug)) {
+      dbg('loadTask: refusing — missing taskUuid or unsupported typeSlug', typeSlug, taskUuid);
+      return;
+    }
+    dbg('loadTask: starting for', typeSlug, taskUuid);
+    var sameTask = s.taskUuid === taskUuid && s.typeSlug === typeSlug;
     var priorEntries = sameTask ? s.entries : [];
     var st = blankState();
     st.taskUuid = taskUuid;
+    st.typeSlug = typeSlug;
     st.loading = true;
     // A refresh on the SAME task (manual click, or the auto-refresh-on-
     // reappear path) must not silently re-expand a panel the clinician
@@ -1110,13 +1248,16 @@
       rerender();
     });
     try {
-      var overview = await apiFetch('/tasks/data/document/overview/' + encodeURIComponent(taskUuid));
+      var overview = await apiFetch(
+        '/tasks/data/' + encodeURIComponent(typeSlug) + '/overview/' + encodeURIComponent(taskUuid)
+      );
       if (st !== s) {
-        dbg('loadTask: navigated away mid-fetch, discarding result for', taskUuid);
+        dbg('loadTask: navigated away mid-fetch, discarding result for', typeSlug, taskUuid);
         return;
       }
       st.patientId = patientIdFromOverview(overview);
       st.inboundDocument = extractInboundDocument(overview);
+      st.onsetDateRaw = onsetDateSource(overview);
       // Log the RAW codesAndActions array too, not just the post-filter
       // count — if extractCodedNoteEntries() is silently filtering out
       // real entries (unexpected type/isMarkedIncorrect/disabled shape),
@@ -1260,16 +1401,20 @@
   function scheduleInject() {
     if (_throttle) return;
     var info = getTaskInfo();
-    var onDocTask = !!(info && info.typeSlug === 'document');
+    var onTargetTask = !!(info && isCodesToProblemsTaskSlug(info.typeSlug));
     var pathChanged = location.pathname !== _lastPath;
-    if (!onDocTask && !pathChanged) {
-      dbg('scheduleInject: not on a document task and path unchanged — no-op (typeSlug =', info && info.typeSlug, ')');
+    if (!onTargetTask && !pathChanged) {
+      dbg(
+        'scheduleInject: not on a document/investigation task and path unchanged — no-op (typeSlug =',
+        info && info.typeSlug,
+        ')'
+      );
       return;
     }
     // Panel is persistent once loaded (loading/error/empty/entries all
     // render something) — the only reason to re-schedule on the SAME task
     // is if the SPA wiped our own node and it needs re-inserting.
-    if (onDocTask && !pathChanged && s.taskUuid === (info && info.taskUuid)) {
+    if (onTargetTask && !pathChanged && s.taskUuid === (info && info.taskUuid)) {
       var existing = document.getElementById(WIDGET_ID);
       if (existing && existing.isConnected) {
         ensureClearOfFileButton(existing);
@@ -1286,15 +1431,15 @@
     if (currentPath !== _lastPath) _lastPath = currentPath;
     if (document.hidden) return;
     var info = getTaskInfo();
-    if (!info || info.typeSlug !== 'document') {
-      dbg('runInject: not on a document task page (path =', currentPath + ') — removing widget, wiping state');
+    if (!info || !isCodesToProblemsTaskSlug(info.typeSlug)) {
+      dbg('runInject: not on a document/investigation task page (path =', currentPath + ') — removing widget, wiping state');
       removeWidget();
       if (s.taskUuid) s = blankState();
       return;
     }
-    if (s.taskUuid !== info.taskUuid) {
-      dbg('runInject: task changed (was', s.taskUuid, 'now', info.taskUuid + ') — reloading');
-      loadTask(info.taskUuid);
+    if (s.taskUuid !== info.taskUuid || s.typeSlug !== info.typeSlug) {
+      dbg('runInject: task changed (was', s.typeSlug, s.taskUuid, 'now', info.typeSlug, info.taskUuid + ') — reloading');
+      loadTask(info.taskUuid, info.typeSlug);
       return;
     }
     var existing = document.getElementById(WIDGET_ID);
@@ -1318,7 +1463,7 @@
         'entries) rather than re-rendering possibly-stale state'
       );
       _lastAutoRefreshAt = Date.now();
-      loadTask(s.taskUuid);
+      loadTask(s.taskUuid, s.typeSlug);
       return;
     }
     dbg(
