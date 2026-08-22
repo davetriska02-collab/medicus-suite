@@ -1164,6 +1164,16 @@ function render(payload) {
   if (!container) return;
   const { state, snapshot, message } = payload;
 
+  // #sentTaskSlot is scaffold, not #sentDynamic — a "Task created for X"
+  // banner (or an open form naming X) must not ride onto the next patient.
+  // data AND degraded states both carry a patientContext; states without one
+  // (idle / queue / no-medicus) deliberately leave the slot alone — see
+  // syncTaskSlotToPatient's header comment.
+  syncTaskSlotToPatient(
+    container.querySelector('#sentTaskSlot'),
+    patientIdFromContext(snapshot && snapshot.patientContext)
+  );
+
   if (state !== 'data') {
     // No usable data behind the action bar in these states.
     _renderCtx = null;
@@ -2153,6 +2163,74 @@ function scaffoldHtml() {
 // patient UUID still matches the one the form was opened for — auto-follow
 // switching patients mid-form invalidates the submit instead of creating a
 // task against the wrong record.
+//
+// SUCCESS-BANNER STALENESS: #sentTaskSlot lives on the persistent scaffold
+// (outside #sentDynamic), so a "Task created for X" / "Reminder added for X"
+// confirmation — or an open form — used to survive the next patient load.
+// The slot is STAMPED with the patient it was opened for
+// (dataset.patientId/patientName); render() compares that stamp with the
+// patient now on screen (data AND degraded states both carry a
+// patientContext) and syncs the slot when a DIFFERENT patient loads:
+//   - a confirmation / error simply clears;
+//   - an OPEN form is replaced by a persistent "cancelled — nothing was
+//     created" notice, never silently vanished (a GP who typed a task for X
+//     and looks back to find the slot empty may believe it was created —
+//     the same "never claim completion / state the consequence" rule the
+//     reception composer learned; the submit-time wrong-patient guard
+//     already refuses the write, this names it).
+// Leaving the record (no-medicus / idle / a queue page) does NOT clear: the
+// banner names its own patient, so it cannot be misattributed there, and a
+// GP flicking to another tab and back must not lose the confirmation.
+
+function patientIdFromContext(patient) {
+  return (patient && (patient.patientUuid || patient.uuid)) || '';
+}
+
+// Clear only when the slot is OWNED by one patient and a DIFFERENT patient's
+// data is now on screen. An un-stamped slot or a screen with no patient
+// (idle/queue) never triggers.
+function taskSlotShouldClearOnPatientChange(slotPatientId, nextPatientId) {
+  return !!(slotPatientId && nextPatientId && slotPatientId !== nextPatientId);
+}
+
+function clearSentinelTaskSlot(slot) {
+  if (!slot) return;
+  slot.innerHTML = '';
+  slot.dataset.open = '';
+  delete slot.dataset.patientId;
+  delete slot.dataset.patientName;
+}
+
+// The open-form replacement. No timeout — "nothing was created" stays real
+// until the clinician acts on it (dismiss, open a fresh form, or the NEXT
+// patient change wipes it).
+function taskSlotCancelledNoticeHtml(patientName) {
+  return (
+    `<div class="sent-task-form sent-task-cancelled" role="status">` +
+    `<span class="sent-task-error">Patient changed — the form for ${escHtml(patientName)} was closed without saving. ` +
+    `Nothing was created for them.</span> ` +
+    `<button class="sent-task-cancel sent-task-cancelled-dismiss" type="button">Dismiss</button>` +
+    `</div>`
+  );
+}
+
+// Called by render() on every state that carries a patientContext. Keeps the
+// slot in sync with the patient on screen; see the header comment above.
+function syncTaskSlotToPatient(slot, nextPatientId) {
+  if (!slot || !slot.dataset.open) return;
+  if (!taskSlotShouldClearOnPatientChange(slot.dataset.patientId, nextPatientId)) return;
+  if (slot.dataset.open === '1') {
+    const staleName = slot.dataset.patientName || 'the previous patient';
+    slot.innerHTML = taskSlotCancelledNoticeHtml(staleName);
+    slot.dataset.open = 'cancelled';
+    // Re-stamp to the patient the notice is SHOWN ON: the same-patient poll
+    // then keeps it visible, and the next patient change wipes it.
+    slot.dataset.patientId = nextPatientId;
+    slot.querySelector('.sent-task-cancelled-dismiss')?.addEventListener('click', () => clearSentinelTaskSlot(slot));
+    return;
+  }
+  clearSentinelTaskSlot(slot);
+}
 
 let _sentTaskFormCache = null; // assignee/priority options are practice-wide
 
@@ -2160,8 +2238,7 @@ async function toggleCreateTaskForm() {
   const slot = container?.querySelector('#sentTaskSlot');
   if (!slot) return;
   if (slot.dataset.open === '1') {
-    slot.innerHTML = '';
-    slot.dataset.open = '';
+    clearSentinelTaskSlot(slot);
     return;
   }
   const patient = _renderCtx?.patient;
@@ -2170,6 +2247,11 @@ async function toggleCreateTaskForm() {
   const patientName = patient.patientName || patient.displayName || 'this patient';
 
   slot.dataset.open = '1';
+  // Ownership stamp — syncTaskSlotToPatient clears/cancels this slot when a
+  // DIFFERENT patient loads. Survives every innerHTML write below (loading,
+  // form, error, done).
+  slot.dataset.patientId = patientId;
+  slot.dataset.patientName = patientName;
   slot.innerHTML = `<div class="sent-task-loading">Loading task form…</div>`;
 
   let code = null;
@@ -2181,7 +2263,9 @@ async function toggleCreateTaskForm() {
   }
   if (!code || !/^[a-f0-9]{4,8}$/i.test(code)) {
     slot.innerHTML = `<div class="sent-task-error">No practice code — open a Medicus tab or set it in Options.</div>`;
-    slot.dataset.open = '';
+    // 'error', not '' — keeps the message toggleable (Create task opens a
+    // fresh form) AND owned, so a patient switch clears it too.
+    slot.dataset.open = 'error';
     return;
   }
   const apiBase = `https://${code}.api.england.medicus.health`;
@@ -2192,7 +2276,7 @@ async function toggleCreateTaskForm() {
     form = _sentTaskFormCache;
   } catch (e) {
     slot.innerHTML = `<div class="sent-task-error">${escHtml(e.message || 'Could not load the task form.')}</div>`;
-    slot.dataset.open = '';
+    slot.dataset.open = 'error';
     return;
   }
 
@@ -2239,8 +2323,7 @@ async function toggleCreateTaskForm() {
   assigneeSel.addEventListener('change', updateEnabled);
   descEl.addEventListener('input', updateEnabled);
   slot.querySelector('.sent-task-cancel').addEventListener('click', () => {
-    slot.innerHTML = '';
-    slot.dataset.open = '';
+    clearSentinelTaskSlot(slot);
   });
   createBtn.addEventListener('click', () => submitSentinelTask(slot, apiBase, patientId, patientName));
 }
@@ -2257,8 +2340,7 @@ function toggleFollowupForm() {
   const slot = container?.querySelector('#sentTaskSlot');
   if (!slot) return;
   if (slot.dataset.open === '1') {
-    slot.innerHTML = '';
-    slot.dataset.open = '';
+    clearSentinelTaskSlot(slot);
     return;
   }
   const patient = _renderCtx?.patient;
@@ -2267,6 +2349,9 @@ function toggleFollowupForm() {
   const patientName = patient.patientName || patient.displayName || 'this patient';
 
   slot.dataset.open = '1';
+  // Same ownership stamp as the task form — see toggleCreateTaskForm.
+  slot.dataset.patientId = patientId;
+  slot.dataset.patientName = patientName;
   slot.innerHTML = `
     <div class="sent-task-form">
       <div class="sent-task-for">Follow-up for <strong>${escHtml(patientName)}</strong> — a personal reminder on this machine only, not a record entry. Document safety-netting in Medicus as usual.</div>
@@ -2290,8 +2375,7 @@ function toggleFollowupForm() {
     saveBtn.disabled = !whatEl.value.trim();
   });
   slot.querySelector('.sent-task-cancel').addEventListener('click', () => {
-    slot.innerHTML = '';
-    slot.dataset.open = '';
+    clearSentinelTaskSlot(slot);
   });
   saveBtn.addEventListener('click', async () => {
     const statusEl = slot.querySelector('.sent-task-status');

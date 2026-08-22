@@ -3,11 +3,14 @@
 //
 // Live Medicus and the DOM it injects into aren't available here, so only
 // the pure logic is exercised: extracting note-type coded entries from a
-// task-overview payload, deriving an onset date from the document date,
-// the text-preview derivation, the exact-code duplicate check, the
-// allergy-code check, and the create-problem payload shape — all modelled
-// on the real values confirmed in
-// docs/learnings-document-problem-creation-api.md (2026-08-12 captures).
+// task-overview payload, deriving an onset date from the document (or
+// investigation-result) date, the text-preview derivation, the exact-code
+// duplicate check, the allergy-code check, the create-problem payload
+// shape, and the investigation-page slug/copy gates — all modelled on the
+// real values confirmed in
+// docs/learnings-document-problem-creation-api.md (2026-08-12 captures)
+// plus the investigation-report date fields already confirmed in
+// engine/normalisers.js.
 
 'use strict';
 
@@ -18,6 +21,11 @@ const {
   clampToToday,
   sanitizeOnsetDate,
   documentDateSource,
+  isoDatePrefix,
+  firstInvestigationResultDate,
+  onsetDateSource,
+  isInvestigationTaskSlug,
+  isCodesToProblemsTaskSlug,
   patientIdFromOverview,
   extractInboundDocument,
   extractCodedNoteEntries,
@@ -29,7 +37,12 @@ const {
   buildCreateProblemPayload,
   markSameBatchDuplicates,
   isFileDocumentButtonLabel,
+  isFileResultsButtonLabel,
+  isHostFileButtonLabel,
+  surfaceNoun,
+  emptyStateCopy,
   rectsOverlap,
+  isBackdropRect,
   defaultPanelPosition,
   nudgeClearOf,
 } = require('./content-scripts/document-codes-to-problems.js');
@@ -59,6 +72,113 @@ console.log('--- documentDateSource: prefer documentDate, fall back to recordDat
   check(documentDateSource({ documentDate: null, recordDate: null }) === null, 'null when neither is set');
   check(documentDateSource(null) === null, 'null inboundDocument -> null, never throws');
   check(documentDateSource(undefined) === null, 'undefined inboundDocument -> null, never throws');
+}
+
+console.log('--- investigation slugs: same family as lab-file-button FILING_URL_RE ---');
+{
+  check(isInvestigationTaskSlug('investigation_result') === true, 'investigation_result (queue-smoke slug)');
+  check(
+    isInvestigationTaskSlug('review_investigation_results_task') === true,
+    'review_investigation_results_task (rota/condor slug)'
+  );
+  check(
+    isInvestigationTaskSlug('review-investigation-report') === true,
+    'review-investigation-report (api-client example slug)'
+  );
+  check(isInvestigationTaskSlug('document') === false, 'document is NOT an investigation slug');
+  check(isInvestigationTaskSlug('medical_patient_request_task') === false, 'triage request is not an investigation');
+  check(isInvestigationTaskSlug('prescription_request_task_routine') === false, 'routine Rx is not an investigation');
+  check(isInvestigationTaskSlug('') === false, 'empty slug -> false');
+  check(isInvestigationTaskSlug(null) === false, 'null slug -> false, never throws');
+  check(isCodesToProblemsTaskSlug('document') === true, 'document is a codes-to-problems surface');
+  check(isCodesToProblemsTaskSlug('investigation_result') === true, 'investigation_result is a codes-to-problems surface');
+  check(isCodesToProblemsTaskSlug('medical_patient_request_task') === false, 'a triage request is not this widget');
+  check(surfaceNoun('document') === 'document', 'surfaceNoun on a document slug');
+  check(surfaceNoun('investigation_result') === 'investigation', 'surfaceNoun on an investigation slug');
+  check(surfaceNoun(null) === 'document', 'null slug falls back to document (never throws)');
+  check(/Code as/.test(emptyStateCopy('investigation_result')), 'investigation empty copy names the Code as field');
+  check(/Codes & actions/.test(emptyStateCopy('document')), 'document empty copy still names Codes & actions');
+  check(
+    !/document/.test(emptyStateCopy('review-investigation-report')),
+    'investigation empty copy does not say "document"'
+  );
+}
+
+console.log('--- isoDatePrefix / firstInvestigationResultDate / onsetDateSource ---');
+{
+  check(isoDatePrefix('2026-01-09 08:26:00') === '2026-01-09', 'specimenCollectionDate datetime -> YYYY-MM-DD');
+  check(isoDatePrefix('2026-03-15T10:00:00Z') === '2026-03-15', 'issuedDateTime ISO -> YYYY-MM-DD');
+  check(isoDatePrefix('2026-07-20') === '2026-07-20', 'already a full ISO date passes through');
+  check(isoDatePrefix('09 Jan 26, 08:26') === null, 'formattedSpecimenCollectionDate display string is refused');
+  check(isoDatePrefix('2015') === null, 'year-only partial -> null');
+  check(isoDatePrefix(null) === null, 'null -> null, never throws');
+  check(isoDatePrefix('') === null, 'empty -> null');
+
+  const report = {
+    investigationGroups: [
+      {
+        results: [
+          { description: 'WBC', specimenCollectionDate: '2026-01-09 08:26:00', issuedDateTime: null },
+          { description: 'RDW', specimenCollectionDate: '2026-01-09 08:26:00', issuedDateTime: null },
+        ],
+      },
+    ],
+    ungroupedResults: [],
+  };
+  check(
+    firstInvestigationResultDate(report) === '2026-01-09',
+    'first grouped result specimenCollectionDate wins (shared specimen date)'
+  );
+  check(
+    firstInvestigationResultDate({
+      investigationGroups: [{ results: [{ description: 'PSA', specimenCollectionDate: null, issuedDateTime: '2026-03-15T10:00:00Z' }] }],
+    }) === '2026-03-15',
+    'falls back to issuedDateTime when specimenCollectionDate is null — the confirmed PSA shape'
+  );
+  check(
+    firstInvestigationResultDate({
+      investigationGroups: [],
+      ungroupedResults: [{ description: 'XR', specimenCollectionDate: '2026-07-28 00:00:00' }],
+    }) === '2026-07-28',
+    'ungroupedResults are walked when groups are empty'
+  );
+  check(firstInvestigationResultDate(null) === null, 'null report -> null');
+  check(firstInvestigationResultDate({}) === null, 'empty report -> null');
+  check(
+    firstInvestigationResultDate({
+      investigationGroups: [{ results: [{ description: 'X', formattedSpecimenCollectionDate: '09 Jan 26, 08:26' }] }],
+    }) === null,
+    'formattedSpecimenCollectionDate alone is never used — display string, not a write value'
+  );
+
+  check(
+    onsetDateSource({ data: { inboundDocument: { documentDate: '2026-07-19', recordDate: '2026-07-20' } } }) ===
+      '2026-07-19',
+    'document overview: documentDate still wins'
+  );
+  check(
+    onsetDateSource({
+      data: {
+        investigationReport: {
+          investigationGroups: [{ results: [{ specimenCollectionDate: '2026-01-09 08:26:00' }] }],
+        },
+      },
+    }) === '2026-01-09',
+    'investigation overview: specimen date is the onset source'
+  );
+  check(
+    onsetDateSource({
+      data: {
+        inboundDocument: { documentDate: '2026-07-19' },
+        investigationReport: {
+          investigationGroups: [{ results: [{ specimenCollectionDate: '2026-01-09 08:26:00' }] }],
+        },
+      },
+    }) === '2026-07-19',
+    'if both were somehow present, the document date still wins (never a guessed merge)'
+  );
+  check(onsetDateSource({}) === null, 'empty overview -> null');
+  check(onsetDateSource(null) === null, 'null overview -> null, never throws');
 }
 
 console.log('--- clampToToday: onset date can never be in the future ---');
@@ -180,6 +300,36 @@ console.log('--- extractInboundDocument / extractCodedNoteEntries: real capture 
     'no codesAndActions -> []'
   );
   check(extractCodedNoteEntries(null).length === 0, 'null overview -> [], never throws');
+}
+
+console.log('--- extractCodedNoteEntries: investigation overview with the same codesAndActions shape ---');
+{
+  const invOverview = {
+    data: {
+      patient: { id: 'p-inv-1', displayName: 'Mrs Test Patient' },
+      investigationReport: {
+        investigationGroups: [{ results: [{ specimenCollectionDate: '2026-07-28 00:00:00' }] }],
+        ungroupedResults: [],
+      },
+      codesAndActions: [
+        {
+          code: 'Osteoarthritis of knee',
+          id: 'note-oa-1',
+          type: 'note',
+          text: 'Osteoarthritis of knee',
+          isMarkedIncorrect: false,
+          disabled: false,
+        },
+        { code: 'Some observation', id: 'obs-1', type: 'observation', text: 'Some observation' },
+      ],
+    },
+  };
+  const invEntries = extractCodedNoteEntries(invOverview);
+  check(invEntries.length === 1, 'investigation codesAndActions: only the note-type coded entry survives');
+  check(invEntries[0].code === 'Osteoarthritis of knee', 'knee OA code is offered — the screenshot case');
+  check(patientIdFromOverview(invOverview) === 'p-inv-1', 'patientIdFromOverview still reads data.patient.id on an investigation payload');
+  check(extractInboundDocument(invOverview) === null, 'no inboundDocument on an investigation overview -> null');
+  check(onsetDateSource(invOverview) === '2026-07-28', 'onsetDateSource reads the XR specimen date from the same payload');
 }
 
 console.log('--- derivePreviewText: "{code}: {noteText}" vs bare "{code}" ---');
@@ -416,7 +566,20 @@ console.log('\n--- panel placement: File document is not covered ---');
   check(isFileDocumentButtonLabel('✓ Saved as document') === true, 'Saved as document chip matches');
   check(isFileDocumentButtonLabel('Document file') === true, 'Document file matches');
   check(isFileDocumentButtonLabel('File all normal') === false, 'lab-file "File all normal" is not this button');
+  check(isFileDocumentButtonLabel('File results') === false, 'File results is not a document-file label');
   check(isFileDocumentButtonLabel('') === false, 'empty label is not a match');
+
+  check(isFileResultsButtonLabel('File results') === true, 'File results matches (investigation filing footer)');
+  check(isFileResultsButtonLabel('Filed results') === true, 'Filed results matches');
+  check(isFileResultsButtonLabel('File result') === true, 'File result (singular) matches');
+  check(isFileResultsButtonLabel('Review & file all normal') === true, 'lab-file ready-state label matches');
+  check(isFileResultsButtonLabel('File all normal…') === true, 'lab-file confirm-state label matches');
+  check(isFileResultsButtonLabel('File document') === false, 'File document is not a results-file label');
+  check(isFileResultsButtonLabel('') === false, 'empty results label is not a match');
+  check(isHostFileButtonLabel('File document') === true, 'host matcher covers File document');
+  check(isHostFileButtonLabel('File results') === true, 'host matcher covers File results');
+  check(isHostFileButtonLabel('Save as document') === true, 'host matcher covers Save as document');
+  check(isHostFileButtonLabel('More actions') === false, 'More actions is not a File control');
 
   const vp = { width: 1280, height: 800 };
   const size = { width: 340, height: 280 };
@@ -448,6 +611,43 @@ console.log('\n--- panel placement: File document is not covered ---');
   check(nudged.top < 740, 'nudge prefers staying off the bottom action, not dropping onto it');
 }
 
+console.log('\n--- overlay obstacles: the investigation "Code as" slideover must not be covered ---');
+{
+  const vp = { width: 1280, height: 800 };
+  // The Code as slideover: full height, right-hand ~third of the viewport.
+  const slideover = { left: 860, top: 0, width: 420, height: 800 };
+  check(isBackdropRect(slideover, vp) === false, 'a right-hand slideover is a REAL obstacle, not a backdrop');
+  check(
+    isBackdropRect({ left: 0, top: 0, width: 1280, height: 800 }, vp) === true,
+    'a full-viewport dialog wrapper/backdrop is skipped (or every dialog would shove the panel to the corner)'
+  );
+  check(
+    isBackdropRect({ left: 0, top: 0, width: 1200, height: 780 }, vp) === true,
+    'near-full-viewport (>=90% both axes) still reads as backdrop'
+  );
+  check(
+    isBackdropRect({ left: 340, top: 150, width: 600, height: 500 }, vp) === false,
+    'a centred modal card is a real obstacle'
+  );
+  check(isBackdropRect(null, vp) === true, 'null rect -> backdrop (never an obstacle), never throws');
+  check(isBackdropRect({ left: 0, top: 0, width: 0, height: 0 }, vp) === true, 'zero-size rect -> never an obstacle');
+
+  // The default top-right dock overlaps the slideover — the nudge must move
+  // the panel clear of it (left of the slideover), not leave it covering the
+  // Code as field.
+  const dock = defaultPanelPosition({ width: 340, height: 280 }, vp, 20);
+  check(
+    rectsOverlap({ left: dock.left, top: dock.top, width: 340, height: 280 }, slideover, 12) === true,
+    'sanity: the default top-right dock DOES overlap an open right-hand slideover'
+  );
+  const moved = nudgeClearOf({ left: dock.left, top: dock.top, width: 340, height: 280 }, [slideover], vp, 12);
+  check(
+    !rectsOverlap({ left: moved.left, top: moved.top, width: 340, height: 280 }, slideover, 12),
+    'nudge moves the panel clear of the slideover — Code as field and its patient banner stay visible'
+  );
+  check(moved.left < slideover.left, 'panel lands to the LEFT of the slideover, still on screen');
+}
+
 console.log('\n--- wiring: draggable header, not a bottom-right cover ---');
 {
   const js = fs.readFileSync(path.join(__dirname, 'content-scripts/document-codes-to-problems.js'), 'utf8');
@@ -459,6 +659,22 @@ console.log('\n--- wiring: draggable header, not a bottom-right cover ---');
   check(/bottom:\s*auto/.test(css), 'CSS default is bottom: auto, not pinned to the page foot');
   check(!/bottom:\s*20px/.test(css), 'CSS no longer uses bottom: 20px (that covered File document)');
   check(/\.ms-df-chip/.test(js), 'nudge treats the Save as document chip as an obstacle');
+  check(/\.chlf-card/.test(js), 'nudge treats the lab-file card as an obstacle on investigation pages');
+  check(
+    /\[role="dialog"\], \[aria-modal="true"\]/.test(js),
+    'nudge collects Medicus overlays (the Code as slideover) as obstacles — same selector family as task-inline.js'
+  );
+  check(/isBackdropRect\(ov\.getBoundingClientRect\(\), vp\)/.test(js), 'full-viewport dialog wrappers are skipped');
+  check(
+    /\/tasks\/data\/' \+ encodeURIComponent\(typeSlug\) \+ '\/overview\//.test(js),
+    'overview fetch uses the live typeSlug, not a hardcoded document path'
+  );
+  check(
+    !js.includes("apiFetch('/tasks/data/document/overview/"),
+    'the v3.235.0 hardcoded /tasks/data/document/overview/ fetch is gone'
+  );
+  check(/isCodesToProblemsTaskSlug\(info\.typeSlug\)/.test(js), 'inject gate accepts document OR investigation slugs');
+  check(!/info\.typeSlug !== 'document'/.test(js), 'inject/submit no longer hard-require typeSlug === document');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
