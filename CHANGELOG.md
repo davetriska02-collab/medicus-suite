@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.23] — 2026-08-22
+
+### Write-path safety net — inventory, public docs, shared confirm-diff
+
+The last three months shipped write canvases faster than the binding
+docs. This release does not add a write surface. It makes the existing
+ones answerable:
+
+- **CSN §6.1** now names the writes that had shipped without a W-row:
+  organise/nest problems (**W17**), Contacts Management (**W18**),
+  journal code-sync / text-strip (**W19** — may change a note's SNOMED
+  concept, unlike W9), add-coded-entries-as-problems (**W20**), and
+  bulk complete/discard of Privacy Officer / EPS tasks (**W21**).
+  Increment 3.18 is **PENDING CSO REVIEW** — no signature invented;
+  product-version pin stays at the last CSO-reviewed version.
+- **CI inventory** (`test-write-path-inventory.js`) walks product
+  `method:POST` sites and fails if a Medicus-record write has no W-id
+  or a `| Wnn |` row is missing from the notice.
+- **README** and **VISION** no longer claim the extension is read-only.
+  Safety is "no silent writes + identity re-check + confirm", not
+  "architecture cannot write".
+- **`shared/write-core.js`** — the v3.236.3 allergy Finalise rule
+  (success is only what the bridge confirms; confirm copy never says
+  Done/Sent/Booked on a partial) is now a dual-export helper. The
+  allergy canvas is the first consumer.
+
+Tests: `test-write-path-inventory.js`, `test-write-core.js`;
+`test-allergy-cleanup-canvas.js` still imports `diffFinaliseOutcome`
+from the canvas (thin alias).
+
 ## [v3.236.22] — 2026-08-22
 
 ### Reception — signed-off call script
