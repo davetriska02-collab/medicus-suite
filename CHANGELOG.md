@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.237.0] — 2026-08-22
+## [v3.236.23] — 2026-08-22
 
 ### Add coded entries as problems — now on investigation filing too
 

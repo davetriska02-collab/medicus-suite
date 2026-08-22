@@ -627,7 +627,7 @@ console.log('\n--- wiring: draggable header, not a bottom-right cover ---');
     'overview fetch uses the live typeSlug, not a hardcoded document path'
   );
   check(
-    !/apiFetch\('\/tasks\/data\/document\/overview\//'/.test(js),
+    !js.includes("apiFetch('/tasks/data/document/overview/"),
     'the v3.235.0 hardcoded /tasks/data/document/overview/ fetch is gone'
   );
   check(/isCodesToProblemsTaskSlug\(info\.typeSlug\)/.test(js), 'inject gate accepts document OR investigation slugs');
