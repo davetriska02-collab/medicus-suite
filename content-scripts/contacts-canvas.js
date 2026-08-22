@@ -201,7 +201,6 @@
       // in-page tree swap). Populated from this patient's own linked contacts in loadCanvas' Step
       // 1.8, and grown further by every edge committed this session (doCanvasConfirm).
       familySession: null,
-      expandedSlots: {}, // slotPath -> true once the user has clicked "+ <slot>" to reveal an empty collapsible row
       // patientId -> the PLACED PARENT's own cardId this grandparent was composed from (loadCanvas
       // step 1.6) — persisted here (not just local to loadCanvas) so renderTree can still group a
       // grandparent under the correct parent's own tree item after it's been placed, without
@@ -1327,13 +1326,14 @@
       </div>`;
   }
 
-  // collapsibleSlotHtml — grandparents/aunts-uncles/other start collapsed behind a "+" button
-  // unless already populated or the user has expanded it this session, so an empty canvas isn't
-  // dominated by rarely-used rows.
+  // collapsibleSlotHtml — RENAMED-IN-PLACE (2026-08-21 request): grandparents/aunts-uncles/other
+  // used to start collapsed behind a "+" button unless already populated, so an empty canvas
+  // wasn't dominated by rarely-used rows. Nick's own call after live use: always show them —
+  // always-visible drop targets outweigh the empty-canvas tidiness. Kept as its own function
+  // (rather than inlining slotHtml at each call site) so a future change to how these three slots
+  // render still has one place to make it.
   function collapsibleSlotHtml(slotPath) {
-    const entries = cardsInSlot(slotPath);
-    if (entries.length || cs.expandedSlots[slotPath]) return slotHtml(slotPath);
-    return `<button class="ms-ct-btn-ghost ms-cv-slot-expand" data-expand-slot="${esc(slotPath)}">+ ${esc(SLOT_TITLES[slotPath])}</button>`;
+    return slotHtml(slotPath);
   }
 
   // branchPlaceholderHtml — the "drop here" list item appended to every branch (see below), always
@@ -1389,13 +1389,10 @@
   // 1.6's cs.grandparentViaParent) — dragged in directly (e.g. via search) rather than composed
   // from a placed parent's own record, so there's no specific parent's item to nest them under.
   // Those WITH a known association render nested there instead (grandparentsPairHtml) — excluded
-  // here so they're never shown twice. Collapsible, same as every other rarely-used slot, since
-  // most families will have nothing left to show here once composition has done its job.
+  // here so they're never shown twice. Always shown (2026-08-21 — see collapsibleSlotHtml's own
+  // comment for the same change applied here), not collapsed behind a "+" button any more.
   function unassignedGrandparentsHtml() {
     const unassigned = cardsInSlot('grandparents').filter(({ edge }) => !cs.grandparentViaParent.has(edge.cardId));
-    if (!unassigned.length && !cs.expandedSlots.grandparents) {
-      return `<button class="ms-ct-btn-ghost ms-cv-slot-expand" data-expand-slot="grandparents">+ ${esc(SLOT_TITLES.grandparents)}</button>`;
-    }
     const cardsHtml = unassigned
       .map(({ edge, card }) =>
         cardHtml(card, 'linked', {
@@ -1785,6 +1782,13 @@
         cs.transitiveCards.find((c) => c.id === id)
       );
     if (kind === 'address') return cs.addressCards.find((c) => c.id === id);
+    // 'linked' (2026-08-21, relocate): a card ALREADY placed in the tree carries data-card-kind
+    // "linked" (see cardHtml's calls throughout slotHtml/grandparentsPairHtml/
+    // unassignedGrandparentsHtml) — the drag payload's own kind field, read straight off that
+    // attribute at dragstart, so tryAssign's very first lookup for a relocate drop was silently
+    // returning null (no match here) and bailing before buildConfirmForCard ever ran — no confirm
+    // panel, no error, nothing visible, exactly the reported "dropping it has no effect".
+    if (kind === 'linked') return cs.linkedCards.find((c) => c.id === id);
     return null;
   }
 
@@ -1855,12 +1859,19 @@
     const candidateName = card.name;
 
     // LEFT column — Jane's (the candidate's) relationship to John (the index patient), written
-    // onto John's own record. Unchanged logic from before this redesign, just relocated: the
-    // picker + forward NOK/copy only apply when the relationship isn't already known (a brand-new
-    // candidate, or an already-linked one whose free text didn't parse) and isn't just cleaning up
-    // an existing link.
-    const forwardColumnBody = !cs.confirm.relationshipKnown
-      ? `<select class="ms-ct-select" id="ms-cv-base">${baseSelect}</select>
+    // onto John's own record. Picker + forward NOK/copy apply when the relationship isn't already
+    // known (a brand-new candidate, or an already-linked one whose free text didn't parse), and
+    // ALSO for a RELOCATE (2026-08-21 — drag an already-placed card onto a different slot): the
+    // whole point of dragging it there is to change what it's recorded as, so leaving the picker
+    // hidden — as the pre-relocate logic did, since relationshipKnown is still true for an
+    // already-linked card — silently applied whatever buildConfirmForCard's slot-override guessed
+    // (or, if the OLD baseId happened to still be valid for the new slot, left it completely
+    // unchanged) with no way to refine or correct it. baseSelect/modRadios already pre-select
+    // cs.confirm's current baseId/modifierId (the guess, or the unchanged original), so showing
+    // the picker here just makes that guess reviewable and editable, never blank.
+    const forwardColumnBody =
+      !cs.confirm.relationshipKnown || cs.confirm.relocateFromSlotPath
+        ? `<select class="ms-ct-select" id="ms-cv-base">${baseSelect}</select>
          ${modRadios}
          ${
            cs.confirm.existingForwardLink
@@ -1870,7 +1881,7 @@
                 <label><input type="checkbox" id="ms-cv-fwd-copy" ${cs.confirm.forwardCopyCorrespondence ? 'checked' : ''}/> Copy correspondence</label>
                 <div class="ms-ct-note">This will allow messages to be sent to ${esc(candidateName)} about ${esc(indexName)}.</div>`
          }`
-      : `<div class="ms-ct-note">Already recorded on ${esc(indexName)}'s own record.</div>`;
+        : `<div class="ms-ct-note">Already recorded on ${esc(indexName)}'s own record.</div>`;
 
     // RIGHT column — John's reciprocal relationship to Jane, written onto JANE's own record (a
     // SEPARATE write, performLinkAndCleanup's reverse link). The relationship label itself is
@@ -1889,15 +1900,23 @@
     // performLinkAndCleanup deliberately preserves that record's existing next-of-kin and
     // copy-correspondence values rather than applying this panel's reverse checkboxes — so offering
     // those checkboxes here would promise a write that never happens.
-    const reverseColumnBody = cs.confirm.reciprocalNeedsRepair
+    // RELOCATE copy (2026-08-21) is distinct from the placeholder-repair copy below: a relocate's
+    // reciprocal currently holds a REAL, previously-correct relationship (not the "Family member"
+    // placeholder text), so saying it "was reset when removed from the tree" would be false — it
+    // says what it will change TO/FROM instead.
+    const reverseColumnBody = cs.confirm.relocateFromSlotPath
       ? cs.confirm.reverseBaseId
-        ? `<div class="ms-ct-warn">${esc(candidateName)}'s own record currently reads “${esc(PLACEHOLDER_RELATIONSHIP_TEXT)}” (it was reset when they were removed from the tree). Confirming corrects it to “${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}”. Their next-of-kin and copy-correspondence settings are left exactly as they are.</div>`
-        : `<div class="ms-ct-warn">${esc(candidateName)}'s own record currently reads “${esc(PLACEHOLDER_RELATIONSHIP_TEXT)}” (it was reset when they were removed from the tree), and the reverse relationship can't be worked out automatically (gender not recorded) — it will stay as it is. Correct it on their own record in Medicus.</div>`
-      : cs.confirm.existingReciprocal
-        ? `<div class="ms-ct-warn">${esc(candidateName)} already lists this patient as their own contact (recorded as "${esc(cs.confirm.existingReciprocal.patientContactRelationship)}") — no reverse link will be created.</div>`
-        : cs.confirm.reverseAmbiguous
-          ? `<div class="ms-ct-note">Reverse relationship not auto-suggested (gender not recorded) — use the wizard for this case.</div>`
-          : `<div class="ms-cv-confirm-reverse-label">${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}</div>
+        ? `<div class="ms-ct-warn">Moving this changes ${esc(candidateName)}'s own record too — it currently reads “${esc((cs.confirm.existingReciprocal && cs.confirm.existingReciprocal.patientContactRelationship) || '')}”. Confirming corrects it to “${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}”. Their next-of-kin and copy-correspondence settings are left exactly as they are.</div>`
+        : `<div class="ms-ct-warn">Moving this should also update ${esc(candidateName)}'s own record (currently “${esc((cs.confirm.existingReciprocal && cs.confirm.existingReciprocal.patientContactRelationship) || '')}”), but the reverse relationship can't be worked out automatically (gender not recorded) — it will stay as it is. Correct it on their own record in Medicus.</div>`
+      : cs.confirm.reciprocalNeedsRepair
+        ? cs.confirm.reverseBaseId
+          ? `<div class="ms-ct-warn">${esc(candidateName)}'s own record currently reads “${esc(PLACEHOLDER_RELATIONSHIP_TEXT)}” (it was reset when they were removed from the tree). Confirming corrects it to “${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}”. Their next-of-kin and copy-correspondence settings are left exactly as they are.</div>`
+          : `<div class="ms-ct-warn">${esc(candidateName)}'s own record currently reads “${esc(PLACEHOLDER_RELATIONSHIP_TEXT)}” (it was reset when they were removed from the tree), and the reverse relationship can't be worked out automatically (gender not recorded) — it will stay as it is. Correct it on their own record in Medicus.</div>`
+        : cs.confirm.existingReciprocal
+          ? `<div class="ms-ct-warn">${esc(candidateName)} already lists this patient as their own contact (recorded as "${esc(cs.confirm.existingReciprocal.patientContactRelationship)}") — no reverse link will be created.</div>`
+          : cs.confirm.reverseAmbiguous
+            ? `<div class="ms-ct-note">Reverse relationship not auto-suggested (gender not recorded) — use the wizard for this case.</div>`
+            : `<div class="ms-cv-confirm-reverse-label">${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}</div>
            <label><input type="checkbox" id="ms-cv-rev-nok" ${cs.confirm.reverseIsNextOfKin ? 'checked' : ''}/> Next of kin</label>
            <div class="ms-ct-note">This will record ${esc(indexName)} as ${esc(candidateName)}'s next of kin.</div>
            <label><input type="checkbox" id="ms-cv-rev-copy" ${cs.confirm.reverseCopyCorrespondence ? 'checked' : ''}/> Copy correspondence</label>
@@ -1909,10 +1928,12 @@
         ${
           cs.confirm.existingForwardLink
             ? `<div class="ms-ct-warn">Already linked (recorded as "${esc(cs.confirm.existingForwardLink.patientContactRelationship)}")${
-                cs.confirm.relationshipKnown
-                  ? ` — this will just clean up the manual duplicate, if one is merged in.`
-                  : `, which didn't match a known category — pick how it should appear below. Confirming will ` +
-                    `update this relationship on Medicus and clean up the manual duplicate, if one is merged in.`
+                cs.confirm.relocateFromSlotPath
+                  ? ` — moving this changes the relationship recorded here. Pick how it should appear below; confirming updates it on Medicus.`
+                  : cs.confirm.relationshipKnown
+                    ? ` — this will just clean up the manual duplicate, if one is merged in.`
+                    : `, which didn't match a known category — pick how it should appear below. Confirming will ` +
+                      `update this relationship on Medicus and clean up the manual duplicate, if one is merged in.`
               }</div>`
             : ''
         }
@@ -3458,9 +3479,26 @@
       (downgrade && downgrade.reciprocalRelationshipId) ||
       (medicusCard && medicusCard.reciprocalRelationshipId) ||
       null;
+    // RELOCATE (2026-08-21 request — drag a locked/already-placed card straight onto a DIFFERENT
+    // slot to change its relationship, instead of the two-step "drag to remove, then re-drop"):
+    // the card's OWN current slot, if it has one AND it differs from where it's just been
+    // dropped. Forces reciprocalNeedsRepair below even when existingReciprocal ISN'T a placeholder
+    // — a relocate changes THIS side's relationship, so the OTHER side's text needs recomputing to
+    // match, exactly the same correctness requirement removeCardFromTree's downgrade exists to
+    // guarantee for the two-step flow (see that function's own comment: without something forcing
+    // reciprocalNeedsRepair, existingReciprocal alone reads as "already linked, nothing to do" and
+    // the reverse side is silently left saying the OLD relationship). doCanvasConfirm clears the
+    // old slot locally once this commit lands (see its own comment) — no separate Medicus write for
+    // the removal itself, since the forward relationship record is being UPDATED in place
+    // (relationshipUpdateId below), not deleted and recreated.
+    const currentEdge = cs.tree && cs.tree.edges.find((e) => e.cardId === candidatePatientId);
+    const relocateFromSlotPath =
+      currentEdge && slotPath && currentEdge.slotPath !== slotPath ? currentEdge.slotPath : null;
     const reciprocalNeedsRepair = !!(
       existingReciprocal &&
-      (downgrade || isPlaceholderRelationshipText(existingReciprocal.patientContactRelationship))
+      (downgrade ||
+        isPlaceholderRelationshipText(existingReciprocal.patientContactRelationship) ||
+        relocateFromSlotPath)
     );
     let reverseBaseId = null;
     let reverseAmbiguous = false;
@@ -3482,6 +3520,7 @@
       originalBaseId,
       originalModifierId,
       slotPath: slotPath || null,
+      relocateFromSlotPath,
       forwardIsNextOfKin: false,
       forwardCopyCorrespondence: false,
       reverseBaseId,
@@ -3759,6 +3798,19 @@
         // scenario where an already-known relationship gets deliberately corrected.
         const lockedBaseId = st.confirm.baseId;
         const lockedModifierId = st.confirm.modifierId;
+        // RELOCATE (2026-08-21): this card is already placed somewhere else in the tree — clear
+        // that slot FIRST, or assignToSlot below pushes a second edge for the same card without
+        // ever removing the first, leaving it placed twice. Purely local bookkeeping — no separate
+        // Medicus write for the removal itself, since the forward relationship record already got
+        // UPDATED in place above (relationshipUpdateId), not deleted and recreated. See
+        // buildConfirmForCard's own comment for why the reciprocal is ALSO corrected for this case.
+        if (st.confirm.relocateFromSlotPath) {
+          st.tree = window.ContactTree.removeFromSlot(
+            st.tree,
+            st.confirm.relocateFromSlotPath,
+            st.confirm.candidatePatientId
+          );
+        }
         st.tree = window.ContactTree.assignToSlot(
           st.tree,
           st.confirm.slotPath,
@@ -3944,7 +3996,12 @@
     // card-to-card merge, {flagKind} for an NOK/cc token drag, or {removeCardId} for a
     // locked/tree-placed card being dragged to the dedicated remove zone — every drop handler
     // below branches on which shape is present, explicitly ignoring shapes it doesn't handle
-    // rather than falling through to a merge/assign call with undefined arguments.
+    // rather than falling through to a merge/assign call with undefined arguments. A removable
+    // (locked/tree-placed) card's payload carries id/kind ALONGSIDE removeCardId (2026-08-21,
+    // "enable dragging between boxes to change relationships") — the SAME drag can land on either
+    // a regular slot zone (relocate — see buildConfirmForCard's relocateFromSlotPath) or the
+    // dedicated remove zone (unplace — removeCardFromTree), each handler reading only the field it
+    // cares about.
     let dragPayload = null;
     // dragend fires on the SOURCE element after every drag, including one the user abandoned
     // (Escape, or a drop on nothing) — the only event that does. Without it `dragPayload` stayed
@@ -3957,7 +4014,11 @@
     overlay.querySelectorAll('.ms-cv-card[draggable="true"]').forEach((el) => {
       el.addEventListener('dragstart', (e) => {
         dragPayload = el.hasAttribute('data-removable')
-          ? { removeCardId: el.getAttribute('data-card-id') }
+          ? {
+              removeCardId: el.getAttribute('data-card-id'),
+              id: el.getAttribute('data-card-id'),
+              kind: el.getAttribute('data-card-kind'),
+            }
           : { id: el.getAttribute('data-card-id'), kind: el.getAttribute('data-card-kind') };
         e.dataTransfer.setData('text/plain', JSON.stringify(dragPayload));
         e.dataTransfer.effectAllowed = 'move';
@@ -4013,11 +4074,19 @@
       el.addEventListener('dragover', (e) => {
         if (!dragPayload) return;
         e.preventDefault();
-        e.dataTransfer.dropEffect = dragPayload.flagKind ? 'copy' : dragPayload.removeCardId ? 'none' : 'move';
+        // A removable card's combined payload (removeCardId + id/kind) now falls through to a
+        // real assign on drop (see the drop handler below) — 'none' here would show a wrong "not
+        // allowed" cursor for a drop that actually works. Only a bare removeCardId (no id) is
+        // truly a dead end for this target.
+        e.dataTransfer.dropEffect = dragPayload.flagKind
+          ? 'copy'
+          : dragPayload.removeCardId && !dragPayload.id
+            ? 'none'
+            : 'move';
         // Same nearest-target-wins rule as the drop below, so the enclosing <li> can't relabel a
         // drop this card is going to handle (a remove-drag showed as an accepted 'move' over a card
         // it would then be ignored on, purely because the outer zone overwrote dropEffect).
-        if (dragPayload.flagKind || dragPayload.removeCardId) e.stopPropagation();
+        if (dragPayload.flagKind || (dragPayload.removeCardId && !dragPayload.id)) e.stopPropagation();
       });
       el.addEventListener('drop', (e) => {
         e.preventDefault();
@@ -4035,10 +4104,15 @@
           dragPayload = null;
           return;
         }
-        if (payload.removeCardId) {
-          // A card being dragged to remove it from the tree was dropped on a regular card, not
-          // the dedicated remove zone — not a valid target for this payload shape; ignore. Stopped
-          // too: "ignore" has to mean ignored, not "ignored here and then handled upstairs".
+        // A removable (already-placed) card's payload carries removeCardId ALONGSIDE id/kind
+        // (2026-08-21, relocate) — dropped on a regular card, this is exactly the same "not a
+        // valid merge target" case a fresh card's drop already handles below (tryMerge declines,
+        // the drop falls through to the slot underneath). Only a BARE removeCardId with no id
+        // (shouldn't occur, defensive) has nothing this handler — or the slot below it — can act
+        // on, so THAT'S ignored here; found live (HAR-free bug report, 2026-08-21): the old
+        // unconditional ignore swallowed every relocate dropped anywhere near an occupied card
+        // instead of the empty "Drop here" placeholder, which is most of a populated tree.
+        if (payload.removeCardId && !payload.id) {
           e.stopPropagation();
           dragPayload = null;
           return;
@@ -4086,7 +4160,11 @@
           if (cardId) setContactFlag(cardId, payload.flagKind, true);
           return;
         }
-        if (payload.removeCardId) return; // not handled here — only the dedicated remove zone
+        // A removable (already-placed) card's payload carries removeCardId ALONGSIDE id/kind —
+        // dropped on a SLOT zone (here) that's a relocate, handled the same way as any other
+        // assign; only a bare removeCardId with no id (shouldn't occur, defensive) has nothing
+        // this handler can act on.
+        if (payload.removeCardId && !payload.id) return;
         e.stopPropagation(); // the slot the card was actually dropped in owns it, not its parent slot
         tryAssign(payload.id, payload.kind, zone.getAttribute('data-slot-path'));
       });
@@ -4114,13 +4192,6 @@
     overlay.querySelectorAll('[data-toggle-flag]').forEach((btn) => {
       btn.addEventListener('click', () => {
         setContactFlag(btn.getAttribute('data-card-id'), btn.getAttribute('data-toggle-flag'), false);
-      });
-    });
-
-    overlay.querySelectorAll('[data-expand-slot]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        cs.expandedSlots[btn.getAttribute('data-expand-slot')] = true;
-        render();
       });
     });
 
