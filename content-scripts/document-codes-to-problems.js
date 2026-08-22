@@ -481,6 +481,20 @@
     return a.left < b.right + pad && a.right + pad > b.left && a.top < b.bottom + pad && a.bottom + pad > b.top;
   }
 
+  // A [role=dialog]/[aria-modal] node covering (nearly) the whole viewport is
+  // an overlay WRAPPER/backdrop, not the visible panel — treating it as an
+  // obstacle would shove the widget to the fallback corner every time any
+  // dialog opens. A right-hand slideover (full height, partial width — the
+  // investigation "Code as" form) or a centred modal card is kept as a real
+  // obstacle. Unmeasurable rects read as backdrop (never an obstacle).
+  function isBackdropRect(rect, viewport) {
+    var r = normalizeRect(rect);
+    if (!r) return true;
+    var vw = (viewport && viewport.width) || 1280;
+    var vh = (viewport && viewport.height) || 800;
+    return r.width >= vw * 0.9 && r.height >= vh * 0.9;
+  }
+
   function defaultPanelPosition(widgetSize, viewport, margin) {
     margin = margin == null ? 20 : margin;
     viewport = viewport || { width: 1280, height: 800 };
@@ -562,6 +576,7 @@
       surfaceNoun,
       emptyStateCopy,
       rectsOverlap,
+      isBackdropRect,
       defaultPanelPosition,
       nudgeClearOf,
     };
@@ -755,6 +770,23 @@
       var text = el.textContent || '';
       if (!isHostFileButtonLabel(aria) && !isHostFileButtonLabel(text)) continue;
       addEl(el);
+    }
+    // Medicus overlays — the investigation filing page opens its "Code as"
+    // form as a right-hand slideover exactly where this panel docks
+    // (top-right), and the panel's z-index sits above it, covering the Code
+    // as field and the slideover's own patient banner. Same overlay selector
+    // family task-inline.js / routine-rx-button.js / reception-quick-actions
+    // already use to detect Medicus dialogs. Full-viewport matches are the
+    // dialog wrapper/backdrop, not the visible panel — skipped via
+    // isBackdropRect, or every open dialog would shove the widget to the
+    // fallback corner.
+    var vp = { width: window.innerWidth, height: window.innerHeight };
+    var overlays = document.querySelectorAll('[role="dialog"], [aria-modal="true"]');
+    for (var k = 0; k < overlays.length; k++) {
+      var ov = overlays[k];
+      if (ov.closest && ov.closest('#' + WIDGET_ID)) continue;
+      if (isBackdropRect(ov.getBoundingClientRect(), vp)) continue;
+      addEl(ov);
     }
     return out;
   }

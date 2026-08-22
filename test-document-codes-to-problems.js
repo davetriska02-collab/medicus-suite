@@ -42,6 +42,7 @@ const {
   surfaceNoun,
   emptyStateCopy,
   rectsOverlap,
+  isBackdropRect,
   defaultPanelPosition,
   nudgeClearOf,
 } = require('./content-scripts/document-codes-to-problems.js');
@@ -610,6 +611,43 @@ console.log('\n--- panel placement: File document is not covered ---');
   check(nudged.top < 740, 'nudge prefers staying off the bottom action, not dropping onto it');
 }
 
+console.log('\n--- overlay obstacles: the investigation "Code as" slideover must not be covered ---');
+{
+  const vp = { width: 1280, height: 800 };
+  // The Code as slideover: full height, right-hand ~third of the viewport.
+  const slideover = { left: 860, top: 0, width: 420, height: 800 };
+  check(isBackdropRect(slideover, vp) === false, 'a right-hand slideover is a REAL obstacle, not a backdrop');
+  check(
+    isBackdropRect({ left: 0, top: 0, width: 1280, height: 800 }, vp) === true,
+    'a full-viewport dialog wrapper/backdrop is skipped (or every dialog would shove the panel to the corner)'
+  );
+  check(
+    isBackdropRect({ left: 0, top: 0, width: 1200, height: 780 }, vp) === true,
+    'near-full-viewport (>=90% both axes) still reads as backdrop'
+  );
+  check(
+    isBackdropRect({ left: 340, top: 150, width: 600, height: 500 }, vp) === false,
+    'a centred modal card is a real obstacle'
+  );
+  check(isBackdropRect(null, vp) === true, 'null rect -> backdrop (never an obstacle), never throws');
+  check(isBackdropRect({ left: 0, top: 0, width: 0, height: 0 }, vp) === true, 'zero-size rect -> never an obstacle');
+
+  // The default top-right dock overlaps the slideover — the nudge must move
+  // the panel clear of it (left of the slideover), not leave it covering the
+  // Code as field.
+  const dock = defaultPanelPosition({ width: 340, height: 280 }, vp, 20);
+  check(
+    rectsOverlap({ left: dock.left, top: dock.top, width: 340, height: 280 }, slideover, 12) === true,
+    'sanity: the default top-right dock DOES overlap an open right-hand slideover'
+  );
+  const moved = nudgeClearOf({ left: dock.left, top: dock.top, width: 340, height: 280 }, [slideover], vp, 12);
+  check(
+    !rectsOverlap({ left: moved.left, top: moved.top, width: 340, height: 280 }, slideover, 12),
+    'nudge moves the panel clear of the slideover — Code as field and its patient banner stay visible'
+  );
+  check(moved.left < slideover.left, 'panel lands to the LEFT of the slideover, still on screen');
+}
+
 console.log('\n--- wiring: draggable header, not a bottom-right cover ---');
 {
   const js = fs.readFileSync(path.join(__dirname, 'content-scripts/document-codes-to-problems.js'), 'utf8');
@@ -622,6 +660,11 @@ console.log('\n--- wiring: draggable header, not a bottom-right cover ---');
   check(!/bottom:\s*20px/.test(css), 'CSS no longer uses bottom: 20px (that covered File document)');
   check(/\.ms-df-chip/.test(js), 'nudge treats the Save as document chip as an obstacle');
   check(/\.chlf-card/.test(js), 'nudge treats the lab-file card as an obstacle on investigation pages');
+  check(
+    /\[role="dialog"\], \[aria-modal="true"\]/.test(js),
+    'nudge collects Medicus overlays (the Code as slideover) as obstacles — same selector family as task-inline.js'
+  );
+  check(/isBackdropRect\(ov\.getBoundingClientRect\(\), vp\)/.test(js), 'full-viewport dialog wrappers are skipped');
   check(
     /\/tasks\/data\/' \+ encodeURIComponent\(typeSlug\) \+ '\/overview\//.test(js),
     'overview fetch uses the live typeSlug, not a hardcoded document path'

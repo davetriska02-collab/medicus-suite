@@ -30,6 +30,16 @@ Empty-state copy names "Code as" on investigations and still names
 "Codes & actions" on documents. Create-problem write, duplicate /
 allergy warnings, and the confirm() dialog are unchanged.
 
+Post-review fix: the investigation filing page opens its "Code as" form
+as a right-hand slideover exactly where the panel docks top-right, and
+the panel's z-index sits above it — covering the Code as field and the
+slideover's own patient banner. Medicus overlays (`[role="dialog"]` /
+`[aria-modal="true"]`, the same family task-inline.js already detects)
+now join the nudge obstacles, so the panel steps left while a slideover
+or modal is open and returns when it closes. Full-viewport matches are
+the dialog wrapper/backdrop, not the visible panel — skipped, or every
+open dialog would shove the widget to the fallback corner.
+
 ## [v3.236.22] — 2026-08-22
 
 ### Reception — signed-off call script
