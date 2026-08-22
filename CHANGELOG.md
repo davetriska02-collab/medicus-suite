@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.237.0] — 2026-08-22
+
+### Reception — signed-off call script
+
+CSO-approved capture format for a live phone call. Red flags render as two same-tier lists (emergency / duty) with a required **None of these**. Own words, how long / course, one or two history turns, what they want, and a number. Caller and age are not asked as their own questions. Extra history sits under **More for the clinician**. A 999 tick allows Generate; later flags stamp unanswered, not a forged no. Signed-off 2026-08-22 (Dr D. Triska).
+
 ## [v3.236.21] — 2026-08-22
 
 ### Docs — all bundled reception call-script mocks for CSO sign-off

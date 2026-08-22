@@ -1,8 +1,10 @@
 # Reception pathways — slim-down proposal
 
-**What this is:** a design proposal, not a content change. The v1.9
-bundled set stays CSO-signed. Constraint: a **call** taps out at **10
-spoken questions**, even if that means amalgamating.
+**Status:** CSO-signed 2026-08-22 (Dr D. Triska) and shipped as the
+call-script renderer in v3.237.0. Red-flag *meanings* in
+`rules/reception-pathways.json` are unchanged (v1.9); the live form
+is the format below. Constraint: a **call** taps out at **10 spoken
+questions**, even if that means amalgamating.
 
 **Verdict:** keep every red-flag meaning; ask them as two same-tier
 lists (emergency / duty today), not a yes/no row each; two history
