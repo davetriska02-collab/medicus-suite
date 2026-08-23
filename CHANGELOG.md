@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.237.3] — 2026-08-23
+## [v3.238.1] — 2026-08-23
 
 ### Signed .crx packaging for managed (IT policy) installs
 
@@ -17,6 +17,68 @@ policy-deployed installs auto-update from
 (Chrome + Edge), and the Web Store ID-continuity note. Packed files are enumerated via
 `git ls-files`, so untracked local files (patient data, keys, scratch) can never leak
 into a package.
+
+## [v3.238.0] — 2026-08-23
+
+### Investigation (lab result) duplicate detection + document content-hash verification
+
+**Investigation duplicate detection (duplicate checker, phase 1).** Live
+finding: a single bad GP2GP reimport can dump many identical copies of a
+lab report onto one date (14 copies of one creatinine result confirmed on
+a real patient). `engine/record-duplicate-parser.js`'s `flattenJournal()`
+now reads investigation results from the same bulk journal payload every
+other kind already uses — matching on `conceptId` + exact collection
+minute + result value, EXACT-tier only (a same-day, different-time,
+different-value repeat test is never treated as a candidate). Displayed
+and removed as Medicus itself shows a lab result — one card per **report**
+(`buildInvestigationReportGroups`), not one per analyte. Removal is only
+offered when every result in every report of a cluster is accounted for
+(`fullMatch`); a report mixing confirmed duplicates with unique results is
+surfaced but never bulk-removable, since Medicus's write contract
+(`POST clinical/investigation/mark-incorrect-and-hidden`) hides the whole
+report. Live-confirmed: removal tested successfully on a real duplicate
+report; partial-match groups correctly flagged as not safe to remove.
+
+**Document content-hash verification.** fileType+fileSize is strong but
+imperfect evidence of identical content — a single bad GP2GP reimport
+dumped six historical vaccination documents, dating back two decades, onto
+one date, all sharing type AND size (auto-generated from the same
+template) yet genuinely different vaccines. A "Verify by content hash…"
+button on same-size/type document groups downloads and hashes the actual
+files (SHA-256), splitting apart anything proven different. Deliberately
+scoped to only groups already confirmed same-type-same-size: GP2GP/export
+can legitimately convert a genuine duplicate to a different file type or
+filename, so a hash check never second-guesses a match formed any other
+way. Every check now reports an explicit outcome — confirmed duplicates,
+proven-unique documents, or "checked, none identical" — instead of
+silently doing nothing when a group's real answer wasn't a split (a
+reliability bug fixed same-day).
+
+**Also fixed:** the discovered journal-URL template (`content-scripts/api-
+discovery.js`) could get silently narrowed to whatever year/type filter a
+clinician's browsing happened to apply, permanently degrading "Analyse
+full record for duplicates" to a partial view for every entity kind — now
+stripped before storing.
+
+**Removal button alignment (duplicate checker):** the KEEPING/REMOVING
+summary boxes in the removal and note-merge confirmation screens now order
+themselves to match the keeper's actual position among the entry cards
+above, instead of always defaulting to KEEPING-first regardless of which
+side the outlined keeper card is on.
+
+**Review fixes (same release):** `fullMatch` now fails closed when flatten
+skipped any raw result on a participating report (missing collection time
+or conceptId), so unread results cannot make a cluster look fully matched;
+removal confirm shows human-readable analyte lines per report (not raw
+UUIDs) and lets the clinician click the copy to keep; execute re-checks
+`canRemoveInvestigationReports` before POST. Journal year/type filters
+are stripped on read as well as on store. Content-hash outcomes come from
+the engine (no duplicated bucket logic; re-verify replaces the previous
+banner). CSN W11 names the investigation hide contract.
+
+**Housekeeping:** untracked an accidentally-committed `node_modules`
+symlink (violates the project's own "never committed" convention and broke
+local tooling on this machine's checkout).
 
 ## [v3.237.2] — 2026-08-23
 
