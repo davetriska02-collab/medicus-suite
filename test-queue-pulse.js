@@ -180,12 +180,8 @@ check(
 check(/\.ch-q-pulse-inline \{[\s\S]*?flex: 0 1 auto/.test(hud), 'inline pulse drops the preview-row 100% flex');
 check(
   /\[col-id='patientName'\]:has\(> \.ch-q-pulse\)/.test(hud) &&
-    /flex-direction: row/.test(
-      hud.slice(hud.search(/\[col-id='patientName'\]:has\(> \.ch-q-result-inline\)/))
-    ) &&
-    /flex-wrap: nowrap/.test(
-      hud.slice(hud.search(/\[col-id='patientName'\]:has\(> \.ch-q-result-inline\)/))
-    ),
+    /flex-direction: row/.test(hud.slice(hud.search(/\[col-id='patientName'\]:has\(> \.ch-q-result-inline\)/))) &&
+    /flex-wrap: nowrap/.test(hud.slice(hud.search(/\[col-id='patientName'\]:has\(> \.ch-q-result-inline\)/))),
   'flat-queue chips sit on the same line after the name (row, nowrap — not clipped under it)'
 );
 check(
@@ -201,8 +197,7 @@ check(
   'repeat/carry inline chips join the same-line-after-name layout'
 );
 check(
-  /overflow: hidden !important/.test(hud) &&
-    /\[col-id='patientName'\]:has\(> \.ch-queue-chips\)/.test(hud),
+  /overflow: hidden !important/.test(hud) && /\[col-id='patientName'\]:has\(> \.ch-queue-chips\)/.test(hud),
   'name cell clips chips so the next AG-Grid column cannot chop them'
 );
 check(
@@ -212,7 +207,10 @@ check(
 
 console.log('\nLayer 4: float lifecycle — per-key cleanup, no leaked listeners, no ghost re-open');
 check(/_pulseFloatCleanups = new Map\(\)/.test(content), 'float cleanups are a per-key Map');
-check(!/_pulseFloatCleanup\b/.test(content), 'the single shared cleanup slot is gone (it leaked listeners every sweep)');
+check(
+  !/_pulseFloatCleanup\b/.test(content),
+  'the single shared cleanup slot is gone (it leaked listeners every sweep)'
+);
 check(/runPulseFloatCleanup\(key\)/.test(content), "refreshPulseOnRow cleans up ONLY its own key's tray");
 check(
   /clearTimeout\(armTimer\)/.test(content) && /const armTimer = setTimeout\(arm, 0\)/.test(content),
@@ -243,7 +241,10 @@ check(
 console.log('\nLayer 5: Act button is medical/admin triage only');
 check(/function isTriageQueueSlug\(slug\)/.test(content), 'isTriageQueueSlug is a named function (extractable)');
 check(/function queueSlugFromHref\(href\)/.test(content), 'queueSlugFromHref is a named function (extractable)');
-check(/const isTriageQueueNow = \(\) => isTriageQueueSlug\(currentQueueSlug\(\)\)/.test(content), 'isTriageQueueNow composes URL-first slug + whitelist');
+check(
+  /const isTriageQueueNow = \(\) => isTriageQueueSlug\(currentQueueSlug\(\)\)/.test(content),
+  'isTriageQueueNow composes URL-first slug + whitelist'
+);
 check(
   /if \(!isTriageQueueNow\(\)\) return;/.test(content),
   'a-key shortcut gates on isTriageQueueNow, not the lagging bridge slug'
@@ -256,10 +257,7 @@ check(
   /open === 'act' && !showActBtn/.test(content),
   'leftover act-open state is cleared on a non-triage queue (no ghost host)'
 );
-check(
-  !/isTriageQueueSlug\(_currentQueueSlug\)/.test(content),
-  'Act is never gated on the bridge slug alone'
-);
+check(!/isTriageQueueSlug\(_currentQueueSlug\)/.test(content), 'Act is never gated on the bridge slug alone');
 
 const vm = require('vm');
 const slugFn = content.match(/function isTriageQueueSlug\(slug\) \{[\s\S]*?\n  \}/);
@@ -268,7 +266,13 @@ check(!!slugFn, 'isTriageQueueSlug extracted');
 check(!!hrefFn, 'queueSlugFromHref extracted');
 const slugBox = {};
 if (slugFn && hrefFn) {
-  vm.runInNewContext(slugFn[0] + '\n' + hrefFn[0] + '\nthis.isTriageQueueSlug = isTriageQueueSlug;\nthis.queueSlugFromHref = queueSlugFromHref;', slugBox);
+  vm.runInNewContext(
+    slugFn[0] +
+      '\n' +
+      hrefFn[0] +
+      '\nthis.isTriageQueueSlug = isTriageQueueSlug;\nthis.queueSlugFromHref = queueSlugFromHref;',
+    slugBox
+  );
 }
 const { isTriageQueueSlug, queueSlugFromHref } = slugBox;
 check(typeof isTriageQueueSlug === 'function', 'isTriageQueueSlug callable');
@@ -318,8 +322,7 @@ if (typeof queueSlugFromHref === 'function') {
     'page URL yields the results slug'
   );
   check(
-    queueSlugFromHref('/e38a9f/tasks/data/medical_patient_request_task/task-list') ===
-      'medical_patient_request_task',
+    queueSlugFromHref('/e38a9f/tasks/data/medical_patient_request_task/task-list') === 'medical_patient_request_task',
     'API /tasks/data/{slug}/task-list shape still yields the real slug'
   );
   check(queueSlugFromHref('/e38a9f/tasks/data/task-list') === '', 'bare /tasks/data/task-list is not a queue type');
