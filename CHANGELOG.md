@@ -2,6 +2,15 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.36] — 2026-08-23
+
+### Architecture plan Phase 4.6 — options backup split
+
+- `options/backup-orchestrator.js` owns `MODULE_IO`, `doFullExport` /
+  `doModuleExport` / `applyEnvelope`, and the backup/restore UI wiring.
+  `options.js` keeps settings sections and calls through for practice-profile
+  publish. `test-module-io-registry.js` now pins the orchestrator file.
+
 ## [v3.236.35] — 2026-08-23
 
 ### Architecture plan Phase 4.1 — panel strips extracted

@@ -60,4 +60,4 @@ console.log('\nThen:');
 console.log(`  - add <button class="nav-tab" data-module="${id}"> to panel.html AND pop-out.html`);
 console.log(`  - add a TAB_HELP entry in shared/tab-help.js`);
 console.log(`  - add a tour step or NAV_COVERED_BY_OVERVIEW`);
-console.log(`  - if it stores anything, add shared/io/${id}-io.js, MODULE_SCOPES + MODULE_IO, preview line, options.html script + card`);
+console.log(`  - if it stores anything, add shared/io/${id}-io.js, MODULE_SCOPES + MODULE_IO (backup-orchestrator.js), preview line, options.html script + card`);

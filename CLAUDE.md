@@ -38,7 +38,7 @@ A module may import another module’s `*-core.js` / `*-store.js` / `*-ledger.js
 
 **When you add a brand-new module with its own storage keys:**
 1. Create `shared/io/<module>-io.js` with `async function <module>Export()` and `async function <module>Import(data)`
-2. Add the scope to `MODULE_SCOPES` in `shared/io/suite-envelope.js` **and** to `MODULE_IO` in `options/options.js` (the export/import loops read those tables)
+2. Add the scope to `MODULE_SCOPES` in `shared/io/suite-envelope.js` **and** to `MODULE_IO` in `options/backup-orchestrator.js` (the export/import loops read those tables)
 3. Add a preview summary line in `previewEnvelope()` in `suite-envelope.js`
 4. Add `<script src="../shared/io/<module>-io.js">` to `options/options.html`
 5. Add a per-module export card in `options/options.html`
