@@ -261,35 +261,24 @@
       mirrorOf: null,
     },
 
-    // ── booking-inline.js / task-inline.js — MIGRATED (shared) ──────────────
-    // Both files carry byte-identical HEADING_RE / findHeading / findCard
-    // implementations (booking-inline.js:216-252, task-inline.js:125-161) —
-    // one shared contract, consumed by both.
-    {
-      id: 'task-widget.codes-actions-heading',
-      description:
-        'The "Codes & actions" section heading both inline widgets anchor below. findHeading() searches the realistic heading carriers first (h1-h6/strong/b/legend — a tiny node set) and only falls back to a div/span/p sweep if that narrow pass finds nothing (perf: avoids reading .textContent of large container subtrees).',
-      feature: 'Booking-inline / task-inline widget placement',
-      degradation:
-        'both inline widgets fall through to their weaker fallback anchors (task-inline\'s bottom action-row, or nothing for booking-inline) — "Book appointment" / "Create task" panels can silently stop appearing on task types that used to have a Codes & actions card.',
-      source:
-        'content-scripts/booking-inline.js:216-236, content-scripts/task-inline.js:125-145 (HEADING_RE / findHeading)',
-      pageMatch:
-        /\/([0-9a-f]{4,})\/tasks\/data\/([^/]+)\/overview\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
-      anchor: 'button, [role="button"], input[type="submit"]',
-      target: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'b', 'legend'],
-      legacy: [['div', 'span', 'p']],
-      runtime: true,
-      mirrorOf: null,
-    },
+    // ── task-widget.card-submit-button — reception-quick-actions.js ─────────
+    // Formerly also consumed by booking-inline.js / task-inline.js's
+    // findCard() (retired 2026-08-23: both merged into
+    // content-scripts/task-actions-panel.js, a body-level floating panel
+    // that no longer anchors to any card — see that file's header). The
+    // sibling `task-widget.codes-actions-heading` and `task-inline.action-row`
+    // contracts existed only for that retired anchor search and were removed
+    // with it, along with their fixtures. This one contract survives because
+    // reception-quick-actions.js's insertionAnchor() still climbs from this
+    // same Submit-button boundary.
     {
       id: 'task-widget.card-submit-button',
       description:
-        'findCard() walks up from the "Codes & actions" heading looking for the smallest ancestor that also contains a button/[role="button"]/input[type="submit"] whose text is exactly "Submit" — the lowest common ancestor of heading and Submit button is the bounding card the widgets insert after.',
-      feature: 'Booking-inline / task-inline widget placement — card boundary',
+        'The smallest ancestor of a form that also contains a button/[role="button"]/input[type="submit"] whose text is exactly "Submit" — the card boundary reception-quick-actions.js climbs from when placing its composer.',
+      feature: 'Reception quick-actions composer placement — card boundary',
       degradation:
-        "findCard() falls back to the heading's immediate parent (a much smaller ancestor than the real card), so the widget can render inside or awkwardly close to the Codes & actions form instead of cleanly below it.",
-      source: 'content-scripts/booking-inline.js:238-252, content-scripts/task-inline.js:147-161 (findCard)',
+        "falls back to the heading's immediate parent (a much smaller ancestor than the real card), so the widget can render inside or awkwardly close to the form instead of cleanly below it.",
+      source: 'content-scripts/reception-quick-actions.js (insertionAnchor)',
       pageMatch:
         /\/([0-9a-f]{4,})\/tasks\/data\/([^/]+)\/overview\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
       anchor: 'h1, h2, h3, h4, h5, h6, strong, b, legend',
@@ -298,24 +287,6 @@
       runtime: false,
       runtimeNote:
         'the "Submit" text filter that identifies the real button happens at runtime beyond what a selector-only probe encodes, and this generic role family is reused everywhere. Fixture-regression only.',
-      mirrorOf: null,
-    },
-    {
-      id: 'task-inline.action-row',
-      description:
-        'The bottom-most visible "More actions" button\'s row — task-inline\'s universal fallback anchor (gate 3) for task types with no Codes & actions card at all, e.g. prescribing overviews (Routine/Non-Routine Repeat Request, Medications for Re-authorisation).',
-      feature: 'Task-inline "Create task" widget — universal fallback anchor',
-      degradation:
-        'on task types with no Codes & actions card, the "Create task for this patient" widget has nowhere left to anchor and silently never injects (this is exactly the v3.134.2 regression the fallback was added to fix).',
-      source: 'content-scripts/task-inline.js:165-175 (findActionRow)',
-      pageMatch:
-        /\/([0-9a-f]{4,})\/tasks\/data\/([^/]+)\/overview\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
-      anchor: 'button, [role="button"], input[type="submit"]',
-      target: ['button', '[role="button"]'],
-      legacy: [],
-      runtime: false,
-      runtimeNote:
-        'the "more actions" text filter and visibility/dialog exclusion happen at runtime beyond what a selector-only probe encodes, and this target family is a near-subset of its own anchor family. Fixture-regression only.',
       mirrorOf: null,
     },
 
