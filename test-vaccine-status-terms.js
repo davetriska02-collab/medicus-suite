@@ -43,6 +43,25 @@ function dataWithProblem(label, codedDate) {
   };
 }
 
+// Rules the 78yo default fixture can NOT satisfy: vax-pneumo-risk-u65 is capped
+// at 64 and needs a risk factor; vax-shingles-immuno needs severe
+// immunosuppression. Give each an eligible patient + qualifying problem so the
+// status-term loops below still exercise them.
+const ELIGIBILITY_FIXTURES = {
+  'vax-pneumo-risk-u65': { ageYears: 45, dob: '1980-05-01', problems: [{ label: 'Splenectomy', status: 'active' }] },
+  'vax-shingles-immuno': { ageYears: 45, dob: '1980-05-01', problems: [{ label: 'Non-Hodgkin lymphoma', status: 'active' }] },
+};
+
+function dataFor(rule, label, codedDate) {
+  const data = dataWithProblem(label, codedDate);
+  const fx = ELIGIBILITY_FIXTURES[rule.id];
+  if (fx) {
+    data.patientContext = { ageYears: fx.ageYears, dob: fx.dob };
+    data.problems = [...fx.problems, ...data.problems];
+  }
+  return data;
+}
+
 function statusOf(rule, data) {
   const chips = engine.evaluateVaccineRule(rule, data, NOW);
   return chips.length ? chips[0].status : null;
@@ -60,7 +79,7 @@ for (const rule of vaxRules.rules) {
   const stem = rule.statusTerms.given[0].replace(/ given$/, '');
   for (const suffix of NEGATIVE_SUFFIXES) {
     const label = `${stem} ${suffix}`;
-    const status = statusOf(rule, dataWithProblem(label, NOW));
+    const status = statusOf(rule, dataFor(rule, label, NOW));
     assert(status !== 'vax_given', `${rule.id}: "${label}" → ${status} (must not be vax_given)`);
   }
 }
@@ -68,7 +87,7 @@ for (const rule of vaxRules.rules) {
 console.log('\n--- undated records vs the season window ---');
 for (const rule of vaxRules.rules) {
   const stem = rule.statusTerms.given[0];
-  const status = statusOf(rule, dataWithProblem(stem, ''));
+  const status = statusOf(rule, dataFor(rule, stem, ''));
   if (rule.schedule === 'once') {
     // One-off window is all-time: an undated historic "given" still counts
     // (treating it as not-given would spam false DUE recalls).
