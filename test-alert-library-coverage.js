@@ -76,19 +76,19 @@ const EXPECTED = {
   'pincer-9': { type: 'drug-monitoring', drugTerms: ['metformin'], intervals: { 'u&e': 365 } },
   'pincer-10': { type: 'drug-monitoring', drugTerms: ['furosemide', 'bumetanide'], intervals: { 'u&e': 180 } },
   'pincer-11': { type: 'drug-monitoring', drugTerms: ['amiodarone'], intervals: { tft: 180, lft: 180 } },
-  'pincer-12': { type: 'drug-combo', severity: 'red', terms: ['lithium', 'ibuprofen'] },
+  'pincer-12': { type: 'drug-combo', severity: 'red', terms: ['lithium', 'priadel', 'camcolit', 'liskonum', 'li-liquid', 'ibuprofen'] },
   'pincer-13': { type: 'drug-combo', severity: 'red', terms: ['warfarin', 'apixaban', 'clopidogrel'], ageMin: 75 },
   'mhra-valproate-ppg': {
     type: 'drug-combo',
     severity: 'red',
-    terms: ['sodium valproate', 'valproic acid', 'valproate', 'epilim', 'depakote'],
+    terms: ['sodium valproate', 'valproic acid', 'valproate', 'epilim', 'depakote', 'convulex', 'belvo', 'dyzantil', 'episenta', 'epival', 'syonell'],
     ageMin: 12,
     ageMax: 55,
     sex: 'F',
   },
   'nice-lithium-monitoring': {
     type: 'drug-monitoring',
-    drugTerms: ['lithium'],
+    drugTerms: ['lithium', 'priadel', 'camcolit', 'liskonum', 'li-liquid'],
     intervals: { 'lithium level': 90, 'u&e': 180, tft: 180, calcium: 180 },
   },
   'mhra-sglt2-dka': {
@@ -151,6 +151,24 @@ const EXPECTED = {
     type: 'drug-combo',
     severity: 'red',
     terms: ['warfarin', 'marevan', 'tramadol', 'zydol'],
+  },
+  // 2026-08-22 Keeper gap analysis: opioid + CNS depressant, valproate male <55
+  'mhra-opioid-cns-depressant': {
+    type: 'drug-combo',
+    severity: 'amber',
+    terms: [
+      'morphine', 'zomorph', 'oxycodone', 'targinact', 'fentanyl', 'buprenorphine',
+      'tramadol', 'codeine', 'co-codamol', 'co-dydramol', 'methadone', 'tapentadol',
+      'diazepam', 'lorazepam', 'temazepam', 'zopiclone', 'zolpidem', 'gabapentin', 'pregabalin',
+    ],
+  },
+  'mhra-valproate-male-u55': {
+    type: 'drug-combo',
+    severity: 'amber',
+    terms: ['sodium valproate', 'valproic acid', 'valproate', 'semisodium valproate', 'epilim', 'depakote', 'convulex', 'belvo', 'dyzantil', 'episenta', 'epival', 'syonell'],
+    ageMin: 12,
+    ageMax: 55,
+    sex: 'M',
   },
 };
 
@@ -251,6 +269,43 @@ check(
 check(
   !comboFires('mhra-warfarin-tramadol', ['Marevan 5mg tablets'], {}),
   'Marevan alone does NOT fire warfarin+tramadol'
+);
+// 2026-08-22 Keeper gap analysis: opioid + CNS depressant / valproate male <55 / lithium brands
+check(
+  comboFires('mhra-opioid-cns-depressant', ['Zomorph 30mg capsules', 'Zopiclone 7.5mg tablets'], {}),
+  'opioid+CNS depressant fires: Zomorph + zopiclone'
+);
+check(
+  comboFires('mhra-opioid-cns-depressant', ['Targinact 10mg/5mg tablets', 'Pregabalin 75mg capsules'], {}),
+  'opioid+CNS depressant fires: Targinact + pregabalin'
+);
+check(
+  !comboFires('mhra-opioid-cns-depressant', ['Zomorph 30mg capsules'], {}),
+  'Zomorph alone does NOT fire opioid+CNS depressant'
+);
+check(
+  !comboFires('mhra-opioid-cns-depressant', ['Codeine linctus 15mg/5ml oral solution', 'Diazepam 2mg tablets'], {}),
+  'codeine linctus + diazepam does NOT fire (linctus exclude holds)'
+);
+check(
+  comboFires('mhra-valproate-male-u55', ['Epilim 500mg tablets'], { ageYears: 30, sex: 'M' }),
+  'valproate male <55 fires: Epilim in a 30yo male'
+);
+check(
+  comboFires('mhra-valproate-male-u55', ['Dyzantil 500mg tablets'], { ageYears: 30, sex: 'M' }),
+  'valproate male <55 fires on brand-only Dyzantil'
+);
+check(
+  !comboFires('mhra-valproate-male-u55', ['Epilim 500mg tablets'], { ageYears: 60, sex: 'M' }),
+  'valproate male <55 does NOT fire for a 60yo male (age gate holds)'
+);
+check(
+  !comboFires('mhra-valproate-male-u55', ['Epilim 500mg tablets'], { ageYears: 30, sex: 'F' }),
+  'valproate male <55 does NOT fire for a 30yo female (sex gate holds)'
+);
+check(
+  comboFires('pincer-12', ['Priadel 400mg modified-release tablets', 'Naproxen 500mg tablets'], {}),
+  'pincer-12 fires on brand-only Priadel + naproxen (lithium brand fix)'
 );
 
 // === INVERSE COVERAGE: every library entry has an EXPECTED entry ===
