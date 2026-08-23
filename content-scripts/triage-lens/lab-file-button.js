@@ -104,7 +104,15 @@
   }
   // First visible element matching one of `selectors` whose text equals (or, as a
   // fallback, contains) `wanted`. `visible` overridable for tests.
-  function findByText(root, selectors, wanted, visible) {
+  //
+  // `exactOnly` (2026-08-22 clinical-safety audit R8): COMMIT-CLICK CALLERS MUST
+  // PASS TRUE. The partial fallback exists for finding/marking steps, but a
+  // committing click through it is dangerous — with fileButtonText "File
+  // results", a screen where only "File results and message patient" is visible
+  // would be clicked via the substring arm, committing a different Medicus
+  // action from the one the profile named. Exact (whitespace-normalised,
+  // case-insensitive) or abort.
+  function findByText(root, selectors, wanted, visible, exactOnly) {
     const vis = visible || defaultVisible;
     const w = norm(wanted);
     if (!w) return null;
@@ -117,7 +125,7 @@
         if (vis(el)) return el;
         continue;
       }
-      if (!partial && t.indexOf(w) >= 0 && vis(el)) partial = el;
+      if (!exactOnly && !partial && t.indexOf(w) >= 0 && vis(el)) partial = el;
     }
     return partial;
   }
@@ -226,8 +234,10 @@
     const wait = o.waitForFn || waitFor;
 
     // GATE 2 — the File control must exist on this screen. If the profile's labels
-    // don't fit this layout, we abort before touching anything.
-    const fileBtn0 = findByText(root, FILE_BUTTON_SEL, f.fileButtonText, vis);
+    // don't fit this layout, we abort before touching anything. Exact-only:
+    // this is the control STEP 5 will commit-click, so a partial match must
+    // abort here, not be discovered at commit time (audit R8).
+    const fileBtn0 = findByText(root, FILE_BUTTON_SEL, f.fileButtonText, vis, true);
     if (!fileBtn0) {
       result.reason = 'no-file-button';
       return result;
@@ -360,9 +370,10 @@
       return result;
     }
 
-    // STEP 5 — file. Re-find the button and require it enabled.
+    // STEP 5 — file. Re-find the button (EXACT label only — a commit click must
+    // never go through the substring fallback, audit R8) and require it enabled.
     const fileBtn = await wait(() => {
-      const b = findByText(root, FILE_BUTTON_SEL, f.fileButtonText, vis);
+      const b = findByText(root, FILE_BUTTON_SEL, f.fileButtonText, vis, true);
       return b && isEnabled(b) ? b : null;
     });
     if (!fileBtn) {
@@ -370,12 +381,15 @@
       return result;
     }
     click(fileBtn);
+    // `filed` records that the File control WAS CLICKED — it is not a Medicus
+    // confirmation that the report left the review list (audit R10: no
+    // post-condition is observed here; the toast copy must not claim one).
     result.filed = true;
 
-    // STEP 6 — optional complete.
+    // STEP 6 — optional complete (exact-only for the same reason as STEP 5).
     if (f.completeButtonText) {
       const completeBtn = await wait(() => {
-        const b = findByText(root, ['button', '[role="button"]'], f.completeButtonText, vis);
+        const b = findByText(root, ['button', '[role="button"]'], f.completeButtonText, vis, true);
         return b && isEnabled(b) ? b : null;
       });
       if (completeBtn) {
@@ -844,7 +858,16 @@
         toast('Marked ' + res.marked + ' subheading(s) normal. Review, then click File.', 'ok');
       } else if (res.filed) {
         recordAudit(profile, res, rs);
-        toast('Filed as normal (' + res.marked + ' subheading(s))' + (res.completed ? ' and completed.' : '.'), 'ok');
+        // Audit R10: the macro observed its own clicks, not a Medicus
+        // confirmation — the copy must not claim the filing completed.
+        toast(
+          'Clicked "' +
+            profile.filing.fileButtonText +
+            '" (' +
+            res.marked +
+            ' subheading(s) marked normal). Check the report has left your list — the suite has not confirmed the filing.',
+          'ok'
+        );
         hideButton();
       } else {
         toast('Could not complete filing (' + (res.reason || 'unknown') + '). Nothing was completed.', 'err');

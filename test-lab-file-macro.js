@@ -174,6 +174,20 @@ function normalScreen() {
   check(res.reason === 'no-file-button', 'aborts when File control absent');
   check(CLICKS.length === 0, 'nothing clicked when File control absent');
 
+  // 5b. commit clicks are EXACT-only (2026-08-22 audit R8): a screen where the
+  // only file-ish control is a SUPERSTRING of the profile's fileButtonText
+  // ("File results and message patient" vs "File") must abort, never
+  // partial-match its way into committing a different Medicus action.
+  console.log('\n--- exact-only commit click (audit R8) ---');
+  CLICKS = [];
+  const supersetScreen = [
+    new El({ tag: 'button', text: 'File results and message patient', label: 'WrongFileBtn' }),
+    new El({ role: 'radio', text: 'No action required', label: 'opt1' }),
+  ];
+  res = await fileAllNormal(baseOpts({ root: new Root(supersetScreen), profile }));
+  check(res.reason === 'no-file-button' && res.filed === false, 'aborts when only a superstring-labelled file control exists');
+  check(CLICKS.indexOf('WrongFileBtn') === -1, 'the superstring control is never clicked');
+
   // 6. profile labels do not match any option
   console.log('\n--- normal option label mismatch ---');
   CLICKS = [];
