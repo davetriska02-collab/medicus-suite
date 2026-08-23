@@ -142,7 +142,7 @@ function makeHarness({ code = 'abc123' } = {}) {
   console.log('Layer 3: consumer wiring (no duplicated endpoint fetches)');
 
   const consumers = [
-    ['side-panel/panel.js', 'panel-wr-strip'],
+    ['side-panel/strips/waiting-room.js', 'panel-wr-strip'],
     ['side-panel/modules/sentinel/sentinel.js', 'sentinel-wr'],
     ['side-panel/modules/today/today.js', 'today-wr'],
   ];

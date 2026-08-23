@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.35] — 2026-08-23
+
+### Architecture plan Phase 4.1 — panel strips extracted
+
+- Six demand/alert strips plus the roll-up live in `side-panel/strips/`,
+  each `initStrip(el, bus) → cleanup`. `panel.js` is the shell
+  (orchestration, quiet pill, nav) and is under 1,200 lines.
+- Shared helpers (`escStrip`, `makePoller`, `appendAlertLog`, `fmtHHMM`)
+  sit in `strips/helpers.js`. Behaviour is a verbatim move.
+
 ## [v3.236.34] — 2026-08-23
 
 ### Architecture plan Phase 5.3 — observer-hub adoption

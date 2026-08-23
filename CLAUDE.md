@@ -47,7 +47,7 @@ A module may import another module’s `*-core.js` / `*-store.js` / `*-ledger.js
 
 ## Global demand / alert strips
 
-Six permanent strips plus a roll-up live in `side-panel/panel.html` outside `<main>` (`#alertRollup` / `#alertStack`), polled independently by `panel.js`:
+Six permanent strips plus a roll-up live in `side-panel/panel.html` outside `<main>` (`#alertRollup` / `#alertStack`), each an ES module under `side-panel/strips/` with `initStrip(el, bus) → cleanup`, orchestrated by `initPanelStrips` in `panel.js`:
 - `#wrStrip` — waiting room patients (`wr-strip-*` CSS)
 - `#rmStrip` — new medical/admin requests (`rm-strip-*` CSS)
 - `#subRagStrip` — submissions RAG threshold alerts (`sub-rag-strip-*` CSS)
