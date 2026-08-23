@@ -855,11 +855,15 @@
       // than filing this document into the previously-open patient's record.
       var commitInfo = getTaskInfo();
       if (!commitInfo || (s.resolvedForTaskUuid && commitInfo.taskUuid !== s.resolvedForTaskUuid)) {
-        throw new Error('The task on screen changed since this form was opened — nothing was saved. Reopen the form on the task you want.');
+        throw new Error(
+          'The task on screen changed since this form was opened — nothing was saved. Reopen the form on the task you want.'
+        );
       }
       var freshOverview = await fetchTaskOverview(commitInfo.typeSlug, commitInfo.taskUuid);
       if (!freshOverview.patientId || freshOverview.patientId !== s.patientId) {
-        throw new Error('Could not re-confirm the patient for this task at save time — nothing was saved. Reopen the form and try again.');
+        throw new Error(
+          'Could not re-confirm the patient for this task at save time — nothing was saved. Reopen the form and try again.'
+        );
       }
       var downloadUrl = resolveAttachmentUrl(att, s.resolvedAttachments, apiBaseUrl());
       if (!downloadUrl) throw new Error("Could not locate this attachment's file — try reopening the task.");

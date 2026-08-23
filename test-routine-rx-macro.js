@@ -611,7 +611,9 @@ function makeSandbox(rootEl, pathname) {
       'happy path: confirm dialog names the destination team'
     );
     check(
-      TOASTS.some((t) => t.kind === 'ok' && /Clicked .Send to routine list./.test(t.msg) && /Check the task/.test(t.msg)),
+      TOASTS.some(
+        (t) => t.kind === 'ok' && /Clicked .Send to routine list./.test(t.msg) && /Check the task/.test(t.msg)
+      ),
       'happy path: the commit toast reports the CLICK and asks the user to verify — never claims "Sent" (audit R10)'
     );
   }

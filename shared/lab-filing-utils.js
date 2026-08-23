@@ -564,9 +564,13 @@
           const compAbove = comp === '>' || comp === '≥' || comp === '>=';
           const compBelow = comp === '<' || comp === '≤' || comp === '<=';
           if (param.low != null && (val < param.low || (compBelow && val <= param.low))) {
-            reasons.push(`${name || 'a result'} (${r.rawValue ?? r.value}${unit}) is below your set minimum of ${param.low}`);
+            reasons.push(
+              `${name || 'a result'} (${r.rawValue ?? r.value}${unit}) is below your set minimum of ${param.low}`
+            );
           } else if (param.high != null && (val > param.high || (compAbove && val >= param.high))) {
-            reasons.push(`${name || 'a result'} (${r.rawValue ?? r.value}${unit}) is above your set maximum of ${param.high}`);
+            reasons.push(
+              `${name || 'a result'} (${r.rawValue ?? r.value}${unit}) is above your set maximum of ${param.high}`
+            );
           }
         }
         continue; // covered by a parameter

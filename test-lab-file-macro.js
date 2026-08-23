@@ -185,7 +185,10 @@ function normalScreen() {
     new El({ role: 'radio', text: 'No action required', label: 'opt1' }),
   ];
   res = await fileAllNormal(baseOpts({ root: new Root(supersetScreen), profile }));
-  check(res.reason === 'no-file-button' && res.filed === false, 'aborts when only a superstring-labelled file control exists');
+  check(
+    res.reason === 'no-file-button' && res.filed === false,
+    'aborts when only a superstring-labelled file control exists'
+  );
   check(CLICKS.indexOf('WrongFileBtn') === -1, 'the superstring control is never clicked');
 
   // 6. profile labels do not match any option

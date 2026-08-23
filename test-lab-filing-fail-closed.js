@@ -124,7 +124,16 @@ check(
 {
   // The reproduced audit exploit: Hb 41 LOW + an hba1c parameter + override on.
   const rep = report([
-    numericResult({ name: 'Hb', value: 41, rawValue: '41', unit: 'g/L', low: 120, high: 160, isBelow: true, text: '41' }),
+    numericResult({
+      name: 'Hb',
+      value: 41,
+      rawValue: '41',
+      unit: 'g/L',
+      low: 120,
+      high: 160,
+      isBelow: true,
+      text: '41',
+    }),
   ]);
   const profile = { paramsOverrideLabFlags: true, parameters: [{ analyte: 'hba1c', high: 47, unit: 'mmol/mol' }] };
   const adj = LF.applyParamOverrides(rep, profile);
@@ -146,7 +155,15 @@ console.log('--- R1c requireRangeForAll default ---');
 {
   // Stored legacy profile with the key absent entirely: gate must still require ranges.
   const rep = report([
-    numericResult({ name: 'Serum urate', value: 720, rawValue: '720', unit: 'umol/L', low: null, high: null, text: '720' }),
+    numericResult({
+      name: 'Serum urate',
+      value: 720,
+      rawValue: '720',
+      unit: 'umol/L',
+      low: null,
+      high: null,
+      text: '720',
+    }),
   ]);
   const blockers = LF.profileParamBlockers(rep, { parameters: [] });
   check(
@@ -170,7 +187,16 @@ console.log('--- unit compatibility on parameters ---');
 }
 {
   const rep = report([
-    numericResult({ name: 'eGFR', value: 75, rawValue: '75', unit: 'nmol/L', low: 90, high: 120, isBelow: true, text: '75' }),
+    numericResult({
+      name: 'eGFR',
+      value: 75,
+      rawValue: '75',
+      unit: 'nmol/L',
+      low: 90,
+      high: 120,
+      isBelow: true,
+      text: '75',
+    }),
   ]);
   const profile = { paramsOverrideLabFlags: true, parameters: [{ analyte: 'egfr', low: 60, unit: 'mL/min/1.73m2' }] };
   const adj = LF.applyParamOverrides(rep, profile);
@@ -213,7 +239,10 @@ console.log('--- comparator censoring ---');
       text: '>90',
     }),
   ]);
-  const profile = { paramsOverrideLabFlags: true, parameters: [{ analyte: 'egfr', low: 60, high: 200, unit: 'mL/min/1.73m2' }] };
+  const profile = {
+    paramsOverrideLabFlags: true,
+    parameters: [{ analyte: 'egfr', low: 60, high: 200, unit: 'mL/min/1.73m2' }],
+  };
   const adj = LF.applyParamOverrides(rep, profile);
   check(adj.results[0].isAbove === true, 'a censored value never clears a lab flag via the override');
 }
@@ -230,9 +259,18 @@ console.log('--- outsideOwnRange belt ---');
   check(blockers.length > 0, '…and is therefore not fileable');
 }
 check(SEV.outsideOwnRange({ value: 70, low: 60, high: 80 }) === false, 'in-range value stays clean');
-check(SEV.outsideOwnRange({ value: 5, rawValue: '<5', comparator: '<', low: 1, high: 10 }) === false, '"<5" below-censored inside range stays clean');
-check(SEV.outsideOwnRange({ value: 5.3, comparator: '>', low: 3.5, high: 5.3 }) === true, '">5.3" touching the high bound is out of range');
-check(SEV.outsideOwnRange({ value: 4, comparator: '<', low: 3.5, high: 5.3 }) === false, '"<4" never fires the above-range arm');
+check(
+  SEV.outsideOwnRange({ value: 5, rawValue: '<5', comparator: '<', low: 1, high: 10 }) === false,
+  '"<5" below-censored inside range stays clean'
+);
+check(
+  SEV.outsideOwnRange({ value: 5.3, comparator: '>', low: 3.5, high: 5.3 }) === true,
+  '">5.3" touching the high bound is out of range'
+);
+check(
+  SEV.outsideOwnRange({ value: 4, comparator: '<', low: 3.5, high: 5.3 }) === false,
+  '"<4" never fires the above-range arm'
+);
 check(SEV.outsideOwnRange({ value: NaN, low: 1, high: 2 }) === false, 'non-finite value never derives a flag');
 
 // ── R1e: evaluator crash is not "confirmed normal" ─────────────────────────────

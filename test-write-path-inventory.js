@@ -133,22 +133,28 @@ const CLICK_MACRO_MAP = {
     note: 'tickRows (W22 OIR tick-off); the only other Medicus-control click is the keyboard-nav Enter-to-open-row, a user-initiated navigation click that writes nothing',
   },
   'content-scripts/booking-inline.js': {
-    reason: 'keyboard-accessibility self-click on its OWN widget toggle only; the W2 Medicus write is a POST, caught by the verb scanner',
+    reason:
+      'keyboard-accessibility self-click on its OWN widget toggle only; the W2 Medicus write is a POST, caught by the verb scanner',
   },
   'content-scripts/task-inline.js': {
-    reason: 'keyboard-accessibility self-click on its OWN widget toggle only; the W5 Medicus write is a POST, caught by the verb scanner',
+    reason:
+      'keyboard-accessibility self-click on its OWN widget toggle only; the W5 Medicus write is a POST, caught by the verb scanner',
   },
   'content-scripts/reception-quick-actions.js': {
-    reason: 'keyboard-accessibility self-click on its OWN composer toggle only; H-049 doctrine — highlights, never clicks, the Medicus Submit control',
+    reason:
+      'keyboard-accessibility self-click on its OWN composer toggle only; H-049 doctrine — highlights, never clicks, the Medicus Submit control',
   },
   'content-scripts/contacts-link-button.js': {
-    reason: 'keyboard-accessibility self-click on its OWN canvas-entry toggle only; the W18 Medicus writes are POSTs in contacts-api.js',
+    reason:
+      'keyboard-accessibility self-click on its OWN canvas-entry toggle only; the W18 Medicus writes are POSTs in contacts-api.js',
   },
   'content-scripts/document-codes-to-problems.js': {
-    reason: 'keyboard-accessibility self-click on its OWN widget toggle only; the W20 Medicus write is a POST, caught by the verb scanner',
+    reason:
+      'keyboard-accessibility self-click on its OWN widget toggle only; the W20 Medicus write is a POST, caught by the verb scanner',
   },
   'content-scripts/triage-lens/options.js': {
-    reason: "extension options page script (not injected into Medicus pages): download-anchor click and file-input opener for the suite's own import/export UI",
+    reason:
+      "extension options page script (not injected into Medicus pages): download-anchor click and file-input opener for the suite's own import/export UI",
   },
 };
 
@@ -249,7 +255,10 @@ for (const abs of SCAN_FILES) {
       continue;
     }
     unmatched.push(loc);
-    check(false, `non-literal method value at ${loc} — name it in COMPUTED_METHOD_ALLOWLIST with a reason or refactor to a literal`);
+    check(
+      false,
+      `non-literal method value at ${loc} — name it in COMPUTED_METHOD_ALLOWLIST with a reason or refactor to a literal`
+    );
   }
 }
 check(true, `${computedOk} passthrough-helper (opts.method || 'GET') idiom line(s) verified`);
@@ -279,7 +288,10 @@ for (const abs of SCAN_FILES) {
   if (!hits.length) continue;
   const claim = CLICK_MACRO_MAP[rel];
   if (claim && claim.wids) {
-    check(true, `${rel} (${hits.length} click site(s)) → DOM-macro ${claim.wids.join(', ')}${claim.note ? ' — ' + claim.note : ''}`);
+    check(
+      true,
+      `${rel} (${hits.length} click site(s)) → DOM-macro ${claim.wids.join(', ')}${claim.note ? ' — ' + claim.note : ''}`
+    );
   } else if (claim && claim.reason) {
     check(true, `${rel} (${hits.length} click site(s)) own-UI — ${claim.reason}`);
   } else {
