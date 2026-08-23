@@ -26,22 +26,19 @@
   // alongside the time-based ranks so they sort and filter consistently:
   // alert (red) ranks with overdue, caution (amber) with due_soon, noted (info)
   // is neutral.
-  const STATUS_RANK = {
-    overdue: 0,
-    not_met: 0,
-    alert: 0,
-    stale: 1,
-    due_soon: 2,
-    caution: 2,
-    no_data: 3,
-    noted: 3,
-    recently_initiated: 4,
-    achieved: 5,
-    in_date: 5,
-    vax_given: 5,
-    vax_declined: 3,
-    vax_due: 1,
-  };
+  const STATUS_RANK = (function loadStatusRank() {
+    if (typeof require === 'function') {
+      try {
+        return require('../shared/status-rank.js').STATUS_RANK;
+      } catch (e) {
+        /* fall through to the classic-script global */
+      }
+    }
+    if (typeof globalThis !== 'undefined' && globalThis.StatusRank) {
+      return globalThis.StatusRank.STATUS_RANK;
+    }
+    throw new Error('STATUS_RANK missing — load shared/status-rank.js before rules-engine.js');
+  })();
 
   // === DRUG MATCHING ===
   function normaliseDrugString(s) {

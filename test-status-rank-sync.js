@@ -35,9 +35,13 @@ function check(cond, msg) {
 }
 
 async function run() {
+  const shared = require(path.join(__dirname, 'shared', 'status-rank.js'));
+  check(shared.STATUS_RANK && typeof shared.STATUS_RANK === 'object', 'shared/status-rank.js exports STATUS_RANK');
+
   const engine = require(path.join(__dirname, 'engine', 'rules-engine.js'));
   const engineRank = engine.STATUS_RANK;
   check(engineRank && typeof engineRank === 'object', 'engine exports STATUS_RANK');
+  check(engineRank === shared.STATUS_RANK, 'engine STATUS_RANK is the shared module (same object)');
 
   const coreMod = await import('./side-panel/modules/sentinel/sentinel-core.js');
   const coreRank = coreMod.STATUS_RANK;

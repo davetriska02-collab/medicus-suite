@@ -23,6 +23,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+require('./shared/status-rank.js');
 
 let passed = 0,
   failed = 0;

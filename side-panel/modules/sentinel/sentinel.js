@@ -9,7 +9,7 @@ import { buildChipActions, buildPatientActions } from '../shared/action-packs.js
 import { buildBrief } from './brief-core.js';
 import { buildPassport } from './passport-core.js';
 import { fetchTaskCreateForm, createGeneralTask } from '../../../shared/task-api.js';
-import { addFollowup } from '../followups/followups.js';
+import { addFollowup } from '../followups/followups-store.js';
 import { dateOnlyISO } from '../followups/followups-core.js';
 import { buildRecallDescription, isActionNeeded } from '../sweep/sweep-core.js';
 import { buildCoverageView } from './coverage-core.js';

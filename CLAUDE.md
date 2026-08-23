@@ -9,7 +9,7 @@
 | `pop-out/` | Floating pop-out window shell (mirrors panel nav) |
 | `shared/` | APIs, utilities, IO helpers used by multiple contexts |
 | `shared/io/` | Per-module backup/restore IO files |
-| `engine/` | Business logic (rules engine, extractors, triage engine) |
+| `engine/` | Business logic. **Pure evaluators** (`rules-engine.js`, `result-severity.js`, `acb-scores.js`, …) must not touch DOM/`chrome.*`/`fetch` — `test-engine-purity.js` fails closed on it. **Adapters** (`api-client.js`, `data-fetcher.js`, `extractors/`, `normalisers.js`) are named as such. |
 | `content-scripts/` | Injected into Medicus pages |
 | `options/` | Settings page |
 | `rota/` | Rota Manager subtree — self-contained ESM app with its own `package.json` (`"type": "module"`). `rota/engine/` is **pure** (no DOM/`chrome.*`/`fetch`), `rota/shared/` is storage + helpers, `rota/app/app.html` is the full app (opens as a full tab). Tests are the root-level `test-rota-*.js` files |
@@ -25,6 +25,8 @@
 6. Follow the backup convention below if the module stores anything
 
 Both shells derive their `MODULES` maps from the catalog — do **not** add a hand-maintained `MODULES` entry in `panel.js` / `pop-out.js`.
+
+A module may import another module’s `*-core.js` / `*-store.js` / `*-ledger.js` / `*-api.js` (or anything under `modules/shared/`). It must **not** import another module’s entry file (`<name>/<name>.js`) — `test-sibling-imports.js` fails closed on that. `STATUS_RANK` lives in `shared/status-rank.js` (load the classic script before `rules-engine.js` / before any ESM that reads `globalThis.StatusRank`).
 
 > **Panel-only tabs (intentional exceptions):** `visualiser`, `duplicate-checker`, `rota-app` and `about` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. `visualiser`, `duplicate-checker` and `rota-app` are special-cased in `panel.js`'s nav click handler (each opens a full browser tab, not a module — `visualiser`/`duplicate-checker` via `chrome.tabs.create`, `rota-app` via `openRotaTab()` in `side-panel/modules/rota/rota-open.js`, which focuses an existing tab rather than stacking duplicates), and `about` renders inline static text — none makes sense in the floating pop-out, so they are deliberately omitted there. The full-tab openers are also excluded from `MODULES` (so the boot guard can't restore into them) and from the Ctrl/Cmd+Alt+Arrow tab cycle; the command palette carries an `open:*` fallback command so the pop-out can still reach them. All *real* modules must still appear in both shells — including `rota` (labelled "Rota"), the compact companion to the full-tab "Rota manager" (`rota-app`), which does.
 

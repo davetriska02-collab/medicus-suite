@@ -12,6 +12,8 @@
 
 'use strict';
 
+require('./shared/status-rank.js');
+
 let passed = 0,
   failed = 0;
 

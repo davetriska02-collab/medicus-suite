@@ -50,6 +50,7 @@
         "engine/api-client.js",
         "engine/normalisers.js",
         "engine/ruleset-io.js",
+        "shared/status-rank.js",
         "engine/rules-engine.js",
         "engine/eval-cache.js",
         "engine/result-severity.js",

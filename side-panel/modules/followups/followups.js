@@ -28,15 +28,14 @@ import {
   classifyFollowup,
   sortFollowups,
   followupCounts,
-  validateFollowup,
-  pruneFollowups,
   formatDueLabel,
   dateOnlyISO,
   FOLLOWUP_STATUS,
   DONE_RETENTION_DAYS,
 } from './followups-core.js';
+import { loadFollowups, saveFollowups, addFollowup, FOLLOWUPS_STORE_KEY } from './followups-store.js';
 
-export const FOLLOWUPS_STORE_KEY = 'followups.entries';
+export { addFollowup, loadFollowups, FOLLOWUPS_STORE_KEY };
 
 let container = null;
 
@@ -44,55 +43,6 @@ function esc(s) {
   const d = document.createElement('div');
   d.textContent = String(s ?? '');
   return d.innerHTML;
-}
-
-// ── Storage (promise wrappers; every write runs the prune) ────────────────────
-
-export function loadFollowups() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get([FOLLOWUPS_STORE_KEY], (res) => {
-      const v = res && res[FOLLOWUPS_STORE_KEY];
-      resolve(Array.isArray(v) ? v : []);
-    });
-  });
-}
-
-function saveFollowups(entries) {
-  return new Promise((resolve) => {
-    chrome.storage.local.set({ [FOLLOWUPS_STORE_KEY]: pruneFollowups(entries, Date.now()) }, resolve);
-  });
-}
-
-// Append one entry — shared with the Monitoring integration (sentinel.js
-// imports this so the write path, prune and ledger note stay in one place).
-export async function addFollowup({ what, due, patientUuid = null, patientName = '', source = 'manual' }) {
-  const err = validateFollowup({ what, due });
-  if (err) throw new Error(err);
-  const entry = {
-    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `fu_${Date.now()}_${Math.random()}`,
-    what: String(what).trim(),
-    due,
-    createdAt: new Date().toISOString(),
-    status: FOLLOWUP_STATUS.OPEN,
-    doneAt: null,
-    patientUuid: patientUuid || null,
-    patientName: String(patientName || ''),
-    source,
-  };
-  const entries = await loadFollowups();
-  entries.push(entry);
-  await saveFollowups(entries);
-  if (window.EventLedger && entry.patientUuid) {
-    window.EventLedger.record({
-      source: 'followups',
-      patientRef: entry.patientUuid,
-      severity: null,
-      ruleId: null,
-      label: 'follow-up reminder added',
-      action: 'followup-added',
-    });
-  }
-  return entry;
 }
 
 async function setStatus(id, status) {
