@@ -26,6 +26,19 @@
 (function () {
   // ── Pure helpers (no window/document/fetch — unit-testable via require()) ───
 
+  var WriteCore =
+    typeof module !== 'undefined' && module.exports
+      ? require('../shared/write-core.js')
+      : typeof window !== 'undefined'
+        ? window.WriteCore
+        : null;
+  if (!WriteCore || typeof WriteCore.diffFinaliseOutcome !== 'function') {
+    throw new Error(
+      'WriteCore.diffFinaliseOutcome missing — load shared/write-core.js before allergy-cleanup-canvas.js'
+    );
+  }
+  var diffFinaliseOutcome = WriteCore.diffFinaliseOutcome;
+
   var NKA_CONCEPT_ID = '716186003';
   var CLASSIFICATION_LANES = ['active', 'junk', 'convert', 'dual'];
 
@@ -238,38 +251,6 @@
     return { ends: ends, tidies: tidies, count: ends.length + tidies.length };
   }
 
-  // Compares what Finalise asked for against what the write bridge reports
-  // actually landed. commitEndJunk/commitClearLegacy settle every write and
-  // never throw — a failed or bridge-refused row simply comes back missing
-  // from ended/tidied, so success must be established from these lists, not
-  // from the absence of an exception.
-  function diffFinaliseOutcome(wantEndIds, wantTidyIds, endedList, tidiedList) {
-    var endedById = {};
-    (endedList || []).forEach(function (f) {
-      if (f && f.id) endedById[f.id] = true;
-    });
-    var tidiedById = {};
-    (tidiedList || []).forEach(function (f) {
-      if (f && f.id) tidiedById[f.id] = true;
-    });
-    var failedEnds = (wantEndIds || []).filter(function (id) {
-      return !endedById[id];
-    });
-    var failedTidies = (wantTidyIds || []).filter(function (id) {
-      return !tidiedById[id];
-    });
-    var wanted = (wantEndIds || []).length + (wantTidyIds || []).length;
-    var failed = failedEnds.length + failedTidies.length;
-    return {
-      failedEnds: failedEnds,
-      failedTidies: failedTidies,
-      wanted: wanted,
-      written: wanted - failed,
-      failed: failed,
-      allWritten: failed === 0,
-    };
-  }
-
   // Tile → tile: merge only inside a known duplicate group. Tile → End:
   // propose end (canStageEnd decides). Tile → Dual-coded lane: stage tidy.
   // Tile → Active: unstage tidy. Same-lane / self / unknown = no-op.
@@ -429,7 +410,7 @@
       allergiesNotEnded: allergiesNotEnded,
       endedAllergyList: endedAllergyList,
       summariseDraft: summariseDraft,
-      diffFinaliseOutcome: diffFinaliseOutcome,
+      diffFinaliseOutcome: WriteCore.diffFinaliseOutcome,
       classifyDrop: classifyDrop,
       readDropPayload: readDropPayload,
       relativeRect: relativeRect,

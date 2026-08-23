@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.236.23] — 2026-08-22
+## [v3.236.26] — 2026-08-23
 
 ### Signed .crx packaging for managed (IT policy) installs
 
@@ -17,6 +17,64 @@ policy-deployed installs auto-update from
 (Chrome + Edge), and the Web Store ID-continuity note. Packed files are enumerated via
 `git ls-files`, so untracked local files (patient data, keys, scratch) can never leak
 into a package.
+
+## [v3.236.25] — 2026-08-22
+
+### Review fixes — CSN table ordering and issue date
+
+Self-review of the v3.236.23/.24 safety-net work. No content change to
+any signed row — ordering and metadata only:
+
+- **CSN §6.1**: W17–W21 had been inserted between W16 and W15, stranding
+  W15 at the bottom of the inventory. The table now runs W14, W15, W16,
+  W17–W21. (The long-standing W12-before-W11 order on `main` is untouched.)
+- **CSN §13 version history**: rows 3.18/3.19 had been inserted mid-table
+  in reverse order, leaving 3.16 as the final row; they now append at the
+  end in ascending order.
+- **CSN header**: "Date issued" now reads 2026-08-22, matching document
+  version 3.19's issue date (it still read 2026-07-28).
+- `test-write-path-inventory.js`: merged the two W-row loops left over
+  from the two-phase landing into one W1–W21 loop.
+
+## [v3.236.24] — 2026-08-22
+
+### CSO sign-off — CSN §6.1 W17–W21
+
+Dave reviewed the write-path inventory and signed off (session 2026-08-22).
+CSN document version 3.19 records the increment. Product-version pin
+moves 3.177.0 → 3.236.23. Not a full re-baseline: the 3.14 write-path
+posture rewrite and the section 6 items 1/8/9 transactional-API note
+stay pending; H-060/H-061/H-062 stay Proposed.
+
+## [v3.236.23] — 2026-08-22
+
+### Write-path safety net — inventory, public docs, shared confirm-diff
+
+The last three months shipped write canvases faster than the binding
+docs. This release does not add a write surface. It makes the existing
+ones answerable:
+
+- **CSN §6.1** now names the writes that had shipped without a W-row:
+  organise/nest problems (**W17**), Contacts Management (**W18**),
+  journal code-sync / text-strip (**W19** — may change a note's SNOMED
+  concept, unlike W9), add-coded-entries-as-problems (**W20**), and
+  bulk complete/discard of Privacy Officer / EPS tasks (**W21**).
+  Increment 3.18 is **PENDING CSO REVIEW** — no signature invented;
+  product-version pin stays at the last CSO-reviewed version.
+- **CI inventory** (`test-write-path-inventory.js`) walks product
+  `method:POST` sites and fails if a Medicus-record write has no W-id
+  or a `| Wnn |` row is missing from the notice.
+- **README** and **VISION** no longer claim the extension is read-only.
+  Safety is "no silent writes + identity re-check + confirm", not
+  "architecture cannot write".
+- **`shared/write-core.js`** — the v3.236.3 allergy Finalise rule
+  (success is only what the bridge confirms; confirm copy never says
+  Done/Sent/Booked on a partial) is now a dual-export helper. The
+  allergy canvas is the first consumer.
+
+Tests: `test-write-path-inventory.js`, `test-write-core.js`;
+`test-allergy-cleanup-canvas.js` still imports `diffFinaliseOutcome`
+from the canvas (thin alias).
 
 ## [v3.236.22] — 2026-08-22
 

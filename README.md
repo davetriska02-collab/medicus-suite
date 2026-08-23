@@ -14,7 +14,7 @@ monitor into one extension that reads the user's logged-in Medicus session.
 Built by Dr Dave Triska (Witley & Milford Surgery). Not affiliated with
 Medicus the company.
 
-For *why* the suite is built this way — the read-only on-top-of-Medicus
+For *why* the suite is built this way — the on-top-of-Medicus
 augmentation model and a grounded "first-of-type" positioning, including its
 honest limits — see [`docs/VISION.md`](docs/VISION.md).
 
@@ -60,12 +60,21 @@ installed extension's update banner will surface the new version.
 
 ## What it does and does not do
 
-The extension only reads from Medicus. It does not create, modify, assign,
-or delete clinical or administrative records. It uses the user's existing
-Medicus login (session cookies on `*.api.england.medicus.health`) and does
-not transmit patient information to any external server. By default the only
-external endpoint the extension contacts is `api.github.com` for update
-checks; no patient data is included in those requests.
+The extension is overwhelmingly a read-and-display layer on the user's
+authenticated Medicus session (session cookies on
+`*.api.england.medicus.health`). It also has a **small, enumerated set of
+user-initiated write actions** — book, file, tidy problems / allergies /
+contacts / duplicates, create tasks, and bulk-complete routine task types.
+Each write is confirmed at commit and executed under the user's own Medicus
+session, so Medicus's access control and audit trail fire as if the user
+had done the work by hand. Medicus remains the system of record. The
+complete write list and its controls are in
+[`docs/CLINICAL-SAFETY-NOTICE.md`](docs/CLINICAL-SAFETY-NOTICE.md) §6.1;
+the frozen scope is in [`docs/INTENDED-PURPOSE.md`](docs/INTENDED-PURPOSE.md).
+
+There is no telemetry. By default the only external endpoint the extension
+contacts is `api.github.com` for update checks; no patient data is included
+in those requests.
 
 The **Leaflets** tab (NHS patient information) is a second, optional
 exception, and it is off by default. With no API key configured in
@@ -78,6 +87,10 @@ selecting a search result additionally sends a plain GET request to
 selected — never patient data — to fetch and display the leaflet text in the
 panel. The API key itself is stored locally on that device only and is
 deliberately excluded from suite backups.
+
+An optional **Transactional API** proxy is **off by default**, read-only,
+and practice-configured — see
+[`docs/TRANSACTIONAL-API-INTEGRATION.md`](docs/TRANSACTIONAL-API-INTEGRATION.md).
 
 ## Licence
 

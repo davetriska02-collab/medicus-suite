@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.236.23
+**Version:** v3.236.26
 **Generated:** 2026-08-22
 
 ## What it is
@@ -227,7 +227,10 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 
 ## Recent additions (last 4 weeks)
 
-- **v3.236.23 (2026-08-22)** — Signed .crx packaging for IT-managed installs: `npm run pack:crx` builds a CRX3 package + `update.xml` policy feed; releases attach both when the signing secret is set. Deployment guide in docs/IT-DEPLOYMENT.md.
+- **v3.236.26 (2026-08-23)** — Signed .crx packaging for IT-managed installs: `npm run pack:crx` builds a CRX3 package + `update.xml` policy feed; releases attach both when the signing secret is set. Deployment guide in docs/IT-DEPLOYMENT.md.
+- **v3.236.25 (2026-08-22)** — CSN §6.1 W-row and version-history ordering fixed; issue date matches document version 3.19.
+- **v3.236.24 (2026-08-22)** — CSO sign-off of CSN §6.1 W17–W21 (write-path inventory); product pin moves to 3.236.23.
+- **v3.236.23 (2026-08-22)** — Write-path safety net: CSN §6.1 gains W17–W21 (nest problems, Contacts, journal code-sync, add-codes-as-problems, bulk task complete/discard); `test-write-path-inventory.js` CI gate fails on any unmapped Medicus write POST; README/VISION drop the read-only claim for the honest enumerated-writes posture; `shared/write-core.js` extracts the bridge-confirmed Finalise diff (allergy canvas is the first consumer).
 - **v3.236.22 (2026-08-22)** — Reception call script: two same-tier safety lists, short history, no separate caller/age questions. CSO-signed.
 - **v3.236.15 (2026-08-21)** — Bulk acknowledge: Review/Confirm sit in a footer so select-all cannot hide the mass-resolve button.
 - **v3.236.14 (2026-08-21)** — Bulk remove/merge trigger removed from the Clinical Summary (Organise problems owns End/merge). Quiet-row chips clip inside the name column so the next box cannot chop them.
