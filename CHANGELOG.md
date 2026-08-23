@@ -50,6 +50,16 @@ themselves to match the keeper's actual position among the entry cards
 above, instead of always defaulting to KEEPING-first regardless of which
 side the outlined keeper card is on.
 
+**Review fixes (same release):** `fullMatch` now fails closed when flatten
+skipped any raw result on a participating report (missing collection time
+or conceptId), so unread results cannot make a cluster look fully matched;
+removal confirm shows human-readable analyte lines per report (not raw
+UUIDs) and lets the clinician click the copy to keep; execute re-checks
+`canRemoveInvestigationReports` before POST. Journal year/type filters
+are stripped on read as well as on store. Content-hash outcomes come from
+the engine (no duplicated bucket logic; re-verify replaces the previous
+banner). CSN W11 names the investigation hide contract.
+
 **Housekeeping:** untracked an accidentally-committed `node_modules`
 symlink (violates the project's own "never committed" convention and broke
 local tooling on this machine's checkout).

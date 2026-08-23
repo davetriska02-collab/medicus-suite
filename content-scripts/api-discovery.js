@@ -93,6 +93,10 @@ function templateUrl(cleanUrl) {
 // for every entity kind (see docs/learnings-patient-journal-api.md line 69
 // for the confirmed filter params).
 function stripJournalFilterParams(u) {
+  // Keep in lock-step with engine/record-duplicate-parser.js
+  // JOURNAL_FILTER_PARAM_KEYS / stripJournalFilterParams — that copy is
+  // also applied on read in duplicate-checker.js so an already-stored
+  // filtered template cannot silently narrow "Analyse full record".
   u.searchParams.delete('year[]');
   u.searchParams.delete('type[]');
   u.searchParams.delete('initialCat');

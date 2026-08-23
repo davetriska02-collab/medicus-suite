@@ -118,13 +118,15 @@
 //    REPORT (`investigationReportId`), confirmed live via HAR capture of a
 //    real manual duplicate-report removal (`POST
 //    clinical/investigation/mark-incorrect-and-hidden`,
-//    `{reason, isConfirmedRemoval, investigationReportId}`). Every result in
-//    that captured report was independently confirmed duplicated (not just
-//    the one being viewed) — but a report mixing duplicate and unique
-//    results is a real possible shape this pass doesn't yet reason about, so
-//    `investigation` is deliberately left OUT of WRITE_CONTRACTS for now:
-//    read-only recommendation, same pattern already used for
-//    investigation-request/communication.
+//    `{reason, isConfirmedRemoval, investigationReportId}`). Removal is
+//    therefore a dedicated report-level function
+//    (`buildInvestigationReportRemovalRequest`), NOT a row in
+//    WRITE_CONTRACTS: those are entry-id-keyed, and sending a result id
+//    here would mark the wrong thing. The UI offers that write only for
+//    `fullMatch` clusters — every raw result on every report accounted
+//    for, including results flatten skipped (missing collection time or
+//    conceptId). A report mixing duplicate and unique results is surfaced
+//    but never bulk-removable.
 
 (function (global) {
   'use strict';
@@ -435,7 +437,11 @@
 
   const DOCUMENT_COMPARISON_FIELDS = [
     { label: 'Title', editKey: 'title', get: (p) => p.document && p.document.title },
-    { label: 'Type', editKey: 'code', get: (p) => p.document && p.document.typeCode && p.document.typeCode.description },
+    {
+      label: 'Type',
+      editKey: 'code',
+      get: (p) => p.document && p.document.typeCode && p.document.typeCode.description,
+    },
     { label: 'Document date', editKey: 'documentDate', get: (p) => p.document && p.document.documentDate },
     { label: 'Author', editKey: 'authoredByOrganisation', get: (p) => p.document && p.document.authoredByText },
     { label: 'Clinical specialty', get: (p) => p.document && specialtyText(p.document.clinicalSpecialty) },
@@ -486,6 +492,29 @@
   function flattenJournal(dayGroups) {
     const entries = [];
     const transferEncounters = [];
+    // Raw per-report census of investigation results — including ones
+    // flatten skips — so fullMatch can fail closed when a report holds
+    // data this pass could not read (missing collection time / conceptId /
+    // report id). Keyed by investigationReportId.
+    const investigationRawByReport = new Map();
+
+    function noteInvestigationRaw(result) {
+      if (!result) return { flattenable: false };
+      const rid = result.investigationReportId || null;
+      const flattenable = !!(
+        rid &&
+        result.orderingDateString &&
+        result.investigationResultCode &&
+        result.investigationResultCode.conceptId
+      );
+      if (rid) {
+        const rec = investigationRawByReport.get(rid) || { total: 0, skipped: 0 };
+        rec.total += 1;
+        if (!flattenable) rec.skipped += 1;
+        investigationRawByReport.set(rid, rec);
+      }
+      return { flattenable };
+    }
 
     function pushEntry(
       kind,
@@ -755,32 +784,49 @@
           // top-level branch. groupAndTier's own defensive id-dedupe covers
           // the case if that assumption turns out wrong later.
           const d = item.data || {};
+          const rawResults = [];
           for (const group of d.investigationGroups || []) {
             for (const result of group.results || []) {
-              if (!result || !result.orderingDateString) continue;
-              pushEntry(
-                'investigation',
-                result.id,
-                result.investigationResultCode && result.investigationResultCode.conceptId,
-                result.resultValue != null ? String(result.resultValue) : null,
-                null,
-                null,
-                result.orderingDateString,
-                null,
-                false,
-                {
-                  investigationReportId: result.investigationReportId || null,
-                  resultUnit: result.resultUnit || null,
-                  investigationResultLabel: result.investigationResultLabel || null,
-                  requiresUrgentReview: !!result.requiresUrgentReview,
-                }
-              );
+              if (result) rawResults.push(result);
             }
+          }
+          // A result with no reportId cannot be attributed. Fail closed on
+          // every report this item does name — we cannot prove those
+          // reports do not also hold that unread result.
+          const unattributed = rawResults.some((r) => !r.investigationReportId);
+          const reportIdsOnItem = [...new Set(rawResults.map((r) => r.investigationReportId).filter(Boolean))];
+          if (unattributed) {
+            for (const rid of reportIdsOnItem) {
+              const rec = investigationRawByReport.get(rid) || { total: 0, skipped: 0 };
+              rec.skipped += 1;
+              investigationRawByReport.set(rid, rec);
+            }
+          }
+          for (const result of rawResults) {
+            const { flattenable } = noteInvestigationRaw(result);
+            if (!flattenable) continue;
+            pushEntry(
+              'investigation',
+              result.id,
+              result.investigationResultCode && result.investigationResultCode.conceptId,
+              result.resultValue != null ? String(result.resultValue) : null,
+              null,
+              null,
+              result.orderingDateString,
+              null,
+              false,
+              {
+                investigationReportId: result.investigationReportId || null,
+                resultUnit: result.resultUnit || null,
+                investigationResultLabel: result.investigationResultLabel || null,
+                requiresUrgentReview: !!result.requiresUrgentReview,
+              }
+            );
           }
         }
       }
     }
-    return { entries, transferEncounters };
+    return { entries, transferEncounters, investigationRawByReport };
   }
 
   // ── Group + tier ──────────────────────────────────────────────────────────
@@ -1030,24 +1076,20 @@
   // internal building block here, not the display unit: this rolls them up
   // into one card per set of reports that share a duplicate cluster.
   //
-  // Safety-critical distinction, matching the file header's own caveat that
-  // a report mixing duplicate and unique results isn't reasoned about yet:
-  // `fullMatch` is only true when EVERY result in EVERY report of the set is
-  // accounted for by a matched analyte cluster (matched count === that
-  // report's own total result count, for all reports in the set). Only a
-  // fullMatch cluster is safe to offer for report-level removal — removing
-  // a report that also holds even one unmatched (potentially unique) result
-  // would destroy real data Medicus's own report-level write contract has
-  // no way to preserve selectively.
-  function buildInvestigationReportGroups(groups, entries) {
+  // Safety-critical distinction: `fullMatch` is only true when EVERY raw
+  // result in EVERY report of the set is accounted for — matched result
+  // count === that report's raw total, and flatten skipped none of them
+  // (missing collection time, conceptId, or an unattributed sibling).
+  // Counting only successfully flattened entries would treat unread
+  // results as absent and offer to hide a report that still holds unique
+  // data. Only a fullMatch cluster is safe to offer for report-level
+  // removal — Medicus's write contract hides the whole report.
+  function buildInvestigationReportGroups(groups, _entries, investigationRawByReport) {
     const invGroups = groups.filter((g) => g.kind === 'investigation');
     if (!invGroups.length) return [];
 
-    const totalByReport = new Map();
-    for (const e of entries) {
-      if (e.kind !== 'investigation' || !e.investigationReportId) continue;
-      totalByReport.set(e.investigationReportId, (totalByReport.get(e.investigationReportId) || 0) + 1);
-    }
+    const rawByReport =
+      investigationRawByReport && typeof investigationRawByReport.get === 'function' ? investigationRawByReport : null;
 
     const clusters = new Map();
     for (const g of invGroups) {
@@ -1062,12 +1104,23 @@
     for (const { reportIds, analyteGroups } of clusters.values()) {
       const matchedCountByReport = {};
       const totalCountByReport = {};
+      const skippedCountByReport = {};
       for (const rid of reportIds) {
-        matchedCountByReport[rid] = analyteGroups.filter((g) => g.entries.some((e) => e.investigationReportId === rid))
-          .length;
-        totalCountByReport[rid] = totalByReport.get(rid) || 0;
+        matchedCountByReport[rid] = analyteGroups.reduce(
+          (n, g) => n + g.entries.filter((e) => e.investigationReportId === rid).length,
+          0
+        );
+        const raw = rawByReport && rawByReport.get(rid);
+        // No raw census → fail closed (treat as unread data present).
+        totalCountByReport[rid] = raw ? raw.total : 0;
+        skippedCountByReport[rid] = raw ? raw.skipped : 1;
       }
-      const fullMatch = reportIds.every((rid) => matchedCountByReport[rid] === totalCountByReport[rid]);
+      const fullMatch = reportIds.every(
+        (rid) =>
+          totalCountByReport[rid] > 0 &&
+          skippedCountByReport[rid] === 0 &&
+          matchedCountByReport[rid] === totalCountByReport[rid]
+      );
 
       // Keeper = earliest-created report, via the UUIDv7 timestamp of its
       // own member result ids — same tie-breaker principle as every other
@@ -1092,6 +1145,7 @@
         analyteGroups,
         matchedCountByReport,
         totalCountByReport,
+        skippedCountByReport,
         fullMatch,
         keeperReportId,
       });
@@ -1116,6 +1170,39 @@
       method: 'POST',
       body: { investigationReportId: reportId, reason: trimmedReason, isConfirmedRemoval: true },
     };
+  }
+
+  // Execute-time gate for the report-level hide write. Re-checks the same
+  // conditions the UI uses to offer the button — a stale analysis, a
+  // keeper id that is not in the cluster (which would remove EVERY report
+  // including the intended keeper), or a cluster that is no longer a
+  // fullMatch must not reach the network.
+  function canRemoveInvestigationReports(rg, keeperReportId) {
+    if (!rg || !rg.fullMatch || !keeperReportId) return false;
+    const ids = rg.reportIds;
+    if (!Array.isArray(ids) || ids.length < 2) return false;
+    if (!ids.includes(keeperReportId)) return false;
+    const skipped = rg.skippedCountByReport || {};
+    const total = rg.totalCountByReport || {};
+    const matched = rg.matchedCountByReport || {};
+    return ids.every((rid) => (skipped[rid] || 0) === 0 && (total[rid] || 0) > 0 && matched[rid] === total[rid]);
+  }
+
+  // Medicus journal-tab UI applies year/category filters by default
+  // (`?year[]=2005&type[]=investigation&initialCat=year`). The discovered
+  // template feeds "Analyse full record for duplicates" and must be the
+  // unfiltered journal. Keep this list in lock-step with
+  // content-scripts/api-discovery.js `stripJournalFilterParams`.
+  const JOURNAL_FILTER_PARAM_KEYS = ['year[]', 'type[]', 'initialCat'];
+  function stripJournalFilterParams(url) {
+    if (!url) return url;
+    try {
+      const u = typeof url === 'string' ? new URL(url) : url;
+      for (const key of JOURNAL_FILTER_PARAM_KEYS) u.searchParams.delete(key);
+      return typeof url === 'string' ? u.toString() : u;
+    } catch (e) {
+      return url;
+    }
   }
 
   // Splits an over-merged document-kind group when >=2 members have known,
@@ -1276,6 +1363,14 @@
         // learned, so nothing should be claimed.
         if (keys[0] !== 'unknown-hash') g.contentHashConfirmed = true;
         result.push(g);
+        checkResults.push({
+          date: g.date,
+          code: g.code,
+          checkedEntryIds: g.entries.map((e) => e.id),
+          confirmedGroupEntryIds: keys[0] !== 'unknown-hash' ? [g.entries.map((e) => e.id)] : [],
+          uniqueEntryIds: [],
+          unresolvedEntryIds: keys[0] === 'unknown-hash' ? g.entries.map((e) => e.id) : [],
+        });
         continue;
       }
       documentGroupsSplitByContentHash++;
@@ -1432,7 +1527,14 @@
   // see. Tier is always REVIEW: same-size-same-type is strong evidence, not
   // proof of identical content, so it's never auto-removable-by-default —
   // same discipline as documentLinked groups.
-  function findFileMatchedDuplicates(documentEntries, existingGroups, fileTypeByEntryId, fileSizeByEntryId, createdDateByEntryId, filedDateTimeByEntryId) {
+  function findFileMatchedDuplicates(
+    documentEntries,
+    existingGroups,
+    fileTypeByEntryId,
+    fileSizeByEntryId,
+    createdDateByEntryId,
+    filedDateTimeByEntryId
+  ) {
     const buckets = new Map();
     // baseKey (fileType::fileSize, ignoring the accurx URL refinement below)
     // -> distinct accurx URLs seen sharing that fileType/fileSize — used only
@@ -1719,7 +1821,8 @@
             const ft = fileTypeByEntryId[id];
             if (!ft) return null;
             const rawSize = fileSizeByEntryId ? fileSizeByEntryId[id] : null;
-            const fs = rawSize === undefined || rawSize === null || rawSize === '' ? 'unknown-size' : String(rawSize).trim();
+            const fs =
+              rawSize === undefined || rawSize === null || rawSize === '' ? 'unknown-size' : String(rawSize).trim();
             return `${ft}::${fs}`;
           })
           .filter(Boolean)
@@ -2124,7 +2227,8 @@
           const org = resolveDocumentOrganisation(m, preview);
           if (org) {
             overrides.authoredByOrganisation = org;
-            overrides.authorOrganisationOption = m.authorOrganisationOption != null ? m.authorOrganisationOption : 'other';
+            overrides.authorOrganisationOption =
+              m.authorOrganisationOption != null ? m.authorOrganisationOption : 'other';
             continue;
           }
         }
@@ -2288,7 +2392,7 @@
 
   function analyzeJournal(payload) {
     const dayGroups = extractDayGroups(payload);
-    const { entries, transferEncounters } = flattenJournal(dayGroups);
+    const { entries, transferEncounters, investigationRawByReport } = flattenJournal(dayGroups);
     const suppressedSameConsultation = [];
     const suppressedQuantityMismatch = [];
     const suppressedProblemLinkage = [];
@@ -2312,7 +2416,7 @@
     // groups above are its raw material, not a second, redundant display of
     // the same duplicates. Excluded here so byTier/totalCandidateGroups and
     // the generic groups list reflect only what's actually rendered there.
-    const investigationReportGroups = buildInvestigationReportGroups(groups, entries);
+    const investigationReportGroups = buildInvestigationReportGroups(groups, entries, investigationRawByReport);
     const visibleGroups = groups.filter((g) => g.kind !== 'investigation');
 
     const byTier = { exact: 0, high: 0, review: 0 };
@@ -2357,6 +2461,8 @@
     groupAndTier,
     buildInvestigationReportGroups,
     buildInvestigationReportRemovalRequest,
+    canRemoveInvestigationReports,
+    stripJournalFilterParams,
     normCode,
     normText,
     decodeIdTimestamp,

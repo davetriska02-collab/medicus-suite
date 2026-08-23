@@ -21,6 +21,8 @@ const {
   buildRemovalRequest,
   buildInvestigationReportGroups,
   buildInvestigationReportRemovalRequest,
+  canRemoveInvestigationReports,
+  stripJournalFilterParams,
   splitWrapperText,
   isJunkRecordedBy,
   wordDiff,
@@ -93,7 +95,13 @@ function flatNoteItem(id, code, note, recordedBy, recordedByOrganisation) {
 function flatInvestigationRequestItem(id, items, requestedBy, requestingOrganisation) {
   return {
     type: 'investigation-request',
-    data: { id, entryType: 'investigation-request', investigationRequestItems: items, requestedBy, requestingOrganisation },
+    data: {
+      id,
+      entryType: 'investigation-request',
+      investigationRequestItems: items,
+      requestedBy,
+      requestingOrganisation,
+    },
   };
 }
 
@@ -158,7 +166,13 @@ function nestedPrescriptionEntry(id, productName, dosageText, issueQuantity) {
 
 // requestingOrganisation live-confirmed 2026-07-17 as a real field.
 function nestedInvestigationRequestEntry(id, items, requestedBy, requestingOrganisation) {
-  return { entryType: 'investigation-request', id, investigationRequestItems: items, requestedBy, requestingOrganisation };
+  return {
+    entryType: 'investigation-request',
+    id,
+    investigationRequestItems: items,
+    requestedBy,
+    requestingOrganisation,
+  };
 }
 
 function problemRef(id, desc) {
@@ -284,9 +298,14 @@ assert(
 );
 assert(!byCode['Annual review'], 'Unique entry does not form a candidate group');
 assert(!byCode['Medication review'].emptyWrapperOnly, 'Group B (real free text) is not flagged emptyWrapperOnly');
-assert(!byCode['Pigmented naevus'].emptyWrapperOnly, 'Group C (wrapper + real prose survives stripping) is not flagged emptyWrapperOnly');
+assert(
+  !byCode['Pigmented naevus'].emptyWrapperOnly,
+  'Group C (wrapper + real prose survives stripping) is not flagged emptyWrapperOnly'
+);
 
-console.log('\n--- note-kind empty-wrapper cap (live-confirmed 2026-07-17, docs/learnings-vaccination-note-duplicates.md) ---');
+console.log(
+  '\n--- note-kind empty-wrapper cap (live-confirmed 2026-07-17, docs/learnings-vaccination-note-duplicates.md) ---'
+);
 {
   // Real motivating case: three different vaccines given the same day, each
   // recorded as a note entry whose ENTIRE body is the content-free
@@ -296,9 +315,27 @@ console.log('\n--- note-kind empty-wrapper cap (live-confirmed 2026-07-17, docs/
     {
       title: 'Tue 19 Jun 2007',
       items: [
-        flatNoteItem('vax-1', 'Immunisations', '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}', 'Dr J R Jones', null),
-        flatNoteItem('vax-2', 'Immunisations', '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}', 'Mrs Janine McGilly', null),
-        flatNoteItem('vax-3', 'Immunisations', '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}', 'Ms Clare Lower', null),
+        flatNoteItem(
+          'vax-1',
+          'Immunisations',
+          '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}',
+          'Dr J R Jones',
+          null
+        ),
+        flatNoteItem(
+          'vax-2',
+          'Immunisations',
+          '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}',
+          'Mrs Janine McGilly',
+          null
+        ),
+        flatNoteItem(
+          'vax-3',
+          'Immunisations',
+          '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}',
+          'Ms Clare Lower',
+          null
+        ),
       ],
     },
   ];
@@ -320,8 +357,20 @@ console.log('\n--- note-kind empty-wrapper cap (live-confirmed 2026-07-17, docs/
     {
       title: 'Tue 19 Jun 2007',
       items: [
-        flatNoteItem('vax-a', 'Immunisations', '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}', 'Dr Test', null),
-        flatNoteItem('vax-b', 'Immunisations', '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}', 'Dr Test', null),
+        flatNoteItem(
+          'vax-a',
+          'Immunisations',
+          '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}',
+          'Dr Test',
+          null
+        ),
+        flatNoteItem(
+          'vax-b',
+          'Immunisations',
+          '{Episodicity : code=303350001, displayName=Ongoing, originalText=Review}',
+          'Dr Test',
+          null
+        ),
       ],
     },
   ];
@@ -331,7 +380,10 @@ console.log('\n--- note-kind empty-wrapper cap (live-confirmed 2026-07-17, docs/
     sameAuthorGroup.tier === TIER.EXACT,
     'Matching recordedBy + empty wrapper still tiers EXACT — the cap only fires on the HIGH (different-author) combination'
   );
-  assert(sameAuthorGroup.emptyWrapperOnly === false, 'EXACT-tier groups are never flagged emptyWrapperOnly (the cap never fired)');
+  assert(
+    sameAuthorGroup.emptyWrapperOnly === false,
+    'EXACT-tier groups are never flagged emptyWrapperOnly (the cap never fired)'
+  );
 }
 
 console.log('\n--- Transfer encounter confirmation ---');
@@ -459,10 +511,20 @@ const nestedRxInvReqDayGroups = [
     title: 'Fri 18 Jul 2025',
     items: [
       encounter('enc-rx-a', 'Dr Test', [
-        nestedPrescriptionEntry('rx-nested-a', 'Amoxicillin 250mg capsules', 'Take one three times a day', '21 capsule'),
+        nestedPrescriptionEntry(
+          'rx-nested-a',
+          'Amoxicillin 250mg capsules',
+          'Take one three times a day',
+          '21 capsule'
+        ),
       ]),
       encounter('enc-rx-b', 'Dr Test', [
-        nestedPrescriptionEntry('rx-nested-b', 'Amoxicillin 250mg capsules', 'Take one three times a day', '21 capsule'),
+        nestedPrescriptionEntry(
+          'rx-nested-b',
+          'Amoxicillin 250mg capsules',
+          'Take one three times a day',
+          '21 capsule'
+        ),
       ]),
       encounter('enc-ir-a', 'Dr Test', [
         nestedInvestigationRequestEntry('ir-nested-a', ['FBC', 'U&E'], 'Dr Test', 'Test Surgery'),
@@ -1319,7 +1381,10 @@ console.log('\n--- Document edit contract (buildDocumentEditDetailsUrl / buildDo
     'buildDocumentEditDetailsUrl targets the confirmed clinical/data/document/edit-details/{documentId} URL'
   );
   assert(buildDocumentEditDetailsUrl(null, 'doc-1') === null, 'buildDocumentEditDetailsUrl refuses a missing apiBase');
-  assert(buildDocumentEditDetailsUrl(apiBase, null) === null, 'buildDocumentEditDetailsUrl refuses a missing documentId');
+  assert(
+    buildDocumentEditDetailsUrl(apiBase, null) === null,
+    'buildDocumentEditDetailsUrl refuses a missing documentId'
+  );
 
   const req = buildDocumentEditRequest(apiBase, safeDocumentEditModel, {});
   assert(
@@ -1454,7 +1519,11 @@ console.log('\n--- Document edit contract (buildDocumentEditDetailsUrl / buildDo
     buildDocumentEditRequest(apiBase, { ...safeDocumentEditModel, code: { label: 'x', value: null } }, {}) === null,
     'refuses a model with no readable code.value'
   );
-  const manualOrgOnly = buildDocumentEditRequest(apiBase, { ...safeDocumentEditModel, authoredByOrganisation: null }, {});
+  const manualOrgOnly = buildDocumentEditRequest(
+    apiBase,
+    { ...safeDocumentEditModel, authoredByOrganisation: null },
+    {}
+  );
   assert(
     manualOrgOnly &&
       manualOrgOnly.body.authoredByOrganisation.organisationName === 'Teddington Memorial Hospital' &&
@@ -1462,7 +1531,10 @@ console.log('\n--- Document edit contract (buildDocumentEditDetailsUrl / buildDo
     'a model with no structured authoredByOrganisation.value falls back to its manual org text (name with null identifiers — the confirmed manual-entry shape)'
   );
 
-  assert(getDocumentEditValue(safeDocumentEditModel, 'title') === null, 'getDocumentEditValue: a stored null title reads as null (a legitimate value)');
+  assert(
+    getDocumentEditValue(safeDocumentEditModel, 'title') === null,
+    'getDocumentEditValue: a stored null title reads as null (a legitimate value)'
+  );
   assert(
     getDocumentEditValue(safeDocumentEditModel, 'code').conceptId === '312341000000104',
     'getDocumentEditValue: code reads the posted-shape .value object'
@@ -1544,7 +1616,12 @@ console.log('\n--- Document edit contract (buildDocumentEditDetailsUrl / buildDo
   const previewForFallback = {
     'doc-2': {
       document: {
-        typeCode: { conceptId: '25781000000108', description: 'Out of hours report', descriptionId: '2326201000000118', originalCodes: [] },
+        typeCode: {
+          conceptId: '25781000000108',
+          description: 'Out of hours report',
+          descriptionId: '2326201000000118',
+          originalCodes: [],
+        },
         recordDate: '2026-02-22',
         documentDate: '22 Feb 2026',
       },
@@ -1576,7 +1653,12 @@ console.log('\n--- Document edit contract (buildDocumentEditDetailsUrl / buildDo
       { editKey: 'authoredByOrganisation', entryId: 'doc-2' },
     ],
     {
-      'doc-2': { ...degradedModel, documentDate: null, authoredByOrganisation: null, manualAuthoredByOrganisation: null },
+      'doc-2': {
+        ...degradedModel,
+        documentDate: null,
+        authoredByOrganisation: null,
+        manualAuthoredByOrganisation: null,
+      },
     }
   );
   assert(
@@ -2273,10 +2355,11 @@ console.log('\n--- splitDocumentGroupsByContentHash (content-hash verification, 
     sameFileTypeAndSize: true,
     entries: [hashDocEntry('m1'), hashDocEntry('m2')],
   };
-  const { groups: agreeing, documentGroupsSplitByContentHash: agreeingSplitCount } = splitDocumentGroupsByContentHash(
-    [agreeingGroup],
-    { m1: 'same-hash', m2: 'same-hash' }
-  );
+  const {
+    groups: agreeing,
+    documentGroupsSplitByContentHash: agreeingSplitCount,
+    checkResults: agreeingResults,
+  } = splitDocumentGroupsByContentHash([agreeingGroup], { m1: 'same-hash', m2: 'same-hash' });
   assert(
     agreeing.length === 1 && agreeing[0] === agreeingGroup,
     'a group whose known hashes all agree passes through unchanged (genuinely confirmed duplicate, nothing to split)'
@@ -2285,6 +2368,12 @@ console.log('\n--- splitDocumentGroupsByContentHash (content-hash verification, 
   assert(
     agreeing[0].contentHashConfirmed === true,
     'a real fix (2026-08-22): a no-split "everyone genuinely agrees" group is still marked contentHashConfirmed, so the UI shows the byte-identical confirmation instead of silently showing the same button again'
+  );
+  assert(
+    agreeingResults.length === 1 &&
+      agreeingResults[0].confirmedGroupEntryIds.length === 1 &&
+      agreeingResults[0].uniqueEntryIds.length === 0,
+    'a no-split confirmed-identical group still emits checkResults so the UI can show the outcome without recomputing buckets'
   );
 
   const { groups: noHashData } = splitDocumentGroupsByContentHash([sixVaccineGroup], {});
@@ -2745,10 +2834,13 @@ console.log('\n--- normText null/junk-only parity + note field comparison (2026-
     note: '{Episodicity : code=255217005, displayName=First}',
     linkedProblems: [],
   };
-  const noteComparison = buildNoteFieldComparison({ entries: [{ id: 'a' }, { id: 'b' }] }, {
-    a: originalOverview,
-    b: duplicateOverview,
-  });
+  const noteComparison = buildNoteFieldComparison(
+    { entries: [{ id: 'a' }, { id: 'b' }] },
+    {
+      a: originalOverview,
+      b: duplicateOverview,
+    }
+  );
   const noteRow = (label) => noteComparison.rows.find((r) => r.label === label);
   assert(noteRow('Code').differs === false, 'Code matches on both copies');
   assert(noteRow('Note text').differs === true, 'Note text differs (null vs the flattened episodicity block)');
@@ -2826,10 +2918,19 @@ console.log('\n--- findSuspiciousDocuments (zero-fetch trigger for the opt-in se
 
   const flagged = findSuspiciousDocuments([near, nearToo, farAway, junkTitled, clean]);
   const byId = Object.fromEntries(flagged.map((f) => [f.id, f]));
-  assert(byId['near-1'] && byId['near-1'].sharedCreationMinute === true, 'near-1 flagged: shares its creation minute with near-2');
-  assert(byId['near-2'] && byId['near-2'].sharedCreationMinute === true, 'near-2 flagged: shares its creation minute with near-1');
+  assert(
+    byId['near-1'] && byId['near-1'].sharedCreationMinute === true,
+    'near-1 flagged: shares its creation minute with near-2'
+  );
+  assert(
+    byId['near-2'] && byId['near-2'].sharedCreationMinute === true,
+    'near-2 flagged: shares its creation minute with near-1'
+  );
   assert(!byId['far-1'], 'far-1 is NOT flagged — its creation minute is unique and its title is clean');
-  assert(byId['junk-1'] && byId['junk-1'].titleJunkPrefix === true, 'junk-1 flagged: junk title prefix, even with a unique creation minute');
+  assert(
+    byId['junk-1'] && byId['junk-1'].titleJunkPrefix === true,
+    'junk-1 flagged: junk title prefix, even with a unique creation minute'
+  );
   assert(!byId['clean-1'], 'clean-1 is NOT flagged — clean title, unique creation minute');
   assert(
     byId['near-1'].titleJunkPrefix === false && byId['junk-1'].sharedCreationMinute === false,
@@ -2850,12 +2951,7 @@ console.log('\n--- findSuspiciousDocuments (zero-fetch trigger for the opt-in se
     {
       title: 'Mon 1 Jan 2024',
       items: [
-        flatDocumentItem(
-          'junk-doc',
-          'Other digital signal',
-          'tiff: GUID.tiff - Type: Admin Letter Author Org: Y',
-          {}
-        ),
+        flatDocumentItem('junk-doc', 'Other digital signal', 'tiff: GUID.tiff - Type: Admin Letter Author Org: Y', {}),
       ],
     },
   ];
@@ -2867,7 +2963,7 @@ console.log('\n--- findSuspiciousDocuments (zero-fetch trigger for the opt-in se
   const docEntry = analysis.entries.find((e) => e.id === 'junk-doc');
   assert(
     docEntry.title === 'tiff: GUID.tiff - Type: Admin Letter Author Org: Y',
-    "a document entry retains its own raw title field (not just the concatenated rawText blob)"
+    'a document entry retains its own raw title field (not just the concatenated rawText blob)'
   );
 }
 
@@ -2878,39 +2974,113 @@ console.log('\n--- findFileMatchedDuplicates (cross-record file-size/type duplic
   // catch these. Two documents, different dates, different codes, but the
   // SAME (fileType, fileSize) — the one signal that can't be corrupted by a
   // reimport relabelling pass.
-  const docA = { id: 'doc-a', kind: 'document', date: 'Mon 1 Jan 2024', code: 'Admin Letter', recordedBy: 'X', recordedByOrganisation: null, idTime: 100, title: 'tiff: GUID.tiff - Type: Admin Letter Author Org: Y' };
-  const docB = { id: 'doc-b', kind: 'document', date: 'Fri 15 Mar 2024', code: 'Clinical letter', recordedBy: 'X', recordedByOrganisation: null, idTime: 200, title: 'Type: Clinical letter Author Org: Y' };
-  const docC = { id: 'doc-c', kind: 'document', date: 'Mon 1 Jan 2024', code: 'Admin Letter', recordedBy: 'X', recordedByOrganisation: null, idTime: 50, title: null };
+  const docA = {
+    id: 'doc-a',
+    kind: 'document',
+    date: 'Mon 1 Jan 2024',
+    code: 'Admin Letter',
+    recordedBy: 'X',
+    recordedByOrganisation: null,
+    idTime: 100,
+    title: 'tiff: GUID.tiff - Type: Admin Letter Author Org: Y',
+  };
+  const docB = {
+    id: 'doc-b',
+    kind: 'document',
+    date: 'Fri 15 Mar 2024',
+    code: 'Clinical letter',
+    recordedBy: 'X',
+    recordedByOrganisation: null,
+    idTime: 200,
+    title: 'Type: Clinical letter Author Org: Y',
+  };
+  const docC = {
+    id: 'doc-c',
+    kind: 'document',
+    date: 'Mon 1 Jan 2024',
+    code: 'Admin Letter',
+    recordedBy: 'X',
+    recordedByOrganisation: null,
+    idTime: 50,
+    title: null,
+  };
   const fileType = { 'doc-a': 'tiff', 'doc-b': 'tiff', 'doc-c': 'pdf' };
   const fileSize = { 'doc-a': '245.11 KB', 'doc-b': '245.11 KB', 'doc-c': '10 KB' };
   const created = { 'doc-a': '2026-02-23 15:11:10' };
   const filed = { 'doc-a': '2026-02-23 06:05:21' };
 
-  const { groups, clustersChecked } = findFileMatchedDuplicates([docA, docB, docC], [], fileType, fileSize, created, filed);
+  const { groups, clustersChecked } = findFileMatchedDuplicates(
+    [docA, docB, docC],
+    [],
+    fileType,
+    fileSize,
+    created,
+    filed
+  );
   assert(
     clustersChecked === 1,
     'only the tiff/245.11KB bucket has 2+ members and counts as a checked cluster — the lone pdf/10KB document never reaches that stage'
   );
   assert(groups.length === 1, 'only the cluster with 2+ members forms a group — a lone document never groups');
   const g = groups[0];
-  assert(g.kind === 'document' && g.tier === TIER.REVIEW && g.fileMatched === true, 'the group is document-kind, tier REVIEW, tagged fileMatched');
-  assert(g.gp2gpWrapper === false, 'gp2gpWrapper is always false for a file-matched group (not a text-wrapper concept)');
-  assert(g.entries.map((e) => e.id).sort().join(',') === 'doc-a,doc-b', 'the matched cluster contains exactly the two same-fileType/fileSize documents');
-  assert(g.date === '2 dates', 'a cluster spanning different journal dates reports a date COUNT, never a guessed single date');
-  assert(g.code === 'tiff · 245.11 KB', 'code displays the matching evidence itself (fileType · fileSize), since there is no shared textual code');
-  assert(g.keeperEntryId === 'doc-a', 'keeper is the earliest-idTime member of the MATCHED pair (doc-a=100 < doc-b=200), independent of doc-c');
+  assert(
+    g.kind === 'document' && g.tier === TIER.REVIEW && g.fileMatched === true,
+    'the group is document-kind, tier REVIEW, tagged fileMatched'
+  );
+  assert(
+    g.gp2gpWrapper === false,
+    'gp2gpWrapper is always false for a file-matched group (not a text-wrapper concept)'
+  );
+  assert(
+    g.entries
+      .map((e) => e.id)
+      .sort()
+      .join(',') === 'doc-a,doc-b',
+    'the matched cluster contains exactly the two same-fileType/fileSize documents'
+  );
+  assert(
+    g.date === '2 dates',
+    'a cluster spanning different journal dates reports a date COUNT, never a guessed single date'
+  );
+  assert(
+    g.code === 'tiff · 245.11 KB',
+    'code displays the matching evidence itself (fileType · fileSize), since there is no shared textual code'
+  );
+  assert(
+    g.keeperEntryId === 'doc-a',
+    'keeper is the earliest-idTime member of the MATCHED pair (doc-a=100 < doc-b=200), independent of doc-c'
+  );
   const entryA = g.entries.find((e) => e.id === 'doc-a');
   const entryB = g.entries.find((e) => e.id === 'doc-b');
   assert(entryA.isKeeper === true && entryB.isKeeper === false, 'isKeeper flags match the computed keeper');
   assert(entryA.titleJunkPrefix === true, "doc-a's junk-prefixed title is flagged on its entry");
   assert(entryB.titleJunkPrefix === false, "doc-b's clean title is not flagged");
-  assert(entryA.createdAfterFiled === true, 'doc-a\'s created-after-filed anomaly is flagged from the caller-supplied maps');
+  assert(
+    entryA.createdAfterFiled === true,
+    "doc-a's created-after-filed anomaly is flagged from the caller-supplied maps"
+  );
   assert(entryB.createdAfterFiled === false, 'doc-b has no known created/filed data, so no anomaly is guessed');
 
   const sameDate = findFileMatchedDuplicates(
     [
-      { id: 'x', kind: 'document', date: 'Mon 1 Jan', recordedBy: 'A', recordedByOrganisation: 'Org1', idTime: 1, title: null },
-      { id: 'y', kind: 'document', date: 'Mon 1 Jan', recordedBy: 'B', recordedByOrganisation: 'Org2', idTime: 2, title: null },
+      {
+        id: 'x',
+        kind: 'document',
+        date: 'Mon 1 Jan',
+        recordedBy: 'A',
+        recordedByOrganisation: 'Org1',
+        idTime: 1,
+        title: null,
+      },
+      {
+        id: 'y',
+        kind: 'document',
+        date: 'Mon 1 Jan',
+        recordedBy: 'B',
+        recordedByOrganisation: 'Org2',
+        idTime: 2,
+        title: null,
+      },
     ],
     [],
     { x: 'pdf', y: 'pdf' },
@@ -2918,7 +3088,10 @@ console.log('\n--- findFileMatchedDuplicates (cross-record file-size/type duplic
     {},
     {}
   );
-  assert(sameDate.groups[0].date === 'Mon 1 Jan', 'a cluster where every member shares one date reports that single date, not a count');
+  assert(
+    sameDate.groups[0].date === 'Mon 1 Jan',
+    'a cluster where every member shares one date reports that single date, not a count'
+  );
   assert(
     sameDate.groups[0].recordedByVaries === true && sameDate.groups[0].recordedByOrganisationVaries === true,
     'recordedBy/recordedByOrganisation variance is computed the same way buildGroupRecord does'
@@ -2975,7 +3148,11 @@ console.log('\n--- findFileMatchedDuplicates (cross-record file-size/type duplic
     {}
   );
   assert(
-    partial.groups.length === 1 && partial.groups[0].entries.map((e) => e.id).sort().join(',') === 'm,n',
+    partial.groups.length === 1 &&
+      partial.groups[0].entries
+        .map((e) => e.id)
+        .sort()
+        .join(',') === 'm,n',
     'a cluster only partially covered by an existing (different-membership) group is still surfaced as new'
   );
 
@@ -2999,8 +3176,14 @@ console.log('\n--- accurxAttachmentUrl / accurx URL-attachment false-positive fi
     accurxAttachmentUrl('record attachment', 'url: https://example.com/PHOTO1') === 'https://example.com/photo1',
     'case-insensitive on both the type label and the URL prefix; extracted value is lowercased for comparison'
   );
-  assert(accurxAttachmentUrl('Admin Letter', 'URL: https://example.com/x') === null, 'a different Type never matches, however URL-shaped the title is');
-  assert(accurxAttachmentUrl('Record Attachment', 'Two week wait referral') === null, 'a Record Attachment whose title is not "URL: ..." never matches');
+  assert(
+    accurxAttachmentUrl('Admin Letter', 'URL: https://example.com/x') === null,
+    'a different Type never matches, however URL-shaped the title is'
+  );
+  assert(
+    accurxAttachmentUrl('Record Attachment', 'Two week wait referral') === null,
+    'a Record Attachment whose title is not "URL: ..." never matches'
+  );
   assert(accurxAttachmentUrl('Record Attachment', null) === null, 'a null title never matches, never throws');
   assert(accurxAttachmentUrl(null, 'URL: https://example.com/x') === null, 'a null code never matches, never throws');
 
@@ -3009,9 +3192,36 @@ console.log('\n--- accurxAttachmentUrl / accurx URL-attachment false-positive fi
   // previous GP system's export templating means these often share BOTH
   // fileType and fileSize even though the actual URL (and therefore the
   // real attachment) differs.
-  const urlA = { id: 'accurx-a', kind: 'document', date: 'Mon 1 Jan 2024', code: 'Record Attachment', recordedBy: 'X', recordedByOrganisation: null, idTime: 1, title: 'URL: https://accurx.nhs.uk/p/photo-1' };
-  const urlB = { id: 'accurx-b', kind: 'document', date: 'Mon 1 Jan 2024', code: 'Record Attachment', recordedBy: 'X', recordedByOrganisation: null, idTime: 2, title: 'URL: https://accurx.nhs.uk/p/photo-2' };
-  const urlC = { id: 'accurx-c', kind: 'document', date: 'Mon 1 Jan 2024', code: 'Record Attachment', recordedBy: 'X', recordedByOrganisation: null, idTime: 3, title: 'URL: https://accurx.nhs.uk/p/photo-3' };
+  const urlA = {
+    id: 'accurx-a',
+    kind: 'document',
+    date: 'Mon 1 Jan 2024',
+    code: 'Record Attachment',
+    recordedBy: 'X',
+    recordedByOrganisation: null,
+    idTime: 1,
+    title: 'URL: https://accurx.nhs.uk/p/photo-1',
+  };
+  const urlB = {
+    id: 'accurx-b',
+    kind: 'document',
+    date: 'Mon 1 Jan 2024',
+    code: 'Record Attachment',
+    recordedBy: 'X',
+    recordedByOrganisation: null,
+    idTime: 2,
+    title: 'URL: https://accurx.nhs.uk/p/photo-2',
+  };
+  const urlC = {
+    id: 'accurx-c',
+    kind: 'document',
+    date: 'Mon 1 Jan 2024',
+    code: 'Record Attachment',
+    recordedBy: 'X',
+    recordedByOrganisation: null,
+    idTime: 3,
+    title: 'URL: https://accurx.nhs.uk/p/photo-3',
+  };
   const sameFileType = { 'accurx-a': 'txt', 'accurx-b': 'txt', 'accurx-c': 'txt' };
   const sameFileSize = { 'accurx-a': '1.2 KB', 'accurx-b': '1.2 KB', 'accurx-c': '1.2 KB' };
 
@@ -3029,7 +3239,14 @@ console.log('\n--- accurxAttachmentUrl / accurx URL-attachment false-positive fi
   // same URL) must still be caught as a real duplicate — the fix must not
   // blanket-exclude every accurx attachment, only ones that actually differ.
   const urlD = { ...urlA, id: 'accurx-d' };
-  const genuineDuplicate = findFileMatchedDuplicates([urlA, urlD], [], { 'accurx-a': 'txt', 'accurx-d': 'txt' }, { 'accurx-a': '1.2 KB', 'accurx-d': '1.2 KB' }, {}, {});
+  const genuineDuplicate = findFileMatchedDuplicates(
+    [urlA, urlD],
+    [],
+    { 'accurx-a': 'txt', 'accurx-d': 'txt' },
+    { 'accurx-a': '1.2 KB', 'accurx-d': '1.2 KB' },
+    {},
+    {}
+  );
   assert(
     genuineDuplicate.groups.length === 1 && genuineDuplicate.groups[0].entries.length === 2,
     'two accurx URL-attachments sharing fileType/fileSize AND the same URL still group as a genuine duplicate'
@@ -3039,8 +3256,26 @@ console.log('\n--- accurxAttachmentUrl / accurx URL-attachment false-positive fi
   // Mixed bucket: differing-URL accurx entries must not disturb an unrelated
   // genuine same-fileType/fileSize document pair sharing the same base key
   // by coincidence (accurx entries route to a disjoint key space).
-  const plainX = { id: 'plain-x', kind: 'document', date: 'Mon 1 Jan 2024', code: 'Admin Letter', recordedBy: 'X', recordedByOrganisation: null, idTime: 4, title: 'Type: Admin Letter' };
-  const plainY = { id: 'plain-y', kind: 'document', date: 'Mon 1 Jan 2024', code: 'Admin Letter', recordedBy: 'X', recordedByOrganisation: null, idTime: 5, title: 'Type: Admin Letter' };
+  const plainX = {
+    id: 'plain-x',
+    kind: 'document',
+    date: 'Mon 1 Jan 2024',
+    code: 'Admin Letter',
+    recordedBy: 'X',
+    recordedByOrganisation: null,
+    idTime: 4,
+    title: 'Type: Admin Letter',
+  };
+  const plainY = {
+    id: 'plain-y',
+    kind: 'document',
+    date: 'Mon 1 Jan 2024',
+    code: 'Admin Letter',
+    recordedBy: 'X',
+    recordedByOrganisation: null,
+    idTime: 5,
+    title: 'Type: Admin Letter',
+  };
   const mixed = findFileMatchedDuplicates(
     [urlA, urlB, plainX, plainY],
     [],
@@ -3050,7 +3285,11 @@ console.log('\n--- accurxAttachmentUrl / accurx URL-attachment false-positive fi
     {}
   );
   assert(
-    mixed.groups.length === 1 && mixed.groups[0].entries.map((e) => e.id).sort().join(',') === 'plain-x,plain-y',
+    mixed.groups.length === 1 &&
+      mixed.groups[0].entries
+        .map((e) => e.id)
+        .sort()
+        .join(',') === 'plain-x,plain-y',
     'a genuine non-accurx duplicate pair sharing the same fileType/fileSize as the split-apart accurx entries still groups normally'
   );
 }
@@ -3060,21 +3299,12 @@ console.log('\n--- sortGroupsByJournalOrder (documentLinked groups adjacent to t
   // Journal order: a note pair early, a document mid-list, another note
   // pair late. The documentLinked group's pseudo-entry is NOT in the
   // journal list — it must slot in via its linkedDocumentId.
-  const journalEntries = [
-    { id: 'n1' },
-    { id: 'n1-dup' },
-    { id: 'doc-1' },
-    { id: 'n2' },
-    { id: 'n2-dup' },
-  ];
+  const journalEntries = [{ id: 'n1' }, { id: 'n1-dup' }, { id: 'doc-1' }, { id: 'n2' }, { id: 'n2-dup' }];
   const earlyGroup = { entries: [{ id: 'n1' }, { id: 'n1-dup' }] };
   const lateGroup = { entries: [{ id: 'n2' }, { id: 'n2-dup' }] };
   const linkedGroup = {
     documentLinked: true,
-    entries: [
-      { id: 'pseudo-1', fromDocumentLinkedElement: true, linkedDocumentId: 'doc-1' },
-      { id: 'n2' },
-    ],
+    entries: [{ id: 'pseudo-1', fromDocumentLinkedElement: true, linkedDocumentId: 'doc-1' }, { id: 'n2' }],
   };
   // Concatenation order mirrors the real caller: main groups first,
   // documentLinked groups appended at the end.
@@ -3191,14 +3421,8 @@ console.log('\n--- External links (buildCareRecordJournalUrl / buildDocumentDown
       'https://england.medicus.health/e38a9f/patient/patient/care-record/01923611-438d-709c-b6f5-ba80da283466?careRecordTab=journal',
     'buildCareRecordJournalUrl matches the confirmed real capture exactly: site code moves from subdomain to first path segment'
   );
-  assert(
-    buildCareRecordJournalUrl(null, 'patient-1') === null,
-    'buildCareRecordJournalUrl refuses a missing apiBase'
-  );
-  assert(
-    buildCareRecordJournalUrl(apiBase, null) === null,
-    'buildCareRecordJournalUrl refuses a missing patientId'
-  );
+  assert(buildCareRecordJournalUrl(null, 'patient-1') === null, 'buildCareRecordJournalUrl refuses a missing apiBase');
+  assert(buildCareRecordJournalUrl(apiBase, null) === null, 'buildCareRecordJournalUrl refuses a missing patientId');
   assert(
     buildCareRecordJournalUrl('https://not-the-expected-shape.example.com', 'patient-1') === null,
     'buildCareRecordJournalUrl refuses rather than guesses when apiBase does not match the confirmed {code}.api.england.medicus.health shape'
@@ -3287,7 +3511,10 @@ console.log('\n--- Investigation (lab result) duplicate detection (2026-08-22) -
   );
   const invDupGroup = invDupResult.investigationReportGroups[0];
   assert(invDupGroup.reportIds.length === 3, 'All three distinct reports are members of the report group');
-  assert(invDupGroup.fullMatch === true, 'Every result in every report is accounted for — a full, safe-to-remove match');
+  assert(
+    invDupGroup.fullMatch === true,
+    'Every result in every report is accounted for — a full, safe-to-remove match'
+  );
   assert(
     invDupResult.summary.investigationReportGroupsTotal === 1 &&
       invDupResult.summary.investigationFullMatchReportGroupsTotal === 1,
@@ -3391,28 +3618,12 @@ console.log('\n--- Investigation (lab result) duplicate detection (2026-08-22) -
       items: [
         flatInvestigationItem('inv-report-8', [
           investigationGroup('U&Es', [
-            investigationResult(
-              'inv-res-8',
-              '1000731000000107',
-              'Serum creatinine',
-              '97',
-              'µmol/L',
-              null,
-              'report-h'
-            ),
+            investigationResult('inv-res-8', '1000731000000107', 'Serum creatinine', '97', 'µmol/L', null, 'report-h'),
           ]),
         ]),
         flatInvestigationItem('inv-report-9', [
           investigationGroup('U&Es', [
-            investigationResult(
-              'inv-res-9',
-              '1000731000000107',
-              'Serum creatinine',
-              '97',
-              'µmol/L',
-              null,
-              'report-i'
-            ),
+            investigationResult('inv-res-9', '1000731000000107', 'Serum creatinine', '97', 'µmol/L', null, 'report-i'),
           ]),
         ]),
       ],
@@ -3521,7 +3732,10 @@ console.log('\n--- Investigation (lab result) duplicate detection (2026-08-22) -
     'Two reports whose every analyte matches roll up into one report group'
   );
   const fullMatchGroup = fullMatchResult.investigationReportGroups[0];
-  assert(fullMatchGroup.analyteGroups.length === 2, 'Both analytes (creatinine and sodium) are part of the report group');
+  assert(
+    fullMatchGroup.analyteGroups.length === 2,
+    'Both analytes (creatinine and sodium) are part of the report group'
+  );
   assert(fullMatchGroup.fullMatch === true, 'Both reports are fully accounted for — safe to remove');
 
   // Multi-analyte PARTIAL match: two reports share a matching creatinine,
@@ -3659,16 +3873,170 @@ console.log('\n--- buildInvestigationReportRemovalRequest (report-level write co
       req.body.isConfirmedRemoval === true,
     'Body matches the confirmed real capture exactly: investigationReportId + reason + isConfirmedRemoval'
   );
-  assert(
-    buildInvestigationReportRemovalRequest(null, 'report-a', 'reason') === null,
-    'Refuses a missing apiBase'
-  );
+  assert(buildInvestigationReportRemovalRequest(null, 'report-a', 'reason') === null, 'Refuses a missing apiBase');
   assert(buildInvestigationReportRemovalRequest(apiBase, null, 'reason') === null, 'Refuses a missing reportId');
   assert(buildInvestigationReportRemovalRequest(apiBase, 'report-a', '') === null, 'Refuses a blank reason');
   assert(
     buildInvestigationReportRemovalRequest(apiBase, 'report-a', '   ') === null,
     'Refuses a whitespace-only reason'
   );
+}
+
+console.log('\n--- fullMatch fails closed on unread/unflattened results ---');
+{
+  // Two reports share a matching creatinine, but report-q also holds a
+  // result with no collection timestamp. Flatten skips that result; the
+  // raw census must still count it so fullMatch cannot be true.
+  const mixedTimestampDayGroups = [
+    {
+      title: 'Wed 12 Mar 2025',
+      items: [
+        flatInvestigationItem('inv-report-17', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-17a',
+              '1000731000000107',
+              'Serum creatinine',
+              '90',
+              'µmol/L',
+              '2025-03-12 09:00:00',
+              'report-q'
+            ),
+            investigationResult('inv-res-17b', '1000761000000109', 'Serum sodium', '140', 'mmol/L', null, 'report-q'),
+          ]),
+        ]),
+        flatInvestigationItem('inv-report-18', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-18a',
+              '1000731000000107',
+              'Serum creatinine',
+              '90',
+              'µmol/L',
+              '2025-03-12 09:00:00',
+              'report-r'
+            ),
+          ]),
+        ]),
+      ],
+    },
+  ];
+  const mixedTimestamp = analyzeJournal(mixedTimestampDayGroups);
+  assert(
+    mixedTimestamp.investigationReportGroups.length === 1,
+    'A pair that shares one readable matching analyte still surfaces'
+  );
+  assert(
+    mixedTimestamp.investigationReportGroups[0].fullMatch === false,
+    'A report with a result flatten skipped (no collection timestamp) is never fullMatch'
+  );
+  assert(
+    mixedTimestamp.investigationReportGroups[0].skippedCountByReport['report-q'] >= 1,
+    'The skipped unread result is counted against the report that holds it'
+  );
+  assert(
+    canRemoveInvestigationReports(mixedTimestamp.investigationReportGroups[0], 'report-r') === false,
+    'Execute-time gate refuses a cluster that is not a fullMatch'
+  );
+
+  const missingConceptDayGroups = [
+    {
+      title: 'Wed 12 Mar 2025',
+      items: [
+        flatInvestigationItem('inv-report-19', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-19a',
+              '1000731000000107',
+              'Serum creatinine',
+              '90',
+              'µmol/L',
+              '2025-03-12 09:00:00',
+              'report-s'
+            ),
+            investigationResult('inv-res-19b', null, 'Uncoded analyte', '1', 'x', '2025-03-12 09:00:00', 'report-s'),
+          ]),
+        ]),
+        flatInvestigationItem('inv-report-20', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-20a',
+              '1000731000000107',
+              'Serum creatinine',
+              '90',
+              'µmol/L',
+              '2025-03-12 09:00:00',
+              'report-t'
+            ),
+          ]),
+        ]),
+      ],
+    },
+  ];
+  const missingConcept = analyzeJournal(missingConceptDayGroups);
+  assert(
+    missingConcept.investigationReportGroups[0].fullMatch === false,
+    'A report with a result flatten skipped (no conceptId) is never fullMatch'
+  );
+
+  const fullMatchGroup = analyzeJournal([
+    {
+      title: 'Wed 12 Mar 2025',
+      items: [
+        flatInvestigationItem('inv-report-21', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-21',
+              '1000731000000107',
+              'Serum creatinine',
+              '90',
+              'µmol/L',
+              '2025-03-12 09:00:00',
+              'report-u'
+            ),
+          ]),
+        ]),
+        flatInvestigationItem('inv-report-22', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-22',
+              '1000731000000107',
+              'Serum creatinine',
+              '90',
+              'µmol/L',
+              '2025-03-12 09:00:00',
+              'report-v'
+            ),
+          ]),
+        ]),
+      ],
+    },
+  ]).investigationReportGroups[0];
+  assert(
+    canRemoveInvestigationReports(fullMatchGroup, fullMatchGroup.keeperReportId || 'report-u') === true,
+    'Execute-time gate allows a genuine fullMatch whose keeper is in the cluster'
+  );
+  assert(
+    canRemoveInvestigationReports(fullMatchGroup, 'not-in-cluster') === false,
+    'Execute-time gate refuses a keeper id that is not one of the clustered reports'
+  );
+  assert(canRemoveInvestigationReports(fullMatchGroup, null) === false, 'Execute-time gate refuses a missing keeper');
+}
+
+console.log('\n--- stripJournalFilterParams (read-time journal URL defence) ---');
+{
+  const filtered =
+    'https://e38a9f.api.england.medicus.health/clinical/data/patient-journal/overview/__PATIENT_UUID__?year[]=2005&type[]=investigation&initialCat=year';
+  const stripped = stripJournalFilterParams(filtered);
+  assert(
+    !stripped.includes('year[]') && !stripped.includes('type[]') && !stripped.includes('initialCat'),
+    'Strips the confirmed journal-tab filter params'
+  );
+  assert(
+    stripped.includes('/clinical/data/patient-journal/overview/__PATIENT_UUID__'),
+    'Keeps the journal overview path and patient placeholder'
+  );
+  assert(stripJournalFilterParams(null) === null, 'A missing URL is returned unchanged');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

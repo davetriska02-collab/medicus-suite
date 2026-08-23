@@ -154,10 +154,20 @@ async function apiFetch(url) {
 // Raw file bytes (not JSON) for content-hash verification — same-origin
 // download of the document's ORIGINAL file, the same endpoint the existing
 // "Download original" links already use (buildDocumentDownloadUrl).
-async function apiFetchArrayBuffer(url) {
+const MAX_CONTENT_HASH_BYTES = 30 * 1024 * 1024;
+
+async function apiFetchArrayBuffer(url, maxBytes) {
   const r = await fetch(url, { credentials: 'include' });
   if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status, url });
-  return r.arrayBuffer();
+  const len = Number(r.headers.get('content-length'));
+  if (Number.isFinite(len) && maxBytes && len > maxBytes) {
+    throw Object.assign(new Error(`file too large to hash (${len} bytes)`), { tooLarge: true });
+  }
+  const buf = await r.arrayBuffer();
+  if (maxBytes && buf.byteLength > maxBytes) {
+    throw Object.assign(new Error(`file too large to hash (${buf.byteLength} bytes)`), { tooLarge: true });
+  }
+  return buf;
 }
 
 // SHA-256 hex digest via the standard Web Crypto API — no library, no extra
@@ -669,7 +679,8 @@ async function runJournalAnalysis(idx, r) {
     return;
   }
 
-  const url = template.replace(new RegExp(PATIENT_UUID_PLACEHOLDER, 'g'), r.uuid);
+  const stripped = window.RecordDuplicateParser.stripJournalFilterParams(template) || template;
+  const url = stripped.replace(new RegExp(PATIENT_UUID_PLACEHOLDER, 'g'), r.uuid);
 
   try {
     const payload = await apiFetch(url);
@@ -1032,7 +1043,7 @@ async function runContentHashVerificationInner(out, gIdx, statusEl) {
       if (!url) {
         analysis.contentHashByEntryId[e.id] = null;
       } else {
-        const buf = await apiFetchArrayBuffer(url);
+        const buf = await apiFetchArrayBuffer(url, MAX_CONTENT_HASH_BYTES);
         analysis.contentHashByEntryId[e.id] = await sha256Hex(buf);
       }
     } catch (err) {
@@ -1041,46 +1052,20 @@ async function runContentHashVerificationInner(out, gIdx, statusEl) {
     done++;
   }
 
-  // This group's own outcome, computed directly from the hash data and
-  // ALWAYS reported — never left to depend on whether
-  // splitDocumentGroupsByContentHash below decides a split is warranted.
-  // That engine function only reports/acts when there's something to
-  // split; a group where every download/hash attempt failed, or where
-  // every member turned out to share the same real hash (confirmed, no
-  // split needed), previously produced no visible signal at all — this is
-  // the fix for "clicking shows the status message briefly, then nothing".
-  const byKey = new Map();
-  g.entries.forEach((e) => {
-    const key = analysis.contentHashByEntryId[e.id] || 'unknown-hash';
-    if (!byKey.has(key)) byKey.set(key, []);
-    byKey.get(key).push(e.id);
-  });
-  const confirmedGroupEntryIds = [];
-  const uniqueEntryIds = [];
-  const unresolvedEntryIds = [];
-  for (const [key, ids] of byKey) {
-    if (ids.length >= 2) confirmedGroupEntryIds.push(ids);
-    else if (key === 'unknown-hash') unresolvedEntryIds.push(ids[0]);
-    else uniqueEntryIds.push(ids[0]);
-  }
-  // Persisted across every check run this session (not just this one
-  // group) — a checked group can shrink to zero surviving cards, so this
-  // is the only durable record of "we checked, here's what we found" once
-  // the re-render below replaces the card that triggered it.
-  analysis.contentHashCheckResults = (analysis.contentHashCheckResults || []).concat([
-    {
-      date: g.date,
-      code: g.code,
-      checkedEntryIds: g.entries.map((e) => e.id),
-      confirmedGroupEntryIds,
-      uniqueEntryIds,
-      unresolvedEntryIds,
-    },
-  ]);
-
-  const { groups: splitGroups, documentGroupsSplitByContentHash } =
-    window.RecordDuplicateParser.splitDocumentGroupsByContentHash(analysis.groups, analysis.contentHashByEntryId);
+  const {
+    groups: splitGroups,
+    documentGroupsSplitByContentHash,
+    checkResults,
+  } = window.RecordDuplicateParser.splitDocumentGroupsByContentHash(analysis.groups, analysis.contentHashByEntryId);
   analysis.groups = splitGroups;
+  // Engine is the single source of outcome — replace any previous result
+  // for the same checked entry set so re-clicking Verify does not stack
+  // duplicate banners.
+  const incoming = checkResults || [];
+  const incomingKeys = new Set(incoming.map((r) => (r.checkedEntryIds || []).slice().sort().join('|')));
+  analysis.contentHashCheckResults = (analysis.contentHashCheckResults || [])
+    .filter((r) => !incomingKeys.has((r.checkedEntryIds || []).slice().sort().join('|')))
+    .concat(incoming);
   analysis.summary.documentGroupsSplitByContentHash =
     (analysis.summary.documentGroupsSplitByContentHash || 0) + documentGroupsSplitByContentHash;
   const byTier = { exact: 0, high: 0, review: 0 };
@@ -1110,7 +1095,8 @@ async function runFileMatchSecondPass(out) {
   const P = window.RecordDuplicateParser;
   const bannerEl = out.querySelector('.file-match-second-pass');
   if (bannerEl) {
-    bannerEl.innerHTML = '<div style="font-size:11px;color:var(--text-3)">Checking file size/type across every document in the record…</div>';
+    bannerEl.innerHTML =
+      '<div style="font-size:11px;color:var(--text-3)">Checking file size/type across every document in the record…</div>';
   }
 
   const allDocumentEntries = (analysis.entries || []).filter((e) => e.kind === 'document');
@@ -1119,14 +1105,28 @@ async function runFileMatchSecondPass(out) {
   const createdDateByEntryId = {};
   const filedDateTimeByEntryId = {};
   for (const [id, preview] of Object.entries(analysis.documentPreviewsByEntryId || {})) {
-    recordDocumentPreviewFields(id, preview, fileTypeByEntryId, fileSizeByEntryId, createdDateByEntryId, filedDateTimeByEntryId);
+    recordDocumentPreviewFields(
+      id,
+      preview,
+      fileTypeByEntryId,
+      fileSizeByEntryId,
+      createdDateByEntryId,
+      filedDateTimeByEntryId
+    );
   }
   for (const e of allDocumentEntries) {
     if (analysis.documentPreviewsByEntryId[e.id] !== undefined) continue;
     try {
       const preview = await apiFetch(`${_apiBase}/clinical/data/document/modals/preview/${e.id}`);
       analysis.documentPreviewsByEntryId[e.id] = preview;
-      recordDocumentPreviewFields(e.id, preview, fileTypeByEntryId, fileSizeByEntryId, createdDateByEntryId, filedDateTimeByEntryId);
+      recordDocumentPreviewFields(
+        e.id,
+        preview,
+        fileTypeByEntryId,
+        fileSizeByEntryId,
+        createdDateByEntryId,
+        filedDateTimeByEntryId
+      );
     } catch (err) {
       analysis.documentPreviewsByEntryId[e.id] = null;
     }
@@ -1269,7 +1269,8 @@ function contentHashCheckResultsHtml(analysis) {
 }
 
 function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
-  const { groups, transferEncounters, summary, gp2gpWrapperCoverage, investigationReportGroups } = analysis;
+  const { groups, transferEncounters, summary, gp2gpWrapperCoverage } = analysis;
+  const investigationReportGroups = analysis.investigationReportGroups || [];
   const nearMisses = (gp2gpWrapperCoverage && gp2gpWrapperCoverage.nearMisses) || [];
   const patientLinkHtml = patientJournalLinkHtml(apiBase, patientUuid);
   const fileMatchBannerHtml = fileMatchSecondPassBannerHtml(analysis);
@@ -1286,7 +1287,15 @@ function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
     ${summary.suppressedQuantityMismatchTotal ? ` · <span style="color:var(--amber)">${summary.suppressedQuantityMismatchTotal} prescription group(s) suppressed as quantity-mismatch (different issued amounts, not a duplicate)</span>` : ''}
     ${summary.suppressedProblemLinkageTotal ? ` · <span style="color:var(--amber)">${summary.suppressedProblemLinkageTotal} problem code(s) suppressed as same-record linkage (one real problem linked from multiple encounters, not duplicate records)</span>` : ''}
     ${summary.suppressedInvestigationAmbiguousTotal ? ` · <span style="color:var(--amber)">${summary.suppressedInvestigationAmbiguousTotal} investigation result group(s) suppressed as ambiguous (same test, same collection time, but a different result value — not flagged)</span>` : ''}
-    ${summary.investigationReportGroupsTotal ? ` · <span class="mono">${summary.investigationFullMatchReportGroupsTotal}/${summary.investigationReportGroupsTotal}</span> duplicate investigation report(s) found (full match, safe to remove)` : ''}
+    ${
+      summary.investigationReportGroupsTotal
+        ? ` · <span class="mono">${summary.investigationReportGroupsTotal}</span> duplicate investigation report group(s) (${summary.investigationFullMatchReportGroupsTotal} full match, safe to remove${
+            summary.investigationReportGroupsTotal - summary.investigationFullMatchReportGroupsTotal
+              ? `; ${summary.investigationReportGroupsTotal - summary.investigationFullMatchReportGroupsTotal} partial, review only`
+              : ''
+          })`
+        : ''
+    }
     ${summary.excludedPrescriptionTimingTotal ? ` · <span style="color:var(--amber)">${summary.excludedPrescriptionTimingTotal} prescription group(s) excluded after timing cross-check (issued a minute+ apart, not a duplicate)</span>` : ''}
     ${summary.excludedQuestionnaireMismatchTotal ? ` · <span style="color:var(--amber)">${summary.excludedQuestionnaireMismatchTotal} document group(s) excluded after questionnaire-template cross-check (different questionnaire types)</span>` : ''}
     ${summary.documentGroupsSplitByFileType ? ` · <span style="color:var(--amber)">${summary.documentGroupsSplitByFileType} document group(s) split by file type/size (were wrongly merged — different documents sharing a date)</span>` : ''}
@@ -1308,7 +1317,9 @@ function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
       // view hid that entirely). REVIEW and documentLinked groups of any
       // kind keep it too.
       const sideBySide = g.tier === 'review' || g.documentLinked || g.kind === 'note' || g.kind === 'problem';
-      const bodyHtml = sideBySide ? reviewEntriesHtml(g, analysis.documentPreviewsByEntryId, apiBase) : standardEntryLinesHtml(g);
+      const bodyHtml = sideBySide
+        ? reviewEntriesHtml(g, analysis.documentPreviewsByEntryId, apiBase)
+        : standardEntryLinesHtml(g);
       return `<div class="dup-group" data-group-idx="${gIdx}">
       <div class="dup-group-head">
         <span class="dup-group-key"><strong>${esc(g.kind)}</strong> · <span class="entry-date">${esc(g.date || 'unknown date')}</span> · <span class="code">${esc(g.code)}</span></span>
@@ -1517,35 +1528,36 @@ function entryOneLiner(e) {
   return `${esc((e && e.recordedBy) || '(unknown author)')}${e && e.recordedByOrganisation ? ` · ${esc(e.recordedByOrganisation)}` : ''}`;
 }
 
-function renderRemovalFormHtml(g, gIdx, keeperId) {
-  const keeperEntry = g.entries.find((e) => e.id === keeperId);
-  const toRemove = g.entries.filter((e) => e.id !== keeperId);
-  const listHtml = toRemove
-    .map((e) => `<div style="font-size:11px;color:var(--text-2);margin-top:2px">– ${entryOneLiner(e)}</div>`)
+// One summary box per entry, in the same left-to-right order as the cards
+// above — a two-box KEEP-then-REMOVE (or the reverse) cannot line up when
+// the keeper is in the middle of 3+ cards.
+function fateSummaryBoxesHtml(items) {
+  return items
+    .map((item) =>
+      item.keep
+        ? `<div style="flex:1 1 200px;border:1px solid var(--green);border-radius:var(--r-md);padding:6px 8px">
+        <div style="font-weight:700;color:var(--green)">✓ KEEPING${item.keepSuffix || ''}</div>
+        <div style="font-size:11px;color:var(--text-2);margin-top:2px">– ${item.lineHtml}</div>
+      </div>`
+        : `<div style="flex:1 1 200px;border:1px solid var(--red-line);border-radius:var(--r-md);padding:6px 8px">
+        <div style="font-weight:700;color:var(--red)">✗ REMOVING (permanently hidden)</div>
+        <div style="font-size:11px;color:var(--text-2);margin-top:2px">– ${item.lineHtml}</div>
+      </div>`
+    )
     .join('');
+}
+
+function renderRemovalFormHtml(g, gIdx, keeperId) {
+  const toRemove = g.entries.filter((e) => e.id !== keeperId);
   // Documents use the "Remove from record" contract (removed completely),
   // the others "mark-incorrect-and-hidden" (hidden) — word it accurately.
   const removalVerb =
     g.kind === 'document'
       ? `permanently remove ${toRemove.length} document${toRemove.length !== 1 ? 's' : ''} from this patient's record`
       : `permanently hide ${toRemove.length} ${esc(g.kind)} ${toRemove.length !== 1 ? 'entries' : 'entry'} from this patient's record`;
-  // The summary boxes below must line up with the entry cards above (same
-  // flex row, same left-to-right order as g.entries, which is what
-  // reviewEntriesHtml/standardEntryLinesHtml render the cards from) — the
-  // keeper isn't always the first card. A fixed "KEEPING-then-REMOVING"
-  // order put the green box under the wrong column whenever the keeper was
-  // the second (or later) card (2026-08-22 user feedback). Order these two
-  // boxes to match the keeper's actual position instead.
-  const keepingBoxHtml = `<div style="flex:1 1 200px;border:1px solid var(--green);border-radius:var(--r-md);padding:6px 8px">
-        <div style="font-weight:700;color:var(--green)">✓ KEEPING</div>
-        <div style="font-size:11px;color:var(--text-2);margin-top:2px">– ${entryOneLiner(keeperEntry)}</div>
-      </div>`;
-  const removingBoxHtml = `<div style="flex:1 1 200px;border:1px solid var(--red-line);border-radius:var(--r-md);padding:6px 8px">
-        <div style="font-weight:700;color:var(--red)">✗ REMOVING (permanently hidden)</div>
-        ${listHtml}
-      </div>`;
-  const keeperIsFirst = g.entries.length > 0 && g.entries[0].id === keeperId;
-  const summaryBoxesHtml = keeperIsFirst ? keepingBoxHtml + removingBoxHtml : removingBoxHtml + keepingBoxHtml;
+  const summaryBoxesHtml = fateSummaryBoxesHtml(
+    g.entries.map((e) => ({ keep: e.id === keeperId, lineHtml: entryOneLiner(e) }))
+  );
 
   return `<div class="removal-form" style="border:1px solid var(--red-line);border-radius:var(--r-md);padding:8px;font-size:11px">
     <div style="color:var(--text-1)">This will ${removalVerb}. There is no confirmed undo for this action.</div>
@@ -1814,7 +1826,8 @@ function reviewEntriesHtml(g, previewsByEntryId, apiBase) {
           const preview = previewsByEntryId && previewsByEntryId[docId];
           const url = preview && P.buildDocumentDownloadUrl(apiBase, preview.fileId);
           if (!url) return null;
-          const label = e.attachedDocumentIds.length > 1 ? `Download attachment ${docIdx + 1} ↗` : 'Download attached document ↗';
+          const label =
+            e.attachedDocumentIds.length > 1 ? `Download attachment ${docIdx + 1} ↗` : 'Download attached document ↗';
           return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">${label}</a>`;
         })
         .filter(Boolean)
@@ -1869,8 +1882,7 @@ function reviewActionsHtml(g, gIdx) {
   // unreliable, not because they're judged equivalent — so the removal
   // button reads plainly for them ("Remove a duplicate copy…") rather than
   // asserting equivalence the way it does for genuine text REVIEW groups.
-  const removeLabel =
-    g.kind === 'document' ? 'Remove a duplicate copy…' : 'These are equivalent — remove duplicates';
+  const removeLabel = g.kind === 'document' ? 'Remove a duplicate copy…' : 'These are equivalent — remove duplicates';
   return `<div style="display:flex;gap:8px;flex-wrap:wrap">
     ${removable ? `<button class="review-equivalent-btn" data-group-idx="${gIdx}" style="background:var(--red-dim);color:var(--red);border:1px solid var(--red-line)">${removeLabel}</button>` : ''}
     ${secondBtn}
@@ -1990,8 +2002,7 @@ function renderMergeSuggestionHtml(g, gIdx) {
   // The removal button is labelled differently per tier ("These are
   // equivalent — remove duplicates" on REVIEW, a direct "Remove N duplicate
   // copies" on HIGH), so the guidance names the right one.
-  const removeButtonName =
-    g.tier === 'review' ? '"These are equivalent — remove duplicates"' : 'the Remove button';
+  const removeButtonName = g.tier === 'review' ? '"These are equivalent — remove duplicates"' : 'the Remove button';
   const guidance = autoApplyAvailable
     ? ''
     : removable
@@ -2017,27 +2028,14 @@ function renderMergeSuggestionHtml(g, gIdx) {
 // Confirmation step for the note-kind automated merge — mirrors
 // renderRemovalFormHtml's reason-required, pre-filled-editable pattern.
 function renderNoteMergeConfirmHtml(g, gIdx, keeperId, mergedText) {
-  const keeperEntry = g.entries.find((e) => e.id === keeperId);
   const toRemove = g.entries.filter((e) => e.id !== keeperId);
-  const listHtml = toRemove
-    .map(
-      (e) =>
-        `<div style="font-size:11px;color:var(--text-2);margin-top:2px">– ${esc(e.recordedBy || '(unknown author)')}</div>`
-    )
-    .join('');
-  // Same column-alignment fix as renderRemovalFormHtml above — order these
-  // two boxes to match the keeper's actual position among g.entries, not a
-  // fixed KEEPING-then-REMOVING order.
-  const keepingBoxHtml = `<div style="flex:1 1 200px;border:1px solid var(--green);border-radius:var(--r-md);padding:6px 8px">
-        <div style="font-weight:700;color:var(--green)">✓ KEEPING (text replaced by the merge)</div>
-        <div style="font-size:11px;color:var(--text-2);margin-top:2px">– ${entryOneLiner(keeperEntry)}</div>
-      </div>`;
-  const removingBoxHtml = `<div style="flex:1 1 200px;border:1px solid var(--red-line);border-radius:var(--r-md);padding:6px 8px">
-        <div style="font-weight:700;color:var(--red)">✗ REMOVING (permanently hidden)</div>
-        ${listHtml}
-      </div>`;
-  const keeperIsFirst = g.entries.length > 0 && g.entries[0].id === keeperId;
-  const summaryBoxesHtml = keeperIsFirst ? keepingBoxHtml + removingBoxHtml : removingBoxHtml + keepingBoxHtml;
+  const summaryBoxesHtml = fateSummaryBoxesHtml(
+    g.entries.map((e) => ({
+      keep: e.id === keeperId,
+      keepSuffix: ' (text replaced by the merge)',
+      lineHtml: entryOneLiner(e),
+    }))
+  );
 
   return `<div class="note-merge-form" style="border:1px solid var(--red-line);border-radius:var(--r-md);padding:8px;font-size:11px">
     <div style="color:var(--text-1)">This will edit the kept copy's note to the merged text below, then permanently hide ${toRemove.length} other cop${toRemove.length !== 1 ? 'ies' : 'y'}. There is no confirmed undo for either action.</div>
@@ -2334,7 +2332,8 @@ async function prepareDocumentFieldApply(out, gIdx, manualOrgName) {
   // what they type when Medicus blocks a save on imported data for the
   // required-but-blank Organisation field).
   const authorStillUnapplied = unapplied.some((u) => u.editKey === 'authoredByOrganisation');
-  const keeperOrgMissing = !('authoredByOrganisation' in overrides) && !P.resolveDocumentOrganisation(keeperModel, previews[g.keeperEntryId]);
+  const keeperOrgMissing =
+    !('authoredByOrganisation' in overrides) && !P.resolveDocumentOrganisation(keeperModel, previews[g.keeperEntryId]);
   if (authorStillUnapplied || (appliedChoices.length && keeperOrgMissing)) {
     const why = authorStillUnapplied
       ? 'No organisation name could be found anywhere on the other copy for your Author pick.'
@@ -2369,7 +2368,8 @@ async function prepareDocumentFieldApply(out, gIdx, manualOrgName) {
           .map((e) => (previews[e.id] || {}).document)
           .map((d) => d && d.typeCode)
           .find((tc) => tc && tc.conceptId && tc.description && tc.descriptionId);
-        const keeperDesc = (codeVal && codeVal.description) || (keeperModel.code && keeperModel.code.label) || 'unknown';
+        const keeperDesc =
+          (codeVal && codeVal.description) || (keeperModel.code && keeperModel.code.label) || 'unknown';
         statusEl.textContent =
           `The kept copy's type ("${keeperDesc}") was imported without its clinical code, and Medicus refuses ANY save of such a document — even its own edit form fails with "This value should not be blank" on the code. ` +
           (codedOther
@@ -2381,9 +2381,7 @@ async function prepareDocumentFieldApply(out, gIdx, manualOrgName) {
     }
   }
 
-  const req = appliedChoices.length
-    ? P.buildDocumentEditRequest(_apiBase, keeperModel, overrides)
-    : null;
+  const req = appliedChoices.length ? P.buildDocumentEditRequest(_apiBase, keeperModel, overrides) : null;
   if (!req) {
     statusEl.textContent = appliedChoices.length
       ? "The kept copy can't be safely auto-edited — it carries a field this tool has never live-tested (linked problems/staff/clinical case/specialty, or a draft/marked-incorrect state). Use the summary to correct it manually in Medicus instead."
@@ -2394,7 +2392,15 @@ async function prepareDocumentFieldApply(out, gIdx, manualOrgName) {
 
   out.__pendingDocumentEdits = out.__pendingDocumentEdits || {};
   out.__pendingDocumentEdits[gIdx] = req;
-  slot.innerHTML = renderDocumentApplyConfirmHtml(g, gIdx, appliedChoices, editModels, unappliedNotes, manualOnly, overrides);
+  slot.innerHTML = renderDocumentApplyConfirmHtml(
+    g,
+    gIdx,
+    appliedChoices,
+    editModels,
+    unappliedNotes,
+    manualOnly,
+    overrides
+  );
 }
 
 // POSTs the pending edit built by prepareDocumentFieldApply. Deliberately
@@ -2422,8 +2428,7 @@ async function executeDocumentFieldApply(out, gIdx) {
   // Document removal is now a confirmed contract (2026-07-08), so offer it
   // right here — the field edit landed on the KEPT copy, and removableSlotHtml
   // targets the non-keepers for removal.
-  slot.innerHTML =
-    `<div style="font-size:11px;color:var(--green)">Document details updated on the kept copy. Values shown above are now stale — re-analyse to refresh.</div>
+  slot.innerHTML = `<div style="font-size:11px;color:var(--green)">Document details updated on the kept copy. Values shown above are now stale — re-analyse to refresh.</div>
      <div style="margin-top:8px;color:var(--text-2)">Now remove the duplicate copy from the record:</div>
      <div style="margin-top:4px">${removableSlotHtml(g, gIdx)}</div>`;
 }
@@ -2435,31 +2440,61 @@ async function executeDocumentFieldApply(out, gIdx) {
 // whole flow works in reportIds throughout, never result ids, via the
 // dedicated buildInvestigationReportRemovalRequest (never the generic
 // per-entry buildRemovalRequest, which would send the wrong kind of id).
+function investigationAnalyteLines(rg, reportId) {
+  return rg.analyteGroups
+    .map((ag) => {
+      const e = ag.entries.find((x) => x.investigationReportId === reportId);
+      if (!e) return null;
+      const value = (e.rawText || '(no value)') + (e.resultUnit ? ` ${e.resultUnit}` : '');
+      const label = e.investigationResultLabel || ag.code;
+      const urgent = e.requiresUrgentReview ? ' · urgent review' : '';
+      return `${label}: ${value}${urgent}`;
+    })
+    .filter(Boolean);
+}
+
+function investigationReportOneLiner(rg, reportId) {
+  const lines = investigationAnalyteLines(rg, reportId);
+  const match = `${(rg.matchedCountByReport && rg.matchedCountByReport[reportId]) || 0}/${
+    (rg.totalCountByReport && rg.totalCountByReport[reportId]) || 0
+  } matched`;
+  const skipped = rg.skippedCountByReport && rg.skippedCountByReport[reportId];
+  const unread = skipped ? ` · ${skipped} unread` : '';
+  return `${lines.join('; ') || 'investigation report'} · ${match}${unread}`;
+}
+
+function investigationReportCardHtml(rg, rid, isKeeper) {
+  const lines = investigationAnalyteLines(rg, rid)
+    .map((line) => `<div style="margin-top:2px">${esc(line)}</div>`)
+    .join('');
+  const match = `${(rg.matchedCountByReport && rg.matchedCountByReport[rid]) || 0}/${
+    (rg.totalCountByReport && rg.totalCountByReport[rid]) || 0
+  } matched`;
+  const skipped = rg.skippedCountByReport && rg.skippedCountByReport[rid];
+  return `<div class="entry-line investigation-report-card" data-report-id="${esc(rid)}" style="flex:1 1 240px;min-width:200px;border:1px solid var(--border);border-radius:var(--r-md);padding:8px;background:var(--bg-mid)">
+    ${isKeeper ? '<div style="font-size:10px;color:var(--green);font-weight:600">kept (earliest copy)</div>' : ''}
+    <div>${lines}</div>
+    <div style="margin-top:4px;font-size:11px;color:var(--text-3)">${esc(match)}${
+      skipped ? ` · ${esc(String(skipped))} unread` : ''
+    }</div>
+  </div>`;
+}
+
 function investigationReportGroupsHtml(investigationReportGroups) {
-  return investigationReportGroups
+  return (investigationReportGroups || [])
     .map((rg, rIdx) => {
-      const analyteRows = rg.analyteGroups
-        .map((ag) => {
-          const first = ag.entries[0];
-          const value = esc(first.rawText || '(no value)') + (first.resultUnit ? ` ${esc(first.resultUnit)}` : '');
-          const label = esc(first.investigationResultLabel || ag.code);
-          const urgent = first.requiresUrgentReview ? ' · <span style="color:var(--red)">urgent review</span>' : '';
-          return `<div style="margin-top:2px"><strong style="color:var(--text-1)">${label}:</strong> ${value}${urgent}</div>`;
-        })
-        .join('');
-      const matchSummary = rg.reportIds
-        .map((rid) => `${esc(rid)} (${rg.matchedCountByReport[rid]}/${rg.totalCountByReport[rid]} matched)`)
-        .join(', ');
       const badge = rg.fullMatch
         ? `<span style="background:var(--red-dim);color:var(--red);border:1px solid var(--red-line);border-radius:999px;padding:1px 8px;font-size:10px;font-weight:600">FULL MATCH</span>`
         : `<span style="color:var(--amber);border:1px solid var(--amber);border-radius:999px;padding:1px 8px;font-size:10px;font-weight:600">PARTIAL MATCH</span>`;
+      const cards = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">${rg.reportIds
+        .map((rid) => investigationReportCardHtml(rg, rid, rid === rg.keeperReportId))
+        .join('')}</div>`;
       return `<div class="investigation-report-group" data-report-idx="${rIdx}" style="border:1px solid var(--border);border-radius:var(--r-md);padding:8px;margin-top:8px">
         <div class="dup-group-head">
           <span class="dup-group-key"><strong>investigation report</strong> · <span class="entry-date">${esc(rg.date || 'unknown date')}</span> · ${rg.reportIds.length} report(s), ${rg.analyteGroups.length} analyte(s)</span>
           ${badge}
         </div>
-        <div style="margin-top:4px;font-size:11px;color:var(--text-3)">${esc(matchSummary)}</div>
-        <div style="margin-top:6px">${analyteRows}</div>
+        ${cards}
         <div class="investigation-removal-slot" data-report-idx="${rIdx}" style="margin-top:8px">${investigationReportRemovalSlotHtml(rg, rIdx)}</div>
       </div>`;
     })
@@ -2485,7 +2520,7 @@ function investigationChooseKeeperFormHtml(rg, rIdx) {
     .map(
       (rid) => `<label style="display:block;margin-top:6px;color:var(--text-2)">
         <input type="radio" name="investigation-keeper-choice-${rIdx}" class="investigation-keeper-choice-radio" data-report-idx="${rIdx}" value="${esc(rid)}" />
-        <span class="mono">${esc(rid)}</span> (${rg.matchedCountByReport[rid]} result${rg.matchedCountByReport[rid] !== 1 ? 's' : ''})
+        ${esc(investigationReportOneLiner(rg, rid))}
       </label>`
     )
     .join('');
@@ -2511,24 +2546,18 @@ function investigationRemovalButtonHtml(rg, rIdx, keeperReportId) {
 
 function investigationRemovalFormHtml(rg, rIdx, keeperReportId) {
   const toRemove = rg.reportIds.filter((rid) => rid !== keeperReportId);
-  const listHtml = toRemove
-    .map(
-      (rid) =>
-        `<div style="font-size:11px;color:var(--text-2);margin-top:2px">– <span class="mono">${esc(rid)}</span></div>`
-    )
-    .join('');
+  const summaryBoxesHtml = fateSummaryBoxesHtml(
+    rg.reportIds.map((rid) => ({
+      keep: rid === keeperReportId,
+      lineHtml: esc(investigationReportOneLiner(rg, rid)),
+    }))
+  );
   return `<div class="investigation-removal-form" style="border:1px solid var(--red-line);border-radius:var(--r-md);padding:8px;font-size:11px">
     <div style="color:var(--text-1)">This will permanently hide ${toRemove.length} whole investigation report${toRemove.length !== 1 ? 's' : ''} from this patient's record — every result in ${toRemove.length !== 1 ? 'each' : 'it'}, not just the matched ones. There is no confirmed undo for this action.</div>
     <div style="margin-top:6px;display:flex;gap:12px;flex-wrap:wrap">
-      <div style="flex:1 1 200px;border:1px solid var(--green);border-radius:var(--r-md);padding:6px 8px">
-        <div style="font-weight:700;color:var(--green)">✓ KEEPING</div>
-        <div style="font-size:11px;color:var(--text-2);margin-top:2px">– <span class="mono">${esc(keeperReportId)}</span></div>
-      </div>
-      <div style="flex:1 1 200px;border:1px solid var(--red-line);border-radius:var(--r-md);padding:6px 8px">
-        <div style="font-weight:700;color:var(--red)">✗ REMOVING (permanently hidden)</div>
-        ${listHtml}
-      </div>
+      ${summaryBoxesHtml}
     </div>
+    <div style="margin-top:6px;color:var(--text-3)">Wrong way round? Click the report to keep in the cards above — the green highlight will follow.</div>
     <label style="display:block;margin-top:8px;color:var(--text-2)">Reason (required)</label>
     <textarea class="investigation-removal-reason" data-report-idx="${rIdx}" rows="2" style="width:100%;box-sizing:border-box;margin-top:4px;font-size:11px;background:var(--bg-mid);color:var(--text-1);border:1px solid var(--border)">${esc(DEFAULT_REMOVAL_REASON)}</textarea>
     <div style="margin-top:8px;display:flex;gap:8px">
@@ -2537,6 +2566,29 @@ function investigationRemovalFormHtml(rg, rIdx, keeperReportId) {
     </div>
     <div class="investigation-removal-status" data-report-idx="${rIdx}" style="margin-top:6px"></div>
   </div>`;
+}
+
+function markInvestigationFates(out, rIdx, keeperReportId) {
+  const groupEl = out.querySelector(`.investigation-report-group[data-report-idx="${rIdx}"]`);
+  if (!groupEl) return;
+  groupEl.querySelectorAll('.investigation-report-card[data-report-id]').forEach((card) => {
+    const keep = card.dataset.reportId === keeperReportId;
+    card.style.outline = keep ? '2px solid var(--green)' : '';
+    card.style.opacity = keep ? '1' : '0.6';
+    card.style.cursor = 'pointer';
+    card.title = keep ? 'This report will be kept' : 'Click to keep this report instead';
+  });
+}
+
+function clearInvestigationFates(out, rIdx) {
+  const groupEl = out.querySelector(`.investigation-report-group[data-report-idx="${rIdx}"]`);
+  if (!groupEl) return;
+  groupEl.querySelectorAll('.investigation-report-card[data-report-id]').forEach((card) => {
+    card.style.outline = '';
+    card.style.opacity = '';
+    card.style.cursor = '';
+    card.title = '';
+  });
 }
 
 function syncInvestigationConfirmEnabled(out, rIdx) {
@@ -2556,6 +2608,16 @@ async function executeInvestigationReportRemoval(out, rIdx, keeperReportId) {
   const statusEl = form.querySelector('.investigation-removal-status');
 
   form.querySelectorAll('button, textarea, input').forEach((el) => (el.disabled = true));
+
+  if (!window.RecordDuplicateParser.canRemoveInvestigationReports(rg, keeperReportId)) {
+    if (statusEl) {
+      statusEl.textContent =
+        'Removal blocked — this cluster is not safe to remove (partial match, unread results, or the keeper is not one of these reports).';
+    }
+    form.querySelectorAll('button, textarea, input').forEach((el) => (el.disabled = false));
+    syncInvestigationConfirmEnabled(out, rIdx);
+    return;
+  }
 
   const toRemove = rg.reportIds.filter((rid) => rid !== keeperReportId);
   let succeeded = 0;
@@ -2662,6 +2724,7 @@ function wireRemovalDelegation(out) {
       const chosen = slot.querySelector('.investigation-keeper-choice-radio:checked');
       if (!chosen) return;
       slot.innerHTML = investigationRemovalFormHtml(rg, rIdx, chosen.value);
+      markInvestigationFates(out, rIdx, chosen.value);
       return;
     }
     const invRemoveBtn = ev.target.closest('.investigation-remove-report-btn');
@@ -2670,6 +2733,7 @@ function wireRemovalDelegation(out) {
       const rg = out.__analysis.investigationReportGroups[rIdx];
       const slot = out.querySelector(`.investigation-removal-slot[data-report-idx="${rIdx}"]`);
       slot.innerHTML = investigationRemovalFormHtml(rg, rIdx, invRemoveBtn.dataset.keeperId);
+      markInvestigationFates(out, rIdx, invRemoveBtn.dataset.keeperId);
       return;
     }
     const invCancelBtn = ev.target.closest('.investigation-cancel-removal-btn');
@@ -2678,6 +2742,7 @@ function wireRemovalDelegation(out) {
       const rg = out.__analysis.investigationReportGroups[rIdx];
       const slot = out.querySelector(`.investigation-removal-slot[data-report-idx="${rIdx}"]`);
       slot.innerHTML = investigationReportRemovalSlotHtml(rg, rIdx);
+      clearInvestigationFates(out, rIdx);
       return;
     }
     const invConfirmBtn = ev.target.closest('.investigation-confirm-removal-btn');
@@ -2812,6 +2877,32 @@ function wireRemovalDelegation(out) {
     // kept one — the form re-renders and the KEEP/DISCARD banners follow.
     // Deliberately last in the chain so slot buttons always win; cards
     // contain no buttons of their own.
+    const invFateCard = ev.target.closest('.investigation-report-card[data-report-id]');
+    if (invFateCard) {
+      const groupEl = invFateCard.closest('.investigation-report-group');
+      if (!groupEl) return;
+      const rIdx = parseInt(groupEl.dataset.reportIdx, 10);
+      const rg = out.__analysis.investigationReportGroups[rIdx];
+      const slot = out.querySelector(`.investigation-removal-slot[data-report-idx="${rIdx}"]`);
+      if (!slot || !rg) return;
+      if (slot.querySelector('.investigation-cancel-removal-btn:disabled')) return;
+      const newKeeperId = invFateCard.dataset.reportId;
+      if (slot.querySelector('.investigation-removal-form')) {
+        slot.innerHTML = investigationRemovalFormHtml(rg, rIdx, newKeeperId);
+        markInvestigationFates(out, rIdx, newKeeperId);
+        return;
+      }
+      if (slot.querySelector('.choose-keeper-form')) {
+        const radio = slot.querySelector(`.investigation-keeper-choice-radio[value="${newKeeperId}"]`);
+        if (radio) {
+          radio.checked = true;
+          const btn = slot.querySelector('.investigation-continue-keeper-btn');
+          if (btn) btn.disabled = false;
+        }
+        return;
+      }
+      return;
+    }
     const fateCard = ev.target.closest('.entry-line[data-entry-id]');
     if (fateCard) {
       const groupEl = fateCard.closest('.dup-group');

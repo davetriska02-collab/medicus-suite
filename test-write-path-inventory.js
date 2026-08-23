@@ -324,6 +324,12 @@ for (let n = 1; n <= LAST_WID; n++) {
   check(csnHasRow(id), `CSN §6.1 has table row | ${id} |`);
 }
 
+const w11Row = (csn.match(/\| W11 \|[^\n]+/) || [''])[0];
+check(
+  /clinical\/investigation\/mark-incorrect-and-hidden/.test(w11Row),
+  'CSN W11 names the investigation-report hide endpoint (clinical/investigation/mark-incorrect-and-hidden)'
+);
+
 // ── 6. Every mapped product file still exists ────────────────────────────────
 
 console.log('\n--- mapped product files exist ---');
