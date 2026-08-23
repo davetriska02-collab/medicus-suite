@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.239.0] — 2026-08-23
+
+### Duty-doctor cockpit — Pulse tranche 2 (Northstar A1 / A2 / E-1.1 / E-1.2 / B2 / B4 / C4)
+
+Turns the shipped Pulse (v3.236.4+) into a morning scan surface. No new
+write path — CSN §6.1 is unchanged.
+
+- **Status-bar huddle + breach strip.** The existing queue status bar
+  (E-1.2) now also names pulsed-red / pulsed-amber / unchecked / SLA-today
+  counts on visible request rows. The panel `#slaBreachStrip` (A2, H-045)
+  is unchanged — still additive, still hidden when nothing is at risk,
+  still fail-visible when priority is unreadable.
+- **SLA / contract-clock chips (A1)** live only in the Created column
+  (mono). Urgent: “must action today · received hh:mm”. Routine:
+  “intake-flagged routine · due EOD tomorrow” — source named, never
+  “tomorrow is fine”. Family `sla` is context-only and never owns the
+  clinical rail. H-063.
+- **Dashed rail (E-1.1).** A quiet row whose record pass has not returned
+  shows a dashed tick (`ch-row-pulse-unchecked`), not an empty rail.
+  Known request-text red/amber still fills/hollows the rail while the
+  pass is in flight. Empty = checked, nothing matched.
+- **Hollow silent diamond + record headlines.** Monitoring-due (B4) and
+  pending-abnormal-lab (B2) may headline; a hollow outline diamond marks
+  “from the record, not the request text” without colliding with
+  filled-red / hollow-amber severity coding (H-061).
+- **Fuller Act-tray.** Numbered prepare-only actions: (1) Book — C4
+  next-green-day snippet, never holds a slot; (2) Pharmacy First;
+  (3) Ask-back; (4) Park until… — local ledger only, not backed up.
+  Persistent confirm bar: “Not yet submitted — reception sees nothing
+  until you confirm.” H-064.
+- **Why-tray fidelity.** Named sources (`request text`,
+  `record · monitoring`, `contract clock · Medicus flag`, …) and a
+  permanent footer: “Not a score. A quiet rail is not all-clear.”
+
+Not in this cut: B1 context headlines, C1 queue lens, C2 batch packs.
+
 ## [v3.238.0] — 2026-08-23
 
 ### Investigation (lab result) duplicate detection + document content-hash verification

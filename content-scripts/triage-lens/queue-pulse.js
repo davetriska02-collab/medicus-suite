@@ -16,10 +16,40 @@
     age: true,
     priority: true,
     taskAge: true,
+    sla: true,
     repeat: true,
     carry: true,
     pf: true,
   };
+
+  // Why-tray source names — named, not a family id. Keep in lock-step with
+  // the families collectSignalsFromRow emits.
+  const SOURCE_LABELS = {
+    rule: 'request text',
+    request: 'request text',
+    monitoring: 'record · monitoring',
+    pending: 'record · pending result',
+    result: 'record · result',
+    flag: 'practice alert',
+    'patient-alerts': 'practice alert',
+    age: 'date of birth',
+    dob: 'date of birth',
+    priority: 'Medicus flag',
+    taskAge: 'created date',
+    sla: 'contract clock · Medicus flag',
+    repeat: 'contact ledger',
+    carry: 'first seen on this machine',
+    pf: 'pathway',
+    askback: 'pathway gaps',
+    system: 'queue decoration',
+  };
+
+  function sourceLabel(signal) {
+    if (!signal) return '';
+    if (signal.source && SOURCE_LABELS[signal.source]) return SOURCE_LABELS[signal.source];
+    if (signal.family && SOURCE_LABELS[signal.family]) return SOURCE_LABELS[signal.family];
+    return signal.source || signal.family || '';
+  }
 
   function isContextOnly(signal) {
     if (!signal || !signal.kind) return true;
@@ -46,10 +76,14 @@
       if (fromRequest) headline = fromRequest;
     }
 
+    // Known named red/amber always win the rail (a duty GP must see MH crisis
+    // while the record pass is still in flight). Dashed "not checked" is the
+    // fail-visible state for a QUIET row whose record pass has not returned —
+    // it must never look like empty/"checked, nothing matched".
     let rail = 'empty';
-    if (opts.recordChecked === false) rail = 'unchecked';
-    else if (headline && headline.kind === 'red') rail = 'red';
+    if (headline && headline.kind === 'red') rail = 'red';
     else if (headline && headline.kind === 'amber') rail = 'amber';
+    else if (opts.recordChecked === false) rail = 'unchecked';
 
     const overflow = list.filter((s) => s !== headline);
     const thread = list.find((s) => s.family === 'repeat') || null;
@@ -72,7 +106,13 @@
     };
   }
 
-  const api = { composePulse: composePulse, isContextOnly: isContextOnly, KIND_RANK: KIND_RANK };
+  const api = {
+    composePulse: composePulse,
+    isContextOnly: isContextOnly,
+    sourceLabel: sourceLabel,
+    KIND_RANK: KIND_RANK,
+    SOURCE_LABELS: SOURCE_LABELS,
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   global.TriageQueuePulse = api;
 })(typeof window !== 'undefined' ? window : globalThis);

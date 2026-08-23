@@ -404,6 +404,10 @@ const ALLOWLIST = new Set([
   // DESIGN, never backed up:
   'ledger.contactLog',
   'ledger.taskAge',
+  // Park-until ledger (shared/park-ledger.js) — local "park this request
+  // until …" mark. taskUuid + until + actor only; never backed up (a restore
+  // must not fabricate "I parked this"):
+  'ledger.parkedTasks',
 
   // Contacts Management cycling session (content-scripts/contacts-canvas.js "Family cycling"
   // section) — a short-lived, single-key snapshot written right before the browser navigates to

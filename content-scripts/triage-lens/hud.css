@@ -36,8 +36,12 @@
 .ch-q-pulse,
 .ch-q-why,
 .ch-q-act,
+.ch-q-sla,
+.ch-q-park,
+.ch-q-pulse-diamond,
 .ch-row-pulse-red,
 .ch-row-pulse-amber,
+.ch-row-pulse-unchecked,
 .ch-row-pulse-on {
   /* Surfaces */
   --bg-deep: #f8fafc;
@@ -262,6 +266,20 @@
     inset 4px 0 0 0 var(--amber-dim),
     inset 1px 0 0 0 var(--amber);
 }
+/* Dashed tick in the same rail column — "record not checked". Shape, not
+   hue: a repeating gap so it cannot be read as empty (checked, nothing
+   matched) or as a filled/hollow clinical rail. */
+.ch-row-pulse-unchecked {
+  box-shadow: none;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--border-hi) 0 3px,
+    transparent 3px 6px
+  );
+  background-size: 3px 100%;
+  background-repeat: no-repeat;
+  background-position: left 2px top 4px;
+}
 /* Hide the per-family chip pile only on escalate (red/amber) rows. Quiet
    rows never get `.ch-row-pulse-on`, so their chips stay visible — hiding
    them would read as all-clear. Chips stay in the DOM either way. */
@@ -335,6 +353,17 @@
   text-transform: uppercase;
   opacity: 0.75;
   margin-left: 4px;
+}
+/* Hollow diamond — provenance, not severity. Transparent fill so a silent
+   amber headline cannot be read as "filled = red". */
+.ch-q-pulse-diamond {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  background: transparent;
+  border: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  margin-right: 2px;
 }
 .ch-q-pulse-more {
   font-family: var(--mono);
@@ -519,6 +548,87 @@
 }
 .ch-q-act-row button:disabled small {
   color: var(--text-3);
+}
+.ch-q-act-confirm {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-md);
+  font-size: 11px;
+  color: var(--text-2);
+}
+.ch-q-act-confirm p {
+  margin: 0 0 6px;
+}
+.ch-q-act-confirm button {
+  font-family: var(--sans);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--accent-line);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  cursor: pointer;
+}
+.ch-q-act-confirm pre {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-2);
+}
+.ch-q-sla {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-3);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 1px 6px;
+  margin: 0 4px 0 0;
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.ch-q-sla-red {
+  color: var(--red);
+  border-color: var(--red-line);
+  background: var(--red-dim);
+}
+.ch-q-sla-amber {
+  color: var(--amber);
+  border-color: var(--amber-line);
+  background: var(--amber-dim);
+}
+.ch-q-sla-info,
+.ch-q-sla-meta {
+  color: var(--text-3);
+}
+.ch-q-park {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  background: var(--bg-mid);
+  border: 1px dashed var(--border-hi);
+  border-radius: var(--r-pill);
+  padding: 1px 6px;
+  margin-left: 4px;
+}
+.ch-q-status-huddle {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  margin-left: 8px;
 }
 .ch-q-act-note {
   margin: 6px 0 0;
@@ -889,7 +999,7 @@
    :not() clauses with no extra selector needed. Pulse rails (v3.236.4)
    are the request-queue's red/amber mark — a focus-dim that faded a
    pulse-red row would contradict its own rail, so they are excluded too. */
-.ch-q-focus-alerts .ag-row:not(.ch-row-sev-red):not(.ch-row-sev-amber):not(.ch-row-pulse-red):not(.ch-row-pulse-amber) {
+.ch-q-focus-alerts .ag-row:not(.ch-row-sev-red):not(.ch-row-sev-amber):not(.ch-row-pulse-red):not(.ch-row-pulse-amber):not(.ch-row-pulse-unchecked) {
   opacity: 0.35;
 }
 

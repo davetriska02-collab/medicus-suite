@@ -101,7 +101,7 @@
   0%, 100% { box-shadow: none; }
   50% { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3); }
 }
-.ch-q-focus-alerts .ag-row:not(.ch-row-sev-red):not(.ch-row-sev-amber):not(.ch-row-pulse-red):not(.ch-row-pulse-amber) {
+.ch-q-focus-alerts .ag-row:not(.ch-row-sev-red):not(.ch-row-sev-amber):not(.ch-row-pulse-red):not(.ch-row-pulse-amber):not(.ch-row-pulse-unchecked) {
   opacity: 0.35;
 }
 
@@ -4554,6 +4554,19 @@
   };
   if (CL) loadContactLedgers();
 
+  const PL0 = typeof window !== 'undefined' && window.ParkLedger;
+  const loadParkLedger = () => {
+    if (!PL0 || !chrome || !chrome.storage || !chrome.storage.local) return;
+    try {
+      chrome.storage.local.get(PL0.STORAGE_KEY, (r) => {
+        _parkMem = PL0.pruneStore(PL0.sanitiseStore(r && r[PL0.STORAGE_KEY]), Date.now());
+      });
+    } catch (_) {
+      _parkMem = {};
+    }
+  };
+  if (PL0) loadParkLedger();
+
   const scheduleLedgerFlush = () => {
     if (!CL || (!_contactLogDirty && !_taskAgeDirty)) return;
     if (_ledgerFlushTimer) return; // already pending — coalesce
@@ -6633,6 +6646,44 @@
 
     const countsEl = el.querySelector('.ch-q-status-counts');
     if (countsEl) countsEl.textContent = text;
+
+    // Request-queue huddle: pulse rails + dashed unchecked + SLA-at-risk.
+    // Additive — never replaces the result-triage counts, never says all-clear.
+    // String class names (not PULSE_* consts) so the smoke-harness extract of
+    // this function does not depend on pulse-block bindings.
+    let huddle = el.querySelector('.ch-q-status-huddle');
+    if (!huddle) {
+      huddle = document.createElement('span');
+      huddle.className = 'ch-q-status-huddle';
+      el.insertBefore(huddle, el.querySelector('.ch-q-status-spinner'));
+    }
+    const onResults =
+      typeof isResultQueueSlug === 'function' && typeof _currentQueueSlug === 'string' && isResultQueueSlug(_currentQueueSlug);
+    if (onResults) {
+      huddle.textContent = '';
+    } else if (typeof queueScope === 'function') {
+      let pulseRed = 0,
+        pulseAmber = 0,
+        unchecked = 0,
+        slaUrgent = 0;
+      queueScope()
+        .querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)')
+        .forEach((row) => {
+          if (row.classList.contains('ch-row-pulse-red')) pulseRed++;
+          else if (row.classList.contains('ch-row-pulse-amber')) pulseAmber++;
+          if (row.classList.contains('ch-row-pulse-unchecked')) unchecked++;
+          const sla = row.querySelector('.ch-q-sla-red, .ch-q-sla-amber');
+          if (sla && /must action today|overdue/i.test(sla.textContent || '')) slaUrgent++;
+        });
+      const bits = [];
+      if (pulseRed) bits.push(pulseRed + ' pulsed-red');
+      if (pulseAmber) bits.push(pulseAmber + ' pulsed-amber');
+      if (unchecked) bits.push(unchecked + ' unchecked');
+      if (slaUrgent) bits.push(slaUrgent + ' SLA today');
+      huddle.textContent = bits.length ? bits.join(' · ') : '';
+      huddle.title =
+        'Pulse rails and contract-clock counts on visible rows. A quiet rail is not all-clear. SLA echoes Medicus\'s own flag.';
+    }
     el.classList.toggle('ch-q-status--checking', counts.checking > 0);
 
     // "Material" change = the aggregate red/amber picture actually moved (a new
@@ -6960,7 +7011,12 @@
   const PULSE_ON = 'ch-row-pulse-on';
   const PULSE_RED = 'ch-row-pulse-red';
   const PULSE_AMBER = 'ch-row-pulse-amber';
+  const PULSE_UNCHECKED = 'ch-row-pulse-unchecked';
   const PULSE_FLOAT = 'ch-q-pulse-float';
+  const WHY_FOOTER = 'Not a score. A quiet rail is not all-clear.';
+  const ACT_CONFIRM = 'Not yet submitted — reception sees nothing until you confirm.';
+  let _parkMem = {};
+  const _pulseStageByKey = new Map(); // pulseOpenKey → { kind, text, untilMs }
   const _pulseActByRow = new Map(); // rowIndex → pathway context from decorateOneRow
   const _pulseOpenByKey = new Map(); // taskUuid|ri → 'why' | 'act'
   // key → cleanup fn. Per-key (NOT a single slot): the reapplyQueuePulses
@@ -7058,6 +7114,7 @@
     if (id === 'queue.child' || id === 'queue.elder') return 'age';
     if (id === 'queue.priority') return 'priority';
     if (id === 'queue.taskAgeAmber' || id === 'queue.taskAgeRed') return 'taskAge';
+    if (id === 'queue.sla') return 'sla';
     if (id === 'queue.repeatContact' || id === 'queue.repeatContactSession') return 'repeat';
     if (id === 'queue.carryOverRed' || id === 'queue.carryOverAmber') return 'carry';
     if (id === 'queue.monitoringDueRed' || id === 'queue.monitoringDueAmber') return 'monitoring';
@@ -7082,6 +7139,20 @@
       signals.push(sig);
     };
     roots.forEach((root) => {
+      root.querySelectorAll('.ch-q-sla').forEach((el) => {
+        const name = ((el.getAttribute('title') || el.textContent || '')).trim();
+        const kind = el.classList.contains('ch-q-sla-red')
+          ? 'red'
+          : el.classList.contains('ch-q-sla-amber')
+            ? 'amber'
+            : el.classList.contains('ch-q-sla-info')
+              ? 'info'
+              : 'meta';
+        push(
+          { kind: kind, name: name || el.textContent, family: 'sla', source: 'Medicus flag' },
+          'sla:' + (el.textContent || name)
+        );
+      });
       root.querySelectorAll('.ch-q-pa').forEach((host) => {
         const level = host.classList.contains('ch-q-pa-red') ? 'red' : 'amber';
         const labelEl = host.querySelector('.ch-q-pa-label');
@@ -7117,25 +7188,55 @@
 
   const clearPulseClasses = (row) => {
     if (!row || !row.classList) return;
-    row.classList.remove(PULSE_ON, PULSE_RED, PULSE_AMBER);
+    row.classList.remove(PULSE_ON, PULSE_RED, PULSE_AMBER, PULSE_UNCHECKED);
     const preview = findQueuePreviewRow(row);
-    if (preview) preview.classList.remove(PULSE_ON, PULSE_RED, PULSE_AMBER);
+    if (preview) preview.classList.remove(PULSE_ON, PULSE_RED, PULSE_AMBER, PULSE_UNCHECKED);
+  };
+
+  const recordPassExpected = () => {
+    if (isResultQueueSlug(_currentQueueSlug)) return true;
+    const redCfg = findSystemChip('queue.monitoringDueRed');
+    const amberCfg = findSystemChip('queue.monitoringDueAmber');
+    return (redCfg && redCfg.enabled !== false) || (amberCfg && amberCfg.enabled !== false);
+  };
+
+  const rowRecordChecked = (row) => {
+    const ri = row && row.getAttribute && row.getAttribute('row-index');
+    if (ri == null) return false;
+    const taskUuid = _durableRowMap.get(Number(ri));
+    if (!taskUuid) return false;
+    if (isResultQueueSlug(_currentQueueSlug)) {
+      const e = _queueResultCache.get(taskUuid);
+      return !!(e && e.sev !== undefined);
+    }
+    if (!recordPassExpected()) return true;
+    const mon = _queueMonCache.get(taskUuid);
+    return !!(mon && Object.prototype.hasOwnProperty.call(mon, 'result'));
   };
 
   const applyPulseRail = (row, rail) => {
     clearPulseClasses(row);
     // Chip-hide (PULSE_ON) is escalate-only. An empty / unchecked rail must
     // leave the chip pile visible — hiding it is the quiet-row all-clear lie.
-    if (rail !== 'red' && rail !== 'amber') return;
     const preview = findQueuePreviewRow(row);
-    const add = (el) => {
+    const add = (el, cls) => {
+      if (!el) return;
+      el.classList.add(cls);
+    };
+    if (rail === 'unchecked') {
+      add(row, PULSE_UNCHECKED);
+      add(preview, PULSE_UNCHECKED);
+      return;
+    }
+    if (rail !== 'red' && rail !== 'amber') return;
+    const mark = (el) => {
       if (!el) return;
       el.classList.add(PULSE_ON);
       if (rail === 'red') el.classList.add(PULSE_RED);
       else el.classList.add(PULSE_AMBER);
     };
-    add(row);
-    add(preview);
+    mark(row);
+    mark(preview);
   };
 
   const pulseTarget = (row) => {
@@ -7180,7 +7281,8 @@
       strong.textContent = s.name;
       const src = document.createElement('span');
       src.className = 'ch-q-why-src';
-      src.textContent = s.source || s.family || '';
+      const QP = typeof window !== 'undefined' && window.TriageQueuePulse;
+      src.textContent = (QP && QP.sourceLabel && QP.sourceLabel(s)) || s.source || s.family || '';
       wrap.appendChild(strong);
       wrap.appendChild(src);
       if (s.silent) {
@@ -7196,17 +7298,79 @@
     tray.appendChild(ul);
     const foot = document.createElement('p');
     foot.className = 'ch-q-why-foot';
-    foot.textContent =
-      'Not a score. A quiet rail is not all-clear — it means nothing matched, or we have not checked the record yet.';
+    foot.textContent = WHY_FOOTER;
     tray.appendChild(foot);
     return tray;
+  };
+
+  const patientNameFromRow = (row) => {
+    const cell = row && row.querySelector && row.querySelector('[col-id="patientName"]');
+    return cell ? String(cell.textContent || '').replace(/\s+/g, ' ').trim() : '';
+  };
+
+  const taskUuidFromRow = (row) => {
+    const ri = row && row.getAttribute && row.getAttribute('row-index');
+    if (ri == null) return null;
+    return _durableRowMap.get(Number(ri)) || null;
+  };
+
+  const persistParkMem = () => {
+    const PL = typeof window !== 'undefined' && window.ParkLedger;
+    if (!PL || !chrome || !chrome.storage || !chrome.storage.local) return;
+    try {
+      chrome.storage.local.set({ [PL.STORAGE_KEY]: _parkMem });
+    } catch (e) { /* local only — a failed persist must not throw on the queue */ }
+  };
+
+  const stagePulseAction = (row, stage) => {
+    const key = pulseOpenKey(row);
+    if (!key) return;
+    _pulseStageByKey.set(key, stage);
+    _pulseOpenByKey.set(key, 'act');
+    refreshPulseOnRow(row);
+  };
+
+  const loadCapacityPresets = () =>
+    new Promise((resolve) => {
+      if (!chrome || !chrome.storage || !chrome.storage.local) return resolve([]);
+      chrome.storage.local.get('capacity.presets', (r) => {
+        const list = r && Array.isArray(r['capacity.presets']) ? r['capacity.presets'] : [];
+        resolve(list.filter((p) => p && p.name && Array.isArray(p.slotTypes) && p.slotTypes.length));
+      });
+    });
+
+  const fetchGreenDayForPreset = async (preset) => {
+    const Book = typeof window !== 'undefined' && window.TriageQueueBook;
+    const API = typeof window !== 'undefined' && window.SentinelApiClient;
+    if (!Book || !API) return null;
+    const ctx = API.detectMedicusContext(location.href);
+    if (!ctx || !ctx.apiBase) return null;
+    const dates = Book.workingDatesFrom(new Date(), 5);
+    for (let i = 0; i < dates.length; i++) {
+      const iso = dates[i];
+      let raw;
+      try {
+        const resp = await fetch(
+          ctx.apiBase + '/scheduling/data/appointment-book/embedded-overview?date=' + iso + '&filterByUsualLocation=false',
+          { credentials: 'include' }
+        );
+        if (!resp.ok) continue;
+        raw = await resp.json();
+      } catch (e) {
+        continue;
+      }
+      const counted = Book.countFreeSlots(raw, { allowedTypes: preset.slotTypes });
+      const day = { iso: iso, free: counted.free, sessionsCount: counted.sessionsCount };
+      if (Book.isGreenDay(day, preset)) return day;
+    }
+    return null;
   };
 
   const buildPulseActTray = (row, act) => {
     const tray = document.createElement('div');
     tray.className = 'ch-q-act';
     const h = document.createElement('h3');
-    h.textContent = '1 · Stage a next step — nothing is sent from here.';
+    h.textContent = 'Stage a next step — nothing is sent from here.';
     tray.appendChild(h);
     const rowEl = document.createElement('div');
     rowEl.className = 'ch-q-act-row';
@@ -7215,7 +7379,7 @@
       b.type = 'button';
       b.disabled = !enabled;
       const title = document.createElement('span');
-      title.textContent = n ? n + '. ' + label : label;
+      title.textContent = n + '. ' + label;
       const small = document.createElement('small');
       small.textContent = detail;
       b.appendChild(title);
@@ -7229,11 +7393,48 @@
       }
       rowEl.appendChild(b);
     };
-    addBtn('', 'Book', 'Not in this first cut — open the request to book', false);
+    const Book = typeof window !== 'undefined' && window.TriageQueueBook;
+    const PL = typeof window !== 'undefined' && window.ParkLedger;
+    const key = pulseOpenKey(row);
+    const staged = key ? _pulseStageByKey.get(key) : null;
+    const taskUuid = taskUuidFromRow(row);
+    const parked = PL && taskUuid ? PL.lookup(_parkMem, taskUuid, Date.now()) : null;
+
+    addBtn(
+      '1',
+      'Book',
+      Book ? 'Prepare a next-green-day note — does not hold a slot' : 'Book assist not loaded',
+      !!Book,
+      async () => {
+        const presets = await loadCapacityPresets();
+        if (!presets.length) {
+          stagePulseAction(row, {
+            kind: 'book',
+            text: Book.composeBookSnippet({
+              patientName: patientNameFromRow(row),
+              presetName: 'capacity preset',
+              day: null,
+            }),
+            emptyPresets: true,
+          });
+          return;
+        }
+        const preset = presets[0];
+        const day = await fetchGreenDayForPreset(preset);
+        stagePulseAction(row, {
+          kind: 'book',
+          text: Book.composeBookSnippet({
+            patientName: patientNameFromRow(row),
+            presetName: preset.name,
+            day: day,
+          }),
+        });
+      }
+    );
     const pfOk = !!(act && act.pfElig && act.pfElig.eligible === true);
     const askOk = !!(act && act.gapsData && (act.gapsData.gaps.length || act.gapsData.flaggedInText.length));
     addBtn(
-      '',
+      '2',
       'Pharmacy First',
       pfOk ? 'Open the pathway draft (still not sent)' : 'Age or pathway not confirmed',
       pfOk,
@@ -7242,7 +7443,7 @@
       }
     );
     addBtn(
-      '',
+      '3',
       'Ask-back',
       askOk ? 'Open the gap-question draft (still not sent)' : 'No pathway gaps on this request',
       askOk,
@@ -7250,11 +7451,67 @@
         if (act) showPathwayMenu(anchor, act.pathway, act.previewText, act.pfElig, act.gapsData, act.closingQuestions);
       }
     );
-    addBtn('', 'Park until…', 'Not in this first cut — Medicus status unchanged', false);
+    addBtn(
+      '4',
+      'Park until…',
+      parked
+        ? 'Already parked until ' + PL.formatUntil(parked.until) + ' — this machine only'
+        : 'Local mark only — Medicus status unchanged',
+      !!PL && !!taskUuid,
+      () => {
+        if (!PL || !taskUuid) return;
+        const until = PL.defaultUntilMs(new Date());
+        stagePulseAction(row, {
+          kind: 'park',
+          untilMs: until,
+          text: 'Park until ' + PL.formatUntil(until) + ' on this machine only. Medicus status is unchanged.',
+        });
+      }
+    );
     tray.appendChild(rowEl);
+
+    if (staged && staged.text) {
+      const bar = document.createElement('div');
+      bar.className = 'ch-q-act-confirm';
+      const p = document.createElement('p');
+      p.textContent = ACT_CONFIRM;
+      bar.appendChild(p);
+      const pre = document.createElement('pre');
+      pre.textContent = staged.text;
+      bar.appendChild(pre);
+      if (staged.emptyPresets) {
+        const hint = document.createElement('p');
+        hint.textContent = 'No capacity presets — open the Capacity tab to add one.';
+        bar.appendChild(hint);
+      }
+      const go = document.createElement('button');
+      go.type = 'button';
+      go.textContent = staged.kind === 'park' ? 'Keep this local park' : 'Copy the draft';
+      go.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (staged.kind === 'park' && PL && taskUuid) {
+          const out = PL.parkTask(_parkMem, taskUuid, staged.untilMs, '', Date.now());
+          if (out.ok) {
+            _parkMem = out.store;
+            persistParkMem();
+          }
+          _pulseStageByKey.delete(key);
+          refreshPulseOnRow(row);
+          return;
+        }
+        const text = staged.text || '';
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).catch(() => {});
+        }
+      });
+      bar.appendChild(go);
+      tray.appendChild(bar);
+    }
+
     const note = document.createElement('p');
     note.className = 'ch-q-act-note';
-    note.textContent = '2 · Open the request to finish — nothing reaches reception until you do.';
+    note.textContent = 'Open the request to finish — nothing reaches reception until you do.';
     tray.appendChild(note);
     return tray;
   };
@@ -7284,16 +7541,21 @@
     }
     const QP = typeof window !== 'undefined' && window.TriageQueuePulse;
     if (!QP) return;
-    const composed = QP.composePulse(collectSignalsFromRow(row), {});
+    const composed = QP.composePulse(collectSignalsFromRow(row), { recordChecked: rowRecordChecked(row) });
     applyPulseRail(row, composed.rail);
     const escalate = composed.rail === 'red' || composed.rail === 'amber';
     const open = key ? _pulseOpenByKey.get(key) : null;
+    const PL0 = typeof window !== 'undefined' && window.ParkLedger;
+    const ri0 = row.getAttribute('row-index');
+    const parked0 =
+      PL0 && ri0 != null ? PL0.lookup(_parkMem, _durableRowMap.get(Number(ri0)), Date.now()) : null;
     // Nothing to say and nothing summoned: no pulse chrome at all — a quiet
     // row keeps its chip pile untouched (applyPulseRail above) and gets no
-    // extra host. The keyboard Space/`a` paths still work: they set the open
-    // state BEFORE calling refreshPulseOnRow, so the host appears on demand.
-    if (!escalate && composed.signals.length === 0 && !open) {
-      clearPulseClasses(row);
+    // extra host. Dashed "not checked" and a local park still need a host so
+    // they cannot vanish. The keyboard Space/`a` paths still work: they set
+    // the open state BEFORE calling refreshPulseOnRow, so the host appears
+    // on demand.
+    if (!escalate && composed.signals.length === 0 && !open && composed.rail !== 'unchecked' && !parked0) {
       return;
     }
     const ri = row.getAttribute('row-index');
@@ -7328,11 +7590,11 @@
       chip.textContent = composed.headline.name;
       chip.title = composed.headline.name;
       if (composed.silent) {
-        const src = document.createElement('span');
-        src.className = 'ch-q-pulse-src';
-        src.setAttribute('aria-hidden', 'true');
-        src.textContent = 'record';
-        chip.appendChild(src);
+        const dia = document.createElement('span');
+        dia.className = 'ch-q-pulse-diamond';
+        dia.setAttribute('aria-hidden', 'true');
+        dia.title = 'From the record, not the request text';
+        head.insertBefore(dia, chip);
       }
       head.appendChild(chip);
       line.appendChild(head);
@@ -7356,6 +7618,15 @@
       line.appendChild(more);
     }
     const act = ri != null ? _pulseActByRow.get(Number(ri)) : null;
+    const PL = typeof window !== 'undefined' && window.ParkLedger;
+    const parked = PL && ri != null ? PL.lookup(_parkMem, _durableRowMap.get(Number(ri)), Date.now()) : null;
+    if (parked && !parked.expired) {
+      const pk = document.createElement('span');
+      pk.className = 'ch-q-park';
+      pk.textContent = 'parked · ' + PL.formatUntil(parked.until);
+      pk.title = 'Local park on this machine — Medicus status is unchanged';
+      line.appendChild(pk);
+    }
     const actBtn = document.createElement('button');
     actBtn.type = 'button';
     actBtn.className = 'ch-q-pulse-act';
@@ -7447,8 +7718,8 @@
     if (!PREF('queuePulseCompress', true)) {
       clearPulseFloatUi();
       queueScope()
-        .querySelectorAll('.' + PULSE_ON + ', .' + PULSE_RED + ', .' + PULSE_AMBER)
-        .forEach((el) => el.classList.remove(PULSE_ON, PULSE_RED, PULSE_AMBER));
+        .querySelectorAll('.' + PULSE_ON + ', .' + PULSE_RED + ', .' + PULSE_AMBER + ', .' + PULSE_UNCHECKED)
+        .forEach((el) => el.classList.remove(PULSE_ON, PULSE_RED, PULSE_AMBER, PULSE_UNCHECKED));
       queueScope()
         .querySelectorAll('.' + PULSE_HOST)
         .forEach((el) => el.remove());
@@ -7512,6 +7783,34 @@
     // Priority escalation
     if (priority && /high|urgent/i.test(priority)) {
       pushSysChip('queue.priority', { priority });
+    }
+
+    // A1 — contract-clock chip lives in the Created column, never the rail.
+    const slaCell = row.querySelector('[col-id="createdAt"]');
+    const skipSla =
+      typeof isResultQueueSlug === 'function' &&
+      typeof _currentQueueSlug === 'string' &&
+      isResultQueueSlug(_currentQueueSlug);
+    if (slaCell && !skipSla) {
+      slaCell.querySelectorAll('.ch-q-sla').forEach((el) => el.remove());
+      const Sla = typeof window !== 'undefined' && window.TriageQueueSla;
+      if (Sla) {
+        const createdDate = Sla.parseCreated(created, new Date());
+        const sla = Sla.composeSlaChip({
+          priority: priority,
+          created: createdDate,
+          now: new Date(),
+          isRequestQueue: true,
+        });
+        if (sla) {
+          const el = document.createElement('span');
+          el.className = 'ch-q-sla ch-q-sla-' + (sla.kind || 'meta');
+          el.textContent = sla.label;
+          el.title = sla.title;
+          el.setAttribute('aria-label', sla.title);
+          slaCell.insertBefore(el, slaCell.firstChild);
+        }
+      }
     }
 
     // Days since created (visible age of task)
@@ -7806,13 +8105,13 @@
     }
     if (queueObserver) queueObserver.disconnect();
     clearPulseFloatUi();
-    queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result, .ch-q-pa, .ch-q-pending, .ch-q-repeat, .ch-q-carry, .ch-q-pulse').forEach(s => s.remove());
+    queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result, .ch-q-pa, .ch-q-pending, .ch-q-repeat, .ch-q-carry, .ch-q-pulse, .ch-q-sla, .ch-q-park').forEach(s => s.remove());
     // Wipe stale severity tint in the SAME cycle as the chip-node wipe (item 1.3) —
     // a recycled row-index must never keep a previous patient's tint colour.
     clearQueueRowTint();
     queueScope()
-      .querySelectorAll('.' + PULSE_ON + ', .' + PULSE_RED + ', .' + PULSE_AMBER)
-      .forEach((el) => el.classList.remove(PULSE_ON, PULSE_RED, PULSE_AMBER));
+      .querySelectorAll('.' + PULSE_ON + ', .' + PULSE_RED + ', .' + PULSE_AMBER + ', .' + PULSE_UNCHECKED)
+      .forEach((el) => el.classList.remove(PULSE_ON, PULSE_RED, PULSE_AMBER, PULSE_UNCHECKED));
     // Item 4.7 — same reasoning as the tint wipe above: a recycled row-index
     // must never keep a previous patient's seen-dim.
     clearQueueSeenDim();
@@ -7907,7 +8206,7 @@
           if (!cl) return false;
           // ch-q-pa included (audit M2): each patient-flag chip injection used
           // to read as a real grid mutation and trigger a full refresh cycle.
-          if (!(cl.contains('ch-q-result') || cl.contains('ch-q-mon') || cl.contains('ch-queue-chips') || cl.contains('ch-chip') || cl.contains('ch-q-pa') || cl.contains('ch-q-pending') || cl.contains('ch-q-repeat') || cl.contains('ch-q-carry') || cl.contains('ch-q-pulse') || cl.contains('ch-q-why') || cl.contains('ch-q-act') || cl.contains('ch-q-pulse-float'))) return false;
+          if (!(cl.contains('ch-q-result') || cl.contains('ch-q-mon') || cl.contains('ch-queue-chips') || cl.contains('ch-chip') || cl.contains('ch-q-pa') || cl.contains('ch-q-pending') || cl.contains('ch-q-repeat') || cl.contains('ch-q-carry') || cl.contains('ch-q-pulse') || cl.contains('ch-q-why') || cl.contains('ch-q-act') || cl.contains('ch-q-pulse-float') || cl.contains('ch-q-sla') || cl.contains('ch-q-park'))) return false;
         }
       }
     }

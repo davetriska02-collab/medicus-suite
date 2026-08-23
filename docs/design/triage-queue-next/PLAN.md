@@ -12,9 +12,13 @@ extension). Open in a browser; each frame is a screenshot target.
 
 **Status:** first live cut shipped in **v3.236.4** (pulse + why-tray + thin act
 tray + thread mark). Pref `queuePulseCompress` (default on). Amber is a
-hollow ring (not a filled bar). Quiet rows keep their chips (empty is not
-all-clear). Book / Park / dashed unchecked rail / thread expand / B1
-context headlines / huddle are out of this cut.
+hollow rail (wash + stroke), not a filled bar. Quiet rows keep their chips
+(empty is not all-clear). **v3.239.0 cockpit tranche:** status-bar huddle +
+existing `#slaBreachStrip` (A2 / E-1.2), Created-column SLA chips (A1),
+dashed unchecked rail (E-1.1), hollow silent diamond + B2/B4 headlines,
+fuller Act-tray (C4 Book prepare-only + Park + PF / Ask-back), why-tray
+named sources + permanent footer. Still out: B1 context headlines, C1
+queue lens, C2 batch packs, thread expand, allergy × mention.
 
 ---
 

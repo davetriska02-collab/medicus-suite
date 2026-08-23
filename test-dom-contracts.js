@@ -274,6 +274,7 @@ const FIXTURES = {
     legacy: ['queue-preview-row-link-legacy.html'],
   },
   'queue.chip-marker-classes': { current: 'queue-chip-marker-classes.html', legacy: [] },
+  'queue.sla-host': { current: 'queue-sla-host.html', legacy: [] },
   'routine-rx.routing-control': {
     current: 'routine-rx-routing-control-current.html',
     legacy: ['routine-rx-routing-control-legacy.html'],

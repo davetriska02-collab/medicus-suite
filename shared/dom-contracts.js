@@ -159,16 +159,31 @@
     {
       id: 'queue.chip-marker-classes',
       description:
-        'The injected chip family classes swept on every refreshQueueChips (wipe-and-redecorate) and de-duped on inject: age/decoration (.ch-queue-chips), monitoring (.ch-q-mon), result-triage (.ch-q-result), the B2 pending-abnormal-lab cross-link (.ch-q-pending), the B3 repeat-contact chip (.ch-q-repeat), the B5 aged-request carry-over chip (.ch-q-carry), and the pulse compressor host (.ch-q-pulse). Per CLAUDE.md rule 5, each must also be present in hud.css\'s token-block selector list or it renders as an unstyled "white rectangle" (that check is out of scope for this registry).',
+        'The injected chip family classes swept on every refreshQueueChips (wipe-and-redecorate) and de-duped on inject: age/decoration (.ch-queue-chips), monitoring (.ch-q-mon), result-triage (.ch-q-result), the B2 pending-abnormal-lab cross-link (.ch-q-pending), the B3 repeat-contact chip (.ch-q-repeat), the B5 aged-request carry-over chip (.ch-q-carry), the pulse compressor host (.ch-q-pulse), the A1 contract-clock chip (.ch-q-sla), and the local park mark (.ch-q-park). Per CLAUDE.md rule 5, each must also be present in hud.css\'s token-block selector list or it renders as an unstyled "white rectangle" (that check is out of scope for this registry).',
       feature:
-        'Queue chips — re-injection / de-dupe (.ch-queue-chips / .ch-q-mon / .ch-q-result / .ch-q-pending / .ch-q-repeat / .ch-q-carry / .ch-q-pulse)',
+        'Queue chips — re-injection / de-dupe (.ch-queue-chips / .ch-q-mon / .ch-q-result / .ch-q-pending / .ch-q-repeat / .ch-q-carry / .ch-q-pulse / .ch-q-sla / .ch-q-park)',
       degradation:
         'stale chips are never swept on AG-Grid row recycling (duplicate or orphaned chips), or the de-dupe check stops preventing double-injection.',
       source:
         'content-scripts/triage-lens/content.js:3641,3691 (decorateOneRow de-dupe guard; refreshQueueChips sweep)',
       pageMatch: /\/tasks\/[^/]+\/task-list/,
       anchor: '.ag-row',
-      target: ['.ch-queue-chips', '.ch-q-mon', '.ch-q-result', '.ch-q-pending', '.ch-q-repeat', '.ch-q-carry', '.ch-q-pulse'],
+      target: ['.ch-queue-chips', '.ch-q-mon', '.ch-q-result', '.ch-q-pending', '.ch-q-repeat', '.ch-q-carry', '.ch-q-pulse', '.ch-q-sla', '.ch-q-park'],
+      legacy: [],
+      runtime: true,
+      mirrorOf: 'content.js',
+    },
+    {
+      id: 'queue.sla-host',
+      description:
+        'Where the A1 contract-clock chip is prepended: the Created column cell. SLA never owns the clinical rail — it is a mono deadline echo of Medicus priorityDisplay + createdAt.',
+      feature: 'Queue SLA / contract-clock chip (.ch-q-sla)',
+      degradation:
+        'contract-clock chips stop injecting into the Created column, so the duty GP cannot scan remaining SLA time without opening each request.',
+      source: 'content-scripts/triage-lens/content.js (decorateOneRow createdAt inject)',
+      pageMatch: /\/tasks\/[^/]+\/task-list/,
+      anchor: '[col-id="createdAt"]',
+      target: ['.ch-q-sla'],
       legacy: [],
       runtime: true,
       mirrorOf: 'content.js',

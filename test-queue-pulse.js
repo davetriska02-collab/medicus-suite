@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { composePulse, isContextOnly } = require('./content-scripts/triage-lens/queue-pulse.js');
+const { composePulse, isContextOnly, sourceLabel } = require('./content-scripts/triage-lens/queue-pulse.js');
 
 let passed = 0,
   failed = 0;
@@ -76,7 +76,12 @@ console.log('Layer 1: composePulse ranking');
 
 {
   const p = composePulse([rule('red', 'MH crisis')], { recordChecked: false });
-  check(p.rail === 'unchecked', 'recordChecked:false forces dashed rail even if a red exists');
+  check(p.rail === 'red', 'known request-text red stays filled while the record pass is in flight');
+}
+
+{
+  const p = composePulse([age('Child · 7y')], { recordChecked: false });
+  check(p.rail === 'unchecked', 'quiet row + record not checked → dashed, not empty');
 }
 
 {
@@ -93,6 +98,10 @@ check(!isContextOnly(mon('red', 'MTX')), 'monitoring is clinical (may own rail)'
 check(!isContextOnly(pending('red', 'Pending K')), 'pending result is clinical');
 check(!isContextOnly(ask()), 'ask-back is not context — it can headline');
 check(isContextOnly({ kind: 'meta', name: '+2', family: 'rule' }), 'meta overflow chips are context');
+check(isContextOnly({ kind: 'amber', name: 'must action today', family: 'sla' }), 'SLA chip never owns the rail');
+check(sourceLabel({ family: 'monitoring', source: 'monitoring' }) === 'record · monitoring', 'why-tray names monitoring as a record source');
+check(sourceLabel({ family: 'rule', source: 'request' }) === 'request text', 'why-tray names request-text rules');
+check(sourceLabel({ family: 'sla' }) === 'contract clock · Medicus flag', 'why-tray names the SLA as a flag echo');
 
 console.log('\nLayer 3: wiring / safety greps');
 const content = fs.readFileSync(path.join(__dirname, 'content-scripts/triage-lens/content.js'), 'utf8');
@@ -106,11 +115,17 @@ check(/data-pref="queuePulseCompress"/.test(options), 'options has a pulse check
 check(/\.ch-q-pulse/.test(hud.split('{')[0]), 'hud.css token-block lists .ch-q-pulse');
 check(/\.ch-q-why/.test(hud.split('{')[0]), 'hud.css token-block lists .ch-q-why');
 check(/\.ch-q-act/.test(hud.split('{')[0]), 'hud.css token-block lists .ch-q-act');
+check(/\.ch-q-sla/.test(hud.split('{')[0]), 'hud.css token-block lists .ch-q-sla');
+check(/\.ch-q-park/.test(hud.split('{')[0]), 'hud.css token-block lists .ch-q-park');
+check(/\.ch-row-pulse-unchecked/.test(hud.split('{')[0]), 'hud.css token-block lists .ch-row-pulse-unchecked');
+check(/queue-sla\.js/.test(manifest), 'manifest loads queue-sla.js');
+check(/queue-book-assist\.js/.test(manifest), 'manifest loads queue-book-assist.js');
+check(/park-ledger\.js/.test(manifest), 'manifest loads park-ledger.js');
 check(
-  /\.ch-queue-chips, \.ch-q-mon, \.ch-q-result, \.ch-q-pa, \.ch-q-pending, \.ch-q-repeat, \.ch-q-carry, \.ch-q-pulse/.test(
+  /\.ch-queue-chips, \.ch-q-mon, \.ch-q-result, \.ch-q-pa, \.ch-q-pending, \.ch-q-repeat, \.ch-q-carry, \.ch-q-pulse, \.ch-q-sla, \.ch-q-park/.test(
     content
   ),
-  'refreshQueueChips wipe includes .ch-q-pulse'
+  'refreshQueueChips wipe includes pulse, SLA and park marks'
 );
 check(/cl\.contains\('ch-q-pulse'\)/.test(content), 'observer self-write filter includes pulse');
 check(/reapplyQueuePulses\(\)/.test(content), 'refreshQueueChips re-applies pulses after reinjects');
@@ -121,8 +136,15 @@ if (actFn) {
     !/\bDone\b|\bSent\b|\bBooked\b|\bSubmitted\b/.test(actFn[0]),
     'act tray copy-ban: no Done/Sent/Booked/Submitted'
   );
+  check(/n \+ '\. ' \+ label/.test(actFn[0]), 'act tray numbers actions (n. label)');
+  check(/does not hold a slot/.test(actFn[0]), 'Book button states it does not hold a slot');
+  check(/Medicus status unchanged/.test(actFn[0]), 'Park button states Medicus status is unchanged');
 }
-check(/Not a score/.test(content), 'why-tray footer refuses the score reading');
+check(
+  /const WHY_FOOTER = 'Not a score\. A quiet rail is not all-clear\.'/.test(content),
+  'why-tray footer is the exact PLAN sentence'
+);
+check(/const ACT_CONFIRM = 'Not yet submitted — reception sees nothing until you confirm\.'/.test(content), 'act-tray confirm bar is persistent and consequence-stated');
 // Amber gets a rail in the same column as red (hollow, not solid) — severity
 // lives on ONE axis (the rail column), distinguished by fill density/shape,
 // not hue. The old standalone amber ring is retired.
@@ -137,10 +159,15 @@ check(
   !/\.ch-row-pulse-amber \{[\s\S]*?box-shadow: inset 4px 0 0 0 var\(--(red|amber)\);/.test(hud),
   'amber rail never uses a solid single-layer ink-fill bar (shape/density, not hue, distinguishes the tiers)'
 );
-// The provenance diamond is replaced by an in-chip mono micro-token.
-check(!/ch-q-pulse-diamond/.test(content), 'the provenance diamond marker is retired from content.js');
-check(!/\.ch-q-pulse-diamond/.test(hud), 'the provenance diamond CSS is retired from hud.css');
-check(/ch-q-pulse-src/.test(content), 'silent headlines get an in-chip record-source micro-token (ch-q-pulse-src)');
+// Silent mark is a HOLLOW diamond (shape = provenance). A filled diamond
+// collided with filled-red / hollow-amber severity coding (H-061 v3.236.16);
+// the outline diamond carries "from the record" without a second fill.
+check(/ch-q-pulse-diamond/.test(content), 'silent headlines carry a diamond mark (ch-q-pulse-diamond)');
+check(/\.ch-q-pulse-diamond/.test(hud), 'hud.css styles the silent diamond');
+check(
+  /\.ch-q-pulse-diamond \{[\s\S]*?background:\s*transparent/.test(hud),
+  'diamond is hollow (transparent fill) so it cannot be read as a filled-red severity'
+);
 check(
   /composed\.silent \? ' — from the record, not the request text' : ''/.test(content),
   'silent pulse headline aria-label names the record source'
@@ -167,11 +194,11 @@ if (tintedFn) {
   );
 }
 check(
-  /\.ch-q-focus-alerts[\s\S]{0,200}?:not\(\.ch-row-pulse-red\):not\(\.ch-row-pulse-amber\)/.test(hud) &&
-    /\.ch-q-focus-alerts .ag-row:not\(\.ch-row-sev-red\):not\(\.ch-row-sev-amber\):not\(\.ch-row-pulse-red\):not\(\.ch-row-pulse-amber\)/.test(
+  /\.ch-q-focus-alerts[\s\S]{0,280}?:not\(\.ch-row-pulse-unchecked\)/.test(hud) &&
+    /\.ch-q-focus-alerts .ag-row:not\(\.ch-row-sev-red\):not\(\.ch-row-sev-amber\):not\(\.ch-row-pulse-red\):not\(\.ch-row-pulse-amber\):not\(\.ch-row-pulse-unchecked\)/.test(
       content
     ),
-  'focus-alerts dim never fades a pulse-red/amber row (both CSS copies)'
+  'focus-alerts dim never fades a pulse-red/amber/unchecked row (both CSS copies)'
 );
 check(
   /PULSE_HOST \+ \(previewRow \? '' : ' ch-q-pulse-inline'\)/.test(content),
