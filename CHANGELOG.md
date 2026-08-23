@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.26] — 2026-08-22
+
+### Architecture evolution plan (docs only)
+
+- New `docs/plans/ARCHITECTURE-EVOLUTION-2026-08-22.md`: principal-engineer
+  audit of the multi-module architecture (shell registration sprawl,
+  sync-guarded duplication, engine purity, god files, write-path guard
+  coverage) and a five-phase evolution plan — guards first, then a single
+  module registry, sync-pair collapse into dual-mode single sources,
+  lint-enforced layering, and strangler-fig decomposition of `content.js`
+  and `panel.js` — with per-phase risk analysis. Preserves every CSN §6.1 /
+  local-only invariant and the no-build thin-augmentation model; proposes
+  no bundler and no behaviour change. Analysis only — no product code
+  changed in this release.
+
 ## [v3.236.25] — 2026-08-22
 
 ### Review fixes — CSN table ordering and issue date
