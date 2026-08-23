@@ -101,7 +101,10 @@
     var slugs = alt === safeSlug ? [safeSlug] : [safeSlug, alt];
     var path = String(pathname == null ? '' : pathname);
     for (var i = 0; i < slugs.length; i++) {
-      var re = new RegExp('/([0-9a-z]{2,})/tasks/(?:data/)?' + slugs[i] + '/task-list', 'i');
+      // Anchored: the siteId must be the FIRST path segment (start of path,
+      // or immediately after the leading '/'), exactly as before /data/ and
+      // hyphen support were added — never a segment fished out mid-path.
+      var re = new RegExp('^/?([0-9a-z]{2,})/tasks/(?:data/)?' + slugs[i] + '/task-list', 'i');
       var m = re.exec(path);
       if (m) return { siteId: m[1] };
     }

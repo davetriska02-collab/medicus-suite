@@ -9,6 +9,7 @@
 const path = require('path');
 const engine = require(path.join(__dirname, 'engine', 'rules-engine.js'));
 const vaxRules = require(path.join(__dirname, 'rules', 'vaccine-rules.json'));
+const qofRules = require(path.join(__dirname, 'rules', 'qof-rules.json'));
 
 let passed = 0;
 let failed = 0;
@@ -51,15 +52,21 @@ const fluRule = vaxRules.rules.find((r) => r.id === 'vax-flu');
 const ppv23Rule = vaxRules.rules.find((r) => r.id === 'vax-pneumo-ppv23');
 const shinglesRule = vaxRules.rules.find((r) => r.id === 'vax-shingles');
 const rsvRule = vaxRules.rules.find((r) => r.id === 'vax-rsv');
+const pneumoRiskRule = vaxRules.rules.find((r) => r.id === 'vax-pneumo-risk-u65');
+const shinglesImmunoRule = vaxRules.rules.find((r) => r.id === 'vax-shingles-immuno');
 
 // ── Rule presence checks ───────────────────────────────────────────────────────
 console.log('\n--- rule presence ---');
 assert(!!ppv23Rule, 'vax-pneumo-ppv23 rule found');
 assert(!!shinglesRule, 'vax-shingles rule found');
 assert(!!rsvRule, 'vax-rsv rule found');
+assert(!!pneumoRiskRule, 'vax-pneumo-risk-u65 rule found');
+assert(!!shinglesImmunoRule, 'vax-shingles-immuno rule found');
 assert(ppv23Rule?.enabled === true, 'vax-pneumo-ppv23 enabled');
 assert(shinglesRule?.enabled === true, 'vax-shingles enabled');
 assert(rsvRule?.enabled === true, 'vax-rsv enabled');
+assert(pneumoRiskRule?.enabled === true, 'vax-pneumo-risk-u65 enabled');
+assert(shinglesImmunoRule?.enabled === true, 'vax-shingles-immuno enabled');
 
 // ── schedule:"once" engine behaviour ─────────────────────────────────────────
 console.log('\n--- schedule:once engine behaviour ---');
@@ -317,9 +324,139 @@ console.log('\n--- RSV 65-74 clinical-risk (vax-001, 2026-08-18) ---');
   assert(chips.length === 1, 'RSV: age 80 + COPD → still chip via 75+');
 }
 
+// ── 2026-08-22 Keeper gap run: PCV20 clinical risk groups 2–64 (gap 5) ────────
+console.log('\n--- pneumococcal clinical-risk under-65 (vax-pneumo-risk-u65, 2026-08-22) ---');
+
+// Real DM register rule from qof-rules.json — the register clause resolves
+// register codes via data._registerLookup.
+const dmRegRule = qofRules.rules.find((r) => r.type === 'qof-register' && r.registerCode === 'DM');
+assert(!!dmRegRule, 'DM register rule found in qof-rules.json (register clause dependency)');
+
+// Age 40 + splenectomy → fires (asplenia problem clause)
+{
+  const data = { ...baseData(40), problems: [{ label: 'Splenectomy', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(pneumoRiskRule, data, NOW);
+  assert(chips.length === 1, 'pneumo-risk: age 40 + splenectomy → chip');
+  assert(chips[0]?.status === 'vax_due', 'pneumo-risk: age 40 + splenectomy, no event → vax_due');
+}
+
+// Age 40, no risk factors → no chip
+{
+  const chips = engine.evaluateVaccineRule(pneumoRiskRule, baseData(40), NOW);
+  assert(chips.length === 0, 'pneumo-risk: age 40 no risk factors → no chip');
+}
+
+// Age 50 + DM-register problem → fires via the register clause
+{
+  const data = {
+    ...baseData(50),
+    problems: [{ label: 'Type 2 diabetes mellitus', status: 'active' }],
+    _registerLookup: { DM: dmRegRule },
+  };
+  const chips = engine.evaluateVaccineRule(pneumoRiskRule, data, NOW);
+  assert(chips.length === 1, 'pneumo-risk: age 50 + DM register → chip (register clause)');
+}
+
+// Age 70 + DM-register problem → must NOT fire (ageMax 64 on the register
+// clause — pins the engine register-branch age-gate patch; the 65+ cohort is
+// vax-pneumo-ppv23's, never a double fire).
+{
+  const data = {
+    ...baseData(70),
+    problems: [{ label: 'Type 2 diabetes mellitus', status: 'active' }],
+    _registerLookup: { DM: dmRegRule },
+  };
+  const chips = engine.evaluateVaccineRule(pneumoRiskRule, data, NOW);
+  assert(chips.length === 0, 'pneumo-risk: age 70 + DM register → no chip (register-clause age gate)');
+}
+
+// Age 40 + methotrexate → fires (immunosuppressive medication clause)
+{
+  const data = { ...baseData(40), medications: [{ name: 'Methotrexate 2.5mg tablets' }] };
+  const chips = engine.evaluateVaccineRule(pneumoRiskRule, data, NOW);
+  assert(chips.length === 1, 'pneumo-risk: age 40 + methotrexate → chip (medication clause)');
+}
+
+// Infant PCV13 record must NOT suppress a 40-year-old asplenic's due status
+// ('pneumococcal conjugate vaccin' deliberately absent from this rule's given list).
+{
+  const data = {
+    ...baseData(40),
+    problems: [
+      { label: 'Splenectomy', status: 'active' },
+      { label: 'Pneumococcal conjugate vaccination', codedDate: '1987-03-01', status: 'active' },
+    ],
+  };
+  const chips = engine.evaluateVaccineRule(pneumoRiskRule, data, NOW);
+  assert(chips.length === 1, 'pneumo-risk: infant PCV13 record → chip still produced');
+  assert(
+    chips[0]?.status === 'vax_due',
+    `pneumo-risk: infant PCV13 record does not satisfy the rule → vax_due (got: ${chips[0]?.status})`
+  );
+}
+
+// ── 2026-08-22 Keeper gap run: Shingrix severely immunosuppressed 18+ (gap 9) ─
+console.log('\n--- shingles severely immunosuppressed 18+ (vax-shingles-immuno, 2026-08-22) ---');
+
+// Age 45 + lymphoma → fires (disease clause)
+{
+  const data = { ...baseData(45), problems: [{ label: 'Non-Hodgkin lymphoma', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(shinglesImmunoRule, data, NOW);
+  assert(chips.length === 1, 'shingles-immuno: age 45 + lymphoma → chip');
+  assert(chips[0]?.status === 'vax_due', 'shingles-immuno: age 45 + lymphoma, no event → vax_due');
+}
+
+// Age 45 + methotrexate only → must NOT fire (conservative severe-immunosuppression
+// term list pinned as deliberate — no methotrexate/low-dose steroids).
+{
+  const data = { ...baseData(45), medications: [{ name: 'Methotrexate 2.5mg tablets' }] };
+  const chips = engine.evaluateVaccineRule(shinglesImmunoRule, data, NOW);
+  assert(chips.length === 0, 'shingles-immuno: age 45 + methotrexate only → no chip (conservative terms)');
+}
+
+// Age 82 + rituximab → fires (no upper age limit)
+{
+  const data = { ...baseData(82), medications: [{ name: 'Rituximab 500mg/50ml concentrate for solution for infusion' }] };
+  const chips = engine.evaluateVaccineRule(shinglesImmunoRule, data, NOW);
+  assert(chips.length === 1, 'shingles-immuno: age 82 + rituximab → chip (no upper limit)');
+}
+
+// Age 45 + lymphoma + Shingrix given → vax_given
+{
+  const data = {
+    ...baseData(45),
+    problems: [
+      { label: 'Non-Hodgkin lymphoma', status: 'active' },
+      { label: 'Shingrix vaccination given', codedDate: '2025-11-01', status: 'active' },
+    ],
+  };
+  const chips = engine.evaluateVaccineRule(shinglesImmunoRule, data, NOW);
+  assert(chips.length === 1, 'shingles-immuno: lymphoma + shingrix record → chip produced');
+  assert(chips[0]?.status === 'vax_given', 'shingles-immuno: shingrix given → vax_given');
+}
+
+// Historic Zostavax must NOT satisfy this rule ('zostavax' deliberately absent
+// from its given list — a Zostavax-given-then-immunosuppressed patient still
+// needs Shingrix, so due is the fail-safe direction).
+{
+  const data = {
+    ...baseData(45),
+    problems: [
+      { label: 'Non-Hodgkin lymphoma', status: 'active' },
+      { label: 'Zostavax', codedDate: '2018-06-01', status: 'active' },
+    ],
+  };
+  const chips = engine.evaluateVaccineRule(shinglesImmunoRule, data, NOW);
+  assert(chips.length === 1, 'shingles-immuno: lymphoma + historic Zostavax → chip still produced');
+  assert(
+    chips[0]?.status === 'vax_due',
+    `shingles-immuno: historic Zostavax does not satisfy the rule → vax_due (got: ${chips[0]?.status})`
+  );
+}
+
 // ── Schema: source and notes required on new rules ───────────────────────────
 console.log('\n--- new vaccine rules have non-empty source and notes ---');
-[ppv23Rule, shinglesRule, rsvRule].forEach((r) => {
+[ppv23Rule, shinglesRule, rsvRule, pneumoRiskRule, shinglesImmunoRule].forEach((r) => {
   if (!r) return;
   assert(typeof r.source === 'string' && r.source.trim().length > 0, `${r.id}: has non-empty source`);
   assert(typeof r.notes === 'string' && r.notes.trim().length > 0, `${r.id}: has non-empty notes`);

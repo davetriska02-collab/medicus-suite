@@ -2346,6 +2346,8 @@
       }
 
       if (k === 'register') {
+        if (age != null && clause.ageMin != null && age < clause.ageMin) continue;
+        if (age != null && clause.ageMax != null && age > clause.ageMax) continue;
         const regs = clause.registers || [];
         let matchedReg = null;
         for (const code of regs) {

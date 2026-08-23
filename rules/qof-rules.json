@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-07-25",
+  "lastUpdated": "2026-08-22",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes. NOTE (qof-007, 2026-07-25): a July 2026 amendment document exists (PRN02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf); content not readable this run (403) — next Keeper run should check all indicators against the amendment. DEM004 is the only indicator confirmed to have been wrong (now corrected in this run).",
-  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-07-11 (The Keeper): added LD register; DEM004 (dementia care plan review); CKD002 (BP target) and CKD003 (ACEi/ARB in CKD+HYP+proteinuria); CHOL003 extended to PAD, STIA, CKD registers (3 new clones); CHOL004 extended to PAD and STIA registers (2 new clones; CKD explicitly NOT covered by CHOL004 per PRN02356). Primary PDF 403 that run — all corroborated via PRN02356 search. 2026-07-25 (The Keeper): CORRECTED DEM004 (30pts/60-90% → 14pts/35-70% — was wrong due to 403 on primary PDF); ENABLED OB register with ageMin:18 corrected (was 16, wrong for QOF 2026/27 definition); LD notes updated to clarify DES/enhanced-service status of annual health check; AF006 upper:95 CONFIRMED correct for 26/27 (proposed revert to 90% killed by VERIFIER-B). PRN02356 July 2026 amendment noted above.",
+  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-07-11 (The Keeper): added LD register; DEM004 (dementia care plan review); CKD002 (BP target) and CKD003 (ACEi/ARB in CKD+HYP+proteinuria); CHOL003 extended to PAD, STIA, CKD registers (3 new clones); CHOL004 extended to PAD and STIA registers (2 new clones; CKD explicitly NOT covered by CHOL004 per PRN02356). Primary PDF 403 that run — all corroborated via PRN02356 search. 2026-07-25 (The Keeper): CORRECTED DEM004 (30pts/60-90% → 14pts/35-70% — was wrong due to 403 on primary PDF); ENABLED OB register with ageMin:18 corrected (was 16, wrong for QOF 2026/27 definition); LD notes updated to clarify DES/enhanced-service status of annual health check; AF006 upper:95 CONFIRMED correct for 26/27 (proposed revert to 90% killed by VERIFIER-B). PRN02356 July 2026 amendment noted above. 2026-08-22 (The Keeper): added the rest of the SMI physical-health suite alongside MH011 — MH002 (care plan, 5pts 40-90%), MH003 (BP, 3pts), MH006 (BMI, 3pts), MH007 (alcohol, 3pts), MH012 (glucose/HbA1c, 7pts; diabetes excluded via excludeIfProblem, never bare 'diabetes') — all observation-recent on the SMI register, flat 12-month windows, verified against PRN02356 July 2026 update + NICE IND143/IND84/IND83/IND82/IND159.",
   "rules": [
     {
       "id": "qof-reg-dm",
@@ -1358,6 +1358,134 @@
       "points": 7,
       "source": "QOF 26/27 MH011 (lipid profile in SMI); confirmed vs primary source PRN02356 2026-06-21",
       "notes": "26/27 MH011 is the LIPID-PROFILE indicator for SMI patients (record of a lipid profile in the preceding 12 months), 7 pts / 50-90%. It is NOT a smoking indicator - smoking-in-SMI moved into SMOK002. Corrected from a stale pre-26/27 mapping that had MH011 as smoking-status-in-SMI (The Keeper, primary-source verified 2026-06-21)."
+    },
+    {
+      "id": "qof-mh002",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "MH002",
+      "indicatorName": "Comprehensive care plan in SMI (preceding 12 months)",
+      "requiresRegister": "SMI",
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "mental health care plan",
+          "comprehensive care plan",
+          "care programme approach",
+          "cpa review",
+          "smi care plan",
+          "mental health review"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 40,
+        "upper": 90
+      },
+      "points": 5,
+      "source": "QOF 26/27 MH002 (NICE IND143)",
+      "notes": "Presence of a care-plan/review code only — content ('comprehensive', carer-agreed) is not verifiable; same caveat as DEM004/AST007. Secondary-care plans filed as documents will not surface — chip prompts, never asserts absence."
+    },
+    {
+      "id": "qof-mh003",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "MH003",
+      "indicatorName": "BP recorded in SMI (preceding 12 months)",
+      "requiresRegister": "SMI",
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "blood pressure",
+          "bp"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 50,
+        "upper": 90
+      },
+      "points": 3,
+      "source": "QOF 26/27 MH003 (NICE IND84)"
+    },
+    {
+      "id": "qof-mh006",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "MH006",
+      "indicatorName": "BMI recorded in SMI (preceding 12 months)",
+      "requiresRegister": "SMI",
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "bmi",
+          "body mass index"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 50,
+        "upper": 90
+      },
+      "points": 3,
+      "source": "QOF 26/27 MH006 (NICE IND83)"
+    },
+    {
+      "id": "qof-mh007",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "MH007",
+      "indicatorName": "Alcohol consumption recorded in SMI (preceding 12 months)",
+      "requiresRegister": "SMI",
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "alcohol consumption",
+          "alcohol intake",
+          "alcohol units",
+          "audit-c",
+          "audit c score"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 50,
+        "upper": 90
+      },
+      "points": 3,
+      "source": "QOF 26/27 MH007 (NICE IND82)",
+      "notes": "Alcohol is often questionnaire-coded (AUDIT-C) — validate the term list against real Medicus journal labels before enabling."
+    },
+    {
+      "id": "qof-mh012",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "MH012",
+      "indicatorName": "Blood glucose or HbA1c recorded in SMI (preceding 12 months)",
+      "requiresRegister": "SMI",
+      "excludeIfProblem": [
+        "type 1 diabetes",
+        "type 2 diabetes",
+        "diabetes mellitus"
+      ],
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "hba1c",
+          "haemoglobin a1c",
+          "blood glucose",
+          "fasting glucose",
+          "plasma glucose"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 50,
+        "upper": 90
+      },
+      "points": 7,
+      "source": "QOF 26/27 MH012 (NICE IND159)",
+      "notes": "Patients with a diagnosis of diabetes are excluded (per PRN02356 — their glucose monitoring is covered by the DM indicators). Exclusion terms are deliberately NOT bare 'diabetes' so diabetes insipidus / gestational diabetes are not wrongly excluded; matching is negation-aware."
     },
     {
       "id": "qof-hf007",

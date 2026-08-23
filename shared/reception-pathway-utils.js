@@ -40,7 +40,7 @@
   // reach a non-clinician destination: the id is still `mental-health`.
   // reception-core.js's evaluateDisposition imports these (kept in lock-step by
   // test-reception-disposition.js, which compares the two exports).
-  const CLINICIAN_ONLY_IDS = Object.freeze(['mental-health', 'gu-male', 'gyn-female', 'general']);
+  const CLINICIAN_ONLY_IDS = Object.freeze(['mental-health', 'gu-male', 'gyn-female', 'general', 'fever-adult']);
   const CLINICIAN_ONLY_DOMAINS = Object.freeze(['mental_health', 'gu_male', 'gyn_female']);
 
   function isStr(v) { return typeof v === 'string'; }

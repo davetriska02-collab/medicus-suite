@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.237.0] — 2026-08-22
+## [v3.237.2] — 2026-08-23
 
 ### Clinical-safety audit remediation — fail-closed hardening, honest docs
 
@@ -73,6 +73,100 @@ New tests: `test-lab-filing-fail-closed.js` (27 checks),
 `test-txn-transport-{retry,timeout}.js`, `test-oir-audit.js`,
 `test-lab-file-macro.js`, `test-routine-rx-macro.js`,
 `test-lab-filing-utils.js`, `test-result-severity.js`.
+
+### Review fixes applied before merge
+
+An independent review of this branch found several of its own fail-closed claims did not hold, plus a live bug in a guard the safety story leans on. All fixed here, each with a pinning regression test:
+
+- **Parameter matching was still substring-based in the surviving direction.** A short `albumin` parameter captured `Microalbumin` and, with the lab-flag override on, cleared the lab's own HIGH flag and graded it fileable as normal — the same failure R1b believed it had removed. It was also first-match-wins, so `[hb, hba1c]` resolved "HbA1c (IFCC)" to `hb`. Matching is now token-anchored, most-specific wins, and an unresolved tie between two unrelated parameters blocks.
+- **The `requireRangeForAll` fail-closed default never reached the installed base.** The previous sanitiser wrote an explicit `false` for everyone who never ticked the box, and stored profiles are not re-sanitised on load. A stamped one-shot migration now runs on read in both the gate and the options editor, which no longer renders the safety box unticked for legacy profiles.
+- **A row with neither a readable number nor any text cleared every blocker** — the purest "cannot judge this" case. It now blocks regardless of `requireRangeForAll`, as does a malformed result row.
+- **The unit veto only caught an explicit mismatch**, but `unitsCompatible` returns `unknown` when either side is empty — so a µg/L range was applied to a lab-flagged value of unknown unit and cleared the flag. A parameter is applied only when units positively agree or neither side declares one.
+- **The routine-rx mid-run navigation guard called an undefined function** (`fail` vs the real `abort`), so it threw a ReferenceError: the commit was skipped but the clinician got no toast and no audit line. Fixed, and the click handler now catches so a dying macro says so.
+- **W6 identity re-verification** no longer sits behind a short-circuit that skipped it when the task uuid was absent, and the verified patient id and API base are pinned into locals so the attachment download cannot leave the write reading state a navigation has blanked.
+- **Import hardening**: triage config is rebuilt key-by-key rather than via `Object.assign` (which re-parented the object through `__proto__`), and the OIR auto-tick gate requires an explicit boolean `true`, so a restored backup cannot re-enable a machine-initiated write with a junk value.
+- **Coverage**: the W6 guard and the lab-file post-click copy previously had *no* test — deleting them left the suite green. W6 gains a structural pin and the "never claim completion" grep now covers both DOM macro files, not just `write-core.js`.
+
+## [v3.237.1] — 2026-08-23
+
+### Organise canvas — fail-safe write paths (merge-review fixes)
+
+An adversarial review of the v3.236.5–.15 merge found the organise canvas's failure paths could strand or double-book patients. All write-path findings fixed:
+
+- **Stretch can no longer silently strand a cancelled patient.** Everything the rebook needs is validated **before** the destructive cancel (a null appointment type now refuses up front). If a post-cancel step still fails, the original booking is **re-created at its original length**; if even that fails, the error says — urgently, naming the patient — that they currently have **no appointment** and must be rebooked now, instead of the old false "the rest are still staged". Failure also refetches the board so the canvas shows what Medicus actually has.
+- **Moves prove the destination is still free before writing.** The captured reschedule payload carries `allowOverlappingAppointments: 'allow'`, so Medicus will not refuse a double-booking — the commit now checks the whole kept-length window against the **fresh** board (free-slot coverage, staged moves included at stage time) and refuses if a colleague took the slot or the appointment doesn't fit (the 60-min-onto-15-min TEST A class). Same-list moves onto a shorter tile now widen the reservation via the captured reserve-then-update lifecycle instead of leaving the contract.
+- **The overlay freezes while a Finalise batch writes.** Every input, Close, Discard and the footer are disabled and guarded, so a mid-write click can no longer start a second concurrent batch (duplicate writes) or "discard" actions that were in fact still being written to Medicus. Failures report exactly how many earlier actions were written.
+- **Send-to claims now match the write.** The confirm bar's static "Send-to is off" line is dynamic — it counts ticked patients when the v3.236.15 "Tell the patient" opt-in is used. The tick is no longer offered on a stretch (that write never sends recipients, and the old summary falsely promised a Medicus confirmation). `HAZARD-LOG.md` H-062 control (d) and CSN §6.3/W14–W16 corrected to record the opt-in — both had still claimed "recipient lists are always empty".
+- **Fail-closed gates.** Stretch "free following slot" now requires actual free-slot coverage (a slotless gap — break/blocked time — refuses); sick-day similar matching refuses untyped diaries instead of matching anything; the book's site+date are pinned at overlay open and a Finalise refuses if the Medicus SPA moved underneath; invalid stretch amounts get their own refusal reason; the sick-day miss reason names the board's real weekday (was hard-coded "Sunday"); staged moves read "Rebook with…", not the past-tense "Rebooked".
+- Reservation-release failures no longer misreport: a confirmed write is returned even if the cleanup release fails, and a release failure in the error path no longer masks the real error.
+- Screen-reader announcements survive the re-render (deferred live-region write).
+
+### Queue pulse / bulk panels — review fixes
+
+- **Pulse popovers no longer leak or resurrect.** The why/act floating trays now use per-key cleanup (was one shared slot): every queue refresh no longer leaks capture listeners while a tray is open, opening a second tray removes the first, and a dismissed tray no longer re-opens by itself on the next refresh sweep.
+- **Scrolling inside a why-tray or chip action menu no longer closes it** — the close-on-scroll listeners now ignore scrolls that originate inside the popover, so a long red-rail explanation can actually be read past the fold.
+- **Flat-queue chips keep a visible colour stub.** The v3.236.14 name-cell clip had no minimum width, so a squeezed red/amber result chip could shrink to nothing; `.ch-q-result-inline`/`.ch-q-mon-inline` now carry the same 1.75rem floor as the pulse.
+- Bulk-acknowledge URL matching re-anchored (siteId must be the first path segment); an aborted drag of the codes-to-problems panel header no longer swallows the next collapse click.
+
+Tests: `test-appointment-organise-core.js` grows to 241 checks (destination-taken, oversize drop, post-cancel restore both ways, release failures, pre-flight, fail-closed identity, day naming, notify no-op); `test-queue-pulse.js`, `test-task-bulk-action.js`, `test-document-codes-to-problems.js` extended.
+
+Clinical safety: CSO sign-off recorded 2026-08-23 (Dr D. Triska, in session) — `HAZARD-LOG.md` v3.28 (H-062 Accepted (ALARP); the "do not use on a live weekday clinic" restriction is lifted), `CLINICAL-SAFETY-NOTICE.md` doc version 3.21, and `docs/cso-review-ledger.json` updated.
+
+## [v3.237.0] — 2026-08-23
+
+### The Keeper (expanded) — top 10 missing clinical rules implemented
+
+Implements the ten highest-value missing rules identified by the
+2026-08-22 expanded Keeper gap analysis (`docs/keeper/KEEPER-GAP-ANALYSIS-2026-08-22.md`),
+ranked by clinical impact × frequency × feasibility. All additive; every
+rule carries its source and a test lock-in. **Pending CSO sign-off on the
+review PR before release** — clinical rule changes are never auto-merged.
+
+New rules:
+
+- **Reception pathways**: `fever-adult` (adult fever incl. neutropenic
+  sepsis — NICE CG151; clinician-only, 8 red flags) plus an
+  `rf-chemo-fever` 999 flag on `feverish-child`. The pathways file
+  previously had no chemotherapy question anywhere.
+- **Drug monitoring**: `thiazide-diuretic-ue` (annual + post-initiation
+  U&E, 22-term brand set incl. combo brands) and `denosumab-calcium`
+  (calcium before each 6-monthly dose per MHRA 2014, 25-term set
+  covering the post-patent biosimilar landscape).
+- **Alerts**: `mhra-opioid-cns-depressant` (opioid + benzodiazepine/
+  Z-drug/gabapentinoid respiratory depression — MHRA 2020/2017/2021)
+  and `mhra-valproate-male-u55` (MHRA Jan 2024 regulatory measures;
+  female rule's brand list extended in step).
+- **QOF**: the SMI physical-health suite — MH002 care plan, MH003 BP,
+  MH006 BMI, MH007 alcohol, MH012 glucose/HbA1c (diabetes excluded via
+  `excludeIfProblem`, never bare "diabetes") — 21 points on the SMI
+  register alongside the existing MH011.
+- **Vaccines**: `vax-pneumo-risk-u65` (PCV20 clinical risk groups 2–64,
+  Green Book ch 25 — asplenia cohort was previously invisible) and
+  `vax-shingles-immuno` (Shingrix, severely immunosuppressed 18+, no
+  upper age limit, per the NHSE/UKHSA Jul 2025 letter); corrected the
+  stale engine-limitation sentence in `vax-shingles` notes.
+- **STOPP/START**: `start_bone_protection_osteoporosis` (START H4),
+  `start_bone_protection_steroid` (START H2, degraded presence-only
+  with the duration caveat stated in the detail text), and
+  `stopp_opioid_no_laxative` (STOPP L2/START K2; Targinact self-covered
+  via naloxone).
+
+Fixes shipped in the same batch:
+
+- 🔴 **Lithium brand blindness in `pincer-12` and
+  `nice-lithium-monitoring`**: both matched only the substring
+  "lithium", so brand-only Priadel/Camcolit/Liskonum/Li-Liquid scripts
+  never fired either alert. Brand lists now match `drug-rules.json`.
+- **Engine**: vaccine `register`-kind eligibility clauses now honour
+  `ageMin`/`ageMax` (previously only problem/medication clauses did) —
+  required so `vax-pneumo-risk-u65`'s register clause cannot double-fire
+  with the 65+ rule.
+- **Engine**: `stopp-start.js` gains a negation-aware problem matcher
+  (lock-step with `rules-engine.js` semantics) so "family history of
+  osteoporosis" cannot fire the new START H4 criterion.
+
+Full test suite green (390 files, 0 failures); every new rule is pinned
+in its domain's coverage/regression test per repo convention.
 
 ## [v3.236.25] — 2026-08-22
 
@@ -184,6 +278,7 @@ Findings from a three-lens design crit (art director on rendered pixels, token/c
 - Overflow count reads `+N` at the end of the chip run; thread chip recast to the sans voice and no longer claims a pointer it doesn't have; hud.css/sidebar.css scoped `--text-4`/`--text-5` corrected to the canon values (contrast improves suite-wide).
 - Hazard log H-061 controls (b)/(e) updated to describe the new rail and provenance implementations (intent unchanged, mechanisms swapped).
 - Merged over v3.236.6–15's parallel pulse work: the trays now render through main's floating-popover mechanism (`positionPulseFloat`, with its own outside-click/Escape/scroll dismissal) rather than in-row, keeping the crit's tray design, severity sort, aria wiring and focus survival; the escalate full-width rail line is guarded off main's flat-queue `.ch-q-pulse-inline` variant so the patient name is never eaten.
+
 ## [v3.236.15] — 2026-08-21
 
 ### Bulk acknowledge — Review stays on screen

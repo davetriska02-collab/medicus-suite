@@ -5,7 +5,12 @@
   right: 140px;
   z-index: 2147482990;
   padding: 6px 12px;
-  font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font:
+    600 12px/1.2 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
   color: #1e3a5f;
   background: #fff;
   border: 1px solid #94a3b8;
@@ -281,13 +286,7 @@
   height: 14px;
   margin-top: 8px;
   border-radius: var(--r-sm);
-  background: repeating-linear-gradient(
-    90deg,
-    #64748b,
-    #64748b 5px,
-    transparent 5px,
-    transparent 10px
-  );
+  background: repeating-linear-gradient(90deg, #64748b, #64748b 5px, transparent 5px, transparent 10px);
   cursor: ns-resize;
 }
 
