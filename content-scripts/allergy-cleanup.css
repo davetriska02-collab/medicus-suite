@@ -737,6 +737,100 @@ input[class*='ms-ac-']:focus-visible {
   margin: 0;
 }
 
+/* "N% match" badge (searchMatchPercent) — a display ranking cue only, never
+   a second filter, same status as the SNOMED id already shown alongside
+   every result. */
+.ms-ac-conv-result-score {
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ms-ac-conv-results-caption {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 6px;
+}
+
+/* "Top-level" substance option (broader, dose/form/brand-stripped ancestor)
+   — deliberately distinct from an ordinary search result: a real result the
+   clinician typed for, this is a SUGGESTION they didn't ask for, so it's set
+   apart in its own bordered block rather than sitting inline with the list. */
+.ms-ac-conv-toplevel {
+  margin: 6px 0;
+  padding: 6px 8px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 5px;
+}
+
+.ms-ac-conv-toplevel-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1e40af;
+  margin-bottom: 4px;
+}
+
+.ms-ac-conv-toplevel-btn {
+  margin-bottom: 4px;
+}
+
+/* Import-text noise cleanup (2026-08-23) — amber-toned like .ms-ac-note,
+   since this is a data-quality nudge, not a clinical decision. */
+.ms-ac-conv-text-clean {
+  margin: 6px 0;
+  padding: 6px 8px;
+  background: #fffbeb;
+  border: 1px solid #fbbf24;
+  border-radius: 5px;
+  font-size: 12px;
+  color: #92400e;
+}
+
+.ms-ac-conv-text-clean.ms-ac-done {
+  background: #f0fdf4;
+  border-color: #22c55e;
+  color: #166534;
+  padding: 6px 8px;
+}
+
+.ms-ac-conv-text-clean-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.ms-ac-conv-text-clean-list {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+
+.ms-ac-conv-text-clean-list li {
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.ms-ac-conv-clean-text-btn {
+  margin-top: 4px;
+  padding: 5px 10px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ms-ac-conv-clean-text-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.ms-ac-conv-clean-text-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .ms-ac-conv-clear-btn {
   padding: 0;
   background: none;
